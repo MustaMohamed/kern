@@ -1,0 +1,71 @@
+#!/usr/bin/env bats
+# hooks/lib/json.sh: string decoding, raw values, escaping, malformed input.
+
+load ../helpers/common
+
+setup() {
+  # shellcheck source=hooks/lib/json.sh
+  . "$(kern_root)/hooks/lib/json.sh"
+}
+
+@test "json_get decodes escapes and ignores a key-like string inside a value" {
+  KERN_INPUT='{"description":"has \"command\": inside","command":"git commit -m \"a b\"\nnext \\ end"}'
+  run json_get command
+  [ "$status" -eq 0 ]
+  [ "$output" = 'git commit -m "a b"
+next \ end' ]
+}
+
+@test "json_get: absent key is 1, a non-string value is 1, unterminated input is 2" {
+  KERN_INPUT='{"n":5}'
+  run json_get missing
+  [ "$status" -eq 1 ]
+  run json_get n
+  [ "$status" -eq 1 ]
+  KERN_INPUT='{"a":"open'
+  run json_get a
+  [ "$status" -eq 2 ]
+}
+
+@test "json_get_raw returns objects, arrays and literals with nested braces in strings" {
+  KERN_INPUT='{"tool_input":{"command":"echo }","x":[1,{"y":"]"}]},"n":12,"b":true}'
+  run json_get_raw tool_input
+  [ "$output" = '{"command":"echo }","x":[1,{"y":"]"}]}' ]
+  run json_get_raw n
+  [ "$output" = 12 ]
+  run json_get_raw b
+  [ "$output" = true ]
+}
+
+@test "json_escape round-trips quotes, backslashes, tabs and newlines" {
+  run bash -c ". '$(kern_root)/hooks/lib/json.sh'; printf 'a \"q\"\tb\\\\c\nd' | json_escape"
+  [ "$output" = 'a \"q\"\tb\\c\nd' ]
+}
+
+@test "json_ok accepts one object with surrounding whitespace and rejects the rest" {
+  KERN_INPUT='  {"a":1}
+'
+  run json_ok
+  [ "$status" -eq 0 ]
+  KERN_INPUT='[1]'
+  run json_ok
+  [ "$status" -eq 1 ]
+  KERN_INPUT=''
+  run json_ok
+  [ "$status" -eq 1 ]
+}
+
+@test "ti_get reads from TOOL_INPUT" {
+  TOOL_INPUT='{"file_path":"/a b/c"}'
+  run ti_get file_path
+  [ "$output" = "/a b/c" ]
+}
+
+@test "a 200 KB value parses in under 5 seconds" {
+  big=$(head -c 200000 /dev/zero | tr '\0' 'x')
+  KERN_INPUT="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/f\",\"content\":\"$big\"}}"
+  start=$(date +%s)
+  run json_get file_path
+  [ "$output" = /f ]
+  [ $(($(date +%s) - start)) -lt 5 ]
+}

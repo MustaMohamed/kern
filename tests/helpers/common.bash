@@ -1,0 +1,83 @@
+# shellcheck shell=bash
+# Shared bats helpers for kern hook and script tests.
+
+# kern_root: absolute path of the kern repo (two levels above this file).
+kern_root() {
+  cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P
+}
+
+# make_repo DIR: a git repo on main with user config, one commit (README.md), and a bare origin
+# at DIR.origin with main pushed and refs/remotes/origin/HEAD set.
+make_repo() {
+  local dir="$1"
+  git init -q -b main "$dir"
+  git -C "$dir" config user.name "Test User"
+  git -C "$dir" config user.email "test@example.com"
+  git -C "$dir" config commit.gpgsign false
+  printf 'readme\n' >"$dir/README.md"
+  git -C "$dir" add README.md
+  git -C "$dir" commit -q -m "init"
+  git init -q --bare -b main "$dir.origin"
+  git -C "$dir" remote add origin "$dir.origin"
+  git -C "$dir" push -q origin main
+  git -C "$dir" remote set-head origin main >/dev/null
+}
+
+# kern_env DIR: isolates HOME and plugin data under the test tmpdir and points CWD at DIR.
+kern_env() {
+  export HOME="$BATS_TEST_TMPDIR/home"
+  export CLAUDE_PLUGIN_DATA="$BATS_TEST_TMPDIR/data"
+  export CLAUDE_PLUGIN_ROOT
+  CLAUDE_PLUGIN_ROOT="$(kern_root)"
+  mkdir -p "$HOME/.claude" "$CLAUDE_PLUGIN_DATA"
+  unset CLAUDE_CODE_ENTRYPOINT
+  export CWD="$1"
+}
+
+# payload EVENT JSON_FIELDS: a hook input object with session_id test-session and cwd $CWD.
+# JSON_FIELDS is the inside of an object, for example '"tool_name":"Bash","tool_input":{...}'.
+payload() {
+  printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"%s",%s}' "$CWD" "$1" "$2"
+}
+
+# bash_payload COMMAND: a PreToolUse payload for the Bash tool. COMMAND must not hold a double quote
+# or a backslash; tests that need them write the JSON by hand.
+bash_payload() {
+  payload PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"}"
+}
+
+# run_guard PAYLOAD [GUARDS]: runs hooks/pre-tool-use with PAYLOAD on stdin.
+run_guard() {
+  local guards="${2-}"
+  run env KERN_GUARDS="$guards" bash "$(kern_root)/hooks/pre-tool-use" <<<"$1"
+}
+
+# decision_of OUTPUT: allow|ask|deny|none.
+decision_of() {
+  local d
+  d=$(printf '%s' "$1" | sed -n 's/.*"permissionDecision":"\([a-z]*\)".*/\1/p')
+  printf '%s\n' "${d:-none}"
+}
+
+# set_autopilot on|off: writes the session state the hooks read (tests only; G16 guards real sessions).
+set_autopilot() {
+  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
+  printf 'voice: normal\nsurface: auto\nautopilot: %s\nsince: 2026-10-12T00:00:00Z\n' "$1" \
+    >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+
+# fake_gh: puts a stub `gh` first on PATH. FAKE_GH_STATES (comma list) answers `pr list`,
+# FAKE_GH_RC its exit code, FAKE_GH_ME answers `api user`, FAKE_GH_AUTHOR answers `pr view`.
+fake_gh() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat >"$BATS_TEST_TMPDIR/bin/gh" <<'GH'
+#!/usr/bin/env bash
+case "$*" in
+  "pr list"*) [ -n "${FAKE_GH_STATES-}" ] && printf '%s\n' "$FAKE_GH_STATES" | tr ',' '\n'; exit "${FAKE_GH_RC:-0}" ;;
+  "api user"*) printf '%s\n' "${FAKE_GH_ME:-me}" ;;
+  "pr view"*) printf '%s\n' "${FAKE_GH_AUTHOR:-someone}" ;;
+esac
+GH
+  chmod +x "$BATS_TEST_TMPDIR/bin/gh"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+}

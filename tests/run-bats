@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Runs bats with /bin/bash first on PATH on macOS, so hooks are tested on the bash 3.2 they meet there.
+set -euo pipefail
+# bash 3.2 does not fail a test on a false [[ ]] unless it is the test's last command, so every
+# [[ ]] assertion must end with || false. Refuse to run while a bare one exists.
+root=$(cd "$(dirname "$0")/.." && pwd)
+bare=$(find "$root/tests" -name '*.bats' -exec grep -nHE '^[[:space:]]+\[\[ .* \]\][[:space:]]*$' {} + || true)
+if [ -n "$bare" ]; then
+  echo "end each [[ ]] assertion with || false:" >&2
+  printf '%s\n' "$bare" >&2
+  exit 1
+fi
+if [ "$(uname)" = Darwin ] && [ -x /bin/bash ]; then
+  shim=$(mktemp -d)
+  trap 'rm -rf "$shim"' EXIT
+  ln -s /bin/bash "$shim/bash"
+  PATH="$shim:$PATH"
+fi
+bats "$@"
