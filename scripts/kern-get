@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Layered settings read. Prints `value<TAB>source`; exit 3 when unset and no default is given.
+set -euo pipefail
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh"
+[ $# -ge 1 ] || { echo "usage: kern-get KEY [DEFAULT]" >&2; exit 2; }
+CWD="$PWD"
+KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+export CWD KERN_MAIN
+if [ $# -ge 2 ]; then
+  value=$(settings_get "$1" "$2")
+else
+  value=$(settings_get "$1") || exit 3
+fi
+printf '%s\t%s\n' "$value" "$(settings_source "$1")"
