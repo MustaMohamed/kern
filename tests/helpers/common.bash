@@ -46,6 +46,12 @@ bash_payload() {
   payload PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"}"
 }
 
+# tool_payload TOOL FIELDS: a PreToolUse payload whose tool_input object holds FIELDS. Callers pass
+# the fields without braces: bash 3.2 brace-expands a literal {"a":1,"b":2} inside "$( )".
+tool_payload() {
+  payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{$2}"
+}
+
 # run_guard PAYLOAD [GUARDS]: runs hooks/pre-tool-use with PAYLOAD on stdin.
 run_guard() {
   local guards="${2-}"

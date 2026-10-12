@@ -1,9 +1,12 @@
 # shellcheck shell=bash
 # Shell and git parsing for guards. Needs settings.sh. Reads CWD and KERN_MAIN.
 
-# git_words CMD: one simple command per line. Splits on ; & && || | and newlines outside quotes,
-# backticks and $( ). The body of `bash -c '...'`, `sh -c` and `eval '...'` is split again and
-# printed after its wrapper, so a chained command inside a string is still seen.
+# git_words CMD: one simple command per line. Splits on ; & && || | ( ), the words { and }, and
+# newlines outside quotes, backticks and $( ); a redirection (2>&1, &>, >|) never splits, and a
+# backslash-newline is dropped. The script of an sh-family shell's -c (any path, flags such as -lc,
+# after the wrappers and keywords _cmd_words skips), the arguments of `eval`, and the bodies of $( )
+# and backticks are split again and printed after their wrapper, so a command inside a string is
+# still seen. Out of scope: commands that xargs or find -exec run.
 git_words() {
   local seg inner body
   _split_words "$1" | while IFS= read -r seg; do
@@ -11,9 +14,14 @@ git_words() {
     _subst_bodies "$seg" | while IFS= read -r body; do
       [ -n "$body" ] && git_words "$body"
     done
-    inner=$(printf '%s\n' "$seg" | sed -n -E "s/^(env +([A-Za-z_][A-Za-z0-9_]*=[^ ]* +)*)?((ba|z|da)?sh +(-[a-z]+ +)*-c|eval) +//p")
-    [ -n "$inner" ] || continue
-    inner=$(_shell_words "$inner" | head -n 1)
+    inner=$(_cmd_words "$seg" | LC_ALL=C awk '
+      NR == 1 { b = $0; sub(/.*\//, "", b); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
+      e { out = out (o++ ? " " : "") $0; next }
+      c { print; exit }
+      /^-[a-z]*c$/ { c = 1; next }
+      /^-/ { next }
+      { exit }
+      END { if (e) print out }')
     [ -n "$inner" ] && git_words "$inner"
   done
 }
@@ -49,7 +57,8 @@ _subst_bodies() {
 
 _split_words() {
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
-    function emit(s) { gsub(/^[ \t\n]+|[ \t\n]+$/, "", s); if (s != "") print s }
+    function emit(s) { gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s); if (s != "") print s }
+    function sep(ch) { return ch == "" || index(" \t\n;&|()", ch) > 0 }
     { buf = buf (NR > 1 ? "\n" : "") $0 }
     END {
       n = length(buf); q = ""; depth = 0; start = 1; i = 1
@@ -67,9 +76,15 @@ _split_words() {
         if (c == sq || c == "\"" || c == "`") { q = c; i++; continue }
         if (c == "$" && substr(buf, i + 1, 1) == "(") { depth++; i += 2; continue }
         if (depth > 0) { if (c == "(") depth++; else if (c == ")") depth--; i++; continue }
-        if (c == ";" || c == "\n" || c == "&" || c == "|") {
+        p = substr(buf, i - 1, 1)
+        x = substr(buf, i + 1, 1)
+        if ((c == "&" && (p == ">" || p == "<" || x == ">")) || (c == "|" && p == ">")) { i++; continue }
+        if ((c == "{" || c == "}") && (i == 1 || sep(p)) && sep(x)) {
           emit(substr(buf, start, i - start))
-          if ((c == "&" || c == "|") && substr(buf, i + 1, 1) == c) i++
+          start = i + 1
+        } else if (c == ";" || c == "\n" || c == "&" || c == "|" || c == "(" || c == ")") {
+          emit(substr(buf, start, i - start))
+          if ((c == "&" || c == "|") && x == c) i++
           start = i + 1
         }
         i++
@@ -102,24 +117,29 @@ _shell_words() {
     }'
 }
 
+# _cmd_words CMDLINE: the words of a simple command from its command name on, one per line.
+# Skips leading VAR=value words, the keywords if then elif else do while until ! {, the wrappers
+# command, exec, time, nohup, sudo and env, and their options (-u and -g take a value).
+_cmd_words() {
+  _shell_words "$1" | LC_ALL=C awk '
+    s { print; next }
+    val { val = 0; next }
+    /^[A-Za-z_][A-Za-z0-9_]*=/ { next }
+    /^(if|then|elif|else|do|while|until|!|[{]|command|exec|time|nohup|sudo|env)$/ { next }
+    /^-[ug]$/ { val = 1; next }
+    /^-/ { next }
+    { s = 1; print }'
+}
+
 # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the
-# command is not git. Leading VAR=value words and command/exec/time/nohup/sudo are skipped.
+# command is not git. What _cmd_words skips comes first.
 git_sub() {
-  local w=() t i=0 n dir="${CWD:-$PWD}" rest=""
+  local w=() t i=1 n dir="${CWD:-$PWD}" rest=""
   while IFS= read -r t; do w+=("$t"); done <<EOT
-$(_shell_words "$1")
+$(_cmd_words "$1")
 EOT
   n=${#w[@]}
-  while [ "$i" -lt "$n" ]; do
-    case "${w[$i]}" in
-      [A-Za-z_]*=*) i=$((i + 1)) ;;
-      command | exec | time | nohup | sudo) i=$((i + 1)) ;;
-      *) break ;;
-    esac
-  done
-  [ "$i" -lt "$n" ] || return 1
-  case "${w[$i]}" in git | */git) ;; *) return 1 ;; esac
-  i=$((i + 1))
+  case "${w[0]}" in git | */git) ;; *) return 1 ;; esac
   while [ "$i" -lt "$n" ]; do
     case "${w[$i]}" in
       -C)
@@ -142,12 +162,10 @@ EOT
   printf '%s\t%s\t%s\n' "$dir" "$t" "$rest"
 }
 
-# cmd_head CMDLINE: the first two words of a simple command after env assignments and wrappers.
+# cmd_head CMDLINE: the first two words of a simple command after what _cmd_words skips.
 cmd_head() {
-  _shell_words "$1" | awk '
-    !started && /^[A-Za-z_][A-Za-z0-9_]*=/ { next }
-    !started && /^(command|exec|time|nohup|sudo)$/ { next }
-    { started = 1; out = out (n++ ? " " : "") $0; if (n == 2) exit }
+  _cmd_words "$1" | awk '
+    { out = out (n++ ? " " : "") $0; if (n == 2) exit }
     END { print out }'
 }
 
@@ -176,9 +194,10 @@ base_branch_name() {
 }
 
 # branch_protected BRANCH: base branch, branch.protected or deploy.envs. With no resolvable base,
-# main, master, trunk and develop count as protected.
+# main, master, trunk and develop count as protected. `*` (every branch, from push_targets) does too.
 branch_protected() {
   local base
+  [ "$1" = "*" ] && return 0
   if base=$(base_branch_name); then
     [ "$1" = "$base" ] && return 0
   else
@@ -189,10 +208,12 @@ branch_protected() {
   return 1
 }
 
-# push_targets DIR REST: remote branch names a `git push` writes, one per line. `:x` and
-# --delete targets print as `x`. No refspec means the current branch.
+# push_targets DIR REST: remote branch names a `git push` writes, one per line. `:x`, `-d x` and
+# `--delete x` print `x`; `refs/heads/` and `heads/` are stripped. --all, --mirror, --branches and
+# a refspec holding `*` print `*`. Redirections (2>&1, >file, `> file`) are skipped. No refspec
+# means the current branch.
 push_targets() {
-  local dir="$1" w=() t i=0 n pos=0 any=0
+  local dir="$1" w=() t r i=0 n pos=0 any=0
   while IFS= read -r t; do [ -n "$t" ] && w+=("$t"); done <<EOT
 $(_shell_words "$2")
 EOT
@@ -201,29 +222,41 @@ EOT
     t="${w[$i]}"
     i=$((i + 1))
     case "$t" in
+      '<'* | '>'* | '&>'* | [0-9]*'>'* | [0-9]*'<'*)
+        # An operator with no target attached (`>`, `2>`) takes the next word as its target.
+        r=${t#"${t%%[!0-9]*}"}
+        r=${r#"${r%%[!<>&|]*}"}
+        [ -n "$r" ] || i=$((i + 1))
+        continue
+        ;;
+      --all | --mirror | --branches) any=1; printf '*\n'; continue ;;
       --repo | --push-option | -o | --receive-pack | --exec) i=$((i + 1)); continue ;;
       -*) continue ;;
     esac
     pos=$((pos + 1))
     [ "$pos" -eq 1 ] && continue
     any=1
+    case "$t" in *'*'*) printf '*\n'; continue ;; esac
     t=${t#+}
     case "$t" in
       *:*) t=${t#*:} ;;
     esac
     [ "$t" = HEAD ] && t=$(current_branch "$dir")
-    printf '%s\n' "${t#refs/heads/}"
+    case "$t" in refs/heads/*) t=${t#refs/heads/} ;; heads/*) t=${t#heads/} ;; esac
+    printf '%s\n' "$t"
   done
   [ "$any" = 1 ] || current_branch "$dir"
 }
 
-# with_timeout SECS CMD...: runs CMD, killing it after SECS seconds. Returns CMD's exit code.
+# with_timeout SECS CMD...: runs CMD, killing it after SECS seconds. Returns CMD's exit code. The
+# watchdog kills CMD's children first (with pkill, when present), so a grandchild such as `sleep`
+# cannot hold the caller's $( ) pipe open after CMD dies.
 with_timeout() {
   local secs="$1" pid w rc
   shift
   "$@" &
   pid=$!
-  (sleep "$secs" && kill "$pid") >/dev/null 2>&1 &
+  (sleep "$secs" && { command -v pkill >/dev/null && pkill -P "$pid"; kill "$pid"; }) >/dev/null 2>&1 &
   w=$!
   wait "$pid"
   rc=$?
@@ -234,12 +267,11 @@ with_timeout() {
 }
 
 # gh_sub CMDLINE: for `gh <group> <verb> ...` prints `<group> <verb>`; exit 1 for anything else.
+# What _cmd_words skips comes first.
 gh_sub() {
   local out
-  out=$(_shell_words "$1" | awk '
-    !s && /^[A-Za-z_][A-Za-z0-9_]*=/ { next }
-    !s && /^(command|exec|time|nohup|sudo)$/ { next }
-    { s = 1; w[++n] = $0; if (n == 3) exit }
+  out=$(_cmd_words "$1" | awk '
+    { w[++n] = $0; if (n == 3) exit }
     END { if (w[1] == "gh" && n >= 3) print w[2] " " w[3]; else if (w[1] == "gh" && n == 2) print w[2] }')
   [ -n "$out" ] || return 1
   printf '%s\n' "$out"

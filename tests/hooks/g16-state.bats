@@ -19,12 +19,6 @@ file_payload() {
   payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{\"$key\":\"$2\",\"content\":\"autopilot: on\"}"
 }
 
-# tool_payload TOOL FIELDS: a PreToolUse payload whose tool_input object holds FIELDS. Callers pass
-# the fields without braces: bash 3.2 brace-expands a literal {"a":1,"b":2} inside "$( )".
-tool_payload() {
-  payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{$2}"
-}
-
 # expect_file_tools PATH DECISION: Write, Edit and NotebookEdit of PATH each give DECISION.
 expect_file_tools() {
   local t
