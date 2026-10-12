@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# kern SessionStart: resets or keeps mode state, then prints the kernel, the settings summary and
+# the active voice rules. Plain stdout is added to Claude's context.
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+for lib in json settings state render; do
+  # shellcheck source=/dev/null
+  . "$KERN_ROOT/hooks/lib/$lib.sh"
+done
+
+# shellcheck disable=SC2034 # read by the json.sh functions
+KERN_INPUT=$(cat)
+SID=$(json_get session_id) || SID=""
+SOURCE=$(json_get source) || SOURCE=startup
+CWD=$(json_get cwd) || CWD="$PWD"
+KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+export CWD KERN_MAIN
+kern_enabled || exit 0
+
+if [ -n "$SID" ]; then
+  case "$SOURCE" in
+    compact | resume) state_get "$SID" voice >/dev/null 2>&1 || state_reset "$SID" ;;
+    *) state_reset "$SID" ;;
+  esac
+fi
+
+K_VERSION=$(kern_version)
+K_ROOT="$KERN_ROOT"
+K_KERN="$KERN_ROOT/skills"
+if [ -n "$SID" ]; then
+  K_MODE=$(mode_line "$SID")
+  K_AUTOPILOT=$(autopilot_text "$SID")
+else
+  K_MODE="kern mode: voice=$(settings_get mode.voice normal) surface=$(settings_get mode.surface auto) autopilot=off"
+  K_AUTOPILOT=off
+fi
+K_SETTINGS=$(settings_summary)
+export K_VERSION K_ROOT K_KERN K_MODE K_AUTOPILOT K_SETTINGS
+render_template "$KERN_ROOT/kernel/kernel.md"
+case "$K_MODE" in
+  *voice=terse*) printf '\n' && cat "$KERN_ROOT/modes/terse.md" ;;
+esac
+exit 0

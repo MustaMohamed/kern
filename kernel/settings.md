@@ -25,7 +25,7 @@ Policy keys take `ask` (default), `auto` or `deny`. Floor actions have no key an
 | `parallel.max` | `3` | integer | parallel-work |
 | `scope_threshold` | `4` | files per change before a pause | define, plan, implement, self-review, finish-branch |
 | `pr.max_lines` | `300` | changed lines before a split is proposed | finish-branch |
-| `test.focused` | detected | command; `{file}` stands for the test path | kern-detect, implement, diagnose, prove-it |
+| `test.focused` | detected | command; `{file}` stands for the test path, or `{dir}` (go) or `{name}` (cargo) where a file cannot be targeted | kern-detect, implement, diagnose, prove-it |
 | `test.full` | detected | command | kern-detect, implement, prove-it, finish-branch |
 | `typecheck` | detected | command | kern-detect, implement, prove-it |
 | `lint` | detected | command | kern-detect, prove-it |
