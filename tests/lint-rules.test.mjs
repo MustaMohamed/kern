@@ -86,9 +86,20 @@ test('rule 4: referenced files must exist', () => {
 test('rule 8: machine paths and listed names in shipped files', () => {
   process.env.KERN_LINT_NAMES = 'Zebediah';
   const body = '\n## Steps\n\n1. Open /Users/someone/x and ask Zebediah.\n';
-  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) });
-  delete process.env.KERN_LINT_NAMES;
-  assert.deepEqual(rules(f), [8, 8]);
+  try {
+    const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) });
+    assert.deepEqual(rules(f), [8, 8]);
+  } finally {
+    delete process.env.KERN_LINT_NAMES;
+  }
+});
+
+test('rule 8: names come from scripts/lint-names.txt, comments ignored', () => {
+  const body = '\n## Steps\n\n1. Ask Zebediah.\n';
+  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body), 'scripts/lint-names.txt': '# personal names\nZebediah\n' });
+  assert.deepEqual(rules(f), [8]);
+  const g = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body), 'scripts/lint-names.txt': '# Zebediah\n' });
+  assert.deepEqual(rules(g), []);
 });
 
 test('rule 10: exemption needs a reason, and suppresses its finding', () => {
