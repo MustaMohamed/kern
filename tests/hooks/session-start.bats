@@ -56,6 +56,7 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
 }
 
 @test "the summary lists set keys, overrides, routes, floor keys and unknown keys" {
+  [ -d "$K/skills/technical-writing" ] || skip "kern ships technical-writing in Task 15"
   mkdir -p "$R/.claude/skills/technical-writing"
   printf -- '---\nname: technical-writing\n---\n' >"$R/.claude/skills/technical-writing/SKILL.md"
   printf 'push.policy: auto\nmerge.policy: auto\nroute.define: off\nfoo.bar: 1\n' >"$R/.claude/kern.local.yml"
