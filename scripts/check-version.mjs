@@ -2,9 +2,10 @@
 // Lint rule 14: manifests and the newest CHANGELOG release agree; shipped changes add an Unreleased line.
 // Idea from addyosmani/agent-skills scripts/validate-versions.js (MIT); the code is written for kern.
 import { readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { isMain } from './lib/is-main.mjs';
 
 const SHIPPED = /^(skills|agents|kernel|modes|hooks)\//;
 const json = (root, p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
@@ -32,7 +33,7 @@ export function checkUnreleased(root, changedFiles) {
   return unreleasedBullets(changelog).length ? [] : ['shipped files changed but ## [Unreleased] has no bullet'];
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const root = fileURLToPath(new URL('..', import.meta.url));
   const problems = checkVersions(root);
   const i = process.argv.indexOf('--pr');

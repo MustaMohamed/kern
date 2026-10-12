@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Bumps both manifests and the CHANGELOG. Prints the tag command; never commits, tags or pushes.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMain } from './lib/is-main.mjs';
 
 export function bump(version, part) {
   const [ma, mi, pa] = version.split('.').map(Number);
@@ -31,7 +32,7 @@ export function release(root, part, date) {
   return next;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const root = fileURLToPath(new URL('..', import.meta.url));
   const next = release(root, process.argv[2], new Date().toISOString().slice(0, 10));
   console.log(`released ${next}; review the diff, commit, then run: git tag v${next}`);

@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checkVersions, checkUnreleased } from '../scripts/check-version.mjs';
@@ -60,4 +62,11 @@ test('release keeps sub-headings and wrapped lines', () => {
 
 test('release refuses an empty Unreleased section', () => {
   assert.throws(() => release(repo({}), 'patch', '2026-11-01'), /Unreleased is empty/);
+});
+
+test('CLI runs when reached through a symlink', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'kern-link-'));
+  symlinkSync(fileURLToPath(new URL('..', import.meta.url)), join(tmp, 'link'));
+  const out = execFileSync(process.execPath, [join(tmp, 'link', 'scripts', 'check-version.mjs')], { encoding: 'utf8' });
+  assert.match(out, /versions: agree/);
 });
