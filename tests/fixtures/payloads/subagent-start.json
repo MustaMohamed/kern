@@ -1,0 +1,1 @@
+{"session_id":"test-session","transcript_path":"/tmp/kern-fixture/t.jsonl","cwd":"/tmp/kern-fixture","scratchpad_dir":"/tmp/kern-fixture/scratch","prompt_id":"f3b7622d-9fd4-44c6-bbda-bc7d65f42fc6","agent_id":"a559fd85f573f22e1","agent_type":"kern:investigator","hook_event_name":"SubagentStart"}
