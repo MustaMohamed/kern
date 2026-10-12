@@ -97,6 +97,8 @@ Reads stdin into `KERN_INPUT`; `json_ok` fails: `fail_closed "hook input not par
 
 Guard ids and milestones: g01 g02 g03 g04 g05 g06 g13 g14 g15 g16 (M1); g18 (M2); g17 (M3).
 
+A guard that votes `allow` approves the whole Bash call, so it proves the full command shape first and falls back to ask (deny under autopilot) for anything it cannot prove; G1's push allow is the model. `settings.sh` `list_has` accepts `a, b` and `[a, b]`.
+
 ## Scripts (KERN/scripts, bash, executable, `set -euo pipefail`, run as `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>`)
 
 | Script | Signature | Output | Exit |
