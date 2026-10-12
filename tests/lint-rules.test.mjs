@@ -102,3 +102,20 @@ test('rule 11: long dashes and curly quotes', () => {
   const body = '\n## Steps\n\n1. Do this — then “that”.\n';
   assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) })), [11, 11]);
 });
+
+test('rule 11: scans any non-binary shipped file, skips binaries', () => {
+  assert.deepEqual(rules(lint({ 'hooks/lib/x.mjs': '// a — b\n' })), [11]);
+  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.'), 'skills/a/logo.png': 'a — b' });
+  assert.deepEqual(rules(f), []);
+});
+
+test('rule 4: existing references pass, repo-root fallback, anchors and ./', () => {
+  const ok = '\n## Steps\n\n1. Read `references/ok.md` and `${CLAUDE_PLUGIN_ROOT}/kernel/k.md`.\n';
+  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', ok), 'skills/a/references/ok.md': 'x', 'kernel/k.md': 'x' }), []);
+  const root = '\n## Steps\n\n1. Run `scripts/tool`.\n';
+  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', root), 'scripts/tool': 'x' }), []);
+  const anchors = '\n## Steps\n\n1. See `references/ok.md#part`, `./references/ok.md` and [x](references/ok.md#x).\n';
+  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', anchors), 'skills/a/references/ok.md': 'x' }), []);
+  const bad = '\n## Steps\n\n1. See `references/missing.md#part`.\n';
+  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', bad) })), [4]);
+});

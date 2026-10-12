@@ -12,6 +12,7 @@ export const LIMITS = { auto: 300, manual: 120, agent: 150, autoTotal: 1500, aut
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const TRIGGER = /\buse (this )?when\b|\buse (before|after|during)\b/i;
 const MACHINE_PATH = /(\/Users\/[A-Za-z]|\/home\/[a-z]|[A-Z]:\\Users\\|~\/Code\/)/;
+const BINARY_EXT = /\.(png|jpe?g|gif|ico|webp|woff2?|ttf|otf|pdf|zip|gz)$/i;
 const LONG_DASH = /[–—]/g;
 const CURLY = /[‘’“”]/g;
 
@@ -126,8 +127,8 @@ export const RULES = [
     const out = [];
     for (const s of model.skills) {
       const p = rel(model, s.file);
-      const local = [...s.body.matchAll(/`((?:references|templates|scripts|prompts)\/[\w./-]+)`|\]\(((?:references|templates|scripts|prompts)\/[\w./-]+)\)/g)].map((m) => m[1] || m[2]);
-      for (const r of local) if (!existsSync(join(model.root, 'skills', s.dir, r))) out.push(err(4, p, `referenced file missing: ${r}`));
+      const local = [...s.body.matchAll(/`(?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#[^`\s]*)?`|\]\((?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#[^)\s]*)?\)/g)].map((m) => m[1] || m[2]);
+      for (const r of local) if (!existsSync(join(model.root, 'skills', s.dir, r)) && !existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: ${r}`));
       const rooted = [...s.body.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)].map((m) => m[1].replace(/[.,;:]+$/, ''));
       for (const r of rooted) if (!existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: \${CLAUDE_PLUGIN_ROOT}/${r}`));
     }
@@ -154,7 +155,7 @@ export const RULES = [
   } },
   { id: 11, check(model) {
     const out = [];
-    const files = [...model.shipped, join(model.root, 'README.md'), join(model.root, 'CHANGELOG.md')].filter((f) => existsSync(f) && /\.(md|sh|json|yml)$|\/hooks\/[a-z-]+$/.test(f));
+    const files = [...model.shipped.filter((f) => !BINARY_EXT.test(f)), ...['README.md', 'CHANGELOG.md'].map((n) => join(model.root, n)).filter((f) => existsSync(f))];
     for (const f of files) {
       const text = readFileSync(f, 'utf8');
       const p = rel(model, f);
