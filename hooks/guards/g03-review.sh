@@ -103,7 +103,8 @@ _g03_sel_ok() {
 
 # _g03_self SEL REPO: for an approval of PR SEL (empty: the current branch's) in REPO (empty: this
 # repo). Votes deny when its author is the gh user, and asks (deny under autopilot) when that cannot
-# be checked: a URL, or gh missing or failing. Exit 0 only when the author is someone else.
+# be checked: a URL, or gh missing or failing. Exit 0 only when the author is someone else. Each gh
+# call stops at 8 s, so both stay under the 20 s hook timeout.
 _g03_self() {
   local me author
   if ! _g03_sel_ok "$1"; then
@@ -111,8 +112,8 @@ _g03_self() {
     return 1
   fi
   if command -v gh >/dev/null 2>&1 &&
-    me=$( (cd "$CWD" && with_timeout 10 gh api user --jq .login) 2>/dev/null) && [ -n "$me" ] &&
-    author=$( (cd "$CWD" && with_timeout 10 gh pr view ${1:+"$1"} ${2:+-R "$2"} --json author --jq .author.login) 2>/dev/null) &&
+    me=$( (cd "$CWD" && with_timeout 8 gh api user --jq .login) 2>/dev/null) && [ -n "$me" ] &&
+    author=$( (cd "$CWD" && with_timeout 8 gh pr view ${1:+"$1"} ${2:+-R "$2"} --json author --jq .author.login) 2>/dev/null) &&
     [ -n "$author" ]; then
     if [ "$me" = "$author" ]; then
       vote deny G3 "self-approval: use a COMMENT review on your own PR"
@@ -172,7 +173,7 @@ _g03_comment() {
 # from a file.
 _g03_api() {
   local toks t kv key val method="" fields=0 input="" ep="" npos=0 fread=0 mut=0 approve=0 bodyf=0
-  local file tax b n repo lab=1 ok=0
+  local file flat="" tax b k n r repo lab=1 keys=1 ok=0
   toks=$(_gh_args "${_GH_RECS[$1]}" 1 | _gh_opts "$_GH_API_OPTS")
   [ "$(_gh_last "$toks" help)" = true ] && return 0
   while IFS= read -r t; do
@@ -215,28 +216,36 @@ EOT
     _g03_ask "gh api $method $ep writes to GitHub"
     return 0
   fi
-  # A PR review or review comment. The --input file's bodies must carry a label, and its event
-  # counts as an approval too.
+  # A PR review or review comment. The --input file is read as one line, because a key and its
+  # value may sit on different lines. Its bodies must carry a label, and its event counts as an
+  # approval too. An "event" or "body" key whose string value the pattern cannot read leaves the
+  # post unproven (keys=0).
   if [ -n "$input" ]; then
     file=$(_g03_path "$input")
+    [ -f "$file" ] && flat=$(tr '\n\r' '  ' <"$file")
     tax=$(settings_get review.taxonomy "$_G03_TAX_DEFAULT" | tr '[:upper:]' '[:lower:]')
     while IFS= read -r b; do
       [ -n "$b" ] || continue
       b=$(printf '%s' "$b" | tr '[:upper:]' '[:lower:]' | sed 's/^[*#> -]*//; s/[^a-z-].*//')
       list_has "$tax" "$b" || lab=0
     done <<EOT
-$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*' "$file" 2>/dev/null | sed 's/^"body"[[:space:]]*:[[:space:]]*"//')
+$(printf '%s' "$flat" | grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*' | sed 's/^"body"[[:space:]]*:[[:space:]]*"//')
 EOT
-    grep -iq '"event"[[:space:]]*:[[:space:]]*"approve"' "$file" 2>/dev/null && approve=1
+    printf '%s' "$flat" | grep -iq '"event"[[:space:]]*:[[:space:]]*"approve"' && approve=1
+    for k in event body; do
+      [ "$(_g03_count "$flat" "\"$k\"")" -eq "$(_g03_count "$flat" "\"$k\"[[:space:]]*:[[:space:]]*\"[^\"]*\"")" ] || keys=0
+    done
   fi
+  # gh fills {owner}/{repo} from the current repo; any other owner/repo is unproven.
+  repo=${ep#/}
+  repo=${repo#repos/}
+  repo=${repo%%/pulls/*}
   if [ "$approve" = 1 ]; then
     n=${ep%/*}
     n=${n##*/}
-    repo=${ep#/}
-    repo=${repo#repos/}
-    repo=${repo%%/pulls/*}
-    [ "$repo" = "{owner}/{repo}" ] && repo=""
-    _g03_self "$n" "$repo" || return 0
+    r=$repo
+    [ "$r" = "{owner}/{repo}" ] && r=""
+    _g03_self "$n" "$r" || return 0
   fi
   if [ "$lab" = 0 ]; then
     vote deny G3 "every review comment body must open with a review.taxonomy label"
@@ -244,10 +253,15 @@ EOT
   fi
   # The file is read as text, so a \u escape (a key or an event spelled in escapes) is unproven.
   if _gh_proven "$1" "$toks" && _gh_only "$toks" "$_GH_API_SAFE" && [ "$npos" = 1 ] &&
-    [ "$fread" = 0 ] && [ "$bodyf" = 0 ] &&
+    [ "$repo" = "{owner}/{repo}" ] && [ "$fread" = 0 ] && [ "$bodyf" = 0 ] && [ "$keys" = 1 ] &&
     { [ -z "$input" ] || { _gh_file_ok "$input" && ! grep -q '\\u' "$file"; }; }; then
     ok=1
   fi
   # shellcheck disable=SC2016 # literal backticks
-  _g03_post "gh api review or comment post" "$ok" '`gh api repos/<o>/<r>/pulls/<n>/reviews|comments --input <file in the repo>` alone'
+  _g03_post "gh api review or comment post" "$ok" '`gh api repos/{owner}/{repo}/pulls/<n>/reviews|comments --input <file in the repo>` alone'
+}
+
+# _g03_count TEXT PATTERN: how many times the basic regex PATTERN matches in TEXT.
+_g03_count() {
+  printf '%s' "$1" | grep -o "$2" | wc -l
 }

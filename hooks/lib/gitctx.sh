@@ -442,12 +442,13 @@ with_timeout() {
 }
 
 # gh_sub CMDLINE: for `gh <group> <verb> ...` prints `<group> <verb>`; exit 1 for anything else.
-# What _cmd_words skips comes first. `-R <repo>`, `-R<repo>`, `--repo <repo>` and `--repo=<repo>`
-# before the group or the verb are skipped: gh reads them there too.
+# What _cmd_words skips comes first. The command is gh by its basename in any case (a path, or GH
+# on a case-insensitive file system), as G1 reads it. `-R <repo>`, `-R<repo>`, `--repo <repo>` and
+# `--repo=<repo>` before the group or the verb are skipped: gh reads them there too.
 gh_sub() {
   local out
   out=$(_cmd_words "$1" | awk '
-    NR == 1 { if ($0 != "gh") exit; next }
+    NR == 1 { b = $0; sub(/.*\//, "", b); if (tolower(b) != "gh") exit; next }
     skip { skip = 0; next }
     $0 == "-R" || $0 == "--repo" { skip = 1; next }
     /^-R./ || /^--repo=/ { next }

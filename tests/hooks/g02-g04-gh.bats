@@ -355,8 +355,10 @@ gh_log() {
   printf '{"comments":[{"body":"nit: a"}],"event":"APPROVE"}' >"$R/appr.json"
   printf '{"bod\\u0079":"Looks fine"}' >"$R/esc.json"
   export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
-  expect allow 'gh api repos/o/r/pulls/12/reviews --input ok.json'
+  expect allow 'gh api repos/{owner}/{repo}/pulls/12/reviews --input ok.json'
   expect allow 'gh api -X POST repos/{owner}/{repo}/pulls/12/comments --input ok.json'
+  expect ask 'gh api repos/o/r/pulls/12/reviews --input ok.json'
+  expect ask 'gh api repos/other/elsewhere/pulls/12/reviews --input ok.json'
   expect deny 'gh api repos/o/r/pulls/12/reviews -f event=APPROVE'
   expect deny 'gh api repos/o/r/pulls/12/reviews --input appr.json'
   expect ask 'gh api -X DELETE repos/o/r/issues/comments/5 -f x=y'
@@ -378,4 +380,65 @@ gh_log() {
   expect deny 'gh api -XPOST repos/o/r/pulls/12/reviews'
   expect deny "gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:\"X\"}) { clientMutationId } }'"
   expect deny 'gh api -X DELETE repos/o/r/issues/comments/5'
+}
+
+@test "G3: --input is read whole: a key and its value on different lines, CRLF included" {
+  policy 'review.post_policy: auto'
+  export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
+  printf '{\n"event":\n"APPROVE",\n"body": "nit: ok"\n}\n' >"$R/ml-appr.json"
+  printf '{\n"body":\n"Looks fine"\n}\n' >"$R/ml-body.json"
+  printf '{\r\n"event":\r\n"APPROVE"\r\n}\r\n' >"$R/crlf-appr.json"
+  printf '{\n"body":\n"nit: ok"\n}\n' >"$R/ml-ok.json"
+  printf '{"body": null}' >"$R/null.json"
+  printf '{"body": "nit: a", "event": APPROVE}' >"$R/bare.json"
+  expect deny 'gh api repos/o/r/pulls/12/reviews --input ml-appr.json'
+  expect deny 'gh api repos/o/r/pulls/12/reviews --input ml-body.json'
+  expect deny 'gh api repos/{owner}/{repo}/pulls/12/reviews --input crlf-appr.json'
+  expect allow 'gh api repos/{owner}/{repo}/pulls/12/reviews --input ml-ok.json'
+  expect ask 'gh api repos/{owner}/{repo}/pulls/12/reviews --input null.json'
+  expect ask 'gh api repos/{owner}/{repo}/pulls/12/reviews --input bare.json'
+}
+
+@test "G2, G3, G4: gh by path or in another case is still gh" {
+  set_autopilot on
+  expect deny '/path/to/gh pr ready 12'
+  set_autopilot off
+  policy 'review.post_policy: auto'
+  printf 'Thanks\n' >"$R/c.md"
+  export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
+  expect deny 'GH pr review 12 --approve'
+  expect deny '/usr/bin/gh pr comment 12 --body hi'
+  expect ask '/usr/bin/gh pr comment 12 --body-file c.md'
+}
+
+@test "G4: a short cluster reaching the text flag through booleans is inline text; close and reopen comments too" {
+  set_autopilot on
+  expect deny 'gh issue create -wbhi'
+  expect deny 'gh release create v1 -dnhi'
+  expect deny 'gh pr merge -dbX'
+  expect deny 'gh pr close 12 -dcbye'
+  expect deny 'gh pr close 12 --comment hi'
+  expect deny 'gh issue close 1 -c hi'
+  expect deny 'gh issue reopen 1 --comment=hi'
+  expect deny 'gh pr reopen 12 -cX'
+  expect allow 'gh pr create --draft -tbig --body-file b.md'
+  set_autopilot off
+  expect deny 'gh pr close 12 --comment hi'
+  expect none 'gh pr close 12 -d'
+  expect ask 'gh pr merge 12 -ds'
+}
+
+@test "G3: a clustered approval with an attached body file is a self-approval" {
+  policy 'review.post_policy: auto'
+  printf 'nit: rename\n' >"$R/l.md"
+  export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
+  expect deny 'gh pr review 12 -aFl.md'
+}
+
+@test "G3: an approval whose pr view lookup fails asks, denied under autopilot" {
+  policy 'review.post_policy: auto'
+  gh_log '[ "$1 $2" = "pr view" ] && exit 1'
+  expect ask 'gh pr review 12 --approve'
+  set_autopilot on
+  expect deny 'gh pr review 12 --approve'
 }
