@@ -281,7 +281,7 @@ _g01_ref() {
     *) _G01_SRC=$r; _G01_DST=$r ;;
   esac
   case "$_G01_DST" in
-    HEAD | @) _G01_DST=$2 ;;
+    HEAD | @) _G01_DST=${2:-HEAD} ;;
     refs/heads/*) _G01_DST=${_G01_DST#refs/heads/} ;;
     heads/*) _G01_DST=${_G01_DST#heads/} ;;
   esac
@@ -379,19 +379,19 @@ EOT
 
 # _g01_proven DIR PLAIN ODD CUR REMOTE REFS...: the one push shape G1 may allow. All hold: this
 # git record is the command's first, every later record is a read-only filter (_g01_filter), and
-# the command has no $( ) or backticks; the record holds no $, { or }, so no word expands; the
-# record is `git`, -C options, `push` (PLAIN 1), and every push option is in the safe set or a
-# quiet redirection (ODD 0); CUR and REMOTE hold only _G01_NAME_CHARS; REMOTE is a name
-# `git remote` lists, with no push, mirror, receivepack, vcs or pushurl config, and no
-# url.<base>.pushInsteadOf is set; there is at least one refspec, and each pushes CUR (a branch)
-# to CUR.
+# the command has no $( ) or backticks; the record holds no $, {, }, *, ?, [ or ~, so no word
+# expands or globs; the record is `git`, -C options, `push` (PLAIN 1), and every push option is in
+# the safe set or a quiet redirection (ODD 0); CUR and REMOTE hold only _G01_NAME_CHARS; REMOTE is
+# a name `git remote` lists, with no push, mirror, receivepack or vcs config, and the URL a push
+# goes to is its own URL: no pushurl, and no insteadOf or pushInsteadOf rewrite applies; there is
+# at least one refspec, and each pushes CUR (a branch) to CUR.
 _g01_proven() {
-  local dir="$1" plain="$2" odd="$3" cur="$4" remote="$5" r s d k i=1
+  local dir="$1" plain="$2" odd="$3" cur="$4" remote="$5" r s d k u i=1
   shift 5
   [ "$_G01_IDX" = 1 ] && [ "$plain" = 1 ] && [ "$odd" = 0 ] && [ $# -gt 0 ] && [ -n "$remote" ] || return 1
   # shellcheck disable=SC2016 # a literal $( in the text
   case "$_G01_CMD" in *'$('* | *'`'*) return 1 ;; esac
-  case "${_G01_RECS[0]}" in *'$'* | *'{'* | *'}'*) return 1 ;; esac
+  case "${_G01_RECS[0]}" in *'$'* | *'{'* | *'}'* | *'*'* | *'?'* | *'['* | *'~'*) return 1 ;; esac
   case "$cur" in "" | *[!"$_G01_NAME_CHARS"]*) return 1 ;; esac
   case "$remote" in *[!"$_G01_NAME_CHARS"]*) return 1 ;; esac
   while [ "$i" -lt "${#_G01_RECS[@]}" ]; do
@@ -406,19 +406,21 @@ _g01_proven() {
   word_has "$(git -C "$dir" remote 2>/dev/null)" "$remote" || return 1
   while IFS= read -r k; do
     case "${k%% *}" in
-      "remote.$remote.push" | "remote.$remote.mirror" | "remote.$remote.receivepack" | \
-        "remote.$remote.vcs" | "remote.$remote.pushurl" | url.*) return 1 ;;
+      "remote.$remote.push" | "remote.$remote.mirror" | "remote.$remote.receivepack" | "remote.$remote.vcs") return 1 ;;
     esac
   done <<EOT
-$(git -C "$dir" config --get-regexp '^(remote\..*\.(push|mirror|receivepack|vcs|pushurl)|url\..*\.pushinsteadof)$' 2>/dev/null)
+$(git -C "$dir" config --get-regexp '^remote\..*\.(push|mirror|receivepack|vcs)$' 2>/dev/null)
 EOT
+  # A pushurl, or an insteadOf or pushInsteadOf rewrite that matches this remote, changes the URL.
+  u=$(git -C "$dir" config --get-all "remote.$remote.url" 2>/dev/null) && [ -n "$u" ] || return 1
+  [ "$(git -C "$dir" remote get-url --push --all "$remote" 2>/dev/null)" = "$u" ] || return 1
   return 0
 }
 
 # _g01_push DIR PLAIN WORDS...: force first, then push.policy deny, remote delete, an unknown
 # directory, protected targets and lease pushes; an allow needs _g01_proven.
 _g01_push() {
-  local dir="$1" plain="$2" toks t r cur policy fix force=none del=0 odd=0 val=0 all=0 have=0 prot=0
+  local dir="$1" plain="$2" toks t r cur policy fix det="" force=none del=0 odd=0 val=0 all=0 have=0 prot=0
   local remote="" refs=() tg=()
   shift 2
   toks=$(_g01_opts "$_G01_PUSH_OPTS" "$@")
@@ -468,7 +470,10 @@ EOT
   fi
   cur=$(current_branch "$dir")
   # The retry that reaches the allowed shape: a bare push names its remote and branch.
-  if [ ${#refs[@]} -gt 0 ]; then
+  if [ -z "$cur" ]; then
+    fix="HEAD is detached; check out a branch first"
+    det="; $fix"
+  elif [ ${#refs[@]} -gt 0 ]; then
     # shellcheck disable=SC2016 # literal backticks
     fix='kern allows only `git push [-u] <remote> <current-branch>` unattended'
     # shellcheck disable=SC2016 # literal backticks
@@ -479,7 +484,7 @@ EOT
     fix="name the remote and branch: git push -u origin $cur"
   fi
   [ "$all" = 1 ] && tg+=("*")
-  [ ${#refs[@]} -gt 0 ] || tg+=("$cur")
+  [ ${#refs[@]} -gt 0 ] || tg+=("${cur:-HEAD}")
   for r in "${refs[@]}"; do
     _g01_ref "$r" "$cur"
     tg+=("$_G01_DST")
@@ -487,21 +492,21 @@ EOT
   for t in "${tg[@]}"; do
     branch_protected "$t" || continue
     prot=1
-    vote ask G1 "push to protected branch $t"
-    [ "$AUTOPILOT" = 1 ] && vote deny G1 "push to protected branch $t under autopilot"
+    vote ask G1 "push to protected branch $t$det"
+    [ "$AUTOPILOT" = 1 ] && vote deny G1 "push to protected branch $t under autopilot$det"
   done
   [ "$prot" = 0 ] || return 0
   if [ "$force" = lease ]; then
     if [ "$AUTOPILOT" = 0 ]; then
       if _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}"; then
-        vote ask G1 "force-with-lease push of ${tg[*]}"
+        vote ask G1 "force-with-lease push of ${tg[*]}$det"
       else
-        vote deny G1 "${tg[*]} may hold commits by other authors (or that could not be checked); a shared branch is never force-pushed"
+        vote deny G1 "${tg[*]} may hold commits by other authors (or that could not be checked); a shared branch is never force-pushed$det"
       fi
     elif [ "$(settings_get rebase.push ask)" != autopilot ]; then
-      vote deny G1 "lease push under autopilot needs rebase.push: autopilot"
+      vote deny G1 "lease push under autopilot needs rebase.push: autopilot$det"
     elif [ "$val" = 1 ]; then
-      vote deny G1 "--force-with-lease=<ref>:<expect> under autopilot; use the bare option"
+      vote deny G1 "--force-with-lease=<ref>:<expect> under autopilot; use the bare option$det"
     elif ! _g01_proven "$dir" "$plain" "$odd" "$cur" "$remote" "${refs[@]}"; then
       vote deny G1 "autopilot lease push of an unknown shape; $fix"
     elif ! _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}"; then

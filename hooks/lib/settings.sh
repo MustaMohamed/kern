@@ -144,9 +144,14 @@ kern_enabled() {
   [ "$(settings_get kern on)" != off ]
 }
 
-# list_has LIST ITEM: exit 0 when the comma-separated LIST contains ITEM (whitespace trimmed).
+# list_has LIST ITEM: exit 0 when the comma-separated LIST contains ITEM (whitespace trimmed). One
+# pair of brackets around the whole LIST is dropped, so a YAML flow list [a, b] reads as a, b.
 list_has() {
-  local rest="$1," item
+  local list="$1" rest item
+  list=${list#"${list%%[![:space:]]*}"}
+  list=${list%"${list##*[![:space:]]}"}
+  case "$list" in "["*"]") list=${list#\[}; list=${list%\]} ;; esac
+  rest="$list,"
   while [ -n "$rest" ]; do
     item=${rest%%,*}; rest=${rest#*,}
     # Trimmed in bash: BSD sed reads [ \t] as space, backslash or t, so it cut feat to fea.

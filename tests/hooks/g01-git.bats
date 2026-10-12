@@ -385,6 +385,32 @@ settings() {
   expect deny "git -C $W push origin {x,main}"
   git -C "$W" switch -q -c '$main'
   expect deny "git -C $W push origin \$'main'"
+  # Branch g passes the name check, so only the record check refuses the $ in the -C dir.
+  git -C "$R" worktree add -q -b g "$BATS_TEST_TMPDIR/w\$X" >/dev/null 2>&1
+  expect deny "git -C $BATS_TEST_TMPDIR/w\$X push origin g"
+}
+
+@test "a branch or remote name outside the safe characters is never allowed" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  expect allow "git -C $W push origin feat"
+  git -C "$W" switch -q -c 'fe!at'
+  expect deny "git -C $W push origin fe!at"
+  git -C "$W" switch -q feat
+  git -C "$R" remote add 'o!x' "$R.origin"
+  expect deny "git -C $W push o!x feat"
+}
+
+@test "a glob or ~ in a push record is never allowed" {
+  T="$BATS_TEST_TMPDIR"
+  git clone -q "$R.origin" "$T/x1"
+  git -C "$T/x1" switch -q -c feat2
+  git -C "$T/x1" config remote.origin.pushurl "$T/elsewhere.git"
+  git clone -q "$R.origin" "$T/x[1]"
+  git -C "$T/x[1]" switch -q -c feat2
+  git -C "$R" worktree add -q -b t2 "$R/~" >/dev/null 2>&1
+  set_autopilot on
+  expect deny "git -C $T/x[1] push origin feat2" "git -C ~ push origin t2"
 }
 
 @test "shell expansion or a glob in a filter is never allowed" {
@@ -441,4 +467,30 @@ settings() {
   g1 "git -C $BATS_TEST_TMPDIR/wt push --force-with-lease=feat:0123456 origin feat"
   [ "$(decision_of "$output")" = deny ]
   [[ "$output" == *"--force-with-lease=<ref>:<expect> under autopilot; use the bare option"* ]] || false
+}
+
+@test "a push URL rewritten for this remote is unproven; an unrelated rewrite is not" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  git config --global url.git@github.com:.pushInsteadOf https://github.com/
+  expect allow "git -C $W push origin feat"
+  git -C "$W" config "url.$BATS_TEST_TMPDIR/else.git.insteadOf" "$R.origin"
+  expect deny "git -C $W push origin feat"
+}
+
+@test "a detached HEAD names itself in the reason" {
+  W="$BATS_TEST_TMPDIR/wt"
+  git -C "$W" switch -q --detach
+  for c in "git -C $W push" "git -C $W push origin HEAD" "git -C $W push --force-with-lease origin HEAD"; do
+    g1 "$c"
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *"HEAD is detached; check out a branch first"* ]] || { echo "$c -> $output"; return 1; }
+  done
+  settings 'rebase.push: autopilot'
+  set_autopilot on
+  for c in "git -C $W push" "git -C $W push origin HEAD" "git -C $W push --force-with-lease"; do
+    g1 "$c"
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *"HEAD is detached; check out a branch first"* ]] || { echo "$c -> $output"; return 1; }
+  done
 }

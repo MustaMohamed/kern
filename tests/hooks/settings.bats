@@ -107,6 +107,17 @@ YML
   [ "$status" -eq 1 ]
 }
 
+@test "list_has reads a YAML flow list in brackets" {
+  list_has "[feat]" feat
+  list_has "[ feat, test ]" test
+  run list_has "[feat]" "[feat]"
+  [ "$status" -eq 1 ]
+  # shellcheck source=hooks/lib/gitctx.sh
+  . "$KERN_ROOT/hooks/lib/gitctx.sh"
+  printf 'branch.protected: [feat]\n' >"$R/.claude/kern.local.yml"
+  branch_protected feat
+}
+
 @test "policy_for never loosens floor actions: merge and deploy read as ask" {
   printf 'merge.policy: auto\ndeploy.policy: auto\npush.policy: auto\n' >"$R/.claude/kern.local.yml"
   [ "$(policy_for merge)" = ask ]
