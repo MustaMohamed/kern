@@ -149,7 +149,9 @@ list_has() {
   local rest="$1," item
   while [ -n "$rest" ]; do
     item=${rest%%,*}; rest=${rest#*,}
-    item=$(printf '%s' "$item" | sed 's/^[ \t]*//; s/[ \t]*$//')
+    # Trimmed in bash: BSD sed reads [ \t] as space, backslash or t, so it cut feat to fea.
+    item=${item#"${item%%[![:space:]]*}"}
+    item=${item%"${item##*[![:space:]]}"}
     [ -n "$item" ] && [ "$item" = "$2" ] && return 0
   done
   return 1

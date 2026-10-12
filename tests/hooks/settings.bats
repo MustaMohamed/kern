@@ -87,6 +87,26 @@ YML
   [ "$status" -eq 1 ]
 }
 
+@test "list_has keeps items that start or end with t, in branch.protected and deploy.envs" {
+  list_has "feat, test" feat
+  list_has "feat, test" test
+  list_has "$(printf 'feat\t, test')" feat
+  run list_has "feat, test" fea
+  [ "$status" -eq 1 ]
+  run list_has "feat, test" es
+  [ "$status" -eq 1 ]
+  # shellcheck source=hooks/lib/gitctx.sh
+  . "$KERN_ROOT/hooks/lib/gitctx.sh"
+  printf 'branch.protected: feat, test\n' >"$R/.claude/kern.local.yml"
+  branch_protected feat
+  branch_protected test
+  printf 'deploy.envs: test, feat\n' >"$R/.claude/kern.local.yml"
+  branch_protected feat
+  branch_protected test
+  run branch_protected fea
+  [ "$status" -eq 1 ]
+}
+
 @test "policy_for never loosens floor actions: merge and deploy read as ask" {
   printf 'merge.policy: auto\ndeploy.policy: auto\npush.policy: auto\n' >"$R/.claude/kern.local.yml"
   [ "$(policy_for merge)" = ask ]
