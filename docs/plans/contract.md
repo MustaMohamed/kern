@@ -125,7 +125,7 @@ Every key in spec A5 plus design 5.4, one row each: key, default, values, read b
 
 ## Kernel rendering
 
-Template placeholders: `{VERSION}` (plugin.json version), `{ROOT_PATH}` (absolute `${CLAUDE_PLUGIN_ROOT}`, printed once in the header), `{ROOT}` and `{KERN}` (left literal in the rendered kernel; the header line defines them as the plugin root and `{ROOT}/skills`, user decision 2026-10-12), `{SETTINGS}` (settings summary), `{MODE}` (one line `kern mode: voice=<v> surface=<s> autopilot=<on|off>`), `{AUTOPILOT}` (`off` or `ON since <iso>`). Rendering uses `sed` with `|` delimiters; values containing `|` or `&` are escaped first.
+Template placeholders: `{VERSION}` (plugin.json version), `{ROOT_PATH}` (absolute `${CLAUDE_PLUGIN_ROOT}`, printed once in the header), `{ROOT}` and `{KERN}` (left literal in the rendered kernel; the header line defines them as the plugin root and `{ROOT}/skills`, user decision 2026-10-12), `{SETTINGS}` (settings summary), `{MODE}` (one line `kern mode: voice=<v> surface=<s> autopilot=<on|off>`), `{AUTOPILOT}` (`off` or `ON since <iso>`). Rendering uses awk (`hooks/lib/render.sh`), so values may hold any character.
 
 ## Commit conventions in the kern repo
 
@@ -166,7 +166,7 @@ Subject `M<n>: <imperative summary>` (72 chars or fewer), body says why. No attr
 
 - `json.sh`: `json_get` and `json_get_raw` also exit 2 on malformed input (unterminated string). `ti_get KEY` reads `$TOOL_INPUT`, the raw `tool_input` JSON the dispatcher sets.
 - `settings.sh` also provides `settings_source KEY` (file or `default`; `settings_get` runs in command substitution, so it cannot set `SETTINGS_SOURCE` for the caller), `settings_keys FILE`, `settings_known_keys`, and `list_has LIST ITEM`.
-- New library `hooks/lib/render.sh`: `render_template FILE` (awk literal replacement of `{VERSION}`, `{ROOT}`, `{KERN}`, `{MODE}`, `{AUTOPILOT}` from `K_*` variables; a line that is exactly `{SETTINGS}` or `{VOICE}` becomes that value; replaces the contract's sed rendering), `kern_version`, `mode_line SID`, `autopilot_text SID`, `settings_summary`, `KERN_FLOOR_KEYS`.
+- New library `hooks/lib/render.sh`: `render_template FILE` (awk literal replacement of `{VERSION}`, `{ROOT_PATH}`, `{MODE}`, `{AUTOPILOT}` from `K_*` variables; a line that is exactly `{SETTINGS}` or `{VOICE}` becomes that value; replaces the contract's sed rendering), `kern_version`, `mode_line SID`, `autopilot_text SID`, `settings_summary`, `KERN_FLOOR_KEYS`.
 - New file `modes/terse-subagent.md`: the one-line terse voice for subagents (the full `modes/terse.md` would break the 1,200-character subagent budget).
 - `decide.sh`: the reason printed is the winning level's reasons, each `G<n>: <reason>`, joined by `; `, prefixed `kern `. `fail_closed` votes as `G0`.
 - `gitctx.sh` also provides `_split_words`, `_subst_bodies`, `_shell_words`, `cmd_head`, `current_branch`, `base_branch_name`, `push_targets DIR REST`, `with_timeout SECS CMD...`, `gh_sub CMDLINE`, `word_value WORDS FLAG...`, `word_has WORDS FLAG...`.
