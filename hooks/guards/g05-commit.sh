@@ -150,7 +150,7 @@ _g05_wide() {
 # _g05_log DIR REF: REF's commit message. --end-of-options keeps a REF such as --output=<file> from
 # being read as a git log option.
 _g05_log() {
-  git -C "$1" log -1 --no-show-signature --no-color --format=%B --end-of-options "$2" -- 2>/dev/null
+  git -C "$1" -c core.fsmonitor=false log -1 --no-show-signature --no-color --format=%B --end-of-options "$2" -- 2>/dev/null
 }
 
 # _g05_message DIR TOKS [raw]: prints the commit message from _g01_opts tokens: the -F file, else

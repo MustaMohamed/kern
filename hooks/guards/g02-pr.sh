@@ -214,7 +214,7 @@ _gh_file_ok() {
     *) return 1 ;;
   esac
   # check-ignore exits 1 for a path git does not ignore; 0 is ignored, 128 an error.
-  git -C "$d" check-ignore -q -- "${f##*/}" 2>/dev/null
+  git -C "$d" -c core.fsmonitor=false check-ignore -q -- "${f##*/}" 2>/dev/null
   [ $? = 1 ]
 }
 

@@ -351,18 +351,23 @@ CDS-2465 in the body'"
   expect deny g05,g06 "git add -- id_rsa && git commit -m 'CDS-2465: key'"
 }
 
-@test "G6: a commit of paths, -i, -o or -a in a cluster scans their unstaged content" {
+@test "G6: a commit of paths, -i, -o, -p or -a in any spelling asks: kern scans only staged content" {
   printf 'ok\n' >"$R/k.txt"
   git -C "$R" add k.txt
   git -C "$R" commit -q -m 'CDS-2465: k'
   printf '%s\n' "$KEY" >>"$R/k.txt"
-  local c
-  for c in "git commit -m 'CDS-2465: k' -- k.txt" "git commit -m 'CDS-2465: k' k.txt" \
-    "git commit -i k.txt -m 'CDS-2465: k'" "git commit -o k.txt -m 'CDS-2465: k'" \
-    "git commit -qa -m 'CDS-2465: k'" "git commit -sam 'CDS-2465: k'"; do
-    expect deny g06 "$c" || return 1
-    [[ "$output" == *"k.txt:2 private-key"* ]] || false
+  local c cmds=(
+    "git commit -m 'CDS-2465: k' -- k.txt" "git commit -m 'CDS-2465: k' k.txt"
+    "git commit -i k.txt -m 'CDS-2465: k'" "git commit -o k.txt -m 'CDS-2465: k'"
+    "git commit -qa -m 'CDS-2465: k'" "git commit -sam 'CDS-2465: k'" "git commit -p -m 'CDS-2465: k'"
+    "git commit --pathspec-from-file=list.txt -m 'CDS-2465: k'"
+  )
+  for c in "${cmds[@]}"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"kern scans only staged content"* ]] || false
   done
+  set_autopilot on
+  for c in "${cmds[@]}"; do expect deny g06 "$c" || return 1; done
 }
 
 @test "G6: a commit in another repository is denied under autopilot" {
@@ -425,8 +430,28 @@ CDS-2465 in the body'"
   git -C "$R" remote add public "$R.public"
   expect none g06 "git push origin CDS-2465/replace-minio"
   expect none g06 "git push"
+  expect ask g06 "git push public CDS-2465/replace-minio"
+  [[ "$output" == *"history already on another remote was not rescanned for public"* ]] || false
+  set_autopilot on
+  expect deny g06 "git push public CDS-2465/replace-minio"
+  set_autopilot off
+  git -C "$R" push -q public main
   expect deny g06 "git push public CDS-2465/replace-minio"
   [[ "$output" == *"s1.txt:1 private-key"* ]] || false
+}
+
+@test "G6: with no tracking refs anywhere the whole history is scanned and nothing asks" {
+  git -C "$R" remote set-head origin -d
+  git -C "$R" update-ref -d refs/remotes/origin/main
+  printf 'clean\n' >"$R/c.txt"
+  git -C "$R" add c.txt
+  git -C "$R" commit -q -m 'CDS-2465: c'
+  expect none g06 "git push -u origin CDS-2465/replace-minio"
+  printf '%s\n' "$KEY" >"$R/k.txt"
+  git -C "$R" add k.txt
+  git -C "$R" commit -q -m 'CDS-2465: k'
+  expect deny g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *"k.txt:1 private-key"* ]] || false
 }
 
 @test "G6: a push of another branch scans that branch" {
@@ -509,4 +534,177 @@ EOT
   expect ask g06 "git push origin \"\$(git branch --show-current)\""
   [[ "$output" == *"not scanned"* ]] || false
   expect ask g06 "git push origin no-such-branch"
+}
+
+@test "G6: attributes, diff.relative and invalid UTF-8 cannot hide an added line" {
+  printf '%s\n' "$KEY" >"$R/id_rsa"
+  git -C "$R" add id_rsa
+  printf 'id_rsa -diff\n' >"$R/.gitattributes"
+  expect deny g06 "git commit -m 'CDS-2465: key'"
+  [[ "$output" == *"id_rsa:1 private-key"* ]] || false
+  rm "$R/.gitattributes"
+  printf '* -diff\n' >"$R/.git/info/attributes"
+  expect deny g06 "git commit -m 'CDS-2465: key'"
+  printf '* binary\n' >"$R/.git/info/attributes"
+  expect deny g06 "git commit -m 'CDS-2465: key'"
+  rm "$R/.git/info/attributes"
+  mkdir -p "$R/sub"
+  git -C "$R" config diff.relative true
+  CWD="$R/sub" expect deny g06 "git commit -m 'CDS-2465: key'"
+  [[ "$output" == *"id_rsa:1 private-key"* ]] || false
+  git -C "$R" config --unset diff.relative
+  git -C "$R" reset -q
+  printf 'x\377y = AKIAABCDEFGHIJKLMNOP\n' >"$R/k.txt"
+  git -C "$R" add k.txt
+  expect deny g06 "git commit -m 'CDS-2465: key'"
+  [[ "$output" == *"k.txt:1 aws-access-key"* ]] || false
+}
+
+@test "G6: repo-configured programs never run in a scan" {
+  printf '#!/bin/sh\necho "$0 $*" >>"%s/ran"\ncat >/dev/null 2>&1\nexit 1\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/evil"
+  chmod +x "$BATS_TEST_TMPDIR/evil"
+  printf 'ok\n' >"$R/k.txt"
+  git -C "$R" add k.txt
+  local tree parent sha
+  tree=$(git -C "$R" write-tree)
+  parent=$(git -C "$R" rev-parse HEAD)
+  sha=$(printf 'tree %s\nparent %s\nauthor T <t@example.com> 1700000000 +0000\ncommitter T <t@example.com> 1700000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n -----END PGP SIGNATURE-----\n\nCDS-2465: signed\n' "$tree" "$parent" |
+    git -C "$R" hash-object -t commit -w --stdin)
+  git -C "$R" update-ref refs/heads/CDS-2465/replace-minio "$sha"
+  printf 'more\n' >>"$R/k.txt"
+  git -C "$R" config log.showSignature true
+  git -C "$R" config gpg.program "$BATS_TEST_TMPDIR/evil"
+  git -C "$R" config core.fsmonitor "$BATS_TEST_TMPDIR/evil"
+  printf 'CDS-2465: m\n' >"$R/msg.txt"
+  expect '!allow' g06 "git push -u origin CDS-2465/replace-minio"
+  expect '!allow' g06 "git commit -m 'CDS-2465: k' -- k.txt"
+  expect '!allow' g06 "git commit -qa -m 'CDS-2465: k'"
+  set_autopilot on
+  expect allow g05 "git commit -F msg.txt"
+  [ ! -e "$BATS_TEST_TMPDIR/ran" ]
+}
+
+@test "G6: a push walk that does not finish asks" {
+  local real
+  real=$(command -v git)
+  mkdir -p "$BATS_TEST_TMPDIR/slow"
+  printf '#!/bin/bash\ncase " $* " in *" log "*" -p "*) exec sleep 5 ;; esac\nexec "%s" "$@"\n' "$real" >"$BATS_TEST_TMPDIR/slow/git"
+  chmod +x "$BATS_TEST_TMPDIR/slow/git"
+  printf 'ok\n' >"$R/s.txt"
+  git -C "$R" add s.txt
+  git -C "$R" commit -q -m 'CDS-2465: s'
+  export KERN_SCAN_SECS=1
+  PATH="$BATS_TEST_TMPDIR/slow:$PATH"
+  expect ask g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *"secret scan did not finish"* ]] || false
+  set_autopilot on
+  expect deny g06 "git push -u origin CDS-2465/replace-minio"
+}
+
+@test "G6: a clean merge of main brings in nothing new: no vote" {
+  git -C "$R" switch -q main
+  printf '%s\n' "$KEY" >"$R/old.txt"
+  printf 'x\n' >"$R/old.db"
+  git -C "$R" add old.txt old.db
+  git -C "$R" commit -q -m 'CDS-2465: already public'
+  git -C "$R" push -q origin main
+  git -C "$R" switch -q CDS-2465/replace-minio
+  printf 'mine\n' >"$R/mine.txt"
+  git -C "$R" add mine.txt
+  git -C "$R" commit -q -m 'CDS-2465: mine'
+  git -C "$R" merge -q --no-ff --no-edit main
+  policy 'never_commit: *.db\n'
+  expect none g06 "git push -u origin CDS-2465/replace-minio"
+}
+
+@test "G6: never_commit reads staged names: a removal passes, a non-ASCII name is caught" {
+  printf 'X=1\n' >"$R/.env"
+  git -C "$R" add -f .env
+  git -C "$R" commit -q -m 'CDS-2465: env'
+  policy 'never_commit: .env*, *.db\n'
+  git -C "$R" rm -q --cached .env
+  expect none g06 "git commit -m 'CDS-2465: untrack env'"
+  git -C "$R" push -q -u origin CDS-2465/replace-minio
+  git -C "$R" commit -q -m 'CDS-2465: untrack env'
+  expect none g06 "git push"
+  git -C "$R" reset -q
+  printf 'x\n' >"$R/d$(printf '\303\244')t.db"
+  git -C "$R" add -- "d$(printf '\303\244')t.db"
+  expect deny g06 "git commit -m 'CDS-2465: db'"
+  [[ "$output" == *"never_commit paths staged: d"*"t.db"* ]] || false
+}
+
+@test "G6: sk- needs a non-word character before it, and file names are not scanned" {
+  printf 'task-abcdefghijklmnopqrstuvwxyz0123\n' >"$R/a.txt"
+  printf 'clean\n' >"$R/sk-abcdefghijklmnopqrstuvwxyz0123.txt"
+  git -C "$R" add a.txt sk-abcdefghijklmnopqrstuvwxyz0123.txt
+  expect none g06 "git commit -m 'CDS-2465: a'"
+  printf 'sk-abcdefghijklmnopqrstuvwxyz0123\nkey=sk-abcdefghijklmnopqrstuvwxyz0123\n' >"$R/b.txt"
+  git -C "$R" add b.txt
+  expect deny g06 "git commit -m 'CDS-2465: b'"
+  [[ "$output" == *"b.txt:1 api-key; b.txt:2 api-key"* ]] || false
+}
+
+@test "G6: after cd, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= it could not scan" {
+  mkdir -p "$R/sub"
+  local c cmds=(
+    "cd sub && git commit -m 'CDS-2465: x'" "git --git-dir=.git commit -m 'CDS-2465: x'"
+    "git --work-tree=. commit -m 'CDS-2465: x'" "GIT_DIR=.git git commit -m 'CDS-2465: x'"
+    "GIT_INDEX_FILE=.git/index git commit -m 'CDS-2465: x'" "export GIT_DIR=.git; git push origin HEAD"
+    "pushd sub && git push"
+  )
+  for c in "${cmds[@]}"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+}
+
+@test "G6: push : and a matching push scan every branch" {
+  git -C "$R" switch -q -c CDS-2465/side main
+  printf '%s\n' "$KEY" >"$R/s2.txt"
+  git -C "$R" add s2.txt
+  git -C "$R" commit -q -m 'CDS-2465: s2'
+  git -C "$R" switch -q CDS-2465/replace-minio
+  expect deny g06 "git push origin :"
+  [[ "$output" == *"s2.txt:1 private-key"* ]] || false
+  git -C "$R" config push.default matching
+  expect deny g06 "git push"
+  expect deny g06 "git push origin"
+  git -C "$R" config --unset push.default
+  git -C "$R" config remote.origin.push 'refs/heads/*:refs/heads/*'
+  expect deny g06 "git push"
+}
+
+@test "G6: a message line that looks like a diff is still read as the message" {
+  git -C "$R" commit -q --allow-empty -m "CDS-2465: x
+
+diff --git a/f b/f
++++ b/f
+key AKIAABCDEFGHIJKLMNOP"
+  expect deny g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *" message:5 aws-access-key"* ]] || false
+}
+
+@test "G6: replace refs and log.showRoot cannot hide pushed content" {
+  printf '%s\n' "$KEY" >"$R/k.txt"
+  git -C "$R" add k.txt
+  git -C "$R" commit -q -m 'CDS-2465: key'
+  local bad clean
+  bad=$(git -C "$R" rev-parse HEAD)
+  clean=$(git -C "$R" commit-tree "$(git -C "$R" rev-parse HEAD~1^{tree})" -p HEAD~1 -m 'CDS-2465: key')
+  git -C "$R" replace "$bad" "$clean"
+  expect deny g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *"k.txt:1 private-key"* ]] || false
+  N="$BATS_TEST_TMPDIR/fresh"
+  git init -q -b main "$N"
+  git -C "$N" config user.email t@example.com
+  git -C "$N" config user.name T
+  printf '%s\n' "$KEY" >"$N/root.txt"
+  git -C "$N" add root.txt
+  git -C "$N" commit -q -m 'CDS-1: root'
+  git init -q --bare "$N.origin"
+  git -C "$N" remote add origin "$N.origin"
+  git -C "$N" config log.showRoot false
+  CWD="$N" expect deny g06 "git push -u origin main"
+  [[ "$output" == *"root.txt:1 private-key"* ]] || false
 }
