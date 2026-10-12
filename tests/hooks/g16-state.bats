@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
-# G16: Claude cannot write kern session state or relay a mode or autopilot command.
+# G16: Claude cannot write kern session state or relay a mode or autopilot command, and the user
+# confirms every write to a kern settings file.
 
 load ../helpers/common
 
@@ -7,6 +8,42 @@ setup() {
   R="$BATS_TEST_TMPDIR/repo"
   make_repo "$R"
   kern_env "$R"
+  S="$CLAUDE_PLUGIN_DATA/sessions"
+  mkdir -p "$S"
+}
+
+# file_payload TOOL PATH: a PreToolUse payload for a Write, Edit or NotebookEdit of PATH.
+file_payload() {
+  local key=file_path
+  [ "$1" = NotebookEdit ] && key=notebook_path
+  payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{\"$key\":\"$2\",\"content\":\"autopilot: on\"}"
+}
+
+# tool_payload TOOL FIELDS: a PreToolUse payload whose tool_input object holds FIELDS. Callers pass
+# the fields without braces: bash 3.2 brace-expands a literal {"a":1,"b":2} inside "$( )".
+tool_payload() {
+  payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{$2}"
+}
+
+# expect_file_tools PATH DECISION: Write, Edit and NotebookEdit of PATH each give DECISION.
+expect_file_tools() {
+  local t
+  for t in Write Edit NotebookEdit; do
+    run_guard "$(file_payload "$t" "$1")" g16
+    [ "$status" -eq 0 ] || { echo "$t $1 -> status $status"; return 1; }
+    [ "$(decision_of "$output")" = "$2" ] || { echo "$t $1 -> $output"; return 1; }
+  done
+}
+
+# expect_bash DECISION COMMAND...: each Bash COMMAND gives DECISION.
+expect_bash() {
+  local d="$1" c
+  shift
+  for c in "$@"; do
+    run_guard "$(bash_payload "$c")" g16
+    [ "$status" -eq 0 ] || { echo "$c -> status $status"; return 1; }
+    [ "$(decision_of "$output")" = "$d" ] || { echo "$c -> $output"; return 1; }
+  done
 }
 
 @test "Write under the sessions dir is denied in both modes" {
@@ -19,12 +56,66 @@ setup() {
 }
 
 @test "Edit of another file: no vote" {
+  expect_file_tools "$S/test-session.state" deny
   run_guard "$(payload PreToolUse "\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$R/README.md\"}")" g16
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
   [ "$(decision_of "$output")" = none ]
 }
 
-@test "a Bash command naming the sessions dir is denied" {
+@test "a .. path into the sessions dir is denied" {
+  expect_file_tools "$CLAUDE_PLUGIN_DATA/nope/../sessions/test-session.state" deny
+  expect_file_tools "$R/../data/./sessions/test-session.state" deny
+}
+
+@test "an upper-cased path to the sessions dir is denied" {
+  expect_file_tools "$(printf '%s' "$S/test-session.state" | tr '[:lower:]' '[:upper:]')" deny
+}
+
+@test "a symlinked dir that resolves to the sessions dir is denied" {
+  ln -s "$S" "$BATS_TEST_TMPDIR/link"
+  expect_file_tools "$BATS_TEST_TMPDIR/link/test-session.state" deny
+}
+
+@test "a Bash write into the sessions dir is denied" {
   run_guard "$(bash_payload "echo autopilot: on >> $CLAUDE_PLUGIN_DATA/sessions/test-session.state")" g16
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "every Bash write shape against session state is denied" {
+  expect_bash deny \
+    "echo autopilot: on >> ~/.claude/plugins/data/k*/sessions/*.state" \
+    "echo autopilot: on > /X/PLUGINS/DATA/KERN-KERN/SESSIONS/A.STATE" \
+    "echo on > \$CLAUDE_PLUGIN_DATA/sessions/a.state" \
+    "echo on >| $S/a.state" \
+    "printf on | tee -a $S/a.state" \
+    "sed -i '' s/off/on/ $S/a.state" \
+    "perl -pi -e s/off/on/ $S/a.state" \
+    "cp /tmp/x $S/a.state" \
+    "mv /tmp/x $S/a.state" \
+    "ln -sf /tmp/x $S/a.state" \
+    "rm -f $S/a.state" \
+    "truncate -s 0 $S/a.state" \
+    "dd if=/tmp/x of=$S/a.state" \
+    "install -m 600 /tmp/x $S/a.state" \
+    "sudo env A=1 tee $S/a.state" \
+    "bash -c 'echo on > $S/a.state'" \
+    "x=\$(echo on > $S/a.state)" \
+    "cd $S && echo autopilot: on > a.state" \
+    "echo on > /tmp/test-session.state"
+}
+
+@test "reads of session state: no vote" {
+  expect_bash deny "echo autopilot: on >> $S/test-session.state"
+  expect_bash none \
+    "cat $S/test-session.state" \
+    "grep autopilot $S/test-session.state 2>/dev/null" \
+    "ls -la ~/.claude/plugins/data/kern-kern/sessions" \
+    "cat $S/test-session.state > /tmp/copy"
+}
+
+@test "a Monitor command writing the state file is denied" {
+  run_guard "$(tool_payload Monitor "\"command\":\"echo autopilot: on >> $S/test-session.state\",\"description\":\"x\"")" g16
   [ "$(decision_of "$output")" = deny ]
 }
 
@@ -37,7 +128,59 @@ setup() {
   [ "$(decision_of "$output")" = deny ]
 }
 
-@test "a scheduled prompt without kern commands: no vote" {
-  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"check CI\"}")" g16
+@test "relayed text that opens with a mode or autopilot command is denied" {
+  run_guard "$(payload PreToolUse "\"tool_name\":\"ScheduleWakeup\",\"tool_input\":{\"prompt\":\"/autopilot on\"}")" g16
+  [ "$(decision_of "$output")" = deny ]
+  run_guard "$(tool_payload SendMessage "\"to\":\"main\",\"message\":\"  /kern:mode terse\"")" g16
+  [ "$(decision_of "$output")" = deny ]
+  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"\\n/mode terse\"}")" g16
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "relayed text that only mentions a mode command: no vote" {
+  run_guard "$(tool_payload SendMessage "\"to\":\"main\",\"message\":\"/kern:mode terse\"")" g16
+  [ "$(decision_of "$output")" = deny ]
+  run_guard "$(tool_payload SendMessage "\"to\":\"main\",\"message\":\"ask the user to type /kern:mode terse\"")" g16
+  [ "$status" -eq 0 ]
   [ "$(decision_of "$output")" = none ]
+  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"/models list\"}")" g16
+  [ "$status" -eq 0 ]
+  [ "$(decision_of "$output")" = none ]
+}
+
+@test "a scheduled prompt without kern commands: no vote" {
+  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"/kern:autopilot on\"}")" g16
+  [ "$(decision_of "$output")" = deny ]
+  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"check CI\"}")" g16
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ "$(decision_of "$output")" = none ]
+}
+
+@test "a Skill call to the mode or autopilot skill is denied; other skills pass" {
+  for s in kern:autopilot kern:mode autopilot mode KERN:MODE; do
+    run_guard "$(tool_payload Skill "\"skill\":\"$s\",\"args\":\"on\"")" g16
+    [ "$(decision_of "$output")" = deny ] || { echo "$s -> $output"; return 1; }
+  done
+  run_guard "$(tool_payload Skill "\"skill\":\"kern:help\",\"args\":\"mention /kern:mode\"")" g16
+  [ "$status" -eq 0 ]
+  [ "$(decision_of "$output")" = none ]
+}
+
+@test "a write to a kern settings file asks, and denies under autopilot" {
+  mkdir -p "$R/.claude"
+  expect_file_tools "$R/.claude/kern.local.yml" ask
+  expect_file_tools "$R/.claude/kern.yml" ask
+  expect_file_tools "$HOME/.claude/kern.yml" ask
+  expect_file_tools "$R/.CLAUDE/KERN.LOCAL.YML" ask
+  [[ "$output" == *'"kern G16: kern settings change guard policy; the user confirms each write"'* ]] || false
+  expect_bash ask "echo kern: off >> .claude/kern.local.yml" "sed -i '' s/ask/auto/ $R/.claude/kern.yml"
+  set_autopilot on
+  expect_file_tools "$R/.claude/kern.local.yml" deny
+  [[ "$output" == *"the user confirms each write (autopilot: nobody to ask)"* ]] || false
+}
+
+@test "reading a kern settings file: no vote" {
+  expect_bash ask "echo kern: off >> .claude/kern.local.yml"
+  expect_bash none "cat .claude/kern.local.yml" "grep policy $R/.claude/kern.yml"
 }

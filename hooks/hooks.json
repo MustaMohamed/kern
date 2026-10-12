@@ -4,6 +4,6 @@
     "SubagentStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start"] }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/prompt-submit"], "timeout": 10 }] }],
     "UserPromptExpansion": [{ "matcher": "", "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/prompt-submit"], "timeout": 10 }] }],
-    "PreToolUse": [{ "matcher": "Bash|Write|Edit|NotebookEdit|Skill|CronCreate|ScheduleWakeup|RemoteTrigger|SendMessage|mcp__.*", "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use"], "timeout": 20, "onFailure": "block" }] }]
+    "PreToolUse": [{ "matcher": "Bash|Monitor|Write|Edit|NotebookEdit|Skill|CronCreate|ScheduleWakeup|RemoteTrigger|SendMessage|mcp__.*", "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use"], "timeout": 20, "onFailure": "block" }] }]
   }
 }

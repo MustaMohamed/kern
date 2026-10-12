@@ -21,7 +21,7 @@ test('every M1 event is wired in exec form', () => {
 test('the guard dispatcher fails closed and sees every guarded tool', () => {
   const pre = hooks.PreToolUse[0];
   assert.equal(pre.hooks[0].onFailure, 'block');
-  for (const tool of ['Bash', 'Write', 'Edit', 'NotebookEdit', 'Skill', 'CronCreate', 'ScheduleWakeup', 'RemoteTrigger', 'SendMessage', 'mcp__claude_ai_Linear__save_issue']) {
+  for (const tool of ['Bash', 'Monitor', 'Write', 'Edit', 'NotebookEdit', 'Skill', 'CronCreate', 'ScheduleWakeup', 'RemoteTrigger', 'SendMessage', 'mcp__claude_ai_Linear__save_issue']) {
     assert.match(tool, new RegExp(`^(${pre.matcher})$`), tool);
   }
 });
