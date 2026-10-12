@@ -63,3 +63,40 @@ autopilot: on"
   run autopilot_on s1
   [ "$status" -eq 1 ]
 }
+
+@test "autopilot_on is off when any layer denies, even under a higher allowed layer" {
+  state_reset s1
+  state_set s1 autopilot=on
+  mkdir -p "$R/.claude"
+  printf 'autopilot: allowed\n' >"$R/.claude/kern.local.yml"
+  printf 'autopilot: denied\n' >"$HOME/.claude/kern.yml"
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+}
+
+@test "a symlinked sessions dir is refused on read" {
+  mkdir -p "$BATS_TEST_TMPDIR/elsewhere"
+  printf 'autopilot: on\n' >"$BATS_TEST_TMPDIR/elsewhere/s1.state"
+  ln -s "$BATS_TEST_TMPDIR/elsewhere" "$(state_dir)"
+  run state_get s1 autopilot
+  [ "$status" -eq 2 ]
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+}
+
+@test "state_reset discards a garbled old file under a UTF-8 locale" {
+  mkdir -p "$(state_dir)"
+  printf 'voice: normal\n\377\377\nautopilot: on\n' >"$(state_file s1)"
+  export LANG=en_US.UTF-8 LC_ALL=
+  run state_reset s1
+  [ "$status" -eq 0 ]
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+  [ "$(state_get s1 autopilot)" = off ]
+}
+
+@test "session ids are ASCII-only whatever the locale" {
+  export LANG=en_US.UTF-8 LC_ALL=
+  run state_file "é"
+  [ "$status" -eq 2 ]
+}

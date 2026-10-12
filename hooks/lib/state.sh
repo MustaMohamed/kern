@@ -8,6 +8,7 @@ state_dir() {
 
 # state_file SID: path of the session's state file. Exit 2 for an id outside [A-Za-z0-9_-].
 state_file() {
+  local LC_ALL=C
   case "$1" in
     '' | *[!A-Za-z0-9_-]*) return 2 ;;
   esac
@@ -18,6 +19,7 @@ state_file() {
 state_get() {
   local f
   f=$(state_file "$1") || return 2
+  [ -L "$(dirname "$f")" ] && return 2
   [ -L "$f" ] && return 2
   [ -f "$f" ] || return 1
   LC_ALL=C awk -v k="$2" 'index($0, k ": ") == 1 { v = substr($0, length(k) + 3); found = 1 }
@@ -26,15 +28,20 @@ state_get() {
 
 # state_set SID KEY=VALUE...: atomic update (temp file in the same dir, then mv), mode 0600.
 state_set() {
-  local sid="$1" f dir tmp kv k v content
-  shift
+  _state_put 0 "$@"
+}
+
+# _state_put FRESH SID KEY=VALUE...: FRESH=1 starts from empty content, ignoring any old file.
+_state_put() {
+  local fresh="$1" sid="$2" f dir tmp kv k v content
+  shift 2
   f=$(state_file "$sid") || return 2
   dir=$(dirname "$f")
   (umask 077 && mkdir -p "$dir") || return 2
   [ -L "$dir" ] && return 2
   [ -L "$f" ] && return 2
   content=""
-  [ -f "$f" ] && content=$(cat "$f")
+  [ "$fresh" = 0 ] && [ -f "$f" ] && content=$(LC_ALL=C cat "$f")
   for kv in "$@"; do
     k=${kv%%=*}
     v=${kv#*=}
@@ -46,7 +53,7 @@ state_set() {
 $k: $v"
   done
   tmp=$(umask 077 && mktemp "$dir/.state.XXXXXX") || return 2
-  printf '%s\n' "$content" | sed '/^$/d' >"$tmp" || { rm -f "$tmp"; return 2; }
+  printf '%s\n' "$content" | LC_ALL=C sed '/^$/d' >"$tmp" || { rm -f "$tmp"; return 2; }
   mv -f "$tmp" "$f"
 }
 
@@ -62,11 +69,17 @@ state_reset() {
   surface=$(settings_get mode.surface auto)
   case "$voice" in normal | terse) ;; *) voice=normal ;; esac
   case "$surface" in chat | auto | html) ;; *) surface=auto ;; esac
-  state_set "$1" "voice=$voice" "surface=$surface" "autopilot=off" "since=$(now_iso)"
+  _state_put 1 "$1" "voice=$voice" "surface=$surface" "autopilot=off" "since=$(now_iso)"
 }
 
-# autopilot_on SID: exit 0 only when no settings layer says `autopilot: denied` and the state says on.
+# autopilot_on SID: exit 0 only when no existing settings layer says `autopilot: denied` and the state says on.
 autopilot_on() {
-  [ "$(settings_get autopilot allowed)" = denied ] && return 1
+  local f
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    [ "$(_settings_lookup "$f" autopilot)" = denied ] && return 1
+  done <<EOT
+$(_settings_files)
+EOT
   [ "$(state_get "$1" autopilot 2>/dev/null)" = on ]
 }
