@@ -76,7 +76,7 @@ SessionStart uses an empty matcher and branches on `source` inside the script, b
 - `state_get SID KEY` prints the value, exit 1 when unset.
 - `state_set SID KEY=VALUE...` atomic: writes a temp file in the same dir with umask 077, then `mv`; refuses when the target is a symlink (exit 2).
 - `state_reset SID` writes defaults from settings: `voice` from `mode.voice` (default `normal`), `surface` from `mode.surface` (default `auto`), `autopilot: off`.
-- `autopilot_on SID` exit 0 only when `settings_get autopilot allowed` is not `denied` and `state_get SID autopilot` is `on`.
+- `autopilot_on SID` exit 0 only when no settings file (local, shared or user) says `autopilot: denied` and `state_get SID autopilot` is `on`.
 
 `decide.sh` (PreToolUse votes):
 - `vote allow|ask|deny GUARD REASON` records a vote; keeps the strictest (deny > ask > allow); concatenates reasons as `G<n>: <reason>` joined by `; `.
