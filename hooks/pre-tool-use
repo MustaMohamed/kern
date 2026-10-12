@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# kern PreToolUse dispatcher: runs every guard in hooks/guards and prints the strictest vote.
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+# shellcheck source=hooks/lib/json.sh
+. "$KERN_ROOT/hooks/lib/json.sh"
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh"
+# shellcheck source=hooks/lib/state.sh
+. "$KERN_ROOT/hooks/lib/state.sh"
+# shellcheck source=hooks/lib/decide.sh
+. "$KERN_ROOT/hooks/lib/decide.sh"
+# shellcheck source=hooks/lib/gitctx.sh
+. "$KERN_ROOT/hooks/lib/gitctx.sh"
+
+# shellcheck disable=SC2034 # KERN_INPUT, TOOL and AGENT are read by json.sh and the guard files
+KERN_INPUT=$(cat)
+AUTOPILOT=0
+SID=$(json_get session_id 2>/dev/null) || SID=""
+# shellcheck disable=SC2034 # TOOL is read by guard files
+if ! json_ok || ! TOOL=$(json_get tool_name); then
+  [ -n "$SID" ] && autopilot_on "$SID" 2>/dev/null && AUTOPILOT=1
+  fail_closed "hook input not parseable"
+  emit_decision
+  exit 0
+fi
+CWD=$(json_get cwd) || CWD="$PWD"
+# shellcheck disable=SC2034 # read by guard files
+AGENT=$(json_get agent_type) || AGENT=""
+TOOL_INPUT=$(json_get_raw tool_input) || TOOL_INPUT="{}"
+KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+export CWD KERN_MAIN
+kern_enabled || exit 0
+[ -n "$SID" ] && autopilot_on "$SID" && AUTOPILOT=1
+
+for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
+  # shellcheck source=/dev/null
+  . "$f"
+done
+for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
+  id=$(basename "$f" .sh)
+  id=${id%%-*}
+  if [ -n "${KERN_GUARDS-}" ]; then
+    case ",$KERN_GUARDS," in *",$id,"*) ;; *) continue ;; esac
+  fi
+  "guard_$id"
+done
+emit_decision
+exit 0
