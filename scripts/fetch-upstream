@@ -32,34 +32,43 @@ clone_at() { # key url sha
       return 0
     fi
   fi
-  rm -rf "$dir"
-  if ! git clone --quiet "$url" "$dir"; then
-    rm -rf "$dir"
+  rm -rf "$dir.new"
+  if ! git clone --quiet "$url" "$dir.new"; then
+    rm -rf "$dir.new"
     echo "$key: clone failed: $url" >&2
     return 3
   fi
-  if ! git -C "$dir" checkout --quiet --detach "$sha" 2>/dev/null; then
-    rm -rf "$dir"
+  if ! git -C "$dir.new" checkout --quiet --detach "$sha" 2>/dev/null; then
+    rm -rf "$dir.new"
     echo "$key: commit $sha not found in $url" >&2
     return 3
   fi
+  rm -rf "$dir" && mv "$dir.new" "$dir"
   echo "$key: $url @ $sha"
 }
 
 copy_from() { # key src...
   local key=$1 dir="$dest/$1"
   shift
-  rm -rf "$dir"
-  mkdir -p "$dir"
+  rm -rf "$dir.new"
+  if ! mkdir -p "$dir.new"; then
+    echo "$key: cannot create $dir.new" >&2
+    return 3
+  fi
   local src
   for src in "$@"; do
     if [ ! -e "$src" ]; then
-      rm -rf "$dir"
+      rm -rf "$dir.new"
       echo "$key: source missing: $src" >&2
       return 3
     fi
-    cp -R "$src" "$dir"/
+    if ! cp -R "$src" "$dir.new"/; then
+      rm -rf "$dir.new"
+      echo "$key: copy failed: $src" >&2
+      return 3
+    fi
   done
+  rm -rf "$dir" && mv "$dir.new" "$dir"
   echo "$key: copied"
 }
 

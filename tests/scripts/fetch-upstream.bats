@@ -52,6 +52,29 @@ setup() {
   [ "$status" -eq 3 ]
 }
 
+@test "a failing re-run keeps the previous good clone" {
+  bash "$ROOT/scripts/fetch-upstream" addy
+  export KERN_UPSTREAM_ADDY_URL="$BATS_TEST_TMPDIR/no-such-remote"
+  export KERN_UPSTREAM_ADDY_SHA=0000000000000000000000000000000000000000
+  run bash "$ROOT/scripts/fetch-upstream" addy
+  [ "$status" -eq 3 ]
+  [ "$(git -C "$KERN_UPSTREAM_DIR/addy" rev-parse HEAD)" = "$SHA1" ]
+  [ ! -e "$KERN_UPSTREAM_DIR/addy.new" ]
+}
+
+@test "a failing copy keeps the previous copy" {
+  mkdir -p "$BATS_TEST_TMPDIR/cave"; echo hi > "$BATS_TEST_TMPDIR/cave/NOTICE"
+  export KERN_UPSTREAM_CAVEMAN_SRC="$BATS_TEST_TMPDIR/cave"
+  bash "$ROOT/scripts/fetch-upstream" caveman
+  mkdir -p "$BATS_TEST_TMPDIR/bad"; echo no > "$BATS_TEST_TMPDIR/bad/NOTICE"; chmod 000 "$BATS_TEST_TMPDIR/bad/NOTICE"
+  export KERN_UPSTREAM_CAVEMAN_SRC="$BATS_TEST_TMPDIR/bad"
+  run bash "$ROOT/scripts/fetch-upstream" caveman
+  chmod 644 "$BATS_TEST_TMPDIR/bad/NOTICE"
+  [ "$status" -eq 3 ]
+  [ "$(cat "$KERN_UPSTREAM_DIR/caveman/NOTICE")" = hi ]
+  [ ! -e "$KERN_UPSTREAM_DIR/caveman.new" ]
+}
+
 @test "unknown key exits 2" {
   run bash "$ROOT/scripts/fetch-upstream" nonsense
   [ "$status" -eq 2 ]
