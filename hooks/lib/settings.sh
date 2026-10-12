@@ -124,12 +124,13 @@ $(_settings_files)
 EOT
 }
 
-# policy_for ACTION: ask|auto|deny for commit, push, pr, tracker or review.post.
+# policy_for ACTION: ask|auto|deny for commit, push, pr, tracker or review.post; any other action reads as ask.
 policy_for() {
   local key v
   case "$1" in
     review.post) key=review.post_policy ;;
-    *) key="$1.policy" ;;
+    commit|push|pr|tracker) key="$1.policy" ;;
+    *) printf 'ask\n'; return 0 ;;
   esac
   v=$(settings_get "$key" ask)
   case "$v" in

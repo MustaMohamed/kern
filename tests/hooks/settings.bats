@@ -86,3 +86,10 @@ YML
   run list_has "a,b" z
   [ "$status" -eq 1 ]
 }
+
+@test "policy_for never loosens floor actions: merge and deploy read as ask" {
+  printf 'merge.policy: auto\ndeploy.policy: auto\npush.policy: auto\n' >"$R/.claude/kern.local.yml"
+  [ "$(policy_for merge)" = ask ]
+  [ "$(policy_for deploy)" = ask ]
+  [ "$(policy_for push)" = auto ]
+}
