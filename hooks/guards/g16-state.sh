@@ -76,9 +76,10 @@ _g16_names() {
 # of=<dir>/x counts); a word with no blank that holds `sessions` and ends in `.state` (a sentence
 # in a message is not a path); the state file name <sid>.state, bare or after a slash; or an
 # absolute glob that, once a leading ~, $HOME or $CLAUDE_PLUGIN_DATA is expanded, matches this
-# session's state file and is as deep as it (a path glob's * does not cross a /). The bare session
-# id is not enough: Claude Code's scratchpad and task paths contain it. Settings: a word ending in
-# .claude/kern.yml or .claude/kern.local.yml, or exactly kern.yml or kern.local.yml.
+# session's state file and, unless it holds **, is as deep as it (a path glob's * does not cross
+# a /). The bare session id is not enough: Claude Code's scratchpad and task paths contain it.
+# Settings: a word ending in .claude/kern.yml or .claude/kern.local.yml, or exactly kern.yml or
+# kern.local.yml.
 _g16_kind() {
   local e p a b slash='[!/]'
   _G16_K=""
@@ -110,7 +111,7 @@ _g16_kind() {
   p="$_G16_SD/$_G16_SID.state"
   a=${e//$slash/}
   b=${p//$slash/}
-  [ "${#a}" = "${#b}" ] || return 0
+  case "$e" in *'**'*) ;; *) [ "${#a}" = "${#b}" ] || return 0 ;; esac
   # shellcheck disable=SC2254 # the word is matched as the glob it is
   case "$p" in $e) _G16_K=state ;; esac
 }
@@ -154,8 +155,11 @@ _g16_redirects() {
 # cd into the sessions dir, every later non-reading command and redirect counts as a write to it,
 # until a cd elsewhere.
 _g16_bash() {
-  local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0
+  local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0 ui=$'\002'
   cmd=$(ti_get command) || return 0
+  # A word-initial -I is perl's include dir but BSD sed's in-place flag; mark it, since lower-casing
+  # turns it into -i.
+  cmd=${cmd// -I/ -$ui}
   cmd=$(_g16_lower "$cmd")
   _G16_SD=$(_g16_lower "$(state_dir)")
   _G16_SID=$(_g16_lower "${SID-}")
@@ -175,7 +179,12 @@ _g16_bash() {
         head=${w##*/}
         continue
       fi
-      case "$w" in --in-place*) inplace=1 ;; --*) ;; -*i*) inplace=1 ;; esac
+      case "$w" in
+        -"$ui"*) [ "$head" = sed ] && inplace=1 ;;
+        --in-place*) inplace=1 ;;
+        --* | -m*) ;;
+        -*i*) inplace=1 ;;
+      esac
       _g16_kind "$w"
       case "$_G16_K" in state) seg_s=1 ;; settings) seg_c=1 ;; esac
     done <<WORDS
@@ -186,7 +195,7 @@ WORDS
     case "$head" in
       cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | jq | \
         echo | printf | test | '[' | git | '') reads=1 ;;
-      find) word_has "$words" -delete -exec -execdir -ok -okdir -fprint -fprint0 -fprintf || reads=1 ;;
+      find) word_has "$words" -delete -exec -execdir -ok -okdir -fls -fprint -fprint0 -fprintf || reads=1 ;;
       sed | perl) if [ "$inplace" = 1 ]; then writes=1; else reads=1; fi ;;
       tee | cp | mv | ln | rm | truncate | dd | install) writes=1 ;;
       cd | pushd) reads=1; in_sd=$seg_s ;;

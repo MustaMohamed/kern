@@ -91,6 +91,25 @@ EOT
   finds "$(printf '%s\n' 'x=$(sudo -u me sh -s <<EOF' 'git push --force' 'EOF' ')')" push
 }
 
+@test "a shell here-doc after a closed \$( ) keeps its body" {
+  finds "$(printf '%s\n' "x=\$(date) bash <<'EOF'" 'git push --force' 'EOF')" push
+  finds "$(printf '%s\n' "x=\"\$(date)\" bash <<'EOF'" 'git push --force' 'EOF')" push
+}
+
+@test "a << inside a top-level (( )) is not a here-doc" {
+  finds "$(printf '%s\n' 'y=1; (( y = 1 << X ))' 'git push --force' 'X')" push
+}
+
+@test "a # after an escaped separator or a closing ) is not a comment" {
+  for c in 'echo a\ #b; git push --force' 'echo a\;#b; git push --force' 'echo a\|#b; git push --force' \
+    'echo a\&#b; git push --force' 'echo a\(#b; git push --force' "$(printf 'echo a\\\t#b; git push --force')" \
+    'x=$(date +%s)#tag; git push --force' 'echo $((1+1))#; git push --force' 'cat <(date)#x; git push --force'; do
+    finds "$c" push
+  done
+  run git_words 'echo a\\ #b; git push --force'
+  [ "$output" = 'echo a\\ #b; git push --force' ]
+}
+
 @test "a here-string is not a here-doc" {
   run git_words "$(printf '%s\n' 'cat <<< EOF' 'git push --force' 'EOF')"
   [ "${lines[0]}" = "cat <<< EOF" ]

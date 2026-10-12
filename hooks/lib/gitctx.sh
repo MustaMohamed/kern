@@ -181,8 +181,9 @@ _split_words() {
       }
       if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash; hdd[hn] = depth }
     }
-    # shut(): a `)` closes a $( ); arithmetic and here-docs opened inside it end with it.
-    function shut() { depth--; if (ar && depth < ar) ar = 0; while (hn && hdd[hn] > depth) hn-- }
+    # shut(): a `)` closes a $( ); arithmetic and here-docs opened inside it end with it, and the
+    # command that held it resumes.
+    function shut() { depth--; cs = csv[depth]; if (ar && depth < ar) ar = 0; while (hn && hdd[hn] > depth) hn-- }
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
     function bodies(j,   h, k, t) {
@@ -206,20 +207,21 @@ _split_words() {
     }
     { L[NR] = $0; buf = buf (NR > 1 ? "\n" : "") $0 }
     # cs: where the current simple command starts. ar: the depth where $(( or (( inside $( ) began.
-    # ta: inside (( )) at the top level. cm: in a comment inside $( ), until the newline.
+    # ta: inside (( )) at the top level. cm: in a comment inside $( ), until the newline. csv[d]:
+    # cs of the command holding the $( ) opened at depth d. es: the last backslash-escaped position.
     END {
       n = length(buf); q = ""; depth = 0; start = 1; cs = 1; i = 1; pre = ""; hn = 0; lp = 1; off[1] = 1
-      ar = 0; ta = 0; cm = 0
+      ar = 0; ta = 0; cm = 0; es = 0
       for (k = 2; k <= NR; k++) off[k] = off[k - 1] + length(L[k - 1]) + 1
       while (i <= n) {
         c = substr(buf, i, 1)
         if (q == sq) { if (c == sq) q = ""; i++; continue }
-        if (c == "\\") { i += 2; continue }
+        if (c == "\\") { es = i + 1; i += 2; continue }
         if (q == "\"") {
           if (c == "\"") q = ""
           else if (c == "$" && substr(buf, i + 1, 1) == "(") {
             if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
-            depth++; cs = i + 2; i++
+            csv[depth] = cs; depth++; cs = i + 2; i++
           }
           else if (c == ")" && depth > 0) shut()
           else if (depth > 0 && c == "<" && hdat(i)) {
@@ -240,20 +242,21 @@ _split_words() {
         }
         if (c == "$" && substr(buf, i + 1, 1) == "(") {
           if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
-          depth++; cs = i + 2; i += 2; continue
+          csv[depth] = cs; depth++; cs = i + 2; i += 2; continue
         }
         p = substr(buf, i - 1, 1)
         x = substr(buf, i + 1, 1)
         if (depth > 0) {
           if (c == "\n") { cm = 0; cs = i + 1; if (hn) { i = nested(i); continue } }
           else if (c == "#" && sep(p)) cm = 1
-          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; depth++; cs = i + 1 }
+          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; csv[depth] = cs; depth++; cs = i + 1 }
           else if (c == ")") shut()
           else if (index(";&|", c)) cs = i + 1
           i++; continue
         }
         if ((c == "&" && (p == ">" || p == "<" || x == ">")) || (c == "|" && p == ">")) { i++; continue }
-        if (c == "#" && (i == 1 || sep(p))) {
+        # Not after an escaped blank or operator, nor after the ) that closes $( ), $(( )) or <( ).
+        if (c == "#" && (i == 1 || (sep(p) && p != ")" && i - 1 != es))) {
           e = index(substr(buf, i), "\n")
           i = e ? i + e - 1 : n + 1
           continue

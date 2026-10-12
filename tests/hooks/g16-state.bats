@@ -133,19 +133,30 @@ expect_cmd() {
     "echo on > \$HOME/.claude/p*/d*/k*/s*/*.state" "echo on > \${HOME}/.claude/p*/d*/k*/s*/*.state" \
     "echo on > \${CLAUDE_PLUGIN_DATA}/s*/*.state"
   expect_cmd deny 'echo on > "$CLAUDE_PLUGIN_DATA"/s*/*.state'
+  expect_bash deny "echo on > ~/.claude/**/*.state"
   expect_bash none "du -sh ~/* ; ls sessions"
 }
 
 @test "plain reads, git commands and messages naming state or settings: no vote" {
   expect_bash none "git diff .claude/kern.yml" "git check-ignore -q .claude/kern.local.yml" \
-    "git add tests/sessions/foo.state" "test -f $S/x.state && echo yes" "find $S -name '*.state'"
+    "git add tests/sessions/foo.state" "test -f $S/x.state && echo yes" "find $S -name '*.state'" \
+    "[ -f $S/x.state ]" "perl -Mstrict -ne 'print' $S/a.state" "perl -Ilib -ne 'print' $S/a.state"
   expect_cmd none 'echo ".claude/kern.local.yml" >> .gitignore' \
-    'git commit -m "G16: deny writes to sessions/<sid>.state"'
-  expect_bash deny "echo on > $S/x.state" "find $S -name x -delete"
+    'git commit -m "G16: deny writes to sessions/<sid>.state"' \
+    'gh pr create --title t --body "G16 now guards sessions/x.state"' \
+    "$(printf '%s\n' 'gh pr create --title t --body "fix: x' '' 'G16 now guards sessions/x.state"')" \
+    "printf '%s\n' $S/x.state"
+  expect_bash deny "echo on > $S/x.state" "find $S -name x -delete" "find /tmp -name x -fls $S/x.state" \
+    "perl -i -pe s/a/b/ $S/a.state" "sed -I '' s/a/b/ $S/a.state"
 }
 
 @test "a shell reading a here-doc runs its body as commands" {
-  expect_cmd deny "$(printf '%s\n' "bash <<'EOF'" "echo autopilot: on > $S/test-session.state" 'EOF')"
+  expect_cmd deny "$(printf '%s\n' "bash <<'EOF'" "echo autopilot: on > $S/test-session.state" 'EOF')" \
+    "$(printf '%s\n' "x=\$(date) bash <<'EOF'" "touch $S/test-session.state" 'EOF')"
+}
+
+@test "a # that bash does not read as a comment hides no state write" {
+  expect_cmd deny "echo a\\ #b; touch $S/test-session.state" "echo \$(date)#t; touch $S/test-session.state"
 }
 
 @test "a misread << hides no state write" {
