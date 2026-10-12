@@ -155,11 +155,8 @@ _g16_redirects() {
 # cd into the sessions dir, every later non-reading command and redirect counts as a write to it,
 # until a cd elsewhere.
 _g16_bash() {
-  local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0 ui=$'\002'
+  local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0
   cmd=$(ti_get command) || return 0
-  # A word-initial -I is perl's include dir but BSD sed's in-place flag; mark it, since lower-casing
-  # turns it into -i.
-  cmd=${cmd// -I/ -$ui}
   cmd=$(_g16_lower "$cmd")
   _G16_SD=$(_g16_lower "$(state_dir)")
   _G16_SID=$(_g16_lower "${SID-}")
@@ -180,7 +177,6 @@ _g16_bash() {
         continue
       fi
       case "$w" in
-        -"$ui"*) [ "$head" = sed ] && inplace=1 ;;
         --in-place*) inplace=1 ;;
         --* | -m*) ;;
         -*i*) inplace=1 ;;

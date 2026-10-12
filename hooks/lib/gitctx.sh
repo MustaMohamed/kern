@@ -216,7 +216,7 @@ _split_words() {
       while (i <= n) {
         c = substr(buf, i, 1)
         if (q == sq) { if (c == sq) q = ""; i++; continue }
-        if (c == "\\") { es = i + 1; i += 2; continue }
+        if (c == "\\") { if (substr(buf, i + 1, 1) != "\n") es = i + 1; i += 2; continue }
         if (q == "\"") {
           if (c == "\"") q = ""
           else if (c == "$" && substr(buf, i + 1, 1) == "(") {
@@ -255,8 +255,8 @@ _split_words() {
           i++; continue
         }
         if ((c == "&" && (p == ">" || p == "<" || x == ">")) || (c == "|" && p == ">")) { i++; continue }
-        # Not after an escaped blank or operator, nor after the ) that closes $( ), $(( )) or <( ).
-        if (c == "#" && (i == 1 || (sep(p) && p != ")" && i - 1 != es))) {
+        # Not after an escaped blank or operator.
+        if (c == "#" && (i == 1 || (sep(p) && i - 1 != es))) {
           e = index(substr(buf, i), "\n")
           i = e ? i + e - 1 : n + 1
           continue

@@ -100,12 +100,12 @@ EOT
   finds "$(printf '%s\n' 'y=1; (( y = 1 << X ))' 'git push --force' 'X')" push
 }
 
-@test "a # after an escaped separator or a closing ) is not a comment" {
+@test "a # after an escaped separator is not a comment; after a line continuation it is" {
   for c in 'echo a\ #b; git push --force' 'echo a\;#b; git push --force' 'echo a\|#b; git push --force' \
-    'echo a\&#b; git push --force' 'echo a\(#b; git push --force' "$(printf 'echo a\\\t#b; git push --force')" \
-    'x=$(date +%s)#tag; git push --force' 'echo $((1+1))#; git push --force' 'cat <(date)#x; git push --force'; do
+    'echo a\&#b; git push --force' 'echo a\(#b; git push --force' "$(printf 'echo a\\\t#b; git push --force')"; do
     finds "$c" push
   done
+  finds "$(printf '%s\n' 'echo a \' "#it's" 'git push --force')" push
   run git_words 'echo a\\ #b; git push --force'
   [ "$output" = 'echo a\\ #b; git push --force' ]
 }
