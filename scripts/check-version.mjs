@@ -27,20 +27,35 @@ export function checkVersions(root) {
   return problems;
 }
 
-export function checkUnreleased(root, changedFiles) {
+export function checkUnreleased(root, changedFiles, baseChangelog) {
   if (!changedFiles.some((f) => SHIPPED.test(f))) return [];
   const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
-  return unreleasedBullets(changelog).length ? [] : ['shipped files changed but ## [Unreleased] has no bullet'];
+  const old = new Set(baseChangelog === undefined ? [] : unreleasedBullets(baseChangelog));
+  const added = unreleasedBullets(changelog).filter((b) => !old.has(b));
+  return added.length ? [] : ['shipped files changed but ## [Unreleased] has no new bullet compared with the base'];
+}
+
+function baseChangelogAt(root, base) {
+  try {
+    return execFileSync('git', ['-C', root, 'show', `${base}:CHANGELOG.md`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    if (/exists on disk, but not in|does not exist in|path .* does not exist/.test(String(e.stderr))) return '';
+    throw e;
+  }
 }
 
 if (isMain(import.meta.url)) {
   const root = fileURLToPath(new URL('..', import.meta.url));
-  const problems = checkVersions(root);
   const i = process.argv.indexOf('--pr');
+  const base = i > 0 ? process.argv[i + 1] : undefined;
+  if (i > 0 && !base) {
+    console.error('usage: check-version.mjs [--pr <base-ref>]');
+    process.exit(2);
+  }
+  const problems = checkVersions(root);
   if (i > 0) {
-    const base = process.argv[i + 1];
     const changed = execFileSync('git', ['-C', root, 'diff', '--name-only', `${base}...HEAD`], { encoding: 'utf8' }).split('\n').filter(Boolean);
-    problems.push(...checkUnreleased(root, changed));
+    problems.push(...checkUnreleased(root, changed, baseChangelogAt(root, base)));
   }
   for (const p of problems) console.log(`error: ${p}`);
   console.log(problems.length ? 'versions: FAILED' : 'versions: agree');
