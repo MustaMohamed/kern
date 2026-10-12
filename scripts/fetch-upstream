@@ -9,9 +9,9 @@ mkdir -p "$dest"
 pin() { # key -> "url sha" for git sources
   case "$1" in
     superpowers) echo "https://github.com/obra/superpowers.git 5bf4e78011075bcfc0dc295f0724994cd123ee71" ;;
-    pstack) echo "https://github.com/cursor/plugins.git 11713c6" ;;
-    pocock) echo "https://github.com/mattpocock/skills.git 49dd158" ;;
-    addy) echo "https://github.com/addyosmani/agent-skills.git 1be8e34" ;;
+    pstack) echo "https://github.com/cursor/plugins.git 11713c683fe4add4fd403ea880580abbc9e0875f" ;;
+    pocock) echo "https://github.com/mattpocock/skills.git 49dd158d1076134a641b33efb035946536778336" ;;
+    addy) echo "https://github.com/addyosmani/agent-skills.git 1be8e34187e34647bb83adc3a1323b26ae6f6abe" ;;
     *) return 1 ;;
   esac
 }
