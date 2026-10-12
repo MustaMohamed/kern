@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# kern SubagentStart: injects the subagent kernel and, when terse is active, the terse voice line.
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+for lib in json settings state render; do
+  # shellcheck source=/dev/null
+  . "$KERN_ROOT/hooks/lib/$lib.sh"
+done
+
+# shellcheck disable=SC2034 # read by the json.sh functions
+KERN_INPUT=$(cat)
+SID=$(json_get session_id) || SID=""
+CWD=$(json_get cwd) || CWD="$PWD"
+KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+export CWD KERN_MAIN
+kern_enabled || exit 0
+
+voice=$(state_get "$SID" voice 2>/dev/null) || voice=$(settings_get mode.voice normal)
+K_VOICE=""
+[ "$voice" = terse ] && K_VOICE=$(cat "$KERN_ROOT/modes/terse-subagent.md")
+K_VERSION=$(kern_version)
+K_ROOT="$KERN_ROOT"
+export K_VERSION K_ROOT K_VOICE
+printf '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"%s"}}\n' \
+  "$(render_template "$KERN_ROOT/kernel/kernel-subagent.md" | json_escape)"
+exit 0
