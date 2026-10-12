@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Runs the CI job's steps locally, in the same order, before a push.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+node --test 'tests/**/*.test.mjs'
+node scripts/lint-skills.mjs
+node scripts/check-version.mjs
+node scripts/route-eval.mjs
+claude plugin validate . --strict
+claude plugin validate .claude-plugin/plugin.json --strict
+bats tests/scripts
+shellcheck scripts/fetch-upstream scripts/ci-local
+echo "ci-local: all steps passed"

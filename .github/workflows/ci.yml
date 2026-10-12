@@ -1,0 +1,39 @@
+name: ci
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Unit tests
+        run: node --test 'tests/**/*.test.mjs'
+      - name: Lint skills
+        run: node scripts/lint-skills.mjs
+      - name: Versions agree
+        run: node scripts/check-version.mjs
+      - name: Unreleased line for shipped changes
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-version.mjs --pr origin/${{ github.base_ref }}
+      - name: Routing evals
+        run: node scripts/route-eval.mjs
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.296
+      - name: Validate marketplace and plugin manifests
+        run: |
+          claude plugin validate . --strict
+          claude plugin validate .claude-plugin/plugin.json --strict
+      - name: Install bats and shellcheck
+        run: sudo apt-get update && sudo apt-get install -y bats shellcheck
+      - name: Script tests
+        run: bats tests/scripts
+      - name: Shellcheck
+        run: shellcheck scripts/fetch-upstream scripts/ci-local
