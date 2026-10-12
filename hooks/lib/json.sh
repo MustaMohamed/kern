@@ -55,6 +55,7 @@ END {
     k = skip_ws(i)
     if (substr(buf, k, 1) != ":" || tok != key) continue
     k = skip_ws(k + 1)
+    if (k > n) exit 2
     if (mode == "str") {
       if (substr(buf, k, 1) != "\"") exit 1
       e = str_end(k + 1)
@@ -63,7 +64,7 @@ END {
       exit 0
     }
     e = raw_end(k)
-    if (!e) exit 2
+    if (!e || e < k) exit 2
     printf "%s", substr(buf, k, e - k + 1)
     exit 0
   }

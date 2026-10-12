@@ -63,9 +63,31 @@ next \ end' ]
 
 @test "a 200 KB value parses in under 5 seconds" {
   big=$(head -c 200000 /dev/zero | tr '\0' 'x')
-  KERN_INPUT="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/f\",\"content\":\"$big\"}}"
+  KERN_INPUT="{\"tool_name\":\"Write\",\"tool_input\":{\"content\":\"$big\",\"file_path\":\"/f\"}}"
   start=$(date +%s)
   run json_get file_path
   [ "$output" = /f ]
   [ $(($(date +%s) - start)) -lt 5 ]
+}
+
+@test "json_get finds tool_input.command in a realistic PreToolUse payload" {
+  KERN_INPUT=$(cat "$(kern_root)/tests/fixtures/payloads/pretooluse-subagent.json")
+  run json_get command
+  [ "$status" -eq 0 ]
+  [ "$output" = "git -C /tmp/kern-fixture log --oneline -1" ]
+}
+
+@test "a found key with a missing or truncated value is 2 with no output" {
+  KERN_INPUT='{"command":'
+  run json_get command
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  KERN_INPUT='{"a":'
+  run json_get_raw a
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  KERN_INPUT='{"a":}'
+  run json_get_raw a
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
 }
