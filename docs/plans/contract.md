@@ -89,7 +89,7 @@ SessionStart uses an empty matcher and branches on `source` inside the script, b
 - `git_sub CMDLINE` for a simple command starting with `git`: prints `<dir><TAB><subcommand><TAB><rest>` after consuming global options `-C <dir>`, `-c <k=v>`, `--git-dir=`, `--work-tree=`, `--no-pager`. `dir` defaults to the hook `cwd`.
 - `in_main_checkout DIR` exit 0 when `git -C DIR rev-parse --show-toplevel` equals `kern_main_root DIR`.
 - `branch_protected BRANCH` exit 0 when BRANCH is `base_branch`, listed in `branch.protected`, or listed in `deploy.envs`.
-- `current_branch DIR` prints `git -C DIR rev-parse --abbrev-ref HEAD`.
+- `current_branch DIR` prints the branch `git -C DIR symbolic-ref -q HEAD` names, without `refs/heads/` (not `rev-parse --abbrev-ref`, which prints `heads/<name>` when a tag shares the name). Exit 1 and no output on a detached HEAD.
 
 ## Guard dispatcher (hooks/pre-tool-use)
 

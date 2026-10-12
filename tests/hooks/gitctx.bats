@@ -199,6 +199,19 @@ sh"
   [ "$status" -eq 1 ]
 }
 
+@test "current_branch reads HEAD by symbolic-ref, past a tag of the same name" {
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  git -C "$R" tag main
+  run current_branch "$R"
+  [ "$status" -eq 0 ]
+  [ "$output" = main ]
+  git -C "$R" switch -q --detach
+  run current_branch "$R"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
 @test "push_targets: refspecs, deletes and the current branch" {
   R="$BATS_TEST_TMPDIR/repo"
   make_repo "$R"

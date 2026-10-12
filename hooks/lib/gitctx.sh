@@ -346,9 +346,13 @@ in_main_checkout() {
   [ "$(cd "$top" && pwd -P)" = "$(cd "$main" && pwd -P)" ]
 }
 
-# current_branch DIR
+# current_branch DIR: the branch HEAD points to, without refs/heads/. Read by symbolic-ref:
+# rev-parse --abbrev-ref prints heads/<name> when a tag has the same name. Exit 1, printing
+# nothing, on a detached HEAD.
 current_branch() {
-  git -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null
+  local r
+  r=$(git -C "$1" symbolic-ref -q HEAD 2>/dev/null) || return 1
+  printf '%s\n' "${r#refs/heads/}"
 }
 
 # base_branch_name: settings base_branch, else origin/HEAD. Exit 1 when neither resolves.

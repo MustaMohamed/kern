@@ -30,6 +30,8 @@ only-matching/o/0 quiet/q/0 silent/-/0 no-messages/s/0 max-count/m/1 after-conte
 before-context/B/1 context/C/1 color/-/o colour/-/o"
 _G01_CAT_OPTS="number/n/0 number-nonblank/b/0 squeeze-blank/s/0 show-nonprinting/v/0 \
 show-ends/E/0 show-tabs/T/0 show-all/A/0 -/e/0 -/t/0 -/u/0"
+# The characters a branch or remote name may hold in an allowed push; no shell expands any of them.
+_G01_NAME_CHARS="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-"
 
 guard_g01() {
   [ "$TOOL" = Bash ] || return 0
@@ -54,8 +56,9 @@ EOT
     case "${w[0]}" in
       cd | pushd | popd) moved=1 ;;
       builtin) case "${w[1]-}" in cd | pushd | popd) moved=1 ;; esac ;;
-      gh | */gh) _g01_gh "$rec" "${w[@]}" ;;
-      git | */git) _g01_git_rec "$rec" "$moved" "${w[@]}" ;;
+      # Any case: on a case-insensitive file system GIT and GH run git and gh.
+      [Gg][Hh] | */[Gg][Hh]) _g01_gh "$rec" "${w[@]}" ;;
+      [Gg][Ii][Tt] | */[Gg][Ii][Tt]) _g01_git_rec "$rec" "$moved" "${w[@]}" ;;
     esac
   done
 }
@@ -338,6 +341,8 @@ _g01_own_refs() {
 _g01_filter() {
   local w=() args=() t table toks n=0 pat=0 dd=""
   case "$1" in tail | "tail "* | head | "head "* | grep | "grep "* | cat | "cat "*) ;; *) return 1 ;; esac
+  # An expansion or a glob could turn a word into a file argument.
+  case "$1" in *'$'* | *'{'* | *'}'* | *'*'* | *'?'* | *'['*) return 1 ;; esac
   while IFS= read -r t; do w+=("$t"); done <<EOT
 $(_cmd_words "$1")
 EOT
@@ -374,17 +379,21 @@ EOT
 
 # _g01_proven DIR PLAIN ODD CUR REMOTE REFS...: the one push shape G1 may allow. All hold: this
 # git record is the command's first, every later record is a read-only filter (_g01_filter), and
-# the command has no $( ) or backticks; the record is `git`, -C options, `push` (PLAIN 1), and
-# every push option is in the safe set or a quiet redirection (ODD 0); REMOTE is a name
-# `git remote` lists, with no push, mirror or receivepack config; there is at least one refspec,
-# and each pushes CUR (a branch) to CUR.
+# the command has no $( ) or backticks; the record holds no $, { or }, so no word expands; the
+# record is `git`, -C options, `push` (PLAIN 1), and every push option is in the safe set or a
+# quiet redirection (ODD 0); CUR and REMOTE hold only _G01_NAME_CHARS; REMOTE is a name
+# `git remote` lists, with no push, mirror, receivepack, vcs or pushurl config, and no
+# url.<base>.pushInsteadOf is set; there is at least one refspec, and each pushes CUR (a branch)
+# to CUR.
 _g01_proven() {
   local dir="$1" plain="$2" odd="$3" cur="$4" remote="$5" r s d k i=1
   shift 5
   [ "$_G01_IDX" = 1 ] && [ "$plain" = 1 ] && [ "$odd" = 0 ] && [ $# -gt 0 ] && [ -n "$remote" ] || return 1
   # shellcheck disable=SC2016 # a literal $( in the text
   case "$_G01_CMD" in *'$('* | *'`'*) return 1 ;; esac
-  case "$cur" in "" | HEAD) return 1 ;; esac
+  case "${_G01_RECS[0]}" in *'$'* | *'{'* | *'}'*) return 1 ;; esac
+  case "$cur" in "" | *[!"$_G01_NAME_CHARS"]*) return 1 ;; esac
+  case "$remote" in *[!"$_G01_NAME_CHARS"]*) return 1 ;; esac
   while [ "$i" -lt "${#_G01_RECS[@]}" ]; do
     _g01_filter "${_G01_RECS[$i]}" || return 1
     i=$((i + 1))
@@ -396,9 +405,12 @@ _g01_proven() {
   done
   word_has "$(git -C "$dir" remote 2>/dev/null)" "$remote" || return 1
   while IFS= read -r k; do
-    case "${k%% *}" in "remote.$remote.push" | "remote.$remote.mirror" | "remote.$remote.receivepack") return 1 ;; esac
+    case "${k%% *}" in
+      "remote.$remote.push" | "remote.$remote.mirror" | "remote.$remote.receivepack" | \
+        "remote.$remote.vcs" | "remote.$remote.pushurl" | url.*) return 1 ;;
+    esac
   done <<EOT
-$(git -C "$dir" config --get-regexp '^remote\..*\.(push|mirror|receivepack)$' 2>/dev/null)
+$(git -C "$dir" config --get-regexp '^(remote\..*\.(push|mirror|receivepack|vcs|pushurl)|url\..*\.pushinsteadof)$' 2>/dev/null)
 EOT
   return 0
 }

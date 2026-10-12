@@ -355,3 +355,90 @@ settings() {
   [ "$(decision_of "$output")" = ask ]
   [[ "$output" == *'kern allows only `git push [-u] <remote> <current-branch>` unattended'* ]] || false
 }
+
+@test "a tag named like the current branch does not hide it" {
+  git -C "$R" tag main
+  set_autopilot on
+  expect deny "git -C $R push origin HEAD" "git -C $R push -u origin @" "git push origin HEAD"
+  settings 'rebase.push: autopilot'
+  expect deny "git -C $R push --force-with-lease origin HEAD"
+  set_autopilot off
+  settings 'push.policy: auto'
+  expect ask "git -C $R push origin HEAD"
+}
+
+@test "a tag named like a branch.protected branch does not hide it" {
+  W="$BATS_TEST_TMPDIR/wt"
+  settings 'branch.protected: feat'
+  set_autopilot on
+  expect deny "git -C $W push origin HEAD"
+  git -C "$R" tag feat
+  expect deny "git -C $W push origin HEAD" "git -C $W push -u origin @"
+}
+
+@test "shell expansion in a push record is never allowed" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  git -C "$W" switch -q -c 'main$X'
+  expect deny "git -C $W push origin main\$X"
+  git -C "$W" switch -q -c '{x,main}'
+  expect deny "git -C $W push origin {x,main}"
+  git -C "$W" switch -q -c '$main'
+  expect deny "git -C $W push origin \$'main'"
+}
+
+@test "shell expansion or a glob in a filter is never allowed" {
+  P="git -C $BATS_TEST_TMPDIR/wt push -u origin feat"
+  set_autopilot on
+  expect deny "$P | grep -e *" "$P | grep {x,-r}" "$P | grep \$X" "$P | head -n ?" "$P | grep -e [a]"
+}
+
+@test "remote and url config that redirects a push makes it unproven" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  expect allow "git -C $W push origin feat"
+  git -C "$W" config remote.origin.receivepack git-receive-pack
+  expect deny "git -C $W push origin feat"
+  git -C "$W" config --unset remote.origin.receivepack
+  git -C "$W" config remote.origin.vcs evil
+  expect deny "git -C $W push origin feat"
+  git -C "$W" config --unset remote.origin.vcs
+  git -C "$W" config remote.origin.pushurl "$BATS_TEST_TMPDIR/elsewhere"
+  expect deny "git -C $W push origin feat"
+  git -C "$W" config --unset remote.origin.pushurl
+  git -C "$W" config "url.$BATS_TEST_TMPDIR/else2.pushInsteadOf" "$R.origin"
+  expect deny "git -C $W push origin feat"
+  git -C "$W" config --remove-section "url.$BATS_TEST_TMPDIR/else2"
+  expect allow "git -C $W push origin feat"
+}
+
+@test "lease: a missing origin/<base> counts as not own" {
+  settings 'rebase.push: autopilot' 'base_branch: nosuch'
+  set_autopilot on
+  expect deny "git -C $BATS_TEST_TMPDIR/wt push --force-with-lease origin feat"
+}
+
+@test "lease: the source of src:dst is what gets checked" {
+  git -C "$R" branch other main
+  git -C "$R" switch -q other
+  printf 'x\n' >"$R/x"; git -C "$R" add x
+  git -C "$R" -c user.email=other@example.com commit -q -m x
+  git -C "$R" switch -q main
+  expect deny "git -C $BATS_TEST_TMPDIR/wt push --force-with-lease origin other:feat"
+}
+
+@test "git and gh are matched case-insensitively" {
+  expect deny "GIT push --force origin main"
+  expect ask "Git -C $BATS_TEST_TMPDIR/wt push origin :feat" "GH pr merge 12 --squash" "GIT stash" \
+    "/usr/bin/GIT reset --hard HEAD"
+  set_autopilot on
+  expect deny "GH pr merge 12 --squash" "Git stash"
+}
+
+@test "an explicit lease value under autopilot names the bare option" {
+  settings 'rebase.push: autopilot'
+  set_autopilot on
+  g1 "git -C $BATS_TEST_TMPDIR/wt push --force-with-lease=feat:0123456 origin feat"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"--force-with-lease=<ref>:<expect> under autopilot; use the bare option"* ]] || false
+}
