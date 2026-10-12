@@ -208,7 +208,6 @@ settings() {
     "git -C $W push -q origin feat:feat" "git -C $W push origin feat >/dev/null 2>&1"
   expect deny \
     "git -C $W push -u origin feat && rm -rf /tmp/nothing-here" \
-    "git -C $W push -u origin feat | tail -1" \
     "git -C $W push -u origin feat # \$(true)" \
     "git -C $W push -u origin feat >$BATS_TEST_TMPDIR/out" \
     "env GIT_TRACE=1 git -C $W push origin feat" \
@@ -252,11 +251,20 @@ settings() {
   git -C "$R" branch other2
   settings 'rebase.push: autopilot'
   set_autopilot on
-  expect allow "git -C $W push --force-with-lease origin feat"
+  expect allow "git -C $W push --force-with-lease origin feat" \
+    "git -C $W push --force-with-lease --force-if-includes origin feat"
   expect deny "git -C $W push --force-with-lease origin other2" \
     "git -C $W push --force-with-lease origin HEAD:someone-else" \
     "git -C $W push --force-with-lease=feat:0123456 origin feat" \
-    "git -C $W push --force-with-lease --force-if-includes origin feat"
+    "git -C $W push --force-with-lease -o ci.skip origin feat"
+}
+
+@test "--force-if-includes follows the lease rules" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  expect deny "git -C $W push --force-if-includes origin feat"
+  settings 'rebase.push: autopilot'
+  expect allow "git -C $W push --force-if-includes origin feat"
 }
 
 @test "lease: another author's commit on the remote branch only is denied" {
@@ -270,10 +278,11 @@ settings() {
   git -C "$O" push -q origin feat
   git -C "$W" fetch -q origin
   printf 'b\n' >"$W/b.txt"; git -C "$W" add b.txt; git -C "$W" commit -q -m b
-  expect deny "git -C $W push --force-with-lease origin feat"
+  expect deny "git -C $W push --force-with-lease origin feat" "git -C $W push --force-if-includes origin feat"
   settings 'rebase.push: autopilot'
   set_autopilot on
-  expect deny "git -C $W push --force-with-lease origin feat"
+  expect deny "git -C $W push --force-with-lease origin feat" \
+    "git -C $W push --force-with-lease --force-if-includes origin feat"
 }
 
 @test "lease to a remote that git remote does not list is denied" {
@@ -302,4 +311,47 @@ settings() {
   expect ask "git -C $W push --no-verify origin feat" "git -C $W push -u --no-verify origin feat"
   set_autopilot on
   expect deny "git -C $W push --no-verify origin feat" "git -C $W push -u --no-verify origin feat"
+}
+
+@test "an allowed push may pipe into tail, head, grep or cat with options only" {
+  W="$BATS_TEST_TMPDIR/wt"
+  P="git -C $W push -u origin feat"
+  set_autopilot on
+  expect allow "$P 2>&1 | tail -5" "$P | tail -n 5" "$P 2>&1 | head -n 20" "$P | head -3" \
+    "$P 2>&1 | grep -i error" "$P 2>&1 | grep -e rejected -e error" "$P | cat -n" \
+    "$P 2>&1 | grep -v hint | tail -n 5" "$P 2>&1 | tail -5 >/dev/null"
+  expect deny "$P | tail -5 /etc/passwd" "$P | cat $HOME/.ssh/id_rsa" "$P | grep -r error" \
+    "$P | grep error notes.txt" "$P | grep -e error notes.txt" "$P | grep -f patterns" \
+    "$P | tail -5 >$BATS_TEST_TMPDIR/out" "$P | tee $BATS_TEST_TMPDIR/out" "$P | sh" \
+    "$P | xargs echo" "$P | env tail -5" "$P | tail -- -5" "tail -5 /etc/hosts; $P" \
+    "$P | bash -c 'tail -5'"
+  settings 'push.policy: auto'
+  set_autopilot off
+  expect allow "$P 2>&1 | tail -5"
+  expect ask "$P | tee $BATS_TEST_TMPDIR/out"
+}
+
+@test "--dry-run is a safe push option" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  expect allow "git -C $W push -n origin feat" "git -C $W push --dry-run -u origin feat"
+}
+
+@test "an unknown push shape names the fix in its reason" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  g1 "git -C $W push"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"name the remote and branch: git push -u origin feat"* ]] || false
+  g1 "git -C $W push origin feat:other"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'kern allows only `git push [-u] <remote> <current-branch>` unattended'* ]] || false
+  set_autopilot off
+  settings 'push.policy: auto'
+  g1 "git -C $W push"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"name the remote and branch: git push -u origin feat"* ]] || false
+  g1 "git -C $W push origin feat:other"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *'kern allows only `git push [-u] <remote> <current-branch>` unattended'* ]] || false
 }

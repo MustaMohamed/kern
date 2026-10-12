@@ -20,17 +20,30 @@ edit-description/-/0 force/f/0 merged/-/1 no-merged/-/1 column/-/o sort/-/1 poin
 ignore-case/i/0 recurse-submodules/-/0 format/-/1"
 _G01_CLEAN_OPTS="quiet/q/0 dry-run/n/0 force/f/0 interactive/i/0 -/d/0 exclude/e/1 -/x/0 -/X/0"
 _G01_WT_REMOVE_OPTS="force/f/0"
+# The read-only filters an allowed push may pipe into (_g01_filter). None of these options reads
+# a file. head and tail also take -NUM.
+_G01_TAIL_OPTS="lines/n/1 bytes/c/1 quiet/q/0 silent/-/0 verbose/v/0"
+_G01_HEAD_OPTS="lines/n/1 bytes/c/1 quiet/q/0 silent/-/0 verbose/v/0"
+_G01_GREP_OPTS="regexp/e/1 ignore-case/i/0 invert-match/v/0 extended-regexp/E/0 \
+fixed-strings/F/0 basic-regexp/G/0 word-regexp/w/0 line-regexp/x/0 count/c/0 line-number/n/0 \
+only-matching/o/0 quiet/q/0 silent/-/0 no-messages/s/0 max-count/m/1 after-context/A/1 \
+before-context/B/1 context/C/1 color/-/o colour/-/o"
+_G01_CAT_OPTS="number/n/0 number-nonblank/b/0 squeeze-blank/s/0 show-nonprinting/v/0 \
+show-ends/E/0 show-tabs/T/0 show-all/A/0 -/e/0 -/t/0 -/u/0"
 
 guard_g01() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd rec recs=() w=() t moved=0
+  local cmd rec w=() t moved=0
   cmd=$(ti_get command) || { fail_closed "Bash call without a command"; return 0; }
-  while IFS= read -r rec; do [ -n "$rec" ] && recs+=("$rec"); done <<EOT
+  _G01_RECS=()
+  while IFS= read -r rec; do [ -n "$rec" ] && _G01_RECS+=("$rec"); done <<EOT
 $(git_words "$cmd")
 EOT
   _G01_CMD=$cmd
-  _G01_NREC=${#recs[@]}
-  for rec in "${recs[@]}"; do
+  _G01_IDX=0
+  while [ "$_G01_IDX" -lt "${#_G01_RECS[@]}" ]; do
+    rec=${_G01_RECS[$_G01_IDX]}
+    _G01_IDX=$((_G01_IDX + 1))
     w=()
     while IFS= read -r t; do w+=("$t"); done <<EOT
 $(_cmd_words "$rec")
@@ -319,18 +332,63 @@ _g01_own_refs() {
   done
 }
 
-# _g01_proven DIR PLAIN ODD CUR REMOTE REFS...: the one push shape G1 may allow. All hold: the Bash
-# command is this single git record, with no $( ) or backticks; the record is `git`, -C options,
-# `push` (PLAIN 1), and every push option is in the safe set or a quiet redirection (ODD 0);
-# REMOTE is a name `git remote` lists, with no push, mirror or receivepack config; there is at
-# least one refspec, and each pushes CUR (a branch) to CUR.
+# _g01_filter RECORD: exit 0 when RECORD is tail, head, grep or cat with options from its table
+# only (head and tail also -NUM), quiet redirections, and no file argument; grep may take its
+# pattern as its one argument when no -e gives it.
+_g01_filter() {
+  local w=() args=() t table toks n=0 pat=0 dd=""
+  case "$1" in tail | "tail "* | head | "head "* | grep | "grep "* | cat | "cat "*) ;; *) return 1 ;; esac
+  while IFS= read -r t; do w+=("$t"); done <<EOT
+$(_cmd_words "$1")
+EOT
+  case "${w[0]}" in
+    tail) table=$_G01_TAIL_OPTS ;;
+    head) table=$_G01_HEAD_OPTS ;;
+    grep) table=$_G01_GREP_OPTS ;;
+    cat) table=$_G01_CAT_OPTS ;;
+    *) return 1 ;;
+  esac
+  for t in "${w[@]:1}"; do
+    # -NUM is a count for head and tail, but after `--` it names a file.
+    [ "$t" = -- ] && dd=1
+    if [ -z "$dd" ] && { [ "${w[0]}" = tail ] || [ "${w[0]}" = head ]; }; then
+      case "$t" in -*[!0-9]* | -) ;; -*) continue ;; esac
+    fi
+    args+=("$t")
+  done
+  [ ${#args[@]} -gt 0 ] || return 0
+  toks=$(_g01_opts "$table" "${args[@]}")
+  while IFS= read -r t; do
+    case "$t" in
+      "?"*) return 1 ;;
+      ">"*) _g01_quiet_redirect "${t#>}" || return 1 ;;
+      @*) n=$((n + 1)) ;;
+      --regexp=*) pat=1 ;;
+    esac
+  done <<EOT
+$toks
+EOT
+  [ "$n" = 0 ] && return 0
+  [ "${w[0]}" = grep ] && [ "$n" = 1 ] && [ "$pat" = 0 ]
+}
+
+# _g01_proven DIR PLAIN ODD CUR REMOTE REFS...: the one push shape G1 may allow. All hold: this
+# git record is the command's first, every later record is a read-only filter (_g01_filter), and
+# the command has no $( ) or backticks; the record is `git`, -C options, `push` (PLAIN 1), and
+# every push option is in the safe set or a quiet redirection (ODD 0); REMOTE is a name
+# `git remote` lists, with no push, mirror or receivepack config; there is at least one refspec,
+# and each pushes CUR (a branch) to CUR.
 _g01_proven() {
-  local dir="$1" plain="$2" odd="$3" cur="$4" remote="$5" r s d k
+  local dir="$1" plain="$2" odd="$3" cur="$4" remote="$5" r s d k i=1
   shift 5
-  [ "$_G01_NREC" = 1 ] && [ "$plain" = 1 ] && [ "$odd" = 0 ] && [ $# -gt 0 ] && [ -n "$remote" ] || return 1
+  [ "$_G01_IDX" = 1 ] && [ "$plain" = 1 ] && [ "$odd" = 0 ] && [ $# -gt 0 ] && [ -n "$remote" ] || return 1
   # shellcheck disable=SC2016 # a literal $( in the text
   case "$_G01_CMD" in *'$('* | *'`'*) return 1 ;; esac
   case "$cur" in "" | HEAD) return 1 ;; esac
+  while [ "$i" -lt "${#_G01_RECS[@]}" ]; do
+    _g01_filter "${_G01_RECS[$i]}" || return 1
+    i=$((i + 1))
+  done
   for r in "$@"; do
     case "$r" in *:*) s=${r%%:*}; d=${r#*:} ;; *) s=$r; d=$cur ;; esac
     case "$s" in "$cur" | HEAD | @ | "refs/heads/$cur") ;; *) return 1 ;; esac
@@ -348,7 +406,7 @@ EOT
 # _g01_push DIR PLAIN WORDS...: force first, then push.policy deny, remote delete, an unknown
 # directory, protected targets and lease pushes; an allow needs _g01_proven.
 _g01_push() {
-  local dir="$1" plain="$2" toks t r cur policy force=none del=0 odd=0 val=0 all=0 have=0 prot=0
+  local dir="$1" plain="$2" toks t r cur policy fix force=none del=0 odd=0 val=0 all=0 have=0 prot=0
   local remote="" refs=() tg=()
   shift 2
   toks=$(_g01_opts "$_G01_PUSH_OPTS" "$@")
@@ -363,9 +421,9 @@ _g01_push() {
       @*) if [ "$have" = 0 ]; then remote=${t#@}; have=1; else refs+=("${t#@}"); fi ;;
     esac
     # The safe set: anything else makes the push unproven. --no-verify is outside it, because
-    # it skips the pre-push hook.
+    # it skips the pre-push hook. --force-if-includes still follows the lease rules.
     case "$t" in
-      --set-upstream | --quiet | --verbose | --force-with-lease | @*) ;;
+      --set-upstream | --quiet | --verbose | --dry-run | --force-with-lease | --force-if-includes | @*) ;;
       ">"*) _g01_quiet_redirect "${t#>}" || odd=1 ;;
       *) odd=1 ;;
     esac
@@ -391,11 +449,23 @@ EOT
     return 0
   fi
   if [ -z "$dir" ]; then
-    vote ask G1 "git push after cd, --git-dir or --work-tree: what it pushes is unknown"
-    [ "$AUTOPILOT" = 1 ] && vote deny G1 "git push from an unknown directory under autopilot"
+    fix="run git -C <dir> push instead of cd, --git-dir or --work-tree"
+    vote ask G1 "git push after cd, --git-dir or --work-tree: what it pushes is unknown; $fix"
+    [ "$AUTOPILOT" = 1 ] && vote deny G1 "git push from an unknown directory under autopilot; $fix"
     return 0
   fi
   cur=$(current_branch "$dir")
+  # The retry that reaches the allowed shape: a bare push names its remote and branch.
+  if [ ${#refs[@]} -gt 0 ]; then
+    # shellcheck disable=SC2016 # literal backticks
+    fix='kern allows only `git push [-u] <remote> <current-branch>` unattended'
+    # shellcheck disable=SC2016 # literal backticks
+    [ "$force" = lease ] && fix='kern allows only `git push --force-with-lease <remote> <current-branch>` unattended'
+  elif [ "$force" = lease ]; then
+    fix="name the remote and branch: git push --force-with-lease origin $cur"
+  else
+    fix="name the remote and branch: git push -u origin $cur"
+  fi
   [ "$all" = 1 ] && tg+=("*")
   [ ${#refs[@]} -gt 0 ] || tg+=("$cur")
   for r in "${refs[@]}"; do
@@ -421,7 +491,7 @@ EOT
     elif [ "$val" = 1 ]; then
       vote deny G1 "--force-with-lease=<ref>:<expect> under autopilot; use the bare option"
     elif ! _g01_proven "$dir" "$plain" "$odd" "$cur" "$remote" "${refs[@]}"; then
-      vote deny G1 "autopilot lease push only as git [-C dir] push --force-with-lease <remote> $cur, alone in the command"
+      vote deny G1 "autopilot lease push of an unknown shape; $fix"
     elif ! _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}"; then
       vote deny G1 "lease push of $cur: not every commit is yours, or that could not be checked"
     else
@@ -438,10 +508,8 @@ EOT
       vote ask G1 "push $cur"
     fi
   elif [ "$AUTOPILOT" = 1 ]; then
-    vote deny G1 "autopilot pushes only the current branch, as git [-C dir] push [-u] <remote> $cur, alone in the command"
-  elif [ "$policy" = auto ]; then
-    vote ask G1 "push ${tg[*]}: push.policy auto covers only a plain push of the current branch, alone in the command"
+    vote deny G1 "autopilot push of an unknown shape; $fix"
   else
-    vote ask G1 "push ${tg[*]}"
+    vote ask G1 "push ${tg[*]}; $fix"
   fi
 }
