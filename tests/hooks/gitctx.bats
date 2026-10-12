@@ -235,6 +235,32 @@ sh"
   [ "$output" = main ]
 }
 
+# words_are STR WORD...: _shell_words prints exactly the WORDs for STR.
+words_are() {
+  local str="$1"
+  shift
+  run _shell_words "$str"
+  [ "$output" = "$(printf '%s\n' "$@")" ] || { echo "$str -> $output"; return 1; }
+}
+
+@test "_shell_words: a word that starts with an unquoted # is a comment to the newline" {
+  words_are 'git status # note' git status
+  words_are 'git clean -fd # -n' git clean -fd
+  words_are "$(printf 'a # b\nc')" a c
+  run _cmd_words 'git status # note'
+  [ "$output" = "$(printf 'git\nstatus')" ]
+}
+
+@test "_shell_words: a # inside a word, quoted or escaped is kept" {
+  words_are 'echo a#b' echo 'a#b'
+  words_are 'echo ${#x}' echo '${#x}'
+  words_are 'echo $#' echo '$#'
+  words_are "echo '#x'" echo '#x'
+  words_are 'echo "#x"' echo '#x'
+  words_are 'echo \#x' echo '#x'
+  words_are 'git log --format=%h#%s' git log '--format=%h#%s'
+}
+
 @test "_shell_words splits a redirection from the word before it" {
   [ "$(_shell_words 'a main>/dev/null 2>&1 b&>c d<<EOF e2>f' | paste -sd ' ' -)" = \
     "a main >/dev/null 2>&1 b &>c d <<EOF e2 >f" ]

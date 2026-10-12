@@ -494,3 +494,10 @@ settings() {
     [[ "$output" == *"HEAD is detached; check out a branch first"* ]] || { echo "$c -> $output"; return 1; }
   done
 }
+
+@test "a trailing comment does not hide a command" {
+  set -- "git clean -fd # -n" "git clean -fdx # --dry-run" "git merge main # --abort"
+  expect ask "$@"
+  set_autopilot on
+  expect deny "$@"
+}

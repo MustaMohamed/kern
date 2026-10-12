@@ -31,6 +31,8 @@ _GW_AWK='
       if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; continue }
       if (c == sq || c == "\"") { q = c; have = 1; continue }
       if (c == " " || c == "\t" || c == "\n" || c == "\037") { if (have) sw_w[++sw_n] = w; w = ""; have = 0; continue }
+      # An unquoted, unescaped # that starts a word is a comment, to the newline, as in bash.
+      if (c == "#" && !have) { while (i < n && index("\n\037", substr(buf, i + 1, 1)) == 0) i++; continue }
       if ((c == "<" || c == ">" || (c == "&" && substr(buf, i + 1, 1) == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
         sw_w[++sw_n] = w; w = ""
       }
