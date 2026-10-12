@@ -362,9 +362,10 @@ _g01_push() {
       --all | --branches) all=1 ;;
       @*) if [ "$have" = 0 ]; then remote=${t#@}; have=1; else refs+=("${t#@}"); fi ;;
     esac
-    # The safe set: anything else makes the push unproven.
+    # The safe set: anything else makes the push unproven. --no-verify is outside it, because
+    # it skips the pre-push hook.
     case "$t" in
-      --set-upstream | --quiet | --verbose | --no-verify | --force-with-lease | @*) ;;
+      --set-upstream | --quiet | --verbose | --force-with-lease | @*) ;;
       ">"*) _g01_quiet_redirect "${t#>}" || odd=1 ;;
       *) odd=1 ;;
     esac

@@ -295,3 +295,11 @@ settings() {
   set_autopilot on
   expect deny "gh -R o/r pr merge 12 --squash"
 }
+
+@test "--no-verify skips the pre-push hook, so the push is never allowed" {
+  W="$BATS_TEST_TMPDIR/wt"
+  settings 'push.policy: auto'
+  expect ask "git -C $W push --no-verify origin feat" "git -C $W push -u --no-verify origin feat"
+  set_autopilot on
+  expect deny "git -C $W push --no-verify origin feat" "git -C $W push -u --no-verify origin feat"
+}
