@@ -68,10 +68,35 @@ EOT
   for c in 'exec -a x git push origin main' 'sudo -p x git push' 'sudo -C 3 git push' \
     'env -P /usr/bin git push' 'env -S "git push origin main"' \
     'bash -o pipefail -c "git push origin main"' 'bash -cx "git push"' \
-    'timeout 30 git push' 'timeout -s KILL 30 git push' 'nice -n 5 git push' 'nice -5 git push' \
+    'timeout 30 git push' 'timeout -s KILL 30 git push' 'timeout --signal KILL 30 git push' \
+    'timeout --kill-after 5 30 git push' 'nice -n 5 git push' 'nice -5 git push' \
     '"/bin/bash" -c "git push"' '/usr/bin/env bash -c "git push"'; do
     finds "$c" push
   done
+}
+
+@test "a leading redirection is not the command name" {
+  for c in '2>/dev/null git push --force' '> /dev/null git push' '2>/dev/null bash -c "git push"'; do
+    finds "$c" push
+  done
+}
+
+@test "a << inside quotes in \$( ) hides nothing" {
+  finds 'echo "$(grep -c '"'<<'"' f)"; git push --force' push
+  finds "$(printf '%s\n' 'echo "$(echo '"'<<X'"')"' 'git push --force' 'X')" push
+}
+
+@test "a shell reading a here-doc runs its body: the body stays as records" {
+  finds "$(printf '%s\n' "bash <<'EOF'" 'git push --force origin main' 'EOF')" push
+  finds "$(printf '%s\n' 'x=$(sudo -u me sh -s <<EOF' 'git push --force' 'EOF' ')')" push
+}
+
+@test "a here-string is not a here-doc" {
+  run git_words "$(printf '%s\n' 'cat <<< EOF' 'git push --force' 'EOF')"
+  [ "${lines[0]}" = "cat <<< EOF" ]
+  [ "${lines[1]}" = "git push --force" ]
+  [ "${lines[2]}" = EOF ]
+  [ "${#lines[@]}" -eq 3 ]
 }
 
 @test "the commit form with a here-doc message gives one git segment, and the message is data" {
@@ -108,7 +133,7 @@ EOT
 $body
 EOF
 )\""
-  t=$( { time git_words "$cmd" >"$BATS_TEST_TMPDIR/out" || true; } 2>&1)
+  t=$( { time git_words "$cmd" >"$BATS_TEST_TMPDIR/out" 2>/dev/null || true; } 2>&1)
   awk -v t="$t" 'BEGIN { exit !(t < 1) }' || { echo "took $t s"; return 1; }
   [ "$(wc -l <"$BATS_TEST_TMPDIR/out")" -eq 2 ]
 }

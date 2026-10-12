@@ -40,6 +40,19 @@ expect_bash() {
   done
 }
 
+# expect_cmd DECISION COMMAND...: expect_bash for commands that hold double quotes or newlines.
+expect_cmd() {
+  local d="$1" c j
+  shift
+  . "$(kern_root)/hooks/lib/json.sh"
+  for c in "$@"; do
+    j=$(printf '%s' "$c" | json_escape)
+    run_guard "$(tool_payload Bash "\"command\":\"$j\"")" g16
+    [ "$status" -eq 0 ] || { echo "$c -> status $status"; return 1; }
+    [ "$(decision_of "$output")" = "$d" ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
 @test "Write under the sessions dir is denied in both modes" {
   p=$(payload PreToolUse "\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/sessions/test-session.state\",\"content\":\"autopilot: on\"}")
   run_guard "$p" g16
@@ -116,7 +129,29 @@ expect_bash() {
 @test "a glob that matches the state file once ~ is expanded is denied" {
   export CLAUDE_PLUGIN_DATA="$HOME/.claude/plugins/data/kern-kern"
   mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
-  expect_bash deny "echo autopilot: on > ~/.claude/p*/d*/k*/s*/*.state"
+  expect_bash deny "echo autopilot: on > ~/.claude/p*/d*/k*/s*/*.state" \
+    "echo on > \$HOME/.claude/p*/d*/k*/s*/*.state" "echo on > \${HOME}/.claude/p*/d*/k*/s*/*.state" \
+    "echo on > \${CLAUDE_PLUGIN_DATA}/s*/*.state"
+  expect_cmd deny 'echo on > "$CLAUDE_PLUGIN_DATA"/s*/*.state'
+  expect_bash none "du -sh ~/* ; ls sessions"
+}
+
+@test "plain reads, git commands and messages naming state or settings: no vote" {
+  expect_bash none "git diff .claude/kern.yml" "git check-ignore -q .claude/kern.local.yml" \
+    "git add tests/sessions/foo.state" "test -f $S/x.state && echo yes" "find $S -name '*.state'"
+  expect_cmd none 'echo ".claude/kern.local.yml" >> .gitignore' \
+    'git commit -m "G16: deny writes to sessions/<sid>.state"'
+  expect_bash deny "echo on > $S/x.state" "find $S -name x -delete"
+}
+
+@test "a shell reading a here-doc runs its body as commands" {
+  expect_cmd deny "$(printf '%s\n' "bash <<'EOF'" "echo autopilot: on > $S/test-session.state" 'EOF')"
+}
+
+@test "a misread << hides no state write" {
+  expect_cmd deny "$(printf '%s\n' 'echo $((1<<X))' "echo on > $S/a.state" X)" \
+    "$(printf '%s\n' '# see <<X' "echo on > $S/a.state" X)" \
+    "$(printf '%s\n' 'x=$(cat <<X)' "echo on > $S/a.state" X)"
 }
 
 @test "a double-quoted state target is denied" {

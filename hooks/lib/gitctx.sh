@@ -5,13 +5,68 @@
 # caller that reads records line by line never takes a quoted line for a command.
 _GW_NL=$'\037'
 
+# _GW_AWK: awk functions shared by _shell_words, _cmd_words and _split_words (run with -v sq="'").
+# sw(STR) splits STR into words, quotes removed, in sw_w[1..sw_n] (see _shell_words). cw_reset()
+# starts a simple command and cw(WORD) feeds it one word; the command name and its arguments
+# collect in cw_w[1..cw_n] (see _cmd_words).
+_GW_AWK='
+  BEGIN {
+    cw_opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
+    cw_opt["env"] = " -C -P -S -u "
+    cw_opt["exec"] = " -a "
+    cw_opt["timeout"] = " -s -k --signal --kill-after "
+    cw_opt["nice"] = " -n "
+  }
+  function sw(buf,   n, q, w, have, i, c) {
+    sw_n = 0; n = length(buf); q = ""; w = ""; have = 0
+    for (i = 1; i <= n; i++) {
+      c = substr(buf, i, 1)
+      if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
+      if (q == "\"") {
+        if (c == "\"") q = ""
+        else if (c == "\\" && index("\"\\$`", substr(buf, i + 1, 1))) { i++; w = w substr(buf, i, 1) }
+        else w = w c
+        continue
+      }
+      if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; continue }
+      if (c == sq || c == "\"") { q = c; have = 1; continue }
+      if (c == " " || c == "\t" || c == "\n" || c == "\037") { if (have) sw_w[++sw_n] = w; w = ""; have = 0; continue }
+      if ((c == "<" || c == ">" || (c == "&" && substr(buf, i + 1, 1) == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
+        sw_w[++sw_n] = w; w = ""
+      }
+      w = w c; have = 1
+    }
+    if (have) sw_w[++sw_n] = w
+  }
+  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0 }
+  function cw(x,   a, k, m, b) {
+    if (cw_s) { cw_w[++cw_n] = x; return }
+    if (cw_val) {
+      cw_val = 0
+      if (cw_split) { cw_split = 0; m = split(x, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") cw(a[k]) }
+      return
+    }
+    if (x ~ /^[0-9]*(<|>|&>)/) { cw_val = (x ~ /^[0-9]*[<>&|]+$/); return }
+    if (x ~ /^[A-Za-z_][A-Za-z0-9_]*=/) return
+    if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
+    b = x; sub(/.*\//, "", b)
+    if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
+    if (x ~ /^-/) {
+      if (cw_wrap in cw_opt && index(cw_opt[cw_wrap], " " x " ")) { cw_val = 1; cw_split = (cw_wrap == "env" && x == "-S") }
+      return
+    }
+    if (cw_dur) { cw_dur = 0; return }
+    cw_s = 1; cw_w[++cw_n] = x
+  }
+'
+
 # git_words CMD: one simple command per line. Splits on ; & && || | ( ), the words { and }, and
 # newlines outside quotes, backticks and $( ); a redirection (2>&1, &>, >|) never splits, and a
 # backslash-newline is dropped. Here-doc bodies are data: they are left out (see _split_words).
 # The script of an sh-family shell's -c (any path, flags such as -lc or -cx, after the wrappers and
 # keywords _cmd_words skips), the arguments of `eval`, and the bodies of $( ) and backticks are
 # split again and printed after their wrapper, so a command inside a string is still seen. Out of
-# scope: commands that xargs or find -exec run.
+# scope: commands that xargs or find -exec run, and a here-doc piped into a shell (cat <<EOF | sh).
 git_words() {
   local seg inner body first
   _split_words "$1" | while IFS= read -r seg; do
@@ -25,10 +80,10 @@ git_words() {
         ;;
     esac
     # The wrapper pass costs two processes, so it runs only when the first word, quotes removed,
-    # is an assignment, a keyword, a wrapper, eval or a shell.
+    # is a redirection, an assignment, a keyword, a wrapper, eval or a shell.
     first=${seg%%[[:space:]]*}
     case "/${first//[\"\'\\]/}" in
-      *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | */eval | \
+      *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | */eval | \
         */command | */exec | */time | */nohup | */sudo | */env | */timeout | */nice | */sh | */bash | \
         */zsh | */dash) ;;
       *) continue ;;
@@ -79,18 +134,37 @@ _subst_bodies() {
 # _split_words STR: the simple commands of STR, one record per line (see git_words). A here-doc
 # (<<WORD, <<-WORD, <<'WORD', <<"WORD") is read at the newline that ends its command line: the body
 # up to the closing WORD line is skipped. At the top level the body and closing line are dropped;
-# inside $( ) the closing line is kept, so the record still parses the same when split again. A
-# here-doc with no closing line skips nothing, so a misread `<<` never hides the commands after it.
+# inside $( ) the closing line is kept, so the record still parses the same when split again. The
+# body of a here-doc that sh, bash, zsh or dash reads as its script (no -c) is kept as commands.
+# A `<<` is never a here-doc inside $(( )) or (( )), after a word that starts with #, or when its
+# $( ) closes before the newline; and a here-doc with no closing line skips nothing. So a misread
+# `<<` cannot hide the commands after it. A comment at the top level runs to its newline.
 _split_words() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
+  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     function emit(s) { gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s); gsub(/\n/, "\037", s); if (s != "") print s }
     function sep(ch) { return ch == "" || index(" \t\n;&|()", ch) > 0 }
     # cut(e): emits the record gathered so far, up to position e - 1.
     function cut(e) { emit(pre substr(buf, start, e - start)); pre = "" }
-    # hdop(j): true when the `<` at j opens a here-doc operator (`<<`, not `<<<`).
-    function hdop(j) { return substr(buf, j + 1, 1) == "<" && substr(buf, j + 2, 1) != "<" && substr(buf, j - 1, 1) != "<" }
-    # heredoc(j): queues the delimiter word that follows the `<<` ending at j - 1, quotes removed.
-    # Returns the position after the word.
+    # hdat(j): true when the `<` at j opens a here-doc operator (`<<`, not `<<<`) where one can start.
+    function hdat(j) {
+      return !cm && !ta && !(ar && depth >= ar) && substr(buf, j + 1, 1) == "<" &&
+        substr(buf, j + 2, 1) != "<" && substr(buf, j - 1, 1) != "<"
+    }
+    # shellin(t): true when the simple command t is sh, bash, zsh or dash with no -c, so a here-doc
+    # it reads is its script.
+    function shellin(t,   k, b) {
+      sw(t); cw_reset()
+      for (k = 1; k <= sw_n; k++) cw(sw_w[k])
+      if (!cw_n) return 0
+      b = cw_w[1]; sub(/.*\//, "", b)
+      if (b !~ /^(ba|z|da)?sh$/) return 0
+      for (k = 2; k <= cw_n; k++) if (cw_w[k] ~ /^-[a-z]*c[a-z]*$/) return 0
+      return 1
+    }
+    # heredoc(j): queues the delimiter word that starts at j, after a `<<`, quotes removed. The word
+    # ends at a blank, an operator, a newline or the end of input, even inside a quote; a quote
+    # still open there means the `<<` was quoted text, and nothing is queued. Scanning resumes
+    # after the `<<` either way, so the word itself is read as ordinary text.
     function heredoc(j,   d, wq, ch, dash) {
       dash = 0
       if (substr(buf, j, 1) == "-") { dash = 1; j++ }
@@ -98,15 +172,17 @@ _split_words() {
       d = ""; wq = ""
       for (; j <= n; j++) {
         ch = substr(buf, j, 1)
+        if (ch == "\n") break
         if (wq != "") { if (ch == wq) wq = ""; else d = d ch; continue }
         if (ch == sq || ch == "\"") { wq = ch; continue }
         if (ch == "\\") { j++; d = d substr(buf, j, 1); continue }
-        if (index(" \t\n;&|<>()", ch)) break
+        if (index(" \t;&|<>()", ch)) break
         d = d ch
       }
-      if (d != "") { hd[++hn] = d; hx[hn] = dash }
-      return j
+      if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash; hdd[hn] = depth }
     }
+    # shut(): a `)` closes a $( ); arithmetic and here-docs opened inside it end with it.
+    function shut() { depth--; if (ar && depth < ar) ar = 0; while (hn && hdd[hn] > depth) hn-- }
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
     function bodies(j,   h, k, t) {
@@ -129,8 +205,11 @@ _split_words() {
       return off[k] + length(L[k])
     }
     { L[NR] = $0; buf = buf (NR > 1 ? "\n" : "") $0 }
+    # cs: where the current simple command starts. ar: the depth where $(( or (( inside $( ) began.
+    # ta: inside (( )) at the top level. cm: in a comment inside $( ), until the newline.
     END {
-      n = length(buf); q = ""; depth = 0; start = 1; i = 1; pre = ""; hn = 0; lp = 1; off[1] = 1
+      n = length(buf); q = ""; depth = 0; start = 1; cs = 1; i = 1; pre = ""; hn = 0; lp = 1; off[1] = 1
+      ar = 0; ta = 0; cm = 0
       for (k = 2; k <= NR; k++) off[k] = off[k - 1] + length(L[k - 1]) + 1
       while (i <= n) {
         c = substr(buf, i, 1)
@@ -138,32 +217,58 @@ _split_words() {
         if (c == "\\") { i += 2; continue }
         if (q == "\"") {
           if (c == "\"") q = ""
-          else if (c == "$" && substr(buf, i + 1, 1) == "(") { depth++; i++ }
-          else if (c == ")" && depth > 0) depth--
-          else if (depth > 0 && c == "<" && hdop(i)) { i = heredoc(i + 2); continue }
-          else if (depth > 0 && c == "\n" && hn) { i = nested(i); continue }
+          else if (c == "$" && substr(buf, i + 1, 1) == "(") {
+            if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
+            depth++; cs = i + 2; i++
+          }
+          else if (c == ")" && depth > 0) shut()
+          else if (depth > 0 && c == "<" && hdat(i)) {
+            if (!shellin(substr(buf, cs, i - cs))) heredoc(i + 2)
+            i += 2; continue
+          }
+          else if (depth > 0 && index(";&|\n", c)) {
+            cs = i + 1
+            if (c == "\n") { cm = 0; if (hn) { i = nested(i); continue } }
+          }
           i++; continue
         }
         if (q == "`") { if (c == "`") q = ""; i++; continue }
         if (c == sq || c == "\"" || c == "`") { q = c; i++; continue }
-        if (c == "<" && hdop(i)) { i = heredoc(i + 2); continue }
-        if (c == "$" && substr(buf, i + 1, 1) == "(") { depth++; i += 2; continue }
-        if (depth > 0) {
-          if (c == "\n" && hn) { i = nested(i); continue }
-          if (c == "(") depth++; else if (c == ")") depth--
-          i++; continue
+        if (c == "<" && hdat(i)) {
+          if (!shellin(substr(buf, cs, i - cs))) heredoc(i + 2)
+          i += 2; continue
+        }
+        if (c == "$" && substr(buf, i + 1, 1) == "(") {
+          if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
+          depth++; cs = i + 2; i += 2; continue
         }
         p = substr(buf, i - 1, 1)
         x = substr(buf, i + 1, 1)
+        if (depth > 0) {
+          if (c == "\n") { cm = 0; cs = i + 1; if (hn) { i = nested(i); continue } }
+          else if (c == "#" && sep(p)) cm = 1
+          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; depth++; cs = i + 1 }
+          else if (c == ")") shut()
+          else if (index(";&|", c)) cs = i + 1
+          i++; continue
+        }
         if ((c == "&" && (p == ">" || p == "<" || x == ">")) || (c == "|" && p == ">")) { i++; continue }
+        if (c == "#" && (i == 1 || sep(p))) {
+          e = index(substr(buf, i), "\n")
+          i = e ? i + e - 1 : n + 1
+          continue
+        }
+        if (c == "(" && x == "(") ta = 1
+        else if (c == ")" && x == ")") ta = 0
         if ((c == "{" || c == "}") && (i == 1 || sep(p)) && sep(x)) {
           cut(i)
-          start = i + 1
+          start = cs = i + 1
         } else if (c == ";" || c == "\n" || c == "&" || c == "|" || c == "(" || c == ")") {
           cut(i)
           if ((c == "&" || c == "|") && x == c) i++
-          start = i + 1
-          if (c == "\n" && hn && (k = bodies(i))) { i = off[k] + length(L[k]); start = i + 1 }
+          start = cs = i + 1
+          if (c == "\n") cm = 0
+          if (c == "\n" && hn && (k = bodies(i))) { i = off[k] + length(L[k]); start = cs = i + 1 }
         }
         i++
       }
@@ -176,64 +281,20 @@ _split_words() {
 # starts a new word unless it follows an fd number or another operator: `main>/dev/null` gives
 # `main` and `>/dev/null`, while `2>&1` stays whole.
 _shell_words() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
+  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     { buf = buf (NR > 1 ? "\037" : "") $0 }
-    END {
-      n = length(buf); q = ""; w = ""; have = 0
-      for (i = 1; i <= n; i++) {
-        c = substr(buf, i, 1)
-        if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
-        if (q == "\"") {
-          if (c == "\"") q = ""
-          else if (c == "\\" && index("\"\\$`", substr(buf, i + 1, 1))) { i++; w = w substr(buf, i, 1) }
-          else w = w c
-          continue
-        }
-        if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; continue }
-        if (c == sq || c == "\"") { q = c; have = 1; continue }
-        if (c == " " || c == "\t" || c == "\037") { if (have) print w; w = ""; have = 0; continue }
-        if ((c == "<" || c == ">" || (c == "&" && substr(buf, i + 1, 1) == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
-          print w; w = ""
-        }
-        w = w c; have = 1
-      }
-      if (have) print w
-    }'
+    END { sw(buf); for (k = 1; k <= sw_n; k++) print sw_w[k] }'
 }
 
 # _cmd_words CMDLINE: the words of a simple command from its command name on, one per line.
-# Skips leading VAR=value words, the keywords if then elif else do while until ! {, the wrappers
-# command, exec, time, nohup, sudo, env, timeout and nice (any path), and their options. The
-# options in `opt` take a value; timeout's duration follows its options; the value of env -S is
-# a command line, read as words.
+# Skips leading redirections (and the target of one that stands alone), VAR=value words, the
+# keywords if then elif else do while until ! {, the wrappers command, exec, time, nohup, sudo,
+# env, timeout and nice (any path), and their options. The options in `cw_opt` take a value;
+# timeout's duration follows its options; the value of env -S is a command line, read as words.
 _cmd_words() {
-  _shell_words "$1" | LC_ALL=C awk '
-    BEGIN {
-      opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
-      opt["env"] = " -C -P -S -u "
-      opt["exec"] = " -a "
-      opt["timeout"] = " -s -k "
-      opt["nice"] = " -n "
-    }
-    function word(x,   a, k, m, b) {
-      if (s) { print x; return }
-      if (val) {
-        val = 0
-        if (split_s) { split_s = 0; m = split(x, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") word(a[k]) }
-        return
-      }
-      if (x ~ /^[A-Za-z_][A-Za-z0-9_]*=/) return
-      if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { wrap = ""; return }
-      b = x; sub(/.*\//, "", b)
-      if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { wrap = b; dur = (b == "timeout"); return }
-      if (x ~ /^-/) {
-        if (wrap in opt && index(opt[wrap], " " x " ")) { val = 1; split_s = (wrap == "env" && x == "-S") }
-        return
-      }
-      if (dur) { dur = 0; return }
-      s = 1; print x
-    }
-    { word($0) }'
+  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+    { buf = buf (NR > 1 ? "\037" : "") $0 }
+    END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); for (k = 1; k <= cw_n; k++) print cw_w[k] }'
 }
 
 # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the
