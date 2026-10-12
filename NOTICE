@@ -76,3 +76,6 @@ extension/fonts/GEIST_LICENSE.txt.
 ----- end caveman NOTICE -----
 
 ## File map
+- evals/distractors.json: superpowers skills/*/SKILL.md descriptions (first clauses)
+- scripts/lib/rank.mjs: addy scripts/run-evals.js lines 62-102 and 121-139
+- scripts/route-eval.mjs: addy scripts/run-evals.js runDeterministic (adapted)
