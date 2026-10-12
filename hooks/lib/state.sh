@@ -72,14 +72,24 @@ state_reset() {
   _state_put 1 "$1" "voice=$voice" "surface=$surface" "autopilot=off" "since=$(now_iso)"
 }
 
-# autopilot_on SID: exit 0 only when no existing settings layer says `autopilot: denied` and the state says on.
-autopilot_on() {
+# autopilot_denied_by: prints the first settings file (in precedence order) that says `autopilot: denied`.
+# Exit 1 when no layer denies.
+autopilot_denied_by() {
   local f
   while IFS= read -r f; do
     [ -f "$f" ] || continue
-    [ "$(_settings_lookup "$f" autopilot)" = denied ] && return 1
+    if [ "$(_settings_lookup "$f" autopilot)" = denied ]; then
+      printf '%s\n' "$f"
+      return 0
+    fi
   done <<EOT
 $(_settings_files)
 EOT
+  return 1
+}
+
+# autopilot_on SID: exit 0 only when no existing settings layer says `autopilot: denied` and the state says on.
+autopilot_on() {
+  autopilot_denied_by >/dev/null && return 1
   [ "$(state_get "$1" autopilot 2>/dev/null)" = on ]
 }

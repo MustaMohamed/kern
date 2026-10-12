@@ -41,8 +41,9 @@ mode_line() {
 
 # autopilot_text SID: `off`, `ON since <iso>`, or `off (denied by <file>)`.
 autopilot_text() {
-  if [ "$(settings_get autopilot allowed)" = denied ]; then
-    printf 'off (denied by %s)\n' "$(settings_source autopilot)"
+  local denier
+  if denier=$(autopilot_denied_by); then
+    printf 'off (denied by %s)\n' "$denier"
   elif autopilot_on "$1"; then
     printf 'ON since %s\n' "$(state_get "$1" since 2>/dev/null || printf 'this session')"
   else

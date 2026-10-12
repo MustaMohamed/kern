@@ -123,3 +123,10 @@ YML
   [[ "$output" == *"Not a git repository"* ]] || false
   [[ "$output" == *"Settings files: ~/.claude/kern.yml"* ]] || false
 }
+
+@test "a lower-layer autopilot deny is named in the kernel" {
+  printf 'autopilot: allowed\n' >"$R/.claude/kern.yml"
+  printf 'autopilot: denied\n' >"$HOME/.claude/kern.yml"
+  start startup
+  [[ "$output" == *"denied by $HOME/.claude/kern.yml"* ]] || false
+}

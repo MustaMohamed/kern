@@ -100,3 +100,20 @@ autopilot: on"
   run state_file "é"
   [ "$status" -eq 2 ]
 }
+
+@test "autopilot_denied_by names the denying layer, even under a higher allowed layer" {
+  mkdir -p "$R/.claude"
+  printf 'autopilot: allowed\n' >"$R/.claude/kern.yml"
+  printf 'autopilot: denied\n' >"$HOME/.claude/kern.yml"
+  run autopilot_denied_by
+  [ "$status" -eq 0 ]
+  [ "$output" = "$HOME/.claude/kern.yml" ]
+}
+
+@test "autopilot_denied_by exits 1 when no layer denies" {
+  mkdir -p "$R/.claude"
+  printf 'autopilot: allowed\n' >"$R/.claude/kern.yml"
+  run autopilot_denied_by
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}

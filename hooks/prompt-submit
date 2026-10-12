@@ -70,14 +70,14 @@ set_surface() {
 
 # apply_autopilot ARGS ALLOW_ON: ALLOW_ON is 1 only for a command the user typed.
 apply_autopilot() {
-  local arg
+  local arg denier
   arg=$(printf '%s' "$1" | lower | awk '{ print $1 }')
   SHOW_LINE=1
   case "$arg" in
     on)
       [ "$2" = 1 ] || return 0
-      if [ "$(settings_get autopilot allowed)" = denied ]; then
-        NOTICE="kern: autopilot denied by $(settings_source autopilot)."
+      if denier=$(autopilot_denied_by); then
+        NOTICE="kern: autopilot denied by $denier."
         return 0
       fi
       if [ "$(state_get "$SID" autopilot 2>/dev/null)" != on ]; then
@@ -98,10 +98,11 @@ dispatch() {
   esac
 }
 
+# wrapped TRIM: true when the prompt itself starts with a wrapper tag.
 wrapped() {
   local t
   for t in $KERN_WRAPPER_TAGS; do
-    case "$1" in *"$t"*) return 0 ;; esac
+    case "$1" in "$t"*) return 0 ;; esac
   done
   return 1
 }
@@ -146,13 +147,14 @@ if [ "$EVENT" = UserPromptExpansion ]; then
   esac
 else
   PROMPT=$(json_get prompt) || PROMPT=""
-  wrapped "$PROMPT" && exit 0
   TRIM=$(printf '%s' "$PROMPT" | sed -n '/[^[:space:]]/,$p' | sed '1s/^[[:space:]]*//')
+  if wrapped "$TRIM"; then TRIM=""; fi
   case "$TRIM" in
+    "") ;;
     "<command-message>"* | "<command-name>"*)
       NAME=$(printf '%s' "$TRIM" | sed -n 's/.*<command-name>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*<\/command-name>.*/\1/p' | head -n 1)
       ARGS=$(printf '%s' "$TRIM" | tr '\n' ' ' | sed -n 's/.*<command-args>[[:space:]]*\([^<]*\)<\/command-args>.*/\1/p' | head -n 1)
-      dispatch "$NAME" "$ARGS" 1
+      dispatch "$NAME" "$ARGS" 0
       ;;
     /kern:mode* | /kern:autopilot*)
       NAME=$(printf '%s' "$TRIM" | awk 'NR == 1 { print $1 }')
