@@ -94,7 +94,7 @@ _g01_merge() {
 # The directory is empty (unknown) when MOVED is 1 or with --git-dir or --work-tree. PLAIN is 1
 # when the record is `git`, then only -C options, then the subcommand.
 _g01_git_rec() {
-  local rec="$1" dir="${CWD:-$PWD}" plain=1
+  local rec="$1" dir="${CWD:-$PWD}" plain=1 cfg=""
   [ "$2" = 1 ] && dir=""
   shift 3
   case "$rec" in "git "*) ;; *) plain=0 ;; esac
@@ -112,7 +112,13 @@ _g01_git_rec() {
         dir=""; plain=0; shift 2
         ;;
       --git-dir=* | --work-tree=*) dir=""; plain=0; shift ;;
-      -c | --config-env | --namespace | --super-prefix | --attr-source)
+      -c)
+        [ $# -ge 2 ] || return 0
+        cfg="$cfg$2
+"
+        plain=0; shift 2
+        ;;
+      --config-env | --namespace | --super-prefix | --attr-source)
         [ $# -ge 2 ] || return 0
         plain=0; shift 2
         ;;
@@ -125,7 +131,70 @@ _g01_git_rec() {
     esac
   done
   [ $# -gt 0 ] || return 0
+  _g01_alias_check G1 "${dir:-${CWD:-$PWD}}" "$1" "$cfg" "$rec" && return 0
   _g01_git "$dir" "$plain" "$@"
+}
+
+# Subcommands a guard reviews (G1, G5, G6), so an alias that runs one asks. Git runs a builtin even
+# when an alias has its name, so these and the builtins in _G01_ALIAS_SKIP are never looked up.
+_G01_ALIAS_GUARDED=" push commit merge rebase reset checkout switch stash clean branch add pull worktree "
+_G01_ALIAS_SKIP=" status log diff show fetch rev-parse config remote ls-files ls-remote grep blame \
+describe tag init clone help version cat-file for-each-ref symbolic-ref show-ref merge-base rev-list \
+shortlog reflog notes check-ignore name-rev var gc fsck mv rm restore cherry-pick revert am apply \
+format-patch submodule bisect stage "
+
+# _g01_alias_exp DIR NAME CFG: the expansion of alias NAME: the last `alias.NAME=` among the
+# record's -c values CFG (one per line; the key in any case), else `git config alias.NAME` in DIR.
+# Exit 1 when NAME is no alias.
+_g01_alias_exp() {
+  local line key want v="" hit=1
+  if [ -n "$3" ]; then
+    want=$(printf 'alias.%s' "$2" | tr '[:upper:]' '[:lower:]')
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      key=$(printf '%s' "${line%%=*}" | tr '[:upper:]' '[:lower:]')
+      [ "$key" = "$want" ] || continue
+      case "$line" in *=*) v=${line#*=} ;; *) v=true ;; esac
+      hit=0
+    done <<EOT
+$3
+EOT
+    if [ "$hit" = 0 ]; then
+      printf '%s\n' "$v"
+      return 0
+    fi
+  fi
+  git -C "$1" -c core.fsmonitor=false config --get "alias.$2" 2>/dev/null
+}
+
+# _g01_alias_check GUARD DIR SUB CFG RECORD: when SUB is a git alias whose expansion runs a guarded
+# subcommand or a shell (`!`), votes ask (deny under autopilot) as GUARD and exits 0. An alias of an
+# alias is followed five deep, skipping leading options in each expansion. A RECORD that sets
+# GIT_CONFIG_* or --config-env may define an alias the hook cannot read, which counts as a shell.
+_g01_alias_check() {
+  local g="$1" dir="$2" sub="$3" cfg="$4" exp head w n=0 ws=()
+  case "$sub" in "" | -*) return 1 ;; esac
+  case "$_G01_ALIAS_GUARDED$_G01_ALIAS_SKIP" in *" $sub "*) return 1 ;; esac
+  case "$5" in
+    *GIT_CONFIG_* | *--config-env*) exp='!' ;;
+    *) exp=$(_g01_alias_exp "$dir" "$sub" "$cfg") || return 1 ;;
+  esac
+  while :; do
+    case "$exp" in '!'*) break ;; esac
+    read -r -a ws <<<"$exp"
+    head=""
+    for w in "${ws[@]}"; do
+      case "$w" in -*) ;; *) head=$w; break ;; esac
+    done
+    case "$_G01_ALIAS_GUARDED" in *" $head "*) break ;; esac
+    n=$((n + 1))
+    [ -n "$head" ] && [ "$n" -lt 5 ] || return 1
+    case "$_G01_ALIAS_SKIP" in *" $head "*) return 1 ;; esac
+    exp=$(_g01_alias_exp "$dir" "$head" "$cfg") || return 1
+  done
+  vote ask "$g" "git $sub is an alias for '$exp'; run the git command itself so kern can check it"
+  [ "$AUTOPILOT" = 1 ] && vote deny "$g" "git alias $sub under autopilot"
+  return 0
 }
 
 # _g01_opts TABLE WORDS...: git's option parsing of WORDS, one token per line: `--long` or

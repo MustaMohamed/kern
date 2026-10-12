@@ -50,6 +50,10 @@ guard_g06() {
       case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) moved=1 ;; esac
       continue
     fi
+    if declare -F _g01_alias_check >/dev/null &&
+      _g01_alias_check G6 "$_G05_DIR" "$_G05_SUB" "$_G05_CFG" "$rec"; then
+      continue
+    fi
     case "$_G05_SUB" in commit | push) ;; *) continue ;; esac
     if [ "$moved" = 1 ] || [ "$_G05_MOVED" = 1 ]; then
       _g06_unscanned "could not scan: git $_G05_SUB after cd, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see"

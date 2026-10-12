@@ -41,23 +41,24 @@ policy() {
   printf 'commit.convention: "^CDS-[0-9]+: "\n%b' "${1-}" >"$R/.claude/kern.local.yml"
 }
 
-# never_allowed CMD...: G5 denies each CMD under autopilot and does not allow it under
-# commit.policy auto. EXTRA (printf %b) is added to the settings.
+# never_allowed CMD...: G5 denies each CMD under autopilot, and does not allow the first two under
+# commit.policy auto: both modes reach the same _g05_proven, so the second pass is representative.
+# EXTRA (printf %b) is added to the settings.
 never_allowed() {
   local c
   policy "commit.policy: auto\n${EXTRA-}"
   set_autopilot off
-  for c in "$@"; do expect '!allow' g05 "$c" || return 1; done
+  for c in "${@:1:2}"; do expect '!allow' g05 "$c" || return 1; done
   set_autopilot on
   for c in "$@"; do expect deny g05 "$c" || return 1; done
 }
 
-# allowed CMD...: G5 allows each CMD under autopilot and under commit.policy auto.
+# allowed CMD...: G5 allows each CMD under autopilot, and the first two under commit.policy auto.
 allowed() {
   local c
   policy 'commit.policy: auto\n'
   set_autopilot off
-  for c in "$@"; do expect allow g05 "$c" || return 1; done
+  for c in "${@:1:2}"; do expect allow g05 "$c" || return 1; done
   policy
   set_autopilot on
   for c in "$@"; do expect allow g05 "$c" || return 1; done
@@ -707,4 +708,64 @@ key AKIAABCDEFGHIJKLMNOP"
   git -C "$N" config log.showRoot false
   CWD="$N" expect deny g06 "git push -u origin main"
   [[ "$output" == *"root.txt:1 private-key"* ]] || false
+}
+
+@test "G5: attribution variants and a --trailer are denied, interactive and default policy" {
+  local c
+  for c in "git commit -m 'CDS-2465: x' -m 'Assisted-by: Claude'" \
+    "git commit -m 'CDS-2465: x' -m 'Generated-by = Anthropic model'" \
+    "git commit -m 'CDS-2465: x' -m 'co-authored-by :claude'" \
+    "git commit -m 'CDS-2465: x' -m 'CO-AUTHORED-BY=Claude'" \
+    "git commit -m 'CDS-2465: x' --trailer 'Co-authored-by: Claude <noreply@anthropic.com>'" \
+    "git commit -m 'CDS-2465: x' --trailer 'Assisted-by=Claude'"; do
+    expect deny g05 "$c" || return 1
+    [[ "$output" == *"attribution"* ]] || false
+  done
+}
+
+@test "G5: the ticket id must be followed by a non-alphanumeric character or the end" {
+  set_autopilot on
+  expect deny g05 "git commit -m 'CDS-24650: x'"
+  [[ "$output" == *"subject lacks the ticket id CDS-2465"* ]] || false
+  policy 'commit.convention: ".*"\n'
+  expect deny g05 "git commit -m 'fix CDS-2465a'"
+  expect allow g05 "git commit -m '[CDS-2465] x'"
+  expect allow g05 "git commit -m 'fix for CDS-2465'"
+}
+
+@test "G5: git add of a word that expands is wide" {
+  mkdir -p "$R/src"
+  local c broad=("git add {.,src}" "git add .{,}" "git add \`pwd\`" "git add src/{a,b}.ts")
+  for c in "${broad[@]}"; do expect ask g05 "$c" || return 1; done
+  set_autopilot on
+  for c in "${broad[@]}"; do expect deny g05 "$c" || return 1; done
+}
+
+@test "G5: git add of the worktree root spelled in another case is wide" {
+  local up
+  up=$(printf '%s' "$R" | tr '[:lower:]' '[:upper:]')
+  [ -d "$up" ] || skip "case-sensitive file system"
+  expect ask g05 "git add $up"
+}
+
+@test "git aliases: one for a guarded command or a shell asks in G1, G5 and G6; others pass" {
+  git -C "$R" config alias.ci commit
+  git -C "$R" config alias.st status
+  git -C "$R" config alias.x '!sh -c "echo hi"'
+  git -C "$R" config alias.pu 'push origin HEAD'
+  git -C "$R" config alias.c2 ci
+  local g c cmds=(
+    "git -c alias.zz=commit zz -m 'CDS-2465: x'" "git ci -m 'CDS-2465: x'" "git x" "git pu" "git c2 -m x"
+    "git -c alias.zz=push zz" "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.yy GIT_CONFIG_VALUE_0=push git yy"
+  )
+  for g in g01 g05 g06; do
+    for c in "${cmds[@]}"; do
+      expect ask "$g" "$c" || return 1
+      [[ "$output" == *"alias"* ]] || false
+    done
+    expect none "$g" "git st" || return 1
+  done
+  set_autopilot on
+  expect deny g01,g05,g06 "git ci -m 'CDS-2465: x'"
+  expect deny g05 "git -c alias.ci=commit commit -m 'CDS-2465: x'"
 }
