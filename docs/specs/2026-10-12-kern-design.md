@@ -408,7 +408,7 @@ Active only when both hold: settings allow it (`autopilot: allowed`, the default
 | G13 protected targets | when set | Copies to and mutating SQL against `protected_targets` denied | Same |
 | G14 tracker and chat writes | on | Write calls from tracker or chat MCP servers ask | Denied |
 | G15 deploy and publish | on | Workflow runs, releases, publishes, terraform, kubectl, helm and pushes to deploy branches ask | Denied |
-| G16 mode state | on | Tool writes under the kern session-state directory denied | Same |
+| G16 mode state | on | Tool writes under the kern session-state directory denied; writes to the kern settings files ask | Same; settings writes denied |
 | G17 gh stack | on | `merge` denied (it merges the whole stack without prompting in a non-interactive session; the user runs it). `rebase`, `sync` and navigation denied in the main checkout, allowed in the stack worktree. `sync` and `push` ask. `submit` asks and must use `--auto` without `--open`. `link` and `unstack` ask. `modify` needs a terminal and is denied | `merge`, `link`, `unstack`, `modify` and `submit --open` denied. `sync` and `push` allowed with `rebase.push: autopilot`. `submit --auto` allowed after dedup |
 | G18 read-only agents | on | For kern's read-only agents (investigator), Bash commands outside a read-only allowlist (git log, show, blame, diff, grep, ls, cat) are denied. Matches `agent_type` `kern:investigator`, which Claude Code passes to hooks for a subagent's tool calls. If the value differs in practice, the investigator loses Bash and the controller collects history for it | Same |
 
