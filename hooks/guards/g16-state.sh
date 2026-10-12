@@ -127,23 +127,15 @@ _g16_bash() {
   _G16_SD=$(_g16_lower "$(state_dir)")
   _G16_SID=$(_g16_lower "${SID-}")
   _g16_names "$cmd" || return 0
-  # The whole line first: the command splitter cuts `>|` and `&>` apart from their targets.
-  while IFS= read -r t; do
-    [ -n "$t" ] || continue
-    _g16_kind "$t"
-    case "$_G16_K" in state) state=1 ;; settings) settings=1 ;; esac
-  done <<LINE
-$(_g16_redirects "$cmd")
-LINE
   while IFS= read -r seg; do
     [ -n "$seg" ] || continue
-    words=$(_shell_words "$seg")
+    # The command name comes first, after the assignments, keywords and wrappers _cmd_words skips.
+    words=$(_cmd_words "$seg")
     head=""
     inplace=0
     seg_k=""
     while IFS= read -r w; do
       if [ -z "$head" ]; then
-        case "$w" in [a-z_]*=* | command | exec | time | nohup | sudo | env | -*) continue ;; esac
         head=${w##*/}
         continue
       fi
@@ -184,9 +176,16 @@ SEGMENTS
 }
 
 # _g16_relay: a scheduled or relayed prompt whose text, after leading whitespace, opens with a mode
-# or autopilot command. A mention later in the text passes.
+# or autopilot command. A mention later in the text passes. RemoteTrigger keeps its routine prompt
+# inside a nested body and a remote run starts its own session with it, so any mention there counts.
 _g16_relay() {
   local k t
+  if [ "$TOOL" = RemoteTrigger ]; then
+    case "$(_g16_lower "$TOOL_INPUT")" in
+      */kern:autopilot* | */kern:mode*) vote deny G16 "$TOOL may not carry /kern:autopilot or /kern:mode; only the user types them" ;;
+    esac
+    return 0
+  fi
   for k in prompt message; do
     t=$(ti_get "$k") || continue
     t=$(_g16_lower "$t")

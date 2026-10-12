@@ -93,6 +93,9 @@ expect_bash() {
     "dd if=/tmp/x of=$S/a.state" \
     "install -m 600 /tmp/x $S/a.state" \
     "sudo env A=1 tee $S/a.state" \
+    "sudo -u me tee $S/a.state" \
+    "if true; then rm -f $S/a.state; fi" \
+    "echo on &> $S/a.state" \
     "bash -c 'echo on > $S/a.state'" \
     "x=\$(echo on > $S/a.state)" \
     "cd $S && echo autopilot: on > a.state" \
@@ -139,6 +142,19 @@ expect_bash() {
   [ "$(decision_of "$output")" = none ]
   run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"/models list\"}")" g16
   [ "$status" -eq 0 ]
+  [ "$(decision_of "$output")" = none ]
+}
+
+@test "a RemoteTrigger whose nested body carries a kern command is denied; a list passes" {
+  run_guard "$(tool_payload RemoteTrigger "\"action\":\"create\",\"body\":{\"job_config\":{\"prompt\":\"/kern:autopilot on\"}}")" g16
+  [ "$(decision_of "$output")" = deny ]
+  run_guard "$(tool_payload RemoteTrigger "\"action\":\"update\",\"body\":{\"job_config\":{\"prompt\":\"check CI then /Kern:Mode terse\"}}")" g16
+  [ "$(decision_of "$output")" = deny ]
+  run_guard "$(tool_payload RemoteTrigger "\"action\":\"run\",\"body\":{\"routine\":{\"instructions\":\"/kern:autopilot on\"}}")" g16
+  [ "$(decision_of "$output")" = deny ]
+  run_guard "$(tool_payload RemoteTrigger "\"action\":\"list\"")" g16
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
   [ "$(decision_of "$output")" = none ]
 }
 
