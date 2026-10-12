@@ -64,6 +64,55 @@ EOT
   finds 'for b in a; do git push origin $b; done' push
 }
 
+@test "git is seen behind wrapper options, env -S, shell options, timeout and nice" {
+  for c in 'exec -a x git push origin main' 'sudo -p x git push' 'sudo -C 3 git push' \
+    'env -P /usr/bin git push' 'env -S "git push origin main"' \
+    'bash -o pipefail -c "git push origin main"' 'bash -cx "git push"' \
+    'timeout 30 git push' 'timeout -s KILL 30 git push' 'nice -n 5 git push' 'nice -5 git push' \
+    '"/bin/bash" -c "git push"' '/usr/bin/env bash -c "git push"'; do
+    finds "$c" push
+  done
+}
+
+@test "the commit form with a here-doc message gives one git segment, and the message is data" {
+  # printf, not a here-doc inside $( ): bash 3.2 misparses the apostrophe there.
+  cmd=$(printf '%s\n' 'git commit -m "$(cat <<'"'EOF'" 'docs: x (git push --force is blocked)' \
+    'echo on > /x/sessions/a.state; git reset --hard' "it's (unbalanced" 'EOF' ')"')
+  run git_words "$cmd"
+  [ "$(git_sub "${lines[0]}" | cut -f2)" = commit ]
+  [ "${lines[1]}" = "cat <<'EOF'" ]
+  [ "${#lines[@]}" -eq 2 ]
+}
+
+@test "here-doc bodies are skipped, and the commands after them are still seen" {
+  run git_words "$(printf '%s\n' 'cat > /tmp/f <<-EOF' '	git push --force' '	EOF' 'git status')"
+  [ "${lines[0]}" = "cat > /tmp/f <<-EOF" ]
+  [ "${lines[1]}" = "git status" ]
+  [ "${#lines[@]}" -eq 2 ]
+  finds "$(printf '%s\n' 'x=$(cat <<"A" <<B' 'a )' 'A' 'b (' 'B' 'git push --force)')" push
+  finds "$(printf '%s\n' 'cat <<EOF' 'no end' 'git push')" push
+}
+
+@test "a quoted multi-line argument stays in its record" {
+  run git_words "$(printf '%s\n' 'git commit -m "a' 'git push --force"' 'git status')"
+  [ "${#lines[@]}" -eq 2 ]
+  [ "$(git_sub "${lines[0]}" | cut -f2)" = commit ]
+  [ "${lines[1]}" = "git status" ]
+  finds "$(printf '%s\n' "bash -c 'git status" "git push --force'")" push
+}
+
+@test "a 1,000-line here-doc runs through git_words in under a second" {
+  local TIMEFORMAT=%R t
+  body=$(awk 'BEGIN { for (i = 1; i <= 1000; i++) printf "line %d: echo x > /tmp/y; (git push --force)\n", i }')
+  cmd="git commit -m \"\$(cat <<'EOF'
+$body
+EOF
+)\""
+  t=$( { time git_words "$cmd" >"$BATS_TEST_TMPDIR/out" || true; } 2>&1)
+  awk -v t="$t" 'BEGIN { exit !(t < 1) }' || { echo "took $t s"; return 1; }
+  [ "$(wc -l <"$BATS_TEST_TMPDIR/out")" -eq 2 ]
+}
+
 @test "a backslash-newline is dropped, not read as a space" {
   finds "git \\
  stash" stash
@@ -127,6 +176,20 @@ sh"
   done
   run push_targets "$R" "$(git_sub 'git push origin 2>&1' | cut -f3)"
   [ "$output" = main ]
+}
+
+@test "_shell_words splits a redirection from the word before it" {
+  [ "$(_shell_words 'a main>/dev/null 2>&1 b&>c d<<EOF e2>f' | paste -sd ' ' -)" = \
+    "a main >/dev/null 2>&1 b &>c d <<EOF e2 >f" ]
+}
+
+@test "push_targets: a redirection glued to the branch, and @" {
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  for rest in 'origin main>/dev/null' 'origin main&>/dev/null' 'origin @'; do
+    run push_targets "$R" "$rest"
+    [ "$output" = main ] || { echo "$rest -> $output"; return 1; }
+  done
 }
 
 @test "push_targets prints * for every-branch pushes, and * is protected" {

@@ -63,28 +63,47 @@ _g16_file() {
   done
 }
 
-# _g16_names STR: exit 0 when the lower-cased STR mentions session state or a settings file at all.
+# _g16_names STR: exit 0 when the lower-cased STR could name session state or a settings file.
 _g16_names() {
   case "$1" in
-    *"$_G16_SD"* | *plugins/data/*sessions* | *claude_plugin_data*sessions* | *.claude/kern.yml* | *.claude/kern.local.yml*) return 0 ;;
+    *"$_G16_SD"* | *sessions* | *.state* | *kern.yml* | *kern.local.yml*) return 0 ;;
   esac
-  [ -n "$_G16_SID" ] || return 1
-  case "$1" in *"$_G16_SID".state*) return 0 ;; esac
   return 1
 }
 
-# _g16_kind WORD: sets _G16_K to `state` when WORD names session state (the sessions dir, any
-# plugins/data/*/sessions path, $CLAUDE_PLUGIN_DATA/sessions, or the state file name <sid>.state),
-# `settings` when it names a kern settings file, else empty. The bare session id is not enough:
-# Claude Code's scratchpad and task paths contain it.
+# _g16_kind WORD: sets _G16_K to `state` when the lower-cased WORD names session state, `settings`
+# when it names a kern settings file, else empty. State: a word holding the sessions dir path (so
+# of=<dir>/x counts); any word that holds `sessions` and ends in `.state`; the state file name
+# <sid>.state, bare or after a slash; or an absolute glob that, once a leading ~, $HOME or
+# $CLAUDE_PLUGIN_DATA is expanded, matches this session's state file. The bare session id is not
+# enough: Claude Code's scratchpad and task paths contain it. Settings: a word ending in
+# .claude/kern.yml or .claude/kern.local.yml, or exactly kern.yml or kern.local.yml.
 _g16_kind() {
+  local e
   _G16_K=""
   case "$1" in
-    *"$_G16_SD"* | *plugins/data/*sessions* | *claude_plugin_data*sessions*) _G16_K=state; return 0 ;;
-    *.claude/kern.yml | *.claude/kern.local.yml) _G16_K=settings; return 0 ;;
+    *"$_G16_SD"* | *sessions*.state) _G16_K=state; return 0 ;;
+    *.claude/kern.yml | *.claude/kern.local.yml | kern.yml | kern.local.yml) _G16_K=settings; return 0 ;;
   esac
-  [ -n "$_G16_SID" ] || return 0
-  case "$1" in "$_G16_SID".state | */"$_G16_SID".state) _G16_K=state ;; esac
+  if [ -n "$_G16_SID" ]; then
+    case "$1" in "$_G16_SID".state | */"$_G16_SID".state) _G16_K=state; return 0 ;; esac
+  fi
+  # shellcheck disable=SC2016 # the literal words Claude wrote, lower-cased
+  case "$1" in
+    '~'/*) e="$_G16_HOME${1#'~'}" ;;
+    '$home'/*) e="$_G16_HOME${1#'$home'}" ;;
+    '${home}'/*) e="$_G16_HOME${1#'${home}'}" ;;
+    '$claude_plugin_data'/*) e="$_G16_DATA${1#'$claude_plugin_data'}" ;;
+    '${claude_plugin_data}'/*) e="$_G16_DATA${1#'${claude_plugin_data}'}" ;;
+    *) e="$1" ;;
+  esac
+  case "$e" in
+    *"$_G16_SD"*) _G16_K=state; return 0 ;;
+    /*[*?[]*) ;;
+    *) return 0 ;;
+  esac
+  # shellcheck disable=SC2254 # the word is matched as the glob it is
+  case "$_G16_SD/$_G16_SID.state" in $e) _G16_K=state ;; esac
 }
 
 # _g16_redirects STR: the target word of each `>` or `>>` outside quotes, one per line.
@@ -101,14 +120,14 @@ _g16_redirects() {
         if (c == sq || c == "\"") { q = c; continue }
         if (c != ">") continue
         while (i < n && index(">|&", substr(buf, i + 1, 1))) i++
-        while (i < n && index(" \t", substr(buf, i + 1, 1))) i++
+        while (i < n && index(" \t\037", substr(buf, i + 1, 1))) i++
         w = ""; wq = ""
         for (j = i + 1; j <= n; j++) {
           d = substr(buf, j, 1)
           if (wq != "") { if (d == wq) wq = ""; else w = w d; continue }
           if (d == "\\") { j++; w = w substr(buf, j, 1); continue }
           if (d == sq || d == "\"") { wq = d; continue }
-          if (index(" \t;&|<>()`", d)) break
+          if (index(" \t\037;&|<>()`", d)) break
           w = w d
         }
         if (w != "") print w
@@ -117,16 +136,20 @@ _g16_redirects() {
     }'
 }
 
-# _g16_bash: write shapes (a redirect, tee, sed -i, perl -i, cp, mv, ln, rm, truncate, dd, install)
-# against session state are denied, and against a settings file ask; reads pass. Every simple
-# command is checked, including the bodies of bash -c, eval, $( ) and backticks, and after a cd
-# into the sessions dir every later write counts as a write to it.
+# _g16_bash: a command that names session state is denied, and one that names a settings file
+# asks, unless its head only reads (cat head tail less more grep egrep fgrep rg ls stat wc file
+# diff cmp jq, and sed or perl without -i). A redirect into either counts whatever the head. Every
+# simple command is checked, including the bodies of bash -c, eval, $( ) and backticks; here-doc
+# bodies are data. After a cd into the sessions dir, every later non-reading command and redirect
+# counts as a write to it, until a cd elsewhere.
 _g16_bash() {
   local cmd seg words w t head inplace seg_k is_write state=0 settings=0 in_sd=0
   cmd=$(ti_get command) || return 0
   cmd=$(_g16_lower "$cmd")
   _G16_SD=$(_g16_lower "$(state_dir)")
   _G16_SID=$(_g16_lower "${SID-}")
+  _G16_HOME=$(_g16_lower "${HOME-}")
+  _G16_DATA=${_G16_SD%/sessions}
   _g16_names "$cmd" || return 0
   while IFS= read -r seg; do
     [ -n "$seg" ] || continue
@@ -149,11 +172,16 @@ _g16_bash() {
     done <<WORDS
 $words
 WORDS
-    is_write=0
+    is_write=1
     case "$head" in
-      tee | cp | mv | ln | rm | truncate | dd | install) is_write=1 ;;
-      sed | perl) is_write=$inplace ;;
-      cd | pushd) [ "$seg_k" = state ] && in_sd=1 ;;
+      cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | jq) is_write=0 ;;
+      sed | perl) [ "$inplace" = 1 ] || is_write=0 ;;
+      cd | pushd)
+        is_write=0
+        in_sd=0
+        [ "$seg_k" = state ] && in_sd=1
+        ;;
+      '') is_write=0 ;;
     esac
     if [ "$is_write" = 1 ]; then
       [ "$in_sd" = 1 ] && seg_k=state

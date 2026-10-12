@@ -102,10 +102,40 @@ expect_bash() {
     "echo on > /tmp/test-session.state"
 }
 
+@test "any command but a reader that names a state path is denied" {
+  expect_bash deny \
+    "cd ~/.claude/plugins/data/kern-kern && sed -i '' s/off/on/ sessions/*.state" \
+    "cd \$CLAUDE_PLUGIN_DATA && echo autopilot: on > sessions/*.state" \
+    "rsync /tmp/x $S/a.state" \
+    "curl -so $S/a.state file:///tmp/x" \
+    "ditto /tmp/x $S/a.state" \
+    "dd if=/tmp/x of=$S/x" \
+    "cp -t $S /tmp/x"
+}
+
+@test "a glob that matches the state file once ~ is expanded is denied" {
+  export CLAUDE_PLUGIN_DATA="$HOME/.claude/plugins/data/kern-kern"
+  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
+  expect_bash deny "echo autopilot: on > ~/.claude/p*/d*/k*/s*/*.state"
+}
+
+@test "a double-quoted state target is denied" {
+  run_guard "$(tool_payload Bash "\"command\":\"echo on > \\\"$S/test-session.state\\\"\"")" g16
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "reads of a state file, and a commit message naming one: no vote" {
+  expect_bash none "cat $S/a.state" "grep on $S/a.state" "ls $S/a.state" "sed -n p $S/a.state"
+  run_guard "$(tool_payload Bash "\"command\":\"git commit -m \\\"\$(cat <<'EOF'\\nfix: x\\necho on > $S/test-session.state\\nEOF\\n)\\\"\"")" g16
+  [ "$status" -eq 0 ]
+  [ "$(decision_of "$output")" = none ]
+}
+
 @test "the session id counts only as the state file name: scratchpad writes pass" {
   d=/private/tmp/claude-501/proj/test-session/scratchpad
   expect_bash deny "echo on > test-session.state" "echo on > /anywhere/test-session.state"
-  expect_bash none "node build.mjs > $d/out.txt" "cp report.json $d/" "git diff > $d/review.diff"
+  expect_bash none "node build.mjs > $d/out.txt" "cp report.json $d/" "git diff > $d/review.diff" \
+    "tee $d/sessions.md" "echo x > $d/test-session.state.txt"
 }
 
 @test "reads of session state: no vote" {
@@ -190,7 +220,8 @@ expect_bash() {
   expect_file_tools "$HOME/.claude/kern.yml" ask
   expect_file_tools "$R/.CLAUDE/KERN.LOCAL.YML" ask
   [[ "$output" == *'"kern G16: kern settings change guard policy; the user confirms each write"'* ]] || false
-  expect_bash ask "echo kern: off >> .claude/kern.local.yml" "sed -i '' s/ask/auto/ $R/.claude/kern.yml"
+  expect_bash ask "echo kern: off >> .claude/kern.local.yml" "sed -i '' s/ask/auto/ $R/.claude/kern.yml" \
+    "cd .claude && sed -i '' s/ask/auto/ kern.yml"
   set_autopilot on
   expect_file_tools "$R/.claude/kern.local.yml" deny
   [[ "$output" == *"the user confirms each write (autopilot: nobody to ask)"* ]] || false
