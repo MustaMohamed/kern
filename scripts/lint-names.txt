@@ -1,0 +1,6 @@
+# Personal names and handles that must not appear in shipped files (lint rule 8).
+Mustafa
+Mohamed
+MustaMohamed
+musta
+heyinfinito
