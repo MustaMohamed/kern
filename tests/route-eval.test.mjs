@@ -75,3 +75,51 @@ test('rank-1 rate below the baseline fails', () => {
   assert.deepEqual(evaluate(root, { minRank1: 100 }).errors, []);
   assert.equal(evaluate(root, { minRank1: 101 }).errors.length, 1);
 });
+
+const POS = ['hello kern', 'greeting kern', 'kern hello there'];
+const NEG = ['deploy prod', 'weather today'];
+const two = (da, db, extra = {}) => repo({
+  'skills/a/SKILL.md': skill('a', da),
+  'skills/b/SKILL.md': skill('b', db),
+  'evals/cases/a.json': caseFile('a', POS, NEG),
+  'evals/cases/b.json': caseFile('b', POS, NEG),
+  'evals/distractors.json': [],
+  'evals/baseline.json': { min_rank1: 0 },
+  ...extra,
+});
+
+test('collision between two auto skills is an error', () => {
+  const r = evaluate(two('Use when greeting kern hello', 'Use when greeting kern hello'), { minRank1: 0 });
+  assert.ok(r.errors.some((e) => /collision: /.test(e)), r.errors.join('\n'));
+});
+
+test('overlap between descriptions is a warning', () => {
+  // similarity 0.62: between COLLISION_WARN 0.5 and COLLISION_ERROR 0.75
+  const r = evaluate(two('Use when greeting kern hello version', 'Use when greeting kern hello installed'), { minRank1: 0 });
+  assert.ok(r.warnings.some((w) => /overlap: /.test(w)), r.warnings.join('\n'));
+  assert.ok(!r.errors.some((e) => /collision: /.test(e)), r.errors.join('\n'));
+});
+
+const withNegatives = (negative) => repo({
+  'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello'),
+  'evals/cases/a.json': { ...caseFile('a', POS, []), trigger: { positive: POS.map((prompt) => ({ prompt, top_k: 3 })), negative } },
+  'evals/distractors.json': [{ name: 'writing-plans', description: 'Use when writing a plan for multi-step tasks' }],
+  'evals/baseline.json': { min_rank1: 0 },
+});
+
+test('skill ranked #1 for a negative prompt is an error', () => {
+  const r = evaluate(withNegatives([{ prompt: 'greeting kern hello' }, { prompt: 'weather today' }]), { minRank1: 0 });
+  assert.ok(r.errors.some((e) => /ranked #1 for negative prompt/.test(e)), r.errors.join('\n'));
+});
+
+test('declared owner must outrank the skill', () => {
+  const ok = evaluate(withNegatives([{ prompt: 'write a plan for tasks', owner: 'writing-plans' }, { prompt: 'weather today' }]), { minRank1: 0 });
+  assert.ok(!ok.errors.some((e) => /owner /.test(e)), ok.errors.join('\n'));
+  const bad = evaluate(withNegatives([{ prompt: 'greeting kern hello', owner: 'writing-plans' }, { prompt: 'weather today' }]), { minRank1: 0 });
+  assert.ok(bad.errors.some((e) => /owner .* does not outrank it/.test(e)), bad.errors.join('\n'));
+});
+
+test('unknown owner is an error', () => {
+  const r = evaluate(withNegatives([{ prompt: 'weather today', owner: 'nope' }, { prompt: 'deploy prod' }]), { minRank1: 0 });
+  assert.ok(r.errors.some((e) => /unknown owner "nope"/.test(e)), r.errors.join('\n'));
+});
