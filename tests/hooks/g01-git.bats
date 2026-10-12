@@ -12,6 +12,22 @@ setup() {
 
 g1() { run_guard "$(bash_payload "$1")" g01; }
 
+# expect DECISION CMD...: G1 gives DECISION for every CMD.
+expect() {
+  local want="$1" c
+  shift
+  for c in "$@"; do
+    g1 "$c"
+    [ "$(decision_of "$output")" = "$want" ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+# settings LINE...: the project's local kern settings, one LINE per key.
+settings() {
+  mkdir -p "$R/.claude"
+  printf '%s\n' "$@" >"$R/.claude/kern.local.yml"
+}
+
 @test "status in the main checkout: no vote" {
   g1 "git status"
   [ "$(decision_of "$output")" = none ]
@@ -144,4 +160,138 @@ g1() { run_guard "$(bash_payload "$1")" g01; }
   run_guard 'not json' g01
   [ "$(decision_of "$output")" = ask ]
   [[ "$output" == *"not parseable"* ]] || false
+}
+
+@test "autopilot denies main-checkout operations, merges and discards" {
+  set_autopilot on
+  expect deny "git reset --hard HEAD" "git stash" "git clean -fd" "git pull" \
+    "git -C $BATS_TEST_TMPDIR/wt merge main" "git branch -D feat" \
+    "git worktree remove --force $BATS_TEST_TMPDIR/wt" "gh pr merge 12 --squash"
+}
+
+@test "pull in the main checkout asks; in a linked worktree: no vote" {
+  expect ask "git pull" "git pull --rebase origin main"
+  expect none "git -C $BATS_TEST_TMPDIR/wt pull"
+}
+
+@test "abbreviated long options and short clusters are read as git reads them" {
+  expect ask "git reset --har HEAD" "git branch -d -f feat" "git branch -df feat" \
+    "git branch --force -d feat" "git branch -qD feat" \
+    "git worktree remove --for $BATS_TEST_TMPDIR/wt"
+  expect none "git clean -fdn" "git clean --dry -fd" "git branch -d feat" "git reset --soft HEAD"
+  expect deny "git push --mirr origin"
+  set_autopilot on
+  expect deny "git -C $BATS_TEST_TMPDIR/wt push --force-w origin feat"
+}
+
+@test "a remote delete asks whatever push.policy says, and is denied under autopilot" {
+  W="$BATS_TEST_TMPDIR/wt"
+  settings 'push.policy: auto'
+  set -- "git -C $W push origin :feat" "git -C $W push -d origin feat" \
+    "git -C $W push -du origin feat" "git -C $W push --del origin feat" \
+    "git -C $W push --delete origin feat"
+  expect ask "$@"
+  set_autopilot on
+  expect deny "$@"
+}
+
+@test "push.policy deny denies under autopilot too" {
+  settings 'push.policy: deny'
+  set_autopilot on
+  expect deny "git -C $BATS_TEST_TMPDIR/wt push -u origin feat"
+}
+
+@test "autopilot allows a push only in the plain shape" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  expect allow "git -C $W push -u origin feat" "git -C $W push origin HEAD" \
+    "git -C $W push -q origin feat:feat" "git -C $W push origin feat >/dev/null 2>&1"
+  expect deny \
+    "git -C $W push -u origin feat && rm -rf /tmp/nothing-here" \
+    "git -C $W push -u origin feat | tail -1" \
+    "git -C $W push -u origin feat # \$(true)" \
+    "git -C $W push -u origin feat >$BATS_TEST_TMPDIR/out" \
+    "env GIT_TRACE=1 git -C $W push origin feat" \
+    "git -C $W -c remote.origin.push=+refs/heads/feat:refs/heads/main push origin" \
+    "git -C $W -c push.default=upstream push" \
+    "git -C $W push" \
+    "git -C $W push origin" \
+    "git -C $W push --receive-pack=evil origin feat" \
+    "git -C $W push --exec=evil origin feat" \
+    "git -C $W push --repo=origin origin feat" \
+    "git -C $W push $R.origin feat" \
+    "git -C $W push https://example.invalid/x.git feat" \
+    "git -C $W push --tags" \
+    "git -C $W push origin --tags" \
+    "git -C $W push --follow-tags origin feat" \
+    "git -C $W push --tag origin feat" \
+    "git -C $W push origin feat:other" \
+    "git -C $W push origin HEAD~1:feat"
+}
+
+@test "push.policy auto allows only the plain shape" {
+  W="$BATS_TEST_TMPDIR/wt"
+  settings 'push.policy: auto'
+  expect allow "git -C $W push -u origin feat"
+  expect ask "git -C $W push -u origin feat && rm -rf /tmp/nothing-here" \
+    "git -C $W push origin feat:other" "git -C $W push --tags"
+}
+
+@test "remote.<name>.push or mirror config makes a push unproven" {
+  W="$BATS_TEST_TMPDIR/wt"
+  set_autopilot on
+  git -C "$W" config remote.origin.push refs/heads/feat:refs/heads/main
+  expect deny "git -C $W push origin feat"
+  git -C "$W" config --unset remote.origin.push
+  git -C "$W" config remote.origin.mirror true
+  expect deny "git -C $W push origin feat"
+}
+
+@test "autopilot lease: current branch only, bare option, no other flags" {
+  W="$BATS_TEST_TMPDIR/wt"
+  git -C "$R" branch other2
+  settings 'rebase.push: autopilot'
+  set_autopilot on
+  expect allow "git -C $W push --force-with-lease origin feat"
+  expect deny "git -C $W push --force-with-lease origin other2" \
+    "git -C $W push --force-with-lease origin HEAD:someone-else" \
+    "git -C $W push --force-with-lease=feat:0123456 origin feat" \
+    "git -C $W push --force-with-lease --force-if-includes origin feat"
+}
+
+@test "lease: another author's commit on the remote branch only is denied" {
+  W="$BATS_TEST_TMPDIR/wt"
+  O="$BATS_TEST_TMPDIR/o2"
+  git -C "$W" push -q origin feat
+  git clone -q "$R.origin" "$O"
+  git -C "$O" switch -q feat
+  printf 'x\n' >"$O/x.txt"; git -C "$O" add x.txt
+  git -C "$O" -c user.email=other@example.com -c user.name=other commit -q -m x
+  git -C "$O" push -q origin feat
+  git -C "$W" fetch -q origin
+  printf 'b\n' >"$W/b.txt"; git -C "$W" add b.txt; git -C "$W" commit -q -m b
+  expect deny "git -C $W push --force-with-lease origin feat"
+  settings 'rebase.push: autopilot'
+  set_autopilot on
+  expect deny "git -C $W push --force-with-lease origin feat"
+}
+
+@test "lease to a remote that git remote does not list is denied" {
+  expect deny "git -C $BATS_TEST_TMPDIR/wt push --force-with-lease $R.origin feat"
+}
+
+@test "after cd, --git-dir or GIT_DIR the directory is unknown" {
+  export CWD="$BATS_TEST_TMPDIR/wt"
+  expect ask "cd $R && git reset --hard HEAD" "cd $R && git stash" "pushd $R && git switch main" \
+    "GIT_DIR=$R/.git git reset --hard" "git --git-dir $R/.git --work-tree $R reset --hard" \
+    "git --git-dir=$R/.git stash" "cd $R && git push origin"
+  set_autopilot on
+  expect deny "cd $R && git push origin feat" "cd $R && git stash" \
+    "git --git-dir=$R/.git push origin feat"
+}
+
+@test "gh pr merge with -R or --repo asks, and is denied under autopilot" {
+  expect ask "gh -R o/r pr merge 12 --squash" "gh pr merge --repo o/r 12" "gh --repo=o/r pr merge 12"
+  set_autopilot on
+  expect deny "gh -R o/r pr merge 12 --squash"
 }
