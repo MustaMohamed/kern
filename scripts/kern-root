@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Prints the main worktree root (line 1) and the git common dir (line 2).
+set -euo pipefail
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh"
+dir="${1:-$PWD}"
+main=$(kern_main_root "$dir") || { echo "kern-root: not a git repository: $dir" >&2; exit 2; }
+common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) ||
+  common=$(cd "$dir" && cd "$(git rev-parse --git-common-dir)" && pwd)
+printf '%s\n%s\n' "$main" "$common"

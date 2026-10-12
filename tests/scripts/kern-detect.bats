@@ -1,0 +1,66 @@
+#!/usr/bin/env bats
+# scripts/kern-detect over small fixture repos.
+
+load ../helpers/common
+
+setup() {
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  K="$(kern_root)/scripts"
+  cd "$R"
+}
+
+@test "base_branch from origin/HEAD" {
+  run bash "$K/kern-detect" base_branch
+  [ "$output" = "main	refs/remotes/origin/HEAD" ]
+}
+
+@test "commit.convention needs 60% of at least 5 subjects" {
+  for i in 1 2 3 4 5 6; do git commit -q --allow-empty -m "CDS-1$i: change $i"; done
+  git push -q origin main
+  run bash "$K/kern-detect" commit.convention
+  [ "$status" -eq 0 ]
+  [ "${output%%	*}" = '^[A-Z][A-Z0-9]+-[0-9]+: ' ]
+}
+
+@test "commit.convention not detectable on mixed subjects exits 3" {
+  for s in "fix a" "add b" "x: c" "Update d" "e"; do git commit -q --allow-empty -m "$s"; done
+  git push -q origin main
+  run bash "$K/kern-detect" commit.convention
+  [ "$status" -eq 3 ]
+}
+
+@test "test, typecheck and lint from package.json with the lockfile's manager" {
+  printf '{"name":"x","scripts":{"test":"jest","lint":"eslint .","type-check":"tsc --noEmit"}}' >package.json
+  touch pnpm-lock.yaml
+  run bash "$K/kern-detect" test.full
+  [ "$output" = "pnpm test	package.json scripts.test" ]
+  run bash "$K/kern-detect" test.focused
+  [ "${output%%	*}" = "pnpm test -- {file}" ]
+  run bash "$K/kern-detect" typecheck
+  [ "${output%%	*}" = "pnpm run type-check" ]
+  run bash "$K/kern-detect" lint
+  [ "${output%%	*}" = "pnpm run lint" ]
+}
+
+@test "no runner at all exits 3 and names what it looked for" {
+  run bash "$K/kern-detect" test.full
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"package.json"* ]] || false
+}
+
+@test "branch.pattern from remote branch names" {
+  for b in CDS-1/a CDS-2/b CDS-3/c CDS-4/d CDS-5/e; do git push -q origin "main:refs/heads/$b"; done
+  git fetch -q origin
+  run bash "$K/kern-detect" branch.pattern
+  [ "${output%%	*}" = '{id}/{slug}' ]
+}
+
+@test "pr.template and an unknown key" {
+  mkdir -p .github; printf 't\n' >.github/pull_request_template.md
+  run bash "$K/kern-detect" pr.template
+  [ "${output%%	*}" = .github/pull_request_template.md ]
+  run bash "$K/kern-detect" nope
+  [ "$status" -eq 2 ]
+}

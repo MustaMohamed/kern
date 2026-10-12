@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Resolves WORK/<sub> under the main worktree root, creates it, and keeps WORK out of git through
+# .git/info/exclude. Exit 2 when the work dir holds tracked files.
+set -euo pipefail
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh"
+sub="${1-}"
+case "$sub" in
+  '' | -* | /* | */ | *//* | */-* | *[!a-z0-9/-]*) echo "kern-dir: name must be lowercase segments of letters, digits and dashes, joined by /" >&2; exit 2 ;;
+esac
+CWD="$PWD"
+KERN_MAIN=$(kern_main_root "$CWD") || { echo "kern-dir: not a git repository" >&2; exit 2; }
+export CWD KERN_MAIN
+wd=$(settings_get work_dir .kern)
+wd=${wd%/}
+case "$wd" in
+  '' | /* | *..*) echo "kern-dir: work_dir must be a relative path inside the repo, not '$wd'" >&2; exit 2 ;;
+esac
+if [ -n "$(git -C "$KERN_MAIN" ls-files -- "$wd")" ]; then
+  echo "kern-dir: $wd holds tracked files; set work_dir in .claude/kern.local.yml" >&2
+  exit 2
+fi
+common=$(git -C "$KERN_MAIN" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) ||
+  common=$(cd "$KERN_MAIN" && cd "$(git rev-parse --git-common-dir)" && pwd)
+mkdir -p "$common/info"
+if ! grep -qxF "/$wd/" "$common/info/exclude" 2>/dev/null; then
+  printf '/%s/\n' "$wd" >>"$common/info/exclude"
+  echo "kern: added /$wd/ to .git/info/exclude" >&2
+fi
+mkdir -p "$KERN_MAIN/$wd/$sub"
+printf '%s\n' "$KERN_MAIN/$wd/$sub"

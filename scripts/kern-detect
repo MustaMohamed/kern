@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# Detects a settings value from the repo. Prints `value<TAB>evidence`; exit 3 when not detectable.
+# Keys: base_branch, branch.pattern, commit.convention, test.focused, test.full, typecheck, lint,
+# build, tracker, pr.template.
+set -uo pipefail
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+# shellcheck source=hooks/lib/json.sh
+. "$KERN_ROOT/hooks/lib/json.sh"
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh"
+key="${1-}"
+CWD="$PWD"
+M=$(kern_main_root "$CWD") || { echo "kern-detect: not a git repository" >&2; exit 2; }
+KERN_MAIN="$M"
+export CWD KERN_MAIN
+
+out() { printf '%s\t%s\n' "$1" "$2"; exit 0; }
+none() { echo "kern-detect: $key not detectable: $1" >&2; exit 3; }
+
+# share COUNT TOTAL: exit 0 when COUNT is at least 60% of TOTAL and TOTAL is at least 5.
+share() { [ "$2" -ge 5 ] && [ $(($1 * 100)) -ge $(($2 * 60)) ]; }
+
+base() {
+  local b
+  b=$(git -C "$M" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null) || return 1
+  printf '%s\n' "${b#origin/}"
+}
+
+# pm: the package manager that owns package.json, from its lockfile.
+pm() {
+  if [ -f "$M/pnpm-lock.yaml" ]; then echo pnpm
+  elif [ -f "$M/yarn.lock" ]; then echo yarn
+  elif [ -f "$M/bun.lockb" ] || [ -f "$M/bun.lock" ]; then echo bun
+  else echo npm
+  fi
+}
+
+# script NAME: exit 0 and print the run command when package.json has scripts.NAME.
+script() {
+  local scripts
+  [ -f "$M/package.json" ] || return 1
+  scripts=$(KERN_INPUT=$(cat "$M/package.json") json_get_raw scripts) || return 1
+  KERN_INPUT="$scripts" json_get "$1" >/dev/null || return 1
+  if [ "$1" = test ]; then
+    printf '%s test\n' "$(pm)"
+  else
+    printf '%s run %s\n' "$(pm)" "$1"
+  fi
+}
+
+make_target() {
+  [ -f "$M/Makefile" ] && grep -Eq "^$1:" "$M/Makefile"
+}
+
+case "$key" in
+  base_branch)
+    b=$(base) || none "refs/remotes/origin/HEAD is not set (git remote set-head origin --auto)"
+    out "$b" "refs/remotes/origin/HEAD"
+    ;;
+  branch.pattern)
+    names=$(git -C "$M" for-each-ref --sort=-committerdate --count=40 --format='%(refname:short)' refs/remotes/origin |
+      sed 's#^origin/##' | grep -v -x -e HEAD -e origin -e "$(base 2>/dev/null || echo main)" | head -n 30)
+    total=$(printf '%s\n' "$names" | grep -c . || true)
+    n=$(printf '%s\n' "$names" | grep -Ec '^[A-Z][A-Z0-9]+-[0-9]+/' || true)
+    share "$n" "$total" && out '{id}/{slug}' "$n of $total remote branches match ID/slug"
+    n=$(printf '%s\n' "$names" | grep -Ec '^[A-Z][A-Z0-9]+-[0-9]+-' || true)
+    share "$n" "$total" && out '{id}-{slug}' "$n of $total remote branches match ID-slug"
+    prefix=$(printf '%s\n' "$names" | sed -n 's#^\([a-z]*\)/.*#\1#p' | sort | uniq -c | sort -rn | awk 'NR == 1 { print $1, $2 }')
+    if [ -n "$prefix" ] && share "${prefix%% *}" "$total"; then
+      out "${prefix#* }/{slug}" "${prefix%% *} of $total remote branches start with ${prefix#* }/"
+    fi
+    none "no branch shape covers 60% of the last $total remote branches"
+    ;;
+  commit.convention)
+    ref=origin/$(base 2>/dev/null || echo HEAD)
+    git -C "$M" rev-parse -q --verify "$ref" >/dev/null || ref=HEAD
+    subjects=$(git -C "$M" log --format=%s -30 "$ref" 2>/dev/null)
+    total=$(printf '%s\n' "$subjects" | grep -c . || true)
+    n=$(printf '%s\n' "$subjects" | grep -Ec '^[A-Z][A-Z0-9]+-[0-9]+: ' || true)
+    share "$n" "$total" && out '^[A-Z][A-Z0-9]+-[0-9]+: ' "$n of the last $total subjects start with ID: "
+    re='^(feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert)(\([^)]+\))?!?: '
+    n=$(printf '%s\n' "$subjects" | grep -Ec "$re" || true)
+    share "$n" "$total" && out "$re" "$n of the last $total subjects are Conventional Commits"
+    none "no subject shape covers 60% of the last $total commits"
+    ;;
+  test.full)
+    c=$(script test) && out "$c" "package.json scripts.test"
+    make_target test && out "make test" "Makefile target test"
+    [ -f "$M/pyproject.toml" ] && grep -q 'pytest' "$M/pyproject.toml" && out "pytest" "pyproject.toml mentions pytest"
+    [ -f "$M/go.mod" ] && out "go test ./..." "go.mod"
+    [ -f "$M/Cargo.toml" ] && out "cargo test" "Cargo.toml"
+    none "no package.json scripts.test, Makefile test target, pytest, go.mod or Cargo.toml"
+    ;;
+  test.focused)
+    c=$(script test) && out "$c -- {file}" "package.json scripts.test with a path argument"
+    [ -f "$M/pyproject.toml" ] && grep -q 'pytest' "$M/pyproject.toml" && out "pytest {file}" "pyproject.toml mentions pytest"
+    [ -f "$M/go.mod" ] && out "go test ./{dir}" "go.mod"
+    [ -f "$M/Cargo.toml" ] && out "cargo test {name}" "Cargo.toml"
+    none "no focused test runner found"
+    ;;
+  typecheck)
+    for s in typecheck type-check tsc check-types; do
+      c=$(script "$s") && out "$c" "package.json scripts.$s"
+    done
+    make_target typecheck && out "make typecheck" "Makefile target typecheck"
+    [ -f "$M/tsconfig.json" ] && out "npx tsc --noEmit" "tsconfig.json at the repo root"
+    [ -f "$M/pyproject.toml" ] && grep -q 'mypy' "$M/pyproject.toml" && out "mypy ." "pyproject.toml mentions mypy"
+    [ -f "$M/go.mod" ] && out "go vet ./..." "go.mod"
+    [ -f "$M/Cargo.toml" ] && out "cargo check" "Cargo.toml"
+    none "no typecheck script, tsconfig.json, mypy, go.mod or Cargo.toml"
+    ;;
+  lint)
+    c=$(script lint) && out "$c" "package.json scripts.lint"
+    make_target lint && out "make lint" "Makefile target lint"
+    [ -f "$M/pyproject.toml" ] && grep -q 'ruff' "$M/pyproject.toml" && out "ruff check ." "pyproject.toml mentions ruff"
+    [ -f "$M/Cargo.toml" ] && out "cargo clippy" "Cargo.toml"
+    none "no lint script, Makefile target, ruff or Cargo.toml"
+    ;;
+  build)
+    c=$(script build) && out "$c" "package.json scripts.build"
+    make_target build && out "make build" "Makefile target build"
+    [ -f "$M/go.mod" ] && out "go build ./..." "go.mod"
+    [ -f "$M/Cargo.toml" ] && out "cargo build" "Cargo.toml"
+    none "no build script, Makefile target, go.mod or Cargo.toml"
+    ;;
+  tracker)
+    url=$(git -C "$M" remote get-url origin 2>/dev/null) || none "no origin remote"
+    case "$url" in
+      *github.com*) out github "origin is on github.com; a tracker MCP server, if connected, is checked by /kern:help setup" ;;
+      *gitlab*) out gitlab "origin is on gitlab" ;;
+    esac
+    none "origin host is not github or gitlab"
+    ;;
+  pr.template)
+    for p in .github/pull_request_template.md .github/PULL_REQUEST_TEMPLATE.md docs/pull_request_template.md pull_request_template.md; do
+      [ -f "$M/$p" ] && out "$p" "file exists"
+    done
+    none "no pull request template"
+    ;;
+  *)
+    echo "usage: kern-detect base_branch|branch.pattern|commit.convention|test.focused|test.full|typecheck|lint|build|tracker|pr.template" >&2
+    exit 2
+    ;;
+esac
