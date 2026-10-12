@@ -53,3 +53,28 @@ setup() {
   run bash "$K/kern-dir" "../x"
   [ "$status" -eq 2 ]
 }
+
+@test "kern-dir adds a newline before its exclude line when the file lacks one" {
+  cd "$R"
+  printf 'foo' >"$R/.git/info/exclude"
+  run bash "$K/kern-dir" specs
+  [ "$status" -eq 0 ]
+  [ "$(cat "$R/.git/info/exclude")" = "$(printf 'foo\n/.kern/')" ]
+  run bash "$K/kern-dir" specs
+  [ "$(wc -l <"$R/.git/info/exclude" | tr -d ' ')" -eq 2 ]
+  [ "$(grep -cxF '/.kern/' "$R/.git/info/exclude")" -eq 1 ]
+}
+
+@test "kern-dir refuses a work_dir of ., .git*, or starting with a colon" {
+  cd "$R"
+  mkdir -p .claude
+  for w in . ./ .git .github ':x'; do
+    printf 'work_dir: %s\n' "$w" >.claude/kern.local.yml
+    run bash "$K/kern-dir" specs
+    [ "$status" -eq 2 ] || { echo "work_dir $w: status $status"; false; }
+    [[ "$output" == *work_dir* ]] || false
+  done
+  rm .claude/kern.local.yml
+  run bash "$K/kern-dir" ":specs"
+  [ "$status" -eq 2 ]
+}

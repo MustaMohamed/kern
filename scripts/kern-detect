@@ -53,6 +53,25 @@ make_target() {
   [ -f "$M/Makefile" ] && grep -Eq "^$1:" "$M/Makefile"
 }
 
+# Script-based keys read package.json; more than one scripts object makes the first match a guess.
+case "$key" in
+  test.full | test.focused | typecheck | lint | build)
+    if [ -f "$M/package.json" ] && [ "$(grep -o '"scripts"' "$M/package.json" | grep -c .)" -gt 1 ]; then
+      none "ambiguous: more than one scripts object in package.json"
+    fi
+    ;;
+esac
+
+# placeholder_test: exit 0 when package.json's test script is npm init's "no test specified" stub.
+placeholder_test() {
+  local scripts t
+  [ -f "$M/package.json" ] || return 1
+  scripts=$(KERN_INPUT=$(cat "$M/package.json") json_get_raw scripts) || return 1
+  t=$(KERN_INPUT="$scripts" json_get test) || return 1
+  case "$t" in *"no test specified"*) return 0 ;; esac
+  return 1
+}
+
 case "$key" in
   base_branch)
     b=$(base) || none "refs/remotes/origin/HEAD is not set (git remote set-head origin --auto)"
@@ -85,6 +104,7 @@ case "$key" in
     none "no subject shape covers 60% of the last $total commits"
     ;;
   test.full)
+    placeholder_test && none "package.json scripts.test is the npm init placeholder (no test specified)"
     c=$(script test) && out "$c" "package.json scripts.test"
     make_target test && out "make test" "Makefile target test"
     [ -f "$M/pyproject.toml" ] && grep -q 'pytest' "$M/pyproject.toml" && out "pytest" "pyproject.toml mentions pytest"
@@ -93,7 +113,8 @@ case "$key" in
     none "no package.json scripts.test, Makefile test target, pytest, go.mod or Cargo.toml"
     ;;
   test.focused)
-    c=$(script test) && out "$c -- {file}" "package.json scripts.test with a path argument"
+    placeholder_test && none "package.json scripts.test is the npm init placeholder (no test specified)"
+    c=$(script test) && out "$c -- {file}" "package.json scripts.test (path argument not verified)"
     [ -f "$M/pyproject.toml" ] && grep -q 'pytest' "$M/pyproject.toml" && out "pytest {file}" "pyproject.toml mentions pytest"
     [ -f "$M/go.mod" ] && out "go test ./{dir}" "go.mod"
     [ -f "$M/Cargo.toml" ] && out "cargo test {name}" "Cargo.toml"

@@ -64,3 +64,29 @@ setup() {
   run bash "$K/kern-detect" nope
   [ "$status" -eq 2 ]
 }
+
+@test "the npm init placeholder test script is not a test runner" {
+  printf '{"scripts":{"test":"echo \\"Error: no test specified\\" && exit 1"}}' >package.json
+  run bash "$K/kern-detect" test.full
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"no test specified"* ]] || false
+  run bash "$K/kern-detect" test.focused
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"no test specified"* ]] || false
+}
+
+@test "more than one scripts object in package.json is ambiguous" {
+  printf '{"scripts":{"test":"jest","lint":"x"},"nested":{"scripts":{"test":"y"}}}' >package.json
+  for k in test.full test.focused typecheck lint build; do
+    run bash "$K/kern-detect" "$k"
+    [ "$status" -eq 3 ] || { echo "$k: $status"; false; }
+    [[ "$output" == *"ambiguous: more than one scripts object in package.json"* ]] || false
+  done
+}
+
+@test "test.focused evidence does not claim a path argument works" {
+  printf '{"scripts":{"test":"jest"}}' >package.json
+  run bash "$K/kern-detect" test.focused
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"(path argument not verified)"* ]] || false
+}
