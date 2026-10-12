@@ -69,13 +69,14 @@ _g16_names() {
     *"$_G16_SD"* | *plugins/data/*sessions* | *claude_plugin_data*sessions* | *.claude/kern.yml* | *.claude/kern.local.yml*) return 0 ;;
   esac
   [ -n "$_G16_SID" ] || return 1
-  case "$1" in *"$_G16_SID"*) return 0 ;; esac
+  case "$1" in *"$_G16_SID".state*) return 0 ;; esac
   return 1
 }
 
 # _g16_kind WORD: sets _G16_K to `state` when WORD names session state (the sessions dir, any
-# plugins/data/*/sessions path, $CLAUDE_PLUGIN_DATA/sessions or the session id), `settings` when it
-# names a kern settings file, else empty.
+# plugins/data/*/sessions path, $CLAUDE_PLUGIN_DATA/sessions, or the state file name <sid>.state),
+# `settings` when it names a kern settings file, else empty. The bare session id is not enough:
+# Claude Code's scratchpad and task paths contain it.
 _g16_kind() {
   _G16_K=""
   case "$1" in
@@ -83,7 +84,7 @@ _g16_kind() {
     *.claude/kern.yml | *.claude/kern.local.yml) _G16_K=settings; return 0 ;;
   esac
   [ -n "$_G16_SID" ] || return 0
-  case "$1" in *"$_G16_SID"*) _G16_K=state ;; esac
+  case "$1" in "$_G16_SID".state | */"$_G16_SID".state) _G16_K=state ;; esac
 }
 
 # _g16_redirects STR: the target word of each `>` or `>>` outside quotes, one per line.

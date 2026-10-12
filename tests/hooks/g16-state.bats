@@ -102,6 +102,12 @@ expect_bash() {
     "echo on > /tmp/test-session.state"
 }
 
+@test "the session id counts only as the state file name: scratchpad writes pass" {
+  d=/private/tmp/claude-501/proj/test-session/scratchpad
+  expect_bash deny "echo on > test-session.state" "echo on > /anywhere/test-session.state"
+  expect_bash none "node build.mjs > $d/out.txt" "cp report.json $d/" "git diff > $d/review.diff"
+}
+
 @test "reads of session state: no vote" {
   expect_bash deny "echo autopilot: on >> $S/test-session.state"
   expect_bash none \
