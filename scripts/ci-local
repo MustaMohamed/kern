@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Runs the CI job's steps locally, in the same order, before a push.
+# Runs CI's steps locally, in the same order, except the PR-only Unreleased check.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)' || { echo "ci-local: Node 22 or later is required (found $(node --version)); put \$HOME/.volta/bin first on PATH" >&2; exit 2; }
 node --test 'tests/**/*.test.mjs'
 node scripts/lint-skills.mjs
 node scripts/check-version.mjs
