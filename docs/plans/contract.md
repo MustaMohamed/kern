@@ -85,7 +85,7 @@ SessionStart uses an empty matcher and branches on `source` inside the script, b
 - `fail_closed REASON` used on parse failure: votes `ask` (becomes `deny` under autopilot).
 
 `gitctx.sh`:
-- `git_words CMD` splits a shell command string into simple commands on `;`, `&&`, `||`, `|` and newlines, and prints one per line (quotes respected; `$( )` and backticks left inside the word).
+- `git_words CMD` splits a shell command string into simple commands on `;`, `&&`, `||`, `|`, newlines and unquoted `( )` and `{ }`, and prints one record per line (quotes respected; the bodies of `$( )`, backticks and `-c` scripts are also emitted as records). A newline inside a record, such as a quoted multi-line commit message, is printed as `\037`; decode it before reading lines of a message. Here-doc bodies are data and are left out, except a here-doc read by an sh-family shell with no `-c`, whose body is records. `_shell_words` keeps a quoted newline as `\037` inside its word.
 - `git_sub CMDLINE` for a simple command starting with `git`: prints `<dir><TAB><subcommand><TAB><rest>` after consuming global options `-C <dir>`, `-c <k=v>`, `--git-dir=`, `--work-tree=`, `--no-pager`. `dir` defaults to the hook `cwd`.
 - `in_main_checkout DIR` exit 0 when `git -C DIR rev-parse --show-toplevel` equals `kern_main_root DIR`.
 - `branch_protected BRANCH` exit 0 when BRANCH is `base_branch`, listed in `branch.protected`, or listed in `deploy.envs`.
