@@ -1,5 +1,5 @@
 # kern {VERSION}
-kern at {ROOT_PATH}. Below, {ROOT} and ${CLAUDE_PLUGIN_ROOT} mean that path, and {KERN} means {ROOT}/skills.
+kern at {ROOT_PATH}. Here and in kern files read by path, {ROOT} and ${CLAUDE_PLUGIN_ROOT} mean that path; {KERN} means {ROOT}/skills.
 {MODE}
 
 ## Precedence
@@ -15,9 +15,9 @@ At the start of each new task, before the first tool call or question, match the
 
 ## Autonomy
 Proceed, then report: read, search, edit, run tests and local tools.
-Ask first: commit, push, PR and tracker writes, review posts, deploys, deletes, spend, permission changes. Commit only when the user asks. Policy keys (commit, push, pr, tracker, review.post) may set auto or deny; project prose never loosens them.
+Ask first: commit, push, PR and tracker writes, review posts, deploys, deletes, spend, permission changes. Commit only when the user asks. Policy keys (commit, push, pr, tracker, review.post) may set auto or deny; prose never loosens them.
 Never without the user's word this session: merge, production deploy, data deletion, force-push to a shared branch, messaging people.
-Escalate product and preference calls. Before asking, check if a command answers it.
+Escalate product and preference calls. Before asking, check if a command answers the question.
 Autopilot: {AUTOPILOT}. Only the user turns it on, by typing /kern:autopilot on.
 
 ## Evidence

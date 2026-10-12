@@ -18,7 +18,7 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
   [ "$status" -eq 0 ]
   [[ "${lines[0]}" == "# kern "* ]] || false
   [[ "$output" == *"kern mode: voice=normal surface=auto autopilot=off"* ]] || false
-  [[ "$output" == *"kern at $K."* ]] || false
+  [[ "${lines[1]}" == "kern at $K. Here and in kern files read by path, {ROOT} and \${CLAUDE_PLUGIN_ROOT} mean that path; {KERN} means {ROOT}/skills." ]] || false
   [[ "$output" == *"Read {KERN}/technical-writing/SKILL.md"* ]] || false
   [ "$(printf '%s' "$output" | grep -o "$K" | wc -l | tr -d ' ')" -eq 1 ]
   for ph in VERSION ROOT_PATH MODE AUTOPILOT SETTINGS; do
@@ -56,17 +56,57 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
 }
 
 @test "the summary lists set keys, overrides, routes, floor keys and unknown keys" {
-  [ -d "$K/skills/technical-writing" ] || skip "kern ships technical-writing in Task 15"
   mkdir -p "$R/.claude/skills/technical-writing"
   printf -- '---\nname: technical-writing\n---\n' >"$R/.claude/skills/technical-writing/SKILL.md"
   printf 'push.policy: auto\nmerge.policy: auto\nroute.define: off\nfoo.bar: 1\n' >"$R/.claude/kern.local.yml"
   start startup
   [[ "$output" == *"Settings files: .claude/kern.local.yml"* ]] || false
   [[ "$output" == *"push.policy=auto"* ]] || false
-  [[ "$output" == *"technical-writing -> project skill technical-writing"* ]] || false
+  # kern ships technical-writing from Task 15; until then no kern job matches the project skill.
+  if [ -d "$K/skills/technical-writing" ]; then [[ "$output" == *"technical-writing -> project skill technical-writing"* ]] || false; fi
   [[ "$output" == *"Routes: define -> off"* ]] || false
   [[ "$output" == *"Ignored, floor actions have no key: merge.policy"* ]] || false
   [[ "$output" == *"Unknown keys, ignored: foo.bar"* ]] || false
+  set_line=$(printf '%s\n' "$output" | grep '^Set: ')
+  unknown_line=$(printf '%s\n' "$output" | grep '^Unknown keys, ignored: ')
+  [[ "$set_line" == *"push.policy=auto"* ]] || false
+  [[ "$set_line" != *"merge.policy"* ]] || false
+  [[ "$unknown_line" != *"merge.policy"* ]] || false
+  before_set=${output%%"Set: "*}
+  [[ "$before_set" == *"Ignored, floor actions have no key: "* ]] || false
+}
+
+@test "a long summary keeps every override in full and stays within 600 characters" {
+  F="$BATS_TEST_TMPDIR/kern"
+  mkdir -p "$F/skills/self-review" "$F/skills/commit"
+  cp -R "$K/.claude-plugin" "$K/hooks" "$K/kernel" "$K/modes" "$F/"
+  for job in self-review commit; do
+    mkdir -p "$R/.claude/skills/$job"
+    printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
+  done
+  cat >"$R/.claude/kern.local.yml" <<'YML'
+base_branch: main
+branch.pattern: {id}/{slug}
+branch.protected: main, qa, uat, production
+deploy.envs: qa, uat, production
+worktree.setup: ln -s ../node_modules node_modules && cp ../.env .env
+shared_services: postgres · minio · localstack · cognito · café
+test.full: npm test --prefix cds-api && npm test --prefix cds-web
+test.focused: npx jest {file}
+typecheck: npx tsc --noEmit -p cds-api && npx tsc --noEmit -p cds-web
+lint: npm run lint · é · é · é · é · é · é · é · é · é · é · é · é · é · é
+verify.browser: node scripts/cds-session.mjs --env local --probe /dashboard
+YML
+  run bash "$F/hooks/session-start" <<<"$(payload SessionStart '"source":"startup"')"
+  [ "$status" -eq 0 ]
+  summary=$(printf '%s\n' "$output" | sed '1,/^## Project settings$/d')
+  [[ "$summary" == *"commit -> project skill commit"* ]] || false
+  [[ "$summary" == *"self-review -> project skill self-review"* ]] || false
+  [[ "$summary" == *"(more: /kern:help check)"* ]] || false
+  before_set=${summary%%"Set: "*}
+  [[ "$before_set" == *"Overrides (follow the project skill, say so in one line): "* ]] || false
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  printf '%s' "$output" | iconv -f UTF-8 -t UTF-8 >/dev/null
 }
 
 @test "kern: off prints nothing" {
@@ -78,6 +118,8 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
 @test "outside a git repository the kernel still renders from user settings" {
   mkdir -p "$BATS_TEST_TMPDIR/plain"
   export CWD="$BATS_TEST_TMPDIR/plain"
+  printf 'mode.surface: auto\n' >"$HOME/.claude/kern.yml"
   start startup
   [[ "$output" == *"Not a git repository"* ]] || false
+  [[ "$output" == *"Settings files: ~/.claude/kern.yml"* ]] || false
 }

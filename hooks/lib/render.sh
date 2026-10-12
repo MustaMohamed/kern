@@ -52,9 +52,12 @@ autopilot_text() {
 
 KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy delete.policy message.policy messaging.policy"
 
-# settings_summary: the Project settings block, at most 600 chars.
+# settings_summary: the Project settings block, at most 600 chars. Overrides and ignored floor keys come
+# before Set:, and only Set: is shortened to fit, a whole `key=value` entry at a time, so no other line
+# is cut and no character is split.
 settings_summary() {
-  local out="" f files="" k v job name dir seen="" line unknown floor
+  local out="" f files="" k v job name dir seen="" line sets="" unknown floor tail="" room sep e
+  local more=" ... (more: /kern:help check)"
   if [ -z "${KERN_MAIN-}" ]; then
     out="Not a git repository: user settings only."
   else
@@ -63,13 +66,13 @@ settings_summary() {
   while IFS= read -r f; do
     [ -f "$f" ] || continue
     f=${f#"${KERN_MAIN:-/nonexistent}"/}
-    files="${files:+$files, }${f/#$HOME/~}"
+    case "$f" in "$HOME"/*) f="~${f#"$HOME"}" ;; esac
+    files="${files:+$files, }$f"
   done <<EOT
 $(_settings_files)
 EOT
   out="$out
 Settings files: ${files:-none; defaults apply}"
-  line=""
   while IFS= read -r f; do
     [ -f "$f" ] || continue
     while IFS= read -r k; do
@@ -79,15 +82,14 @@ Settings files: ${files:-none; defaults apply}"
       case " $KERN_FLOOR_KEYS " in *" $k "*) continue ;; esac
       case "$k" in overrides.* | route.*) continue ;; esac
       v=$(settings_get "$k")
-      line="${line:+$line; }$k=$v"
+      sets="$sets$k=$v
+"
     done <<EOT
 $(settings_keys "$f")
 EOT
   done <<EOT
 $(_settings_files)
 EOT
-  [ -n "$line" ] && out="$out
-Set: $line"
   line=""
   for dir in "$KERN_ROOT"/skills/*/; do
     job=$(basename "$dir")
@@ -102,23 +104,49 @@ Set: $line"
   done
   [ -n "$line" ] && out="$out
 Overrides (follow the project skill, say so in one line): $line"
-  line=""
-  for k in $seen; do
-    case "$k" in route.*) line="${line:+$line; }${k#route.} -> $(settings_get "$k")" ;; esac
-  done
-  [ -n "$line" ] && out="$out
-Routes: $line"
   floor=""
   for k in $seen; do
     case " $KERN_FLOOR_KEYS " in *" $k "*) floor="${floor:+$floor, }$k" ;; esac
   done
   [ -n "$floor" ] && out="$out
 Ignored, floor actions have no key: $floor"
+  line=""
+  for k in $seen; do
+    case "$k" in route.*) line="${line:+$line; }${k#route.} -> $(settings_get "$k")" ;; esac
+  done
+  [ -n "$line" ] && tail="$tail
+Routes: $line"
   unknown=$(settings_unknown_keys | awk -F '\t' '{ print $2 }' | grep -v -x -F -e merge.policy -e deploy.policy -e production.policy -e force_push.policy -e delete.policy -e message.policy -e messaging.policy | paste -sd ',' - | sed 's/,/, /g')
-  [ -n "$unknown" ] && out="$out
+  [ -n "$unknown" ] && tail="$tail
 Unknown keys, ignored: $unknown"
-  if [ "${#out}" -gt 600 ]; then
-    out="$(printf '%s' "$out" | cut -c1-560 | head -c 560) ... (more: /kern:help check)"
+  if [ -n "$sets" ]; then
+    # Full Set: line first; if the block is over 600, keep the entries that fit and mark the rest.
+    line="
+Set:"
+    sep=" "
+    while IFS= read -r e; do
+      [ -n "$e" ] || continue
+      line="$line$sep$e"
+      sep="; "
+    done <<EOT
+$sets
+EOT
+    if [ $((${#out} + ${#line} + ${#tail})) -gt 600 ]; then
+      room=$((600 - ${#out} - ${#tail} - ${#more}))
+      line="
+Set:"
+      sep=" "
+      while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        [ $((${#line} + ${#sep} + ${#e})) -le "$room" ] || break
+        line="$line$sep$e"
+        sep="; "
+      done <<EOT
+$sets
+EOT
+      line="$line$more"
+    fi
+    out="$out$line"
   fi
-  printf '%s\n' "$out"
+  printf '%s\n' "$out$tail"
 }
