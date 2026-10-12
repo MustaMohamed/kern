@@ -125,7 +125,7 @@ Every key in spec A5 plus design 5.4, one row each: key, default, values, read b
 
 ## Kernel rendering
 
-Template placeholders: `{VERSION}` (plugin.json version), `{ROOT}` (absolute `${CLAUDE_PLUGIN_ROOT}`), `{KERN}` (`{ROOT}/skills`), `{SETTINGS}` (settings summary), `{MODE}` (one line `kern mode: voice=<v> surface=<s> autopilot=<on|off>`), `{AUTOPILOT}` (`off` or `ON since <iso>`). Rendering uses `sed` with `|` delimiters; values containing `|` or `&` are escaped first.
+Template placeholders: `{VERSION}` (plugin.json version), `{ROOT_PATH}` (absolute `${CLAUDE_PLUGIN_ROOT}`, printed once in the header), `{ROOT}` and `{KERN}` (left literal in the rendered kernel; the header line defines them as the plugin root and `{ROOT}/skills`, user decision 2026-10-12), `{SETTINGS}` (settings summary), `{MODE}` (one line `kern mode: voice=<v> surface=<s> autopilot=<on|off>`), `{AUTOPILOT}` (`off` or `ON since <iso>`). Rendering uses `sed` with `|` delimiters; values containing `|` or `&` are escaped first.
 
 ## Commit conventions in the kern repo
 
