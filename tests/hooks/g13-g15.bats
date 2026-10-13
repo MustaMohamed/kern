@@ -201,6 +201,7 @@ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
     mcpi "${c%%|*}" "${c#*|}"
     [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
   done
+  [[ "$output" == *"mcp__claude_ai_GitHub__create_issue always asks: github MCP writes can name any repo; use gh issue or gh label for a checked write"* ]] || false
   set_autopilot on
   mcpi mcp__github__add_issue_comment '"owner":"o","repo":"r","issue_number":1,"body":"hi"'
   [ "$(decision_of "$output")" = deny ]

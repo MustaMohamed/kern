@@ -121,6 +121,10 @@ _g14_mcp_proven() {
   case "$fam" in
     linear) list=$_G14_LINEAR ;;
     notion) list=$_G14_NOTION ;;
+    github)
+      _G14_WHY="always asks: github MCP writes can name any repo; use gh issue or gh label for a checked write"
+      return 1
+      ;;
     *) return 1 ;;
   esac
   for w in $list; do
