@@ -20,12 +20,10 @@ kern's prompt hook applies the switch before this skill loads. This skill only r
 ## Words
 `terse` and `normal` set the voice. `chat`, `auto` and `html` set the surface. `default` resets both to the settings defaults. `status` changes nothing. Words combine, as in `/kern:mode html terse`. An unknown word changes nothing.
 
-A phrase also switches, without this skill:
-- terse voice: "terse mode", "go terse", "be terse", "switch to terse", "terse on", "use terse", "enable terse", "turn on terse", "activate terse", "terse please";
-- normal voice: "normal mode", "back to normal", "go back to normal", "switch back to normal", "switch to normal", "stop terse", "terse off", "terse mode off", "turn off terse", "disable terse", "exit terse", "quit terse", "normal voice";
+A phrase below also switches, without this skill, only when it stands alone on the prompt's first line: put the phrase alone on the first line, or type `/kern:mode`. A leading "please" or "ok", a trailing "please", a final "." or "!", and "mode" after "terse" or "normal" are allowed; with anything else on the line, as in "go terse and fix the bug", nothing switches.
+- terse voice: "terse", "go terse", "be terse", "use terse", "enable terse", "turn on terse", "activate terse", "switch to terse", "terse on", "terse mode";
+- normal voice: "normal", "normal mode", "normal voice", "back to normal", "go back to normal", "switch back to normal", "switch to normal", "stop terse", "terse off", "terse mode off", "turn off terse", "disable terse", "exit terse", "quit terse";
 - html surface: "html mode", "go html", "switch to html", "html on";
 - surface back to the settings default, or `auto` when that default is `html`: "stop html", "html off";
 - chat surface: "chat only", "chat mode";
 - autopilot off: "stop autopilot", "autopilot off".
-
-The phrase must open the prompt's first line, after an optional "please" or "ok". It switches only when it is the whole line, or when punctuation or the word "and", "then", "now" or "please" follows it. "go terse, then fix the test" switches. "go terse for the rest of this session" does not. A voice phrase that ends in "terse" or "normal" may add "mode", as in "turn off terse mode". "terse" switches only as the whole line. A first line that ends with "then go terse" or "then stop terse", as in "fix the test, then go terse", switches too, unless a negation word such as "not", "never" or "without" appears anywhere in the line. A first line that holds a question mark, or opens with a question word or a negation such as "don't go terse", never switches.

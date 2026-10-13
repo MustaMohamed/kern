@@ -85,8 +85,8 @@ expand() {
   [ "$(st autopilot)" = off ]
 }
 
-@test "natural language: imperative switches, negation and question guards" {
-  submit "go terse, then fix the test"
+@test "natural language: a phrase alone on the first line switches; negations and questions do not" {
+  submit 'go terse\nfix the test'
   [ "$(st voice)" = terse ]
   submit "back to normal"
   [ "$(st voice)" = normal ]
@@ -96,6 +96,24 @@ expand() {
   [ "$(st voice)" = normal ]
   submit "terse mode is broken in the docs"
   [ "$(st voice)" = normal ]
+}
+
+@test "surface and autopilot phrases switch only alone on the first line" {
+  submit "html mode"
+  [ "$(st surface)" = html ]
+  submit "stop html"
+  [ "$(st surface)" = auto ]
+  submit "chat only."
+  [ "$(st surface)" = chat ]
+  submit "go html, then explain the diagram"
+  [ "$(st surface)" = chat ]
+  submit "html on and dark theme for the docs"
+  [ "$(st surface)" = chat ]
+  set_autopilot on
+  submit "stop autopilot and fix the bug"
+  [ "$(st autopilot)" = on ]
+  submit "autopilot off!"
+  [ "$(st autopilot)" = off ]
 }
 
 @test "reminder only outside the default preset" {
@@ -145,7 +163,7 @@ expand() {
 
 @test "autopilot off by natural language works when a wrapper tag appears later in the prompt" {
   printf 'voice: normal\nsurface: auto\nautopilot: on\nsince: 2026-10-12T00:00:00Z\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
-  submit 'stop autopilot, the <task-notification> parse is wrong'
+  submit 'stop autopilot\nthe <task-notification> parse is wrong'
   [ "$(st autopilot)" = off ]
 }
 

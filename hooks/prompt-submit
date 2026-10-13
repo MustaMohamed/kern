@@ -108,49 +108,28 @@ wrapped() {
   return 1
 }
 
-# natural PROMPT: switches on the prompt's first line only, with negation and question guards.
+# natural PROMPT: switches only when the first line, lowercased and trimmed, is a switch phrase and
+# nothing else, apart from a leading "please", "ok" or "okay", a trailing "please" and a final . or !.
+# A phrase that ends in "terse" or "normal" may add " mode". A line that holds anything more, such
+# as "use terse, descriptive names", never switches.
 natural() {
-  local first
-  first=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}' | lower | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^(please|ok|okay),? //')
-  case "$first" in
-    "don't"* | "do not"* | "dont"* | never* | no\ * | "not "*) return 0 ;;
-    *'?'* | what* | how* | why* | does* | do\ * | is\ * | are\ * | can\ * | could\ * | should\ * | when\ * | which\ * | who\ *) return 0 ;;
-  esac
-  # The off triggers come first: "terse mode off" also starts with the on trigger "terse mode".
-  case "$first" in
-    "normal mode"* | "back to normal"* | "stop terse"* | "terse off"* | "normal voice"* | "terse mode off"* | "turn off terse"* | \
-      "disable terse"* | "exit terse"* | "quit terse"* | "go back to normal"* | "switch back to normal"* | "switch to normal"*)
-      _nl_ok "$first" && set_voice normal && SHOW_LINE=1
+  local p
+  p=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}' | lower |
+    sed -E 's/^[[:space:]]+//; s/[[:space:]]*[.!]*[[:space:]]*$//; s/,?[[:space:]]+please$//; s/^(please|ok|okay),?[[:space:]]+//; s/(^|[[:space:]])(terse|normal) mode$/\1\2/')
+  case "$p" in
+    terse | "go terse" | "be terse" | "use terse" | "enable terse" | "turn on terse" | "activate terse" | "switch to terse" | "terse on")
+      set_voice terse && SHOW_LINE=1
       ;;
-    "terse mode"* | "go terse"* | "be terse"* | "switch to terse"* | "terse on"* | "use terse"* | "enable terse"* | "turn on terse"* | \
-      "activate terse"* | "terse please"*)
-      _nl_ok "$first" && set_voice terse && SHOW_LINE=1
+    normal | "normal voice" | "back to normal" | "go back to normal" | "switch back to normal" | "switch to normal" | "stop terse" | \
+      "terse off" | "terse mode off" | "turn off terse" | "disable terse" | "exit terse" | "quit terse")
+      set_voice normal && SHOW_LINE=1
       ;;
-    terse) set_voice terse && SHOW_LINE=1 ;;
-    "html mode"* | "go html"* | "switch to html"* | "html on"*) _nl_ok "$first" && set_surface html && SHOW_LINE=1 ;;
-    "stop html"* | "html off"*) _nl_ok "$first" && set_surface "$(settings_get mode.surface auto | sed 's/^html$/auto/')" && SHOW_LINE=1 ;;
-    "chat only"* | "chat mode"*) _nl_ok "$first" && set_surface chat && SHOW_LINE=1 ;;
-    "stop autopilot"* | "autopilot off"*) _nl_ok "$first" && state_set "$SID" autopilot=off && SHOW_LINE=1 ;;
-    # A trailing clause that ends the first line, when the line holds no negation word.
-    *" then go terse" | *" then go terse"[.!]) _no_negation "$first" && set_voice terse && SHOW_LINE=1 ;;
-    *" then stop terse" | *" then stop terse"[.!]) _no_negation "$first" && set_voice normal && SHOW_LINE=1 ;;
+    "html mode" | "go html" | "switch to html" | "html on") set_surface html && SHOW_LINE=1 ;;
+    "stop html" | "html off") set_surface "$(settings_get mode.surface auto | sed 's/^html$/auto/')" && SHOW_LINE=1 ;;
+    "chat only" | "chat mode") set_surface chat && SHOW_LINE=1 ;;
+    "stop autopilot" | "autopilot off") state_set "$SID" autopilot=off && SHOW_LINE=1 ;;
   esac
   return 0
-}
-
-# _no_negation FIRST: no negation word anywhere in the line. The start-of-line guard does not see a
-# "not" before a trailing clause, as in "fix the bug, and do not then go terse".
-_no_negation() {
-  local c
-  # U+2019, the curly apostrophe that smart punctuation types; lint keeps the character out of files.
-  c=$(printf '\342\200\231')
-  ! printf '%s\n' "$1" | grep -Eq "(^|[^a-z])(not|no|never|dont|(don|doesn|won)('|$c)t|without)([^a-z]|\$)"
-}
-
-# _nl_ok FIRST: the trigger is the whole first line or is followed by punctuation or "and". A
-# trigger that ends in "terse" or "normal" may take " mode", as in "turn off terse mode".
-_nl_ok() {
-  printf '%s\n' "$1" | grep -Eq '^(((go|be|switch to|use|enable|turn on|activate|stop|turn off|disable|exit|quit) terse|(back|go back|switch back|switch) to normal)( mode)?|terse mode|terse on|terse please|normal mode|terse off|normal voice|terse mode off|html mode|go html|switch to html|html on|stop html|html off|chat only|chat mode|stop autopilot|autopilot off)([[:space:]]*[.!,;:]|[[:space:]]+(and|then|now|please)([[:space:]]|$)|[[:space:]]*$)'
 }
 
 if [ "$EVENT" = UserPromptExpansion ]; then

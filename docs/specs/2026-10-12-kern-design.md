@@ -290,7 +290,7 @@ Storage: `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.state`, flat `key: value` 
 ### 6.2 Switching
 
 - The slash skill `mode` (and `autopilot`) has `disable-model-invocation: true`, so only the user can type it. A hook reads the command and writes the state. Primary signal: `UserPromptExpansion`, which fires only when a user-typed command expands and carries `command_name`, `command_args` and `command_source`. Whether it fires for a `disable-model-invocation` skill, and whether `command_name` reads `autopilot` or `kern:autopilot`, are checked in M1. Fallback: UserPromptSubmit, accepting the command only when it opens the prompt and the prompt is not wrapped as a teammate, cross-session, task or scheduled message. Text from any agent, notification or fetched content never switches a mode.
-- Natural-language switches ("go terse", "stop html", "normal mode") are parsed by the same hook, with guards against negations ("don't go terse") and questions ("what does terse do?"), following caveman's parser design.
+- Natural-language switches ("go terse", "stop html", "normal mode") are parsed by the same hook. A phrase switches only when it stands alone on the prompt's first line, so a negation ("don't go terse"), a question ("what does terse do?") or a phrase inside a longer line ("use terse, descriptive names") never switches.
 - Guard G16 denies any tool call that writes under `${CLAUDE_PLUGIN_DATA}/sessions/`, so Claude cannot change its own mode or autopilot state.
 - A switch re-injects the new mode's full rules. Outside the default preset, each prompt gets a reminder of about 40 tokens.
 
