@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 # Template rendering for the kernel and the subagent kernel. Literal replacement (no regex), so
-# values may hold any character. Values come from K_VERSION, K_ROOT, K_KERN, K_MODE, K_AUTOPILOT,
-# K_VOICE and K_SETTINGS; a line that is exactly {SETTINGS} or {VOICE} is replaced by that value.
+# values may hold any character: {VERSION}, {ROOT_PATH}, {MODE} and {AUTOPILOT} take K_VERSION,
+# K_ROOT, K_MODE and K_AUTOPILOT, and a line that is exactly {SETTINGS} or {VOICE} is replaced by
+# K_SETTINGS or K_VOICE.
 
 # render_template FILE
 render_template() {
@@ -58,7 +59,7 @@ KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy 
 # is cut and no character is split.
 settings_summary() {
   local out="" f files="" k v job name dir seen="" line sets="" unknown floor tail="" room sep e
-  local more=" ... (more: /kern:help check)"
+  local more=" ... (more: bash {ROOT}/scripts/kern-get <key>)"
   if [ -z "${KERN_MAIN-}" ]; then
     out="Not a git repository: user settings only."
   else

@@ -102,7 +102,7 @@ YML
   summary=$(printf '%s\n' "$output" | sed '1,/^## Project settings$/d')
   [[ "$summary" == *"commit -> project skill commit"* ]] || false
   [[ "$summary" == *"self-review -> project skill self-review"* ]] || false
-  [[ "$summary" == *"(more: /kern:help check)"* ]] || false
+  [[ "$summary" == *"(more: bash {ROOT}/scripts/kern-get <key>)"* ]] || false
   before_set=${summary%%"Set: "*}
   [[ "$before_set" == *"Overrides (follow the project skill, say so in one line): "* ]] || false
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }

@@ -1,1 +1,1 @@
-(more: /kern:help check)
+(more: bash {ROOT}/scripts/kern-get <key>)
