@@ -23,7 +23,7 @@ A per-session grant for unattended runs. kern's prompt hook turns it on only fro
 - Run git and gh directly, with no wrapper such as env, sudo, xargs or caffeinate, and no `cd` first. kern denies what it cannot prove.
 - Push the current branch with `git push [-u] <remote> <current-branch>`, naming both, when the branch is not protected. kern denies a bare `git push`.
 - Push with `git push --force-with-lease <remote> <current-branch>` only when settings say `rebase.push: autopilot`, the branch is not protected, and every commit on it past the base branch is the user's. kern denies a lease push of any other branch.
-- Open a draft PR from the current branch with `gh pr create --draft` plus `--title`, `--base`, `--fill` or `--body-file` with a file in the repo, after the duplicate check. kern denies it when the head already has an open, merged or closed PR.
+- Open a draft PR from the current branch with `gh pr create --draft` plus `--title`, `--base`, `--fill`, `--fill-first`, `--fill-verbose`, `--dry-run`, `--no-maintainer-edit`, `--body-file` with a file in the repo, or `--head` naming the current branch, after the duplicate check. kern denies it when the head already has an open, merged or closed PR.
 
 kern denies every other action that would ask, because nobody is there to answer. Merge, deploy, review posting and tracker writes always need the user. Park each judgment call with the default chosen, and continue the work that does not depend on it.
 
