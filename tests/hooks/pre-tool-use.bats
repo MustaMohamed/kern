@@ -135,6 +135,41 @@ feed() {
   [[ "$output" == *'"kern G0: guard g13 did not load"'* ]] || false
 }
 
+# without_lib LIB: a copy of kern's hooks in $BATS_TEST_TMPDIR/k with hooks/lib/LIB removed.
+without_lib() {
+  rm -rf "$BATS_TEST_TMPDIR/k"
+  mkdir -p "$BATS_TEST_TMPDIR/k"
+  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
+  rm "$BATS_TEST_TMPDIR/k/hooks/lib/$1"
+}
+
+@test "a hook library that does not load gives ask, or deny under bypassPermissions" {
+  local lib mode want p out
+  for lib in json.sh settings.sh state.sh decide.sh gitctx.sh; do
+    without_lib "$lib"
+    for mode in default bypassPermissions; do
+      want=ask
+      [ "$mode" = default ] || want=deny
+      p=$(payload PreToolUse "\"permission_mode\":\"$mode\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push --force origin main\"}")
+      out=$(bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$p") || { echo "$lib $mode -> status $?"; return 1; }
+      [ "$(parsed_decision "$out")" = "$want" ] || { echo "$lib $mode -> $out"; return 1; }
+      [[ "$out" == *"\"kern G0: hook library $lib did not load; reinstall kern\""* ]] || { echo "$lib $mode -> $out"; return 1; }
+    done
+  done
+  # A space after the colon still reads as bypassPermissions.
+  p=$(payload PreToolUse '"permission_mode": "bypassPermissions","tool_name":"Bash","tool_input":{"command":"ls"}')
+  out=$(bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$p")
+  [ "$(parsed_decision "$out")" = deny ]
+}
+
+@test "a hook library that sources but lacks a function the dispatcher calls gives ask" {
+  without_lib settings.sh
+  { cat "$K/hooks/lib/settings.sh"; printf 'unset -f kern_enabled\n'; } >"$BATS_TEST_TMPDIR/k/hooks/lib/settings.sh"
+  out=$(bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$(bash_payload "git push --force origin main")")
+  [ "$(parsed_decision "$out")" = ask ]
+  [[ "$out" == *'"kern G0: hook library settings.sh did not load; reinstall kern"'* ]] || false
+}
+
 @test "the dispatcher's list of guard ids names every guard file" {
   ids=$(sed -n 's/^KERN_GUARD_IDS="\(.*\)"$/\1/p' "$K/hooks/pre-tool-use")
   files=$(cd "$K/hooks/guards" && for f in g*.sh; do printf '%s ' "${f%%-*}"; done)

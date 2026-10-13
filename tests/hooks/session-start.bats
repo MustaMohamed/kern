@@ -141,3 +141,11 @@ YML
   [[ "$set_line" != *"push.policy="* ]] || false
   [[ "$set_line" != *"rebase.push="* ]] || false
 }
+
+@test "with settings.sh missing, session-start exits 0 and prints nothing" {
+  mkdir -p "$BATS_TEST_TMPDIR/k"
+  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
+  rm "$BATS_TEST_TMPDIR/k/hooks/lib/settings.sh"
+  out=$(bash "$BATS_TEST_TMPDIR/k/hooks/session-start" 2>/dev/null <<<"$(payload SessionStart '"source":"startup"')")
+  [ -z "$out" ]
+}

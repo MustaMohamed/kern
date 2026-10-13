@@ -419,7 +419,7 @@ G8, an edit-time typecheck, was dropped: projects keep their own hooks, which mu
 1. Bash, POSIX tools and git only. `gh`, `jq` and `gitleaks` are used when present, never required.
 2. Plugin hooks use exec form with `${CLAUDE_PLUGIN_ROOT}` paths.
 3. PreToolUse decisions are returned as `hookSpecificOutput.permissionDecision` (`allow`, `deny`, `ask`) with `permissionDecisionReason`. Claude Code applies the strictest decision across all hooks: deny, then defer, then ask, then allow.
-4. A hook that cannot parse its input returns `ask`, or `deny` under autopilot. It never allows on a parse failure.
+4. A hook that cannot parse its input, or cannot load its libraries, returns `ask`, or `deny` under autopilot. It never allows on a parse failure. Without its libraries it cannot read autopilot, so it denies under `bypassPermissions` instead.
 5. PostToolUse and Stop warnings exit 2 with the message on stderr, so Claude sees them.
 6. The Skill tool's input fields are not documented, so G3 matches `--comment` against the raw `tool_input` text. That check is best effort, backed by the skill's own rule and G3's checks on `gh` posting commands.
 7. Each guard has a bats test with allow, ask and deny cases in both modes.

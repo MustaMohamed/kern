@@ -3,16 +3,42 @@
 # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export KERN_ROOT
+
+# no_lib NAME: library NAME did not load, so no guard can run. Prints the decision without any
+# library: ask, or deny under bypassPermissions, where an ask might not stop the call. Reads the hook
+# input, which nothing has read yet.
+no_lib() {
+  local d=ask
+  grep -Eq '"permission_mode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && d=deny
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"kern G0: hook library %s did not load; reinstall kern"}}\n' \
+    "$d" "$1"
+  exit 0
+}
+
+# need LIB FUNCTION...: LIB counts as not loaded unless it defined every FUNCTION.
+need() {
+  local lib="$1" f
+  shift
+  for f in "$@"; do
+    declare -F "$f" >/dev/null || no_lib "$lib"
+  done
+}
+
 # shellcheck source=hooks/lib/json.sh
-. "$KERN_ROOT/hooks/lib/json.sh"
+. "$KERN_ROOT/hooks/lib/json.sh" || no_lib json.sh
 # shellcheck source=hooks/lib/settings.sh
-. "$KERN_ROOT/hooks/lib/settings.sh"
+. "$KERN_ROOT/hooks/lib/settings.sh" || no_lib settings.sh
 # shellcheck source=hooks/lib/state.sh
-. "$KERN_ROOT/hooks/lib/state.sh"
+. "$KERN_ROOT/hooks/lib/state.sh" || no_lib state.sh
 # shellcheck source=hooks/lib/decide.sh
-. "$KERN_ROOT/hooks/lib/decide.sh"
+. "$KERN_ROOT/hooks/lib/decide.sh" || no_lib decide.sh
 # shellcheck source=hooks/lib/gitctx.sh
-. "$KERN_ROOT/hooks/lib/gitctx.sh"
+. "$KERN_ROOT/hooks/lib/gitctx.sh" || no_lib gitctx.sh
+# Every library function this file calls directly.
+need json.sh json_get json_get_raw json_ok
+need settings.sh kern_main_root kern_enabled
+need state.sh autopilot_on
+need decide.sh vote fail_closed emit_decision
 
 # unparseable WHAT: fail closed on input the JSON reader could not parse, and stop.
 unparseable() {

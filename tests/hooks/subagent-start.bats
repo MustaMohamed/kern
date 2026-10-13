@@ -31,3 +31,11 @@ context_of() {
   [[ "$ctx" == *"Voice: terse"* ]] || false
   [ "${#ctx}" -le 1200 ]
 }
+
+@test "with settings.sh missing, subagent-start exits 0 and prints nothing or valid JSON" {
+  mkdir -p "$BATS_TEST_TMPDIR/k"
+  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
+  rm "$BATS_TEST_TMPDIR/k/hooks/lib/settings.sh"
+  out=$(bash "$BATS_TEST_TMPDIR/k/hooks/subagent-start" 2>/dev/null <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')")
+  [ -z "$out" ] || context_of "$out" >/dev/null
+}
