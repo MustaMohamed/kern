@@ -277,7 +277,8 @@ EOF"
     "mount_smbfs '//admin@v1-host/c\$' /tmp/v1" "lftp -e 'put a.txt' sftp://v1-host" "ftp v1-host" \
     "wget --post-file=a.txt http://v1-host/x" "mosh v1-host" "nc v1-host 3306" "/usr/bin/NC v1-host 3306" \
     "pwsh -c \"Invoke-Command -HostName v1-host -ScriptBlock { Remove-Item C:\x }\"" \
-    "powershell -Command \"Enter-PSSession -ComputerName v1-host\""
+    "powershell -Command \"Enter-PSSession -ComputerName v1-host\"" "ncat v1-host 3306" "netcat v1-host 3306" \
+    "telnet v1-host 3306" "sqsh -S prod-db.internal" "isql prod-db.internal"
   g13_all none "autossh -M 0 v1-host 'dir C:\data'" "plink -batch v1-host dir C:\data" "curl https://example.com/v1-host-docs" \
     "pwsh -c \"Get-ChildItem C:\x\"" "pwsh -c \"Invoke-Command -HostName other -ScriptBlock { ls }\"" "nc -z other-host 22" \
     "mycli -h 127.0.0.1 -P 3306 -e 'DELETE FROM t'"

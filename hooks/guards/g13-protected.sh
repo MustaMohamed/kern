@@ -53,7 +53,8 @@ _g13_names() {
       *[Mm][Aa][Rr][Ii][Aa][Dd][Bb]* | *[Pp][Ss][Qq][Ll]* | *[Ss][Qq][Ll][Ii][Tt][Ee]* | *[Ss][Qq][Ll][Cc][Mm][Dd]* | \
       *[Pp][Gg]_* | *[Pp][Ll][Ii][Nn][Kk]* | *[Mm][Yy][Cc][Ll][Ii]* | *[Pp][Gg][Cc][Ll][Ii]* | *[Uu][Ss][Qq][Ll]* | \
       *[Ll][Ii][Tt][Ee][Cc][Ll][Ii]* | *[Cc][Uu][Rr][Ll]* | *[Ww][Gg][Ee][Tt]* | *[Ss][Mm][Bb]* | *[Mm][Oo][Ss][Hh]* | \
-      *[Pp][Ww][Ss][Hh]* | *[Pp][Oo][Ww][Ee][Rr][Ss][Hh][Ee][Ll][Ll]* | [Nn][Cc] | [Nn][Cc][!A-Za-z0-9_-]* | \
+      *[Pp][Ww][Ss][Hh]* | *[Pp][Oo][Ww][Ee][Rr][Ss][Hh][Ee][Ll][Ll]* | *[Nn][Cc][Aa][Tt]* | *[Nn][Ee][Tt][Cc][Aa][Tt]* | \
+      *[Tt][Ee][Ll][Nn][Ee][Tt]* | *[Ss][Qq][Ss][Hh]* | *[Ii][Ss][Qq][Ll]* | [Nn][Cc] | [Nn][Cc][!A-Za-z0-9_-]* | \
       *[!A-Za-z0-9_-][Nn][Cc] | *[!A-Za-z0-9_-][Nn][Cc][!A-Za-z0-9_-]*) return 0 ;;
   esac
   return 1
@@ -534,7 +535,8 @@ _G13_AWK='
     JUDGE["ssh"] = JUDGE["autossh"] = JUDGE["plink"] = 1
     n = split("-P -l -pw -pwfile -i -m -load -hostkey -L -R -D -nc -proxycmd -sshlog -sshrawlog -sercfg", a, " ")
     for (k = 1; k <= n; k++) PLINKV[a[k]] = 1
-    n = split("mycli pgcli usql litecli curl wget smbclient mount_smbfs lftp ftp mosh nc pwsh powershell", a, " ")
+    n = split("mycli pgcli usql litecli curl wget smbclient mount_smbfs lftp ftp mosh nc ncat netcat telnet sqsh isql " \
+      "pwsh powershell", a, " ")
     for (k = 1; k <= n; k++) NET[a[k]] = JUDGE[a[k]] = 1
     CTLRE = ""
     for (k = 1; k < 128; k++) {
