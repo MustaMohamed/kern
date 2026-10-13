@@ -79,6 +79,16 @@ parsed_decision() {
     process.stdout.write(o.hookSpecificOutput.permissionDecision)'
 }
 
+# need_list HOOK LIB: the functions that hooks/HOOK's `need LIB ...` lines name, sorted, one per line.
+need_list() {
+  awk -v l="$2" '$1 == "need" && $2 == l { for (i = 3; i <= NF; i++) print $i }' "$(kern_root)/hooks/$1" | sort
+}
+
+# lib_functions LIB: the functions hooks/lib/LIB defines with `name() {`, sorted, one per line.
+lib_functions() {
+  sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)() {.*/\1/p' "$(kern_root)/hooks/lib/$1" | sort
+}
+
 # set_autopilot on|off: writes the session state the hooks read (tests only; G16 guards real sessions).
 set_autopilot() {
   mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"

@@ -170,6 +170,23 @@ without_lib() {
   [[ "$out" == *'"kern G0: hook library settings.sh did not load; reinstall kern"'* ]] || false
 }
 
+@test "pre-tool-use checks every function each library it loads defines" {
+  local lib
+  for lib in json.sh settings.sh state.sh decide.sh gitctx.sh; do
+    [ -n "$(lib_functions "$lib")" ] || { echo "$lib defines no functions"; return 1; }
+    [ "$(need_list pre-tool-use "$lib")" = "$(lib_functions "$lib")" ] ||
+      { echo "$lib: need list differs from its definitions"; diff <(need_list pre-tool-use "$lib") <(lib_functions "$lib"); return 1; }
+  done
+}
+
+@test "a gitctx.sh that sources but lacks git_words gives the G0 ask" {
+  without_lib gitctx.sh
+  { cat "$K/hooks/lib/gitctx.sh"; printf 'unset -f git_words\n'; } >"$BATS_TEST_TMPDIR/k/hooks/lib/gitctx.sh"
+  out=$(bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$(bash_payload "git push --force origin main")")
+  [ "$(parsed_decision "$out")" = ask ] || { echo "$out"; return 1; }
+  [[ "$out" == *'"kern G0: hook library gitctx.sh did not load; reinstall kern"'* ]] || { echo "$out"; return 1; }
+}
+
 @test "the dispatcher's list of guard ids names every guard file" {
   ids=$(sed -n 's/^KERN_GUARD_IDS="\(.*\)"$/\1/p' "$K/hooks/pre-tool-use")
   files=$(cd "$K/hooks/guards" && for f in g*.sh; do printf '%s ' "${f%%-*}"; done)
