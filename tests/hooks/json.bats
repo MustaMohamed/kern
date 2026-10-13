@@ -120,3 +120,13 @@ next \ end' ]
   [ ${#output} -gt 400000 ]
   [ $(($(date +%s) - start)) -le 1 ]
 }
+
+@test "589 KB of structural input outside strings scans in linear time" {
+  nums=$(head -c 300000 /dev/zero | tr '\0' '1' | sed 's/1/1,/g')
+  KERN_INPUT="{\"tool_name\":\"mcp__x\",\"tool_input\":{\"a\":[${nums}1]}}"
+  [ ${#KERN_INPUT} -gt 589000 ]
+  start=$(date +%s)
+  run json_get agent_type
+  [ "$status" -eq 1 ]
+  [ $(($(date +%s) - start)) -le 2 ]
+}

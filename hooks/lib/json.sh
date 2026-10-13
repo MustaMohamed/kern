@@ -47,7 +47,7 @@ function raw_end(p,   c, depth, e) {
 END {
   n = split(buf, C, ""); i = 1
   while (i <= n) {
-    c = substr(buf, i, 1)
+    c = C[i]
     if (c != "\"") { i++; continue }
     e = str_end(i + 1)
     if (!e) exit 2
