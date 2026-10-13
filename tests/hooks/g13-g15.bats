@@ -190,56 +190,31 @@ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
   done
 }
 
-@test "G14: a github allow proves owner and repo against origin, label_write's method and no copilot" {
+@test "G14: every github MCP write asks under tracker.policy auto, whatever its arguments" {
   printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
   git -C "$R" remote set-url origin https://github.com/o/r.git
   for c in 'mcp__github__add_issue_comment|"owner":"o","repo":"r","issue_number":1,"body":"hi"' \
-    'mcp__github__label_write|"method":"create","owner":"O","repo":"R","name":"bug"' \
-    'mcp__github__issue_write|"method":"create","owner":"o","repo":"r","title":"x","assignees":["alice"],"body":"ask copilot"'; do
-    mcpi "${c%%|*}" "${c#*|}"
-    [ "$(decision_of "$output")" = allow ] || { echo "$c -> $output"; return 1; }
-  done
-  for c in 'mcp__github__add_issue_comment|"owner":"torvalds","repo":"linux","issue_number":1,"body":"hi"' \
-    'mcp__github__add_issue_comment|"owner":"o","issue_number":1,"body":"hi"' \
+    'mcp__github__add_issue_comment|"owner":"torvalds","repo":"linux","issue_number":1,"body":"hi"' \
     'mcp__github__label_write|"method":"delete","owner":"o","repo":"r","name":"bug"' \
-    'mcp__github__label_write|"owner":"o","repo":"r","name":"bug"' \
     'mcp__github__issue_write|"method":"create","owner":"o","repo":"r","title":"x","assignees":["copilot-swe-agent"]' \
-    'mcp__github__update_issue|"owner":"o","repo":"r","issue_number":1,"reviewers":["COPILOT"]' \
-    'mcp__github__merge_pull_request|"owner":"o","repo":"r","pullNumber":1' \
-    'mcp__github__create_gist|"owner":"o","repo":"r","files":"x"' \
-    'mcp__github__add_issue_comment|"owner":"o","repo":"r","owner":"torvalds","issue_number":1,"body":"hi"' \
-    'mcp__github__issue_write|"method":"create","owner":"o","repo":"r","assignees":["a"],"assignees":["copilot"]' \
-    'mcp__github__add_issue_comment|"owner":"o","repo":"r\n","issue_number":1'; do
+    'mcp__claude_ai_GitHub__create_issue|"owner":"o","repo":"r","title":"x"'; do
     mcpi "${c%%|*}" "${c#*|}"
     [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
   done
+  set_autopilot on
+  mcpi mcp__github__add_issue_comment '"owner":"o","repo":"r","issue_number":1,"body":"hi"'
+  [ "$(decision_of "$output")" = deny ]
 }
 
-@test "G14: the github repo check reads origin's URL: github.com in https, scp or ssh form, else ask" {
-  printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
-  f='"owner":"o","repo":"r","issue_number":1,"body":"hi"'
-  for u in https://github.com/o/r https://github.com/o/r.git/ git@github.com:o/r.git ssh://git@github.com:22/o/r.git https://x:t@GitHub.com/O/R; do
-    git -C "$R" remote set-url origin "$u"
-    mcpi mcp__github__add_issue_comment "$f"
-    [ "$(decision_of "$output")" = allow ] || { echo "$u -> $output"; return 1; }
-  done
-  for u in https://gitlab.com/o/r.git git@github-work:o/r.git https://github.com/o/r/x https://github.com/o file:///tmp/o/r "$R.origin"; do
-    git -C "$R" remote set-url origin "$u"
-    mcpi mcp__github__add_issue_comment "$f"
-    [ "$(decision_of "$output")" = ask ] || { echo "$u -> $output"; return 1; }
-  done
-  git -C "$R" remote remove origin
-  mcpi mcp__github__add_issue_comment "$f"
-  [ "$(decision_of "$output")" = ask ]
-}
-
-@test "G14: Linear save_issue with a delegate, a team on an update, or an escape kern cannot read asks under auto" {
+@test "G14: Linear save_issue asks under auto when it sets a delegate, an assignee, or a team on an update" {
   printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
   for f in '"team":"Eng","title":"x"' '"id":"LIN-1","title":"y"'; do
     mcpi mcp__claude_ai_Linear__save_issue "$f"
     [ "$(decision_of "$output")" = allow ] || { echo "$f -> $output"; return 1; }
   done
-  for f in '"id":"LIN-1","delegate":"Copilot"' '"id":"LIN-1","delegate":null' '"id":"LIN-1","team":"Other"' '"\u0064elegate":"Copilot","title":"x"'; do
+  mcpi mcp__claude_ai_Linear__save_comment '"issueId":"LIN-1","body":"x"'
+  [ "$(decision_of "$output")" = allow ]
+  for f in '"id":"LIN-1","delegate":"Copilot"' '"id":"LIN-1","delegate":null' '"id":"LIN-1","assignee":"me"' '"team":"Eng","title":"x","assignee":"alice"' '"id":"LIN-1","team":"Other"' '"\u0064elegate":"Copilot","title":"x"'; do
     mcpi mcp__claude_ai_Linear__save_issue "$f"
     [ "$(decision_of "$output")" = ask ] || { echo "$f -> $output"; return 1; }
   done
@@ -249,14 +224,14 @@ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
   printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
   for ap in off on; do
     set_autopilot "$ap"
-    for t in mcp__github__get_workflow_run mcp__github__list_workflow_run_artifacts mcp__github__get_pull_request mcp__claude_ai_Atlassian__getJiraIssue; do
+    for t in mcp__github__get_workflow_run mcp__github__download_workflow_run_artifact mcp__github__list_workflow_run_artifacts mcp__github__get_pull_request mcp__github__pull_request_read mcp__claude_ai_Atlassian__getJiraIssue; do
       mcp "$t"
       [ "$(decision_of "$output")" = none ] || { echo "$ap $t -> $output"; return 1; }
     done
   done
 }
 
-@test "G14: request, dismiss, manage, star, cancel, spawn, stop and convert are writes" {
+@test "G14: copilot, dismiss, manage, star, cancel, spawn, stop and convert are writes" {
   printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
   for t in mcp__github__request_copilot_review mcp__github__dismiss_notification mcp__github__manage_notification_subscription mcp__github__star_repository mcp__gitlab__cancel_pipeline mcp__claude_ai_Notion__notion-spawn-session mcp__claude_ai_Notion__notion-stop-session mcp__claude_ai_Notion__notion-convert-page-to-skill; do
     mcp "$t"

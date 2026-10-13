@@ -8,20 +8,19 @@
 
 KERN_G14_TRACKERS="linear jira atlassian asana github gitlab notion monday clickup todoist trello shortcut height zendesk"
 KERN_G14_CHAT="slack gmail discord teams intercom front mail telegram whatsapp"
-KERN_G14_VERBS="create save update delete remove comment post send merge transition move assign archive edit write add set upload submit resolve share invite publish label close reopen mark reply push run rerun retry play fork schedule duplicate restore unshare request dismiss manage star cancel spawn stop convert"
+KERN_G14_VERBS="create save update delete remove comment post send merge transition move assign archive edit write add set upload submit resolve share invite publish label close reopen mark reply push run rerun retry play fork schedule duplicate restore unshare copilot dismiss manage star cancel spawn stop convert"
 # A tool name whose first word is one of these reads, and never votes (get_workflow_run).
-KERN_G14_READS="get list search read fetch query find view show describe count check export"
+KERN_G14_READS="get list search read fetch query find view show describe count check export download"
 _G14_ALNUM=abcdefghijklmnopqrstuvwxyz0123456789
 # tracker.policy, read once per hook call by _g14_policy.
 _G14_POLICY=""
 
 # The MCP tools tracker.policy auto may allow, by exact name, for each family: issue, comment, label
 # and project writes only. Code hosting, CI, release, sharing, agent-trigger, attachment and delete
-# tools are left out, and the arguments are proven too (_g14_mcp_proven). A family whose tool names
-# kern has no source for (jira, atlassian, asana, gitlab, monday, clickup, todoist, trello, shortcut,
-# height, zendesk, and mcp.write_servers) has no list, so its writes ask.
-# github: github-mcp-server's issue tools, as listed in the M1 Task 13 review.
-_G14_GITHUB="create_issue update_issue add_issue_comment issue_write sub_issue_write label_write"
+# tools are left out, and the arguments are proven too (_g14_mcp_proven). A family with no list
+# asks for every write: github, whose tools name any repo while gh covers the same issue writes with
+# a proven shape, and those whose tool names kern has no source for (jira, atlassian, asana,
+# gitlab, monday, clickup, todoist, trello, shortcut, height, zendesk, and mcp.write_servers).
 # linear: the claude.ai Linear connector's tool names (create_issue_label is the deprecated form of
 # save_issue_label).
 _G14_LINEAR="save_issue save_comment create_issue_label save_issue_label save_project save_milestone"
@@ -120,7 +119,6 @@ _g14_mcp_proven() {
   done
   [ "$n" = 1 ] || return 1
   case "$fam" in
-    github) list=$_G14_GITHUB ;;
     linear) list=$_G14_LINEAR ;;
     notion) list=$_G14_NOTION ;;
     *) return 1 ;;
@@ -130,93 +128,19 @@ _g14_mcp_proven() {
   done
   [ "$hit" = 0 ] || return 1
   case "$TOOL_INPUT" in *'\u'*) _G14_WHY="has a \\u escape kern cannot read"; return 1 ;; esac
-  case "$fam:$2" in
-    github:*) _g14_github_args "$2" ;;
-    linear:save_issue) _g14_linear_issue_args ;;
-  esac
+  [ "$fam:$2" != linear:save_issue ] || _g14_linear_issue_args
 }
 
-# _g14_once KEY: the text "KEY" appears at most once in tool_input. The JSON reader takes a key's
-# first value and a server may take its last, so a key read for a value must not repeat.
-_g14_once() {
-  case "$TOOL_INPUT" in *"\"$1\""*"\"$1\""*) return 1 ;; esac
-}
-
-# _g14_github_args NAME: no assignee or reviewer names copilot, in any case (copilot starts an
-# agent); label_write's method is create or update (its delete is a delete); and owner and repo,
-# GitHub's name characters only, name the main worktree's origin on github.com, compared in any
-# case as GitHub does. Each key read for a value appears once (_g14_once).
-_g14_github_args() {
-  local k v rc owner repo origin
-  case "$TOOL_INPUT" in
-    *[Cc][Oo][Pp][Ii][Ll][Oo][Tt]*)
-      _G14_WHY="assigns or asks copilot, which starts an agent"
-      for k in assignees assignee reviewers reviewer; do
-        _g14_once "$k" || return 1
-        v=$(KERN_INPUT=$TOOL_INPUT json_get_raw "$k")
-        rc=$?
-        [ "$rc" = 1 ] && continue
-        [ "$rc" = 0 ] || return 1
-        case "$v" in *[Cc][Oo][Pp][Ii][Ll][Oo][Tt]*) return 1 ;; esac
-      done
-      ;;
-  esac
-  if [ "$1" = label_write ]; then
-    _G14_WHY="label_write is allowed only with method create or update"
-    _g14_once method || return 1
-    case "$(ti_get method && printf x)" in createx | updatex) ;; *) return 1 ;; esac
-  fi
-  _G14_WHY="names a repo kern cannot match to this repo's origin on github.com"
-  _g14_once owner && _g14_once repo || return 1
-  # The x keeps a trailing newline, which $( ) would drop, in the value the checks below see.
-  owner=$(ti_get owner && printf x) && repo=$(ti_get repo && printf x) || return 1
-  owner=${owner%x}
-  repo=${repo%x}
-  case "$owner" in "" | *[!a-zA-Z0-9._-]*) return 1 ;; esac
-  case "$repo" in "" | *[!a-zA-Z0-9._-]*) return 1 ;; esac
-  origin=$(_g14_origin) || return 1
-  [ "$(printf '%s/%s' "$owner" "$repo" | LC_ALL=C tr '[:upper:]' '[:lower:]')" = "$origin" ]
-}
-
-# _g14_origin: OWNER/REPO, lowercased, of the main worktree's origin when its URL names a github.com
-# repo: an https, http, ssh or git URL (user, password and port allowed), or the scp form
-# (git@github.com:o/r.git). Exit 1 for any other URL, or when git cannot answer.
-_g14_origin() {
-  local url host path
-  [ -n "${KERN_MAIN-}" ] || return 1
-  url=$(git -C "$KERN_MAIN" -c core.fsmonitor=false remote get-url origin 2>/dev/null) || return 1
-  url=$(printf '%s' "$url" | LC_ALL=C tr '[:upper:]' '[:lower:]')
-  case "$url" in
-    https://* | http://* | ssh://* | git://* | git+ssh://* | ssh+git://*)
-      path=${url#*://}
-      host=${path%%/*}
-      path=${path#"$host"}
-      host=${host##*@}
-      host=${host%:*}
-      ;;
-    *://*) return 1 ;;
-    *:*)
-      host=${url%%:*}
-      path=${url#*:}
-      case "$host" in */*) return 1 ;; esac
-      host=${host##*@}
-      ;;
-    *) return 1 ;;
-  esac
-  [ "$host" = github.com ] || return 1
-  while :; do case "$path" in /*) path=${path#/} ;; */) path=${path%/} ;; *) break ;; esac; done
-  path=${path%.git}
-  case "$path" in ?*/?*) ;; *) return 1 ;; esac
-  case "${path#*/}" in */*) return 1 ;; esac
-  printf '%s\n' "$path"
-}
-
-# _g14_linear_issue_args: save_issue has no delegate key (an agent) and, on an update (an id key),
-# no team key (a move to another team). A key counts at any depth.
+# _g14_linear_issue_args: save_issue has no delegate key (an agent) and no assignee key, and on an
+# update (an id key) no team key (a move to another team). A key counts at any depth, and with any
+# value, null included.
 _g14_linear_issue_args() {
-  _G14_WHY="delegates the issue to an agent"
-  KERN_INPUT=$TOOL_INPUT json_get_raw delegate >/dev/null
-  [ $? = 1 ] || return 1
+  local k
+  _G14_WHY="delegates or assigns the issue"
+  for k in delegate assignee; do
+    KERN_INPUT=$TOOL_INPUT json_get_raw "$k" >/dev/null
+    [ $? = 1 ] || return 1
+  done
   _G14_WHY="moves the issue to another team"
   KERN_INPUT=$TOOL_INPUT json_get_raw id >/dev/null
   case $? in
