@@ -88,8 +88,21 @@ _GW_AWK='
     if (have) sw_w[++sw_n] = w
   }
   function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0 }
-  # cw_line(s): feeds cw the words of the command line s (the value of env -S).
-  function cw_line(s,   a, k, m) { m = split(s, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") cw(a[k]) }
+  # cw_line(s): feeds cw the words of the command line s (the value of env -S), split at blanks
+  # outside quotes and with the quotes removed, as env -S reads it.
+  function cw_line(s,   n, C, i, c, q, w, have) {
+    n = split(s, C, ""); q = ""; w = ""; have = 0
+    for (i = 1; i <= n; i++) {
+      c = C[i]
+      if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
+      if (c == "\\" && i < n && (q == "" || index("\"\\$`", C[i + 1]))) { i++; w = w C[i]; have = 1; continue }
+      if (q == "\"") { if (c == "\"") q = ""; else w = w c; continue }
+      if (c == sq || c == "\"") { q = c; have = 1; continue }
+      if (c == " " || c == "\t" || c == "\037") { if (have) cw(w); w = ""; have = 0; continue }
+      w = w c; have = 1
+    }
+    if (have) cw(w)
+  }
   function cw(x,   b, v, P) {
     if (cw_s) { cw_w[++cw_n] = x; return }
     if (cw_val) {

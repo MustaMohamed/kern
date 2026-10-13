@@ -89,6 +89,13 @@ EOT
   done
 }
 
+@test "env -S splits its line with quotes, as env does" {
+  finds "env -S \"bash -c 'git push --force origin main'\"" push
+  finds "env -S 'sh -c \"git push\"'" push
+  run _cmd_words "env -S \"printf '%s' 'a b' c\\ d\""
+  [ "$output" = "$(printf '%s\n' printf %s 'a b' 'c d')" ]
+}
+
 @test "a shell that runs a -c script reads its here-doc as data, in any cluster form" {
   for c in "bash -Ec 'cat'" "bash -c -- 'cat'" "bash --rcfile f -c 'cat'"; do
     run git_words "$(printf '%s\n' "$c <<'EOF'" 'git push --force' 'EOF')"
