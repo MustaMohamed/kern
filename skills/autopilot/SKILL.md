@@ -21,6 +21,9 @@ A per-session grant for unattended runs. kern's prompt hook turns it on only fro
 - Commit on a branch that is not protected, with exactly one `-m` or `-F` and no other option except `-q` or `-v`, when the message passes the convention and attribution checks. kern denies `--amend`, `-a`, `--no-verify`, a pathspec and `git add -A`.
 - Write the commit message with `-m '<text>'`, or write it to a file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir msg` prints and pass that file's absolute path to `git commit -F`. kern cannot check a `$( )` or here-doc message, so it denies one.
 - Run git and gh directly, with no wrapper such as env, sudo, xargs or caffeinate, and no `cd` first. kern denies what it cannot prove.
+- Spell every command out. kern denies a command it cannot read: a command name built at run time, a shell script it cannot parse, and code piped into a shell. Interpreter code in a file, or a python here-doc, is fine.
+- Stage and commit in separate calls. A `git add` before a commit or push in the same call asks, and autopilot denies it.
+- A gh alias or extension asks, and autopilot denies it. Run the gh command it stands for.
 - Push the current branch with `git push [-u] <remote> <current-branch>`, naming both, when the branch is not protected. kern denies a bare `git push`.
 - Push with `git push --force-with-lease <remote> <current-branch>` only when settings say `rebase.push: autopilot`, the branch is not protected, and every commit on it past the base branch is the user's. kern denies a lease push of any other branch.
 - Open a draft PR from the current branch with `gh pr create --draft` plus `--title`, `--base`, `--fill`, `--fill-first`, `--fill-verbose`, `--dry-run`, `--no-maintainer-edit`, `--body-file` with a file in the repo, or `--head` naming the current branch, after the duplicate check. kern denies it when the head already has an open, merged or closed PR.

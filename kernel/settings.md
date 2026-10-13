@@ -101,6 +101,8 @@ A policy key set to `auto`, or autopilot, lets an action through without asking 
 | Notion MCP write | `notion-create-comment` | `tracker.policy` allows it | denied |
 | GitHub MCP write | none. A github MCP tool can name any repo, so use `gh issue` or `gh label` | always asks | denied |
 
+Under autopilot kern also denies commands it cannot read: a command name built at run time, a shell script it cannot parse, and code piped into a shell. Interpreter code in a file, or a python here-doc, is fine. Stage and commit in separate calls: a `git add` before a commit in the same call asks, and autopilot denies it. A gh alias or extension asks, and autopilot denies it.
+
 Each allowed git or gh shape is the whole Bash call. Nothing runs before it: no `cd`, wrapper or assignment. No word expands, and no `$( )` or backtick appears. Only `head`, `tail`, `grep` or `cat` with no file argument may follow it, and a redirection may only go to `/dev/null` or copy a file descriptor.
 
 A `<file>` is a regular file, not a symlink, inside the main worktree and outside `.git`. It is under `work_dir`, or git does not ignore it.
