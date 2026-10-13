@@ -20,4 +20,12 @@ kern's prompt hook applies the switch before this skill loads. This skill only r
 ## Words
 `terse` and `normal` set the voice. `chat`, `auto` and `html` set the surface. `default` resets both to the settings defaults. `status` changes nothing. Words combine, as in `/kern:mode html terse`. An unknown word changes nothing.
 
-A phrase that opens the prompt also switches, without this skill: "go terse", "terse mode", "back to normal", "html mode", "stop html", "chat only". A question or a negation, such as "don't go terse", never switches.
+A phrase also switches, without this skill:
+- terse voice: "terse mode", "go terse", "be terse", "switch to terse", "terse on";
+- normal voice: "normal mode", "back to normal", "stop terse", "terse off", "normal voice";
+- html surface: "html mode", "go html", "switch to html", "html on";
+- surface back to the settings default, or `auto` when that default is `html`: "stop html", "html off";
+- chat surface: "chat only", "chat mode";
+- autopilot off: "stop autopilot", "autopilot off".
+
+The phrase must open the prompt's first line, after an optional "please" or "ok". It switches only when it is the whole line, or when punctuation or the word "and", "then", "now" or "please" follows it. "go terse, then fix the test" switches. "go terse for the rest of this session" does not. A first line that holds a question mark, or opens with a question word or a negation such as "don't go terse", never switches.

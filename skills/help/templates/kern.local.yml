@@ -38,7 +38,8 @@
 # Risk
 # autopilot: allowed
 # Each protected target is an exact host (any case, also as user@host or in a URL), a host:port, or an sqlite file path.
-# List every ssh alias and each SSH tunnel's local host:port. G13 allows only proven reads to them and denies everything else.
+# List every ssh alias and each SSH tunnel's local host:port. G13 lets through only proven reads to them
+# and denies every other call that names them, in both modes.
 # protected_targets: prod-db.internal
 # deploy.envs: production
 # never_commit: *.db, .env*
