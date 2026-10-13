@@ -21,8 +21,17 @@ guard_g15() {
     sub=${rest%%	*}
     rest=${rest#*	}
     [ "$sub" = push ] || continue
+    # On a detached HEAD push_targets prints nothing for a push with no refspec, and an empty line
+    # for HEAD or @; it prints * for --all, --mirror, --branches or a pattern. Each target is
+    # unknown, so it may be a deploy branch.
     while IFS= read -r t; do
-      [ -n "$t" ] && list_has "$envs" "$t" && _g15_vote "push to deploy branch $t"
+      if [ -z "$t" ]; then
+        _g15_vote "push from a detached HEAD: the target branch is unknown"
+      elif [ "$t" = '*' ]; then
+        _g15_vote "push of every branch or a pattern may reach a deploy branch"
+      elif list_has "$envs" "$t"; then
+        _g15_vote "push to deploy branch $t"
+      fi
     done <<EOT
 $(push_targets "$dir" "$rest")
 EOT

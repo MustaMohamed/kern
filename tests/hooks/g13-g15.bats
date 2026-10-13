@@ -98,3 +98,46 @@ mcp() { run_guard "$(payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{}"
   g "git push origin feat" g15
   [ "$(decision_of "$output")" = none ]
 }
+
+@test "G14: tracker.policy auto allows a gh issue or label write only in a proven shape" {
+  printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
+  printf 'Body\n' >"$R/c.md"
+  for c in "gh issue comment 5 --body-file c.md" "gh issue close 5 --reason completed | tail -n 1" "gh label create bug --color ff0000 >/dev/null"; do
+    g "$c" g14
+    [ "$(decision_of "$output")" = allow ] || { echo "$c -> $output"; return 1; }
+  done
+  for c in "gh issue comment 5 --body-file c.md && rm -rf x" "rm -rf x; gh issue close 5" "gh issue create -R o/r --title x" "gh --repo=o/r issue close 5" "GH_REPO=o/r gh issue close 5" "export GH_REPO=o/r; gh issue close 5" "cd /tmp && gh issue close 5" "gh issue close 5 > out.txt" "gh issue edit 5 --title \$(id)" "gh issue comment 5 --body-file /etc/hosts" "gh issue comment https://github.com/o/r/issues/1 --body-file c.md" "gh issue create --title x --web" "gh issue transfer 5 o/r"; do
+    g "$c" g14
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+  set_autopilot on
+  g "gh issue comment 5 --body-file c.md" g14
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "G15: a push from a detached HEAD asks when deploy.envs is set, denied under autopilot" {
+  git -C "$R" switch -q --detach
+  g "git push" g15
+  [ "$(decision_of "$output")" = none ]
+  printf 'deploy.envs: production\n' >"$R/.claude/kern.local.yml"
+  for c in "git push" "git push origin" "git push origin HEAD"; do
+    g "$c" g15
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+  set_autopilot on
+  g "git push" g15
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "G15: a push of every branch or a pattern asks when deploy.envs is set, denied under autopilot" {
+  g "git push --all origin" g15
+  [ "$(decision_of "$output")" = none ]
+  printf 'deploy.envs: production\n' >"$R/.claude/kern.local.yml"
+  for c in "git push --all origin" "git push --branches origin" "git push --mirror origin" "git push origin refs/heads/*:refs/heads/*"; do
+    g "$c" g15
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+  set_autopilot on
+  g "git push --all origin" g15
+  [ "$(decision_of "$output")" = deny ]
+}
