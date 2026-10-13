@@ -600,3 +600,46 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   run_guard "$(bash_payload "git -C $BATS_TEST_TMPDIR/wt commit -m 'CDS-2465: read GIT_CONFIG_COUNT' | grep git")" g01,g05
   [ "$(decision_of "$output")" = allow ] || { echo "$output"; return 1; }
 }
+
+@test "lease push to a protected branch names the force; over another author's commits it is denied" {
+  local O="$BATS_TEST_TMPDIR/o3"
+  git clone -q "$R.origin" "$O"
+  printf 'x\n' >"$O/x.txt"; git -C "$O" add x.txt
+  git -C "$O" -c user.email=other@example.com -c user.name=other commit -q -m x
+  git -C "$O" push -q origin main
+  git -C "$R" pull -q --ff-only origin main
+  printf 'm\n' >"$R/m.txt"; git -C "$R" add m.txt; git -C "$R" commit -q -m m
+  # Every commit the push adds or drops is the user's: ask, and the reason says it forces.
+  g1 "git -C $R push --force-with-lease origin main"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"--force-with-lease push to protected branch main"* ]] || false
+  # The rewrite drops the other author's commit from main.
+  git -C "$R" reset -q --hard HEAD~2
+  printf 'n\n' >"$R/n.txt"; git -C "$R" add n.txt; git -C "$R" commit -q -m n
+  g1 "git -C $R push --force-with-lease origin main"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"main may hold commits by other authors"* ]] || false
+  # A protected branch other than the base: its commits past the base are checked as on any branch.
+  settings 'branch.protected: release'
+  git -C "$O" switch -q -c release
+  printf 'r\n' >"$O/r.txt"; git -C "$O" add r.txt
+  git -C "$O" -c user.email=other@example.com -c user.name=other commit -q -m r
+  git -C "$O" push -q origin release
+  git -C "$R" fetch -q origin
+  git -C "$R" switch -q -c release origin/release
+  printf 's\n' >"$R/s.txt"; git -C "$R" add s.txt; git -C "$R" commit -q -m s
+  g1 "git -C $R push --force-with-lease origin release"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"release may hold commits by other authors"* ]] || false
+  set_autopilot on
+  settings 'branch.protected: release' 'rebase.push: autopilot'
+  g1 "git -C $R push --force-with-lease origin release"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"--force-with-lease push to protected branch release under autopilot"* ]] || false
+  [[ "$output" == *"release may hold commits by other authors"* ]] || false
+  git -C "$R" switch -q main
+  g1 "git -C $R push --force-with-lease origin main"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"--force-with-lease push to protected branch main under autopilot"* ]] || false
+  [[ "$output" == *"main may hold commits by other authors"* ]] || false
+}

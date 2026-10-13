@@ -415,19 +415,35 @@ _g01_own() {
   _g01_only "$a" "$me"
 }
 
-# _g01_own_refs DIR REMOTE CUR REFS...: _g01_own for the source and destination of each refspec,
-# or HEAD to CUR when there is none.
-_g01_own_refs() {
-  local dir="$1" remote="$2" cur="$3" r
-  shift 3
+# _g01_keeps DIR REMOTE SRC DST: every commit on REMOTE's DST that SRC does not hold, so that a forced
+# push would drop, was authored by user.email. No such remote ref drops nothing; a lookup error
+# counts as not own. Callers run _g01_own first, which checks REMOTE.
+_g01_keeps() {
+  local me a
+  me=$(git -C "$1" config user.email 2>/dev/null) && [ -n "$me" ] || return 1
+  git -C "$1" rev-parse --verify -q "refs/remotes/$2/$4" >/dev/null || return 0
+  a=$(git -C "$1" log --no-show-signature --format=%ae "$3..refs/remotes/$2/$4" 2>/dev/null) || return 1
+  _g01_only "$a" "$me"
+}
+
+# _g01_each CHECK DIR REMOTE CUR REFS...: `CHECK DIR REMOTE SRC DST` holds for the source and
+# destination of each refspec, or HEAD to CUR when there is none.
+_g01_each() {
+  local check="$1" dir="$2" remote="$3" cur="$4" r
+  shift 4
   if [ $# -eq 0 ]; then
-    _g01_own "$dir" "$remote" HEAD "$cur"
+    "$check" "$dir" "$remote" HEAD "$cur"
     return
   fi
   for r in "$@"; do
     _g01_ref "$r" "$cur"
-    _g01_own "$dir" "$remote" "$_G01_SRC" "$_G01_DST" || return 1
+    "$check" "$dir" "$remote" "$_G01_SRC" "$_G01_DST" || return 1
   done
+}
+
+# _g01_own_refs DIR REMOTE CUR REFS...: _g01_own for each refspec (see _g01_each).
+_g01_own_refs() {
+  _g01_each _g01_own "$@"
 }
 
 # _g01_filter RECORD: exit 0 when RECORD is tail, head, grep or cat with options from its table
@@ -515,7 +531,7 @@ EOT
 # _g01_push DIR PLAIN WORDS...: force first, then push.policy deny, remote delete, an unknown
 # directory, protected targets and lease pushes; an allow needs _g01_proven.
 _g01_push() {
-  local dir="$1" plain="$2" toks t r cur policy fix det="" force=none del=0 odd=0 val=0 all=0 have=0 prot=0
+  local dir="$1" plain="$2" toks t r cur policy fix det="" force=none del=0 odd=0 val=0 all=0 have=0 prot=0 what
   local remote="" refs=() tg=()
   shift 2
   toks=$(_g01_opts "$_G01_PUSH_OPTS" "$@")
@@ -584,13 +600,23 @@ EOT
     _g01_ref "$r" "$cur"
     tg+=("$_G01_DST")
   done
+  what=push
+  [ "$force" = lease ] && what="--force-with-lease push"
   for t in "${tg[@]}"; do
     branch_protected "$t" || continue
     prot=1
-    vote ask G1 "push to protected branch $t$det"
-    [ "$AUTOPILOT" = 1 ] && vote deny G1 "push to protected branch $t under autopilot$det"
+    vote ask G1 "$what to protected branch $t$det"
+    [ "$AUTOPILOT" = 1 ] && vote deny G1 "$what to protected branch $t under autopilot$det"
   done
-  [ "$prot" = 0 ] || return 0
+  if [ "$prot" = 1 ]; then
+    # A lease push to a protected branch is checked as one to any branch, and every commit it would
+    # drop from the remote branch must be the user's too: on the base branch nothing is past the base.
+    if [ "$force" = lease ] && ! { _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}" &&
+      _g01_each _g01_keeps "$dir" "$remote" "$cur" "${refs[@]}"; }; then
+      vote deny G1 "${tg[*]} may hold commits by other authors (or that could not be checked); a shared branch is never force-pushed$det"
+    fi
+    return 0
+  fi
   if [ "$force" = lease ]; then
     if [ "$AUTOPILOT" = 0 ]; then
       if _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}"; then
