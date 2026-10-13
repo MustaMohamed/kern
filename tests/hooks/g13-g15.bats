@@ -14,6 +14,21 @@ g() { run_guard "$(bash_payload "$1")" "$2"; }
 mcp() { run_guard "$(payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{}")" g14; }
 # mcpi TOOL FIELDS: G14 on an MCP call whose tool_input holds FIELDS (passed without braces).
 mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
+# gx CMD: G13 on CMD, which may hold double quotes, backslashes and newlines.
+gx() {
+  local esc
+  esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
+  run_guard "$(bash_payload "$esc")" g13
+}
+# g13_all DECISION CMD...: G13 decides DECISION on every CMD.
+g13_all() {
+  local want="$1" c
+  shift
+  for c in "$@"; do
+    gx "$c"
+    [ "$(decision_of "$output")" = "$want" ] || { echo "$c -> $output"; return 1; }
+  done
+}
 
 @test "G13: inactive until protected_targets is set" {
   g "scp a.txt v1-host:/data/" g13
@@ -46,6 +61,61 @@ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
   set_autopilot on
   g "ssh v1-host 'rm -f /data/x'" g13
   [ "$(decision_of "$output")" = deny ]
+}
+
+@test "G13: an ssh remote command off the read list is denied, Windows and PowerShell included" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "ssh v1-host 'DEL C:\data\x'" "ssh v1-host 'ren C:\data\x y'" "ssh v1-host 'perl app2020arcp.pl'" \
+    "ssh v1-host 'sed -i s/a/b/ /data/x'" "ssh v1-host 'net stop mysql'" "ssh v1-host 'taskkill /im perl.exe'" \
+    "ssh v1-host 'powershell -c Remove-Item C:\data\x'" "ssh v1-host 'powershell -c Set-Content C:\data\x hi'" \
+    "ssh v1-host 'powershell -NoProfile -Command \"Get-Item C:\x | Remove-Item\"'" \
+    "ssh v1-host 'powershell -Command (Get-Item C:\x).Delete()'" "ssh v1-host 'powershell -EncodedCommand ZABpAHIA'" \
+    "ssh v1-host 'cmd /c \"dir C:\data && del C:\data\x\"'" "ssh v1-host 'dir C:\data & del C:\data\x'" \
+    "ssh v1-host 'ls /data; rm -f /data/x'" "ssh v1-host 'cat /data/x > /data/y'" "ssh v1-host 'ls \$(rm -f /data/x)'" \
+    "ssh v1-host 'find /data -name x -delete'" "ssh v1-host 'find /data -exec rm {} +'" "ssh v1-host 'date -s 2020-01-01'" \
+    "ssh v1-host 'hostname newname'" "ssh v1-host 'ls -la | xargs rm'"
+  set_autopilot on
+  g13_all deny "ssh v1-host 'DEL C:\data\x'"
+}
+
+@test "G13: ssh to a target names it in any case, as user@host, a URL, a jump or a HostName option" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "ssh admin@v1-host 'rm -f /data/x'" "ssh ssh://admin@v1-host:22 'rm -f /data/x'" \
+    "ssh -p 22 V1-HOST 'rm -f /data/x'" "ssh v1-host -t 'rm -f /data/x'" "ssh -o RemoteCommand='rm -f /data/x' v1-host" \
+    "ssh -J v1-host localhost 'rm -f /data/x'" "ssh -o HostName=v1-host alias 'rm -f /data/x'" \
+    "ssh -o ProxyCommand='ssh v1-host rm -f /data/x' other ls"
+}
+
+@test "G13: ssh to a target with no remote command, a shell, or input on stdin is denied" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "ssh v1-host" "ssh -t v1-host bash" "ssh v1-host bash < fix.sh" "ssh v1-host 'bash -s' < fix.sh" \
+    "ssh v1-host < fix.sh" "cat fix.sh | ssh v1-host bash" "cat fix.sh | ssh v1-host 'cat /data/x'" \
+    "ssh v1-host cat <<< 'rm -f /data/x'" "ssh v1-host cmd" "ssh v1-host 'cmd /k'" "ssh v1-host powershell" \
+    "ssh v1-host 'powershell -Command -'" "ssh v1-host 'pwsh fix.ps1'" "ssh -s v1-host sftp"
+  g13_all deny "ssh v1-host <<'EOF'
+rm -f /data/x
+EOF"
+}
+
+@test "G13: an ssh behind a path, another case, quotes or a wrapper is still read" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "/usr/bin/ssh v1-host 'rm -f /data/x'" "SSH v1-host 'rm -f /data/x'" "s''sh v1-host 'rm -f /data/x'" \
+    "caffeinate ssh v1-host 'rm -f /data/x'" "sudo -u admin ssh v1-host 'rm -f /data/x'" \
+    "sshpass -p x ssh v1-host 'rm -f /data/x'" "bash -c \"ssh v1-host 'rm -f /data/x'\"" \
+    "env -S 'ssh v1-host rm -f /data/x'" "ls && ssh v1-host 'rm -f /data/x' | tail -n 1"
+}
+
+@test "G13: ssh reads, tunnels and other hosts get no vote" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all none "ssh v1-host ls 2>/dev/null" "ssh v1-host 'dir C:\data' 2>&1" "ssh v1-host 'cat /data/x' > local.txt" \
+    "ssh v1-host 'ls /data/rm-backups'" "ssh v1-host 'ls -la /data | grep x | wc -l'" "ssh v1-host 'type C:\data\x.txt'" \
+    "ssh v1-host 'findstr /i error C:\logs\app.log'" "ssh v1-host 'cmd /c dir C:\data'" \
+    "ssh v1-host 'powershell -NoProfile -Command \"Get-ChildItem C:\data | Measure-Object\"'" \
+    "ssh v1-host 'Get-Content C:\logs\a.log -Tail 20'" "ssh v1-host 'find /data -name x 2>/dev/null'" \
+    "ssh v1-host 'hostname; whoami; ver'" "ssh v1-host 'gci C:\data | sls error'" "ssh v1-host 'date +%F'" \
+    "ssh -n v1-host ls < fix.sh" "ssh -N -L 3307:localhost:3306 v1-host" "ssh -fN -L 3307:127.0.0.1:3306 admin@v1-host" \
+    "ssh -O exit v1-host" "ssh other-host 'rm -f /tmp/x'" "ssh v1-host-2 'rm -f /tmp/x'" \
+    "git commit -m 'ssh v1-host is read-only'" "grep -rn 'ssh v1-host' docs"
 }
 
 @test "G14: a tracker write asks, a read does not vote, autopilot denies" {
