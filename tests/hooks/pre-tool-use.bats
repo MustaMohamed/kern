@@ -82,6 +82,14 @@ feed() {
   run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
   [ "$(parsed_decision "$output")" = ask ]
   [[ "$output" == *"git x"*'\u0002'*'\u001e'*"y is not"* ]] || false
+  # A newline inside $( ) reaches a reason as git_words' 0x1f record marker.
+  # shellcheck disable=SC2016 # a literal $( in the command
+  printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"git push origin \\"$(git \\nbranch --show-current)\\""}}' \
+    "$CWD" >"$BATS_TEST_TMPDIR/in"
+  run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
+  [ "$(parsed_decision "$output")" = ask ]
+  # shellcheck disable=SC2016
+  [[ "$output" == *'$(git \u001fbranch'* ]] || false
   # json_get decodes \b, so one appended record used to remove every decision under autopilot.
   set_autopilot on
   printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"git push --force origin main; git x\\by"}}' \
