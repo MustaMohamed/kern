@@ -13,7 +13,7 @@ test('unslop: path-tier frontmatter and the upstream sections in order', () => {
   assert.equal(data['disable-model-invocation'], 'true');
   assert.ok(data.description.length <= 120);
   assert.deepEqual(h2(body), ['Shape', 'Document rules', 'Process', 'Adding soul', 'Patterns to detect and fix']);
-  assert.match(body, /chat replies follow the active kern voice first/);
+  assert.match(body, /Chat replies follow the active kern voice first\. Everything else composed for a reader follows this file: /);
 });
 
 test('technical-writing: opens with Steps that apply unslop, then the standard', () => {

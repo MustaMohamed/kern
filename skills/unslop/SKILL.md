@@ -1,12 +1,12 @@
 ---
 name: unslop
-description: "Rules for prose others read: artifact shapes, document rules and the catalogue of AI-writing tells."
+description: "Rules for prose others read: artifact shapes, document rules and the catalog of AI-writing tells."
 disable-model-invocation: true
 ---
 
 # Unslop
 
-The output contract. It applies to everything composed for a reader (chat replies follow the active kern voice first): chat replies, subagent returns, review records, plans, specs, PR bodies, issue text, commit messages, docs. Code and config files match their surroundings instead.
+The output contract. Chat replies follow the active kern voice first. Everything else composed for a reader follows this file: subagent returns, review records, plans, specs, PR bodies, issue text, commit messages, docs. Code and config files match their surroundings instead.
 
 ## Shape
 
