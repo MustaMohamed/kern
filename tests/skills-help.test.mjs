@@ -34,3 +34,30 @@ test('the template parses as kern settings and every key in it is documented', (
     assert.ok(table.includes(`| \`${family}\` |`), `${k} is in kernel/settings.md`);
   }
 });
+
+test('check compares keys with kernel/settings.md and names the floor keys the hooks ignore', () => {
+  const check = body.split('## Check')[1];
+  assert.match(check, /kernel\/settings\.md/);
+  assert.match(check, /Do not rely on the kernel's Project settings block/);
+  const table = readFileSync(join(dir, '..', '..', 'kernel', 'settings.md'), 'utf8');
+  const actions = table.match(/Floor actions have no key and never loosen: ([^.]+)\./)[1];
+  assert.ok(check.includes(actions), 'Check names the floor actions as kernel/settings.md lists them');
+  const render = readFileSync(join(dir, '..', '..', 'hooks', 'lib', 'render.sh'), 'utf8');
+  const floor = render.match(/^KERN_FLOOR_KEYS="([^"]+)"/m)[1].split(' ').sort();
+  const named = [...check.matchAll(/`([a-z_]+\.policy)`/g)].map((m) => m[1]).sort();
+  assert.deepEqual(named, floor);
+});
+
+test('setup defers the work dir to kern-dir; allowed-tools covers its git and script calls', () => {
+  const setup = body.split('## Setup')[1].split('\n## ')[0];
+  assert.match(setup, /bash \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/kern-dir [a-z]/);
+  assert.doesNotMatch(body, /\/\.kern\//);
+  for (const t of ['Bash(git rev-parse *)', 'Bash(git check-ignore *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir *)']) {
+    assert.ok(data['allowed-tools'].split(', ').includes(t), t);
+  }
+});
+
+test('the template sets no key: every line is a comment or blank', () => {
+  const tpl = readFileSync(join(dir, 'templates', 'kern.local.yml'), 'utf8');
+  assert.doesNotMatch(tpl, /^[^#\n]/m);
+});

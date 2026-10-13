@@ -166,8 +166,10 @@ export const RULES = [
   } },
   { id: 6, check(model) {
     const out = [];
-    const rows = [...model.kernelText.matchAll(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/gm)];
-    for (const m of rows) {
+    for (const line of model.kernelText.split('\n')) {
+      if (!line.trimStart().startsWith('|') || !/\{(KERN|ROOT)\}\//.test(line)) continue;
+      const m = line.match(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/);
+      if (!m) { out.push(err(6, 'kernel/kernel.md', `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}`)); continue; }
       const target = m[1] === 'KERN' ? join('skills', m[2]) : m[2];
       const file = join(model.root, target);
       if (!existsSync(file)) { out.push(err(6, 'kernel/kernel.md', `route ${target} does not exist`)); continue; }

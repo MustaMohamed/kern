@@ -3,7 +3,7 @@
 # Every key is documented in kern's kernel/settings.md. Delete lines you do not need.
 
 # Repo
-base_branch: main
+# base_branch: main
 # branch.pattern: {id}/{slug}
 # branch.protected: main, production
 # worktree.dir: .claude/worktrees

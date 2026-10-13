@@ -166,3 +166,19 @@ test('rule 6: every user-reachable skill is in the help map', () => {
   files['skills/help/references/map.md'] = map + '| `mode` | slash | /kern:mode | voice |\n';
   assert.deepEqual(rules(lint(files)), []);
 });
+
+test('rule 6: a route row in another form, or ## Steps without a numbered list, is an error', () => {
+  const tw = { 'skills/tw/SKILL.md': skill('tw', 'description: d\ndisable-model-invocation: true') };
+  const ticks = lint({ ...tw, 'kernel/kernel.md': kernel(['| Prose | Read `{KERN}/tw/SKILL.md` |']) });
+  assert.deepEqual(rules(ticks), [6]);
+  assert.match(ticks[0].message, /bare/);
+  const trailing = lint({ 'kernel/kernel.md': kernel(['| Prose | Read {KERN}/nope/SKILL.md, then x |']) });
+  assert.deepEqual(rules(trailing), [6]);
+  assert.match(trailing[0].message, /bare/);
+  const bullets = lint({
+    'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']),
+    'skills/tw/SKILL.md': skill('tw', 'description: d\ndisable-model-invocation: true', '\n# tw\n\n## Steps\n\n- a\n'),
+  });
+  assert.deepEqual(rules(bullets), [6]);
+  assert.match(bullets[0].message, /numbered list/);
+});

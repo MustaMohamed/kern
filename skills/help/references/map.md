@@ -1,6 +1,6 @@
 # kern map
 
-Installed skills only. Tier: `auto` skills load by description; `path` skills load through a kernel route or a slash command; `slash` skills load only when typed.
+Installed skills only. Tier: `auto` skills load by description; `path` skills load through a kernel Routing row or when typed; `slash` skills never load by description: they load when typed, or when a kernel rule or another skill names their file.
 
 | Skill | Tier | Reached by | Job |
 |---|---|---|---|

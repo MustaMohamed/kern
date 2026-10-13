@@ -3,7 +3,7 @@ name: help
 description: "Map of kern: which skill fits, fixes for a run that went wrong, and help setup to write this project's settings."
 disable-model-invocation: true
 argument-hint: "[setup|check|<question>]"
-allowed-tools: Read, Bash(git remote *), Bash(git symbolic-ref *), Bash(git log *), Bash(git for-each-ref *), Bash(git worktree list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
+allowed-tools: Read, Bash(git remote *), Bash(git symbolic-ref *), Bash(git log *), Bash(git for-each-ref *), Bash(git worktree list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(git rev-parse *), Bash(git check-ignore *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir *)
 ---
 
 # Help
@@ -23,11 +23,16 @@ The human-facing map of kern and the project setup. A message that asks for work
 3. Ask one key group at a time, recommended answer first, skipping groups detection settled: tracker; conventions; check commands; review; risk (`autopilot`, `protected_targets`, `deploy.envs`, `never_commit`, `scope_threshold`, `shared_services`); `worktree.setup`.
 4. Map project skills to kern jobs and show the map, for example `overrides.commit: commit`. Say that kern's guards still apply to project skills.
 5. Show the full commented draft of `.claude/kern.local.yml`, built from `templates/kern.local.yml`. Let the user edit it. Write it only after an explicit yes, as one file at the main worktree root; a re-run updates it in place.
-6. On the same yes, append to `$(git rev-parse --git-common-dir)/info/exclude` the lines `/.claude/kern.local.yml`, `/.kern/`, and `worktree.dir` when it is inside the repo and `git check-ignore -q` fails for it. Never edit `.gitignore` or any tracked file.
+6. On the same yes, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir notes`: it reads `work_dir`, creates that directory and adds its exclude line. Then append to `$(git rev-parse --git-common-dir)/info/exclude` the line `/.claude/kern.local.yml`, and `worktree.dir` when it is inside the repo and `git check-ignore -q` fails for it. Never edit `.gitignore` or any tracked file.
 7. Offer `.claude/kern.yml` (shared, committed) only if the user wants team settings; committing it follows the normal commit rules. Offer user defaults (`mode.voice`, `mode.surface`, `kern_repo`) for `~/.claude/kern.yml` as a separate yes.
 8. Print the status-line snippet from `references/fix-a-run.md`. Never write `settings.json`.
 
 Under autopilot, setup refuses: nobody can confirm the draft. Setup makes no tracker writes.
 
 ## Check
-Validate without writing anything: unknown keys and floor-action keys (the kernel's Project settings block lists both); `overrides.<job>` values that name a missing project skill; settings files that exist in a linked worktree but not at the main worktree root (`git worktree list`); missing exclude lines for `.claude/kern.local.yml` and `.kern/`. The key table is `${CLAUDE_PLUGIN_ROOT}/kernel/settings.md`.
+Validate without writing anything. Read each settings file that exists: `.claude/kern.local.yml` and `.claude/kern.yml` at the main worktree root, and `~/.claude/kern.yml`. Compare its keys with the key column of `${CLAUDE_PLUGIN_ROOT}/kernel/settings.md`, where a key with `<...>` stands for a family. Do not rely on the kernel's Project settings block: it is capped and may be cut. Report:
+- floor-action keys, which are ignored. `kernel/settings.md` names the floor actions (merge, production deploy, data deletion, force-push to a shared branch, messaging people); the hooks ignore these keys for them: `merge.policy`, `deploy.policy`, `production.policy`, `force_push.policy`, `delete.policy`, `message.policy`, `messaging.policy`;
+- any other key that is not in the table, as unknown;
+- `overrides.<job>` values that name a missing project skill;
+- settings files that exist in a linked worktree but not at the main worktree root (`git worktree list`);
+- missing exclude lines for `.claude/kern.local.yml` and the `work_dir` directory (default `.kern`).
