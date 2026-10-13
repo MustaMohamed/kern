@@ -293,7 +293,7 @@ gh_log() {
 @test "G3: review.post_policy auto allows only the proven shape" {
   policy 'review.post_policy: auto'
   printf 'nit: rename\n' >"$R/l.md"
-  printf 'Thanks\n' >"$R/c.md"
+  printf 'nit: thanks\n' >"$R/c.md"
   expect allow 'gh pr comment 12 --body-file c.md'
   expect allow 'gh pr comment 12 --body-file c.md | tail -n 1'
   expect allow 'gh pr review 12 --comment --body-file l.md'
@@ -405,7 +405,7 @@ gh_log() {
   expect deny '/path/to/gh pr ready 12'
   set_autopilot off
   policy 'review.post_policy: auto'
-  printf 'Thanks\n' >"$R/c.md"
+  printf 'nit: thanks\n' >"$R/c.md"
   export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
   expect deny 'GH pr review 12 --approve'
   expect deny '/usr/bin/gh pr comment 12 --body hi'
@@ -571,4 +571,24 @@ gh_log() {
   for c in $want; do
     case "$_GH_CMDS" in *" $c "*) ;; *) echo "in gh help, not listed: $c"; return 1 ;; esac
   done
+}
+
+@test "G3: a pr comment body without a taxonomy label is denied, as a review body is" {
+  printf 'looks fine to me\n' >"$R/c.md"
+  printf 'nit: rename\n' >"$R/l.md"
+  printf 'Nitpicking aside, this is wrong\n' >"$R/np.md"
+  mkdir -p "$HOME/x"
+  printf 'nit: from home\n' >"$HOME/x/h.md"
+  g "gh pr comment 5 --body-file c.md" g03
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"comment body must open with a review.taxonomy label"* ]] || false
+  g "gh pr comment 5 --body-file l.md" g03
+  [ "$(decision_of "$output")" = ask ]
+  policy 'review.post_policy: auto'
+  expect deny 'gh pr comment 5 --body-file c.md'
+  expect deny 'gh pr comment 5 -Fnp.md'
+  expect deny 'gh pr comment 5 --body-file l.md --body-file c.md'
+  expect allow 'gh pr comment 5 --body-file l.md'
+  # The shell reads ~ as HOME, and so does the label check; the post is still unproven.
+  expect ask 'gh pr comment 5 --body-file ~/x/h.md'
 }

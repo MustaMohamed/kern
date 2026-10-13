@@ -72,9 +72,14 @@ _g03_ask() {
   [ "$AUTOPILOT" = 1 ] && vote deny G3 "$1 (under autopilot)"
 }
 
-# _g03_path FILE: FILE as an absolute path, relative ones read from CWD.
+# _g03_path FILE: FILE as an absolute path, relative ones read from CWD, and ~/ read as HOME, as the
+# shell expands it.
 _g03_path() {
-  case "$1" in /*) printf '%s\n' "$1" ;; *) printf '%s\n' "$CWD/$1" ;; esac
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    '~'/*) printf '%s\n' "$HOME/${1#'~/'}" ;;
+    *) printf '%s\n' "$CWD/$1" ;;
+  esac
 }
 
 # _g03_labelled FILE: the first non-empty line starts with a review.taxonomy label as a whole word:
@@ -160,6 +165,10 @@ _g03_comment() {
   fi
   sel=$(_gh_pos "$toks" | sed -n 1p)
   file=$(_gh_last "$toks" body-file) || file=""
+  if [ -n "$file" ] && ! _g03_labelled "$(_g03_path "$file")"; then
+    vote deny G3 "comment body must open with a review.taxonomy label ($(settings_get review.taxonomy "$_G03_TAX_DEFAULT"))"
+    return 0
+  fi
   if _gh_proven "$1" "$toks" && _gh_only "$toks" "$_GH_COMMENT_SAFE" &&
     [ "$(_gh_pos "$toks" | wc -l)" -le 1 ] && _g03_sel_ok "$sel" &&
     { [ -z "$file" ] || _gh_file_ok "$file"; }; then
