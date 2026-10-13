@@ -362,8 +362,30 @@ expect_cmd() {
   set_autopilot off
   expect_bash none "cat .claude/settings.json" "jq . ~/.claude/settings.json" "grep allow .claude/settings.local.json" \
     "ls -la .claude" "ls ~/.claude" "git diff .claude/settings.json" "git log -p .claude/kern.yml" \
-    "git show HEAD:.claude/settings.json" "vim .claude/settings.json" "git add .claude/settings.json" \
+    "git show HEAD:.claude/settings.json" "vim .claude/settings.json" \
     "find .claude -name settings.json" "mkdir -p .claude/agents" "rm -rf .claude/worktrees/x" "cd .claude && ls"
   expect_cmd none 'gh pr create --draft --title "Guard .claude/settings.json" --body-file b.md' \
     'git commit -m "G16: read .claude, .claude/kern.yml and settings.json"'
+}
+
+@test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
+  mkdir -p "$R/.claude"
+  # The re-review's probes: a tracked file moved onto kern.local.yml, a removal, and diff --output.
+  expect_bash ask "git mv off.yml .claude/kern.local.yml" "git rm .claude/settings.json" \
+    "git rm -q --cached .claude/settings.json" "git diff --output=.claude/kern.local.yml" \
+    "git diff --output .claude/settings.json HEAD" "git diff --ou=.claude/kern.yml" "git log -p --output=.claude/kern.yml" \
+    "git format-patch -o .claude HEAD~1" "git archive -o .claude/settings.json HEAD" "git clean -fdx .claude" \
+    "git add .claude/settings.json" "git config -f .claude/kern.yml kern off" "git reflog expire --all .claude" \
+    "git branch -f .claude" "git -C .claude mv a b"
+  set_autopilot on
+  expect_bash deny "git mv off.yml .claude/kern.local.yml" "git rm .claude/settings.json" \
+    "git diff --output=.claude/kern.local.yml"
+  set_autopilot off
+  expect_bash none "git status .claude" "git log -p .claude/kern.yml" "git show HEAD:.claude/settings.json" \
+    "git blame .claude/settings.json" "git grep allow -- .claude" "git ls-files .claude" "git ls-tree HEAD .claude/" \
+    "git cat-file -p HEAD:.claude/settings.json" "git rev-parse HEAD:.claude/settings.json" \
+    "git shortlog -- .claude" "git reflog show .claude" "git for-each-ref refs/heads/.claude" \
+    "git branch --list .claude" "git config --get -f .claude/kern.yml kern" "git diff .claude/settings.json" \
+    "git diff --stat -- .claude" "git diff --output-indicator-new=+ .claude" "git -C .claude status" \
+    "git check-ignore -q .claude/kern.local.yml"
 }

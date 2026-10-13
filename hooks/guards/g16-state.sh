@@ -225,6 +225,38 @@ _g16_name() {
   case "$p" in $e) _G16_K=state ;; esac
 }
 
+# _g16_gitread RECORD WORDS: exit 0 when the lower-cased git RECORD, whose words are WORDS, only
+# reads: status, log, show, blame, grep, ls-files, ls-tree, cat-file, rev-parse, describe, shortlog,
+# for-each-ref, check-ignore, diff, reflog show, branch --list or -l, and config --get (or --get-*),
+# with no -o and no --output or --output-directory (in any unique prefix) anywhere. Any other git,
+# mv and rm among them, may write what it names.
+_g16_gitread() {
+  local s rest w n od=output-directory
+  s=$(git_sub "$1") || return 1
+  s=${s#*"$_G16_TAB"}
+  rest=${s#*"$_G16_TAB"}
+  s=${s%%"$_G16_TAB"*}
+  while IFS= read -r w; do
+    case "$w" in
+      -o*) return 1 ;;
+      --ou*)
+        n=${w%%=*}
+        case "$od" in "${n#--}"*) return 1 ;; esac
+        ;;
+    esac
+  done <<EOT
+$2
+EOT
+  case "$s" in
+    status | log | show | blame | grep | ls-files | ls-tree | cat-file | rev-parse | describe | shortlog | \
+      for-each-ref | check-ignore | diff) return 0 ;;
+    reflog) case "$rest" in show | "show "*) return 0 ;; esac ;;
+    branch) case " $rest " in *" --list "* | *" -l "*) return 0 ;; esac ;;
+    config) case " $rest " in *" --get "* | *" --get-"*) return 0 ;; esac ;;
+  esac
+  return 1
+}
+
 # _g16_redirects STR: the target word of each `>` or `>>` outside quotes, one per line.
 _g16_redirects() {
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
@@ -260,15 +292,15 @@ _g16_redirects() {
 # no action that writes or runs, and sed or perl without -i). Settings follow the same model and ask:
 # a head that is not a reader, and names a kern settings file, Claude Code's own settings or a
 # .claude directory (as an operand or an option's value, or through a symlink as the last operand).
-# For this check vim and vi read, and a git that writes the work tree (checkout restore reset stash
-# apply am merge pull cherry-pick revert) does not. A redirect into state or a settings file counts
+# For this check vim and vi read, and git reads only through the subcommands _g16_gitread lists. A
+# redirect into state or a settings file counts
 # whatever the head. Every simple command is checked, including the bodies of bash -c, eval, $( ) and
 # backticks; here-doc bodies are data unless a shell reads them. After a cd into the sessions dir,
 # every later non-reading command and redirect counts as a write to it, until a cd elsewhere; after a
 # cd into a .claude directory, `.` and a bare settings.json or settings.local.json are in it. A
 # variable that holds a path is not read (accepted limit).
 _g16_bash() {
-  local cmd t seg words w head inplace seg_s seg_k last dd skip anydir reads creads sub
+  local cmd t seg words w head inplace seg_s seg_k last dd skip anydir reads creads
   local state=0 settings=0 cc=0 into=0 in_sd=0
   cmd=$(ti_get command) || return 0
   # Only a command whose text could name state, a settings file or a .claude directory, in any case,
@@ -361,11 +393,7 @@ WORDS
       vim | vi) creads=1 ;;
       git)
         if [ -n "$seg_k" ] || [ "$anydir" = 1 ]; then
-          sub=$(git_sub "$seg")
-          sub=${sub#*"$_G16_TAB"}
-          case "${sub%%"$_G16_TAB"*}" in
-            checkout | restore | reset | stash | apply | am | merge | pull | cherry-pick | revert) creads=0 ;;
-          esac
+          _g16_gitread "$seg" "$words" || creads=0
         fi
         ;;
     esac
