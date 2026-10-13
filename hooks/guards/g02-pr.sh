@@ -21,22 +21,87 @@ _GH_READY_OPTS="undo/-/b repo/R/v help/h/b"
 _G02_GROUPS=" auth codespace cs discussion gist issue org pr project release repo skill skills cache run \
 workflow agent-task agent-tasks agent agents alias api attestation at completion config copilot extension \
 extensions ext gpg-key label licenses preview ruleset rs secret ssh-key variable "
+# gh 2.100.0's own commands: what `gh help` lists under CORE, GITHUB ACTIONS and ADDITIONAL COMMANDS
+# and HELP TOPICS, the group aliases each `gh <command> --help` lists under ALIASES, and the hidden
+# help, version and credits. gh refuses an alias or an extension named like one of its commands, so a
+# first word outside this list is an alias (`gh alias set`) or an extension (`gh extension install`).
+_GH_CMDS=" auth browse codespace cs discussion gist issue org pr project release repo skill skills cache \
+run workflow agent-task agent-tasks agent agents alias api attestation at completion config copilot \
+extension extensions ext gpg-key label licenses preview ruleset rs search secret ssh-key status variable \
+accessibility a11y actions environment exit-codes formatting mintty reference telemetry help version credits "
 
 guard_g02() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd i=0
+  local cmd sub i=0
   cmd=$(ti_get command) || return 0
   # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
   case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
   _gh_load "$cmd"
   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
-    case "$(gh_sub "${_GH_RECS[$i]}")" in
+    sub=$(gh_sub "${_GH_RECS[$i]}") || sub=""
+    if [ -n "$sub" ]; then
+      _gh_canon "$sub"
+      sub=$_GH_SUB
+      _g02_own "$sub"
+    fi
+    case "$sub" in
       "pr create") _g02_create "$i" ;;
       "pr ready") _g02_ready "$i" ;;
       "") _g02_hidden "${_GH_RECS[$i]}" ;;
     esac
     i=$((i + 1))
   done
+}
+
+# _gh_canon SUB: sets _GH_SUB to SUB (gh_sub's `<group> <verb>`) with gh 2.100.0's aliases replaced
+# by the commands they name, as the ALIASES section of `gh <group> [<verb>] --help` lists them: pr new
+# is pr create, ext is extension, every ls is list.
+_gh_canon() {
+  local g="${1%% *}" v=""
+  case "$1" in *" "*) v=${1#* } ;; esac
+  case "$g" in
+    cs) g=codespace ;;
+    skills) g=skill ;;
+    agent-tasks | agent | agents) g=agent-task ;;
+    at) g=attestation ;;
+    extensions | ext) g=extension ;;
+    rs) g=ruleset ;;
+  esac
+  case "$g $v" in
+    "gist new" | "issue new" | "pr new" | "release new" | "repo new") v=create ;;
+    "pr co") v=checkout ;;
+    "skill add") v=install ;;
+    "skill show") v=preview ;;
+    "extension uninstall") v=remove ;;
+    "secret remove" | "variable remove") v=delete ;;
+    *" ls") v=list ;;
+  esac
+  _GH_SUB="$g${v:+ $v}"
+}
+
+# _g02_own SUB: SUB (from _gh_canon) runs one of gh's own commands. A first word outside _GH_CMDS is an
+# alias or an extension, which kern cannot read: ask, deny under autopilot. gh alias set, import and
+# delete change what such a word runs, and gh extension exec runs an extension: they ask too. gh's own
+# --help, -h and --version pass; any other option first is read as unknown.
+_g02_own() {
+  local g="${1%% *}" why
+  case "$g" in --help | -h | --version) return 0 ;; esac
+  case "$_GH_CMDS" in
+    *" $g "*) ;;
+    *)
+      vote ask G2 "gh $g is not one of gh's own commands (an alias or an extension); run the gh command it stands for so kern can check it"
+      [ "$AUTOPILOT" = 1 ] && vote deny G2 "gh $g under autopilot: not one of gh's own commands"
+      return 0
+      ;;
+  esac
+  case "$1" in
+    "alias set" | "alias import" | "alias delete") why="gh $1 changes what a gh word runs" ;;
+    "extension exec") why="gh extension exec runs an extension kern cannot read" ;;
+    *) return 0 ;;
+  esac
+  vote ask G2 "$why; the user confirms it"
+  [ "$AUTOPILOT" = 1 ] && vote deny G2 "$why (under autopilot)"
+  return 0
 }
 
 # _g02_hidden RECORD: a simple command whose head is neither git nor gh may still run gh (an unknown

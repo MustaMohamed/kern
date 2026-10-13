@@ -498,3 +498,77 @@ gh_log() {
     [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
   done
 }
+
+@test "G2: gh pr new is gh pr create" {
+  g "gh pr new --title x --body-file b.md" g02
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"open PRs as drafts"* ]] || false
+  set_autopilot on
+  g "gh pr new --title x --body-file b.md" g02
+  [ "$(decision_of "$output")" = deny ]
+  g "gh pr new --draft --title x --body-file b.md" g02
+  [ "$(decision_of "$output")" = allow ]
+  export FAKE_GH_STATES=OPEN
+  g "gh pr new --draft --title x --body-file b.md" g02
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"a PR is already open"* ]] || false
+}
+
+@test "G4: the text of issue new, release new and pr new is read as their create verbs' text" {
+  for ap in off on; do
+    set_autopilot "$ap"
+    expect deny "gh issue new -t x -b hello"
+    expect deny "gh issue new -wbhello"
+    expect deny "gh release new v1 -n x"
+    expect deny "gh release new v1 --notes 'inline text'"
+    expect deny "gh release new v1 -dnx"
+    expect deny "gh pr new --draft -t x -b hello"
+  done
+}
+
+@test "G2: a gh alias or extension asks, and is denied under autopilot; gh alias set, import and delete ask" {
+  local c cmds=(
+    "gh pm 12" "gh co 12" "gh stack push" "gh -R o/r pm 12" "GH pm" "/usr/bin/gh pm" "gh pm"
+    "gh alias set pm 'pr merge --admin'" "gh alias set --shell pm 'git push --force origin main'"
+    "gh alias import aliases.yml" "gh alias delete pm" "gh ext exec stack push" "gh extensions exec stack"
+  )
+  for c in "${cmds[@]}"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+  g "gh pm 12" g02
+  [[ "$output" == *"gh pm is not one of gh's own commands (an alias or an extension)"* ]] || false
+  set_autopilot on
+  for c in "${cmds[@]}"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
+  # gh's own commands, their aliases, its help topics, help and version.
+  for c in "gh" "gh pr list" "gh pr ls" "gh alias list" "gh alias ls" "gh ext list" "gh cs list" \
+    "gh agents list" "gh rs view 1" "gh --version" "gh version" "gh --help" "gh -h" "gh help" "gh help pr" \
+    "gh environment" "gh credits" "gh status" "gh search prs x" "gh api user" "gh -R o/r issue list"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "G2: the list of gh's own commands is gh 2.100.0's, where that gh is installed" {
+  local real c a want=" " got
+  real=$(PATH=${PATH#"$BATS_TEST_TMPDIR/bin:"} command -v gh) || skip "gh is not installed"
+  "$real" --version | grep -q '^gh version 2\.100\.0 ' || skip "gh is not 2.100.0"
+  for c in $("$real" help | awk '/^(CORE|GITHUB ACTIONS|ADDITIONAL) COMMANDS|^HELP TOPICS/ { f = 1; next }
+    /^[A-Z]/ { f = 0 } f && NF { sub(/:$/, "", $1); print $1 }'); do
+    want="$want$c "
+    for a in $("$real" "$c" --help 2>/dev/null | awk '/^ALIASES/ { f = 1; next } /^[A-Z]/ { f = 0 }
+      f { gsub(/,/, " "); for (i = 1; i < NF; i++) if ($i == "gh" && ($(i + 2) == "" || $(i + 2) == "gh")) print $(i + 1) }'); do
+      want="$want$a "
+    done
+  done
+  . "$(kern_root)/hooks/guards/g02-pr.sh"
+  got=" "
+  for c in $_GH_CMDS; do case "$want" in *" $c "*) ;; *) got="$got$c " ;; esac; done
+  [ "$got" = " help version credits " ] || { echo "listed, not in gh help:$got"; return 1; }
+  for c in $want; do
+    case "$_GH_CMDS" in *" $c "*) ;; *) echo "in gh help, not listed: $c"; return 1 ;; esac
+  done
+}

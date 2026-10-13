@@ -10,6 +10,8 @@ guard_g04() {
   case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
   while IFS= read -r seg; do
     sub=$(gh_sub "$seg") || continue
+    # gh's aliases (pr new, issue new, release new) read as the commands they name (g02-pr.sh).
+    _gh_canon "$sub" && sub=$_GH_SUB
     case "$sub" in
       "pr "* | "issue "* | "release "*) _g04_text "$seg" "$sub" ;;
       api*)
