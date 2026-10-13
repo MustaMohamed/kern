@@ -58,7 +58,8 @@ if [ -n "$SID" ]; then
   esac
 fi
 # Other sessions' state files, and temp files a failed write left, go after 30 days untouched. A
-# symlinked state dir is left alone. A session id with glob characters only keeps more files.
+# symlinked state dir is left alone. An id with glob characters, such as "[", can make "! -name"
+# exclude nothing, but state_file rejects such ids, so none of them owns a file here.
 STATE_DIR=$(state_dir)
 if [ -d "$STATE_DIR" ] && [ ! -L "$STATE_DIR" ]; then
   find "$STATE_DIR" -maxdepth 1 -type f \( -name '*.state' -o -name '.state.*' \) -mtime +30 \
