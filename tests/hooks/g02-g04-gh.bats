@@ -412,6 +412,24 @@ gh_log() {
   expect ask '/usr/bin/gh pr comment 12 --body-file c.md'
 }
 
+@test "G2, G3 and G4 parse only a command that holds gh, quoted forms too, and the gh guards parse it once" {
+  local real
+  real=$(command -v awk)
+  # An awk shim logs each split of a command into simple commands (_split_words).
+  printf '#!/bin/bash\ncase "$*" in *"function emit("*) echo split >>"%s/split.log" ;; esac\nexec %s "$@"\n' \
+    "$BATS_TEST_TMPDIR" "$real" >"$BATS_TEST_TMPDIR/bin/awk"
+  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  g "ls -la; git status" g02,g03,g04,g14
+  [ "$(decision_of "$output")" = none ]
+  [ ! -e "$BATS_TEST_TMPDIR/split.log" ]
+  g "gh pr list" g02,g03,g14
+  [ "$(grep -c . "$BATS_TEST_TMPDIR/split.log")" -eq 1 ]
+  policy 'review.post_policy: auto'
+  export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
+  expect deny "g''h pr review 12 --approve"
+  expect deny 'G\H pr comment 12 --body hi'
+}
+
 @test "G4: a short cluster reaching the text flag through booleans is inline text; close and reopen comments too" {
   set_autopilot on
   expect deny 'gh issue create -wbhi'

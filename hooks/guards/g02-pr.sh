@@ -26,6 +26,8 @@ guard_g02() {
   [ "$TOOL" = Bash ] || return 0
   local cmd i=0
   cmd=$(ti_get command) || return 0
+  # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
+  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
   _gh_load "$cmd"
   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
     case "$(gh_sub "${_GH_RECS[$i]}")" in
@@ -70,14 +72,17 @@ EOT
   done
 }
 
-# _gh_load CMD: the simple commands of CMD in _GH_RECS, and CMD in _GH_CMD.
+# _gh_load CMD: the simple commands of CMD in _GH_RECS, and CMD in _GH_CMD. G2, G3 and G14 load
+# the same command, so a second load of it keeps the records the first one read.
 _gh_load() {
   local rec
+  [ "${_GH_LOADED-}" = 1 ] && [ "$_GH_CMD" = "$1" ] && return 0
   _GH_CMD=$1
   _GH_RECS=()
   while IFS= read -r rec; do [ -n "$rec" ] && _GH_RECS+=("$rec"); done <<EOT
 $(git_words "$1")
 EOT
+  _GH_LOADED=1
 }
 
 # _gh_args RECORD N: the words of a gh record after `gh` and its N command words (2 for `pr create`,

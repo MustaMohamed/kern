@@ -23,6 +23,8 @@ guard_g03() {
   esac
   local cmd i=0
   cmd=$(ti_get command) || return 0
+  # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
+  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
   _gh_load "$cmd"
   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
     case "$(gh_sub "${_GH_RECS[$i]}")" in
