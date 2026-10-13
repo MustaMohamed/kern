@@ -95,8 +95,11 @@ git_words() {
     # The wrapper pass costs two processes, so it runs only when the first word, quotes removed,
     # is a redirection, an assignment, a keyword, a wrapper, eval or a shell. A wrapper or shell name
     # matches in any case, as _cmd_words reads it.
+    # One tr pass strips the quotes, and only when the word holds one: ${first//[...]/} is cubic in
+    # the word's length on bash 3.2 in a UTF-8 locale.
     first=${seg%%[[:space:]]*}
-    case "/${first//[\"\'\\]/}" in
+    case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+    case "/$first" in
       *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
         */[Ee][Vv][Aa][Ll] | */[Cc][Oo][Mm][Mm][Aa][Nn][Dd] | */[Ee][Xx][Ee][Cc] | */[Tt][Ii][Mm][Ee] | \
         */[Nn][Oo][Hh][Uu][Pp] | */[Ss][Uu][Dd][Oo] | */[Ee][Nn][Vv] | */[Tt][Ii][Mm][Ee][Oo][Uu][Tt] | \

@@ -45,6 +45,7 @@ next \ end' ]
 @test "json_escape output parses as a JSON string for every byte below 0x20" {
   s='a "q" \ b'
   for i in $(seq 1 31); do
+    # shellcheck disable=SC2059 # the format is the octal escape
     printf -v c "\\$(printf '%03o' "$i")"
     s="$s$c."
   done

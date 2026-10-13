@@ -73,6 +73,7 @@ feed() {
   b=""
   for i in $(seq 2 30); do
     case "$i" in 9 | 10) continue ;; esac
+    # shellcheck disable=SC2059 # the format is the octal escape
     printf -v c "\\$(printf '%03o' "$i")"
     b="$b$c"
   done
@@ -87,6 +88,19 @@ feed() {
     "$CWD" >"$BATS_TEST_TMPDIR/in"
   run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
   [ "$(parsed_decision "$output")" = deny ]
+}
+
+@test "a 10 KB UTF-8 assignment before a command runs every guard in under 2 s" {
+  local blob t0 t1
+  # shellcheck disable=SC2046 # one argument per character
+  blob=$(printf 'é%.0s' $(seq 5120))
+  export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+  t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  run_guard "$(bash_payload "X='$blob' ls")" ""
+  t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  [ "$status" -eq 0 ]
+  [ "$(decision_of "$output")" = none ]
+  [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
 }
 
 @test "a guard file that does not load fails closed" {
