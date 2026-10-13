@@ -43,8 +43,10 @@ EOT
         commit) _g05_commit "$i" ;;
       esac
     else
-      # After a cd, later git commands run where G5 cannot tell.
+      # After a cd, or an exported GIT_DIR or GIT_WORK_TREE, later git commands run where G5 cannot
+      # tell.
       case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) moved=1 ;; esac
+      _g05_env_has later GIT_DIR GIT_WORK_TREE && moved=1
     fi
     i=$((i + 1))
   done
@@ -57,9 +59,10 @@ _g05_ready() {
 
 # _g05_split RECORD: reads a git record (any case, any path) into _G05_DIR (where git runs: CWD, then
 # each -C), _G05_SUB, _G05_ARGS (the words after the subcommand), _G05_PLAIN (1 when only -C pairs
-# come before the subcommand), _G05_CROSS (1 when a -C leaves this session's repository) and
-# _G05_MOVED (1 with --git-dir, --work-tree, GIT_DIR= or GIT_WORK_TREE=). _G05_HEAD is the first
-# word. Exit 1 when the record is not git with a subcommand.
+# come before the subcommand), _G05_CROSS (1 when a -C leaves this session's repository),
+# _G05_CONFIG (1 with -c or --config-env) and _G05_MOVED (1 with --git-dir or --work-tree, or a
+# GIT_DIR or GIT_WORK_TREE assignment). _G05_HEAD is the first word and _G05_ENV what _g05_env
+# prints, read for every record. Exit 1 when the record is not git with a subcommand.
 _g05_split() {
   local w=() t i=1 n d
   while IFS= read -r t; do w+=("$t"); done <<EOT
@@ -71,8 +74,11 @@ EOT
   _G05_ARGS=()
   _G05_PLAIN=1
   _G05_CROSS=0
+  _G05_CONFIG=0
   _G05_MOVED=0
-  case "$1" in *GIT_DIR=* | *GIT_WORK_TREE=*) _G05_MOVED=1 ;; esac
+  _G05_ENV=""
+  case "$1" in *=* | *env* | *sudo* | *declare* | *typeset*) _G05_ENV=$(_g05_env "$1") ;; esac
+  _g05_env_has now GIT_DIR GIT_WORK_TREE && _G05_MOVED=1
   case "$_G05_HEAD" in [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) return 1 ;; esac
   n=${#w[@]}
   while [ "$i" -lt "$n" ]; do
@@ -85,7 +91,9 @@ EOT
         ;;
       --git-dir | --work-tree) _G05_MOVED=1; _G05_PLAIN=0; i=$((i + 2)) ;;
       --git-dir=* | --work-tree=*) _G05_MOVED=1; _G05_PLAIN=0; i=$((i + 1)) ;;
-      -c | --config-env | --namespace | --super-prefix | --attr-source) _G05_PLAIN=0; i=$((i + 2)) ;;
+      -c | --config-env) _G05_CONFIG=1; _G05_PLAIN=0; i=$((i + 2)) ;;
+      --config-env=*) _G05_CONFIG=1; _G05_PLAIN=0; i=$((i + 1)) ;;
+      --namespace | --super-prefix | --attr-source) _G05_PLAIN=0; i=$((i + 2)) ;;
       -*) _G05_PLAIN=0; i=$((i + 1)) ;;
       *) break ;;
     esac
@@ -97,6 +105,69 @@ EOT
     _G05_ARGS+=("${w[$i]}")
     i=$((i + 1))
   done
+}
+
+# _g05_env RECORD: what RECORD changes in the environment of the command it runs, one line each:
+# NAME for a VAR=value word before the command word (after the wrappers env, sudo, command, exec,
+# nice, nohup, time and timeout and their options, as _cmd_words skips them); +NAME when the
+# assignment outlives the record (an export or declare -x record, or one that is only assignments);
+# @cwd when env -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory. Never a substring
+# of an argument.
+_g05_env() {
+  _shell_words "$1" | LC_ALL=C awk '
+    BEGIN {
+      n = split("env sudo command exec nice nohup time timeout", a, " ")
+      for (k = 1; k <= n; k++) wrap[a[k]] = 1
+      val["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
+      val["env"] = " -C -P -S -u --chdir --split-string --unset --argv0 "
+      val["exec"] = " -a "; val["timeout"] = " -s -k --signal --kill-after "; val["nice"] = " -n "
+    }
+    function asg(s) { sub(/=.*/, "", s); names[++m] = s }
+    NR == 1 {
+      b = $0; sub(/.*\//, "", b)
+      if (b == "export") { ex = 1; next }
+      if (b == "declare" || b == "typeset") { dx = 1; next }
+    }
+    dx && /^-/ { if ($0 ~ /x/) ex = 1; next }
+    dx { dx = 0; if (!ex) done = 1 }
+    ex { if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) asg($0); next }
+    done { next }
+    skip { skip = 0; next }
+    /^[0-9]*(<|>|&>)/ { if ($0 ~ /^[0-9]*[<>&|]+$/) skip = 1; next }
+    /^(if|then|elif|else|do|while|until|!|\{)$/ { w = ""; next }
+    /^[A-Za-z_][A-Za-z0-9_]*=/ { asg($0); next }
+    { b = $0; sub(/.*\//, "", b) }
+    b in wrap { w = b; dur = (b == "timeout"); next }
+    /^-/ && w != "" {
+      if (w == "env" && ($0 ~ /^--c/ || $0 ~ /^-[^-]*C/)) print "@cwd"
+      if (w == "sudo" && ($0 ~ /^--c[hr]/ || $0 ~ /^-[^-]*[DR]/)) print "@cwd"
+      if (index(val[w], " " $0 " ")) skip = 1
+      next
+    }
+    dur { dur = 0; next }
+    { done = 1 }
+    END { for (k = 1; k <= m; k++) print ((ex || !done) ? "+" : "") names[k] }'
+}
+
+# _g05_env_has WHEN GLOB...: exit 0 when a line of _G05_ENV matches a GLOB. WHEN `now` reads every
+# line (NAME, +NAME, @cwd); `later` reads only the +NAME lines, which hold for the records after.
+_g05_env_has() {
+  local when="$1" l g
+  shift
+  while IFS= read -r l; do
+    case "$when:$l" in
+      later:+*) l=${l#+} ;;
+      later:*) continue ;;
+      now:+*) l=${l#+} ;;
+    esac
+    for g in "$@"; do
+      # shellcheck disable=SC2254
+      case "$l" in $g) return 0 ;; esac
+    done
+  done <<EOT
+$_G05_ENV
+EOT
+  return 1
 }
 
 _g05_broad() {

@@ -1,23 +1,27 @@
 # shellcheck shell=bash
 # G6 secrets: scan what a commit or push would publish, commit messages included; refuse never_commit
 # paths. G6 reads only what git stores (the index for a commit, commits for a push), never the
-# worktree, with color, external diff, textconv, fsmonitor, signatures, replace refs and
-# diff.relative off and every file read as text, so repo config can neither hide an added line nor
-# run a program here. Each walk runs under with_timeout and streams into the scan. Records are read
-# with G5's _g05_split and _g05_message and options with G1's _g01_opts: the dispatcher sources every
-# guard before it calls any.
+# worktree, with color, external diff, textconv, fsmonitor, signatures, replace refs, diff.relative
+# and log output encoding fixed and every file read as text, so repo config can neither hide an
+# added line nor run a program here. Each walk runs under with_timeout and streams into the scan,
+# NULs turned into \001 first. Records are read with G5's _g05_split, _g05_env_has and _g05_message
+# and options with G1's _g01_opts: the dispatcher sources every guard before it calls any.
 
-# Seconds a walk may run. Under bats, KERN_SCAN_SECS shortens it.
+# Seconds one walk may run, and seconds every walk and gitleaks of one call may run together, so a
+# push stays inside the 20 s hook timeout. Under bats, KERN_SCAN_SECS shortens both.
 _G06_SECS=8
-[ -n "${BATS_TEST_FILENAME-}" ] && _G06_SECS=${KERN_SCAN_SECS:-8}
+_G06_BUDGET=14
+if [ -n "${BATS_TEST_FILENAME-}" ] && [ -n "${KERN_SCAN_SECS-}" ]; then
+  _G06_SECS=$KERN_SCAN_SECS
+  _G06_BUDGET=$((KERN_SCAN_SECS * 3))
+fi
 
 # Diff options for every patch G6 reads. A staged diff also takes --diff-filter=d; a push walk does
-# not, because in git log it drops whole commits, messages included, and _g06_parse skips the names
-# of deleted files itself.
+# not, because in git log it drops whole commits, and _g06_parse skips the names of deleted files
+# itself.
 _G06_DIFF=(--text --no-relative --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/)
 
-# Line markers in a walk's output: \035 starts a never_commit name, \034 the walk's exit code. In a
-# push walk git prints \036 before each commit's hash and message and \037 after the message.
+# Line markers in a walk's output: \035 starts a never_commit name, \034 the walk's exit code.
 _G06_NAME=$'\035'
 _G06_RC=$'\034'
 
@@ -32,13 +36,16 @@ api-key|[^A-Za-z0-9_]sk-[A-Za-z0-9_-]{20,}
 stripe-key|[rs]k_live_[A-Za-z0-9]{20,}
 google-api-key|AIza[0-9A-Za-z_-]{35}'
 
+# guard_g06: MOVED is set after cd, pushd or popd, and after a record that exports, or only
+# assigns, GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE; CONF after one that does so for GIT_CONFIG*,
+# HOME or XDG_CONFIG_HOME. Both hold for the records that follow.
 guard_g06() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd rec moved=0
+  local cmd rec moved=0 conf=0
   cmd=$(ti_get command) || return 0
+  _G06_T0=$SECONDS
   while IFS= read -r rec; do
     [ -n "$rec" ] || continue
-    case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=* | *GIT_INDEX_FILE=*) moved=1 ;; esac
     if ! _g06_ready; then
       case "$(git_sub "$rec" | cut -f2)" in
         commit | push) vote ask G6 "the secret scan could not load its parsers" ;;
@@ -46,8 +53,9 @@ guard_g06() {
       continue
     fi
     if ! _g05_split "$rec"; then
-      # After a cd, later git commands run where G6 cannot tell.
       case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) moved=1 ;; esac
+      _g05_env_has later GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && moved=1
+      _g05_env_has later 'GIT_CONFIG*' HOME XDG_CONFIG_HOME && conf=1
       continue
     fi
     if ! declare -F _g01_foreign >/dev/null; then
@@ -56,8 +64,13 @@ guard_g06() {
       continue
     fi
     case "$_G05_SUB" in commit | push) ;; *) continue ;; esac
-    if [ "$moved" = 1 ] || [ "$_G05_MOVED" = 1 ]; then
-      _g06_unscanned "could not scan: git $_G05_SUB after cd, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see"
+    if [ "$moved" = 1 ] || [ "$_G05_MOVED" = 1 ] || _g05_env_has now GIT_INDEX_FILE @cwd; then
+      _g06_unscanned "could not scan: git $_G05_SUB after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see"
+      continue
+    fi
+    if [ "$_G05_SUB" = push ] &&
+      { [ "$conf" = 1 ] || [ "$_G05_CONFIG" = 1 ] || _g05_env_has now 'GIT_CONFIG*' HOME XDG_CONFIG_HOME; }; then
+      _g06_unscanned "could not scan: git push with -c, --config-env or config from the environment may push what kern does not read"
       continue
     fi
     case "$_G05_SUB" in
@@ -71,7 +84,7 @@ EOT
 
 # _g06_ready: G5's and G1's parsers and with_timeout are loaded.
 _g06_ready() {
-  declare -F _g05_split _g05_message _g01_opts with_timeout >/dev/null &&
+  declare -F _g05_split _g05_env_has _g05_message _g01_opts with_timeout >/dev/null &&
     [ -n "${_G05_COMMIT_OPTS-}" ] && [ -n "${_G01_PUSH_OPTS-}" ]
 }
 
@@ -82,31 +95,31 @@ _g06_unscanned() {
   return 0
 }
 
-# _g06_git DIR ARGS...: git in DIR with replace refs, color and fsmonitor off and paths unquoted.
+# _g06_git DIR ARGS...: git in DIR with replace refs, color and fsmonitor off, paths unquoted and log
+# output in UTF-8.
 _g06_git() {
   local d="$1"
   shift
   git -C "$d" --no-replace-objects -c color.ui=never -c core.fsmonitor=false -c core.quotePath=false \
-    -c log.showRoot=true "$@" 2>/dev/null
+    -c log.showRoot=true -c i18n.logOutputEncoding=UTF-8 "$@" 2>/dev/null
 }
 
-# _g06_parse: reads a patch, or a push walk with its \036 message records, and prints a scan line
-# `<label>\t <text>` for each added line (label `path:line`) and message line (label
-# `commit <hash> message:<n>`), and \035<path> for each file it adds or changes (not one it
-# deletes). A `+++ ` line is a header only between a `diff` line and the first `@@`, so no text is
-# taken for a path. A merge comes as a combined diff (--cc): a line counts when it is added against
-# every parent.
+# _g06_secs CAP: the seconds the next walk may run: CAP, or what is left of _G06_BUDGET for this call
+# when that is less; 0 when it is spent.
+_g06_secs() {
+  local left=$((_G06_BUDGET - (SECONDS - ${_G06_T0:-$SECONDS})))
+  [ "$left" -gt 0 ] || left=0
+  if [ "$left" -lt "$1" ]; then printf '%s\n' "$left"; else printf '%s\n' "$1"; fi
+}
+
+# _g06_parse: reads a patch and prints a scan line `<path>:<line>\t <text>` for each added line, and
+# \035<path> for each file it adds or changes (not one it deletes). A `+++ ` line is a header only
+# between a `diff` line and the first `@@`, so no text is taken for a path. A merge comes as a
+# combined diff (--cc): a line counts when it is added against every parent.
 _g06_parse() {
-  LC_ALL=C awk -v nm="$_G06_NAME" -v rs=$'\036' -v us=$'\037' '
+  LC_ALL=C awk -v nm="$_G06_NAME" '
     # name(): prints the pending file name of the header just read, unless the file was deleted.
     function name() { if (pn != "") print nm pn; pn = "" }
-    index($0, rs) == 1 { name(); c = substr($0, 2); m = 1; n = 0; h = 0; nc = 0; next }
-    m {
-      e = index($0, us)
-      if (!e) { print "commit " c " message:" ++n "\t " $0; next }
-      if (e > 1) print "commit " c " message:" ++n "\t " substr($0, 1, e - 1)
-      m = 0; next
-    }
     /^diff --git / {
       name(); h = 1; s = substr($0, 12); k = (length(s) - 5) / 2
       if (k > 0 && k == int(k) && substr(s, 1, 2) == "a/" && substr(s, k + 3, 3) == " b/" &&
@@ -131,6 +144,16 @@ _g06_parse() {
     END { name() }'
 }
 
+# _g06_msgs: reads `git log -z --format=%h%x00%B` with its NULs turned into \001 and prints a scan
+# line `commit <hash> message:<n>\t <text>` for each message line. A \001-separated record of hex
+# digits alone names the commit; every other record is message text. A forged NUL or \001 in a
+# message can only shift labels: every byte is still scanned, and hex digits alone match no rule.
+_g06_msgs() {
+  LC_ALL=C awk -v RS=$'\001' '
+    /^[0-9a-f]+$/ { c = $0; next }
+    { n = split($0, l, "\n"); for (i = 1; i <= n; i++) print "commit " c " message:" i "\t " l[i] }'
+}
+
 # _g06_any: every rule as one ERE.
 _g06_any() {
   local any="" rule re
@@ -145,11 +168,17 @@ _g06_keep() {
   LC_ALL=C grep -a -E -- "^$_G06_NAME|^[^	]*	.*($(_g06_any))"
 }
 
-# _g06_walk DIR ARGS...: `git ARGS` in DIR under with_timeout, streamed through _g06_parse and
-# _g06_keep, so the patch is never held in a variable. Prints the kept lines, then \034 and the
-# walk's exit code.
+# _g06_walk SECS PARSER DIR ARGS...: `git ARGS` in DIR under with_timeout SECS, its NULs turned into
+# \001 (macOS awk ends a line at NUL), then PARSER and _g06_keep, so the output is never held in a
+# variable. Prints the kept lines, then \034 and the walk's exit code (124 when SECS is 0).
 _g06_walk() {
-  with_timeout "$_G06_SECS" _g06_git "$@" | _g06_parse | _g06_keep
+  local secs="$1" parse="$2"
+  shift 2
+  if [ "$secs" -lt 1 ]; then
+    printf '%s124\n' "$_G06_RC"
+    return 0
+  fi
+  with_timeout "$secs" _g06_git "$@" | LC_ALL=C tr '\000' '\001' | "$parse" | _g06_keep
   printf '%s%s\n' "$_G06_RC" "${PIPESTATUS[0]}"
 }
 
@@ -199,25 +228,42 @@ EOT
   return 0
 }
 
-# _g06_finish OUT DIR ARGS...: votes on a walk's output OUT (plus any message scan lines): the
-# never_commit names, the rule hits, and a walk that did not finish. With no hit, gitleaks (when
-# installed) reads `git ARGS` again.
-_g06_finish() {
-  local out="$1" rc names hits
+# _g06_leaks DIR ARGS...: `git ARGS` in DIR read by gitleaks; gitleaks' exit code.
+_g06_leaks() {
+  local d="$1"
   shift
-  rc=$(printf '%s\n' "$out" | LC_ALL=C sed -n "s/^$_G06_RC//p" | tail -n 1)
+  _g06_git "$d" "$@" | gitleaks stdin --no-banner --redact >/dev/null 2>&1
+}
+
+# _g06_finish OUT DIR ARGS...: votes on the walks' output OUT (plus any message scan lines): the
+# never_commit names, the rule hits, and a walk that did not finish. With no hit, gitleaks (when
+# installed) reads `git ARGS` again under with_timeout; an overrun asks too.
+_g06_finish() {
+  local out="$1" rc names hits secs leak
+  shift
+  rc=$(printf '%s\n' "$out" | LC_ALL=C sed -n "s/^$_G06_RC//p" | grep -v '^0$' | head -n 1)
   names=$(printf '%s\n' "$out" | LC_ALL=C sed -n "s/^$_G06_NAME//p" | LC_ALL=C awk '!s[$0]++')
   hits=$(printf '%s\n' "$out" | LC_ALL=C grep -a -v -E "^($_G06_NAME|$_G06_RC)")
   _g06_paths "$names"
   if [ -n "$hits" ]; then
     vote deny G6 "possible secret, not committed or pushed: $(_g06_rules "$hits" | LC_ALL=C awk '!s[$0]++' | head -n 5 | paste -sd ';' - | LC_ALL=C sed 's/;/; /g')"
   fi
-  if [ "$rc" != 0 ]; then
-    vote ask G6 "secret scan did not finish in ${_G06_SECS} s (exit ${rc:-unknown}); check the change for secrets yourself"
-  elif [ -z "$hits" ] && command -v gitleaks >/dev/null 2>&1; then
-    with_timeout "$_G06_SECS" _g06_git "$@" | gitleaks stdin --no-banner --redact >/dev/null 2>&1
-    [ "${PIPESTATUS[1]}" = 1 ] && vote deny G6 "gitleaks reports a secret in this change; run gitleaks yourself to see where"
+  if [ -z "$rc" ] && [ -z "$hits" ] && command -v gitleaks >/dev/null 2>&1; then
+    secs=$(_g06_secs "$_G06_SECS")
+    if [ "$secs" -lt 1 ]; then
+      rc=124
+    else
+      # gitleaks exits 1 on a finding; 124 or more means with_timeout stopped it.
+      with_timeout "$secs" _g06_leaks "$@"
+      leak=$?
+      if [ "$leak" = 1 ]; then
+        vote deny G6 "gitleaks reports a secret in this change; run gitleaks yourself to see where"
+      elif [ "$leak" -ge 124 ]; then
+        rc="gitleaks $leak"
+      fi
+    fi
   fi
+  [ -n "$rc" ] && vote ask G6 "secret scan did not finish (exit $rc); check the change for secrets yourself"
   return 0
 }
 
@@ -238,7 +284,7 @@ EOT
   [ -n "$why" ] && _g06_unscanned "kern scans only staged content; git commit $why commits worktree content it does not read"
   args=(diff --cached "${_G06_DIFF[@]}" --diff-filter=d)
   msg=$(_g05_message "$dir" "$toks" raw)
-  out=$(_g06_walk "$dir" "${args[@]}")
+  out=$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_parse "$dir" "${args[@]}")
   out="$out
 $(_g06_msg "commit message" "$msg" | _g06_keep)"
   _g06_finish "$out" "$dir" "${args[@]}"
@@ -260,13 +306,14 @@ _g06_remote() {
   fi
 }
 
-# _g06_push: the push _g05_split just read. Scans, in one bounded walk, every commit it sends that
-# the target remote's tracking refs do not hold, merges as combined diffs, and their messages.
-# Sources: each refspec's source; all branches for --all, --branches, --mirror, a pattern, `:`, or
-# no refspec under push.default=matching or remote.<r>.push; tags for --tags or --mirror; else HEAD.
-# A source that does not resolve asks. The target is the repository argument, else the remote git
-# would pick. When it has no tracking refs (a new remote, a URL) the walk skips commits on every
-# remote, and asks: that history was not rescanned for this target.
+# _g06_push: the push _g05_split just read. Scans every commit it sends that the target remote's
+# tracking refs do not hold in two bounded walks: the patches (merges as combined diffs) and, apart,
+# the messages, so nothing in a message can end or hide message text. Sources: each refspec's
+# source; all branches for --all, --branches, --mirror, a pattern, `:`, or no refspec under
+# push.default=matching or remote.<r>.push; tags for --tags or --mirror; else HEAD. A source that
+# does not resolve asks. The target is the repository argument, else the remote git would pick; a
+# mirror remote could not be scanned. When the target has no tracking refs (a new remote, a URL) the
+# walks skip commits on every remote, and ask: that history was not rescanned for this target.
 _g06_push() {
   local dir="$_G05_DIR" toks t r src sha remote="" have=0 other=0 revs=() refs=() ex=() args out
   toks=$(_g01_opts "$_G01_PUSH_OPTS" "${_G05_ARGS[@]}")
@@ -282,6 +329,10 @@ _g06_push() {
 $toks
 EOT
   [ -n "$remote" ] || remote=$(_g06_remote "$dir")
+  if [ "$(_g06_git "$dir" config --bool "remote.$remote.mirror")" = true ]; then
+    _g06_unscanned "could not scan: remote $remote is a mirror, so a push sends every ref"
+    return 0
+  fi
   for r in "${refs[@]}"; do
     r=${r#+}
     case "$r" in :) revs+=(--branches); continue ;; esac
@@ -314,8 +365,10 @@ EOT
     ex=(--not --remotes)
     [ -n "$(_g06_git "$dir" for-each-ref --count=1 --format=x refs/remotes/)" ] && other=1
   fi
-  args=(log --no-show-signature -p --cc "${_G06_DIFF[@]}" '--format=%x1e%h%n%B%x1f' "${revs[@]}" "${ex[@]}")
-  out=$(_g06_walk "$dir" "${args[@]}")
+  args=(log --no-show-signature -p --cc "${_G06_DIFF[@]}" --format= "${revs[@]}" "${ex[@]}")
+  out=$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_parse "$dir" "${args[@]}")
+  out="$out
+$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_msgs "$dir" log --no-show-signature -z '--format=%h%x00%B' "${revs[@]}" "${ex[@]}")"
   _g06_finish "$out" "$dir" "${args[@]}"
   [ "$other" = 1 ] && _g06_unscanned "history already on another remote was not rescanned for $remote"
   return 0

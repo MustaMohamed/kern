@@ -806,3 +806,112 @@ key AKIAABCDEFGHIJKLMNOP"
   [[ "$output" == *"force-with-lease push"* ]] || false
   [ ! -e "$BATS_TEST_TMPDIR/ran" ]
 }
+
+@test "G6: a forged \\037, \\001 or NUL in a pushed message cannot hide its text" {
+  git -C "$R" commit -q --allow-empty -m "$(printf 'CDS-2465: x\n\nnote\037 AKIAABCDEFGHIJKLMNOP\nAKIAQQQQQQQQQQQQQQQQ')"
+  expect deny g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *"message:3 aws-access-key"* ]] || false
+  [[ "$output" == *"message:4 aws-access-key"* ]] || false
+  set_autopilot on
+  expect deny g01,g05,g06 "git push -u origin CDS-2465/replace-minio"
+  set_autopilot off
+  git -C "$R" reset -q --hard HEAD~1
+  git -C "$R" commit -q --allow-empty -m "$(printf 'CDS-2465: y\n\nhead\001\036 ghp_abcdefghijklmnopqrstuvwxyz0123')"
+  expect deny g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *"github-token"* ]] || false
+  [[ "$output" != *"ghp_abc"* ]] || false
+}
+
+@test "G6: a NUL earlier on a line cannot hide a key, staged or pushed" {
+  printf 'hdr\000\001 AKIAABCDEFGHIJKLMNOP\n' >"$R/blob.bin"
+  git -C "$R" add blob.bin
+  expect deny g06 "git commit -m 'CDS-2465: x'"
+  [[ "$output" == *"blob.bin:1 aws-access-key"* ]] || false
+  git -C "$R" commit -q -m 'CDS-2465: blob'
+  expect deny g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *"blob.bin:1 aws-access-key"* ]] || false
+}
+
+@test "G6: i18n.logOutputEncoding cannot hide a pushed message" {
+  git -C "$R" commit -q --allow-empty -m "$(printf 'CDS-2465: x\n\nkey AKIAABCDEFGHIJKLMNOP')"
+  git -C "$R" config i18n.logOutputEncoding UTF-16
+  expect deny g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *"message:3 aws-access-key"* ]] || false
+}
+
+@test "G6: a push that carries config, or goes to a mirror remote, could not be scanned" {
+  local c cmds=(
+    "git -c push.default=matching push" "git -c remote.origin.push='refs/heads/*:refs/heads/*' push"
+    "git -c color.ui=never push" "git --config-env=push.default=PD push"
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=matching git push"
+    "HOME=$BATS_TEST_TMPDIR/h git push" "XDG_CONFIG_HOME=$BATS_TEST_TMPDIR/x git push"
+    "export GIT_CONFIG_GLOBAL=$BATS_TEST_TMPDIR/g; git push"
+  )
+  for c in "${cmds[@]}"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+  git -C "$R" config remote.origin.mirror true
+  expect ask g06 "git push"
+  [[ "$output" == *"could not scan"* ]] || false
+  set_autopilot on
+  expect deny g06 "git push"
+  expect deny g06 "git -c push.default=matching push"
+}
+
+@test "G6: env -C or --chdir could not be scanned, and the autopilot deny holds" {
+  mkdir -p "$R/sub"
+  local c cmds=(
+    "env -C sub git commit -m 'CDS-2465: x'" "env --chdir=sub git commit -m 'CDS-2465: x'"
+    "env --chd=sub git push" "env -i -C sub git push"
+    "cd sub && git commit -m 'CDS-2465: x'" "GIT_INDEX_FILE=.git/index git commit -m 'CDS-2465: x'"
+  )
+  for c in "${cmds[@]}"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+  set_autopilot on
+  for c in "${cmds[@]}"; do
+    expect deny g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+}
+
+@test "G6: GIT_DIR= inside a message or an argument is not an assignment" {
+  printf 'ok\n' >"$R/a.txt"
+  git -C "$R" add a.txt
+  expect none g06 "git commit -m 'CDS-2465: stop exporting GIT_DIR=.git in ci'"
+  expect none g06 "echo GIT_INDEX_FILE=x; git commit -m 'CDS-2465: x'"
+  set_autopilot on
+  expect allow g01,g05,g06 "git commit -m 'CDS-2465: stop exporting GIT_DIR=.git in ci'"
+  expect deny g06 "GIT_DIR=.git; git push"
+  expect deny g06 "sudo GIT_DIR=.git git commit -m 'CDS-2465: x'"
+}
+
+@test "G6: the gitleaks pass is bounded and its overrun asks" {
+  mkdir -p "$BATS_TEST_TMPDIR/gl"
+  printf '#!/bin/sh\ncat >/dev/null\nexec sleep 5\n' >"$BATS_TEST_TMPDIR/gl/gitleaks"
+  chmod +x "$BATS_TEST_TMPDIR/gl/gitleaks"
+  printf 'ok\n' >"$R/a.txt"
+  git -C "$R" add a.txt
+  export KERN_SCAN_SECS=1
+  PATH="$BATS_TEST_TMPDIR/gl:$PATH"
+  expect ask g06 "git commit -m 'CDS-2465: a'"
+  [[ "$output" == *"secret scan did not finish"* ]] || false
+  printf '#!/bin/sh\ncat >/dev/null\nexit 1\n' >"$BATS_TEST_TMPDIR/gl/gitleaks"
+  expect deny g06 "git commit -m 'CDS-2465: a'"
+  [[ "$output" == *"gitleaks reports a secret"* ]] || false
+}
+
+@test "G6: a message walk that does not finish asks" {
+  local real
+  real=$(command -v git)
+  mkdir -p "$BATS_TEST_TMPDIR/slow"
+  printf '#!/bin/bash\ncase " $* " in *" log "*" -z "*) exec sleep 5 ;; esac\nexec "%s" "$@"\n' "$real" >"$BATS_TEST_TMPDIR/slow/git"
+  chmod +x "$BATS_TEST_TMPDIR/slow/git"
+  git -C "$R" commit -q --allow-empty -m 'CDS-2465: s'
+  export KERN_SCAN_SECS=1
+  PATH="$BATS_TEST_TMPDIR/slow:$PATH"
+  expect ask g06 "git push -u origin CDS-2465/replace-minio"
+  [[ "$output" == *"secret scan did not finish"* ]] || false
+}
