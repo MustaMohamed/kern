@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs every hook over the fixture projects in tests/fixtures/projects (lint rule 15).
 # Per case: SessionStart output holds each line of expect.txt (or is empty for <empty>);
-# SubagentStart prints valid JSON within 1,200 characters; UserPromptSubmit and PreToolUse
-# exit 0 and print nothing or valid JSON.
+# SubagentStart prints valid JSON within 1,400 characters; UserPromptSubmit exits 0 (its plain
+# stdout is context); PreToolUse exits 0 and prints nothing or valid JSON.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP=$(mktemp -d)

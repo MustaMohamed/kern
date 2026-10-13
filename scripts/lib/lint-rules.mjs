@@ -194,25 +194,31 @@ export const RULES = [
     if (!existsSync(join(model.root, 'hooks', 'session-start'))) return [];
     const out = [];
     const tmp = mkdtempSync(join(tmpdir(), 'kern-rule7-'));
-    const repo = join(tmp, 'repo');
-    mkdirSync(join(repo, '.claude'), { recursive: true });
-    spawnSync('git', ['init', '-q', repo]);
-    const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
-    for (const f of ['kern.local.yml', 'kern.yml']) if (existsSync(join(fixture, f))) copyFileSync(join(fixture, f), join(repo, '.claude', f));
-    const env = { ...process.env, HOME: join(tmp, 'home'), CLAUDE_PLUGIN_DATA: join(tmp, 'data') };
-    const hook = (name, payload) => spawnSync('bash', [join(model.root, 'hooks', name)], { input: JSON.stringify(payload), env, encoding: 'utf8' }).stdout || '';
-    const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
-    const kernel = norm(hook('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' }));
-    const terse = existsSync(join(model.root, 'modes', 'terse.md')) ? readFileSync(join(model.root, 'modes', 'terse.md'), 'utf8').length : 0;
-    if (kernel.length > 4000) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 4,000`));
-    if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
-    const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
-    let ctx = '';
-    try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }
-    const terseSub = existsSync(join(model.root, 'modes', 'terse-subagent.md')) ? readFileSync(join(model.root, 'modes', 'terse-subagent.md'), 'utf8').length : 0;
-    if (ctx.length + terseSub > 1200) out.push(err(7, 'kernel/kernel-subagent.md', `subagent kernel with terse voice ${ctx.length + terseSub} chars, limit 1,200`));
-    rmSync(tmp, { recursive: true, force: true });
-    return out;
+    try {
+      const repo = join(tmp, 'repo');
+      mkdirSync(join(repo, '.claude'), { recursive: true });
+      spawnSync('git', ['init', '-q', repo]);
+      const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
+      for (const f of ['kern.local.yml', 'kern.yml']) if (existsSync(join(fixture, f))) copyFileSync(join(fixture, f), join(repo, '.claude', f));
+      const env = { ...process.env, HOME: join(tmp, 'home'), CLAUDE_PLUGIN_DATA: join(tmp, 'data') };
+      const run = (name, payload) => spawnSync('bash', [join(model.root, 'hooks', name)], { input: JSON.stringify(payload), env, encoding: 'utf8' });
+      const hook = (name, payload) => run(name, payload).stdout || '';
+      const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
+      const start = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
+      if (start.status !== 0 || !(start.stdout || '').trim()) out.push(err(7, 'hooks/session-start', `exited ${start.status} with ${(start.stdout || '').length} chars of output, so the kernel was not measured`));
+      const kernel = norm(start.stdout || '');
+      const terse = existsSync(join(model.root, 'modes', 'terse.md')) ? readFileSync(join(model.root, 'modes', 'terse.md'), 'utf8').length : 0;
+      if (kernel.length > 4000) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 4,000`));
+      if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
+      const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
+      let ctx = '';
+      try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }
+      const terseSub = existsSync(join(model.root, 'modes', 'terse-subagent.md')) ? readFileSync(join(model.root, 'modes', 'terse-subagent.md'), 'utf8').length : 0;
+      if (ctx.length + terseSub > 1200) out.push(err(7, 'kernel/kernel-subagent.md', `subagent kernel with terse voice ${ctx.length + terseSub} chars, limit 1,200`));
+      return out;
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   } },
   { id: 13, check(model) {
     const table = join(model.root, 'kernel', 'settings.md');
@@ -229,8 +235,9 @@ export const RULES = [
     const read = new Map();
     const add = (k, f) => { if (!read.has(k)) read.set(k, f); };
     for (const { f, text } of code) {
-      for (const m of text.matchAll(/(?:settings_(?:get|source)|_settings_lookup\s+"?\$\w+"?)\s+"?([a-z_][a-z0-9_.]*)/g)) add(m[1], f);
-      for (const m of text.matchAll(/policy_for\s+"?([a-z][a-z.]*)/g)) if (m[1] !== 'ACTION') add(m[1] === 'review.post' ? 'review.post_policy' : `${m[1]}.policy`, f);
+      for (const m of text.matchAll(/(?:settings_(?:get|source)|_settings_lookup\s+"?\$\w+"?)\s+["']?([a-z_][a-z0-9_.]*)/g)) add(m[1], f);
+      for (const m of text.matchAll(/policy_for\s+["']?([a-z][a-z.]*)/g)) if (m[1] !== 'ACTION') add(m[1] === 'review.post' ? 'review.post_policy' : `${m[1]}.policy`, f);
+      if (/policy_for\s+["']?\$/.test(text)) out.push(err(13, rel(model, f), 'policy_for takes a variable, so rule 13 cannot check its key; pass the action literally'));
       if (f.endsWith('/kern-detect')) for (const m of text.matchAll(/^ {2}([a-z_.]+)\)$/gm)) add(m[1], f);
     }
     for (const [k, f] of read) if (!known(k)) out.push(err(13, rel(model, f), `reads settings key ${k}, which kernel/settings.md does not list`));
@@ -247,7 +254,9 @@ export const RULES = [
     if (!existsSync(join(model.root, 'hooks', 'session-start'))) return [];
     const out = [];
     for (const c of ['no-settings', 'shared-only', 'local-only', 'both', 'kern-off', 'floor-policy-key', 'unknown-key', 'long-settings']) {
-      if (!existsSync(join(model.root, 'tests', 'fixtures', 'projects', c, 'expect.txt'))) out.push(err(15, `tests/fixtures/projects/${c}`, 'hook-shape fixture has no expect.txt'));
+      const dir = join(model.root, 'tests', 'fixtures', 'projects', c);
+      if (!existsSync(join(dir, 'expect.txt'))) out.push(err(15, `tests/fixtures/projects/${c}`, 'hook-shape fixture has no expect.txt'));
+      if (c !== 'no-settings' && !['kern.local.yml', 'kern.yml'].some((f) => existsSync(join(dir, f)))) out.push(err(15, `tests/fixtures/projects/${c}`, 'hook-shape fixture has no kern.local.yml or kern.yml'));
     }
     if (!existsSync(join(model.root, 'tests', 'hook-shape.sh'))) out.push(err(15, 'tests/hook-shape.sh', 'hook-shape runner missing'));
     return out;

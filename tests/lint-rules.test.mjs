@@ -1,7 +1,7 @@
 // tests/lint-rules.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
@@ -211,4 +211,44 @@ test('rule 13: _settings_lookup of a literal key is a read; the generic "$1" for
   const generic = lint({ 'kernel/settings.md': table, 'hooks/x': '#!/usr/bin/env bash\n_settings_lookup "$f" "$1"\n' });
   assert.deepEqual(rules(generic), [13]);
   assert.match(generic[0].message, /^autopilot names a hook or kern script as reader, but none reads it$/);
+});
+
+test('rule 7: a session-start that fails or prints nothing is an error', () => {
+  const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
+  for (const start of ['#!/usr/bin/env bash\necho kernel\nexit 1\n', '#!/usr/bin/env bash\nexit 0\n']) {
+    const f = lint({ 'hooks/session-start': start, 'hooks/subagent-start': sub }).filter((x) => x.rule === 7 && x.level === 'error');
+    assert.deepEqual(f.map((x) => x.path), ['hooks/session-start']);
+  }
+});
+
+test('rule 7: its temp directory is removed when a check throws', () => {
+  const root = repo({ 'hooks/session-start': '#!/usr/bin/env bash\necho k\n', 'tests/fixtures/projects/long-settings/kern.local.yml/x': 'not a file' });
+  const saved = process.env.TMPDIR;
+  process.env.TMPDIR = mkdtempSync(join(tmpdir(), 'kern-lint-tmp-'));
+  try {
+    assert.throws(() => runLint(loadModel(root)));
+    assert.deepEqual(readdirSync(process.env.TMPDIR), []);
+  } finally {
+    if (saved === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = saved;
+  }
+});
+
+test('rule 13: single-quoted keys are reads; a policy_for with a variable is an error', () => {
+  const table = '| Key | Default | Values | Read by |\n|---|---|---|---|\n| `orphan.key` | x | x | prompt-submit |\n';
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table, 'hooks/x': "#!/usr/bin/env bash\nsettings_get 'orphan.key'\n" })), []);
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table, 'hooks/x': "#!/usr/bin/env bash\nsettings_get 'orphan.key'\nsettings_get 'banana.key'\n" })), [13]);
+  const dyn = lint({ 'kernel/settings.md': table, 'hooks/x': '#!/usr/bin/env bash\nsettings_get orphan.key\npolicy_for "$action"\n' });
+  assert.deepEqual(rules(dyn), [13]);
+  assert.equal(dyn[0].path, 'hooks/x');
+});
+
+test('rule 15: every fixture case but no-settings carries a settings file', () => {
+  const dir = join(import.meta.dirname, 'fixtures', 'projects');
+  const files = { 'hooks/session-start': '#!/usr/bin/env bash\n', 'tests/hook-shape.sh': '#!/usr/bin/env bash\n' };
+  for (const c of readdirSync(dir)) for (const f of readdirSync(join(dir, c))) files[`tests/fixtures/projects/${c}/${f}`] = readFileSync(join(dir, c, f), 'utf8');
+  const only15 = () => rules(lint(files)).filter((r) => r === 15);
+  assert.deepEqual(only15(), []);
+  delete files['tests/fixtures/projects/long-settings/kern.local.yml'];
+  assert.deepEqual(only15(), [15]);
 });
