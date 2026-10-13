@@ -7,14 +7,18 @@
 # NULs turned into \001 first. Records are read with G5's _g05_split, _g05_env_has and _g05_message
 # and options with G1's _g01_opts: the dispatcher sources every guard before it calls any.
 
-# Seconds one walk may run, and seconds every walk and gitleaks of one call may run together, so a
-# push stays inside the 20 s hook timeout. Under bats, KERN_SCAN_SECS shortens both.
+# Seconds one walk may run, and the second after the dispatcher's start by which every walk and
+# gitleaks must end, so the whole call, the guards before G6 included, stays inside the 20 s hook
+# timeout. Under bats, KERN_SCAN_SECS shortens both.
 _G06_SECS=8
 _G06_BUDGET=14
 if [ -n "${BATS_TEST_FILENAME-}" ] && [ -n "${KERN_SCAN_SECS-}" ]; then
   _G06_SECS=$KERN_SCAN_SECS
   _G06_BUDGET=$((KERN_SCAN_SECS * 3))
 fi
+# The budget's clock starts when the dispatcher sources this file, before it runs any guard. SECONDS
+# is read as a difference: bash takes its start value from the environment when SECONDS is set there.
+_G06_T0=$SECONDS
 
 # Diff options for every patch G6 reads. A staged diff also takes --diff-filter=d; a push walk does
 # not, because in git log it drops whole commits, and _g06_parse skips the names of deleted files
@@ -43,7 +47,6 @@ guard_g06() {
   [ "$TOOL" = Bash ] || return 0
   local cmd rec moved=0 conf=0
   cmd=$(ti_get command) || return 0
-  _G06_T0=$SECONDS
   while IFS= read -r rec; do
     [ -n "$rec" ] || continue
     if ! _g06_ready; then
@@ -104,10 +107,10 @@ _g06_git() {
     -c log.showRoot=true -c i18n.logOutputEncoding=UTF-8 "$@" 2>/dev/null
 }
 
-# _g06_secs CAP: the seconds the next walk may run: CAP, or what is left of _G06_BUDGET for this call
-# when that is less; 0 when it is spent.
+# _g06_secs CAP: the seconds the next walk may run: CAP, or what is left of _G06_BUDGET when that is
+# less; 0 when it is spent.
 _g06_secs() {
-  local left=$((_G06_BUDGET - (SECONDS - ${_G06_T0:-$SECONDS})))
+  local left=$((_G06_BUDGET - (SECONDS - _G06_T0)))
   [ "$left" -gt 0 ] || left=0
   if [ "$left" -lt "$1" ]; then printf '%s\n' "$left"; else printf '%s\n' "$1"; fi
 }

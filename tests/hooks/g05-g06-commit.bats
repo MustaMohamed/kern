@@ -926,6 +926,17 @@ key AKIAABCDEFGHIJKLMNOP"
   [[ "$output" == *"gitleaks reports a secret"* ]] || false
 }
 
+@test "G6: the scan budget counts from the dispatcher's start, so time spent by G2 leaves less" {
+  mkdir -p "$BATS_TEST_TMPDIR/slow"
+  printf '#!/bin/sh\nsleep 3\n' >"$BATS_TEST_TMPDIR/slow/gh"
+  chmod +x "$BATS_TEST_TMPDIR/slow/gh"
+  git -C "$R" commit -q --allow-empty -m 'CDS-2465: s'
+  export KERN_SCAN_SECS=1
+  PATH="$BATS_TEST_TMPDIR/slow:$PATH"
+  run_guard "$(cmd_payload "gh pr create --draft --title x --body-file b.md && git push -u origin CDS-2465/replace-minio")" g02,g06
+  [[ "$output" == *"G6: secret scan did not finish"* ]] || false
+}
+
 @test "G6: a message walk that does not finish asks" {
   local real
   real=$(command -v git)
