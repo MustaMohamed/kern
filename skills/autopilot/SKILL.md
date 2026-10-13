@@ -3,7 +3,7 @@ name: autopilot
 description: Turn this session's autopilot grant on or off, or show what it allows. Only a prompt you type can turn it on.
 disable-model-invocation: true
 argument-hint: "[on|off|status]"
-allowed-tools: Read
+allowed-tools: Read, Glob, Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *)
 ---
 
 # Autopilot
@@ -15,7 +15,7 @@ A per-session grant for unattended runs. kern's prompt hook turns it on only fro
 2. `on`, and the line says `autopilot=on`: list what is allowed, what is denied and the floor. Say how to stop: `/kern:autopilot off`, "stop autopilot" or `/clear`. Then ask for, or propose, a checkable stop predicate for the run, such as "stop when every task in the plan has a complete ledger line or one is parked".
 3. `on`, and the hook reported "autopilot denied by <file>": name the file and the `autopilot: denied` key. Do not suggest changing it unless the user asks.
 4. `status`: on or off, the settings source of `autopilot`, and the `rebase.push` value.
-5. `off`: confirm, then list the `parked:` lines written since autopilot turned on in `WORK/ledgers/*/ledger.md`. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` prints that directory.
+5. `off`: confirm, then list the `parked:` lines written since autopilot turned on in `WORK/ledgers/*/ledger.md`. Find the directory without creating anything: line 1 of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root` is the main root, and the text before the tab in `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern` is the work dir. Read `<main root>/<work_dir>/ledgers` only when it already exists. If it does not, say nothing was parked. Never run `kern-dir` here: it creates the directory and edits `.git/info/exclude`.
 
 ## What autopilot allows
 - Commit on a branch that is not protected, with exactly one `-m` or `-F` and no other option except `-q` or `-v`, when the message passes the convention and attribution checks. kern denies `--amend`, `-a`, `--no-verify`, a pathspec and `git add -A`.

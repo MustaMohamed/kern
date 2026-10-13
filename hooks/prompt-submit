@@ -192,7 +192,7 @@ fi
 case "${CLAUDE_CODE_ENTRYPOINT-}" in sdk*) exit 0 ;; esac
 case "$LINE" in
   *"voice=normal surface=auto autopilot=off"*) ;;
-  *voice=terse*) printf '%s\nkern: terse voice: answer first, short sentences, no ceremony, payload exact; persisted text plain.\n' "$LINE" ;;
+  *voice=terse*) printf '%s\nkern: terse voice: answer first, answer only what was asked, short sentences, no ceremony, payload exact; persisted text plain.\n' "$LINE" ;;
   *) printf '%s\n' "$LINE" ;;
 esac
 exit 0
