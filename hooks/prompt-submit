@@ -28,6 +28,7 @@ SHOW_LINE=0
 CHANGED_VOICE=""
 CHANGED_SURFACE=""
 AP_TURNED_ON=0
+SCHEDULED=0
 
 lower() { tr '[:upper:]' '[:lower:]'; }
 
@@ -148,7 +149,10 @@ if [ "$EVENT" = UserPromptExpansion ]; then
 else
   PROMPT=$(json_get prompt) || PROMPT=""
   TRIM=$(printf '%s' "$PROMPT" | sed -n '/[^[:space:]]/,$p' | sed '1s/^[[:space:]]*//')
-  if wrapped "$TRIM"; then TRIM=""; fi
+  if wrapped "$TRIM"; then
+    case "$TRIM" in "<scheduled-task"*) SCHEDULED=1 ;; esac
+    TRIM=""
+  fi
   case "$TRIM" in
     "") ;;
     "<command-message>"* | "<command-name>"*)
@@ -181,7 +185,7 @@ if [ -n "$CHANGED_SURFACE" ]; then
 fi
 LINE=$(mode_line "$SID")
 if [ "$AP_TURNED_ON" = 1 ] || { autopilot_on "$SID" && [ "${CLAUDE_CODE_ENTRYPOINT#sdk}" = "${CLAUDE_CODE_ENTRYPOINT-}" ]; }; then
-  printf '%s\n' "$LINE"
+  [ "$SCHEDULED" = 1 ] || printf '%s\n' "$LINE"
   printf '%s\n' "autopilot ON: commit with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or \$( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly, commands spelled out: no wrapper, no cd, no run-time-built name, no shell script or code piped to a shell, no gh alias; git add in its own call, before the commit; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls."
   exit 0
 fi
@@ -189,7 +193,9 @@ if [ "$SHOW_LINE" = 1 ] || [ -n "$CHANGED_VOICE$CHANGED_SURFACE" ]; then
   printf '%s\n' "$LINE"
   exit 0
 fi
+# Headless and scheduled runs get no reminder.
 case "${CLAUDE_CODE_ENTRYPOINT-}" in sdk*) exit 0 ;; esac
+[ "$SCHEDULED" = 1 ] && exit 0
 case "$LINE" in
   *"voice=normal surface=auto autopilot=off"*) ;;
   *voice=terse*) printf '%s\nkern: terse voice: answer first, answer only what was asked, short sentences, no ceremony, payload exact; persisted text plain.\n' "$LINE" ;;

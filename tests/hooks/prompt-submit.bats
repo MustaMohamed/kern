@@ -156,6 +156,29 @@ expand() {
   [[ "$output" == *"autopilot ON:"* ]] || false
 }
 
+@test "a scheduled-task prompt prints no mode line and no terse reminder" {
+  printf 'voice: terse\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit '<scheduled-task name=y>fix the bug</scheduled-task>'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a scheduled-task prompt under autopilot prints the autopilot line only" {
+  printf 'voice: terse\nsurface: auto\nautopilot: on\nsince: 2026-10-12T00:00:00Z\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit '<scheduled-task name=y>fix the bug</scheduled-task>'
+  [[ "$output" == "autopilot ON:"* ]] || false
+  [[ "$output" != *"kern mode:"* ]] || false
+  [[ "$output" != *"terse voice"* ]] || false
+}
+
+@test "a headless sdk run with voice=terse prints no reminder" {
+  printf 'voice: terse\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  export CLAUDE_CODE_ENTRYPOINT=sdk-cli
+  submit "fix the bug"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "with settings.sh missing, prompt-submit exits 0 and prints nothing" {
   mkdir -p "$BATS_TEST_TMPDIR/k"
   cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
