@@ -66,7 +66,14 @@ guard_g06() {
     elif _g01_foreign G6 "$_G05_SUB"; then
       continue
     fi
-    case "$_G05_SUB" in commit | push) ;; *) continue ;; esac
+    case "$_G05_SUB" in
+      commit | push) ;;
+      send-pack | http-push)
+        _g06_unscanned "could not scan: git $_G05_SUB pushes refs kern does not read; use git push"
+        continue
+        ;;
+      *) continue ;;
+    esac
     if [ "$moved" = 1 ] || [ "$_G05_MOVED" = 1 ] || _g05_env_has now GIT_INDEX_FILE @cwd; then
       _g06_unscanned "could not scan: git $_G05_SUB after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see"
       continue

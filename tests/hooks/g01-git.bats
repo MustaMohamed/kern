@@ -679,3 +679,26 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   # A wrapper that keeps the directory keeps G1's reading of it.
   expect none "env A=1 git -C $W reset --hard" "sudo -u me git -C $W stash" "env -i git status"
 }
+
+@test "send-pack and http-push push refs: they ask, are denied under autopilot, and their force forms are denied" {
+  local W="$BATS_TEST_TMPDIR/wt" U="https://example.com/r.git"
+  settings 'push.policy: auto'
+  expect ask "git send-pack $R.origin feat" "git -C $W send-pack --dry-run $R.origin feat" \
+    "git send-pack --all $R.origin" "git send-pack --force-with-lease $R.origin feat" "git http-push $U feat" \
+    "git http-push --dry-run $U feat" "git http-push -d $U feat"
+  [[ "$output" == *"git http-push pushes refs without the checks kern makes on git push"* ]] || false
+  expect deny "git send-pack --force $R.origin feat:main" "git send-pack -f $R.origin feat" \
+    "git send-pack --mirr $R.origin" "git send-pack -vf $R.origin feat" "git send-pack $R.origin +feat:main" \
+    "git send-pack --mirror $R.origin" "git http-push --force $U feat" "git http-push $U +feat:main" \
+    "git http-push -D $U feat"
+  [[ "$output" == *"plain force push"* ]] || false
+  set_autopilot on
+  expect deny "git send-pack $R.origin feat" "git -C $W send-pack $R.origin feat" "git http-push $U feat"
+}
+
+@test "send-email asks, and is denied under autopilot" {
+  expect ask "git send-email --to=team@example.com HEAD~1" "git -C $BATS_TEST_TMPDIR/wt send-email x.patch"
+  [[ "$output" == *"git send-email sends mail"* ]] || false
+  set_autopilot on
+  expect deny "git send-email --to=team@example.com HEAD~1"
+}

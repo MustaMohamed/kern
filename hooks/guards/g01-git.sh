@@ -20,6 +20,9 @@ edit-description/-/0 force/f/0 merged/-/1 no-merged/-/1 column/-/o sort/-/1 poin
 ignore-case/i/0 recurse-submodules/-/0 format/-/1"
 _G01_CLEAN_OPTS="quiet/q/0 dry-run/n/0 force/f/0 interactive/i/0 -/d/0 exclude/e/1 -/x/0 -/X/0"
 _G01_WT_REMOVE_OPTS="force/f/0"
+_G01_SEND_PACK_OPTS="verbose/v/0 quiet/q/0 receive-pack/-/1 exec/-/1 remote/-/1 all/-/0 dry-run/n/0 \
+mirror/-/0 force/f/0 signed/-/o push-option/-/1 progress/-/0 thin/-/0 atomic/-/0 stateless-rpc/-/0 \
+stdin/-/0 helper-status/-/0 force-with-lease/-/o force-if-includes/-/0"
 # The read-only filters an allowed push may pipe into (_g01_filter). None of these options reads
 # a file. head and tail also take -NUM.
 _G01_TAIL_OPTS="lines/n/1 bytes/c/1 quiet/q/0 silent/-/0 verbose/v/0"
@@ -373,7 +376,39 @@ _g01_git() {
       word_has "$t" --force && _g01_destructive "git worktree remove --force"
       ;;
     push) _g01_push "$dir" "$plain" "$@" ;;
+    send-pack | http-push) _g01_plumb "$sub" "$@" ;;
+    send-email)
+      vote ask G1 "git send-email sends mail; mail always needs the user's word"
+      [ "$AUTOPILOT" = 1 ] && vote deny G1 "git send-email under autopilot: mail stays human"
+      ;;
   esac
+}
+
+# _g01_plumb SUB WORDS...: git send-pack or git http-push, which push refs past every check
+# _g01_push makes. A plain force is denied: send-pack's --force or --mirror in any spelling git
+# reads (_g01_opts), http-push's --force or -D (it reads options by their exact names and takes any
+# other word as its URL), or a +refspec in either. Anything else asks, and is denied under autopilot.
+_g01_plumb() {
+  local sub="$1" t force=0
+  shift
+  if [ "$sub" = send-pack ]; then
+    while IFS= read -r t; do
+      case "$t" in --force | --mirror | @+*) force=1 ;; esac
+    done <<EOT
+$(_g01_opts "$_G01_SEND_PACK_OPTS" "$@")
+EOT
+  else
+    for t in "$@"; do
+      case "$t" in --force | -D | +*) force=1 ;; esac
+    done
+  fi
+  if [ "$force" = 1 ]; then
+    vote deny G1 "plain force push (git $sub with --force, --mirror, -D or a +refspec); use git push --force-with-lease on your own branch"
+    return 0
+  fi
+  vote ask G1 "git $sub pushes refs without the checks kern makes on git push; use git push"
+  [ "$AUTOPILOT" = 1 ] && vote deny G1 "git $sub under autopilot; use git push"
+  return 0
 }
 
 _g01_destructive() {

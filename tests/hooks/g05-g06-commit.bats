@@ -1021,3 +1021,16 @@ key AKIAABCDEFGHIJKLMNOP"
     [[ "$output" == *"could not scan"* ]] || false
   done
 }
+
+@test "G6: send-pack and http-push could not be scanned" {
+  printf 'token = "ghp_abcdefghijklmnopqrstuvwxyz0123"\n' >"$R/cfg.txt"
+  git -C "$R" add cfg.txt
+  git -C "$R" commit -q -m "CDS-2465: cfg"
+  local c cmds=("git send-pack $R.origin CDS-2465/replace-minio" "git http-push https://example.com/r.git main")
+  for c in "${cmds[@]}"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan: git "*" pushes refs"* ]] || false
+  done
+  set_autopilot on
+  for c in "${cmds[@]}"; do expect deny g06 "$c" || return 1; done
+}
