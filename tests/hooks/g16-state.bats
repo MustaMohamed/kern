@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # G16: Claude cannot write kern session state or relay a mode or autopilot command, and the user
-# confirms every write to a kern settings file.
+# confirms every write to a kern settings file or to Claude Code's own settings.
 
 load ../helpers/common
 
@@ -292,4 +292,58 @@ expect_cmd() {
   [ ! -e "$BATS_TEST_TMPDIR/tr.log" ]
   expect_bash ask "echo kern: off >> .Claude/Kern.Local.YML" "sed -i '' s/ask/auto/ $R/.claude/KERN.yml"
   expect_bash deny "echo on > $(printf '%s' "$S" | tr '[:lower:]' '[:upper:]')/A.State"
+}
+
+@test "a settings path spelled with ., .. or // or split by quotes is still a settings path" {
+  mkdir -p "$R/.claude/sub"
+  expect_bash ask "echo kern: off > .claude/./kern.local.yml" "echo kern: off > .claude//kern.local.yml" \
+    "echo kern: off > .claude/sub/../kern.local.yml" "echo kern: off > $R/x/../.claude/kern.local.yml" \
+    "tee .claude/./kern.yml" "dd of=.claude//kern.yml" "cd .claude && echo kern: off > ./kern.yml" \
+    "echo kern: off > .cl''aude/ke''rn.local.yml"
+  ln -s "$R/.claude" "$R/c"
+  expect_bash ask "echo kern: off > c/kern.local.yml"
+  set_autopilot on
+  expect_bash deny "echo kern: off > .claude//kern.local.yml"
+}
+
+@test "a copy, move or link into a .claude directory is a settings write; a copy out of one is not" {
+  mkdir -p "$R/.claude/agents"
+  expect_bash ask "cp /tmp/kern.local.yml .claude/" "cp /tmp/kern.local.yml .claude" \
+    "mv /tmp/kern.local.yml $R/.claude/" "install -m 600 /tmp/settings.json ~/.claude" "ln -sf /tmp/fake .claude" \
+    "cp -t .claude /tmp/kern.local.yml" "cd .claude && cp /tmp/kern.local.yml ." "cp /tmp/kern.local.yml .claude/./" \
+    "rsync -a /tmp/kern.local.yml .claude/" "ditto /tmp/settings.json .claude" "mv .claude/kern.local.yml /tmp/" \
+    "cp /tmp/kern.local.yml 2>/dev/null .claude/"
+  [[ "$output" == *"a copy, move or link into a .claude directory, or its removal, may change kern or Claude Code settings"* ]] || false
+  ln -s "$R/.claude" "$R/c"
+  expect_bash ask "cp /tmp/kern.local.yml c/"
+  set_autopilot on
+  expect_bash deny "cp /tmp/kern.local.yml .claude/"
+  set_autopilot off
+  expect_bash none "cp .claude/kern.yml /tmp/kern.yml.bak" "cp /tmp/x.md .claude/agents/" "cp -r .claude/agents /tmp/" \
+    "ls .claude" "cat .claude/agents/x.md"
+}
+
+@test "a write to Claude Code's own settings asks, and denies under autopilot; plain reads get no vote" {
+  mkdir -p "$R/.claude" "$R/.vscode"
+  expect_file_tools "$R/.claude/settings.json" ask
+  expect_file_tools "$R/.claude/settings.local.json" ask
+  expect_file_tools "$HOME/.claude/settings.json" ask
+  expect_file_tools "$R/.Claude/Settings.JSON" ask
+  expect_file_tools "$R/.claude/x/../settings.local.json" ask
+  [[ "$output" == *"Claude Code settings set permissions and hooks; the user confirms each write"* ]] || false
+  expect_bash ask "echo {} > .claude/settings.json" "tee ~/.claude/settings.json" \
+    "cp /tmp/s.json .claude/settings.local.json" "sed -i '' s/deny/allow/ $HOME/.claude/settings.json" \
+    "cd .claude && echo {} > settings.local.json" "mv .claude/settings.json /tmp/" "rm .claude/settings.local.json" \
+    "echo {} > .claude//settings.json" "echo {} > \$HOME/.claude/settings.json"
+  export CWD="$HOME/.claude"
+  expect_bash ask "echo {} > settings.json"
+  export CWD="$R"
+  set_autopilot on
+  expect_file_tools "$R/.claude/settings.local.json" deny
+  expect_bash deny "echo {} > .claude/settings.json"
+  set_autopilot off
+  expect_bash none "cat .claude/settings.json" "jq .permissions ~/.claude/settings.json" \
+    "grep allow $R/.claude/settings.local.json" "cp .claude/settings.json /tmp/settings.json.bak" \
+    "git diff .claude/settings.json" "echo x > .vscode/settings.json" "cp /tmp/s.json .vscode/settings.json"
+  expect_file_tools "$R/.vscode/settings.json" none
 }

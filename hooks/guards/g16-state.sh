@@ -1,10 +1,12 @@
 # shellcheck shell=bash
 # G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
-# and the user confirms every write to a kern settings file.
+# and the user confirms every write to a kern settings file or to Claude Code's own settings.
 
 _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
 _G16_STATE_CMD="commands may not write kern session state"
 _G16_SETTINGS="kern settings change guard policy; the user confirms each write"
+_G16_CC="Claude Code settings set permissions and hooks; the user confirms each write"
+_G16_INTO="a copy, move or link into a .claude directory, or its removal, may change kern or Claude Code settings; the user confirms each write"
 
 guard_g16() {
   case "$TOOL" in
@@ -59,28 +61,118 @@ _g16_file() {
   for c in "$p" "$norm" "$real"; do
     case "$(_g16_lower "$c")" in
       */.claude/kern.yml | */.claude/kern.local.yml) vote ask G16 "$_G16_SETTINGS"; return 0 ;;
+      */.claude/settings.json | */.claude/settings.local.json) vote ask G16 "$_G16_CC"; return 0 ;;
     esac
   done
 }
 
-# _g16_names STR: exit 0 when the lower-cased STR could name session state or a settings file.
-_g16_names() {
-  case "$1" in
-    *"$_G16_SD"* | *sessions* | *.state* | *kern.yml* | *kern.local.yml*) return 0 ;;
-  esac
-  return 1
+# _g16_tidy WORD: sets _G16_T to WORD with empty and `.` parts dropped and each `..` taking the part
+# before it, as text, as _g16_norm does for a Write path; a leading / stays, a relative WORD stays
+# relative (its leading `..` kept), and a WORD with nothing left is `.`.
+_g16_tidy() {
+  local rest="$1/" s out=() n=0 i=0 j="" lead=""
+  case "$1" in /*) lead=/ ;; esac
+  while [ -n "$rest" ]; do
+    s=${rest%%/*}
+    rest=${rest#*/}
+    case "$s" in
+      "" | .) ;;
+      ..)
+        if [ "$n" -gt 0 ] && [ "${out[$((n - 1))]}" != .. ]; then
+          n=$((n - 1))
+        elif [ -z "$lead" ]; then
+          out[n]=..
+          n=$((n + 1))
+        fi
+        ;;
+      *)
+        out[n]=$s
+        n=$((n + 1))
+        ;;
+    esac
+  done
+  while [ "$i" -lt "$n" ]; do
+    j="$j${j:+/}${out[$i]}"
+    i=$((i + 1))
+  done
+  _G16_T="$lead$j"
+  [ -n "$_G16_T" ] || _G16_T=.
 }
 
 # _g16_kind WORD: sets _G16_K to `state` when the lower-cased WORD names session state, `settings`
-# when it names a kern settings file, else empty. State: a word holding the sessions dir path (so
+# when it names a kern settings file, `cc` when it names Claude Code's own settings, else empty. As
+# _g16_file reads a Write path, WORD is read as written (_g16_name), then with `.`, `..` and `//`
+# resolved as text (_g16_tidy), then through its physical directory (_g16_real).
+_g16_kind() {
+  _g16_name "$1"
+  [ -z "$_G16_K" ] || return 0
+  _G16_T=$1
+  case "$1" in
+    . | .. | ./* | ../* | */. | */.. | *//* | */./* | */../*)
+      _g16_tidy "$1"
+      _g16_name "$_G16_T"
+      [ -z "$_G16_K" ] || return 0
+      ;;
+  esac
+  _g16_real "$_G16_T"
+}
+
+# _g16_real WORD: for a WORD whose last part is a kern or Claude Code settings file name, sets _G16_K
+# when the file's directory is a .claude directory: a bare name after a cd into one earlier in the
+# command (_G16_INCC), or a directory that resolves to one, from CWD, through symlinks. A directory
+# that would expand is not read.
+_g16_real() {
+  local d
+  case "${1##*/}" in
+    kern.yml | kern.local.yml) _G16_K=settings ;;
+    settings.json | settings.local.json) _G16_K=cc ;;
+    *) return 0 ;;
+  esac
+  case "$1" in */*) d=${1%/*} ;; *) d=. ;; esac
+  [ -n "$d" ] || d=/
+  [ "$d" = . ] && [ "$_G16_INCC" = 1 ] && return 0
+  if _g16_physical "$d"; then return 0; fi
+  _G16_K=""
+}
+
+# _g16_physical DIR: exit 0 when DIR, from CWD, resolves through symlinks to a directory named .claude
+# in any case. A DIR that would expand is not read.
+_g16_physical() {
+  local d="$1"
+  case "$d" in "" | *'$'* | *'`'* | '~'* | *'*'* | *'?'* | *'['*) return 1 ;; esac
+  case "$d" in /*) ;; *) d="${CWD:-$PWD}/$d" ;; esac
+  d=$(cd "$d" 2>/dev/null && pwd -P) || return 1
+  case "$d" in */.[Cc][Ll][Aa][Uu][Dd][Ee]) return 0 ;; esac
+  return 1
+}
+
+# _g16_claude WORD: exit 0 when the lower-cased WORD, read by _g16_tidy, names a .claude directory:
+# `.claude`, a path ending in /.claude, or `.` after a cd into one earlier in the command.
+_g16_claude() {
+  _g16_tidy "$1"
+  case "$_G16_T" in
+    .claude | */.claude) return 0 ;;
+    .) [ "$_G16_INCC" = 1 ] ;;
+    *) return 1 ;;
+  esac
+}
+
+# _g16_into WORD: _g16_claude, or WORD resolves to a .claude directory (_g16_physical).
+_g16_into() {
+  [ -n "$1" ] || return 1
+  _g16_claude "$1" || _g16_physical "$1"
+}
+
+# _g16_name WORD: _g16_kind's reading of WORD as written. State: a word holding the sessions dir path (so
 # of=<dir>/x counts); a word with no blank that holds `sessions` and ends in `.state` (a sentence
 # in a message is not a path); the state file name <sid>.state, bare or after a slash; or an
 # absolute glob that, once a leading ~, $HOME or $CLAUDE_PLUGIN_DATA is expanded, matches this
 # session's state file and, unless it holds **, is as deep as it (a path glob's * does not cross
 # a /). The bare session id is not enough: Claude Code's scratchpad and task paths contain it.
 # Settings: a word ending in .claude/kern.yml or .claude/kern.local.yml, or exactly kern.yml or
-# kern.local.yml.
-_g16_kind() {
+# kern.local.yml. Claude Code's settings: a word ending in .claude/settings.json or
+# .claude/settings.local.json.
+_g16_name() {
   local e p a b slash='[!/]'
   _G16_K=""
   case "$1" in *"$_G16_SD"*) _G16_K=state; return 0 ;; esac
@@ -90,6 +182,7 @@ _g16_kind() {
   esac
   case "$1" in
     *.claude/kern.yml | *.claude/kern.local.yml | kern.yml | kern.local.yml) _G16_K=settings; return 0 ;;
+    *.claude/settings.json | *.claude/settings.local.json) _G16_K=cc; return 0 ;;
   esac
   if [ -n "$_G16_SID" ]; then
     case "$1" in "$_G16_SID".state | */"$_G16_SID".state) _G16_K=state; return 0 ;; esac
@@ -148,20 +241,30 @@ _g16_redirects() {
 
 # _g16_bash: a command that names session state is denied unless its head only reads (cat head
 # tail less more grep egrep fgrep rg ls stat wc file diff cmp jq echo printf test [ git, find with
-# no action that writes or runs, and sed or perl without -i). A command that names a settings file
-# asks only for a write shape (tee cp mv ln rm truncate dd install, sed or perl -i). A redirect
-# into either counts whatever the head. Every simple command is checked, including the bodies of
-# bash -c, eval, $( ) and backticks; here-doc bodies are data unless a shell reads them. After a
-# cd into the sessions dir, every later non-reading command and redirect counts as a write to it,
-# until a cd elsewhere.
+# no action that writes or runs, and sed or perl without -i). A command that names a kern settings
+# file or Claude Code's own settings asks only for a write shape: tee mv rm truncate dd, sed or perl
+# -i, and the copies cp install ln rsync ditto, where only the destination counts (the last operand;
+# every operand with a -t or --target-directory option), so a copy out of .claude is a read. A copy,
+# move or link whose destination is a .claude directory, or an mv or rm of one, asks too. A redirect
+# into any of them counts whatever the head. Every simple command is checked, including the bodies of
+# bash -c, eval, $( ) and backticks; here-doc bodies are data unless a shell reads them. After a cd
+# into the sessions dir, every later non-reading command and redirect counts as a write to it, until a
+# cd elsewhere; after a cd into a .claude directory, a bare settings.json or settings.local.json is
+# Claude Code's.
 _g16_bash() {
-  local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0
+  local cmd t seg words w head inplace seg_s seg_k last tall dd skip anydir reads k
+  local state=0 settings=0 cc=0 into=0 in_sd=0
   cmd=$(ti_get command) || return 0
-  # _g16_names on the raw text, in any case, before the four tr processes below. The sessions dir
-  # ends in sessions, so its path needs no pattern of its own.
-  case "$cmd" in
+  # Only a command whose text could name state, a settings file or a .claude directory, in any case,
+  # is lower-cased and parsed. Quotes and backslashes are taken out first, in one tr pass and only
+  # when the text holds one, so ke''rn.yml is still seen. The sessions dir ends in sessions, so its
+  # path needs no pattern of its own.
+  t=$cmd
+  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+  case "$t" in
     *[Ss][Ee][Ss][Ss][Ii][Oo][Nn][Ss]* | *.[Ss][Tt][Aa][Tt][Ee]* | *[Kk][Ee][Rr][Nn].[Yy][Mm][Ll]* | \
-      *[Kk][Ee][Rr][Nn].[Ll][Oo][Cc][Aa][Ll].[Yy][Mm][Ll]*) ;;
+      *[Kk][Ee][Rr][Nn].[Ll][Oo][Cc][Aa][Ll].[Yy][Mm][Ll]* | *[Ss][Ee][Tt][Tt][Ii][Nn][Gg][Ss]*.[Jj][Ss][Oo][Nn]* | \
+      *.[Cc][Ll][Aa][Uu][Dd][Ee]*) ;;
     *) return 0 ;;
   esac
   cmd=$(_g16_lower "$cmd")
@@ -169,7 +272,7 @@ _g16_bash() {
   _G16_SID=$(_g16_lower "${SID-}")
   _G16_HOME=$(_g16_lower "${HOME-}")
   _G16_DATA=${_G16_SD%/sessions}
-  _g16_names "$cmd" || return 0
+  _G16_INCC=0
   while IFS= read -r seg; do
     [ -n "$seg" ] || continue
     # The command name comes first, after the assignments, keywords and wrappers _cmd_words skips.
@@ -177,7 +280,12 @@ _g16_bash() {
     head=""
     inplace=0
     seg_s=0
-    seg_c=0
+    seg_k=""
+    last=""
+    tall=0
+    dd=0
+    skip=0
+    anydir=0
     while IFS= read -r w; do
       if [ -z "$head" ]; then
         head=${w##*/}
@@ -189,28 +297,84 @@ _g16_bash() {
         -*i*) inplace=1 ;;
       esac
       _g16_kind "$w"
-      case "$_G16_K" in state) seg_s=1 ;; settings) seg_c=1 ;; esac
+      case "$_G16_K" in state) seg_s=1 ;; settings | cc) seg_k="$seg_k $_G16_K" ;; esac
+      # The operands: no option, and no redirection or the target of one that stands alone.
+      if [ "$skip" = 1 ]; then
+        skip=0
+        continue
+      fi
+      t=${w#"${w%%[!0-9]*}"}
+      case "$t" in
+        '<'* | '>'* | '&>'*)
+          case "$t" in *[!\<\>\&\|]*) ;; *) skip=1 ;; esac
+          continue
+          ;;
+      esac
+      case "$dd:$w" in
+        0:--) dd=1; continue ;;
+        # A target directory option: the destination may be any operand, or the option's own value.
+        0:--t*)
+          tall=1
+          case "$w" in *=*) _g16_claude "${w#*=}" && anydir=1 ;; esac
+          continue
+          ;;
+        0:-[!-]*)
+          case "$w" in
+            *t*)
+              tall=1
+              [ -n "${w#*t}" ] && _g16_claude "${w#*t}" && anydir=1
+              ;;
+          esac
+          continue
+          ;;
+        0:-*) continue ;;
+      esac
+      last=$w
+      case "$head" in cp | install | ln | rsync | ditto | mv | rm) _g16_claude "$w" && anydir=1 ;; esac
     done <<WORDS
 $words
 WORDS
     reads=0
-    writes=0
+    k=""
     case "$head" in
       cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | jq | \
         echo | printf | test | '[' | git | '') reads=1 ;;
       find) word_has "$words" -delete -exec -execdir -ok -okdir -fls -fprint -fprint0 -fprintf || reads=1 ;;
-      sed | perl) if [ "$inplace" = 1 ]; then writes=1; else reads=1; fi ;;
-      tee | cp | mv | ln | rm | truncate | dd | install) writes=1 ;;
-      cd | pushd) reads=1; in_sd=$seg_s ;;
+      sed | perl) if [ "$inplace" = 1 ]; then k=$seg_k; else reads=1; fi ;;
+      tee | mv | rm | truncate | dd) k=$seg_k ;;
+      cp | install | ln | rsync | ditto)
+        if [ "$tall" = 1 ]; then
+          k=$seg_k
+        elif [ -n "$last" ]; then
+          _g16_kind "$last"
+          k=$_G16_K
+        fi
+        ;;
+      cd | pushd)
+        reads=1
+        in_sd=$seg_s
+        if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi
+        ;;
+    esac
+    case "$head" in
+      cp | install | ln | rsync | ditto | mv)
+        if [ "$anydir" = 1 ] && { [ "$tall" = 1 ] || [ "$head" = mv ]; }; then
+          into=1
+        elif _g16_into "$last"; then
+          into=1
+        fi
+        ;;
+      rm) [ "$anydir" = 1 ] && into=1 ;;
     esac
     if [ "$reads" = 0 ] && { [ "$seg_s" = 1 ] || [ "$in_sd" = 1 ]; }; then state=1; fi
-    [ "$writes" = 1 ] && [ "$seg_c" = 1 ] && settings=1
+    case " $k " in *" settings "*) settings=1 ;; esac
+    case " $k " in *" cc "*) cc=1 ;; esac
     case "$seg" in *">"*) ;; *) continue ;; esac
     while IFS= read -r t; do
       case "$t" in '' | /dev/null | /dev/stdout | /dev/stderr | [0-9]) continue ;; esac
       if [ "$in_sd" = 1 ]; then state=1; continue; fi
       _g16_kind "$t"
-      case "$_G16_K" in state) state=1 ;; settings) settings=1 ;; esac
+      case "$_G16_K" in state) state=1 ;; settings) settings=1 ;; cc) cc=1 ;; esac
     done <<REDIRECTS
 $(_g16_redirects "$seg")
 REDIRECTS
@@ -219,6 +383,8 @@ $(git_words "$cmd")
 SEGMENTS
   [ "$state" = 1 ] && vote deny G16 "$_G16_STATE_CMD"
   [ "$settings" = 1 ] && vote ask G16 "$_G16_SETTINGS"
+  [ "$cc" = 1 ] && vote ask G16 "$_G16_CC"
+  [ "$into" = 1 ] && vote ask G16 "$_G16_INTO"
   return 0
 }
 
