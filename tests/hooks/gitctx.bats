@@ -82,6 +82,13 @@ EOT
   done
 }
 
+@test "a redirection among a shell's options is not its script" {
+  for c in "bash 2>/dev/null -c 'git push'" "bash -c 2>&1 'git push'" "bash >/tmp/log -c 'git push'" \
+    "bash -c > /tmp/log 'git push'" "bash -c <<< x 'git push'" "zsh -c 2> err 'git push'"; do
+    finds "$c" push
+  done
+}
+
 @test "a shell that runs a -c script reads its here-doc as data, in any cluster form" {
   for c in "bash -Ec 'cat'" "bash -c -- 'cat'" "bash --rcfile f -c 'cat'"; do
     run git_words "$(printf '%s\n' "$c <<'EOF'" 'git push --force' 'EOF')"

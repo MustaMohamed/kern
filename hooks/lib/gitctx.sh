@@ -38,6 +38,8 @@ _GW_AWK='
     c = 0; lng = !z
     for (k = h + 1; k <= cw_n; k++) {
       w = cw_w[k]
+      # A redirection is not an argument; one with no target attached takes the next word.
+      if (w ~ /^[0-9]*(<|>|&>)/) { if (w ~ /^[0-9]*[<>&|]+$/) k++; continue }
       if (w !~ /^[-+]/) { if (c) return k; return gw_dyn(w) ? -1 : 0 }
       if (gw_dyn(w)) return -1
       if (w == "-" || w == "--" || (z && w == "+")) { k++; break }
