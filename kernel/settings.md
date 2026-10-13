@@ -11,7 +11,7 @@ Above all files, the user's instruction in this session comes first, then a proj
 
 Format: one `key: value` per line. `#` starts a comment at line start or after whitespace outside quotes. kern strips surrounding quotes, so quote a value that ends in a space. Lists are comma-separated. A key with `<...>` in this table stands for a family, such as `overrides.commit`. In the Read by column, `pre-tool-use G1` means guard G1 of the pre-tool-use hook.
 
-Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read any other value as `ask`. `auto` lets through only the shapes under What auto and autopilot allow below, and every other shape still asks. `deny` denies in both modes. Floor actions have no key and never loosen: merge, production deploy, data deletion, force-push to a shared branch, messaging people. kern reports and ignores a key that names a floor action.
+Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read any other value as `ask`. `auto` lets through only the shapes under What auto and autopilot allow below, and kern asks or denies every other shape. `deny` denies in both modes. Floor actions have no key and never loosen: merge, production deploy, data deletion, force-push to a shared branch, messaging people. kern reports and ignores a key that names a floor action.
 
 | Key | Default | Values | Read by |
 |---|---|---|---|
@@ -87,13 +87,13 @@ G13 lets through only proven reads to a `protected_targets` entry and denies eve
 
 ## What auto and autopilot allow
 
-A policy key set to `auto`, or autopilot, lets an action through without asking only in the shapes below. kern asks for any other shape, and autopilot denies it. The guard's reason names the shape it wanted.
+A policy key set to `auto`, or autopilot, lets an action through without asking only in the shapes below. For any other shape kern asks or denies, and autopilot denies it. The guard's reason names the shape it wanted.
 
 | Action | Allowed shape | With the policy key at `auto` | Under autopilot |
 |---|---|---|---|
 | Commit | `git commit -m <msg>` or `git commit -F <file>`, exactly one of the two, plus only `-q` or `-v`, on a branch that is not protected. The message passes the convention, ticket-id and attribution checks | `commit.policy` allows it | allowed |
 | Push | `git push [-u] <remote> <current-branch>` to a branch that is not protected. The remote is one `git remote` lists, with no push URL and no URL rewrite | `push.policy` allows it | allowed |
-| Lease push | `git push --force-with-lease <remote> <current-branch>` to a branch that is not protected, when every commit on it past the base branch is the user's | never allowed. It asks | allowed only with `rebase.push: autopilot` |
+| Lease push | `git push --force-with-lease <remote> <current-branch>` to a branch that is not protected, when every commit on it past the base branch is the user's | never allowed. It asks or denies | allowed only with `rebase.push: autopilot` |
 | Draft PR | `gh pr create --draft` from the current branch, with `--title`, `--base`, `--fill` or `--body-file <file>`, after the duplicate check finds no PR for the branch | `pr.policy` allows it | allowed |
 | Review post | `gh pr review [<number>]` with `--comment`, `--request-changes` or `--approve`, or `gh pr comment [<number>]`, with any body in `--body-file <file>` | `review.post_policy` allows it | denied |
 | gh issue or label write | `gh issue create`, `comment`, `edit`, `close`, `reopen` or `lock`, or `gh label create` or `edit`, in this repo. The command names an issue by number, not by URL | `tracker.policy` allows it | denied |
@@ -103,7 +103,7 @@ A policy key set to `auto`, or autopilot, lets an action through without asking 
 
 Each allowed git or gh shape is the whole Bash call. Nothing runs before it: no `cd`, wrapper or assignment. No word expands, and no `$( )` or backtick appears. Only `head`, `tail`, `grep` or `cat` with no file argument may follow it, and a redirection may only go to `/dev/null` or copy a file descriptor.
 
-A `<file>` is a regular file inside the main worktree and outside `.git`. It is under `work_dir`, or git does not ignore it.
+A `<file>` is a regular file, not a symlink, inside the main worktree and outside `.git`. It is under `work_dir`, or git does not ignore it.
 
 The other guards still vote, and the strictest vote wins. G6 denies a commit or push that holds a possible secret or a `never_commit` path. G3 denies a review body that does not open with a `review.taxonomy` label, and an approval of the user's own PR.
 
