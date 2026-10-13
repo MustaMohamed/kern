@@ -581,11 +581,40 @@ ssh v1-host 'del C:\x'"
     "kubectl config set current-context prod" "helm diff upgrade api ./chart -f values.yaml" \
     "helm upgrade --install api ./chart --dry-run --debug" "helm install api ./chart --dry-run" \
     "aws s3 cp s3://bucket/logs/app.log ./app.log" "aws s3 sync s3://bucket/reports ./reports" \
-    "aws s3 mv s3://bucket/x ./x" "kubectl auth can-i create pods" "semantic-release --dry-run"
+    "kubectl auth can-i create pods" "semantic-release --dry-run"
   g15_all ask "kubectl rollout undo deploy/api" "kubectl apply --dry-run=none -f x.yml" "kubectl exec api -- npm publish" \
     "docker buildx build --push -t x ." "docker build --push -t x ." "aws s3 cp ./x s3://b/x" \
     "aws s3 sync dist s3://b --delete --profile prod" "aws s3 cp --recursive ./dist s3://b" "aws s3 cp - s3://b/x" \
     "aws s3 cp s3://a/x s3://b/x" "aws s3 mv ./x s3://b/x"
+}
+
+@test "G15: a move from a bucket, mvnw, and su --command= or an attached -c ask" {
+  g15_all ask "aws s3 mv s3://bucket/x ./x" "gsutil mv gs://b/x ./x" "mvnw deploy" "./mvnw -B deploy" \
+    "su --command='npm publish'" "su deploy --command 'npm publish'" "su -c'npm publish' deploy" \
+    "script -q -c'npm publish' /dev/null"
+  g15_all none "su --command='npm ci'" "./mvnw test" "aws s3 cp s3://bucket/x ./x"
+}
+
+@test "G15: the final rider's rows ask; their read forms do not" {
+  g15_all ask "flux reconcile kustomization apps --with-source" "eas build --platform all --auto-submit" "eas build -s" \
+    "cargo release patch --execute" "cargo yank --version 1.0.0" "func azure functionapp publish myfunc" \
+    "gcloud storage cp -r dist gs://bucket" "gcloud storage mv gs://b/x ./x" "gcloud storage rm gs://b/x" \
+    "gcloud run services update api --image x" "gcloud run services update-traffic api --to-latest" \
+    "gcloud run services delete api" "vercel alias set app-abc.vercel.app example.com" "firebase functions:delete fn" \
+    "fly secrets set KEY=v" "fly secrets unset KEY" "fly scale count 3" "npx prisma migrate deploy" "npx convex deploy" \
+    "npx release-it --ci" "npx gh-pages -d dist" "npx surge ./dist example.surge.sh" "npx nx release publish" \
+    "deno publish" "npx jsr publish" "aws cloudfront create-invalidation --distribution-id E1 --paths '/*'" \
+    "aws deploy create-deployment --application-name a --deployment-group-name g" \
+    "aws elasticbeanstalk update-environment --environment-name e --version-label v2" "heroku container:release web" \
+    "heroku releases:rollback v12" "kubectl -n prod cp ./x pod:/tmp/x" "mix hex.publish" "pod trunk push X.podspec" \
+    "dart pub publish" "flutter pub publish --force" "sbt publish" \
+    "docker buildx imagetools create -t ghcr.io/o/a:latest ghcr.io/o/a:1.2" "skopeo copy docker://a docker-daemon:b" \
+    "cdktf deploy" "cdktf destroy" "lerna version --yes"
+  g15_all none "fly status" "gcloud run services list" "prisma migrate status" "heroku logs --tail" \
+    "flux get kustomizations" "eas build --platform ios" "gcloud storage ls gs://b" "gcloud storage cp gs://b/x ./x" \
+    "vercel alias ls" "deno test" "mix test" "pod install" "flutter pub get" "dart pub get" "sbt compile" \
+    "skopeo inspect docker://x" "cdktf synth" "lerna run build" "nx build app" "heroku releases" \
+    "flutter pub publish --dry-run" "git checkout gh-pages"
 }
 
 @test "G15: a failed judge or a failed parse asks" {

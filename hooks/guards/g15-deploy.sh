@@ -11,9 +11,9 @@
 # terraform apply`, `man kubectl apply`), ask. A tool's words end at `--`; a --dry-run among them,
 # or one of its read verbs before the deploy verb, ends its vote.
 # Quoted text stays one word, except after a runner (npx, bunx, uvx, pnpx; npm exec or x, pnpm and
-# yarn dlx or exec, bun x, uv run or uv tool run, python -m), ssh, watch, or the -c of sh, bash,
-# zsh, dash, su or script: there each later word is split at blanks and its quotes dropped, since
-# it may be a command line (`ssh prod 'kubectl apply -f x.yml'`).
+# yarn dlx or exec, bun x, uv run or uv tool run, python -m), ssh, watch, or the -c (attached too)
+# or --command of sh, bash, zsh, dash, su or script: there each later word is split at blanks and
+# its quotes dropped, since it may be a command line (`ssh prod 'kubectl apply -f x.yml'`).
 # Out of scope (accepted limits): package scripts (npm run deploy, make deploy), a bare `vercel`
 # with an option value or a path (`vercel --scope team`), and names built at run time.
 
@@ -72,15 +72,17 @@ _G15_AWK='
   BEGIN {
     g15_tool("gh", "workflow run|release create|release new|release upload|release edit|release delete|release delete-asset|run rerun")
     g15_tool("npm", "publish|unpublish|deprecate|dist-tag add")
-    g15_tool("pnpm,yarn,bun,cargo,poetry,uv,lerna,changeset", "publish")
+    g15_tool("pnpm,yarn,bun,poetry,uv,changeset,deno,jsr,vsce,ovsx,sbt", "publish")
+    g15_tool("cargo", "publish|release|yank")
+    g15_tool("lerna", "publish|version")
     g15_tool("twine", "upload")
     g15_tool("gem", "push")
-    g15_tool("docker", "push|--push|stack deploy|stack up")
+    g15_tool("docker", "push|--push|stack deploy|stack up|imagetools create")
     g15_tool("docker-compose,podman", "push")
     g15_tool("terraform,tofu,terragrunt", "apply|destroy|import")
     g15_tool("pulumi", "up|destroy")
     g15_tool("cdk,aws-cdk", "deploy|destroy")
-    g15_tool("kubectl,oc", "apply|create|delete|replace|patch|rollout restart|rollout undo|rollout pause|rollout resume|scale|set|edit|annotate|label|run|expose|drain|cordon|taint")
+    g15_tool("kubectl,oc", "apply|create|delete|replace|patch|rollout restart|rollout undo|rollout pause|rollout resume|scale|set|edit|annotate|label|run|expose|drain|cordon|taint|cp")
     g15_tool("helm", "install|upgrade|uninstall|rollback|delete|del|un|push")
     g15_tool("helmfile", "apply|sync|destroy")
     g15_tool("argocd", "app sync|app create|app delete|app rollback")
@@ -88,32 +90,42 @@ _G15_AWK='
     g15_tool("serverless,sls", "deploy|remove")
     g15_tool("sam", "deploy|delete")
     g15_tool("sst", "deploy|remove")
-    g15_tool("vercel", "deploy|--prod|promote|rollback|redeploy|remove|~")
-    g15_tool("fly,flyctl", "deploy|apps destroy")
-    g15_tool("firebase,firebase-tools", "deploy|hosting:channel:deploy")
+    g15_tool("vercel", "deploy|--prod|promote|rollback|redeploy|remove|alias set|~")
+    g15_tool("fly,flyctl", "deploy|apps destroy|secrets set|secrets unset|scale")
+    g15_tool("firebase,firebase-tools", "deploy|hosting:channel:deploy|functions:delete")
     g15_tool("eb", "deploy")
-    g15_tool("gcloud", "run deploy|app deploy|functions deploy|builds submit|deploy releases create")
-    g15_tool("gsutil", "rsync >gs://|cp >gs://|mv >gs://|rm gs://*")
+    g15_tool("gcloud", "run deploy|app deploy|functions deploy|builds submit|deploy releases create|run services update|run services update-traffic|run services delete|storage cp >gs://|storage mv gs://*|storage rm gs://*")
+    g15_tool("gsutil", "rsync >gs://|cp >gs://|mv gs://*|rm gs://*")
     g15_tool("wrangler", "deploy|publish")
     g15_tool("netlify,netlify-cli", "deploy")
-    g15_tool("mvn", "deploy")
+    g15_tool("mvn,mvnw", "deploy")
     g15_tool("gradle,gradlew", "publish")
     g15_tool("dotnet", "nuget push")
-    g15_tool("semantic-release", ".")
-    g15_tool("vsce,ovsx", "publish")
-    g15_tool("eas", "update|submit")
+    g15_tool("semantic-release,release-it,gh-pages,surge", ".")
+    g15_tool("eas", "update|submit|build --auto-submit*|build -s")
     g15_tool("supabase", "functions deploy|db push")
     g15_tool("railway", "up|deploy")
     g15_tool("kamal", "deploy|rollback")
     g15_tool("az", "create|delete|update|deploy|upload|swap|restart|start|stop|publish|push")
     g15_tool("azd", "up|deploy|provision|down")
     g15_tool("glab", "release create|release upload|release delete|ci run")
-    g15_tool("aws", "ecs update-service|lambda update-function-code|lambda publish-version|lambda create-function|lambda delete-function|lambda update-function-configuration|cloudformation deploy|cloudformation create-stack|cloudformation update-stack|cloudformation delete-stack|s3 sync >s3://|s3 cp >s3://|s3 mv >s3://|s3 rm s3://*|s3 rb s3://*|s3api put-object|s3api delete-object|s3api delete-bucket|s3api put-bucket-policy")
+    g15_tool("flux", "reconcile")
+    g15_tool("func", "publish")
+    g15_tool("prisma", "migrate deploy")
+    g15_tool("convex", "deploy")
+    g15_tool("nx", "release publish")
+    g15_tool("heroku", "container:release|releases:rollback")
+    g15_tool("mix", "hex.publish")
+    g15_tool("pod", "trunk push")
+    g15_tool("dart,flutter", "pub publish")
+    g15_tool("skopeo", "copy")
+    g15_tool("cdktf", "deploy|destroy")
+    g15_tool("aws", "ecs update-service|lambda update-function-code|lambda publish-version|lambda create-function|lambda delete-function|lambda update-function-configuration|cloudformation deploy|cloudformation create-stack|cloudformation update-stack|cloudformation delete-stack|s3 sync >s3://|s3 cp >s3://|s3 mv s3://*|s3 rm s3://*|s3 rb s3://*|s3api put-object|s3api delete-object|s3api delete-bucket|s3api put-bucket-policy|cloudfront create-invalidation|deploy create-deployment|elasticbeanstalk update-environment")
     g15_reads("kubectl,oc", "get describe logs explain top config auth diff wait version api-resources cluster-info events")
     g15_reads("helm", "diff template lint show status history get list search repo")
     g15_reads("docker", "run exec build inspect logs ps images")
     # Where a command line starts: after the word itself (" "), after a listed word that follows it,
-    # or after a -c cluster that follows it ("-c").
+    # or after a -c cluster or --command that follows it ("-c"), whose attached value is one too.
     G15R["npx"] = G15R["bunx"] = G15R["uvx"] = G15R["pnpx"] = G15R["ssh"] = G15R["watch"] = " "
     G15R["npm"] = " exec x "; G15R["pnpm"] = " dlx exec "; G15R["yarn"] = " dlx exec "; G15R["bun"] = " x "
     G15R["uv"] = " run "; G15R["python"] = " -m "
@@ -134,7 +146,16 @@ _G15_AWK='
         continue
       }
       L[++m] = cw_w[k]
-      if (host != "" && (G15R[host] == "-c" ? cw_w[k] ~ /^-[a-z]*c[a-z]*$/ : index(G15R[host], " " cw_w[k] " "))) { r = m; continue }
+      if (host != "" && G15R[host] == "-c" && (cw_w[k] ~ /^-[a-z]*c/ || cw_w[k] ~ /^--command(=|$)/)) {
+        r = m
+        x = ""
+        if (cw_w[k] ~ /^--command=/) x = substr(cw_w[k], 11)
+        else if (cw_w[k] ~ /^-[a-z]*c/) x = substr(cw_w[k], index(cw_w[k], "c") + 1)
+        n = split(x, a, /[ \t\037]+/)
+        for (i = 1; i <= n; i++) { gsub(qre, "", a[i]); if (a[i] != "") L[++m] = a[i] }
+        continue
+      }
+      if (host != "" && G15R[host] != "-c" && index(G15R[host], " " cw_w[k] " ")) { r = m; continue }
       h = g15_name(cw_w[k])
       if (h in G15R) { if (G15R[h] == " ") r = m; else host = h }
     }
@@ -227,7 +248,12 @@ _g15_named() {
       *[Dd][Oo][Tt][Nn][Ee][Tt]* | *[Ss][Ee][Mm][Aa][Nn][Tt][Ii][Cc]* | *[Vv][Ss][Cc][Ee]* | \
       *[Oo][Vv][Ss][Xx]* | *[Ee][Aa][Ss]* | *[Ss][Uu][Pp][Aa][Bb][Aa][Ss][Ee]* | \
       *[Rr][Aa][Ii][Ll][Ww][Aa][Yy]* | *[Kk][Aa][Mm][Aa][Ll]* | *[Aa][Zz]* | *[Gg][Ll][Aa][Bb]* | \
-      *[Aa][Ww][Ss]* | *[Pp][Uu][Ss][Hh]*) return 0 ;;
+      *[Aa][Ww][Ss]* | *[Ff][Ll][Uu][Xx]* | *[Ff][Uu][Nn][Cc]* | *[Pp][Rr][Ii][Ss][Mm][Aa]* | \
+      *[Cc][Oo][Nn][Vv][Ee][Xx]* | *[Rr][Ee][Ll][Ee][Aa][Ss][Ee]-[Ii][Tt]* | \
+      *[Ss][Uu][Rr][Gg][Ee]* | *[Nn][Xx]* | *[Dd][Ee][Nn][Oo]* | *[Jj][Ss][Rr]* | \
+      *[Hh][Ee][Rr][Oo][Kk][Uu]* | *[Mm][Ii][Xx]* | *[Pp][Oo][Dd]* | *[Dd][Aa][Rr][Tt]* | \
+      *[Ff][Ll][Uu][Tt][Tt][Ee][Rr]* | *[Ss][Bb][Tt]* | *[Ss][Kk][Oo][Pp][Ee][Oo]* | \
+      *[Pp][Uu][Ss][Hh]*) return 0 ;;
   esac
   return 1
 }
