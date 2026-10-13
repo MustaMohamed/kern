@@ -23,6 +23,13 @@ if [ -n "$SID" ]; then
     *) state_reset "$SID" ;;
   esac
 fi
+# Other sessions' state files, and temp files a failed write left, go after 30 days untouched. A
+# symlinked state dir is left alone. A session id with glob characters only keeps more files.
+STATE_DIR=$(state_dir)
+if [ -d "$STATE_DIR" ] && [ ! -L "$STATE_DIR" ]; then
+  find "$STATE_DIR" -maxdepth 1 -type f \( -name '*.state' -o -name '.state.*' \) -mtime +30 \
+    ! -name "$SID.state" -delete >/dev/null 2>&1
+fi
 
 K_VERSION=$(kern_version)
 K_ROOT="$KERN_ROOT"

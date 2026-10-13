@@ -142,6 +142,72 @@ YML
   [[ "$set_line" != *"rebase.push="* ]] || false
 }
 
+# old FILE...: sets each FILE's mtime to 2020-01-01, well past the 30-day limit.
+old() { touch -h -t 202001010000 "$@"; }
+
+@test "state files untouched for 30 days are removed; recent ones and other names stay" {
+  S="$CLAUDE_PLUGIN_DATA/sessions"
+  mkdir -p "$S/sub"
+  for f in gone.state .state.Ab12Cd recent.state notes.txt sub/deep.state; do printf 'voice: normal\n' >"$S/$f"; done
+  old "$S/gone.state" "$S/.state.Ab12Cd" "$S/notes.txt" "$S/sub/deep.state"
+  start startup
+  [ "$status" -eq 0 ]
+  [ ! -e "$S/gone.state" ]
+  [ ! -e "$S/.state.Ab12Cd" ]
+  [ -f "$S/recent.state" ]
+  [ -f "$S/notes.txt" ]
+  [ -f "$S/sub/deep.state" ]
+}
+
+@test "the current session's state file stays however old it is" {
+  set_autopilot on
+  old "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  start compact
+  [ -f "$CLAUDE_PLUGIN_DATA/sessions/test-session.state" ]
+  [[ "$output" == *"autopilot=on"* ]] || false
+}
+
+@test "a symlink named like a state file stays, and so does its target" {
+  S="$CLAUDE_PLUGIN_DATA/sessions"
+  mkdir -p "$S"
+  printf 'keep\n' >"$BATS_TEST_TMPDIR/target"
+  ln -s "$BATS_TEST_TMPDIR/target" "$S/x.state"
+  old "$BATS_TEST_TMPDIR/target" "$S/x.state"
+  start startup
+  [ -L "$S/x.state" ]
+  [ -f "$BATS_TEST_TMPDIR/target" ]
+}
+
+@test "a symlinked state dir is left alone" {
+  mkdir -p "$BATS_TEST_TMPDIR/real"
+  printf 'voice: normal\n' >"$BATS_TEST_TMPDIR/real/gone.state"
+  old "$BATS_TEST_TMPDIR/real/gone.state"
+  ln -s "$BATS_TEST_TMPDIR/real" "$CLAUDE_PLUGIN_DATA/sessions"
+  # find does not follow a symlinked start path, so a logging find shows the step was skipped.
+  real=$(command -v find)
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/sh\necho "$*" >>"%s/find.log"\nexec "%s" "$@"\n' "$BATS_TEST_TMPDIR" "$real" >"$BATS_TEST_TMPDIR/bin/find"
+  chmod +x "$BATS_TEST_TMPDIR/bin/find"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH" start startup
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == "# kern "* ]] || false
+  [ -f "$BATS_TEST_TMPDIR/real/gone.state" ]
+  [ ! -e "$BATS_TEST_TMPDIR/find.log" ]
+}
+
+@test "a state dir kern cannot write to does not stop session-start" {
+  S="$CLAUDE_PLUGIN_DATA/sessions"
+  mkdir -p "$S"
+  printf 'voice: normal\n' >"$S/gone.state"
+  old "$S/gone.state"
+  chmod 555 "$S"
+  out=$(bash "$K/hooks/session-start" 2>/dev/null <<<"$(payload SessionStart '"source":"startup"')") || rc=$?
+  chmod 755 "$S"
+  [ "${rc-0}" -eq 0 ]
+  [[ "$out" == "# kern "* ]] || false
+  [[ "$out" != *"ermission denied"* ]] || false
+}
+
 @test "with settings.sh missing, session-start exits 0 and prints nothing" {
   mkdir -p "$BATS_TEST_TMPDIR/k"
   cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
