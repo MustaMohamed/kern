@@ -79,3 +79,7 @@ extension/fonts/GEIST_LICENSE.txt.
 - evals/distractors.json: superpowers skills/*/SKILL.md descriptions (first clauses)
 - scripts/lib/rank.mjs: addy scripts/run-evals.js lines 62-102 and 121-139
 - scripts/route-eval.mjs: addy scripts/run-evals.js runDeterministic (adapted)
+- skills/unslop/SKILL.md: local unslop/SKILL.md (the user's adapted copy of pstack unslop)
+- skills/technical-writing/SKILL.md: pstack pstack/skills/technical-writing/SKILL.md
+- modes/terse.md: caveman skills/caveman/SKILL.md (idea only; text written for kern)
+- hooks/prompt-submit: caveman src/hooks/caveman-parse.js and caveman-mode-tracker.js (ideas only: envelope parsing, negation and question guards; code written for kern)
