@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # kern SessionStart: resets or keeps mode state, then prints the kernel, the settings summary and
 # the active voice rules. Plain stdout is added to Claude's context.
+# shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export KERN_ROOT
 # POSIXLY_CORRECT in the environment starts bash in POSIX mode, where a "." that fails exits the
@@ -26,10 +27,14 @@ need() {
   done
 }
 
-for lib in json settings state render; do
-  # shellcheck source=/dev/null
-  . "$KERN_ROOT/hooks/lib/$lib.sh" || no_lib "$lib.sh"
-done
+# shellcheck source=hooks/lib/json.sh
+. "$KERN_ROOT/hooks/lib/json.sh" || no_lib json.sh
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh" || no_lib settings.sh
+# shellcheck source=hooks/lib/state.sh
+. "$KERN_ROOT/hooks/lib/state.sh" || no_lib state.sh
+# shellcheck source=hooks/lib/render.sh
+. "$KERN_ROOT/hooks/lib/render.sh" || no_lib render.sh
 # Every function each library defines. A bats test keeps these lists equal to the definitions.
 need json.sh json_get json_get_raw json_escape json_ok ti_get
 need settings.sh kern_main_root _settings_files _settings_lookup _settings_ignored _settings_local_ok settings_get

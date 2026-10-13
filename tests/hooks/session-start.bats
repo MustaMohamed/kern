@@ -246,10 +246,5 @@ start_without() {
 }
 
 @test "session-start checks every function each library it loads defines" {
-  local lib
-  for lib in json.sh settings.sh state.sh render.sh; do
-    [ -n "$(lib_functions "$lib")" ] || { echo "$lib defines no functions"; return 1; }
-    [ "$(need_list session-start "$lib")" = "$(lib_functions "$lib")" ] ||
-      { echo "$lib: need list differs from its definitions"; diff <(need_list session-start "$lib") <(lib_functions "$lib"); return 1; }
-  done
+  need_lists_match session-start
 }

@@ -180,12 +180,7 @@ without_lib() {
 }
 
 @test "pre-tool-use checks every function each library it loads defines" {
-  local lib
-  for lib in json.sh settings.sh state.sh decide.sh gitctx.sh; do
-    [ -n "$(lib_functions "$lib")" ] || { echo "$lib defines no functions"; return 1; }
-    [ "$(need_list pre-tool-use "$lib")" = "$(lib_functions "$lib")" ] ||
-      { echo "$lib: need list differs from its definitions"; diff <(need_list pre-tool-use "$lib") <(lib_functions "$lib"); return 1; }
-  done
+  need_lists_match pre-tool-use
 }
 
 @test "a gitctx.sh that sources but lacks git_words gives the G0 ask" {

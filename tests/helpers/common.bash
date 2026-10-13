@@ -89,6 +89,26 @@ lib_functions() {
   sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)() {.*/\1/p' "$(kern_root)/hooks/lib/$1" | sort
 }
 
+# hook_libs HOOK: the libraries hooks/HOOK sources with a `. "$KERN_ROOT/hooks/lib/X.sh"` line.
+hook_libs() {
+  sed -n 's|^\. "\$KERN_ROOT/hooks/lib/\([A-Za-z0-9_-]*\.sh\)".*|\1|p' "$(kern_root)/hooks/$1"
+}
+
+# need_lists_match HOOK: hooks/HOOK has need lines for exactly the libraries it sources, and each
+# library's need lines name exactly the functions it defines. Prints the difference otherwise.
+need_lists_match() {
+  local libs lib
+  libs=$(hook_libs "$1")
+  [ -n "$libs" ] || { echo "$1 has no source line for a hooks/lib library"; return 1; }
+  [ "$(printf '%s\n' "$libs" | sort)" = "$(awk '$1 == "need" { print $2 }' "$(kern_root)/hooks/$1" | sort -u)" ] ||
+    { echo "$1: its need lines and its source lines name different libraries"; return 1; }
+  for lib in $libs; do
+    [ -n "$(lib_functions "$lib")" ] || { echo "$lib defines no functions"; return 1; }
+    [ "$(need_list "$1" "$lib")" = "$(lib_functions "$lib")" ] ||
+      { echo "$1, $lib: need list differs from its definitions"; diff <(need_list "$1" "$lib") <(lib_functions "$lib"); return 1; }
+  done
+}
+
 # set_autopilot on|off: writes the session state the hooks read (tests only; G16 guards real sessions).
 set_autopilot() {
   mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
