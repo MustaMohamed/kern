@@ -199,8 +199,8 @@ allowed-tools: Read
 2. Any settings layer with `autopilot: denied`: state stays off; inject "autopilot denied by <file>". [approved]
 3. `off`, or a prompt-initial "stop autopilot", turns it off. Turning off is always allowed. [CV caveman-parse.js:250-260 durable off]
 4. State `autopilot: on`, `since: <iso time>`. Reset on `startup` and `clear`; kept on `compact` and `resume`. [approved]
-5. While on, each prompt carries: "autopilot ON: commit when convention and attribution checks pass (no git add -A); push the current non-protected branch; draft PR after dedup; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the human; park judgment calls." [approved; MM-ship 0.5]
-6. G1, G2, G5, G14, G15 read `autopilot_on` (settings allowed and state on). G16 protects the state. [approved]
+5. While on, each prompt carries: "autopilot ON: commit with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or $( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly: no wrapper, no cd first; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls." [M1 close: names the shapes the guards prove]
+6. The dispatcher reads `autopilot_on` (settings allowed and state on) once and applies it to every guard. G16 protects the state. [approved]
 
 **4. Steps**
 1. Read the injected `kern mode:` line. None: "the hook did not run; autopilot is off". **Never write the state file; never report "on" without the hook line.** [approved; D6]

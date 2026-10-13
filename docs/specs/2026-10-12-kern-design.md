@@ -156,7 +156,7 @@ Rendering fills `{VERSION}` from `plugin.json`, `{KERN}` with `${CLAUDE_PLUGIN_R
 
 The rule: at the start of each new task, before the first tool call or question, match the task against the table. A casual turn, a question answerable from context, or a user opt-out matches nothing. On a match, Read the route, then open a todo list whose first items are its `## Steps`, copied verbatim. A step not done stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
 
-| When (observable) | Route |
+| Observable trigger | Route |
 |---|---|
 | New behaviour and no agreed spec | define |
 | Agreed spec, more than one step | plan |
@@ -253,7 +253,7 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 | Risk | `protected_targets` | Unset | G13 |
 | Risk | `deploy.envs`, `deploy.proof` | Unset | ship-check, G15 |
 | Risk | `never_commit` | Unset | G6 |
-| Modes | `mode.default` | `auto` | session-start, prompt-submit |
+| Modes | `mode.voice`, `mode.surface` | `normal`, `auto` | session-start, prompt-submit |
 | Learning | `lessons` | `.kern/lessons.md` | retro, correct |
 | Learning | `rule_bar` | 3 occurrences or 1 severe incident for prose; 2 for a mechanism | retro, correct |
 | Overrides | `overrides.<job>`, `route.<name>` | None | kernel, all |
@@ -285,7 +285,7 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 
 Each word sets one field and leaves the other as it is. `terse` and `normal` set voice, and `chat`, `auto` and `html` set surface. Words combine, as in `/kern:mode html terse`. `default` resets both fields to the settings defaults.
 
-Storage: `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.json`, keyed by the `session_id` from the hook's stdin. State survives compaction and resume. Startup and `/clear` reset to `mode.default`.
+Storage: `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.state`, flat `key: value` lines keyed by the `session_id` from the hook's stdin. State survives compaction and resume. Startup and `/clear` reset to `mode.voice` and `mode.surface`.
 
 ### 6.2 Switching
 
