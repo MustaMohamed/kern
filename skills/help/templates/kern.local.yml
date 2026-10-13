@@ -1,0 +1,53 @@
+# kern settings for this project. Untracked: listed in .git/info/exclude by /kern:help setup.
+# One `key: value` per line. Quote a value that ends in a space. Lists are comma-separated.
+# Every key is documented in kern's kernel/settings.md. Delete lines you do not need.
+
+# Repo
+base_branch: main
+# branch.pattern: {id}/{slug}
+# branch.protected: main, production
+# worktree.dir: .claude/worktrees
+# worktree.setup: npm ci
+# shared_services: postgres
+
+# Checks (detected when unset; set only where detection is wrong)
+# test.full: npm test
+# test.focused: npm test -- {file}
+# typecheck: npm run type-check
+# lint: npm run lint
+# build: npm run build
+# verify.browser: node scripts/browser-check.mjs
+
+# Git and PRs
+# commit.convention: "^[A-Z]+-[0-9]+: "
+# commit.attribution: none
+# commit.policy: ask
+# push.policy: ask
+# pr.policy: ask
+# rebase.push: ask
+
+# Tracking
+# tracker: linear
+# tracker.first: false
+# tracker.policy: ask
+
+# Review
+# review.taxonomy: blocker,should-fix,nit,pre-existing
+# review.post_policy: ask
+
+# Risk
+# autopilot: allowed
+# Each protected target is an exact host (any case, also as user@host or in a URL), a host:port, or an sqlite file path.
+# List every ssh alias and each SSH tunnel's local host:port. G13 allows only proven reads to them and denies everything else.
+# protected_targets: prod-db.internal
+# deploy.envs: production
+# never_commit: *.db, .env*
+# scope_threshold: 4
+
+# Modes
+# mode.voice: normal
+# mode.surface: auto
+
+# Project skills that own a kern job (kern's guards still apply to them)
+# overrides.commit: commit
+# overrides.self-review: self-review

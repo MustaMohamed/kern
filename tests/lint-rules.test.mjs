@@ -130,3 +130,39 @@ test('rule 4: existing references pass, repo-root fallback, anchors and ./', () 
   const bad = '\n## Steps\n\n1. See `references/missing.md#part`.\n';
   assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', bad) })), [4]);
 });
+
+// M1 rules: 6 (routes and help map), 7 (kernel size), 13 (settings keys), 15 (hook-shape fixtures).
+const kernel = (rows) => `# kern {VERSION}\n\n## Routing\n| When | Route |\n|---|---|\n${rows.join('\n')}\n`;
+
+test('rule 6: a route must exist and open with ## Steps', () => {
+  const ok = lint({
+    'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |', '| Phase ends | Read {ROOT}/kernel/context.md |']),
+    'skills/tw/SKILL.md': skill('tw', 'description: d\ndisable-model-invocation: true'),
+    'kernel/context.md': '# Context\n\n## Steps\n1. a\n',
+  });
+  assert.deepEqual(rules(ok), []);
+  const zero = lint({
+    'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']),
+    'skills/tw/SKILL.md': skill('tw', 'description: d\ndisable-model-invocation: true', '\n# tw\n\n## Steps\n\n0. Defer\n1. a\n'),
+  });
+  assert.deepEqual(rules(zero), [], 'a ## Steps list may start at 0.');
+  const missing = lint({ 'kernel/kernel.md': kernel(['| Prose | Read {KERN}/nope/SKILL.md |']) });
+  assert.deepEqual(rules(missing), [6]);
+  const noSteps = lint({
+    'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']),
+    'skills/tw/SKILL.md': skill('tw', 'description: d\ndisable-model-invocation: true', '\n# tw\n\n## Rules\n\n1. a\n'),
+  });
+  assert.deepEqual(rules(noSteps), [6]);
+});
+
+test('rule 6: every user-reachable skill is in the help map', () => {
+  const map = '| Skill | Tier | Reached by | Job |\n|---|---|---|---|\n| `help` | slash | /kern:help | map |\n';
+  const files = {
+    'skills/help/SKILL.md': skill('help', 'description: d\ndisable-model-invocation: true'),
+    'skills/help/references/map.md': map,
+    'skills/mode/SKILL.md': skill('mode', 'description: d\ndisable-model-invocation: true'),
+  };
+  assert.deepEqual(rules(lint(files)), [6]);
+  files['skills/help/references/map.md'] = map + '| `mode` | slash | /kern:mode | voice |\n';
+  assert.deepEqual(rules(lint(files)), []);
+});

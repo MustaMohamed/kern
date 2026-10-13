@@ -164,6 +164,28 @@ export const RULES = [
     }
     return out;
   } },
+  { id: 6, check(model) {
+    const out = [];
+    const rows = [...model.kernelText.matchAll(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/gm)];
+    for (const m of rows) {
+      const target = m[1] === 'KERN' ? join('skills', m[2]) : m[2];
+      const file = join(model.root, target);
+      if (!existsSync(file)) { out.push(err(6, 'kernel/kernel.md', `route ${target} does not exist`)); continue; }
+      const body = parseFrontmatter(readFileSync(file, 'utf8')).body.replace(/\r\n/g, '\n');
+      const firstH2 = body.split('\n').find((l) => l.startsWith('## '));
+      if (firstH2 !== '## Steps') out.push(err(6, target, 'a route file must open with ## Steps'));
+      else if (!/^## Steps\n+\d+\. /m.test(body)) out.push(err(6, target, '## Steps must open with a numbered list'));
+    }
+    const mapFile = join(model.root, 'skills', 'help', 'references', 'map.md');
+    if (existsSync(mapFile)) {
+      const listed = new Set([...readFileSync(mapFile, 'utf8').matchAll(/^\| `([a-z0-9-]+)` \|/gm)].map((m) => m[1]));
+      for (const s of model.skills) {
+        if (s.data['user-invocable'] === 'false') continue;
+        if (!listed.has(s.name)) out.push(err(6, rel(model, s.file), `${s.name} is missing from skills/help/references/map.md`));
+      }
+    }
+    return out;
+  } },
 ];
 
 export function runLint(model) {
