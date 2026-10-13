@@ -395,7 +395,9 @@ _cmd_words() {
 }
 
 # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the
-# command is not git. What _cmd_words skips comes first.
+# command is not git. What _cmd_words skips comes first. The global options are those of git 2.54,
+# the table G1 reads (_g01_git_rec); those that take a value take the next word unless it is
+# attached with =. Only -C moves `dir`.
 git_sub() {
   local w=() t i=1 n dir="${CWD:-$PWD}" rest=""
   while IFS= read -r t; do w+=("$t"); done <<EOT
@@ -411,8 +413,11 @@ EOT
         case "$t" in /*) dir="$t" ;; *) dir="$dir/$t" ;; esac
         i=$((i + 2))
         ;;
-      -c) i=$((i + 2)) ;;
-      --git-dir=* | --work-tree=* | --namespace=* | --no-pager | --paginate | -p | --bare | --no-replace-objects | --literal-pathspecs | --no-optional-locks) i=$((i + 1)) ;;
+      -c | --config-env | --git-dir | --work-tree | --namespace | --super-prefix | --attr-source) i=$((i + 2)) ;;
+      --config-env=* | --git-dir=* | --work-tree=* | --namespace=* | --super-prefix=* | --attr-source=* | \
+        --exec-path=* | -p | -P | --paginate | --no-pager | --bare | --no-replace-objects | --no-lazy-fetch | \
+        --no-optional-locks | --no-advice | --literal-pathspecs | --glob-pathspecs | --noglob-pathspecs | \
+        --icase-pathspecs) i=$((i + 1)) ;;
       *) break ;;
     esac
   done

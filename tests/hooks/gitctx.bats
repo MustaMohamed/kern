@@ -236,6 +236,17 @@ sh"
   [ "$status" -eq 1 ]
 }
 
+@test "git_sub skips each global option of git 2.54, and the next word where it takes a value" {
+  for g in -P -p --no-pager --paginate --no-advice --bare --no-replace-objects --no-lazy-fetch \
+    --no-optional-locks --literal-pathspecs --glob-pathspecs --noglob-pathspecs --icase-pathspecs \
+    '--config-env x=Y' --config-env=x=Y '--git-dir /r/.git' --git-dir=/r/.git '--work-tree /r' \
+    --work-tree=/r '--namespace n' --namespace=n '--super-prefix p/' --super-prefix=p/ \
+    '--attr-source HEAD' --attr-source=HEAD --exec-path=/x '-c a=b'; do
+    run git_sub "git $g push origin production"
+    [ "$output" = "/tmp	push	origin production" ] || { echo "$g -> $output"; return 1; }
+  done
+}
+
 @test "gh_sub, word_value and word_has" {
   [ "$(gh_sub 'GH_TOKEN=x gh pr create --draft')" = "pr create" ]
   w=$(_shell_words "gh pr create --head feat --title 'a b'")
