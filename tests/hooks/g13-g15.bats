@@ -310,6 +310,52 @@ EOF"
   g13_all none "ssh v1-host 'dir C:\x'"
 }
 
+@test "G13: SQL files are read only for a target, and denied above 1 MB" {
+  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  awk 'BEGIN { for (i = 0; i < 30000; i++) print "SELECT id, name FROM users WHERE id = " i ";" }' >"$R/big.sql"
+  awk 'BEGIN { for (i = 0; i < 1500; i++) print "SELECT id, name FROM users WHERE note = '\''x;y'\'' AND id = " i ";" }' >"$R/mid.sql"
+  g13_all deny "mysql -h prod-db.internal < big.sql" "psql -h prod-db.internal -f big.sql"
+  [[ "$output" == *"over 1 MB"* ]] || false
+  g13_all none "mysql -h prod-db.internal < mid.sql"
+  # A FIFO no one writes blocks whoever opens it to read: a call to another host must not open it.
+  mkfifo "$R/pipe.sql"
+  (gx "psql -h other-db -f pipe.sql" && decision_of "$output" >"$BATS_TEST_TMPDIR/d") &
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [ -s "$BATS_TEST_TMPDIR/d" ] && break; sleep 0.25; done
+  early=$(cat "$BATS_TEST_TMPDIR/d" 2>/dev/null || true)
+  # Opening it read-write for one null command releases a reader that is waiting, if any.
+  : 7<>"$R/pipe.sql"
+  wait
+  [ "$early" = none ]
+}
+
+@test "G13: a backslash-newline joins words before G13 reads them" {
+  printf 'protected_targets: v1-host, 127.0.0.1:3307\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "s\\
+sh v1-host 'del C:\x'" "echo x\\\\
+ssh v1-host 'del C:\x'"
+  g13_all none "ssh v1-host \\
+  'dir C:\data'" "mysql -h 127.0.0.1 \\
+  -P 3307 \\
+  -e 'SELECT 1'"
+}
+
+@test "G13: PowerShell formatting, Get- cmdlets and property reads are reads; a method call is not" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all none "ssh v1-host 'powershell -c \"Get-ChildItem C:\data | Format-Table Name,CreationTime\"'" \
+    "ssh v1-host 'powershell -c \"Get-ChildItem C:\data | ft Name; gci C:\x | fl\"'" \
+    "ssh v1-host 'Get-ChildItem C:\data | Format-List'" "ssh v1-host 'powershell -c (Get-Item C:\x).CreationTime'" \
+    "ssh v1-host 'powershell -c \"(Get-Item C:\x).LastWriteTime\"'" "ssh v1-host 'Get-Service mysql'"
+  g13_all deny "ssh v1-host 'powershell -c (Get-Item C:\x).Delete()'" "ssh v1-host 'powershell -c (Get-Item C:\x).Delete ()'" \
+    "ssh v1-host 'powershell -c (Get-Item C:\x).CreationTime.ToString()'" \
+    "ssh v1-host 'powershell -c (Get-Item C:\x).IsReadOnly = 1'" "ssh v1-host 'Get-Item C:\x | Remove-Item'"
+}
+
+@test "G13: one host:path sftp operand is a get from the target" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all none "sftp v1-host:/data/x.pdf ./" "sftp admin@v1-host:/data/x.pdf" "sftp sftp://v1-host/data/x.pdf"
+  g13_all deny "sftp v1-host:" "sftp v1-host:/data/x.pdf <<< 'put a'" "sftp v1-host"
+}
+
 @test "G14: a tracker write asks, a read does not vote, autopilot denies" {
   mcp mcp__claude_ai_Linear__save_issue
   [ "$(decision_of "$output")" = ask ]
