@@ -109,13 +109,14 @@ wrapped() {
 }
 
 # natural PROMPT: switches only when the first line, lowercased and trimmed, is a switch phrase and
-# nothing else, apart from a leading "please", "ok" or "okay", a trailing "please" and a final . or !.
-# A phrase that ends in "terse" or "normal" may add " mode". A line that holds anything more, such
-# as "use terse, descriptive names", never switches.
+# nothing else, apart from a leading "please", "ok" or "okay" and any trailing mix of "please", "now"
+# and a final . or !. A phrase that ends in "terse" or "normal" may add " mode". A line that holds
+# anything more, such as "use terse, descriptive names", never switches.
 natural() {
   local p
   p=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}' | lower |
-    sed -E 's/^[[:space:]]+//; s/[[:space:]]*[.!]*[[:space:]]*$//; s/,?[[:space:]]+please$//; s/^(please|ok|okay),?[[:space:]]+//; s/(^|[[:space:]])(terse|normal) mode$/\1\2/')
+    sed -E -e 's/^[[:space:]]+//; s/[[:space:]]+$//' -e ':a' -e 's/[[:space:]]*[.!]+$//; s/,?[[:space:]]+(please|now)$//' -e 'ta' \
+      -e 's/^(please|ok|okay),?[[:space:]]+//; s/(^|[[:space:]])(terse|normal) mode$/\1\2/')
   case "$p" in
     terse | "go terse" | "be terse" | "use terse" | "enable terse" | "turn on terse" | "activate terse" | "switch to terse" | "terse on")
       set_voice terse && SHOW_LINE=1
