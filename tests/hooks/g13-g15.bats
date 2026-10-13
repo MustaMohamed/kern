@@ -652,23 +652,24 @@ ssh v1-host 'del C:\x'"
   done
 }
 
-@test "G13 and G15: a 10 KB here-doc PR body passes every guard in under 2 s in a UTF-8 locale" {
+@test "G13 and G15: a 10 KB inline PR body passes every guard in under 2 s in a UTF-8 locale" {
   local body="" i=0 line cmd t0 t1
   printf 'protected_targets: v1-host\ndeploy.envs: production\n' >"$R/.claude/kern.local.yml"
-  line="- Fixed the \`npm publish\` step so it doesn't \"push\" to production's main branch; see docs/release.md (ssh, scp, kubectl apply)."
+  # Inline, as Claude writes it: the double quotes, backticks and dollars inside are escaped.
+  line='- Fixed the \`npm publish\` step so it doesn'\''t \"push\" to production'\''s main branch, a naïve \$PATH fix; see docs/release.md (ssh, scp, kubectl apply).'
   while [ "${#body}" -lt 10240 ]; do
     i=$((i + 1))
     body="$body$i. $line
 "
   done
-  cmd="gh pr create --title 'M1: x' --body \"\$(cat <<'EOF'
-${body}EOF
-)\""
+  cmd="gh pr create --title 'M1: x' --body \"$body\""
   export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
   t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
   gx "$cmd" ""
   t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
   [ "$status" = 0 ]
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"G4: "* ]] || false
   [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
 }
 

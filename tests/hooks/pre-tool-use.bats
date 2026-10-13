@@ -134,6 +134,12 @@ feed() {
   [ "$ids " = "$files" ]
 }
 
+@test "decision_of tells output with no decision from no output" {
+  [ "$(decision_of "")" = none ]
+  [ "$(decision_of "pre-tool-use: line 9: _g01_x: command not found")" = error ]
+  [ "$(decision_of '{"hookSpecificOutput":{"permissionDecision":"ask"}}')" = ask ]
+}
+
 @test "KERN_GUARDS limits the guards under bats only" {
   p=$(payload PreToolUse "\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/sessions/test-session.state\"}")
   run_guard "$p" g01

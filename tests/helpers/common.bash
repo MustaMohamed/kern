@@ -58,11 +58,18 @@ run_guard() {
   run env KERN_GUARDS="$guards" bash "$(kern_root)/hooks/pre-tool-use" <<<"$1"
 }
 
-# decision_of OUTPUT: allow|ask|deny|none.
+# decision_of OUTPUT: allow|ask|deny; none when OUTPUT is empty, error when OUTPUT holds no decision
+# but is not empty (a bash error, for example).
 decision_of() {
   local d
   d=$(printf '%s' "$1" | sed -n 's/.*"permissionDecision":"\([a-z]*\)".*/\1/p')
-  printf '%s\n' "${d:-none}"
+  if [ -n "$d" ]; then
+    printf '%s\n' "$d"
+  elif [ -n "$1" ]; then
+    printf 'error\n'
+  else
+    printf 'none\n'
+  fi
 }
 
 # parsed_decision OUTPUT: the permissionDecision of OUTPUT as JSON.parse reads it; fails when OUTPUT
