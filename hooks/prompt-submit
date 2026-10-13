@@ -138,9 +138,10 @@ natural() {
   return 0
 }
 
-# _nl_ok FIRST: the trigger is the whole first line or is followed by punctuation or "and".
+# _nl_ok FIRST: the trigger is the whole first line or is followed by punctuation or "and". A
+# trigger that ends in "terse" or "normal" may take " mode", as in "turn off terse mode".
 _nl_ok() {
-  printf '%s\n' "$1" | grep -Eq '^(terse mode|go terse|be terse|switch to terse|terse on|use terse mode|use terse|enable terse mode|enable terse|turn on terse mode|turn on terse|activate terse|terse please|normal mode|back to normal|stop terse|terse off|normal voice|terse mode off|turn off terse|disable terse|exit terse mode|exit terse|quit terse|go back to normal mode|go back to normal|switch back to normal|switch to normal|html mode|go html|switch to html|html on|stop html|html off|chat only|chat mode|stop autopilot|autopilot off)([[:space:]]*[.!,;:]|[[:space:]]+(and|then|now|please)([[:space:]]|$)|[[:space:]]*$)'
+  printf '%s\n' "$1" | grep -Eq '^(((go|be|switch to|use|enable|turn on|activate|stop|turn off|disable|exit|quit) terse|(back|go back|switch back|switch) to normal)( mode)?|terse mode|terse on|terse please|normal mode|terse off|normal voice|terse mode off|html mode|go html|switch to html|html on|stop html|html off|chat only|chat mode|stop autopilot|autopilot off)([[:space:]]*[.!,;:]|[[:space:]]+(and|then|now|please)([[:space:]]|$)|[[:space:]]*$)'
 }
 
 if [ "$EVENT" = UserPromptExpansion ]; then

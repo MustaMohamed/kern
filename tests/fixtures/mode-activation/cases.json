@@ -57,6 +57,7 @@
   { "prompt": "switch to normalized paths", "expect": "none", "known_failing": false },
   { "prompt": "go back to normal operations after the deploy", "expect": "none", "known_failing": false },
   { "prompt": "exit terse-mode handling is broken", "expect": "none", "known_failing": false },
+  { "prompt": "use terse modes in the docs", "expect": "none", "known_failing": false },
   { "prompt": "fix(prompt-submit): stop terse flipping on plain prose", "expect": "none", "known_failing": false },
   { "prompt": "The parser flips the voice when a prompt contains disable terse; please fix.", "expect": "none", "known_failing": false },
   { "prompt": "\"go terse\" is the phrase", "expect": "none", "known_failing": false },
@@ -67,9 +68,11 @@
   { "prompt": "<scheduled-task name=y>go terse</scheduled-task>", "expect": "none", "known_failing": false },
   { "prompt": "<teammate-message teammate_id=\"lead\">stop terse</teammate-message>", "expect": "none", "known_failing": false },
   { "prompt": "<task-notification>terse mode</task-notification>", "expect": "none", "known_failing": false },
-  { "prompt": "activate terse mode", "expect": "on", "known_failing": true },
-  { "prompt": "turn off terse mode", "expect": "off", "known_failing": true },
-  { "prompt": "disable terse mode", "expect": "off", "known_failing": true },
-  { "prompt": "switch to normal mode", "expect": "off", "known_failing": true },
+  { "prompt": "activate terse mode", "expect": "on", "known_failing": false },
+  { "prompt": "turn off terse mode", "expect": "off", "known_failing": false },
+  { "prompt": "disable terse mode", "expect": "off", "known_failing": false },
+  { "prompt": "switch to normal mode", "expect": "off", "known_failing": false },
+  { "prompt": "quit terse mode", "expect": "off", "known_failing": false },
+  { "prompt": "back to normal mode", "expect": "off", "known_failing": false },
   { "prompt": "fix the bug, and do not then go terse", "expect": "none", "known_failing": true }
 ]
