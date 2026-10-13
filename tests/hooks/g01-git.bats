@@ -563,20 +563,28 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   [[ "$output" == *"after cd, --git-dir or --work-tree"* ]] || false
 }
 
-@test "git behind a command that sets an alias with -c or --config-env asks, whatever word follows" {
-  local c
+@test "git behind a command with -c, --config-env or GIT_CONFIG in the command asks, whatever word follows" {
+  local c cmds=(
+    "caffeinate git -c alias.p=push p --force origin main"
+    "caffeinate git -c help.autocorrect=immediate psuh --force origin main"
+    "caffeinate git --config-env=help.autocorrect=V psuh --force origin main"
+    "caffeinate git -c include.path=/tmp/a.cfg p --force origin main"
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push caffeinate git p --force origin main"
+    "GIT_CONFIG_PARAMETERS=\"'alias.p=push'\" caffeinate git p --force origin main"
+    "export GIT_CONFIG_PARAMETERS=\"'alias.p=push'\"; caffeinate git p --force origin main"
+  )
   g1 "caffeinate git -c alias.p=push p --force origin main"
   [ "$(decision_of "$output")" = ask ]
   [[ "$output" == *"git inside caffeinate cannot be checked; run git directly"* ]] || false
+  g1 "caffeinate git -c color.ui=never log -1"
+  [ "$(decision_of "$output")" = ask ]
   set_autopilot on
-  for c in "caffeinate git -c alias.p=push p --force origin main" "caffeinate git -c ALIAS.p=push p" \
-    "caffeinate git --config-env=alias.p=V p" "caffeinate git --no-pager --config-env Alias.p=V p" \
-    "xargs git -c alias.s=status s"; do
+  for c in "${cmds[@]}" "caffeinate git -c ALIAS.p=push p" "caffeinate git --no-pager --config-env Alias.p=V p" \
+    "xargs git -c alias.s=status s" "caffeinate git -c color.ui=never log -1"; do
     g1q "$c"
     [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
   done
-  for c in "caffeinate git -c color.ui=never log -1" "caffeinate git -c core.x=alias.y status" \
-    "caffeinate git --config-env=core.x=V status"; do
+  for c in "caffeinate git --no-pager log -1" "echo GIT_CONFIG_COUNT=1" "GIT_CONFIG_COUNT=0 git status"; do
     g1q "$c"
     [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
   done

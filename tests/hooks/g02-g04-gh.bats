@@ -466,3 +466,16 @@ gh_log() {
     expect none "$c" || return 1
   done
 }
+
+@test "G2: gh's group aliases behind another command ask, and are denied under autopilot" {
+  local c
+  g "caffeinate gh cs delete --all --force" g02
+  [ "$(decision_of "$output")" = ask ]
+  set_autopilot on
+  for c in "caffeinate gh cs delete --all --force" "caffeinate gh ext install o/evil" "caffeinate gh extensions x" \
+    "caffeinate gh rs x" "caffeinate gh at x" "caffeinate gh agent x" "caffeinate gh agents x" \
+    "caffeinate gh agent-tasks x" "caffeinate gh skills x"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
+}

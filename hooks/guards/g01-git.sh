@@ -74,8 +74,10 @@ shortlog for-each-ref merge-base name-rev count-objects var "
 # global options; when the next word is one of git's own commands outside _G01_READ_ONLY, G1 asks,
 # deny under autopilot. Any other word after it (curl in `apt-get install git curl`, an option git
 # rejects) gets no vote. Quoted text is one word, so `grep -rn "git push" docs` holds no word git,
-# while `echo git push` asks. A -c or --config-env that sets alias.* (any case) asks whatever word
-# follows, since the alias may stand for any command; an alias set in git config is not seen.
+# while `echo git push` asks. Config set in the same command may turn any word into any command (an
+# alias, help.autocorrect, include.path), so a -c or --config-env among the global options, or
+# GIT_CONFIG anywhere in the command (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT, ...), asks whatever
+# word follows. An alias set in git config by an earlier call is not seen.
 _g01_hidden() {
   local head="$1" al
   shift
@@ -85,19 +87,20 @@ _g01_hidden() {
       *) shift; continue ;;
     esac
     al=0
+    case "$_G01_CMD" in *GIT_CONFIG*) al=1 ;; esac
     while [ $# -gt 0 ]; do
       case "$1" in
         -c | --config-env)
+          al=1
           shift
-          case "${1-}" in [Aa][Ll][Ii][Aa][Ss].*) al=1 ;; esac
           [ $# -gt 0 ] && shift
           ;;
-        --config-env=[Aa][Ll][Ii][Aa][Ss].*) al=1; shift ;;
+        --config-env=*) al=1; shift ;;
         -C | --git-dir | --work-tree | --namespace | --super-prefix | --attr-source | --shallow-file)
           shift
           [ $# -gt 0 ] && shift
           ;;
-        --git-dir=* | --work-tree=* | --namespace=* | --config-env=* | --super-prefix=* | --attr-source=* | \
+        --git-dir=* | --work-tree=* | --namespace=* | --super-prefix=* | --attr-source=* | \
           --exec-path=* | -p | -P | --paginate | --no-pager | --bare | --no-replace-objects | --no-lazy-fetch | \
           --no-optional-locks | --no-advice | --literal-pathspecs | --no-literal-pathspecs | --glob-pathspecs | \
           --noglob-pathspecs | --icase-pathspecs) shift ;;

@@ -15,12 +15,12 @@ help/h/b"
 # the body from elsewhere, open an editor or a browser, or name another repo.
 _GH_CREATE_SAFE="title body-file base head draft fill fill-first fill-verbose dry-run no-maintainer-edit"
 _GH_READY_OPTS="undo/-/b repo/R/v help/h/b"
-# gh 2.100.0's command groups (`gh help`) that ask when gh runs behind another command
-# (_g02_hidden): all but browse, search and status, which only read or open a browser. help and
-# version are not listed there either.
-_G02_GROUPS=" auth codespace discussion gist issue org pr project release repo skill cache run workflow \
-agent-task alias api attestation completion config copilot extension gpg-key label licenses preview \
-ruleset secret ssh-key variable "
+# gh 2.100.0's command groups (`gh help`) and their aliases (`gh help <group>`) that ask when gh runs
+# behind another command (_g02_hidden): all but browse, search and status, which only read or open a
+# browser. help and version are not listed there either.
+_G02_GROUPS=" auth codespace cs discussion gist issue org pr project release repo skill skills cache run \
+workflow agent-task agent-tasks agent agents alias api attestation at completion config copilot extension \
+extensions ext gpg-key label licenses preview ruleset rs secret ssh-key variable "
 
 guard_g02() {
   [ "$TOOL" = Bash ] || return 0
