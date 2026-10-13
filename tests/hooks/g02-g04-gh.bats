@@ -592,3 +592,9 @@ gh_log() {
   # The shell reads ~ as HOME, and so does the label check; the post is still unproven.
   expect ask 'gh pr comment 5 --body-file ~/x/h.md'
 }
+
+@test "G2: an unproven draft's reason names the whole flag set an allowed draft may carry" {
+  g "gh pr create --draft --title x --label bug --body-file b.md" g02
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *'kern allows only `gh pr create --draft` alone, from the current branch, with --title, --base, --fill, --fill-first, --fill-verbose, --dry-run, --no-maintainer-edit, --body-file <file in the repo> or --head <current branch>'* ]] || false
+}

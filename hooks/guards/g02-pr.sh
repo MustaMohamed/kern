@@ -390,7 +390,7 @@ _g02_create() {
     fi
   fi
   # shellcheck disable=SC2016 # literal backticks
-  fix='kern allows only `gh pr create --draft` alone, from the current branch, with --title, --base, --fill or --body-file <file in the repo>'
+  fix='kern allows only `gh pr create --draft` alone, from the current branch, with --title, --base, --fill, --fill-first, --fill-verbose, --dry-run, --no-maintainer-edit, --body-file <file in the repo> or --head <current branch>'
   vote ask G2 "draft PR in a shape kern cannot check; $fix"
   [ "$AUTOPILOT" = 1 ] && vote deny G2 "draft PR of an unchecked shape under autopilot; $fix"
 }
