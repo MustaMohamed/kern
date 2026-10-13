@@ -42,10 +42,13 @@ google-api-key|AIza[0-9A-Za-z_-]{35}'
 
 # guard_g06: MOVED is set after cd, pushd or popd, and after a record that exports, or only
 # assigns, GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE; CONF after one that does so for GIT_CONFIG*,
-# HOME or XDG_CONFIG_HOME. Both hold for the records that follow.
+# HOME or XDG_CONFIG_HOME. Both hold for the records that follow. STALE names the first git command
+# that changes the index or HEAD (add, stage, cherry-pick, merge, rebase, revert, am, apply, checkout,
+# switch, restore, mv, rm, reset): G6 reads them as they are at hook time, so a commit or push after
+# it asks that its scan may be stale, and is denied under autopilot.
 guard_g06() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd rec moved=0 conf=0
+  local cmd rec moved=0 conf=0 stale=""
   cmd=$(ti_get command) || return 0
   while IFS= read -r rec; do
     [ -n "$rec" ] || continue
@@ -72,8 +75,13 @@ guard_g06() {
         _g06_unscanned "could not scan: git $_G05_SUB pushes refs kern does not read; use git push"
         continue
         ;;
+      add | stage | cherry-pick | merge | rebase | revert | am | apply | checkout | switch | restore | mv | rm | reset)
+        stale=${stale:-$_G05_SUB}
+        continue
+        ;;
       *) continue ;;
     esac
+    [ -n "$stale" ] && _g06_unscanned "secret scan may be stale: git $stale runs before the $_G05_SUB in this command, and kern reads the index and HEAD as they are now; run it in a call of its own first"
     if [ "$moved" = 1 ] || [ "$_G05_MOVED" = 1 ] || _g05_env_has now GIT_INDEX_FILE @cwd; then
       _g06_unscanned "could not scan: git $_G05_SUB after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see"
       continue

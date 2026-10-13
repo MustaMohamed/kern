@@ -1034,3 +1034,32 @@ key AKIAABCDEFGHIJKLMNOP"
   set_autopilot on
   for c in "${cmds[@]}"; do expect deny g06 "$c" || return 1; done
 }
+
+@test "G6: git add, merge or another index or HEAD change earlier in the command leaves the scan stale" {
+  printf 'commit.convention: "^CDS-[0-9]+: "\nnever_commit: .env*\n' >"$R/.claude/kern.local.yml"
+  printf 'AKIAABCDEFGHIJKLMNOP\n' >"$R/.env"
+  # Staged by a separate call, the key and the path are both caught.
+  git -C "$R" add .env
+  expect deny g06 "git commit -m 'CDS-2465: x'"
+  [[ "$output" == *"never_commit paths staged: .env"* ]] || false
+  [[ "$output" == *"aws-access-key"* ]] || false
+  git -C "$R" rm -q --cached .env
+  # Staged in the same call, the index the scan reads is not yet the one committed.
+  expect ask g05,g06 "git add .env && git commit -m 'CDS-2465: x'"
+  [[ "$output" == *"G6: secret scan may be stale: git add runs before the commit in this command"* ]] || false
+  local s
+  for s in add stage cherry-pick merge rebase revert am apply checkout switch restore mv rm reset; do
+    expect ask g06 "git $s x && git commit -m 'CDS-2465: x'" || return 1
+    [[ "$output" == *"secret scan may be stale"* ]] || false
+    expect ask g06 "git -C $R $s x; git push origin HEAD" || return 1
+    [[ "$output" == *"secret scan may be stale: git $s runs before the push"* ]] || false
+  done
+  set_autopilot on
+  expect deny g06 "git add .env && git commit -m 'CDS-2465: x'"
+  expect deny g06 "git merge other && git push origin HEAD"
+  # After the commit, or with no commit or push, nothing is stale.
+  set_autopilot off
+  expect none g06 "git commit -m 'CDS-2465: x'; git add .env"
+  expect none g06 "git add .env"
+  expect none g06 "git status && git log -1 && git commit -m 'CDS-2465: x'"
+}
