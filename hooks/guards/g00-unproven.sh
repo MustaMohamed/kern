@@ -1,7 +1,8 @@
 # shellcheck shell=bash
-# G0 under autopilot: kern denies a Bash command it cannot read. Every other guard votes on the
+# G00 under autopilot: kern denies a Bash command it cannot read. Every other guard votes on the
 # command shapes it knows and on nothing else, so a shape kern cannot see passes them all, and under
-# autopilot nobody is there to ask. Interactive mode is unchanged: G0 votes nothing there.
+# autopilot nobody is there to ask. Interactive mode is unchanged: G00 votes nothing there. Its
+# label is G00, apart from the G0 of fail_closed.
 # A git_words record is unread when:
 # - its command name is built at run time, so the variable can supply the program or its options: a
 #   $, a backtick or a brace pattern in it, or a glob with words after it (a lone `*` is a case
@@ -179,5 +180,5 @@ $out
 EOT
   [ "$seen" = 1 ] || what="the command (its judge failed)"
   [ -n "$what" ] || return 0
-  vote deny G0 "under autopilot kern denies what it cannot read: $what; to go on, write the code to a file in the repo and run the file, spell each command name out, or have the user run it with !"
+  vote deny G00 "under autopilot kern denies what it cannot read: $what; to go on, write the code to a file in the repo and run the file, spell each command name out, or have the user run it with !"
 }

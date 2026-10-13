@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# G0 under autopilot: a Bash command kern cannot read is denied, since every other guard votes only
+# G00 under autopilot: a Bash command kern cannot read is denied, since every other guard votes only
 # on the command shapes it knows.
 # shellcheck disable=SC2016 # the commands under test hold a literal $ or backtick
 
@@ -12,14 +12,14 @@ setup() {
   set_autopilot on
 }
 
-# gx CMD [GUARDS]: G0 (or GUARDS; "" runs them all) on CMD, which may hold double quotes, backslashes
+# gx CMD [GUARDS]: G00 (or GUARDS; "" runs them all) on CMD, which may hold double quotes, backslashes
 # and newlines.
 gx() {
   local esc
   esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
   run_guard "$(bash_payload "$esc")" "${2-g00}"
 }
-# g00_all DECISION CMD...: G0 decides DECISION on every CMD.
+# g00_all DECISION CMD...: G00 decides DECISION on every CMD.
 g00_all() {
   local want="$1" c
   shift
@@ -35,13 +35,14 @@ g00_all() {
     '/usr/bin/g?t push --force origin main' '/usr/*/git push' '{git,push,--force,origin,main}' \
     'git{,} status' 'if true; then $g push; fi' 'X=$(echo ")") $g push'
   gx 'g=git; $g push --force origin main'
-  [[ "$output" == *'G0: under autopilot kern denies what it cannot read: the command name $g is built at run time'* ]] || false
+  # G00, not G0: fail_closed votes as G0.
+  [[ "$output" == *'"kern G00: under autopilot kern denies what it cannot read: the command name $g is built at run time'* ]] || false
   [[ "$output" == *'; to go on, write the code to a file in the repo and run the file, spell each command name out, or have the user run it with !"'* ]] || false
   gx '$(echo git) push'
   [[ "$output" == *'the command name of `$(echo git) push` is built at run time'* ]] || false
 }
 
-@test "each shape the G0 ruling keeps is denied under autopilot" {
+@test "each shape the G00 ruling keeps is denied under autopilot" {
   # A command name the variable can supply: the program or its options.
   g00_all deny 'g=git; $g push --force origin main' '"$@"' "\$'git' push" '$(echo git) push' \
     '`echo git` push' '/usr/bin/g?t push --force origin main' '{git,push,--force,origin,main}'
@@ -98,7 +99,7 @@ g00_all() {
     "$(printf '%s\n' "sh -s <<'EOF'" 'ls' 'EOF')" 'bash < x.sh' 'source .venv/bin/activate' '. ./env.sh'
 }
 
-@test "the commands autopilot runs every day get no vote from G0, with every guard running" {
+@test "the commands autopilot runs every day get no vote from G00, with every guard running" {
   local c
   for c in 'npm test' 'python -m pytest' 'node --test' 'node scripts/x.mjs' 'bash scripts/ci-local' \
     'git status' 'ls' 'rg -n foo' "$(printf '%s\n' "bash <<'EOF'" 'git status' 'npm test' 'EOF')"; do
@@ -107,7 +108,7 @@ g00_all() {
   done
 }
 
-@test "ordinary commands get no vote from G0 under autopilot" {
+@test "ordinary commands get no vote from G00 under autopilot" {
   g00_all none 'npm test' 'python -m pytest' 'python3 -m pytest -q' 'python3 -mpytest' \
     'node scripts/x.mjs' 'node --test' 'node --version' 'bash scripts/ci-local' 'git status' 'ls' \
     'ls -la' 'python3 script.py -c x' 'python3 -X dev script.py' 'perl script.pl -e x' 'ruby x.rb' \
@@ -120,7 +121,7 @@ g00_all() {
     'f=$(ls -t ~/.cache/* | head -1)' 'v=${x:-a b} make' 'echo "$(date) $(git rev-parse HEAD)"'
 }
 
-@test "G0 votes nothing outside autopilot or for other tools" {
+@test "G00 votes nothing outside autopilot or for other tools" {
   set_autopilot off
   g00_all none 'g=git; $g push' "python3 -c x" 'echo x | sh' "xargs sh -c x"
   set_autopilot on
