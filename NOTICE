@@ -20,8 +20,9 @@ Copyright (c) 2025 Addy Osmani. MIT License (licenses/addy.LICENSE).
 caveman, https://github.com/JuliusBrussee/caveman
 Copyright 2026 Julius Brussee. Apache License 2.0 (licenses/caveman.LICENSE).
 kern's terse mode adapts ideas from caveman's mode rules and prompt parser. kern
-does not use the caveman name or its other trademarks. Files changed from
-caveman sources say so in their first lines. caveman's NOTICE follows.
+does not use the caveman name or its other trademarks. No caveman text is
+copied: the caveman entries in the file map below take ideas only. caveman's
+NOTICE follows.
 
 ----- caveman NOTICE -----
 Caveman
@@ -79,7 +80,11 @@ extension/fonts/GEIST_LICENSE.txt.
 - evals/distractors.json: superpowers skills/*/SKILL.md descriptions (first clauses)
 - scripts/lib/rank.mjs: addy scripts/run-evals.js lines 62-102 and 121-139
 - scripts/route-eval.mjs: addy scripts/run-evals.js runDeterministic (adapted)
+- scripts/check-version.mjs: addy scripts/validate-versions.js (idea only; code written for kern)
+- scripts/lib/lint-rules.mjs: addy scripts/lib/skill-lint.js (rule set idea; code written for kern)
 - skills/unslop/SKILL.md: local unslop/SKILL.md (the user's adapted copy of pstack unslop)
 - skills/technical-writing/SKILL.md: pstack pstack/skills/technical-writing/SKILL.md
+- skills/help/SKILL.md: pstack pstack/skills/poteto-help/SKILL.md (its multiple-choice opener and its sentence on checking the state that changes the answer)
+- skills/help/references/fix-a-run.md: pstack pstack/skills/poteto-help/SKILL.md "Fix a run that went wrong" (the symptom and fix table; rows written for kern)
 - modes/terse.md: caveman skills/caveman/SKILL.md (idea only; text written for kern)
 - hooks/prompt-submit: caveman src/hooks/caveman-parse.js and caveman-mode-tracker.js (ideas only: envelope parsing, negation and question guards; code written for kern)
