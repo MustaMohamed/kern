@@ -787,6 +787,9 @@ key AKIAABCDEFGHIJKLMNOP"
     expect none "$g" "git --version" || return 1
     expect none "$g" "git -h" || return 1
     expect none "$g" "git --help" || return 1
+    expect none "$g" "git --exec-path" || return 1
+    expect none "$g" "git -v" || return 1
+    expect none "$g" "git --list-cmds=builtins" || return 1
   done
   set_autopilot on
   expect none g01,g05,g06 "git --version"
@@ -944,4 +947,13 @@ key AKIAABCDEFGHIJKLMNOP"
   expect none g06 "git push -u origin CDS-2465/replace-minio"
   grep -q 'patch-text-17' "$BATS_TEST_TMPDIR/gl.in"
   grep -q 'message-text-42' "$BATS_TEST_TMPDIR/gl.in"
+}
+
+@test "git: a global option G1 does not know asks, so it cannot hide the command after it" {
+  expect ask g01 "git --foo ci"
+  [[ "$output" == *"not one of git's own commands"* ]] || false
+  set_autopilot on
+  expect deny g01,g05,g06 "git --shallow-file status push --force origin main"
+  expect deny g01 "git --foo ci"
+  expect deny g01 "git --shallow-file x commit -m 'CDS-2465: x'"
 }
