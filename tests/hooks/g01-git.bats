@@ -643,3 +643,39 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   [[ "$output" == *"--force-with-lease push to protected branch main under autopilot"* ]] || false
   [[ "$output" == *"main may hold commits by other authors"* ]] || false
 }
+
+@test "a push through -C into another repository is never allowed, as G5 never allows such a commit" {
+  local O="$BATS_TEST_TMPDIR/other"
+  make_repo "$O"
+  git -C "$O" switch -q -c develop
+  git -C "$O" push -q origin develop
+  git -C "$O" remote set-head origin develop >/dev/null
+  set_autopilot on
+  # In a session of its own, the other repository's base branch is protected.
+  export CWD="$O"
+  expect deny "git push origin develop"
+  export CWD="$R"
+  expect deny "git -C $O push origin develop" "git -C $O push -u origin develop" \
+    "git -C $BATS_TEST_TMPDIR -C other push origin develop"
+  [[ "$output" == *"-C names another repository"* ]] || false
+  expect allow "git -C $BATS_TEST_TMPDIR/wt push -u origin feat"
+  set_autopilot off
+  settings 'push.policy: auto'
+  expect ask "git -C $O push origin develop"
+  [[ "$output" == *"-C names another repository"* ]] || false
+  expect allow "git -C $BATS_TEST_TMPDIR/wt push -u origin feat"
+}
+
+@test "env -C, env --chdir, sudo -D and sudo -R leave the directory unknown, as cd does" {
+  local W="$BATS_TEST_TMPDIR/wt"
+  export CWD="$W"
+  expect ask "env -C $R git reset --hard" "env --chdir=$R git checkout -B main origin/main" \
+    "env --chdir $R git stash" "env -i -C $R git clean -fd" "ENV -C$R git switch main" \
+    "sudo -D $R git switch main" "sudo --chdir=$R git rebase main" "sudo -R / git stash"
+  [[ "$output" == *"after cd, --git-dir or --work-tree"* ]] || false
+  set_autopilot on
+  expect deny "env -C $R git reset --hard" "env --chdir=$R git checkout -B main origin/main" \
+    "env -C $W git push origin feat" "sudo -D $W git push origin feat"
+  # A wrapper that keeps the directory keeps G1's reading of it.
+  expect none "env A=1 git -C $W reset --hard" "sudo -u me git -C $W stash" "env -i git status"
+}

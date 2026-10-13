@@ -35,7 +35,7 @@ _G01_NAME_CHARS="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.
 
 guard_g01() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd rec w=() t moved=0
+  local cmd rec w=() t m moved=0
   cmd=$(ti_get command) || { fail_closed "Bash call without a command"; return 0; }
   _G01_RECS=()
   while IFS= read -r rec; do [ -n "$rec" ] && _G01_RECS+=("$rec"); done <<EOT
@@ -51,17 +51,31 @@ EOT
 $(_cmd_words "$rec")
 EOT
     # After a cd, or a GIT_DIR or GIT_WORK_TREE assignment, later git commands run where G1
-    # cannot tell.
+    # cannot tell; under env -C or sudo -D, so does this one.
     case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=* | *GIT_DIR+=* | *GIT_WORK_TREE+=*) moved=1 ;; esac
     case "${w[0]}" in
       cd | pushd | popd) moved=1 ;;
       builtin) case "${w[1]-}" in cd | pushd | popd) moved=1 ;; esac ;;
       # Any case: on a case-insensitive file system GIT and GH run git and gh.
       [Gg][Hh] | */[Gg][Hh]) _g01_gh "$rec" "${w[@]}" ;;
-      [Gg][Ii][Tt] | */[Gg][Ii][Tt]) _g01_git_rec "$rec" "$moved" "${w[@]}" ;;
+      [Gg][Ii][Tt] | */[Gg][Ii][Tt])
+        m=$moved
+        _g01_chdir "$rec" && m=1
+        _g01_git_rec "$rec" "$m" "${w[@]}"
+        ;;
     esac
     case "${w[0]}" in "" | [Gg][Hh] | */[Gg][Hh] | [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) _g01_hidden "${w[@]}" ;; esac
   done
+}
+
+# _g01_chdir RECORD: exit 0 when an env or sudo wrapper in RECORD changes the directory its command
+# runs in (env -C or --chdir, sudo -D, -R, --chdir or --chroot), as G5's _g05_env reads it (@cwd), or
+# when _g05_env did not load.
+_g01_chdir() {
+  case "$1" in *[Ee][Nn][Vv]* | *[Ss][Uu][Dd][Oo]*) ;; *) return 1 ;; esac
+  declare -F _g05_env >/dev/null || return 0
+  case "$(_g05_env "$1")" in *@cwd*) return 0 ;; esac
+  return 1
 }
 
 # Git's own commands that only read, which a git behind another command may run (_g01_hidden).
@@ -146,7 +160,8 @@ _g01_merge() {
 }
 
 # _g01_git_rec RECORD MOVED git WORDS...: reads git's global options, then checks the subcommand.
-# The directory is empty (unknown) when MOVED is 1 or with --git-dir or --work-tree. PLAIN is 1
+# The directory is empty (unknown) when MOVED is 1 (after cd, or under env -C or sudo -D) or with
+# --git-dir or --work-tree. PLAIN is 1
 # when the record is `git`, then only -C options, then the subcommand.
 _g01_git_rec() {
   local rec="$1" dir="${CWD:-$PWD}" plain=1
@@ -303,9 +318,9 @@ _g01_opts() {
 _g01_main_op() {
   if [ -z "$1" ]; then
     if [ "$AUTOPILOT" = 1 ]; then
-      vote deny G1 "git $2 after cd, --git-dir or --work-tree may hit the main checkout (D3)"
+      vote deny G1 "git $2 after cd, --git-dir or --work-tree, or under env -C or sudo -D, may hit the main checkout (D3)"
     else
-      vote ask G1 "git $2 after cd, --git-dir or --work-tree may change the main checkout (D3)"
+      vote ask G1 "git $2 after cd, --git-dir or --work-tree, or under env -C or sudo -D, may change the main checkout (D3)"
     fi
     return 0
   fi
@@ -495,11 +510,13 @@ EOT
 # the safe set or a quiet redirection (ODD 0); CUR and REMOTE hold only _G01_NAME_CHARS; REMOTE is
 # a name `git remote` lists, with no push, mirror, receivepack or vcs config, and the URL a push
 # goes to is its own URL: no pushurl, and no insteadOf or pushInsteadOf rewrite applies; there is
-# at least one refspec, and each pushes CUR (a branch) to CUR.
+# at least one refspec, and each pushes CUR (a branch) to CUR; DIR is in this session's repository
+# (_G01_CROSS 0), whose protected branches branch_protected reads.
 _g01_proven() {
   local dir="$1" plain="$2" odd="$3" cur="$4" remote="$5" r s d k u i=1
   shift 5
-  [ "$_G01_IDX" = 1 ] && [ "$plain" = 1 ] && [ "$odd" = 0 ] && [ $# -gt 0 ] && [ -n "$remote" ] || return 1
+  [ "$_G01_IDX" = 1 ] && [ "$plain" = 1 ] && [ "$odd" = 0 ] && [ "$_G01_CROSS" = 0 ] && [ $# -gt 0 ] &&
+    [ -n "$remote" ] || return 1
   # shellcheck disable=SC2016 # a literal $( in the text
   case "$_G01_CMD" in *'$('* | *'`'*) return 1 ;; esac
   case "${_G01_RECS[0]}" in *'$'* | *'{'* | *'}'* | *'*'* | *'?'* | *'['* | *'~'*) return 1 ;; esac
@@ -529,7 +546,9 @@ EOT
 }
 
 # _g01_push DIR PLAIN WORDS...: force first, then push.policy deny, remote delete, an unknown
-# directory, protected targets and lease pushes; an allow needs _g01_proven.
+# directory, protected targets and lease pushes; an allow needs _g01_proven. _G01_CROSS is 1 when DIR
+# (where -C leads) is not in this session's repository, as G5's _G05_CROSS: branch_protected and
+# base_branch_name read this one, so another repository's base branch would not count as protected.
 _g01_push() {
   local dir="$1" plain="$2" toks t r cur policy fix det="" force=none del=0 odd=0 val=0 all=0 have=0 prot=0 what
   local remote="" refs=() tg=()
@@ -574,14 +593,18 @@ EOT
     return 0
   fi
   if [ -z "$dir" ]; then
-    fix="run git -C <dir> push instead of cd, --git-dir or --work-tree"
-    vote ask G1 "git push after cd, --git-dir or --work-tree: what it pushes is unknown; $fix"
+    fix="run git -C <dir> push instead of cd, env -C, sudo -D, --git-dir or --work-tree"
+    vote ask G1 "git push after cd, --git-dir or --work-tree, or under env -C or sudo -D: what it pushes is unknown; $fix"
     [ "$AUTOPILOT" = 1 ] && vote deny G1 "git push from an unknown directory under autopilot; $fix"
     return 0
   fi
   cur=$(current_branch "$dir")
+  _G01_CROSS=0
+  [ -n "${KERN_MAIN-}" ] && [ "$(kern_main_root "$dir" 2>/dev/null)" = "$KERN_MAIN" ] || _G01_CROSS=1
   # The retry that reaches the allowed shape: a bare push names its remote and branch.
-  if [ -z "$cur" ]; then
+  if [ "$_G01_CROSS" = 1 ]; then
+    fix="-C names another repository, whose protected branches kern does not read; push from a session there"
+  elif [ -z "$cur" ]; then
     fix="HEAD is detached; check out a branch first"
     det="; $fix"
   elif [ ${#refs[@]} -gt 0 ]; then
