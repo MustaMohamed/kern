@@ -52,6 +52,18 @@ _settings_lookup() {
 # The list keys whose layers add up, so a project file cannot drop an entry a lower file sets.
 _KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
 
+# _settings_ignored FILE KEY VALUE: exit 0 when the layer FILE must not set KEY to VALUE. The committed
+# project file (any kern.yml but the user's) cannot turn kern off, and cannot loosen a *.policy key to
+# auto: it may only ask or deny. Such a value reads as unset, so a lower layer or the default applies.
+_settings_ignored() {
+  case "$1" in "$HOME/.claude/kern.yml" | */kern.local.yml) return 1 ;; esac
+  case "$2" in
+    kern) [ "$3" = off ] ;;
+    *.policy | review.post_policy) [ "$3" = auto ] ;;
+    *) return 1 ;;
+  esac
+}
+
 # settings_get KEY [DEFAULT]: prints the resolved value. Exit 0 found or defaulted, 3 unset. A key in
 # _KERN_UNION_KEYS joins the items of every layer that sets it, highest first, with ", ": one pair of
 # brackets around each layer's value ([a, b]) is dropped, items are trimmed, and an empty or repeated
@@ -78,6 +90,7 @@ settings_get() {
         done
         ;;
       *)
+        _settings_ignored "$f" "$1" "$v" && continue
         printf '%s\n' "$v"
         return 0
         ;;
@@ -99,11 +112,12 @@ EOT
 # settings_source KEY: prints the file that sets KEY, or `default`. Exit 0 always. A key in
 # _KERN_UNION_KEYS prints every file that sets it, joined with ", ".
 settings_source() {
-  local f out=""
+  local f v out=""
   while IFS= read -r f; do
     [ -f "$f" ] || continue
-    _settings_lookup "$f" "$1" >/dev/null || continue
+    v=$(_settings_lookup "$f" "$1") || continue
     case "$_KERN_UNION_KEYS" in *" $1 "*) out="${out:+$out, }$f"; continue ;; esac
+    _settings_ignored "$f" "$1" "$v" && continue
     printf '%s\n' "$f"
     return 0
   done <<EOT

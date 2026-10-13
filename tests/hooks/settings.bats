@@ -158,3 +158,57 @@ YML
   [ "$(policy_for deploy)" = ask ]
   [ "$(policy_for push)" = auto ]
 }
+
+@test "a committed kern: off is ignored; the local and the user file still turn kern off" {
+  printf 'kern: off\n' >"$R/.claude/kern.yml"
+  kern_enabled
+  [ "$(settings_get kern on)" = on ]
+  [ "$(settings_source kern)" = default ]
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  run kern_enabled
+  [ "$status" -eq 1 ]
+  rm "$R/.claude/kern.local.yml" "$R/.claude/kern.yml"
+  printf 'kern: off\n' >"$HOME/.claude/kern.yml"
+  run kern_enabled
+  [ "$status" -eq 1 ]
+}
+
+@test "a committed kern: off does not hide a lower layer's on" {
+  printf 'kern: off\n' >"$R/.claude/kern.yml"
+  printf 'kern: on\n' >"$HOME/.claude/kern.yml"
+  kern_enabled
+  [ "$(settings_source kern)" = "$HOME/.claude/kern.yml" ]
+}
+
+@test "a committed policy may be ask or deny, never auto: auto reads as unset" {
+  printf 'push.policy: auto\ncommit.policy: deny\npr.policy: ask\nreview.post_policy: auto\ntracker.policy: auto\n' \
+    >"$R/.claude/kern.yml"
+  [ "$(policy_for push)" = ask ]
+  [ "$(policy_for commit)" = deny ]
+  [ "$(policy_for pr)" = ask ]
+  [ "$(policy_for review.post)" = ask ]
+  [ "$(policy_for tracker)" = ask ]
+  [ "$(settings_source push.policy)" = default ]
+  [ "$(settings_source commit.policy)" = "$RP/.claude/kern.yml" ]
+}
+
+@test "a committed policy auto falls through to the user file, and local and user auto still work" {
+  printf 'push.policy: auto\n' >"$R/.claude/kern.yml"
+  printf 'push.policy: deny\n' >"$HOME/.claude/kern.yml"
+  [ "$(policy_for push)" = deny ]
+  printf 'push.policy: auto\n' >"$HOME/.claude/kern.yml"
+  [ "$(policy_for push)" = auto ]
+  rm "$HOME/.claude/kern.yml"
+  [ "$(policy_for push)" = ask ]
+  printf 'push.policy: auto\n' >"$R/.claude/kern.local.yml"
+  [ "$(policy_for push)" = auto ]
+}
+
+@test "a committed policy deny beats a user auto, and the user file's protections stay" {
+  printf 'push.policy: deny\n' >"$R/.claude/kern.yml"
+  printf 'push.policy: auto\nprotected_targets: prod-db\n' >"$HOME/.claude/kern.yml"
+  [ "$(policy_for push)" = deny ]
+  printf 'kern: off\n' >>"$R/.claude/kern.yml"
+  kern_enabled
+  [ "$(settings_get protected_targets)" = prod-db ]
+}
