@@ -9,8 +9,11 @@
 KERN_G14_TRACKERS="linear jira atlassian asana github gitlab notion monday clickup todoist trello shortcut height zendesk"
 KERN_G14_CHAT="slack gmail discord teams intercom front mail telegram whatsapp"
 KERN_G14_VERBS="create save update delete remove comment post send merge transition move assign archive edit write add set upload submit resolve share invite publish label close reopen mark reply push run rerun retry play fork schedule duplicate restore unshare copilot dismiss manage star unstar cancel spawn stop convert"
-# A tool name whose first word is one of these reads, and never votes (get_workflow_run).
+# A tool name whose first word is one of these reads, and never votes (get_workflow_run), unless a
+# later word is a strong write verb (get_or_create_issue). merge is left out, so get_merge_request
+# stays a read.
 KERN_G14_READS="get list search read fetch query find view show describe count check export download"
+KERN_G14_STRONG="create update delete remove save send push write edit archive close share publish reply upload submit move assign"
 _G14_ALNUM=abcdefghijklmnopqrstuvwxyz0123456789
 # tracker.policy, read once per hook call by _g14_policy.
 _G14_POLICY=""
@@ -22,8 +25,8 @@ _G14_POLICY=""
 # a proven shape, and those whose tool names kern has no source for (jira, atlassian, asana,
 # gitlab, monday, clickup, todoist, trello, shortcut, height, zendesk, and mcp.write_servers).
 # linear: the claude.ai Linear connector's tool names (create_issue_label is the deprecated form of
-# save_issue_label).
-_G14_LINEAR="save_issue save_comment create_issue_label save_issue_label save_project save_milestone"
+# save_issue_label). save_project is left out: it moves a project between teams and sets its lead.
+_G14_LINEAR="save_issue save_comment create_issue_label save_issue_label save_milestone"
 # notion: the claude.ai Notion connector's tool names. Its page tools can delete content, share or
 # mark a page as a skill, so only the comment is listed.
 _G14_NOTION="notion-create-comment"
@@ -82,7 +85,7 @@ $(printf '%s\n%s\n%s\n' "${rest%%__*}" "$name" "$name" |
     LC_ALL=C tr '[:upper:]' '[:lower:]')
 EOT
   for first in ${words//[!$_G14_ALNUM]/ }; do break; done
-  case " $KERN_G14_READS " in *" $first "*) return 0 ;; esac
+  case " $KERN_G14_READS " in *" $first "*) _g14_is_write "$words $plain" "$KERN_G14_STRONG" || return 0 ;; esac
   _g14_has_word "$srv" "$KERN_G14_CHAT" && kind=chat
   [ -z "$kind" ] && _g14_has_word "$srv" "$KERN_G14_TRACKERS" && kind=tracker
   if [ -z "$kind" ]; then
@@ -98,11 +101,12 @@ EOT
   _g14_decide "$kind" "$TOOL" "$ok" "$_G14_WHY"
 }
 
-# _g14_is_write WORDS: any word of WORDS, split on every character but a-z and 0-9, is a write verb.
+# _g14_is_write WORDS [VERBS]: any word of WORDS, split on every character but a-z and 0-9, is one
+# of VERBS (default KERN_G14_VERBS).
 _g14_is_write() {
-  local part
+  local part verbs=" ${2:-$KERN_G14_VERBS} "
   for part in ${1//[!$_G14_ALNUM]/ }; do
-    case " $KERN_G14_VERBS " in *" $part "*) return 0 ;; esac
+    case "$verbs" in *" $part "*) return 0 ;; esac
   done
   return 1
 }

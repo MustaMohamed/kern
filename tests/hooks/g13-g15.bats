@@ -242,3 +242,28 @@ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
   mcp mcp__github__request_copilot_review
   [ "$(decision_of "$output")" = deny ]
 }
+
+@test "G14: Linear save_project asks under auto: it moves projects between teams and sets a lead" {
+  printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
+  for f in '"id":"P-1","setTeams":["Other"]' '"id":"P-1","addTeams":["Secret"],"leadTeam":"Secret"' '"id":"P-1","removeTeams":["Eng"]' '"id":"P-1","lead":"alice"'; do
+    mcpi mcp__claude_ai_Linear__save_project "$f"
+    [ "$(decision_of "$output")" = ask ] || { echo "$f -> $output"; return 1; }
+  done
+}
+
+@test "G14: a read-first name with a strong write verb after it still votes" {
+  printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
+  for t in mcp__github__get_or_create_issue mcp__claude_ai_Linear__list_and_close_issues; do
+    mcp "$t"
+    [ "$(decision_of "$output")" = ask ] || { echo "$t -> $output"; return 1; }
+  done
+  set_autopilot on
+  for t in mcp__github__get_or_create_issue mcp__claude_ai_Linear__list_and_close_issues; do
+    mcp "$t"
+    [ "$(decision_of "$output")" = deny ] || { echo "$t -> $output"; return 1; }
+  done
+  for t in mcp__github__get_workflow_run mcp__github__pull_request_read mcp__gitlab__get_merge_request mcp__github__download_workflow_run_artifact; do
+    mcp "$t"
+    [ "$(decision_of "$output")" = none ] || { echo "$t -> $output"; return 1; }
+  done
+}
