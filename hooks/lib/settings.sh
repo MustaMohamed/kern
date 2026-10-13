@@ -49,18 +49,35 @@ _settings_lookup() {
     END { if (found) { print val; exit 0 } exit 1 }' "$1"
 }
 
-# settings_get KEY [DEFAULT]: prints the resolved value. Exit 0 found or defaulted, 3 unset.
+# The list keys whose layers add up, so a project file cannot drop an entry a lower file sets.
+_KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
+
+# settings_get KEY [DEFAULT]: prints the resolved value. Exit 0 found or defaulted, 3 unset. A key in
+# _KERN_UNION_KEYS joins the values of every layer that sets it, highest first, with ", ", and drops
+# one pair of brackets around each layer's value ([a, b]).
 settings_get() {
-  local f v
+  local f v out="" found=0
   while IFS= read -r f; do
     [ -f "$f" ] || continue
-    if v=$(_settings_lookup "$f" "$1"); then
-      printf '%s\n' "$v"
-      return 0
-    fi
+    v=$(_settings_lookup "$f" "$1") || continue
+    case "$_KERN_UNION_KEYS" in
+      *" $1 "*)
+        found=1
+        case "$v" in "["*"]") v=${v#\[}; v=${v%\]} ;; esac
+        [ -n "$v" ] && out="${out:+$out, }$v"
+        ;;
+      *)
+        printf '%s\n' "$v"
+        return 0
+        ;;
+    esac
   done <<EOT
 $(_settings_files)
 EOT
+  if [ "$found" = 1 ]; then
+    printf '%s\n' "$out"
+    return 0
+  fi
   if [ $# -ge 2 ]; then
     printf '%s\n' "$2"
     return 0
@@ -68,19 +85,20 @@ EOT
   return 3
 }
 
-# settings_source KEY: prints the file that sets KEY, or `default`. Exit 0 always.
+# settings_source KEY: prints the file that sets KEY, or `default`. Exit 0 always. A key in
+# _KERN_UNION_KEYS prints every file that sets it, joined with ", ".
 settings_source() {
-  local f
+  local f out=""
   while IFS= read -r f; do
     [ -f "$f" ] || continue
-    if _settings_lookup "$f" "$1" >/dev/null; then
-      printf '%s\n' "$f"
-      return 0
-    fi
+    _settings_lookup "$f" "$1" >/dev/null || continue
+    case "$_KERN_UNION_KEYS" in *" $1 "*) out="${out:+$out, }$f"; continue ;; esac
+    printf '%s\n' "$f"
+    return 0
   done <<EOT
 $(_settings_files)
 EOT
-  printf 'default\n'
+  printf '%s\n' "${out:-default}"
 }
 
 # settings_keys FILE: every key set in FILE, one per line.

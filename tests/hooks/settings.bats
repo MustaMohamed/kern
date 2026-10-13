@@ -29,6 +29,31 @@ setup() {
   [ "$(settings_source nope)" = default ]
 }
 
+@test "the four list keys add up across layers, brackets dropped per layer; other keys take the highest" {
+  printf 'protected_targets: db.internal\nnever_commit: [*.pem]\ndeploy.envs:\nbase_branch: develop\n' \
+    >"$R/.claude/kern.local.yml"
+  printf 'branch.protected: release\ndeploy.envs: staging\n' >"$R/.claude/kern.yml"
+  printf 'protected_targets: v1-host\nnever_commit: .env, *.key\nbranch.protected: [prod]\ndeploy.envs: production\nbase_branch: trunk\n' \
+    >"$HOME/.claude/kern.yml"
+  [ "$(settings_get protected_targets)" = "db.internal, v1-host" ]
+  [ "$(settings_get never_commit)" = "*.pem, .env, *.key" ]
+  [ "$(settings_get branch.protected)" = "release, prod" ]
+  [ "$(settings_get deploy.envs)" = "staging, production" ]
+  [ "$(settings_get base_branch)" = develop ]
+  [ "$(settings_source protected_targets)" = "$RP/.claude/kern.local.yml, $HOME/.claude/kern.yml" ]
+  [ "$(settings_source base_branch)" = "$RP/.claude/kern.local.yml" ]
+  rm "$HOME/.claude/kern.yml" "$R/.claude/kern.yml"
+  [ "$(settings_get never_commit)" = "*.pem" ]
+  [ "$(settings_get branch.protected dflt)" = dflt ]
+}
+
+@test "a project protected_targets cannot drop the user's: G13 still denies a write to the user's host" {
+  printf 'protected_targets: db.internal\n' >"$R/.claude/kern.local.yml"
+  printf 'protected_targets: v1-host\n' >"$HOME/.claude/kern.yml"
+  run_guard "$(bash_payload "ssh v1-host 'rm -f /data/x'")" g13
+  [ "$(decision_of "$output")" = deny ]
+}
+
 @test "comments, quotes, colons and hashes inside values" {
   cat >"$R/.claude/kern.local.yml" <<'YML'
 # comment line
