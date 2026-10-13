@@ -11,9 +11,10 @@
 # terraform apply`, `man kubectl apply`), ask. A tool's words end at `--`; a --dry-run among them,
 # or one of its read verbs before the deploy verb, ends its vote.
 # Quoted text stays one word, except after a runner (npx, bunx, uvx, pnpx; npm exec or x, pnpm and
-# yarn dlx or exec, bun x, uv run or uv tool run, python -m), ssh, watch, or the -c (attached too)
-# or --command of sh, bash, zsh, dash, su or script: there each later word is split at blanks and
-# its quotes dropped, since it may be a command line (`ssh prod 'kubectl apply -f x.yml'`).
+# yarn dlx or exec, bun x, uv run or uv tool run, python -m), ssh, watch, or the -c (in a cluster of
+# any case, after - or +, attached too) or --command of sh, bash, zsh, dash, su or script: there each
+# later word is split at blanks and its quotes dropped, since it may be a command line
+# (`ssh prod 'kubectl apply -f x.yml'`).
 # Out of scope (accepted limits): package scripts (npm run deploy, make deploy), a bare `vercel`
 # with an option value or a path (`vercel --scope team`), and names built at run time.
 
@@ -146,11 +147,11 @@ _G15_AWK='
         continue
       }
       L[++m] = cw_w[k]
-      if (host != "" && G15R[host] == "-c" && (cw_w[k] ~ /^-[a-z]*c/ || cw_w[k] ~ /^--command(=|$)/)) {
+      if (host != "" && G15R[host] == "-c" && (cw_w[k] ~ /^[-+][A-Za-z]*c/ || cw_w[k] ~ /^--command(=|$)/)) {
         r = m
         x = ""
         if (cw_w[k] ~ /^--command=/) x = substr(cw_w[k], 11)
-        else if (cw_w[k] ~ /^-[a-z]*c/) x = substr(cw_w[k], index(cw_w[k], "c") + 1)
+        else if (cw_w[k] ~ /^[-+][A-Za-z]*c/) x = substr(cw_w[k], index(cw_w[k], "c") + 1)
         n = split(x, a, /[ \t\037]+/)
         for (i = 1; i <= n; i++) { gsub(qre, "", a[i]); if (a[i] != "") L[++m] = a[i] }
         continue

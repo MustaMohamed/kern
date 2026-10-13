@@ -585,6 +585,11 @@ ssh v1-host 'del C:\x'"
   g15_all deny "ssh prod 'kubectl apply -f /tmp/x.yml'" "su deploy -c 'npm publish'"
 }
 
+@test "G15: a shell's -c is read in a cluster of any case, and after a plus" {
+  g15_all ask "xargs bash -Ec 'kubectl apply -f x.yml'" "docker exec api sh -Cc 'npm publish'" \
+    "caffeinate -i bash +c 'terraform apply'"
+}
+
 @test "G15: the round-1 table rows ask" {
   g15_all ask "helmfile apply" "helmfile sync" "helmfile destroy" "argocd app sync api" "argocd app create api" \
     "argocd app delete api" "argocd app rollback api 3" "podman push x" "helm push chart.tgz oci://r" "skaffold run" \
