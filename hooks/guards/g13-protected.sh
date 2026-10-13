@@ -14,13 +14,13 @@
 
 guard_g13() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd flat list
+  local cmd list
   cmd=$(ti_get command) || return 0
   case "$cmd" in *'\u'*) cmd=$(_g13_unescape "$cmd") ;; esac
   case "$cmd" in *\\$'\n'*) cmd=$(_g13_join "$cmd") ;; esac
   # Cheap prefilter before settings_get: some client or transfer name, quotes and backslashes removed.
-  flat=${cmd//[\"\'\\]/}
-  _g13_names "$flat" || return 0
+  _g13_flat "$cmd"
+  _g13_names "$_G13_FLAT" || return 0
   list=$(settings_get protected_targets '')
   [ -n "$list" ] || return 0
   _g13_scan "$cmd" "$list" 0
@@ -30,7 +30,7 @@ guard_g13() {
 _g13_scan() {
   local rec prev="" fed up
   while IFS= read -r rec; do
-    if _g13_names "${rec//[\"\'\\]/}"; then
+    if _g13_flat "$rec" && _g13_names "$_G13_FLAT"; then
       fed=0
       up=""
       if _g13_fed "$1" "$rec"; then
@@ -43,6 +43,15 @@ _g13_scan() {
   done <<EOT
 $(git_words "$1")
 EOT
+}
+
+# _g13_flat TEXT: sets _G13_FLAT to TEXT less quotes and backslashes, in one linear pass: bash 3.2's
+# ${x//[...]/} is cubic on long text in a UTF-8 locale. Text with none of them is kept as is.
+_g13_flat() {
+  case "$1" in
+    *[\"\'\\]*) _G13_FLAT=$(printf '%s' "$1" | LC_ALL=C tr -d '\\"\047') ;;
+    *) _G13_FLAT=$1 ;;
+  esac
 }
 
 # _g13_names TEXT: exit 0 when TEXT holds a client or transfer name G13 reads, in any case (nc only as
@@ -149,7 +158,7 @@ _g13_judge() {
         why=${why//$_GW_NL/$'\n'}
         if [ "$6" -lt 2 ]; then
           _g13_scan "$why" "$2" $(($6 + 1))
-        elif _g13_names "${why//[\"\'\\]/}"; then
+        elif _g13_flat "$why" && _g13_names "$_G13_FLAT"; then
           vote deny G13 "a command run on another host nests too deep to check against protected targets"
         fi
         ;;

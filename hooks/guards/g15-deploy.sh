@@ -8,9 +8,12 @@
 # the words of a verb path must then appear after it in order, each a whole word, so global options
 # before the verb cannot hide it either, and no option table is needed. The costs: an option value
 # spelled as a verb (`terraform plan -out apply`), and a tool and its verb as plain words (`echo
-# terraform apply`, `man kubectl apply`), ask. Quoted text stays one word. After a runner (npx,
-# bunx, uvx, pnpx; npm exec or x, pnpm and yarn dlx or exec, bun x, uv run or uv tool run,
-# python -m), each later word is also split at blanks (`npm exec -c 'vercel deploy'`).
+# terraform apply`, `man kubectl apply`), ask. A tool's words end at `--`; a --dry-run among them,
+# or one of its read verbs before the deploy verb, ends its vote.
+# Quoted text stays one word, except after a runner (npx, bunx, uvx, pnpx; npm exec or x, pnpm and
+# yarn dlx or exec, bun x, uv run or uv tool run, python -m), ssh, watch, or the -c of sh, bash,
+# zsh, dash, su or script: there each later word is split at blanks and its quotes dropped, since
+# it may be a command line (`ssh prod 'kubectl apply -f x.yml'`).
 # Out of scope (accepted limits): package scripts (npm run deploy, make deploy), a bare `vercel`
 # with an option value or a path (`vercel --scope team`), and names built at run time.
 
@@ -19,6 +22,11 @@
 # shellcheck disable=SC2016 # awk text
 _G15_AWK='
   function g15_tool(names, paths,   a, k, n) { n = split(names, a, ","); for (k = 1; k <= n; k++) G15T[a[k]] = paths }
+  # g15_reads(names, verbs): the read verbs of a tool; one before the deploy verb ends the vote.
+  function g15_reads(names, verbs,   a, b, k, i, n, nb) {
+    n = split(names, a, ","); nb = split(verbs, b, " ")
+    for (k = 1; k <= n; k++) for (i = 1; i <= nb; i++) G15RD[a[k], b[i]] = 1
+  }
   # g15_name(w): the tool w runs: its basename in lower case, less a :tag (hashicorp/terraform:1.9)
   # and an @version (vercel@latest); python3.12 and the like read as python.
   function g15_name(w) {
@@ -28,68 +36,116 @@ _G15_AWK='
     if (w ~ /^[^@]+@/) sub(/@.*/, "", w)
     return w
   }
-  # g15_has(p, path): true when the words of path appear in L after position p, in order, each a
-  # whole word; a path word ending in * matches any word it starts. The path ~ is a bare run: the
-  # word at p runs (the head, or after a runner) and every later word is an option other than help
-  # or version.
-  function g15_has(p, path,   a, n, k, j, e, x) {
+  # g15_runs(p): true when the word at p runs: the head, or after r.
+  function g15_runs(p) { return p == 1 || (r && p > r) }
+  # g15_has(t, p, e, path): true when the words of path appear in L between p and e, in order, each
+  # a whole word, with no read verb of t before the first (unless that first word is an option).
+  # A path word ending in * matches any word it starts; >X matches when a positional word after the
+  # verb, other than the first (the source), starts with X. The path . is a run of the tool at p;
+  # ~ is a bare run, every later word an option other than help or version.
+  function g15_has(t, p, e, path,   a, n, k, j, w, x, f) {
+    if (path == ".") return g15_runs(p)
     if (path == "~") {
-      if (p > 1 && !(r && p > r)) return 0
-      for (j = p + 1; j <= m; j++) if (L[j] !~ /^-/ || L[j] ~ /^(-h|--help|-v|--version)$/) return 0
+      if (!g15_runs(p)) return 0
+      for (j = p + 1; j < e; j++) if (L[j] !~ /^-/ || L[j] ~ /^(-h|--help|-v|--version)$/) return 0
       return 1
     }
     n = split(path, a, " "); j = p
     for (k = 1; k <= n; k++) {
-      e = a[k]; x = (e ~ /\*$/)
-      if (x) e = substr(e, 1, length(e) - 1)
-      for (j++; j <= m; j++) if (x ? substr(L[j], 1, length(e)) == e : L[j] == e) break
-      if (j > m) return 0
+      w = a[k]
+      if (w ~ /^>/) {
+        w = substr(w, 2); f = 0
+        for (j++; j < e; j++) if (L[j] !~ /^-./ && f++ && substr(L[j], 1, length(w)) == w) break
+        if (j >= e) return 0
+        continue
+      }
+      x = (w ~ /\*$/)
+      if (x) w = substr(w, 1, length(w) - 1)
+      for (j++; j < e; j++) {
+        if (x ? substr(L[j], 1, length(w)) == w : L[j] == w) break
+        if (k == 1 && w !~ /^-/ && ((t, L[j]) in G15RD)) return 0
+      }
+      if (j >= e) return 0
     }
     return 1
   }
   BEGIN {
     g15_tool("gh", "workflow run|release create|release new|release upload|release edit|release delete|release delete-asset|run rerun")
-    g15_tool("npm,pnpm,yarn,bun,cargo,poetry,uv,lerna,changeset", "publish")
+    g15_tool("npm", "publish|unpublish|deprecate|dist-tag add")
+    g15_tool("pnpm,yarn,bun,cargo,poetry,uv,lerna,changeset", "publish")
     g15_tool("twine", "upload")
     g15_tool("gem", "push")
     g15_tool("docker", "push|--push|stack deploy|stack up")
-    g15_tool("docker-compose", "push")
-    g15_tool("terraform,tofu", "apply|destroy|import")
+    g15_tool("docker-compose,podman", "push")
+    g15_tool("terraform,tofu,terragrunt", "apply|destroy|import")
     g15_tool("pulumi", "up|destroy")
     g15_tool("cdk,aws-cdk", "deploy|destroy")
-    g15_tool("kubectl", "apply|create|delete|replace|patch|rollout|scale|set|edit|annotate|label")
-    g15_tool("helm", "install|upgrade|uninstall|rollback|delete|del|un")
+    g15_tool("kubectl,oc", "apply|create|delete|replace|patch|rollout restart|rollout undo|rollout pause|rollout resume|scale|set|edit|annotate|label|run|expose|drain|cordon|taint")
+    g15_tool("helm", "install|upgrade|uninstall|rollback|delete|del|un|push")
+    g15_tool("helmfile", "apply|sync|destroy")
+    g15_tool("argocd", "app sync|app create|app delete|app rollback")
+    g15_tool("skaffold", "run|deploy|delete")
     g15_tool("serverless,sls", "deploy|remove")
-    g15_tool("vercel", "deploy|--prod|~")
+    g15_tool("sam", "deploy|delete")
+    g15_tool("sst", "deploy|remove")
+    g15_tool("vercel", "deploy|--prod|promote|rollback|redeploy|remove|~")
     g15_tool("fly,flyctl", "deploy|apps destroy")
-    g15_tool("firebase,firebase-tools", "deploy")
+    g15_tool("firebase,firebase-tools", "deploy|hosting:channel:deploy")
     g15_tool("eb", "deploy")
-    g15_tool("gcloud", "run deploy|app deploy|functions deploy")
+    g15_tool("gcloud", "run deploy|app deploy|functions deploy|builds submit|deploy releases create")
+    g15_tool("gsutil", "rsync >gs://|cp >gs://|mv >gs://|rm gs://*")
     g15_tool("wrangler", "deploy|publish")
     g15_tool("netlify,netlify-cli", "deploy")
-    g15_tool("aws", "ecs update-service|lambda update-function-code|cloudformation deploy|cloudformation create-stack|cloudformation update-stack|cloudformation delete-stack|s3 sync s3://*|s3 cp s3://*|s3 rm s3://*|s3 mv s3://*|s3 rb s3://*")
-    # Runners: a head that runs the command in its later words, alone (" ") or after a listed word.
-    G15R["npx"] = G15R["bunx"] = G15R["uvx"] = G15R["pnpx"] = " "
+    g15_tool("mvn", "deploy")
+    g15_tool("gradle,gradlew", "publish")
+    g15_tool("dotnet", "nuget push")
+    g15_tool("semantic-release", ".")
+    g15_tool("vsce,ovsx", "publish")
+    g15_tool("eas", "update|submit")
+    g15_tool("supabase", "functions deploy|db push")
+    g15_tool("railway", "up|deploy")
+    g15_tool("kamal", "deploy|rollback")
+    g15_tool("az", "create|delete|update|deploy|upload|swap|restart|start|stop|publish|push")
+    g15_tool("azd", "up|deploy|provision|down")
+    g15_tool("glab", "release create|release upload|release delete|ci run")
+    g15_tool("aws", "ecs update-service|lambda update-function-code|lambda publish-version|lambda create-function|lambda delete-function|lambda update-function-configuration|cloudformation deploy|cloudformation create-stack|cloudformation update-stack|cloudformation delete-stack|s3 sync >s3://|s3 cp >s3://|s3 mv >s3://|s3 rm s3://*|s3 rb s3://*|s3api put-object|s3api delete-object|s3api delete-bucket|s3api put-bucket-policy")
+    g15_reads("kubectl,oc", "get describe logs explain top config auth diff wait version api-resources cluster-info events")
+    g15_reads("helm", "diff template lint show status history get list search repo")
+    g15_reads("docker", "run exec build inspect logs ps images")
+    # Where a command line starts: after the word itself (" "), after a listed word that follows it,
+    # or after a -c cluster that follows it ("-c").
+    G15R["npx"] = G15R["bunx"] = G15R["uvx"] = G15R["pnpx"] = G15R["ssh"] = G15R["watch"] = " "
     G15R["npm"] = " exec x "; G15R["pnpm"] = " dlx exec "; G15R["yarn"] = " dlx exec "; G15R["bun"] = " x "
     G15R["uv"] = " run "; G15R["python"] = " -m "
+    G15R["sh"] = G15R["bash"] = G15R["zsh"] = G15R["dash"] = G15R["su"] = G15R["script"] = "-c"
+    qre = "[\"" sq "]"
   }
   {
     sw($0); cw_reset()
     for (k = 1; k <= sw_n; k++) cw(sw_w[k])
     if (!cw_n) next
-    # L[1..m]: the words; r: where a runner ends, after which words are split at blanks.
-    h = g15_name(cw_w[1]); m = 1; L[1] = cw_w[1]
-    r = (h in G15R && G15R[h] == " ")
-    for (k = 2; k <= cw_n; k++) {
-      if (r) { n = split(cw_w[k], a, /[ \t\037]+/); for (i = 1; i <= n; i++) if (a[i] != "") L[++m] = a[i]; continue }
+    # L[1..m]: the words. r: where a command line starts (a runner, ssh, watch, a -c); each word
+    # after it is split at blanks, its quotes dropped. host: the last word that may start one later.
+    m = 0; r = 0; host = ""
+    for (k = 1; k <= cw_n; k++) {
+      if (r) {
+        n = split(cw_w[k], a, /[ \t\037]+/)
+        for (i = 1; i <= n; i++) { gsub(qre, "", a[i]); if (a[i] != "") L[++m] = a[i] }
+        continue
+      }
       L[++m] = cw_w[k]
-      if (h in G15R && index(G15R[h], " " cw_w[k] " ")) r = m
+      if (host != "" && (G15R[host] == "-c" ? cw_w[k] ~ /^-[a-z]*c[a-z]*$/ : index(G15R[host], " " cw_w[k] " "))) { r = m; continue }
+      h = g15_name(cw_w[k])
+      if (h in G15R) { if (G15R[h] == " ") r = m; else host = h }
     }
     for (p = 1; p <= m; p++) {
       t = g15_name(L[p])
       if (!(t in G15T)) continue
+      # e: the end of the tool words, at the first -- after it. A --dry-run among them ends the vote.
+      for (e = p + 1; e <= m && L[e] != "--"; e++) if (L[e] ~ /^--dry-run(=client|=server)?$/) break
+      if (e <= m && L[e] != "--") continue
       n = split(G15T[t], v, "|")
-      for (i = 1; i <= n; i++) if (g15_has(p, v[i])) break
+      for (i = 1; i <= n; i++) if (g15_has(t, p, e, v[i])) break
       if (i > n) continue
       out = L[1]
       for (k = 2; k <= m; k++) out = out " " L[k]
@@ -104,10 +160,12 @@ _G15_AWK='
 
 guard_g15() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd line seen=0 got=0 envs="" parsed dir rest sub t
+  local cmd out line seen=0 got=0 envs="" parsed dir rest sub t
   cmd=$(ti_get command) || return 0
   _g15_named "$cmd" || return 0
+  # A failed parse or judge leaves no `.`, so G15 asks.
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
+  out=$(set -o pipefail; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK") || out=""
   while IFS= read -r line; do
     case "$line" in
       .) seen=1; continue ;;
@@ -139,7 +197,7 @@ guard_g15() {
 $(push_targets "$dir" "$rest")
 EOT
   done <<EOT
-$(git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK")
+$out
 EOT
   [ "$seen" = 1 ] || _g15_vote "kern could not read the command"
 }
@@ -147,18 +205,29 @@ EOT
 # _g15_named CMD: exit 0 when CMD, with quotes, backslashes and newlines removed, holds a tool name
 # from _G15_AWK's table or push, in any case. It runs before any parse or settings_get, and is a
 # superset of what the judge can match: a name the shell joins from quotes or a continued line
-# still passes.
+# still passes. The strip is one linear tr pass: bash 3.2's ${x//[...]/} is cubic on long text in
+# a UTF-8 locale.
 _g15_named() {
-  local flat=${1//[\"\'\\]/}
-  flat=${flat//$'\n'/}
+  local flat=$1
+  case "$1" in *[\"\'\\]* | *$'\n'*) flat=$(printf '%s' "$1" | LC_ALL=C tr -d '"\047\\\n') ;; esac
   case "$flat" in
     *[Gg][Hh]* | *[Nn][Pp][Mm]* | *[Yy][Aa][Rr][Nn]* | *[Bb][Uu][Nn]* | *[Cc][Aa][Rr][Gg][Oo]* | \
-      *[Pp][Oo][Ee][Tt][Rr][Yy]* | *[Uu][Vv]* | *[Ll][Ee][Rr][Nn][Aa]* | *[Cc][Hh][Aa][Nn][Gg][Ee][Ss][Ee][Tt]* | \
-      *[Tt][Ww][Ii][Nn][Ee]* | *[Gg][Ee][Mm]* | *[Dd][Oo][Cc][Kk][Ee][Rr]* | *[Tt][Ee][Rr][Rr][Aa][Ff][Oo][Rr][Mm]* | \
-      *[Tt][Oo][Ff][Uu]* | *[Pp][Uu][Ll][Uu][Mm][Ii]* | *[Cc][Dd][Kk]* | *[Kk][Uu][Bb][Ee][Cc][Tt][Ll]* | *[Hh][Ee][Ll][Mm]* | \
-      *[Ss][Ee][Rr][Vv][Ee][Rr][Ll][Ee][Ss][Ss]* | *[Ss][Ll][Ss]* | *[Vv][Ee][Rr][Cc][Ee][Ll]* | *[Ff][Ll][Yy]* | \
-      *[Ff][Ii][Rr][Ee][Bb][Aa][Ss][Ee]* | *[Ee][Bb]* | *[Gg][Cc][Ll][Oo][Uu][Dd]* | *[Ww][Rr][Aa][Nn][Gg][Ll][Ee][Rr]* | \
-      *[Nn][Ee][Tt][Ll][Ii][Ff][Yy]* | *[Aa][Ww][Ss]* | *[Pp][Uu][Ss][Hh]*) return 0 ;;
+      *[Pp][Oo][Ee][Tt][Rr][Yy]* | *[Uu][Vv]* | *[Ll][Ee][Rr][Nn][Aa]* | \
+      *[Cc][Hh][Aa][Nn][Gg][Ee][Ss][Ee][Tt]* | *[Tt][Ww][Ii][Nn][Ee]* | *[Gg][Ee][Mm]* | \
+      *[Dd][Oo][Cc][Kk][Ee][Rr]* | *[Pp][Oo][Dd][Mm][Aa][Nn]* | \
+      *[Tt][Ee][Rr][Rr][Aa][Ff][Oo][Rr][Mm]* | *[Tt][Oo][Ff][Uu]* | \
+      *[Tt][Ee][Rr][Rr][Aa][Gg][Rr][Uu][Nn][Tt]* | *[Pp][Uu][Ll][Uu][Mm][Ii]* | *[Cc][Dd][Kk]* | \
+      *[Kk][Uu][Bb][Ee][Cc][Tt][Ll]* | *[Oo][Cc]* | *[Hh][Ee][Ll][Mm]* | \
+      *[Aa][Rr][Gg][Oo][Cc][Dd]* | *[Ss][Kk][Aa][Ff][Ff][Oo][Ll][Dd]* | \
+      *[Ss][Ee][Rr][Vv][Ee][Rr][Ll][Ee][Ss][Ss]* | *[Ss][Ll][Ss]* | *[Ss][Aa][Mm]* | \
+      *[Ss][Ss][Tt]* | *[Vv][Ee][Rr][Cc][Ee][Ll]* | *[Ff][Ll][Yy]* | \
+      *[Ff][Ii][Rr][Ee][Bb][Aa][Ss][Ee]* | *[Ee][Bb]* | *[Gg][Cc][Ll][Oo][Uu][Dd]* | \
+      *[Gg][Ss][Uu][Tt][Ii][Ll]* | *[Ww][Rr][Aa][Nn][Gg][Ll][Ee][Rr]* | \
+      *[Nn][Ee][Tt][Ll][Ii][Ff][Yy]* | *[Mm][Vv][Nn]* | *[Gg][Rr][Aa][Dd][Ll][Ee]* | \
+      *[Dd][Oo][Tt][Nn][Ee][Tt]* | *[Ss][Ee][Mm][Aa][Nn][Tt][Ii][Cc]* | *[Vv][Ss][Cc][Ee]* | \
+      *[Oo][Vv][Ss][Xx]* | *[Ee][Aa][Ss]* | *[Ss][Uu][Pp][Aa][Bb][Aa][Ss][Ee]* | \
+      *[Rr][Aa][Ii][Ll][Ww][Aa][Yy]* | *[Kk][Aa][Mm][Aa][Ll]* | *[Aa][Zz]* | *[Gg][Ll][Aa][Bb]* | \
+      *[Aa][Ww][Ss]* | *[Pp][Uu][Ss][Hh]*) return 0 ;;
   esac
   return 1
 }

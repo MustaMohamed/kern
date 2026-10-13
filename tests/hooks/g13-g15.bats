@@ -14,11 +14,12 @@ g() { run_guard "$(bash_payload "$1")" "$2"; }
 mcp() { run_guard "$(payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{}")" g14; }
 # mcpi TOOL FIELDS: G14 on an MCP call whose tool_input holds FIELDS (passed without braces).
 mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
-# gx CMD [GUARDS]: G13 (or GUARDS) on CMD, which may hold double quotes, backslashes and newlines.
+# gx CMD [GUARDS]: G13 (or GUARDS; "" runs them all) on CMD, which may hold double quotes, backslashes
+# and newlines.
 gx() {
   local esc
   esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
-  run_guard "$(bash_payload "$esc")" "${2:-g13}"
+  run_guard "$(bash_payload "$esc")" "${2-g13}"
 }
 # g13_all DECISION CMD...: G13 decides DECISION on every CMD.
 g13_all() {
@@ -536,8 +537,95 @@ ssh v1-host 'del C:\x'"
   g15_all deny "vercel"
 }
 
+@test "G15: a command inside one quoted word is split: ssh, a shell's -c, su -c, script -c and watch" {
+  g15_all ask "ssh prod 'kubectl apply -f /tmp/x.yml'" "ssh deploy@web1 \"cd /srv/app && npm publish\"" \
+    "ssh -i ~/.ssh/k prod 'terraform apply -auto-approve'" "docker exec api sh -c 'npm publish'" \
+    "docker run --rm -v \"\$PWD\":/w -w /w hashicorp/terraform:1.9 sh -c 'terraform init && terraform apply -auto-approve'" \
+    "caffeinate -i sh -c 'terraform apply'" "su deploy -c 'npm publish'" "watch -n 5 'kubectl rollout restart deploy/api'" \
+    "script -q /dev/null -c 'npm publish'" "ssh prod 'bash -c \"npm publish\"'"
+  g15_all none "ssh prod 'kubectl get pods'" "ssh prod uptime" "watch -n 5 'kubectl get pods'" \
+    "docker exec api sh -c 'npm test'" "su deploy -c 'npm ci'"
+  set_autopilot on
+  g15_all deny "ssh prod 'kubectl apply -f /tmp/x.yml'" "su deploy -c 'npm publish'"
+}
+
+@test "G15: the round-1 table rows ask" {
+  g15_all ask "helmfile apply" "helmfile sync" "helmfile destroy" "argocd app sync api" "argocd app create api" \
+    "argocd app delete api" "argocd app rollback api 3" "podman push x" "helm push chart.tgz oci://r" "skaffold run" \
+    "skaffold deploy" "skaffold delete" "oc apply -f x.yml" "oc -n prod rollout restart deploy/api" "kubectl run x --image=y" \
+    "kubectl expose deploy api --port 80" "kubectl drain node1" "kubectl cordon node1" "kubectl taint nodes n k=v:NoSchedule" \
+    "terragrunt apply" "terragrunt run-all apply" "terragrunt destroy" "terragrunt import a.b id" "sam deploy" "sam delete" \
+    "sst deploy --stage prod" "sst remove" "mvn deploy" "mvn -B -DskipTests deploy" "gradle publish" "./gradlew publish" \
+    "dotnet nuget push x.nupkg" "npm unpublish x@1" "npm deprecate x@1 old" "npm dist-tag add x@1 latest" \
+    "semantic-release" "npx semantic-release --branches main" "vsce publish" "ovsx publish" "eas update --branch production" \
+    "eas submit" "vercel promote https://x" "vercel rollback" "vercel redeploy https://x" "vercel remove app" \
+    "firebase hosting:channel:deploy pr-1" "supabase functions deploy f" "supabase db push" "railway up" "railway deploy" \
+    "kamal deploy" "kamal rollback v1" "az webapp deploy --src-path x.zip" "az group create -n g -l w" "az vm restart -n x" \
+    "az storage blob upload -f x -c c" "az webapp deployment slot swap -s staging" "azd up" "azd deploy" "azd provision" \
+    "azd down" "gsutil -m rsync -r dist gs://b" "gsutil cp x.txt gs://b/" "gsutil mv x gs://b/x" "gsutil rm gs://b/x" \
+    "gcloud builds submit --tag x" "gcloud deploy releases create r1" "aws s3api put-object --bucket b --key k" \
+    "aws s3api delete-object --bucket b --key k" "aws s3api delete-bucket --bucket b" "aws s3api put-bucket-policy --bucket b" \
+    "aws lambda publish-version --function-name f" "aws lambda create-function --function-name f" \
+    "aws lambda delete-function --function-name f" "aws lambda update-function-configuration --function-name f" \
+    "glab release create v1" "glab release upload v1 x" "glab release delete v1" "glab ci run"
+  g15_all none "gsutil cp gs://b/x ./x" "gsutil ls gs://b" "az account show" "az login" "eas build" "mvn test" \
+    "./gradlew build" "dotnet nuget list source" "glab mr list" "npm i -D semantic-release" "supabase start" "oc get pods" \
+    "helmfile diff" "argocd app list" "sam build" "railway logs" "kamal app logs" "podman build -t x ."
+}
+
+@test "G15: a read verb first, --dry-run, words after --, rollout reads and s3 downloads do not vote" {
+  g15_all none "npm test -- -t publish" "npm publish --dry-run" "cargo publish --dry-run" "docker run --rm alpine echo push" \
+    "kubectl rollout status deployment/api" "kubectl rollout history deployment/api" "kubectl apply --dry-run=client -f x.yml" \
+    "kubectl apply --dry-run=server -f x.yml" "kubectl create deployment api --image=x --dry-run=client -o yaml" \
+    "kubectl create secret generic s --from-literal=a=b --dry-run=client -o yaml" "kubectl describe clusterrole edit" \
+    "kubectl config set current-context prod" "helm diff upgrade api ./chart -f values.yaml" \
+    "helm upgrade --install api ./chart --dry-run --debug" "helm install api ./chart --dry-run" \
+    "aws s3 cp s3://bucket/logs/app.log ./app.log" "aws s3 sync s3://bucket/reports ./reports" \
+    "aws s3 mv s3://bucket/x ./x" "kubectl auth can-i create pods" "semantic-release --dry-run"
+  g15_all ask "kubectl rollout undo deploy/api" "kubectl apply --dry-run=none -f x.yml" "kubectl exec api -- npm publish" \
+    "docker buildx build --push -t x ." "docker build --push -t x ." "aws s3 cp ./x s3://b/x" \
+    "aws s3 sync dist s3://b --delete --profile prod" "aws s3 cp --recursive ./dist s3://b" "aws s3 cp - s3://b/x" \
+    "aws s3 cp s3://a/x s3://b/x" "aws s3 mv ./x s3://b/x"
+}
+
+@test "G15: a failed judge or a failed parse asks" {
+  local real
+  real=$(command -v awk)
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/bash\ncase "$*" in *"$KERN_TEST_BREAK"*) exit 2 ;; esac\nexec %s "$@"\n' "$real" >"$BATS_TEST_TMPDIR/bin/awk"
+  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  for b in 'g15_tool(' 'function emit('; do
+    KERN_TEST_BREAK=$b
+    export KERN_TEST_BREAK
+    g "npm publish; ls" g15
+    [ "$(decision_of "$output")" = ask ] || { echo "$b -> $output"; return 1; }
+    case "$output" in *"could not read the command"*) ;; *) echo "$b -> $output"; return 1 ;; esac
+  done
+}
+
+@test "G13 and G15: a 10 KB here-doc PR body passes every guard in under 2 s in a UTF-8 locale" {
+  local body="" i=0 line cmd t0 t1
+  printf 'protected_targets: v1-host\ndeploy.envs: production\n' >"$R/.claude/kern.local.yml"
+  line="- Fixed the \`npm publish\` step so it doesn't \"push\" to production's main branch; see docs/release.md (ssh, scp, kubectl apply)."
+  while [ "${#body}" -lt 10240 ]; do
+    i=$((i + 1))
+    body="$body$i. $line
+"
+  done
+  cmd="gh pr create --title 'M1: x' --body \"\$(cat <<'EOF'
+${body}EOF
+)\""
+  export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+  t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  gx "$cmd" ""
+  t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  [ "$status" = 0 ]
+  [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
+}
+
 @test "G15: every tool in the table asks for each of its verbs, in any case, and passes the prefilter" {
-  local f names paths name path p n=0 cmd="" line want=() names_all=()
+  local f names paths name path p w ws n=0 cmd="" line want=() names_all=()
   f="$(kern_root)/hooks/guards/g15-deploy.sh"
   while IFS='	' read -r names paths; do
     [ -n "$names" ] || continue
@@ -545,9 +633,18 @@ ssh v1-host 'del C:\x'"
       names_all+=("$name" "$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')")
       while IFS= read -r path; do
         n=$((n + 1))
-        # A * path word stands for any word it starts; the path ~ is the tool alone.
-        p=${path//\*/x}
-        [ "$p" = '~' ] && p=""
+        # A path word ending in * stands for any word it starts, and >X for a source then a word
+        # that starts with X; the paths ~ and . are the tool alone.
+        p=""
+        read -r -a ws <<<"$path"
+        for w in "${ws[@]}"; do
+          case "$w" in
+            '~' | .) ;;
+            '>'*) p="${p:+$p }./src ${w#>}x" ;;
+            *'*') p="${p:+$p }${w%\*}x" ;;
+            *) p="${p:+$p }$w" ;;
+          esac
+        done
         line="$name${p:+ $p}"
         [ $((n % 2)) = 0 ] && line="$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')${p:+ $p}"
         want+=("$line")
