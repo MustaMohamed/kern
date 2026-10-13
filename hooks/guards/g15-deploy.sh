@@ -3,27 +3,28 @@
 # commands and deploy-branch pushes ask, and are denied under autopilot. No policy key loosens it,
 # and it never votes allow.
 # The words of each simple command come from _cmd_words (wrappers, assignments, any path, any
-# case). Any word may name a tool in _G15_AWK's table (basename, lower case, no @version), so an
-# unknown wrapper, xargs, find -exec or `docker run <image>/terraform` cannot hide it; the words of
-# a verb path must then appear after it in order, each a whole word, so global options before the
-# verb cannot hide it either, and no option table is needed. The costs: an option value spelled as
-# a verb (`terraform plan -out apply`), and a tool and its verb as plain words (`echo terraform
-# apply`, `man kubectl apply`), ask. Quoted text stays one word. After a runner (npx, bunx, uvx,
-# pnpx; npm exec or x, pnpm and yarn dlx or exec, bun x, uv run or uv tool run, python -m), each
-# later word is also split at blanks (`npm exec -c 'vercel deploy'`).
-# Out of scope (accepted limits): package scripts (npm run deploy, make deploy), a bare `vercel` with
-# an option value or a path (`vercel --scope team`), and names built at run time.
+# case). Any word may name a tool in _G15_AWK's table (basename, lower case, no :tag or @version),
+# so an unknown wrapper, xargs, find -exec or `docker run <image>/terraform:<tag>` cannot hide it;
+# the words of a verb path must then appear after it in order, each a whole word, so global options
+# before the verb cannot hide it either, and no option table is needed. The costs: an option value
+# spelled as a verb (`terraform plan -out apply`), and a tool and its verb as plain words (`echo
+# terraform apply`, `man kubectl apply`), ask. Quoted text stays one word. After a runner (npx,
+# bunx, uvx, pnpx; npm exec or x, pnpm and yarn dlx or exec, bun x, uv run or uv tool run,
+# python -m), each later word is also split at blanks (`npm exec -c 'vercel deploy'`).
+# Out of scope (accepted limits): package scripts (npm run deploy, make deploy), a bare `vercel`
+# with an option value or a path (`vercel --scope team`), and names built at run time.
 
 # _G15_AWK: the judge, run on git_words records after _GW_AWK. Prints `D<TAB>words` for a deploy or
 # publish, `P<TAB>record` for a git command with a push word, and `.` at the end.
 # shellcheck disable=SC2016 # awk text
 _G15_AWK='
   function g15_tool(names, paths,   a, k, n) { n = split(names, a, ","); for (k = 1; k <= n; k++) G15T[a[k]] = paths }
-  # g15_name(w): the tool w runs: its basename in lower case, less an @version (vercel@latest);
-  # python3.12 and the like read as python.
+  # g15_name(w): the tool w runs: its basename in lower case, less a :tag (hashicorp/terraform:1.9)
+  # and an @version (vercel@latest); python3.12 and the like read as python.
   function g15_name(w) {
     sub(/.*\//, "", w); w = tolower(w)
     if (w ~ /^python[0-9.]*$/) return "python"
+    if (w ~ /^[^:]+:/) sub(/:.*/, "", w)
     if (w ~ /^[^@]+@/) sub(/@.*/, "", w)
     return w
   }
@@ -52,6 +53,7 @@ _G15_AWK='
     g15_tool("twine", "upload")
     g15_tool("gem", "push")
     g15_tool("docker", "push|--push|stack deploy|stack up")
+    g15_tool("docker-compose", "push")
     g15_tool("terraform,tofu", "apply|destroy|import")
     g15_tool("pulumi", "up|destroy")
     g15_tool("cdk,aws-cdk", "deploy|destroy")

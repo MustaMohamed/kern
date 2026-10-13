@@ -519,9 +519,11 @@ ssh v1-host 'del C:\x'"
 @test "G15: a tool name as any later word asks; quoted text stays one word" {
   g15_all ask "caffeinate terraform apply" "xargs -n1 npm publish" 'find . -name package.json -execdir npm publish \;' \
     "docker run --rm hashicorp/terraform apply" "nvm exec 20 npm publish" "corepack pnpm publish" \
-    "ssh build-host kubectl apply -f x.yml" "echo terraform apply" "man kubectl apply"
+    "ssh build-host kubectl apply -f x.yml" "echo terraform apply" "man kubectl apply" \
+    "docker run --rm hashicorp/terraform:1.9 apply" "docker-compose push"
   g15_all none "git commit -m 'npm publish'" "echo 'terraform apply'" "brew install helm" "npm i -g vercel" \
-    "yarn add -D vercel" "which vercel" "pip install twine" "rg 'kubectl apply' docs"
+    "yarn add -D vercel" "which vercel" "pip install twine" "rg 'kubectl apply' docs" "docker run alpine:3 ls" \
+    "docker-compose up"
   set_autopilot on
   g15_all deny "caffeinate terraform apply" "xargs -n1 npm publish"
 }
