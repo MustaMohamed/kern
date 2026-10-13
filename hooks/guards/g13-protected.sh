@@ -44,12 +44,16 @@ $(git_words "$1")
 EOT
 }
 
-# _g13_names TEXT: exit 0 when TEXT holds a client or transfer name G13 reads, in any case.
+# _g13_names TEXT: exit 0 when TEXT holds a client or transfer name G13 reads, in any case (nc only as
+# a whole word: as a substring it is in too many commands).
 _g13_names() {
   case "$1" in
-    *[Ss][Ss][Hh]* | *[Ss][Cc][Pp]* | *[Ss][Ff][Tt][Pp]* | *[Rr][Ss][Yy][Nn][Cc]* | *[Mm][Yy][Ss][Qq][Ll]* | \
+    *[Ss][Ss][Hh]* | *[Ss][Cc][Pp]* | *[Ff][Tt][Pp]* | *[Rr][Ss][Yy][Nn][Cc]* | *[Mm][Yy][Ss][Qq][Ll]* | \
       *[Mm][Aa][Rr][Ii][Aa][Dd][Bb]* | *[Pp][Ss][Qq][Ll]* | *[Ss][Qq][Ll][Ii][Tt][Ee]* | *[Ss][Qq][Ll][Cc][Mm][Dd]* | \
-      *[Pp][Gg]_*) return 0 ;;
+      *[Pp][Gg]_* | *[Pp][Ll][Ii][Nn][Kk]* | *[Mm][Yy][Cc][Ll][Ii]* | *[Pp][Gg][Cc][Ll][Ii]* | *[Uu][Ss][Qq][Ll]* | \
+      *[Ll][Ii][Tt][Ee][Cc][Ll][Ii]* | *[Cc][Uu][Rr][Ll]* | *[Ww][Gg][Ee][Tt]* | *[Ss][Mm][Bb]* | *[Mm][Oo][Ss][Hh]* | \
+      *[Pp][Ww][Ss][Hh]* | *[Pp][Oo][Ww][Ee][Rr][Ss][Hh][Ee][Ll][Ll]* | [Nn][Cc] | [Nn][Cc][!A-Za-z0-9_-]* | \
+      *[!A-Za-z0-9_-][Nn][Cc] | *[!A-Za-z0-9_-][Nn][Cc][!A-Za-z0-9_-]*) return 0 ;;
   esac
   return 1
 }
@@ -180,7 +184,12 @@ _G13_AWK='
     if (have) { qw_w[++qw_n] = w; qw_r[qw_n] = rd; qw_d[qw_n] = dy }
   }
   function base(w) { sub(/.*[\/\\]/, "", w); w = tolower(w); sub(/\.exe$/, "", w); return w }
-  function canon(h) { h = tolower(h); sub(/\.$/, "", h); gsub(/^\[|\]$/, "", h); if (h == "127.0.0.1" || h == "::1") h = "localhost"; return h }
+  # canon(H): H lowercased; every loopback or any-address spelling is localhost.
+  function canon(h) {
+    h = tolower(h); sub(/\.$/, "", h); gsub(/^\[|\]$/, "", h); sub(/^::ffff:/, "", h)
+    if (h == "::1" || h == "0" || h == "0.0.0.0" || h ~ /^127\.[0-9]+(\.[0-9]+)?(\.[0-9]+)?$/) h = "localhost"
+    return h
+  }
   # hit(H, P): the target that host H on port P names, else 0.
   function hit(h, p,   k) {
     h = canon(h)
@@ -234,12 +243,14 @@ _G13_AWK='
   }
 
   # rem(S, D): "" when the remote command S only reads, else what is not proven. Quotes are not
-  # trusted to protect a separator or a redirect: the remote shell may be cmd, which has no quotes.
+  # trusted to protect a separator or a redirect: the remote shell may be cmd, which has no quotes. A
+  # carriage return ends a PowerShell statement; any other control character denies.
   function rem(s, d,   n, segs, i, why) {
     if (d > 4) return "wrappers nest too deep"
+    if (match(s, CTLRE)) return "control character " ORD[substr(s, RSTART, 1)]
     why = rredir(s)
     if (why != "") return why
-    n = split(RS_OUT, segs, /[;&|\n\037(){}`]/)
+    n = split(RS_OUT, segs, /[;&|\n\r\037(){}`]/)
     for (i = 1; i <= n; i++) if ((why = rseg(segs[i], d)) != "") return why
     return ""
   }
@@ -311,67 +322,111 @@ _G13_AWK='
     return "`" h "` with no command is a shell"
   }
 
-  # j_ssh(S): ssh at word S. OpenSSH reads options before and after the destination; the first word
-  # after that starts the remote command.
-  function j_ssh(s,   k, w, j, c, v, dest, port, nf, nin, ctl, inc, rc, orc, stdin, t, key, h, why, lc, lt, dyn) {
-    port = 22; dest = ""; rc = ""; orc = ""; nf = 0; nin = 0; ctl = 0; inc = 0; stdin = ""; t = 0; lc = ""; lt = 0; OH = ""; dyn = 0
+  # j_ssh(S, B): ssh, autossh or plink at word S. OpenSSH reads options before and after the
+  # destination; the first word after that starts the remote command. the -M of autossh takes a port.
+  # The parse fills the X_ globals and ssh_end decides.
+  function j_ssh(s, b,   k, w, j, c, v, vl, inc) {
+    X_port = 22; X_dest = ""; X_rc = ""; X_orc = ""; X_nf = 0; X_nin = 0; X_ctl = 0; X_stdin = ""; X_t = 0
+    X_lc = ""; X_lt = 0; X_oh = ""; X_dyn = 0; X_mux = 0; X_file = ""; X_load = ""
+    if (b == "plink") { p_plink(s); ssh_end(b); return }
+    vl = "BbcDEeFIiJLlmOoPpQRSWw" (b == "autossh" ? "M" : "")
+    inc = 0
     for (k = s + 1; k <= N; k++) {
       w = W[k]
-      if (R[k]) {
-        k = redir(k)
-        if (RO ~ /^</ && !(RO == "<" && RT == "/dev/null")) stdin = RO
-        continue
-      }
-      if (inc) { rc = rc " " w; dyn = dyn || D[k]; continue }
+      if (R[k]) { k = redir(k); sshin(); continue }
+      if (inc) { X_rc = X_rc " " w; X_dyn = X_dyn || D[k]; continue }
       if (w ~ /^-./ && w != "--") {
         for (j = 2; j <= length(w); j++) {
           c = substr(w, j, 1)
-          if (index("BbcDEeFIiJLlmOoPpQRSWw", c)) {
+          if (index(vl, c)) {
             v = substr(w, j + 1)
             if (v == "" && k < N) v = W[++k]
-            if (c == "p") port = v
-            else if (c == "J" && !t) t = hops(v)
-            else if (c == "O" || c == "W") ctl = 1
-            else if (c == "o") {
-              key = tolower(v); sub(/[ =].*/, "", key); sub(/^[^ =]*[ =][ \t]*/, "", v)
-              if (key == "port") port = v
-              else if (key == "hostname") OH = v
-              else if (key == "remotecommand") { orc = v; dyn = dyn || D[k] }
-              else if (key == "proxyjump" && !t) t = hops(v)
-              else if (key ~ /^(proxycommand|localcommand|knownhostscommand)$/ && (lt = named(v))) lc = key
-              else if (!t) t = named(v)
-            }
+            if (c == "p") X_port = v
+            else if (c == "J" && !X_t) X_t = hops(v)
+            else if (c == "O" || c == "W") X_ctl = 1
+            else if (c == "S" && tolower(v) != "none") X_mux = 1
+            else if (c == "o") sshopt(v, D[k])
             break
           }
-          if (c == "N") nf = 1
-          else if (c == "n") nin = 1
-          else if (c == "G" || c == "V") ctl = 2
+          if (c == "N") X_nf = 1
+          else if (c == "n") X_nin = 1
+          else if (c == "G" || c == "V") X_ctl = 2
         }
         continue
       }
       if (w == "--") continue
-      if (dest == "") { dest = w; continue }
-      inc = 1; rc = w; dyn = D[k]
+      if (X_dest == "") { X_dest = w; continue }
+      inc = 1; X_rc = w; X_dyn = D[k]
     }
-    if (ctl == 2 || dest == "") return
-    uhost(dest)
-    if (!t) t = hit(UH, UP != "" ? UP : port)
-    if (!t && OH != "") t = hit(OH, UP != "" ? UP : port)
-    if (lc != "") { deny("ssh -o " lc " runs a command that names protected target " tr[lt] "; kern cannot check it"); return }
-    # Another host may reach a target in turn (ssh bastion "scp f v1-host:"): the caller checks its
-    # command as a command line.
-    if (!t) { if (rc != "") print "\001" rc; if (orc != "") print "\001" orc; return }
-    h = tr[t]
-    if (rc == "" && orc == "") {
-      if (nf || ctl) return
-      deny("ssh to protected target " h " with no remote command opens a shell")
+    ssh_end(b)
+  }
+  # p_plink(S): PuTTY plink [options] [user@]host [command]. -m reads the command from a file, and
+  # -load may name the host through a saved session.
+  function p_plink(s,   k, w, v, inc) {
+    inc = 0
+    for (k = s + 1; k <= N; k++) {
+      w = W[k]
+      if (R[k]) { k = redir(k); sshin(); continue }
+      if (inc) { X_rc = X_rc " " w; X_dyn = X_dyn || D[k]; continue }
+      if (w ~ /^-./) {
+        if (w in PLINKV) {
+          v = (k < N) ? W[++k] : ""
+          if (w == "-P") X_port = v
+          else if (w == "-m") X_file = v
+          else if (w == "-load") X_load = v
+          else if (w == "-nc") X_ctl = 1
+          else if (w == "-proxycmd" && (X_lt = named(v))) X_lc = w
+        }
+        else if (w == "-N") X_nf = 1
+        continue
+      }
+      if (X_dest == "") { X_dest = w; continue }
+      inc = 1; X_rc = w; X_dyn = D[k]
+    }
+    if (X_dest == "") X_dest = X_load
+  }
+  function sshin() { if (RO ~ /^</ && !(RO == "<" && RT == "/dev/null")) X_stdin = RO }
+  # sshopt(V, DYN): one ssh -o option.
+  function sshopt(v, dy,   key) {
+    key = tolower(v); sub(/[ =].*/, "", key); sub(/^[^ =]*[ =][ \t]*/, "", v)
+    if (key == "port") X_port = v
+    else if (key == "hostname") X_oh = v
+    else if (key == "remotecommand") { X_orc = v; X_dyn = X_dyn || dy }
+    else if (key == "controlpath" || key == "controlmaster") { if (tolower(v) != "none") X_mux = 1 }
+    else if (key == "proxyjump" && !X_t) X_t = hops(v)
+    else if (key ~ /^(proxycommand|localcommand|knownhostscommand)$/ && (X_lt = named(v))) X_lc = "-o " key
+    else if (!X_t) X_t = named(v)
+  }
+  # ssh_end(TOOL): an ssh whose session may run on a target (its destination, a jump, HostName, or a
+  # shared connection, whose master may be on a target) must run a proven read.
+  function ssh_end(tool,   t, h, why) {
+    if (X_ctl == 2 || X_dest == "") return
+    if (X_lc != "") { deny(tool " " X_lc " runs a command that names protected target " tr[X_lt] "; kern cannot check it"); return }
+    uhost(X_dest)
+    t = X_t
+    if (!t) t = hit(UH, UP != "" ? UP : X_port)
+    if (!t && X_oh != "") t = hit(X_oh, UP != "" ? UP : X_port)
+    if (!t && X_load != "") t = named(X_load)
+    if (t) h = tool " to protected target " tr[t]
+    else if (X_mux) h = tool " over a shared connection (-S, ControlPath or ControlMaster; judged as a protected target)"
+    else {
+      # Another host may reach a target in turn (ssh bastion "scp f v1-host:"): the caller checks its
+      # command as a command line.
+      if (X_rc != "") print "\001" X_rc
+      if (X_orc != "") print "\001" X_orc
       return
     }
-    if (!nin && stdin != "") deny("ssh to protected target " h " with input on stdin (" stdin ")")
-    else if (!nin && FED) deny("ssh to protected target " h " with input piped to it")
-    if (dyn) deny("ssh to protected target " h ": the remote command is built at run time ($ or a backtick)")
-    if (rc != "" && (why = rem(rc, 0)) != "") deny("ssh to protected target " h ": " why)
-    if (orc != "" && (why = rem(orc, 0)) != "") deny("ssh -o RemoteCommand to protected target " h ": " why)
+    if (X_file != "") { deny(h " reads its remote command from " X_file); return }
+    if (X_rc == "" && X_orc == "") {
+      if (X_nf || X_ctl) return
+      deny(h " with no remote command opens a shell")
+      return
+    }
+    if (!X_nin && X_stdin != "") deny(h " with input on stdin (" X_stdin ")")
+    else if (!X_nin && FED) deny(h " with input piped to it")
+    if (X_dyn) deny(h ": the remote command is built at run time ($ or a backtick)")
+    if (X_rc != "" && (why = rem(X_rc, 0)) != "") deny(h ": " why)
+    if (X_orc != "" && (why = rem(X_orc, 0)) != "") deny(h " (-o RemoteCommand): " why)
   }
   # hops(V): the target a comma list of jump hosts names, else 0.
   function hops(v,   n, a, i, t) {
@@ -380,8 +435,37 @@ _G13_AWK='
     return 0
   }
 
+  # j_net(S, B): a network client G13 has no read proof for. It is denied when a word names a target
+  # (a host, or an sqlite path), or holds the port of a host:port target next to its host (alone for a
+  # loopback target, the client default). pwsh and powershell vote only with a remoting parameter.
+  function j_net(s, b,   k, w, t, ps, x, pk, hk) {
+    if (b == "pwsh" || b == "powershell") {
+      ps = 0
+      for (k = s + 1; k <= N; k++) if (tolower(W[k]) ~ /(^|[^a-z0-9_-])-(computername|cn|hostname|[a-z]*session)([^a-z0-9_-]|$)/) ps = 1
+      if (!ps) return
+    }
+    for (t = 1; t <= tn; t++) { pk[t] = 0; hk[t] = (th[t] == "localhost") }
+    for (k = s + 1; k <= N; k++) {
+      if (R[k]) { k = redir(k); continue }
+      w = tolower(W[k])
+      if ((t = named(w)) || (t = pathhit(w))) break
+      for (t = 1; t <= tn; t++) if (tp[t] != "") {
+        if (w ~ ("(^|[^0-9])" tp[t] "([^0-9]|$)")) pk[t] = 1
+        if (bnd(w, th[t], "")) hk[t] = 1
+      }
+      t = 0
+    }
+    if (!t) for (x = 1; x <= tn && !t; x++) if (pk[x] && hk[x]) t = x
+    if (t) deny(b " names protected target " tr[t] "; kern proves reads only for ssh, scp, sftp, rsync and SQL clients")
+  }
+  # pathhit(W): the path target (an entry holding a /) W holds, else 0.
+  function pathhit(w,   k) {
+    for (k = 1; k <= tn; k++) if (index(tr[k], "/") && index(w, tolower(tr[k]))) return k
+    return 0
+  }
   function judge(b, k) {
-    if (b == "ssh") j_ssh(k)
+    if (b == "ssh" || b == "autossh" || b == "plink") j_ssh(k, b)
+    else if (b in NET) j_net(k, b)
     else if (b == "scp") j_scp(k)
     else if (b == "rsync") j_rsync(k)
     else if (b == "sftp") j_sftp(k)
@@ -401,7 +485,17 @@ _G13_AWK='
       "dir type findstr where ver get-childitem get-content select-string get-item test-path get-filehash measure-object " \
       "gci gc sls", ra, " ")
     for (k = 1; k <= nr; k++) READ[ra[k]] = 1
-    JUDGE["ssh"] = 1
+    JUDGE["ssh"] = JUDGE["autossh"] = JUDGE["plink"] = 1
+    n = split("-P -l -pw -pwfile -i -m -load -hostkey -L -R -D -nc -proxycmd -sshlog -sshrawlog -sercfg", a, " ")
+    for (k = 1; k <= n; k++) PLINKV[a[k]] = 1
+    n = split("mycli pgcli usql litecli curl wget smbclient mount_smbfs lftp ftp mosh nc pwsh powershell", a, " ")
+    for (k = 1; k <= n; k++) NET[a[k]] = JUDGE[a[k]] = 1
+    CTLRE = ""
+    for (k = 1; k < 128; k++) {
+      ORD[sprintf("%c", k)] = k
+      if (k < 32 && k != 9 && k != 10 && k != 13 && k != 31 || k == 127) CTLRE = CTLRE sprintf("%c", k)
+    }
+    CTLRE = "[" CTLRE "]"
     CMDTXT = ENVIRON["G13_CMD"]
   }
   { buf = buf (NR > 1 ? "\037" : "") $0 }
@@ -452,7 +546,9 @@ _G13_SQL_AWK='
       if (w ~ /^--./) {
         opt = w; v = ""; x = 0
         if ((j = index(w, "=")) > 0) { opt = substr(w, 1, j - 1); v = substr(w, j + 1); x = 1 }
-        role = ((b SUBSEP opt) in LONG) ? LONG[b, opt] : LONG[fam, opt]
+        if ((b SUBSEP opt) in LONG) role = LONG[b, opt]
+        else if ((fam SUBSEP opt) in LONG) role = LONG[fam, opt]
+        else role = lpre(b, fam, opt)
         if (role != "") {
           if (!x && k < N) v = W[++k]
           sqlopt(role, v, D[k], fam)
@@ -593,11 +689,22 @@ _G13_SQL_AWK='
     else if (p !~ /^\//) p = ENVIRON["CWD"] "/" p
     return tolower(p)
   }
+  # lpre(B, FAM, OPT): the role of the long option OPT abbreviates (mysql clients and getopt_long
+  # take any unambiguous prefix), for a prefix of two letters or more; else "".
+  function lpre(b, fam, opt,   key, kk) {
+    if (length(opt) < 4) return ""
+    for (key in LONG) {
+      split(key, kk, SUBSEP)
+      if ((kk[1] == b || kk[1] == fam) && index(kk[2], opt) == 1) return LONG[key]
+    }
+    return ""
+  }
+  # dumpopt: an unambiguous prefix counts too, so --lock-t is --lock-tables.
   function dumpopt(opt, v, x,   off) {
     off = x && tolower(v) ~ /^(0|off|false)$/
-    if (opt == "--single-transaction") single = !off
+    if (length(opt) > 8 && index("--single-transaction", opt) == 1) single = !off
     else if (opt ~ /^--(skip|disable)-single-transaction$/) single = 0
-    else if (!off && opt ~ /^--(lock-tables|lock-all-tables|master-data|source-data|flush-logs|flush-privileges|delete-master-logs|delete-source-logs|dump-slave|dump-replica|lock-for-backup)$/) locks = locks " " opt
+    else if (!off && opt ~ /^--(lock|master|source-d|flush|delete-m|delete-s|dump-s|dump-r)/) locks = locks " " opt
   }
 
   # sqlok(TEXT, FAM): "" when every statement in TEXT reads, under each way FAM may lex strings

@@ -267,6 +267,49 @@ EOF"
   g13_all none "sqlite3 /srv/prod.db 'SELECT count(*) FROM t'" "sqlite3 dev.db 'DELETE FROM t'"
 }
 
+@test "G13: autossh and plink are read as ssh; other network clients naming a target are denied" {
+  printf 'protected_targets: v1-host, prod-db.internal, 127.0.0.1:3307, /srv/prod.db\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "autossh -M 0 v1-host 'del C:\data\x'" "plink -batch v1-host 'del C:\data\x'" \
+    "plink -ssh -P 22 -pw x admin@v1-host del C:\data\x" "plink -m fix.txt v1-host" \
+    "mycli -h 127.0.0.1 -P 3307 -e 'DELETE FROM t'" "mycli -P 3307 -e 'DELETE FROM t'" \
+    "usql mysql://127.0.0.1:3307/db -c 'DELETE FROM t'" "pgcli -h prod-db.internal" "litecli /srv/prod.db" \
+    "curl -T a.txt 'smb://v1-host/c\$/data/a.txt'" "smbclient '//v1-host/c\$' -c 'put a.txt'" \
+    "mount_smbfs '//admin@v1-host/c\$' /tmp/v1" "lftp -e 'put a.txt' sftp://v1-host" "ftp v1-host" \
+    "wget --post-file=a.txt http://v1-host/x" "mosh v1-host" "nc v1-host 3306" "/usr/bin/NC v1-host 3306" \
+    "pwsh -c \"Invoke-Command -HostName v1-host -ScriptBlock { Remove-Item C:\x }\"" \
+    "powershell -Command \"Enter-PSSession -ComputerName v1-host\""
+  g13_all none "autossh -M 0 v1-host 'dir C:\data'" "plink -batch v1-host dir C:\data" "curl https://example.com/v1-host-docs" \
+    "pwsh -c \"Get-ChildItem C:\x\"" "pwsh -c \"Invoke-Command -HostName other -ScriptBlock { ls }\"" "nc -z other-host 22" \
+    "mycli -h 127.0.0.1 -P 3306 -e 'DELETE FROM t'"
+}
+
+@test "G13: loopback spellings and abbreviated long options still reach a host:port target" {
+  printf 'protected_targets: 127.0.0.1:3307, prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "mysql -h 0.0.0.0 -P 3307 -e 'DELETE FROM t'" "mysql -h 0 -P 3307 -e 'DELETE FROM t'" \
+    "mysql -h 127.1 -P 3307 -e 'DELETE FROM t'" "mysql -h ::ffff:127.0.0.1 -P 3307 -e 'DELETE FROM t'" \
+    "mysql --hos=127.0.0.1 --por=3307 -e 'DELETE FROM t'" "mysql -h 127.0.0.1 --po=3307 -e 'DELETE FROM t'" \
+    "mysql --ho 127.0.0.1 --por 3307 -e 'DELETE FROM t'" "psql --hos=127.0.0.1 --por=3307 -c 'DELETE FROM t'" \
+    "mysql -h 127.0.0.1 -P 3307 -e 'SELECT 1' --exe='DELETE FROM t'" \
+    "mysqldump -h prod-db.internal --single-transaction --lock-t app"
+  g13_all none "mysql -h 10.0.0.5 -P 3307 -e 'DELETE FROM t'" "mysql -h 127.0.0.1 --po=3306 -e 'DELETE FROM t'"
+}
+
+@test "G13: ssh over a shared connection is judged as if on a target" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "ssh -S ~/.ssh/cm-v1 x 'del C:\data\x'" "ssh -o ControlPath=~/.ssh/cm-%r@%h:%p x 'del C:\data\x'" \
+    "ssh -o ControlMaster=auto other 'rm -f /tmp/x'" "ssh -S sock x"
+  g13_all none "ssh -S ~/.ssh/cm-v1 x 'dir C:\data'" "ssh -S sock -O exit x" "ssh -S none other 'rm -f /tmp/x'"
+  printf 'protected_targets: \n' >"$R/.claude/kern.local.yml"
+  g13_all none "ssh -S sock x 'rm -f /tmp/x'"
+}
+
+@test "G13: a carriage return splits a remote command; another control character denies" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "ssh v1-host 'dir C:\x"$'\r'"Remove-Item C:\x'" "ssh v1-host 'powershell -c dir C:\x\u000dRemove-Item C:\x'" \
+    "ssh v1-host 'dir C:\x\u0007'" "ssh v1-host 'dir C:\x"$'\v'"'"
+  g13_all none "ssh v1-host 'dir C:\x'"
+}
+
 @test "G14: a tracker write asks, a read does not vote, autopilot denies" {
   mcp mcp__claude_ai_Linear__save_issue
   [ "$(decision_of "$output")" = ask ]
