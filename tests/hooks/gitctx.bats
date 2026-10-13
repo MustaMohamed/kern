@@ -64,6 +64,32 @@ EOT
   finds 'for b in a; do git push origin $b; done' push
 }
 
+@test "a shell's -c is read in a cluster of any case, after options, -- or -, and value long options" {
+  # Each form runs its -c script in bash 3.2, bash 5 or zsh 5.9.
+  for c in "bash -Ec 'git push'" 'sh -Cc "git push"' 'bash -xec "git push"' 'bash +c "git push"' \
+    "bash -c -- 'git push'" "bash -c - 'git push'" "bash -c -e 'git push'" "bash -c +x 'git push'" \
+    "bash -c -o pipefail 'git push'" "bash -oc pipefail 'git push'" "bash -co pipefail 'git push'" \
+    "bash -eO extglob -c 'git push'" "bash --rcfile f -c 'git push'" "bash --init-file f -c 'git push'" \
+    "bash -rcfile f -c 'git push'" "bash -norc -c 'git push'" "bash --norc --login -c 'git push'" \
+    "zsh -opipefail -c 'git push'" "zsh -rcfile 'git push'" "ZSH -c -b 'git push'" \
+    "bash -rcfile '\"' -c 'git push'"; do
+    finds "$c" push
+  done
+  # Not -c: -C is noclobber, and - ends the options, so a -c after it names a script file.
+  for c in "bash -C 'git push'" "bash - -c 'git push'"; do
+    run git_words "$c"
+    [ "${#lines[@]}" -eq 1 ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "a shell that runs a -c script reads its here-doc as data, in any cluster form" {
+  for c in "bash -Ec 'cat'" "bash -c -- 'cat'" "bash --rcfile f -c 'cat'"; do
+    run git_words "$(printf '%s\n' "$c <<'EOF'" 'git push --force' 'EOF')"
+    [ "${#lines[@]}" -eq 2 ] || { echo "$c -> $output"; return 1; }
+    [ "${lines[1]}" = cat ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
 @test "git is seen behind wrapper options, env -S, shell options, timeout and nice" {
   for c in 'exec -a x git push origin main' 'sudo -p x git push' 'sudo -C 3 git push' \
     'env -P /usr/bin git push' 'env -S "git push origin main"' \

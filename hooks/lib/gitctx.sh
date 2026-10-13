@@ -17,6 +17,47 @@ _GW_AWK='
     cw_opt["exec"] = " -a "
     cw_opt["timeout"] = " -s -k --signal --kill-after "
     cw_opt["nice"] = " -n --adjustment "
+    # The long options of bash (long_args in shell.c); 1 takes the next word as its value. bash also
+    # reads them with one dash (-rcfile f), and only before the first short option.
+    split("debug debugger dump-po-strings dump-strings help login noediting noprofile norc posix " \
+      "pretty-print protected restricted verbose version wordexp", sh_a, " ")
+    for (sh_i in sh_a) sh_long[sh_a[sh_i]] = 0
+    sh_long["rcfile"] = sh_long["init-file"] = 1
+  }
+  # gw_dyn(w): true when the word w, quotes removed, may expand into other words at run time: it
+  # holds a $ or a backtick, or a brace pattern ({a,b} or {a..b}).
+  function gw_dyn(w) { return w ~ /[$`]/ || w ~ /[{][^}]*(,|[.][.])[^}]*[}]/ }
+  # shc(h, z): for the sh-family shell at cw_w[h], the index of the word it runs as its -c script, by
+  # the rules of bash (z = 0) or of zsh (z = 1). Callers take both, since sh may be either. The script
+  # is the first word after the options, which end at -, --, or the first word that does not start
+  # with - or +. A c in a cluster, after either sign, asks for a script. bash: long options come
+  # first, and each o or O in a cluster takes the next word. zsh: o takes the rest of its cluster or
+  # else the next word, b ends the options after its word, and --name takes no value. Returns 0 when
+  # no script is run, and -1 when a word that may be an option or its value is built at run time.
+  function shc(h, z,   k, w, c, lng, nm, n, i, C, brk) {
+    c = 0; lng = !z
+    for (k = h + 1; k <= cw_n; k++) {
+      w = cw_w[k]
+      if (w !~ /^[-+]/) { if (c) return k; return gw_dyn(w) ? -1 : 0 }
+      if (gw_dyn(w)) return -1
+      if (w == "-" || w == "--" || (z && w == "+")) { k++; break }
+      if (lng && w ~ /^-/) {
+        nm = w; sub(/^--?/, "", nm)
+        if (nm in sh_long) { if (sh_long[nm] && ++k <= cw_n && gw_dyn(cw_w[k])) return -1; continue }
+        if (w ~ /^--/) return 0
+      }
+      lng = 0
+      if (z && w ~ /^--/) continue
+      n = split(substr(w, 2), C, ""); brk = 0
+      for (i = 1; i <= n; i++) {
+        if (C[i] == "c") c = 1
+        else if (z && C[i] == "b") brk = 1
+        else if (z && C[i] == "o") { if (i == n && ++k <= cw_n && gw_dyn(cw_w[k])) return -1; break }
+        else if (!z && (C[i] == "o" || C[i] == "O") && ++k <= cw_n && gw_dyn(cw_w[k])) return -1
+      }
+      if (brk) { k++; break }
+    }
+    return c && k <= cw_n ? k : 0
   }
   # sw and cw read a string once: split(s, C, "") for its characters and split(s, P, "/") for its last
   # path part. In BWK awk, substr scans the whole string on every call, so substr per character, or
@@ -78,11 +119,11 @@ _GW_AWK='
 # git_words CMD: one simple command per line. Splits on ; & && || | ( ), the words { and }, and
 # newlines outside quotes, backticks and $( ); a redirection (2>&1, &>, >|) never splits, and a
 # backslash-newline is dropped. Here-doc bodies are data: they are left out (see _split_words).
-# The script of an sh-family shell's -c (any path, flags such as -lc or -cx, after the wrappers and
-# keywords _cmd_words skips), the arguments of `eval`, and the bodies of $( ) and backticks are
-# split again and printed after their wrapper, so a command inside a string is still seen. Out of
-# scope here: commands that xargs or find -exec run (G1 and G2 ask for a git or gh among their
-# words), and a here-doc piped into a shell (cat <<EOF | sh).
+# The script of an sh-family shell's -c (any path, any option form, as shc reads it by the rules of
+# bash and of zsh, after the wrappers and keywords _cmd_words skips), the arguments of `eval`, and
+# the bodies of $( ) and backticks are split again and printed after their wrapper, so a command
+# inside a string is still seen. Out of scope here: commands that xargs or find -exec run (G1 and G2
+# ask for a git or gh among their words), and a here-doc piped into a shell (cat <<EOF | sh).
 git_words() {
   local seg inner body first
   _split_words "$1" | while IFS= read -r seg; do
@@ -95,7 +136,7 @@ git_words() {
         done
         ;;
     esac
-    # The wrapper pass costs two processes, so it runs only when the first word, quotes removed,
+    # The wrapper pass costs a process, so it runs only when the first word, quotes removed,
     # is a redirection, an assignment, a keyword, a wrapper, eval or a shell. A wrapper or shell name
     # matches in any case, as _cmd_words reads it.
     # One tr pass strips the quotes, and only when the word holds one: ${first//[...]/} is cubic in
@@ -109,17 +150,22 @@ git_words() {
         */[Nn][Ii][Cc][Ee] | */[Ss][Hh] | */[Bb][Aa][Ss][Hh] | */[Zz][Ss][Hh] | */[Dd][Aa][Ss][Hh]) ;;
       *) continue ;;
     esac
-    inner=$(_cmd_words "$seg" | LC_ALL=C awk '
-      NR == 1 { b = tolower(P[split($0, P, "/")]); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
-      e { out = out (o++ ? " " : "") $0; next }
-      c { print; exit }
-      v { v = 0; next }
-      /^[-+][oO]$/ { v = 1; next }
-      /^-[a-z]*c[a-z]*$/ { c = 1; next }
-      /^[-+]/ { next }
-      { exit }
-      END { if (e) print out }')
-    if [ -n "$inner" ]; then git_words "${inner//$_GW_NL/$'\n'}"; fi
+    # One line per inner command line: the words after eval, or each script shc finds, read by the
+    # rules of bash and of zsh. Each is split on its own, so one cannot quote the other away.
+    printf '%s' "$seg" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+      { buf = buf (NR > 1 ? "\037" : "") $0 }
+      END {
+        sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k])
+        if (!cw_n) exit
+        b = tolower(P[split(cw_w[1], P, "/")])
+        if (b == "eval") { for (k = 2; k <= cw_n; k++) out = out (k > 2 ? " " : "") cw_w[k]; print out; exit }
+        if (b !~ /^(ba|z|da)?sh$/) exit
+        s = shc(1, 0); t = shc(1, 1)
+        if (s > 0) print cw_w[s]
+        if (t > 0 && t != s) print cw_w[t]
+      }' | while IFS= read -r inner; do
+      if [ -n "$inner" ]; then git_words "${inner//$_GW_NL/$'\n'}"; fi
+    done
   done
 }
 
@@ -171,16 +217,15 @@ _split_words() {
       return !cm && !ta && !(ar && depth >= ar) && substr(buf, j + 1, 1) == "<" &&
         substr(buf, j + 2, 1) != "<" && substr(buf, j - 1, 1) != "<"
     }
-    # shellin(t): true when the simple command t is sh, bash, zsh or dash with no -c, so a here-doc
-    # it reads is its script.
+    # shellin(t): true when the simple command t is sh, bash, zsh or dash and no reading of shc finds
+    # a -c script it runs, so a here-doc it reads is its script.
     function shellin(t,   k, b, P) {
       sw(t); cw_reset()
       for (k = 1; k <= sw_n; k++) cw(sw_w[k])
       if (!cw_n) return 0
       b = P[split(cw_w[1], P, "/")]
       if (tolower(b) !~ /^(ba|z|da)?sh$/) return 0
-      for (k = 2; k <= cw_n; k++) if (cw_w[k] ~ /^-[a-z]*c[a-z]*$/) return 0
-      return 1
+      return shc(1, 0) <= 0 && shc(1, 1) <= 0
     }
     # heredoc(j): queues the delimiter word that starts at j, after a `<<`, quotes removed. The word
     # ends at a blank, an operator, a newline or the end of input, even inside a quote; a quote
