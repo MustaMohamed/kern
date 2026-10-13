@@ -99,6 +99,8 @@ Guard ids and milestones: g01 g02 g03 g04 g05 g06 g13 g14 g15 g16 (M1); g18 (M2)
 
 A guard that votes `allow` approves the whole Bash call, so it proves the full command shape first and falls back to ask (deny under autopilot) for anything it cannot prove; G1's push allow is the model. `settings.sh` `list_has` accepts `a, b` and `[a, b]`. The `_gh_*` helpers in `hooks/guards/g02-pr.sh` (`_gh_load`, `_gh_args`, `_gh_opts`, `_gh_last`, `_gh_only`, `_gh_pos`, `_gh_literal`, `_gh_proven`, `_gh_file_ok`) parse gh flags against gh 2.100's tables and prove a gh command's shape; G3 and G4 use them, and every guard file is sourced before any guard runs.
 
+`_G01_GIT_CMDS` in `hooks/guards/g01-git.sh` lists git 2.54's own commands (`git --list-cmds=builtins,main`, less `pack-redundant` and `whatchanged`). `_g01_foreign` makes G1, G5 and G6 ask, and deny under autopilot, for any git subcommand outside that list, and for any option word left after G1's global-option loop except those that end git (`-v`, `--version`, `-h`, `--help`, `--exec-path`, `--html-path`, `--man-path`, `--info-path`, `--list-cmds=*`); it reads no config. Every guard git call that reads the repo runs with `-c core.fsmonitor=false`, and every `git log` with `--no-show-signature`. G6 runs its git reads under `with_timeout`; an overrun asks "secret scan did not finish".
+
 ## Scripts (KERN/scripts, bash, executable, `set -euo pipefail`, run as `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>`)
 
 | Script | Signature | Output | Exit |
