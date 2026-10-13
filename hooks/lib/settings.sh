@@ -53,10 +53,11 @@ _settings_lookup() {
 _KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
 
 # settings_get KEY [DEFAULT]: prints the resolved value. Exit 0 found or defaulted, 3 unset. A key in
-# _KERN_UNION_KEYS joins the values of every layer that sets it, highest first, with ", ", and drops
-# one pair of brackets around each layer's value ([a, b]).
+# _KERN_UNION_KEYS joins the items of every layer that sets it, highest first, with ", ": one pair of
+# brackets around each layer's value ([a, b]) is dropped, items are trimmed, and an empty or repeated
+# item is dropped, so each item keeps its first place.
 settings_get() {
-  local f v out="" found=0
+  local f v out="" found=0 rest item seen=$'\n'
   while IFS= read -r f; do
     [ -f "$f" ] || continue
     v=$(_settings_lookup "$f" "$1") || continue
@@ -64,7 +65,17 @@ settings_get() {
       *" $1 "*)
         found=1
         case "$v" in "["*"]") v=${v#\[}; v=${v%\]} ;; esac
-        [ -n "$v" ] && out="${out:+$out, }$v"
+        rest="$v,"
+        while [ -n "$rest" ]; do
+          item=${rest%%,*}
+          rest=${rest#*,}
+          item=${item#"${item%%[![:space:]]*}"}
+          item=${item%"${item##*[![:space:]]}"}
+          [ -n "$item" ] || continue
+          case "$seen" in *$'\n'"$item"$'\n'*) continue ;; esac
+          seen="$seen$item"$'\n'
+          out="${out:+$out, }$item"
+        done
         ;;
       *)
         printf '%s\n' "$v"

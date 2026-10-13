@@ -47,6 +47,15 @@ setup() {
   [ "$(settings_get branch.protected dflt)" = dflt ]
 }
 
+@test "a union drops repeated values, keeping each at its first place" {
+  printf 'deploy.envs: qa, production\nnever_commit: *.pem,, *.pem\n' >"$R/.claude/kern.local.yml"
+  printf 'deploy.envs: [production , uat, qa]\nnever_commit: .env\n' >"$HOME/.claude/kern.yml"
+  [ "$(settings_get deploy.envs)" = "qa, production, uat" ]
+  [ "$(settings_get never_commit)" = "*.pem, .env" ]
+  printf 'deploy.envs: production\n' >"$HOME/.claude/kern.yml"
+  [ "$(settings_get deploy.envs)" = "qa, production" ]
+}
+
 @test "a project protected_targets cannot drop the user's: G13 still denies a write to the user's host" {
   printf 'protected_targets: db.internal\n' >"$R/.claude/kern.local.yml"
   printf 'protected_targets: v1-host\n' >"$HOME/.claude/kern.yml"
