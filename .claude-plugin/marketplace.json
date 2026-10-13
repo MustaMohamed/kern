@@ -2,11 +2,13 @@
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "kern",
   "description": "The kern plugin, served from its own repo.",
-  "owner": { "name": "Mustafa Mohamed" },
+  "owner": {
+    "name": "Mustafa Mohamed"
+  },
   "plugins": [
     {
       "name": "kern",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "./",
       "description": "Personal workflow kernel for Claude Code: routing, guarded autonomy, proof before done, and project settings that defer to each repo's own rules.",
       "license": "MIT"

@@ -1,8 +1,10 @@
 {
   "name": "kern",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Personal workflow kernel for Claude Code: routing, guarded autonomy, proof before done, and project settings that defer to each repo's own rules.",
-  "author": { "name": "Mustafa Mohamed" },
+  "author": {
+    "name": "Mustafa Mohamed"
+  },
   "repository": "https://github.com/MustaMohamed/kern",
   "license": "MIT",
   "skills": "./skills"

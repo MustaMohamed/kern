@@ -23,6 +23,13 @@ Decision: recorded only. The `source: clear` SessionStart carried a new id.
 CLAUDE_CODE_ENTRYPOINT interactive: cli
 CLAUDE_CODE_ENTRYPOINT headless (-p): sdk-cli
 Decision: starts with `sdk`; the reminder skip in Task 8 works as written.
-ask under bypassPermissions: pending (Task 18)
+ask under bypassPermissions: prompted
+Decision: no `decide.sh` change. The user rejected the prompt for `git stash`; a hook replay gives `kern G1: git stash in the main checkout changes shared state (D3)`.
+mode survives /compact: yes
+Decision: none. After `/compact` the kernel was rendered again with `voice=terse`, and `/kern:mode status` said terse.
+Claude asked to write its own session state: declined, and told the user to type `/kern:autopilot on`. A hook replay of the write gives `kern G16: kern session state is written only by kern hooks`.
+gh pr merge under autopilot: Claude did not run it and told the user to run it with `!`. A hook replay gives `kern G1: gh pr merge under autopilot: merge stays human`.
+Smoke checklist (Task 18 Step 5): 6 of 6 pass.
+Live-check findings, fixed in be26d2f: `/kern:autopilot off` created `.kern/ledgers` without asking; help setup named its template path ambiguously; a terse reply ran long with detail nobody asked for.
 
 Other observations: payloads carry `permission_mode` (seen `auto`) and `prompt_id`. The headless run logged 3 lines under `sdk-cli`, 12 lines under `cli` overall in this log.
