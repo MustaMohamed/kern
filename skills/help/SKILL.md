@@ -3,7 +3,7 @@ name: help
 description: "Map of kern: which skill fits, fixes for a run that went wrong, and help setup to write this project's settings."
 disable-model-invocation: true
 argument-hint: "[setup|check|<question>]"
-allowed-tools: Read, Bash(git remote *), Bash(git symbolic-ref *), Bash(git log *), Bash(git for-each-ref *), Bash(git worktree list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(git rev-parse *), Bash(git check-ignore *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir *)
+allowed-tools: Read, Bash(git remote *), Bash(git symbolic-ref *), Bash(git log *), Bash(git for-each-ref *), Bash(git worktree list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(git rev-parse *), Bash(git check-ignore *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)
 ---
 
 # Help

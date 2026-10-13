@@ -48,13 +48,13 @@ test('check compares keys with kernel/settings.md and names the floor keys the h
   assert.deepEqual(named, floor);
 });
 
-test('setup defers the work dir to kern-dir; allowed-tools covers its git and script calls', () => {
+test('setup defers the work dir to kern-dir; allowed-tools covers its read-only calls', () => {
   const setup = body.split('## Setup')[1].split('\n## ')[0];
   assert.match(setup, /bash \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/kern-dir [a-z]/);
   assert.doesNotMatch(body, /\/\.kern\//);
-  for (const t of ['Bash(git rev-parse *)', 'Bash(git check-ignore *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir *)']) {
-    assert.ok(data['allowed-tools'].split(', ').includes(t), t);
-  }
+  const tools = data['allowed-tools'].split(', ');
+  for (const t of ['Bash(git rev-parse *)', 'Bash(git check-ignore *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)']) assert.ok(tools.includes(t), t);
+  assert.ok(!tools.some((t) => t.includes('kern-dir')), 'kern-dir writes, so setup step 6 keeps its permission prompt');
 });
 
 test('the template sets no key: every line is a comment or blank', () => {
