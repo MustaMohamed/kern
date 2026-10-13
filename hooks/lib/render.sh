@@ -83,7 +83,7 @@ Settings files: ${files:-none; defaults apply}"
       seen="$seen $k"
       case " $KERN_FLOOR_KEYS " in *" $k "*) continue ;; esac
       case "$k" in overrides.* | route.*) continue ;; esac
-      v=$(settings_get "$k")
+      v=$(settings_get "$k") || continue
       sets="$sets$k=$v
 "
     done <<EOT

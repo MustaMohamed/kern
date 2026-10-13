@@ -212,3 +212,16 @@ YML
   kern_enabled
   [ "$(settings_get protected_targets)" = prod-db ]
 }
+
+@test "a committed rebase.push: autopilot reads as unset; the local and user files still set it" {
+  printf 'rebase.push: autopilot\n' >"$R/.claude/kern.yml"
+  [ "$(settings_get rebase.push ask)" = ask ]
+  printf 'rebase.push: autopilot\n' >"$HOME/.claude/kern.yml"
+  [ "$(settings_get rebase.push ask)" = autopilot ]
+  rm "$HOME/.claude/kern.yml"
+  printf 'rebase.push: autopilot\n' >"$R/.claude/kern.local.yml"
+  [ "$(settings_get rebase.push ask)" = autopilot ]
+  printf 'rebase.push: ask\n' >"$R/.claude/kern.yml"
+  rm "$R/.claude/kern.local.yml"
+  [ "$(settings_get rebase.push ask)" = ask ]
+}

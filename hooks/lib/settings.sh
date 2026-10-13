@@ -54,12 +54,13 @@ _KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
 
 # _settings_ignored FILE KEY VALUE: exit 0 when the layer FILE must not set KEY to VALUE. The committed
 # project file (any kern.yml but the user's) cannot turn kern off, and cannot loosen a *.policy key to
-# auto: it may only ask or deny. Such a value reads as unset, so a lower layer or the default applies.
+# auto or rebase.push to autopilot: it may only tighten. Such a value reads as unset, so a lower layer or the default applies.
 _settings_ignored() {
   case "$1" in "$HOME/.claude/kern.yml" | */kern.local.yml) return 1 ;; esac
   case "$2" in
     kern) [ "$3" = off ] ;;
     *.policy | review.post_policy) [ "$3" = auto ] ;;
+    rebase.push) [ "$3" = autopilot ] ;;
     *) return 1 ;;
   esac
 }

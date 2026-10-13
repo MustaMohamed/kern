@@ -130,3 +130,14 @@ YML
   start startup
   [[ "$output" == *"denied by $HOME/.claude/kern.yml"* ]] || false
 }
+
+@test "a committed loosening value is ignored, so the summary does not list it as set" {
+  printf 'kern: off\npush.policy: auto\nrebase.push: autopilot\ncommit.policy: deny\n' >"$R/.claude/kern.yml"
+  start startup
+  [ "$status" -eq 0 ]
+  set_line=$(printf '%s\n' "$output" | grep '^Set: ')
+  [[ "$set_line" == *"commit.policy=deny"* ]] || false
+  [[ "$set_line" != *"kern="* ]] || false
+  [[ "$set_line" != *"push.policy="* ]] || false
+  [[ "$set_line" != *"rebase.push="* ]] || false
+}
