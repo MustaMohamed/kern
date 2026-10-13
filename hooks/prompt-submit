@@ -131,11 +131,20 @@ natural() {
     "stop html"* | "html off"*) _nl_ok "$first" && set_surface "$(settings_get mode.surface auto | sed 's/^html$/auto/')" && SHOW_LINE=1 ;;
     "chat only"* | "chat mode"*) _nl_ok "$first" && set_surface chat && SHOW_LINE=1 ;;
     "stop autopilot"* | "autopilot off"*) _nl_ok "$first" && state_set "$SID" autopilot=off && SHOW_LINE=1 ;;
-    # A trailing clause that ends the first line.
-    *" then go terse" | *" then go terse"[.!]) set_voice terse && SHOW_LINE=1 ;;
-    *" then stop terse" | *" then stop terse"[.!]) set_voice normal && SHOW_LINE=1 ;;
+    # A trailing clause that ends the first line, when the line holds no negation word.
+    *" then go terse" | *" then go terse"[.!]) _no_negation "$first" && set_voice terse && SHOW_LINE=1 ;;
+    *" then stop terse" | *" then stop terse"[.!]) _no_negation "$first" && set_voice normal && SHOW_LINE=1 ;;
   esac
   return 0
+}
+
+# _no_negation FIRST: no negation word anywhere in the line. The start-of-line guard does not see a
+# "not" before a trailing clause, as in "fix the bug, and do not then go terse".
+_no_negation() {
+  local c
+  # U+2019, the curly apostrophe that smart punctuation types; lint keeps the character out of files.
+  c=$(printf '\342\200\231')
+  ! printf '%s\n' "$1" | grep -Eq "(^|[^a-z])(not|no|never|dont|(don|doesn|won)('|$c)t|without)([^a-z]|\$)"
 }
 
 # _nl_ok FIRST: the trigger is the whole first line or is followed by punctuation or "and". A

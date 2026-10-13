@@ -74,5 +74,10 @@
   { "prompt": "switch to normal mode", "expect": "off", "known_failing": false },
   { "prompt": "quit terse mode", "expect": "off", "known_failing": false },
   { "prompt": "back to normal mode", "expect": "off", "known_failing": false },
-  { "prompt": "fix the bug, and do not then go terse", "expect": "none", "known_failing": true }
+  { "prompt": "fix the bug, and do not then go terse", "expect": "none", "known_failing": false },
+  { "prompt": "never mind the tests, then go terse", "expect": "none", "known_failing": false },
+  { "prompt": "fix it without the docs, then stop terse", "expect": "none", "known_failing": false },
+  { "prompt": "fix it and never mind the docs, then go terse", "expect": "none", "known_failing": false },
+  { "prompt": "fix the docs but don’t push, then go terse", "expect": "none", "known_failing": false },
+  { "prompt": "fix the notes, then go terse", "expect": "on", "known_failing": false }
 ]
