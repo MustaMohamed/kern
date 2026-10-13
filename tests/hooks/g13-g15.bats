@@ -119,8 +119,7 @@ EOF"
   printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
   g13_all none "ssh v1-host ls 2>/dev/null" "ssh v1-host 'dir C:\data' 2>&1" "ssh v1-host 'cat /data/x' > local.txt" \
     "ssh v1-host 'ls /data/rm-backups'" "ssh v1-host 'ls -la /data | grep x | wc -l'" "ssh v1-host 'type C:\data\x.txt'" \
-    "ssh v1-host 'findstr /i error C:\logs\app.log'" "ssh v1-host 'cmd /c dir C:\data'" \
-    "ssh v1-host 'powershell -NoProfile -Command \"Get-ChildItem C:\data | Measure-Object\"'" \
+    "ssh v1-host 'findstr /i error C:\logs\app.log'" "ssh v1-host 'Get-ChildItem C:\data | Measure-Object'" \
     "ssh v1-host 'Get-Content C:\logs\a.log -Tail 20'" "ssh v1-host 'find /data -name x 2>/dev/null'" \
     "ssh v1-host 'hostname; whoami; ver'" "ssh v1-host 'gci C:\data | sls error'" "ssh v1-host 'date +%F'" \
     "ssh -n v1-host ls < fix.sh" "ssh -N -L 3307:localhost:3306 v1-host" "ssh -fN -L 3307:127.0.0.1:3306 admin@v1-host" \
@@ -162,13 +161,11 @@ EOF"
 
 @test "G13: SQL reads against a target, and SQL words outside a client, get no vote" {
   printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
-  printf 'SELECT id FROM users;\n-- never DELETE here\nSHOW TABLES;\n' >"$R/read.sql"
+  printf 'SELECT id FROM users;\nSHOW TABLES;\n' >"$R/read.sql"
   g13_all none "mysql -h prod-db.internal -e 'SHOW GRANTS'" "mysql -h prod-db.internal -e 'SHOW CREATE TABLE users'" \
     "mysql -h prod-db.internal -Nse 'SELECT id FROM users LIMIT 1'" "psql -h prod-db.internal -Atc 'SELECT 1'" \
     "psql -h prod-db.internal -c \"SELECT 'update x set' FROM t\"" \
-    "psql -h prod-db.internal -c 'SELECT * FROM users WHERE note = \$\$truncate\$\$'" \
-    "mysql -h prod-db.internal -e 'SELECT REPLACE(name, \"a\", \"b\") FROM users; DESCRIBE users; EXPLAIN SELECT 1'" \
-    "mysql -h prod-db.internal -e 'SELECT 1 -- DELETE FROM users'" "mysql -h prod-db.internal -e 'SELECT * FROM t\\G'" \
+    "mysql -h prod-db.internal -e \"SELECT REPLACE(name, 'a', 'b') FROM users; DESCRIBE users; EXPLAIN SELECT 1\"" \
     "psql -h prod-db.internal -c 'WITH x AS (SELECT 1) SELECT * FROM x'" "psql -h prod-db.internal -f read.sql" \
     "mysql -h prod-db.internal < read.sql" "psql -h prod-db.internal -l" "pg_dump -h prod-db.internal -f out.sql appdb" \
     "mysql -h other-db -e 'DELETE FROM users'" "git commit -m 'docs: never DELETE FROM users on prod-db.internal'" \
@@ -352,19 +349,50 @@ ssh v1-host 'del C:\x'"
 
 @test "G13: PowerShell formatting, Get- cmdlets and property reads are reads; a method call is not" {
   printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
-  g13_all none "ssh v1-host 'powershell -c \"Get-ChildItem C:\data | Format-Table Name,CreationTime\"'" \
-    "ssh v1-host 'powershell -c \"Get-ChildItem C:\data | ft Name; gci C:\x | fl\"'" \
-    "ssh v1-host 'Get-ChildItem C:\data | Format-List'" "ssh v1-host 'powershell -c (Get-Item C:\x).CreationTime'" \
-    "ssh v1-host 'powershell -c \"(Get-Item C:\x).LastWriteTime\"'" "ssh v1-host 'Get-Service mysql'"
-  g13_all deny "ssh v1-host 'powershell -c (Get-Item C:\x).Delete()'" "ssh v1-host 'powershell -c (Get-Item C:\x).Delete ()'" \
-    "ssh v1-host 'powershell -c (Get-Item C:\x).CreationTime.ToString()'" \
-    "ssh v1-host 'powershell -c (Get-Item C:\x).IsReadOnly = 1'" "ssh v1-host 'Get-Item C:\x | Remove-Item'"
+  g13_all none "ssh v1-host 'Get-ChildItem C:\data | Format-Table Name,CreationTime'" \
+    "ssh v1-host 'Get-ChildItem C:\data | ft Name; gci C:\x | fl'" \
+    "ssh v1-host 'Get-ChildItem C:\data | Format-List'" "ssh v1-host '(Get-Item C:\x).CreationTime'" \
+    "ssh v1-host '(Get-Item C:\x).LastWriteTime'" "ssh v1-host 'Get-Service mysql'"
+  g13_all deny "ssh v1-host '(Get-Item C:\x).Delete()'" "ssh v1-host '(Get-Item C:\x).Delete ()'" \
+    "ssh v1-host '(Get-Item C:\x).CreationTime.ToString()'" \
+    "ssh v1-host '(Get-Item C:\x).IsReadOnly = 1'" "ssh v1-host 'Get-Item C:\x | Remove-Item'"
 }
 
 @test "G13: one host:path sftp operand is a get from the target" {
   printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
   g13_all none "sftp v1-host:/data/x.pdf ./" "sftp admin@v1-host:/data/x.pdf" "sftp sftp://v1-host/data/x.pdf"
   g13_all deny "sftp v1-host:" "sftp v1-host:/data/x.pdf <<< 'put a'" "sftp v1-host"
+}
+
+@test "G13: a cmd or powershell wrapper in a remote command to a target denies, in both modes" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  for ap in off on; do
+    set_autopilot "$ap"
+    g13_all deny "ssh v1-host 'cmd /c dir C:\data'" "ssh v1-host 'powershell -NoProfile -Command \"Get-ChildItem C:\data\"'" \
+      "ssh v1-host 'pwsh -c Get-Content C:\x'" "ssh v1-host 'powershell -EncodedCommand ZABpAHIA'" \
+      "ssh v1-host 'dir C:\data & cmd /k'" "ssh v1-host 'C:\Windows\System32\cmd.exe /c type C:\x'"
+  done
+  [[ "$output" == *"run it yourself with !"* ]] || false
+  set_autopilot off
+  g13_all none "ssh v1-host 'dir C:\data'" "ssh v1-host 'type C:\x.txt'" "ssh v1-host 'findstr /i error C:\logs\a.log'" \
+    "ssh v1-host 'Get-ChildItem C:\data | Measure-Object'"
+}
+
+@test "G13: SQL to a target that needs more than plain lexing denies, in both modes" {
+  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  for ap in off on; do
+    set_autopilot "$ap"
+    g13_all deny "mysql -h prod-db.internal -e 'SELECT 1 -- x'" "mysql -h prod-db.internal -e 'SELECT 1 # x'" \
+      "mysql -h prod-db.internal -e 'SELECT /* x */ 1'" "mysql -h prod-db.internal -e 'SELECT /*!50000 1 */'" \
+      "mysql -h prod-db.internal -e 'SELECT * FROM t\\G'" "psql -h prod-db.internal -c 'SELECT \$\$x\$\$'" \
+      "psql -h prod-db.internal -c 'SELECT \$q\$x\$q\$'" "psql -h prod-db.internal -c \"SELECT E'x'\"" \
+      "mysql -h prod-db.internal -e \"SELECT 'it''s'\"" "mysql -h prod-db.internal -e 'SELECT \"x\"'" \
+      "mysql -h prod-db.internal -e \"SELECT 'x\"" "mysql -h prod-db.internal -e 'SELECT \`a\`\`b\` FROM t'" \
+      "mysql -h prod-db.internal -e \"SELECT 'a\\b'\""
+  done
+  set_autopilot off
+  g13_all none "mysql -h prod-db.internal -e \"SELECT * FROM t WHERE name = 'x'\"" "mysql -h prod-db.internal -e 'SHOW GRANTS'" \
+    "mysql -h prod-db.internal -e 'SELECT \`id\` FROM \`users\`'" "psql -h prod-db.internal -c \"SELECT 'a--b; c#d /* e'\""
 }
 
 @test "G14: a tracker write asks, a read does not vote, autopilot denies" {

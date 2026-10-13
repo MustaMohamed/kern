@@ -2,9 +2,9 @@
 # G13 protected targets: the hosts in protected_targets are read-only, so G13 proves a read and
 # denies, in both modes, any call to a target it cannot prove reads. A missed write is the costly
 # failure; a read G13 cannot prove is denied, and the user runs it by hand with `!`.
-# An ssh to a target must run a remote command whose every segment (after `cmd /c` and
-# `powershell -Command`) is on a closed read list, with no redirect except to /dev/null, nul or an
-# fd copy, and no input on stdin; `ssh -N` tunnels and `ssh -O` control commands are exempt.
+# An ssh to a target must run a remote command whose every segment is on a closed read list (a cmd
+# or powershell wrapper denies: G13 does not unwrap one), with no redirect except to /dev/null, nul
+# or an fd copy, and no input on stdin; `ssh -N` tunnels and `ssh -O` control commands are exempt.
 # SQL to a target must be proven statement by statement (_G13_SQL_AWK); a copy may only come from a
 # target, and sftp may only run read verbs (_G13_XFER_AWK).
 # Targets match the host in any case, as user@host or in a URL; an entry may be host:port.
@@ -286,29 +286,17 @@ _G13_AWK='
     return k
   }
 
-  # rem(S, D): "" when the remote command S only reads, else what is not proven. Quotes are not
-  # trusted to protect a separator or a redirect: the remote shell may be cmd, which has no quotes. A
-  # carriage return ends a PowerShell statement; any other control character denies. A method call
-  # (.Name followed by a paren) denies; a property read such as (Get-Item x).CreationTime does not.
-  # A cmd or powershell wrapper takes the rest of the string, separators included, as its command.
-  function rem(s, d,   rest, seg, tail, n, a, h, why) {
-    if (d > 4) return "wrappers nest too deep"
+  # rem(S): "" when the remote command S only reads, else what is not proven. Quotes are not trusted
+  # to protect a separator or a redirect: the remote shell may be cmd, which has no quotes. A carriage
+  # return ends a PowerShell statement; any other control character denies. A method call (.Name
+  # followed by a paren) denies; a property read such as (Get-Item x).CreationTime does not.
+  function rem(s,   n, segs, i, why) {
     if (match(s, CTLRE)) return "control character " ORD[substr(s, RSTART, 1)]
     why = rredir(s)
     if (why != "") return why
     if (match(RS_OUT, /\.[A-Za-z_][A-Za-z0-9_]*[ \t]*\(/)) return "method call " substr(RS_OUT, RSTART, RLENGTH)
-    rest = RS_OUT
-    while (rest != "") {
-      if (match(rest, /[;&|\n\r\037(){}`]/)) { seg = substr(rest, 1, RSTART - 1); tail = substr(rest, RSTART); rest = substr(rest, RSTART + 1) }
-      else { seg = rest; tail = ""; rest = "" }
-      gsub(/^[ \t]+|[ \t]+$/, "", seg)
-      if (unq(seg) ~ /^[ \t]*$/) continue
-      n = split(seg, a, /[ \t]+/)
-      h = base(unq(a[1]))
-      if (h == "cmd") return rcmd(a, n, d, tail)
-      if (h == "powershell" || h == "pwsh") return rps(a, n, h, d, tail)
-      if ((why = rseg(seg, d)) != "") return why
-    }
+    n = split(RS_OUT, segs, /[;&|\n\r\037(){}`]/)
+    for (i = 1; i <= n; i++) if ((why = rseg(segs[i])) != "") return why
     return ""
   }
   # rredir(S): "" when every redirect in S goes to /dev/null, nul, $null or is an fd copy; sets RS_OUT
@@ -327,12 +315,14 @@ _G13_AWK='
     RS_OUT = out s
     return why
   }
-  # rseg(SEG, D): one segment of a remote command: its head must be on the read list.
-  function rseg(seg, d,   n, a, h, i, w) {
+  # rseg(SEG): one segment of a remote command: its head must be on the read list. A cmd or
+  # powershell wrapper is not unwrapped: it denies.
+  function rseg(seg,   n, a, h, i, w) {
     gsub(/^[ \t]+|[ \t]+$/, "", seg)
-    if (seg == "") return ""
+    if (unq(seg) ~ /^[ \t]*$/) return ""
     n = split(seg, a, /[ \t]+/)
     h = base(unq(a[1]))
+    if (h == "cmd" || h == "powershell" || h == "pwsh") return "`" h "` wraps a command, which kern does not unwrap"
     if (h ~ /^\./) return (n == 1 && unq(seg) ~ /^(\.[A-Za-z_][A-Za-z0-9_]*)+$/) ? "" : "`" seg "` is not a property read"
     if (!(h in READ) && h !~ /^get-[a-z]/) return "`" h "` is not on the read list"
     for (i = 2; i <= n; i++) {
@@ -344,40 +334,6 @@ _G13_AWK='
     }
     return ""
   }
-  # rcmd: cmd [/x ...] /c|/k COMMAND; any other cmd is a shell. TAIL: the string after the segment.
-  function rcmd(a, n, d, tail,   i, w, rest) {
-    for (i = 2; i <= n; i++) {
-      w = unq(a[i])
-      if (tolower(w) ~ /^\/[ck]/) {
-        rest = substr(a[i], index(a[i], "/") + 2) " " join(a, i + 1, n) " " tail
-        if (unq(rest) ~ /^[ \t]*$/) break
-        return rem(rest, d + 1)
-      }
-      if (w !~ /^\/[A-Za-z](:.*)?$/) break
-    }
-    return "`cmd` without /c is a shell"
-  }
-  # rps: powershell or pwsh [options] -Command COMMAND (Windows PowerShell also takes COMMAND bare).
-  function rps(a, n, h, d, tail,   i, w, p, rest) {
-    for (i = 2; i <= n; i++) {
-      w = tolower(unq(a[i]))
-      if (w !~ /^[-\/]/) {
-        if (h == "powershell") return rem(join(a, i, n) " " tail, d + 1)
-        return "`pwsh` runs a script file"
-      }
-      p = substr(w, 2)
-      if (p ~ /^(c|com|comm|comma|comman|command|commandwithargs|cwa)$/) {
-        rest = join(a, i + 1, n) " " tail; w = unq(rest); gsub(/[ \t]/, "", w)
-        if (w == "" || w == "-") return "`" h "` reads its command from stdin"
-        return rem(rest, d + 1)
-      }
-      if (p ~ /^(nop|noprofile|noni|noninteractive|nol|nologo|sta|mta|noe|noexit)$/) continue
-      if (p ~ /^(ex|ep|executionpolicy|w|win|windowstyle|if|inp|inputformat|o|of|outputformat|v|version|config|configurationname|wd|workingdirectory|settingsfile)$/) { i++; continue }
-      return "`" h " -" p "` cannot be checked"
-    }
-    return "`" h "` with no command is a shell"
-  }
-
   # j_ssh(S, B): ssh, autossh or plink at word S. OpenSSH reads options before and after the
   # destination; the first word after that starts the remote command. the -M of autossh takes a port.
   # The parse fills the X_ globals and ssh_end decides.
@@ -481,8 +437,8 @@ _G13_AWK='
     if (!X_nin && X_stdin != "") deny(h " with input on stdin (" X_stdin ")")
     else if (!X_nin && FED) deny(h " with input piped to it")
     if (X_dyn) deny(h ": the remote command is built at run time ($ or a backtick)")
-    if (X_rc != "" && (why = rem(X_rc, 0)) != "") deny(h ": " why)
-    if (X_orc != "" && (why = rem(X_orc, 0)) != "") deny(h " (-o RemoteCommand): " why)
+    if (X_rc != "" && (why = rem(X_rc)) != "") deny(h ": " why)
+    if (X_orc != "" && (why = rem(X_orc)) != "") deny(h " (-o RemoteCommand): " why)
   }
   # hops(V): the target a comma list of jump hosts names, else 0.
   function hops(v,   n, a, i, t) {
@@ -575,15 +531,15 @@ _G13_AWK='
 # conninfo host=, PGHOST= or MYSQL_HOST= in the command, else localhost) and its port (likewise, else
 # the client default) name one, or an option value names one as a whole host; sqlite3 when its file
 # is one. Then every statement in -e, -c, -Q, --init-command and every input file (-f, -i, <) is
-# proven: it starts with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH and holds no write, lock,
-# file or wait word, for every way the client may lex its strings. Files are opened only once a
+# proven: it needs no lexing beyond plain literals (see sqlscan), starts with SELECT, SHOW, DESCRIBE,
+# DESC, EXPLAIN or WITH, and holds no write, lock, file or wait word. Files are opened only once a
 # target is known. Piped, here-doc or run-time input, a file G13 cannot read, input over 1 MB, and no
 # statement at all are denied.
 # shellcheck disable=SC2016 # awk text
 _G13_SQL_AWK='
   function j_sql(s, b,   fam, k, w, j, c, v, x, opt, pos, t, i, h, why, role) {
     fam = SQLFAM[b]
-    nh = 0; np = 0; nst = 0; stdin = ""; dyn = 0; single = 0; locks = ""; pos = 0; dbf = ""; FBT = 0; vars = ""
+    nh = 0; np = 0; nst = 0; stdin = ""; dyn = 0; single = 0; locks = ""; pos = 0; dbf = ""; FBT = 0; vars = ""; lread = 0
     for (k = s + 1; k <= N; k++) {
       w = W[k]
       if (R[k]) {
@@ -632,7 +588,7 @@ _G13_SQL_AWK='
           }
           if (fam == "my" && index("p#", c)) break
           if (b ~ /dump$/ && index("lxF", c)) locks = locks " -" c
-          if (b == "psql" && c == "l") sqlst("\\l", 0)
+          if (b == "psql" && c == "l") lread = 1
         }
         continue
       }
@@ -659,17 +615,17 @@ _G13_SQL_AWK='
     if (FED) deny("SQL to protected target " h " with input piped to " b)
     if (stdin != "") deny("SQL to protected target " h " with input from " stdin)
     if (dyn) deny("SQL to protected target " h " built at run time ($ or a backtick)")
-    if (nst == 0) { deny("SQL to protected target " h " with no statement opens an interactive " b); return }
+    if (nst == 0 && !lread) { deny("SQL to protected target " h " with no statement opens an interactive " b); return }
     x = 0
     for (i = 1; i <= nst; i++) {
       if ((j = srcsize(i)) < 0) { deny("SQL to protected target " h ": cannot read " ST[i]); STK[i] = "x" }
       else x += j
     }
     if (x > 1048576) { deny("SQL to protected target " h ": input over 1 MB, more than kern reads"); return }
-    for (i = 1; i <= nst; i++) if (STK[i] != "x" && (why = sqlok(i, fam)) != "") { deny("SQL to protected target " h ": " why); break }
+    for (i = 1; i <= nst; i++) if (STK[i] != "x" && (why = sqlscan(i, fam, 0)) != "") { deny("SQL to protected target " h ": " why); break }
     if (vars != "") {
       ST[++nst] = vars; STK[nst] = "s"
-      if (index(vars, ";") || (why = sqlscan(nst, fam, 1, 1)) != "") deny("SQL to protected target " h ": a psql variable holds SQL")
+      if (index(vars, ";") || (why = sqlscan(nst, fam, 1)) != "") deny("SQL to protected target " h ": a psql variable holds SQL")
     }
   }
   # sqlopt(ROLE, V, DYN, FAM): h host, P port, S sqlcmd server, e statement, f file, d database or
@@ -769,25 +725,18 @@ _G13_SQL_AWK='
     else if (!off && opt ~ /^--(lock|master|source-d|flush|delete-m|delete-s|dump-s|dump-r)/) locks = locks " " opt
   }
 
-  # sqlok(I, FAM): "" when every statement of source I reads, under each way FAM may lex strings
-  # (mysql: backslash escapes on or off; psql: in E strings only, or everywhere).
-  function sqlok(i, fam,   n, a, k, why) {
-    n = split(LEX[fam], a, " ")
-    for (k = 1; k <= n; k++) if ((why = sqlscan(i, fam, a[k], 0)) != "") return why
-    return ""
-  }
-  # sqlscan(I, FAM, BS, FRAG): "" when every statement of source I reads, lexed one way, else why
-  # not. It walks each line once (split into characters), carrying string and comment state across
-  # lines, so time is linear. Comments go; a MySQL /*! or /*M! comment is code. BS 1: a backslash
-  # escapes in every string; e: only in an E string; 0: never. psql also has dollar quotes; only mysql
-  # has # comments and backticks. Client commands: mysql \g and \G end a statement; psql \d*, \l, \x,
-  # \q, \g, \gx, \conninfo and \timing end one and take the rest of the line; sqlite3 dot commands on
-  # LITEDOT; sqlcmd GO; anything else denies. FRAG: a psql variable, which has no statement head.
-  function sqlscan(i, fam, bs, frag,   line, n, C, j, c, nx, k, tag, name, why) {
-    src_open(STK[i], ST[i]); Q_q = ""; Q_cm = 0; Q_frag = frag; Q_fam = fam; Q_tok = ""; sqlend()
+  # sqlscan(I, FAM, FRAG): "" when every statement of source I reads, else why not. G13 lexes only the
+  # plainest SQL, so no client can split or quote it differently: a single-quoted literal with no
+  # backslash or doubled quote, and (mysql) a backtick name with no backtick inside. A comment, a
+  # backslash, a double-quoted string, a dollar quote, an E string, a doubled quote and an unterminated
+  # literal deny. It walks each line once (split into characters), so time is linear. sqlite3 dot
+  # commands on LITEDOT and sqlcmd GO lines are allowed; other client commands deny. FRAG: a psql
+  # variable, which has no statement head.
+  function sqlscan(i, fam, frag,   line, n, C, j, c, nx, name, why) {
+    src_open(STK[i], ST[i]); Q_q = ""; Q_frag = frag; Q_fam = fam; Q_tok = ""; sqlend()
     while (src_line()) {
       line = SL
-      if (Q_q == "" && !Q_cm) {
+      if (Q_q == "") {
         if (fam == "lite" && line ~ /^[ \t]*\./) {
           name = line; sub(/^[ \t]*\./, "", name); sub(/[ \t].*/, "", name)
           if (!(tolower(name) in LITEDOT)) return sqlfail("sqlite3 dot command ." name)
@@ -799,43 +748,22 @@ _G13_SQL_AWK='
       n = split(line, C, "")
       for (j = 1; j <= n; j++) {
         c = C[j]
-        if (Q_cm) { if (c == "*" && C[j + 1] == "/") { Q_cm = 0; j++ }; continue }
-        if (Q_q == "$") { if (c == "$" && dollar(C, j, n) == Q_tag) { j += length(Q_tag) - 1; Q_q = "" }; continue }
         if (Q_q != "") {
-          if (Q_esc && c == "\\") j++
-          else if (c == Q_q) { if (C[j + 1] == Q_q) j++; else Q_q = "" }
+          if (c == "\\") return sqlfail("a backslash in a literal")
+          if (c == Q_q) { if (C[j + 1] == Q_q) return sqlfail("a doubled quote in a literal"); Q_q = "" }
           continue
         }
         nx = C[j + 1]
-        if ((c == "-" && nx == "-" && (j + 2 > n || C[j + 2] == " " || C[j + 2] == "\t")) || (c == "#" && fam == "my")) break
-        if (c == "/" && nx == "*") {
+        if ((c == "-" && nx == "-") || c == "#" || (c == "/" && nx == "*")) return sqlfail("a comment")
+        if (c == "\\") return sqlfail("a backslash")
+        if (c == "\"") return sqlfail("a double-quoted string")
+        if (c == "$" && dollar(C, j, n) != "") return sqlfail("a dollar quote")
+        if (fam == "ms" && c == "$" && nx == "(") return sqlfail("sqlcmd variable $(")
+        if (c == sq || (c == "`" && fam == "my")) {
+          if (c == sq && tolower(Q_tok) == "e") return sqlfail("an E string")
           if ((why = tokend()) != "") return sqlfail(why)
-          if (C[j + 2] == "!") j += 2
-          else if (C[j + 2] == "M" && C[j + 3] == "!") j += 3
-          else { Q_cm = 1; j++; continue }
-          while (C[j + 1] ~ /[0-9]/) j++
-          continue
-        }
-        if (c == "*" && nx == "/") { if ((why = tokend()) != "") return sqlfail(why); j++; continue }
-        if (c == sq || c == "\"" || (c == "`" && fam == "my")) {
-          Q_esc = (bs == 1) || (bs == "e" && c == sq && tolower(Q_tok) == "e")
-          if (Q_esc && bs == "e") Q_tok = ""
-          else if ((why = tokend()) != "") return sqlfail(why)
           Q_q = c; continue
         }
-        if (c == "$" && fam == "pg" && Q_tok == "" && (tag = dollar(C, j, n)) != "") { Q_q = "$"; Q_tag = tag; j += length(tag) - 1; continue }
-        if (c == "\\" && (fam == "my" || fam == "pg")) {
-          if ((why = tokend()) != "") return sqlfail(why)
-          if (fam == "my") {
-            if (nx != "g" && nx != "G") return sqlfail("mysql client command \\" nx)
-            j++; sqlend(); continue
-          }
-          name = ""
-          for (k = j + 1; k <= n && C[k] !~ /[ \t;\\]/; k++) name = name C[k]
-          if (name !~ /^(d[A-Za-z+]*|l\+?|x|q|g|gx|conninfo|timing)$/) return sqlfail("psql meta-command \\" name)
-          sqlend(); break
-        }
-        if (fam == "ms" && c == "$" && nx == "(") return sqlfail("sqlcmd variable $(")
         if (c ~ /[A-Za-z_]/ || (Q_tok != "" && c ~ /[0-9$]/)) { Q_tok = Q_tok c; continue }
         if ((why = tokend()) != "") return sqlfail(why)
         if (c == ";") { sqlend(); continue }
@@ -843,7 +771,8 @@ _G13_SQL_AWK='
       }
       if ((why = tokend()) != "") return sqlfail(why)
     }
-    return SERR ? "cannot read " ST[i] : ""
+    if (SERR) return "cannot read " ST[i]
+    return Q_q != "" ? "an unterminated literal" : ""
   }
   function sqlfail(why) { src_stop(); return why }
   function sqlend() { Q_head = ""; Q_prev = ""; Q_tok = "" }
@@ -894,7 +823,6 @@ _G13_SQL_AWK='
     DEFPORT["my"] = 3306; DEFPORT["pg"] = 5432; DEFPORT["ms"] = 1433
     ENVN["my", "h"] = "MYSQL_HOST"; ENVN["my", "p"] = "MYSQL_TCP_PORT"
     ENVN["pg", "h"] = "PGHOST PGHOSTADDR"; ENVN["pg", "p"] = "PGPORT"; ENVN["ms", "h"] = "SQLCMDSERVER"
-    LEX["my"] = "1 0"; LEX["pg"] = "e 1"; LEX["lite"] = "0 1"; LEX["ms"] = "0 1"
     n = split("mysql mariadb psql sqlite3 sqlite sqlcmd", a, " ")
     for (i = 1; i <= n; i++) SQLRUN[a[i]] = 1
     n = split("pg_dump pg_dumpall pg_isready mysqlshow mariadb-show mysqlbinlog mariadb-binlog", a, " ")
