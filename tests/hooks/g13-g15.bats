@@ -420,6 +420,14 @@ ssh v1-host 'del C:\x'"
   [ "$(decision_of "$output")" = none ]
 }
 
+@test "G15: git in another case or by path still pushes to a deploy branch" {
+  printf 'deploy.envs: production\n' >"$R/.claude/kern.local.yml"
+  for c in "GIT push origin feat:production" "/usr/bin/Git push origin HEAD:production" "Git -C . push origin HEAD:production"; do
+    g "$c" g15
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
 @test "G14: tracker.policy auto allows a gh issue or label write only in a proven shape" {
   printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
   printf 'Body\n' >"$R/c.md"

@@ -174,7 +174,8 @@ _G15_AWK='
       print "D\t" substr(out, 1, 60)
       next
     }
-    if (cw_w[1] == "git" || cw_w[1] ~ /\/git$/) for (k = 2; k <= cw_n; k++) if (cw_w[k] == "push") { print "P\t" $0; next }
+    b = tolower(cw_w[1])
+    if (b == "git" || b ~ /\/git$/) for (k = 2; k <= cw_n; k++) if (cw_w[k] == "push") { print "P\t" $0; next }
   }
   END { print "." }
 '

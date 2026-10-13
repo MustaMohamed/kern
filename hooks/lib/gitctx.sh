@@ -330,7 +330,8 @@ git_sub() {
 $(_cmd_words "$1")
 EOT
   n=${#w[@]}
-  case "${w[0]}" in git | */git) ;; *) return 1 ;; esac
+  # Any case: on a case-insensitive file system GIT runs git.
+  case "${w[0]}" in [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) return 1 ;; esac
   while [ "$i" -lt "$n" ]; do
     case "${w[$i]}" in
       -C)
