@@ -53,15 +53,22 @@ _settings_lookup() {
 _KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
 
 # _settings_ignored FILE KEY VALUE: exit 0 when the layer FILE must not set KEY to VALUE. The committed
-# project file (any kern.yml but the user's) cannot turn kern off, and cannot loosen a *.policy key to
-# auto or rebase.push to autopilot: it may only tighten. Such a value reads as unset, so a lower layer or the default applies.
+# project file cannot turn kern off, cannot loosen a *.policy key to auto or rebase.push to autopilot:
+# it may only tighten. Such a value reads as unset, so a lower layer or the default applies. The local
+# file is local only while git does not track it; a tracked one is committed, whatever its name. The
+# one git call runs only for a file that exists and a key that matters; the :(icase) pathspec matches
+# KERN.LOCAL.YML, which a case-insensitive file system also reads as the local file.
 _settings_ignored() {
-  case "$1" in "$HOME/.claude/kern.yml" | */kern.local.yml) return 1 ;; esac
+  case "$1" in "$HOME/.claude/kern.yml") return 1 ;; esac
   case "$2" in
-    kern) [ "$3" = off ] ;;
-    *.policy | review.post_policy) [ "$3" = auto ] ;;
-    rebase.push) [ "$3" = autopilot ] ;;
+    kern) [ "$3" = off ] || return 1 ;;
+    *.policy | review.post_policy) [ "$3" = auto ] || return 1 ;;
+    rebase.push) [ "$3" = autopilot ] || return 1 ;;
     *) return 1 ;;
+  esac
+  case "$1" in
+    */kern.local.yml) git -C "${1%/.claude/kern.local.yml}" ls-files --error-unmatch -- ':(icase).claude/kern.local.yml' >/dev/null 2>&1 ;;
+    *) return 0 ;;
   esac
 }
 

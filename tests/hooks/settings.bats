@@ -225,3 +225,36 @@ YML
   rm "$R/.claude/kern.local.yml"
   [ "$(settings_get rebase.push ask)" = ask ]
 }
+
+@test "a tracked kern.local.yml gets the committed-file rules: its kern: off cannot disable the user's protection" {
+  printf 'protected_targets: v1-host\n' >"$HOME/.claude/kern.yml"
+  printf 'kern: off\npush.policy: auto\nrebase.push: autopilot\n' >"$R/.claude/kern.local.yml"
+  git -C "$R" add .claude/kern.local.yml
+  kern_enabled
+  [ "$(policy_for push)" = ask ]
+  [ "$(settings_get rebase.push ask)" = ask ]
+  run_guard "$(bash_payload "ssh v1-host 'rm -f /data/x'")" g13
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "a tracked kern.local.yml may still tighten: deny and ask count" {
+  printf 'push.policy: deny\n' >"$R/.claude/kern.local.yml"
+  git -C "$R" add .claude/kern.local.yml
+  [ "$(policy_for push)" = deny ]
+}
+
+@test "an untracked kern.local.yml still turns kern off and sets auto" {
+  printf 'kern: off\npush.policy: auto\n' >"$R/.claude/kern.local.yml"
+  run kern_enabled
+  [ "$status" -eq 1 ]
+  [ "$(policy_for push)" = auto ]
+}
+
+@test "a tracked KERN.LOCAL.YML on a case-insensitive file system gets the committed-file rules" {
+  printf 'x\n' >"$R/.claude/CaseProbe"
+  [ -f "$R/.claude/caseprobe" ] || skip "case-sensitive file system"
+  printf 'kern: off\n' >"$R/.claude/KERN.LOCAL.YML"
+  git -C "$R" add .claude/KERN.LOCAL.YML
+  kern_enabled
+  [ "$(settings_source kern)" = default ]
+}
