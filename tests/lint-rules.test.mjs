@@ -182,3 +182,33 @@ test('rule 6: a route row in another form, or ## Steps without a numbered list, 
   assert.deepEqual(rules(bullets), [6]);
   assert.match(bullets[0].message, /numbered list/);
 });
+
+test('rule 7: an oversized rendered kernel is an error; the real kernel passes', () => {
+  const big = '#!/usr/bin/env bash\nhead -c 9500 /dev/zero | tr "\\0" x\n';
+  const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
+  assert.deepEqual(rules(lint({ 'hooks/session-start': big, 'hooks/subagent-start': sub })).filter((r) => r === 7), [7]);
+  const real = runLint(loadModel(join(import.meta.dirname, '..'))).filter((f) => f.rule === 7 && f.level === 'error');
+  assert.deepEqual(real, []);
+});
+
+test('rule 13: hooks and the settings table agree', () => {
+  const table = '| Key | Default | Values | Read by |\n|---|---|---|---|\n| `push.policy` | `ask` | x | pre-tool-use (G1) |\n| `overrides.<job>` | none | x | session-start |\n';
+  const hook = '#!/usr/bin/env bash\npolicy_for push\nsettings_get "overrides.$job" ""\n';
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table, 'hooks/x': hook })), []);
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table, 'hooks/x': hook + 'settings_get banana.key\n' })), [13]);
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table + '| `orphan.key` | x | x | prompt-submit |\n', 'hooks/x': hook })), [13]);
+});
+
+test('rule 15: hook-shape fixtures and runner exist once hooks exist', () => {
+  assert.ok(rules(lint({ 'hooks/session-start': '#!/usr/bin/env bash\n' })).includes(15));
+  const real = runLint(loadModel(join(import.meta.dirname, '..'))).filter((f) => f.rule === 15);
+  assert.deepEqual(real, []);
+});
+
+test('rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not', () => {
+  const table = '| Key | Default | Values | Read by |\n|---|---|---|---|\n| `autopilot` | `allowed` | x | prompt-submit |\n';
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table, 'hooks/x': '#!/usr/bin/env bash\n_settings_lookup "$f" autopilot\n' })), []);
+  const generic = lint({ 'kernel/settings.md': table, 'hooks/x': '#!/usr/bin/env bash\n_settings_lookup "$f" "$1"\n' });
+  assert.deepEqual(rules(generic), [13]);
+  assert.match(generic[0].message, /^autopilot names a hook or kern script as reader, but none reads it$/);
+});

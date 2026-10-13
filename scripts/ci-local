@@ -9,6 +9,9 @@ node scripts/check-version.mjs
 node scripts/route-eval.mjs
 claude plugin validate . --strict
 claude plugin validate .claude-plugin/plugin.json --strict
-bats tests/scripts
+tests/run-bats tests/scripts
 shellcheck scripts/fetch-upstream scripts/ci-local
+tests/run-bats tests/hooks
+bash tests/hook-shape.sh
+shellcheck -x -S warning hooks/lib/*.sh hooks/guards/*.sh hooks/session-start hooks/subagent-start hooks/prompt-submit hooks/pre-tool-use scripts/kern-root scripts/kern-get scripts/kern-dir scripts/kern-detect tests/hook-shape.sh tests/run-bats tests/helpers/common.bash
 echo "ci-local: all steps passed"

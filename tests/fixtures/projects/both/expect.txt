@@ -1,0 +1,4 @@
+Settings files: .claude/kern.local.yml, .claude/kern.yml
+push.policy=auto
+mode.voice=terse
+# kern terse voice

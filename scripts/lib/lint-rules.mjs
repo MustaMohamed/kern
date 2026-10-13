@@ -1,7 +1,9 @@
 // kern lint rules (design spec 11.2). Pure checks over a loaded model; the CLI is scripts/lint-skills.mjs.
 // Rule set informed by addyosmani/agent-skills scripts/lib/skill-lint.js (MIT); the code is written for kern.
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, mkdtempSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { parseFrontmatter } from './frontmatter.mjs';
 
 export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
@@ -186,6 +188,68 @@ export const RULES = [
         if (!listed.has(s.name)) out.push(err(6, rel(model, s.file), `${s.name} is missing from skills/help/references/map.md`));
       }
     }
+    return out;
+  } },
+  { id: 7, check(model) {
+    if (!existsSync(join(model.root, 'hooks', 'session-start'))) return [];
+    const out = [];
+    const tmp = mkdtempSync(join(tmpdir(), 'kern-rule7-'));
+    const repo = join(tmp, 'repo');
+    mkdirSync(join(repo, '.claude'), { recursive: true });
+    spawnSync('git', ['init', '-q', repo]);
+    const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
+    for (const f of ['kern.local.yml', 'kern.yml']) if (existsSync(join(fixture, f))) copyFileSync(join(fixture, f), join(repo, '.claude', f));
+    const env = { ...process.env, HOME: join(tmp, 'home'), CLAUDE_PLUGIN_DATA: join(tmp, 'data') };
+    const hook = (name, payload) => spawnSync('bash', [join(model.root, 'hooks', name)], { input: JSON.stringify(payload), env, encoding: 'utf8' }).stdout || '';
+    const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
+    const kernel = norm(hook('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' }));
+    const terse = existsSync(join(model.root, 'modes', 'terse.md')) ? readFileSync(join(model.root, 'modes', 'terse.md'), 'utf8').length : 0;
+    if (kernel.length > 4000) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 4,000`));
+    if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
+    const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
+    let ctx = '';
+    try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }
+    const terseSub = existsSync(join(model.root, 'modes', 'terse-subagent.md')) ? readFileSync(join(model.root, 'modes', 'terse-subagent.md'), 'utf8').length : 0;
+    if (ctx.length + terseSub > 1200) out.push(err(7, 'kernel/kernel-subagent.md', `subagent kernel with terse voice ${ctx.length + terseSub} chars, limit 1,200`));
+    rmSync(tmp, { recursive: true, force: true });
+    return out;
+  } },
+  { id: 13, check(model) {
+    const table = join(model.root, 'kernel', 'settings.md');
+    if (!existsSync(table)) return [];
+    const out = [];
+    const rows = readFileSync(table, 'utf8').split('\n').filter((l) => /^\| `/.test(l)).map((l) => {
+      const cells = l.split('|').slice(1, -1).map((c) => c.trim());
+      return { key: cells[0].replace(/`/g, ''), readBy: cells[cells.length - 1] };
+    });
+    const prefix = (k) => (k.includes('<') ? k.slice(0, k.indexOf('<')) : null);
+    const known = (k) => rows.some((r) => r.key === k || (prefix(r.key) && k.startsWith(prefix(r.key))));
+    const code = [...walk(join(model.root, 'hooks')), ...walk(join(model.root, 'scripts')).filter((f) => /\/kern-[a-z]+$/.test(f))]
+      .map((f) => ({ f, text: readFileSync(f, 'utf8') }));
+    const read = new Map();
+    const add = (k, f) => { if (!read.has(k)) read.set(k, f); };
+    for (const { f, text } of code) {
+      for (const m of text.matchAll(/(?:settings_(?:get|source)|_settings_lookup\s+"?\$\w+"?)\s+"?([a-z_][a-z0-9_.]*)/g)) add(m[1], f);
+      for (const m of text.matchAll(/policy_for\s+"?([a-z][a-z.]*)/g)) if (m[1] !== 'ACTION') add(m[1] === 'review.post' ? 'review.post_policy' : `${m[1]}.policy`, f);
+      if (f.endsWith('/kern-detect')) for (const m of text.matchAll(/^ {2}([a-z_.]+)\)$/gm)) add(m[1], f);
+    }
+    for (const [k, f] of read) if (!known(k)) out.push(err(13, rel(model, f), `reads settings key ${k}, which kernel/settings.md does not list`));
+    const hookReader = /session-start|subagent-start|prompt-submit|pre-tool-use|kern-detect|kern-dir|kern-get/;
+    const allCode = code.map((c) => c.text).join('\n');
+    for (const r of rows) {
+      if (!hookReader.test(r.readBy)) continue;
+      const ok = prefix(r.key) ? allCode.includes(prefix(r.key)) : read.has(r.key);
+      if (!ok) out.push(err(13, 'kernel/settings.md', `${r.key} names a hook or kern script as reader, but none reads it`));
+    }
+    return out;
+  } },
+  { id: 15, check(model) {
+    if (!existsSync(join(model.root, 'hooks', 'session-start'))) return [];
+    const out = [];
+    for (const c of ['no-settings', 'shared-only', 'local-only', 'both', 'kern-off', 'floor-policy-key', 'unknown-key', 'long-settings']) {
+      if (!existsSync(join(model.root, 'tests', 'fixtures', 'projects', c, 'expect.txt'))) out.push(err(15, `tests/fixtures/projects/${c}`, 'hook-shape fixture has no expect.txt'));
+    }
+    if (!existsSync(join(model.root, 'tests', 'hook-shape.sh'))) out.push(err(15, 'tests/hook-shape.sh', 'hook-shape runner missing'));
     return out;
   } },
 ];

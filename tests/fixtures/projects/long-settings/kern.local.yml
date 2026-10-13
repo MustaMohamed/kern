@@ -1,0 +1,21 @@
+base_branch: main
+branch.pattern: {id}/{slug}
+branch.protected: main, qa, uat, production
+deploy.envs: qa, uat, production
+worktree.setup: ln -s ../node_modules node_modules && cp ../.env .env
+shared_services: postgres, minio, localstack, cognito
+test.full: npm test --prefix cds-api && npm test --prefix cds-web
+test.focused: npx jest {file}
+typecheck: npx tsc --noEmit -p cds-api && npx tsc --noEmit -p cds-web
+lint: npm run lint
+verify.browser: node scripts/cds-session.mjs --env local --probe /dashboard
+commit.convention: "^CDS-[0-9]+: "
+tracker: linear
+tracker.first: true
+review.taxonomy: Bug,Suggestion,Nit
+protected_targets: v1-prod-host, prod-db.internal, 10.0.0.12
+never_commit: migration-dashboard/data/migration_dashboard.db, .env*, *.pem
+scope_threshold: 4
+overrides.commit: commit
+overrides.self-review: self-review
+route.diagnose: investigate-bug

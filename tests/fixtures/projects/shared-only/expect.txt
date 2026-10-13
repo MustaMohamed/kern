@@ -1,0 +1,2 @@
+Settings files: .claude/kern.yml
+Set: push.policy=deny

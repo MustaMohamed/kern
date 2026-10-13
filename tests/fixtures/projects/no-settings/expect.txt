@@ -1,0 +1,2 @@
+Settings files: none; defaults apply
+kern mode: voice=normal surface=auto autopilot=off

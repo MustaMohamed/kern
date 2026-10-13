@@ -1,0 +1,2 @@
+push.policy: deny
+mode.voice: terse

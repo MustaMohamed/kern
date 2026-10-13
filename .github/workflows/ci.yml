@@ -37,6 +37,12 @@ jobs:
       - name: Install bats and shellcheck
         run: sudo apt-get update && sudo apt-get install -y bats shellcheck
       - name: Script tests
-        run: bats tests/scripts
+        run: tests/run-bats tests/scripts
       - name: Shellcheck
         run: shellcheck scripts/fetch-upstream scripts/ci-local
+      - name: Hook tests
+        run: tests/run-bats tests/hooks
+      - name: Hook shape over fixture projects
+        run: bash tests/hook-shape.sh
+      - name: Shellcheck hooks and kern scripts
+        run: shellcheck -x -S warning hooks/lib/*.sh hooks/guards/*.sh hooks/session-start hooks/subagent-start hooks/prompt-submit hooks/pre-tool-use scripts/kern-root scripts/kern-get scripts/kern-dir scripts/kern-detect tests/hook-shape.sh tests/run-bats tests/helpers/common.bash
