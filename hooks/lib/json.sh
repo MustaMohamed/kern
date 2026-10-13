@@ -4,13 +4,14 @@
 
 # Scanner shared by json_get and json_get_raw. Prints the value of the first object key equal to
 # `key`. mode=str prints a decoded string value; mode=raw prints the raw JSON text of any value.
-# Exit 0 found, 1 absent (or, in str mode, not a string), 2 malformed input.
+# The input is split into the array C once, one character per element: substr per character is
+# quadratic in BWK awk. Exit 0 found, 1 absent (or, in str mode, not a string), 2 malformed input.
 _KERN_JSON_AWK='
-function skip_ws(p) { while (p <= n && index(" \t\r\n", substr(buf, p, 1)) > 0) p++; return p }
+function skip_ws(p) { while (p <= n && index(" \t\r\n", C[p]) > 0) p++; return p }
 function str_end(p,   d) {
   # p is the index just after an opening quote; returns the index of the closing quote, or 0.
   while (p <= n) {
-    d = substr(buf, p, 1)
+    d = C[p]
     if (d == "\\") { p += 2; continue }
     if (d == "\"") return p
     p++
@@ -26,12 +27,12 @@ function decode(s) {
   return s
 }
 function raw_end(p,   c, depth, e) {
-  c = substr(buf, p, 1)
+  c = C[p]
   if (c == "\"") { e = str_end(p + 1); return e }
   if (c == "{" || c == "[") {
     depth = 0
     while (p <= n) {
-      c = substr(buf, p, 1)
+      c = C[p]
       if (c == "\"") { e = str_end(p + 1); if (!e) return 0; p = e + 1; continue }
       if (c == "{" || c == "[") depth++
       else if (c == "}" || c == "]") { depth--; if (depth == 0) return p }
@@ -39,12 +40,12 @@ function raw_end(p,   c, depth, e) {
     }
     return 0
   }
-  while (p <= n && index(",}] \t\r\n", substr(buf, p, 1)) == 0) p++
+  while (p <= n && index(",}] \t\r\n", C[p]) == 0) p++
   return p - 1
 }
 { buf = buf (NR > 1 ? "\n" : "") $0 }
 END {
-  n = length(buf); i = 1
+  n = split(buf, C, ""); i = 1
   while (i <= n) {
     c = substr(buf, i, 1)
     if (c != "\"") { i++; continue }

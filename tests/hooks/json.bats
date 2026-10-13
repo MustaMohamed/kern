@@ -106,3 +106,17 @@ next \ end' ]
   [ "$status" -eq 2 ]
   [ -z "$output" ]
 }
+
+@test "a 400 KB value scans in linear time: an absent key and tool_input each take about a second at most" {
+  big=$(head -c 400000 /dev/zero | tr '\0' 'x')
+  KERN_INPUT="{\"tool_name\":\"Write\",\"tool_input\":{\"content\":\"$big\",\"file_path\":\"/f\"}}"
+  start=$(date +%s)
+  run json_get agent_type
+  [ "$status" -eq 1 ]
+  [ $(($(date +%s) - start)) -le 1 ]
+  start=$(date +%s)
+  run json_get_raw tool_input
+  [ "$status" -eq 0 ]
+  [ ${#output} -gt 400000 ]
+  [ $(($(date +%s) - start)) -le 1 ]
+}
