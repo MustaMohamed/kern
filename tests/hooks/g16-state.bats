@@ -376,7 +376,7 @@ expect_cmd() {
     "git diff --output .claude/settings.json HEAD" "git diff --ou=.claude/kern.yml" "git log -p --output=.claude/kern.yml" \
     "git format-patch -o .claude HEAD~1" "git archive -o .claude/settings.json HEAD" "git clean -fdx .claude" \
     "git add .claude/settings.json" "git config -f .claude/kern.yml kern off" "git reflog expire --all .claude" \
-    "git branch -f .claude" "git -C .claude mv a b"
+    "git branch -f .claude" "git -C .claude mv a b" "git diff -o .claude/settings.json" "git archive -o.claude/kern.yml HEAD"
   set_autopilot on
   expect_bash deny "git mv off.yml .claude/kern.local.yml" "git rm .claude/settings.json" \
     "git diff --output=.claude/kern.local.yml"
@@ -387,7 +387,7 @@ expect_cmd() {
     "git shortlog -- .claude" "git reflog show .claude" "git for-each-ref refs/heads/.claude" \
     "git branch --list .claude" "git config --get -f .claude/kern.yml kern" "git diff .claude/settings.json" \
     "git diff --stat -- .claude" "git diff --output-indicator-new=+ .claude" "git -C .claude status" \
-    "git check-ignore -q .claude/kern.local.yml"
+    "git check-ignore -q .claude/kern.local.yml" "git ls-files -o .claude" "git grep -o allow .claude/settings.json"
 }
 
 @test "a settings write under a directory with a space asks; only a message option's text is read as a sentence" {

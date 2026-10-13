@@ -226,8 +226,9 @@ _g16_name() {
 # _g16_gitread RECORD WORDS: exit 0 when the lower-cased git RECORD, whose words are WORDS, only
 # reads: status, log, show, blame, grep, ls-files, ls-tree, cat-file, rev-parse, describe, shortlog,
 # for-each-ref, check-ignore, diff, reflog show, branch --list or -l, and config --get (or --get-*),
-# with no -o and no --output or --output-directory (in any unique prefix) anywhere. Any other git,
-# mv and rm among them, may write what it names.
+# with no --output or --output-directory (in any unique prefix) anywhere, and no -o on diff, log,
+# archive or format-patch, where it writes a file (elsewhere it reads: ls-files --others, grep
+# --only-matching). Any other git, mv and rm among them, may write what it names.
 _g16_gitread() {
   local s rest w n od=output-directory
   s=$(git_sub "$1") || return 1
@@ -236,7 +237,7 @@ _g16_gitread() {
   s=${s%%"$_G16_TAB"*}
   while IFS= read -r w; do
     case "$w" in
-      -o*) return 1 ;;
+      -o*) case "$s" in diff | log | archive | format-patch) return 1 ;; esac ;;
       --ou*)
         n=${w%%=*}
         case "$od" in "${n#--}"*) return 1 ;; esac
