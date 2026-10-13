@@ -258,3 +258,53 @@ YML
   kern_enabled
   [ "$(settings_source kern)" = default ]
 }
+
+@test "a committed symlinked .claude holding kern.local.yml cannot turn kern off or drop protection" {
+  printf 'protected_targets: v1-host\n' >"$HOME/.claude/kern.yml"
+  mv "$R/.claude" "$R/cfg"
+  ln -s cfg "$R/.claude"
+  printf 'kern: off\npush.policy: auto\n' >"$R/cfg/kern.local.yml"
+  git -C "$R" add .claude cfg
+  kern_enabled
+  [ "$(policy_for push)" = ask ]
+  run_guard "$(bash_payload "ssh v1-host 'rm -f /data/x'")" g13
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "a .claude that is a submodule cannot turn kern off or drop protection" {
+  printf 'protected_targets: v1-host\n' >"$HOME/.claude/kern.yml"
+  S="$BATS_TEST_TMPDIR/sub"
+  git init -q "$S"
+  printf 'kern: off\npush.policy: auto\n' >"$S/kern.local.yml"
+  git -C "$S" add kern.local.yml
+  git -C "$S" -c user.name=t -c user.email=t@t commit -q -m s
+  rm -rf "$R/.claude"
+  git -C "$R" -c protocol.file.allow=always submodule add -q "$S" .claude
+  [ -f "$R/.claude/kern.local.yml" ]
+  kern_enabled
+  [ "$(policy_for push)" = ask ]
+  run_guard "$(bash_payload "ssh v1-host 'rm -f /data/x'")" g13
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "a .claude holding its own .git, or a symlinked kern.local.yml, cannot loosen" {
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  mkdir "$R/.claude/.git"
+  kern_enabled
+  rmdir "$R/.claude/.git"
+  run kern_enabled
+  [ "$status" -eq 1 ]
+  rm "$R/.claude/kern.local.yml"
+  printf 'kern: off\npush.policy: auto\n' >"$BATS_TEST_TMPDIR/elsewhere.yml"
+  ln -s "$BATS_TEST_TMPDIR/elsewhere.yml" "$R/.claude/kern.local.yml"
+  kern_enabled
+  [ "$(policy_for push)" = ask ]
+}
+
+@test "a symlinked .claude pointing outside the main worktree cannot loosen" {
+  mkdir "$BATS_TEST_TMPDIR/out"
+  printf 'kern: off\n' >"$BATS_TEST_TMPDIR/out/kern.local.yml"
+  rm -rf "$R/.claude"
+  ln -s "$BATS_TEST_TMPDIR/out" "$R/.claude"
+  kern_enabled
+}

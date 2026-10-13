@@ -55,9 +55,7 @@ _KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
 # _settings_ignored FILE KEY VALUE: exit 0 when the layer FILE must not set KEY to VALUE. The committed
 # project file cannot turn kern off, cannot loosen a *.policy key to auto or rebase.push to autopilot:
 # it may only tighten. Such a value reads as unset, so a lower layer or the default applies. The local
-# file is local only while git does not track it; a tracked one is committed, whatever its name. The
-# one git call runs only for a file that exists and a key that matters; the :(icase) pathspec matches
-# KERN.LOCAL.YML, which a case-insensitive file system also reads as the local file.
+# file loosens only while it is the user's own untracked file: see _settings_local_ok.
 _settings_ignored() {
   case "$1" in "$HOME/.claude/kern.yml") return 1 ;; esac
   case "$2" in
@@ -67,9 +65,27 @@ _settings_ignored() {
     *) return 1 ;;
   esac
   case "$1" in
-    */kern.local.yml) git -C "${1%/.claude/kern.local.yml}" ls-files --error-unmatch -- ':(icase).claude/kern.local.yml' >/dev/null 2>&1 ;;
+    */kern.local.yml) ! _settings_local_ok "${1%/.claude/kern.local.yml}" ;;
     *) return 0 ;;
   esac
+}
+
+# _settings_local_ok MAIN: exit 0 when MAIN/.claude/kern.local.yml is the user's own untracked file. A
+# clone can ship it under another shape, so all of these must hold: the file is a regular file, not a
+# symlink; .claude is a real directory (no symlink, no .git inside, no gitlink in the index) whose
+# physical path is MAIN's own .claude; and git does not track the file, matched in any case. One git
+# call, made only for a loosening value.
+_settings_local_ok() {
+  local main="$1" d="$1/.claude" pm pd
+  [ -f "$d/kern.local.yml" ] && [ ! -L "$d/kern.local.yml" ] || return 1
+  [ -d "$d" ] && [ ! -L "$d" ] && [ ! -e "$d/.git" ] && [ ! -L "$d/.git" ] || return 1
+  pm=$(cd "$main" 2>/dev/null && pwd -P) && pd=$(cd "$d" 2>/dev/null && pwd -P) || return 1
+  [ "$pd" = "$pm/.claude" ] || return 1
+  git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null | LC_ALL=C awk -F '\t' '
+    { p = tolower($2); m = substr($1, 1, 6) }
+    m == "160000" && p == ".claude" { bad = 1 }
+    p == ".claude/kern.local.yml" { bad = 1 }
+    END { exit bad }'
 }
 
 # settings_get KEY [DEFAULT]: prints the resolved value. Exit 0 found or defaulted, 3 unset. A key in
