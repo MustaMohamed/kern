@@ -508,7 +508,7 @@ ssh v1-host 'del C:\x'"
 
 @test "G15: ordinary commands do not vote" {
   g15_all none "terraform plan" "kubectl get pods" "helm list" "npm test" "npx vitest" "gcloud config list" \
-    "docker build ." "gh run view 123" "echo npm publish" "git commit -m 'npm publish'" "ls -la"
+    "docker build ." "gh run view 123" "echo 'npm publish'" "git commit -m 'npm publish'" "ls -la"
 }
 
 @test "G15: quotes, backslashes and a backslash-newline do not hide a tool" {
@@ -516,8 +516,26 @@ ssh v1-host 'del C:\x'"
     $'npm pub\\\nlish' "bash -c 'n\"p\"m publish'"
 }
 
+@test "G15: a tool name as any later word asks; quoted text stays one word" {
+  g15_all ask "caffeinate terraform apply" "xargs -n1 npm publish" 'find . -name package.json -execdir npm publish \;' \
+    "docker run --rm hashicorp/terraform apply" "nvm exec 20 npm publish" "corepack pnpm publish" \
+    "ssh build-host kubectl apply -f x.yml" "echo terraform apply" "man kubectl apply"
+  g15_all none "git commit -m 'npm publish'" "echo 'terraform apply'" "brew install helm" "npm i -g vercel" \
+    "yarn add -D vercel" "which vercel" "pip install twine" "rg 'kubectl apply' docs"
+  set_autopilot on
+  g15_all deny "caffeinate terraform apply" "xargs -n1 npm publish"
+}
+
+@test "G15: a bare vercel with only options asks where vercel runs" {
+  g15_all ask "vercel" "vercel --yes" "VERCEL -y" "npx vercel" "pnpm dlx vercel --yes" "./node_modules/.bin/vercel"
+  g15_all none "vercel ls" "vercel env pull" "vercel dev" "vercel --version" "vercel --help" "vercel -h" \
+    "npm i -g vercel" "brew install vercel-cli"
+  set_autopilot on
+  g15_all deny "vercel"
+}
+
 @test "G15: every tool in the table asks for each of its verbs, in any case, and passes the prefilter" {
-  local f names paths name path n=0 cmd="" line want=() names_all=()
+  local f names paths name path p n=0 cmd="" line want=() names_all=()
   f="$(kern_root)/hooks/guards/g15-deploy.sh"
   while IFS='	' read -r names paths; do
     [ -n "$names" ] || continue
@@ -525,8 +543,11 @@ ssh v1-host 'del C:\x'"
       names_all+=("$name" "$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')")
       while IFS= read -r path; do
         n=$((n + 1))
-        line="$name ${path//\*/x}"
-        [ $((n % 2)) = 0 ] && line="$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]') ${path//\*/x}"
+        # A * path word stands for any word it starts; the path ~ is the tool alone.
+        p=${path//\*/x}
+        [ "$p" = '~' ] && p=""
+        line="$name${p:+ $p}"
+        [ $((n % 2)) = 0 ] && line="$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')${p:+ $p}"
         want+=("$line")
         cmd="${cmd:+$cmd
 }$line"

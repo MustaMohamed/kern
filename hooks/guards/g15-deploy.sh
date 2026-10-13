@@ -2,15 +2,17 @@
 # G15 deploy and publish: workflow runs, releases, package publishes, infra applies, deploy
 # commands and deploy-branch pushes ask, and are denied under autopilot. No policy key loosens it,
 # and it never votes allow.
-# The head of each simple command comes from _cmd_words (wrappers, assignments, any path, any case).
-# For a tool in _G15_AWK's table, the words of a verb path must appear in order, each a whole word,
-# anywhere after the tool name: global options before the verb cannot hide it, and no option table
-# is needed. The cost is an option value spelled as a verb (`terraform plan -out apply` asks).
-# After a runner (npx, bunx, uvx, pnpx; npm exec or x, pnpm and yarn dlx or exec, bun x, uv run or
-# uv tool run, python -m), every later word, split at blanks, may name the tool, so the runner's
-# options and their values cannot hide it.
-# Out of scope (accepted limits): heads _cmd_words does not skip (caffeinate, xargs, find -exec),
-# package scripts (npm run deploy, make deploy), a bare `vercel`, and names built at run time.
+# The words of each simple command come from _cmd_words (wrappers, assignments, any path, any
+# case). Any word may name a tool in _G15_AWK's table (basename, lower case, no @version), so an
+# unknown wrapper, xargs, find -exec or `docker run <image>/terraform` cannot hide it; the words of
+# a verb path must then appear after it in order, each a whole word, so global options before the
+# verb cannot hide it either, and no option table is needed. The costs: an option value spelled as
+# a verb (`terraform plan -out apply`), and a tool and its verb as plain words (`echo terraform
+# apply`, `man kubectl apply`), ask. Quoted text stays one word. After a runner (npx, bunx, uvx,
+# pnpx; npm exec or x, pnpm and yarn dlx or exec, bun x, uv run or uv tool run, python -m), each
+# later word is also split at blanks (`npm exec -c 'vercel deploy'`).
+# Out of scope (accepted limits): package scripts (npm run deploy, make deploy), a bare `vercel` with
+# an option value or a path (`vercel --scope team`), and names built at run time.
 
 # _G15_AWK: the judge, run on git_words records after _GW_AWK. Prints `D<TAB>words` for a deploy or
 # publish, `P<TAB>record` for a git command with a push word, and `.` at the end.
@@ -26,8 +28,15 @@ _G15_AWK='
     return w
   }
   # g15_has(p, path): true when the words of path appear in L after position p, in order, each a
-  # whole word; a path word ending in * matches any word it starts.
+  # whole word; a path word ending in * matches any word it starts. The path ~ is a bare run: the
+  # word at p runs (the head, or after a runner) and every later word is an option other than help
+  # or version.
   function g15_has(p, path,   a, n, k, j, e, x) {
+    if (path == "~") {
+      if (p > 1 && !(r && p > r)) return 0
+      for (j = p + 1; j <= m; j++) if (L[j] !~ /^-/ || L[j] ~ /^(-h|--help|-v|--version)$/) return 0
+      return 1
+    }
     n = split(path, a, " "); j = p
     for (k = 1; k <= n; k++) {
       e = a[k]; x = (e ~ /\*$/)
@@ -49,7 +58,7 @@ _G15_AWK='
     g15_tool("kubectl", "apply|create|delete|replace|patch|rollout|scale|set|edit|annotate|label")
     g15_tool("helm", "install|upgrade|uninstall|rollback|delete|del|un")
     g15_tool("serverless,sls", "deploy|remove")
-    g15_tool("vercel", "deploy|--prod")
+    g15_tool("vercel", "deploy|--prod|~")
     g15_tool("fly,flyctl", "deploy|apps destroy")
     g15_tool("firebase,firebase-tools", "deploy")
     g15_tool("eb", "deploy")
@@ -66,7 +75,7 @@ _G15_AWK='
     sw($0); cw_reset()
     for (k = 1; k <= sw_n; k++) cw(sw_w[k])
     if (!cw_n) next
-    # L[1..m]: the words; r: where a runner ends, so every later word may name the tool.
+    # L[1..m]: the words; r: where a runner ends, after which words are split at blanks.
     h = g15_name(cw_w[1]); m = 1; L[1] = cw_w[1]
     r = (h in G15R && G15R[h] == " ")
     for (k = 2; k <= cw_n; k++) {
@@ -75,7 +84,6 @@ _G15_AWK='
       if (h in G15R && index(G15R[h], " " cw_w[k] " ")) r = m
     }
     for (p = 1; p <= m; p++) {
-      if (p > 1 && (!r || p <= r)) continue
       t = g15_name(L[p])
       if (!(t in G15T)) continue
       n = split(G15T[t], v, "|")
