@@ -14,11 +14,11 @@ g() { run_guard "$(bash_payload "$1")" "$2"; }
 mcp() { run_guard "$(payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{}")" g14; }
 # mcpi TOOL FIELDS: G14 on an MCP call whose tool_input holds FIELDS (passed without braces).
 mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
-# gx CMD: G13 on CMD, which may hold double quotes, backslashes and newlines.
+# gx CMD [GUARDS]: G13 (or GUARDS) on CMD, which may hold double quotes, backslashes and newlines.
 gx() {
   local esc
   esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
-  run_guard "$(bash_payload "$esc")" g13
+  run_guard "$(bash_payload "$esc")" "${2:-g13}"
 }
 # g13_all DECISION CMD...: G13 decides DECISION on every CMD.
 g13_all() {
@@ -26,6 +26,15 @@ g13_all() {
   shift
   for c in "$@"; do
     gx "$c"
+    [ "$(decision_of "$output")" = "$want" ] || { echo "$c -> $output"; return 1; }
+  done
+}
+# g15_all DECISION CMD...: G15 decides DECISION on every CMD.
+g15_all() {
+  local want="$1" c
+  shift
+  for c in "$@"; do
+    gx "$c" g15
     [ "$(decision_of "$output")" = "$want" ] || { echo "$c -> $output"; return 1; }
   done
 }
@@ -451,6 +460,94 @@ ssh v1-host 'del C:\x'"
   set_autopilot on
   g "git push --all origin" g15
   [ "$(decision_of "$output")" = deny ]
+}
+
+@test "G15: a tool behind a wrapper, an assignment, a path or another case asks, denied under autopilot" {
+  g15_all ask "timeout 600 terraform apply" "env NODE_ENV=production npm publish" "env npm publish" \
+    "sudo -u deploy kubectl apply -f x.yml" "sudo -E npm publish" "nice -n 5 npm publish" "command -p npm publish" \
+    "TERRAFORM apply" "Terraform apply -auto-approve" "Npm publish" "KUBECTL apply -f x.yml" \
+    "/usr/local/bin/npm publish" "./node_modules/.bin/vercel deploy --prod"
+  set_autopilot on
+  g15_all deny "timeout 600 terraform apply" "TERRAFORM apply"
+}
+
+@test "G15: a deploy verb after global options asks; the verb must be a whole word" {
+  g15_all ask "kubectl -n prod apply -f x.yml" "kubectl --context prod delete pod x" "terraform -chdir=infra apply" \
+    "helm -n prod upgrade api ./chart" "firebase --project prod deploy" "fly -a app deploy" \
+    "aws --profile prod ecs update-service --cluster c --service s" \
+    "aws --region us-east-1 lambda update-function-code --function-name f --zip-file fileb://x.zip" \
+    "gh -R o/r workflow run deploy.yml" "gh release -R o/r create v1" "npm --prefix pkg publish" "pnpm -r publish" \
+    "pnpm --filter x publish" "cargo +nightly publish" "docker buildx build --push -t x ." "terraform plan -out apply"
+  g15_all none "terraform plan -out apply.tfplan" "kubectl -n prod get pods" "aws s3 ls s3://bucket" \
+    "gh issue create --title 'release create'" "kubectl get pods -l app=label"
+}
+
+@test "G15: a runner and its options are stripped" {
+  g15_all ask "npx -y vercel deploy" "npx --yes vercel --prod" "npx vercel@latest deploy" "npx -p aws-cdk cdk deploy" \
+    "npx aws-cdk deploy" "npx wrangler deploy" "npx netlify deploy --prod" "pnpm dlx vercel deploy --prod" \
+    "pnpm exec cdk deploy" "pnpm --filter x exec cdk deploy" "yarn dlx vercel deploy --prod" "bunx vercel deploy --prod" \
+    "uvx twine upload dist/x" "uvx --with keyring twine upload dist/x" "npm exec -- vercel deploy --prod" \
+    "npm exec -c 'vercel deploy --prod'" "python -m twine upload dist/x" "python3.12 -m twine upload dist/x" \
+    "npx changeset publish" "bun x vercel deploy" "uv tool run twine upload dist/x" "uv run twine upload dist/x"
+  g15_all none "npx vitest run" "pnpm exec eslint ." "uvx ruff check" "uv run pytest" "npx prettier --write 'npm publish.md'"
+  set_autopilot on
+  g15_all deny "npx -y vercel deploy" "pnpm dlx vercel deploy --prod"
+}
+
+@test "G15: gcloud, helm delete, flyctl, gh run rerun, docker stack, uv, wrangler, netlify, vercel, serverless, firebase and cloudformation ask" {
+  g15_all ask "gcloud run deploy api --image x" "gcloud app deploy" "gcloud functions deploy f" "gcloud beta run deploy api" \
+    "helm delete api" "helm uninstall api" "flyctl deploy" "gh run rerun 123" "gh release new v1" \
+    "docker stack deploy -c x.yml app" "docker stack up -c x.yml app" "docker image push x" "uv publish" \
+    "wrangler deploy" "wrangler publish" "netlify deploy --prod" "vercel deploy" "vercel --prod" "serverless deploy" \
+    "sls deploy" "firebase deploy" "aws cloudformation deploy --template-file t.yml --stack-name s" \
+    "aws cloudformation create-stack --stack-name s" "aws cloudformation update-stack --stack-name s" \
+    "aws cloudformation delete-stack --stack-name s" "aws s3 rb s3://bucket --force" "lerna publish"
+  set_autopilot on
+  g15_all deny "gcloud run deploy api" "gh run rerun 123"
+}
+
+@test "G15: ordinary commands do not vote" {
+  g15_all none "terraform plan" "kubectl get pods" "helm list" "npm test" "npx vitest" "gcloud config list" \
+    "docker build ." "gh run view 123" "echo npm publish" "git commit -m 'npm publish'" "ls -la"
+}
+
+@test "G15: quotes, backslashes and a backslash-newline do not hide a tool" {
+  g15_all ask "ter''raform apply" 'k"ub"ectl apply -f x.yml' 'terra\form apply' $'terra\\\nform apply' \
+    $'npm pub\\\nlish' "bash -c 'n\"p\"m publish'"
+}
+
+@test "G15: every tool in the table asks for each of its verbs, in any case, and passes the prefilter" {
+  local f names paths name path n=0 cmd="" line want=() names_all=()
+  f="$(kern_root)/hooks/guards/g15-deploy.sh"
+  while IFS='	' read -r names paths; do
+    [ -n "$names" ] || continue
+    while IFS= read -r name; do
+      names_all+=("$name" "$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')")
+      while IFS= read -r path; do
+        n=$((n + 1))
+        line="$name ${path//\*/x}"
+        [ $((n % 2)) = 0 ] && line="$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]') ${path//\*/x}"
+        want+=("$line")
+        cmd="${cmd:+$cmd
+}$line"
+      done <<EOT
+$(printf '%s\n' "$paths" | tr '|' '\n')
+EOT
+    done <<EOT
+$(printf '%s\n' "$names" | tr ',' '\n')
+EOT
+  done <<EOT
+$(sed -n 's/^ *g15_tool("\([^"]*\)", "\([^"]*\)").*/\1	\2/p' "$f")
+EOT
+  [ "$n" -ge 60 ] || { echo "only $n table entries"; return 1; }
+  gx "$cmd" g15
+  [ "$(decision_of "$output")" = ask ]
+  for line in "${want[@]}"; do
+    case "$output" in *"deploy or publish: $line\""* | *"deploy or publish: $line;"*) ;; *) echo "no vote: $line"; return 1 ;; esac
+  done
+  run bash -c '. "$1"; shift; for w in "$@"; do _g15_named "x $w y" || echo "prefilter misses $w"; done' _ "$f" "${names_all[@]}"
+  [ "$status" = 0 ]
+  [ -z "$output" ]
 }
 
 @test "G14: tracker.policy auto allows only a family's listed tools, the family matched as a server token" {
