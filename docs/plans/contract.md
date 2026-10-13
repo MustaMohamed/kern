@@ -101,6 +101,11 @@ A guard that votes `allow` approves the whole Bash call, so it proves the full c
 
 `_G01_GIT_CMDS` in `hooks/guards/g01-git.sh` lists git 2.54's own commands (`git --list-cmds=builtins,main`, less `pack-redundant` and `whatchanged`). `_g01_foreign` makes G1, G5 and G6 ask, and deny under autopilot, for any git subcommand outside that list, and for any option word left after G1's global-option loop except those that end git (`-v`, `--version`, `-h`, `--help`, `--exec-path`, `--html-path`, `--man-path`, `--info-path`, `--list-cmds=*`); it reads no config. Every guard git call that reads the repo runs with `-c core.fsmonitor=false`, and every `git log` with `--no-show-signature`. G6 runs its git reads under `with_timeout`; an overrun asks "secret scan did not finish".
 
+`_cmd_words` reads `NAME=value` and `NAME+=value` as assignments, and compares wrapper and shell names in any case. `cw_opt` holds the long options that take a value: env `--chdir --unset --split-string --argv0`; sudo `--user --group --host --prompt --chdir --chroot --role --type --close-from --other-user --command-timeout`; nice `--adjustment`; timeout `--signal --kill-after`. A git or gh that appears later in a command whose head is something else is hidden.
+- `_g01_hidden` asks, and denies under autopilot, in either of two cases. The first: the next word after git's global options is in `_G01_GIT_CMDS` and outside `_G01_READ_ONLY`. The second: the hidden git carries `-c` or `--config-env`, whatever word follows. A hidden git with no word after it gets no vote.
+- `_g02_hidden` asks when the next gh word is in `_G02_GROUPS`. That list holds gh 2.100's groups and their aliases, less browse, search and status.
+Neither ever votes allow.
+
 ## Scripts (KERN/scripts, bash, executable, `set -euo pipefail`, run as `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>`)
 
 | Script | Signature | Output | Exit |
