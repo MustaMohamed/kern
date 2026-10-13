@@ -52,7 +52,7 @@ $(_cmd_words "$rec")
 EOT
     # After a cd, or a GIT_DIR or GIT_WORK_TREE assignment, later git commands run where G1
     # cannot tell.
-    case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=*) moved=1 ;; esac
+    case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=* | *GIT_DIR+=* | *GIT_WORK_TREE+=*) moved=1 ;; esac
     case "${w[0]}" in
       cd | pushd | popd) moved=1 ;;
       builtin) case "${w[1]-}" in cd | pushd | popd) moved=1 ;; esac ;;
@@ -60,6 +60,48 @@ EOT
       [Gg][Hh] | */[Gg][Hh]) _g01_gh "$rec" "${w[@]}" ;;
       [Gg][Ii][Tt] | */[Gg][Ii][Tt]) _g01_git_rec "$rec" "$moved" "${w[@]}" ;;
     esac
+    case "${w[0]}" in "" | [Gg][Hh] | */[Gg][Hh] | [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) _g01_hidden "${w[@]}" ;; esac
+  done
+}
+
+# Git's own commands that only read, which a git behind another command may run (_g01_hidden).
+_G01_READ_ONLY=" status log diff show rev-parse ls-files ls-remote blame describe grep help version cat-file \
+shortlog for-each-ref merge-base name-rev count-objects var "
+
+# _g01_hidden HEAD WORDS...: a simple command whose head is neither git nor gh may still run git: an
+# unknown wrapper (caffeinate, stdbuf), xargs, find -exec, or a wrapper option _cmd_words does not
+# read (env --ch, env -iC). Each later word whose basename is git (any case) is read past git's
+# global options; when the next word is one of git's own commands outside _G01_READ_ONLY, G1 asks,
+# deny under autopilot. Any other word after it (curl in `apt-get install git curl`, an option git
+# rejects) gets no vote. Quoted text is one word, so `grep -rn "git push" docs` holds no word git,
+# while `echo git push` asks.
+_g01_hidden() {
+  local head="$1"
+  shift
+  while [ $# -gt 0 ]; do
+    case "${1##*/}" in
+      [Gg][Ii][Tt]) shift ;;
+      *) shift; continue ;;
+    esac
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -C | -c | --git-dir | --work-tree | --namespace | --config-env | --super-prefix | --attr-source | --shallow-file)
+          shift
+          [ $# -gt 0 ] && shift
+          ;;
+        --git-dir=* | --work-tree=* | --namespace=* | --config-env=* | --super-prefix=* | --attr-source=* | \
+          --exec-path=* | -p | -P | --paginate | --no-pager | --bare | --no-replace-objects | --no-lazy-fetch | \
+          --no-optional-locks | --no-advice | --literal-pathspecs | --no-literal-pathspecs | --glob-pathspecs | \
+          --noglob-pathspecs | --icase-pathspecs) shift ;;
+        *) break ;;
+      esac
+    done
+    [ $# -gt 0 ] || return 0
+    case "$_G01_GIT_CMDS" in *" $1 "*) ;; *) continue ;; esac
+    case "$_G01_READ_ONLY" in *" $1 "*) continue ;; esac
+    vote ask G1 "git inside $head cannot be checked; run git directly"
+    [ "$AUTOPILOT" = 1 ] && vote deny G1 "git inside $head under autopilot: it cannot be checked; run git directly"
+    return 0
   done
 }
 

@@ -77,7 +77,7 @@ EOT
   _G05_CONFIG=0
   _G05_MOVED=0
   _G05_ENV=""
-  case "$1" in *=* | *env* | *sudo* | *declare* | *typeset*) _G05_ENV=$(_g05_env "$1") ;; esac
+  case "$1" in *=* | *[Ee][Nn][Vv]* | *[Ss][Uu][Dd][Oo]* | *declare* | *typeset*) _G05_ENV=$(_g05_env "$1") ;; esac
   _g05_env_has now GIT_DIR GIT_WORK_TREE && _G05_MOVED=1
   case "$_G05_HEAD" in [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) return 1 ;; esac
   n=${#w[@]}
@@ -108,35 +108,32 @@ EOT
 }
 
 # _g05_env RECORD: what RECORD changes in the environment of the command it runs, one line each:
-# NAME for a VAR=value word before the command word (after the wrappers env, sudo, command, builtin,
-# exec, nice, nohup, time and timeout and their options); +NAME when the assignment outlives the
-# record (an export or declare -x command, behind wrappers or not, or a record that is only
-# assignments); @cwd when env -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory.
-# Never a substring of an argument.
+# NAME for a VAR=value or VAR+=value word before the command word (after the wrappers env, sudo,
+# command, builtin, exec, nice, nohup, time and timeout, in any case, and their options: the value
+# options are _cmd_words' `cw_opt`); +NAME when the assignment outlives the record (an export or
+# declare -x command, behind wrappers or not, or a record that is only assignments); @cwd when env
+# -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory. Never a substring of an argument.
 _g05_env() {
-  _shell_words "$1" | LC_ALL=C awk '
+  _shell_words "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     BEGIN {
       n = split("env sudo command builtin exec nice nohup time timeout", a, " ")
       for (k = 1; k <= n; k++) wrap[a[k]] = 1
-      val["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
-      val["env"] = " -C -P -S -u --chdir --split-string --unset --argv0 "
-      val["exec"] = " -a "; val["timeout"] = " -s -k --signal --kill-after "; val["nice"] = " -n "
     }
-    function asg(s) { sub(/=.*/, "", s); names[++m] = s }
+    function asg(s) { sub(/\+?=.*/, "", s); names[++m] = s }
     dx && /^-/ { if ($0 ~ /x/) ex = 1; next }
     dx { dx = 0; if (!ex) done = 1 }
-    ex { if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) asg($0); next }
+    ex { if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) asg($0); next }
     done { next }
     skip { skip = 0; next }
     /^[0-9]*(<|>|&>)/ { if ($0 ~ /^[0-9]*[<>&|]+$/) skip = 1; next }
     /^(if|then|elif|else|do|while|until|!|\{)$/ { w = ""; next }
-    /^[A-Za-z_][A-Za-z0-9_]*=/ { asg($0); next }
-    { b = $0; sub(/.*\//, "", b) }
-    b in wrap { w = b; dur = (b == "timeout"); next }
+    /^[A-Za-z_][A-Za-z0-9_]*\+?=/ { asg($0); next }
+    { b = $0; sub(/.*\//, "", b); lb = tolower(b) }
+    lb in wrap { w = lb; dur = (lb == "timeout"); next }
     /^-/ && w != "" {
       if (w == "env" && ($0 ~ /^--c/ || $0 ~ /^-[^-]*C/)) print "@cwd"
       if (w == "sudo" && ($0 ~ /^--c[hr]/ || $0 ~ /^-[^-]*[DR]/)) print "@cwd"
-      if (index(val[w], " " $0 " ")) skip = 1
+      if (index(cw_opt[w], " " $0 " ")) skip = 1
       next
     }
     dur { dur = 0; next }

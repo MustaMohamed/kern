@@ -442,3 +442,27 @@ gh_log() {
   set_autopilot on
   expect deny 'gh pr review 12 --approve'
 }
+
+@test "G2: gh behind a command kern cannot read asks, and is denied under autopilot" {
+  local c
+  for c in "caffeinate gh pr merge 1" "caffeinate gh -R o/r pr merge 1" "caffeinate g''h pr merge 1" \
+    "echo 1 | xargs GH pr merge"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *"gh inside "*" cannot be checked; run gh directly"* ]] || false
+  done
+  set_autopilot on
+  for c in "caffeinate gh pr merge 1" "caffeinate gh -R o/r pr merge 1" "caffeinate g''h pr merge 1" \
+    "echo 1 | xargs GH pr merge"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "G2: a word gh before no gh command group, or before a read-only one, gets no vote" {
+  set_autopilot on
+  for c in "brew upgrade gh" "which gh" 'echo "use gh pr create"' "gh pr list" "caffeinate gh status" \
+    "caffeinate gh --repo o/r search prs x" "caffeinate gh help pr" "echo gh is here" "brew install gh git"; do
+    expect none "$c" || return 1
+  done
+}

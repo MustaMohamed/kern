@@ -501,3 +501,64 @@ settings() {
   set_autopilot on
   expect deny "$@"
 }
+
+# g1q CMD: g1 for a command that may hold double quotes or backslashes.
+g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
+
+@test "git behind a command kern cannot read asks, and is denied under autopilot" {
+  local c
+  for c in "env --ch sub git push --force origin main" "env -iC sub git push --force origin main"; do
+    g1q "$c"
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *"git inside sub cannot be checked; run git directly"* ]] || false
+  done
+  set_autopilot on
+  for c in "env --ch sub git push --force origin main" "env -iC sub git push --force origin main" \
+    "caffeinate -i git push --force origin main" "stdbuf -oL git commit -m x" \
+    "echo main | xargs git push --force origin" 'find . -maxdepth 0 -exec git push --force origin main \;' \
+    "caffeinate g''it push --force origin main" "caffeinate git -C x -c a=b --no-pager push origin feat" \
+    "builtin command git push --force origin main"; do
+    g1q "$c"
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *"git inside "*" under autopilot"* ]] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "a word git that runs no git command, or a read-only one, gets no vote" {
+  local c mode
+  for mode in off on; do
+    set_autopilot "$mode"
+    for c in "brew install git" "which git" "apt-get install git curl" "man git" 'grep -rn "git push" docs' \
+      'echo "git push"' "xargs git status" "git status" "caffeinate git --no-pager log -1" "brew install git gh"; do
+      g1q "$c"
+      [ "$(decision_of "$output")" = none ] || { echo "$mode: $c -> $output"; return 1; }
+    done
+  done
+}
+
+@test "echo git push asks: a word git before one of git's commands that writes is not read further" {
+  g1 "echo git push"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"git inside echo cannot be checked"* ]] || false
+  set_autopilot on
+  g1 "echo git push"
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "an append assignment or a wrapper in another case does not hide git from G1's own checks" {
+  local c mode
+  for mode in off on; do
+    set_autopilot "$mode"
+    for c in "X+=1 git push --force origin main" "ENV git push --force origin main" \
+      "Env --chdir=sub git push --force origin main" 'BASH -c "git push --force origin main"' \
+      'ENV bash -c "git push --force origin main"' "env -iS 'git push --force origin main'"; do
+      g1q "$c"
+      [ "$(decision_of "$output")" = deny ] || { echo "$mode: $c -> $output"; return 1; }
+      [[ "$output" == *"plain force push"* ]] || { echo "$mode: $c -> $output"; return 1; }
+      [[ "$output" != *"cannot be checked"* ]] || { echo "$mode: $c -> $output"; return 1; }
+    done
+  done
+  set_autopilot off
+  expect ask "GIT_DIR+=$R/.git git reset --hard"
+  [[ "$output" == *"after cd, --git-dir or --work-tree"* ]] || false
+}

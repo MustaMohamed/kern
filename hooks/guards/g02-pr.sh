@@ -15,6 +15,12 @@ help/h/b"
 # the body from elsewhere, open an editor or a browser, or name another repo.
 _GH_CREATE_SAFE="title body-file base head draft fill fill-first fill-verbose dry-run no-maintainer-edit"
 _GH_READY_OPTS="undo/-/b repo/R/v help/h/b"
+# gh 2.100.0's command groups (`gh help`) that ask when gh runs behind another command
+# (_g02_hidden): all but browse, search and status, which only read or open a browser. help and
+# version are not listed there either.
+_G02_GROUPS=" auth codespace discussion gist issue org pr project release repo skill cache run workflow \
+agent-task alias api attestation completion config copilot extension gpg-key label licenses preview \
+ruleset secret ssh-key variable "
 
 guard_g02() {
   [ "$TOOL" = Bash ] || return 0
@@ -25,8 +31,42 @@ guard_g02() {
     case "$(gh_sub "${_GH_RECS[$i]}")" in
       "pr create") _g02_create "$i" ;;
       "pr ready") _g02_ready "$i" ;;
+      "") _g02_hidden "${_GH_RECS[$i]}" ;;
     esac
     i=$((i + 1))
+  done
+}
+
+# _g02_hidden RECORD: a simple command whose head is neither git nor gh may still run gh (an unknown
+# wrapper, xargs, find -exec). Each later word whose basename is gh (any case) is read past -R or
+# --repo and its value; when the next word is one of _G02_GROUPS, G2 asks, deny under autopilot.
+# Only a record whose text holds gh, or g and h apart by quotes or a backslash (g''h), and that does
+# not start with the word git or gh, is read: no other record costs a process.
+_g02_hidden() {
+  local w=() t i=1 n
+  case "$1" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+  case "${1%%[[:space:]]*}" in [Gg][Ii][Tt] | */[Gg][Ii][Tt] | [Gg][Hh] | */[Gg][Hh]) return 0 ;; esac
+  while IFS= read -r t; do w+=("$t"); done <<EOT
+$(_cmd_words "$1")
+EOT
+  n=${#w[@]}
+  case "${w[0]}" in "" | [Gg][Hh] | */[Gg][Hh] | [Gg][Ii][Tt] | */[Gg][Ii][Tt]) return 0 ;; esac
+  while [ "$i" -lt "$n" ]; do
+    t=${w[$i]}
+    i=$((i + 1))
+    case "${t##*/}" in [Gg][Hh]) ;; *) continue ;; esac
+    while [ "$i" -lt "$n" ]; do
+      case "${w[$i]}" in
+        -R | --repo) i=$((i + 2)) ;;
+        -R?* | --repo=*) i=$((i + 1)) ;;
+        *) break ;;
+      esac
+    done
+    [ "$i" -lt "$n" ] || return 0
+    case "$_G02_GROUPS" in *" ${w[$i]} "*) ;; *) continue ;; esac
+    vote ask G2 "gh inside ${w[0]} cannot be checked; run gh directly"
+    [ "$AUTOPILOT" = 1 ] && vote deny G2 "gh inside ${w[0]} under autopilot: it cannot be checked; run gh directly"
+    return 0
   done
 }
 

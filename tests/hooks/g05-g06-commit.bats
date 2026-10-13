@@ -957,3 +957,20 @@ key AKIAABCDEFGHIJKLMNOP"
   expect deny g01 "git --foo ci"
   expect deny g01 "git --shallow-file x commit -m 'CDS-2465: x'"
 }
+
+@test "G6: an append assignment, a wrapper in another case or a sudo long option still leaves git unscanned" {
+  local c cmds=(
+    "GIT_DIR+=/x/.git git commit -m 'CDS-2465: x'" "export GIT_DIR+=/x/.git; git commit -m 'CDS-2465: x'"
+    "ENV GIT_DIR=/x/.git git commit -m 'CDS-2465: x'" "sudo --user root GIT_DIR=/x/.git git commit -m 'CDS-2465: x'"
+    "ENV -C sub git commit -m 'CDS-2465: x'" "Sudo -D /tmp git push"
+  )
+  for c in "${cmds[@]}"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+  set_autopilot on
+  for c in "${cmds[@]}"; do
+    expect deny g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+}

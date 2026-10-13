@@ -11,11 +11,12 @@ _GW_NL=$'\037'
 # collect in cw_w[1..cw_n] (see _cmd_words).
 _GW_AWK='
   BEGIN {
-    cw_opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
-    cw_opt["env"] = " -C -P -S -u "
+    cw_opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u --user --group --host --prompt --chdir --chroot "
+    cw_opt["sudo"] = cw_opt["sudo"] "--role --type --close-from --other-user --command-timeout "
+    cw_opt["env"] = " -C -P -S -u --chdir --unset --split-string --argv0 "
     cw_opt["exec"] = " -a "
     cw_opt["timeout"] = " -s -k --signal --kill-after "
-    cw_opt["nice"] = " -n "
+    cw_opt["nice"] = " -n --adjustment "
   }
   function sw(buf,   n, q, w, have, i, c) {
     sw_n = 0; n = length(buf); q = ""; w = ""; have = 0
@@ -41,20 +42,29 @@ _GW_AWK='
     if (have) sw_w[++sw_n] = w
   }
   function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0 }
-  function cw(x,   a, k, m, b) {
+  # cw_line(s): feeds cw the words of the command line s (the value of env -S).
+  function cw_line(s,   a, k, m) { m = split(s, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") cw(a[k]) }
+  function cw(x,   b, v) {
     if (cw_s) { cw_w[++cw_n] = x; return }
     if (cw_val) {
       cw_val = 0
-      if (cw_split) { cw_split = 0; m = split(x, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") cw(a[k]) }
+      if (cw_split) { cw_split = 0; cw_line(x) }
       return
     }
     if (x ~ /^[0-9]*(<|>|&>)/) { cw_val = (x ~ /^[0-9]*[<>&|]+$/); return }
-    if (x ~ /^[A-Za-z_][A-Za-z0-9_]*=/) return
+    if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) return
     if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
-    b = x; sub(/.*\//, "", b)
+    # Any case: on a case-insensitive file system ENV and Sudo run env and sudo.
+    b = x; sub(/.*\//, "", b); b = tolower(b)
     if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
     if (x ~ /^-/) {
-      if (cw_wrap in cw_opt && index(cw_opt[cw_wrap], " " x " ")) { cw_val = 1; cw_split = (cw_wrap == "env" && x == "-S") }
+      # env -S, after any of the flags -0 -i -v in its cluster: the line is attached or the next word.
+      if (cw_wrap == "env" && x ~ /^(-[0iv]*S|--split-string=)/) {
+        v = x; sub(/^(-[0iv]*S|--split-string=)/, "", v)
+        if (v != "") cw_line(v); else if (x !~ /^--/) { cw_val = 1; cw_split = 1 }
+        return
+      }
+      if (cw_wrap in cw_opt && index(cw_opt[cw_wrap], " " x " ")) { cw_val = 1; cw_split = (cw_wrap == "env" && (x == "-S" || x == "--split-string")) }
       return
     }
     if (cw_dur) { cw_dur = 0; return }
@@ -68,7 +78,8 @@ _GW_AWK='
 # The script of an sh-family shell's -c (any path, flags such as -lc or -cx, after the wrappers and
 # keywords _cmd_words skips), the arguments of `eval`, and the bodies of $( ) and backticks are
 # split again and printed after their wrapper, so a command inside a string is still seen. Out of
-# scope: commands that xargs or find -exec run, and a here-doc piped into a shell (cat <<EOF | sh).
+# scope here: commands that xargs or find -exec run (G1 and G2 ask for a git or gh among their
+# words), and a here-doc piped into a shell (cat <<EOF | sh).
 git_words() {
   local seg inner body first
   _split_words "$1" | while IFS= read -r seg; do
@@ -82,16 +93,18 @@ git_words() {
         ;;
     esac
     # The wrapper pass costs two processes, so it runs only when the first word, quotes removed,
-    # is a redirection, an assignment, a keyword, a wrapper, eval or a shell.
+    # is a redirection, an assignment, a keyword, a wrapper, eval or a shell. A wrapper or shell name
+    # matches in any case, as _cmd_words reads it.
     first=${seg%%[[:space:]]*}
     case "/${first//[\"\'\\]/}" in
-      *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | */eval | \
-        */command | */exec | */time | */nohup | */sudo | */env | */timeout | */nice | */sh | */bash | \
-        */zsh | */dash) ;;
+      *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
+        */[Ee][Vv][Aa][Ll] | */[Cc][Oo][Mm][Mm][Aa][Nn][Dd] | */[Ee][Xx][Ee][Cc] | */[Tt][Ii][Mm][Ee] | \
+        */[Nn][Oo][Hh][Uu][Pp] | */[Ss][Uu][Dd][Oo] | */[Ee][Nn][Vv] | */[Tt][Ii][Mm][Ee][Oo][Uu][Tt] | \
+        */[Nn][Ii][Cc][Ee] | */[Ss][Hh] | */[Bb][Aa][Ss][Hh] | */[Zz][Ss][Hh] | */[Dd][Aa][Ss][Hh]) ;;
       *) continue ;;
     esac
     inner=$(_cmd_words "$seg" | LC_ALL=C awk '
-      NR == 1 { b = $0; sub(/.*\//, "", b); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
+      NR == 1 { b = $0; sub(/.*\//, "", b); b = tolower(b); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
       e { out = out (o++ ? " " : "") $0; next }
       c { print; exit }
       v { v = 0; next }
@@ -159,7 +172,7 @@ _split_words() {
       for (k = 1; k <= sw_n; k++) cw(sw_w[k])
       if (!cw_n) return 0
       b = cw_w[1]; sub(/.*\//, "", b)
-      if (b !~ /^(ba|z|da)?sh$/) return 0
+      if (tolower(b) !~ /^(ba|z|da)?sh$/) return 0
       for (k = 2; k <= cw_n; k++) if (cw_w[k] ~ /^-[a-z]*c[a-z]*$/) return 0
       return 1
     }
@@ -292,10 +305,14 @@ _shell_words() {
 }
 
 # _cmd_words CMDLINE: the words of a simple command from its command name on, one per line.
-# Skips leading redirections (and the target of one that stands alone), VAR=value words, the
-# keywords if then elif else do while until ! {, the wrappers command, exec, time, nohup, sudo,
-# env, timeout and nice (any path), and their options. The options in `cw_opt` take a value;
-# timeout's duration follows its options; the value of env -S is a command line, read as words.
+# Skips leading redirections (and the target of one that stands alone), VAR=value and VAR+=value
+# words, the keywords if then elif else do while until ! {, the wrappers command, exec, time, nohup,
+# sudo, env, timeout and nice (any path, any case), and their options. The options in `cw_opt` take a
+# value as the next word (`--opt=value` is one word); timeout's duration follows its options; the
+# value of env -S or --split-string, attached or not and after the flags -0 -i -v in a cluster, is a
+# command line, read as words. Any other option `cw_opt` does not list (a cluster such as -iC, a
+# prefix such as --ch) takes no value, so the word after it is read as the command name; G1 and G2
+# still ask for a later git or gh.
 _cmd_words() {
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     { buf = buf (NR > 1 ? "\037" : "") $0 }

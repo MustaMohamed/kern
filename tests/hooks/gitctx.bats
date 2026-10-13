@@ -315,3 +315,22 @@ words_are() {
   [ "$out" = partial ]
   [ $(($(date +%s) - start)) -lt 3 ]
 }
+
+@test "git is seen behind wrapper long options that take a value" {
+  for c in 'env --chdir sub git push origin main' 'env --unset X git push' \
+    'env --split-string "git push origin main"' 'sudo --user root git push' \
+    'sudo --chdir /tmp git push' 'nice --adjustment 5 git push'; do
+    finds "$c" push
+  done
+}
+
+@test "git is seen after an append assignment, an attached env -S line, and a wrapper or shell in another case" {
+  for c in 'X+=1 git push' 'GIT_DIR+=/x/.git git push' 'env --split-string="git push origin main"' \
+    "env -S'git push origin main'" 'ENV git push' 'Env --chdir=sub git push' 'SUDO -u me git push' \
+    '/usr/bin/NoHup git push' 'TIMEOUT 5 git push' 'sudo --chroot /x git push' \
+    'BASH -c "git push"' 'ENV bash -c "git push"' 'Sh -c "git push"' 'env -iS "git push origin main"' \
+    "env -0vS'git push origin main'" 'env -uS git push'; do
+    finds "$c" push
+  done
+  finds "$(printf '%s\n' "BASH <<'EOF'" 'git push --force origin main' 'EOF')" push
+}
