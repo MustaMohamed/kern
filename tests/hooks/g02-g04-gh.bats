@@ -573,24 +573,31 @@ gh_log() {
   done
 }
 
-@test "G3: a pr comment body without a taxonomy label is denied, as a review body is" {
+@test "G3: a pr comment body without a taxonomy label asks, denied under autopilot; a review body's is denied" {
   printf 'looks fine to me\n' >"$R/c.md"
   printf 'nit: rename\n' >"$R/l.md"
   printf 'Nitpicking aside, this is wrong\n' >"$R/np.md"
   mkdir -p "$HOME/x"
   printf 'nit: from home\n' >"$HOME/x/h.md"
   g "gh pr comment 5 --body-file c.md" g03
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"gh pr comment body does not open with a review.taxonomy label"* ]] || false
+  g "gh pr review 5 --comment --body-file c.md" g03
   [ "$(decision_of "$output")" = deny ]
-  [[ "$output" == *"comment body must open with a review.taxonomy label"* ]] || false
   g "gh pr comment 5 --body-file l.md" g03
   [ "$(decision_of "$output")" = ask ]
   policy 'review.post_policy: auto'
-  expect deny 'gh pr comment 5 --body-file c.md'
-  expect deny 'gh pr comment 5 -Fnp.md'
-  expect deny 'gh pr comment 5 --body-file l.md --body-file c.md'
+  expect ask 'gh pr comment 5 --body-file c.md'
+  expect ask 'gh pr comment 5 -Fnp.md'
+  expect ask 'gh pr comment 5 --body-file l.md --body-file c.md'
   expect allow 'gh pr comment 5 --body-file l.md'
   # The shell reads ~ as HOME, and so does the label check; the post is still unproven.
   expect ask 'gh pr comment 5 --body-file ~/x/h.md'
+  policy 'review.post_policy: deny'
+  expect deny 'gh pr comment 5 --body-file c.md'
+  policy 'review.post_policy: auto'
+  set_autopilot on
+  expect deny 'gh pr comment 5 --body-file c.md'
 }
 
 @test "G2: an unproven draft's reason names the whole flag set an allowed draft may carry" {

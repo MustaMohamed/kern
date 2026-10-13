@@ -156,7 +156,7 @@ _g03_review() {
 }
 
 _g03_comment() {
-  local toks sel file ok=0
+  local toks sel file ok=0 lab=1
   toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_COMMENT_OPTS")
   [ "$(_gh_last "$toks" help)" = true ] && return 0
   if [ "$(_gh_last "$toks" delete-last)" = true ]; then
@@ -165,11 +165,13 @@ _g03_comment() {
   fi
   sel=$(_gh_pos "$toks" | sed -n 1p)
   file=$(_gh_last "$toks" body-file) || file=""
+  # A comment may be a plain reply ("Fixed in abc123"), so an unlabelled body asks where a review's
+  # is denied; review.post_policy auto allows only a labelled one.
   if [ -n "$file" ] && ! _g03_labelled "$(_g03_path "$file")"; then
-    vote deny G3 "comment body must open with a review.taxonomy label ($(settings_get review.taxonomy "$_G03_TAX_DEFAULT"))"
-    return 0
+    lab=0
+    vote ask G3 "gh pr comment body does not open with a review.taxonomy label ($(settings_get review.taxonomy "$_G03_TAX_DEFAULT")); a finding needs one, a plain reply asks"
   fi
-  if _gh_proven "$1" "$toks" && _gh_only "$toks" "$_GH_COMMENT_SAFE" &&
+  if [ "$lab" = 1 ] && _gh_proven "$1" "$toks" && _gh_only "$toks" "$_GH_COMMENT_SAFE" &&
     [ "$(_gh_pos "$toks" | wc -l)" -le 1 ] && _g03_sel_ok "$sel" &&
     { [ -z "$file" ] || _gh_file_ok "$file"; }; then
     ok=1
