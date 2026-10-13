@@ -208,10 +208,37 @@ old() { touch -h -t 202001010000 "$@"; }
   [[ "$out" != *"ermission denied"* ]] || false
 }
 
-@test "with settings.sh missing, session-start exits 0 and prints nothing" {
+# start_without LIB [LINE]: runs a copy of session-start whose hooks/lib/LIB is removed, or replaced by
+# the real one plus LINE; stdout only, into $out.
+start_without() {
+  rm -rf "$BATS_TEST_TMPDIR/k"
   mkdir -p "$BATS_TEST_TMPDIR/k"
-  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
-  rm "$BATS_TEST_TMPDIR/k/hooks/lib/settings.sh"
+  cp -R "$K/hooks" "$K/kernel" "$K/modes" "$K/.claude-plugin" "$BATS_TEST_TMPDIR/k/"
+  rm "$BATS_TEST_TMPDIR/k/hooks/lib/$1"
+  [ -z "${2-}" ] || { cat "$K/hooks/lib/$1"; printf '%s\n' "$2"; } >"$BATS_TEST_TMPDIR/k/hooks/lib/$1"
   out=$(bash "$BATS_TEST_TMPDIR/k/hooks/session-start" 2>/dev/null <<<"$(payload SessionStart '"source":"startup"')")
-  [ -z "$out" ]
+}
+
+@test "a library session-start cannot load gives one line that says so" {
+  local lib
+  for lib in json.sh settings.sh state.sh; do
+    start_without "$lib"
+    [ "$out" = "kern did not load: hooks/lib/$lib is missing or broken; guards ask on every call; reinstall kern" ] ||
+      { echo "$lib -> $out"; return 1; }
+  done
+  # PreToolUse does not load render.sh, so the guards still run.
+  start_without render.sh
+  [ "$out" = "kern did not load: hooks/lib/render.sh is missing or broken; reinstall kern" ] || { echo "$out"; return 1; }
+  start_without state.sh "unset -f state_reset"
+  [ "$out" = "kern did not load: hooks/lib/state.sh is missing or broken; guards ask on every call; reinstall kern" ] ||
+    { echo "$out"; return 1; }
+}
+
+@test "session-start checks every function each library it loads defines" {
+  local lib
+  for lib in json.sh settings.sh state.sh render.sh; do
+    [ -n "$(lib_functions "$lib")" ] || { echo "$lib defines no functions"; return 1; }
+    [ "$(need_list session-start "$lib")" = "$(lib_functions "$lib")" ] ||
+      { echo "$lib: need list differs from its definitions"; diff <(need_list session-start "$lib") <(lib_functions "$lib"); return 1; }
+  done
 }
