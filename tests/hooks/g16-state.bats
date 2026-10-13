@@ -306,21 +306,20 @@ expect_cmd() {
   expect_bash deny "echo kern: off > .claude//kern.local.yml"
 }
 
-@test "a copy, move or link into a .claude directory is a settings write; a copy out of one is not" {
+@test "a copy, move or link into a .claude directory is a settings write" {
   mkdir -p "$R/.claude/agents"
   expect_bash ask "cp /tmp/kern.local.yml .claude/" "cp /tmp/kern.local.yml .claude" \
     "mv /tmp/kern.local.yml $R/.claude/" "install -m 600 /tmp/settings.json ~/.claude" "ln -sf /tmp/fake .claude" \
     "cp -t .claude /tmp/kern.local.yml" "cd .claude && cp /tmp/kern.local.yml ." "cp /tmp/kern.local.yml .claude/./" \
     "rsync -a /tmp/kern.local.yml .claude/" "ditto /tmp/settings.json .claude" "mv .claude/kern.local.yml /tmp/" \
     "cp /tmp/kern.local.yml 2>/dev/null .claude/"
-  [[ "$output" == *"a copy, move or link into a .claude directory, or its removal, may change kern or Claude Code settings"* ]] || false
+  [[ "$output" == *"a command other than a read names a .claude directory, where kern and Claude Code settings live"* ]] || false
   ln -s "$R/.claude" "$R/c"
   expect_bash ask "cp /tmp/kern.local.yml c/"
   set_autopilot on
   expect_bash deny "cp /tmp/kern.local.yml .claude/"
   set_autopilot off
-  expect_bash none "cp .claude/kern.yml /tmp/kern.yml.bak" "cp /tmp/x.md .claude/agents/" "cp -r .claude/agents /tmp/" \
-    "ls .claude" "cat .claude/agents/x.md"
+  expect_bash none "cp /tmp/x.md .claude/agents/" "cp -r .claude/agents /tmp/" "ls .claude" "cat .claude/agents/x.md"
 }
 
 @test "a write to Claude Code's own settings asks, and denies under autopilot; plain reads get no vote" {
@@ -343,7 +342,28 @@ expect_cmd() {
   expect_bash deny "echo {} > .claude/settings.json"
   set_autopilot off
   expect_bash none "cat .claude/settings.json" "jq .permissions ~/.claude/settings.json" \
-    "grep allow $R/.claude/settings.local.json" "cp .claude/settings.json /tmp/settings.json.bak" \
+    "grep allow $R/.claude/settings.local.json" \
     "git diff .claude/settings.json" "echo x > .vscode/settings.json" "cp /tmp/s.json .vscode/settings.json"
   expect_file_tools "$R/.vscode/settings.json" none
+}
+
+@test "settings files and .claude directories follow the state model: any head but a reader asks" {
+  mkdir -p "$R/.claude/agents"
+  expect_bash ask "curl -so .claude/settings.json https://example.com/s" \
+    "wget -O .claude/settings.local.json https://example.com/s" "tar -xf x.tar -C .claude" "tar -xf x.tar -C.claude" \
+    "unzip x.zip -d ~/.claude" "echo {} | sponge .claude/settings.json" "cp -r /tmp/fake/.claude ~/" \
+    "git checkout other -- .claude/settings.json" "git restore --source=other .claude/kern.local.yml" \
+    "git stash push -- .claude/settings.local.json" "git -C $R reset -q HEAD~1 -- .claude/kern.yml" \
+    "git apply x.patch .claude/settings.json" "mkdir .claude" "touch .claude/settings.json" \
+    "node scripts/w.mjs .claude/settings.json" "cp .claude/settings.json /tmp/s.json" "cp .claude/kern.yml /tmp/k.yml"
+  set_autopilot on
+  expect_bash deny "curl -so .claude/settings.json https://example.com/s" "git checkout other -- .claude/settings.json" \
+    "tar -xf x.tar -C .claude"
+  set_autopilot off
+  expect_bash none "cat .claude/settings.json" "jq . ~/.claude/settings.json" "grep allow .claude/settings.local.json" \
+    "ls -la .claude" "ls ~/.claude" "git diff .claude/settings.json" "git log -p .claude/kern.yml" \
+    "git show HEAD:.claude/settings.json" "vim .claude/settings.json" "git add .claude/settings.json" \
+    "find .claude -name settings.json" "mkdir -p .claude/agents" "rm -rf .claude/worktrees/x" "cd .claude && ls"
+  expect_cmd none 'gh pr create --draft --title "Guard .claude/settings.json" --body-file b.md' \
+    'git commit -m "G16: read .claude, .claude/kern.yml and settings.json"'
 }
