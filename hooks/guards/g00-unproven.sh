@@ -104,6 +104,12 @@ _G00_AWK='
     if (src == "ps") return "a process substitution"
     return "a pipe or stdin"
   }
+  # g0_stream(w): 0 when the path w names stdin (/dev/stdin, /dev/fd/0, /proc/self/fd/0), fd when it
+  # names another file descriptor, else "".
+  function g0_stream(w) {
+    if (w !~ /^\/(dev\/(stdin|fd\/[0-9]+)|proc\/self\/fd\/[0-9]+)$/) return ""
+    return w ~ /(stdin|\/0)$/ ? "0" : "fd"
+  }
   # g0_any(k, re): the first word after k that matches re in lower case, or "".
   function g0_any(k, re,   j) {
     for (j = k + 1; j <= cw_n; j++) if (tolower(cw_w[j]) ~ re) return cw_w[j]
@@ -124,7 +130,12 @@ _G00_AWK='
       else if (k > 1) g0_out(b " -c after " cw_w[1] " runs a script kern does not read")
       return
     }
-    if (k > 1 || (shc_op && !shc_s) || g0_any(k, "^--?(version|help)$") != "") return
+    if (k > 1 || g0_any(k, "^--?(version|help)$") != "") return
+    # A script operand is a file, unless it names stdin (then it reads the stream below) or an fd.
+    if (shc_op && !shc_s) {
+      if ((w = g0_stream(cw_w[shc_op])) == "") return
+      if (w == "fd") { g0_out(b " reads its program from a file descriptor"); return }
+    }
     src = g0_src()
     if (src == "file" || (src == "hd" && f == "sh")) return
     g0_out(b " reads its program from " g0_from(src))
@@ -152,7 +163,7 @@ _G00_AWK='
       hb = tolower(cw_w[2]); k = 2
       if (hb == "eval") { g0_out("builtin eval runs text kern does not read"); next }
     }
-    if ((hb == "source" || hb == ".") && (k == cw_n || cw_w[k + 1] ~ /^\/(dev\/(stdin|fd\/)|proc\/self\/fd\/)/)) {
+    if ((hb == "source" || hb == ".") && (k == cw_n || g0_stream(cw_w[k + 1]) != "")) {
       g0_out(hb " reads a script from stdin, a file descriptor or a process substitution")
       next
     }
