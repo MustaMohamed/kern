@@ -8,7 +8,7 @@
 
 KERN_G14_TRACKERS="linear jira atlassian asana github gitlab notion monday clickup todoist trello shortcut height zendesk"
 KERN_G14_CHAT="slack gmail discord teams intercom front mail telegram whatsapp"
-KERN_G14_VERBS="create save update delete remove comment post send merge transition move assign archive edit write add set upload submit resolve share invite publish label close reopen mark reply push run rerun retry play fork schedule duplicate restore unshare copilot dismiss manage star cancel spawn stop convert"
+KERN_G14_VERBS="create save update delete remove comment post send merge transition move assign archive edit write add set upload submit resolve share invite publish label close reopen mark reply push run rerun retry play fork schedule duplicate restore unshare copilot dismiss manage star unstar cancel spawn stop convert"
 # A tool name whose first word is one of these reads, and never votes (get_workflow_run).
 KERN_G14_READS="get list search read fetch query find view show describe count check export download"
 _G14_ALNUM=abcdefghijklmnopqrstuvwxyz0123456789

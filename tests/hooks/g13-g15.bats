@@ -231,9 +231,9 @@ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
   done
 }
 
-@test "G14: copilot, dismiss, manage, star, cancel, spawn, stop and convert are writes" {
+@test "G14: copilot, dismiss, manage, star, unstar, cancel, spawn, stop and convert are writes" {
   printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
-  for t in mcp__github__request_copilot_review mcp__github__dismiss_notification mcp__github__manage_notification_subscription mcp__github__star_repository mcp__gitlab__cancel_pipeline mcp__claude_ai_Notion__notion-spawn-session mcp__claude_ai_Notion__notion-stop-session mcp__claude_ai_Notion__notion-convert-page-to-skill; do
+  for t in mcp__github__request_copilot_review mcp__github__dismiss_notification mcp__github__manage_notification_subscription mcp__github__star_repository mcp__github__unstar_repository mcp__gitlab__cancel_pipeline mcp__claude_ai_Notion__notion-spawn-session mcp__claude_ai_Notion__notion-stop-session mcp__claude_ai_Notion__notion-convert-page-to-skill; do
     mcp "$t"
     [ "$(decision_of "$output")" = ask ] || { echo "$t -> $output"; return 1; }
   done
