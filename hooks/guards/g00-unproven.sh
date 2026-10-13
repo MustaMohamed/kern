@@ -110,6 +110,23 @@ _G00_AWK='
     if (w !~ /^\/(dev\/(stdin|fd\/[0-9]+)|proc\/self\/fd\/[0-9]+)$/) return ""
     return w ~ /(stdin|\/0)$/ ? "0" : "fd"
   }
+  # g0_xargs(k): the index of the command that xargs at cw_w[k] runs, after its options (those of
+  # GNU and BSD xargs that take the next word), or 0 when there is none.
+  function g0_xargs(k,   j, w) {
+    for (j = k + 1; j <= cw_n; j++) {
+      w = cw_w[j]
+      if (w == "--") return j < cw_n ? j + 1 : 0
+      if (w !~ /^-/) return j
+      if (w ~ /^-[IJLnPsEdaRS]$/ || w ~ /^--(arg-file|delimiter|max-args|max-procs|max-chars|process-slot-var)$/) j++
+    }
+    return 0
+  }
+  # g0_name(j, by): when the word at j, which by runs as a command, is built at run time, says so.
+  function g0_name(j, by,   w) {
+    if (!j || j > cw_n) return
+    w = cw_w[j]
+    if ((gw_dyn(w) && !gw_path(w)) || g0_glob(w)) g0_out("the command name " w " after " by " is built at run time")
+  }
   # g0_any(k, re): the first word after k that matches re in lower case, or "".
   function g0_any(k, re,   j) {
     for (j = k + 1; j <= cw_n; j++) if (tolower(cw_w[j]) ~ re) return cw_w[j]
@@ -167,9 +184,19 @@ _G00_AWK='
       g0_out(hb " reads a script from stdin, a file descriptor or a process substitution")
       next
     }
+    if ((hb == "source" || hb == ".") && gw_dyn(cw_w[k + 1]) && !gw_path(cw_w[k + 1])) {
+      g0_out("the script name " cw_w[k + 1] " that " hb " reads is built at run time")
+      next
+    }
+    # Each shell judged; and the command that xargs runs, or find runs after -exec, -execdir, -ok or
+    # -okdir, read as a command name.
+    fnd = 0
     for (k = 1; k <= cw_n; k++) {
       b = P[split(cw_w[k], P, "/")]
       if ((f = g0_family(b)) != "") g0_judge(f, k, b)
+      if (tolower(b) == "xargs") g0_name(g0_xargs(k), "xargs")
+      else if (tolower(b) == "find") fnd = 1
+      else if (fnd && cw_w[k] ~ /^-(exec|execdir|ok|okdir)$/) g0_name(k + 1, "find " cw_w[k])
     }
   }
   END { print "." }

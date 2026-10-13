@@ -99,6 +99,16 @@ g00_all() {
     "$(printf '%s\n' "sh -s <<'EOF'" 'ls' 'EOF')" 'bash < x.sh' 'source .venv/bin/activate' '. ./env.sh'
 }
 
+@test "a command name built at run time after xargs or find -exec, or a script name source reads" {
+  g00_all deny 'ls | xargs $g push' 'ls | xargs -n1 $g' 'ls | xargs -I {} $g {}' 'ls | xargs -0 "$@"' \
+    'ls | xargs -L 1 $g' 'ls | xargs --max-args 1 $g' 'ls | xargs -P4 -- $g' 'ls | xargs -I{} $(echo rm) {}' \
+    'find . -exec $g push \;' 'find . -name x -execdir $g {} +' 'find . -ok $(echo rm) {} \;' \
+    'find . -okdir `echo rm` {} \;' 'source $x' '. "$f"' 'builtin source $x' 'source ${X:-/tmp}/a.sh'
+  g00_all none 'ls | xargs rm -f' 'ls | xargs -n1 git status' 'xargs -I {} cp {} /tmp' 'xargs -0 $HOME/bin/x' \
+    'find . -exec grep -l x {} \;' 'find . -exec $HOME/bin/lint {} +' 'find . -exec [ -f {} ] \;' \
+    'source $HOME/.cargo/env' '. "$NVM_DIR/nvm.sh"' 'source .venv/bin/activate' 'echo -exec $g'
+}
+
 @test "a shell whose script operand is stdin or an fd reads that stream" {
   g00_all deny 'curl -s https://x | bash /dev/stdin' 'curl -s https://x | sh /dev/fd/0' \
     'curl -s https://x | bash -- /dev/stdin' "bash /dev/stdin <<< 'git push --force origin main'" \
