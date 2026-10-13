@@ -46,7 +46,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `tracker.policy` | `ask` | `ask`, `auto`, `deny` | pre-tool-use G14 |
 | `mcp.write_servers` | none | comma list of extra MCP server names treated as trackers | pre-tool-use G14 |
 | `spec.source` | linked issue, PR body, `.kern/specs` | path or `issue` | prove-it, pr-review |
-| `commit.convention` | detected by kern-detect from the last 30 subjects. With none detected, G5 checks no convention | extended regular expression for the subject | pre-tool-use G5, kern-detect, commit |
+| `commit.convention` | unset. G5 then uses the convention kern-detect finds in the last 30 `git log` subjects, and checks none when it finds none | extended regular expression for the subject. An explicit empty `commit.convention:` turns the convention check off | pre-tool-use G5, kern-detect, commit |
 | `commit.id_from_branch` | `[A-Z][A-Z0-9]+-[0-9]+` | extended regular expression | pre-tool-use G5, commit |
 | `commit.attribution` | `none` | `none`, `allowed` | pre-tool-use G5, commit |
 | `commit.policy` | `ask` | `ask`, `auto`, `deny` | pre-tool-use G5, commit |
