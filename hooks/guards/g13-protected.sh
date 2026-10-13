@@ -24,7 +24,7 @@ guard_g13() {
     if _g13_names "${rec//[\"\'\\]/}"; then
       fed=0
       _g13_fed "$cmd" "$rec" && fed=1
-      _g13_judge "$rec" "$list" "$fed"
+      _g13_judge "$rec" "$list" "$fed" "$cmd"
     fi
   done <<EOT
 $(git_words "$cmd")
@@ -37,7 +37,7 @@ _g13_names() {
   case "$1" in
     *[Ss][Ss][Hh]* | *[Ss][Cc][Pp]* | *[Ss][Ff][Tt][Pp]* | *[Rr][Ss][Yy][Nn][Cc]* | *[Mm][Yy][Ss][Qq][Ll]* | \
       *[Mm][Aa][Rr][Ii][Aa][Dd][Bb]* | *[Pp][Ss][Qq][Ll]* | *[Ss][Qq][Ll][Ii][Tt][Ee]* | *[Ss][Qq][Ll][Cc][Mm][Dd]* | \
-      *[Pp][Gg]_[Dd][Uu][Mm][Pp]*) return 0 ;;
+      *[Pp][Gg]_*) return 0 ;;
   esac
   return 1
 }
@@ -73,15 +73,20 @@ _g13_fed() {
   done
 }
 
-# _g13_judge REC LIST FED: denies for each client in the simple command REC that reaches a target in
-# LIST without a proven read. FED is 1 when REC's stdin may come from a pipe.
+# _g13_judge REC LIST FED CMD: denies for each client in the simple command REC that reaches a target
+# in LIST without a proven read. FED is 1 when REC's stdin may come from a pipe; CMD is the whole
+# command (for PGHOST=, MYSQL_HOST= and the like set before the client).
 _g13_judge() {
-  local why
+  local why out
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
+  if ! out=$(printf '%s' "$1" | G13_TG="$2" G13_FED="$3" G13_CMD="$4" LC_ALL=C awk -v sq="'" "$_GW_AWK$_G13_AWK$_G13_SQL_AWK" 2>&1); then
+    vote deny G13 "the protected_targets check failed: ${out%%$'\n'*}"
+    return 0
+  fi
   while IFS= read -r why; do
     [ -n "$why" ] && vote deny G13 "$why"
   done <<EOT
-$(printf '%s' "$1" | G13_TG="$2" G13_FED="$3" LC_ALL=C awk -v sq="'" "$_GW_AWK$_G13_AWK")
+$out
 EOT
 }
 
@@ -93,31 +98,32 @@ EOT
 # shellcheck disable=SC2016 # awk text
 _G13_AWK='
   function qw(buf,   n, q, w, have, i, c, rd, quo, nx) {
-    qw_n = 0; n = length(buf); q = ""; w = ""; have = 0; rd = 0; quo = 0
+    qw_n = 0; n = length(buf); q = ""; w = ""; have = 0; rd = 0; quo = 0; dy = 0
     for (i = 1; i <= n; i++) {
       c = substr(buf, i, 1)
       if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
       if (q == "\"") {
         if (c == "\"") q = ""
         else if (c == "\\" && index("\"\\$`", substr(buf, i + 1, 1))) { i++; w = w substr(buf, i, 1) }
-        else w = w c
+        else { w = w c; if (c == "$" || c == "`") dy = 1 }
         continue
       }
       if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; quo = 1; continue }
       if (c == sq || c == "\"") { q = c; have = 1; quo = 1; continue }
       if (c == " " || c == "\t" || c == "\n" || c == "\037") {
-        if (have) { qw_w[++qw_n] = w; qw_r[qw_n] = rd }
-        w = ""; have = 0; rd = 0; quo = 0; continue
+        if (have) { qw_w[++qw_n] = w; qw_r[qw_n] = rd; qw_d[qw_n] = dy }
+        w = ""; have = 0; rd = 0; quo = 0; dy = 0; continue
       }
       if (c == "#" && !have) { while (i < n && index("\n\037", substr(buf, i + 1, 1)) == 0) i++; continue }
       nx = substr(buf, i + 1, 1)
       if (c == "<" || c == ">" || (c == "&" && nx == ">")) {
-        if (have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) { qw_w[++qw_n] = w; qw_r[qw_n] = rd; w = ""; quo = 0; rd = 0 }
+        if (have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) { qw_w[++qw_n] = w; qw_r[qw_n] = rd; qw_d[qw_n] = dy; w = ""; quo = 0; rd = 0; dy = 0 }
         if (!quo && w ~ /^[0-9]*$/) rd = 1
       }
+      if (c == "$" || c == "`") dy = 1
       w = w c; have = 1
     }
-    if (have) { qw_w[++qw_n] = w; qw_r[qw_n] = rd }
+    if (have) { qw_w[++qw_n] = w; qw_r[qw_n] = rd; qw_d[qw_n] = dy }
   }
   function base(w) { sub(/.*[\/\\]/, "", w); w = tolower(w); sub(/\.exe$/, "", w); return w }
   function canon(h) { h = tolower(h); sub(/\.$/, "", h); gsub(/^\[|\]$/, "", h); if (h == "127.0.0.1" || h == "::1") h = "localhost"; return h }
@@ -253,8 +259,8 @@ _G13_AWK='
 
   # j_ssh(S): ssh at word S. OpenSSH reads options before and after the destination; the first word
   # after that starts the remote command.
-  function j_ssh(s,   k, w, j, c, v, dest, port, nf, nin, ctl, inc, rc, orc, stdin, t, key, h, why, lc, lt) {
-    port = 22; dest = ""; rc = ""; orc = ""; nf = 0; nin = 0; ctl = 0; inc = 0; stdin = ""; t = 0; lc = ""; lt = 0; OH = ""
+  function j_ssh(s,   k, w, j, c, v, dest, port, nf, nin, ctl, inc, rc, orc, stdin, t, key, h, why, lc, lt, dyn) {
+    port = 22; dest = ""; rc = ""; orc = ""; nf = 0; nin = 0; ctl = 0; inc = 0; stdin = ""; t = 0; lc = ""; lt = 0; OH = ""; dyn = 0
     for (k = s + 1; k <= N; k++) {
       w = W[k]
       if (R[k]) {
@@ -262,7 +268,7 @@ _G13_AWK='
         if (RO ~ /^</ && !(RO == "<" && RT == "/dev/null")) stdin = RO
         continue
       }
-      if (inc) { rc = rc " " w; continue }
+      if (inc) { rc = rc " " w; dyn = dyn || D[k]; continue }
       if (w ~ /^-./ && w != "--") {
         for (j = 2; j <= length(w); j++) {
           c = substr(w, j, 1)
@@ -276,7 +282,7 @@ _G13_AWK='
               key = tolower(v); sub(/[ =].*/, "", key); sub(/^[^ =]*[ =][ \t]*/, "", v)
               if (key == "port") port = v
               else if (key == "hostname") OH = v
-              else if (key == "remotecommand") orc = v
+              else if (key == "remotecommand") { orc = v; dyn = dyn || D[k] }
               else if (key == "proxyjump" && !t) t = hops(v)
               else if (key ~ /^(proxycommand|localcommand|knownhostscommand)$/ && (lt = named(v))) lc = key
               else if (!t) t = named(v)
@@ -291,7 +297,7 @@ _G13_AWK='
       }
       if (w == "--") continue
       if (dest == "") { dest = w; continue }
-      inc = 1; rc = w
+      inc = 1; rc = w; dyn = D[k]
     }
     if (ctl == 2 || dest == "") return
     uhost(dest)
@@ -307,6 +313,7 @@ _G13_AWK='
     }
     if (!nin && stdin != "") deny("ssh to protected target " h " with input on stdin (" stdin ")")
     else if (!nin && FED) deny("ssh to protected target " h " with input piped to it")
+    if (dyn) deny("ssh to protected target " h ": the remote command is built at run time ($ or a backtick)")
     if (rc != "" && (why = rem(rc, 0)) != "") deny("ssh to protected target " h ": " why)
     if (orc != "" && (why = rem(orc, 0)) != "") deny("ssh -o RemoteCommand to protected target " h ": " why)
   }
@@ -319,6 +326,7 @@ _G13_AWK='
 
   function judge(b, k) {
     if (b == "ssh") j_ssh(k)
+    else if (b in SQLFAM) j_sql(k, b)
   }
 
   BEGIN {
@@ -335,11 +343,12 @@ _G13_AWK='
       "gci gc sls", ra, " ")
     for (k = 1; k <= nr; k++) READ[ra[k]] = 1
     JUDGE["ssh"] = 1
+    CMDTXT = ENVIRON["G13_CMD"]
   }
   { buf = buf (NR > 1 ? "\037" : "") $0 }
   END {
     qw(buf); N = qw_n
-    for (k = 1; k <= N; k++) { W[k] = qw_w[k]; R[k] = qw_r[k] }
+    for (k = 1; k <= N; k++) { W[k] = qw_w[k]; R[k] = qw_r[k]; D[k] = qw_d[k] }
     found = 0
     for (k = 1; k <= N; k++) if (!R[k] && ((b = base(W[k])) in JUDGE)) { found = 1; judge(b, k) }
     if (found) exit
@@ -347,12 +356,352 @@ _G13_AWK='
     for (k = 1; k <= N; k++) cw(W[k])
     if (!cw_n || !((b = base(cw_w[1])) in JUDGE)) exit
     N = cw_n
-    for (k = 1; k <= N; k++) { W[k] = cw_w[k]; R[k] = (k > 1 && W[k] ~ /^[0-9]*(<|>|&>)/) }
+    for (k = 1; k <= N; k++) { W[k] = cw_w[k]; R[k] = (k > 1 && W[k] ~ /^[0-9]*(<|>|&>)/); D[k] = (W[k] ~ /[$`]/) }
     judge(b, 1)
   }
 '
 
-# _g13_legacy CMD LIST: scp, rsync and sftp toward a target, and mutating SQL.
+# The SQL judge, appended to _G13_AWK. A client reaches a target when its host (-h, --host, a URL, a
+# conninfo host=, PGHOST= or MYSQL_HOST= in the command, else localhost) and its port (likewise, else
+# the client default) name one, or an option value names one as a whole host; sqlite3 when its file
+# is one. Then every statement in -e, -c, -Q, --init-command and every input file (-f, -i, <) is
+# proven: it starts with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH and holds no write, lock,
+# file or wait word, for every way the client may lex its strings. Piped, here-doc or run-time input,
+# a file G13 cannot read, and no statement at all are denied.
+# shellcheck disable=SC2016 # awk text
+_G13_SQL_AWK='
+  function j_sql(s, b,   fam, k, w, j, c, v, x, opt, pos, t, i, h, why, role) {
+    fam = SQLFAM[b]
+    nh = 0; np = 0; nst = 0; bad = ""; stdin = ""; dyn = 0; single = 0; locks = ""; pos = 0; dbf = ""; FBT = 0; vars = ""
+    for (k = s + 1; k <= N; k++) {
+      w = W[k]
+      if (R[k]) {
+        k = redir(k)
+        if (RO == "<") sqlfile(RT)
+        else if (RO ~ /^</) stdin = RO
+        continue
+      }
+      if (fam == "lite" && w ~ /^-/) {
+        opt = w; sub(/^--/, "-", opt)
+        if ((opt in LITEV) && k < N) {
+          v = W[++k]
+          if (opt == "-cmd") sqlst(v, D[k])
+          else if (opt == "-init") sqlfile(v)
+        }
+        continue
+      }
+      if (w ~ /^--./) {
+        opt = w; v = ""; x = 0
+        if ((j = index(w, "=")) > 0) { opt = substr(w, 1, j - 1); v = substr(w, j + 1); x = 1 }
+        role = ((b SUBSEP opt) in LONG) ? LONG[b, opt] : LONG[fam, opt]
+        if (role != "") {
+          if (!x && k < N) v = W[++k]
+          sqlopt(role, v, D[k], fam)
+        } else {
+          if (x) fb(v)
+          if (b ~ /dump$/) dumpopt(opt, v, x)
+        }
+        continue
+      }
+      if (w ~ /^-./) {
+        if (fam == "ms") {
+          c = substr(w, 2, 1)
+          if (index(SQLV[b], c)) { v = substr(w, 3); if (v == "" && k < N) v = W[++k]; sqlopt(ROLE[b, c], v, D[k], fam) }
+          continue
+        }
+        for (j = 2; j <= length(w); j++) {
+          c = substr(w, j, 1)
+          if (index(SQLV[b], c)) {
+            v = substr(w, j + 1)
+            if (v == "" && k < N) v = W[++k]
+            sqlopt(ROLE[b, c], v, D[k], fam)
+            break
+          }
+          if (fam == "my" && index("p#", c)) break
+          if (b ~ /dump$/ && index("lxF", c)) locks = locks " -" c
+          if (b == "psql" && c == "l") ST[++nst] = "\\l"
+        }
+        continue
+      }
+      if (fam == "lite") { if (++pos == 1) dbf = w; else sqlst(w, D[k]); continue }
+      conn(w); fb(w)
+    }
+    if (fam == "lite") t = litehit(dbf, s)
+    else {
+      if (nh == 0) { envscan(fam, "h"); H[++nh] = "localhost" }
+      if (np == 0) { envscan(fam, "p"); P[++np] = DEFPORT[fam] }
+      t = 0
+      for (i = 1; i <= nh && !t; i++) for (j = 1; j <= np && !t; j++) t = hit(H[i], P[j])
+      if (!t) t = FBT
+    }
+    if (!t) return
+    h = tr[t]
+    if (b in SQLREAD) return
+    if (b ~ /dump$/) {
+      if (!single) deny(b " of protected target " h " without --single-transaction locks tables")
+      if (locks != "") deny(b " of protected target " h " with" locks " takes a lock or writes")
+      return
+    }
+    if (!(b in SQLRUN)) { deny(b " against protected target " h ": kern proves reads only for mysql, mariadb, psql, sqlite3, sqlcmd, mysqldump and pg_dump"); return }
+    if (FED) deny("SQL to protected target " h " with input piped to " b)
+    if (stdin != "") deny("SQL to protected target " h " with input from " stdin)
+    if (bad != "") deny("SQL to protected target " h ": cannot read " bad)
+    if (dyn) deny("SQL to protected target " h " built at run time ($ or a backtick)")
+    if (nst == 0) { deny("SQL to protected target " h " with no statement opens an interactive " b); return }
+    for (i = 1; i <= nst; i++) if ((why = sqlok(ST[i], fam)) != "") { deny("SQL to protected target " h ": " why); break }
+    if (vars != "" && (index(vars, ";") || (why = sqlkw(sqlstrip(vars, fam, 1), fam, "")) != "")) deny("SQL to protected target " h ": a psql variable holds SQL")
+  }
+  # sqlopt(ROLE, V, DYN, FAM): h host, P port, S sqlcmd server, e statement, f file, d database or
+  # conninfo, v psql variable; anything else may still name a target.
+  function sqlopt(role, v, dy, fam,   n, a, i) {
+    if (role == "h") { n = split(v, a, ","); for (i = 1; i <= n; i++) H[++nh] = a[i] }
+    else if (role == "P") { n = split(v, a, ","); for (i = 1; i <= n; i++) P[++np] = a[i] }
+    else if (role == "S") sqlserver(v)
+    else if (role == "e") sqlst(v, dy)
+    else if (role == "f") { n = split(v, a, fam == "ms" ? "," : "\001"); for (i = 1; i <= n; i++) sqlfile(a[i]) }
+    else if (role == "d") { conn(v); fb(v) }
+    else if (role == "v") { sub(/^[^=]*=/, "", v); vars = vars " " v }
+    else fb(v)
+  }
+  # sqlserver(V): sqlcmd [tcp:]host[\instance][,port].
+  function sqlserver(v) {
+    sub(/^[A-Za-z]+:/, "", v)
+    if (match(v, /,[0-9]+$/)) { P[++np] = substr(v, RSTART + 1); v = substr(v, 1, RSTART - 1) }
+    sub(/\\.*/, "", v)
+    H[++nh] = v
+  }
+  function sqlst(v, dy) { ST[++nst] = v; if (dy) dyn = 1 }
+  function sqlfile(f,   t) {
+    if (f ~ /^(-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/) { stdin = "stdin"; return }
+    t = slurp(f)
+    if (SLURP_OK) ST[++nst] = t
+    else if (bad == "") bad = f
+  }
+  function slurp(f,   line, t, r) {
+    if (f ~ /^~\//) f = ENVIRON["HOME"] substr(f, 2)
+    else if (f !~ /^\//) f = ENVIRON["CWD"] "/" f
+    t = ""; SLURP_OK = 0
+    while ((r = (getline line < f)) > 0) t = t line "\n"
+    if (r < 0) return ""
+    close(f); SLURP_OK = 1
+    return t
+  }
+  # conn(W): hosts and ports from a URL or a conninfo string.
+  function conn(w,   hp, n, a, i, k, kv) {
+    if (w ~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\//) {
+      hp = w; sub(/^[^:]*:\/\//, "", hp); sub(/[\/?].*/, "", hp); sub(/.*@/, "", hp)
+      n = split(hp, a, ",")
+      for (i = 1; i <= n; i++) { uhost(a[i]); if (UH != "") H[++nh] = UH; if (UP != "") P[++np] = UP }
+      hp = w; sub(/^[^?]*\??/, "", hp); gsub(/&/, " ", hp); w = hp
+    }
+    n = split(w, a, /[ \t]+/)
+    for (i = 1; i <= n; i++) {
+      if (!(k = index(a[i], "="))) continue
+      kv = tolower(substr(a[i], 1, k - 1))
+      if (kv == "host" || kv == "hostaddr") sqlopt("h", substr(a[i], k + 1))
+      else if (kv == "port") sqlopt("P", substr(a[i], k + 1))
+    }
+  }
+  # fb(V): remembers the first target V names as a whole host.
+  function fb(v) { if (!FBT) FBT = named(v) }
+  # envscan(FAM, KIND): hosts or ports assigned anywhere in the command (PGHOST=x psql, export ...).
+  function envscan(fam, kind,   names, n, a, i, s, v) {
+    names = ENVN[fam, kind]
+    n = split(names, a, " ")
+    for (i = 1; i <= n; i++) {
+      s = CMDTXT
+      while (match(s, "(^|[^A-Za-z0-9_])" a[i] "=[^ \t;&|)]*")) {
+        v = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+        sub(/^[^=]*=/, "", v); v = unq(v)
+        if (kind == "p") P[++np] = v
+        else if (a[i] == "SQLCMDSERVER") sqlserver(v)
+        else H[++nh] = v
+      }
+    }
+  }
+  # litehit(F, S): the target the sqlite3 file F is, or a path target any later word holds.
+  function litehit(f, s,   k, e, lf, i) {
+    lf = lpath(f)
+    for (k = 1; k <= tn; k++) {
+      e = tolower(tr[k])
+      if (index(e, "/")) { if (f != "" && lf == lpath(e)) return k; for (i = s + 1; i <= N; i++) if (index(tolower(W[i]), e)) return k }
+      else if (f != "" && (tolower(f) == e || substr(lf, length(lf) - length(e)) == "/" e)) return k
+    }
+    return 0
+  }
+  function lpath(p) {
+    if (p ~ /^~\//) p = ENVIRON["HOME"] substr(p, 2)
+    else if (p !~ /^\//) p = ENVIRON["CWD"] "/" p
+    return tolower(p)
+  }
+  function dumpopt(opt, v, x,   off) {
+    off = x && tolower(v) ~ /^(0|off|false)$/
+    if (opt == "--single-transaction") single = !off
+    else if (opt ~ /^--(skip|disable)-single-transaction$/) single = 0
+    else if (!off && opt ~ /^--(lock-tables|lock-all-tables|master-data|source-data|flush-logs|flush-privileges|delete-master-logs|delete-source-logs|dump-slave|dump-replica|lock-for-backup)$/) locks = locks " " opt
+  }
+
+  # sqlok(TEXT, FAM): "" when every statement in TEXT reads, under each way FAM may lex strings
+  # (mysql: backslash escapes on or off; psql: in E strings only, or everywhere).
+  function sqlok(text, fam,   n, a, i, why) {
+    n = split(LEX[fam], a, " ")
+    for (i = 1; i <= n; i++) if ((why = sqlvar(text, fam, a[i])) != "") return why
+    return ""
+  }
+  function sqlvar(text, fam, bs,   s, c, e, rest, n, a, i, why, line, out) {
+    gsub(/\037/, "\n", text)
+    s = sqlstrip(text, fam, bs)
+    if (fam == "my") {
+      while (match(s, /\\./)) {
+        c = substr(s, RSTART + 1, 1)
+        if (c != "g" && c != "G") return "mysql client command \\" c
+        s = substr(s, 1, RSTART - 1) ";" substr(s, RSTART + 2)
+      }
+    } else if (fam == "pg") {
+      while (match(s, /\\[^ \t\n;]*/)) {
+        c = substr(s, RSTART + 1, RLENGTH - 1); e = RSTART; rest = substr(s, RSTART)
+        if (c !~ /^(d[A-Za-z+]*|l\+?|x|q|g|gx|conninfo|timing)$/) return "psql meta-command \\" c
+        s = substr(s, 1, e - 1) ";" (match(rest, /\n/) ? substr(rest, RSTART) : "")
+      }
+    } else {
+      n = split(s, a, "\n"); out = ""
+      for (i = 1; i <= n; i++) {
+        line = a[i]
+        if (fam == "lite" && line ~ /^[ \t]*\./) {
+          c = line; sub(/^[ \t]*\./, "", c); sub(/[ \t].*/, "", c)
+          if (!(tolower(c) in LITEDOT)) return "sqlite3 dot command ." c
+          line = ";"
+        }
+        if (fam == "ms") {
+          if (tolower(line) ~ /^[ \t]*go([ \t]+[0-9]+)?[ \t]*$/) line = ";"
+          else if (line ~ /^[ \t]*(:|!!)/) return "sqlcmd command " line
+          else if (index(line, "$(")) return "sqlcmd variable in " line
+        }
+        out = out line "\n"
+      }
+      s = out
+    }
+    n = split(s, a, ";")
+    for (i = 1; i <= n; i++) if ((why = sqlstmt(a[i], fam)) != "") return why
+    return ""
+  }
+  # sqlstrip(S, FAM, BS): S with comments removed and strings and quoted names replaced by an empty
+  # string; a MySQL /*! or /*M! comment is code. BS 1: a backslash escapes in every string; e: only
+  # in an E string; 0: never. psql also has dollar quotes; only mysql has # comments and backticks.
+  function sqlstrip(s, fam, bs,   n, i, c, nx, out, j, q, esc, e, tag) {
+    n = length(s); out = ""
+    for (i = 1; i <= n; i++) {
+      c = substr(s, i, 1); nx = substr(s, i + 1, 1)
+      if ((c == "-" && nx == "-" && index(" \t\n", substr(s, i + 2, 1))) || (c == "#" && fam == "my")) {
+        while (i < n && substr(s, i + 1, 1) != "\n") i++
+        out = out " "; continue
+      }
+      if (c == "/" && nx == "*") {
+        if (substr(s, i + 2, 1) == "!" || substr(s, i + 2, 2) == "M!") {
+          i += (substr(s, i + 2, 1) == "!") ? 2 : 3
+          while (substr(s, i + 1, 1) ~ /[0-9]/) i++
+          out = out " "; continue
+        }
+        e = index(substr(s, i + 2), "*/")
+        if (!e) break
+        i += e + 2; out = out " "; continue
+      }
+      if (c == "*" && nx == "/") { i++; out = out " "; continue }
+      if (c == sq || c == "\"" || (c == "`" && fam == "my")) {
+        esc = (bs == 1) || (bs == "e" && c == sq && i > 1 && substr(s, i - 1, 1) ~ /[eE]/ && (i == 2 || substr(s, i - 2, 1) !~ /[A-Za-z0-9_]/))
+        for (j = i + 1; j <= n; j++) {
+          q = substr(s, j, 1)
+          if (esc && q == "\\") { j++; continue }
+          if (q == c) { if (substr(s, j + 1, 1) == c) { j++; continue }; break }
+        }
+        out = out " "; i = j; continue
+      }
+      if (c == "$" && fam == "pg" && (i == 1 || substr(s, i - 1, 1) !~ /[A-Za-z0-9_$]/) && match(substr(s, i), /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/)) {
+        tag = substr(s, i, RLENGTH)
+        e = index(substr(s, i + RLENGTH), tag)
+        if (!e) { out = out " "; break }
+        i += RLENGTH + e + length(tag) - 2; out = out " "; continue
+      }
+      out = out c
+    }
+    return out
+  }
+  # sqlstmt(ST, FAM): one statement starts with a read word and holds no write, lock, file or wait word.
+  function sqlstmt(st, fam,   rest, n, tk, x, i, w) {
+    rest = tolower(st); n = 0
+    while (match(rest, /[a-z_][a-z0-9_$]*/)) { tk[++n] = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH) }
+    x = tolower(st); gsub(/^[ \t\n(]+/, "", x)
+    if (x == "") return ""
+    if (!n || !(tk[1] in SQLHEAD) || index(x, tk[1]) != 1) { x = substr(x, 1, 24); gsub(/[\n\t]/, " ", x); return "statement `" x "` is not a read" }
+    return sqlkw(st, fam, tk[1])
+  }
+  # sqlkw(S, FAM, HEAD): "" unless S holds a write, lock, file or wait word.
+  function sqlkw(s, fam, head,   rest, w, p) {
+    rest = tolower(s); p = ""
+    while (match(rest, /[a-z_][a-z0-9_$]*/)) {
+      w = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+      if (head == "show" && (w == "create" || w == "set")) { p = w; continue }
+      if ((w in SQLANY) || (fam == "ms" && (w in MSANY)) || w ~ /^(pg_advisory_|pg_try_advisory_|pg_stat_reset|pg_replication_origin_)/) return "`" w "` writes, locks or waits"
+      if (w == "share" && (p == "for" || p == "key")) return "`" p " share` locks rows"
+      p = w
+    }
+    return ""
+  }
+  BEGIN {
+    n = split("mysql mariadb mysqldump mariadb-dump mysqladmin mariadb-admin mysqlimport mariadb-import mysqlcheck " \
+      "mariadb-check mysqlshow mariadb-show mysqlpump mysqlslap mariadb-slap mysqlbinlog mariadb-binlog mysql_upgrade " \
+      "mariadb-upgrade mysqlsh", a, " ")
+    for (i = 1; i <= n; i++) { SQLFAM[a[i]] = "my"; SQLV[a[i]] = "hPSu"; ROLE[a[i], "h"] = "h"; ROLE[a[i], "P"] = "P" }
+    SQLV["mysql"] = SQLV["mariadb"] = "DehPSu"; ROLE["mysql", "e"] = ROLE["mariadb", "e"] = "e"
+    SQLV["mysqldump"] = SQLV["mariadb-dump"] = "hPSurwT"
+    n = split("psql pg_dump pg_dumpall pg_restore pg_isready", a, " ")
+    for (i = 1; i <= n; i++) { SQLFAM[a[i]] = "pg"; ROLE[a[i], "h"] = "h"; ROLE[a[i], "p"] = "P"; ROLE[a[i], "d"] = "d" }
+    SQLV["psql"] = "cdfhpUvoLPFRT"; ROLE["psql", "c"] = "e"; ROLE["psql", "f"] = "f"; ROLE["psql", "v"] = "v"
+    SQLV["pg_dump"] = "dfFhjnNpSTtUZe"; SQLV["pg_dumpall"] = "dfhlpSU"; SQLV["pg_restore"] = "dfFhIjLnNpPSTtUe"; SQLV["pg_isready"] = "dhptU"
+    SQLFAM["sqlite3"] = SQLFAM["sqlite"] = "lite"
+    SQLFAM["sqlcmd"] = "ms"; SQLV["sqlcmd"] = "SUPdQqiovHltswacfkyYmLAGeh"
+    ROLE["sqlcmd", "S"] = "S"; ROLE["sqlcmd", "Q"] = ROLE["sqlcmd", "q"] = "e"; ROLE["sqlcmd", "i"] = "f"
+    n = split("my pg ms", a, " ")
+    for (i = 1; i <= n; i++) { LONG[a[i], "--host"] = "h"; LONG[a[i], "--port"] = "P" }
+    LONG["mysql", "--execute"] = LONG["mariadb", "--execute"] = "e"
+    LONG["mysql", "--init-command"] = LONG["mariadb", "--init-command"] = "e"
+    LONG["mysql", "--init-command-add"] = LONG["mariadb", "--init-command-add"] = "e"
+    LONG["pg", "--dbname"] = "d"; LONG["psql", "--command"] = "e"; LONG["psql", "--file"] = "f"
+    LONG["psql", "--set"] = LONG["psql", "--variable"] = "v"
+    LONG["ms", "--server"] = "S"; LONG["ms", "--query"] = "e"; LONG["ms", "--input-file"] = "f"
+    n = split("-cmd -init -separator -newline -nullvalue -vfs -mmap -heap -maxsize -escape", a, " ")
+    for (i = 1; i <= n; i++) LITEV[a[i]] = 1
+    n = split("tables schema indexes indices databases headers mode dbinfo quit exit show help width fullschema", a, " ")
+    for (i = 1; i <= n; i++) LITEDOT[a[i]] = 1
+    DEFPORT["my"] = 3306; DEFPORT["pg"] = 5432; DEFPORT["ms"] = 1433
+    ENVN["my", "h"] = "MYSQL_HOST"; ENVN["my", "p"] = "MYSQL_TCP_PORT"
+    ENVN["pg", "h"] = "PGHOST PGHOSTADDR"; ENVN["pg", "p"] = "PGPORT"; ENVN["ms", "h"] = "SQLCMDSERVER"
+    LEX["my"] = "1 0"; LEX["pg"] = "e 1"; LEX["lite"] = "0 1"; LEX["ms"] = "0 1"
+    n = split("mysql mariadb psql sqlite3 sqlite sqlcmd", a, " ")
+    for (i = 1; i <= n; i++) SQLRUN[a[i]] = 1
+    n = split("pg_dump pg_dumpall pg_isready mysqlshow mariadb-show mysqlbinlog mariadb-binlog", a, " ")
+    for (i = 1; i <= n; i++) SQLREAD[a[i]] = 1
+    n = split("select show describe desc explain with", a, " ")
+    for (i = 1; i <= n; i++) SQLHEAD[a[i]] = 1
+    n = split("insert update delete merge drop create alter grant revoke lock unlock into outfile dumpfile " \
+      "get_lock release_lock release_all_locks sleep benchmark pg_sleep pg_sleep_for pg_sleep_until " \
+      "pg_terminate_backend pg_cancel_backend pg_reload_conf pg_rotate_logfile pg_switch_wal pg_switch_xlog " \
+      "pg_promote pg_create_restore_point set_config setval nextval lo_import lo_export lo_unlink lo_create " \
+      "lo_creat lo_put lo_from_bytea lo_truncate pg_file_write pg_file_unlink pg_file_rename pg_file_sync dblink " \
+      "dblink_exec dblink_connect dblink_send_query query_to_xml query_to_xml_and_xmlschema query_to_xmlschema " \
+      "pg_drop_replication_slot pg_create_physical_replication_slot pg_create_logical_replication_slot " \
+      "pg_logical_emit_message pg_backup_start pg_backup_stop pg_start_backup pg_stop_backup " \
+      "pg_import_system_collations pg_wal_replay_pause pg_wal_replay_resume sys_exec sys_eval master_pos_wait " \
+      "source_pos_wait wait_for_executed_gtid_set wait_until_sql_thread_after_gtids", a, " ")
+    for (i = 1; i <= n; i++) SQLANY[a[i]] = 1
+    n = split("exec execute kill shutdown truncate backup restore dbcc waitfor reconfigure openrowset " \
+      "opendatasource openquery bulk", a, " ")
+    for (i = 1; i <= n; i++) MSANY[a[i]] = 1
+    for (b in SQLFAM) JUDGE[b] = 1
+  }
+'
+
+# _g13_legacy CMD LIST: scp, rsync and sftp toward a target.
 _g13_legacy() {
   local cmd="$1" seg rest target
   rest="$2,"
@@ -367,7 +716,6 @@ _g13_legacy() {
     done <<EOT
 $(git_words "$cmd")
 EOT
-    _g13_sql "$cmd" "$target"
   done
 }
 
@@ -384,18 +732,4 @@ _g13_segment() {
         vote deny G13 "sftp write to protected target $target"
       ;;
   esac
-}
-
-# _g13_sql CMD TARGET: mutating SQL in the command, or in a file it feeds with -f, --file or <.
-_g13_sql() {
-  local cmd="$1" target="$2" text f
-  text="$cmd"
-  for f in $(printf '%s\n' "$cmd" | grep -Eo '(-f|--file=?|<)[[:space:]]*[^[:space:];|&]+\.sql' | sed -E 's/^(-f|--file=?|<)[[:space:]]*//'); do
-    case "$f" in /*) ;; *) f="$CWD/$f" ;; esac
-    [ -f "$f" ] && text="$text
-$(cat "$f")"
-  done
-  printf '%s\n' "$text" | grep -Eiq '(^|[^a-z_])(insert[[:space:]]+into|update[[:space:]]+[a-z_."`]+[[:space:]]+set|delete[[:space:]]+from|drop[[:space:]]+(table|database|schema|index|view)|alter[[:space:]]+(table|database|schema)|truncate|create[[:space:]]+(table|database|schema|index)|grant[[:space:]]|revoke[[:space:]]|lock[[:space:]]+tables|set[[:space:]]+global|kill[[:space:]]+[0-9])' &&
-    vote deny G13 "mutating SQL against protected target $target"
-  return 0
 }

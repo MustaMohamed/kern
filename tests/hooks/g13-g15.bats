@@ -118,6 +118,99 @@ EOF"
     "git commit -m 'ssh v1-host is read-only'" "grep -rn 'ssh v1-host' docs"
 }
 
+@test "G13: SQL to a target is SELECT, SHOW, DESCRIBE, EXPLAIN or WITH with no write, lock, file or wait" {
+  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "psql -h prod-db.internal -c 'UPDATE users2 SET a=1'" "psql -h prod-db.internal -c 'UPDATE users u SET a=1'" \
+    "psql -h prod-db.internal -c 'UPDATE ONLY users SET a=1'" "psql -h prod-db.internal -c 'UPDATE/**/users/**/SET a=1'" \
+    "mysql -h prod-db.internal -e 'INSERT users VALUES (1)'" "mysql -h prod-db.internal -e 'REPLACE INTO users VALUES (1)'" \
+    "psql -h prod-db.internal -c 'MERGE INTO users USING x ON true WHEN MATCHED THEN DELETE'" \
+    "psql -h prod-db.internal -c \"COPY users FROM '/tmp/x.csv'\"" "psql -h prod-db.internal -c 'DROP FUNCTION f()'" \
+    "psql -h prod-db.internal -c 'CREATE OR REPLACE VIEW v AS SELECT 1'" "mysql -h prod-db.internal -e 'RENAME TABLE a TO b'" \
+    "psql -h prod-db.internal -c 'CALL purge()'" "psql -h prod-db.internal -c 'VACUUM FULL users'" \
+    "mysql -h prod-db.internal -e 'KILL QUERY 5'" "mysql -h prod-db.internal -e 'SET PERSIST max_connections=1'" \
+    "psql -h prod-db.internal -c 'SELECT pg_terminate_backend(5)'" "psql -h prod-db.internal -c \"SELECT nextval('s')\"" \
+    "mysql -h prod-db.internal -e \"SELECT * FROM users INTO OUTFILE '/tmp/x'\"" \
+    "mysql -h prod-db.internal -e 'SELECT * FROM users FOR UPDATE'" "psql -h prod-db.internal -c 'SELECT * FROM users FOR SHARE'" \
+    "mysql -h prod-db.internal -e 'SELECT * FROM users LOCK IN SHARE MODE'" "mysql -h prod-db.internal -e 'SELECT SLEEP(100)'" \
+    "mysql -h prod-db.internal -e 'SELECT BENCHMARK(1000000, MD5(1))'" \
+    "psql -h prod-db.internal -c 'WITH d AS (DELETE FROM users RETURNING *) SELECT * FROM d'" \
+    "mysql -h prod-db.internal -e 'SELECT 1; DELETE FROM users'" "mysql -h prod-db.internal -e 'SELECT 1 /*!50000 ; DELETE FROM users */'" \
+    "mysql -h prod-db.internal -e \"SELECT 'a\\'; DELETE FROM users; -- '\"" \
+    "psql -h prod-db.internal -c \"SELECT E'x\\'', 'y\\'; DELETE FROM users; --'\"" \
+    "mysql -h prod-db.internal -e 'SELECT 1' --init-command='DELETE FROM users'" \
+    "mysql -h prod-db.internal -e 'SELECT 1\\! rm -rf /tmp/x'" "sqlcmd -S prod-db.internal -Q 'SELECT 1 DELETE FROM users'"
+}
+
+@test "G13: LOCK TABLES and GET_LOCK against a target are denied in both modes" {
+  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  for ap in off on; do
+    set_autopilot "$ap"
+    g13_all deny "mysql -h prod-db.internal -e 'LOCK TABLES users READ'" "psql -h prod-db.internal -c 'LOCK TABLE users'" \
+      "mysql -h prod-db.internal -e \"SELECT GET_LOCK('x', 10)\"" "mysql -h prod-db.internal -e 'UNLOCK TABLES'"
+  done
+}
+
+@test "G13: SQL reads against a target, and SQL words outside a client, get no vote" {
+  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  printf 'SELECT id FROM users;\n-- never DELETE here\nSHOW TABLES;\n' >"$R/read.sql"
+  g13_all none "mysql -h prod-db.internal -e 'SHOW GRANTS'" "mysql -h prod-db.internal -e 'SHOW CREATE TABLE users'" \
+    "mysql -h prod-db.internal -Nse 'SELECT id FROM users LIMIT 1'" "psql -h prod-db.internal -Atc 'SELECT 1'" \
+    "psql -h prod-db.internal -c \"SELECT 'update x set' FROM t\"" \
+    "psql -h prod-db.internal -c 'SELECT * FROM users WHERE note = \$\$truncate\$\$'" \
+    "mysql -h prod-db.internal -e 'SELECT REPLACE(name, \"a\", \"b\") FROM users; DESCRIBE users; EXPLAIN SELECT 1'" \
+    "mysql -h prod-db.internal -e 'SELECT 1 -- DELETE FROM users'" "mysql -h prod-db.internal -e 'SELECT * FROM t\\G'" \
+    "psql -h prod-db.internal -c 'WITH x AS (SELECT 1) SELECT * FROM x'" "psql -h prod-db.internal -f read.sql" \
+    "mysql -h prod-db.internal < read.sql" "psql -h prod-db.internal -l" "pg_dump -h prod-db.internal -f out.sql appdb" \
+    "mysql -h other-db -e 'DELETE FROM users'" "git commit -m 'docs: never DELETE FROM users on prod-db.internal'" \
+    "grep -rn 'DROP TABLE' docs/prod-db.internal.md"
+}
+
+@test "G13: SQL input G13 cannot read is denied: files of any name, pipes, here-docs, run-time text, none at all" {
+  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  printf 'DELETE FROM users;\n' >"$R/fix.txt"
+  printf 'DELETE FROM users;\n' >"$R/fix"
+  printf 'DELETE FROM users;\n' >"$R/fix.psql"
+  printf 'DELETE FROM users;\n' >"$HOME/fix.sql"
+  g13_all deny "mysql -h prod-db.internal < fix.txt" "mysql -h prod-db.internal < fix" "mysql -h prod-db.internal <fix.txt" \
+    "cat fix.txt | mysql -h prod-db.internal" "psql -h prod-db.internal -f ~/fix.sql" "psql -h prod-db.internal -f fix.psql" \
+    "psql -h prod-db.internal -f missing.sql" "mysql -h prod-db.internal <<< 'SELECT 1'" \
+    "psql -h prod-db.internal -c \"\$(cat fix.txt)\"" "mysql -h prod-db.internal -e \"SELECT \$(cat fix.txt)\"" \
+    "mysql -h prod-db.internal" "caffeinate psql -h prod-db.internal -c 'UPDATE users SET a=1'" \
+    "PSQL -h prod-db.internal -c 'UPDATE users SET a=1'" "/usr/bin/mysql -h prod-db.internal -e 'DELETE FROM users'" \
+    "PGHOST=prod-db.internal psql -c 'DELETE FROM users'" "mysqladmin -h prod-db.internal shutdown" \
+    "pg_restore -h prod-db.internal -d app dump.bin"
+  g13_all deny "psql -h prod-db.internal <<'EOF'
+DELETE FROM users;
+EOF"
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "ssh v1-host \"ls \$(cat names.txt)\""
+}
+
+@test "G13: a host:port entry protects a database behind an SSH tunnel" {
+  printf 'protected_targets: 127.0.0.1:3307\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "mysql -h 127.0.0.1 -P 3307 -e 'DELETE FROM users'" "mysql -h127.0.0.1 -P3307 -e 'DELETE FROM users'" \
+    "mysql --host=localhost --port=3307 -e 'DELETE FROM users'" "mysql --host 127.0.0.1 --port 3307 -e 'LOCK TABLES users READ'" \
+    "mysql -P 3307 -e 'DELETE FROM users'" "MYSQL_TCP_PORT=3307 mysql -h 127.0.0.1 -e 'DELETE FROM users'" \
+    "psql postgresql://u@localhost:3307/app -c 'DELETE FROM users'" \
+    "psql 'host=127.0.0.1 port=3307 dbname=app' -c 'DELETE FROM users'"
+  g13_all none "mysql -h 127.0.0.1 -P 3306 -e 'DELETE FROM users'" "mysql -h 127.0.0.1 -e 'DELETE FROM users'" \
+    "mysql -h 127.0.0.1 -P 3307 -e 'SELECT 1'" "psql -h localhost -p 5432 -c 'DELETE FROM users'"
+}
+
+@test "G13: mysqldump of a target needs --single-transaction and no lock option; pg_dump reads" {
+  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "mysqldump -h prod-db.internal app" "mysqldump -h prod-db.internal --single-transaction --lock-tables app" \
+    "mysqldump -h prod-db.internal --single-transaction -x app" "mysqldump -h prod-db.internal --single-transaction --master-data=2 app" \
+    "mysqldump -h prod-db.internal --single-transaction=0 app"
+  g13_all none "mysqldump -h prod-db.internal --single-transaction app > dump.sql" "pg_dump -h prod-db.internal app"
+}
+
+@test "G13: sqlite3 votes only when its file is a target" {
+  printf 'protected_targets: /srv/prod.db\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "sqlite3 /srv/prod.db 'DELETE FROM t'" "sqlite3 /srv/prod.db '.import x.csv t'"
+  g13_all none "sqlite3 /srv/prod.db 'SELECT count(*) FROM t'" "sqlite3 dev.db 'DELETE FROM t'"
+}
+
 @test "G14: a tracker write asks, a read does not vote, autopilot denies" {
   mcp mcp__claude_ai_Linear__save_issue
   [ "$(decision_of "$output")" = ask ]
