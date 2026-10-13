@@ -157,6 +157,13 @@ _g16_redirects() {
 _g16_bash() {
   local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0
   cmd=$(ti_get command) || return 0
+  # _g16_names on the raw text, in any case, before the four tr processes below. The sessions dir
+  # ends in sessions, so its path needs no pattern of its own.
+  case "$cmd" in
+    *[Ss][Ee][Ss][Ss][Ii][Oo][Nn][Ss]* | *.[Ss][Tt][Aa][Tt][Ee]* | *[Kk][Ee][Rr][Nn].[Yy][Mm][Ll]* | \
+      *[Kk][Ee][Rr][Nn].[Ll][Oo][Cc][Aa][Ll].[Yy][Mm][Ll]*) ;;
+    *) return 0 ;;
+  esac
   cmd=$(_g16_lower "$cmd")
   _G16_SD=$(_g16_lower "$(state_dir)")
   _G16_SID=$(_g16_lower "${SID-}")

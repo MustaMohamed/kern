@@ -277,3 +277,19 @@ expect_cmd() {
   expect_bash ask "echo kern: off >> .claude/kern.local.yml"
   expect_bash none "cat .claude/kern.local.yml" "grep policy $R/.claude/kern.yml"
 }
+
+@test "a command that names neither state nor settings costs G16 no lower-casing; any case still counts" {
+  local real
+  real=$(command -v tr)
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  # A tr shim logs each lower-casing call.
+  printf '#!/bin/bash\ncase "$*" in *"[:upper:]"*) echo tr >>"%s/tr.log" ;; esac\nexec %s "$@"\n' \
+    "$BATS_TEST_TMPDIR" "$real" >"$BATS_TEST_TMPDIR/bin/tr"
+  chmod +x "$BATS_TEST_TMPDIR/bin/tr"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  run_guard "$(bash_payload "ls -la")" g16
+  [ "$(decision_of "$output")" = none ]
+  [ ! -e "$BATS_TEST_TMPDIR/tr.log" ]
+  expect_bash ask "echo kern: off >> .Claude/Kern.Local.YML" "sed -i '' s/ask/auto/ $R/.claude/KERN.yml"
+  expect_bash deny "echo on > $(printf '%s' "$S" | tr '[:lower:]' '[:upper:]')/A.State"
+}
