@@ -49,7 +49,7 @@ Policy keys take `ask` (default), `auto` or `deny`. Floor actions have no key an
 | `pr.template` | detected | path | kern-detect, finish-branch |
 | `rebase.push` | `ask` | `ask`, `autopilot` | pre-tool-use (G1), take-feedback |
 | `stack.tool` | detected | `gh-stack`, `git`, `none` | take-feedback, finish-branch |
-| `protected_targets` | none | comma list of hosts, DSN fragments or profiles | pre-tool-use (G13), diagnose |
+| `protected_targets` | none | comma list; each entry matches an exact host (any case, also as user@host or in a URL), a host:port (localhost, 127.0.0.1 and ::1 are one host), or an sqlite file path; list every ssh alias and each SSH tunnel's local host:port | pre-tool-use (G13), diagnose |
 | `evidence_agents` | none | comma list of project agents for read-only data | diagnose |
 | `never_commit` | none | comma list of path globs | pre-tool-use (G6), commit |
 | `review.rules` | CLAUDE.md, `.claude/rules/**`, CONTRIBUTING.md | comma list of paths | self-review, execute-plan, pr-review |
@@ -75,3 +75,5 @@ Policy keys take `ask` (default), `auto` or `deny`. Floor actions have no key an
 | `stack` | detected | text | architect, build-ui, implement |
 | `overrides.<job>` | none; a same-name project skill is found by session-start | project skill name, or `off` | session-start, every skill |
 | `route.<name>` | none | project skill name, or `off` | session-start |
+
+G13 allows only proven reads to a `protected_targets` entry and denies everything else, in both modes.
