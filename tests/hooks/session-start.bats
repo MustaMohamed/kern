@@ -234,6 +234,17 @@ start_without() {
     { echo "$out"; return 1; }
 }
 
+@test "with POSIXLY_CORRECT set, a missing library still gives the one line" {
+  rm -rf "$BATS_TEST_TMPDIR/k"
+  mkdir -p "$BATS_TEST_TMPDIR/k"
+  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/"
+  rm "$BATS_TEST_TMPDIR/k/hooks/lib/state.sh"
+  out=$(POSIXLY_CORRECT=1 bash "$BATS_TEST_TMPDIR/k/hooks/session-start" 2>/dev/null <<<"$(payload SessionStart '"source":"startup"')") ||
+    { echo "status $?"; return 1; }
+  [ "$out" = "kern did not load: hooks/lib/state.sh is missing or broken; guards ask on every call; reinstall kern" ] ||
+    { echo "$out"; return 1; }
+}
+
 @test "session-start checks every function each library it loads defines" {
   local lib
   for lib in json.sh settings.sh state.sh render.sh; do

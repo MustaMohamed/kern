@@ -162,6 +162,15 @@ without_lib() {
   [ "$(parsed_decision "$out")" = deny ]
 }
 
+@test "with POSIXLY_CORRECT set, a missing hook library still gives the G0 ask" {
+  # In POSIX mode a failing "." exits the shell before "|| no_lib" can run.
+  without_lib settings.sh
+  out=$(POSIXLY_CORRECT=1 bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$(bash_payload "git push --force origin main")") ||
+    { echo "status $?"; return 1; }
+  [ "$(parsed_decision "$out")" = ask ] || { echo "$out"; return 1; }
+  [[ "$out" == *'"kern G0: hook library settings.sh did not load; reinstall kern"'* ]] || false
+}
+
 @test "a hook library that sources but lacks a function the dispatcher calls gives ask" {
   without_lib settings.sh
   { cat "$K/hooks/lib/settings.sh"; printf 'unset -f kern_enabled\n'; } >"$BATS_TEST_TMPDIR/k/hooks/lib/settings.sh"

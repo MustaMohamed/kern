@@ -3,6 +3,9 @@
 # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export KERN_ROOT
+# POSIXLY_CORRECT in the environment starts bash in POSIX mode, where a "." that fails exits the
+# shell before "|| no_lib" runs.
+set +o posix
 
 # no_lib NAME: library NAME did not load, so no guard can run. Prints the decision without any
 # library: ask, or deny under bypassPermissions, where an ask might not stop the call. Reads the hook
