@@ -1080,3 +1080,13 @@ key AKIAABCDEFGHIJKLMNOP"
     expect none g06 "git $s && git commit -m 'CDS-2465: x'" || return 1
   done
 }
+
+@test "G6: a -C or GIT_DIR inside env -S could not be scanned" {
+  mkdir -p "$R/sub"
+  local c cmds=("env -S '-C sub git commit -m CDS-2465:x'" "env -S 'GIT_DIR=.git' git commit -m 'CDS-2465: x'"
+    "env --split-string='-C sub' git push")
+  for c in "${cmds[@]}"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+}

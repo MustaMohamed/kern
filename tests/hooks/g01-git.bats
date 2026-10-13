@@ -709,3 +709,19 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   set_autopilot on
   expect deny "git imap-send < 0001-x.patch"
 }
+
+@test "env -S reads its value as words, so a -C inside it leaves the directory unknown" {
+  local W="$BATS_TEST_TMPDIR/wt" c
+  export CWD="$W"
+  for c in "env -S '-C $R git reset --hard'" "env -iS '-C $R git switch main'" "env --split-string='-C $R git stash'" \
+    "env -S '-u X -C $R' git reset --hard" "env -S 'A=1 -C$R' git checkout -B main origin/main"; do
+    g1q "$c"
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *"or under env -C or sudo -D"* ]] || { echo "$c -> $output"; return 1; }
+  done
+  set_autopilot on
+  g1q "env -S '-C $R git reset --hard'"
+  [ "$(decision_of "$output")" = deny ]
+  g1q "env -S 'A=1' git -C $W reset --hard"
+  [ "$(decision_of "$output")" = none ]
+}

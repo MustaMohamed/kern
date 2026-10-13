@@ -113,6 +113,9 @@ EOT
 # options are _cmd_words' `cw_opt`); +NAME when the assignment outlives the record (an export or
 # declare -x command, behind wrappers or not, or a record that is only assignments); @cwd when env
 # -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory. Never a substring of an argument.
+# The value of env -S or --split-string (attached or the next word, after the flags -0 -i -v in a
+# cluster) is read first as words, split as _cmd_words' cw_line splits it, so a -C or an assignment
+# inside it counts.
 _g05_env() {
   _shell_words "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     BEGIN {
@@ -120,27 +123,39 @@ _g05_env() {
       for (k = 1; k <= n; k++) wrap[a[k]] = 1
     }
     function asg(s) { sub(/\+?=.*/, "", s); names[++m] = s }
-    dx && /^-/ { if ($0 ~ /x/) ex = 1; next }
-    dx { dx = 0; if (!ex) done = 1 }
-    ex { if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) asg($0); next }
-    done { next }
-    skip { skip = 0; next }
-    /^[0-9]*(<|>|&>)/ { if ($0 ~ /^[0-9]*[<>&|]+$/) skip = 1; next }
-    /^(if|then|elif|else|do|while|until|!|\{)$/ { w = ""; next }
-    /^[A-Za-z_][A-Za-z0-9_]*\+?=/ { asg($0); next }
-    { b = P[split($0, P, "/")]; lb = tolower(b) }
-    lb in wrap { w = lb; dur = (lb == "timeout"); next }
-    /^-/ && w != "" {
-      if (w == "env" && ($0 ~ /^--c/ || $0 ~ /^-[^-]*C/)) print "@cwd"
-      if (w == "sudo" && ($0 ~ /^--c[hr]/ || $0 ~ /^-[^-]*[DR]/)) print "@cwd"
-      if (index(cw_opt[w], " " $0 " ")) skip = 1
-      next
+    # evl(s): the words of an env -S line, in order.
+    function evl(s,   p, k, c) { c = split(s, p, /[ \t\037]+/); for (k = 1; k <= c; k++) if (p[k] != "") ev(p[k]) }
+    # ev(x): one word of the record, in order.
+    function ev(x,   b, P, v) {
+      if (sv) { sv = 0; evl(x); return }
+      if (dx && x ~ /^-/) { if (x ~ /x/) ex = 1; return }
+      if (dx) { dx = 0; if (!ex) done = 1 }
+      if (ex) { if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) asg(x); return }
+      if (done) return
+      if (skip) { skip = 0; return }
+      if (x ~ /^[0-9]*(<|>|&>)/) { if (x ~ /^[0-9]*[<>&|]+$/) skip = 1; return }
+      if (x ~ /^(if|then|elif|else|do|while|until|!|\{)$/) { w = ""; return }
+      if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) { asg(x); return }
+      b = P[split(x, P, "/")]; lb = tolower(b)
+      if (lb in wrap) { w = lb; dur = (lb == "timeout"); return }
+      if (x ~ /^-/ && w != "") {
+        if (w == "env" && x ~ /^(-[0iv]*S|--split-string(=|$))/) {
+          v = x; sub(/^(-[0iv]*S|--split-string=?)/, "", v)
+          if (v != "") evl(v); else sv = 1
+          return
+        }
+        if (w == "env" && (x ~ /^--c/ || x ~ /^-[^-]*C/)) print "@cwd"
+        if (w == "sudo" && (x ~ /^--c[hr]/ || x ~ /^-[^-]*[DR]/)) print "@cwd"
+        if (index(cw_opt[w], " " x " ")) skip = 1
+        return
+      }
+      if (dur) { dur = 0; return }
+      # The command word: export, declare and typeset assign for the records after.
+      if (b == "export") { ex = 1; return }
+      if (b == "declare" || b == "typeset") { dx = 1; return }
+      done = 1
     }
-    dur { dur = 0; next }
-    # The command word: export, declare and typeset assign for the records after.
-    b == "export" { ex = 1; next }
-    b == "declare" || b == "typeset" { dx = 1; next }
-    { done = 1 }
+    { ev($0) }
     END { for (k = 1; k <= m; k++) print ((ex || !done) ? "+" : "") names[k] }'
 }
 
