@@ -110,7 +110,7 @@ git_words() {
       *) continue ;;
     esac
     inner=$(_cmd_words "$seg" | LC_ALL=C awk '
-      NR == 1 { b = $0; sub(/.*\//, "", b); b = tolower(b); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
+      NR == 1 { b = tolower(P[split($0, P, "/")]); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
       e { out = out (o++ ? " " : "") $0; next }
       c { print; exit }
       v { v = 0; next }
@@ -173,11 +173,11 @@ _split_words() {
     }
     # shellin(t): true when the simple command t is sh, bash, zsh or dash with no -c, so a here-doc
     # it reads is its script.
-    function shellin(t,   k, b) {
+    function shellin(t,   k, b, P) {
       sw(t); cw_reset()
       for (k = 1; k <= sw_n; k++) cw(sw_w[k])
       if (!cw_n) return 0
-      b = cw_w[1]; sub(/.*\//, "", b)
+      b = P[split(cw_w[1], P, "/")]
       if (tolower(b) !~ /^(ba|z|da)?sh$/) return 0
       for (k = 2; k <= cw_n; k++) if (cw_w[k] ~ /^-[a-z]*c[a-z]*$/) return 0
       return 1
@@ -472,7 +472,7 @@ with_timeout() {
 gh_sub() {
   local out
   out=$(_cmd_words "$1" | awk '
-    NR == 1 { b = $0; sub(/.*\//, "", b); if (tolower(b) != "gh") exit; next }
+    NR == 1 { b = P[split($0, P, "/")]; if (tolower(b) != "gh") exit; next }
     skip { skip = 0; next }
     $0 == "-R" || $0 == "--repo" { skip = 1; next }
     /^-R./ || /^--repo=/ { next }

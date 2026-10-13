@@ -128,7 +128,7 @@ _g05_env() {
     /^[0-9]*(<|>|&>)/ { if ($0 ~ /^[0-9]*[<>&|]+$/) skip = 1; next }
     /^(if|then|elif|else|do|while|until|!|\{)$/ { w = ""; next }
     /^[A-Za-z_][A-Za-z0-9_]*\+?=/ { asg($0); next }
-    { b = $0; sub(/.*\//, "", b); lb = tolower(b) }
+    { b = P[split($0, P, "/")]; lb = tolower(b) }
     lb in wrap { w = lb; dur = (lb == "timeout"); next }
     /^-/ && w != "" {
       if (w == "env" && ($0 ~ /^--c/ || $0 ~ /^-[^-]*C/)) print "@cwd"

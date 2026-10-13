@@ -29,8 +29,8 @@ _G15_AWK='
   }
   # g15_name(w): the tool w runs: its basename in lower case, less a :tag (hashicorp/terraform:1.9)
   # and an @version (vercel@latest); python3.12 and the like read as python.
-  function g15_name(w) {
-    sub(/.*\//, "", w); w = tolower(w)
+  function g15_name(w,   P) {
+    w = tolower(P[split(w, P, "/")])
     if (w ~ /^python[0-9.]*$/) return "python"
     if (w ~ /^[^:]+:/) sub(/:.*/, "", w)
     if (w ~ /^[^@]+@/) sub(/@.*/, "", w)
