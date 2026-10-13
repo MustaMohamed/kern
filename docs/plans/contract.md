@@ -106,6 +106,14 @@ A guard that votes `allow` approves the whole Bash call, so it proves the full c
 - `_g02_hidden` asks when the next gh word is in `_G02_GROUPS`. That list holds gh 2.100's groups and their aliases, less browse, search and status.
 Neither ever votes allow.
 
+G13, G14 and G15 (Task 13):
+- **G13** proves a read to a `protected_targets` entry and denies anything else in both modes; it fails closed when its awk judge errors.
+- **G14** allows only the closed per-family MCP list and the proven gh issue/label shape under `tracker.policy: auto`.
+- **G15** never allows. It asks (deny under autopilot) when a deploy tool appears at any word with its verb after it.
+- **Shared rules:**
+  - Each guard strips quotes from whole command text in one `LC_ALL=C tr` pass. Never with `${var//[...]/}`, which is cubic under bash 3.2 in a UTF-8 locale.
+  - `git_words` returns 0 when it succeeds, so callers may run it under `pipefail`.
+
 ## Scripts (KERN/scripts, bash, executable, `set -euo pipefail`, run as `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>`)
 
 | Script | Signature | Output | Exit |
