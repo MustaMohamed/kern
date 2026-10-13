@@ -203,9 +203,10 @@ _subst_bodies() {
 # up to the closing WORD line is skipped. At the top level the body and closing line are dropped;
 # inside $( ) the closing line is kept, so the record still parses the same when split again. The
 # body of a here-doc that sh, bash, zsh or dash reads as its script (no -c) is kept as commands.
-# A `<<` is never a here-doc inside $(( )) or (( )), after a word that starts with #, or when its
-# $( ) closes before the newline; and a here-doc with no closing line skips nothing. So a misread
-# `<<` cannot hide the commands after it. A comment at the top level runs to its newline.
+# A `<<` is never a here-doc inside $(( )) or (( )), inside ${ }, $[ ] or a NAME[ ] subscript (an
+# array assignment), after a word that starts with #, or when its $( ) closes before the newline; and
+# a here-doc with no closing line skips nothing. So a misread `<<` cannot hide the commands after it.
+# A comment at the top level runs to its newline.
 _split_words() {
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     function emit(s) { gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s); gsub(/\n/, "\037", s); if (s != "") print s }
@@ -214,7 +215,7 @@ _split_words() {
     function cut(e) { emit(pre substr(buf, start, e - start)); pre = "" }
     # hdat(j): true when the `<` at j opens a here-doc operator (`<<`, not `<<<`) where one can start.
     function hdat(j) {
-      return !cm && !ta && !(ar && depth >= ar) && substr(buf, j + 1, 1) == "<" &&
+      return !cm && !ta && bn <= bb && !(ar && depth >= ar) && substr(buf, j + 1, 1) == "<" &&
         substr(buf, j + 2, 1) != "<" && substr(buf, j - 1, 1) != "<"
     }
     # shellin(t): true when the simple command t is sh, bash, zsh or dash and no reading of shc finds
@@ -247,9 +248,20 @@ _split_words() {
       }
       if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash; hdd[hn] = depth }
     }
-    # shut(): a `)` closes a $( ); arithmetic and here-docs opened inside it end with it, and the
-    # command that held it resumes.
-    function shut() { depth--; cs = csv[depth]; if (ar && depth < ar) ar = 0; while (hn && hdd[hn] > depth) hn-- }
+    # named(j): true when the `[` at j follows a NAME that starts a word, as in an array assignment.
+    function named(j,   k) {
+      for (k = j - 1; k >= 1 && substr(buf, k, 1) ~ /[A-Za-z0-9_]/; k--) ;
+      return k < j - 1 && substr(buf, k + 1, 1) ~ /[A-Za-z_]/ && (k == 0 || sep(substr(buf, k, 1)))
+    }
+    # open(): a $( or ( inside one opens a depth, with its own stack of ${ } and the like.
+    function open() { csv[depth] = cs; bbv[depth] = bb; bb = bn; depth++ }
+    # shut(): a `)` closes a $( ); arithmetic, here-docs and ${ } opened inside it end with it, and
+    # the command that held it resumes.
+    function shut() {
+      depth--; cs = csv[depth]; bn = bb; bb = bbv[depth]
+      if (ar && depth < ar) ar = 0
+      while (hn && hdd[hn] > depth) hn--
+    }
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
     function bodies(j,   h, k, t) {
@@ -275,19 +287,26 @@ _split_words() {
     # cs: where the current simple command starts. ar: the depth where $(( or (( inside $( ) began.
     # ta: inside (( )) at the top level. cm: in a comment inside $( ), until the newline. csv[d]:
     # cs of the command holding the $( ) opened at depth d. es: the last backslash-escaped position.
+    # bk[bb + 1..bn]: the closing } or ] of each ${ }, $[ ] or NAME[ ] open at this depth, innermost
+    # last; a { or [ inside one nests (as zsh reads ${x:-{}a}). bbv[d]: bb at depth d.
     END {
       n = length(buf); q = ""; depth = 0; start = 1; cs = 1; i = 1; pre = ""; hn = 0; lp = 1; off[1] = 1
-      ar = 0; ta = 0; cm = 0; es = 0
+      ar = 0; ta = 0; cm = 0; es = 0; bn = 0; bb = 0
       for (k = 2; k <= NR; k++) off[k] = off[k - 1] + length(L[k - 1]) + 1
       while (i <= n) {
         c = substr(buf, i, 1)
         if (q == sq) { if (c == sq) q = ""; i++; continue }
         if (c == "\\") { if (substr(buf, i + 1, 1) != "\n") es = i + 1; i += 2; continue }
         if (q == "\"") {
+          if (c == "$" && index("{[", x = substr(buf, i + 1, 1))) { bk[++bn] = x == "{" ? "}" : "]"; i += 2; continue }
+          if (bn > bb && index("{}[]", c)) {
+            if (c == bk[bn]) bn--
+            else if (c == "{" || c == "[") bk[++bn] = c == "{" ? "}" : "]"
+          }
           if (c == "\"") q = ""
-          else if (c == "$" && substr(buf, i + 1, 1) == "(") {
+          else if (c == "$" && x == "(") {
             if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
-            csv[depth] = cs; depth++; cs = i + 2; i++
+            open(); cs = i + 2; i++
           }
           else if (c == ")" && depth > 0) shut()
           else if (depth > 0 && c == "<" && hdat(i)) {
@@ -308,14 +327,19 @@ _split_words() {
         }
         if (c == "$" && substr(buf, i + 1, 1) == "(") {
           if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
-          csv[depth] = cs; depth++; cs = i + 2; i += 2; continue
+          open(); cs = i + 2; i += 2; continue
         }
         p = substr(buf, i - 1, 1)
         x = substr(buf, i + 1, 1)
+        if (index("${}[]", c)) {
+          if (c == "$") { if (x == "{" || x == "[") { bk[++bn] = x == "{" ? "}" : "]"; i += 2; continue } }
+          else if (bn > bb) { if (c == bk[bn]) bn--; else if (c == "{" || c == "[") bk[++bn] = c == "{" ? "}" : "]" }
+          else if (c == "[" && named(i)) bk[++bn] = "]"
+        }
         if (depth > 0) {
           if (c == "\n") { cm = 0; cs = i + 1; if (hn) { i = nested(i); continue } }
           else if (c == "#" && sep(p)) cm = 1
-          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; csv[depth] = cs; depth++; cs = i + 1 }
+          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; open(); cs = i + 1 }
           else if (c == ")") shut()
           else if (index(";&|", c)) cs = i + 1
           i++; continue

@@ -126,6 +126,27 @@ EOT
   finds "$(printf '%s\n' 'y=1; (( y = 1 << X ))' 'git push --force' 'X')" push
 }
 
+@test "a << inside \${ }, \$[ ], \$(( )) or a NAME[ ] subscript is not a here-doc" {
+  # bash runs the middle line of each: the << is text or arithmetic, not a here-doc.
+  finds "$(printf '%s\n' 'echo ${x:-<<X}' 'git push --force origin main' 'X}')" push
+  finds "$(printf '%s\n' 'echo $[1<<X]' 'git push --force origin main' 'X]')" push
+  finds "$(printf '%s\n' 'echo $((1<<X))' 'git push --force origin main' 'X))')" push
+  finds "$(printf '%s\n' 'a[1<<X]=1' 'git push --force origin main' 'X]=1')" push
+  finds "$(printf '%s\n' 'echo ${x:-${y:-<<X}}' 'git push --force origin main' 'X}}')" push
+  finds "$(printf '%s\n' 'echo ${x:-{<<X}' 'git push --force origin main' 'X}')" push
+  finds "$(printf '%s\n' 'echo ${a[$[1<<X]]}' 'git push --force origin main' 'X]]}')" push
+  finds "$(printf '%s\n' 'y=$(echo ${x:-<<X}' 'git push --force origin main' 'X})')" push
+  finds "$(printf '%s\n' 'y="$(echo ${x:-<<X}' 'git push --force origin main' 'X})"')" push
+}
+
+@test "a here-doc after a closed \${ } or subscript, or inside \$( ) in one, is still a here-doc" {
+  for c in 'echo ${x:-a} <<EOF' 'echo ${a[1]} <<EOF' 'a[1]=2 cat <<EOF' 'echo ${x:-$(cat <<EOF'; do
+    run git_words "$(printf '%s\n' "$c" 'git push --force' 'EOF' ')}' 'git status')"
+    [[ "$output" != *"git push --force"* ]] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *"git status"* ]] || { echo "$c -> $output"; return 1; }
+  done
+}
+
 @test "a # after an escaped separator is not a comment; after a line continuation it is" {
   for c in 'echo a\ #b; git push --force' 'echo a\;#b; git push --force' 'echo a\|#b; git push --force' \
     'echo a\&#b; git push --force' 'echo a\(#b; git push --force' "$(printf 'echo a\\\t#b; git push --force')"; do
