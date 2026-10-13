@@ -9,6 +9,7 @@ _GW_NL=$'\037'
 # sw(STR) splits STR into words, quotes removed, in sw_w[1..sw_n] (see _shell_words). cw_reset()
 # starts a simple command and cw(WORD) feeds it one word; the command name and its arguments
 # collect in cw_w[1..cw_n] (see _cmd_words).
+# shellcheck disable=SC2016 # awk text
 _GW_AWK='
   BEGIN {
     cw_opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u --user --group --host --prompt --chdir --chroot "
@@ -27,13 +28,20 @@ _GW_AWK='
   # gw_dyn(w): true when the word w, quotes removed, may expand into other words at run time: it
   # holds a $ or a backtick, or a brace pattern ({a,b} or {a..b}).
   function gw_dyn(w) { return w ~ /[$`]/ || w ~ /[{][^}]*(,|[.][.])[^}]*[}]/ }
+  # gw_path(w): true when the word w is $NAME/ or ${NAME}/ and a rest gw_dyn finds literal, such as
+  # $HOME/.local/bin/bats: a path under a variable, which is an accepted limit as a script file is.
+  function gw_path(w) {
+    return w ~ /^[$]([{][A-Za-z_][A-Za-z0-9_]*[}]|[A-Za-z_][A-Za-z0-9_]*)\// &&
+      !gw_dyn(substr(w, index(w, "/")))
+  }
   # shc(h, z): for the sh-family shell at cw_w[h], the index of the word it runs as its -c script, by
   # the rules of bash (z = 0) or of zsh (z = 1). Callers take both, since sh may be either. The script
   # is the first word after the options, which end at -, --, or the first word that does not start
   # with - or +. A c in a cluster, after either sign, asks for a script. bash: long options come
   # first, and each o or O in a cluster takes the next word. zsh: o takes the rest of its cluster or
   # else the next word, b ends the options after its word, and --name takes no value. Returns 0 when
-  # no script is run, and -1 when a word that may be an option or its value is built at run time.
+  # no script is run, and -1 when a word that may be an option or its value is built at run time
+  # (a script operand under a variable, as gw_path reads it, is a script file).
   # Also sets shc_op, the index of the first word after the options (0 when there is none), and
   # shc_s, true when an s in a cluster reads the commands from stdin.
   function shc(h, z,   k, w, c, lng, nm, n, i, C, brk) {
@@ -42,7 +50,7 @@ _GW_AWK='
       w = cw_w[k]
       # A redirection is not an argument; one with no target attached takes the next word.
       if (w ~ /^[0-9]*(<|>|&>)/) { if (w ~ /^[0-9]*[<>&|]+$/) k++; continue }
-      if (w !~ /^[-+]/) { shc_op = k; if (c) return k; return gw_dyn(w) ? -1 : 0 }
+      if (w !~ /^[-+]/) { shc_op = k; if (c) return k; return gw_dyn(w) && !gw_path(w) ? -1 : 0 }
       if (gw_dyn(w)) return -1
       if (w == "-" || w == "--" || (z && w == "+")) { k++; break }
       if (lng && w ~ /^-/) {
