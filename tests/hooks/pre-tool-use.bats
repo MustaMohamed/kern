@@ -113,6 +113,27 @@ feed() {
   [[ "$output" == *'"kern G0: guard g99 did not load"'* ]] || false
 }
 
+@test "a guard file that stops loading partway, or a missing guard file, fails closed" {
+  mkdir -p "$BATS_TEST_TMPDIR/k"
+  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
+  printf 'guard_g01() { _g01_missing; }\nif then\n' >"$BATS_TEST_TMPDIR/k/hooks/guards/g01-git.sh"
+  run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload ls)"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *'"kern G0: guard g01 did not load"'* ]] || false
+  cp "$K/hooks/guards/g01-git.sh" "$BATS_TEST_TMPDIR/k/hooks/guards/"
+  rm "$BATS_TEST_TMPDIR/k/hooks/guards/g13-protected.sh"
+  run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload ls)"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *'"kern G0: guard g13 did not load"'* ]] || false
+}
+
+@test "the dispatcher's list of guard ids names every guard file" {
+  ids=$(sed -n 's/^KERN_GUARD_IDS="\(.*\)"$/\1/p' "$K/hooks/pre-tool-use")
+  files=$(cd "$K/hooks/guards" && for f in g*.sh; do printf '%s ' "${f%%-*}"; done)
+  [ -n "$ids" ]
+  [ "$ids " = "$files" ]
+}
+
 @test "KERN_GUARDS limits the guards under bats only" {
   p=$(payload PreToolUse "\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/sessions/test-session.state\"}")
   run_guard "$p" g01

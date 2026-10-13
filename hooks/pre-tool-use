@@ -49,16 +49,23 @@ AGENT=$(json_get agent_type) || case $? in 1) AGENT="" ;; *) unparseable agent_t
 [ "$TOOL" = Monitor ] && TOOL=Bash
 kern_enabled || exit 0
 
-for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
-  # shellcheck source=/dev/null
-  . "$f"
-done
+# The guards kern ships, so a missing guard file fails closed. A guard file that does not source to
+# the end fails closed too, and its guard does not run.
+KERN_GUARD_IDS="g01 g02 g03 g04 g05 g06 g13 g14 g15 g16"
+ids=" $KERN_GUARD_IDS "
+bad=" "
 for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
   id=$(basename "$f" .sh)
   id=${id%%-*}
+  case "$ids" in *" $id "*) ;; *) ids="$ids$id " ;; esac
+  # shellcheck source=/dev/null
+  . "$f" || bad="$bad$id "
+done
+for id in $ids; do
   if [ -n "${KERN_GUARDS-}" ] && [ -n "${BATS_TEST_FILENAME-}" ]; then
     case ",$KERN_GUARDS," in *",$id,"*) ;; *) continue ;; esac
   fi
+  case "$bad" in *" $id "*) fail_closed "guard $id did not load"; continue ;; esac
   declare -F "guard_$id" >/dev/null || { fail_closed "guard $id did not load"; continue; }
   "guard_$id"
 done
