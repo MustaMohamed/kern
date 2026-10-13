@@ -36,7 +36,7 @@ g00_all() {
     'git{,} status' 'if true; then $g push; fi' 'X=$(echo ")") $g push'
   gx 'g=git; $g push --force origin main'
   [[ "$output" == *'G0: under autopilot kern denies what it cannot read: the command name $g is built at run time'* ]] || false
-  [[ "$output" == *'have the user run it with !, or rewrite it as plain commands'* ]] || false
+  [[ "$output" == *'; to go on, write the code to a file in the repo and run the file, spell each command name out, or have the user run it with !"'* ]] || false
   gx '$(echo git) push'
   [[ "$output" == *'the command name of `$(echo git) push` is built at run time'* ]] || false
 }
@@ -76,6 +76,15 @@ g00_all() {
   g00_all none "$(printf '%s\n' "bash <<'EOF'" 'git status' 'EOF')" \
     "$(printf '%s\n' "sh -s <<'EOF'" 'ls' 'EOF')" 'python3 < x.py' 'python3 - < x.py' 'bash < x.sh' \
     'source .venv/bin/activate' '. ./env.sh'
+}
+
+@test "the commands autopilot runs every day get no vote from G0, with every guard running" {
+  local c
+  for c in 'npm test' 'python -m pytest' 'node --test' 'node scripts/x.mjs' 'bash scripts/ci-local' \
+    'git status' 'ls' 'rg -n foo' "$(printf '%s\n' "bash <<'EOF'" 'git status' 'npm test' 'EOF')"; do
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
 }
 
 @test "ordinary commands get no vote from G0 under autopilot" {

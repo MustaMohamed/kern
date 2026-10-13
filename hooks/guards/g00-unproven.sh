@@ -257,5 +257,5 @@ $out
 EOT
   [ "$seen" = 1 ] || what="the command (its judge failed)"
   [ -n "$what" ] || return 0
-  vote deny G0 "under autopilot kern denies what it cannot read: $what; have the user run it with !, or rewrite it as plain commands"
+  vote deny G0 "under autopilot kern denies what it cannot read: $what; to go on, write the code to a file in the repo and run the file, spell each command name out, or have the user run it with !"
 }
