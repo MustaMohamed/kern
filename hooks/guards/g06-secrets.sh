@@ -228,16 +228,24 @@ EOT
   return 0
 }
 
-# _g06_leaks DIR ARGS...: `git ARGS` in DIR read by gitleaks; gitleaks' exit code.
+# The message walk's git arguments for gitleaks; empty for a commit, whose message G6 reads itself.
+_G06_MSGARGS=()
+
+# _g06_leaks DIR ARGS...: `git ARGS` in DIR, then the message walk in _G06_MSGARGS (NULs as
+# newlines), read by gitleaks; gitleaks' exit code.
 _g06_leaks() {
   local d="$1"
   shift
-  _g06_git "$d" "$@" | gitleaks stdin --no-banner --redact >/dev/null 2>&1
+  {
+    _g06_git "$d" "$@"
+    [ ${#_G06_MSGARGS[@]} -eq 0 ] || _g06_git "$d" "${_G06_MSGARGS[@]}" | LC_ALL=C tr '\000' '\n'
+  } | gitleaks stdin --no-banner --redact >/dev/null 2>&1
 }
 
 # _g06_finish OUT DIR ARGS...: votes on the walks' output OUT (plus any message scan lines): the
 # never_commit names, the rule hits, and a walk that did not finish. With no hit, gitleaks (when
-# installed) reads `git ARGS` again under with_timeout; an overrun asks too.
+# installed) reads `git ARGS` and the message walk again under with_timeout, inside the same
+# budget; an overrun asks too.
 _g06_finish() {
   local out="$1" rc names hits secs leak
   shift
@@ -287,6 +295,7 @@ EOT
   out=$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_parse "$dir" "${args[@]}")
   out="$out
 $(_g06_msg "commit message" "$msg" | _g06_keep)"
+  _G06_MSGARGS=()
   _g06_finish "$out" "$dir" "${args[@]}"
 }
 
@@ -366,9 +375,10 @@ EOT
     [ -n "$(_g06_git "$dir" for-each-ref --count=1 --format=x refs/remotes/)" ] && other=1
   fi
   args=(log --no-show-signature -p --cc "${_G06_DIFF[@]}" --format= "${revs[@]}" "${ex[@]}")
+  _G06_MSGARGS=(log --no-show-signature -z '--format=%h%x00%B' "${revs[@]}" "${ex[@]}")
   out=$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_parse "$dir" "${args[@]}")
   out="$out
-$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_msgs "$dir" log --no-show-signature -z '--format=%h%x00%B' "${revs[@]}" "${ex[@]}")"
+$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_msgs "$dir" "${_G06_MSGARGS[@]}")"
   _g06_finish "$out" "$dir" "${args[@]}"
   [ "$other" = 1 ] && _g06_unscanned "history already on another remote was not rescanned for $remote"
   return 0

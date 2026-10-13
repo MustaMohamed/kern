@@ -108,26 +108,21 @@ EOT
 }
 
 # _g05_env RECORD: what RECORD changes in the environment of the command it runs, one line each:
-# NAME for a VAR=value word before the command word (after the wrappers env, sudo, command, exec,
-# nice, nohup, time and timeout and their options, as _cmd_words skips them); +NAME when the
-# assignment outlives the record (an export or declare -x record, or one that is only assignments);
-# @cwd when env -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory. Never a substring
-# of an argument.
+# NAME for a VAR=value word before the command word (after the wrappers env, sudo, command, builtin,
+# exec, nice, nohup, time and timeout and their options); +NAME when the assignment outlives the
+# record (an export or declare -x command, behind wrappers or not, or a record that is only
+# assignments); @cwd when env -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory.
+# Never a substring of an argument.
 _g05_env() {
   _shell_words "$1" | LC_ALL=C awk '
     BEGIN {
-      n = split("env sudo command exec nice nohup time timeout", a, " ")
+      n = split("env sudo command builtin exec nice nohup time timeout", a, " ")
       for (k = 1; k <= n; k++) wrap[a[k]] = 1
       val["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
       val["env"] = " -C -P -S -u --chdir --split-string --unset --argv0 "
       val["exec"] = " -a "; val["timeout"] = " -s -k --signal --kill-after "; val["nice"] = " -n "
     }
     function asg(s) { sub(/=.*/, "", s); names[++m] = s }
-    NR == 1 {
-      b = $0; sub(/.*\//, "", b)
-      if (b == "export") { ex = 1; next }
-      if (b == "declare" || b == "typeset") { dx = 1; next }
-    }
     dx && /^-/ { if ($0 ~ /x/) ex = 1; next }
     dx { dx = 0; if (!ex) done = 1 }
     ex { if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) asg($0); next }
@@ -145,6 +140,9 @@ _g05_env() {
       next
     }
     dur { dur = 0; next }
+    # The command word: export, declare and typeset assign for the records after.
+    b == "export" { ex = 1; next }
+    b == "declare" || b == "typeset" { dx = 1; next }
     { done = 1 }
     END { for (k = 1; k <= m; k++) print ((ex || !done) ? "+" : "") names[k] }'
 }

@@ -784,8 +784,12 @@ key AKIAABCDEFGHIJKLMNOP"
     expect none "$g" "git status" || return 1
     expect none "$g" "git log --oneline -5" || return 1
     expect none "$g" "git stage -- a.txt" || return 1
+    expect none "$g" "git --version" || return 1
+    expect none "$g" "git -h" || return 1
+    expect none "$g" "git --help" || return 1
   done
   set_autopilot on
+  expect none g01,g05,g06 "git --version"
   expect allow g01,g05,g06 "git commit -m 'CDS-2465: x'"
   expect deny g05 "git -c alias.ci=commit commit -m 'CDS-2465: x'"
 }
@@ -914,4 +918,30 @@ key AKIAABCDEFGHIJKLMNOP"
   PATH="$BATS_TEST_TMPDIR/slow:$PATH"
   expect ask g06 "git push -u origin CDS-2465/replace-minio"
   [[ "$output" == *"secret scan did not finish"* ]] || false
+}
+
+@test "G6: an export behind a wrapper still leaves the next git command unscanned" {
+  local c cmds=(
+    "command export GIT_DIR=/x/.git; git commit -m 'CDS-2465: x'"
+    "builtin export GIT_INDEX_FILE=/tmp/i; git commit -m 'CDS-2465: x'"
+    "command declare -x GIT_DIR=/x/.git; git commit -m 'CDS-2465: x'"
+    "builtin export HOME=/tmp; git push"
+  )
+  for c in "${cmds[@]}"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+}
+
+@test "G6: gitleaks reads a pushed commit's message as well as its patch" {
+  mkdir -p "$BATS_TEST_TMPDIR/gl"
+  printf '#!/bin/sh\ncat >"%s/gl.in"\nexit 0\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/gl/gitleaks"
+  chmod +x "$BATS_TEST_TMPDIR/gl/gitleaks"
+  printf 'patch-text-17\n' >"$R/p.txt"
+  git -C "$R" add p.txt
+  git -C "$R" commit -q -m "$(printf 'CDS-2465: x\n\nmessage-text-42')"
+  PATH="$BATS_TEST_TMPDIR/gl:$PATH"
+  expect none g06 "git push -u origin CDS-2465/replace-minio"
+  grep -q 'patch-text-17' "$BATS_TEST_TMPDIR/gl.in"
+  grep -q 'message-text-42' "$BATS_TEST_TMPDIR/gl.in"
 }

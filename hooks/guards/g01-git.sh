@@ -155,8 +155,10 @@ worktree write-tree "
 
 # _g01_foreign GUARD SUB: when SUB is not one of git's own commands, votes ask (deny under autopilot)
 # as GUARD and exits 0. No config is read, so -c, HOME, XDG_CONFIG_HOME, GIT_DIR, cd and include
-# paths cannot steer it.
+# paths cannot steer it. An option word (git --version, -h, --help) is no subcommand: every global
+# option that leads on to one has already been read.
 _g01_foreign() {
+  case "$2" in -*) return 1 ;; esac
   case "$_G01_GIT_CMDS" in *" $2 "*) return 1 ;; esac
   vote ask "$1" "git $2 is not one of git's own commands (an alias or an extension); run the git command it stands for so kern can check it"
   [ "$AUTOPILOT" = 1 ] && vote deny "$1" "git $2 under autopilot: not one of git's own commands"
