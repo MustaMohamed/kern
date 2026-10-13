@@ -124,7 +124,6 @@ _g16_kind() {
 # that would expand is not read.
 _g16_real() {
   local d
-  _g16_pathy "$1" || return 0
   case "${1##*/}" in
     kern.yml | kern.local.yml) _G16_K=settings ;;
     settings.json | settings.local.json) _G16_K=cc ;;
@@ -149,7 +148,9 @@ _g16_physical() {
 }
 
 # _g16_pathy WORD: exit 0 unless WORD holds a blank or a newline and does not start as a path does
-# (/, ~, ./, ../ or $): a sentence in a message that ends in a settings path is not a path.
+# (/, ~, ./, ../ or $). Read only for the value of a message option (_g16_bash): a sentence in a
+# commit message or a PR title that ends in a settings path is not a path. A redirect target, a copy
+# destination or any other operand is a path whatever it holds.
 _g16_pathy() {
   case "$1" in
     *[[:blank:]]* | *"$_GW_NL"*)
@@ -162,7 +163,6 @@ _g16_pathy() {
 # _g16_claude WORD: exit 0 when the lower-cased WORD, read by _g16_tidy, names a .claude directory:
 # `.claude`, a path ending in /.claude, or `.` after a cd into one earlier in the command.
 _g16_claude() {
-  _g16_pathy "$1" || return 1
   _g16_tidy "$1"
   case "$_G16_T" in
     .claude | */.claude) return 0 ;;
@@ -194,12 +194,10 @@ _g16_name() {
     *[[:blank:]]* | *"$_GW_NL"*) ;;
     *sessions*.state) _G16_K=state; return 0 ;;
   esac
-  if _g16_pathy "$1"; then
-    case "$1" in
-      *.claude/kern.yml | *.claude/kern.local.yml | kern.yml | kern.local.yml) _G16_K=settings; return 0 ;;
-      *.claude/settings.json | *.claude/settings.local.json) _G16_K=cc; return 0 ;;
-    esac
-  fi
+  case "$1" in
+    *.claude/kern.yml | *.claude/kern.local.yml | kern.yml | kern.local.yml) _G16_K=settings; return 0 ;;
+    *.claude/settings.json | *.claude/settings.local.json) _G16_K=cc; return 0 ;;
+  esac
   if [ -n "$_G16_SID" ]; then
     case "$1" in "$_G16_SID".state | */"$_G16_SID".state) _G16_K=state; return 0 ;; esac
   fi
@@ -300,7 +298,7 @@ _g16_redirects() {
 # cd into a .claude directory, `.` and a bare settings.json or settings.local.json are in it. A
 # variable that holds a path is not read (accepted limit).
 _g16_bash() {
-  local cmd t seg words w head inplace seg_s seg_k last dd skip anydir reads creads
+  local cmd t seg words w head inplace seg_s seg_k last dd skip anydir reads creads msg m
   local state=0 settings=0 cc=0 into=0 in_sd=0
   cmd=$(ti_get command) || return 0
   # Only a command whose text could name state, a settings file or a .claude directory, in any case,
@@ -333,6 +331,7 @@ _g16_bash() {
     dd=0
     skip=0
     anydir=0
+    msg=0
     while IFS= read -r w; do
       if [ -z "$head" ]; then
         head=${w##*/}
@@ -343,8 +342,29 @@ _g16_bash() {
         --* | -m*) ;;
         -*i*) inplace=1 ;;
       esac
+      # M is 1 for a message option's value that reads as a sentence (_g16_pathy): --message,
+      # --title, --body, --subject, --notes, --comment or --trailer; -m of git, hg, jj or svn (git's
+      # -am too); gh's -t, -b, -n and -c. The value is attached or the next word. It is still read for
+      # state, never for settings or .claude.
+      m=0
+      if [ "$msg" = 1 ]; then
+        msg=0
+        _g16_pathy "$w" || m=1
+      else
+        case "$w" in
+          --message=* | --title=* | --body=* | --subject=* | --notes=* | --comment=* | --trailer=*)
+            _g16_pathy "${w#*=}" || m=1
+            ;;
+          --message | --title | --body | --subject | --notes | --comment | --trailer) msg=1 ;;
+        esac
+        case "$head:$w" in
+          git:-m | git:-[!-]*m | hg:-m | jj:-m | svn:-m | gh:-t | gh:-b | gh:-n | gh:-c) msg=1 ;;
+          git:-m?* | hg:-m?* | jj:-m?* | svn:-m?* | gh:-[tbnc]?*) _g16_pathy "${w#-?}" || m=1 ;;
+        esac
+      fi
       _g16_kind "$w"
-      case "$_G16_K" in state) seg_s=1 ;; settings | cc) seg_k="$seg_k $_G16_K" ;; esac
+      case "$_G16_K" in state) seg_s=1 ;; settings | cc) [ "$m" = 1 ] || seg_k="$seg_k $_G16_K" ;; esac
+      [ "$m" = 0 ] || continue
       # A .claude directory among the operands and the option values (-C.claude, --directory=.claude,
       # -xC.claude); not a redirection or the target of one that stands alone.
       if [ "$skip" = 1 ]; then

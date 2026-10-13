@@ -389,3 +389,20 @@ expect_cmd() {
     "git diff --stat -- .claude" "git diff --output-indicator-new=+ .claude" "git -C .claude status" \
     "git check-ignore -q .claude/kern.local.yml"
 }
+
+@test "a settings write under a directory with a space asks; only a message option's text is read as a sentence" {
+  expect_cmd ask 'echo kern: off > "my dir/.claude/kern.local.yml"' 'cp /tmp/s.json "my dir/.claude/settings.local.json"' \
+    'cp /tmp/kern.local.yml "my dir/.claude/"' 'tee "my dir/.claude/settings.json"' \
+    'cp /tmp/x my\ dir/.claude/settings.json' 'tar -xf x.tar -C "my dir/.claude"' \
+    'git commit -m x -- "my dir/.claude/settings.json"'
+  set_autopilot on
+  expect_cmd deny 'echo kern: off > "my dir/.claude/kern.local.yml"'
+  set_autopilot off
+  expect_cmd none 'gh pr create --draft --title "Guard .claude/settings.json" --body-file b.md' \
+    'git commit -m "G16: read .claude, .claude/kern.yml and settings.json"' \
+    'gh issue create -t "fix .claude/kern.yml" -b "see .claude/settings.json"' \
+    'git commit --message="move to .claude/settings.local.json"' \
+    'gh pr create --draft --title="Guard .claude" --body-file b.md' \
+    'git commit -m "fix: x" -m "see .claude/kern.yml"' 'git commit -am "fix .claude/kern.yml"'
+  expect_cmd ask 'rsync -m "my dir/.claude/settings.json" /tmp/'
+}
