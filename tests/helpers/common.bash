@@ -65,6 +65,13 @@ decision_of() {
   printf '%s\n' "${d:-none}"
 }
 
+# parsed_decision OUTPUT: the permissionDecision of OUTPUT as JSON.parse reads it; fails when OUTPUT
+# is not valid JSON.
+parsed_decision() {
+  printf '%s' "$1" | node -e 'const o = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    process.stdout.write(o.hookSpecificOutput.permissionDecision)'
+}
+
 # set_autopilot on|off: writes the session state the hooks read (tests only; G16 guards real sessions).
 set_autopilot() {
   mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"

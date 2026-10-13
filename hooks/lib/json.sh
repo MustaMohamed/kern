@@ -81,12 +81,21 @@ json_get_raw() {
   printf '%s' "${KERN_INPUT-}" | LC_ALL=C awk -v key="$1" -v mode=raw "$_KERN_JSON_AWK"
 }
 
-# json_escape: stdin escaped for the body of a JSON string, without the surrounding quotes.
+# json_escape: stdin escaped for the body of a JSON string, without the surrounding quotes. Every
+# byte below 0x20 is escaped (tab, CR and newline as \t, \r and \n, the rest as \u00XX): reasons
+# echo command words, and json_get decodes \b and \f to raw bytes.
 json_escape() {
-  local tab cr
-  tab=$(printf '\t'); cr=$(printf '\r')
-  LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/${tab}/\\\\t/g" -e "s/${cr}/\\\\r/g" |
-    LC_ALL=C awk 'BEGIN { sep = "" } { printf "%s%s", sep, $0; sep = "\\n" }'
+  LC_ALL=C awk '
+    BEGIN {
+      for (i = 1; i < 32; i++) if (i != 10) { c = sprintf("%c", i); e[c] = sprintf("\\u%04x", i); cls = cls c }
+      e["\t"] = "\\t"; e["\r"] = "\\r"; e["\\"] = "\\\\"; e["\""] = "\\\""
+      re = "[" cls "\\\\\"]"
+    }
+    {
+      s = $0; out = ""
+      while (match(s, re)) { out = out substr(s, 1, RSTART - 1) e[substr(s, RSTART, 1)]; s = substr(s, RSTART + 1) }
+      printf "%s%s%s", (NR > 1 ? "\\n" : ""), out, s
+    }'
 }
 
 # json_ok: exit 0 when $KERN_INPUT is one object: starts with { and ends with } after trimming.

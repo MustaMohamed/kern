@@ -42,6 +42,20 @@ next \ end' ]
   [ "$output" = 'a \"q\"\tb\\c\nd' ]
 }
 
+@test "json_escape output parses as a JSON string for every byte below 0x20" {
+  s='a "q" \ b'
+  for i in $(seq 1 31); do
+    printf -v c "\\$(printf '%03o' "$i")"
+    s="$s$c."
+  done
+  printf '%s' "$s" >"$BATS_TEST_TMPDIR/raw"
+  printf '"%s"' "$(printf '%s' "$s" | json_escape)" >"$BATS_TEST_TMPDIR/json"
+  run node -e 'const fs = require("fs");
+    process.exit(JSON.parse(fs.readFileSync(process.argv[1], "utf8")) === fs.readFileSync(process.argv[2], "utf8") ? 0 : 3)' \
+    "$BATS_TEST_TMPDIR/json" "$BATS_TEST_TMPDIR/raw"
+  [ "$status" -eq 0 ]
+}
+
 @test "json_ok accepts one object with surrounding whitespace and rejects the rest" {
   KERN_INPUT='  {"a":1}
 '

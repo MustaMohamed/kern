@@ -67,6 +67,28 @@ feed() {
   [[ "$output" != *"kern settings"* ]] || false
 }
 
+@test "a reason that echoes control bytes still prints JSON that parses" {
+  # Tab, newline and 0x1f split words and json_get reads a raw 0x01 as a backslash, so those never
+  # reach this reason; json.bats covers them.
+  b=""
+  for i in $(seq 2 30); do
+    case "$i" in 9 | 10) continue ;; esac
+    printf -v c "\\$(printf '%03o' "$i")"
+    b="$b$c"
+  done
+  printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"git x%sy"}}' \
+    "$CWD" "$b" >"$BATS_TEST_TMPDIR/in"
+  run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
+  [ "$(parsed_decision "$output")" = ask ]
+  [[ "$output" == *"git x"*'\u0002'*'\u001e'*"y is not"* ]] || false
+  # json_get decodes \b, so one appended record used to remove every decision under autopilot.
+  set_autopilot on
+  printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"git push --force origin main; git x\\by"}}' \
+    "$CWD" >"$BATS_TEST_TMPDIR/in"
+  run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
+  [ "$(parsed_decision "$output")" = deny ]
+}
+
 @test "a guard file that does not load fails closed" {
   mkdir -p "$BATS_TEST_TMPDIR/k"
   cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
