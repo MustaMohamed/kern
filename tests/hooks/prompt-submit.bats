@@ -47,6 +47,17 @@ expand() {
   [ "$(st autopilot)" = off ]
 }
 
+@test "the per-prompt autopilot line names the allowed shapes and the user" {
+  expand kern:autopilot on
+  submit "next task"
+  [[ "$output" == *"autopilot ON:"* ]] || false
+  for s in "one -m '<msg>' or -F <file>" "git push [-u] <remote> <current-branch>" "no wrapper" "no cd" \
+    "need the user"; do
+    [[ "$output" == *"$s"* ]] || { echo "missing: $s"; echo "$output"; return 1; }
+  done
+  [[ "$output" != *human* ]] || false
+}
+
 @test "autopilot on is refused when settings deny it" {
   mkdir -p "$R/.claude"; printf 'autopilot: denied\n' >"$R/.claude/kern.local.yml"
   expand kern:autopilot on
