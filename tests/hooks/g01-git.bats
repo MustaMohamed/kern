@@ -589,3 +589,25 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
     [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
   done
 }
+
+@test "GIT_CONFIG counts only as an assignment in the parsed records; a git with no word after it gets no vote" {
+  local c
+  set_autopilot on
+  for c in "echo \$GIT_CONFIG_GLOBAL; which git" "env | grep GIT_CONFIG; git --version; type git" \
+    "grep -rn GIT_CONFIG hooks | grep -v git" "GIT_CONFIG_NOSYSTEM=1 git log | grep git" \
+    "git commit -m 'CDS-2465: read GIT_CONFIG_COUNT' | grep git" "caffeinate git -c color.ui=never" \
+    "git commit -m 'CDS-2465: set GIT_CONFIG_COUNT=1' | xargs git log -1"; do
+    g1q "$c"
+    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
+  run_guard "$(bash_payload "git -C $BATS_TEST_TMPDIR/wt commit -m 'CDS-2465: read GIT_CONFIG_COUNT' | grep git")" g01,g05
+  [ "$(decision_of "$output")" = allow ] || { echo "$output"; return 1; }
+  for c in 'eval GIT_CONF\IG_COUNT=1 GIT_CONF\IG_KEY_0=alias.p GIT_CONF\IG_VALUE_0=push caffeinate git p --force origin main' \
+    "bash -c 'GIT_CONF''IG_COUNT=1 GIT_CONF''IG_KEY_0=alias.p GIT_CONF''IG_VALUE_0=push caffeinate git p --force origin main'" \
+    "env GIT_CONFIG_GLOBAL=/tmp/g caffeinate git log -1" "GIT_CONFIG_COUNT+=1 caffeinate git log -1" \
+    "command export GIT_CONFIG_PARAMETERS=x; caffeinate git log -1" "declare -x GIT_CONFIG_COUNT=1; xargs git p" \
+    "GIT_CONFIG_PARAMETERS=x; caffeinate git log -1"; do
+    g1q "$c"
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
+}
