@@ -354,6 +354,34 @@ words_are() {
   done
 }
 
+@test "a committed base_branch adds a protected branch; origin/HEAD, or else main and the like, stay protected" {
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  mkdir -p "$R/.claude"
+  printf 'base_branch: zzz\n' >"$R/.claude/kern.yml"
+  git -C "$R" add .claude/kern.yml
+  git -C "$R" commit -q -m "chore: kern settings"
+  branch_protected zzz
+  branch_protected main
+  run branch_protected feat
+  [ "$status" -eq 1 ]
+  # With no origin/HEAD, main, master, trunk and develop are protected whatever base_branch says.
+  git -C "$R" remote set-head origin -d
+  for b in zzz main master trunk develop; do branch_protected "$b" || { echo "$b"; return 1; }; done
+  run branch_protected feat
+  [ "$status" -eq 1 ]
+  # The re-review's probe: under autopilot, a commit on main and a push of main are denied.
+  git -C "$R" remote set-head origin main >/dev/null
+  set_autopilot on
+  printf 'x\n' >>"$R/README.md"
+  git -C "$R" add README.md
+  run_guard "$(tool_payload Bash '"command":"git commit -m \"feat: x\""')" ""
+  [ "$(decision_of "$output")" = deny ] || { echo "commit -> $output"; return 1; }
+  run_guard "$(bash_payload 'git push origin main')" ""
+  [ "$(decision_of "$output")" = deny ] || { echo "push -> $output"; return 1; }
+}
+
 @test "push_targets prints * for every-branch pushes, and * is protected" {
   R="$BATS_TEST_TMPDIR/repo"
   make_repo "$R"

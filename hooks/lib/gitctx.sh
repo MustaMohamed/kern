@@ -495,13 +495,16 @@ base_branch_name() {
   printf '%s\n' "${b#origin/}"
 }
 
-# branch_protected BRANCH: base branch, branch.protected or deploy.envs. With no resolvable base,
-# main, master, trunk and develop count as protected. `*` (every branch, from push_targets) does too.
+# branch_protected BRANCH: the settings base_branch, the origin/HEAD branch, branch.protected or
+# deploy.envs. With no origin/HEAD, main, master, trunk and develop count as protected. A base_branch
+# only adds a branch, so a committed one cannot unprotect main. `*` (every branch, from
+# push_targets) is protected too.
 branch_protected() {
-  local base
+  local b
   [ "$1" = "*" ] && return 0
-  if base=$(base_branch_name); then
-    [ "$1" = "$base" ] && return 0
+  b=$(settings_get base_branch '') && [ -n "$b" ] && [ "$1" = "$b" ] && return 0
+  if b=$(git -C "${KERN_MAIN:-${CWD:-$PWD}}" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null); then
+    [ "$1" = "${b#origin/}" ] && return 0
   else
     case "$1" in main | master | trunk | develop) return 0 ;; esac
   fi
