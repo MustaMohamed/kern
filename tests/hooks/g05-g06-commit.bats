@@ -101,6 +101,26 @@ KEY='-----BEGIN RSA PRIVATE KEY-----'
   [ "$(decision_of "$output")" = ask ]
 }
 
+@test "G5: the convention detected from signed history runs no program that repo config names" {
+  local i tree sha
+  rm "$R/.claude/kern.local.yml"
+  tree=$(git -C "$R" write-tree)
+  sha=$(git -C "$R" rev-parse HEAD)
+  for i in 1 2 3 4 5; do
+    sha=$(printf 'tree %s\nparent %s\nauthor T <t@example.com> 1700000000 +0000\ncommitter T <t@example.com> 1700000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n -----END PGP SIGNATURE-----\n\nCDS-%s: step\n' "$tree" "$sha" "$i" |
+      git -C "$R" hash-object -t commit -w --stdin)
+  done
+  git -C "$R" update-ref refs/remotes/origin/main "$sha"
+  printf '#!/bin/sh\necho "$0 $*" >>"%s/ran"\ncat >/dev/null 2>&1\necho "Good signature"\nexit 0\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/evil"
+  chmod +x "$BATS_TEST_TMPDIR/evil"
+  git -C "$R" config log.showSignature true
+  git -C "$R" config gpg.program "$BATS_TEST_TMPDIR/evil"
+  g "git commit -m 'CDS-2465 swap'" g05
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'detected from git log'* ]] || false
+  [ ! -e "$BATS_TEST_TMPDIR/ran" ]
+}
+
 @test "G5: a missing ticket id from the branch is denied" {
   printf 'commit.convention: ".*"\n' >"$R/.claude/kern.local.yml"
   g "git commit -m 'swap MinIO'" g05

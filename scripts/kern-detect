@@ -94,7 +94,8 @@ case "$key" in
   commit.convention)
     ref=origin/$(base 2>/dev/null || echo HEAD)
     git -C "$M" rev-parse -q --verify "$ref" >/dev/null || ref=HEAD
-    subjects=$(git -C "$M" log --format=%s -30 "$ref" 2>/dev/null)
+    # --no-show-signature: log.showSignature would run the signing program that repo config names.
+    subjects=$(git -C "$M" log --no-show-signature --format=%s -30 "$ref" 2>/dev/null)
     total=$(printf '%s\n' "$subjects" | grep -c . || true)
     n=$(printf '%s\n' "$subjects" | grep -Ec '^[A-Z][A-Z0-9]+-[0-9]+: ' || true)
     share "$n" "$total" && out '^[A-Z][A-Z0-9]+-[0-9]+: ' "$n of the last $total subjects start with ID: "
