@@ -51,7 +51,7 @@ kern_enabled || exit 0
 
 # The guards kern ships, so a missing guard file fails closed. A guard file that does not source to
 # the end fails closed too, and its guard does not run.
-KERN_GUARD_IDS="g01 g02 g03 g04 g05 g06 g13 g14 g15 g16"
+KERN_GUARD_IDS="g00 g01 g02 g03 g04 g05 g06 g13 g14 g15 g16"
 ids=" $KERN_GUARD_IDS "
 bad=" "
 for f in "$KERN_ROOT"/hooks/guards/g*.sh; do

@@ -34,13 +34,15 @@ _GW_AWK='
   # first, and each o or O in a cluster takes the next word. zsh: o takes the rest of its cluster or
   # else the next word, b ends the options after its word, and --name takes no value. Returns 0 when
   # no script is run, and -1 when a word that may be an option or its value is built at run time.
+  # Also sets shc_op, the index of the first word after the options (0 when there is none), and
+  # shc_s, true when an s in a cluster reads the commands from stdin.
   function shc(h, z,   k, w, c, lng, nm, n, i, C, brk) {
-    c = 0; lng = !z
+    c = 0; lng = !z; shc_op = 0; shc_s = 0
     for (k = h + 1; k <= cw_n; k++) {
       w = cw_w[k]
       # A redirection is not an argument; one with no target attached takes the next word.
       if (w ~ /^[0-9]*(<|>|&>)/) { if (w ~ /^[0-9]*[<>&|]+$/) k++; continue }
-      if (w !~ /^[-+]/) { if (c) return k; return gw_dyn(w) ? -1 : 0 }
+      if (w !~ /^[-+]/) { shc_op = k; if (c) return k; return gw_dyn(w) ? -1 : 0 }
       if (gw_dyn(w)) return -1
       if (w == "-" || w == "--" || (z && w == "+")) { k++; break }
       if (lng && w ~ /^-/) {
@@ -52,6 +54,7 @@ _GW_AWK='
       if (z && w ~ /^--/) continue
       n = split(substr(w, 2), C, ""); brk = 0
       for (i = 1; i <= n; i++) {
+        if (C[i] == "s") shc_s = 1
         if (C[i] == "c") c = 1
         else if (z && C[i] == "b") brk = 1
         else if (z && C[i] == "o") { if (i == n && ++k <= cw_n && gw_dyn(cw_w[k])) return -1; break }
@@ -59,6 +62,7 @@ _GW_AWK='
       }
       if (brk) { k++; break }
     }
+    if (k <= cw_n) shc_op = k
     return c && k <= cw_n ? k : 0
   }
   # sw and cw read a string once: split(s, C, "") for its characters and split(s, P, "/") for its last
