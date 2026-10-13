@@ -141,3 +141,49 @@ mcp() { run_guard "$(payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{}"
   g "git push --all origin" g15
   [ "$(decision_of "$output")" = deny ]
 }
+
+@test "G14: tracker.policy auto allows only a family's listed tools, the family matched as a server token" {
+  printf 'tracker.policy: auto\nmcp.write_servers: youtrack\n' >"$R/.claude/kern.local.yml"
+  for t in mcp__github__create_issue mcp__github__label_write mcp__claude_ai_Linear__save_comment mcp__plugin_engineering_linear__save_issue mcp__claude_ai_Notion__notion-create-comment; do
+    mcp "$t"
+    [ "$(decision_of "$output")" = allow ] || { echo "$t -> $output"; return 1; }
+  done
+  for t in mcp__github__merge_pull_request mcp__claude_ai_Linear__merge_diff mcp__claude_ai_Linear__delete_comment mcp__gitlab__delete_issue mcp__claude_ai_Linear__share_issue mcp__github__create_gist mcp__github__assign_copilot_to_issue mcp__github__create_or_update_file mcp__gitlab__create_issue mcp__atlassian__jira_create_issue mcp__youtrack__update_issue mcp__mylinearish__save_issue mcp__claude_ai_Linear__SAVE_ISSUE mcp__github__x__create_issue; do
+    mcp "$t"
+    [ "$(decision_of "$output")" = ask ] || { echo "$t -> $output"; return 1; }
+  done
+}
+
+@test "G14: camelCase names and push, run, retry, play, fork, schedule, duplicate, restore and unshare are writes" {
+  printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
+  for t in mcp__claude_ai_Atlassian__createJiraIssue mcp__claude_ai_Atlassian__addCommentToJiraIssue mcp__github__push_files mcp__github__run_workflow mcp__github__rerun_failed_jobs mcp__gitlab__retry_pipeline mcp__gitlab__play_pipeline_job mcp__github__fork_repository mcp__claude_ai_Slack__slack_schedule_message mcp__claude_ai_Notion__notion-duplicate-page mcp__claude_ai_Notion__notion-restore-pages mcp__claude_ai_Linear__unshare_issue mcp__github__reOpen_issue; do
+    mcp "$t"
+    [ "$(decision_of "$output")" = ask ] || { echo "$t -> $output"; return 1; }
+  done
+  mcp mcp__claude_ai_Atlassian__getJiraIssue
+  [ "$(decision_of "$output")" = none ]
+  set_autopilot on
+  mcp mcp__claude_ai_Atlassian__createJiraIssue
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "G14: gh issue new is create; deletes, develop, pin, unpin, unlock and label clone ask under tracker.policy auto" {
+  printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
+  printf 'Body\n' >"$R/c.md"
+  g "gh issue new --title x --body-file c.md" g14
+  [ "$(decision_of "$output")" = allow ]
+  for c in "gh issue new -R o/r --title x" "gh issue delete 5 --yes" "gh label delete bug --yes" "gh issue develop 5 --checkout" "gh issue pin 5" "gh issue unpin 5" "gh issue unlock 5" "gh label clone o/r --force"; do
+    g "$c" g14
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+  set_autopilot on
+  g "gh issue pin 5" g14
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "G14: a gh write still votes when gh is in another case, a path or split by quotes" {
+  for c in "GH issue close 5" "/usr/bin/gh issue close 5" "g''h issue close 5"; do
+    g "$c" g14
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+}

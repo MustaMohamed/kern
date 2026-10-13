@@ -286,7 +286,8 @@ gh_log() {
   done
   set_autopilot off
   expect none "gh pr checkout 12 -b local"
-  expect none "gh issue develop 1 -b main -n feat"
+  # G14 asks because develop is an unproven write; the line still proves G4 does not deny.
+  expect ask "gh issue develop 1 -b main -n feat"
 }
 
 @test "G3: review.post_policy auto allows only the proven shape" {
