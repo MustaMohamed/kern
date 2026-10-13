@@ -108,28 +108,39 @@ wrapped() {
   return 1
 }
 
-# natural PROMPT: prompt-initial switches only, with negation and question guards.
+# natural PROMPT: switches on the prompt's first line only, with negation and question guards.
 natural() {
   local first
-  first=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}' | lower | sed -E 's/^[[:space:]]+//; s/^(please|ok|okay),? //')
+  first=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}' | lower | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^(please|ok|okay),? //')
   case "$first" in
     "don't"* | "do not"* | "dont"* | never* | no\ * | "not "*) return 0 ;;
     *'?'* | what* | how* | why* | does* | do\ * | is\ * | are\ * | can\ * | could\ * | should\ * | when\ * | which\ * | who\ *) return 0 ;;
   esac
+  # The off triggers come first: "terse mode off" also starts with the on trigger "terse mode".
   case "$first" in
-    "terse mode"* | "go terse"* | "be terse"* | "switch to terse"* | "terse on"*) _nl_ok "$first" && set_voice terse && SHOW_LINE=1 ;;
-    "normal mode"* | "back to normal"* | "stop terse"* | "terse off"* | "normal voice"*) _nl_ok "$first" && set_voice normal && SHOW_LINE=1 ;;
+    "normal mode"* | "back to normal"* | "stop terse"* | "terse off"* | "normal voice"* | "terse mode off"* | "turn off terse"* | \
+      "disable terse"* | "exit terse"* | "quit terse"* | "go back to normal"* | "switch back to normal"* | "switch to normal"*)
+      _nl_ok "$first" && set_voice normal && SHOW_LINE=1
+      ;;
+    "terse mode"* | "go terse"* | "be terse"* | "switch to terse"* | "terse on"* | "use terse"* | "enable terse"* | "turn on terse"* | \
+      "activate terse"* | "terse please"*)
+      _nl_ok "$first" && set_voice terse && SHOW_LINE=1
+      ;;
+    terse) set_voice terse && SHOW_LINE=1 ;;
     "html mode"* | "go html"* | "switch to html"* | "html on"*) _nl_ok "$first" && set_surface html && SHOW_LINE=1 ;;
     "stop html"* | "html off"*) _nl_ok "$first" && set_surface "$(settings_get mode.surface auto | sed 's/^html$/auto/')" && SHOW_LINE=1 ;;
     "chat only"* | "chat mode"*) _nl_ok "$first" && set_surface chat && SHOW_LINE=1 ;;
     "stop autopilot"* | "autopilot off"*) _nl_ok "$first" && state_set "$SID" autopilot=off && SHOW_LINE=1 ;;
+    # A trailing clause that ends the first line.
+    *" then go terse" | *" then go terse"[.!]) set_voice terse && SHOW_LINE=1 ;;
+    *" then stop terse" | *" then stop terse"[.!]) set_voice normal && SHOW_LINE=1 ;;
   esac
   return 0
 }
 
 # _nl_ok FIRST: the trigger is the whole first line or is followed by punctuation or "and".
 _nl_ok() {
-  printf '%s\n' "$1" | grep -Eq '^(terse mode|go terse|be terse|switch to terse|terse on|normal mode|back to normal|stop terse|terse off|normal voice|html mode|go html|switch to html|html on|stop html|html off|chat only|chat mode|stop autopilot|autopilot off)([[:space:]]*[.!,;:]|[[:space:]]+(and|then|now|please)([[:space:]]|$)|[[:space:]]*$)'
+  printf '%s\n' "$1" | grep -Eq '^(terse mode|go terse|be terse|switch to terse|terse on|use terse mode|use terse|enable terse mode|enable terse|turn on terse mode|turn on terse|activate terse|terse please|normal mode|back to normal|stop terse|terse off|normal voice|terse mode off|turn off terse|disable terse|exit terse mode|exit terse|quit terse|go back to normal mode|go back to normal|switch back to normal|switch to normal|html mode|go html|switch to html|html on|stop html|html off|chat only|chat mode|stop autopilot|autopilot off)([[:space:]]*[.!,;:]|[[:space:]]+(and|then|now|please)([[:space:]]|$)|[[:space:]]*$)'
 }
 
 if [ "$EVENT" = UserPromptExpansion ]; then

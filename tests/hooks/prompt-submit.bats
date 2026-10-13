@@ -179,6 +179,41 @@ expand() {
   [ -z "$output" ]
 }
 
+# The corpus runs each prompt through the hook: `on` cases from voice=normal, `off` cases from
+# voice=terse, and `none` cases from both, so a prompt that wrongly switches either way is caught.
+@test "every mode-activation corpus case switches as expected; known failures still fail" {
+  local expect known pj starts start want got ok why fails="" nl="
+"
+  node -e 'const cases = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    for (const c of cases) {
+      if (typeof c.prompt !== "string" || !["on", "off", "none"].includes(c.expect) || typeof c.known_failing !== "boolean")
+        throw new Error("bad case: " + JSON.stringify(c));
+      console.log([c.expect, c.known_failing, JSON.stringify(c.prompt)].join("\t"));
+    }' "$K/tests/fixtures/mode-activation/cases.json" >"$BATS_TEST_TMPDIR/cases.tsv"
+  while IFS="$(printf '\t')" read -r expect known pj; do
+    case "$expect" in on) starts=normal ;; off) starts=terse ;; *) starts="normal terse" ;; esac
+    ok=1
+    why=""
+    for start in $starts; do
+      case "$expect" in on) want=terse ;; off) want=normal ;; *) want=$start ;; esac
+      printf 'voice: %s\nsurface: auto\nautopilot: off\n' "$start" >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+      printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":%s}' "$CWD" "$pj" |
+        bash "$K/hooks/prompt-submit" >/dev/null 2>&1
+      got=$(st voice)
+      if [ "$got" != "$want" ]; then
+        ok=0
+        why="$why from voice=$start got voice=$got;"
+      fi
+    done
+    if [ "$known" = true ]; then
+      [ "$ok" = 0 ] || fails="$fails${nl}known_failing case passes, set it to false: $pj"
+    else
+      [ "$ok" = 1 ] || fails="$fails${nl}$pj expects $expect:$why"
+    fi
+  done <"$BATS_TEST_TMPDIR/cases.tsv"
+  [ -z "$fails" ] || { printf '%s\n' "$fails"; return 1; }
+}
+
 @test "with settings.sh missing, prompt-submit exits 0 and prints nothing" {
   mkdir -p "$BATS_TEST_TMPDIR/k"
   cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"

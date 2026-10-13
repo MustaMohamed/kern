@@ -21,11 +21,11 @@ kern's prompt hook applies the switch before this skill loads. This skill only r
 `terse` and `normal` set the voice. `chat`, `auto` and `html` set the surface. `default` resets both to the settings defaults. `status` changes nothing. Words combine, as in `/kern:mode html terse`. An unknown word changes nothing.
 
 A phrase also switches, without this skill:
-- terse voice: "terse mode", "go terse", "be terse", "switch to terse", "terse on";
-- normal voice: "normal mode", "back to normal", "stop terse", "terse off", "normal voice";
+- terse voice: "terse mode", "go terse", "be terse", "switch to terse", "terse on", "use terse", "use terse mode", "enable terse", "enable terse mode", "turn on terse", "turn on terse mode", "activate terse", "terse please";
+- normal voice: "normal mode", "back to normal", "go back to normal", "go back to normal mode", "switch back to normal", "switch to normal", "stop terse", "terse off", "terse mode off", "turn off terse", "disable terse", "exit terse", "exit terse mode", "quit terse", "normal voice";
 - html surface: "html mode", "go html", "switch to html", "html on";
 - surface back to the settings default, or `auto` when that default is `html`: "stop html", "html off";
 - chat surface: "chat only", "chat mode";
 - autopilot off: "stop autopilot", "autopilot off".
 
-The phrase must open the prompt's first line, after an optional "please" or "ok". It switches only when it is the whole line, or when punctuation or the word "and", "then", "now" or "please" follows it. "go terse, then fix the test" switches. "go terse for the rest of this session" does not. A first line that holds a question mark, or opens with a question word or a negation such as "don't go terse", never switches.
+The phrase must open the prompt's first line, after an optional "please" or "ok". It switches only when it is the whole line, or when punctuation or the word "and", "then", "now" or "please" follows it. "go terse, then fix the test" switches. "go terse for the rest of this session" does not. "terse" switches only as the whole line. A first line that ends with "then go terse" or "then stop terse", as in "fix the test, then go terse", switches too. A first line that holds a question mark, or opens with a question word or a negation such as "don't go terse", never switches.
