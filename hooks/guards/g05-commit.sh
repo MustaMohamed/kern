@@ -32,8 +32,9 @@ EOT
   while [ "$i" -lt "${#_G05_RECS[@]}" ]; do
     if _g05_split "${_G05_RECS[$i]}"; then
       [ "$moved" = 1 ] && _G05_MOVED=1
-      if declare -F _g01_alias_check >/dev/null &&
-        _g01_alias_check G5 "$_G05_DIR" "$_G05_SUB" "$_G05_CFG" "${_G05_RECS[$i]}"; then
+      if ! declare -F _g01_foreign >/dev/null; then
+        vote ask G5 "kern could not load the list of git's own commands"
+      elif _g01_foreign G5 "$_G05_SUB"; then
         i=$((i + 1))
         continue
       fi
@@ -57,9 +58,8 @@ _g05_ready() {
 # _g05_split RECORD: reads a git record (any case, any path) into _G05_DIR (where git runs: CWD, then
 # each -C), _G05_SUB, _G05_ARGS (the words after the subcommand), _G05_PLAIN (1 when only -C pairs
 # come before the subcommand), _G05_CROSS (1 when a -C leaves this session's repository) and
-# _G05_MOVED (1 with --git-dir, --work-tree, GIT_DIR= or GIT_WORK_TREE=). _G05_CFG holds the -c
-# values, one per line. _G05_HEAD is the first word. Exit 1 when the record is not git with a
-# subcommand.
+# _G05_MOVED (1 with --git-dir, --work-tree, GIT_DIR= or GIT_WORK_TREE=). _G05_HEAD is the first
+# word. Exit 1 when the record is not git with a subcommand.
 _g05_split() {
   local w=() t i=1 n d
   while IFS= read -r t; do w+=("$t"); done <<EOT
@@ -69,7 +69,6 @@ EOT
   _G05_DIR=${CWD:-$PWD}
   _G05_SUB=""
   _G05_ARGS=()
-  _G05_CFG=""
   _G05_PLAIN=1
   _G05_CROSS=0
   _G05_MOVED=0
@@ -86,13 +85,7 @@ EOT
         ;;
       --git-dir | --work-tree) _G05_MOVED=1; _G05_PLAIN=0; i=$((i + 2)) ;;
       --git-dir=* | --work-tree=*) _G05_MOVED=1; _G05_PLAIN=0; i=$((i + 1)) ;;
-      -c)
-        _G05_CFG="$_G05_CFG${w[$((i + 1))]-}
-"
-        _G05_PLAIN=0
-        i=$((i + 2))
-        ;;
-      --config-env | --namespace | --super-prefix | --attr-source) _G05_PLAIN=0; i=$((i + 2)) ;;
+      -c | --config-env | --namespace | --super-prefix | --attr-source) _G05_PLAIN=0; i=$((i + 2)) ;;
       -*) _G05_PLAIN=0; i=$((i + 1)) ;;
       *) break ;;
     esac

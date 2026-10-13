@@ -50,8 +50,9 @@ guard_g06() {
       case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) moved=1 ;; esac
       continue
     fi
-    if declare -F _g01_alias_check >/dev/null &&
-      _g01_alias_check G6 "$_G05_DIR" "$_G05_SUB" "$_G05_CFG" "$rec"; then
+    if ! declare -F _g01_foreign >/dev/null; then
+      vote ask G6 "kern could not load the list of git's own commands"
+    elif _g01_foreign G6 "$_G05_SUB"; then
       continue
     fi
     case "$_G05_SUB" in commit | push) ;; *) continue ;; esac

@@ -748,24 +748,61 @@ key AKIAABCDEFGHIJKLMNOP"
   expect ask g05 "git add $up"
 }
 
-@test "git aliases: one for a guarded command or a shell asks in G1, G5 and G6; others pass" {
-  git -C "$R" config alias.ci commit
+@test "git: a subcommand outside git's own commands asks in G1, G5 and G6, whatever config says" {
+  O="$BATS_TEST_TMPDIR/other"
+  make_repo "$O"
+  git -C "$O" config alias.ci commit
+  mkdir -p "$BATS_TEST_TMPDIR/h3"
+  printf '[alias]\n\tci = commit\n' >"$BATS_TEST_TMPDIR/h3/.gitconfig"
+  git -C "$R" config alias.q1 '"commit"'
+  git -C "$R" config alias.q3 'com\mit'
+  git -C "$R" config alias.q7 '-c user.name=Zed commit'
   git -C "$R" config alias.st status
-  git -C "$R" config alias.x '!sh -c "echo hi"'
-  git -C "$R" config alias.pu 'push origin HEAD'
-  git -C "$R" config alias.c2 ci
   local g c cmds=(
-    "git -c alias.zz=commit zz -m 'CDS-2465: x'" "git ci -m 'CDS-2465: x'" "git x" "git pu" "git c2 -m x"
-    "git -c alias.zz=push zz" "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.yy GIT_CONFIG_VALUE_0=push git yy"
+    "git ci -m 'CDS-2465: x'" "git st" "git lfs pull" "git q1 -m 'CDS-2465: x'" "git q3 -m x" "git q7 -m x"
+    "git -c alias.zz=commit zz -m 'CDS-2465: x'" "git -c alias.zz='\"commit\"' zz -m x"
+    "HOME=$BATS_TEST_TMPDIR/h3 git ci -m x" "XDG_CONFIG_HOME=$BATS_TEST_TMPDIR/h3 git ci -m x"
+    "git -c include.path=$BATS_TEST_TMPDIR/h3/.gitconfig ci -m x" "cd $O && git ci -m 'CDS-2465: x'"
+    "git --git-dir=$O/.git ci -m x" "GIT_DIR=$O/.git git ci -m x" "git COMMIT -m 'CDS-2465: x'"
+    "git whatchanged" "git pack-redundant --all"
   )
   for g in g01 g05 g06; do
     for c in "${cmds[@]}"; do
       expect ask "$g" "$c" || return 1
-      [[ "$output" == *"alias"* ]] || false
+      [[ "$output" == *"not one of git's own commands"* ]] || false
     done
-    expect none "$g" "git st" || return 1
   done
   set_autopilot on
-  expect deny g01,g05,g06 "git ci -m 'CDS-2465: x'"
+  for c in "git ci -m 'CDS-2465: x'" "git q1 -am 'CDS-2465: x'" "git lfs push origin main"; do
+    expect deny g01,g05,g06 "$c" || return 1
+  done
+}
+
+@test "git: git's own commands keep their behaviour" {
+  local g
+  for g in g01 g05 g06; do
+    expect none "$g" "git status" || return 1
+    expect none "$g" "git log --oneline -5" || return 1
+    expect none "$g" "git stage -- a.txt" || return 1
+  done
+  set_autopilot on
+  expect allow g01,g05,g06 "git commit -m 'CDS-2465: x'"
   expect deny g05 "git -c alias.ci=commit commit -m 'CDS-2465: x'"
+}
+
+@test "G1: a lease push reads authors without running gpg from log.showSignature" {
+  local tree parent sha
+  tree=$(git -C "$R" write-tree)
+  parent=$(git -C "$R" rev-parse HEAD)
+  sha=$(printf 'tree %s\nparent %s\nauthor Test User <test@example.com> 1700000000 +0000\ncommitter Test User <test@example.com> 1700000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n -----END PGP SIGNATURE-----\n\nCDS-2465: signed\n' "$tree" "$parent" |
+    git -C "$R" hash-object -t commit -w --stdin)
+  git -C "$R" update-ref refs/heads/CDS-2465/replace-minio "$sha"
+  git -C "$R" push -q -u origin CDS-2465/replace-minio
+  printf '#!/bin/sh\necho "$0 $*" >>"%s/ran"\ncat >/dev/null 2>&1\nexit 1\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/evil"
+  chmod +x "$BATS_TEST_TMPDIR/evil"
+  git -C "$R" config log.showSignature true
+  git -C "$R" config gpg.program "$BATS_TEST_TMPDIR/evil"
+  expect ask g01 "git push --force-with-lease origin CDS-2465/replace-minio"
+  [[ "$output" == *"force-with-lease push"* ]] || false
+  [ ! -e "$BATS_TEST_TMPDIR/ran" ]
 }
