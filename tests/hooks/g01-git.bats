@@ -702,3 +702,10 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   set_autopilot on
   expect deny "git send-email --to=team@example.com HEAD~1"
 }
+
+@test "imap-send asks like send-email, and is denied under autopilot" {
+  expect ask "git imap-send < 0001-x.patch" "git -C $BATS_TEST_TMPDIR/wt imap-send"
+  [[ "$output" == *"git imap-send sends mail"* ]] || false
+  set_autopilot on
+  expect deny "git imap-send < 0001-x.patch"
+}

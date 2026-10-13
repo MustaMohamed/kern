@@ -377,9 +377,9 @@ _g01_git() {
       ;;
     push) _g01_push "$dir" "$plain" "$@" ;;
     send-pack | http-push) _g01_plumb "$sub" "$@" ;;
-    send-email)
-      vote ask G1 "git send-email sends mail; mail always needs the user's word"
-      [ "$AUTOPILOT" = 1 ] && vote deny G1 "git send-email under autopilot: mail stays human"
+    send-email | imap-send)
+      vote ask G1 "git $sub sends mail; mail always needs the user's word"
+      [ "$AUTOPILOT" = 1 ] && vote deny G1 "git $sub under autopilot: mail stays human"
       ;;
   esac
 }

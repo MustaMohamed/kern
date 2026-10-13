@@ -605,3 +605,21 @@ gh_log() {
   [ "$(decision_of "$output")" = ask ]
   [[ "$output" == *'kern allows only `gh pr create --draft` alone, from the current branch, with --title, --base, --fill, --fill-first, --fill-verbose, --dry-run, --no-maintainer-edit, --body-file <file in the repo> or --head <current branch>'* ]] || false
 }
+
+@test "G2: gh extension install and upgrade ask, and are denied under autopilot; list and search do not" {
+  local c cmds=("gh extension install o/gh-x" "gh ext install ./local" "gh extensions upgrade --all" "gh ext upgrade x")
+  for c in "${cmds[@]}"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+  [[ "$output" == *"gh extension upgrade installs code"* ]] || false
+  set_autopilot on
+  for c in "${cmds[@]}"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
+  for c in "gh extension list" "gh ext search x" "gh ext browse"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
+}

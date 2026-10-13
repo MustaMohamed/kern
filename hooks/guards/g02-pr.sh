@@ -81,8 +81,9 @@ _gh_canon() {
 
 # _g02_own SUB: SUB (from _gh_canon) runs one of gh's own commands. A first word outside _GH_CMDS is an
 # alias or an extension, which kern cannot read: ask, deny under autopilot. gh alias set, import and
-# delete change what such a word runs, and gh extension exec runs an extension: they ask too. gh's own
-# --help, -h and --version pass; any other option first is read as unknown.
+# delete change what such a word runs, gh extension exec runs an extension, and gh extension install
+# and upgrade install code: they ask too. gh's own --help, -h and --version pass; any other option
+# first is read as unknown.
 _g02_own() {
   local g="${1%% *}" why
   case "$g" in --help | -h | --version) return 0 ;; esac
@@ -97,6 +98,7 @@ _g02_own() {
   case "$1" in
     "alias set" | "alias import" | "alias delete") why="gh $1 changes what a gh word runs" ;;
     "extension exec") why="gh extension exec runs an extension kern cannot read" ;;
+    "extension install" | "extension upgrade") why="gh $1 installs code that runs as a gh command" ;;
     *) return 0 ;;
   esac
   vote ask G2 "$why; the user confirms it"
