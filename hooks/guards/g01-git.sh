@@ -43,7 +43,6 @@ $(git_words "$cmd")
 EOT
   _G01_CMD=$cmd
   _G01_IDX=0
-  _G01_CONF=""
   while [ "$_G01_IDX" -lt "${#_G01_RECS[@]}" ]; do
     rec=${_G01_RECS[$_G01_IDX]}
     _G01_IDX=$((_G01_IDX + 1))
@@ -61,7 +60,7 @@ EOT
       [Gg][Hh] | */[Gg][Hh]) _g01_gh "$rec" "${w[@]}" ;;
       [Gg][Ii][Tt] | */[Gg][Ii][Tt]) _g01_git_rec "$rec" "$moved" "${w[@]}" ;;
     esac
-    case "${w[0]}" in "" | [Gg][Hh] | */[Gg][Hh] | [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) _g01_hidden "$rec" "${w[@]}" ;; esac
+    case "${w[0]}" in "" | [Gg][Hh] | */[Gg][Hh] | [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) _g01_hidden "${w[@]}" ;; esac
   done
 }
 
@@ -69,19 +68,20 @@ EOT
 _G01_READ_ONLY=" status log diff show rev-parse ls-files ls-remote blame describe grep help version cat-file \
 shortlog for-each-ref merge-base name-rev count-objects var "
 
-# _g01_hidden RECORD HEAD WORDS...: a simple command whose head is neither git nor gh may still run git: an
+# _g01_hidden HEAD WORDS...: a simple command whose head is neither git nor gh may still run git: an
 # unknown wrapper (caffeinate, stdbuf), xargs, find -exec, or a wrapper option _cmd_words does not
 # read (env --ch, env -iC). Each later word whose basename is git (any case) is read past git's
 # global options; when the next word is one of git's own commands outside _G01_READ_ONLY, G1 asks,
 # deny under autopilot. Any other word after it (curl in `apt-get install git curl`, an option git
 # rejects) gets no vote. Quoted text is one word, so `grep -rn "git push" docs` holds no word git,
 # while `echo git push` asks. Config set in the same command may turn any word into any command (an
-# alias, help.autocorrect, include.path), so a -c or --config-env among the global options, or a
-# GIT_CONFIG* assignment (_g01_config_set), asks whatever word follows. A git with no word after it
-# gets no vote. An alias set in git config by an earlier call is not seen.
+# alias, help.autocorrect, include.path), so a -c or --config-env among the global options asks
+# whatever word follows. A git with no word after it gets no vote. Not seen (accepted limits): config
+# from the environment (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT, ...) and an alias set in git config
+# by an earlier call.
 _g01_hidden() {
-  local rec="$1" head="$2" al
-  shift 2
+  local head="$1" al
+  shift
   while [ $# -gt 0 ]; do
     case "${1##*/}" in
       [Gg][Ii][Tt]) shift ;;
@@ -109,34 +109,13 @@ _g01_hidden() {
     done
     [ $# -gt 0 ] || return 0
     if [ "$al" = 0 ]; then
-      case "$_G01_GIT_CMDS" in *" $1 "*) case "$_G01_READ_ONLY" in *" $1 "*) ;; *) al=1 ;; esac ;; esac
+      case "$_G01_GIT_CMDS" in *" $1 "*) ;; *) continue ;; esac
+      case "$_G01_READ_ONLY" in *" $1 "*) continue ;; esac
     fi
-    [ "$al" = 1 ] || _g01_config_set "$rec" || continue
     vote ask G1 "git inside $head cannot be checked; run git directly"
     [ "$AUTOPILOT" = 1 ] && vote deny G1 "git inside $head under autopilot: it cannot be checked; run git directly"
     return 0
   done
-}
-
-# _g01_config_set RECORD: exit 0 when GIT_CONFIG* (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT and its
-# KEY_n and VALUE_n, GIT_CONFIG_GLOBAL, ...) is set for what RECORD runs: an assignment before its
-# command (after env and the other wrappers, NAME+=value too), or one that outlives its record (an
-# export, declare -x or typeset -x, or a record of assignments only) anywhere in the command. G5's
-# _g05_env reads them from the git_words records, so quotes and escapes are already removed and an
-# argument is never one. Only records holding = are read; the scan of every record runs once per
-# command (_G01_CONF). Exit 0 when _g05_env did not load.
-_g01_config_set() {
-  local r
-  declare -F _g05_env >/dev/null || return 0
-  case "$1" in *=*) case $'\n'"$(_g05_env "$1")" in *$'\n'GIT_CONFIG* | *$'\n+'GIT_CONFIG*) return 0 ;; esac ;; esac
-  if [ -z "$_G01_CONF" ]; then
-    _G01_CONF=0
-    for r in "${_G01_RECS[@]}"; do
-      case "$r" in *=*) ;; *) continue ;; esac
-      case $'\n'"$(_g05_env "$r")" in *$'\n+'GIT_CONFIG*) _G01_CONF=1; break ;; esac
-    done
-  fi
-  [ "$_G01_CONF" = 1 ]
 }
 
 # _g01_gh RECORD gh WORDS...: `gh pr merge`, with or without -R/--repo, and `gh api` on a merge
