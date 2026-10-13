@@ -39,9 +39,10 @@ _GW_AWK='
   # is the first word after the options, which end at -, --, or the first word that does not start
   # with - or +. A c in a cluster, after either sign, asks for a script. bash: long options come
   # first, and each o or O in a cluster takes the next word. zsh: o takes the rest of its cluster or
-  # else the next word, b ends the options after its word, and --name takes no value. Returns 0 when
-  # no script is run, and -1 when a word that may be an option or its value is built at run time
-  # (a script operand under a variable, as gw_path reads it, is a script file).
+  # else the next word, b ends the options after its word, --emulate takes the next word and any
+  # other --name takes no value. Returns 0 when no script is run, and -1 when a word that may be an
+  # option or its value is built at run time (a script operand under a variable, as gw_path reads
+  # it, is a script file).
   # Also sets shc_op, the index of the first word after the options (0 when there is none), and
   # shc_s, true when an s in a cluster reads the commands from stdin.
   function shc(h, z,   k, w, c, lng, nm, n, i, C, brk) {
@@ -59,6 +60,7 @@ _GW_AWK='
         if (w ~ /^--/) return 0
       }
       lng = 0
+      if (z && w == "--emulate") { if (++k <= cw_n && gw_dyn(cw_w[k])) return -1; continue }
       if (z && w ~ /^--/) continue
       n = split(substr(w, 2), C, ""); brk = 0
       for (i = 1; i <= n; i++) {

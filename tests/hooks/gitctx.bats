@@ -82,6 +82,13 @@ EOT
   done
 }
 
+@test "zsh's --emulate takes the next word, so the -c after it is read" {
+  finds "zsh --emulate sh -c 'git push'" push
+  finds "ZSH --emulate ksh -ec 'git push'" push
+  run git_words "zsh --emulate sh 'git push'"
+  [ "${#lines[@]}" -eq 1 ]
+}
+
 @test "a redirection among a shell's options is not its script" {
   for c in "bash 2>/dev/null -c 'git push'" "bash -c 2>&1 'git push'" "bash >/tmp/log -c 'git push'" \
     "bash -c > /tmp/log 'git push'" "bash -c <<< x 'git push'" "zsh -c 2> err 'git push'"; do
