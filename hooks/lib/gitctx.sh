@@ -88,7 +88,7 @@ git_words() {
     case "$seg" in
       *'$('* | *'`'*)
         _subst_bodies "$seg" | while IFS= read -r body; do
-          [ -n "$body" ] && git_words "${body//$_GW_NL/$'\n'}"
+          if [ -n "$body" ]; then git_words "${body//$_GW_NL/$'\n'}"; fi
         done
         ;;
     esac
@@ -113,7 +113,7 @@ git_words() {
       /^[-+]/ { next }
       { exit }
       END { if (e) print out }')
-    [ -n "$inner" ] && git_words "${inner//$_GW_NL/$'\n'}"
+    if [ -n "$inner" ]; then git_words "${inner//$_GW_NL/$'\n'}"; fi
   done
 }
 

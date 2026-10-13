@@ -617,6 +617,17 @@ ssh v1-host 'del C:\x'"
     "flutter pub publish --dry-run" "git checkout gh-pages"
 }
 
+@test "G15: a last record that starts with an assignment, a wrapper, ! or a redirect gets no vote under autopilot" {
+  local c
+  set_autopilot on
+  for c in "NODE_ENV=test npm test" "time npm test" "timeout 600 npm test" "sudo npm install -g pnpm" "env CI=1 npm test" \
+    "cd web && FOO=1 npm run build" "DEBUG=1 cargo build" "KUBECONFIG=x kubectl get pods" "! grep -q x docs/a.md" \
+    "nohup npm run dev > log 2>&1 &"; do
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
 @test "G15: a failed judge or a failed parse asks" {
   local real
   real=$(command -v awk)
