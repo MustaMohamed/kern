@@ -243,6 +243,12 @@ test('rule 13: single-quoted keys are reads; a policy_for with a variable is an 
   assert.equal(dyn[0].path, 'hooks/x');
 });
 
+test("rule 13: a hook's need list names functions, so it reads no settings key", () => {
+  const table = '| Key | Default | Values | Read by |\n|---|---|---|---|\n| `orphan.key` | x | x | prompt-submit |\n';
+  const hook = '#!/usr/bin/env bash\nsettings_get orphan.key\nneed settings.sh settings_get settings_source policy_for kern_enabled\n';
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table, 'hooks/x': hook })), []);
+});
+
 test('rule 15: every fixture case but no-settings carries a settings file', () => {
   const dir = join(import.meta.dirname, 'fixtures', 'projects');
   const files = { 'hooks/session-start': '#!/usr/bin/env bash\n', 'tests/hook-shape.sh': '#!/usr/bin/env bash\n' };
