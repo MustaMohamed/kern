@@ -5,6 +5,8 @@
 # An ssh to a target must run a remote command whose every segment (after `cmd /c` and
 # `powershell -Command`) is on a closed read list, with no redirect except to /dev/null, nul or an
 # fd copy, and no input on stdin; `ssh -N` tunnels and `ssh -O` control commands are exempt.
+# SQL to a target must be proven statement by statement (_G13_SQL_AWK); a copy may only come from a
+# target, and sftp may only run read verbs (_G13_XFER_AWK).
 # Targets match the host in any case, as user@host or in a URL; an entry may be host:port.
 # Out of scope (accepted limits): scripts and programs that connect on their own (an extractor, a
 # Perl or Python client), an ssh config alias not listed itself, and names built at run time
@@ -12,7 +14,7 @@
 
 guard_g13() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd flat list rec fed
+  local cmd flat list
   cmd=$(ti_get command) || return 0
   case "$cmd" in *'\u'*) cmd=$(_g13_unescape "$cmd") ;; esac
   # Cheap prefilter before settings_get: some client or transfer name, quotes and backslashes removed.
@@ -20,16 +22,26 @@ guard_g13() {
   _g13_names "$flat" || return 0
   list=$(settings_get protected_targets '')
   [ -n "$list" ] || return 0
+  _g13_scan "$cmd" "$list" 0
+}
+
+# _g13_scan CMD LIST DEPTH: judges each simple command of CMD that names a client.
+_g13_scan() {
+  local rec prev="" fed up
   while IFS= read -r rec; do
     if _g13_names "${rec//[\"\'\\]/}"; then
       fed=0
-      _g13_fed "$cmd" "$rec" && fed=1
-      _g13_judge "$rec" "$list" "$fed" "$cmd"
+      up=""
+      if _g13_fed "$1" "$rec"; then
+        fed=1
+        up=$(_g13_upstream "$1" "$rec" "$prev")
+      fi
+      _g13_judge "$rec" "$2" "$fed" "$1" "$up" "$3"
     fi
+    prev=$rec
   done <<EOT
-$(git_words "$cmd")
+$(git_words "$1")
 EOT
-  _g13_legacy "$cmd" "$list"
 }
 
 # _g13_names TEXT: exit 0 when TEXT holds a client or transfer name G13 reads, in any case.
@@ -73,18 +85,59 @@ _g13_fed() {
   done
 }
 
-# _g13_judge REC LIST FED CMD: denies for each client in the simple command REC that reaches a target
-# in LIST without a proven read. FED is 1 when REC's stdin may come from a pipe; CMD is the whole
-# command (for PGHOST=, MYSQL_HOST= and the like set before the client).
+# _g13_upstream CMD REC PREV: prints PREV when, at every place REC follows a pipe in CMD, PREV is the
+# command right before that pipe, so PREV's output is REC's input.
+_g13_upstream() {
+  local rest="$1" r="${2//$_GW_NL/$'\n'}" p="${3//$_GW_NL/$'\n'}" pre
+  [ -n "$p" ] || return 0
+  while :; do
+    case "$rest" in *"$r"*) ;; *) break ;; esac
+    pre=${rest%%"$r"*}
+    rest=${rest#*"$r"}
+    while :; do
+      case "$pre" in *[[:space:]] | *'(' | *'{' | *'!') pre=${pre%?} ;; *) break ;; esac
+    done
+    case "$pre" in
+      *'||') continue ;;
+      *'|&') pre=${pre%??} ;;
+      *'|') pre=${pre%?} ;;
+      *) continue ;;
+    esac
+    while :; do
+      case "$pre" in *[[:space:]]) pre=${pre%?} ;; *) break ;; esac
+    done
+    case "$pre" in "$p" | *[[:space:]\;\&\|\(\)\{\}]"$p") ;; *) return 0 ;; esac
+  done
+  printf '%s' "$p"
+}
+
+# _g13_judge REC LIST FED CMD UP DEPTH: denies for each client in the simple command REC that reaches
+# a target in LIST without a proven read. FED is 1 when REC's stdin may come from a pipe, and UP is
+# the command that feeds it when G13 can tell; CMD is the whole command (for PGHOST= and the like set
+# before the client, and for here-doc bodies). A line the judge starts with \001 is a command another
+# host runs (ssh bastion "scp f v1-host:"): it is scanned in turn, two levels deep; one deeper that
+# names a client is denied.
 _g13_judge() {
   local why out
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
-  if ! out=$(printf '%s' "$1" | G13_TG="$2" G13_FED="$3" G13_CMD="$4" LC_ALL=C awk -v sq="'" "$_GW_AWK$_G13_AWK$_G13_SQL_AWK" 2>&1); then
+  if ! out=$(printf '%s' "$1" | G13_TG="$2" G13_FED="$3" G13_CMD="$4" G13_UP="$5" LC_ALL=C \
+    awk -v sq="'" "$_GW_AWK$_G13_AWK$_G13_SQL_AWK$_G13_XFER_AWK" 2>&1); then
     vote deny G13 "the protected_targets check failed: ${out%%$'\n'*}"
     return 0
   fi
   while IFS= read -r why; do
-    [ -n "$why" ] && vote deny G13 "$why"
+    case "$why" in
+      $'\001'*)
+        why=${why#?}
+        why=${why//$_GW_NL/$'\n'}
+        if [ "$6" -lt 2 ]; then
+          _g13_scan "$why" "$2" $(($6 + 1))
+        elif _g13_names "${why//[\"\'\\]/}"; then
+          vote deny G13 "a command run on another host nests too deep to check against protected targets"
+        fi
+        ;;
+      ?*) vote deny G13 "$why" ;;
+    esac
   done <<EOT
 $out
 EOT
@@ -94,10 +147,11 @@ EOT
 # qw_r[k] a word that is an unquoted redirection (a quoted '>' is an argument). Every word whose
 # basename, lowercased and without .exe, is a client is judged from there on (a wrapper G13 does not
 # know, such as caffeinate or sshpass, hides nothing); _cmd_words' head is judged too when no word
-# matched (env -S). Each reason prints once.
+# matched (env -S). qw_d[k] marks a word with an unquoted or double-quoted $ or backtick, text the
+# shell builds at run time. Each reason prints once.
 # shellcheck disable=SC2016 # awk text
 _G13_AWK='
-  function qw(buf,   n, q, w, have, i, c, rd, quo, nx) {
+  function qw(buf,   n, q, w, have, i, c, rd, quo, nx, dy) {
     qw_n = 0; n = length(buf); q = ""; w = ""; have = 0; rd = 0; quo = 0; dy = 0
     for (i = 1; i <= n; i++) {
       c = substr(buf, i, 1)
@@ -168,14 +222,14 @@ _G13_AWK='
   # deny(S): prints the reason S once, with the way out.
   function deny(s) { s = s "; run it yourself with ! if it only reads"; if (!(s in said)) { said[s] = 1; print s } }
   function join(a, i, n,   s) { s = ""; for (; i <= n; i++) s = s (s == "" ? "" : " ") a[i]; return s }
-  # redir(K): W[K] is an unquoted redirection: sets RO (operator, fd number dropped) and RT (target);
-  # returns the index of the last word it takes.
+  # redir(K): W[K] is an unquoted redirection: sets RO (operator, fd number dropped), RT (target) and
+  # RD (the target is built at run time); returns the index of the last word it takes.
   function redir(k,   w) {
     w = W[k]
     match(w, /^[0-9]*(&>>|&>|<<<|<<-|<<|<>|<&|>&|>>|>\||<|>)/)
     RO = substr(w, RSTART, RLENGTH); sub(/^[0-9]*/, "", RO)
-    RT = substr(w, RLENGTH + 1)
-    if (RT == "" && k < N) { RT = W[k + 1]; return k + 1 }
+    RT = substr(w, RLENGTH + 1); RD = D[k]
+    if (RT == "" && k < N) { RT = W[k + 1]; RD = D[k + 1]; return k + 1 }
     return k
   }
 
@@ -304,7 +358,9 @@ _G13_AWK='
     if (!t) t = hit(UH, UP != "" ? UP : port)
     if (!t && OH != "") t = hit(OH, UP != "" ? UP : port)
     if (lc != "") { deny("ssh -o " lc " runs a command that names protected target " tr[lt] "; kern cannot check it"); return }
-    if (!t) return
+    # Another host may reach a target in turn (ssh bastion "scp f v1-host:"): the caller checks its
+    # command as a command line.
+    if (!t) { if (rc != "") print "\001" rc; if (orc != "") print "\001" orc; return }
     h = tr[t]
     if (rc == "" && orc == "") {
       if (nf || ctl) return
@@ -326,6 +382,9 @@ _G13_AWK='
 
   function judge(b, k) {
     if (b == "ssh") j_ssh(k)
+    else if (b == "scp") j_scp(k)
+    else if (b == "rsync") j_rsync(k)
+    else if (b == "sftp") j_sftp(k)
     else if (b in SQLFAM) j_sql(k, b)
   }
 
@@ -701,35 +760,228 @@ _G13_SQL_AWK='
   }
 '
 
-# _g13_legacy CMD LIST: scp, rsync and sftp toward a target.
-_g13_legacy() {
-  local cmd="$1" seg rest target
-  rest="$2,"
-  while [ -n "$rest" ]; do
-    target=${rest%%,*}
-    rest=${rest#*,}
-    target=$(printf '%s' "$target" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-    [ -n "$target" ] || continue
-    case "$cmd" in *"$target"*) ;; *) continue ;; esac
-    while IFS= read -r seg; do
-      _g13_segment "$seg" "$target"
-    done <<EOT
-$(git_words "$cmd")
-EOT
-  done
-}
-
-_g13_segment() {
-  local seg="$1" target="$2" head last
-  head=$(cmd_head "$seg")
-  case "${head%% *}" in
-    scp | rsync)
-      last=$(_shell_words "$seg" | tail -n 1)
-      case "$last" in *"$target"*) vote deny G13 "copy to protected target $target" ;; esac
-      ;;
-    sftp)
-      printf '%s\n' "$seg" | grep -Eiq '(^|[^a-z])(put|rm|rename|mkdir|rmdir|chmod)[[:space:]]' &&
-        vote deny G13 "sftp write to protected target $target"
-      ;;
-  esac
-}
+# The transfer judge, appended to _G13_AWK. A remote operand is scp://, sftp:// or rsync://
+# [user@]host[:port]/..., host::module, or [user@]host:path with the colon before any slash. scp and
+# rsync deny a copy whose destination, the last positional word, is on a target; rsync also denies
+# --remove-source-files, --delete* and a remote command (--rsync-path, -M) when any operand is on a
+# target. A long rsync option written without = is read both with and without a value, so the last
+# positional is never guessed wrong. sftp to a target runs only read verbs, read from -b, a
+# here-string, the command's only here-doc, a < file, or a pipe from echo, printf or cat.
+# shellcheck disable=SC2016 # awk text
+_G13_XFER_AWK='
+  function isremote(w) {
+    return w ~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\// || (index(w, ":") && (!index(w, "/") || index(w, ":") < index(w, "/")))
+  }
+  # ohit(W, PORT, DPORT): the target the remote operand W names; DPORT is the port of host::module.
+  function ohit(w, port, dport,   h) {
+    if (w ~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\//) { uhost(w); return hit(UH, UP != "" ? UP : (w ~ /^rsync:/ ? dport : port)) }
+    h = substr(w, 1, index(w, ":") - 1); sub(/.*@/, "", h)
+    return hit(h, substr(w, index(w, ":") + 1, 1) == ":" ? dport : port)
+  }
+  # oval(TOOL, V): an ssh -o option of scp, sftp or rsync -e. Sets O_PORT for Port; returns the
+  # target its value names. A command option that names a target is denied.
+  function oval(tool, v,   key, t) {
+    key = tolower(v); sub(/[ =].*/, "", key); sub(/^[^ =]*[ =][ \t]*/, "", v)
+    if (key == "port") O_PORT = v
+    if (!(t = named(v))) return 0
+    if (key ~ /^(proxycommand|localcommand|knownhostscommand|remotecommand)$/) deny(tool " -o " key " runs a command that names protected target " tr[t] "; kern cannot check it")
+    return t
+  }
+  function j_scp(s,   k, w, j, c, v, n, a, t, port, ot, x) {
+    n = 0; port = 22; ot = 0
+    for (k = s + 1; k <= N; k++) {
+      w = W[k]
+      if (R[k]) { k = redir(k); continue }
+      if (w ~ /^-./) {
+        for (j = 2; j <= length(w); j++) {
+          c = substr(w, j, 1)
+          if (index("cDFiJloPSX", c)) {
+            v = substr(w, j + 1)
+            if (v == "" && k < N) v = W[++k]
+            if (c == "P") port = v
+            else if (c == "J" && !ot) ot = hops(v)
+            else if (c == "o") { O_PORT = ""; x = oval("scp", v); if (!ot) ot = x; if (O_PORT != "") port = O_PORT }
+            break
+          }
+        }
+        continue
+      }
+      a[++n] = w
+    }
+    if (n < 2 || !isremote(a[n])) return
+    if ((t = ohit(a[n], port, 22)) || (t = ot)) deny("scp copy to protected target " tr[t])
+  }
+  function j_rsync(s,   k, w, j, c, v, x, pa, pb, na, nb, pend, rm, del, rc, i, t, touch, sp) {
+    na = 0; nb = 0; pend = 0; rm = 0; del = 0; rc = ""; RT_OT = 0; sp = 22
+    for (k = s + 1; k <= N; k++) {
+      w = W[k]
+      if (R[k]) { k = redir(k); continue }
+      if (w == "--") { for (k++; k <= N; k++) if (!R[k]) { pa[++na] = W[k]; pb[++nb] = W[k] }; break }
+      if (w ~ /^--./) {
+        pend = 0; x = w; sub(/=.*/, "", x); v = ""
+        if (index(w, "=")) v = substr(w, index(w, "=") + 1)
+        else if (x ~ /^--(rsh|rsync-path|remote-option)$/) { if (k < N) v = W[++k] }
+        else pend = 1
+        if (x ~ /^--(remove-source-files|remove-sent-files)$/ || (x == "--remote-option" && v ~ /remove-s(ource|ent)-files/)) rm = 1
+        if (x ~ /^--del/ || (x == "--remote-option" && v ~ /^--del/)) del = 1
+        if (x ~ /^--(rsync-path|remote-option)$/) rc = x
+        if (x == "--rsh") sp = rsh(v, sp)
+        continue
+      }
+      if (w ~ /^-./) {
+        pend = 0
+        for (j = 2; j <= length(w); j++) {
+          c = substr(w, j, 1)
+          if (index("efBTM@", c)) {
+            v = substr(w, j + 1)
+            if (v == "" && k < N) v = W[++k]
+            if (c == "e") sp = rsh(v, sp)
+            if (c == "M") { rc = "-M"; if (v ~ /remove-s(ource|ent)-files/) rm = 1; if (v ~ /^--del/) del = 1 }
+            break
+          }
+        }
+        continue
+      }
+      pa[++na] = w
+      if (pend) pend = 0
+      else pb[++nb] = w
+    }
+    touch = 0
+    for (i = 1; i <= na; i++) if ((t = rhit(pa[i], sp))) {
+      touch = t
+      if (na >= 2 && i == na) deny("rsync to protected target " tr[t])
+    }
+    for (i = 1; i <= nb; i++) if ((t = rhit(pb[i], sp))) {
+      touch = t
+      if (nb >= 2 && i == nb) deny("rsync to protected target " tr[t])
+    }
+    if (!touch) return
+    if (rm) deny("rsync --remove-source-files deletes on protected target " tr[touch])
+    if (del) deny("rsync --delete touching protected target " tr[touch])
+    if (rc != "") deny("rsync " rc " runs a remote command on protected target " tr[touch])
+  }
+  # rhit(W, PORT): the target the rsync operand W is on: by its host, or any remote operand when -e
+  # names a target.
+  function rhit(w, port,   t) {
+    if (!isremote(w)) return 0
+    t = ohit(w, port, 873)
+    return t ? t : RT_OT
+  }
+  # rsh(V, PORT): an rsync -e command. Notes in RT_OT the target it names; returns its -p port.
+  function rsh(v, port,   n, a, i, t) {
+    n = split(v, a, /[ \t]+/)
+    for (i = 1; i <= n; i++) {
+      if (a[i] == "-p" && i < n) port = a[i + 1]
+      else if (a[i] ~ /^-p[0-9]+$/) port = substr(a[i], 3)
+      else if (a[i] == "-o" && i < n) { O_PORT = ""; if ((t = oval("rsync -e", a[i + 1]))) RT_OT = t; if (O_PORT != "") port = O_PORT }
+    }
+    if (!RT_OT) RT_OT = named(v)
+    return port
+  }
+  function j_sftp(s,   k, w, j, c, v, n, a, t, port, ot, bf, stdin, rt, rd, txt, why, h, x) {
+    n = 0; port = 22; ot = 0; bf = ""; stdin = ""; rt = ""; rd = 0
+    for (k = s + 1; k <= N; k++) {
+      w = W[k]
+      if (R[k]) { k = redir(k); if (RO ~ /^</) { stdin = RO; rt = RT; rd = RD }; continue }
+      if (w ~ /^-./) {
+        for (j = 2; j <= length(w); j++) {
+          c = substr(w, j, 1)
+          if (index("BbcDFiJloPRSsX", c)) {
+            v = substr(w, j + 1)
+            if (v == "" && k < N) v = W[++k]
+            if (c == "b") bf = v
+            else if (c == "P") port = v
+            else if (c == "J" && !ot) ot = hops(v)
+            else if (c == "o") { O_PORT = ""; x = oval("sftp", v); if (!ot) ot = x; if (O_PORT != "") port = O_PORT }
+            break
+          }
+        }
+        continue
+      }
+      a[++n] = w
+    }
+    if (n < 1) return
+    if (a[1] ~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\//) { uhost(a[1]); t = hit(UH, UP != "" ? UP : port) }
+    else { h = a[1]; sub(/:.*/, "", h); sub(/.*@/, "", h); t = hit(h, port) }
+    if (!t) t = ot
+    if (!t) return
+    h = "sftp to protected target " tr[t]
+    if (bf != "" && bf != "-") { txt = slurp(bf); if (!SLURP_OK) { deny(h ": cannot read batch file " bf); return } }
+    else if (stdin == "<<<") { if (rd) { deny(h ": the here-string is built at run time"); return }; txt = rt }
+    else if (stdin ~ /^<<-?$/) {
+      txt = hdbody()
+      if (HDN != 1) { deny(h ": the command holds more than one here-doc"); return }
+      if (!HDQ && txt ~ /[$`]/) { deny(h ": the here-doc expands $ or a backtick"); return }
+    }
+    else if (stdin == "<") { txt = slurp(rt); if (!SLURP_OK) { deny(h ": cannot read " rt); return } }
+    else if (stdin != "") { deny(h " with input from " stdin); return }
+    else if (FED) { txt = upstream(); if (txt == "\001") { deny(h " with input piped from a command kern cannot read"); return } }
+    else { deny(h " with no batch opens an interactive session"); return }
+    if ((why = sftpok(txt)) != "") deny(h ": " why)
+  }
+  function sftpok(text,   n, a, i, l, v) {
+    gsub(/\037/, "\n", text)
+    n = split(text, a, "\n")
+    for (i = 1; i <= n; i++) {
+      l = a[i]; sub(/^[ \t]+/, "", l)
+      if (l == "" || l ~ /^#/) continue
+      sub(/^[-@]+/, "", l)
+      v = tolower(l); sub(/[ \t].*/, "", v)
+      if (!(v in SFTPREAD)) return "`" v "` is not a read"
+    }
+    return ""
+  }
+  # upstream(): what the piped command G13_UP prints: echo, printf with a literal format or %s\n, or
+  # cat of files G13 can read; "\001" when G13 cannot tell.
+  function upstream(   n, k, b, t, f) {
+    if (ENVIRON["G13_UP"] == "") return "\001"
+    qw(ENVIRON["G13_UP"]); n = qw_n
+    for (k = 1; k <= n; k++) if (qw_r[k] || qw_d[k]) return "\001"
+    b = base(qw_w[1]); t = ""
+    if (b == "echo") {
+      for (k = 2; k <= n && qw_w[k] ~ /^-[neE]+$/; k++) ;
+      for (; k <= n; k++) t = t (t == "" ? "" : " ") qw_w[k]
+      gsub(/\\n/, "\n", t); return t
+    }
+    if (b == "printf" && n >= 2) {
+      if (qw_w[2] == "%s\\n") { for (k = 3; k <= n; k++) t = t qw_w[k] "\n"; return t }
+      if (index(qw_w[2], "%")) return "\001"
+      t = qw_w[2]; gsub(/\\n/, "\n", t); return t
+    }
+    if (b == "cat" && n >= 2) {
+      for (k = 2; k <= n; k++) { if (qw_w[k] ~ /^-/) return "\001"; f = slurp(qw_w[k]); if (!SLURP_OK) return "\001"; t = t f }
+      return t
+    }
+    return "\001"
+  }
+  # hdbody(): the body of the only here-doc in the command. Sets HDN to the number of << operators and
+  # HDQ when the delimiter is quoted (the body is not expanded).
+  function hdbody(   tmp, i, nl, L, k, line, p, off, d, dash, out) {
+    HDN = 0; HDQ = 0; tmp = CMDTXT
+    while ((i = index(tmp, "<<")) > 0) { if (substr(tmp, i + 2, 1) != "<") HDN++; tmp = substr(tmp, i + (substr(tmp, i + 2, 1) == "<" ? 3 : 2)) }
+    if (HDN != 1) return ""
+    nl = split(CMDTXT, L, "\n"); p = 0
+    for (k = 1; k <= nl && !p; k++) {
+      tmp = L[k]; off = 0
+      while ((i = index(tmp, "<<")) > 0) {
+        if (substr(tmp, i + 2, 1) != "<") { p = off + i; break }
+        off += i + 2; tmp = substr(tmp, i + 3)
+      }
+    }
+    if (!p) return ""
+    line = L[--k]; d = substr(line, p + 2); dash = 0
+    if (substr(d, 1, 1) == "-") { dash = 1; d = substr(d, 2) }
+    sub(/^[ \t]+/, "", d)
+    match(d, /^[^ \t;&|<>()]*/); d = substr(d, 1, RLENGTH)
+    HDQ = (d ~ /["\\]/ || index(d, sq) > 0)
+    d = unq(d); gsub(/\\/, "", d)
+    out = ""
+    for (k++; k <= nl; k++) { line = L[k]; if (dash) sub(/^\t+/, "", line); if (line == d) break; out = out line "\n" }
+    return out
+  }
+  BEGIN {
+    JUDGE["scp"] = JUDGE["rsync"] = JUDGE["sftp"] = 1
+    n = split("get reget ls dir cd lcd lls pwd lpwd help exit quit bye version progress", a, " ")
+    for (i = 1; i <= n; i++) SFTPREAD[a[i]] = 1
+  }
+'

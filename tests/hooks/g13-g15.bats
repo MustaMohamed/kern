@@ -205,6 +205,62 @@ EOF"
   g13_all none "mysqldump -h prod-db.internal --single-transaction app > dump.sql" "pg_dump -h prod-db.internal app"
 }
 
+@test "G13: scp or rsync to a target is denied by its last positional word, in any case or URL form" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "scp a.txt v1-host:/data/ 2>&1" "scp a.txt v1-host:/data/ >/dev/null" "scp a.txt V1-HOST:/data/" \
+    "scp a.txt admin@v1-host:/data/" "scp a.txt scp://admin@v1-host:22/data/" "scp -o HostName=v1-host a.txt alias:/data/" \
+    "rsync -av a.txt v1-host:/data/" "rsync -av a.txt v1-host:/data/ --progress" "rsync -av a.txt v1-host:/data/ 2>/dev/null" \
+    "rsync -av a.txt v1-host:/data/ --exclude x" "rsync -av a.txt rsync://v1-host/mod/" "rsync -av a.txt v1-host::mod/" \
+    "rsync -av -e 'ssh -o HostName=v1-host' a.txt alias:/data/"
+}
+
+@test "G13: rsync --remove-source-files, --delete or a remote command touching a target is denied" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "rsync -av --remove-source-files v1-host:/data/x ." "rsync -av --delete empty/ v1-host:/data/ >/dev/null" \
+    "rsync -av --delete-after v1-host:/data/ ./mirror/" "rsync -av --rsync-path='sudo rsync' v1-host:/data/ ." \
+    "rsync -av -M--remove-source-files v1-host:/data/x ."
+}
+
+@test "G13: an scp or rsync behind a path, another case or a wrapper is still read" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all deny "/usr/bin/scp a.txt v1-host:/data/" "SCP a.txt v1-host:/data/" "caffeinate scp a.txt v1-host:/data/" \
+    "sshpass -p x scp a.txt v1-host:/data/" "xargs -I{} scp {} v1-host:/data/ < list.txt" "nice -n 5 rsync a.txt v1-host:/data/" \
+    "ssh bastion 'scp a.txt v1-host:/data/'" "ssh bastion \"ssh v1-host 'rm -f /data/x'\""
+}
+
+@test "G13: copies from a target and to other hosts get no vote" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  g13_all none "scp v1-host:/data/a.txt ./backup-v1-host/" "scp admin@v1-host:/data/a.txt ." \
+    "rsync -av v1-host:/data/ ./v1-host-mirror/" "rsync -av --progress v1-host:/data/ ./mirror/" \
+    "scp a.txt other-host:/data/v1-host/" "rsync -av ./v1-host/ /backup/" "ssh bastion 'scp v1-host:/data/a.txt .'" \
+    "ssh a \"ssh b 'ssh c ls'\""
+}
+
+@test "G13: sftp to a target runs only read verbs, from a batch file, here-doc, here-string or pipe" {
+  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  printf 'put a.txt /data/a.txt\n' >"$R/batch.txt"
+  printf 'get /data/a.txt .\nls /data\n-cd /data\nbye\n' >"$R/get.txt"
+  g13_all deny "sftp -b batch.txt v1-host" "echo 'put a.txt /data/' | sftp v1-host" "sftp v1-host <<< 'put a.txt /data/'" \
+    "sftp v1-host <<< 'reput a.txt /data/a.txt'" "sftp v1-host <<< 'ln /data/a /data/b'" "sftp v1-host <<< 'chown 0 /data/a'" \
+    "sftp -b - v1-host <<< '!rm x'" "printf 'get a\nrm b\n' | sftp v1-host" "cat batch.txt | sftp v1-host" "sftp v1-host" \
+    "sftp -b missing.txt v1-host" "sftp admin@v1-host:/data/ <<< 'put a'" "sftp -b batch.txt sftp://v1-host" \
+    "ls | sftp v1-host" "printf 'get a\n' \"\$(echo 'put b')\" | sftp v1-host"
+  g13_all deny "sftp v1-host <<'EOF'
+put a.txt /data/
+EOF" "cat <<'A' >b.txt
+get x
+A
+sftp v1-host <<'B'
+put y
+B"
+  g13_all none "sftp -b get.txt v1-host" "sftp v1-host <<< 'get /data/a.txt'" "echo 'get /data/a.txt' | sftp v1-host" \
+    "printf '%s\n' 'get /data/a' 'bye' | sftp v1-host" "sftp -b batch.txt other-host"
+  g13_all none "sftp v1-host <<'EOF'
+get /data/a.txt
+ls
+EOF"
+}
+
 @test "G13: sqlite3 votes only when its file is a target" {
   printf 'protected_targets: /srv/prod.db\n' >"$R/.claude/kern.local.yml"
   g13_all deny "sqlite3 /srv/prod.db 'DELETE FROM t'" "sqlite3 /srv/prod.db '.import x.csv t'"
