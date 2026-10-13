@@ -1063,3 +1063,20 @@ key AKIAABCDEFGHIJKLMNOP"
   expect none g06 "git add .env"
   expect none g06 "git status && git log -1 && git commit -m 'CDS-2465: x'"
 }
+
+@test "G6: stash pop or apply, pull, update-index, read-tree, update-ref, branch -f, commit-tree and notes leave the scan stale" {
+  local s
+  for s in "stash pop" "stash apply" "pull" "update-index --add x" "read-tree HEAD" "update-ref refs/heads/x HEAD" \
+    "branch -f x HEAD" "branch --forc x HEAD" "branch -fq x" "commit-tree HEAD^{tree}" "notes add -m n"; do
+    expect ask g06 "git $s && git commit -m 'CDS-2465: x'" || return 1
+    [[ "$output" == *"secret scan may be stale: git ${s%% *}"* ]] || false
+    expect ask g06 "git $s; git push origin HEAD" || return 1
+    [[ "$output" == *"secret scan may be stale: git ${s%% *}"* ]] || false
+  done
+  set_autopilot on
+  expect deny g06 "git stash pop && git commit -m 'CDS-2465: x'"
+  set_autopilot off
+  for s in "stash list" "stash show" "branch x" "branch -d x" "notes list" "notes show"; do
+    expect none g06 "git $s && git commit -m 'CDS-2465: x'" || return 1
+  done
+}

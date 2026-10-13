@@ -43,9 +43,11 @@ google-api-key|AIza[0-9A-Za-z_-]{35}'
 # guard_g06: MOVED is set after cd, pushd or popd, and after a record that exports, or only
 # assigns, GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE; CONF after one that does so for GIT_CONFIG*,
 # HOME or XDG_CONFIG_HOME. Both hold for the records that follow. STALE names the first git command
-# that changes the index or HEAD (add, stage, cherry-pick, merge, rebase, revert, am, apply, checkout,
-# switch, restore, mv, rm, reset): G6 reads them as they are at hook time, so a commit or push after
-# it asks that its scan may be stale, and is denied under autopilot.
+# that changes the index, HEAD or a ref (add, stage, cherry-pick, merge, rebase, revert, am, apply,
+# checkout, switch, restore, mv, rm, reset, pull, update-index, read-tree, update-ref, commit-tree,
+# stash pop or apply, branch -f, and notes but its list, show and get-ref): G6 reads them as they are
+# at hook time, so a commit or push after it asks that its scan may be stale, and is denied under
+# autopilot.
 guard_g06() {
   [ "$TOOL" = Bash ] || return 0
   local cmd rec moved=0 conf=0 stale=""
@@ -75,8 +77,21 @@ guard_g06() {
         _g06_unscanned "could not scan: git $_G05_SUB pushes refs kern does not read; use git push"
         continue
         ;;
-      add | stage | cherry-pick | merge | rebase | revert | am | apply | checkout | switch | restore | mv | rm | reset)
+      add | stage | cherry-pick | merge | rebase | revert | am | apply | checkout | switch | restore | mv | rm | reset | \
+        pull | update-index | read-tree | update-ref | commit-tree)
         stale=${stale:-$_G05_SUB}
+        continue
+        ;;
+      stash)
+        case "${_G05_ARGS[0]-}" in pop | apply) stale=${stale:-stash ${_G05_ARGS[0]}} ;; esac
+        continue
+        ;;
+      notes)
+        case "${_G05_ARGS[0]-}" in "" | list | show | get-ref) ;; *) stale=${stale:-notes ${_G05_ARGS[0]}} ;; esac
+        continue
+        ;;
+      branch)
+        word_has "$(_g01_opts "$_G01_BRANCH_OPTS" "${_G05_ARGS[@]}")" --force && stale=${stale:-branch -f}
         continue
         ;;
       *) continue ;;
