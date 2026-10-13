@@ -18,23 +18,26 @@ _GW_AWK='
     cw_opt["timeout"] = " -s -k --signal --kill-after "
     cw_opt["nice"] = " -n --adjustment "
   }
-  function sw(buf,   n, q, w, have, i, c) {
-    sw_n = 0; n = length(buf); q = ""; w = ""; have = 0
+  # sw and cw read a string once: split(s, C, "") for its characters and split(s, P, "/") for its last
+  # path part. In BWK awk, substr scans the whole string on every call, so substr per character, or
+  # sub(/.*\//) on a long word, is quadratic in its length.
+  function sw(buf,   n, q, w, have, i, c, C) {
+    sw_n = 0; n = split(buf, C, ""); q = ""; w = ""; have = 0
     for (i = 1; i <= n; i++) {
-      c = substr(buf, i, 1)
+      c = C[i]
       if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
       if (q == "\"") {
         if (c == "\"") q = ""
-        else if (c == "\\" && index("\"\\$`", substr(buf, i + 1, 1))) { i++; w = w substr(buf, i, 1) }
+        else if (c == "\\" && index("\"\\$`", C[i + 1])) { i++; w = w C[i] }
         else w = w c
         continue
       }
-      if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; continue }
+      if (c == "\\") { i++; w = w C[i]; have = 1; continue }
       if (c == sq || c == "\"") { q = c; have = 1; continue }
       if (c == " " || c == "\t" || c == "\n" || c == "\037") { if (have) sw_w[++sw_n] = w; w = ""; have = 0; continue }
       # An unquoted, unescaped # that starts a word is a comment, to the newline, as in bash.
-      if (c == "#" && !have) { while (i < n && index("\n\037", substr(buf, i + 1, 1)) == 0) i++; continue }
-      if ((c == "<" || c == ">" || (c == "&" && substr(buf, i + 1, 1) == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
+      if (c == "#" && !have) { while (i < n && index("\n\037", C[i + 1]) == 0) i++; continue }
+      if ((c == "<" || c == ">" || (c == "&" && C[i + 1] == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
         sw_w[++sw_n] = w; w = ""
       }
       w = w c; have = 1
@@ -44,7 +47,7 @@ _GW_AWK='
   function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0 }
   # cw_line(s): feeds cw the words of the command line s (the value of env -S).
   function cw_line(s,   a, k, m) { m = split(s, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") cw(a[k]) }
-  function cw(x,   b, v) {
+  function cw(x,   b, v, P) {
     if (cw_s) { cw_w[++cw_n] = x; return }
     if (cw_val) {
       cw_val = 0
@@ -55,7 +58,7 @@ _GW_AWK='
     if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) return
     if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
     # Any case: on a case-insensitive file system ENV and Sudo run env and sudo.
-    b = x; sub(/.*\//, "", b); b = tolower(b)
+    b = tolower(P[split(x, P, "/")])
     if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
     if (x ~ /^-/) {
       # env -S, after any of the flags -0 -i -v in its cluster: the line is attached or the next word.
