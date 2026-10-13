@@ -279,15 +279,22 @@ EOT
 
 # _g05_problems DIR MESSAGE: one line per failed check; nothing when the message passes.
 _g05_problems() {
-  local dir="$1" msg="$2" subject conv idre branch id
+  local dir="$1" msg="$2" subject conv src idre branch id
   subject=$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')
   if [ "$(settings_get commit.attribution none)" = none ] &&
     printf '%s\n' "$msg" | grep -Eiq 'co-authored-by:.*(claude|anthropic)|generated (with|by) .*claude|claude-session:|claude\.ai/code|(co-authored-by|assisted-by|generated-by)[[:space:]]*[:=].*(claude|anthropic)'; then
     echo "attribution trailer present (commit.attribution: none)"
   fi
-  conv=$(settings_get commit.convention '')
+  # Unset, the convention is the one kern-detect finds in git log; with none found, none is checked.
+  if conv=$(settings_get commit.convention); then
+    src=""
+  else
+    conv=$(cd "$dir" && bash "$KERN_ROOT/scripts/kern-detect" commit.convention 2>/dev/null) || conv=""
+    conv=${conv%%$'\t'*}
+    src=", detected from git log"
+  fi
   if [ -n "$conv" ] && ! printf '%s\n' "$subject" | grep -Eq -- "$conv"; then
-    echo "subject does not match commit.convention $conv"
+    echo "subject does not match commit.convention $conv$src"
   fi
   idre=$(settings_get commit.id_from_branch '[A-Z][A-Z0-9]+-[0-9]+')
   branch=$(current_branch "$dir")

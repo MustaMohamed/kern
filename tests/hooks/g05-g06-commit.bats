@@ -85,6 +85,22 @@ KEY='-----BEGIN RSA PRIVATE KEY-----'
   [ "$(decision_of "$output")" = deny ]
 }
 
+@test "G5: with commit.convention unset, the convention kern-detect finds is checked, and none when it finds none" {
+  rm "$R/.claude/kern.local.yml"
+  g "git commit -m 'CDS-2465 swap'" g05
+  [ "$(decision_of "$output")" = ask ]
+  for i in 1 2 3 4 5; do git -C "$R" commit -q --allow-empty -m "CDS-$i: step $i"; done
+  git -C "$R" push -q origin HEAD:main
+  g "git commit -m 'CDS-2465 swap'" g05
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'commit.convention ^[A-Z][A-Z0-9]+-[0-9]+: , detected from git log'* ]] || false
+  g "git commit -m 'CDS-2465: swap'" g05
+  [ "$(decision_of "$output")" = ask ]
+  printf 'commit.convention:\n' >"$R/.claude/kern.local.yml"
+  g "git commit -m 'CDS-2465 swap'" g05
+  [ "$(decision_of "$output")" = ask ]
+}
+
 @test "G5: a missing ticket id from the branch is denied" {
   printf 'commit.convention: ".*"\n' >"$R/.claude/kern.local.yml"
   g "git commit -m 'swap MinIO'" g05
