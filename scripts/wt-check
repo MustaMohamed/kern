@@ -17,6 +17,7 @@ gitdir=$(git -C "$wt" rev-parse --path-format=absolute --git-dir)
 common=$(git -C "$wt" rev-parse --path-format=absolute --git-common-dir)
 [ "$gitdir" != "$common" ] || fail "not a linked worktree (this is the main checkout): $wt"
 MAIN=$(kern_main_root "$wt") || fail "cannot resolve the main worktree for $wt"
+export KERN_MAIN="$MAIN"
 [ "$(cd "$top" && pwd -P)" != "$(cd "$MAIN" && pwd -P)" ] || fail "worktree is the main checkout: $wt"
 git -C "$wt" rev-parse --verify --quiet "$base^{commit}" > /dev/null || fail "unknown base ref: $base"
 git -C "$wt" merge-base --is-ancestor "$base" HEAD || fail "base $base is not an ancestor of HEAD in $wt"
