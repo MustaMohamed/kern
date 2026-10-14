@@ -174,3 +174,68 @@ says() { printf '%s\n' "$output" | grep -qF -- "$1" || { echo "missing: $1"; ech
   pc --files plan.md 9
   [ "$status" -eq 2 ]
 }
+
+@test "a directory path overlaps a path inside it, and a longer name does not" {
+  sed -i.bak 's#^- Create: `src/parse.js:1-20`#- Create: `docs/**`#' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 1 and Task 4 share docs/, but Task 4 is not blocked by Task 1"
+  sed -i.bak 's#^- Create: `docs/parse.md`#- Create: `doc.md`#' plan.md
+  pc plan.md
+  [ "$status" -eq 0 ]
+}
+
+@test "--graph keeps a directory and a file inside it out of one wave" {
+  sed -i.bak 's#^- Create: `src/parse.js:1-20`#- Create: `docs/**`#' plan.md
+  sed -i.bak '/^### Task 4:/,$ s/^\*\*Blocked by:\*\* none$/**Blocked by:** Task 1/' plan.md
+  pc --graph plan.md
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = $'overlap\t1\t4\tdocs/' ]
+  [ "${lines[2]}" = $'wave\t1\t1' ]
+  [ "${lines[3]}" = $'wave\t2\t2 4' ]
+}
+
+@test "an Acceptance line with no leading number list is an error" {
+  sed -i.bak '/^### Task 4:/,$ s/^\*\*Acceptance:\*\* 3$/**Acceptance:** responds within 2 seconds, covers 1/' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 4: Acceptance names no criterion number"
+}
+
+@test "an Acceptance range covers every number in it" {
+  sed -i.bak 's/^\*\*Acceptance:\*\* 2$/**Acceptance:** 1/; s/^\*\*Acceptance:\*\* 3$/**Acceptance:** 1-3/' plan.md
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "only the leading Acceptance list counts, not numbers in the prose after it" {
+  sed -i.bak 's/^\*\*Acceptance:\*\* 2$/**Acceptance:** 1/; s/^\*\*Acceptance:\*\* 3$/**Acceptance:** 1, 3 - prose with 2 in it/' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "acceptance criterion 2 of the spec is covered by no task"
+}
+
+@test "an unclosed code fence is an error at its opening line" {
+  n=$(wc -l < plan.md)
+  printf '%s\n' '```' 'text' >> plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "plan.md:$((n + 1)): fence not closed"
+}
+
+@test "redis-cli counts as using the redis service" {
+  mkdir -p .claude
+  printf 'shared_services: redis\n' > .claude/kern.local.yml
+  sed -i.bak 's#^- Create: `docs/parse.md`#- Create: `docs/parse.md` (run redis-cli flush)#; s#^- Create: `src/parse.js:1-20`#- Create: `src/parse.js:1-20` (redis cache)#' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 1 and Task 4 share redis, but Task 4 is not blocked by Task 1"
+}
+
+@test "a backticked none is not an interface name" {
+  sed -i.bak '0,/^- Consumes: none$/ s//- Consumes: `none`/; s/^- Produces: `table-b`$/- Produces: `none`/' plan.md
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
