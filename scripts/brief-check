@@ -3,7 +3,7 @@
 # Usage: brief-check FILE    Prints "brief-check: ok" (exit 0) or one line per problem (exit 1); usage exit 2.
 # A field is a line that starts with its label (GOAL, SCOPE, CONTEXT, ACCEPTANCE, VERIFY, TIMEBOX,
 # FORBIDDEN, REPORT, STANDING) and holds text after it, or whose next indented lines do. VERIFY's first
-# command is the wt-check entry check. A field whose text is still the placeholder from
+# command is the wt-check entry check (optionally after bash) with a worktree and a base ref. A field whose text starts with the placeholder from
 # skills/parallel-work/references/brief-template.md is not filled in (FORBIDDEN's text is meant to be
 # kept, so it is not checked).
 # Field list adapted from pstack poteto-mode playbooks/orchestrate.md (MIT).
@@ -22,6 +22,7 @@ awk '
     ph["REPORT"] = "status line, files, commands run with results, deviations, report file path"
     ph["STANDING"] = "the standing orders below, pasted verbatim"
   }
+  { sub(/\r$/, "") }
   /^[ \t]*```/ { next }
   {
     for (i = 1; i <= n; i++) {
@@ -40,13 +41,20 @@ awk '
     }
     cur = ""
   }
+  function verify_ok(s,   w, k, c) {
+    k = split(s, w, /[ \t]+/)
+    c = 1
+    if (w[c] == "bash") c++
+    if (w[c] !~ /(^|\/)wt-check$/) return 0
+    return k - c >= 2
+  }
   END {
     for (i = 1; i <= n; i++) {
       if (!seen[L[i]]) { print "missing: " L[i]; bad = 1 }
       else if (text[L[i]] == "") { print "empty: " L[i]; bad = 1 }
-      else if ((L[i] in ph) && text[L[i]] == ph[L[i]]) { print "placeholder: " L[i]; bad = 1 }
+      else if ((L[i] in ph) && index(text[L[i]], ph[L[i]]) == 1) { print "placeholder: " L[i]; bad = 1 }
     }
-    if (seen["VERIFY"] && text["VERIFY"] != "" && first["VERIFY"] !~ /wt-check/) { print "VERIFY must start with the wt-check entry check"; bad = 1 }
+    if (seen["VERIFY"] && text["VERIFY"] != "" && !verify_ok(first["VERIFY"])) { print "VERIFY must start with the wt-check entry check"; bad = 1 }
     if (!bad) print "brief-check: ok"
     exit bad
   }' "$1"
