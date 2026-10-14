@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Extract one task, plus the plan's Global Constraints, into LEDGER_DIR/briefs/task-N.md.
+# Usage: task-brief PLAN N LEDGER_DIR    Prints the brief path. Exit 2 when the task is not found.
+# Adapted from superpowers subagent-driven-development/scripts/task-brief (MIT).
+set -euo pipefail
+[ $# -eq 3 ] || { echo "usage: task-brief PLAN N LEDGER_DIR" >&2; exit 2; }
+plan=$1 n=$2 ledger_dir=$3
+[ -f "$plan" ] || { echo "task-brief: no such plan: $plan" >&2; exit 2; }
+case "$n" in ''|*[!0-9]*) echo "task-brief: N must be a number: $n" >&2; exit 2 ;; esac
+
+task=$(awk -v n="$n" '
+  /^[`][`][`]|^~~~/ { fence = !fence; if (intask) print; next }
+  fence { if (intask) print; next }
+  /^#+[ \t]/ {
+    match($0, /^#+/); lvl = RLENGTH
+    if ($0 ~ /^#+[ \t]+Task[ \t]+[0-9]+/) {
+      intask = ($0 ~ ("^#+[ \t]+Task[ \t]+" n "([^0-9]|$)")); tlvl = lvl
+    } else if (intask && lvl <= tlvl) {
+      intask = 0
+    }
+  }
+  intask { print }
+' "$plan")
+[ -n "$task" ] || { echo "task-brief: no heading 'Task $n' in $plan" >&2; exit 2; }
+
+constraints=$(awk '
+  /^[`][`][`]|^~~~/ { fence = !fence }
+  !fence && /^## / { gc = ($0 ~ /^## Global Constraints/) }
+  gc { print }
+' "$plan")
+
+mkdir -p "$ledger_dir/briefs"
+out="$ledger_dir/briefs/task-$n.md"
+plan_abs=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
+{
+  printf '# Brief: Task %s\n\nPlan: %s\n\n' "$n" "$plan_abs"
+  if [ -n "$constraints" ]; then printf '%s\n\n' "$constraints"; fi
+  printf '%s\n' "$task"
+} > "$out"
+printf '%s\n' "$out"

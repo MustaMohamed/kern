@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Open the execute-plan ledger for an approved plan, or check a ledger at the end of a run.
+# Usage: ledger-open PLAN [DIR]    Prints the ledger dir. DIR defaults to WORK/ledgers/<plan slug>.
+#        ledger-open --summary DIR Prints the Decision, parked, deferred-minor and Preflight lines, then
+#                                  whether the main checkout's branch and status are as recorded.
+# Exit 2: the plan is not approved (status: approved and an approved: line with a date and the user's
+# quoted words), or DIR holds another plan's ledger. --summary exits 1 when the main checkout changed.
+# Ledger identity adapted from superpowers subagent-driven-development/scripts/sdd-workspace (MIT).
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+
+# main_state: "<main root> branch=<name> status=<hash of git status --porcelain>".
+main_state() {
+  local m b
+  m=$(kern_main_root "$PWD") || { echo "ledger-open: not a git repository" >&2; exit 2; }
+  b=$(git -C "$m" symbolic-ref -q --short HEAD 2> /dev/null) || b='(detached)'
+  printf '%s branch=%s status=%s\n' "$m" "$b" \
+    "$(git --no-optional-locks -C "$m" status --porcelain | git hash-object --stdin)"
+}
+
+if [ "${1-}" = --summary ]; then
+  [ $# -eq 2 ] && [ -f "$2/ledger.md" ] || { echo "usage: ledger-open --summary DIR (DIR holds ledger.md)" >&2; exit 2; }
+  grep -E '^(Decision:|parked:|Preflight:|Task [0-9]+: minor \(deferred\):)' "$2/ledger.md" || true
+  rec=$(sed -n 's/^Main: //p' "$2/ledger.md" | head -n 1)
+  now=$(main_state)
+  if [ "$rec" = "$now" ]; then
+    echo "main: unchanged"
+    exit 0
+  fi
+  echo "main: changed; recorded $rec; now $now"
+  exit 1
+fi
+
+[ $# -ge 1 ] && [ $# -le 2 ] || { echo "usage: ledger-open PLAN [DIR] | ledger-open --summary DIR" >&2; exit 2; }
+plan=$1
+[ -f "$plan" ] || { echo "ledger-open: no such plan: $plan" >&2; exit 2; }
+plan=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
+# The frontmatter is the block between a first line of --- and the next ---.
+fm=$(awk 'NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1 { print }' "$plan")
+status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
+approved=$(printf '%s\n' "$fm" | sed -n 's/^approved:[[:space:]]*//p' | head -n 1)
+[ "$status" = approved ] || { echo "ledger-open: $plan has status: ${status:-none}; execute-plan runs only an approved plan" >&2; exit 2; }
+printf '%s' "$approved" | grep -Eq '[0-9]{4}-[0-9]{2}-[0-9]{2}.*"[^"]+"' ||
+  { echo "ledger-open: $plan has no approved: line with a date and the user's quoted words" >&2; exit 2; }
+
+if [ $# -eq 2 ]; then
+  dir=$2
+else
+  slug=$(basename "$plan" .md | tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//')
+  [ -n "$slug" ] || { echo "ledger-open: cannot make a ledger name from $plan" >&2; exit 2; }
+  dir=$(bash "$here/kern-dir" "ledgers/$slug")
+fi
+ledger="$dir/ledger.md"
+if [ -f "$ledger" ]; then
+  head=$(head -n 1 "$ledger")
+  if [ "$head" != "# kern ledger: $plan" ]; then
+    echo "ledger-open: $ledger belongs to another plan (${head#\# kern ledger: }); leave it and pass another DIR" >&2
+    exit 2
+  fi
+else
+  # Assigned first: a failure inside $(...) as a printf argument would not stop the script.
+  state=$(main_state)
+  mkdir -p "$dir"
+  printf '# kern ledger: %s\nMain: %s\n' "$plan" "$state" > "$ledger"
+fi
+mkdir -p "$dir/briefs" "$dir/reports" "$dir/reviews" "$dir/logs"
+printf '%s\n' "$dir"
