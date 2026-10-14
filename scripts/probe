@@ -43,7 +43,8 @@ if [ -n "$mutate" ]; then
   [ -f "$wt/$mfile" ] || { echo "probe: inconclusive (no such file in the worktree: $mfile)"; exit 3; }
 else
   # Every path the patch touches (both sides of a rename), then the test paths among them.
-  git -C "$wt" apply --numstat -z "$patch" 2> /dev/null | tr '\0' '\n' |
+  git -C "$wt" apply --numstat -z "$patch" > "$logs/numstat" 2> /dev/null || { echo "probe: inconclusive (cannot read the patch)"; exit 3; }
+  tr '\0' '\n' < "$logs/numstat" |
     awk 'n > 0 { print; n--; next } /^[0-9-]+\t[0-9-]+\t$/ { n = 2; next } { sub(/^[0-9-]+\t[0-9-]+\t/, ""); if ($0 != "") print }' > "$logs/paths"
   awk -v print_tests=1 -f "$here/lib/test-paths.awk" "$logs/paths" > "$logs/tests"
   if [ -s "$logs/tests" ]; then
@@ -71,6 +72,12 @@ slug="probe-$$-$RANDOM"
 if ! fork=$(cd "$wt" && bash "$here/wt-fork" "$wt" "$slug" 2> "$logs/fork.err"); then
   fork=''
   echo "probe: inconclusive (could not fork: $(tail -n 1 "$logs/fork.err"))"
+  exit 3
+fi
+
+if ! (cd "$fork" && "$@") > "$logs/control.log" 2>&1; then
+  echo "probe: inconclusive (the command fails in the fork before any change is reversed; missing ignored files or setup?)"
+  tail -n 5 "$logs/control.log" >&2
   exit 3
 fi
 
@@ -115,7 +122,7 @@ if (cd "$fork" && "$@") > "$logs/without.log" 2>&1; then
   if [ -n "$mutate" ]; then echo "probe: mutation survived ($(cat "$logs/mutated-line"))"; else echo "probe: test did not fail with the guard removed"; fi
   exit 1
 fi
-blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
+blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|command not found|: not found|Permission denied|ENOENT|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
 if grep -Eq "$blocked" "$logs/without.log"; then
   echo "probe: inconclusive (the test did not run without the guard: $(grep -Em1 "$blocked" "$logs/without.log"))"
   exit 3

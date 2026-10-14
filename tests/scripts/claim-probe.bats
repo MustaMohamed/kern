@@ -134,3 +134,44 @@ setup() {
   [ "$status" -eq 3 ]
   [ "$output" = "probe: inconclusive (no condition to invert on a.txt:1)" ]
 }
+
+@test "a tool only in an ignored directory makes the probe inconclusive, never ok" {
+  mkdir -p "$WT/nm"
+  printf '#!/bin/sh\nexit 0\n' > "$WT/nm/jest"
+  chmod +x "$WT/nm/jest"
+  printf 'nm/\n' >> "$(git -C "$WT" rev-parse --git-path info/exclude)"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c 'PATH=$PWD/nm:$PATH; jest || exit 1; sh check.sh -1 && exit 1; exit 0'
+  [ "$status" -eq 3 ]
+  [ "$output" = "probe: inconclusive (the command fails in the fork before any change is reversed; missing ignored files or setup?)" ]
+}
+
+@test "--mutate: a tool only in an ignored directory is inconclusive" {
+  mkdir -p "$WT/nm"
+  printf '#!/bin/sh\nexit 0\n' > "$WT/nm/jest"
+  chmod +x "$WT/nm/jest"
+  printf 'nm/\n' >> "$(git -C "$WT" rev-parse --git-path info/exclude)"
+  printf '[ "$1" != bad ]\n' > "$WT/gate.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.sh:1 "$WT" -- sh -c 'PATH=$PWD/nm:$PATH; jest || exit 1; bash gate.sh bad && exit 1; exit 0'
+  [ "$status" -eq 3 ]
+  [[ "$output" == "probe: inconclusive (the command fails in the fork before any change is reversed"* ]] || false
+}
+
+@test "a patch git cannot read is inconclusive" {
+  printf 'this is not a patch\n' > "$TMP/garbage.patch"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/garbage.patch" -- sh test-guard.sh
+  [ "$status" -eq 3 ]
+  [ "$output" = "probe: inconclusive (cannot read the patch)" ]
+}
+
+@test "no probe worktree remains after a non-zero exit" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-always.sh
+  [ "$status" -eq 1 ]
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+  mkdir -p "$WT/nm"
+  printf '#!/bin/sh\nexit 0\n' > "$WT/nm/jest"
+  chmod +x "$WT/nm/jest"
+  printf 'nm/\n' >> "$(git -C "$WT" rev-parse --git-path info/exclude)"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c 'PATH=$PWD/nm:$PATH; jest || exit 1; exit 0'
+  [ "$status" -eq 3 ]
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+}
