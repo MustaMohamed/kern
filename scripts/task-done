@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Close a task in an execute-plan ledger. Writes the completion line only when all hold: the worktree
+# still snapshots to TREE, the task's last review approved exactly that tree, CMD exits 0 in WT, and
+# the test fails once the change (test files excluded) is reversed on a throwaway fork. A task with no
+# test to probe (docs, config) names why with --no-probe, and the reason goes into the ledger.
+# Usage: task-done LEDGER N WT TREE (--probe PATCH | --no-probe REASON) -- CMD...
+# Appends: Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok|inconclusive|skipped (REASON)> last=<line>
+# Exit 2 when a check fails (nothing written); 1 when the probe shows the test passes without the
+# change; CMD's own code when it fails.
+# Adapted from superpowers executing-plans/scripts/task-done (MIT).
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+usage() { echo "usage: task-done LEDGER N WT TREE (--probe PATCH | --no-probe REASON) -- CMD..." >&2; exit 2; }
+[ $# -ge 8 ] || usage
+ledger=$1 n=$2 wt=$3 tree=$4
+shift 4
+patch='' skip=''
+case "$1" in
+  --probe) patch=$2; [ -n "$patch" ] || { echo "task-done: --probe needs a patch file" >&2; exit 2; } ;;
+  --no-probe) skip=$2; [ -n "$skip" ] || { echo "task-done: --no-probe needs a reason" >&2; exit 2; } ;;
+  *) echo "task-done: name --probe PATCH, or --no-probe REASON for a task with no test to probe" >&2; exit 2 ;;
+esac
+shift 2
+[ "$1" = -- ] && [ $# -ge 2 ] || usage
+shift
+[ -f "$ledger" ] && [ -r "$ledger" ] || { echo "task-done: no readable ledger at $ledger" >&2; exit 2; }
+case "$n" in '' | *[!0-9]*) echo "task-done: N must be a number: $n" >&2; exit 2 ;; esac
+printf '%s' "$tree" | grep -Eq '^[0-9a-f]{40}([0-9a-f]{24})?$' ||
+  { echo "task-done: TREE must be a full object id: $tree" >&2; exit 2; }
+wt=$(cd "$wt" 2> /dev/null && pwd -P) || { echo "task-done: no such worktree: $3" >&2; exit 2; }
+
+now=$(bash "$here/wt-snap" "$wt") || { echo "task-done: cannot snapshot $wt; Task $n not recorded" >&2; exit 2; }
+if [ "$now" != "$tree" ]; then
+  echo "task-done: $wt changed after the review (tree ${tree:0:7}, now ${now:0:7}); review the new tree first" >&2
+  exit 2
+fi
+review=$(grep "^Task $n: review " "$ledger" | tail -n 1 || true)
+case "$review" in
+  *" tree=$tree spec=compliant quality=approved") ;;
+  '') echo "task-done: Task $n has no review line; run the review and record it with task-review" >&2; exit 2 ;;
+  *) echo "task-done: Task $n's last review did not approve tree ${tree:0:7}: $review" >&2; exit 2 ;;
+esac
+
+logdir="$(dirname "$ledger")/logs"
+mkdir -p "$logdir"
+log="$logdir/task-$n.log"
+cmd=''
+for a in "$@"; do
+  case "$a" in
+    *[[:space:]\"\;\|\&\']*) cmd="$cmd '$a'" ;;
+    *) cmd="$cmd $a" ;;
+  esac
+done
+cmd=${cmd# }
+
+rc=0
+(cd "$wt" && "$@") > "$log" 2>&1 || rc=$?
+tail -n 5 "$log"
+if [ "$rc" -ne 0 ]; then
+  echo "task-done: command exited $rc; Task $n not recorded (log: $log)" >&2
+  exit "$rc"
+fi
+
+probe="skipped ($skip)"
+if [ -n "$patch" ]; then
+  prc=0
+  bash "$here/probe" --exclude-tests "$wt" "$patch" -- "$@" > "$logdir/task-$n.probe.log" 2>&1 || prc=$?
+  head -n 1 "$logdir/task-$n.probe.log"
+  case "$prc" in
+    0) probe=ok ;;
+    3) probe=inconclusive ;;
+    1) echo "task-done: the test passes with the change reversed, so it does not prove Task $n; not recorded" >&2; exit 1 ;;
+    *) echo "task-done: probe exited $prc; Task $n not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 2 ;;
+  esac
+fi
+last=$(grep -v '^[[:space:]]*$' "$log" | tail -n 1 || true)
+line="Task $n: complete tree=$tree test=$cmd exit=0 review=approved probe=$probe last=$last"
+printf '%s\n' "$line" >> "$ledger"
+echo "ledger: $line"

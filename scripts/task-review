@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Record one task review in an execute-plan ledger: the two verdicts for one tree id, and any minor
+# findings deferred to the final review.
+# Usage: task-review LEDGER N TREE ROUND SPEC QUALITY [--minor TEXT]...
+#   SPEC is compliant or issues; QUALITY is approved or needs-fixes; ROUND is 1, 2 or 3.
+# Appends and prints: Task N: review round=<r> tree=<id> spec=<s> quality=<q>
+# and one "Task N: minor (deferred): <text>" line per --minor. Exit 2 on any malformed argument.
+# Deferred-minor line from superpowers subagent-driven-development SKILL.md (MIT).
+set -euo pipefail
+usage() { echo "usage: task-review LEDGER N TREE ROUND SPEC QUALITY [--minor TEXT]..." >&2; exit 2; }
+[ $# -ge 6 ] || usage
+ledger=$1 n=$2 tree=$3 round=$4 spec=$5 quality=$6
+shift 6
+[ -f "$ledger" ] || { echo "task-review: no ledger at $ledger" >&2; exit 2; }
+case "$n" in '' | *[!0-9]*) echo "task-review: N must be a number: $n" >&2; exit 2 ;; esac
+printf '%s' "$tree" | grep -Eq '^[0-9a-f]{40}([0-9a-f]{24})?$' ||
+  { echo "task-review: TREE must be a full object id: $tree" >&2; exit 2; }
+case "$round" in 1 | 2 | 3) ;; *) echo "task-review: ROUND is 1, 2 or 3 (D10): $round" >&2; exit 2 ;; esac
+case "$spec" in compliant | issues) ;; *) echo "task-review: SPEC is compliant or issues: $spec" >&2; exit 2 ;; esac
+case "$quality" in approved | needs-fixes) ;; *) echo "task-review: QUALITY is approved or needs-fixes: $quality" >&2; exit 2 ;; esac
+minors=''
+nl='
+'
+while [ $# -gt 0 ]; do
+  [ "$1" = --minor ] && [ $# -ge 2 ] && [ -n "$2" ] || usage
+  case "$2" in *"$nl"*) echo "task-review: a --minor text is one line" >&2; exit 2 ;; esac
+  minors="${minors}Task $n: minor (deferred): $2$nl"
+  shift 2
+done
+line="Task $n: review round=$round tree=$tree spec=$spec quality=$quality"
+printf '%s\n%s' "$line" "$minors" >> "$ledger"
+printf '%s\n%s' "$line" "$minors"
