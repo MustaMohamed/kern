@@ -8,11 +8,15 @@ _G16_SETTINGS="kern settings change guard policy; the user confirms each write"
 _G16_CC="Claude Code settings set permissions and hooks; the user confirms each write"
 _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write"
+_G16_HOOKS="kern's hooks run only from Claude Code; running or sourcing one, or calling its state functions, could forge the user's prompt or the session state"
 
 guard_g16() {
   case "$TOOL" in
     Write | Edit | NotebookEdit) _g16_file ;;
-    Bash) _g16_bash ;;
+    Bash)
+      _g16_bash
+      _g16_hooks
+      ;;
     CronCreate | ScheduleWakeup | RemoteTrigger | SendMessage) _g16_relay ;;
     Skill) _g16_skill ;;
   esac
@@ -439,6 +443,80 @@ SEGMENTS
   [ "$settings" = 1 ] && vote ask G16 "$_G16_SETTINGS"
   [ "$cc" = 1 ] && vote ask G16 "$_G16_CC"
   [ "$into" = 1 ] && vote ask G16 "$_G16_INTO"
+  return 0
+}
+
+# _g16_hookfile WORD: exit 0 when the lower-cased WORD names, by its tail, a file of kern's hook code:
+# prompt-submit, session-start, subagent-start or pre-tool-use, bare or after a slash, or a library
+# under hooks/lib/ (or lib/<name>.sh, after a cd into hooks). Test files such as pre-tool-use.bats do
+# not count.
+_g16_hookfile() {
+  case "$1" in
+    prompt-submit | session-start | subagent-start | pre-tool-use | */prompt-submit | */session-start | \
+      */subagent-start | */pre-tool-use | *hooks/lib/* | lib/json.sh | lib/settings.sh | lib/state.sh | \
+      lib/decide.sh | lib/gitctx.sh | lib/render.sh) return 0 ;;
+  esac
+  return 1
+}
+
+# _g16_hooks: running or sourcing kern's hook code, or calling its state functions, could forge what
+# the hooks record: prompt-submit run with a made-up prompt rewrites the user's last message and can
+# turn autopilot on, and state_set writes any key. Denied in both modes. A simple command that only
+# reads (cat, grep, git, shellcheck, sed without -i, find with no action that runs) may name the hook
+# files, unless the same command also runs a shell, source, . or eval, which could read them from a
+# pipe. Every simple command is checked, including the bodies of bash -c, eval and $( ). A path or a
+# function name built at run time is not seen (accepted limit).
+_g16_hooks() {
+  local cmd t seg words w head reads named=0 shell=0 run=0
+  cmd=$(ti_get command) || return 0
+  # Only a command whose text, in any case and with quotes and backslashes taken out, could name hook
+  # code or a state function is lower-cased and parsed; the parse reads the command as written.
+  t=$cmd
+  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+  case "$t" in
+    *[Pp][Rr][Oo][Mm][Pp][Tt]-[Ss][Uu][Bb][Mm][Ii][Tt]* | *[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ss][Tt][Aa][Rr][Tt]* | \
+      *[Ss][Uu][Bb][Aa][Gg][Ee][Nn][Tt]-[Ss][Tt][Aa][Rr][Tt]* | *[Pp][Rr][Ee]-[Tt][Oo][Oo][Ll]-[Uu][Ss][Ee]* | \
+      *[Hh][Oo][Oo][Kk][Ss]/[Ll][Ii][Bb]* | *[Ll][Ii][Bb]/*.[Ss][Hh]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | \
+      *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]*) ;;
+    *) return 0 ;;
+  esac
+  cmd=$(_g16_lower "$cmd")
+  while IFS= read -r seg; do
+    [ -n "$seg" ] || continue
+    words=$(_cmd_words "$seg")
+    head=${words%%$'\n'*}
+    head=${head##*/}
+    case "$head" in
+      state_set | _state_put | state_reset) run=1 ;;
+      sh | bash | zsh | dash | ksh | fish | source | . | eval) shell=1 ;;
+    esac
+    reads=0
+    case "$head" in
+      cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | echo | printf | \
+        test | '[' | git | shellcheck | shfmt | bat | nl | od | xxd | hexdump | strings | cksum | md5 | md5sum | shasum | \
+        sha1sum | sha256sum | basename | dirname | realpath | readlink | cd | pushd) reads=1 ;;
+      sed)
+        reads=1
+        while IFS= read -r w; do
+          case "$w" in --in-place* | -i* | -[!-]*i*) reads=0 ;; esac
+        done <<EOT
+$words
+EOT
+        ;;
+      find) word_has "$words" -exec -execdir -ok -okdir -delete || reads=1 ;;
+    esac
+    while IFS= read -r w; do
+      _g16_hookfile "$w" || continue
+      if [ "$reads" = 1 ]; then named=1; else run=1; fi
+    done <<EOT
+$words
+EOT
+  done <<SEGMENTS
+$(git_words "$cmd")
+SEGMENTS
+  if [ "$run" = 1 ] || { [ "$named" = 1 ] && [ "$shell" = 1 ]; }; then
+    vote deny G16 "$_G16_HOOKS"
+  fi
   return 0
 }
 

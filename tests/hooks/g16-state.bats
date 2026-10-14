@@ -406,3 +406,28 @@ expect_cmd() {
     'git commit -m "fix: x" -m "see .claude/kern.yml"' 'git commit -am "fix .claude/kern.yml"'
   expect_cmd ask 'rsync -m "my dir/.claude/settings.json" /tmp/'
 }
+
+@test "running or sourcing kern's hook code, or calling its state functions, is denied in both modes" {
+  K=$(kern_root)
+  # shellcheck disable=SC2016 # literal ${CLAUDE_PLUGIN_ROOT}, as Claude would write it
+  expect_cmd deny \
+    "printf '%s' '{\"session_id\":\"test-session\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit" \
+    "$K/hooks/prompt-submit < /dev/null" 'bash hooks/session-start' 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start' \
+    "sh $K/hooks/pre-tool-use" ". $K/hooks/lib/state.sh" 'source hooks/lib/state.sh && state_set s autopilot=on' \
+    "bash -c '. hooks/lib/state.sh; state_set test-session prompt_hashes=1'" "bash -c 'state_reset test-session'" \
+    'eval _state_put 0 s autopilot=on' 'cat hooks/prompt-submit | bash' 'bash < hooks/prompt-submit' \
+    "cp -r $K /tmp/k && bash /tmp/k/hooks/prompt-submit" 'cd hooks && bash prompt-submit' 'cd hooks && . lib/state.sh'
+  set_autopilot on
+  expect_cmd deny "bash $K/hooks/prompt-submit"
+}
+
+@test "reading kern's hook code, or running its tests, is not denied" {
+  local c
+  for c in 'cat hooks/prompt-submit' 'grep -n state_set hooks/lib/state.sh' 'shellcheck -x hooks/prompt-submit hooks/lib/state.sh' \
+    'git diff -- hooks/prompt-submit' 'git add -- hooks/prompt-submit hooks/lib/state.sh' 'sed -n 1,20p hooks/lib/state.sh' \
+    'tests/run-bats tests/hooks/pre-tool-use.bats tests/hooks/prompt-submit.bats' 'git commit -m "fix state_set in prompt-submit"'; do
+    . "$(kern_root)/hooks/lib/json.sh"
+    run_guard "$(tool_payload Bash "\"command\":\"$(printf '%s' "$c" | json_escape)\"")" g16
+    [ "$(decision_of "$output")" != deny ] || { echo "$c -> $output"; return 1; }
+  done
+}
