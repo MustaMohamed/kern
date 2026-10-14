@@ -23,15 +23,16 @@ The audit of 2026-10-14 grouped 216 mechanisms against kern 0.2.0 and the design
 1. A milestone row in section 14 names the source mechanisms it ports. A mechanism detailed only in `docs/research/merge-*.md` is not planned until a row names it.
 2. Before a milestone closes, its ported mechanisms are checked against this file. A mechanism dropped from a milestone moves to another milestone or to Rejected, with the reason.
 3. A new source version, or a new source, gets an audit before kern ports from it.
+4. At each milestone close, the milestone's rows are re-audited, counting only built and tested work. The milestone closes with none of its rows left where a source is stronger.
 
 ## Gaps and their homes
 
 | # | Gap | Source | Home | Size |
 |---|---|---|---|---|
-| 1 | PreToolUse fails closed when a hook library cannot load | caveman | 0.2.1 | S |
-| 2 | Natural-language switch phrases, with a corpus run against the real hook | caveman | 0.2.1 | S |
-| 3 | No voice reminder on scheduled prompts | caveman | 0.2.1 | S |
-| 4 | Remove old session state files | caveman | 0.2.1 | S |
+| 1 | PreToolUse fails closed when a hook library cannot load | caveman | 0.2.1 (shipped) | S |
+| 2 | Natural-language switch phrases, with a corpus run against the real hook | caveman | 0.2.1 (shipped) | S |
+| 3 | No voice reminder on scheduled prompts | caveman | 0.2.1 (shipped) | S |
+| 4 | Remove old session state files | caveman | 0.2.1 (shipped) | S |
 | 5 | `plan-check`: lint generated plans and specs | pstack | M2 | S |
 | 6 | `wt-audit`: find worktrees left by earlier sessions | pstack | M2 | S |
 | 7 | Rationalization and red-flag tables in prove-it, implement and diagnose; lint rule 9 requires them in discipline skills | superpowers, addy | M2 | S |

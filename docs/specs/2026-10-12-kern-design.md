@@ -13,6 +13,10 @@ The name follows the operating-system model: a small always-on kernel routes wor
 
 ### 1.1 Goals
 
+0. Master goal: for each category of work, kern is at least as strong as the strongest of its five sources. It takes the strongest mechanism per category, enforces it in code where code can, and combines the parts as focused lanes, scripts and hooks rather than one merged prompt. Goals 3 and 4 bound it. It is measured three ways:
+   - `docs/specs/coverage.md` gives every source mechanism a home or a recorded rejection, and a re-audit at each milestone close leaves no row of that milestone where a source is stronger, counting only built and tested work.
+   - Head-to-head evals run kern and the strongest source on the same seeded fixtures for review, debugging and planning, and count real findings and false alarms.
+   - The M2 pilot includes side-by-side runs against superpowers on the same tasks.
 1. One install per machine; the same behaviour in every project.
 2. Cover every job superpowers does today, plus pstack's proof discipline, mattpocock's debugging gate and design vocabulary, addy's specialist skills and evals, and caveman's terse voice.
 3. Gated by default: nothing leaves the machine and nothing is committed without the user, unless the user turns on autopilot for the session.
@@ -170,7 +174,7 @@ The rule: at the start of each new task, before the first tool call or question,
 | Long, autonomous or unattended run | decision-log |
 | Phase ends, or context is filling | kernel/context.md |
 
-A row ships in the same milestone as its route; until then it is absent, and lint rule 6 fails on a row whose route does not exist. M1 ships the technical-writing and context rows; M2 adds define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall; M3 adds pr-review and take-feedback; M6 adds write-skill and decision-log.
+A row ships in the same milestone as its route; until then it is absent, and lint rule 6 fails on a row whose route does not exist. M1 ships the technical-writing and context rows; M2 adds define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall; M3 adds pr-review, take-feedback and decision-log; M6 adds write-skill.
 
 `route.<name>` in settings replaces a row's target with a project skill or `off`. The override is rendered into the settings summary, not the table, so the table text is identical across projects. Every route file opens with a numbered `## Steps` list; the linter checks it.
 
@@ -411,6 +415,7 @@ Active only when both hold: settings allow it (`autopilot: allowed`, the default
 | G16 mode state | on | Tool writes under the kern session-state directory denied; writes to the kern settings files ask | Same; settings writes denied |
 | G17 gh stack | on | `merge` denied (it merges the whole stack without prompting in a non-interactive session; the user runs it). `rebase`, `sync` and navigation denied in the main checkout, allowed in the stack worktree. `sync` and `push` ask. `submit` asks and must use `--auto` without `--open`. `link` and `unstack` ask. `modify` needs a terminal and is denied | `merge`, `link`, `unstack`, `modify` and `submit --open` denied. `sync` and `push` allowed with `rebase.push: autopilot`. `submit --auto` allowed after dedup |
 | G18 read-only agents | on | For kern's read-only agents (investigator), Bash commands outside a read-only allowlist (git log, show, blame, diff, grep, ls, cat) are denied. Matches `agent_type` `kern:investigator`, which Claude Code passes to hooks for a subagent's tool calls. If the value differs in practice, the investigator loses Bash and the controller collects history for it | Same |
+| G19 local deletes | on (M3) | `rm`, `rmdir`, `unlink` and `find -delete` inside the current worktree or kern's scratch directories pass; any other delete asks | Deletes outside those paths denied |
 
 G8, an edit-time typecheck, was dropped: projects keep their own hooks, which must exit 2 for Claude to see failures.
 
@@ -459,7 +464,7 @@ G8, an edit-time typecheck, was dropped: projects keep their own hooks, which mu
 | Context | handoff | slash | M6 | Pause and hand off cleanly | PO, PS |
 | Learning | retro | slash | M6 | Session review, deterministic checks first | PO, SP |
 | Learning | correct | slash | M6 | Turn a repeated mistake into a check | PS |
-| Learning | decision-log | path | M6 | Decision trail for long or unattended runs | PS |
+| Learning | decision-log | path | M3 | Decision trail for long or unattended runs | PS |
 | Writing | visual | path | M4 | Build a visual page, ask on it, wait for the answer | SP, PO |
 | Writing | unslop | path | M1 | Rules for prose others read | PS |
 | Writing | technical-writing | path | M1 | Docs, PR bodies, commit messages | PS |
@@ -565,7 +570,7 @@ Signal, then cited evidence, then kind (one-off, missed trigger, wrong shape, me
 
 1. Through M2, superpowers stays enabled. kern is tested with `--plugin-dir` in sessions where superpowers is disabled for that project (`"superpowers@claude-plugins-official": false` in `.claude/settings.local.json`), so only one router runs.
 2. Pilot on two projects (one of them cds-app-rewrite) for at least five real tasks each, covering define, plan, execute, diagnose and finish-branch.
-3. Pass criteria: the behavioural fixtures pass; no guard false negative in the pilot; the user judges output quality at least equal to superpowers on the same kinds of task.
+3. Pass criteria: the behavioural fixtures pass; no guard false negative in the pilot; the user judges output quality at least equal to superpowers, including side-by-side runs of the same tasks with each.
 4. Then disable superpowers at user level and uninstall caveman. Move the user's own `~/.claude/skills/recall`, `unslop` and `no-comments` and `~/.claude/agents/comment-sicko.md` aside once kern ships their replacements (recall and unslop at M2, no-comments and comment-sicko at M3), so two descriptions do not compete.
 5. Rollback: re-enable superpowers in `~/.claude/settings.json`; disable kern with `kern: off` or by uninstalling.
 
@@ -575,11 +580,11 @@ Signal, then cited evidence, then kind (one-off, missed trigger, wrong shape, me
 |---|---|---|---|
 | M0 | Repo, manifests, LICENSE, NOTICE, licenses/, UPSTREAM.md, lint and routing-eval scripts adapted from addy, CI | 4 to 6 | `claude plugin validate --strict` passes; CI runs lint and routing evals on an empty skill set with a placeholder skill |
 | M1 | Kernel and subagent kernel; SessionStart, SubagentStart, UserPromptSubmit hooks; settings parsing; `mode`, `autopilot`, `help` with `help setup`; terse voice; unslop and technical-writing references; guards G1 to G6 and G13 to G16 | 10 to 14 | Hook-shape tests pass on all fixtures; rendered kernel under 4,000 chars; mode switches survive compaction; G16 denies a state write; each guard's bats tests pass in both modes |
-| M2 | define, plan, execute-plan, parallel-work, implement, diagnose, prove-it, self-review, commit, finish-branch, recall; agents implementer, task-reviewer, investigator; worktree scripts (`wt-new`, `wt-fork`, `wt-snap`, `wt-diff`, `wt-apply`); check scripts G7 (as a script), G9 and G10; guard G18 | 19 to 25 | Each skill's eval cases pass; kernel adherence passes on a routed prompt; per-task review works with no commits; pilot criteria in section 13 met |
-| M3 | pr-review lanes, take-feedback with five modes and stack providers, G17, the G7 Stop hook, scripts G11 and G12, no-comments and comment-sicko, security references; starts with a one-hour gh-stack worktree spike | 11 to 17 | Spike result recorded; lanes merge correctly on a seeded diff; stack rebase on a fixture stack restores cleanly on `--abort` |
+| M2 | define, plan, execute-plan, parallel-work, implement, diagnose, prove-it, self-review, commit, finish-branch, recall; agents implementer, task-reviewer, investigator; worktree scripts (`wt-new`, `wt-fork`, `wt-snap`, `wt-diff`, `wt-apply`); check scripts G7 (as a script), G9 and G10; guard G18; coverage gaps 5 to 19 (`docs/specs/coverage.md`) | 19 to 25 | Each skill's eval cases pass through the behavioural runner; kernel adherence passes on a routed prompt; per-task review works with no commits; pilot criteria in section 13 met, including side-by-side runs against superpowers |
+| M3 | pr-review lanes, take-feedback with five modes and stack providers, G17, the G7 Stop hook, scripts G11 and G12, no-comments and comment-sicko, security references, decision-log (moved from M6), guard G19; coverage gaps 20 to 26; starts with a one-hour gh-stack worktree spike | 11 to 17 | Spike result recorded; lanes merge correctly on a seeded diff and find at least as many seeded bugs as the strongest source review, with no more false alarms; stack rebase on a fixture stack restores cleanly on `--abort` |
 | M4 | visual: renderer, components, page server, `kern-page publish/wait/stop`, answers in hook, static fallback, auto thresholds | 10 to 14 | Send on a page resumes Claude with the answer; a terminal answer cancels the wait; pages make no network requests |
-| M5 | Specialists and stack references | 14 to 20 | Each skill's eval cases pass |
-| M6 | handoff, retro, correct, decision-log, plain, write-skill, skill-eval; nightly behavioural evals | 10 to 14 | Nightly run green for a week |
+| M5 | Specialists and stack references; coverage gaps 27 to 31 | 14 to 20 | Each skill's eval cases pass |
+| M6 | handoff, retro, correct, plain, write-skill, skill-eval; nightly behavioural evals; coverage gaps 32 to 34 | 10 to 14 | Nightly run green for a week |
 
 The first build is M0 to M2 (about 33 to 45 hours), then the pilot. The full framework stays at about 78 to 110 hours.
 
