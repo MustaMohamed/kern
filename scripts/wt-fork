@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Detached worktree at SRC_WT's HEAD with SRC_WT's uncommitted state (tracked and untracked) applied.
+# Usage: wt-fork SRC_WT SLUG    Prints the fork path. Exit 3 when the state cannot be applied, 2 when
+# worktree.setup fails; either way the fork is removed. The state moves as a diff-tree patch, which
+# ignores diff.noprefix, textconv and external diff drivers in the user's config.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+# shellcheck source=/dev/null
+. "$here/lib/wt-common.sh"
+
+[ $# -eq 2 ] || { echo "usage: wt-fork SRC_WT SLUG" >&2; exit 2; }
+src=$(cd "$1" 2> /dev/null && pwd -P) || { echo "wt-fork: no such directory: $1" >&2; exit 2; }
+slug=$2
+case "$slug" in ''|.*|*[!A-Za-z0-9._-]*) echo "wt-fork: bad slug: $slug" >&2; exit 2 ;; esac
+MAIN=$(kern_main_root "$src") || { echo "wt-fork: not a git repository: $src" >&2; exit 2; }
+# settings_get reads KERN_MAIN, so worktree.dir and worktree.setup come from MAIN, not the caller's cwd.
+export KERN_MAIN="$MAIN"
+head=$(git -C "$src" rev-parse --verify --quiet HEAD) || { echo "wt-fork: $src has no commits" >&2; exit 2; }
+tree=$(bash "$here/wt-snap" "$src")
+
+dir=$(wt_dir)
+path="$dir/$slug"
+wt_path_free "$path" || exit 2
+mkdir -p "$dir"
+wt_exclude_dir "$dir"
+
+patch=$(mktemp "${TMPDIR:-/tmp}/kern-fork.XXXXXX")
+trap 'rm -f "$patch"' EXIT
+git -C "$src" diff-tree -r -p --binary --full-index "$head" "$tree" > "$patch"
+git -C "$MAIN" worktree add --quiet --detach "$path" "$head" >&2
+path=$(cd "$path" && pwd -P)
+if [ -s "$patch" ] && ! git -C "$path" apply --binary "$patch" >&2; then
+  git -C "$MAIN" worktree remove --force "$path" > /dev/null 2>&1 || true
+  echo "wt-fork: could not apply the uncommitted state of $src; fork removed" >&2
+  exit 3
+fi
+wt_include "$path"
+if ! wt_setup "$path"; then
+  log="$(git -C "$path" rev-parse --path-format=absolute --git-dir)/kern-setup.log"
+  tail -n 20 "$log" >&2 2> /dev/null || true
+  git -C "$MAIN" worktree remove --force "$path" > /dev/null 2>&1 || true
+  echo "wt-fork: worktree.setup failed in the fork (its log is above); fork removed" >&2
+  exit 2
+fi
+printf '%s\n' "$path"

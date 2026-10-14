@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Apply a binary-safe patch (wt-diff's <package>.patch) into a worktree, all or nothing.
+# Usage: wt-apply PATCH DST_WT    Prints "applied". Exit 3 on conflict, with DST_WT unchanged.
+set -euo pipefail
+[ $# -eq 2 ] || { echo "usage: wt-apply PATCH DST_WT" >&2; exit 2; }
+patch=$1 dst=$2
+[ -f "$patch" ] || { echo "wt-apply: no such patch: $patch" >&2; exit 2; }
+git -C "$dst" rev-parse --git-dir > /dev/null 2>&1 || { echo "wt-apply: not a git worktree: $dst" >&2; exit 2; }
+patch=$(cd "$(dirname "$patch")" && pwd -P)/$(basename "$patch")
+if ! out=$(git -C "$dst" apply --check --binary "$patch" 2>&1); then
+  echo "wt-apply: conflict, nothing applied:"
+  printf '%s\n' "$out"
+  exit 3
+fi
+git -C "$dst" apply --binary "$patch"
+echo applied
