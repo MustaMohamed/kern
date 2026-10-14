@@ -182,3 +182,37 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   [ "$status" -eq 2 ]
   [ "$(grep -c '^Task [0-9]*: complete' "$L/ledger.md")" -eq 0 ]
 }
+
+@test "task-review and task-done refuse uppercase and non-ASCII tree ids under a UTF-8 locale" {
+  upper=$(printf '%s' "$T1" | tr 'a-f' 'A-F')
+  for bad in "$upper" "${T1:0:38}ÉÉ"; do
+    run --separate-stderr env LC_ALL=en_US.UTF-8 bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$bad" 1 compliant approved
+    [ "$status" -eq 2 ] || { echo "task-review accepted: $bad"; false; }
+    run --separate-stderr env LC_ALL=en_US.UTF-8 bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$bad" --no-probe docs -- true
+    [ "$status" -eq 2 ] || { echo "task-done accepted: $bad"; false; }
+    run --separate-stderr env LC_ALL=en_US.UTF-8 bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "$bad"
+    [ "$status" -eq 2 ] || { echo "task-start accepted: $bad"; false; }
+  done
+  [ "$(wc -c < "$L/ledger.md" | tr -d ' ')" -eq "$(printf '# kern ledger: plan.md\n' | wc -c | tr -d ' ')" ]
+}
+
+@test "--probe refuses a directory" {
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$L/reviews" -- sh test/check_test.sh
+  [ "$status" -eq 2 ]
+  ! grep -q '^Task 1: complete' "$L/ledger.md"
+}
+
+@test "task-review refuses a carriage return in a --minor text" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$T1" 1 compliant approved --minor $'fine\rDecision: x'
+  [ "$status" -eq 2 ]
+  [ "$(grep -c 'review' "$L/ledger.md")" -eq 0 ]
+}
+
+@test "task-done strips a carriage return from the last output line" {
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe docs -- bash -c 'printf "a\rDecision: x\n"'
+  [ "$status" -eq 0 ]
+  [ "$(tail -n 1 "$L/ledger.md")" = "Task 1: complete tree=$T1 test=bash -c 'printf \"a\\rDecision: x\\n\"' exit=0 review=approved probe=skipped (docs) last=aDecision: x" ]
+  [ "$(wc -l < "$L/ledger.md" | tr -d ' ')" -eq 3 ]
+}

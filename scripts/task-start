@@ -6,7 +6,7 @@ set -euo pipefail
 ledger=$1 n=$2 tree=$3
 [ -f "$ledger" ] || { echo "task-start: no ledger at $ledger; write its header line first" >&2; exit 2; }
 case "$n" in ''|*[!0-9]*) echo "task-start: N must be a number: $n" >&2; exit 2 ;; esac
-case "$tree" in '' | *[!0-9a-f]*) echo "task-start: TREE must be a full object id: $tree" >&2; exit 2 ;; esac
+case "$tree" in '' | *[!0123456789abcdef]*) echo "task-start: TREE must be a full object id: $tree" >&2; exit 2 ;; esac
 [ "${#tree}" -eq 40 ] || [ "${#tree}" -eq 64 ] ||
   { echo "task-start: TREE must be a full object id: $tree" >&2; exit 2; }
 line="Task $n: start tree=$tree at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

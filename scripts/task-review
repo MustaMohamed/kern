@@ -13,18 +13,19 @@ ledger=$1 n=$2 tree=$3 round=$4 spec=$5 quality=$6
 shift 6
 [ -f "$ledger" ] || { echo "task-review: no ledger at $ledger" >&2; exit 2; }
 case "$n" in '' | *[!0-9]*) echo "task-review: N must be a number: $n" >&2; exit 2 ;; esac
-case "$tree" in '' | *[!0-9a-f]*) echo "task-review: TREE must be a full object id: $tree" >&2; exit 2 ;; esac
+case "$tree" in '' | *[!0123456789abcdef]*) echo "task-review: TREE must be a full object id: $tree" >&2; exit 2 ;; esac
 [ "${#tree}" -eq 40 ] || [ "${#tree}" -eq 64 ] ||
   { echo "task-review: TREE must be a full object id: $tree" >&2; exit 2; }
 case "$round" in 1 | 2 | 3) ;; *) echo "task-review: ROUND is 1, 2 or 3 (D10): $round" >&2; exit 2 ;; esac
 case "$spec" in compliant | issues) ;; *) echo "task-review: SPEC is compliant or issues: $spec" >&2; exit 2 ;; esac
 case "$quality" in approved | needs-fixes) ;; *) echo "task-review: QUALITY is approved or needs-fixes: $quality" >&2; exit 2 ;; esac
 minors=''
+cr=$(printf '\r')
 nl='
 '
 while [ $# -gt 0 ]; do
   [ "$1" = --minor ] && [ $# -ge 2 ] && [ -n "$2" ] || usage
-  case "$2" in *"$nl"*) echo "task-review: a --minor text is one line" >&2; exit 2 ;; esac
+  case "$2" in *"$nl"* | *"$cr"*) echo "task-review: a --minor text is one line" >&2; exit 2 ;; esac
   minors="${minors}Task $n: minor (deferred): $2$nl"
   shift 2
 done

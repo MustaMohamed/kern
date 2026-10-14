@@ -16,7 +16,7 @@ ledger=$1 n=$2 wt=$3 tree=$4
 shift 4
 patch='' skip=''
 case "$1" in
-  --probe) patch=$2; [ -s "$patch" ] && [ -r "$patch" ] || { echo "task-done: --probe needs a non-empty readable patch file: $patch" >&2; exit 2; } ;;
+  --probe) patch=$2; [ -f "$patch" ] && [ -s "$patch" ] && [ -r "$patch" ] || { echo "task-done: --probe needs a non-empty readable patch file: $patch" >&2; exit 2; } ;;
   --no-probe) skip=$2; [ -n "$skip" ] || { echo "task-done: --no-probe needs a reason" >&2; exit 2; } ;;
   *) echo "task-done: name --probe PATCH, or --no-probe REASON for a task with no test to probe" >&2; exit 2 ;;
 esac
@@ -31,7 +31,7 @@ done
 shift
 [ -f "$ledger" ] && [ -r "$ledger" ] || { echo "task-done: no readable ledger at $ledger" >&2; exit 2; }
 case "$n" in '' | *[!0-9]*) echo "task-done: N must be a number: $n" >&2; exit 2 ;; esac
-case "$tree" in '' | *[!0-9a-f]*) echo "task-done: TREE must be a full object id: $tree" >&2; exit 2 ;; esac
+case "$tree" in '' | *[!0123456789abcdef]*) echo "task-done: TREE must be a full object id: $tree" >&2; exit 2 ;; esac
 [ "${#tree}" -eq 40 ] || [ "${#tree}" -eq 64 ] ||
   { echo "task-done: TREE must be a full object id: $tree" >&2; exit 2; }
 wt=$(cd "$wt" 2> /dev/null && pwd -P) || { echo "task-done: no such worktree: $3" >&2; exit 2; }
@@ -80,7 +80,7 @@ if [ -n "$patch" ]; then
     *) echo "task-done: probe exited $prc; Task $n not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 2 ;;
   esac
 fi
-last=$(grep -v '^[[:space:]]*$' "$log" | tail -n 1 || true)
+last=$(grep -v '^[[:space:]]*$' "$log" | tail -n 1 | LC_ALL=C tr -d '\000-\037\177' || true)
 line="Task $n: complete tree=$tree test=$cmd exit=0 review=approved probe=$probe last=$last"
 printf '%s\n' "$line" >> "$ledger"
 echo "ledger: $line"
