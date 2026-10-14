@@ -2,7 +2,8 @@
 # Read-only list of the kern worktrees under worktree.dir, each in one bucket, so recall and teardown
 # proposals start from evidence. Never removes anything.
 # Usage: wt-audit [--days N]    Output: bucket<TAB>path<TAB>branch<TAB>evidence, one line per worktree.
-# Buckets: merged, open-pr, closed-pr, uncommitted, committed, empty. A worktree idle for N days or more
+# Buckets: merged, open-pr, closed-pr, uncommitted, committed, empty, unknown. unknown means a git call
+# failed or the base ref did not resolve; the evidence names which. A worktree idle for N days or more
 # (default 14) gets "idle <d>d" in its evidence.
 # Bucket idea adapted from pstack poteto-mode playbooks/worktree-cleanup.md (MIT).
 set -euo pipefail
@@ -50,26 +51,46 @@ git -C "$MAIN" worktree list --porcelain | awk '/^worktree / { print substr($0, 
   elif [ -n "$branch" ]; then
     ev="gh unavailable"
   fi
-  dirty=$(g -C "$wt" status --porcelain 2> /dev/null | wc -l | tr -d ' ')
-  ahead=0
-  if [ -n "$base" ] && g -C "$wt" rev-parse --verify --quiet "refs/remotes/origin/$base" > /dev/null; then
-    ahead=$(g -C "$wt" rev-list --count "refs/remotes/origin/$base..HEAD" 2> /dev/null || echo 0)
+  why=''
+  if status_out=$(g -C "$wt" status --porcelain 2> /dev/null); then
+    dirty=0
+    [ -z "$status_out" ] || dirty=$(printf '%s\n' "$status_out" | wc -l | tr -d ' ')
+  else
+    dirty='?'
+    why="git status failed"
+  fi
+  ahead='?'
+  if [ -z "$base" ] || ! g -C "$wt" rev-parse --verify --quiet "refs/remotes/origin/$base" > /dev/null; then
+    why="${why:+$why, }no base ref"
+  elif ahead=$(g -C "$wt" rev-list --count "refs/remotes/origin/$base..HEAD" 2> /dev/null); then
+    :
+  else
+    ahead='?'
+    why="${why:+$why, }rev-list failed"
   fi
   if [ -z "$bucket" ]; then
-    if [ "$dirty" -gt 0 ]; then bucket=uncommitted
+    if [ -n "$why" ]; then bucket=unknown
+    elif [ "$dirty" -gt 0 ]; then bucket=uncommitted
     elif [ "$ahead" -gt 0 ]; then bucket=committed
     else bucket=empty
     fi
   fi
-  ev="${ev:+$ev, }$dirty uncommitted paths, $ahead commits ahead of origin/${base:-?}"
+  ev="${ev:+$ev, }$dirty uncommitted paths, $ahead commits ahead of origin/${base:-?}${why:+, $why}"
   # Idle: no commit and no file change in the last N days. -print -quit stops at the first file, so a
   # large worktree cannot end the pipeline early (head under pipefail exited 141). --days 0 needs no
   # file check: GNU find counts a file written today as -mtime -0, BSD find does not.
-  last=$(g -C "$wt" log -1 --format=%ct 2> /dev/null || echo "$now")
+  # A failed log is reported and never counted as idle.
+  if last=$(g -C "$wt" log -1 --format=%ct 2> /dev/null) && [ -n "$last" ]; then
+    last_known=1
+  else
+    last=$now
+    last_known=0
+    ev="$ev, last commit unknown"
+  fi
   recent=''
   if [ "$days" -gt 0 ]; then
     recent=$(find "$wt" \( -name .git -o -name node_modules \) -prune -o -type f -mtime "-$days" -print -quit 2> /dev/null) || true
   fi
-  if [ -z "$recent" ] && [ $(( (now - last) / 86400 )) -ge "$days" ]; then ev="$ev, idle ${days}d or more"; fi
+  if [ "$last_known" = 1 ] && [ -z "$recent" ] && [ $(( (now - last) / 86400 )) -ge "$days" ]; then ev="$ev, idle ${days}d or more"; fi
   printf '%s\t%s\t%s\t%s\n' "$bucket" "$real" "${branch:-(detached)}" "$ev"
 done

@@ -49,13 +49,18 @@ line_for() { printf '%s\n' "$output" | grep -F "/.claude/worktrees/$1	"; }
   bash "$KERN_ROOT/scripts/wt-fork" "$src" fork-one > /dev/null 2>&1
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
   [[ "$(line_for fork-one)" == empty$'\t'*$'\t(detached)\t'* ]] || false
-  [ "$(printf '%s\n' "$output" | grep -c "^[a-z-]*	$REPO	")" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c "^[a-z-]*	$(cd "$REPO" && pwd -P)	")" -eq 0 ]
 }
 
 @test "without gh the buckets come from local state and say so" {
   rm "$TMP/bin/gh"
   bash "$KERN_ROOT/scripts/wt-new" local-one > /dev/null 2>&1
-  PATH="$TMP/bin:/usr/bin:/bin" run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
+  # Only the tools the script needs, so no gh is reachable even where /usr/bin has one.
+  mkdir -p "$TMP/nogh"
+  for t in bash git find awk sed wc tr cut date grep cat dirname basename head tail sort uname mktemp env mkdir; do
+    p=$(command -v "$t") && ln -sf "$p" "$TMP/nogh/$t"
+  done
+  PATH="$TMP/nogh" run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
   [[ "$(line_for local-one)" == empty$'\t'*"gh unavailable"* ]] || false
 }
 
@@ -93,4 +98,20 @@ line_for() { printf '%s\n' "$output" | grep -F "/.claude/worktrees/$1	"; }
 @test "a bad --days value exits 2" {
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit" --days soon
   [ "$status" -eq 2 ]
+}
+
+@test "a worktree whose git status fails is unknown, not empty" {
+  w=$(bash "$KERN_ROOT/scripts/wt-new" broken-one 2> /dev/null)
+  idx=$(git -C "$w" rev-parse --path-format=absolute --git-path index)
+  printf 'garbage\n' > "$idx"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
+  [ "$status" -eq 0 ]
+  [[ "$(line_for broken-one)" == unknown$'\t'*"git status failed"* ]] || false
+}
+
+@test "a clean worktree with no resolvable base ref is unknown, not empty" {
+  bash "$KERN_ROOT/scripts/wt-new" nobase-one > /dev/null 2>&1
+  git -C "$REPO" update-ref -d refs/remotes/origin/main
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
+  [[ "$(line_for nobase-one)" == unknown$'\t'*"no base ref"* ]] || false
 }
