@@ -5734,7 +5734,7 @@ Every task is the smallest unit with its own test cycle that a reviewer could re
 
 **Blocked by:** Task numbers, or none.
 
-**Acceptance:** the spec's acceptance lines this task satisfies, by number.
+**Acceptance:** the spec's acceptance lines this task satisfies, as a leading list of numbers or ranges such as `1, 3-4` (plan-check parses only that list).
 
 - [ ] Step 1: Write the failing test (the real test code).
 - [ ] Step 2: Run it to verify it fails. Run: `<command>`. Expected: `<the failure and why>`.
