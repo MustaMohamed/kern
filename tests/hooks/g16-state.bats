@@ -493,3 +493,24 @@ bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:
   [ "$(decision_of "$output")" = ask ]
   [[ "$output" == *"G16 could not read the command for kern's hook code"* ]] || false
 }
+
+@test "a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied" {
+  local nl=$'\n' cr=$'\r'
+  K=$(kern_root)
+  expect_hook "bash $K/hooks/prompt-\\${nl}submit" ". $K/hooks/lib/sta\\${nl}te.sh" "bash \"$K/hooks/prompt-\\${nl}submit\"" \
+    "cd hooks && bash prompt-\\${nl}submit" "bash $K/hooks/session-\\${cr}${nl}start"
+}
+
+@test "the APFS case folds of s and k inside a hook path are read as s and k; asks, and under autopilot is denied" {
+  # U+017F (long s) folds to s and U+212A (Kelvin sign) to k, written as their UTF-8 bytes.
+  local s=$'\305\277' k=$'\342\204\252'
+  K=$(kern_root)
+  expect_hook "bash $K/hooks/prompt-${s}ubmit" "bash hooks/${s}ession-start" "bash hooks/pre-tool-u${s}e" \
+    ". $K/hoo${k}s/lib/state.sh" "cd $K/hook${s} && bash prompt-submit"
+}
+
+@test "a brace group that spans a slash asks, and under autopilot is denied" {
+  K=$(kern_root)
+  expect_hook "bash $K/hoo{ks/prompt-sub,x}mit < j.json" 'bash ho{oks/session-st,}art' 'cp src/{a/b,c} /tmp/' \
+    'ls x{a/b..c}'
+}

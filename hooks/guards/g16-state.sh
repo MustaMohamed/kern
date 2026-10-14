@@ -14,6 +14,9 @@ _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write"
 _G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool"
 _G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
+# U+017F (long s) and U+212A (Kelvin sign), in UTF-8: APFS folds them to s and k in a file name.
+_G16_LONG_S=$'\305\277'
+_G16_KELVIN=$'\342\204\252'
 # _G16_HOOK_AWK: reads the command text, lower-cased. Prints `hit` when a line names a hook after a
 # slash, a .sh file under hooks/lib/, or a state function as a word; a hook counts only when the
 # character after it cannot go on a file name, so pre-tool-use.bats does not. Otherwise prints `ctx`
@@ -490,15 +493,18 @@ _g16_glob() {
 # autopilot. Running prompt-submit with a made-up prompt rewrites the user's last message and can turn
 # autopilot on, and state_set writes any key; a command that reads can run code too (git -c
 # core.fsmonitor=..., rg --pre, xargs sh -c), so no command is let through on the name it starts with.
-# The match is on the command text, in any case, with quotes and backslashes taken out, so wrappers,
-# -c strings, git config values and xargs are all covered. It counts:
+# The match is on the command text, in any case, with line continuations joined, the APFS folds of s
+# and k read as s and k, and quotes and backslashes taken out, so wrappers, -c strings, git config
+# values and xargs are all covered. It counts:
 # - in the text (_G16_HOOK_AWK): a hook after a slash, a .sh file under hooks/lib/, or state_set,
 #   _state_put or state_reset;
 # - in a word inside a hooks directory: a last part that names a hook or a hooks/lib file, holds a
 #   glob that could match one (_g16_glob), or holds a $, a backtick or a { (a variable, command
 #   output, or the {} of find -exec and xargs). Every word is inside one when the text names a hooks
 #   directory (cd hooks, git log hooks/) or the session's directory is one; a single word is when a
-#   part of its own directory holds a glob that could match hooks ($K/h*/lib/state.sh).
+#   part of its own directory holds a glob that could match hooks ($K/h*/lib/state.sh);
+# - a word with a brace group that holds a / and a , or .. (hoo{ks/prompt-sub,x}mit), which can join
+#   the parts on both sides of a slash. The command is never expanded to decide.
 # Reading a hook file stays possible with the Read and Grep tools. Not seen (accepted limits): a hooks
 # directory reached without naming it (find $K -name prompt-submit, a glob for the directory in one
 # word and the hook in another), a name built at run time ($'\x..' escapes, xargs with no {}),
@@ -506,9 +512,14 @@ _g16_glob() {
 _g16_hooks() {
   local cmd t r w d c last names f ctx=0 inside hit=0
   cmd=$(ti_get command) || return 0
-  # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one tr pass
-  # and only when the text holds one.
-  t=${cmd//\$\'/}
+  # A backslash before a newline, or before CR LF, joins the lines; the long s and the Kelvin sign
+  # read as s and k, for the prefilter and the awk alike; $'...' and $"..." read as plain quotes; then
+  # quotes and backslashes are taken out, in one tr pass and only when the text holds one.
+  t=${cmd//\\$'\r\n'/}
+  t=${t//\\$'\n'/}
+  t=${t//$_G16_LONG_S/s}
+  t=${t//$_G16_KELVIN/k}
+  t=${t//\$\'/}
   t=${t//\$\"/}
   case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
   case "$CWD" in */[Hh][Oo][Oo][Kk][Ss] | */[Hh][Oo][Oo][Kk][Ss]/*) ctx=1 ;; esac
@@ -536,6 +547,11 @@ _g16_hooks() {
     esac
     while [ "$hit" = 0 ] && IFS= read -r w; do
       w=${w#"${w%%[!(]*}"}
+      case "$w" in
+        *'{'*/*'}'*)
+          case "$w" in *'{'*,*'}'* | *'{'*..*'}'*) hit=1; continue ;; esac
+          ;;
+      esac
       inside=$ctx
       case "$inside:$w" in
         0:*/*)
