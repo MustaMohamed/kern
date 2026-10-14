@@ -1,0 +1,9 @@
+diff --git a/src/sum.js b/src/sum.js
+index d4a3b92..94ddeaf 100644
+--- a/src/sum.js
++++ b/src/sum.js
+@@ -3,3 +3,4 @@ export function sum(a, b) {
+   --i;
+   return a + b;
+ }
++export const id = '123e4567-e89b-12d3-a456-426614174000';

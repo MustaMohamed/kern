@@ -1,0 +1,9 @@
+diff --git a/src/sum.js b/src/sum.js
+index d4a3b92..e241969 100644
+--- a/src/sum.js
++++ b/src/sum.js
+@@ -3,3 +3,4 @@ export function sum(a, b) {
+   --i;
+   return a + b;
+ }
++export const colour = '#a1b2c3d4';

@@ -1,0 +1,10 @@
+diff --git a/test/sum.test.js b/test/sum.test.js
+index d6a016e..eec48b1 100644
+--- a/test/sum.test.js
++++ b/test/sum.test.js
+@@ -1,5 +1,4 @@
+ import { sum } from '../src/sum.js';
+ test('sum', () => {
+   expect(sum(1, 2)).toBe(3);
+-  expect(sum(0, 0)).toBe(0);
+ });

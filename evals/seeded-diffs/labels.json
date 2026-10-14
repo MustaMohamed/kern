@@ -1,0 +1,22 @@
+[
+  { "id": "s01-skip", "expect": ["test-made-easier"] },
+  { "id": "s02-assert-removed", "expect": ["assertion-removed"] },
+  { "id": "s03-test-deleted", "expect": ["test-deleted"] },
+  { "id": "s04-ts-ignore", "expect": ["silenced-checker"] },
+  { "id": "s05-as-any", "expect": ["silenced-checker"] },
+  { "id": "s06-empty-catch", "expect": ["unfinished-work"] },
+  { "id": "s07-debug", "expect": ["debug-print"] },
+  { "id": "s08-coverage-lowered", "expect": ["bar-lowered"] },
+  { "id": "s09-strict-off", "expect": ["bar-lowered"] },
+  { "id": "s10-ci-nonblocking", "expect": ["bar-lowered"] },
+  { "id": "s11-unknown-sha", "expect": ["sha-unknown"] },
+  { "id": "s12-absolute-claim", "expect": ["absolute-claim"] },
+  { "id": "d01-reformatted-assert", "expect": [] },
+  { "id": "d02-renamed-test", "expect": [] },
+  { "id": "d03-doc-todo", "expect": [] },
+  { "id": "d04-hex-colour", "expect": [] },
+  { "id": "d05-uuid", "expect": [] },
+  { "id": "d06-moved-assert", "expect": [] },
+  { "id": "d07-decrement", "expect": [] },
+  { "id": "d08-threshold-raised", "expect": [] }
+]

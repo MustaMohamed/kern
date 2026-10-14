@@ -1,0 +1,11 @@
+diff --git a/src/sum.js b/src/sum.js
+index d4a3b92..7c1bbbf 100644
+--- a/src/sum.js
++++ b/src/sum.js
+@@ -1,5 +1,6 @@
+ export function sum(a, b) {
+   let i = 0;
+   --i;
++  console.log(a, b);
+   return a + b;
+ }

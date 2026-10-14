@@ -1,0 +1,4 @@
+diff --git a/test/old.test.js b/test/legacy.test.js
+similarity index 100%
+rename from test/old.test.js
+rename to test/legacy.test.js
