@@ -5,6 +5,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 ## [Unreleased]
 
 - floor-scan: the G7 check as a script, with a lowered-bar class and ratchet.<metric> settings keys.
+- Guard G18: kern's read-only investigator may run only allowlisted read commands.
 
 ## [0.2.1] - 2026-10-14
 

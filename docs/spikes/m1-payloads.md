@@ -33,3 +33,4 @@ Smoke checklist (Task 18 Step 5): 6 of 6 pass.
 Live-check findings, fixed in be26d2f: `/kern:autopilot off` created `.kern/ledgers` without asking; help setup named its template path ambiguously; a terse reply ran long with detail nobody asked for.
 
 Other observations: payloads carry `permission_mode` (seen `auto`) and `prompt_id`. The headless run logged 3 lines under `sdk-cli`, 12 lines under `cli` overall in this log.
+G18 path: A (M2a Task 12): agent_type is kern:investigator, so the investigator keeps Bash behind G18.
