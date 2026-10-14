@@ -13,13 +13,17 @@ function hit(p, ln, cls, txt) {
   printf "%s:%d\t%s\t%s\n", p, ln, cls, txt
   hits++
 }
-# thr(t): sets K and V to a threshold key and its number found in t; returns 1 when found.
-function thr(t, keys,   s) {
-  if (!match(t, "(" keys ")[\"']?[ \t]*[:=][ \t]*[0-9]+(\\.[0-9]+)?")) return 0
-  s = substr(t, RSTART, RLENGTH)
-  K = s; sub(/["']?[ \t]*[:=].*/, "", K)
-  V = s; sub(/^.*[:=][ \t]*/, "", V)
-  return 1
+# thr(t, keys): fills TK[1..TN] and TV[1..TN] with every threshold key and number found in t, in order.
+function thr(t, keys,   s, k, v) {
+  TN = 0
+  while (match(t, "(" keys ")[\"']?[ \t]*[:=][ \t]*[0-9]+(\\.[0-9]+)?")) {
+    s = substr(t, RSTART, RLENGTH)
+    t = substr(t, RSTART + RLENGTH)
+    k = s; sub(/["']?[ \t]*[:=].*/, "", k)
+    v = s; sub(/^.*[:=][ \t]*/, "", v)
+    TN++; TK[TN] = k; TV[TN] = v
+  }
+  return TN
 }
 function added_line(p, ln, t) {
   if (is_doc(p)) return
@@ -33,13 +37,13 @@ function added_line(p, ln, t) {
   if (p ~ /(^|\/)package\.json$/ && t ~ /:[ \t]*["']off["'][ \t]*,?[ \t]*$/) hit(p, ln, "bar-lowered", t)
 }
 # flush: the buffered lines of one file, paired so a moved or reformatted line is not a change.
-function flush(   i, t, k, m, d) {
+function flush(   i, j, t, k, m, d, K, V) {
   if (file == "") return
   for (i = 1; i <= na; i++) if (!(norm(at[i]) in rset)) added_line(file, al[i], at[i])
   for (i = 1; i <= nr; i++) {
     t = rt[i]
     if (norm(t) in aset) continue
-    if (is_test(file) && !deleted && t ~ /(^|[^A-Za-z_])(expect|assert|should)([^A-Za-z_]|$)/) hit(file, rl[i], "assertion-removed", t)
+    if (is_test(file) && !deleted && (t ~ /(^|[^A-Za-z_])(expect|assert|should)([^A-Za-z_]|$)/ || t ~ /(^|[^A-Za-z0-9_])(debug_)?assert([A-Z][A-Za-z0-9]*|_[a-z_]+)?([^A-Za-z0-9_]|$)/ || t ~ /(^|[^A-Za-z0-9_])require\.[A-Z]/)) hit(file, rl[i], "assertion-removed", t)
     if (is_ci(file) && t ~ /^[ \t]*-?[ \t]*(run|script|uses):/) hit(file, rl[i], "bar-lowered", "CI step removed: " t)
     if (is_tscfg(file) && t ~ /"strict"[ \t]*:[ \t]*true/) hit(file, rl[i], "bar-lowered", "strict removed: " t)
   }
@@ -47,8 +51,9 @@ function flush(   i, t, k, m, d) {
   # ratchet location. min: lowering loosens; max: raising loosens.
   for (k in rk) delete rk[k]
   for (k in ak) delete ak[k]
-  for (i = 1; i <= nr; i++) if (thr(rt[i], tkeys)) { rk[K]++; rv[K, rk[K]] = V }
-  for (i = 1; i <= na; i++) if (thr(at[i], tkeys)) {
+  for (i = 1; i <= nr; i++) if (thr(rt[i], tkeys)) for (j = 1; j <= TN; j++) { K = TK[j]; rk[K]++; rv[K, rk[K]] = TV[j] }
+  for (i = 1; i <= na; i++) if (thr(at[i], tkeys)) for (j = 1; j <= TN; j++) {
+    K = TK[j]; V = TV[j]
     ak[K]++; m = ak[K]
     if (!((K, m) in rv)) continue
     d = (K in dir) ? dir[K] : "min"

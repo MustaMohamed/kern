@@ -169,3 +169,43 @@ count() { printf '%s\n' "$output" | grep -cE "$1" || true; }
   scan
   [ "$status" -eq 0 ]
 }
+
+@test "removed assertions in JUnit, Rust, unittest and testify styles are assertion-removed" {
+  printf 'class FooTest {\n  void t() {\n    assertEquals(3, sum(1, 2));\n  }\n}\n' > test/FooTest.java
+  mkdir -p tests
+  printf '#[test]\nfn t() {\n    assert_eq!(1, 1);\n    debug_assert!(true);\n    assert_ne!(1, 2);\n}\n' > tests/t.rs
+  printf 'class T(unittest.TestCase):\n    def test_a(self):\n        self.assertEqual(1, 1)\n' > test/test_a.py
+  printf 'func TestA(t *testing.T) {\n\trequire.Equal(t, 1, 1)\n\tassert.Equal(t, 2, 2)\n}\n' > test/a_test.go
+  git add -A && git commit --quiet -m styles
+  printf 'class FooTest {\n  void t() {\n  }\n}\n' > test/FooTest.java
+  printf '#[test]\nfn t() {\n}\n' > tests/t.rs
+  printf 'class T(unittest.TestCase):\n    def test_a(self):\n        pass\n' > test/test_a.py
+  printf 'func TestA(t *testing.T) {\n}\n' > test/a_test.go
+  scan
+  [ "$status" -eq 1 ]
+  has $'^test/FooTest\\.java:3\tassertion-removed\t'
+  has $'^tests/t\\.rs:3\tassertion-removed\t'
+  has $'^tests/t\\.rs:4\tassertion-removed\t'
+  has $'^tests/t\\.rs:5\tassertion-removed\t'
+  has $'^test/test_a\\.py:3\tassertion-removed\t'
+  has $'^test/a_test\\.go:2\tassertion-removed\t'
+  has $'^test/a_test\\.go:3\tassertion-removed\t'
+}
+
+@test "a removed require('y') import in a test file is not an assertion" {
+  printf "const x = require('y');\ntest('a', () => {});\n" > test/imp.test.js
+  git add -A && git commit --quiet -m imp
+  printf "test('a', () => {});\n" > test/imp.test.js
+  scan
+  [ "$(count 'assertion-removed')" -eq 0 ]
+}
+
+@test "every threshold on one line is checked" {
+  printf '{ "branches": 80, "lines": 90 }\n' > package.json
+  git add -A && git commit --quiet -m pkg
+  printf '{ "branches": 80, "lines": 50 }\n' > package.json
+  scan
+  [ "$status" -eq 1 ]
+  has $'^package\\.json:1\tbar-lowered\tthreshold lines moved from 90 to 50$'
+  [ "$(count 'branches moved')" -eq 0 ]
+}
