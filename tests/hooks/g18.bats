@@ -66,6 +66,15 @@ denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output"
   done
 }
 
+@test "an option that runs a program is denied: rg --hostname-bin, file -z and -Z" {
+  for cmd in 'rg --hostname-bin=./h.sh foo' 'rg --hostname-bin ./h.sh foo' "rg -n '--hostname-bin=hostname' foo" \
+    'file -z a.gz' 'file -Z a.gz' 'file -bz a.gz' 'file -bZ a.gz' 'file --uncompress a.gz' 'file --uncompress-noreport a.gz' \
+    'file --uncompress-n a.gz'; do
+    hook kern:investigator "$cmd"
+    denied || { echo "not denied: $cmd"; false; }
+  done
+}
+
 @test "a redirect that only looks like 2>&1 or /dev/null is denied" {
   for cmd in 'cat a.txt >&1x' 'cat a.txt 2>&1y' 'cat a.txt >/dev/nullx' 'cat a.txt &>/dev/null.txt'; do
     hook kern:investigator "$cmd"

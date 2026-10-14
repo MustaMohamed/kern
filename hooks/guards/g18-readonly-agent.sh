@@ -35,18 +35,20 @@ $words
 EOF
       ;;
     rg)
-      # --pre runs a program; -z runs decompression programs, alone or in a cluster such as -nz.
+      # --pre and --hostname-bin run a program; -z runs decompression programs, alone or in a cluster
+      # such as -nz.
       while IFS= read -r w; do
-        case "$w" in --pre* | --search-zip*) return 1 ;; --*) ;; -*z*) return 1 ;; esac
+        case "$w" in --pre* | --search-zip* | --hostname-bin*) return 1 ;; --*) ;; -*z*) return 1 ;; esac
       done <<EOF
 $words
 EOF
       ;;
     grep | ls | cat | head | tail | wc | cut | tr | nl | stat | du | pwd | echo | printf | basename | dirname | realpath | cd | true | test | jq | column | cmp | diff | comm) ;;
     file)
-      # -C writes a .mgc file, also inside a cluster such as -bC; file reads --co as --compile.
+      # -C writes a .mgc file, also inside a cluster such as -bC; file reads --co as --compile. -z and -Z
+      # run decompression programs; --u is a prefix only of --uncompress and --uncompress-noreport.
       while IFS= read -r w; do
-        case "$w" in --co*) return 1 ;; --*) ;; -*C*) return 1 ;; esac
+        case "$w" in --co* | --u*) return 1 ;; --*) ;; -*C* | -*z* | -*Z*) return 1 ;; esac
       done <<EOF
 $words
 EOF
