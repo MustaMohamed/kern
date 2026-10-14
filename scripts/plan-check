@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# Lint a kern plan or spec, and read a plan's task graph, so its structure is checked in code.
+# Usage: plan-check FILE              problems as FILE:LINE: message; exit 0 clean, 1 problems, 2 usage
+#        plan-check --graph PLAN      after a clean lint, TSV rows: overlap<TAB>A<TAB>B<TAB>shared and
+#                                     wave<TAB>N<TAB>tasks; tasks in one wave share no file or service
+#        plan-check --files PLAN N    Task N's Files paths, one per line, line ranges removed; a path
+#                                     ending in /** or /* is printed as its directory with a trailing /
+# A file with "### Task N:" headings is a plan; any other file is a spec.
+# Plan checks: frontmatter; Global Constraints, Review Focus and File map; per task Files, Interfaces
+# (Consumes, Produces), Blocked by, Acceptance and a Run:/Expected: pair; tasks numbered from 1; a task
+# blocked only by earlier tasks; tasks sharing a file or a shared_services entry ordered by Blocked by;
+# a consumed name blocked by its producer; every spec acceptance number covered; no placeholders, long
+# dashes or curly quotes. Structure checks adapted from pstack poteto-mode scripts/check-plan.mjs (MIT).
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+usage() { echo "usage: plan-check FILE | plan-check --graph PLAN | plan-check --files PLAN N" >&2; exit 2; }
+mode=lint n=''
+case "${1-}" in
+  --graph) mode=graph; shift ;;
+  --files) mode=files; shift ;;
+esac
+[ $# -ge 1 ] || usage
+file=$1
+if [ "$mode" = files ]; then
+  [ $# -eq 2 ] || usage
+  n=$2
+  case "$n" in '' | *[!0-9]*) usage ;; esac
+else
+  [ $# -eq 1 ] || usage
+fi
+[ -f "$file" ] || { echo "plan-check: no such file: $file" >&2; exit 2; }
+
+MAIN=$(kern_main_root "$PWD" 2> /dev/null) || MAIN=''
+export KERN_MAIN="$MAIN"
+SHARED=$(settings_get shared_services '' 2> /dev/null || true)
+WD=$(settings_get work_dir .kern 2> /dev/null || echo .kern)
+
+# Acceptance numbers of the plan's spec, when the spec: line names a file that resolves.
+ACCEPT='' SPECPATH='' SPECBAD=''
+spec=$(awk '{ sub(/\r$/, "") } NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1 && /^spec:/ { sub(/^spec:[ \t]*/, ""); print }' "$file")
+case "$spec" in
+  *.md)
+    case "$spec" in WORK/*) spec="$MAIN/${WD%/}/${spec#WORK/}" ;; esac
+    for c in "$spec" "$(dirname "$file")/$spec" "$MAIN/$spec"; do
+      if [ -f "$c" ]; then SPECPATH=$c; break; fi
+    done
+    if [ -n "$SPECPATH" ]; then
+      ACCEPT=$(awk '{ sub(/\r$/, "") } /^## / { on = ($0 ~ /^## Acceptance criteria/) ; next } on && /^[0-9]+\. / { sub(/\..*/, ""); printf "%s ", $0 }' "$SPECPATH")
+    else
+      ACCEPT=MISSING
+    fi
+    ;;
+  *) SPECBAD=1 ;;
+esac
+
+DASH=$(printf '\342\200\223|\342\200\224') CURLY=$(printf '\342\200\230|\342\200\231|\342\200\234|\342\200\235') \
+  MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec LC_ALL=C awk -v sq="'" '
+function problem(ln, msg) { printf "%s:%d: %s\n", FILENAME, ln, msg; bad = 1 }
+function spans(s, out,   k, t) {
+  k = 0
+  while (match(s, /`[^`]+`/)) { out[++k] = substr(s, RSTART + 1, RLENGTH - 2); s = substr(s, RSTART + RLENGTH) }
+  return k
+}
+function first(s) { sub(/^[ \t]+/, "", s); sub(/[ \t(].*/, "", s); return s }
+function has(list, x) { return index(" " list " ", " " x " ") > 0 }
+function mentions(txt, w,   pos, before, after, rest, off) {
+  off = 0; rest = txt
+  while ((pos = index(rest, w)) > 0) {
+    before = (off + pos > 1) ? substr(txt, off + pos - 1, 1) : " "
+    after = substr(txt, off + pos + length(w), 1)
+    if (before !~ /[A-Za-z0-9_-]/ && after !~ /[A-Za-z0-9_-]/) return 1
+    off += pos; rest = substr(txt, off + 1)
+  }
+  return 0
+}
+{ sub(/\r$/, "") }
+BEGIN { shared_n = split(tolower(ENVIRON["SHARED"]), shared, /[ \t]*,[ \t]*/) }
+NR == 1 && $0 == "---" { infm = 1; fmstart = 1; next }
+infm && $0 == "---" { infm = 0; fmclosed = 1; next }
+infm { k = $0; sub(/:.*/, "", k); v = $0; sub(/^[^:]*:[ \t]*/, "", v); fm[k] = v; fmline[k] = NR; next }
+/^[ \t]*(```|~~~)/ { fence = !fence; if (cur) text[cur] = text[cur] " " tolower($0); next }
+fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
+{
+  prose = $0; gsub(/`[^`]*`/, "", prose)
+  if (prose ~ ENVIRON["DASH"]) problem(NR, "long dash")
+  if (prose ~ ENVIRON["CURLY"]) problem(NR, "curly quote")
+  if (prose ~ /(^|[^A-Za-z])(TBD|TODO)([^A-Za-z]|$)/ || tolower(prose) ~ /similar to task|add appropriate|fill in|implement later/) problem(NR, "placeholder: " $0)
+}
+/^## / { h2[$0] = 1; field = ""; if (cur) { cur = "" } }
+/^### Task [0-9]+:/ {
+  t = $3; sub(/:$/, "", t); t += 0
+  cur = t; tasks++; order[tasks] = t; tline[t] = NR; field = ""
+  next
+}
+!cur { next }
+{ text[cur] = text[cur] " " tolower($0) }
+/^\*\*Files:\*\*/ { field = "files"; nfiles[cur] += 0; next }
+/^\*\*Interfaces:\*\*/ { field = "ifaces"; next }
+/^\*\*Blocked by:\*\*/ {
+  field = ""; seenb[cur] = 1; s = $0; sub(/^\*\*Blocked by:\*\*[ \t]*/, "", s)
+  while (match(s, /Task[ \t]+[0-9]+/)) { b = substr(s, RSTART, RLENGTH); sub(/Task[ \t]+/, "", b); blk[cur] = blk[cur] " " (b + 0); s = substr(s, RSTART + RLENGTH) }
+  if (blk[cur] == "" && tolower(s) !~ /none/) problem(NR, "Task " cur ": Blocked by names no task and is not none")
+  next
+}
+/^\*\*Acceptance:\*\*/ {
+  field = ""; seena[cur] = 1; s = $0; sub(/^\*\*Acceptance:\*\*[ \t]*/, "", s)
+  while (match(s, /[0-9]+/)) { acc[cur] = acc[cur] " " substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH) }
+  next
+}
+/Run:/ { run[cur] = 1 }
+/Expected:/ { expect[cur] = 1 }
+field == "files" && /^- (Create|Modify|Test|Delete):/ {
+  k = spans($0, sp)
+  for (i = 1; i <= k; i++) { p = sp[i]; sub(/:[0-9]+(-[0-9]+)?$/, "", p); sub(/\/\*\*?$/, "/", p); nfiles[cur]++; files[cur, nfiles[cur]] = p }
+  next
+}
+field == "ifaces" && /^- Consumes:/ { k = spans($0, sp); for (i = 1; i <= k; i++) if (first(sp[i]) != "none") cons[cur] = cons[cur] " " first(sp[i]); seenc[cur] = 1; next }
+field == "ifaces" && /^- Produces:/ { k = spans($0, sp); for (i = 1; i <= k; i++) { w = first(sp[i]); if (w == "none") continue; prod[cur] = prod[cur] " " w; if (!(w in producer)) producer[w] = cur }; seenp[cur] = 1; next }
+END {
+  if (fmstart && !fmclosed) problem(1, "frontmatter is not closed")
+  if (tasks == 0 && ENVIRON["MODE"] != "lint") { print "plan-check: " FILENAME " is not a plan (no ### Task headings)" > "/dev/stderr"; exit 2 }
+  if (ENVIRON["MODE"] == "files") {
+    t = ENVIRON["N"] + 0
+    if (!(t in tline)) { print "plan-check: no Task " t > "/dev/stderr"; exit 2 }
+    for (i = 1; i <= nfiles[t]; i++) print files[t, i]
+    exit 0
+  }
+  if (tasks == 0) {
+    # A spec.
+    st = fm["status"]
+    if (!fmstart) problem(1, "no frontmatter")
+    else if (st != "draft" && st != "approved" && st != "draft (parked under autopilot)") problem(fmline["status"] + 0, "status is draft, approved or draft (parked under autopilot), not \"" st "\"")
+    if (st == "approved" && fm["approved"] !~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*"[^"]+"/) problem(fmline["status"], "status: approved needs approved: with the date and the user" sq "s quoted words")
+    if (fm["form"] == "short") need = "## Problem|## Constraints|## Acceptance criteria|## Test seams"
+    else need = "## Problem|## Intent|## Constraints|## Assumptions|## Success criteria|## Acceptance criteria|## Decisions|## Compatibility|## Authorization|## Rollout|## Checklists|## Test seams|## Not doing|## Open questions"
+    k = split(need, hs, "|")
+    for (i = 1; i <= k; i++) if (!(hs[i] in h2)) problem(1, "missing section " hs[i])
+    exit bad ? 1 : 0
+  }
+  # A plan.
+  st = fm["status"]
+  if (!fmstart) problem(1, "no frontmatter")
+  if (st != "draft" && st != "approved") problem(fmline["status"] + 0, "plan status is draft or approved, not \"" st "\"")
+  if (st == "approved") {
+    if (fm["approved"] !~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*"[^"]+"/) problem(fmline["status"], "status: approved needs approved: with the date and the user" sq "s quoted words")
+    if (fm["execution"] !~ /^(step|inline|delegate)$/) problem(fmline["status"], "status: approved needs execution: step, inline or delegate")
+  }
+  if (!("spec" in fm)) problem(1, "frontmatter has no spec: line")
+  if (fm["commits"] != "ask") problem(1, "frontmatter needs commits: ask")
+  k = split("## Global Constraints|## Review Focus|## File map", hs, "|")
+  for (i = 1; i <= k; i++) if (!(hs[i] in h2)) problem(1, "missing section " hs[i])
+  for (i = 1; i <= tasks; i++) {
+    t = order[i]
+    if (t != i) problem(tline[t], "Task " t " is out of sequence; expected Task " i)
+    if (nfiles[t] + 0 == 0) problem(tline[t], "Task " t ": Files lists no backticked path")
+    if (!seenc[t] || !seenp[t]) problem(tline[t], "Task " t ": Interfaces needs a Consumes line and a Produces line")
+    if (!seenb[t]) problem(tline[t], "Task " t ": no Blocked by line")
+    if (!seena[t]) problem(tline[t], "Task " t ": no Acceptance line")
+    if (!run[t] || !expect[t]) problem(tline[t], "Task " t ": no Run: and Expected: pair")
+    m = split(blk[t], bs, " ")
+    for (j = 1; j <= m; j++) {
+      if (bs[j] >= t || !(bs[j] in tline)) problem(tline[t], "Task " t " is blocked by Task " bs[j] ", which is not an earlier task")
+      else { anc[t] = anc[t] " " bs[j] " " anc[bs[j]] }
+    }
+  }
+  # Overlap: a shared file or a shared service must be ordered by Blocked by.
+  for (i = 1; i <= tasks; i++) for (j = i + 1; j <= tasks; j++) {
+    a = order[i]; b = order[j]; what = ""
+    for (x = 1; x <= nfiles[a]; x++) for (y = 1; y <= nfiles[b]; y++) if (files[a, x] == files[b, y]) { what = files[a, x]; break }
+    if (what == "") for (s = 1; s <= shared_n; s++) if (shared[s] != "" && mentions(text[a], shared[s]) && mentions(text[b], shared[s])) { what = shared[s]; break }
+    if (what == "") {
+      ma = 0; mb = 0
+      for (x = 1; x <= nfiles[a]; x++) if (files[a, x] ~ /migration/) ma = 1
+      for (y = 1; y <= nfiles[b]; y++) if (files[b, y] ~ /migration/) mb = 1
+      if (ma && mb) what = "migrations"
+    }
+    if (what == "") continue
+    ov[++novl] = a "\t" b "\t" what
+    if (!has(anc[b], a)) problem(tline[b], "Task " a " and Task " b " share " what ", but Task " b " is not blocked by Task " a)
+  }
+  # A consumed name must come from an earlier task that blocks the consumer.
+  for (i = 1; i <= tasks; i++) {
+    t = order[i]; m = split(cons[t], cs, " ")
+    for (j = 1; j <= m; j++) {
+      w = cs[j]; if (!(w in producer)) continue
+      p = producer[w]; if (p == t) continue
+      if (p > t) problem(tline[t], "Task " t " consumes `" w "` before Task " p " produces it")
+      else if (!has(anc[t], p)) problem(tline[t], "Task " t " consumes `" w "` from Task " p " but is not blocked by it")
+    }
+  }
+  if (ENVIRON["SPECBAD"] != "" && ("spec" in fm)) problem(fmline["spec"] + 0, "spec: must name a .md file")
+  else if (ENVIRON["ACCEPT"] == "MISSING") problem(fmline["spec"] + 0, "spec " ENVIRON["SPEC"] " not found")
+  else if (("spec" in fm) && ENVIRON["ACCEPT"] ~ /^[ ]*$/) problem(fmline["spec"] + 0, "spec " ENVIRON["SPEC"] " lists no numbered acceptance criteria")
+  else {
+    m = split(ENVIRON["ACCEPT"], need_acc, " ")
+    for (j = 1; j <= m; j++) {
+      ok = 0
+      for (i = 1; i <= tasks; i++) if (has(acc[order[i]], need_acc[j])) ok = 1
+      if (!ok) problem(fmline["spec"] + 0, "acceptance criterion " need_acc[j] " of the spec is covered by no task")
+    }
+  }
+  if (bad) exit 1
+  if (ENVIRON["MODE"] == "graph") {
+    for (i = 1; i <= novl; i++) print "overlap\t" ov[i]
+    maxw = 0
+    for (i = 1; i <= tasks; i++) {
+      t = order[i]; lv = 1; m = split(blk[t], bs, " ")
+      for (j = 1; j <= m; j++) if (level[bs[j]] + 1 > lv) lv = level[bs[j]] + 1
+      level[t] = lv; wave[lv] = wave[lv] (wave[lv] == "" ? "" : " ") t; if (lv > maxw) maxw = lv
+    }
+    for (lv = 1; lv <= maxw; lv++) print "wave\t" lv "\t" wave[lv]
+  }
+  exit 0
+}' "$file"
