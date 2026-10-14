@@ -13,11 +13,12 @@ here=$(cd "$(dirname "$0")" && pwd -P)
 
 # main_state: "<main root> branch=<name> status=<hash of git status --porcelain>".
 main_state() {
-  local m b
+  local m b st
   m=$(kern_main_root "$PWD") || { echo "ledger-open: not a git repository" >&2; exit 2; }
   b=$(git -C "$m" symbolic-ref -q --short HEAD 2> /dev/null) || b='(detached)'
-  printf '%s branch=%s status=%s\n' "$m" "$b" \
-    "$(git --no-optional-locks -C "$m" status --porcelain | git hash-object --stdin)"
+  # Read first: a failing git status inside a pipe or printf argument would be hashed as empty input.
+  st=$(git --no-optional-locks -C "$m" status --porcelain) || { echo "ledger-open: git status failed in $m" >&2; exit 2; }
+  printf '%s branch=%s status=%s\n' "$m" "$b" "$(printf '%s' "$st" | git hash-object --stdin)"
 }
 
 if [ "${1-}" = --summary ]; then
@@ -38,7 +39,8 @@ plan=$1
 [ -f "$plan" ] || { echo "ledger-open: no such plan: $plan" >&2; exit 2; }
 plan=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
 # The frontmatter is the block between a first line of --- and the next ---.
-fm=$(awk 'NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1 { print }' "$plan")
+fm=$(awk 'NR == 1 { if ($0 != "---") exit; opened = 1; next } $0 == "---" { closed = 1; exit } { print } END { if (opened && !closed) exit 3 }' "$plan") ||
+  { echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2; }
 status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
 approved=$(printf '%s\n' "$fm" | sed -n 's/^approved:[[:space:]]*//p' | head -n 1)
 [ "$status" = approved ] || { echo "ledger-open: $plan has status: ${status:-none}; execute-plan runs only an approved plan" >&2; exit 2; }

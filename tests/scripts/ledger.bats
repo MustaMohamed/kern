@@ -144,3 +144,52 @@ approved_plan() {
   [ "$status" -eq 1 ]
   [[ "${lines[3]}" == 'main: changed; '* ]] || false
 }
+
+@test "ledger-open refuses an unclosed frontmatter and writes nothing" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "x"' '' '### Task 1: One' > "$TMP/u.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/u.md" "$TMP/fresh"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"$TMP/u.md: frontmatter not closed"* ]] || false
+  [ ! -e "$TMP/fresh" ]
+}
+
+@test "a refusal writes nothing into a fresh DIR" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/d.md" draft
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/d.md" "$TMP/fresh"
+  [ "$status" -eq 2 ]
+  [ ! -e "$TMP/fresh" ]
+  approved_plan "$TMP/a.md"; approved_plan "$TMP/b.md"
+  mkdir -p "$TMP/other"
+  printf '# kern ledger: %s\n' "$TMP/a.md" > "$TMP/other/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/b.md" "$TMP/other"
+  [ "$status" -eq 2 ]
+  [ "$(ls -A "$TMP/other")" = ledger.md ]
+}
+
+@test "ledger-open outside a git repository exits 2 and writes no ledger" {
+  mkdir "$TMP/nogit"; cd "$TMP/nogit"
+  approved_plan "$TMP/a.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/fresh"
+  [ "$status" -eq 2 ]
+  [ ! -e "$TMP/fresh" ]
+}
+
+@test "ledger-open --summary fails when the main checkout state cannot be read" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/a.md"
+  dir=$(bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l" 2> /dev/null)
+  mkdir "$TMP/nogit"; cd "$TMP/nogit"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" --summary "$dir"
+  [ "$status" -eq 2 ]
+}
+
+@test "ledger-open refuses when git status fails and does not record an empty-input hash" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/a.md"
+  printf 'garbage' > "$REPO/.git/index"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/fresh"
+  [ "$status" -ne 0 ]
+  [ ! -e "$TMP/fresh/ledger.md" ]
+}
