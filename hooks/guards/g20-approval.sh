@@ -6,8 +6,10 @@
 # the change over two edits does not get past it. The approved: line must quote one whole line of the
 # user's last message, verbatim, that is not a non-answer such as "sounds good", and the file must be
 # older than that message. prompt-submit records the message's line hashes in the session state, which
-# G16 protects. Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan
-# with a Markdown name, so every approval it accepts passed through G20.
+# G16 protects, along with kern's hooks themselves, so the model cannot run prompt-submit to forge the
+# message. Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan with a
+# Markdown name, and G20, ledger-open and plan-check read frontmatter with one reader
+# (scripts/lib/frontmatter.awk), so every approval ledger-open accepts passed through G20.
 #
 # Accepted limits:
 # - "The user's last message" is the last prompt prompt-submit does not read as wrapped. A prompt
@@ -20,41 +22,49 @@
 # - The hash is djb2, not a cryptographic hash: a quote built to collide with a line of the message
 #   passes. A shell write that hides the path or the word (a script run by name, a word built at run
 #   time, a recursive directory copy, git checkout or apply, a hard link) is not seen.
-_G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess "
+_G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess | no | nope | not yet | wait | stop | don't | do not "
+# A right single quote, read as an apostrophe in a non-answer ("don't").
+_G20_RSQ=$'\342\200\231'
 _G20_USE_TOOL="set or change an approval with the Edit or Write tool, so kern can check the user's quote"
 
-# _G20_FM_AWK: prints the frontmatter (the lines between a first line --- and the next ---) of the text
-# it reads, after replacing ENVIRON G20_OLD with G20_NEW: the first match, or every match when G20_ALL
-# is true. An empty G20_OLD replaces nothing. Line ends are read as Claude Code's Edit reads them: CRLF
-# as LF, and when G20_OLD is not found, curly quotes as straight ones. A UTF-8 BOM before the first
-# ---, and blanks after a ---, are ignored, so the reading is never narrower than a YAML parser's.
+# The frontmatter reader G20 shares with ledger-open and plan-check, so all three agree on where a
+# file's frontmatter ends.
+_G20_FM_FILE="$KERN_ROOT/scripts/lib/frontmatter.awk"
+
+# A status: approved line, bare or quoted, in any case, with any blanks around the colon and an optional
+# comment after it.
+_G20_STATUS_RE="^[[:space:]]*[\"']?status[\"']?[[:space:]]*:[[:space:]]*[\"']?approved[\"']?[[:space:]]*(#.*)?\$"
+
+# _G20_EDIT_AWK: prints the text it reads after replacing ENVIRON G20_OLD with G20_NEW: the first
+# match, or every match when G20_ALL is true. Line ends are read as Claude Code's Edit reads them: CRLF
+# as LF, and when G20_OLD is not found, curly quotes as straight ones. Exit 4 when G20_OLD is still not
+# found.
 # shellcheck disable=SC2016 # awk text
-_G20_FM_AWK='
+_G20_EDIT_AWK='
 function straight(s) { gsub("\342\200\230|\342\200\231", "\047", s); gsub("\342\200\234|\342\200\235", "\"", s); return s }
 { sub(/\r$/, ""); t = t $0 "\n" }
 END {
   o = ENVIRON["G20_OLD"]
-  if (o != "") {
-    if (!index(t, o)) { t = straight(t); o = straight(o) }
-    out = ""; r = t
-    while ((i = index(r, o)) > 0) {
-      out = out substr(r, 1, i - 1) ENVIRON["G20_NEW"]; r = substr(r, i + length(o))
-      if (ENVIRON["G20_ALL"] != "true") break
-    }
-    t = out r
+  if (!index(t, o)) { t = straight(t); o = straight(o) }
+  if (!index(t, o)) exit 4
+  out = ""; r = t
+  while ((i = index(r, o)) > 0) {
+    out = out substr(r, 1, i - 1) ENVIRON["G20_NEW"]; r = substr(r, i + length(o))
+    if (ENVIRON["G20_ALL"] != "true") break
   }
-  n = split(t, L, "\n")
-  for (k = 1; k <= n; k++) sub(/\r$/, "", L[k])
-  sub(/^\357\273\277/, "", L[1])
-  if (L[1] !~ /^---[ \t]*$/) exit
-  for (k = 2; k <= n && L[k] !~ /^---[ \t]*$/; k++) print L[k]
+  printf "%s", out r
 }'
 
-# _g20_approved FRONTMATTER: exit 0 when FRONTMATTER sets status: approved, bare or quoted, in any
-# case, with any blanks around the colon and an optional comment after it.
+# _g20_approved FRONTMATTER: exit 0 when a line of FRONTMATTER sets status: approved.
 _g20_approved() {
-  printf '%s\n' "$1" |
-    LC_ALL=C grep -Eiq "^[[:space:]]*[\"']?status[\"']?[[:space:]]*:[[:space:]]*[\"']?approved[\"']?[[:space:]]*(#.*)?\$"
+  printf '%s\n' "$1" | LC_ALL=C grep -Eiq "$_G20_STATUS_RE"
+}
+
+# _g20_holds FILE: exit 0 when any line of FILE sets status: approved, in its frontmatter or not. A
+# shell edit can turn body lines into frontmatter (sed deleting a ---, tail dropping a first line), so
+# for a shell write every line counts.
+_g20_holds() {
+  [ -f "$1" ] && [ -r "$1" ] && LC_ALL=C grep -Eiq "$_G20_STATUS_RE" "$1" 2> /dev/null
 }
 
 # _g20_lines FRONTMATTER: the value of every approved: line, in order.
@@ -84,10 +94,14 @@ _g20_mdfile() {
   return 1
 }
 
-# _g20_front FILE: the frontmatter of FILE as it is now; nothing when FILE is not a readable file.
-_g20_front() {
-  [ -f "$1" ] && [ -r "$1" ] || return 0
-  G20_OLD='' LC_ALL=C awk "$_G20_FM_AWK" "$1" 2> /dev/null
+# _g20_fm NAME: sets _G20_FM to the frontmatter of the text on stdin (NAME's), read by the shared
+# reader; an unclosed block counts to its end. Fails closed, and returns 1, when the reader cannot run.
+_g20_fm() {
+  local rc=0
+  _G20_FM=$(LC_ALL=C awk -v fm_print=1 -f "$_G20_FM_FILE" 2> /dev/null) || rc=$?
+  case "$rc" in 0 | 3) return 0 ;; esac
+  fail_closed "G20 could not read the frontmatter of $1 to judge an approval"
+  return 1
 }
 
 guard_g20() {
@@ -98,11 +112,16 @@ guard_g20() {
 }
 
 _g20_file() {
-  local p text old='' new all before after lines quote norm qh hashes sf
+  local p base text old='' new all post rc before after lines quote norm qh hashes sf
   p=$(ti_get file_path) || return 0
   case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
   _g20_mdfile "$p" || return 0
-  before=$(_g20_front "$p")
+  base=$(basename "$p")
+  before=''
+  if [ -f "$p" ] && [ -r "$p" ]; then
+    _g20_fm "$base" < "$p" || return 0
+    before=$_G20_FM
+  fi
   if [ "$TOOL" = Edit ]; then
     old=$(ti_get old_string && printf x) || return 0
     old=${old%x}
@@ -115,14 +134,33 @@ _g20_file() {
     else
       text=$(ti_get new_string && printf x) || return 0
     fi
-    after=$(printf '%s' "${text%x}" | G20_OLD='' LC_ALL=C awk "$_G20_FM_AWK")
+    _g20_fm "$base" <<< "${text%x}" || return 0
   else
-    [ -f "$p" ] || return 0
     new=$(ti_get new_string && printf x) || return 0
+    new=${new%x}
     all=$(KERN_INPUT="${TOOL_INPUT-}" json_get_raw replace_all 2> /dev/null) || all=false
-    after=$(G20_OLD="$old" G20_NEW="${new%x}" G20_ALL="$all" LC_ALL=C awk "$_G20_FM_AWK" "$p") ||
-      { fail_closed "G20 could not read $(basename "$p") to judge the Edit for an approval"; return 0; }
+    rc=4
+    if [ -f "$p" ]; then
+      rc=0
+      post=$(G20_OLD="$old" G20_NEW="$new" G20_ALL="$all" LC_ALL=C awk "$_G20_EDIT_AWK" "$p" 2> /dev/null) || rc=$?
+    fi
+    case "$rc" in
+      0) _g20_fm "$base" <<< "$post" || return 0 ;;
+      4)
+        # G20's model of the Edit found nothing to replace. If Claude Code's own matching differs, an
+        # Edit that writes a status or approved: line could approve unseen, so it fails closed.
+        if printf '%s\n' "$new" | LC_ALL=C grep -Eiq "^[[:space:]]*[\"']?(status|approved)[\"']?[[:space:]]*:"; then
+          vote deny G20 "old_string is not in $base as G20 reads it, so it cannot judge an Edit that writes a status or approved: line; read the file and edit it again"
+        fi
+        return 0
+        ;;
+      *)
+        fail_closed "G20 could not read $base to judge the Edit for an approval"
+        return 0
+        ;;
+    esac
   fi
+  after=$_G20_FM
   _g20_approved "$after" || return 0
   lines=$(_g20_lines "$after")
   # An approved file whose approved: lines stay the same is not being approved now.
@@ -140,6 +178,7 @@ _g20_file() {
   fi
   norm=$(printf '%s\n' "$quote" | LC_ALL=C tr '[:upper:]' '[:lower:]' |
     sed -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //' -e 's/ $//' -e 's/[.!?,;:]*$//' -e 's/ $//')
+  norm=${norm//$_G20_RSQ/\'}
   case "$_G20_NOT_YES" in
     *" $norm "*)
       vote deny G20 "\"$quote\" is not an explicit yes; ask the user for one"
@@ -160,7 +199,7 @@ _g20_file() {
   # 3.2 compares whole seconds, so a draft from the same second as the prompt counts as changed after it.
   sf=$(state_file "$SID" 2> /dev/null) || sf=''
   if [ -f "$p" ] && ! { [ -n "$sf" ] && [ "$sf" -nt "$p" ]; }; then
-    vote deny G20 "$(basename "$p") changed after the user's last message; show the draft again and get a fresh yes"
+    vote deny G20 "$base changed after the user's last message; set status and approved: in one edit, on a draft unchanged since the user's yes, so ask for the yes again"
   fi
 }
 
@@ -168,8 +207,9 @@ _g20_file() {
 # check. _g20_bash reads each simple command (git_words) and denies when one writes a Markdown file
 # (a redirect; an operand of sed -i, perl -i, awk or gawk -i inplace, ed, ex, vi, vim, tee, truncate or
 # sponge; dd of=; the destination of cp, mv, install, ln, rsync, ditto or git mv; the same inside
-# find -exec and xargs) and the command holds the word approved, or the file is approved now, or the
-# command names another file whose frontmatter is approved (cp, cat or tee from a prepared file). A
+# find -exec and xargs) and the command holds the word approved, or the file holds a status: approved
+# line now, or the command names another file that does (cp, cat, tee or tail from a prepared file);
+# any line counts, not only frontmatter, because a shell edit can move body lines into it. A
 # script interpreter running inline code (python -c, node -e, a here-doc on stdin) is denied when the
 # command holds both approved and a Markdown name. With approved in the command, a destination built
 # at run time (a glob, a variable, find's {}) is denied too. A script run by name, or a word built at
@@ -212,8 +252,8 @@ _g20_target() {
     return 0
   fi
   _g20_dyn "$w" && return 0
-  if _g20_approved "$(_g20_front "$_G20_P")"; then
-    _G20_WHY="$(basename "$_G20_P") is approved, and a shell write to it skips the quote check; $_G20_USE_TOOL"
+  if _g20_holds "$_G20_P"; then
+    _G20_WHY="$(basename "$_G20_P") holds a status: approved line, and a shell write to it skips the quote check; $_G20_USE_TOOL"
   fi
 }
 
@@ -570,13 +610,12 @@ _g20_bash() {
   done <<CMD
 $(git_words "$cmd")
 CMD
-  # A command that writes a Markdown file and also names a file whose frontmatter is approved can copy
-  # that frontmatter in (cp, cat or tee from a prepared file).
+  # A command that writes a Markdown file and also names a file holding a status: approved line, in its
+  # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file).
   if [ -z "$_G20_WHY" ] && [ "$_G20_WRITES" = 1 ]; then
     while IFS= read -r s; do
-      [ -f "$s" ] || continue
-      if _g20_approved "$(_g20_front "$s")"; then
-        _G20_WHY="the command writes a Markdown file and names $(basename "$s"), whose frontmatter is approved, so it can copy an approval past the quote check; $_G20_USE_TOOL"
+      if _g20_holds "$s"; then
+        _G20_WHY="the command writes a Markdown file and names $(basename "$s"), which holds a status: approved line, so it can copy an approval past the quote check; $_G20_USE_TOOL"
         break
       fi
     done <<SRC

@@ -58,9 +58,15 @@ done
 for name in "$plan" "$real"; do
   markdown "$name" || { echo "ledger-open: $name is not a Markdown file; G20 checks approvals only in .md files" >&2; exit 2; }
 done
-# The frontmatter is the block between a first line of --- and the next ---.
-fm=$(awk 'NR == 1 { if ($0 != "---") exit; opened = 1; next } $0 == "---" { closed = 1; exit } { print } END { if (opened && !closed) exit 3 }' "$plan") ||
-  { echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2; }
+# The frontmatter as G20 reads it (scripts/lib/frontmatter.awk), so an approval G20 never saw cannot
+# open a ledger.
+rc=0
+fm=$(LC_ALL=C awk -v fm_print=1 -f "$here/lib/frontmatter.awk" "$plan") || rc=$?
+case "$rc" in
+  0) ;;
+  3) echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2 ;;
+  *) echo "ledger-open: could not read the frontmatter of $plan" >&2; exit 2 ;;
+esac
 spec=$(printf '%s\n' "$fm" | sed -n 's/^spec:[[:space:]]*//p' | head -n 1 | sed 's/[[:space:]]*$//')
 case "$spec" in
   '' | none) ;;

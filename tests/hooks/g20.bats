@@ -99,6 +99,8 @@ approve() {
 
 @test "other files and draft edits get no G20 vote" {
   say 'no'
+  # notes.md exists and holds the old_string, so the Edit is judged; it has no frontmatter.
+  printf '%s\n' '# notes' 'status: draft' > "$R/notes.md"
   approve 'no' "$R/notes.md"
   [ -z "$output" ]
   run_guard "$(tool_payload Edit "\"file_path\":\"$SPEC\",\"old_string\":\"## Problem\",\"new_string\":\"## Problem\\nstatus: draft\"")" g20

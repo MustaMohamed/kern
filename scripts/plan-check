@@ -39,7 +39,10 @@ WD=$(settings_get work_dir .kern 2> /dev/null || echo .kern)
 
 # Acceptance numbers of the plan's spec, when the spec: line names a file that resolves.
 ACCEPT='' SPECPATH='' SPECBAD=''
-spec=$(awk '{ sub(/\r$/, "") } NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1 && /^spec:/ { sub(/^spec:[ \t]*/, ""); print }' "$file")
+# The frontmatter as G20 and ledger-open read it: one reader, so the three agree on where it ends.
+FM_AWK=$(cat "$here/lib/frontmatter.awk") || { echo "plan-check: cannot read $here/lib/frontmatter.awk" >&2; exit 2; }
+spec=$(LC_ALL=C awk -v fm_print=1 "$FM_AWK" "$file" | sed -n 's/^spec:[[:blank:]]*//p') || [ "$?" = 3 ] ||
+  { echo "plan-check: could not read the frontmatter of $file" >&2; exit 2; }
 case "$spec" in
   *.md)
     case "$spec" in WORK/*) spec="$MAIN/${WD%/}/${spec#WORK/}" ;; esac
@@ -56,7 +59,7 @@ case "$spec" in
 esac
 
 DASH=$(printf '\342\200\223|\342\200\224') CURLY=$(printf '\342\200\230|\342\200\231|\342\200\234|\342\200\235') \
-  MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec LC_ALL=C awk -v sq="'" '
+  MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec LC_ALL=C awk -v sq="'" "$FM_AWK"'
 function problem(ln, msg) { printf "%s:%d: %s\n", FILENAME, ln, msg; bad = 1 }
 function spans(s, out,   k, t) {
   k = 0
@@ -83,8 +86,8 @@ function mentions(txt, w,   pos, before, after, rest, off) {
 }
 { sub(/\r$/, "") }
 BEGIN { shared_n = split(tolower(ENVIRON["SHARED"]), shared, /[ \t]*,[ \t]*/) }
-NR == 1 && $0 == "---" { infm = 1; fmstart = 1; next }
-infm && $0 == "---" { infm = 0; fmclosed = 1; next }
+NR == 1 && fm_delim($0, 1) { infm = 1; fmstart = 1; next }
+infm && fm_delim($0, 0) { infm = 0; fmclosed = 1; next }
 infm { k = $0; sub(/:.*/, "", k); v = $0; sub(/^[^:]*:[ \t]*/, "", v); fm[k] = v; fmline[k] = NR; next }
 /^[ \t]*(```|~~~)/ { fence = !fence; if (fence) fenceline = NR; if (cur) text[cur] = text[cur] " " tolower($0); next }
 fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
