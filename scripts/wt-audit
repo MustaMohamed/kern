@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Read-only list of the kern worktrees under worktree.dir, each in one bucket, so recall and teardown
+# proposals start from evidence. Never removes anything.
+# Usage: wt-audit [--days N]    Output: bucket<TAB>path<TAB>branch<TAB>evidence, one line per worktree.
+# Buckets: merged, open-pr, closed-pr, uncommitted, committed, empty. A worktree idle for N days or more
+# (default 14) gets "idle <d>d" in its evidence.
+# Bucket idea adapted from pstack poteto-mode playbooks/worktree-cleanup.md (MIT).
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+# shellcheck source=/dev/null
+. "$here/lib/wt-common.sh"
+
+days=14
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --days) [ $# -ge 2 ] || { echo "usage: wt-audit [--days N]" >&2; exit 2; }; days=$2; shift 2 ;;
+    *) echo "usage: wt-audit [--days N]" >&2; exit 2 ;;
+  esac
+done
+case "$days" in '' | *[!0-9]*) echo "wt-audit: --days takes a whole number" >&2; exit 2 ;; esac
+MAIN=$(kern_main_root "$PWD") || { echo "wt-audit: not a git repository" >&2; exit 2; }
+export KERN_MAIN="$MAIN"
+dir=$(wt_dir)
+dir=$(cd "$dir" 2> /dev/null && pwd -P) || exit 0
+base=$(settings_get base_branch '') || base=''
+[ -n "$base" ] || base=$(bash "$here/kern-detect" base_branch 2> /dev/null | cut -f1) || base=''
+have_gh=0
+command -v gh > /dev/null 2>&1 && have_gh=1
+now=$(date +%s)
+
+# git without index refreshes or other optional writes.
+g() { git --no-optional-locks -c core.fsmonitor=false "$@"; }
+
+git -C "$MAIN" worktree list --porcelain | awk '/^worktree / { print substr($0, 10) }' | while IFS= read -r wt; do
+  real=$(cd "$wt" 2> /dev/null && pwd -P) || continue
+  case "$real" in "$dir"/*) ;; *) continue ;; esac
+  branch=$(g -C "$wt" symbolic-ref -q --short HEAD 2> /dev/null) || branch=''
+  ev=''
+  bucket=''
+  if [ -n "$branch" ] && [ "$have_gh" = 1 ]; then
+    states=$(cd "$wt" && gh pr list --head "$branch" --state all --json state --jq '.[].state' 2> /dev/null) || states='?'
+    case "$states" in
+      '?') ev="gh could not answer" ;;
+      *OPEN*) bucket=open-pr; ev="PR open" ;;
+      *MERGED*) bucket=merged; ev="PR merged" ;;
+      *CLOSED*) bucket=closed-pr; ev="PR closed" ;;
+    esac
+  elif [ -n "$branch" ]; then
+    ev="gh unavailable"
+  fi
+  dirty=$(g -C "$wt" status --porcelain 2> /dev/null | wc -l | tr -d ' ')
+  ahead=0
+  if [ -n "$base" ] && g -C "$wt" rev-parse --verify --quiet "refs/remotes/origin/$base" > /dev/null; then
+    ahead=$(g -C "$wt" rev-list --count "refs/remotes/origin/$base..HEAD" 2> /dev/null || echo 0)
+  fi
+  if [ -z "$bucket" ]; then
+    if [ "$dirty" -gt 0 ]; then bucket=uncommitted
+    elif [ "$ahead" -gt 0 ]; then bucket=committed
+    else bucket=empty
+    fi
+  fi
+  ev="${ev:+$ev, }$dirty uncommitted paths, $ahead commits ahead of origin/${base:-?}"
+  # Idle: no commit and no file change in the last N days. -print -quit stops at the first file, so a
+  # large worktree cannot end the pipeline early (head under pipefail exited 141). --days 0 needs no
+  # file check: GNU find counts a file written today as -mtime -0, BSD find does not.
+  last=$(g -C "$wt" log -1 --format=%ct 2> /dev/null || echo "$now")
+  recent=''
+  if [ "$days" -gt 0 ]; then
+    recent=$(find "$wt" \( -name .git -o -name node_modules \) -prune -o -type f -mtime "-$days" -print -quit 2> /dev/null) || true
+  fi
+  if [ -z "$recent" ] && [ $(( (now - last) / 86400 )) -ge "$days" ]; then ev="$ev, idle ${days}d or more"; fi
+  printf '%s\t%s\t%s\t%s\n' "$bucket" "$real" "${branch:-(detached)}" "$ev"
+done
