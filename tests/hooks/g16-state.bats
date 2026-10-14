@@ -407,27 +407,89 @@ expect_cmd() {
   expect_cmd ask 'rsync -m "my dir/.claude/settings.json" /tmp/'
 }
 
-@test "running or sourcing kern's hook code, or calling its state functions, is denied in both modes" {
+# expect_hook COMMAND...: each COMMAND asks with G16's hook reason, and under autopilot is denied.
+expect_hook() {
+  local c j mode d
+  . "$(kern_root)/hooks/lib/json.sh"
+  for mode in off on; do
+    set_autopilot "$mode"
+    d=ask
+    [ "$mode" = on ] && d=deny
+    for c in "$@"; do
+      j=$(printf '%s' "$c" | json_escape)
+      run_guard "$(tool_payload Bash "\"command\":\"$j\"")" g16
+      [ "$(decision_of "$output")" = "$d" ] && [[ "$output" == *"kern G16: the command names kern's hook code"* ]] ||
+        { echo "autopilot $mode: $c -> $output"; return 1; }
+    done
+  done
+  [[ "$output" == *"(autopilot: nobody to ask)"* ]] || false
+}
+
+@test "a command that reads but can run code, and names a hook or state_set, asks; under autopilot it is denied" {
   K=$(kern_root)
-  # shellcheck disable=SC2016 # literal ${CLAUDE_PLUGIN_ROOT}, as Claude would write it
-  expect_cmd deny \
-    "printf '%s' '{\"session_id\":\"test-session\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit" \
+  expect_hook "git -c core.fsmonitor='bash $K/hooks/prompt-submit < j.json; false' status" \
+    "git -c core.fsmonitor='. hooks/lib/state.sh; state_set test-session autopilot=on; false' status" \
+    "echo hooks/prompt-submit | xargs -I{} sh -c 'bash {} < j.json'" "xargs sh -c 'bash hooks/prompt-submit < j.json'" \
+    'rg --pre hooks/prompt-submit x' 'rg --pre ./run.sh x hooks/prompt-submit'
+}
+
+@test "a glob, brace or zsh group after hooks/ that could name a hook asks; under autopilot it is denied" {
+  K=$(kern_root)
+  expect_hook 'bash hooks/prompt-sub*' 'bash hooks/prompt-s[u]bmit' 'bash hooks/{prompt-submit,x}' 'bash hooks/prompt-subm?t' \
+    "bash $K/hooks/*" "bash $K/hooks/lib/s*.sh" 'bash hooks/l?b/state.sh' 'bash hooks/lib/*' 'bash hooks/{prompt-submit,x/y}' \
+    'bash hooks/prompt-subm(i|x)t' 'bash hooks/(prompt-submit|x)' 'bash hooks/^x' 'bash hooks/prompt-submi[[:alpha:]]'
+}
+
+@test "running, sourcing or reading a hook, or calling a state function, asks; under autopilot it is denied" {
+  K=$(kern_root)
+  # shellcheck disable=SC2016 # literal ${CLAUDE_PLUGIN_ROOT}, $'...' and $f, as Claude would write them
+  expect_hook "printf '%s' '{\"session_id\":\"test-session\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit" \
     "$K/hooks/prompt-submit < /dev/null" 'bash hooks/session-start' 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start' \
     "sh $K/hooks/pre-tool-use" ". $K/hooks/lib/state.sh" 'source hooks/lib/state.sh && state_set s autopilot=on' \
     "bash -c '. hooks/lib/state.sh; state_set test-session prompt_hashes=1'" "bash -c 'state_reset test-session'" \
-    'eval _state_put 0 s autopilot=on' 'cat hooks/prompt-submit | bash' 'bash < hooks/prompt-submit' \
-    "cp -r $K /tmp/k && bash /tmp/k/hooks/prompt-submit" 'cd hooks && bash prompt-submit' 'cd hooks && . lib/state.sh'
-  set_autopilot on
-  expect_cmd deny "bash $K/hooks/prompt-submit"
+    'eval _state_put 0 s autopilot=on' "stat\$'e'_set s autopilot=on" 'cat hooks/prompt-submit | bash' \
+    'bash < hooks/prompt-submit' "cp -r $K /tmp/k && bash /tmp/k/hooks/prompt-submit" "bash $K/HOOKS/PROMPT-SUB''MIT" \
+    "bash $K/hooks/\$'prompt-submit'" 'bash hooks//prompt-submit' 'bash hooks/./prompt-submit' '. hooks/./lib/state.sh' '. hooks/lib/state.sh.bak' \
+    "bash hooks/prompt-submit$(printf '\r')" 'cat hooks/prompt-submit' 'grep -n state_set hooks/lib/state.sh' \
+    'git diff -- hooks/prompt-submit' 'shellcheck hooks/prompt-submit'
 }
 
-@test "reading kern's hook code, or running its tests, is not denied" {
-  local c
-  for c in 'cat hooks/prompt-submit' 'grep -n state_set hooks/lib/state.sh' 'shellcheck -x hooks/prompt-submit hooks/lib/state.sh' \
-    'git diff -- hooks/prompt-submit' 'git add -- hooks/prompt-submit hooks/lib/state.sh' 'sed -n 1,20p hooks/lib/state.sh' \
-    'tests/run-bats tests/hooks/pre-tool-use.bats tests/hooks/prompt-submit.bats' 'git commit -m "fix state_set in prompt-submit"'; do
-    . "$(kern_root)/hooks/lib/json.sh"
-    run_guard "$(tool_payload Bash "\"command\":\"$(printf '%s' "$c" | json_escape)\"")" g16
-    [ "$(decision_of "$output")" != deny ] || { echo "$c -> $output"; return 1; }
-  done
+@test "a hooks directory named elsewhere in the command, or reached by a glob, makes a hook's bare name ask" {
+  K=$(kern_root)
+  # shellcheck disable=SC2016 # literal $PATH and $f
+  expect_hook 'cd hooks && bash prompt-submit' 'cd hooks && . lib/state.sh' 'cd hooks; f=prompt-submit; bash $f' \
+    "cd hooks$(printf '\r')
+bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:\$PATH prompt-submit < j.json" \
+    'find hooks -type f -exec bash {} \;' "find hooks -name 'prompt-s*' -exec bash {} \;" \
+    'ls hooks | while read f; do bash hooks/$f < j.json; done' "bash $K/h*/prompt-submit" ". $K/h*/lib/state.sh" \
+    "bash $K/*/p*-submit" 'cat */*'
+}
+
+@test "a command that names no kern hook, such as a hook's test file, gets no hook vote" {
+  # shellcheck disable=SC2016 # literal ${HOME} and $(pwd)
+  expect_cmd none 'tests/run-bats tests/hooks/prompt-submit.bats' 'git log hooks/' 'tests/run-bats tests/hooks/g20*.bats' \
+    'ls tests/hooks/*.bats' 'git commit -m "fix the prompt-submit test"' 'shellcheck scripts/ledger-open' \
+    'cat hooks/prompt-submit.md' 'bash hooks/prompt-submit.bak' 'cat hooks/pre-tool-use_old' 'cat docs/hooks.md' \
+    'ls *.md' 'ls *' 'cat */*.md' 'echo ${HOME}/x' 'echo $(pwd)/x'
+}
+
+@test "inside a hooks directory a bare hook name, or a glob that could match one, asks" {
+  CWD="$R/hooks"
+  mkdir -p "$CWD"
+  expect_hook 'bash prompt-submit < j.json' 'bash pr*' '. lib/state.sh' 'bash ./session-start'
+  set_autopilot off
+  expect_cmd none 'ls' 'bash x.sh' 'cat *.md'
+}
+
+@test "when awk cannot read the command for kern's hook code, G16 fails closed" {
+  local real
+  real=$(command -v awk)
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  # An awk shim that fails only on G16's hook program, which alone names subagent-start.
+  printf '#!/bin/bash\ncase "$*" in *subagent-start*) exit 2 ;; esac\nexec %s "$@"\n' "$real" >"$BATS_TEST_TMPDIR/bin/awk"
+  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  run_guard "$(bash_payload "git log hooks/")" g16
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"G16 could not read the command for kern's hook code"* ]] || false
 }

@@ -1,6 +1,9 @@
 # shellcheck shell=bash
 # G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
-# and the user confirms every write to a kern settings file or to Claude Code's own settings.
+# and the user confirms every write to a kern settings file or to Claude Code's own settings, and every
+# command that names kern's hook code or a state function, which could forge the user's prompt.
+# Accepted limits: a path held in a variable or built at run time; interpreter code that builds a
+# hook path; a script written to disk and then run by name.
 
 _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
 _G16_STATE_CMD="commands may not write kern session state"
@@ -8,7 +11,26 @@ _G16_SETTINGS="kern settings change guard policy; the user confirms each write"
 _G16_CC="Claude Code settings set permissions and hooks; the user confirms each write"
 _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write"
-_G16_HOOKS="kern's hooks run only from Claude Code; running or sourcing one, or calling its state functions, could forge the user's prompt or the session state"
+_G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool"
+_G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
+# _G16_HOOK_AWK: reads the command text, lower-cased. Prints `hit` when a line names a hook after a
+# slash, a .sh file under hooks/lib/, or a state function as a word; a hook counts only when the
+# character after it cannot go on a file name, so pre-tool-use.bats does not. Otherwise prints `ctx`
+# when a line names a hooks directory (else `-`), then each word, split at blanks, CR, ; | & < > ) and =.
+# shellcheck disable=SC2016 # awk text
+_G16_HOOK_AWK='
+BEGIN {
+  a = "abcdefghijklmnopqrstuvwxyz0123456789"
+  e = "([^" a "._-]|$)"
+  hit = "/(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
+  hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset)([^" a "_]|$)"
+  dir = "(^|[^" a "._-])hooks" e
+}
+{ $0 = tolower($0) }
+$0 ~ hit { print "hit"; found = 1; exit }
+$0 ~ dir { ctx = 1 }
+{ n = split($0, w, /[ \t\r;|&<>)=]+/); for (i = 1; i <= n; i++) if (w[i] != "") words = words w[i] "\n" }
+END { if (!found) printf "%s\n%s", (ctx ? "ctx" : "-"), words }'
 
 guard_g16() {
   case "$TOOL" in
@@ -446,77 +468,98 @@ SEGMENTS
   return 0
 }
 
-# _g16_hookfile WORD: exit 0 when the lower-cased WORD names, by its tail, a file of kern's hook code:
-# prompt-submit, session-start, subagent-start or pre-tool-use, bare or after a slash, or a library
-# under hooks/lib/ (or lib/<name>.sh, after a cd into hooks). Test files such as pre-tool-use.bats do
-# not count.
-_g16_hookfile() {
-  case "$1" in
-    prompt-submit | session-start | subagent-start | pre-tool-use | */prompt-submit | */session-start | \
-      */subagent-start | */pre-tool-use | *hooks/lib/* | lib/json.sh | lib/settings.sh | lib/state.sh | \
-      lib/decide.sh | lib/gitctx.sh | lib/render.sh) return 0 ;;
+# _g16_glob NAMES WORD: exit 0 when WORD, a word or a part of a path, could expand to one of NAMES:
+# a glob (* ? [) that matches one, or a brace expansion, a zsh group (a ( not after $) or a zsh extended
+# glob (^, or # after a character), which are not matched here and always count.
+_g16_glob() {
+  local n
+  case "$2" in
+    '('* | *[!\$]'('* | *'^'* | ?*'#'* | *'{'*,*'}'* | *'{'*..*'}'*) return 0 ;;
+    *[\*\?\[]*) ;;
+    *) return 1 ;;
   esac
+  for n in $1; do
+    # shellcheck disable=SC2254 # the word is matched as the pattern it is
+    case "$n" in $2) return 0 ;; esac
+  done
   return 1
 }
 
-# _g16_hooks: running or sourcing kern's hook code, or calling its state functions, could forge what
-# the hooks record: prompt-submit run with a made-up prompt rewrites the user's last message and can
-# turn autopilot on, and state_set writes any key. Denied in both modes. A simple command that only
-# reads (cat, grep, git, shellcheck, sed without -i, find with no action that runs) may name the hook
-# files, unless the same command also runs a shell, source, . or eval, which could read them from a
-# pipe. Every simple command is checked, including the bodies of bash -c, eval and $( ). A path or a
-# function name built at run time is not seen (accepted limit).
+# _g16_hooks: a command that names kern's hook code or a state function asks, and is denied under
+# autopilot. Running prompt-submit with a made-up prompt rewrites the user's last message and can turn
+# autopilot on, and state_set writes any key; a command that reads can run code too (git -c
+# core.fsmonitor=..., rg --pre, xargs sh -c), so no command is let through on the name it starts with.
+# The match is on the command text, in any case, with quotes and backslashes taken out, so wrappers,
+# -c strings, git config values and xargs are all covered. It counts:
+# - in the text (_G16_HOOK_AWK): a hook after a slash, a .sh file under hooks/lib/, or state_set,
+#   _state_put or state_reset;
+# - in a word inside a hooks directory: a last part that names a hook or a hooks/lib file, holds a
+#   glob that could match one (_g16_glob), or holds a $, a backtick or a { (a variable, command
+#   output, or the {} of find -exec and xargs). Every word is inside one when the text names a hooks
+#   directory (cd hooks, git log hooks/) or the session's directory is one; a single word is when a
+#   part of its own directory holds a glob that could match hooks ($K/h*/lib/state.sh).
+# Reading a hook file stays possible with the Read and Grep tools. Not seen (accepted limits): a hooks
+# directory reached without naming it (find $K -name prompt-submit, a glob for the directory in one
+# word and the hook in another), a name built at run time ($'\x..' escapes, xargs with no {}),
+# interpreter code that builds a hook path, and a script written to disk and then run by name.
 _g16_hooks() {
-  local cmd t seg words w head reads named=0 shell=0 run=0
+  local cmd t r w d c last names f ctx=0 inside hit=0
   cmd=$(ti_get command) || return 0
-  # Only a command whose text, in any case and with quotes and backslashes taken out, could name hook
-  # code or a state function is lower-cased and parsed; the parse reads the command as written.
-  t=$cmd
+  # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one tr pass
+  # and only when the text holds one.
+  t=${cmd//\$\'/}
+  t=${t//\$\"/}
   case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
-  case "$t" in
-    *[Pp][Rr][Oo][Mm][Pp][Tt]-[Ss][Uu][Bb][Mm][Ii][Tt]* | *[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ss][Tt][Aa][Rr][Tt]* | \
-      *[Ss][Uu][Bb][Aa][Gg][Ee][Nn][Tt]-[Ss][Tt][Aa][Rr][Tt]* | *[Pp][Rr][Ee]-[Tt][Oo][Oo][Ll]-[Uu][Ss][Ee]* | \
-      *[Hh][Oo][Oo][Kk][Ss]/[Ll][Ii][Bb]* | *[Ll][Ii][Bb]/*.[Ss][Hh]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | \
-      *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]*) ;;
-    *) return 0 ;;
-  esac
-  cmd=$(_g16_lower "$cmd")
-  while IFS= read -r seg; do
-    [ -n "$seg" ] || continue
-    words=$(_cmd_words "$seg")
-    head=${words%%$'\n'*}
-    head=${head##*/}
-    case "$head" in
-      state_set | _state_put | state_reset) run=1 ;;
-      sh | bash | zsh | dash | ksh | fish | source | . | eval) shell=1 ;;
+  case "$CWD" in */[Hh][Oo][Oo][Kk][Ss] | */[Hh][Oo][Oo][Kk][Ss]/*) ctx=1 ;; esac
+  # Only text that could count is read; any case still counts.
+  if [ "$ctx" = 0 ]; then
+    case "$t" in
+      *[Hh][Oo][Oo][Kk][Ss]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | \
+        *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[Pp][Rr][Oo][Mm][Pp][Tt]-[Ss][Uu][Bb][Mm][Ii][Tt]* | \
+        *[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ss][Tt][Aa][Rr][Tt]* | *[Ss][Uu][Bb][Aa][Gg][Ee][Nn][Tt]-[Ss][Tt][Aa][Rr][Tt]* | \
+        *[Pp][Rr][Ee]-[Tt][Oo][Oo][Ll]-[Uu][Ss][Ee]* | *[\*\?\[\{\(^#]*/*) ;;
+      *) return 0 ;;
     esac
-    reads=0
-    case "$head" in
-      cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | echo | printf | \
-        test | '[' | git | shellcheck | shfmt | bat | nl | od | xxd | hexdump | strings | cksum | md5 | md5sum | shasum | \
-        sha1sum | sha256sum | basename | dirname | realpath | readlink | cd | pushd) reads=1 ;;
-      sed)
-        reads=1
-        while IFS= read -r w; do
-          case "$w" in --in-place* | -i* | -[!-]*i*) reads=0 ;; esac
-        done <<EOT
-$words
-EOT
-        ;;
-      find) word_has "$words" -exec -execdir -ok -okdir -delete || reads=1 ;;
-    esac
-    while IFS= read -r w; do
-      _g16_hookfile "$w" || continue
-      if [ "$reads" = 1 ]; then named=1; else run=1; fi
-    done <<EOT
-$words
-EOT
-  done <<SEGMENTS
-$(git_words "$cmd")
-SEGMENTS
-  if [ "$run" = 1 ] || { [ "$named" = 1 ] && [ "$shell" = 1 ]; }; then
-    vote deny G16 "$_G16_HOOKS"
   fi
+  r=$(printf '%s\n' "$t" | LC_ALL=C awk "$_G16_HOOK_AWK") ||
+    { fail_closed "G16 could not read the command for kern's hook code"; return 0; }
+  names=$_G16_HOOK_NAMES
+  for f in "$KERN_ROOT"/hooks/lib/*.sh; do
+    [ -e "$f" ] && names="$names ${f##*/}"
+  done
+  {
+    IFS= read -r w
+    case "$w" in
+      hit) hit=1 ;;
+      ctx) ctx=1 ;;
+    esac
+    while [ "$hit" = 0 ] && IFS= read -r w; do
+      w=${w#"${w%%[!(]*}"}
+      inside=$ctx
+      case "$inside:$w" in
+        0:*/*)
+          d=${w%/*}/
+          while [ -n "$d" ]; do
+            c=${d%%/*}
+            d=${d#*/}
+            if _g16_glob hooks "$c"; then
+              inside=1
+              break
+            fi
+          done
+          ;;
+      esac
+      [ "$inside" = 1 ] || continue
+      last=${w##*/}
+      case "$last" in *[\{\$\`]*) hit=1 ;; esac
+      case "$w" in *'{'*,*'}'* | *'{'*..*'}'*) hit=1 ;; esac
+      case " $names " in *" $last "*) hit=1 ;; esac
+      _g16_glob "$names" "$last" && hit=1
+    done
+  } <<EOT
+$r
+EOT
+  [ "$hit" = 1 ] && vote ask G16 "$_G16_HOOKS"
   return 0
 }
 
