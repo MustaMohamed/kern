@@ -6,7 +6,20 @@
 # the change over two edits does not get past it. The approved: line must quote one whole line of the
 # user's last message, verbatim, that is not a non-answer such as "sounds good", and the file must be
 # older than that message. prompt-submit records the message's line hashes in the session state, which
-# G16 protects. Under autopilot nothing approves. G20 never votes allow.
+# G16 protects. Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan
+# with a Markdown name, so every approval it accepts passed through G20.
+#
+# Accepted limits:
+# - "The user's last message" is the last prompt prompt-submit does not read as wrapped. A prompt
+#   Claude Code starts itself that wrapped() misses counts as the user's, and its lines can be quoted.
+# - An AskUserQuestion answer is a tool result, not a prompt, so it is not recorded and cannot approve;
+#   define and plan ask for the yes as a typed reply.
+# - The approval does not bind the content. An approved file whose approved: lines stay the same can be
+#   rewritten by Edit or Write, the approval edit itself may change the body, and a new file has no
+#   draft to be older than the message, so removing a draft and writing it anew with a real quote passes.
+# - The hash is djb2, not a cryptographic hash: a quote built to collide with a line of the message
+#   passes. A shell write that hides the path or the word (a script run by name, a word built at run
+#   time, a recursive directory copy, git checkout or apply, a hard link) is not seen.
 _G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess "
 _G20_USE_TOOL="set or change an approval with the Edit or Write tool, so kern can check the user's quote"
 

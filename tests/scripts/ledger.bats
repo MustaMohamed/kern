@@ -154,6 +154,42 @@ approved_plan() {
   [ ! -e "$TMP/fresh" ]
 }
 
+@test "ledger-open refuses a plan or a spec: line that is not a Markdown name, and writes nothing" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  # G20 guards Markdown files only, so a plan.txt can carry an approval nobody gave.
+  approved_plan "$TMP/plan.txt" approved '2026-10-14, "ship it"'
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/plan.txt" "$TMP/fresh"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"$TMP/plan.txt is not a Markdown file"* ]] || false
+  [ ! -e "$TMP/fresh" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/plan.txt"
+  [ "$status" -eq 2 ]
+  [ ! -e "$REPO/.kern/ledgers/plan" ]
+  ln -s plan.txt "$TMP/link.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/link.md" "$TMP/fresh"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"plan.txt is not a Markdown file"* ]] || false
+  [ ! -e "$TMP/fresh" ]
+  printf '%s\n' '---' 'status: approved' 'spec: WORK/specs/export.txt' 'approved: 2026-10-14, "yes"' 'execution: delegate' \
+    'commits: ask' '---' > "$TMP/s.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/s.md" "$TMP/fresh"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"spec: WORK/specs/export.txt is not a Markdown file"* ]] || false
+  [ ! -e "$TMP/fresh" ]
+}
+
+@test "ledger-open takes a Markdown name in any case, and spec: none" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/Upper.MD"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/Upper.MD"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.kern/ledgers/upper" ]
+  printf '%s\n' '---' 'status: approved' 'spec: WORK/specs/export.Markdown' 'approved: 2026-10-14, "yes"' \
+    'execution: delegate' 'commits: ask' '---' > "$TMP/s.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/s.md" "$TMP/l"
+  [ "$status" -eq 0 ]
+}
+
 @test "a refusal writes nothing into a fresh DIR" {
   REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
   approved_plan "$TMP/d.md" draft

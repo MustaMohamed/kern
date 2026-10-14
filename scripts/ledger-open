@@ -4,7 +4,9 @@
 #        ledger-open --summary DIR Prints the Decision, parked, deferred-minor and Preflight lines, then
 #                                  whether the main checkout's branch and status are as recorded.
 # Exit 2: the plan is not approved (status: approved and an approved: line with a date and the user's
-# quoted words), or DIR holds another plan's ledger. --summary exits 1 when the main checkout changed.
+# quoted words), the plan, the file a symlinked plan names, or its spec: line is not a Markdown name
+# (G20 checks approvals only in Markdown files), or DIR holds another plan's ledger. Each refusal
+# writes nothing. --summary exits 1 when the main checkout changed.
 # Ledger identity adapted from superpowers subagent-driven-development/scripts/sdd-workspace (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -19,6 +21,12 @@ main_state() {
   # Read first: a failing git status inside a pipe or printf argument would be hashed as empty input.
   st=$(git --no-optional-locks -C "$m" status --porcelain) || { echo "ledger-open: git status failed in $m" >&2; exit 2; }
   printf '%s branch=%s status=%s\n' "$m" "$b" "$({ [ -z "$st" ] || printf '%s\n' "$st"; } | git hash-object --stdin)"
+}
+
+# markdown NAME: exit 0 when NAME ends in .md or .markdown, in any case, as G20 reads a Markdown name.
+markdown() {
+  case "$1" in *.[Mm][Dd] | *.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]) return 0 ;; esac
+  return 1
 }
 
 if [ "${1-}" = --summary ]; then
@@ -38,9 +46,26 @@ fi
 plan=$1
 [ -f "$plan" ] || { echo "ledger-open: no such plan: $plan" >&2; exit 2; }
 plan=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
+# A plan named x.md that is a symlink to x.txt carries an approval G20 never saw, so the file it names
+# must be Markdown too.
+real=$plan
+hops=0
+while [ -L "$real" ] && [ "$hops" -lt 8 ]; do
+  link=$(readlink "$real") || { echo "ledger-open: cannot read the symlink $real" >&2; exit 2; }
+  case "$link" in /*) real=$link ;; *) real=$(dirname "$real")/$link ;; esac
+  hops=$((hops + 1))
+done
+for name in "$plan" "$real"; do
+  markdown "$name" || { echo "ledger-open: $name is not a Markdown file; G20 checks approvals only in .md files" >&2; exit 2; }
+done
 # The frontmatter is the block between a first line of --- and the next ---.
 fm=$(awk 'NR == 1 { if ($0 != "---") exit; opened = 1; next } $0 == "---" { closed = 1; exit } { print } END { if (opened && !closed) exit 3 }' "$plan") ||
   { echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2; }
+spec=$(printf '%s\n' "$fm" | sed -n 's/^spec:[[:space:]]*//p' | head -n 1 | sed 's/[[:space:]]*$//')
+case "$spec" in
+  '' | none) ;;
+  *) markdown "$spec" || { echo "ledger-open: $plan: spec: $spec is not a Markdown file; G20 checks approvals only in .md files" >&2; exit 2; } ;;
+esac
 status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
 approved=$(printf '%s\n' "$fm" | sed -n 's/^approved:[[:space:]]*//p' | head -n 1)
 [ "$status" = approved ] || { echo "ledger-open: $plan has status: ${status:-none}; execute-plan runs only an approved plan" >&2; exit 2; }
@@ -50,7 +75,8 @@ printf '%s' "$approved" | grep -Eq '[0-9]{4}-[0-9]{2}-[0-9]{2}.*"[^"]+"' ||
 if [ $# -eq 2 ]; then
   dir=$2
 else
-  slug=$(basename "$plan" .md | tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//')
+  name=$(basename "$plan")
+  slug=$(printf '%s\n' "${name%.*}" | tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//')
   [ -n "$slug" ] || { echo "ledger-open: cannot make a ledger name from $plan" >&2; exit 2; }
   dir=$(bash "$here/kern-dir" "ledgers/$slug")
 fi
