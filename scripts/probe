@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# G10, fail-then-pass. Patch mode: CMD passes in WT; on a throwaway fork with PATCH reversed, CMD fails.
+# Mutate mode: CMD passes in WT; on a fork with one condition inverted at FILE:LINE, CMD fails.
+# Usage: probe [--exclude-tests] WT PATCH -- CMD...
+#        probe --mutate FILE:LINE WT -- CMD...
+# --exclude-tests reverses only the non-test files of PATCH, so a test the patch adds stays in the fork;
+# without it, a PATCH that touches a test file is inconclusive. A command word that names a path in WT
+# must still exist in the fork. Exit 0 ok; 1 the test did not fail; 3 inconclusive; 2 usage.
+# The fork is always removed.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+usage() { echo "usage: probe [--exclude-tests] WT PATCH -- CMD... | probe --mutate FILE:LINE WT -- CMD..." >&2; exit 2; }
+excl=0 mutate='' patch=''
+case "${1-}" in
+  --exclude-tests) excl=1; shift ;;
+  --mutate) [ $# -ge 2 ] || usage; mutate=$2; shift 2 ;;
+esac
+if [ -n "$mutate" ]; then
+  [ $# -ge 3 ] && [ "$2" = -- ] || usage
+  wtarg=$1
+  shift 2
+  mfile=${mutate%:*} mline=${mutate##*:}
+  case "$mline" in '' | *[!0-9]*) usage ;; esac
+else
+  [ $# -ge 4 ] && [ "$3" = -- ] || usage
+  wtarg=$1
+  [ -s "$2" ] || { echo "probe: inconclusive (empty or missing patch: $2)"; exit 3; }
+  patch=$(cd "$(dirname "$2")" && pwd -P)/$(basename "$2")
+  shift 3
+fi
+wt=$(cd "$wtarg" 2> /dev/null && pwd -P) || { echo "probe: no such worktree: $wtarg" >&2; exit 2; }
+
+logs=$(mktemp -d "${TMPDIR:-/tmp}/kern-probe.XXXXXX")
+fork=''
+cleanup() {
+  if [ -n "$fork" ] && [ -d "$fork" ]; then git -C "$wt" worktree remove --force "$fork" > /dev/null 2>&1 || true; fi
+  rm -rf "$logs"
+}
+trap cleanup EXIT
+
+excludes=()
+if [ -n "$mutate" ]; then
+  [ -f "$wt/$mfile" ] || { echo "probe: inconclusive (no such file in the worktree: $mfile)"; exit 3; }
+else
+  # Every path the patch touches (both sides of a rename), then the test paths among them.
+  git -C "$wt" apply --numstat -z "$patch" 2> /dev/null | tr '\0' '\n' |
+    awk 'n > 0 { print; n--; next } /^[0-9-]+\t[0-9-]+\t$/ { n = 2; next } { sub(/^[0-9-]+\t[0-9-]+\t/, ""); if ($0 != "") print }' > "$logs/paths"
+  awk -v print_tests=1 -f "$here/lib/test-paths.awk" "$logs/paths" > "$logs/tests"
+  if [ -s "$logs/tests" ]; then
+    if [ "$excl" = 0 ]; then
+      echo "probe: inconclusive (the patch changes test files: $(paste -sd ' ' - < "$logs/tests"); pass --exclude-tests so they stay in the fork)"
+      exit 3
+    fi
+    if [ -z "$(awk 'NR == FNR { t[$0] = 1; next } !($0 in t)' "$logs/tests" "$logs/paths")" ]; then
+      echo "probe: inconclusive (the patch changes only test files; there is no change to reverse)"
+      exit 3
+    fi
+    while IFS= read -r p; do
+      excludes+=("--exclude=$(printf '%s' "$p" | sed 's/[][*?\\]/\\&/g')")
+    done < "$logs/tests"
+  fi
+fi
+
+if ! (cd "$wt" && "$@") > "$logs/with.log" 2>&1; then
+  echo "probe: inconclusive (the command fails with the guard in place)"
+  tail -n 5 "$logs/with.log"
+  exit 3
+fi
+
+slug="probe-$$-$RANDOM"
+if ! fork=$(cd "$wt" && bash "$here/wt-fork" "$wt" "$slug" 2> "$logs/fork.err"); then
+  fork=''
+  echo "probe: inconclusive (could not fork: $(tail -n 1 "$logs/fork.err"))"
+  exit 3
+fi
+
+if [ -n "$mutate" ]; then
+  # Invert the first operator found on the line, in this order; a word must stand alone.
+  if ! awk -v ln="$mline" '
+    function word(s, w,   i, b, a) {
+      i = index(s, w); if (!i) return 0
+      b = (i == 1) ? "" : substr(s, i - 1, 1); a = substr(s, i + length(w), 1)
+      return (b !~ /[A-Za-z0-9_]/ && a !~ /[A-Za-z0-9_]/) ? i : 0
+    }
+    NR == ln {
+      n = split("===,!==,==,!=,<=,>=,&&,||, < , > ,true,false", op, ",")
+      split("!==,===,!=,==,>,<,||,&&, >= , <= ,false,true", to, ",")
+      for (k = 1; k <= n; k++) {
+        i = (op[k] ~ /^[a-z]+$/) ? word($0, op[k]) : index($0, op[k])
+        if (i) { $0 = substr($0, 1, i - 1) to[k] substr($0, i + length(op[k])); done = 1; print > "/dev/stderr"; break }
+      }
+    }
+    { print }
+    END { exit done ? 0 : 1 }' "$fork/$mfile" > "$logs/mutated" 2> "$logs/mutated-line"; then
+    echo "probe: inconclusive (no condition to invert on $mfile:$mline)"
+    exit 3
+  fi
+  cat "$logs/mutated" > "$fork/$mfile"
+else
+  if ! git -C "$fork" apply -R --check ${excludes[@]+"${excludes[@]}"} "$patch" 2> "$logs/apply.err"; then
+    echo "probe: inconclusive (the patch does not reverse-apply: $(head -n 1 "$logs/apply.err"))"
+    exit 3
+  fi
+  git -C "$fork" apply -R ${excludes[@]+"${excludes[@]}"} "$patch"
+  for a in "$@"; do
+    case "$a" in -* | */) continue ;; esac
+    if [ -e "$wt/$a" ] && [ ! -e "$fork/$a" ]; then
+      echo "probe: inconclusive (the command names $a, which the reversed fork lacks)"
+      exit 3
+    fi
+  done
+fi
+
+if (cd "$fork" && "$@") > "$logs/without.log" 2>&1; then
+  if [ -n "$mutate" ]; then echo "probe: mutation survived ($(cat "$logs/mutated-line"))"; else echo "probe: test did not fail with the guard removed"; fi
+  exit 1
+fi
+blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
+if grep -Eq "$blocked" "$logs/without.log"; then
+  echo "probe: inconclusive (the test did not run without the guard: $(grep -Em1 "$blocked" "$logs/without.log"))"
+  exit 3
+fi
+if [ -n "$mutate" ]; then echo "probe: mutation caught ($(cat "$logs/mutated-line"))"; else echo "probe: fail-then-pass ok"; fi
