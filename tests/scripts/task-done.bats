@@ -121,9 +121,12 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
 
 @test "task-done refuses an empty --probe patch, an unsnappable worktree and an unreadable ledger" {
   review "$T1"
-  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "" -- sh test/check_test.sh
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$TMP/nonexistent.patch" -- sh test/check_test.sh
   [ "$status" -eq 2 ]
-  [[ "$stderr" == *"--probe needs a patch file"* ]] || false
+  [[ "$stderr" == *"--probe needs a non-empty readable patch"* ]] || false
+  : > "$TMP/empty.patch"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$TMP/empty.patch" -- sh test/check_test.sh
+  [ "$status" -eq 2 ]
   mkdir "$TMP/notgit"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$TMP/notgit" "$T1" --no-probe "test only" -- true
   [ "$status" -eq 2 ]
@@ -138,4 +141,44 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- true
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"did not approve tree"* ]] || false
+}
+
+@test "task-review refuses a TREE holding a newline, and writes nothing" {
+  forged="$T1"$'\n'"Task 2: review round=1 tree=$T1 spec=compliant quality=approved"$'\n'"Task 1: review round=1 tree=$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$forged" 1 issues needs-fixes
+  [ "$status" -eq 2 ]
+  [ "$(grep -c 'review' "$L/ledger.md")" -eq 0 ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$forged" --no-probe docs -- true
+  [ "$status" -eq 2 ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "${T1}0" 1 compliant approved
+  [ "$status" -eq 2 ]
+}
+
+@test "task-done refuses a newline or carriage return in REASON or CMD, and writes nothing" {
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe $'docs\nTask 3: review x' -- true
+  [ "$status" -eq 2 ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe $'docs\rx' -- true
+  [ "$status" -eq 2 ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe docs -- echo $'q\nTask 3: x'
+  [ "$status" -eq 2 ]
+  [ "$(wc -l < "$L/ledger.md" | tr -d ' ')" -eq 2 ]
+}
+
+@test "a later needs-fixes line for the same tree overrides an earlier approval" {
+  review "$T1"
+  review "$T1" 2 issues needs-fixes
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe docs -- true
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"did not approve tree"* ]] || false
+}
+
+@test "an approval for Task 1 does not close Task 10, nor the reverse" {
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 10 "$WT" "$T1" --no-probe docs -- true
+  [ "$status" -eq 2 ]
+  printf 'Task 10: review round=1 tree=%s spec=compliant quality=approved\n' "$T1" > "$L/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe docs -- true
+  [ "$status" -eq 2 ]
+  [ "$(grep -c '^Task [0-9]*: complete' "$L/ledger.md")" -eq 0 ]
 }

@@ -13,7 +13,8 @@ ledger=$1 n=$2 tree=$3 round=$4 spec=$5 quality=$6
 shift 6
 [ -f "$ledger" ] || { echo "task-review: no ledger at $ledger" >&2; exit 2; }
 case "$n" in '' | *[!0-9]*) echo "task-review: N must be a number: $n" >&2; exit 2 ;; esac
-printf '%s' "$tree" | grep -Eq '^[0-9a-f]{40}([0-9a-f]{24})?$' ||
+case "$tree" in '' | *[!0-9a-f]*) echo "task-review: TREE must be a full object id: $tree" >&2; exit 2 ;; esac
+[ "${#tree}" -eq 40 ] || [ "${#tree}" -eq 64 ] ||
   { echo "task-review: TREE must be a full object id: $tree" >&2; exit 2; }
 case "$round" in 1 | 2 | 3) ;; *) echo "task-review: ROUND is 1, 2 or 3 (D10): $round" >&2; exit 2 ;; esac
 case "$spec" in compliant | issues) ;; *) echo "task-review: SPEC is compliant or issues: $spec" >&2; exit 2 ;; esac

@@ -16,16 +16,23 @@ ledger=$1 n=$2 wt=$3 tree=$4
 shift 4
 patch='' skip=''
 case "$1" in
-  --probe) patch=$2; [ -n "$patch" ] || { echo "task-done: --probe needs a patch file" >&2; exit 2; } ;;
+  --probe) patch=$2; [ -s "$patch" ] && [ -r "$patch" ] || { echo "task-done: --probe needs a non-empty readable patch file: $patch" >&2; exit 2; } ;;
   --no-probe) skip=$2; [ -n "$skip" ] || { echo "task-done: --no-probe needs a reason" >&2; exit 2; } ;;
   *) echo "task-done: name --probe PATCH, or --no-probe REASON for a task with no test to probe" >&2; exit 2 ;;
 esac
 shift 2
+cr=$(printf '\r')
+nl='
+'
+for a in "$skip" "$@"; do
+  case "$a" in *"$nl"* | *"$cr"*) echo "task-done: REASON and CMD arguments are one line each" >&2; exit 2 ;; esac
+done
 [ "$1" = -- ] && [ $# -ge 2 ] || usage
 shift
 [ -f "$ledger" ] && [ -r "$ledger" ] || { echo "task-done: no readable ledger at $ledger" >&2; exit 2; }
 case "$n" in '' | *[!0-9]*) echo "task-done: N must be a number: $n" >&2; exit 2 ;; esac
-printf '%s' "$tree" | grep -Eq '^[0-9a-f]{40}([0-9a-f]{24})?$' ||
+case "$tree" in '' | *[!0-9a-f]*) echo "task-done: TREE must be a full object id: $tree" >&2; exit 2 ;; esac
+[ "${#tree}" -eq 40 ] || [ "${#tree}" -eq 64 ] ||
   { echo "task-done: TREE must be a full object id: $tree" >&2; exit 2; }
 wt=$(cd "$wt" 2> /dev/null && pwd -P) || { echo "task-done: no such worktree: $3" >&2; exit 2; }
 
