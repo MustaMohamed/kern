@@ -4,6 +4,8 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- floor-scan: the G7 check as a script, with a lowered-bar class and ratchet.<metric> settings keys.
+
 ## [0.2.1] - 2026-10-14
 
 - PreToolUse asks, or denies under `bypassPermissions`, when a hook library cannot load or lacks a function it defines. In 0.2.0 a missing `settings.sh` or `decide.sh` gave no decision at all. session-start says when kern did not load.

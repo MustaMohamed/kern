@@ -40,6 +40,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `verify.fast` | `typecheck` then `lint` | command | self-review, prove-it |
 | `verify.browser` | none: ask when a UI claim needs it | command | prove-it, diagnose, verify-app |
 | `generated_artifacts` | none | comma list of `trigger-glob=command` | implement, prove-it, self-review |
+| `ratchet.<metric>` | none | `<path>:<key>`, with `:max` appended when a higher value loosens the bar | floor-scan, self-review |
 | `checklists` | existing data and consumers, authorization scope, persisted-shape change | comma list | define, plan |
 | `tracker` | detected | `none`, `github`, `gitlab`, `linear`, `jira`, or another name | kern-detect, define, plan, recall, triage |
 | `tracker.first` | `false` | `true`, `false` | define, plan |

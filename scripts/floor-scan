@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# G7 as a script: list moves in a git diff that lower the bar: suppressions and type escapes, skipped or
+# deleted tests, removed assertions, stubs and empty catch blocks, debug prints, and a lowered bar
+# (a coverage threshold or ratchet.<metric> value moved the loose way, strict typing off, a lint rule
+# off, a CI step removed or made non-blocking). Advisory: exit 1 on any hit.
+# Usage: floor-scan DIFF_FILE    Output: path:line<TAB>class<TAB>text. Exit 2 when the input is not a git diff.
+# A line removed and added again in the same file (moved, or only re-spaced or re-quoted) is not a hit.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+[ $# -eq 1 ] || { echo "usage: floor-scan DIFF_FILE" >&2; exit 2; }
+[ -r "$1" ] || { echo "floor-scan: cannot read $1" >&2; exit 2; }
+grep -q '^diff --git ' "$1" || { echo "floor-scan: $1 has no diff --git header; pass a git diff or a wt-diff package" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+KERN_MAIN=$(kern_main_root "$PWD" 2> /dev/null) || KERN_MAIN=''
+export KERN_MAIN
+# ratchet.<metric>: <path>:<key>[:min|:max] lines, metric<TAB>path<TAB>key<TAB>direction.
+RATCHETS=''
+for k in $(while IFS= read -r f; do [ -f "$f" ] && settings_keys "$f"; done <<EOT | grep '^ratchet\.' | sort -u
+$(_settings_files)
+EOT
+); do
+  v=$(settings_get "$k") || continue
+  d=min
+  case "$v" in *:max) d=max; v=${v%:max} ;; *:min) v=${v%:min} ;; esac
+  RATCHETS="$RATCHETS${k#ratchet.}	${v%:*}	${v##*:}	$d
+"
+done
+export RATCHETS
+LC_ALL=C awk -f "$here/lib/test-paths.awk" -f "$here/lib/floor-scan.awk" "$1"
