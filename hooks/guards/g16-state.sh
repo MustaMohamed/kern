@@ -2,8 +2,9 @@
 # G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
 # and the user confirms every write to a kern settings file or to Claude Code's own settings, and every
 # command that names kern's hook code or a state function, which could forge the user's prompt.
-# Accepted limits: a path held in a variable or built at run time; interpreter code that builds a
-# hook path; a script written to disk and then run by name.
+# Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
+# naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
+# to disk and then run by name.
 
 _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
 _G16_STATE_CMD="commands may not write kern session state"
