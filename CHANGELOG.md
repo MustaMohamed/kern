@@ -4,6 +4,14 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-14
+
+- PreToolUse asks, or denies under `bypassPermissions`, when a hook library cannot load or lacks a function it defines. In 0.2.0 a missing `settings.sh` or `decide.sh` gave no decision at all. session-start says when kern did not load.
+- pre-tool-use and session-start leave POSIX mode first, so `POSIXLY_CORRECT` cannot skip that check.
+- A natural-language voice switch fires only when the phrase stands alone on the first line, such as `go terse`, `turn off terse mode` or `back to normal`, with a leading `please` or `ok` and a trailing `please`, `now`, `.` or `!` allowed. More phrases switch, and prompts such as `use terse variable names` no longer do. A 200-case corpus tests the hook.
+- No mode line or terse reminder on scheduled-task prompts.
+- session-start removes session state files untouched for 30 days.
+
 ## [0.2.0] - 2026-10-13
 
 - Kernel and subagent kernel, rendered at session start and subagent start, with the project settings summary.
