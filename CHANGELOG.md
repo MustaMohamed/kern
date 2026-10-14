@@ -7,6 +7,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - Agents implementer, task-reviewer and investigator.
 - floor-scan: the G7 check as a script, with a lowered-bar class and ratchet.<metric> settings keys.
 - Guard G18: kern's read-only investigator may run only allowlisted read commands.
+- Guard G20: a Markdown spec or plan becomes approved, or changes its approved: line, only with a quote of the user's last message, judged on the file as the edit leaves it; never under autopilot.
 
 ## [0.2.1] - 2026-10-14
 

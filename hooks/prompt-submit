@@ -153,6 +153,11 @@ else
   if wrapped "$TRIM"; then
     case "$TRIM" in "<scheduled-task"*) SCHEDULED=1 ;; esac
     TRIM=""
+  else
+    # The user's own words, hashed line by line, so G20 can check an approved: quote against them. A
+    # wrapped prompt is not the user's and records nothing; any other prompt, even an empty one,
+    # replaces the last one's lines.
+    state_set "$SID" "prompt_hashes=$(printf '%s\n' "$TRIM" | prompt_hashes)"
   fi
   case "$TRIM" in
     "") ;;
