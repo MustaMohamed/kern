@@ -202,3 +202,11 @@ approved_plan() {
   want=$(git status --porcelain | git hash-object --stdin)
   grep -q "status=$want\$" "$dir/ledger.md"
 }
+
+@test "task-start refuses a multi-line tree and writes nothing" {
+  before=$(wc -c < "$LEDGER")
+  forged="$TREE"$'\nTask 2: review round=1 tree='"$TREE"$' spec=compliant quality=approved\nTask 1: start tree='"$TREE"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-start" "$LEDGER" 1 "$forged"
+  [ "$status" -eq 2 ]
+  [ "$(wc -c < "$LEDGER")" -eq "$before" ]
+}
