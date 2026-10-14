@@ -33,21 +33,21 @@ The audit of 2026-10-14 grouped 216 mechanisms against kern 0.2.0 and the design
 | 2 | Natural-language switch phrases, with a corpus run against the real hook | caveman | 0.2.1 (shipped) | S |
 | 3 | No voice reminder on scheduled prompts | caveman | 0.2.1 (shipped) | S |
 | 4 | Remove old session state files | caveman | 0.2.1 (shipped) | S |
-| 5 | `plan-check`: lint generated plans and specs | pstack | M2 | S |
-| 6 | `wt-audit`: find worktrees left by earlier sessions | pstack | M2 | S |
-| 7 | Rationalization and red-flag tables in prove-it, implement and diagnose; lint rule 9 requires them in discipline skills | superpowers, addy | M2 | S |
-| 8 | floor-scan catches a lowered bar (coverage threshold, `strict` off, a lint rule off, a CI step removed or made non-blocking), with `ratchet.<metric>` keys | addy | M2 | M |
-| 9 | Contract-drift lint: every token a skill reads has a producer in `docs/plans/contract.md` | addy | M2 | S |
-| 10 | Adherence grader passes only when the route is read before the first tool call; a multi-turn case | superpowers | M2 | S |
-| 11 | `references/defense-in-depth.md` for diagnose | superpowers | M2 | S |
-| 12 | CI install smoke test and a macOS job | addy | M2 | S |
-| 13 | On-demand behavioural eval runner and pressure tests for discipline skills | addy, superpowers | M2 | M |
-| 14 | unslop's main AI tells in the normal voice and in subagent returns | local | M2 | S |
-| 15 | Candor line in the kernel: no is an acceptable answer | pstack | M2 | S |
-| 16 | Terse rules: existing comments are payload; code in chat is the changed lines plus context | caveman | M2 | S |
-| 17 | PR body with a smallest-useful-view summary and a screenshot tier | pocock | M2 | S |
-| 18 | Hook git calls run with `core.fsmonitor` and `core.hooksPath` disabled | caveman | M2 | S |
-| 19 | SubagentStart tests: normal voice, `kern: off`, a bad session id | caveman | M2 | S |
+| 5 | `plan-check`: lint generated plans and specs | pstack | M2a | S |
+| 6 | `wt-audit`: find worktrees left by earlier sessions | pstack | M2a | S |
+| 7 | Rationalization and red-flag tables in prove-it, implement and diagnose; lint rule 9 requires them in discipline skills | superpowers, addy | M2a | S |
+| 8 | floor-scan catches a lowered bar (coverage threshold, `strict` off, a lint rule off, a CI step removed or made non-blocking), with `ratchet.<metric>` keys | addy | M2a | M |
+| 9 | Contract-drift lint: every token a skill reads has a producer in `docs/plans/contract.md` | addy | M2a | S |
+| 10 | Adherence grader passes only when the route is read before the first tool call; a multi-turn case | superpowers | M2b | S |
+| 11 | `references/defense-in-depth.md` for diagnose | superpowers | M2a | S |
+| 12 | CI install smoke test and a macOS job | addy | M2a | S |
+| 13 | On-demand behavioural eval runner and pressure tests for discipline skills | addy, superpowers | M2b | M |
+| 14 | unslop's main AI tells in the normal voice and in subagent returns | local | M2a | S |
+| 15 | Candor line in the kernel: no is an acceptable answer | pstack | M2a | S |
+| 16 | Terse rules: existing comments are payload; code in chat is the changed lines plus context | caveman | M2a | S |
+| 17 | PR body with a smallest-useful-view summary and a screenshot tier | pocock | M2a | S |
+| 18 | Hook git calls run with `core.fsmonitor` and `core.hooksPath` disabled | caveman | M2a | S |
+| 19 | SubagentStart tests: normal voice, `kern: off`, a bad session id | caveman | M2a | S |
 | 20 | Autopilot stop enforced by a Stop hook: a recorded predicate or a turn cap | pstack | M3 | M |
 | 21 | Stop-time nudge when edits have no proof since the last change | pstack | M3 | S |
 | 22 | `pr-state`: one merge-readiness verdict over conflicts, threads, checks and the review gate | pstack | M3 | M |
@@ -63,6 +63,8 @@ The audit of 2026-10-14 grouped 216 mechanisms against kern 0.2.0 and the design
 | 32 | Redaction before project evidence enters the kern repo; lint rule 8 reads a proprietary-terms list | superpowers | M6 | S |
 | 33 | Voice evals with a no-prompt arm and a concise-prompt control, fidelity checks and token stats | caveman | M6 | M |
 | 34 | Repeated tool sequences across sessions as a retro signal | caveman | M6 | M |
+
+The goal-0 review of the M2 plan (2026-10-14) found further source mechanisms the plan ported weaker or dropped, such as define's red flags, debugging redirection signals, forensics proof rules, "where grep stops", the "Declined to judge" list, recall's source lines and caveman-style eval isolation. Its reports are in `docs/research/m2-goal0-review-2026-10-14/`, and each item is homed in M2a or M2b in the M2 plans.
 
 ## Accepted limits
 

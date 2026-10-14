@@ -16,7 +16,7 @@ The name follows the operating-system model: a small always-on kernel routes wor
 0. Master goal: for each category of work, kern is at least as strong as the strongest of its five sources. It takes the strongest mechanism per category, enforces it in code where code can, and combines the parts as focused lanes, scripts and hooks rather than one merged prompt. Goals 3 and 4 bound it. It is measured three ways:
    - `docs/specs/coverage.md` gives every source mechanism a home or a recorded rejection, and a re-audit at each milestone close leaves no row of that milestone where a source is stronger, counting only built and tested work.
    - Head-to-head evals run kern and the strongest source on the same seeded fixtures for review, debugging and planning, and count real findings and false alarms.
-   - The M2 pilot includes side-by-side runs against superpowers on the same tasks.
+   - The M2b pilot includes side-by-side runs against superpowers on the same tasks.
 1. One install per machine; the same behaviour in every project.
 2. Cover every job superpowers does today, plus pstack's proof discipline, mattpocock's debugging gate and design vocabulary, addy's specialist skills and evals, and caveman's terse voice.
 3. Gated by default: nothing leaves the machine and nothing is committed without the user, unless the user turns on autopilot for the session.
@@ -44,7 +44,7 @@ The name follows the operating-system model: a small always-on kernel routes wor
 | D-7 | html surface | Single visual pages, answerable on the page or in the terminal |
 | D-8 | Working files | `.kern/` at the main worktree root, excluded through `.git/info/exclude` |
 | D-9 | Repo | Private GitHub repo that is its own marketplace |
-| D-10 | First build | M0 to M2, then a pilot on two projects, then switch superpowers off |
+| D-10 | First build | M0 to M2b (M2 split into M2a build and M2b proof), with the pilot inside M2b, then switch superpowers off |
 | D-11 | Review | Four parallel lanes, one of them Claude Code's built-in `code-review` |
 | D-12 | Stacked PRs | Supported through `take-feedback`, with `gh stack` first-class |
 
@@ -569,7 +569,7 @@ Signal, then cited evidence, then kind (one-off, missed trigger, wrong shape, me
 ## 13. Migration from superpowers
 
 1. Through M2, superpowers stays enabled. kern is tested with `--plugin-dir` in sessions where superpowers is disabled for that project (`"superpowers@claude-plugins-official": false` in `.claude/settings.local.json`), so only one router runs.
-2. Pilot on two projects (one of them cds-app-rewrite) for at least five real tasks each, covering define, plan, execute, diagnose and finish-branch.
+2. Pilot, in M2b, on two projects (one of them cds-app-rewrite) for at least five real tasks each, covering define, plan, execute, diagnose and finish-branch.
 3. Pass criteria: the behavioural fixtures pass; no guard false negative in the pilot; the user judges output quality at least equal to superpowers, including side-by-side runs of the same tasks with each.
 4. Then disable superpowers at user level and uninstall caveman. Move the user's own `~/.claude/skills/recall`, `unslop` and `no-comments` and `~/.claude/agents/comment-sicko.md` aside once kern ships their replacements (recall and unslop at M2, no-comments and comment-sicko at M3), so two descriptions do not compete.
 5. Rollback: re-enable superpowers in `~/.claude/settings.json`; disable kern with `kern: off` or by uninstalling.
@@ -580,13 +580,14 @@ Signal, then cited evidence, then kind (one-off, missed trigger, wrong shape, me
 |---|---|---|---|
 | M0 | Repo, manifests, LICENSE, NOTICE, licenses/, UPSTREAM.md, lint and routing-eval scripts adapted from addy, CI | 4 to 6 | `claude plugin validate --strict` passes; CI runs lint and routing evals on an empty skill set with a placeholder skill |
 | M1 | Kernel and subagent kernel; SessionStart, SubagentStart, UserPromptSubmit hooks; settings parsing; `mode`, `autopilot`, `help` with `help setup`; terse voice; unslop and technical-writing references; guards G1 to G6 and G13 to G16 | 10 to 14 | Hook-shape tests pass on all fixtures; rendered kernel under 4,000 chars; mode switches survive compaction; G16 denies a state write; each guard's bats tests pass in both modes |
-| M2 | define, plan, execute-plan, parallel-work, implement, diagnose, prove-it, self-review, commit, finish-branch, recall; agents implementer, task-reviewer, investigator; worktree scripts (`wt-new`, `wt-fork`, `wt-snap`, `wt-diff`, `wt-apply`); check scripts G7 (as a script), G9 and G10; guard G18; coverage gaps 5 to 19 (`docs/specs/coverage.md`) | 19 to 25 | Each skill's eval cases pass through the behavioural runner; kernel adherence passes on a routed prompt; per-task review works with no commits; pilot criteria in section 13 met, including side-by-side runs against superpowers |
+| M2a | define, plan, execute-plan, parallel-work, implement, diagnose, prove-it, self-review, commit, finish-branch, recall; agents implementer, task-reviewer, investigator; worktree scripts (`wt-new`, `wt-fork`, `wt-snap`, `wt-diff`, `wt-apply`, `wt-audit`); check scripts G7 (as a script), G9, G10 and `plan-check`; ledger and brief scripts that enforce review, approval and plan identity in code; guard G18; coverage gaps 5 to 19 except 10 and 13; the goal-0 plan review items for the build | 20 to 26 | Each skill's unit and execution tests pass, including commit and finish-branch against a `gh` shim; per-task review works with no commits and `task-done` refuses an unreviewed tree; floor-scan and the review seeded-diff set pass in CI; release 0.3.0 |
+| M2b | Proof of goal 0 for M2: the behavioural eval runner and kernel-adherence grader with host isolation, negative cases and committed snapshots (coverage gaps 10 and 13); head-to-head evals for planning, debugging and review against superpowers, pocock and a no-plugin control on seeded fixtures with hidden answer keys; the coverage re-audit of M2 rows; a release-time token measurement; the side-by-side pilot | 12 to 16 | In each head-to-head category kern finds at least as many key items as the strongest arm, with no more false alarms; no M2 coverage row is left where a source is stronger; standing cost within goal 4; pilot criteria in section 13 met; release 0.4.0 |
 | M3 | pr-review lanes, take-feedback with five modes and stack providers, G17, the G7 Stop hook, scripts G11 and G12, no-comments and comment-sicko, security references, decision-log (moved from M6), guard G19; coverage gaps 20 to 26; starts with a one-hour gh-stack worktree spike | 11 to 17 | Spike result recorded; lanes merge correctly on a seeded diff and find at least as many seeded bugs as the strongest source review, with no more false alarms; stack rebase on a fixture stack restores cleanly on `--abort` |
 | M4 | visual: renderer, components, page server, `kern-page publish/wait/stop`, answers in hook, static fallback, auto thresholds | 10 to 14 | Send on a page resumes Claude with the answer; a terminal answer cancels the wait; pages make no network requests |
 | M5 | Specialists and stack references; coverage gaps 27 to 31 | 14 to 20 | Each skill's eval cases pass |
 | M6 | handoff, retro, correct, plain, write-skill, skill-eval; nightly behavioural evals; coverage gaps 32 to 34 | 10 to 14 | Nightly run green for a week |
 
-The first build is M0 to M2 (about 33 to 45 hours), then the pilot. The full framework stays at about 78 to 110 hours.
+Elsewhere in this spec, "M2" means M2a and M2b together. The first build is M0 to M2b (about 46 to 62 hours), with the pilot inside M2b. The full framework is about 91 to 127 hours.
 
 ## 15. Risks and spikes
 
