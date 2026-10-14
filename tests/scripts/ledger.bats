@@ -193,3 +193,12 @@ approved_plan() {
   [ "$status" -ne 0 ]
   [ ! -e "$TMP/fresh/ledger.md" ]
 }
+
+@test "the recorded status hash equals git status --porcelain piped to git hash-object" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  printf 'x\n' > "$REPO/stray.txt"
+  approved_plan "$TMP/a.md"
+  dir=$(bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l" 2> /dev/null)
+  want=$(git status --porcelain | git hash-object --stdin)
+  grep -q "status=$want\$" "$dir/ledger.md"
+}

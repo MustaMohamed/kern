@@ -18,7 +18,7 @@ main_state() {
   b=$(git -C "$m" symbolic-ref -q --short HEAD 2> /dev/null) || b='(detached)'
   # Read first: a failing git status inside a pipe or printf argument would be hashed as empty input.
   st=$(git --no-optional-locks -C "$m" status --porcelain) || { echo "ledger-open: git status failed in $m" >&2; exit 2; }
-  printf '%s branch=%s status=%s\n' "$m" "$b" "$(printf '%s' "$st" | git hash-object --stdin)"
+  printf '%s branch=%s status=%s\n' "$m" "$b" "$({ [ -z "$st" ] || printf '%s\n' "$st"; } | git hash-object --stdin)"
 }
 
 if [ "${1-}" = --summary ]; then
