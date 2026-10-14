@@ -4,7 +4,8 @@
 # command that names kern's hook code or a state function, which could forge the user's prompt.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
-# to disk and then run by name.
+# to disk and then run by name; and any other spelling of a hook path than the ones _g16_hooks reads
+# (any case, line continuations, the APFS folds of s and k, quotes, backslashes, globs and braces).
 
 _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
 _G16_STATE_CMD="commands may not write kern session state"
@@ -17,16 +18,17 @@ _G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
 # U+017F (long s) and U+212A (Kelvin sign), in UTF-8: APFS folds them to s and k in a file name.
 _G16_LONG_S=$'\305\277'
 _G16_KELVIN=$'\342\204\252'
-# _G16_HOOK_AWK: reads the command text, lower-cased. Prints `hit` when a line names a hook after a
-# slash, a .sh file under hooks/lib/, or a state function as a word; a hook counts only when the
-# character after it cannot go on a file name, so pre-tool-use.bats does not. Otherwise prints `ctx`
-# when a line names a hooks directory (else `-`), then each word, split at blanks, CR, ; | & < > ) and =.
+# _G16_HOOK_AWK: reads the command text, lower-cased. Prints `hit` when a line names a hook after
+# hooks/ (or hooks// or hooks/./), a .sh file under hooks/lib/, or a state function as a word; a hook
+# counts only when the character after it cannot go on a file name, so pre-tool-use.bats does not.
+# Otherwise prints `ctx` when a line names a hooks directory (else `-`), then each word, split at
+# blanks, CR, ; | & < > ) and =.
 # shellcheck disable=SC2016 # awk text
 _G16_HOOK_AWK='
 BEGIN {
   a = "abcdefghijklmnopqrstuvwxyz0123456789"
   e = "([^" a "._-]|$)"
-  hit = "/(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
+  hit = "hooks/(/|[.]/)*(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
   hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset)([^" a "_]|$)"
   dir = "(^|[^" a "._-])hooks" e
 }
@@ -496,8 +498,8 @@ _g16_glob() {
 # The match is on the command text, in any case, with line continuations joined, the APFS folds of s
 # and k read as s and k, and quotes and backslashes taken out, so wrappers, -c strings, git config
 # values and xargs are all covered. It counts:
-# - in the text (_G16_HOOK_AWK): a hook after a slash, a .sh file under hooks/lib/, or state_set,
-#   _state_put or state_reset;
+# - in the text (_G16_HOOK_AWK): a hook after hooks/, a .sh file under hooks/lib/, or state_set,
+#   _state_put or state_reset; a hook name elsewhere (a branch m2/session-start, a URL) is not hook code;
 # - in a word inside a hooks directory: a last part that names a hook or a hooks/lib file, holds a
 #   glob that could match one (_g16_glob), or holds a $, a backtick or a { (a variable, command
 #   output, or the {} of find -exec and xargs). Every word is inside one when the text names a hooks
@@ -508,7 +510,8 @@ _g16_glob() {
 # Reading a hook file stays possible with the Read and Grep tools. Not seen (accepted limits): a hooks
 # directory reached without naming it (find $K -name prompt-submit, a glob for the directory in one
 # word and the hook in another), a name built at run time ($'\x..' escapes, xargs with no {}),
-# interpreter code that builds a hook path, and a script written to disk and then run by name.
+# interpreter code that builds a hook path, a script written to disk and then run by name, and any
+# other spelling-level evasion beyond the forms above.
 _g16_hooks() {
   local cmd t r w d c last names f ctx=0 inside hit=0
   cmd=$(ti_get command) || return 0
@@ -527,9 +530,7 @@ _g16_hooks() {
   if [ "$ctx" = 0 ]; then
     case "$t" in
       *[Hh][Oo][Oo][Kk][Ss]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | \
-        *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[Pp][Rr][Oo][Mm][Pp][Tt]-[Ss][Uu][Bb][Mm][Ii][Tt]* | \
-        *[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ss][Tt][Aa][Rr][Tt]* | *[Ss][Uu][Bb][Aa][Gg][Ee][Nn][Tt]-[Ss][Tt][Aa][Rr][Tt]* | \
-        *[Pp][Rr][Ee]-[Tt][Oo][Oo][Ll]-[Uu][Ss][Ee]* | *[\*\?\[\{\(^#]*/*) ;;
+        *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[\*\?\[\{\(^#]*/*) ;;
       *) return 0 ;;
     esac
   fi

@@ -470,7 +470,8 @@ bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:
   expect_cmd none 'tests/run-bats tests/hooks/prompt-submit.bats' 'git log hooks/' 'tests/run-bats tests/hooks/g20*.bats' \
     'ls tests/hooks/*.bats' 'git commit -m "fix the prompt-submit test"' 'shellcheck scripts/ledger-open' \
     'cat hooks/prompt-submit.md' 'bash hooks/prompt-submit.bak' 'cat hooks/pre-tool-use_old' 'cat docs/hooks.md' \
-    'ls *.md' 'ls *' 'cat */*.md' 'echo ${HOME}/x' 'echo $(pwd)/x'
+    'ls *.md' 'ls *' 'cat */*.md' 'echo ${HOME}/x' 'echo $(pwd)/x' 'git checkout -b m2/session-start' \
+    'git push origin fix/pre-tool-use' 'curl https://x/api/session-start' 'git log -- skills/session-start/'
 }
 
 @test "inside a hooks directory a bare hook name, or a glob that could match one, asks" {
