@@ -13,8 +13,8 @@ Updated 2026-10-14 for the M2 split: M2a (`docs/plans/2026-10-14-kern-m2a-plan.m
 | `help` | slash | M1 | 3.5 KB (+6.5 KB refs, template) | Map of kern, fix-a-run, `help setup` writes `.claude/kern.local.yml` |
 | `define` | path | M2a | at most 6.5 KB, 5.7 planned (+7.5 KB refs) | Clarify, classify, get explicit approval before code |
 | `plan` | path | M2a | at most 6.5 KB, 5.0 planned (+5 KB refs) | Approved spec to ordered, testable tasks |
-| `execute-plan` | path | M2a | at most 10 KB, 9.5 planned (+4 KB refs, scripts) | Run a plan with a ledger, implementer and two-verdict review, no commits |
-| `parallel-work` | path | M2a | at most 5 KB, 4.0 planned (+2 KB ref) | Fan out with one worktree per writer, integrate, re-test |
+| `execute-plan` | path | M2a | at most 12 KB, about 11.3 built (+4 KB refs, scripts) | Run a plan with a ledger, implementer and two-verdict review, no commits |
+| `parallel-work` | path | M2a | at most 6.4 KB, 6.4 built (+2 KB ref) | Fan out with one worktree per writer, integrate, re-test |
 | `implement` | path | M2a | at most 5.5 KB, 4.2 planned (+5.5 KB refs) | Thin slices, test first, full suite |
 | `diagnose` | path | M2a | at most 6.5 KB, 5.0 planned (+7 KB refs, 2 scripts) | Red-capable loop before any fix |
 | `prove-it` | auto | M2a | at most 3.6 KB, 3.3 planned (+1.8 KB ref) | Evidence before any "done" |
@@ -439,7 +439,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/execute-plan.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** SP subagent-driven-development (+ prompts and scripts), executing-plans (+ scripts); AD build.md, context-engineering; PO implement-spec; PB orchestrate, feature, autonomous-run. SKILL.md at most 10,000 bytes; `references/ledger-format.md` at most 2,600 bytes, `model-selection.md` 1,600, `brief-template.md` 1,800 (shared with `parallel-work`) (the plan's caps).
+**8. Sources; size.** SP subagent-driven-development (+ prompts and scripts), executing-plans (+ scripts); AD build.md, context-engineering; PO implement-spec; PB orchestrate, feature, autonomous-run. SKILL.md at most 12,000 bytes (raised from 10,000 in M2a Task 22: the exit handling every gate script needs did not fit); `references/ledger-format.md` at most 2,600 bytes, `model-selection.md` 1,600, `brief-template.md` 1,800 (shared with `parallel-work`) (the plan's caps).
 
 ---
 
@@ -480,7 +480,7 @@ disable-model-invocation: true
 
 The full checklist is `tests/skills/parallel-work.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** SP dispatching-parallel-agents, using-git-worktrees; PS swarm, principle-separate-before-serializing-shared-state; PB orchestrate, worktree-cleanup; ADR orchestration-patterns. SKILL.md at most 5,000 bytes; `references/worktrees.md` at most 2,200 bytes (the plan's cap).
+**8. Sources; size.** SP dispatching-parallel-agents, using-git-worktrees; PS swarm, principle-separate-before-serializing-shared-state; PB orchestrate, worktree-cleanup; ADR orchestration-patterns. SKILL.md at most 6,400 bytes (raised from 5,000 in M2a Task 21: the drain mapping, exit handling and teardown guard did not fit); `references/worktrees.md` at most 2,200 bytes (the plan's cap).
 
 ---
 ### C5. `implement` (path, M2)
