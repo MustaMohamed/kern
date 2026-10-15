@@ -5,6 +5,9 @@
 # A newline inside one record (quoted text, or the inside of $( )) is printed as this byte, so a
 # caller that reads records line by line never takes a quoted line for a command.
 _GW_NL=$'\037'
+# git_words' own state, never taken from the environment: _GW_IN marks a call inside the outermost
+# one, _GW_NOALIAS a call that splits an alias's expansion.
+unset _GW_IN _GW_NOALIAS
 
 # _GW_AWK: awk functions shared by _shell_words, _cmd_words and _split_words (run with -v sq="'").
 # sw(STR) splits STR into words, quotes removed, in sw_w[1..sw_n] (see _shell_words). cw_reset()
@@ -156,16 +159,25 @@ _GW_AWK='
 # ask for a git or gh among their words), and a here-doc piped into a shell (cat <<EOF | sh).
 git_words() {
   local seg inner body first
+  # With aliases loaded (aliases.sh), the outermost call prints the command's own records exactly as
+  # without aliases, in their order, then every expansion record after all of them. Inner calls mark an
+  # expansion record with a leading tab, which no record of the command starts with (_split_words trims
+  # blanks). So an expansion never changes the context a record of the command is read in, such as a
+  # cd before it: it can only add votes.
+  if [ -z "${_GW_IN-}" ] && [ -n "${KERN_ALIASES-}" ]; then
+    _GW_IN=1 git_words "$1" | LC_ALL=C awk '/^\t/ { a[++n] = substr($0, 2); next } { print } END { for (i = 1; i <= n; i++) print a[i] }'
+    return
+  fi
   _split_words "$1" | while IFS= read -r seg; do
     printf '%s\n' "$seg"
     # A record whose head word is an alias that runs git or gh (aliases.sh) is judged as its expansion
-    # too, split again after it. The record itself stays, so no vote the command got without aliases is
-    # lost, and a guard that allows only a command starting with git or gh never allows an alias. The
-    # expansion's own words are not expanded again: zsh does not re-expand the alias it is expanding,
-    # and the table already followed the head-word chain.
+    # too, split again and marked for the outermost call to print last. A guard that allows only a
+    # command whose first record starts with git or gh never allows an alias. The expansion's own words
+    # are not expanded again: zsh does not re-expand the alias it is expanding, and the table already
+    # followed the head-word chain.
     if [ -z "${_GW_NOALIAS-}" ] && declare -F alias_expand >/dev/null && alias_expand "$seg"; then
       _GW_NOALIAS=1
-      git_words "$ALIAS_EXP"
+      git_words "$ALIAS_EXP" | LC_ALL=C sed $'s/^/\t/'
       _GW_NOALIAS=
     fi
     # shellcheck disable=SC2016 # a literal $( in the text

@@ -264,6 +264,8 @@ noalias_hook() {
       alias_expand "ls -l" || true
       alias_expand "" || true
       alias_expand "gpf! origin" || true
+      alias_expand "X='"'"''"'"' gpf! origin" || true
+      alias_expand "X='"'"'a" || true
       after=$(set | sed -n "s/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p" | sort)
       comm -13 <(printf "%s\n" "$before") <(printf "%s\n" "$after") | grep -v -e "^_KA_" -e "^KERN_ALIASES$" -e "^ALIAS_EXP$" -e "^before$" || true
       echo finished' _ "$(kern_root)"
@@ -315,10 +317,10 @@ noalias_hook() {
   expect none "prc --title t --body b" "rel v1" "isc --title t --body-file b.md" "prv 1 --approve" "pdb"
 }
 
-@test "an alias whose value ends in a blank expands the word after it, as zsh does, at most 8 times" {
+@test "an alias whose value ends in a space expands the word after it, as zsh does, 8 times, then fails closed" {
   local h c w8 w9 mode want
   h=$(noalias_hook)
-  snap "alias -- _='sudo '" "alias -- gpf!='git push --force'" "alias -- n='nice '"
+  snap "alias -- _='sudo '" "alias -- gpf!='git push --force'" "alias -- n='nice '" "alias -- t='nice"$'\t'"'"
   for mode in off on; do
     set_autopilot "$mode"
     all "_ gpf! origin main"
@@ -326,15 +328,134 @@ noalias_hook() {
     [[ "$output" == *"kern G1"* ]] || false
     same "_ gpf! origin main" "sudo git push --force origin main"
     # Without a git or gh alias after it, `_` is judged as before.
-    for c in "_ git status" "_ ls -la" "_ 'gpf!' origin main" "_ X=1 gpf! origin main"; do
+    # A trailing tab is not zsh's trailing space: t's value ends in one.
+    for c in "_ git status" "_ ls -la" "_ 'gpf!' origin main" "_ X=1 gpf! origin main" "t gpf! origin main"; do
       want=$(env KERN_GUARDS= bash "$h" <<<"$(bash_payload "$c")")
       all "$c"
       [ "$output" = "$want" ] || { printf '%s, %s:\n%s\n%s\n' "$mode" "$c" "$output" "$want"; return 1; }
     done
   done
-  # n is `nice `: gpf! is the 8th word after the head n in w8, which expands; the 9th in w9 does not.
+  # n is `nice `: gpf! is the 8th word after the head n in w8, which expands. In w9 it is the 9th: it
+  # stays an alias kern did not expand, which G00 denies under autopilot, as base gives no vote.
   w8="n n n n n n n n gpf! origin main"
   w9="n n n n n n n n n gpf! origin main"
+  set_autopilot off
   expect deny "$w8"
   expect none "$w9"
+  set_autopilot on
+  expect deny "$w8" "$w9"
+  [[ "$output" == *'kern G00: '*'$KERN_ALIAS_PAST_8'* ]] || { echo "$output"; return 1; }
+}
+
+@test "an assignment with a quote or \$ before the alias does not hide it" {
+  for mode in off on; do
+    set_autopilot "$mode"
+    expect deny "X='' gpf! origin main" "X='a b' gpf! origin main" "X=\$(true) Y=1 gpf! origin main"
+    same "X='' gpf! origin main" "X='' git push --force origin main"
+    expect none "X='' 'gpf!' origin main" "X='a b' echo gpf! origin main"
+  done
+}
+
+@test "git_words prints the command's own records as without aliases, then each expansion after all of them" {
+  run bash -c '
+    . "$1/hooks/lib/settings.sh"; . "$1/hooks/lib/aliases.sh"; . "$1/hooks/lib/gitctx.sh"
+    c="cd /x && gst && echo y \$(gp; cd /z) && X=1 gpf! origin main"
+    want=$(git_words "$c")
+    aliases_load
+    [ -n "$KERN_ALIASES" ] || exit 3
+    got=$(git_words "$c")
+    printf "%s\n--\n%s\n" "$want" "$got"' _ "$(kern_root)"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  want=${output%%$'\n--\n'*}
+  got=${output#*$'\n--\n'}
+  # The command's own records come first, unchanged and in order.
+  [ "${got:0:${#want}}" = "$want" ] || { printf '%s\n--\n%s\n' "$want" "$got"; return 1; }
+  [ "${got:${#want}}" = $'\ngit status\ngit push\nX=1 git push --force origin main' ] || { printf '[%s]\n' "${got:${#want}}"; return 1; }
+  case "$got" in *$'\n\t'* | $'\t'*) echo "marker left in: $got"; return 1 ;; esac
+}
+
+@test "with aliases loaded, no command gets a weaker decision than without them, in both modes" {
+  local h c mode want got s rank_want rank_got W SD
+  h=$(noalias_hook)
+  W="$BATS_TEST_TMPDIR/wt"
+  SD="$CLAUDE_PLUGIN_DATA/sessions"
+  mkdir -p "$SD" "$R/.claude"
+  printf 'push.policy: auto\ndeploy.envs: production\n' >"$R/.claude/kern.local.yml"
+  # feat holds another author's commit, so a lease push of it is denied; a key is staged in the worktree.
+  git -C "$W" -c user.email=other@example.com -c user.name=Other commit -q --allow-empty -m "other: work"
+  git -C "$W" push -q origin feat >/dev/null 2>&1
+  printf 'key = AKIA%s\n' ABCDEFGHIJKLMNOP >"$W/creds.txt"
+  git -C "$W" add creds.txt
+  printf '{}\n' >"$HOME/.claude/settings.json"
+  kern_env "$W"
+  # Aliases as oh-my-zsh defines them, and a hostile table that shadows common commands with a cd.
+  cat >"$BATS_TEST_TMPDIR/omz.sh" <<'SNAP'
+alias -- _='sudo '
+alias -- sudo='nocorrect sudo'
+alias -- g=git
+alias -- gaa='git add --all'
+alias -- gcmsg='git commit --message'
+alias -- gp='git push'
+alias -- gpf!='git push --force'
+alias -- gst='git status'
+alias -- grhh='git reset --hard'
+alias -- grt='cd "$(git rev-parse --show-toplevel || echo .)"'
+SNAP
+  cat >"$BATS_TEST_TMPDIR/hostile.sh" <<'SNAP'
+alias -- git='git status'
+alias -- gh='gh pr list'
+alias -- cd='git status; cd'
+alias -- ls='cd / && git log'
+alias -- cat='cd /tmp; git status'
+alias -- echo='GIT_DIR=/x git status; echo'
+alias -- env='git status; env'
+alias -- sudo='git status; sudo'
+alias -- true='cd -; git status'
+alias -- if='git push --force'
+alias -- time='git status'
+alias -- sed='cd /; git status; sed'
+alias -- cp='git status; cd /; cp'
+alias -- x2='git status &&'
+alias -- _='sudo '
+alias -- gpf!='git push --force'
+alias -- gp='git push'
+alias -- gst='git status'
+alias -- grt='cd "$(git rev-parse --show-toplevel || echo .)"'
+SNAP
+  rank() { case "$(decision_of "$1")" in deny) echo 3 ;; ask) echo 2 ;; none) echo 1 ;; allow) echo 0 ;; *) echo 9 ;; esac; }
+  for mode in off on; do
+    set_autopilot "$mode"
+    while IFS= read -r c; do
+      want=$(env KERN_GUARDS= bash "$h" <<<"$(bash_payload "$c")")
+      rank_want=$(rank "$want")
+      for s in omz hostile; do
+        got=$(env KERN_GUARDS= KERN_SHELL_SNAPSHOT="$BATS_TEST_TMPDIR/$s.sh" bash "$(kern_root)/hooks/pre-tool-use" <<<"$(bash_payload "$c")")
+        rank_got=$(rank "$got")
+        [ "$rank_got" != 9 ] && [ "$rank_got" -ge "$rank_want" ] ||
+          { printf '%s, %s, %s:\nwithout: %s\nwith:    %s\n' "$mode" "$s" "$c" "$want" "$got"; return 1; }
+      done
+    done <<CORPUS
+cd $HOME/.claude && grt && sed -i '' s/a/b/ settings.json
+cd $HOME/.claude && ls && echo x > settings.json
+cd $HOME/.claude && true && cp /tmp/x settings.local.json
+cd $SD && ls && echo x > foo
+cd $SD && grt && echo x > foo
+grt && echo x > $SD/test-session.state
+git commit -m 'feat: add creds'
+grt && git commit -m 'feat: add creds'
+gaa && git commit -m x
+git push --force-with-lease origin feat
+grt && git push --force-with-lease origin feat
+ls && git push --force-with-lease origin feat
+true; git push --force-with-lease origin feat
+git push -u origin feat
+gp -u origin feat
+gp origin production
+gpf! origin main
+_ gpf! origin main
+_ _ _ _ _ _ _ _ _ gpf! origin main
+X='' gpf! origin main
+x2 git push --force origin main
+CORPUS
+  done
 }

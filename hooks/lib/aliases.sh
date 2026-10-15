@@ -8,7 +8,7 @@
 
 # _ALIASES_AWK: reads a snapshot and prints `<hex of name><TAB>expansion` for each alias whose
 # expansion holds a word that is git or gh (by its last path part, any case, quotes removed), and for
-# each alias whose expansion ends in a blank, which zsh's trailing-space rule lets expand the word after
+# each alias whose expansion ends in a space, which zsh's trailing-space rule lets expand the word after
 # it; such an expansion is printed with one space at its end and no other expansion ends in one. Lines are
 # `alias [--] name=value`, with a CRLF read as LF; value is a bare word, single-quoted text with '\''
 # for a quote, or backslash escapes. A value in $'...' or double quotes, an unclosed quote, a control
@@ -81,20 +81,60 @@ function gitword(v,    w, n, k, b, P) {
 }
 END {
   for (i = 1; i <= cnt; i++) {
-    # ts: the expansion ends in a blank, its own or that of an alias whose value ends it.
-    nm = order[i]; v = val[nm]; split("", seen); seen[nm] = 1; ts = v ~ /[ \t]$/
+    # ts: the expansion ends in a space (a tab does not count in zsh), its own or that of an alias
+    # whose value ends it.
+    nm = order[i]; v = val[nm]; split("", seen); seen[nm] = 1; ts = v ~ / $/
     for (d = 0; d < 8; d++) {
       hd = head(v)
       if (hd == "" || !(hd in val) || (hd in seen) || length(v) > 4096) break
       seen[hd] = 1
       n = split(v, w, /[ \t]+/); pre = ""; rest = ""
       for (k = 1; k <= n; k++) if (w[k] != "") { if (k < hk) pre = pre w[k] " "; else if (k > hk) rest = rest " " w[k] }
-      if (rest == "" && val[hd] ~ /[ \t]$/) ts = 1
+      if (rest == "" && val[hd] ~ / $/) ts = 1
       v = pre val[hd] rest
     }
     sub(/[ \t]+$/, "", v)
     if (ts) v = v " "
     if (gitword(v) || ts) print hx[nm] "\t" v
+  }
+}'
+
+# _ALIAS_HEAD_AWK: for a simple command whose leading words include an assignment that holds a quote, a
+# $ or a backslash (X='a b' gpf!), prints three lines: the text before the head word, the head word and
+# the text after it, all as written. Words are split at blanks outside quotes, $( ), ${ } and backticks;
+# the words skipped are those alias_expand skips. Prints nothing when there is no head word. A word it
+# splits wrongly can only add or miss an expansion record, which git_words prints after the command's
+# own records.
+# shellcheck disable=SC2016 # awk text
+_ALIAS_HEAD_AWK='
+{ buf = buf (NR > 1 ? "\n" : "") $0 }
+END {
+  split("if then elif else do while until ! { time nocorrect coproc", A, " "); for (k in A) RW[A[k]] = 1
+  n = split(buf, C, ""); i = 1; skip = 0
+  for (;;) {
+    while (i <= n && (C[i] == " " || C[i] == "\t")) i++
+    if (i > n) exit
+    s = i; q = ""; d = 0
+    for (; i <= n; i++) {
+      c = C[i]
+      if (q == sq) { if (c == sq) q = ""; continue }
+      if (c == "\\") { i++; continue }
+      if (q == "`") { if (c == "`") q = ""; continue }
+      if (c == "$" && (C[i + 1] == "(" || C[i + 1] == "{")) { d++; i++; continue }
+      if (d && (c == "(" || c == "{")) { d++; continue }
+      if (d && (c == ")" || c == "}")) { d--; continue }
+      if (q == "\"") { if (c == "\"" && !d) q = ""; continue }
+      if (c == sq || c == "\"" || c == "`") { q = c; continue }
+      if (!d && (c == " " || c == "\t")) break
+    }
+    w = substr(buf, s, i - s)
+    if (skip) { skip = 0; continue }
+    if (w in RW) continue
+    if (w == "repeat") { skip = 1; continue }
+    t = w; sub(/^[0-9]+/, "", t)
+    if (t ~ /^(<|>|&>)/) { if (t !~ /[^<>&|]/) skip = 1; continue }
+    if (w ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) continue
+    print substr(buf, 1, s - 1); print w; print substr(buf, i); exit
   }
 }'
 
@@ -175,20 +215,37 @@ _alias_var() {
 
 # alias_expand SEG: when the head word of the simple command SEG is an alias aliases_load set, sets
 # ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. When the expansion ends
-# in a blank, the word after the alias is replaced too when it is such an alias, as zsh's trailing-space
-# rule does, and so on, at most 8 times. As zsh does, the head
-# word is the first word after unquoted NAME=value words, redirections (with a target in the next word
-# when none is attached) and the reserved words if then elif else do while until ! { time nocorrect
-# coproc and repeat with its count; zsh does not expand an alias after command, builtin, exec, noglob
-# or -, and neither does this. A word with a quote, a backslash, a $ or a backtick is never an alias, as
-# in zsh, and ends the search.
+# in a space, the word after the alias is replaced too when it is such an alias, as zsh's trailing-space
+# rule does, and so on, at most 8 times; a 9th word that is still such an alias becomes the command name
+# $KERN_ALIAS_PAST_8, which G00 reads as built at run time, so autopilot denies it. As zsh does, the
+# head word is the first word after NAME=value words, redirections (with a target in the next word when
+# none is attached) and the reserved words if then elif else do while until ! { time nocorrect coproc
+# and repeat with its count; zsh does not expand an alias after command, builtin, exec, noglob or -, and
+# neither does this. An assignment word with a quote, a $ or a backslash hands the search to
+# _ALIAS_HEAD_AWK. Any other word with one, or with a backtick, is never an alias, as in zsh, and ends
+# the search.
 alias_expand() {
   local rest="$1" pre="" w t v skip=0 n=0
   [ -n "${KERN_ALIASES-}" ] || return 1
   while :; do
     rest=${rest#"${rest%%[!"$_ALIAS_BLANK"]*}"}
     w=${rest%%["$_ALIAS_BLANK"]*}
-    case "$w" in '' | *[\"\'\\\$\`]*) return 1 ;; esac
+    case "$w" in
+      '') return 1 ;;
+      *[\"\'\\\$\`]*)
+        [ "$skip" = 0 ] || return 1
+        case "$w" in *=*) ;; *) return 1 ;; esac
+        t=${w%%=*}
+        t=${t%+}
+        case "$t" in '' | [0123456789]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;; esac
+        { IFS= read -r pre || :; IFS= read -r w || :; IFS= read -r rest || :; } <<EOF
+$(printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_ALIAS_HEAD_AWK")
+EOF
+        [ -n "$w" ] || return 1
+        rest="$w$rest"
+        break
+        ;;
+    esac
     if [ "$skip" = 1 ]; then
       skip=0
     else
@@ -217,12 +274,17 @@ alias_expand() {
   _alias_var "$w" v || return 1
   pre="$pre${!v}"
   rest=${rest#"$w"}
-  while [ "$n" -lt 8 ]; do
+  while :; do
     case "$pre" in *' ') ;; *) break ;; esac
     t=${rest#"${rest%%[!"$_ALIAS_BLANK"]*}"}
     w=${t%%["$_ALIAS_BLANK"]*}
     case "$w" in '' | *[\"\'\\\$\`]*) break ;; esac
     _alias_var "$w" v || break
+    if [ "$n" -ge 8 ]; then
+      # shellcheck disable=SC2016 # a literal $, for G00
+      pre="$pre"'$KERN_ALIAS_PAST_8 '
+      break
+    fi
     pre="$pre${!v}"
     rest=${t#"$w"}
     n=$((n + 1))
