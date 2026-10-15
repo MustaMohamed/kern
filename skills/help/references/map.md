@@ -11,6 +11,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | `unslop` | slash | The kernel's Reply rule, technical-writing step 5, or `/kern:unslop` | Rules for prose others read |
 | `prove-it` | auto | Its description; routed row "About to say done, fixed or passing, commit, or open a PR" | Evidence before any done, fixed or passing |
 | `implement` | path | Routed row "One bounded change with an agreed design"; /kern:implement | Thin slices, test first, full suite |
+| `diagnose` | path | Routed row "Bug, failing test, unexpected output"; /kern:diagnose | Root cause before any fix |
 
 ## Close calls
 - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
