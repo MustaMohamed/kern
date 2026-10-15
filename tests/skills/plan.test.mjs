@@ -82,9 +82,13 @@ test('plan pins order, routing and stop rules', () => {
     'A yes with a change request: make it, show it, ask again',
     'A reply that is no explicit yes or names no choice: ask again',
     '`tracker`, `tracker.first`',
+    'Under autopilot a step 1 stop parks: give the `parked:` line in the reply and create no plan file',
+    'the split, never a plan over `scope_threshold`',
+    'Draft tracker sub-issues only on request',
+    'execute-plan runs only an approved plan',
     'every stop parks',
     'the step 4 spike is not run and the step 7 scope question takes its default',
     'under Open questions in the plan and in the reply',
   ]);
-  assertContains('skills/plan/references/plan-template.md', ['## Open questions', 'branch or SHA plus the evidence', '`parked: <question>; default: <choice>; why: <one line>`']);
+  assertContains('skills/plan/references/plan-template.md', ['## Open questions', 'branch or SHA plus the evidence', '`parked: <question>; default: <choice>; why: <one line>`', 'every acceptance number covered', 'one line per `checklists` item in each', 'regression check that runs the same scenario on base and head']);
 });

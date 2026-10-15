@@ -1,6 +1,6 @@
 # Plan template
 
-Copy from the first `---` line to the end into `WORK/plans/<slug>.md`. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` checks the result.
+Copy from the first `---` line to the end into `WORK/plans/<slug>.md`. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` checks the result: structure, ordering of shared files and services, each consumed name blocked by its producer, every acceptance number covered.
 
 ---
 status: draft
@@ -35,4 +35,4 @@ A spike's answer: the branch or SHA plus the evidence. Under autopilot, each `pa
 
 ### Task 1: <name>
 
-(Tasks follow `task-template.md`. Put a checkpoint step every 2 or 3 tasks.)
+(Tasks follow `task-template.md`, one line per `checklists` item in each. Put a checkpoint step every 2 or 3 tasks, and add a regression check that runs the same scenario on base and head.)
