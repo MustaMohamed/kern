@@ -27,7 +27,7 @@ test('plan sections and steps', () => {
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
-  assertHeadings('skills/plan/references/plan-template.md', ['# Plan template', '## Global Constraints', '## Review Focus', '## File map']);
+  assertHeadings('skills/plan/references/plan-template.md', ['# Plan template', '## Global Constraints', '## Review Focus', '## Open questions', '## File map']);
   assertContains('skills/plan/references/plan-template.md', ['Copy from the first `---` line to the end', 'status: draft', 'approved: (set only on an explicit yes', 'execution:', 'commits: ask', '### Task 1:', 'Always, Ask first, Never']);
   assertMaxBytes('skills/plan/references/plan-template.md', 2200);
   assertHeadings('skills/plan/references/task-template.md', ['# Task template', '### Task N: <name>']);
@@ -60,4 +60,31 @@ test('plan pins its approval, lookup and autopilot rules', () => {
   ]);
   assertContains('skills/plan/references/task-template.md', ['as a leading list of numbers or ranges such as `1, 3-4`', 'plan-check parses only that list']);
   assertContains('skills/plan/references/plan-review.md', ['`Verdict: approve | revise`', 'Round 1 only']);
+});
+
+test('plan pins order, routing and stop rules', () => {
+  const { body } = readDoc(SKILL);
+  const s = steps(body);
+  const w = s[11].indexOf('kern-dir plans');
+  assert.ok(w >= 0 && w < s[11].indexOf('scripts/plan-check'), 'step 11 writes the plan before it runs plan-check');
+  assert.ok(!s[12].includes('kern-dir plans') && !s[12].includes('Write tool'), 'step 12 writes nothing new');
+  assertContains(SKILL, [
+    'A plan for this spec exists: update it in place',
+    'An unfinished plan for other work: stop and ask',
+    'issue acceptance criteria alone are not approved (its bounded path records them as an approved short spec)',
+    '(no issue id: the slug or title words)',
+    'else stop and ask the user to confirm the scope or split',
+    'Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel',
+    'round 1 only',
+    'each demoable on its own',
+    'the contract task blocked by every migrate batch',
+    'Record its answer under Open questions as the branch or SHA plus the evidence',
+    'A yes with a change request: make it, show it, ask again',
+    'A reply that is no explicit yes or names no choice: ask again',
+    '`tracker`, `tracker.first`',
+    'every stop parks',
+    'the step 4 spike is not run and the step 7 scope question takes its default',
+    'under Open questions in the plan and in the reply',
+  ]);
+  assertContains('skills/plan/references/plan-template.md', ['## Open questions', 'branch or SHA plus the evidence', '`parked: <question>; default: <choice>; why: <one line>`']);
 });

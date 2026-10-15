@@ -24,6 +24,10 @@ The spec's Constraints lines (Always, Ask first, Never), verbatim, then one line
 
 Inputs or conditions the spec implies but no test exercises, most likely first, each naming the task whose test pins it.
 
+## Open questions
+
+A spike's answer: the branch or SHA plus the evidence. Under autopilot, each `parked: <question>; default: <choice>; why: <one line>` line. Else none.
+
 ## File map
 
 | Path | Task | Responsibility |
