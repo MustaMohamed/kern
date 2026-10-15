@@ -21,7 +21,7 @@ Updated 2026-10-14 for the M2 split: M2a (`docs/plans/2026-10-14-kern-m2a-plan.m
 | `self-review` | path | M2a | at most 7 KB, 4.3 planned (+5 KB refs) | Author's pre-PR check and verdict |
 | `commit` | slash | M2a | at most 5.2 KB, 4.0 planned | Commit named files to the project convention |
 | `finish-branch` | slash | M2a | at most 5 KB, 4.6 planned (+1.5 KB ref) | Verify, review, then commit / push / draft PR / keep |
-| `recall` | auto | M2a | at most 6.5 KB, 4.7 planned (+2 KB ref) | Rebuild state across sessions; `recall chat` for this thread |
+| `recall` | auto | M2a | at most 7.2 KB, 4.7 planned (+2 KB ref) | Rebuild state across sessions; `recall chat` for this thread |
 | agent `implementer` | agent | M2a | 4 KB | One task in one worktree, test first, status contract |
 | agent `task-reviewer` | agent | M2a | 4.5 KB | Read-only: spec verdict, then quality verdict |
 | agent `investigator` | agent | M2a | 2.5 KB | Read-only cited evidence for define, plan, diagnose |
@@ -796,7 +796,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/recall.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** LOC recall (adapted from PS recall), PS ketchup, SP diagnosing-superpowers context-safety. Hard-coded MoneyApp and infinito sources in LOC become `tracker` and `workflow_records`. SKILL.md at most 6,500 bytes; `references/transcripts.md` at most 2,200 bytes (the plan's cap).
+**8. Sources; size.** LOC recall (adapted from PS recall), PS ketchup, SP diagnosing-superpowers context-safety. Hard-coded MoneyApp and infinito sources in LOC become `tracker` and `workflow_records`. SKILL.md at most 7,200 bytes (raised from 6,500 in M2a Task 28: every source exit goes to Sources skipped, and the `[unverified, <source> unavailable]` tag); `references/transcripts.md` at most 2,200 bytes (the plan's cap).
 
 ---
 ## D. Agents
