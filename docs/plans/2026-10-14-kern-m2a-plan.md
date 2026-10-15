@@ -9168,4 +9168,11 @@ If Step 6 ran, add `evals/snapshots` to the `git add` line. Create the tag the r
 
 ## Tasks added during execution
 
-(None yet. A task added during execution goes here with its reason, as in the M1 plan.)
+### Task 35: Guard context that predates aliases (added during execution)
+
+Reason: the Task 33 review (opus) found three autopilot loosenings that predate Task 33. Under autopilot, `noglob eval 'git push --force origin main'`, `nocorrect eval`, `repeat 1 eval`, `coproc eval` and `noglob sh <<EOF` get no vote, because `_cmd_words` does not read zsh's precommand modifiers. G6 turns its secret deny into an ask after any `cd`. G16 clears `in_sd` and `_G16_INCC` on a `cd` whose target it cannot know, so `cd ~/.claude && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json` gets no vote. Each fix runs before the 0.3.0 release, with its own review.
+
+- `_cmd_words` reads through `noglob`, `nocorrect`, `repeat N` and `coproc` as precommand modifiers, so the guards judge the command after them.
+- G6 keeps scanning CWD after a `cd`: the deny stays, and the "could not scan" ask is added.
+- G16 keeps `in_sd` and `_G16_INCC` across a `cd` whose target is unknown.
+- Tests: each command above is denied under autopilot, and the full hook suite still passes.
