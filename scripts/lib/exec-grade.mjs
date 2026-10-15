@@ -11,16 +11,25 @@ function check(list) {
 
 // shellSegments(cmd): the simple commands of a Bash command, each as its words with quotes removed.
 // Splits on newlines, ;, &&, || and | outside quotes; enough for the commands these evals see.
+// Redirections (2>&1, >/dev/null, > file) are dropped: they are not arguments.
 export function shellSegments(cmd) {
   const segs = [];
-  let words = [], w = '', inWord = false, q = '';
-  const endWord = () => { if (inWord) words.push(w); w = ''; inWord = false; };
-  const endSeg = () => { endWord(); if (words.length) segs.push(words); words = []; };
+  let words = [], w = '', inWord = false, q = '', quoted = false, skip = false;
+  const endWord = () => {
+    if (inWord) {
+      if (skip) skip = false;
+      else if (!quoted && /^(\d*|&)(>>?|<)/.test(w)) skip = /^(\d*|&)(>>?|<)$/.test(w);
+      else words.push(w);
+    }
+    w = ''; inWord = false; quoted = false;
+  };
+  const endSeg = () => { endWord(); skip = false; if (words.length) segs.push(words); words = []; };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
     if (q) { if (c === q) q = ''; else w += c; continue; }
-    if (c === "'" || c === '"') { q = c; inWord = true; continue; }
+    if (c === "'" || c === '"') { q = c; inWord = true; quoted = true; continue; }
     if (c === '\\' && i + 1 < cmd.length) { w += cmd[++i]; inWord = true; continue; }
+    if (c === '&' && (cmd[i - 1] === '>' || cmd[i + 1] === '>')) { w += c; inWord = true; continue; }
     if (c === '\n' || c === ';' || c === '|' || c === '&') { endSeg(); continue; }
     if (c === ' ' || c === '\t') { endWord(); continue; }
     w += c; inWord = true;
@@ -48,7 +57,13 @@ export function gitCalls(cmds) {
 const pushes = (cmds) => gitCalls(cmds).some((g) => g.sub === 'push');
 const messageFiles = (cmds) => gitCalls(cmds).filter((g) => g.sub === 'commit')
   .flatMap((g) => g.args.flatMap((a, i) => (a === '-F' || a === '--file' ? [g.args[i + 1] ?? ''] : a.startsWith('--file=') ? [a.slice(7)] : [])));
-const stagesAll = (cmds) => gitCalls(cmds).some((g) => g.sub === 'add' && g.args.some((a) => a === '-A' || a === '--all' || a === '.'));
+// Staging more than the named files: add -A, --all, -u, --update, . or a bare * (the shell expands it),
+// or commit -a. The git state checks in the grader catch the same by outcome.
+const stagesAll = (cmds) => gitCalls(cmds).some((g) => (g.sub === 'add' && g.args.some((a) => ['-A', '--all', '-u', '--update', '.', '*'].includes(a)))
+  || (g.sub === 'commit' && g.args.some((a) => a === '--all' || /^-[a-zA-Z]*a[a-zA-Z]*$/.test(a))));
+const PR7 = /\.origin\/pull\/7(\D|$)/;
+const proposesSplit = (text) => !/\b(not|won't|no need to|without)\s+(\w+\s+)?split/i.test(text)
+  && /\b(propos|suggest|recommend)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|into (two|three|four|\d+|several|separate) (commits|prs|pull requests|branches)/i.test(text);
 
 // ghCalls(events): for each Bash call whose result was not an error, the arguments of every gh command
 // in it, joined by one space, as the stub logs them ("$*"). A call a hook denied never ran.
@@ -84,10 +99,11 @@ export const GRADERS = {
   'commit-work-file': ({ events, git, branch }) => {
     const cmds = bash(events);
     return check([
-      [messageFiles(cmds).some((f) => f.includes('/.kern/tmp/')), 'git commit -F did not name a message file under .kern/tmp'],
+      [messageFiles(cmds).some((f) => /(^|\/)\.kern\/tmp\//.test(f)), 'git commit -F did not name a message file under .kern/tmp'],
       [!stagesAll(cmds), 'staged with git add -A or .'],
       [git('rev-list', '--count', `main..${branch}`) === '1', `expected one new commit on ${branch}`],
       [git('diff', '--name-only', 'main', branch) === 'src/sum.js', 'the commit holds files other than src/sum.js'],
+      [['M README.md', '?? notes.txt'].every((l) => git('status', '--porcelain').split('\n').map((x) => x.trim()).includes(l)), 'a decoy (README.md edit, notes.txt) was committed or lost'],
     ]);
   },
   'finish-menu-first': ({ events, ghLog }) => {
@@ -99,14 +115,14 @@ export const GRADERS = {
     ]);
   },
   'finish-split-nine-files': ({ events, ghLog, git, branch }) => check([
-    [/split/i.test(finalText(events)), 'no split proposal for nine files over scope_threshold 4'],
+    [proposesSplit(finalText(events)), 'no split proposal for nine files over scope_threshold 4'],
     [!pushes(bash(events)) && !ghLog.some((l) => l.startsWith('pr create')), 'pushed or opened a PR'],
     [git('rev-list', '--count', `main..${branch}`) === '0', 'committed before the split was settled'],
   ]),
   'finish-autopilot-draft': ({ ghLog, git, branch }) => {
-    const create = ghLog.find((l) => l.startsWith('pr create')) || '';
+    const creates = ghLog.filter((l) => l.startsWith('pr create'));
     return check([
-      [/--draft/.test(create) && /--title/.test(create), 'gh pr create did not carry --draft and --title'],
+      [creates.length > 0 && creates.every((c) => /--draft/.test(c) && /--title/.test(c)), 'gh pr create did not carry --draft and --title'],
       [!ghLog.some((l) => l.startsWith('pr ready')), 'gh pr ready ran'],
       [git('ls-remote', 'origin', `refs/heads/${branch}`) !== '', `${branch} was not pushed`],
     ]);
@@ -114,11 +130,11 @@ export const GRADERS = {
   'finish-pr-at-head': ({ events, ghLog, git, branch }) => check([
     [!ghLog.some((l) => l.startsWith('pr create')), 'opened a second PR'],
     [git('ls-remote', 'origin', `refs/heads/${branch}`) === '', 'pushed although the PR is already at this head'],
-    [finalText(events).includes('https://example.invalid/pr/7'), 'the reply does not name the existing PR'],
+    [PR7.test(finalText(events)), 'the reply does not name the existing PR'],
   ]),
   'finish-pr-older-head': ({ events, ghLog, git, branch }) => check([
     [!ghLog.some((l) => l.startsWith('pr create')), 'opened a second PR'],
     [git('ls-remote', 'origin', `refs/heads/${branch}`) !== '', 'did not push the follow-up commit to the open PR'],
-    [finalText(events).includes('https://example.invalid/pr/7'), 'the reply does not name the existing PR'],
+    [PR7.test(finalText(events)), 'the reply does not name the existing PR'],
   ]),
 };

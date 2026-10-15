@@ -31,6 +31,10 @@ GH
 
 decide() {
   run_guard "$(bash_payload "$1")"
+  if [ "$status" -ne 0 ]; then
+    echo "crash:$status"
+    return 0
+  fi
   decision_of "$output"
 }
 

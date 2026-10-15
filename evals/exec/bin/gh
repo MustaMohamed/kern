@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 # gh stand-in for the exec evals: logs every call to $KERN_EXEC_LOG and answers from $KERN_EXEC_PR
 # (none, open-at-head or open-older). It never reaches a network; a call it does not know fails.
+# PR URLs are file://<origin path>/pull/<n>: finish-branch counts a PR only if its URL is this repo's
+# (`git remote get-url origin`), so the URL has to contain the origin path to be believed.
 printf '%s\n' "$*" >>"${KERN_EXEC_LOG:?KERN_EXEC_LOG is not set}"
-pr_json() { printf '[{"number":7,"state":"OPEN","headRefOid":"%s","url":"https://example.invalid/pr/7"}]\n' "$1"; }
+origin=$(git remote get-url origin 2>/dev/null) || origin=
+pr_url() {
+  [ -n "$origin" ] || { echo "gh stub: no origin remote here" >&2; return 1; }
+  printf 'file://%s/pull/%s' "$origin" "$1"
+}
+pr_json() { printf '[{"number":7,"state":"OPEN","headRefOid":"%s","url":"%s"}]\n' "$1" "$(pr_url 7)"; }
 case "$1 $2" in
   "pr list")
     case "${KERN_EXEC_PR:-none}" in
@@ -11,8 +18,8 @@ case "$1 $2" in
       *) case "$*" in *--jq*) ;; *) echo '[]' ;; esac ;;
     esac
     ;;
-  "pr create") echo "https://example.invalid/pr/8" ;;
-  "pr view") echo '{"number":7,"state":"OPEN","url":"https://example.invalid/pr/7"}' ;;
+  "pr create") pr_url 8 || exit 1; echo ;;
+  "pr view") url=$(pr_url 7) || exit 1; printf '{"number":7,"state":"OPEN","url":"%s"}\n' "$url" ;;
   "api user") echo dev ;;
   "auth status") echo "Logged in to example.invalid account dev" ;;
   *) echo "gh stub: unhandled call: $*" >&2; exit 1 ;;

@@ -1,9 +1,9 @@
 // Run Claude Code headless on a fixture project, isolated from the host: no user settings (so no user
 // plugins or hooks), no MCP servers, no saved session. Shared by exec-eval (M2a) and the M2b runners.
 import { spawnSync, execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, renameSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 export const ISOLATION = ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'];
 // A headless run cannot answer a permission prompt, and the isolation flags drop the user's allow rules, so
@@ -12,6 +12,17 @@ export const ISOLATION = ['--setting-sources', 'project', '--strict-mcp-config',
 export const PERMISSIONS = ['--permission-mode', 'acceptEdits', '--allowedTools', 'Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite'];
 
 const SETUP_TIMEOUT_MS = 60 * 1000;
+
+// The only parent variables a run inherits: the shell basics, and the auth and config Claude Code reads.
+// Every other credential in the caller's shell (GITHUB_TOKEN, AWS_*, ...) stays out.
+const INHERITED = /^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|LANG|TERM)$|^LC_|^ANTHROPIC_|^CLAUDE_CODE_/;
+
+// childEnv(parent, extra): the inherited variables of parent, then extra on top.
+export function childEnv(parent, extra = {}) {
+  const env = {};
+  for (const [k, v] of Object.entries(parent)) if (INHERITED.test(k) && v !== undefined) env[k] = v;
+  return { ...env, ...extra };
+}
 
 // A child that could not run, or was cut off, is never a result. fatal: every later run would fail the
 // same way (no claude binary, not executable), so the caller stops instead of grading the rest.
@@ -51,22 +62,45 @@ export function workspace(fixtureDir, { name = 'app', origin = false, branch = '
 }
 
 // runClaude: one headless run; each prompt is one user turn, sent as stream-json on stdin. Throws
-// ClaudeRunError when claude is missing, not executable (126, 127), killed by the timeout or a signal.
-// A non-zero exit is returned in status for the caller to fail on; it is never a pass.
-// The run is capped by dollars (--max-budget-usd): this Claude Code lists no turn cap in `claude --help`.
-export function runClaude({ cwd, prompts, pluginDirs = [], model, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000 }) {
+// ClaudeRunError when cwd is not under the OS temp dir (the run has unrestricted Bash), claude is
+// missing, not executable (126, 127), killed by the timeout or a signal. The child sees childEnv(), not
+// the caller's whole environment. A non-zero exit is returned in status; use runProblem() to decide
+// whether the run may be graded. Capped by turns (--max-turns, which `claude --help` does not list but
+// the CLI reference documents) and by dollars (--max-budget-usd).
+export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000 }) {
   if (!model) throw new ClaudeRunError('runClaude needs a model', true);
+  const root = realpathSync(tmpdir());
+  let real;
+  try { real = realpathSync(cwd); } catch (e) { throw new ClaudeRunError(`cwd ${cwd} is not usable: ${e.message}`, true); }
+  if (!real.startsWith(root + sep)) throw new ClaudeRunError(`refusing to run in ${real}: not under ${root}`, true);
   const argv = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
-    '--model', model, '--max-budget-usd', String(maxBudgetUsd), ...PERMISSIONS, ...ISOLATION, ...pluginDirs.flatMap((d) => ['--plugin-dir', d])];
+    '--model', model, '--max-turns', String(maxTurns), '--max-budget-usd', String(maxBudgetUsd), ...PERMISSIONS, ...ISOLATION, ...pluginDirs.flatMap((d) => ['--plugin-dir', d])];
   const input = prompts.map((text) => JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } })).join('\n') + '\n';
-  const run = spawnSync('claude', argv, { cwd, input, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...env } });
+  const run = spawnSync('claude', argv, { cwd, input, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: childEnv(process.env, env) });
   if (run.error?.code === 'ENOENT') throw new ClaudeRunError('claude is not on PATH', true);
   if (run.error?.code === 'ETIMEDOUT') throw new ClaudeRunError(`claude timed out after ${timeoutMs} ms`);
   if (run.error) throw new ClaudeRunError(`claude could not run: ${run.error.message}`, true);
   if (run.status === 126 || run.status === 127) throw new ClaudeRunError(`claude exited ${run.status}: ${(run.stderr || '').trim()}`, true);
   if (run.status === null) throw new ClaudeRunError(`claude was killed by ${run.signal}`);
-  const events = (run.stdout || '').split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });
-  return { argv, events, status: run.status, stderr: run.stderr || '' };
+  const events = [];
+  let badLines = 0;
+  for (const l of (run.stdout || '').split('\n').filter(Boolean)) {
+    try { events.push(JSON.parse(l)); } catch { badLines += 1; }
+  }
+  return { argv, events, badLines, status: run.status, stderr: run.stderr || '' };
+}
+
+// runProblem(run): why a run may not be graded, or '' when it may: a non-zero exit, a line that is not
+// JSON, no events, or no result event, or a result that is not a success (a turn or budget stop, an
+// error). A run that ended early reads as an invalid run, never as a failed or passed case.
+export function runProblem(run) {
+  if (run.status !== 0) return `claude exited ${run.status}: ${run.stderr.trim().split('\n').pop() || 'no stderr'}`;
+  if (run.badLines > 0) return `${run.badLines} line(s) of stdout were not JSON`;
+  if (run.events.length === 0) return 'claude printed no events';
+  const results = run.events.filter((e) => e?.type === 'result');
+  if (results.length === 0) return 'no result event: the run was cut off';
+  const bad = results.find((e) => e.subtype !== 'success' || e.is_error === true);
+  return bad ? `the run ended with ${bad.subtype ?? 'a result with no subtype'}${bad.is_error === true ? ' (is_error)' : ''}` : '';
 }
 
 // toolUses(events): every tool call in order, { name, input }.

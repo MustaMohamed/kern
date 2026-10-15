@@ -1,6 +1,6 @@
 [
   { "id": "commit-work-file", "autopilot": true, "branch": "feat/sum",
-    "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"],
+    "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js", "printf 'scratch\\n' > notes.txt", "printf 'todo\\n' >> README.md"],
     "turn": "/kern:commit src/sum.js" },
   { "id": "finish-menu-first", "autopilot": false, "branch": "feat/sum",
     "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"],

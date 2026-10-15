@@ -3,17 +3,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GRADERS, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
-import { ISOLATION, PERMISSIONS, ClaudeRunError, runClaude } from '../scripts/lib/claude-run.mjs';
+import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem } from '../scripts/lib/claude-run.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
 const git = (answers) => (...a) => answers[a.join(' ')] ?? '';
-const oneCommit = git({ 'rev-list --count main..feat/sum': '1', 'diff --name-only main feat/sum': 'src/sum.js' });
+const DECOYS = 'M README.md\n?? notes.txt';
+const oneCommit = git({ 'rev-list --count main..feat/sum': '1', 'diff --name-only main feat/sum': 'src/sum.js', 'status --porcelain': DECOYS });
+const ORIGIN_PR = 'file:///w/app.origin/pull/7';
 
 test('commit: a -F message under .kern/tmp passes; a temp file outside it fails', () => {
   assert.equal(GRADERS['commit-work-file']({ events: [bash('git add -- src/sum.js'), bash('git commit -F /w/app/.kern/tmp/commit-msg')], git: oneCommit, branch: 'feat/sum' }).pass, true);
@@ -35,6 +37,42 @@ test('commit: the git -C forms the skill prescribes pass, and -A or . is rejecte
   assert.deepEqual(outside.reasons, ['git commit -F did not name a message file under .kern/tmp']);
   const inline = GRADERS['commit-work-file']({ events: [bash('git -C /w/app commit -m "feat: x"')], git: oneCommit, branch: 'feat/sum' });
   assert.deepEqual(inline.reasons, ['git commit -F did not name a message file under .kern/tmp']);
+});
+
+test('commit: a relative .kern/tmp message path is accepted', () => {
+  assert.equal(GRADERS['commit-work-file']({ events: [bash('git -C /w/app commit -F .kern/tmp/commit-msg')], git: oneCommit, branch: 'feat/sum' }).pass, true);
+});
+
+test('commit: commit -a, add -u and add * fail, by command and by outcome (the decoys are committed)', () => {
+  const swept = git({ 'rev-list --count main..feat/sum': '1', 'diff --name-only main feat/sum': 'README.md\nsrc/sum.js', 'status --porcelain': '?? notes.txt' });
+  const msg = 'git -C /w/app commit -F /w/app/.kern/tmp/commit-msg';
+  for (const stage of ['git -C /w/app commit -a -F /w/app/.kern/tmp/commit-msg', 'git -C /w/app commit -am x', 'git -C /w/app add -u', 'git -C /w/app add -- *', 'git -C /w/app add --update']) {
+    const r = GRADERS['commit-work-file']({ events: [bash(stage), bash(msg)], git: swept, branch: 'feat/sum' });
+    assert.equal(r.pass, false, stage);
+    assert.ok(r.reasons.includes('the commit holds files other than src/sum.js'), stage);
+  }
+  const byState = GRADERS['commit-work-file']({ events: [bash('git -C /w/app add -- src/sum.js'), bash(msg)], git: swept, branch: 'feat/sum' });
+  assert.deepEqual(byState.reasons, ['the commit holds files other than src/sum.js', 'a decoy (README.md edit, notes.txt) was committed or lost']);
+});
+
+test('shellSegments drops redirections, so 2>&1 and >/dev/null are not arguments', () => {
+  assert.deepEqual(shellSegments('gh pr list --head b --json number 2>&1'), [['gh', 'pr', 'list', '--head', 'b', '--json', 'number']]);
+  assert.deepEqual(shellSegments('gh pr list > /dev/null 2>/dev/null && git push &> /tmp/x'), [['gh', 'pr', 'list'], ['git', 'push']]);
+  assert.deepEqual(shellSegments("gh pr create --title '> not a redirect'"), [['gh', 'pr', 'create', '--title', '> not a redirect']]);
+  const ran = [{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'gh pr list --head b 2>&1' } }] } }];
+  assert.deepEqual(stubMissed(ran, ['pr list --head b']), []);
+});
+
+test('finish-branch: every gh pr create must carry --draft and --title; the split needs a proposal', () => {
+  const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc' });
+  const r = GRADERS['finish-autopilot-draft']({ ghLog: ['pr create --draft --title t --base main', 'pr create --title t --base main'], git: g, branch: 'feat/sum' });
+  assert.deepEqual(r.reasons, ['gh pr create did not carry --draft and --title']);
+  assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: [], git: g, branch: 'feat/sum' }).pass, false, 'no create at all');
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  const verdict = (text) => GRADERS['finish-split-nine-files']({ events: [say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
+  assert.equal(verdict('Nine files is over scope_threshold 4. I propose a split into two PRs.'), true);
+  assert.equal(verdict('I will not split this; going ahead.'), false);
+  assert.equal(verdict('Nine files, nothing else to say.'), false);
 });
 
 test('gitCalls drops -C and -c, reads past && and ;, and ignores other commands', () => {
@@ -68,7 +106,7 @@ test('finish-branch under autopilot: the draft PR carries --draft and --title, a
 test('finish-branch: a PR at this head stops; one at an older head gets the push', () => {
   const none = git({});
   const pushed = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum' });
-  const said = [say('PR https://example.invalid/pr/7 is already open at this head.')];
+  const said = [say(`PR ${ORIGIN_PR} is already open at this head.`)];
   assert.equal(GRADERS['finish-pr-at-head']({ events: said, ghLog: ['pr list'], git: none, branch: 'feat/sum' }).pass, true);
   assert.equal(GRADERS['finish-pr-at-head']({ events: said, ghLog: ['pr create --draft'], git: none, branch: 'feat/sum' }).pass, false);
   assert.equal(GRADERS['finish-pr-older-head']({ events: said, ghLog: ['pr list'], git: pushed, branch: 'feat/sum' }).pass, true);
@@ -112,33 +150,81 @@ function fakeClaude(body) {
   chmodSync(join(dir, 'claude'), 0o755);
   return { PATH: `${dir}:/usr/bin:/bin` };
 }
-const attempt = (env, extra = {}) => () => runClaude({ cwd: tmpdir(), prompts: ['hi'], model: 'm', env, ...extra });
+const work = () => mkdtempSync(join(tmpdir(), 'wk-'));
+const attempt = (env, extra = {}) => () => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env, ...extra });
 
 test('runClaude: a missing binary, exit 126 or 127, a timeout and a signal all throw; none is a result', () => {
   assert.throws(attempt({ PATH: '/nonexistent' }), (e) => e instanceof ClaudeRunError && e.fatal && /not on PATH/.test(e.message));
   for (const code of [126, 127]) assert.throws(attempt(fakeClaude(`echo boom >&2; exit ${code}`)), (e) => e.fatal && e.message.includes(`exited ${code}`) && e.message.includes('boom'));
   assert.throws(attempt(fakeClaude('sleep 5'), { timeoutMs: 200 }), (e) => e instanceof ClaudeRunError && !e.fatal && /timed out/.test(e.message));
   assert.throws(attempt(fakeClaude('kill -9 $$')), (e) => e instanceof ClaudeRunError && /killed by SIGKILL/.test(e.message));
-  assert.throws(() => runClaude({ cwd: tmpdir(), prompts: ['hi'], env: {} }), /needs a model/);
+  assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], env: {} }), /needs a model/);
 });
 
 test('runClaude: a non-zero exit is returned for the caller to fail on, with stdin as stream-json turns and the budget cap', () => {
   const r = attempt(fakeClaude('cat > "$0.in"; echo "$@" > "$0.argv"; echo \'{"type":"result","result":"x"}\'; exit 3'))();
   assert.equal(r.status, 3);
   assert.deepEqual(r.events, [{ type: 'result', result: 'x' }]);
-  assert.ok(r.argv.includes('--max-budget-usd') && !r.argv.includes('--max-turns'));
+  assert.deepEqual(r.argv.slice(r.argv.indexOf('--max-turns'), r.argv.indexOf('--max-turns') + 4), ['--max-turns', '12', '--max-budget-usd', '3']);
+  assert.ok(attempt(fakeClaude('exit 0'), { maxTurns: 30, maxBudgetUsd: 5 })().argv.join(' ').includes('--max-turns 30 --max-budget-usd 5'));
 });
 
 test('the gh stub logs every call, answers pr list from the case, and fails on a call it does not know', () => {
   const stub = fileURLToPath(new URL('../evals/exec/bin/gh', import.meta.url));
   const log = join(mkdtempSync(join(tmpdir(), 'gh-')), 'gh.log');
-  const gh = (...a) => spawnSync(stub, a, { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', KERN_EXEC_LOG: log, KERN_EXEC_PR: 'none' } });
+  const repo = mkdtempSync(join(tmpdir(), 'ghr-'));
+  spawnSync('git', ['-C', repo, 'init', '-q']);
+  spawnSync('git', ['-C', repo, 'remote', 'add', 'origin', `${repo}.origin`]);
+  const gh = (...a) => spawnSync(stub, a, { encoding: 'utf8', cwd: repo, env: { PATH: '/usr/bin:/bin', KERN_EXEC_LOG: log, KERN_EXEC_PR: 'none' } });
   assert.equal(gh('pr', 'list', '--json', 'state').stdout, '[]\n');
   assert.equal(gh('pr', 'list', '--state', 'all', '--json', 'state', '--jq', '.[].state').stdout, '');
-  assert.equal(gh('pr', 'create', '--draft').stdout, 'https://example.invalid/pr/8\n');
+  assert.equal(gh('pr', 'create', '--draft').stdout, `file://${repo}.origin/pull/8\n`, 'a PR URL carries the origin path');
+  assert.equal(gh('pr', 'view', '7').stdout, `{"number":7,"state":"OPEN","url":"file://${repo}.origin/pull/7"}\n`);
+  const bare = mkdtempSync(join(tmpdir(), 'nr-'));
+  const noOrigin = spawnSync(stub, ['pr', 'create'], { encoding: 'utf8', cwd: bare, env: { PATH: '/usr/bin:/bin', KERN_EXEC_LOG: log } });
+  assert.equal(noOrigin.status, 1, 'no origin, no invented URL');
   const odd = gh('repo', 'delete', 'x');
   assert.equal(odd.status, 1);
   assert.match(odd.stderr, /unhandled call: repo delete x/);
-  assert.equal(readFileSync(log, 'utf8').split('\n').filter(Boolean).length, 4);
+  assert.equal(readFileSync(log, 'utf8').split('\n').filter(Boolean).length, 6);
   assert.notEqual(spawnSync(stub, ['pr', 'list'], { env: { PATH: '/usr/bin:/bin' } }).status, 0, 'no log path, no run');
+});
+
+test('runClaude refuses a workspace outside the OS temp dir, or one that is the temp dir itself', () => {
+  const refuse = (cwd) => () => runClaude({ cwd, prompts: ['hi'], model: 'm', env: fakeClaude('exit 0') });
+  assert.throws(refuse(process.cwd()), (e) => e instanceof ClaudeRunError && e.fatal && /not under/.test(e.message));
+  assert.throws(refuse(tmpdir()), /not under/);
+  assert.throws(refuse(join(tmpdir(), 'no-such-dir-x')), (e) => e.fatal && /not usable/.test(e.message));
+  const inside = work();
+  mkdirSync(join(inside, 'sub'));
+  assert.equal(refuse(join(inside, 'sub'))().status, 0);
+});
+
+test('the child environment is an allowlist: auth and config in, other credentials out', () => {
+  const parent = { PATH: '/p', HOME: '/h', USER: 'u', LC_ALL: 'C', ANTHROPIC_API_KEY: 'k', CLAUDE_CODE_OAUTH_TOKEN: 't', GITHUB_TOKEN: 'g', AWS_SECRET_ACCESS_KEY: 's', SSH_AUTH_SOCK: '/s', GH_TOKEN: 'real' };
+  assert.deepEqual(childEnv(parent, { GH_TOKEN: 'invalid', GH_HOST: 'example.invalid', KERN_EXEC_LOG: '/l' }),
+    { PATH: '/p', HOME: '/h', USER: 'u', LC_ALL: 'C', ANTHROPIC_API_KEY: 'k', CLAUDE_CODE_OAUTH_TOKEN: 't', GH_TOKEN: 'invalid', GH_HOST: 'example.invalid', KERN_EXEC_LOG: '/l' });
+});
+
+test('runClaude gives the child that allowlist, not the caller environment', () => {
+  const cwd = work();
+  process.env.GITHUB_TOKEN = 'leak-check';
+  try {
+    const r = runClaude({ cwd, prompts: ['hi'], model: 'm', env: fakeClaude('env > env.txt; exit 0') });
+    assert.equal(r.status, 0);
+  } finally { delete process.env.GITHUB_TOKEN; }
+  const seen = readFileSync(join(cwd, 'env.txt'), 'utf8');
+  assert.ok(!seen.includes('GITHUB_TOKEN') && !seen.includes('leak-check'));
+  assert.match(seen, /^PATH=/m);
+});
+
+test('runProblem: only a clean exit with a success result may be graded', () => {
+  const run = (body) => attempt(fakeClaude(body))();
+  assert.match(runProblem(run('exit 0')), /printed no events/);
+  assert.match(runProblem(run('echo "not json"; exit 0')), /not JSON/);
+  assert.match(runProblem(run('echo \'{"type":"assistant","message":{"content":[]}}\'; exit 0')), /no result event/);
+  assert.match(runProblem(run('echo \'{"type":"result","subtype":"error_max_turns","is_error":false}\'; exit 0')), /error_max_turns/);
+  assert.match(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":true,"result":"x"}\'; exit 0')), /is_error/);
+  assert.match(runProblem(run('echo \'{"type":"result","subtype":"success"}\'; exit 2')), /exited 2/);
+  assert.equal(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":false,"result":"x"}\'; exit 0')), '');
 });

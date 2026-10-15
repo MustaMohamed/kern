@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, PERMISSIONS, ClaudeRunError, claudeVersion, runClaude, toolUses, workspace } from './lib/claude-run.mjs';
+import { ISOLATION, PERMISSIONS, ClaudeRunError, claudeVersion, runClaude, runProblem, toolUses, workspace } from './lib/claude-run.mjs';
 import { GRADERS, stubMissed } from './lib/exec-grade.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -33,7 +33,7 @@ for (const c of cases) {
     let run;
     try {
       run = runClaude({
-        cwd: dir, prompts, pluginDirs: [ROOT], model: MODEL,
+        cwd: dir, prompts, pluginDirs: [ROOT], model: MODEL, maxTurns: 30,
         env: { PATH: `${join(ROOT, 'evals', 'exec', 'bin')}:${process.env.PATH}`, KERN_EXEC_LOG: log, KERN_EXEC_PR: c.pr || 'none', GH_TOKEN: 'invalid', GH_HOST: 'example.invalid' },
       });
     } catch (e) {
@@ -46,9 +46,13 @@ for (const c of cases) {
     const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', timeout: 60 * 1000 }).trim();
     const missed = stubMissed(run.events, ghLog);
     let g;
-    if (run.status !== 0) g = { pass: false, invalid: true, reasons: [`claude exited ${run.status}: ${run.stderr.trim().split('\n').pop() || 'no stderr'}`] };
+    const problem = runProblem(run);
+    if (problem) g = { pass: false, invalid: true, reasons: [problem] };
     else if (missed.length) g = { pass: false, invalid: true, reasons: [`the stub never logged \`gh ${missed[0]}\`: the Bash tool did not see evals/exec/bin first on PATH`] };
-    else g = GRADERS[c.id]({ events: run.events, ghLog, git, branch: c.branch });
+    else {
+      try { g = GRADERS[c.id]({ events: run.events, ghLog, git, branch: c.branch }); }
+      catch (e) { g = { pass: false, invalid: true, reasons: [`grader error: ${e.message}`] }; }
+    }
     results.push({ id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status,
       commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command) });
     console.log(`${g.pass ? 'PASS' : g.invalid ? 'INVALID' : 'FAIL'} ${c.id}${g.pass ? '' : `: ${g.reasons.join('; ')}`}`);
@@ -57,7 +61,8 @@ for (const c of cases) {
     rmSync(`${dir}.origin`, { recursive: true, force: true });
   }
 }
-if (!dryRun) {
+if (!dryRun && only) console.log('--case run: no snapshot written; a full run writes it');
+if (!dryRun && !only) {
   const out = join(ROOT, 'evals', 'snapshots', `exec-${new Date().toISOString().slice(0, 10)}.json`);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify({ model: MODEL, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, results }, null, 2) + '\n');
