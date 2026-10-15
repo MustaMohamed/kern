@@ -40,3 +40,15 @@ test('define references', () => {
   }
   assertContains('skills/define/references/spec-template.md', ['Copy from the first `---` line to the end', '- Always:', '- Ask first:', '- Never:', 'form: short', 'the highest seam that already exists and the fewest seams']);
 });
+
+test('define pins its approval rules', () => {
+  const skill = readDoc(SKILL).raw;
+  const gate = 'ask for the yes as a typed reply in chat, never through AskUserQuestion';
+  assert.equal(skill.split(gate).length - 1, 2, 'the AskUserQuestion rule appears at both gates');
+  assertContains(SKILL, ['An AskUserQuestion answer records no prompt line', 'every path parks', 'After the user\'s yes message, leave the file untouched until the approval edit',
+    'run the same plan-check again', '${CLAUDE_PLUGIN_ROOT}/skills/define/references/spec-review.md', 'which G20 and plan read',
+    'dispatched in one message', 'A question that depends on an open one waits a round']);
+  assertContains('skills/define/references/interview.md', ['Two rounds without rising confidence: stop and say so', 'means the user gave up on the interview']);
+  assertContains('skills/define/references/spec-review.md', ['`Verdict: approve | revise`', 'Approve unless a gap would mislead planning']);
+  assertContains('skills/define/references/capability-map.md', ['approved before any module spec']);
+});

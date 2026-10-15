@@ -32,7 +32,7 @@ At high confidence, write back, in the user's words, in 5 to 8 lines:
 
 - Outcome, User, Why now, Success, Constraint, Out of scope.
 
-Then list what was said and what is assumed. Out of scope is required: half of misalignment is silent disagreement about what is not being built. Only an explicit yes approves, as a typed reply in chat. "Whatever you think" is delegation: re-ask with two concrete options. "Sounds good" and silence are not a yes: ask what they would refine. A recorded approval quotes one whole line of the user's message, verbatim. On a correction, fold it in and restate.
+Then list what was said and what is assumed. Out of scope is required: half of misalignment is silent disagreement about what is not being built. Only an explicit yes approves, as a typed reply in chat. "Whatever you think" is delegation: re-ask with two concrete options. "Sounds good" and silence are not a yes: ask what they would refine. Silence, then "okay, let's start", means the user gave up on the interview, not that they agree: stop and ask what you missed. A recorded approval quotes one whole line of the user's message, verbatim. On a correction, fold it in and restate.
 
 ## When to step back
 

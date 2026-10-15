@@ -75,7 +75,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `lessons` | none: proposals stay in chat | path | self-review, retro, correct |
 | `rule_bar` | 3 occurrences or 1 severe incident, 2 for a mechanism | text | retro, correct |
 | `model.implementer` | `sonnet` | model alias | execute-plan, parallel-work |
-| `model.reviewer` | `sonnet` | model alias | execute-plan |
+| `model.reviewer` | `sonnet` | model alias | define, execute-plan |
 | `model.final_review` | `opus` | model alias | execute-plan |
 | `model.investigator` | `sonnet` | model alias | define, plan, diagnose |
 | `model.miner` | `haiku` | model alias | recall |
