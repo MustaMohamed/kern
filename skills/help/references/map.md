@@ -17,6 +17,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | `parallel-work` | path | execute-plan and diagnose; /kern:parallel-work | One worktree per writer, integrate, re-test |
 | `execute-plan` | path | Routed row "Executing an agreed plan"; /kern:execute-plan | Run a plan with a ledger and two-verdict review |
 | `self-review` | path | Routed row "Review requested on your own diff, no PR yet"; /kern:self-review | Author's check before a PR |
+| `commit` | slash | /kern:commit | One commit of named files, or one per reviewed task, per the project's convention |
 
 ## Close calls
 - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.

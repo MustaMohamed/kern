@@ -17,6 +17,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - parallel-work: fan out with one worktree per writer, checked briefs and serial integration.
 - execute-plan: ledger, per-task worktree snapshots and two-verdict review without commits; approval, review and RED checked by scripts.
 - self-review: deterministic checks, built-in code-review at low effort, a spec lane, blast radius, probes, verdict.
+- commit: named files, convention-checked message from a file under .kern/tmp, one commit per reviewed task run as `git -C <worktree> commit`, no attribution by default.
 
 ## [0.2.1] - 2026-10-14
 
