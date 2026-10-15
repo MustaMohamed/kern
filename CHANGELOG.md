@@ -18,6 +18,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - execute-plan: ledger, per-task worktree snapshots and two-verdict review without commits; approval, review and RED checked by scripts.
 - self-review: deterministic checks, built-in code-review at low effort, a spec lane, blast radius, probes, verdict.
 - commit: named files, convention-checked message from a file under .kern/tmp, one commit per reviewed task run as `git -C <worktree> commit`, no attribution by default.
+- finish-branch: verify, self-review and size gate before the commit, push or draft PR menu; the PR has a title, a body under .kern/tmp and a dedup on the head commit. prove-it hands commits and PRs to these skills.
 
 ## [0.2.1] - 2026-10-14
 

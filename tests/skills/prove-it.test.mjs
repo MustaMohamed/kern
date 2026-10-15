@@ -33,3 +33,7 @@ test('evidence reference', () => {
 test('the M0 placeholder is gone', () => {
   for (const p of ['skills/hello', 'evals/cases/hello.json', 'evals/fixtures/hello']) assert.ok(!existsSync(join(ROOT, p)), `${p} removed`);
 });
+
+test('the gate hands a commit to commit and a push or PR to finish-branch', () => {
+  assertContains(SKILL, ['for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`']);
+});
