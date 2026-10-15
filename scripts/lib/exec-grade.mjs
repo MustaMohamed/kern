@@ -66,10 +66,13 @@ const PR7 = /\.origin\/pull\/7(\D|$)/;
 // (propose/suggest/recommend/consider ... split, "split into", "split this") and does not negate it
 // ("did not propose a split", "no split needed", "will not split", "no need to split").
 // A forecast is not a proposal: "will propose", "would flag", "a later step" describe what a step the run
-// never reached would do.
-const forecastsSplit = (text) => /\b(will|would|going to|gonna)\b[^.]*\b(propos|flag|suggest|recommend|split)|'ll\b[^.]*\b(propos|flag|suggest|recommend|split)|\b(later|next) step\b/i.test(text);
-const proposesSplit = (text) => !forecastsSplit(text) && !/\b(not|never|won't|without|no need to)\b[^.]*\bsplit|\bno\s+split/i.test(text)
-  && /\b(propos|suggest|recommend|consider)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|\bsplitting\b|into (two|three|four|\d+|several|separate|smaller) (commits|prs|pull requests|branches)/i.test(text);
+// never reached would do. Only the proposing verbs count, so "I'll show the menu" is not one.
+const forecastsSplit = (text) => /\b(will|would|going to|gonna)\b[^.]*\b(propos|flag|suggest|recommend)|'ll\b[^.]*\b(propos|flag|suggest|recommend)|\b(later|next) step\b/i.test(text);
+// A split offered to the user as a choice: "should I split", "Split (recommended)", "reply `split`".
+const offersSplit = (text) => /\b(should|shall) (I|we) split\b|\bwant me to split\b|\bsplit\b[^.\n]*\(recommended\)|\breply `?split`?/i.test(text);
+// An offer overrides the negation check: its other option ("No split: go on") is a label, not a refusal.
+const proposesSplit = (text) => !forecastsSplit(text) && (offersSplit(text) || (!/\b(not|never|won't|without|no need to)\b[^.]*\bsplit|\bno\s+split/i.test(text)
+  && /\b(propos|suggest|recommend|consider)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|\bsplitting\b|into (two|three|four|\d+|several|separate|smaller) (commits|prs|pull requests|branches)/i.test(text)));
 
 // ghCalls(events): for each Bash call whose result was not an error, the arguments of every gh command
 // in it, joined by one space, as the stub logs them ("$*"). A call a hook denied never ran.

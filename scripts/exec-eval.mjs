@@ -37,7 +37,8 @@ function runCase(c) {
     let run;
     try {
       run = runClaude({
-        cwd: dir, prompts, pluginDirs: [ROOT], model: MODEL, maxTurns: 30,
+        // 60 turns: finish-branch runs its proof and a whole self-review before the size gate, and 30 was reached; the $3 budget still caps spend.
+        cwd: dir, prompts, pluginDirs: [ROOT], model: MODEL, maxTurns: 60,
         env: { PATH: `${join(ROOT, 'evals', 'exec', 'bin')}:${process.env.PATH}`, KERN_EXEC_LOG: log, KERN_EXEC_PR: c.pr || 'none', GH_TOKEN: 'invalid', GH_HOST: 'example.invalid' },
       });
     } catch (e) {

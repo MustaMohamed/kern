@@ -333,3 +333,26 @@ test('finish-split-nine-files: a forecast is not a proposal, and a run that stop
   assert.equal(stoppedOnRedProof([...test('x', true)]), true);
   assert.equal(stoppedOnRedProof([{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'l', name: 'Bash', input: { command: 'ls' } }] } }, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'l', is_error: true, content: '' }] } }]), false, 'only a test command counts');
 });
+
+test('finish-split-nine-files: a split offered as a choice passes; a forecast of one still fails', () => {
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  const green = [
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'g', name: 'Bash', input: { command: 'npm test' } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'g', is_error: false, content: '' }] } },
+  ];
+  const grade = (text) => GRADERS['finish-split-nine-files']({ events: [...green, say(text)], ghLog: [], git: none, branch: 'feat/many' });
+  const offered = [
+    'Self-review verdict is `ready`, but the size gate stops the run, so nothing is committed or pushed yet.',
+    '**Size gate** - The diff is 10 files, +10/-1, against `scope_threshold` 4.',
+    '**Decision for you:** should I split this?',
+    '1. **Split (recommended):** commit and push the `sum.js` fix on its own, and keep `v1` to `v9` out of the PR.',
+    '2. **No split:** go on with all 10 files, then pick from the menu (commit, push, or draft PR).',
+    "Reply `split` or `no`. If `no`, I'll show the menu.",
+  ].join('\n\n');
+  assert.equal(grade(offered).pass, true, 'the reply rerun 3 produced');
+  assert.equal(grade('Should I split this? Reply split or no.').pass, true);
+  assert.equal(grade("I'll show the menu next.").pass, false, 'no split offered at all');
+  const forecast = 'I stopped at step 4 because `npm test` fails. A later step will also flag the size gate. Nine new files is above your `scope_threshold` of 4, so it will propose a split.';
+  assert.equal(grade(forecast).pass, false, 'the reply rerun 2 produced');
+  assert.equal(grade('Should I split this? A later step will propose it.').pass, false, 'an offer wrapped in a forecast');
+});
