@@ -496,10 +496,23 @@ bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:
 }
 
 @test "a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied" {
-  local nl=$'\n' cr=$'\r'
+  local nl=$'\n'
   K=$(kern_root)
   expect_hook "bash $K/hooks/prompt-\\${nl}submit" ". $K/hooks/lib/sta\\${nl}te.sh" "bash \"$K/hooks/prompt-\\${nl}submit\"" \
-    "cd hooks && bash prompt-\\${nl}submit" "bash $K/hooks/session-\\${cr}${nl}start"
+    "cd hooks && bash prompt-\\${nl}submit"
+}
+
+@test "an escaped backslash, or a backslash before CR LF, does not join the lines; the next line still asks" {
+  # bash ends the line after \\ and after \ CR, so a hooks path on the next line is a command of its own.
+  local nl=$'\n' cr=$'\r'
+  expect_hook "echo a\\\\${nl}hooks/lib/../prompt-submit < j.json" "echo a\\${cr}${nl}hooks/lib/../prompt-submit < j.json"
+}
+
+@test "a hooks directory on one line and a hook on the next still ask, as they did before lines were joined" {
+  local nl=$'\n'
+  expect_hook "cd hooks${nl}bash prompt-submit < j.json" "cd hooks\\\\${nl}bash prompt-submit < j.json" \
+    "ls hooks${nl}bash lib/../prompt-submit" "git log hooks/${nl}bash ./session-start" "cd hooks &&${nl}bash pre-tool-use" \
+    "echo hooks/${nl}. lib/state.sh"
 }
 
 @test "the APFS case folds of s and k inside a hook path are read as s and k; asks, and under autopilot is denied" {

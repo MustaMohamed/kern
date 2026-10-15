@@ -506,9 +506,10 @@ _g16_glob() {
 # autopilot. Running prompt-submit with a made-up prompt rewrites the user's last message and can turn
 # autopilot on, and state_set writes any key; a command that reads can run code too (git -c
 # core.fsmonitor=..., rg --pre, xargs sh -c), so no command is let through on the name it starts with.
-# The match is on the command text, in any case, with line continuations joined, the APFS folds of s
-# and k read as s and k, and quotes and backslashes taken out, so wrappers, -c strings, git config
-# values and xargs are all covered. It counts:
+# The match is on the command text, in any case, with the APFS folds of s and k read as s and k and
+# quotes and backslashes taken out, so wrappers, -c strings, git config values and xargs are all
+# covered. The vote is the strongest over every reading of the text (see _g16_hooks); _g16_hooks_read
+# matches one reading and counts:
 # - in the text (_G16_HOOK_AWK): a hook after hooks/, a .sh file under hooks/lib/, or state_set,
 #   _state_put or state_reset; a hook name elsewhere (a branch m2/session-start, a URL) is not hook code;
 # - in a word inside a hooks directory: a last part that names a hook or a hooks/lib file, holds a
@@ -524,16 +525,45 @@ _g16_glob() {
 # interpreter code that builds a hook path, a script written to disk and then run by name, and any
 # other spelling-level evasion beyond the forms above.
 _g16_hooks() {
-  local cmd t r w d c last names f ctx=0 inside hit=0
+  local cmd t hit=0 failed=0 nl=$'\n'
+  local -a readings
   cmd=$(ti_get command) || return 0
-  # A backslash before a newline, or before CR LF, joins the lines; the long s and the Kelvin sign
-  # read as s and k, for the prefilter and the awk alike; $'...' and $"..." read as plain quotes; then
-  # quotes and backslashes are taken out, in one tr pass and only when the text holds one.
-  t=${cmd//\\$'\r\n'/}
-  t=${t//\\$'\n'/}
-  _g16_fold "$t"
-  t=$_G16_F
-  t=${t//\$\'/}
+  _g16_fold "$cmd"
+  # Each reading is one way the shell may read the text, and every reading is matched. A step that
+  # normalises the text adds a reading and never changes the text another reading sees, so it cannot
+  # drop a vote; a future normalisation is one more reading here.
+  # Reading 1: the text as written.
+  readings=("$_G16_F")
+  # Reading 2: bash's line continuation. An escaped backslash (\\) is dropped first, then a backslash
+  # before a newline joins the lines; a backslash before CR LF does not, as in bash.
+  case "$_G16_F" in
+    *\\"$nl"*)
+      t=${_G16_F//\\\\/}
+      readings[1]=${t//\\$nl/}
+      ;;
+  esac
+  for t in "${readings[@]}"; do
+    _g16_hooks_read "$t"
+    case $? in
+      0) hit=1 ;;
+      2) failed=1 ;;
+    esac
+  done
+  if [ "$hit" = 1 ]; then
+    vote ask G16 "$_G16_HOOKS"
+  elif [ "$failed" = 1 ]; then
+    fail_closed "G16 could not read the command for kern's hook code"
+  fi
+  return 0
+}
+
+# _g16_hooks_read TEXT: exit 0 when one reading of a command, TEXT, names kern's hook code or a state
+# function (see _g16_hooks), 1 when it does not, 2 when awk could not read it.
+_g16_hooks_read() {
+  local t r w d c last names f ctx=0 inside hit=0
+  # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one tr pass
+  # and only when the text holds one.
+  t=${1//\$\'/}
   t=${t//\$\"/}
   case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
   case "$CWD" in */[Hh][Oo][Oo][Kk][Ss] | */[Hh][Oo][Oo][Kk][Ss]/*) ctx=1 ;; esac
@@ -542,11 +572,10 @@ _g16_hooks() {
     case "$t" in
       *[Hh][Oo][Oo][Kk][Ss]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | \
         *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[\*\?\[\{\(^#]*/*) ;;
-      *) return 0 ;;
+      *) return 1 ;;
     esac
   fi
-  r=$(printf '%s\n' "$t" | LC_ALL=C awk "$_G16_HOOK_AWK") ||
-    { fail_closed "G16 could not read the command for kern's hook code"; return 0; }
+  r=$(printf '%s\n' "$t" | LC_ALL=C awk "$_G16_HOOK_AWK") || return 2
   names=$_G16_HOOK_NAMES
   for f in "$KERN_ROOT"/hooks/lib/*.sh; do
     [ -e "$f" ] && names="$names ${f##*/}"
@@ -588,8 +617,7 @@ _g16_hooks() {
   } <<EOT
 $r
 EOT
-  [ "$hit" = 1 ] && vote ask G16 "$_G16_HOOKS"
-  return 0
+  [ "$hit" = 1 ]
 }
 
 # _g16_relay: a scheduled or relayed prompt whose text, after leading whitespace, opens with a mode
