@@ -15,6 +15,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - define: clarify, classify and get an explicit, quoted approval before code; specs carry a Constraints section.
 - plan: approved spec to ordered tasks with exact files and verify commands, checked by plan-check.
 - parallel-work: fan out with one worktree per writer, checked briefs and serial integration.
+- execute-plan: ledger, per-task worktree snapshots and two-verdict review without commits; approval, review and RED checked by scripts.
 
 ## [0.2.1] - 2026-10-14
 
