@@ -19,7 +19,7 @@ Updated 2026-10-14 for the M2 split: M2a (`docs/plans/2026-10-14-kern-m2a-plan.m
 | `diagnose` | path | M2a | at most 6.5 KB, 5.0 planned (+7 KB refs, 2 scripts) | Red-capable loop before any fix |
 | `prove-it` | auto | M2a | at most 3.6 KB, 3.3 planned (+1.8 KB ref) | Evidence before any "done" |
 | `self-review` | path | M2a | at most 7 KB, 4.3 planned (+5 KB refs) | Author's pre-PR check and verdict |
-| `commit` | slash | M2a | at most 4.2 KB, 4.0 planned | Commit named files to the project convention |
+| `commit` | slash | M2a | at most 5.2 KB, 4.0 planned | Commit named files to the project convention |
 | `finish-branch` | slash | M2a | at most 5 KB, 4.6 planned (+1.5 KB ref) | Verify, review, then commit / push / draft PR / keep |
 | `recall` | auto | M2a | at most 6.5 KB, 4.7 planned (+2 KB ref) | Rebuild state across sessions; `recall chat` for this thread |
 | agent `implementer` | agent | M2a | 4 KB | One task in one worktree, test first, status contract |
@@ -704,7 +704,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/commit.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** AD git-workflow-and-versioning; ADC build.md; SP finishing-a-development-branch; MM-ship 8 and G5. SKILL.md at most 4,200 bytes.
+**8. Sources; size.** AD git-workflow-and-versioning; ADC build.md; SP finishing-a-development-branch; MM-ship 8 and G5. SKILL.md at most 5,200 bytes (raised from 4,200 in M2a Task 24: per-task staging needs its package path, overlap and worktree rules).
 
 ---
 
