@@ -57,7 +57,7 @@ need state.sh prompt_hashes
 need decide.sh vote fail_closed emit_decision
 need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words git_sub cmd_head in_main_checkout
 need gitctx.sh current_branch base_branch_name branch_protected push_targets with_timeout gh_sub word_value word_has
-need aliases.sh alias_snapshot aliases_load alias_text _alias_var alias_expand
+need aliases.sh alias_snapshot _alias_key _alias_table aliases_load alias_text _alias_var alias_expand
 
 # unparseable WHAT: fail closed on input the JSON reader could not parse, and stop.
 unparseable() {
