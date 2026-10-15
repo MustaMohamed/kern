@@ -60,7 +60,7 @@ test('rule 1: missing frontmatter, name mismatch, non-kebab dir', () => {
 
 test('rule 2: unknown skill key and ignored plugin-agent keys', () => {
   assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.\ncolour: red') })), [2]);
-  const agent = '---\nname: r\ndescription: d\npermissionMode: plan\n---\nbody\n';
+  const agent = '---\nname: r\ndescription: d\npermissionMode: plan\n---\n## Report\n\nbody\n';
   assert.deepEqual(rules(lint({ 'agents/r.md': agent })), [2]);
 });
 
@@ -70,7 +70,7 @@ test('rule 3: auto limit and trigger, manual limit, agent limit, totals', () => 
   assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Does things.') })), [3]);
   const manual = `description: ${'y'.repeat(121)}\ndisable-model-invocation: true`;
   assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', manual) })), [3]);
-  const agent = `---\nname: r\ndescription: ${'z'.repeat(151)}\n---\nbody\n`;
+  const agent = `---\nname: r\ndescription: ${'z'.repeat(151)}\n---\n## Report\n\nbody\n`;
   assert.deepEqual(rules(lint({ 'agents/r.md': agent })), [3]);
   const files = {};
   for (let i = 0; i < 6; i++) files[`skills/s${i}/SKILL.md`] = skill(`s${i}`, `description: Use when ${'w'.repeat(280)}`);
@@ -257,4 +257,124 @@ test('rule 15: every fixture case but no-settings carries a settings file', () =
   assert.deepEqual(only15(), []);
   delete files['tests/fixtures/projects/long-settings/kern.local.yml'];
   assert.deepEqual(only15(), [15]);
+});
+
+// M2a rules: 5 (Skill-tool and agent Read paths), 9 (required sections and Red flags), 16 (contract drift).
+const manual = (desc = 'd') => `description: ${desc}\ndisable-model-invocation: true`;
+const agentDoc = (body) => `---\nname: r\ndescription: d\n---\n${body}`;
+const flags = (n) => `\n## Red flags\n\n| Thought | Reality |\n|---|---|\n${Array.from({ length: n }, (_, i) => `| t${i} | r${i} |`).join('\n')}\n`;
+
+test('rule 5: Skill tool references name auto or built-in skills', () => {
+  const caller = (target) => skill('c', manual(), `\n# c\n\n## Steps\n\n1. Call the Skill tool with \`${target}\`.\n`);
+  assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': caller('nope') })), [5]);
+  assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': caller('code-review') })), []);
+  assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': caller('kern:a'), 'skills/a/SKILL.md': skill('a', 'description: Use when x.') })), []);
+  assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': caller('p'), 'skills/p/SKILL.md': skill('p', manual()) })), [5]);
+});
+
+test('rule 5: the kernel and agents are scanned, fenced examples are not', () => {
+  assert.deepEqual(rules(lint({ 'kernel/kernel.md': 'Use the Skill tool with `nope`.\n' })), [5]);
+  const fenced = '\n# c\n\n## Steps\n\n1. a\n\n```\nSkill tool with `nope`\n```\n';
+  assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': skill('c', manual(), fenced) })), []);
+  assert.deepEqual(rules(lint({ 'agents/r.md': agentDoc('## Report\n\nSkill tool with `nope`\n') })), [5]);
+});
+
+test('rule 5: agent Read paths resolve', () => {
+  const body = '## Report\n\nRead `${CLAUDE_PLUGIN_ROOT}/skills/missing/SKILL.md`.\n';
+  assert.deepEqual(rules(lint({ 'agents/r.md': agentDoc(body) })), [5]);
+  const ok = { 'agents/r.md': agentDoc('## Report\n\nRead `${CLAUDE_PLUGIN_ROOT}/skills/a/SKILL.md`.\n'), 'skills/a/SKILL.md': skill('a', 'description: Use when x.') };
+  assert.deepEqual(rules(lint(ok)), []);
+});
+
+test('rule 9: auto skills need Steps; slash skills need Steps first', () => {
+  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', '\n# a\n\n## Notes\n\nx\n') })), [9]);
+  assert.deepEqual(rules(lint({ 'skills/s/SKILL.md': skill('s', manual(), '\n# s\n\n## Inputs\n\nx\n\n## Steps\n\n1. a\n') })), [9]);
+  assert.deepEqual(rules(lint({ 'skills/s/SKILL.md': skill('s', manual(), '\n# s\n\nRules only.\n') })), [9]);
+  assert.deepEqual(rules(lint({ 'skills/s/SKILL.md': skill('s', manual()) })), []);
+});
+
+test('rule 9: Steps must be an H2 outside a fence and not a longer heading', () => {
+  const fenced = '\n# a\n\n```md\n## Steps\n```\n';
+  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', fenced) })), [9]);
+  const tilde = '\n# a\n\n~~~\n## Steps\n~~~\n';
+  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', tilde) })), [9]);
+  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', '\n# a\n\n## Steps and more\n\n1. a\n') })), [9]);
+  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', '\n# a\n\n### Steps\n\n1. a\n') })), [9]);
+});
+
+test('rule 9: an unclosed fence is reported, not read as a pass', () => {
+  const body = '\n# a\n\n## Steps\n\n1. a\n\n```\nnever closed\n';
+  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) }).filter((x) => x.rule === 9);
+  assert.equal(f.length, 1);
+  assert.match(f[0].message, /unclosed code fence/);
+});
+
+test('rule 9: CRLF files are read like LF files', () => {
+  const crlf = (t) => t.replace(/\n/g, '\r\n');
+  assert.deepEqual(rules(lint({ 'skills/s/SKILL.md': crlf(skill('s', manual())) })), []);
+  assert.deepEqual(rules(lint({ 'skills/s/SKILL.md': crlf(skill('s', manual(), '\n# s\n\n## Inputs\n\nx\n\n## Steps\n\n1. a\n')) })), [9]);
+  assert.deepEqual(rules(lint({ 'agents/r.md': crlf(agentDoc('## Report\n\nbody\n')) })), []);
+  const body = `\n# implement\n\n## Steps\n\n1. a\n${flags(3)}`;
+  assert.deepEqual(rules(lint({ 'skills/implement/SKILL.md': crlf(skill('implement', manual(), body)) })), []);
+});
+
+test('rule 9: a slash skill without Steps passes with an exemption', () => {
+  const files = {
+    'skills/s/SKILL.md': skill('s', manual(), '\n# s\n\nRules only.\n'),
+    'scripts/lint-exemptions.json': '[{"rule":9,"path":"skills/s/SKILL.md","reason":"rule document, not a procedure"}]',
+  };
+  assert.deepEqual(rules(lint(files)), []);
+});
+
+test('rule 9: agents need an output contract section', () => {
+  assert.deepEqual(rules(lint({ 'agents/r.md': agentDoc('Just do it.\n') })), [9]);
+  assert.deepEqual(rules(lint({ 'agents/r.md': agentDoc('## Output\n\nVerdict first.\n') })), []);
+  assert.deepEqual(rules(lint({ 'agents/r.md': agentDoc('```\n## Report\n```\n') })), [9]);
+  assert.deepEqual(rules(lint({ 'agents/r.md': agentDoc('## Reports\n\nx\n') })), [9]);
+});
+
+test('rule 9: a discipline skill needs a Red flags table of 2 to 6 rows', () => {
+  const body = (extra) => `\n# implement\n\n## Steps\n\n1. a\n${extra}`;
+  assert.deepEqual(rules(lint({ 'skills/implement/SKILL.md': skill('implement', manual(), body('')) })), [9]);
+  assert.deepEqual(rules(lint({ 'skills/implement/SKILL.md': skill('implement', manual(), body(flags(1))) })), [9]);
+  assert.deepEqual(rules(lint({ 'skills/implement/SKILL.md': skill('implement', manual(), body(flags(7))) })), [9]);
+  assert.deepEqual(rules(lint({ 'skills/implement/SKILL.md': skill('implement', manual(), body(flags(2))) })), []);
+  assert.deepEqual(rules(lint({ 'skills/implement/SKILL.md': skill('implement', manual(), body(flags(6))) })), []);
+  assert.deepEqual(rules(lint({ 'skills/implement/SKILL.md': skill('implement', manual(), body(flags(3))) })), []);
+  assert.deepEqual(rules(lint({ 'skills/other/SKILL.md': skill('other', manual(), body('')) })), [], 'only discipline skills need the table');
+});
+
+test('rule 9: Red flags must be a real H2 with the Thought | Reality header', () => {
+  const body = (extra) => `\n# implement\n\n## Steps\n\n1. a\n${extra}`;
+  const run = (extra) => rules(lint({ 'skills/implement/SKILL.md': skill('implement', manual(), body(extra)) }));
+  assert.deepEqual(run(`\n\`\`\`md${flags(3)}\`\`\`\n`), [9], 'a fenced table does not count');
+  assert.deepEqual(run(flags(3).replace('## Red flags', '## Red flags and more')), [9], 'a longer heading does not count');
+  assert.deepEqual(run(flags(3).replace('## Red flags', '### Red flags')), [9], 'an H3 does not count');
+  assert.deepEqual(run(flags(3).replace('| Thought | Reality |', '| Excuse | Truth |')), [9], 'wrong header');
+  assert.deepEqual(run(flags(3).replace('|---|---|\n', '')), [9], 'no separator row');
+  assert.deepEqual(run(`${flags(1)}\n## Other\n\n| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n`), [9], 'rows after the next H2 do not count');
+});
+
+test('rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract', () => {
+  const contract = '| `wt-snap` | x |\n- `WORK/plans/`\n- `Task N: start tree=<id> at=<iso>`\n';
+  const body = (s) => `\n# c\n\n## Steps\n\n1. ${s}\n`;
+  const ok = body('Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>` and read WORK/plans; then `Task N: start tree=<id> at=<iso>`.');
+  assert.deepEqual(rules(lint({ 'docs/plans/contract.md': contract, 'skills/c/SKILL.md': skill('c', manual(), ok), 'scripts/wt-snap': '' })), []);
+  const bad = body('Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-gone <wt>`, read WORK/drafts and write `Task N: done`.');
+  const f = lint({ 'docs/plans/contract.md': contract, 'skills/c/SKILL.md': skill('c', manual(), bad), 'scripts/wt-gone': '' }).filter((x) => x.rule === 16);
+  assert.deepEqual(f.map((x) => x.message.split(':')[0]), ['scripts/wt-gone', 'WORK/drafts', 'Task N']);
+});
+
+test('rule 16: silent without a contract file; agents, references, CRLF and fences handled', () => {
+  const body = '\n# c\n\n## Steps\n\n1. Read WORK/drafts.\n';
+  assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': skill('c', manual(), body) })), []);
+  const contract = '- `WORK/plans/`\n';
+  const run = (files) => lint({ 'docs/plans/contract.md': contract, ...files }).filter((x) => x.rule === 16).map((x) => x.path);
+  assert.deepEqual(run({ 'agents/r.md': agentDoc('## Report\n\nRead WORK/drafts.\n') }), ['agents/r.md']);
+  assert.deepEqual(run({ 'skills/c/SKILL.md': skill('c', manual()), 'skills/c/references/x.md': 'Read WORK/drafts.\n' }), ['skills/c/references/x.md']);
+  const crlfContract = contract.replace(/\n/g, '\r\n');
+  const crlfSkill = skill('c', manual(), '\n# c\n\n## Steps\n\n1. Read WORK/plans and `Task N: start`.\n').replace(/\n/g, '\r\n');
+  assert.deepEqual(lint({ 'docs/plans/contract.md': crlfContract + '- `Task N: start`\r\n', 'skills/c/SKILL.md': crlfSkill }).filter((x) => x.rule === 16), []);
+  const fenced = '\n# c\n\n## Steps\n\n1. a\n\n```\nRead WORK/drafts and `Task N: done`\n```\n';
+  assert.deepEqual(run({ 'skills/c/SKILL.md': skill('c', manual(), fenced) }), []);
 });

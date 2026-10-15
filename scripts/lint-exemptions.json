@@ -1,3 +1,4 @@
 [
-  { "rule": 6, "path": "skills/hello/SKILL.md", "reason": "M0 placeholder skill, removed in M2; it is not part of the help map." }
+  { "rule": 6, "path": "skills/hello/SKILL.md", "reason": "M0 placeholder skill, removed in M2; it is not part of the help map." },
+  { "rule": 9, "path": "skills/unslop/SKILL.md", "reason": "rule document read by technical-writing; it has no procedure" }
 ]

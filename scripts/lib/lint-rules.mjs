@@ -31,6 +31,25 @@ function walk(dir) {
   return out;
 }
 
+// Markdown scan shared by rules 5, 9 and 16: normalizes CRLF and blanks fenced lines (``` and ~~~), so headings,
+// references and ledger lines inside a code example are not read as real ones. `unclosed` is true when a fence
+// is left open; callers report it instead of treating the rest of the file as scanned.
+function scanMarkdown(text) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  let open = null;
+  const kept = lines.map((l) => {
+    const m = l.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (open) {
+      if (m && m[1][0] === open[0] && m[1].length >= open.length && !m[2].trim()) open = null;
+      return '';
+    }
+    if (m) { open = m[1]; return ''; }
+    return l;
+  });
+  return { lines: kept, text: kept.join('\n'), unclosed: open !== null };
+}
+const h2Lines = (scan) => scan.lines.filter((l) => /^## /.test(l)).map((l) => l.trimEnd());
+
 export function loadModel(root) {
   const skills = [];
   const skillsDir = join(root, 'skills');
@@ -261,6 +280,106 @@ export const RULES = [
       if (c !== 'no-settings' && !['kern.local.yml', 'kern.yml'].some((f) => existsSync(join(dir, f)))) out.push(err(15, `tests/fixtures/projects/${c}`, 'hook-shape fixture has no kern.local.yml or kern.yml'));
     }
     if (!existsSync(join(model.root, 'tests', 'hook-shape.sh'))) out.push(err(15, 'tests/hook-shape.sh', 'hook-shape runner missing'));
+    return out;
+  } },
+  { id: 5, check(model) {
+    const BUILTIN_SKILLS = new Set(['code-review', 'security-review', 'simplify']);
+    const out = [];
+    const auto = new Set(model.skills.filter((s) => s.tier === 'auto').map((s) => s.name));
+    const docs = [...model.skills, ...model.agents].filter((d) => !d.error).map((d) => ({ file: d.file, body: d.body }));
+    if (model.kernelText) docs.push({ file: join(model.root, 'kernel', 'kernel.md'), body: model.kernelText });
+    for (const d of docs) {
+      for (const m of scanMarkdown(d.body).text.matchAll(/Skill tool with `([a-z0-9:-]+)`/g)) {
+        const name = m[1].replace(/^kern:/, '');
+        if (!auto.has(name) && !BUILTIN_SKILLS.has(name)) {
+          out.push(err(5, rel(model, d.file), `Skill tool reference "${m[1]}" names neither a kern auto skill nor a built-in skill; path and slash skills are reached by Read or typed by the user`));
+        }
+      }
+    }
+    for (const a of model.agents.filter((x) => !x.error)) {
+      for (const m of scanMarkdown(a.body).text.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)) {
+        const r = m[1].replace(/[.,;:]+$/, '');
+        if (!existsSync(join(model.root, r))) out.push(err(5, rel(model, a.file), `Read path does not resolve: \${CLAUDE_PLUGIN_ROOT}/${r}`));
+      }
+    }
+    return out;
+  } },
+  { id: 9, check(model) {
+    // Discipline skills carry a ## Red flags table of 2 to 6 rows: the thought that skips a step, and why
+    // it is wrong (design gap 7, the goal-0 review).
+    const DISCIPLINE = new Set(['prove-it', 'implement', 'diagnose', 'define', 'execute-plan', 'commit', 'finish-branch']);
+    const out = [];
+    // Body lines of the first `heading` H2, up to the next H2; null when there is none.
+    const section = (scan, heading) => {
+      const i = scan.lines.findIndex((l) => l.trimEnd() === heading);
+      if (i < 0) return null;
+      const rest = [];
+      for (const l of scan.lines.slice(i + 1)) { if (/^## /.test(l)) break; rest.push(l.trim()); }
+      return rest;
+    };
+    const redFlagsProblem = (scan) => {
+      const sec = section(scan, '## Red flags');
+      if (!sec) return 'discipline skill has no "## Red flags" H2 section';
+      const at = sec.findIndex((l) => l.replace(/\s/g, '') === '|Thought|Reality|');
+      const bad = '"## Red flags" needs a | Thought | Reality | table of 2 to 6 rows';
+      if (at < 0 || !/^\|[\s:|-]*-[\s:|-]*\|$/.test(sec[at + 1] || '')) return bad;
+      let n = 0;
+      while (/^\|/.test(sec[at + 2 + n] || '')) n++;
+      return n < 2 || n > 6 ? `${bad}, found ${n}` : null;
+    };
+    for (const s of model.skills.filter((x) => !x.error)) {
+      const scan = scanMarkdown(s.body);
+      const heads = h2Lines(scan);
+      const p = rel(model, s.file);
+      if (scan.unclosed) out.push(err(9, p, 'unclosed code fence; the lines after it were not checked'));
+      if (DISCIPLINE.has(s.name)) {
+        const problem = redFlagsProblem(scan);
+        if (problem) out.push(err(9, p, problem));
+      }
+      if (s.tier === 'path') continue; // rule 6 (M1) checks that route files open with ## Steps
+      if (s.tier === 'auto') {
+        if (!heads.includes('## Steps')) out.push(err(9, p, 'auto skill has no "## Steps" section'));
+      } else if (heads[0] !== '## Steps') {
+        out.push(err(9, p, heads.includes('## Steps') ? '"## Steps" must be the first H2 of a slash skill' : 'slash skill has no "## Steps" section; add one or record a rule-9 exemption with a reason'));
+      }
+    }
+    for (const a of model.agents.filter((x) => !x.error)) {
+      const scan = scanMarkdown(a.body);
+      const p = rel(model, a.file);
+      if (scan.unclosed) out.push(err(9, p, 'unclosed code fence; the lines after it were not checked'));
+      if (!h2Lines(scan).some((h) => /^## (Report|Output|Return|Status)\b/.test(h))) {
+        out.push(err(9, p, 'agent has no output contract section (## Report, ## Output, ## Return or ## Status)'));
+      }
+    }
+    return out;
+  } },
+  { id: 16, check(model) {
+    // Contract drift: every script, WORK subfolder and ledger line a shipped skill or agent names has its
+    // producer in docs/plans/contract.md (adapted from addy scripts/validate-artifact-paths.js, MIT).
+    const cf = join(model.root, 'docs', 'plans', 'contract.md');
+    if (!existsSync(cf)) return [];
+    const contract = readFileSync(cf, 'utf8').replace(/\r\n/g, '\n');
+    const out = [];
+    const docs = [...model.skills, ...model.agents].filter((d) => !d.error).map((d) => ({ file: d.file, body: d.body }));
+    for (const s of model.skills) {
+      for (const f of walk(join(model.root, 'skills', s.dir, 'references')).filter((x) => x.endsWith('.md'))) docs.push({ file: f, body: readFileSync(f, 'utf8'), ref: true });
+    }
+    const seen = new Set();
+    for (const d of docs) {
+      const scan = scanMarkdown(d.body);
+      const p = rel(model, d.file);
+      if (d.ref && scan.unclosed) out.push(err(16, p, 'unclosed code fence; the lines after it were not checked'));
+      const flag = (token, why) => { if (!seen.has(`${p}\0${token}`)) { seen.add(`${p}\0${token}`); out.push(err(16, p, `${token}: ${why}`)); } };
+      for (const m of scan.text.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z0-9-]+)/g)) {
+        if (!contract.includes(`| \`${m[1]}\` |`)) flag(`scripts/${m[1]}`, 'no row in the Scripts table of docs/plans/contract.md');
+      }
+      for (const m of scan.text.matchAll(/\bWORK\/([a-z]+)/g)) {
+        if (!contract.includes(`\`WORK/${m[1]}/\``)) flag(`WORK/${m[1]}`, 'not listed under "Working directory" in docs/plans/contract.md');
+      }
+      for (const m of scan.text.matchAll(/`((?:Task N|parked|Decision|Worktree|Main|Wave|Applied|Preflight):[^`]*)`/g)) {
+        if (!contract.includes(`\`${m[1]}\``)) flag(m[1], 'ledger line format not in docs/plans/contract.md');
+      }
+    }
     return out;
   } },
 ];
