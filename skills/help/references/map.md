@@ -16,3 +16,4 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 ## Close calls
 - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
 - Terse chat but a full PR body: terse governs chat only. Persisted text always follows `unslop`.
+| `define` | path | Routed row "New behaviour and no agreed spec"; /kern:define | Clarify, classify and approve before code |

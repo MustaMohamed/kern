@@ -12,6 +12,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - Guard G20: a Markdown spec or plan becomes approved, or changes its approved: line, only with a quote of the user's last message, judged on the file as the edit leaves it; never under autopilot.
 - implement: thin slices, failing test first, mutation and fail-then-pass probes, full suite.
 - diagnose: red-capable loop before hypotheses, fix with a regression test proven by probe; loop-rate for flaky bugs.
+- define: clarify, classify and get an explicit, quoted approval before code; specs carry a Constraints section.
 
 ## [0.2.1] - 2026-10-14
 
