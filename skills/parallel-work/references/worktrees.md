@@ -20,6 +20,11 @@ One writer, one worktree. Never the Agent tool's `isolation` parameter, and neve
 
 Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit` and keep only the paths this run recorded. Never propose the integration worktree or a wt-fork source. An `unknown` worktree is never torn down. A worktree whose PR merged (bucket `merged`) may go with plain `git worktree remove <path>`.
 
-`--force` needs the recorded integrated tree (wt-diff's second line) to equal `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Equal trees: run `git -C <wt> status --ignored --porcelain` and name every ignored file, since wt-snap skips them and `--force` deletes them. Trees differ, or none was recorded: no `--force`; report it, because the worker wrote after its package was cut.
+`--force` runs only when ALL of these hold:
+1. `wt-apply` printed `applied` for this worker's package. Record wt-diff's second line (TO_TREE) only then; a conflicted or exit 4 worker has no recorded tree.
+2. The recorded TO_TREE equals `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>` now.
+3. The path is in this run's recorded list.
+4. Every ignored file in `git -C <wt> status --ignored --porcelain` is named to the user: wt-snap skips them and `--force` deletes them.
+5. The user said yes. G1 asks on `git worktree remove --force` and denies it under autopilot, so list the worktrees instead.
 
-Run each removal only on the user's yes. G1 asks on `git worktree remove --force` and denies it under autopilot, so list the worktrees instead. Then `git worktree prune`.
+If any condition is not proven, use plain `git worktree remove <path>`, or keep the worktree and report it. Then `git worktree prune`.

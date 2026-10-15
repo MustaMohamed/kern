@@ -56,7 +56,7 @@ test('parallel-work pins the drain mapping, entry check, package location, teard
   assert.ok(at(6).includes('Exit 3 is no change'));
   // Step 8 points at the worktrees reference, where the teardown rules are pinned.
   assert.ok(at(8).includes('${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md'));
-  assert.ok(at(8).includes('`--force` only on a matching integrated tree'));
+  assert.ok(at(8).includes('`--force` only when all five preconditions there hold'));
   assert.ok(at(8).includes("only on the user's yes"));
   // Minor rules from the review round.
   assert.ok(at(2).includes('a model named in every dispatch'));
@@ -69,7 +69,9 @@ test('parallel-work pins the drain mapping, entry check, package location, teard
   assert.ok(at(6).includes('a directory ends in `/`, a prefix in `*`'));
   assert.ok(at(6).includes('name each red test as before or after'));
   assert.ok(at(6).includes('spot-check one claim per worker against its diff'));
-  assert.ok(at(7).includes("each integrated tree (wt-diff's second line) in evidence"));
+  assert.ok(at(7).includes('each recorded tree in evidence'));
+  assert.ok(at(6).includes("prints `applied`, and only then record wt-diff's second line"));
+  assert.ok(at(6).includes('stop, no tree recorded'));
   // Stops and autopilot.
   const stops = body.slice(body.indexOf('## Stops and autopilot'));
   for (const n of ['Stops at steps 1, 3, 6, 7 and 8', 'on per the latest kern signal', 'a turn with no mode line changes nothing',
@@ -97,10 +99,16 @@ test('brief template fields and worktrees reference', () => {
 
 test('worktrees teardown pins the force check', () => {
   const t = readDoc('skills/parallel-work/references/worktrees.md').raw;
-  for (const n of ['${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit', 'keep only the paths this run recorded', 'Never propose the integration worktree or a wt-fork source',
-    'An `unknown` worktree is never torn down', '`--force` needs the recorded integrated tree (wt-diff\'s second line) to equal `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`',
-    'git -C <wt> status --ignored --porcelain', 'name every ignored file', 'Trees differ, or none was recorded: no `--force`; report it',
-    'Run each removal only on the user\'s yes', 'G1 asks on `git worktree remove --force` and denies it under autopilot']) {
+  for (const n of ['${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit', 'keep only the paths this run recorded. Never propose the integration worktree or a wt-fork source.', 'An `unknown` worktree is never torn down',
+    'A worktree whose PR merged (bucket `merged`) may go with plain `git worktree remove <path>`.',
+    '`--force` runs only when ALL of these hold:',
+    "1. `wt-apply` printed `applied` for this worker's package. Record wt-diff's second line (TO_TREE) only then; a conflicted or exit 4 worker has no recorded tree.",
+    '2. The recorded TO_TREE equals `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>` now.',
+    '3. The path is in this run\'s recorded list.\n',
+    '4. Every ignored file in `git -C <wt> status --ignored --porcelain` is named to the user',
+    '5. The user said yes. G1 asks on `git worktree remove --force` and denies it under autopilot',
+    'If any condition is not proven, use plain `git worktree remove <path>`, or keep the worktree and report it'
+  ]) {
     assert.ok(t.includes(n), `worktrees.md must contain: ${n}`);
   }
 });
