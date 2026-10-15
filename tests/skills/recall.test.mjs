@@ -38,8 +38,7 @@ test('recall sections, steps and the source lines it keeps', () => {
 
 test('recall resolves WORK read-only and never calls kern-dir', () => {
   assertOnce(SKILL, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern`', '`git rev-parse --path-format=absolute --git-common-dir`',
-    'never `kern-dir`, which creates folders and edits `.git/info/exclude`', 'from a linked worktree too',
-    'A missing `WORK` is not an error: say there are no kern working files']);
+    'never `kern-dir`, which creates folders and edits `.git/info/exclude`', 'from a linked worktree too']);
   assert.ok(!readDoc(SKILL).raw.includes('scripts/kern-dir'), 'recall never calls kern-dir');
 });
 
@@ -57,7 +56,9 @@ test('recall pins the unverified tag and the verified-uncommitted rules', () => 
     'and that snapshot differs from `git -C <wt> rev-parse HEAD^{tree}`',
     'equal to `HEAD^{tree}` means committed, so tag by its branch or PR, as for a differing `tree=`',
     'No `Worktree:` line, a `<wt>` not in `git worktree list`, or a failing `wt-snap` rules the tag out',
-    'tag from its branch or PR when a branch is known, else `[unverified, worktree unavailable]`', 'the next move still comes from the incomplete ledger task',
+    'tag from its branch or PR when the `Worktree:` line or the thread names a branch (never the `Main:` line\'s), else `[unverified, worktree unavailable]`',
+    'A missing `WORK`, or a failed `rev-parse`, is not an error: say there are no kern working files',
+    '"My work on X means everything this week" | Keep the topic.', 'the next move still comes from the incomplete ledger task',
     'The one exception is `wt-snap`', '`wt-snap` is the one exception named above']);
 });
 
@@ -65,7 +66,7 @@ test('recall dispatches a named agent, model and read-only commands', () => {
   assertOnce(SKILL, ['dispatch `kern:investigator` on model `model.miner`', 'the absolute paths from the `session` lines', 'a return budget of 15 lines per session',
     'It may run only read commands', '`grep -n` the topic first', '`wc -c` before reading', '`sed -n <first>,<last>p` with line numbers and p only',
     'If it reports a command the allowlist blocks, run that command yourself; never widen the guard',
-    'G18 denies `>` anywhere in a command, even inside quotes: search with `grep -F`, no redirection',
+    'G18 denies `>` anywhere in a command, even inside quotes: search one side of the `>` or put `.` in its place; no redirection',
     'When the answer hinges on what an agent actually did, read the full transcript region, not a grep line or summary']);
 });
 
