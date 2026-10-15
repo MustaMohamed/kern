@@ -13,14 +13,20 @@ export const PERMISSIONS = ['--permission-mode', 'acceptEdits', '--allowedTools'
 
 const SETUP_TIMEOUT_MS = 60 * 1000;
 
-// The only parent variables a run inherits: the shell basics, and the auth and config Claude Code reads.
-// Every other credential in the caller's shell (GITHUB_TOKEN, AWS_*, ...) stays out.
-const INHERITED = /^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|LANG|TERM)$|^LC_|^ANTHROPIC_|^CLAUDE_CODE_/;
+// The only parent variables a run inherits, by exact name: the shell basics and the auth and config
+// Claude Code reads. No ANTHROPIC_* or CLAUDE_* prefix: the calling session's own plumbing
+// (CLAUDE_CODE_MESSAGING_TOKEN, SESSION_ID, ...) must not reach a model that has unrestricted Bash. Every
+// other credential in the caller's shell (GITHUB_TOKEN, AWS_*, ...) stays out too.
+export const INHERITED_NAMES = new Set(['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'TERM',
+  'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
+  'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CONFIG_DIR']);
+const INHERITED_PREFIXES = ['LC_', 'KERN_EXEC_'];
+const inherited = (k) => INHERITED_NAMES.has(k) || INHERITED_PREFIXES.some((p) => k.startsWith(p));
 
 // childEnv(parent, extra): the inherited variables of parent, then extra on top.
 export function childEnv(parent, extra = {}) {
   const env = {};
-  for (const [k, v] of Object.entries(parent)) if (INHERITED.test(k) && v !== undefined) env[k] = v;
+  for (const [k, v] of Object.entries(parent)) if (inherited(k) && v !== undefined) env[k] = v;
   return { ...env, ...extra };
 }
 

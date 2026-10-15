@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GRADERS, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem } from '../scripts/lib/claude-run.mjs';
+import { UsageError, exitCode, parseArgs, runEval } from '../scripts/lib/exec-run.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
@@ -206,6 +207,17 @@ test('the child environment is an allowlist: auth and config in, other credentia
     { PATH: '/p', HOME: '/h', USER: 'u', LC_ALL: 'C', ANTHROPIC_API_KEY: 'k', CLAUDE_CODE_OAUTH_TOKEN: 't', GH_TOKEN: 'invalid', GH_HOST: 'example.invalid', KERN_EXEC_LOG: '/l' });
 });
 
+test('the calling session\'s own plumbing and other credentials never reach the child', () => {
+  const session = ['CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_BRIDGE_SESSION_ID',
+    'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'ANTHROPIC_FOO', 'CLAUDE_FOO', 'NPM_TOKEN', 'HTTPS_PROXY'];
+  const wanted = ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'TERM', 'LC_CTYPE', 'KERN_EXEC_LOG', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN',
+    'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CONFIG_DIR'];
+  const parent = Object.fromEntries([...session, ...wanted].map((k) => [k, 'v']));
+  const env = childEnv(parent);
+  for (const k of session) assert.ok(!(k in env), `${k} must be absent`);
+  assert.deepEqual(Object.keys(env).sort(), [...wanted].sort());
+});
+
 test('runClaude gives the child that allowlist, not the caller environment', () => {
   const cwd = work();
   process.env.GITHUB_TOKEN = 'leak-check';
@@ -227,4 +239,53 @@ test('runProblem: only a clean exit with a success result may be graded', () => 
   assert.match(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":true,"result":"x"}\'; exit 0')), /is_error/);
   assert.match(runProblem(run('echo \'{"type":"result","subtype":"success"}\'; exit 2')), /exited 2/);
   assert.equal(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":false,"result":"x"}\'; exit 0')), '');
+});
+
+const result = (id, pass, invalid = false) => ({ id, pass, invalid, reasons: pass ? [] : ['why'] });
+const drive = ({ only = null, outcomes }) => {
+  const lines = [], snaps = [], ran = [];
+  const cases = [{ id: 'a' }, { id: 'b' }].filter((c) => !only || c.id === only);
+  const code = runEval({ cases, only, dryRun: false, describe: (c) => c.id, log: (l) => lines.push(l),
+    runCase: (c) => { ran.push(c.id); return result(c.id, outcomes[c.id]); }, writeSnapshot: (r) => snaps.push(r) });
+  return { code, lines, snaps, ran };
+};
+
+test('exit code: 0 only when every case that ran passed, for a full run and a --case run alike', () => {
+  assert.equal(drive({ outcomes: { a: true, b: true } }).code, 0);
+  assert.equal(drive({ outcomes: { a: true, b: false } }).code, 1);
+  assert.equal(drive({ only: 'a', outcomes: { a: true, b: false } }).code, 0, 'b did not run');
+  assert.equal(drive({ only: 'b', outcomes: { a: true, b: false } }).code, 1, 'a failing --case run is not a pass');
+  assert.equal(exitCode([]), 1, 'nothing ran is not a pass');
+  assert.equal(exitCode([result('x', false, true)]), 1, 'an invalid case is not a pass');
+});
+
+test('snapshot: a full run writes it with every result; a --case run writes none', () => {
+  const full = drive({ outcomes: { a: true, b: false } });
+  assert.equal(full.snaps.length, 1);
+  assert.deepEqual(full.snaps[0].map((r) => r.id), ['a', 'b']);
+  const one = drive({ only: 'a', outcomes: { a: true } });
+  assert.deepEqual(one.snaps, []);
+  assert.deepEqual(one.ran, ['a']);
+  assert.match(one.lines.join('\n'), /no snapshot written/);
+});
+
+test('arguments: a --case with no value, a flag as its value or an unknown id is a usage error before any run', () => {
+  const ids = ['a', 'b'];
+  assert.deepEqual(parseArgs(['--case', 'b'], ids), { only: 'b', dryRun: false });
+  assert.deepEqual(parseArgs(['--dry-run'], ids), { only: null, dryRun: true });
+  for (const bad of [['--case'], ['--case', '--dry-run'], ['--case', 'zzz'], ['--cas', 'a'], ['a']]) assert.throws(() => parseArgs(bad, ids), UsageError, bad.join(' '));
+  const eval_ = (...a) => spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/exec-eval.mjs', import.meta.url)), ...a], { encoding: 'utf8', env: { PATH: '/nonexistent' } });
+  for (const a of [['--case'], ['--case', 'nope']]) {
+    const r = eval_(...a);
+    assert.equal(r.status, 2, a.join(' '));
+    assert.match(r.stderr, /usage: node scripts\/exec-eval\.mjs/);
+    assert.equal(r.stdout, '', 'nothing ran');
+  }
+});
+
+test('finish-split-nine-files: negated replies fail, real proposals pass', () => {
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  const verdict = (text) => GRADERS['finish-split-nine-files']({ events: [say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
+  for (const no of ['I did not propose a split.', 'No split needed here.', 'There is no need to split this.', 'I will not split this branch.', 'Never split it.']) assert.equal(verdict(no), false, no);
+  for (const yes of ['I propose splitting the branch.', 'Split into two PRs?', 'Consider splitting into smaller PRs.', 'I recommend a split: 5 and 4 files.']) assert.equal(verdict(yes), true, yes);
 });

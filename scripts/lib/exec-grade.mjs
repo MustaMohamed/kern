@@ -62,8 +62,11 @@ const messageFiles = (cmds) => gitCalls(cmds).filter((g) => g.sub === 'commit')
 const stagesAll = (cmds) => gitCalls(cmds).some((g) => (g.sub === 'add' && g.args.some((a) => ['-A', '--all', '-u', '--update', '.', '*'].includes(a)))
   || (g.sub === 'commit' && g.args.some((a) => a === '--all' || /^-[a-zA-Z]*a[a-zA-Z]*$/.test(a))));
 const PR7 = /\.origin\/pull\/7(\D|$)/;
-const proposesSplit = (text) => !/\b(not|won't|no need to|without)\s+(\w+\s+)?split/i.test(text)
-  && /\b(propos|suggest|recommend)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|into (two|three|four|\d+|several|separate) (commits|prs|pull requests|branches)/i.test(text);
+// A heuristic on the reply's wording, not a parse: a split is proposed when the reply says so
+// (propose/suggest/recommend/consider ... split, "split into", "split this") and does not negate it
+// ("did not propose a split", "no split needed", "will not split", "no need to split").
+const proposesSplit = (text) => !/\b(not|never|won't|without|no need to)\b[^.]*\bsplit|\bno\s+split/i.test(text)
+  && /\b(propos|suggest|recommend|consider)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|\bsplitting\b|into (two|three|four|\d+|several|separate|smaller) (commits|prs|pull requests|branches)/i.test(text);
 
 // ghCalls(events): for each Bash call whose result was not an error, the arguments of every gh command
 // in it, joined by one space, as the stub logs them ("$*"). A call a hook denied never ran.
