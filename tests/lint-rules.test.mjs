@@ -382,3 +382,41 @@ test('rule 16: silent without a contract file; agents, references, CRLF handled;
   const fencedScript = '\n# c\n\n## Steps\n\n1. a\n\n```bash\nbash ${CLAUDE_PLUGIN_ROOT}/scripts/x\n```\n';
   assert.deepEqual(run({ 'skills/c/SKILL.md': skill('c', manual(), fencedScript), 'scripts/x': '' }), ['skills/c/SKILL.md']);
 });
+
+// Fence parser (scanMarkdown), pinned through rule 9: it reads headings outside fences only.
+test('fence parser: a fence closed by the other marker stays open and is reported', () => {
+  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', '\n# a\n\n## Steps\n\n1. a\n\n```\nx\n~~~\n') }).filter((x) => x.rule === 9);
+  assert.equal(f.length, 1);
+  assert.match(f[0].message, /unclosed code fence/);
+});
+
+test('fence parser: a longer fence holds a shorter fence line', () => {
+  const run = (body) => rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) }));
+  assert.deepEqual(run('\n# a\n\n````\n```\n````\n\n## Steps\n\n1. a\n'), []);
+  assert.deepEqual(run('\n# a\n\n````\n```\n## Steps\n````\n'), [9], 'the heading inside the long fence is hidden');
+});
+
+test('fence parser: an opener indented 0 to 3 spaces counts, 4 does not', () => {
+  const run = (open) => rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', `\n# a\n\n${open}\n## Steps\n\n1. a\n${open}\n`) }));
+  assert.deepEqual(run('```'), [9]);
+  assert.deepEqual(run('   ```'), [9]);
+  assert.deepEqual(run('    ```'), [], 'a 4-space indent is code, not a fence');
+});
+
+test('rule 16: a script name is read whole, dots, slashes and underscores included', () => {
+  const body = (name) => `\n# c\n\n## Steps\n\n1. Run \`bash \${CLAUDE_PLUGIN_ROOT}/scripts/${name}\`.\n`;
+  const run = (contract, name) => lint({ 'docs/plans/contract.md': contract, 'skills/c/SKILL.md': skill('c', manual(), body(name)) }).filter((x) => x.rule === 16).map((x) => x.message.split(':')[0]);
+  assert.deepEqual(run('| `lint-skills.mjs` | x |\n', 'lint-skills.mjs'), []);
+  assert.deepEqual(run('| `lint-skills` | x |\n', 'lint-skills.mjs'), ['scripts/lint-skills.mjs']);
+  assert.deepEqual(run('| `wt-snap` | x |\n', 'lib/wt-common.sh'), ['scripts/lib/wt-common.sh']);
+  assert.deepEqual(run('| `foo_bar` | x |\n', 'foo_bar'), []);
+  assert.deepEqual(run('| `foo` | x |\n', 'foo_bar'), ['scripts/foo_bar']);
+  assert.deepEqual(run('| `wt-snap` | x |\n', 'wt-snap.'), [], 'trailing sentence punctuation is not part of the name');
+});
+
+test('rule 16: a WORK folder is read whole, in any case', () => {
+  const run = (text) => lint({ 'docs/plans/contract.md': '- `WORK/spec/`\n- `WORK/plans/`\n', 'skills/c/SKILL.md': skill('c', manual(), `\n# c\n\n## Steps\n\n1. ${text}\n`) }).filter((x) => x.rule === 16).map((x) => x.message.split(':')[0]);
+  assert.deepEqual(run('Write WORK/spec-2/x.'), ['WORK/spec-2']);
+  assert.deepEqual(run('Write WORK/Plan.'), ['WORK/Plan']);
+  assert.deepEqual(run('Write WORK/spec/x.md and WORK/plans.'), []);
+});

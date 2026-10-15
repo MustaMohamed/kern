@@ -372,11 +372,15 @@ export const RULES = [
       const p = rel(model, d.file);
       if (d.ref && scan.unclosed) out.push(err(16, p, 'unclosed code fence; the lines after it were not checked'));
       const flag = (token, why) => { if (!seen.has(`${p}\0${token}`)) { seen.add(`${p}\0${token}`); out.push(err(16, p, `${token}: ${why}`)); } };
-      for (const m of text.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z0-9-]+)/g)) {
-        if (!contract.includes(`| \`${m[1]}\` |`)) flag(`scripts/${m[1]}`, 'no row in the Scripts table of docs/plans/contract.md');
+      // The whole name after scripts/ or WORK/, up to whitespace, a quote, a bracket or a path break; trailing
+      // sentence punctuation is not part of it. A name cut at the first odd character would match the wrong row.
+      for (const m of text.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([^\s`'"()<>|]+)/g)) {
+        const name = m[1].replace(/[.,;:]+$/, '');
+        if (!contract.includes(`| \`${name}\` |`)) flag(`scripts/${name}`, 'no row in the Scripts table of docs/plans/contract.md');
       }
-      for (const m of text.matchAll(/\bWORK\/([a-z]+)/g)) {
-        if (!contract.includes(`\`WORK/${m[1]}/\``)) flag(`WORK/${m[1]}`, 'not listed under "Working directory" in docs/plans/contract.md');
+      for (const m of text.matchAll(/\bWORK\/([^\s/`'"()<>|,;:]+)/g)) {
+        const sub = m[1].replace(/\.+$/, '');
+        if (sub && !contract.includes(`\`WORK/${sub}/\``)) flag(`WORK/${sub}`, 'not listed under "Working directory" in docs/plans/contract.md');
       }
       for (const m of text.matchAll(/`((?:Task N|parked|Decision|Worktree|Main|Wave|Applied|Preflight):[^`]*)`/g)) {
         if (!contract.includes(`\`${m[1]}\``)) flag(m[1], 'ledger line format not in docs/plans/contract.md');
