@@ -254,3 +254,47 @@ start_without() {
   [[ "$output" == *"No is an acceptable answer: say when a scope, proposal or plan is weak, and why."* ]] || false
   [[ "$output" == *"in either voice skip the main AI tells"* ]] || false
 }
+
+# fake_git_version OUTPUT RC: puts a git first on PATH that answers `git version` with OUTPUT and exit
+# code RC and hands every other call to the real git.
+fake_git_version() {
+  mkdir -p "$BATS_TEST_TMPDIR/gitbin"
+  printf '#!/bin/sh\nif [ "$1" = version ]; then printf "%%s" "%s"; exit %s; fi\nexec "%s" "$@"\n' \
+    "$1" "$2" "$(command -v git)" >"$BATS_TEST_TMPDIR/gitbin/git"
+  chmod +x "$BATS_TEST_TMPDIR/gitbin/git"
+  export PATH="$BATS_TEST_TMPDIR/gitbin:$PATH"
+}
+
+@test "git older than 2.31, or a git version that cannot be read, gets one line saying the hardening may not apply" {
+  local v rc n norm
+  for v in "git version 2.30.9|0|is older than 2.31" "|1|failed or printed no version" \
+    "git version 2.54.0|3|failed or printed no version" "not a version|0|failed or printed no version" \
+    "git version x.31|0|failed or printed no version"; do
+    fake_git_version "${v%%|*}" "$(printf '%s' "$v" | cut -d'|' -f2)"
+    start startup
+    [ "$status" -eq 0 ]
+    n=$(printf '%s\n' "$output" | grep -c "GIT_CONFIG_\* hardening" || true)
+    [ "$n" -eq 1 ] || { echo "$v: $n hardening lines"; return 1; }
+    [[ "$output" == *"${v##*|}"*"a repository's fsmonitor program"*"on kern's index reads"* ]] || { echo "$v: $output"; return 1; }
+    [[ "${lines[0]}" == "# kern "* ]] || false
+    [[ "$output" == *"## Project settings"* ]] || false
+    norm=${output//"$K"/\/Users\/someone\/.claude\/plugins\/cache\/kern\/kern\/0.1.0}
+    [ "${#norm}" -le 4000 ] || { echo "$v: ${#norm} characters"; return 1; }
+    PATH=${PATH#"$BATS_TEST_TMPDIR/gitbin:"}
+  done
+  fake_git_version "git version 2.30.9" 0
+  start startup
+  [[ "$output" == *"kern: git 2.30 is older than 2.31, so git ignores kern's GIT_CONFIG_* hardening"* ]] || false
+}
+
+@test "git 2.31 or later gets no git line" {
+  local v
+  for v in "git version 2.31.0" "git version 2.54" "git version 2.54.0 (Apple Git-157)" "git version 3.0.1"; do
+    fake_git_version "$v" 0
+    start startup
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"## Project settings"* ]] || false
+    [[ "$output" != *"GIT_CONFIG_"* ]] || { echo "$v warned"; return 1; }
+    PATH=${PATH#"$BATS_TEST_TMPDIR/gitbin:"}
+  done
+}

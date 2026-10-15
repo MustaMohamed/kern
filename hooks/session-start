@@ -51,6 +51,31 @@ need state.sh state_dir state_file state_get state_set _state_put now_iso state_
 need state.sh prompt_hashes
 need render.sh render_template kern_version mode_line autopilot_text settings_summary
 
+# git_note: one line when git is older than 2.31, the first git that reads the GIT_CONFIG_* pairs
+# exported above, or when `git version` fails or prints no version; nothing for git 2.31 or later.
+git_note() {
+  local out major minor
+  out=$(git version 2>/dev/null) || out=""
+  out=${out%%$'\n'*}
+  case "$out" in
+    "git version "[0-9]*.[0-9]*)
+      major=${out#git version }
+      minor=${major#*.}
+      major=${major%%.*}
+      minor=${minor%%[!0-9]*}
+      ;;
+    *) major="" minor="" ;;
+  esac
+  case "$major" in "" | *[!0-9]* | ?????*) major="" ;; esac
+  case "$minor" in "" | *[!0-9]* | ?????*) major="" ;; esac
+  if [ -z "$major" ]; then
+    printf '%s\n' "kern: git version failed or printed no version, so git may ignore kern's GIT_CONFIG_* hardening and a repository's fsmonitor program may run on kern's index reads; install git 2.31 or later."
+  elif [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 31 ]; }; then
+    printf '%s\n' "kern: git $major.$minor is older than 2.31, so git ignores kern's GIT_CONFIG_* hardening and a repository's fsmonitor program can run on kern's index reads; install git 2.31 or later."
+  fi
+  return 0
+}
+
 # shellcheck disable=SC2034 # read by the json.sh functions
 KERN_INPUT=$(cat)
 SID=$(json_get session_id) || SID=""
@@ -88,6 +113,7 @@ fi
 K_SETTINGS=$(settings_summary)
 export K_VERSION K_ROOT K_KERN K_MODE K_AUTOPILOT K_SETTINGS
 render_template "$KERN_ROOT/kernel/kernel.md"
+git_note
 case "$K_MODE" in
   *voice=terse*) printf '\n' && cat "$KERN_ROOT/modes/terse.md" ;;
 esac

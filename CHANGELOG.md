@@ -22,7 +22,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - finish-branch: verify, self-review and size gate before the commit, push or draft PR menu; the PR has a title, a body under .kern/tmp and a dedup on the head commit. prove-it hands commits and PRs to these skills.
 - recall: rebuild state from kern working files, this project's transcripts and live state; replaces the user-level recall skill.
 - Kernel: M2's routes live in kernel/routes.md, which the Routing rule points to, for define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall; routing evals with fixed floors and a frozen held-out set; lint rule 12 and a standing-cost budget.
-- Hooks run git with no fsmonitor program and no repo hooks.
+- Hooks run git with no fsmonitor program and no repo hooks (git 2.31 or later). With an older git, or one whose version cannot be read, session-start says so in one line.
 
 ## [0.2.1] - 2026-10-14
 

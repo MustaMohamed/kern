@@ -4,6 +4,8 @@ A personal Claude Code plugin that routes work through a small always-on kernel,
 
 ## Install
 
+Needs git 2.31 or later.
+
 1. `gh auth login`
 2. In Claude Code: `/plugin marketplace add <owner>/kern`, then `/plugin install kern@kern` at user scope.
 3. Optional: restore `~/.claude/kern.yml`. Per project, run `/kern:help setup` when the defaults are not enough.
