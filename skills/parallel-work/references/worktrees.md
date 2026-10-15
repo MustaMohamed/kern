@@ -4,21 +4,22 @@ One writer, one worktree. Never the Agent tool's `isolation` parameter, and neve
 
 ## Creating
 
-- `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug> --detach` makes a detached worktree off a freshly fetched `origin/<base_branch>`, copies `.worktreeinclude` files, runs `worktree.setup` and leaves the setup marker. Add `--branch <name>` instead of `--detach` when `branch.pattern` holds `{id}`.
+- `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug> --detach` makes a detached worktree off a freshly fetched `origin/<base_branch>`, copies `.worktreeinclude` files, runs `worktree.setup` and leaves the setup marker. Use `--branch <name>` instead of `--detach` when `branch.pattern` holds `{id}`.
 - `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork <source-wt> <slug>` does the same from a worktree's HEAD and carries its uncommitted state. Exit 3: the state would not apply, fork removed.
 - Both print the path. Any non-zero exit: say why and ask. Never fall back to a shared tree.
-- Worktrees live under `worktree.dir`, which kern keeps out of git.
 
 ## Entry check
 
-`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-check <wt> <base-ref>` prints `ok`, or the first mismatch and exits 1: not a linked worktree, unknown or non-ancestor base, setup marker missing. The worker runs it first; a mismatch is BLOCKED.
+`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-check <wt> <base-ref>` prints `ok`, or the first mismatch and exits 1. The worker runs it first; a mismatch is BLOCKED.
 
 ## Integration
 
-Per worker: `wt-snap` before it starts, then `wt-diff <wt> <starting-tree> --out <package>`, then `wt-apply <package>.patch <integration-wt>`. One patch at a time. A conflict applies nothing and goes to the user. Run the full suite once, after the last patch.
+`wt-snap` before the worker starts, then `wt-diff <wt> <starting-tree> --out <package>`, then `wt-apply <package>.patch <integration-wt>`, one patch at a time. A conflict applies nothing and goes to the user.
 
 ## Teardown
 
-Start from `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit`: one line per worktree, `bucket<TAB>path<TAB>branch<TAB>evidence`. A worktree is done when its PR merged (bucket `merged`, read from `gh pr list --head <branch> --state all`) or its work was integrated. An `unknown` worktree is never torn down: a git call failed or the base did not resolve, so nothing is known about its work.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit` and keep only the paths this run recorded. Never propose the integration worktree or a wt-fork source. An `unknown` worktree is never torn down. A worktree whose PR merged (bucket `merged`) may go with plain `git worktree remove <path>`.
 
-Propose `git worktree remove <path>` for each done one, and `--force` only for a writer's worktree whose work was integrated, since it still holds an uncommitted copy. A worktree holding uncommitted work not yet integrated stays. Run the commands only on yes, never under autopilot, then `git worktree prune`.
+`--force` needs the recorded integrated tree (wt-diff's second line) to equal `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Equal trees: run `git -C <wt> status --ignored --porcelain` and name every ignored file, since wt-snap skips them and `--force` deletes them. Trees differ, or none was recorded: no `--force`; report it, because the worker wrote after its package was cut.
+
+Run each removal only on the user's yes. G1 asks on `git worktree remove --force` and denies it under autopilot, so list the worktrees instead. Then `git worktree prune`.

@@ -54,14 +54,26 @@ test('parallel-work pins the drain mapping, entry check, package location, teard
   assert.ok(at(6).includes('--allow'));
   assert.ok(at(6).includes('Exit 4 is a write outside SCOPE'));
   assert.ok(at(6).includes('Exit 3 is no change'));
-  // Step 8: teardown starts at wt-audit and never touches unknown.
-  assert.ok(at(8).includes('${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit'));
-  assert.ok(at(8).includes('An `unknown` worktree is never torn down'));
-  assert.ok(at(8).includes('only on yes'));
+  // Step 8 points at the worktrees reference, where the teardown rules are pinned.
+  assert.ok(at(8).includes('${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md'));
+  assert.ok(at(8).includes('`--force` only on a matching integrated tree'));
+  assert.ok(at(8).includes("only on the user's yes"));
+  // Minor rules from the review round.
+  assert.ok(at(2).includes('a model named in every dispatch'));
+  assert.ok(at(2).includes('A script exit this skill does not name stops that unit'));
+  assert.ok(at(3).includes('resolve `${CLAUDE_PLUGIN_ROOT}` to the absolute root'));
+  assert.ok(at(4).includes('the absolute path of `${CLAUDE_PLUGIN_ROOT}/skills/implement/SKILL.md`'));
+  assert.ok(at(5).includes('(none: BLOCKED)'));
+  assert.ok(at(5).includes('with an empty or "none" could-not-trace list, is PASS'));
+  assert.ok(at(5).includes('a silent reader, which has neither, is re-asked once, then BLOCKED'));
+  assert.ok(at(6).includes('a directory ends in `/`, a prefix in `*`'));
+  assert.ok(at(6).includes('name each red test as before or after'));
+  assert.ok(at(6).includes('spot-check one claim per worker against its diff'));
+  assert.ok(at(7).includes("each integrated tree (wt-diff's second line) in evidence"));
   // Stops and autopilot.
   const stops = body.slice(body.indexOf('## Stops and autopilot'));
   for (const n of ['Stops at steps 1, 3, 6, 7 and 8', 'on per the latest kern signal', 'a turn with no mode line changes nothing',
-    'parked: <question>; default: <choice>; why: <one line>', 'Teardown never runs under autopilot', 'AskUserQuestion']) {
+    'parked: <question>; default: <choice>; why: <one line>', 'Teardown never runs under autopilot', 'AskUserQuestion', 'parks that unit while the rest continue']) {
     assert.ok(stops.includes(n), `stops section must contain: ${n}`);
   }
 });
@@ -80,6 +92,17 @@ test('brief template fields and worktrees reference', () => {
   assert.deepEqual(r.stdout.trim().split('\n'), [...['GOAL', 'SCOPE', 'CONTEXT', 'ACCEPTANCE', 'VERIFY', 'TIMEBOX', 'REPORT', 'STANDING'].map((k) => `placeholder: ${k}`), 'VERIFY must start with the wt-check entry check']);
   assertHeadings('skills/parallel-work/references/worktrees.md', ['# Worktrees', '## Creating', '## Entry check', '## Integration', '## Teardown']);
   assertMaxBytes('skills/parallel-work/references/worktrees.md', 2200);
+  assertContains(TEMPLATE, ['a directory entry ends in /, a prefix in *']);
+});
+
+test('worktrees teardown pins the force check', () => {
+  const t = readDoc('skills/parallel-work/references/worktrees.md').raw;
+  for (const n of ['${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit', 'keep only the paths this run recorded', 'Never propose the integration worktree or a wt-fork source',
+    'An `unknown` worktree is never torn down', '`--force` needs the recorded integrated tree (wt-diff\'s second line) to equal `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`',
+    'git -C <wt> status --ignored --porcelain', 'name every ignored file', 'Trees differ, or none was recorded: no `--force`; report it',
+    'Run each removal only on the user\'s yes', 'G1 asks on `git worktree remove --force` and denies it under autopilot']) {
+    assert.ok(t.includes(n), `worktrees.md must contain: ${n}`);
+  }
 });
 
 test('a filled brief passes brief-check', () => {

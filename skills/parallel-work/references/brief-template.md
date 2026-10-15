@@ -7,6 +7,7 @@ Every worker brief fills every field, each a line that starts with its label. `b
 ```
 GOAL        one sentence; the outcome, runnable by someone with no chat access
 SCOPE       paths this worker may write; paths it may not; its worktree path and base ref
+            a directory entry ends in /, a prefix in *; wt-diff --allow reads these
 CONTEXT     file pointers; upstream reports pasted in full when this unit depends on them
 ACCEPTANCE  checkable criteria, one per line
 VERIFY      exact commands, starting with wt-check <wt> <base-ref>, then the focused baseline
