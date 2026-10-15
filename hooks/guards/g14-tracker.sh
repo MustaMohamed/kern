@@ -195,7 +195,7 @@ _g14_decide() {
 _g14_gh() {
   local cmd sub i=0
   cmd=$(ti_get command) || return 0
-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
   _gh_load "$cmd"
   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
     sub=$(gh_sub "${_GH_RECS[$i]}")

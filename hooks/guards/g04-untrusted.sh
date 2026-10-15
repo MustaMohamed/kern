@@ -7,7 +7,7 @@ guard_g04() {
   local cmd seg sub words w
   cmd=$(ti_get command) || return 0
   # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
   while IFS= read -r seg; do
     sub=$(gh_sub "$seg") || continue
     # gh's aliases (pr new, issue new, release new) read as the commands they name (g02-pr.sh).

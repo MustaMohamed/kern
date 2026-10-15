@@ -19,7 +19,7 @@ guard_g13() {
   case "$cmd" in *'\u'*) cmd=$(_g13_unescape "$cmd") ;; esac
   case "$cmd" in *\\$'\n'*) cmd=$(_g13_join "$cmd") ;; esac
   # Cheap prefilter before settings_get: some client or transfer name, quotes and backslashes removed.
-  _g13_flat "$cmd"
+  _g13_flat "$cmd ${KERN_ALIAS_TEXT-}"
   _g13_names "$_G13_FLAT" || return 0
   list=$(settings_get protected_targets '')
   [ -n "$list" ] || return 0

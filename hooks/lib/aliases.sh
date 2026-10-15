@@ -137,6 +137,19 @@ aliases_load() {
   return 0
 }
 
+# alias_text CMD: the expansion of each record of CMD (git_words, from gitctx.sh) whose head word is an
+# alias aliases_load set, one per line. A guard that skips a command whose text lacks a name it reads
+# (gh, push) reads this text too, so an alias such as prc='gh pr create' is not skipped.
+alias_text() {
+  local rec
+  [ -n "${KERN_ALIASES-}" ] || return 0
+  while IFS= read -r rec; do
+    if alias_expand "$rec"; then printf '%s\n' "$ALIAS_EXP"; fi
+  done <<EOF
+$(git_words "$1")
+EOF
+}
+
 # alias_expand SEG: when the head word of the simple command SEG is an alias aliases_load set, sets
 # ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. As zsh does, the head
 # word is the first word after unquoted NAME=value words, redirections (with a target in the next word

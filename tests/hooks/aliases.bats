@@ -186,6 +186,7 @@ noalias_hook() {
   [ "$(decision_of "$output")" = deny ]
   run_guard "$(payload PreToolUse '"agent_id":"a1","agent_type":"kern:investigator","tool_name":"Bash","tool_input":{"command":"glg"}')"
   [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"kern G18: kern:investigator is read-only; 'glg'"* ]] || { echo "$output"; return 1; }
 }
 
 @test "alias names are encoded one to one, and a chain, a cycle and a self-reference resolve" {
@@ -274,4 +275,42 @@ noalias_hook() {
 @test "a _KA_ variable from the environment is never an alias" {
   run env _KA_7878='git push --force' bash "$(kern_root)/hooks/pre-tool-use" <<<"$(bash_payload "xx origin main")"
   [ "$(decision_of "$output")" = none ]
+}
+
+@test "an alias is not skipped by a guard that reads the command text first, and without a snapshot nothing changes" {
+  snap "alias -- prc='gh pr create'" "alias -- rel='gh release create'" "alias -- isc='gh issue create'" \
+    "alias -- prv='gh pr review'" "alias -- gp='git push'"
+  mkdir -p "$R/.claude"
+  printf 'deploy.envs: production\n' >"$R/.claude/kern.local.yml"
+  # G2 alone, then G15 alone: each votes on the alias as on its expansion.
+  run_guard "$(bash_payload "prc --title t --body-file b.md")" g02
+  [[ "$output" == *'"kern G2: '* ]] || { echo "$output"; return 1; }
+  a=$output
+  run_guard "$(bash_payload "gh pr create --title t --body-file b.md")" g02
+  [ "$a" = "$output" ] || { printf '%s\n%s\n' "$a" "$output"; return 1; }
+  run_guard "$(bash_payload "gp origin production")" g15
+  [[ "$output" == *"G15: deploy or publish: push to deploy branch production"* ]] || { echo "$output"; return 1; }
+  a=$output
+  run_guard "$(bash_payload "git push origin production")" g15
+  [ "$a" = "$output" ] || { printf '%s\n%s\n' "$a" "$output"; return 1; }
+  # Every guard together: G4 (inline body), G15 (release), G14 (issue) and G3 (review).
+  same "prc --title t --body b" "gh pr create --title t --body b"
+  same "rel v1" "gh release create v1"
+  same "isc --title t --body-file b.md" "gh issue create --title t --body-file b.md"
+  same "prv 1 --approve" "gh pr review 1 --approve"
+  expect deny "prc --title t --body b"
+  snap "alias -- pdb='git status && psql -h prod-db.internal -c '\\''DELETE FROM x'\\'''"
+  printf 'deploy.envs: production\nprotected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  # G13 cannot find the alias's psql in the command text, so it also reads it as fed by a pipe.
+  expect deny "pdb"
+  [[ "$output" == *"statement starting \`delete\` is not a read"* ]] || false
+  # With no snapshot the same commands get no vote, as before aliases.sh.
+  rm -f "$SNAPS"/*.sh
+  for c in "prc --title t --body-file b.md" "gp origin production"; do
+    for g in g02 g15 ""; do
+      run_guard "$(bash_payload "$c")" "$g"
+      [ "$(decision_of "$output")" = none ] || { echo "$c, ${g:-all}: $output"; return 1; }
+    done
+  done
+  expect none "prc --title t --body b" "rel v1" "isc --title t --body-file b.md" "prv 1 --approve" "pdb"
 }

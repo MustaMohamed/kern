@@ -185,7 +185,7 @@ guard_g15() {
   [ "$TOOL" = Bash ] || return 0
   local cmd out line seen=0 got=0 envs="" parsed dir rest sub t
   cmd=$(ti_get command) || return 0
-  _g15_named "$cmd" || return 0
+  _g15_named "$cmd ${KERN_ALIAS_TEXT-}" || return 0
   # A failed parse or judge leaves no `.`, so G15 asks.
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
   out=$(set -o pipefail; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK") || out=""
