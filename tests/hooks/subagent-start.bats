@@ -39,3 +39,10 @@ context_of() {
   out=$(bash "$BATS_TEST_TMPDIR/k/hooks/subagent-start" 2>/dev/null <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')")
   [ -z "$out" ] || context_of "$out" >/dev/null
 }
+
+@test "subagent returns skip preamble, praise and closing offers, and no agent is told to write a bulk file" {
+  run bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"kern:investigator"')"
+  ctx=$(context_of "$output")
+  [[ "$ctx" == *"with no preamble, praise or closing offer"* ]] || false
+  [[ "$ctx" != *"Put bulk in a file"* ]] || false
+}

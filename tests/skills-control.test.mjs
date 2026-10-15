@@ -57,5 +57,5 @@ test('terse mode tells the voice to answer only what was asked, in numbered orde
   const t = readFileSync(join(import.meta.dirname, '..', 'modes', 'terse.md'), 'utf8');
   assert.match(t, /\n2\. Answer only what was asked: no unrequested background, lists, examples, option tables or follow-up offers\. Give detail when the user asks for it\./);
   const nums = t.split('## Rules\n')[1].split('\n\n')[0].split('\n').map((l) => l.match(/^(\d+)\./)[1]);
-  assert.deepEqual(nums, ['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+  assert.deepEqual(nums, ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']);
 });

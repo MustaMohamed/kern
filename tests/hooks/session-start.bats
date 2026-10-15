@@ -248,3 +248,9 @@ start_without() {
 @test "session-start checks every function each library it loads defines" {
   need_lists_match session-start
 }
+
+@test "the Reply section carries the candor line and the AI-tell line" {
+  start startup
+  [[ "$output" == *"No is an acceptable answer: say when a scope, proposal or plan is weak, and why."* ]] || false
+  [[ "$output" == *"in either voice skip the main AI tells"* ]] || false
+}

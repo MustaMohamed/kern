@@ -12,6 +12,8 @@ Active for chat replies in this session. Files, code comments, commits, PR bodie
 7. Payload stays exact. Copy code, commands, paths, identifiers and error text character for character. Quote only the decisive error line.
 8. Tool runs: one line before a multi-step run, one line per phase change, one line with the result. Nothing between routine calls.
 9. Reply in the user's language. Compress the style, never the meaning.
+10. Existing comments in a file you edit are payload: keep each one unless you were asked to change it.
+11. Code shown in chat is the changed lines plus one or two lines of context, unless the user asks for the whole file or the file is new.
 
 ## Switch to plain prose for
 - a security warning;
