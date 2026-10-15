@@ -53,11 +53,23 @@ test('setup defers the work dir to kern-dir; allowed-tools covers its read-only 
   assert.match(setup, /bash \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/kern-dir [a-z]/);
   assert.doesNotMatch(body, /\/\.kern\//);
   const tools = data['allowed-tools'].split(', ');
-  for (const t of ['Bash(git rev-parse *)', 'Bash(git check-ignore *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)']) assert.ok(tools.includes(t), t);
+  for (const t of ['Bash(git rev-parse --git-common-dir)', 'Bash(git check-ignore -q *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)']) assert.ok(tools.includes(t), t);
   assert.ok(!tools.some((t) => t.includes('kern-dir')), 'kern-dir writes, so setup step 6 keeps its permission prompt');
 });
 
 test('the template sets no key: every line is a comment or blank', () => {
   const tpl = readFileSync(join(dir, 'templates', 'kern.local.yml'), 'utf8');
   assert.doesNotMatch(tpl, /^[^#\n]/m);
+});
+
+test('help allows only the exact git commands it prescribes, so no wildcard can add a write or a program run', () => {
+  assert.equal(
+    data['allowed-tools'],
+    'Read, Bash(git remote -v), Bash(git rev-parse --git-common-dir), Bash(git check-ignore -q *), Bash(git worktree list), ' +
+      'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), ' +
+      'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)',
+  );
+  const git = data['allowed-tools'].split(', ').filter((t) => t.startsWith('Bash(git '));
+  // The only wildcard over git is check-ignore -q, whose options only read; no other git entry ends in *.
+  assert.deepEqual(git.filter((t) => t.endsWith('*)')), ['Bash(git check-ignore -q *)']);
 });

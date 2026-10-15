@@ -4,6 +4,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- help: allows only the exact git commands it prescribes (`git remote -v`, `git rev-parse --git-common-dir`, `git check-ignore -q *`, `git worktree list`); `git remote *`, `git symbolic-ref *` and `git log *` could write config, move HEAD or run a program with no prompt.
 - Mode switches: "terse voice" and "terse mode on" switch; extra spaces are folded; a first line over 200 characters never switches.
 - Kernel: no is an acceptable answer, and chat in either voice skips the main AI tells; terse keeps existing comments and shows only changed code.
 - prove-it: evidence before any done, fixed or passing claim. Removes the M0 placeholder skill.
