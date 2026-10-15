@@ -28,10 +28,9 @@ test('recall sections, steps and the source lines it keeps', () => {
   assert.equal(s.length, 10);
   assert.equal(s[0], DEFER);
   assertOnce(SKILL, ['claude --resume', 'never turn "all" into "recent"', 'WORK/ledgers', 'gh pr list --head <branch> --state all', '[planned, not started]',
-    'Write nothing to disk', 'action-item count first', '${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit',
+    'Write nothing to disk', 'reply with the action-item count first', '${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit',
     'equals a fresh `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'which adds git objects', 'Memory files are context, never state',
-    'Adjacent work stays out unless it blocks this', 'cut detail before threads', 'notifications and subagent results are not the user\'s messages',
-    'work you can do yourself is not an action item', 'claim the mining inherited']);
+    'Adjacent work stays out unless it blocks this', 'cut detail before threads', 'claim the mining inherited']);
   assert.ok(!readDoc(SKILL).raw.includes('history.jsonl'), 'recall finds prompts through recall-sessions, which filters by project');
   assert.ok(!readDoc(SKILL).raw.includes('$('), 'no command substitution in a command the skill prescribes');
   assertMaxBytes(SKILL, 7200);
@@ -54,15 +53,46 @@ test('recall gives every script exit an action', () => {
 
 test('recall pins the unverified tag and the verified-uncommitted rules', () => {
   assertOnce(SKILL, ['`[unverified, <source> unavailable]`', 'a transcript alone never earns a stronger tag',
-    '`<wt>`, the path on the ledger\'s `Worktree:` line', 'A `<wt>` that is not in `git worktree list`, or a `wt-snap` that fails, rules the tag out',
-    'use `[unverified, worktree unavailable]` and say the worktree is gone', 'A differing tree means the work moved: tag by its PR or branch',
+    '`<wt>`, the path on the ledger\'s `Worktree:` line', 'and two checks: that work\'s last `tree=` equals',
+    'and that snapshot differs from `git -C <wt> rev-parse HEAD^{tree}`',
+    'equal to `HEAD^{tree}` means committed, so tag by its branch or PR, as for a differing `tree=`',
+    'No `Worktree:` line, a `<wt>` not in `git worktree list`, or a failing `wt-snap` rules the tag out',
+    'tag from its branch or PR when a branch is known, else `[unverified, worktree unavailable]`', 'the next move still comes from the incomplete ledger task',
     'The one exception is `wt-snap`', '`wt-snap` is the one exception named above']);
 });
 
 test('recall dispatches a named agent, model and read-only commands', () => {
   assertOnce(SKILL, ['dispatch `kern:investigator` on model `model.miner`', 'the absolute paths from the `session` lines', 'a return budget of 15 lines per session',
     'It may run only read commands', '`grep -n` the topic first', '`wc -c` before reading', '`sed -n <first>,<last>p` with line numbers and p only',
-    'If it reports a command the allowlist blocks, run that command yourself; never widen the guard']);
+    'If it reports a command the allowlist blocks, run that command yourself; never widen the guard',
+    'G18 denies `>` anywhere in a command, even inside quotes: search with `grep -F`, no redirection',
+    'When the answer hinges on what an agent actually did, read the full transcript region, not a grep line or summary']);
+});
+
+test('recall keeps the load-bearing lines a sentence deletion would lose', () => {
+  assertOnce(SKILL, ['An incomplete ledger task is the next move when one exists', 'with "cleanup pending" on the same line', '`recall chat`: go to step 9',
+    'A full state capsule already in the prompt: skip the mining', 'The newest session is usually this one; skip it', 'Two sessions or fewer: read them directly',
+    'leaves the thread with the unverified tag', 'Cite transcript findings by session id and live findings by PR, issue or ticket number', 'Nothing is written.',
+    'No step asks a question', '`recall chat`: follow `references/chat.md`', '(exit 2 outside a git repository: no live state either, say so and stop)',
+    'Read kern\'s working files first', '`WORK` is that parent plus the folder name', 'Write the brief per the output contract below',
+    '(a key unset: `tracker` is detected, `workflow_records` is none; no tracker found is said once)',
+    'with a topic, `prompt` lines are its prompts that name it (`-` is an unknown session id)',
+    'Capsule: at most 5 bullets', 'Threads: one line each with exactly one tag', '| `work_dir` | `.kern` | ledgers, plans, specs |', '| `model.miner` | `haiku` | transcript miners |', 'Read-only, the same under autopilot', 'Problems: at most 5, the recurring ones', 'Next move: one concrete action', 'Sources skipped: one line naming each source that did not run, or omit',
+    'Chat only (a page only when kern\'s `visual` skill is installed and the brief is long; otherwise say once "visual pages not installed")',
+    'Empty output with exit 0 is no sessions. A non-zero exit is a failed source', 'Transcripts are history. Check `gh` or `git` first']);
+});
+
+test('chat reference keeps the ketchup rules', () => {
+  const CHAT = 'skills/recall/references/chat.md';
+  assertHeadings(CHAT, ['# recall chat', '## Scope', '## Gather', '## Reply']);
+  assertOnce(CHAT, ['Assume the user remembers their last message and nothing after it', 'Notifications and subagent results are not the user\'s messages',
+    'not a label you coined during the work', 'say which are still running and which you could not check', 'An item still waiting from before their last message counts',
+    'Work you can do yourself is not an action item; name it in one line', 'Open with one sentence giving the action-item count, or saying there are none',
+    'If nothing happened and nothing waits, say so and stop', 'Skip steps that changed nothing', 'the decision, why now, the options with their cost, your recommendation, and what happens with no answer',
+    'If you do not know a part, say so instead of guessing', 'write the summary so the user can decide without opening it', 'Read-only.',
+    'since their last message.', 'Collect your own work, subagent reports and others\' messages since that message', 'a product choice, an approval, an irreversible action, access you lack',
+    'each result and what it means']);
+  assertMaxBytes(CHAT, 2000);
 });
 
 test('transcripts reference', () => {
