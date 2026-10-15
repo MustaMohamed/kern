@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { parseFrontmatter } from './frontmatter.mjs';
-import { kernelRows } from './kernel-rows.mjs';
+import { kernelRows, parseRow, routedSkills } from './kernel-rows.mjs';
 
 export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
 export const AGENT_KEYS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'color', 'maxTurns', 'skills', 'memory', 'background', 'isolation']);
@@ -67,7 +67,7 @@ export function loadModel(root) {
   const kernelText = existsSync(kernelPath) ? readFileSync(kernelPath, 'utf8') : '';
   const routesPath = join(root, 'kernel', 'routes.md');
   const routesText = existsSync(routesPath) ? readFileSync(routesPath, 'utf8') : '';
-  const routed = new Set([...`${kernelText}\n${routesText}`.matchAll(/Read \{KERN\}\/([a-z0-9-]+)\/SKILL\.md/g)].map((m) => m[1]));
+  const routed = routedSkills(`${kernelText}\n${routesText}`);
   for (const s of skills) s.tier = s.data['disable-model-invocation'] !== 'true' ? 'auto' : routed.has(s.name) ? 'path' : 'slash';
   const cases = {};
   const casesDir = join(root, 'evals', 'cases');
@@ -196,11 +196,10 @@ export const RULES = [
       out.push(err(6, 'kernel/kernel.md', 'kernel/routes.md holds route rows, but the kernel never names {ROOT}/kernel/routes.md, so no route there is reached'));
     }
     for (const [src, text] of sources) for (const line of text.split('\n')) {
-      if (!line.trimStart().startsWith('|') || !/\{(KERN|ROOT)\}\//.test(line)) continue;
-      const m = line.match(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/);
-      if (!m) { out.push(err(6, src, `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}`)); continue; }
-      const target = m[1] === 'KERN' ? join('skills', m[2]) : m[2];
-      if (target === 'kernel/routes.md') { out.push(err(6, src, 'kernel/routes.md is named in the Routing rule, not routed by a row')); continue; }
+      const row = parseRow(line);
+      if (!row) continue;
+      if (row.error) { out.push(err(6, src, row.error)); continue; }
+      const target = row.base === 'KERN' ? join('skills', row.path) : row.path;
       const file = join(model.root, target);
       if (!existsSync(file)) { out.push(err(6, src, `route ${target} does not exist`)); continue; }
       const body = parseFrontmatter(readFileSync(file, 'utf8')).body.replace(/\r\n/g, '\n');
@@ -222,21 +221,27 @@ export const RULES = [
     const out = [];
     if (model.routesText.length > 1500) out.push(err(7, 'kernel/routes.md', `routed file ${model.routesText.length} chars, limit 1,500; every routed task reads it`));
     if (!existsSync(join(model.root, 'hooks', 'session-start'))) return out;
+    const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
+    const settings = ['kern.local.yml', 'kern.yml'].filter((f) => existsSync(join(fixture, f)));
+    if (!settings.length) out.push(err(7, 'tests/fixtures/projects/long-settings', 'no kern.local.yml or kern.yml, so the longest-settings render would be measured with defaults'));
     const tmp = mkdtempSync(join(tmpdir(), 'kern-rule7-'));
     try {
       const repo = join(tmp, 'repo');
       mkdirSync(join(repo, '.claude'), { recursive: true });
       const init = spawnSync('git', ['init', '-q', repo]);
       if (init.status !== 0) out.push(err(7, 'hooks/session-start', `git init exited ${init.status}, so the kernel was not measured in a repository`));
-      const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
-      for (const f of ['kern.local.yml', 'kern.yml']) if (existsSync(join(fixture, f))) copyFileSync(join(fixture, f), join(repo, '.claude', f));
+      for (const f of settings) copyFileSync(join(fixture, f), join(repo, '.claude', f));
       const env = { ...process.env, HOME: join(tmp, 'home'), CLAUDE_PLUGIN_DATA: join(tmp, 'data') };
       const run = (name, payload) => spawnSync('bash', [join(model.root, 'hooks', name)], { input: JSON.stringify(payload), env, encoding: 'utf8' });
       const hook = (name, payload) => run(name, payload).stdout || '';
       const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
-      const ran = (r) => r.status === 0 && (r.stdout || '').trim() !== '';
+      // A render is the kernel only when it exits 0 and carries the header line that defines {ROOT}. "kern did not
+      // load", or any other output, is not a kernel, and its length is not a measurement.
+      const header = `kern at ${model.root}. `;
+      const rendered = (r) => r.status === 0 && (r.stdout || '').split('\n').some((l) => l.startsWith(header));
+      const failed = (r) => `exited ${r.status} with ${(r.stdout || '').length} chars of output${r.status === 0 ? ' and no "kern at <root>." header line' : ''}`;
       const start = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
-      if (!ran(start)) out.push(err(7, 'hooks/session-start', `exited ${start.status} with ${(start.stdout || '').length} chars of output, so the kernel was not measured`));
+      if (!rendered(start)) out.push(err(7, 'hooks/session-start', `${failed(start)}, so the kernel was not measured`));
       const kernel = norm(start.stdout || '');
       const terse = existsSync(join(model.root, 'modes', 'terse.md')) ? readFileSync(join(model.root, 'modes', 'terse.md'), 'utf8').length : 0;
       if (kernel.length > 4000) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 4,000`));
@@ -245,7 +250,7 @@ export const RULES = [
       // description, the text every session carries.
       for (const f of ['kern.local.yml', 'kern.yml']) rmSync(join(repo, '.claude', f), { force: true });
       const again = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
-      if (ran(start) && !ran(again)) out.push(err(7, 'hooks/session-start', `exited ${again.status} with no project settings, so the standing cost was not measured`));
+      if (rendered(start) && !rendered(again)) out.push(err(7, 'hooks/session-start', `${failed(again)} with no project settings, so the standing cost was not measured`));
       const bare = norm(again.stdout || '');
       const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
       if (bare.length + desc > 4800) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 4,800`));
@@ -419,6 +424,8 @@ export const RULES = [
       // A negative marked "grader": "model" is checked by M2b's model-graded runner, not here; it does not count.
       const nc = c.trigger?.negative?.filter((n) => n.grader !== 'model').length ?? 0;
       const ec = c.evals?.length ?? 0;
+      const flagged = (c.trigger?.positive || []).filter((x) => x.grader !== undefined).length;
+      if (flagged) out.push(err(12, path, `evals/cases/${key}.json has ${flagged} positive prompt(s) with "grader"; only a negative can be model-graded`));
       if (pc < 3 || nc < 2 || ec < 1) out.push(err(12, path, `evals/cases/${key}.json has ${pc} positive, ${nc} negative, ${ec} behavioural; needs 3, 2, 1`));
     };
     for (const s of model.skills.filter((x) => !x.error && x.tier === 'auto')) need(s.name, rel(model, s.file));

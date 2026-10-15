@@ -24,9 +24,6 @@ export function targets(root) {
   return [...skills, ...rows, ...distractors];
 }
 
-// A kernel row and the skill it routes to are one owner: either ranking first is a hit.
-const ownerOf = (name) => name.replace(/^row-/, '');
-
 // A negative marked "grader": "model" is one the lexical ranker cannot judge, such as a question about the words a
 // row uses. It is listed on every run, left out of the checks and minimums here, and checked by M2b's model-graded runner.
 const modelGraded = (n) => n.grader === 'model';
@@ -34,14 +31,35 @@ const modelGraded = (n) => n.grader === 'model';
 function loadCases(root) {
   const dir = join(root, 'evals', 'cases');
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => {
+  return readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => {
     try { return { file: f, data: JSON.parse(readFileSync(join(dir, f), 'utf8')) }; }
     catch (e) { return { file: f, parseError: e.message }; }
   });
 }
 
+// evals/heldout.json: a non-empty array of { owner, prompt }. Missing is an error only when a floor is set; malformed
+// always is. Returns null when there is nothing to rank.
+function loadHeldout(root, required, errors) {
+  const path = join(root, 'evals', 'heldout.json');
+  if (!existsSync(path)) {
+    if (required) errors.push('evals/heldout.json is missing, so the held-out floor cannot be checked');
+    return null;
+  }
+  let held;
+  try { held = JSON.parse(readFileSync(path, 'utf8')); }
+  catch (e) { errors.push(`evals/heldout.json: invalid JSON: ${e.message}`); return null; }
+  if (!Array.isArray(held) || !held.length) { errors.push('evals/heldout.json must be a non-empty array of { owner, prompt }'); return null; }
+  const bad = held.findIndex((h) => typeof h?.owner !== 'string' || typeof h?.prompt !== 'string');
+  if (bad >= 0) { errors.push(`evals/heldout.json entry ${bad} is not { owner, prompt }`); return null; }
+  return held;
+}
+
 export function evaluate(root, { minRank1, minHeldout = null }) {
   const all = targets(root);
+  // A kernel row and the skill it routes to are one owner: either ranking first is a hit. Only a row folds, by its
+  // kind, so a skill or distractor that happens to be named row-<x> stays its own owner.
+  const kinds = new Map(all.map((t) => [t.name, t.kind]));
+  const ownerOf = (name) => (kinds.get(name) === 'row' ? name.replace(/^row-/, '') : name);
   const owners = all.filter((t) => t.kind !== 'distractor');
   const corpus = buildCorpus(all);
   const names = new Set(all.map((t) => t.name));
@@ -113,19 +131,19 @@ export function evaluate(root, { minRank1, minHeldout = null }) {
 
   const rank1Rate = positives ? Math.floor((rank1 / positives) * 100) : null;
   if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the floor ${minRank1}%`);
+  if (minRank1 !== null && !positives) errors.push('no case positives to rank, so the rank-1 floor cannot be checked');
 
   // Held-out organic prompts (evals/heldout.json), frozen by a test: never reworded to pass.
   let heldoutRate = null;
-  const hPath = join(root, 'evals', 'heldout.json');
-  if (existsSync(hPath)) {
-    const held = JSON.parse(readFileSync(hPath, 'utf8'));
+  const held = loadHeldout(root, minHeldout != null, errors);
+  if (held) {
     let hits = 0;
     for (const h of held) {
       if (!owners.some((t) => ownerOf(t.name) === h.owner)) { errors.push(`heldout: no owner "${h.owner}" for "${h.prompt}"`); continue; }
       const r = rank(h.prompt, corpus);
       if (ownerOf(r[0].name) === h.owner && r[0].score > 0) hits++;
     }
-    heldoutRate = held.length ? Math.floor((hits / held.length) * 100) : null;
+    heldoutRate = Math.floor((hits / held.length) * 100);
     if (minHeldout != null && heldoutRate !== null && heldoutRate < minHeldout) errors.push(`held-out rank-1 rate ${heldoutRate}% is below the floor ${minHeldout}%`);
   }
   return { errors, warnings, rank1Rate, heldoutRate, modelGraded: graded };
@@ -134,10 +152,27 @@ export function evaluate(root, { minRank1, minHeldout = null }) {
 if (isMain(import.meta.url)) {
   const root = resolve(process.argv.slice(2).find((a) => !a.startsWith('--')) || fileURLToPath(new URL('..', import.meta.url)));
   const basePath = join(root, 'evals', 'baseline.json');
-  const baseline = JSON.parse(readFileSync(basePath, 'utf8'));
+  // The gate's own inputs. A missing or malformed file stops the run with a message; it never falls back to a floor
+  // of 0, and a null or NaN floor never reaches a comparison, where it would pass everything.
+  const setup = [];
+  const gateFile = (name, keys) => {
+    const path = join(root, 'evals', name);
+    if (!existsSync(path)) { setup.push(`evals/${name} is missing`); return null; }
+    let data;
+    try { data = JSON.parse(readFileSync(path, 'utf8')); }
+    catch (e) { setup.push(`evals/${name}: invalid JSON: ${e.message}`); return null; }
+    const bad = keys.filter((k) => !Number.isFinite(data?.[k]));
+    if (bad.length) { setup.push(`evals/${name} needs a finite number for ${bad.join(' and ')}`); return null; }
+    return data;
+  };
+  const baseline = gateFile('baseline.json', ['min_rank1']);
   // evals/floors.json holds fixed floors a test pins; the baseline only rises above them.
-  const fPath = join(root, 'evals', 'floors.json');
-  const floors = existsSync(fPath) ? JSON.parse(readFileSync(fPath, 'utf8')) : { rank1: 0, heldout_rank1: null };
+  const floors = gateFile('floors.json', ['rank1', 'heldout_rank1']);
+  if (setup.length) {
+    for (const e of setup) console.log(`error: ${e}`);
+    console.log('route-eval: FAILED');
+    process.exit(1);
+  }
   const minRank1 = Math.max(baseline.min_rank1, floors.rank1);
   const r = evaluate(root, { minRank1, minHeldout: floors.heldout_rank1 });
   for (const w of r.warnings) console.log(`warn: ${w}`);

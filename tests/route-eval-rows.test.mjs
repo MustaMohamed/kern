@@ -103,6 +103,8 @@ const withGrader = (negative, positive = ['where did I leave off yesterday', 'ca
     evals: [{ id: 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] }],
   }),
   'evals/baseline.json': JSON.stringify({ min_rank1: 0 }),
+  'evals/floors.json': JSON.stringify({ rank1: 0, heldout_rank1: 0 }),
+  'evals/heldout.json': JSON.stringify([{ owner: 'recall', prompt: 'where did I leave off after the gap' }]),
 });
 const LEXICAL = [{ prompt: 'fix this crash' }, { prompt: 'rename a variable' }];
 
@@ -131,4 +133,108 @@ test('only lexically checked negatives count toward the minimum', () => {
 test('a negative with a grader other than model is an error', () => {
   const r = evaluate(withGrader([...LEXICAL, { prompt: 'add a CSV export', grader: 'modle' }]), { minRank1: null });
   assert.ok(r.errors.some((e) => e.startsWith('recall: unknown grader "modle"')), JSON.stringify(r.errors));
+});
+
+// Fix round 1: one row parser, owners folded by kind, and gates that never skip (D6).
+test('kernelRows takes only the rows rule 6 accepts', () => {
+  assert.deepEqual(kernelRows([
+    '| Bug \\| crash | Read {KERN}/diagnose/SKILL.md |',
+    '| a | b | Read {KERN}/diagnose/SKILL.md |',
+    '| More | Read {ROOT}/kernel/routes.md |',
+    '| Prose | Read `{KERN}/technical-writing/SKILL.md` |',
+    'Then Read {KERN}/recall/SKILL.md first.',
+    '| Gap | Read {KERN}/recall/SKILL.md |',
+  ].join('\n')), [{ when: 'Gap', route: 'recall' }]);
+});
+
+test('only a kernel row folds into the skill it routes to; a distractor named row-<x> does not', () => {
+  const root = repo({
+    'skills/a/SKILL.md': autoSkill('a', 'Use when greeting kern hello'),
+    'evals/cases/a.json': cases('a', ['hello kern', 'greeting kern', 'kern hello there'], ['deploy the release to production', 'weather today']),
+    'evals/distractors.json': JSON.stringify([{ name: 'row-a', description: 'deploy the release to production servers' }]),
+  });
+  assert.deepEqual(evaluate(root, { minRank1: null }).errors, []);
+});
+
+test('held-out entries name a known owner', () => {
+  const held = JSON.stringify([{ owner: 'recall', prompt: 'where did I leave off after the gap' }, { owner: 'ghost', prompt: 'boo' }]);
+  const r = evaluate(fixture({ 'evals/heldout.json': held }), { minRank1: null });
+  assert.ok(r.errors.includes('heldout: no owner "ghost" for "boo"'), JSON.stringify(r.errors));
+});
+
+test('a missing, empty or malformed held-out set is an error once a floor is set', () => {
+  const run = (extra) => evaluate(fixture(extra), { minRank1: null, minHeldout: 0 }).errors;
+  assert.ok(run({}).includes('evals/heldout.json is missing, so the held-out floor cannot be checked'), JSON.stringify(run({})));
+  for (const bad of ['[]', '{}', 'null', JSON.stringify([{ owner: 'recall' }])]) {
+    const errors = run({ 'evals/heldout.json': bad });
+    assert.ok(errors.some((e) => /^evals\/heldout\.json (must be a non-empty array|entry 0 is not)/.test(e)), `${bad}: ${JSON.stringify(errors)}`);
+  }
+  assert.ok(run({ 'evals/heldout.json': '[' }).some((e) => e.startsWith('evals/heldout.json: invalid JSON')));
+});
+
+test('no case positives under a rank-1 floor is an error', () => {
+  const r = evaluate(repo({ 'skills/x/SKILL.md': pathSkill('x') }), { minRank1: 85 });
+  assert.ok(r.errors.includes('no case positives to rank, so the rank-1 floor cannot be checked'), JSON.stringify(r.errors));
+});
+
+test('the model-graded negatives are pinned: flagging one more means editing this list', () => {
+  assert.deepEqual(evaluate(ROOT, { minRank1: null }).modelGraded, [
+    { owner: 'prove-it', prompt: 'Explain what fixed and passing mean in this commit message' },
+    { owner: 'prove-it', prompt: 'What does a passing PR mean for subagent work' },
+  ]);
+});
+
+// The CLI against a fixture root: the floors, the baseline and the held-out floor are each enforced, and a missing
+// or malformed gate file stops the run with a message.
+const HELD = JSON.stringify([{ owner: 'recall', prompt: 'where did I leave off after the gap' }, { owner: 'diagnose', prompt: 'catch me up' }]);
+function cli(gates) {
+  // One recall positive ranks diagnose first, so the rank-1 rate is 92% (12 of 13).
+  // A null entry leaves that file out.
+  const files = {
+    'evals/cases/recall.json': cases('recall', ['where did I leave off yesterday', 'catch me up on the work', 'resuming after a long gap', 'the failing test with an error after a gap'], ['fix this crash', 'rename a variable']),
+    'evals/heldout.json': HELD,
+    ...gates,
+  };
+  const root = fixture(Object.fromEntries(Object.entries(files).filter(([, v]) => v !== null)));
+  const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'route-eval.mjs'), root], { encoding: 'utf8' });
+  return { status: r.status, out: r.stdout, err: r.stderr };
+}
+const gate = (baseline, floors) => ({ 'evals/baseline.json': JSON.stringify({ min_rank1: baseline }), 'evals/floors.json': JSON.stringify(floors) });
+
+test('the CLI enforces the baseline, the fixed rank-1 floor and the held-out floor', () => {
+  const ok = cli(gate(0, { rank1: 0, heldout_rank1: 0 }));
+  assert.equal(ok.status, 0, ok.out + ok.err);
+  assert.match(ok.out, /^rank-1 rate: 92% /m);
+  const floor = cli(gate(0, { rank1: 95, heldout_rank1: 0 }));
+  assert.equal(floor.status, 1);
+  assert.match(floor.out, /^error: rank-1 rate 92% is below the floor 95%$/m);
+  const baseline = cli(gate(95, { rank1: 0, heldout_rank1: 0 }));
+  assert.equal(baseline.status, 1);
+  assert.match(baseline.out, /^error: rank-1 rate 92% is below the floor 95%$/m);
+  const held = cli(gate(0, { rank1: 0, heldout_rank1: 60 }));
+  assert.equal(held.status, 1);
+  assert.match(held.out, /^error: held-out rank-1 rate 50% is below the floor 60%$/m);
+});
+
+test('the CLI fails with a message, never a default, when a gate file is missing or malformed', () => {
+  const good = gate(0, { rank1: 0, heldout_rank1: 0 });
+  const cases = [
+    [{ ...good, 'evals/floors.json': null }, 'evals/floors.json is missing'],
+    [{ ...good, 'evals/baseline.json': null }, 'evals/baseline.json is missing'],
+    [{ ...good, 'evals/floors.json': '{}' }, 'evals/floors.json needs a finite number for rank1 and heldout_rank1'],
+    [{ ...good, 'evals/floors.json': 'null' }, 'evals/floors.json needs a finite number for rank1 and heldout_rank1'],
+    [{ ...good, 'evals/floors.json': '{ "rank1": null, "heldout_rank1": 32 }' }, 'evals/floors.json needs a finite number for rank1'],
+    [{ ...good, 'evals/floors.json': '{ "rank1": "85", "heldout_rank1": 32 }' }, 'evals/floors.json needs a finite number for rank1'],
+    [{ ...good, 'evals/baseline.json': '{}' }, 'evals/baseline.json needs a finite number for min_rank1'],
+    [{ ...good, 'evals/floors.json': '{' }, 'evals/floors.json: invalid JSON'],
+    [{ ...good, 'evals/heldout.json': null }, 'evals/heldout.json is missing, so the held-out floor cannot be checked'],
+    [{ ...good, 'evals/heldout.json': '{}' }, 'evals/heldout.json must be a non-empty array of { owner, prompt }'],
+  ];
+  for (const [files, message] of cases) {
+    const r = cli(files);
+    assert.equal(r.status, 1, `${message}: ${r.out}${r.err}`);
+    assert.ok(r.out.split('\n').some((l) => l.startsWith(`error: ${message}`)), `${message}: ${r.out}`);
+    assert.equal(r.err, '', `no stack trace: ${r.err}`);
+    assert.match(r.out, /route-eval: FAILED\n$/);
+  }
 });

@@ -33,7 +33,7 @@
       "expectations": [
         "Reads skills/self-review/SKILL.md",
         "Runs floor-scan and claim-check on the package",
-        "Ends with one verdict: ready, fix first, rebase first or split"
+        "Ends with one verdict: split, fix first, rebase first or ready"
       ]
     }
   ]
