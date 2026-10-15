@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# List this project's Claude Code sessions for recall: the main worktree's transcripts and its kern
+# worktrees', newest first, inside a window; with --topic, also this project's prompts that name the
+# topic. Never reads another project's transcripts or prompts. Read-only.
+# Usage: recall-sessions [--days N] [--topic TEXT]
+# Output: session<TAB><iso mtime><TAB><session id><TAB><bytes><TAB><path>, newest first; the newest is
+# usually the session running now. Then, with --topic: prompt<TAB><iso time><TAB><session id><TAB><text>.
+# Exit: 0; 2 on a usage error or outside a git repository; 1 when a folder, a file or a command it
+# needs fails (nothing is printed then, so a failure never reads as "no sessions").
+# A missing ~/.claude/projects, transcript folder or history.jsonl is not an error: no records is the
+# truth there, and the answer is empty.
+# Scope limits, accepted: transcripts come from the main worktree's exact folder and from folders named
+# <main slug>--claude-worktrees-*. A session started in a subdirectory of the main checkout is not
+# listed, because a slug prefix match would also take sibling projects (/x/kern-old). Prompts count only
+# when their project is the main worktree or lies under the worktree dir.
+# history.jsonl is read with awk, not a JSON parser: "display" is unescaped for \" \\ \/ and \n \t \r
+# (the last three become a space); \uXXXX is left as typed, so a topic never matches across one. Text
+# and the 120-character cut are bytes (LC_ALL=C), and the topic matches case-insensitively for ASCII only.
+# Adapted from the user's recall skill, "Where the records are" (MIT, local copy).
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+# shellcheck source=/dev/null
+. "$here/lib/wt-common.sh"
+usage() { echo "usage: recall-sessions [--days N] [--topic TEXT]" >&2; exit 2; }
+die() { echo "recall-sessions: $*" >&2; exit 1; }
+days=7 topic=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --days) [ $# -ge 2 ] || usage; days=$2; shift 2 ;;
+    --topic) [ $# -ge 2 ] && [ -n "$2" ] || usage; topic=$2; shift 2 ;;
+    *) usage ;;
+  esac
+done
+case "$days" in '' | *[!0-9]*) usage ;; esac
+[ "${#days}" -le 6 ] || usage
+MAIN=$(kern_main_root "$PWD") || { echo "recall-sessions: not a git repository" >&2; exit 2; }
+export KERN_MAIN="$MAIN"
+projects="$HOME/.claude/projects"
+# Claude Code names a project's transcript folder after its path, every character outside A-Z, a-z and
+# 0-9 turned into -.
+slug() { printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9' '-'; }
+main_slug=$(slug "$MAIN")
+wt_root=$(wt_dir) || die "cannot resolve the worktree dir"
+wt_slug=$(slug "$wt_root/")
+
+# iso_at SECONDS: local time of an epoch second. GNU date takes -d @S and rejects -r S; BSD date takes
+# -r S and rejects -d @S. Pick once, so a real failure is not mistaken for the other system's syntax.
+if date -d @0 +%s > /dev/null 2>&1; then
+  iso_at() { date -d "@$1" +%Y-%m-%dT%H:%M; }
+else
+  iso_at() { date -r "$1" +%Y-%m-%dT%H:%M; }
+fi
+
+TAB=$'\t'
+recs=''
+for d in "$projects/$main_slug" "$projects/$wt_slug"*; do
+  [ -d "$d" ] || continue
+  # Top-level transcripts only: subagents/, tool-results/ and workflows/ hold a session's children.
+  found=$(find "$d" -maxdepth 1 -type f -name '*.jsonl' -mtime "-$days") || die "cannot read $d"
+  [ -n "$found" ] || continue
+  while IFS= read -r f; do
+    # `date -r FILE` is the file's mtime on both BSD and GNU date.
+    epoch=$(date -r "$f" +%s) || die "cannot read the mtime of $f"
+    iso=$(date -r "$f" +%Y-%m-%dT%H:%M) || die "cannot read the mtime of $f"
+    bytes=$(wc -c < "$f") || die "cannot read $f"
+    bytes=${bytes//[[:space:]]/}
+    case "$epoch$bytes" in '' | *[!0-9]*) die "unreadable mtime or size for $f" ;; esac
+    [ -n "$iso" ] || die "empty mtime for $f"
+    recs="$recs$epoch$TAB$iso$TAB$(basename "$f" .jsonl)$TAB$bytes$TAB$f"$'\n'
+  done <<EOT
+$found
+EOT
+done
+
+out=''
+if [ -n "$recs" ]; then
+  sorted=$(printf '%s' "$recs" | LC_ALL=C sort -t "$TAB" -k1,1nr -k3,3) || die "sort failed"
+  while IFS="$TAB" read -r _ iso id bytes f; do
+    out="${out}session$TAB$iso$TAB$id$TAB$bytes$TAB$f"$'\n'
+  done <<EOT
+$sorted
+EOT
+fi
+
+hist="$HOME/.claude/history.jsonl"
+if [ -n "$topic" ] && [ -e "$hist" ]; then
+  [ -r "$hist" ] || die "cannot read $hist"
+  now=$(date +%s) || die "date failed"
+  case "$now" in '' | *[!0-9]*) die "date gave no epoch" ;; esac
+  since=$(( (now - days * 86400) * 1000 ))
+  prompts=$(MAIN=$MAIN WT="$wt_root/" TOPIC=$topic SINCE=$since LC_ALL=C awk '
+    # The value of string key k, up to its first unescaped quote. A quote inside a string is always
+    # written \", so "k":" never matches inside a value.
+    function field(k,   pat, i, rest, j, c, o, e) {
+      pat = "\"" k "\":\""
+      i = index($0, pat)
+      if (i == 0) return ""
+      rest = substr($0, i + length(pat)); o = ""
+      while ((j = match(rest, /["\\]/)) > 0) {
+        o = o substr(rest, 1, j - 1)
+        if (substr(rest, j, 1) == "\"") return o
+        e = substr(rest, j + 1, 1)
+        if (e == "n" || e == "t" || e == "r") o = o " "
+        else if (e == "\"" || e == "\\" || e == "/") o = o e
+        else o = o "\\" e
+        rest = substr(rest, j + 2)
+      }
+      return o
+    }
+    { sub(/\r$/, "") }
+    {
+      p = field("project")
+      if (p != ENVIRON["MAIN"] && index(p, ENVIRON["WT"]) != 1) next
+      if (!match($0, /"timestamp":[0-9]+/)) next
+      ts = substr($0, RSTART + 12, RLENGTH - 12) + 0
+      if (ts < ENVIRON["SINCE"] + 0) next
+      d = field("display")
+      if (index(tolower(d), tolower(ENVIRON["TOPIC"])) == 0) next
+      printf "%.0f\t%s\t%s\n", ts / 1000, field("sessionId"), substr(d, 1, 120)
+    }' "$hist") || die "cannot read $hist"
+  if [ -n "$prompts" ]; then
+    while IFS="$TAB" read -r ts sid text; do
+      iso=$(iso_at "$ts") || die "cannot format the time of a prompt ($ts)"
+      [ -n "$iso" ] || die "empty time for a prompt ($ts)"
+      out="${out}prompt$TAB$iso$TAB$sid$TAB$text"$'\n'
+    done <<EOT
+$prompts
+EOT
+  fi
+fi
+printf '%s' "$out"
