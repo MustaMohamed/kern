@@ -102,7 +102,8 @@ END {
 # _ALIAS_HEAD_AWK: for a simple command whose leading words include an assignment that holds a quote, a
 # $ or a backslash (X='a b' gpf!), prints three lines: the text before the head word, the head word and
 # the text after it, all as written. Words are split at blanks outside quotes, $( ), ${ } and backticks;
-# the words skipped are those alias_expand skips. Prints nothing when there is no head word. A word it
+# each $( ) or ${ } keeps its own quote state, so a quote inside one closes there. The words skipped are
+# those alias_expand skips. Prints nothing when there is no head word. A word it
 # splits wrongly can only add or miss an expansion record, which git_words prints after the command's
 # own records.
 # shellcheck disable=SC2016 # awk text
@@ -120,10 +121,11 @@ END {
       if (q == sq) { if (c == sq) q = ""; continue }
       if (c == "\\") { i++; continue }
       if (q == "`") { if (c == "`") q = ""; continue }
-      if (c == "$" && (C[i + 1] == "(" || C[i + 1] == "{")) { d++; i++; continue }
-      if (d && (c == "(" || c == "{")) { d++; continue }
-      if (d && (c == ")" || c == "}")) { d--; continue }
-      if (q == "\"") { if (c == "\"" && !d) q = ""; continue }
+      # QS[d]: the quote open outside the $( ) or ${ } at depth d, restored when it closes.
+      if (c == "$" && (C[i + 1] == "(" || C[i + 1] == "{")) { QS[++d] = q; q = ""; i++; continue }
+      if (q == "\"") { if (c == "\"") q = ""; continue }
+      if (d && (c == "(" || c == "{")) { QS[++d] = ""; continue }
+      if (d && (c == ")" || c == "}")) { q = QS[d--]; continue }
       if (c == sq || c == "\"" || c == "`") { q = c; continue }
       if (!d && (c == " " || c == "\t")) break
     }

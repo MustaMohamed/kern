@@ -481,3 +481,28 @@ CORPUS
   set_autopilot off
   expect none "${cmds[0]}" "${cmds[2]}"
 }
+
+@test "the head search keeps each \$( )'s own quotes, so a quote or a parenthesis inside one does not hide the alias" {
+  local c
+  cat >"$BATS_TEST_TMPDIR/cases" <<'CASES'
+X=$(printf "%s" a) gpf! origin main
+X=$(echo "(") gpf! origin main
+X=$(echo ")" ) gpf! origin main
+X="$(echo "a b")" gpf! origin main
+X=$(a "$(b "c d")" e) gpf! origin main
+X=${Y:-"}"} gpf! origin main
+X=$(echo 'a ) b') gpf! origin main
+X='' 'gpf!' origin main
+CASES
+  run bash -c '. "$1/hooks/lib/aliases.sh"
+    while IFS= read -r c; do printf "%s" "$c" | LC_ALL=C awk -v sq="'"'"'" "$_ALIAS_HEAD_AWK" | sed -n 2p; done <"$2"' \
+    _ "$(kern_root)" "$BATS_TEST_TMPDIR/cases"
+  [ "$output" = $'gpf!\ngpf!\ngpf!\ngpf!\ngpf!\ngpf!\ngpf!\n\'gpf!\'' ] || { echo "$output"; return 1; }
+  set_autopilot on
+  # \" is a quote once the JSON payload is decoded.
+  for c in 'X=$(printf \"%s\" a) gpf! origin main' 'X=$(echo \"(\") gpf! origin main' 'X=$(echo \")\" ) gpf! origin main'; do
+    run_guard "$(payload PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}")"
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *"kern G1"* ]] || { echo "$c -> $output"; return 1; }
+  done
+}
