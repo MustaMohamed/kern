@@ -439,7 +439,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/execute-plan.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** SP subagent-driven-development (+ prompts and scripts), executing-plans (+ scripts); AD build.md, context-engineering; PO implement-spec; PB orchestrate, feature, autonomous-run. SKILL.md at most 12,000 bytes (raised from 10,000 in M2a Task 22: the exit handling every gate script needs did not fit); `references/ledger-format.md` at most 2,600 bytes, `model-selection.md` 1,600, `brief-template.md` 1,800 (shared with `parallel-work`) (the plan's caps).
+**8. Sources; size.** SP subagent-driven-development (+ prompts and scripts), executing-plans (+ scripts); AD build.md, context-engineering; PO implement-spec; PB orchestrate, feature, autonomous-run. SKILL.md at most 12,400 bytes (raised from 10,000 in M2a Task 22: the exit handling every gate script needs did not fit, then the rule that steps 2 and 3 rerun on every invocation); `references/ledger-format.md` at most 2,600 bytes, `resume.md` 2,500, `model-selection.md` 1,600, `brief-template.md` 1,800 (shared with `parallel-work`) (the plan's caps).
 
 ---
 
