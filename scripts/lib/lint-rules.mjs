@@ -31,9 +31,10 @@ function walk(dir) {
   return out;
 }
 
-// Markdown scan shared by rules 5, 9 and 16: normalizes CRLF and blanks fenced lines (``` and ~~~), so headings,
-// references and ledger lines inside a code example are not read as real ones. `unclosed` is true when a fence
-// is left open; callers report it instead of treating the rest of the file as scanned.
+// Markdown scan for heading structure (rule 9; rule 16 uses it only to report an unclosed fence in a reference):
+// normalizes CRLF and blanks fenced lines (``` and ~~~), so a heading inside a code example is not read as real.
+// Rules 5 and 16 do not scan with it: they read fenced text too, because skills keep script calls in fences.
+// `unclosed` is true when a fence is left open; callers report it instead of treating the rest as scanned.
 function scanMarkdown(text) {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   let open = null;
@@ -289,7 +290,7 @@ export const RULES = [
     const docs = [...model.skills, ...model.agents].filter((d) => !d.error).map((d) => ({ file: d.file, body: d.body }));
     if (model.kernelText) docs.push({ file: join(model.root, 'kernel', 'kernel.md'), body: model.kernelText });
     for (const d of docs) {
-      for (const m of scanMarkdown(d.body).text.matchAll(/Skill tool with `([a-z0-9:-]+)`/g)) {
+      for (const m of d.body.replace(/\r\n/g, '\n').matchAll(/Skill tool with `([a-z0-9:-]+)`/g)) {
         const name = m[1].replace(/^kern:/, '');
         if (!auto.has(name) && !BUILTIN_SKILLS.has(name)) {
           out.push(err(5, rel(model, d.file), `Skill tool reference "${m[1]}" names neither a kern auto skill nor a built-in skill; path and slash skills are reached by Read or typed by the user`));
@@ -297,7 +298,7 @@ export const RULES = [
       }
     }
     for (const a of model.agents.filter((x) => !x.error)) {
-      for (const m of scanMarkdown(a.body).text.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)) {
+      for (const m of a.body.replace(/\r\n/g, '\n').matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)) {
         const r = m[1].replace(/[.,;:]+$/, '');
         if (!existsSync(join(model.root, r))) out.push(err(5, rel(model, a.file), `Read path does not resolve: \${CLAUDE_PLUGIN_ROOT}/${r}`));
       }
@@ -367,16 +368,17 @@ export const RULES = [
     const seen = new Set();
     for (const d of docs) {
       const scan = scanMarkdown(d.body);
+      const text = d.body.replace(/\r\n/g, '\n'); // fenced blocks are read: skills keep their script calls there
       const p = rel(model, d.file);
       if (d.ref && scan.unclosed) out.push(err(16, p, 'unclosed code fence; the lines after it were not checked'));
       const flag = (token, why) => { if (!seen.has(`${p}\0${token}`)) { seen.add(`${p}\0${token}`); out.push(err(16, p, `${token}: ${why}`)); } };
-      for (const m of scan.text.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z0-9-]+)/g)) {
+      for (const m of text.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z0-9-]+)/g)) {
         if (!contract.includes(`| \`${m[1]}\` |`)) flag(`scripts/${m[1]}`, 'no row in the Scripts table of docs/plans/contract.md');
       }
-      for (const m of scan.text.matchAll(/\bWORK\/([a-z]+)/g)) {
+      for (const m of text.matchAll(/\bWORK\/([a-z]+)/g)) {
         if (!contract.includes(`\`WORK/${m[1]}/\``)) flag(`WORK/${m[1]}`, 'not listed under "Working directory" in docs/plans/contract.md');
       }
-      for (const m of scan.text.matchAll(/`((?:Task N|parked|Decision|Worktree|Main|Wave|Applied|Preflight):[^`]*)`/g)) {
+      for (const m of text.matchAll(/`((?:Task N|parked|Decision|Worktree|Main|Wave|Applied|Preflight):[^`]*)`/g)) {
         if (!contract.includes(`\`${m[1]}\``)) flag(m[1], 'ledger line format not in docs/plans/contract.md');
       }
     }

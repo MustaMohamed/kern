@@ -272,10 +272,12 @@ test('rule 5: Skill tool references name auto or built-in skills', () => {
   assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': caller('p'), 'skills/p/SKILL.md': skill('p', manual()) })), [5]);
 });
 
-test('rule 5: the kernel and agents are scanned, fenced examples are not', () => {
+test('rule 5: the kernel and agents are scanned, fenced blocks included', () => {
   assert.deepEqual(rules(lint({ 'kernel/kernel.md': 'Use the Skill tool with `nope`.\n' })), [5]);
   const fenced = '\n# c\n\n## Steps\n\n1. a\n\n```\nSkill tool with `nope`\n```\n';
-  assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': skill('c', manual(), fenced) })), []);
+  assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': skill('c', manual(), fenced) })), [5]);
+  const fencedAgent = '## Report\n\n```\nRead ${CLAUDE_PLUGIN_ROOT}/skills/missing/SKILL.md\n```\n';
+  assert.deepEqual(rules(lint({ 'agents/r.md': agentDoc(fencedAgent) })), [5]);
   assert.deepEqual(rules(lint({ 'agents/r.md': agentDoc('## Report\n\nSkill tool with `nope`\n') })), [5]);
 });
 
@@ -365,7 +367,7 @@ test('rule 16: scripts, WORK folders and ledger lines a skill names have a produ
   assert.deepEqual(f.map((x) => x.message.split(':')[0]), ['scripts/wt-gone', 'WORK/drafts', 'Task N']);
 });
 
-test('rule 16: silent without a contract file; agents, references, CRLF and fences handled', () => {
+test('rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read', () => {
   const body = '\n# c\n\n## Steps\n\n1. Read WORK/drafts.\n';
   assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': skill('c', manual(), body) })), []);
   const contract = '- `WORK/plans/`\n';
@@ -376,5 +378,7 @@ test('rule 16: silent without a contract file; agents, references, CRLF and fenc
   const crlfSkill = skill('c', manual(), '\n# c\n\n## Steps\n\n1. Read WORK/plans and `Task N: start`.\n').replace(/\n/g, '\r\n');
   assert.deepEqual(lint({ 'docs/plans/contract.md': crlfContract + '- `Task N: start`\r\n', 'skills/c/SKILL.md': crlfSkill }).filter((x) => x.rule === 16), []);
   const fenced = '\n# c\n\n## Steps\n\n1. a\n\n```\nRead WORK/drafts and `Task N: done`\n```\n';
-  assert.deepEqual(run({ 'skills/c/SKILL.md': skill('c', manual(), fenced) }), []);
+  assert.deepEqual(run({ 'skills/c/SKILL.md': skill('c', manual(), fenced) }), ['skills/c/SKILL.md', 'skills/c/SKILL.md'], 'WORK folder and ledger line');
+  const fencedScript = '\n# c\n\n## Steps\n\n1. a\n\n```bash\nbash ${CLAUDE_PLUGIN_ROOT}/scripts/x\n```\n';
+  assert.deepEqual(run({ 'skills/c/SKILL.md': skill('c', manual(), fencedScript), 'scripts/x': '' }), ['skills/c/SKILL.md']);
 });
