@@ -459,3 +459,25 @@ x2 git push --force origin main
 CORPUS
   done
 }
+
+@test "past 8 trailing-space words the marker is a record of its own, so expansions through nocorrect, watch or a wrapper's value still fail closed" {
+  local a c i cmds=()
+  # The oh-my-zsh shape: _ is `sudo `, and sudo is `nocorrect sudo`.
+  snap "alias -- _='sudo '" "alias -- sudo='nocorrect sudo'" "alias -- gpf!='git push --force'" \
+    "alias -- w='watch '" "alias -- to='timeout 5 '" "alias -- eu='env -u X '" "alias -- sr='sudo -u root '"
+  for a in "_ 9" "_ 12" "w 9" "to 9" "eu 9" "sr 9"; do
+    c=""
+    for ((i = 0; i < ${a#* }; i++)); do c="$c${a% *} "; done
+    cmds+=("${c}gpf! origin main")
+  done
+  set_autopilot on
+  expect deny "${cmds[@]}"
+  all "${cmds[0]}"
+  [[ "$output" == *'kern G00: '*'$KERN_ALIAS_PAST_8'* ]] || { echo "$output"; return 1; }
+  # Eight words still expand in full: `_ ×8 gpf!` is `nocorrect sudo ×8 git push --force`.
+  all "_ _ _ _ _ _ _ _ gpf! origin main"
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  # Interactively G00 votes nothing, so these get no vote, as without aliases.
+  set_autopilot off
+  expect none "${cmds[0]}" "${cmds[2]}"
+}

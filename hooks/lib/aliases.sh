@@ -216,8 +216,9 @@ _alias_var() {
 # alias_expand SEG: when the head word of the simple command SEG is an alias aliases_load set, sets
 # ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. When the expansion ends
 # in a space, the word after the alias is replaced too when it is such an alias, as zsh's trailing-space
-# rule does, and so on, at most 8 times; a 9th word that is still such an alias becomes the command name
-# $KERN_ALIAS_PAST_8, which G00 reads as built at run time, so autopilot denies it. As zsh does, the
+# rule does, and so on, at most 8 times; a 9th word that is still such an alias starts a record of its
+# own whose command name is $KERN_ALIAS_PAST_8, which G00 reads as built at run time, so autopilot denies
+# it whatever word the expansions before it start with (nocorrect, watch). As zsh does, the
 # head word is the first word after NAME=value words, redirections (with a target in the next word when
 # none is attached) and the reserved words if then elif else do while until ! { time nocorrect coproc
 # and repeat with its count; zsh does not expand an alias after command, builtin, exec, noglob or -, and
@@ -282,7 +283,7 @@ EOF
     _alias_var "$w" v || break
     if [ "$n" -ge 8 ]; then
       # shellcheck disable=SC2016 # a literal $, for G00
-      pre="$pre"'$KERN_ALIAS_PAST_8 '
+      pre="$pre"'; $KERN_ALIAS_PAST_8 '
       break
     fi
     pre="$pre${!v}"
