@@ -185,7 +185,7 @@ The lines `ledger-open`, `task-start`, `task-review`, `task-done` and execute-pl
 - `Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>`
 - `Task N: minor (deferred): <text>`
 - `Task N: fix round=<r> tree=<id>`
-- `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok, inconclusive or skipped (reason)> last=<line>`
+- `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>`
 - `Wave: tasks <list> forks=<paths>`
 - `Applied: Task N patch=<path>`
 - `parked: <question>; default: <choice>; why: <one line>`

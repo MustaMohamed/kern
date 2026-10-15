@@ -15,16 +15,16 @@ One ledger per plan at `WORK/ledgers/<plan-slug>/ledger.md`, append only, opened
 | `Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>` | `task-review` | one per review or re-review |
 | `Task N: minor (deferred): <text>` | `task-review --minor` | a Minor finding for the final review to triage |
 | `Task N: fix round=<r> tree=<id>` | step 9 | a fix round began from that reviewed tree |
-| `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok, inconclusive or skipped (reason)> last=<line>` | `task-done` | done, only on an approved, unchanged, proven tree |
+| `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>` | `task-done` | done, only on an approved, unchanged, proven tree |
 | `Wave: tasks <list> forks=<paths>` | step 6 | a parallel wave's forks exist |
 | `Applied: Task N patch=<path>` | step 11 | a worker's patch integrated |
 | `parked: <question>; default: <choice>; why: <one line>` | autopilot | a judgment call parked |
 
-Lines no script writes are appended with `printf '%s\n' '<line>' >> <ledger>`; one holding the word approved goes in with the Edit tool, as G20 denies that shell write to a Markdown file.
+Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand. A batch of tasks shares one brief, package and review, and the scripts still write each task's lines. The other lines are appended with `printf '%s\n' '<line>' >> <ledger>`; one holding the word approved goes in with the Edit tool, as G20 denies that shell write to a Markdown file. Limit: no guard yet stops an Edit or Write that forges a script's line; that guard is deferred to M3.
 
 ## Resume rule
 
-A task is done only when its `Task N: complete` line exists. Resume at the first task without one; when every task has one, go to the final review. A started task keeps its `Task N: start` tree as `tree-before` (no second `task-start`), so its review sees every change since dispatch; a snapshot still equal to it means nothing landed: dispatch again. If a task's last line is a `fix round`, resume that fix loop with a fresh snapshot. A wave task resumes in the fork its `Wave:` line names. Never re-dispatch a completed task.
+A task is done only when its `Task N: complete` line exists. Where a run resumes is in `resume.md`.
 
 ## Tree ids
 
