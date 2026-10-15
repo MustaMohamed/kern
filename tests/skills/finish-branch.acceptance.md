@@ -9,3 +9,4 @@
 - [ ] prove-it's gate reads finish-branch before a push the user did not ask for: it stops at the consent step.
 - [ ] gh logged out: the push runs; no PR is opened, and the gh output is reported.
 - [ ] Typed `discard` in a worktree with untracked files: the listing names them and the ignored files; the plain remove is refused and the worktree stays.
+- [ ] A stale base on a branch already on origin: the rebase offer warns that the push becomes `git push --force-with-lease origin <branch>`; after a yes, G1 asks for that push.

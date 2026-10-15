@@ -21,7 +21,7 @@ test('prove-it sections, steps, gate and red flags', () => {
   assert.equal(s.length, 8);
   assert.equal(s[0], DEFER);
   assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'probe: fail-then-pass ok', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff', 'claim: command, result', 'Gate: steps 1 to 7 hold', 'zero tests run', '| Thought | Reality |']);
-  assertMaxBytes(SKILL, 3600);
+  assertMaxBytes(SKILL, 3800);
 });
 
 test('evidence reference', () => {
@@ -35,5 +35,5 @@ test('the M0 placeholder is gone', () => {
 });
 
 test('the gate hands a commit to commit and a push or PR to finish-branch', () => {
-  assertContains(SKILL, ['for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`']);
+  assertContains(SKILL, ['unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step)', 'for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`']);
 });
