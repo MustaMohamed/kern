@@ -95,7 +95,7 @@ export const PINS = {
     'A refusal writes nothing and says why.', '`command exited <n>` or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round',
     '(after round 3: the split proposal)', '`command exited 126` or `127`: stop.',
     'Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask.',
-    'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 3 to 6 (a wave task: after step 11)."],
+    'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11)."],
   11: ["Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`",
     'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then `test.full` there; red: stop.'],
   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',
