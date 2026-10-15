@@ -1,0 +1,54 @@
+---
+name: implement
+description: "Change production code in thin slices: failing test first, minimal green, full suite, out-of-scope listed."
+disable-model-invocation: true
+---
+
+# implement
+
+Write production code in slices, each proven by a test seen failing for the right reason. Reached from the kernel row for one bounded change, from execute-plan inline mode, from diagnose step 7, and by the `kern:implementer` agent, whose brief gives this file's absolute path.
+
+## Steps
+
+0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+1. Pick where to edit. In a kern worktree, edit there. In the main session, edit the current checkout only when its branch is a non-protected feature branch; otherwise propose `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, adding `--branch <name>` when `branch.pattern` holds `{id}`, and wait for one answer. Never switch the main checkout's branch. Under autopilot, always use a worktree.
+2. Resolve `test.focused`, `test.full`, `typecheck` and `lint` with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`, else `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect <key>`. Print each command with its source. When both exit 3, ask the user for that command; never guess a command.
+3. Slice the work and list the seams; use the plan's seams when it has them (`references/slicing.md`).
+4. For each slice, name the break in one sentence, write the test, run it, and see RED for the expected reason: an assertion failure, not an import or syntax error. A test that already passes is a finding, not a RED.
+5. Before the first production edit, record the tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Write the minimum code that turns the test GREEN.
+6. Run the focused test and `typecheck`. Refactor only code you touched, and stay green.
+7. A file outside the approved list pauses the work: name it and ask. Findings outside scope go to a NOTICED BUT NOT TOUCHING list.
+8. Check test quality with `references/test-design.md`. For one new condition, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate <file>:<line> <wt> -- <test command>` and expect `probe: mutation caught`; a survivor means a stronger test, and exit 3 is reported as inconclusive, never as a pass. Add adversarial inputs (empty, zero, false, cleared, several elements). For each new guard, make the patch with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>`, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <change.patch> -- <test command>` and expect `probe: fail-then-pass ok`.
+9. No correct seam for a test: say so, and give the closest executable check with its output.
+10. Regenerate `generated_artifacts` for touched trigger paths, run `test.full`, and name every red test, marking the ones that were red before your change.
+11. Report the failing-before and passing-after output, the commands, the files changed and the NOTICED list. Do not commit.
+
+## Inputs
+
+| Key | Default | Use |
+|---|---|---|
+| `test.focused`, `test.full`, `typecheck`, `lint` | detected, source printed | RED, GREEN and the full suite |
+| `generated_artifacts` | none declared | files to regenerate after a change |
+| `scope_threshold` | 4 files | size of the approved list |
+| `branch.protected`, `branch.pattern` | `base_branch` plus `deploy.envs` branches; detected | where editing in place is allowed; the worktree branch |
+
+Project test obligations come from the project rules already in context.
+
+## Outputs
+
+Code and tests in the chosen tree; a chat report. `wt-diff` writes a review package and its `.patch` under `WORK/reviews/`. No commit.
+
+## Stops and autopilot
+
+Stops at steps 1, 2 and 7. Under autopilot the steps are the same, RED is never skipped, and a file outside the approved list parks the slice with a `parked:` line.
+
+## Red flags
+
+| Thought | Reality |
+|---|---|
+| "Too simple to test" | Simple code breaks, and the test takes a minute. |
+| "I'll test after" | A test written after passes at once and proves nothing. Watch it fail first. |
+| "I checked it by hand" | A hand check leaves no record and is not re-run on the next change. |
+| "It passed before my change, close enough" | A test that passes first is a finding, not a RED. |
+| "That file is just outside the list" | A file outside the approved list pauses the work. |
+| "Hard to test, so skip it" | Hard to test means hard to use. Name the closest seam and its check. |

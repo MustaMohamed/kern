@@ -10,6 +10,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - Guard G18: kern's read-only investigator may run only allowlisted read commands.
 - Guard G16 asks, and under autopilot denies, any command whose text names kern's hook code or its state functions, reads included; hook files stay readable through the Read and Grep tools. Running prompt-submit with a made-up prompt could forge the user's message or turn autopilot on.
 - Guard G20: a Markdown spec or plan becomes approved, or changes its approved: line, only with a quote of the user's last message, judged on the file as the edit leaves it; never under autopilot.
+- implement: thin slices, failing test first, mutation and fail-then-pass probes, full suite.
 
 ## [0.2.1] - 2026-10-14
 
