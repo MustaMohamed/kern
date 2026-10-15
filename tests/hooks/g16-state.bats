@@ -495,6 +495,51 @@ bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:
   [[ "$output" == *"G16 could not read the command for kern's hook code"* ]] || false
 }
 
+# awk_fails_on PATTERN: puts first on PATH an awk that fails G16's hook program (the only awk program
+# that names subagent-start) when the text it reads has a line matching the extended regex PATTERN, so
+# one reading of a command fails while another is read. The real awk is found once, before any shim.
+awk_fails_on() {
+  local real
+  [ -n "${AWK_REAL-}" ] || AWK_REAL=$(command -v awk)
+  real=$AWK_REAL
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat >"$BATS_TEST_TMPDIR/bin/awk" <<EOF
+#!/bin/bash
+case "\$*" in
+  *subagent-start*)
+    in=\$(cat)
+    printf '%s\n' "\$in" | grep -Eq '$1' && exit 2
+    printf '%s\n' "\$in" | exec $real "\$@"
+    ;;
+esac
+exec $real "\$@"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  case ":$PATH:" in *":$BATS_TEST_TMPDIR/bin:"*) ;; *) PATH="$BATS_TEST_TMPDIR/bin:$PATH" ;; esac
+}
+
+@test "when awk fails on one reading and no reading hits, G16 fails closed in both modes" {
+  local nl=$'\n'
+  # Reading 2 joins the lines to `echo hooks fail`, and its awk fails; reading 1 is read and has no hook.
+  awk_fails_on '^echo hooks fail$'
+  set_autopilot off
+  expect_cmd ask "echo hooks fa\\${nl}il"
+  [[ "$output" == *"kern G0: G16 could not read the command for kern's hook code"* ]] || false
+  set_autopilot on
+  expect_cmd deny "echo hooks fa\\${nl}il"
+  [[ "$output" == *"kern G0: G16 could not read the command for kern's hook code"*"(autopilot: nobody to ask)"* ]] || false
+}
+
+@test "when awk fails on one reading and another reading hits, G16 asks with its own reason; under autopilot it is denied" {
+  local nl=$'\n'
+  # Reading 1 fails (its second line is `submit`), and reading 2, the joined line, names the hook.
+  awk_fails_on '^submit$'
+  expect_hook "bash hooks/prompt-\\${nl}submit"
+  # Reading 2 fails (the joined `echo ab`), and reading 1 names the hook.
+  awk_fails_on '^cat hooks/prompt-submit; echo ab$'
+  expect_hook "cat hooks/prompt-submit; echo a\\${nl}b"
+}
+
 @test "a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied" {
   local nl=$'\n'
   K=$(kern_root)

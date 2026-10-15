@@ -532,7 +532,7 @@ _g16_hooks() {
   # Each reading is one way the shell may read the text, and every reading is matched. A step that
   # normalises the text adds a reading and never changes the text another reading sees, so it cannot
   # drop a vote; a future normalisation is one more reading here.
-  # Reading 1: the text as written.
+  # Reading 1: the folded text, otherwise as written.
   readings=("$_G16_F")
   # Reading 2: bash's line continuation. An escaped backslash (\\) is dropped first, then a backslash
   # before a newline joins the lines; a backslash before CR LF does not, as in bash.
