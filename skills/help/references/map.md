@@ -16,6 +16,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | `plan` | path | Routed row "Agreed spec, more than one step"; /kern:plan | Approved spec to ordered, checked tasks |
 | `parallel-work` | path | execute-plan and diagnose; /kern:parallel-work | One worktree per writer, integrate, re-test |
 | `execute-plan` | path | Routed row "Executing an agreed plan"; /kern:execute-plan | Run a plan with a ledger and two-verdict review |
+| `self-review` | path | Routed row "Review requested on your own diff, no PR yet"; /kern:self-review | Author's check before a PR |
 
 ## Close calls
 - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
