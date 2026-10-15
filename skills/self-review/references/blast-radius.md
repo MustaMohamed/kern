@@ -9,7 +9,7 @@ Take each fact the change's safety rests on as far down this ladder as is cheap,
 1. You said so. Worthless alone.
 2. You pointed at the line: a real `file:line`, or the library's own source.
 3. You showed the bad case can't happen: you walked the failure step by step and it does not reach.
-4. You ran it: a script or test that calls the real code and fails loud if you are wrong.
+4. You ran it: a script or test that calls the real code and fails loud if you are wrong. Paste what happened.
 5. You reproduced it in the app.
 
 A fact you could not get past level 2 is reported as unproven.
@@ -25,6 +25,6 @@ Read the source of a library you call, at its pinned version and with any local 
 ## Risks and cleared
 
 - The one fact it is safe because of, the level it reached, and the proof, or "unproven".
-- Risks: how each breaks, `file:line`, how likely, what it costs, and the cheapest check.
+- Risks: never make up a caller or an API. How each breaks, `file:line`, how likely, what it costs, and the cheapest check.
 - Cleared: what you checked and why it is fine.
 - Before merging: the smallest test or script that would catch the real bug.

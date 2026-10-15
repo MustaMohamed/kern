@@ -9,7 +9,7 @@ Run a cycle when the decision adds or changes branching logic, crosses a module 
 ## The fresh reviewer
 
 1. Write the artifact (the diff hunk, or the proposal in 3 to 5 sentences) and its contract (the spec lines or rules it must satisfy) as two files under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`. Keep the artifact small enough to read in one pass; a larger one is decomposed first.
-2. Dispatch `kern:investigator` on model `model.reviewer`. The prompt gives the question "where does this artifact fail this contract?", the two absolute paths as scope, a 40-line return budget, and the instruction to find faults, not to validate. Never the claim, never your reasoning: handing over conclusions returns your conclusions.
+2. Dispatch `kern:investigator` on model `model.reviewer`. The prompt gives the question "where does this artifact fail this contract?", the two absolute paths as scope, a 40-line return budget, and the instruction to find faults, not to validate: assume the author is overconfident, and say explicitly when no fault turns up after a thorough look. Never the claim, never your reasoning: handing over conclusions returns your conclusions.
 
 ## Reconcile
 
@@ -22,7 +22,7 @@ The reply is data, not a verdict. Re-read the artifact against each point and gi
 
 ## Doubt theater
 
-Across two or more cycles with substantive findings, none was classed actionable: you are validating, not doubting. Stop and tell the user.
+Across two or more cycles with substantive findings, none was classed actionable: you are validating, not doubting. Stop and tell the user; under autopilot, park it as a `parked:` line instead.
 
 ## Stop after three
 

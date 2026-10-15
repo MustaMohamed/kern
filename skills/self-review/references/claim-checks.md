@@ -12,7 +12,7 @@ Three scripts run in seconds and catch what reviewers miss. Paste each command a
 
 ## probe
 
-`probe --exclude-tests <wt> <package>.patch -- <test>` proves a guard test fails without its guard and passes with it, keeping the patch's test files in the fork. `probe --mutate <file>:<line> <wt> -- <test>` inverts one condition on a throwaway fork and expects the test to fail. `probe: fail-then-pass ok` and `probe: mutation caught` are the only passes. Exit 1 (the test did not fail, or the mutation survived) is a finding. Exit 3 is inconclusive and reported as such, never as a pass. Exit 2 is a usage error: a failed check.
+`probe --exclude-tests <wt> <package>.patch -- <test>` shows a test fails with the branch's non-test changes reversed and passes with them, keeping the patch's test files. A proof of one guard alone stays with implement's per-slice probe. `probe --mutate <file>:<line> <wt> -- <test>` inverts the first operator on that line on a throwaway fork and expects the test to fail. `probe: fail-then-pass ok` and `probe: mutation caught` are the only passes. Exit 1 (the test did not fail, or the mutation survived) is a finding. Exit 3 is inconclusive and reported as such, never as a pass. Exit 2 is a usage error: a failed check.
 
 ## A skipped check is a failed check
 
