@@ -45,7 +45,7 @@ test('define pins its approval rules', () => {
   const skill = readDoc(SKILL).raw;
   const gate = 'ask for the yes as a typed reply in chat, never through AskUserQuestion';
   assert.equal(skill.split(gate).length - 1, 2, 'the AskUserQuestion rule appears at both gates');
-  assertContains(SKILL, ['An AskUserQuestion answer records no prompt line', 'every path parks', 'After the user\'s yes message, leave the file untouched until the approval edit',
+  assertContains(SKILL, ['An AskUserQuestion answer records no prompt line', 'every path parks', 'on per the latest kern signal', 'a turn with no mode line changes nothing', 'After the user\'s yes message, leave the file untouched until the approval edit',
     'run the same plan-check again', '${CLAUDE_PLUGIN_ROOT}/skills/define/references/spec-review.md', 'which G20 and plan read',
     'dispatched in one message', 'A question that depends on an open one waits a round']);
   assertContains('skills/define/references/interview.md', ['Two rounds without rising confidence: stop and say so', 'means the user gave up on the interview']);
