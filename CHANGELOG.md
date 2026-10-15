@@ -13,6 +13,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - implement: thin slices, failing test first, mutation and fail-then-pass probes, full suite.
 - diagnose: red-capable loop before hypotheses, fix with a regression test proven by probe; loop-rate for flaky bugs.
 - define: clarify, classify and get an explicit, quoted approval before code; specs carry a Constraints section.
+- plan: approved spec to ordered tasks with exact files and verify commands, checked by plan-check.
 
 ## [0.2.1] - 2026-10-14
 

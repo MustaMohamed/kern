@@ -1,0 +1,34 @@
+# Plan template
+
+Copy from the first `---` line to the end into `WORK/plans/<slug>.md`. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` checks the result.
+
+---
+status: draft
+spec: WORK/specs/<slug>.md
+issue: (tracker id, or none)
+base: <base branch>; promotion: <branch chain, or none>
+approved: (set only on an explicit yes, in the same edit as status: approved: the date, then one whole line of the user's message in double quotes)
+execution:
+commits: ask
+---
+
+**Goal:** one sentence.
+
+**Architecture:** two or three sentences.
+
+## Global Constraints
+
+The spec's Constraints lines (Always, Ask first, Never), verbatim, then one line each for other exact values the spec fixes. Every task's brief includes this section.
+
+## Review Focus
+
+Inputs or conditions the spec implies but no test exercises, most likely first, each naming the task whose test pins it.
+
+## File map
+
+| Path | Task | Responsibility |
+|---|---|---|
+
+### Task 1: <name>
+
+(Tasks follow `task-template.md`. Put a checkpoint step every 2 or 3 tasks.)
