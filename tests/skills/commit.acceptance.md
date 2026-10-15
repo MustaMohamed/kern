@@ -11,3 +11,4 @@
 - [ ] A complete task whose file was renamed (`R100`): both old and new paths are staged.
 - [ ] A started, incomplete task lists a path a complete task also changed: the complete task is not committed by path; it asks, or under autopilot parks and stays uncommitted.
 - [ ] Two ledgers name the same worktree: it asks.
+- [ ] A rename whose package is missing: both paths are staged.

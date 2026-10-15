@@ -43,7 +43,7 @@ test('commit ledger-tasks reference', () => {
   assertHeadings(REF, ['# Ledger tasks', '## Which ledger', '## A task\'s files', '## Overlap', '## Already committed']);
   assertContains(REF, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers`', '`Worktree:` line names `<toplevel>`', 'Several do: ask (default: commit nothing from ledgers).',
     'reviews/task-<N>-<tree7>.diff', '`tree=` of its `Task <N>: complete` line', '`M<TAB>path`, `D<TAB>path`, `R100<TAB>old<TAB>new`', 'stage both paths of a rename',
-    'git -C <toplevel> diff --name-only <start tree> <complete tree>', 'failing that, ask (default: leave the task uncommitted).',
+    'git -C <toplevel> diff --name-only --no-renames <start tree> <complete tree>', '(a `dir/` entry covers what is under it)', 'failing that, ask (default: leave the task uncommitted).',
     'Tasks that share a path cannot be split', "Never stage a file that holds another task's hunks under one task's name.", 'offer one commit naming each, or ask (default: that commit)',
     '`Task <N>: start` line and no complete line contributes the paths in `<ledger dir>/briefs/task-<N>.files`', 'is not committed by path: ask (default: leave it uncommitted).',
     'Autopilot commits each task as it closes', 'the started-task check applies in both', 'reported as already committed, not as a failure']);

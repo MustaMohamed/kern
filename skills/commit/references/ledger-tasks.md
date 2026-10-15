@@ -10,7 +10,7 @@ Rules for step 3 when execute-plan ledgers hold complete tasks. Every default be
 
 A complete task has a `Task <N>: complete tree=<id> ...` line; keep ledger order. Its package is `<ledger dir>/reviews/task-<N>-<tree7>.diff`, `<tree7>` the first 7 characters of the `tree=` of its `Task <N>: complete` line. Its `## Files changed` lines are name-status: `M<TAB>path`, `D<TAB>path`, `R100<TAB>old<TAB>new`. Take the path fields; stage both paths of a rename.
 
-If the package is missing, run `git -C <toplevel> diff --name-only <start tree> <complete tree>` on the trees of its start and complete lines; failing that, ask (default: leave the task uncommitted).
+If the package is missing, run `git -C <toplevel> diff --name-only --no-renames <start tree> <complete tree>` on the trees of its start and complete lines; failing that, ask (default: leave the task uncommitted).
 
 ## Overlap
 
