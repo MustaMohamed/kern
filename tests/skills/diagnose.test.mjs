@@ -22,7 +22,9 @@ test('diagnose sections, steps and red flags', () => {
   assertContains(SKILL, ['red-capable, deterministic, fast and runnable by an agent', 'form no hypotheses', '[kern-dbg]', 'three failed fixes',
     '${CLAUDE_PLUGIN_ROOT}/skills/implement/SKILL.md', '--detach --base', 'scripts/hitl-loop.template.sh',
     '${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/loop-rate.sh', 'on `model.investigator`', '"stop guessing"', 'then the original scenario',
-    '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'blind reproduction', 'references/defense-in-depth.md']);
+    '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'blind reproduction', 'references/defense-in-depth.md',
+    'find-polluter.sh', 'wt-new bisect-<n> --detach', '`! bash <path>`', 'itself the finding']);
+  assertContains('skills/diagnose/references/flaky-and-async.md', ['find-polluter.sh', 'loop-rate.sh', 'pin time']);
   assertMaxBytes(SKILL, 6500);
 });
 

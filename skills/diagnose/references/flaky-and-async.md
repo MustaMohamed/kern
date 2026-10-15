@@ -8,7 +8,7 @@ Measure the rate, then raise it. Run the loop command N times and read the `loop
 
 `bash ${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/loop-rate.sh <n> -- <loop command>`
 
-It prints `loop-rate: <red>/<N> red, median <seconds>s`. A run is red when the command exits non-zero. Raise the rate by looping the trigger 100 times, running copies in parallel, adding load, narrowing timing windows or injecting delays at the suspected race. Report the red count before the fix and after it; the same N both times.
+It prints `loop-rate: <red>/<N> red, median <seconds>s`. A run is red when the command exits non-zero. Raise the rate by looping the trigger 100 times, running copies in parallel, adding load, narrowing timing windows or injecting delays at the suspected race. Make the loop more deterministic too: pin time, seed the random generator, isolate the filesystem, freeze the network. Report the red count before the fix and after it; the same N both times.
 
 ## Wait for conditions, not time
 

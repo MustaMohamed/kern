@@ -4,7 +4,7 @@
 # Usage: loop-rate.sh N -- CMD...    Prints: loop-rate: <red>/<N> red, median <seconds>s
 # A run is red when CMD exits non-zero. CMD's own output is discarded; CMD is one command with its
 # arguments, so wrap a pipeline as sh -c '...'. Exit 0. Exit 2: usage, N not a whole number from 1 to
-# 999999999, CMD not found, or the timing could not be read.
+# 999999999, CMD not found, a run that exits 126 or 127 (it could not run), or the timing could not be read.
 # Adapted from pocock diagnosing-bugs (raise the reproduction rate and measure it).
 set -euo pipefail
 if [ $# -lt 3 ] || [ "$2" != "--" ]; then
@@ -28,7 +28,13 @@ red=0
 i=0
 while [ "$i" -lt "$n" ]; do
   i=$((i + 1))
-  if ! { time "$@" > /dev/null 2>&1; } 2> "$tmp/time"; then red=$((red + 1)); fi
+  rc=0
+  { time "$@" > /dev/null 2>&1; } 2> "$tmp/time" || rc=$?
+  if [ "$rc" -eq 126 ] || [ "$rc" -eq 127 ]; then
+    echo "loop-rate: the command could not run (exit $rc)" >&2
+    exit 2
+  fi
+  [ "$rc" -eq 0 ] || red=$((red + 1))
   tr -d '\r' < "$tmp/time" | grep -E '^[0123456789]+[.][0123456789]+$' >> "$tmp/secs" || {
     echo "loop-rate: could not read the run time of run $i" >&2
     exit 2

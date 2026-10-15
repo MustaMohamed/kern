@@ -33,3 +33,16 @@ commands() {
 $cmds
 EOF
 }
+
+@test "G18 still denies writes and programs the investigator must not run" {
+  for c in "sed -i s/a/b/ app.log" "echo x >f" "awk '{print}' app.log" "rg --pre cat x app.log" "sort -o out.txt in.txt" "git -c core.pager=cat log"; do
+    if g18_allowed "$c"; then echo "G18 allows: $c"; return 1; fi
+  done
+}
+
+@test "the parity check fails when a command that G18 denies is planted in a reference" {
+  printf 'Run `awk '"'"'{print}'"'"' app.log` now.\n' > "$BATS_TEST_TMPDIR/planted.md"
+  cmds=$(commands "$BATS_TEST_TMPDIR/planted.md")
+  [ -n "$cmds" ]
+  ! g18_allowed "$cmds"
+}

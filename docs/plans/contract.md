@@ -166,7 +166,7 @@ G13, G14 and G15 (Task 13):
 
 `worktree.dir` default: `MAIN/.claude/worktrees`. Branch for `wt-new` (non-detached): `branch.pattern` with `{slug}` substituted, else `kern/<slug>`. A script that sets `MAIN` exports `KERN_MAIN="$MAIN"` before reading settings.
 
-Skill scripts (run as `bash ${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/<name>`): `find-polluter.sh POLLUTION_PATH TEST_GLOB -- TEST_CMD...` (1 with `polluter: <file> creates <path>`; 0 with `no polluter found among <n> test files`; 2 usage) and `loop-rate.sh N -- CMD...` (`loop-rate: <red>/<N> red, median <seconds>s`; 0; 2 usage).
+Skill scripts (run as `bash ${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/<name>`): `find-polluter.sh POLLUTION_PATH TEST_GLOB -- TEST_CMD...` (1 with `polluter: <file> creates <path>`; 0 with `no polluter found among <n> test files`; 2 usage, no matching file, TEST_CMD not found, the path already present, a run that exits 126 or 127, or every run failing with no polluter) and `loop-rate.sh N -- CMD...` (`loop-rate: <red>/<N> red, median <seconds>s`; 0; 2 usage, CMD not found, or a run that exits 126 or 127).
 
 ### Working directory
 

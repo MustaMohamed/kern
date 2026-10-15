@@ -26,3 +26,26 @@ setup() {
   run bash "$KERN_ROOT/skills/diagnose/scripts/loop-rate.sh" 3 true
   [ "$status" -eq 2 ]
 }
+
+@test "a command that cannot run exits 2, not N/N red" {
+  run bash "$KERN_ROOT/skills/diagnose/scripts/loop-rate.sh" 2 -- sh -c 'exit 127'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"loop-rate: the command could not run (exit 127)"* ]] || false
+  [[ "$output" != *"red, median"* ]] || false
+}
+
+@test "a leading-zero N is read as decimal" {
+  run bash "$KERN_ROOT/skills/diagnose/scripts/loop-rate.sh" 003 -- true
+  [ "$status" -eq 0 ]
+  [[ "$output" == "loop-rate: 0/3 red, median "* ]] || false
+}
+
+@test "a ten-digit N is rejected" {
+  run bash "$KERN_ROOT/skills/diagnose/scripts/loop-rate.sh" 1000000000 -- true
+  [ "$status" -eq 2 ]
+}
+
+@test "a missing command exits 2" {
+  run bash "$KERN_ROOT/skills/diagnose/scripts/loop-rate.sh" 2 -- no-such-runner-xyz
+  [ "$status" -eq 2 ]
+}

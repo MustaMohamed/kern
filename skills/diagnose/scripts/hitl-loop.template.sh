@@ -4,7 +4,8 @@
 #   step "<instruction>"        show an instruction, wait for Enter
 #   capture VAR "<question>"    show a question, read the answer into VAR
 # At the end, captured values print as KEY=VALUE for the agent to parse. Capture observations only;
-# leave signing in to the user as a step. The script exits 1 when its input closes before the last step.
+# leave signing in to the user as a step. Run it in the user's terminal (a Bash call here has no stdin),
+# for example `! bash <path>`, and have them paste the KEY=VALUE lines back. The script exits 1 when its input closes before the last step.
 # Adapted from mattpocock/skills diagnosing-bugs/scripts/hitl-loop.template.sh (MIT).
 # shellcheck disable=SC2154  # captured variables are set through printf -v
 set -euo pipefail
