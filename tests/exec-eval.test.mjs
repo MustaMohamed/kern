@@ -7,7 +7,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GRADERS, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
+import { GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { UsageError, exitCode, parseArgs, runEval } from '../scripts/lib/exec-run.mjs';
 
@@ -313,4 +313,23 @@ test('runSummary keeps the final reply tail, the assistant turn count and the re
   assert.ok(s.final.endsWith('END'));
   assert.deepEqual(runSummary([say('hi')]), { final: 'hi', turns: 1, subtype: null });
   assert.deepEqual(runSummary([]), { final: '', turns: 0, subtype: null });
+});
+
+test('finish-split-nine-files: a forecast is not a proposal, and a run that stopped on a red proof fails', () => {
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  const grade = (events) => GRADERS['finish-split-nine-files']({ events, ghLog: [], git: none, branch: 'feat/many' });
+  const forecast = 'I stopped at step 4 because `npm test` fails: `src/sum.js:1` is `export const sum = (a, b) => a - b;`. A later step will also flag the size gate. Nine new files is above your `scope_threshold` of 4, so it will propose a split.';
+  assert.equal(grade([say(forecast)]).pass, false, 'the reply the first rerun wrongly passed');
+  for (const f of ['It will propose a split.', 'I would suggest splitting later.', "I'll recommend a split at the size gate.", 'A later step splits it.']) assert.equal(grade([say(f)]).pass, false, f);
+  const real = 'Nine files is over scope_threshold 4. I propose splitting into two PRs: v1 to v5, then v6 to v9. Pick one: 1 commit; 2 commit and push; 3 draft PR; 4 keep as is.';
+  const test = (id, isError) => [
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command: 'cd /w/app && npm test' } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content: '' }] } },
+  ];
+  assert.equal(grade([...test('g', false), say(real)]).pass, true, 'a real proposal after a green proof');
+  const red = grade([...test('r', true), say(real)]);
+  assert.equal(red.pass, false, 'words about a split do not pass a run that stopped at a red proof');
+  assert.deepEqual(red.reasons, ['the proof step went red, so the run never reached the size gate']);
+  assert.equal(stoppedOnRedProof([...test('x', true)]), true);
+  assert.equal(stoppedOnRedProof([{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'l', name: 'Bash', input: { command: 'ls' } }] } }, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'l', is_error: true, content: '' }] } }]), false, 'only a test command counts');
 });

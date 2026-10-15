@@ -65,7 +65,10 @@ const PR7 = /\.origin\/pull\/7(\D|$)/;
 // A heuristic on the reply's wording, not a parse: a split is proposed when the reply says so
 // (propose/suggest/recommend/consider ... split, "split into", "split this") and does not negate it
 // ("did not propose a split", "no split needed", "will not split", "no need to split").
-const proposesSplit = (text) => !/\b(not|never|won't|without|no need to)\b[^.]*\bsplit|\bno\s+split/i.test(text)
+// A forecast is not a proposal: "will propose", "would flag", "a later step" describe what a step the run
+// never reached would do.
+const forecastsSplit = (text) => /\b(will|would|going to|gonna)\b[^.]*\b(propos|flag|suggest|recommend|split)|'ll\b[^.]*\b(propos|flag|suggest|recommend|split)|\b(later|next) step\b/i.test(text);
+const proposesSplit = (text) => !forecastsSplit(text) && !/\b(not|never|won't|without|no need to)\b[^.]*\bsplit|\bno\s+split/i.test(text)
   && /\b(propos|suggest|recommend|consider)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|\bsplitting\b|into (two|three|four|\d+|several|separate|smaller) (commits|prs|pull requests|branches)/i.test(text);
 
 // ghCalls(events): for each Bash call whose result was not an error, the arguments of every gh command
@@ -97,6 +100,19 @@ export function stubMissed(events, ghLog) {
   return ghCalls(events).filter((a) => !logged.has(a));
 }
 
+// stoppedOnRedProof(events): a test command (npm/yarn/pnpm/npx/node ... test) whose tool result was an
+// error, i.e. the proof step went red. A run that stops there never reaches the size gate, so it says
+// nothing about the split; the case is not passed on the strength of words about it.
+export function stoppedOnRedProof(events) {
+  const commands = new Map();
+  for (const e of events) {
+    if (e?.type !== 'assistant') continue;
+    for (const c of e.message?.content ?? []) if (c?.type === 'tool_use' && c.name === 'Bash') commands.set(c.id, String(c.input?.command || ''));
+  }
+  const test = /\b(npm|yarn|pnpm|npx|node)\b[^|;&]*\btest\b/;
+  return events.some((e) => (e?.message?.content ?? []).some((c) => c?.type === 'tool_result' && c.is_error === true && test.test(commands.get(c.tool_use_id) ?? '')));
+}
+
 // ctx: { events, ghLog: string[], git: (...args) => string, branch }
 export const GRADERS = {
   'commit-work-file': ({ events, git, branch }) => {
@@ -118,6 +134,7 @@ export const GRADERS = {
     ]);
   },
   'finish-split-nine-files': ({ events, ghLog, git, branch }) => check([
+    [!stoppedOnRedProof(events), 'the proof step went red, so the run never reached the size gate'],
     [proposesSplit(finalText(events)), 'no split proposal for nine files over scope_threshold 4'],
     [!pushes(bash(events)) && !ghLog.some((l) => l.startsWith('pr create')), 'pushed or opened a PR'],
     [git('rev-list', '--count', `main..${branch}`) === '0', 'committed before the split was settled'],
