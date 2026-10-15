@@ -3,6 +3,14 @@
 # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export KERN_ROOT
+# Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
+# hooks, so a repository's own config cannot run code through a kern hook (git 2.31+ reads
+# GIT_CONFIG_COUNT). The two pairs go after the pairs the environment already holds, which still apply
+# (a container's safe.directory, for one). KERN_GC is their number; a count that is not a number
+# counts as none.
+case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
+export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
+  "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"
 # POSIXLY_CORRECT in the environment starts bash in POSIX mode, where a "." that fails exits the
 # shell before "|| no_lib" runs.
 set +o posix
