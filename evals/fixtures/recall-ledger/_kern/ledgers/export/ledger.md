@@ -1,0 +1,9 @@
+# kern ledger: /work/app/.kern/plans/export.md
+Main: /work/app branch=main status=0000000000000000000000000000000000000000
+Task 1: start tree=1111111111111111111111111111111111111111 at=2026-10-10T09:00:00Z
+Task 1: review round=1 tree=2222222222222222222222222222222222222222 spec=compliant quality=approved
+Task 1: complete tree=2222222222222222222222222222222222222222 test=npm test exit=0 review=approved probe=ok last=# pass 4
+Task 2: start tree=2222222222222222222222222222222222222222 at=2026-10-10T10:00:00Z
+Task 2: review round=1 tree=3333333333333333333333333333333333333333 spec=compliant quality=approved
+Task 2: complete tree=3333333333333333333333333333333333333333 test=npm test exit=0 review=approved probe=ok last=# pass 6
+Task 3: start tree=3333333333333333333333333333333333333333 at=2026-10-10T11:00:00Z

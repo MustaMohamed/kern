@@ -1,0 +1,71 @@
+{
+  "skill_name": "recall",
+  "trigger": {
+    "positive": [
+      { "prompt": "Where did I leave off on the floci swap?", "top_k": 3 },
+      { "prompt": "Catch me up on the billing work, I have been away for days", "top_k": 3 },
+      { "prompt": "I got lost in these PRs. What remains?", "top_k": 3 }
+    ],
+    "negative": [
+      { "prompt": "Add a CSV export to the reports page" },
+      { "prompt": "Rename the config loader to settings loader" }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "Where did I leave off on the export feature?",
+      "expected_output": "States the scope back, checks kern ledgers and live PR state, and returns a brief with one tag per thread and one next move, writing no files.",
+      "expectations": [
+        "Says the window, topic and workspace back before mining",
+        "Checks PR or branch state with gh or git before tagging a thread",
+        "Gives exactly one tag per thread and one next move",
+        "Writes no file"
+      ]
+    },
+    {
+      "id": 2,
+      "kind": "execution",
+      "files": ["recall-ledger"],
+      "prompt": "Where did I leave off on the export plan?",
+      "expected_output": "Reads the ledger, sees Tasks 1 and 2 complete and Task 3 started but not complete, and names Task 3 as the next move.",
+      "expectations": [
+        "Reads .kern/ledgers/export/ledger.md before any transcript",
+        "Names Task 3 of the export plan as the next move",
+        "Writes no file"
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "dialogue",
+      "prompt": "recall chat",
+      "expected_output": "Opens with the action-item count, then what happened by importance, then each action item with the decision, options, a recommendation and what happens with no answer.",
+      "expectations": [
+        "The first sentence gives the action-item count, or says there are none",
+        "Each action item has a recommendation",
+        "Treats notifications and subagent results as reports, not as the user's messages"
+      ]
+    },
+    {
+      "id": 4,
+      "kind": "dialogue",
+      "prompt": "Resume session 7f3a",
+      "expected_output": "Points to claude --resume and stops without mining transcripts.",
+      "expectations": [
+        "Names claude --resume",
+        "Reads no transcript and runs no recall-sessions"
+      ]
+    },
+    {
+      "id": 5,
+      "kind": "dialogue",
+      "prompt": "What does recall mean in machine learning metrics?",
+      "expected_output": "Answers the question directly; recall does not run.",
+      "expectations": [
+        "Does not read skills/recall/SKILL.md or call the recall skill",
+        "Answers with the precision and recall definition"
+      ]
+    }
+  ]
+}

@@ -19,6 +19,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - self-review: deterministic checks, built-in code-review at low effort, a spec lane, blast radius, probes, verdict.
 - commit: named files, convention-checked message from a file under .kern/tmp, one commit per reviewed task run as `git -C <worktree> commit`, no attribution by default.
 - finish-branch: verify, self-review and size gate before the commit, push or draft PR menu; the PR has a title, a body under .kern/tmp and a dedup on the head commit. prove-it hands commits and PRs to these skills.
+- recall: rebuild state from kern working files, this project's transcripts and live state; replaces the user-level recall skill.
 
 ## [0.2.1] - 2026-10-14
 
