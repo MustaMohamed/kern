@@ -212,3 +212,12 @@ without_lib() {
   out=$(unset BATS_TEST_FILENAME; KERN_GUARDS=g01 bash "$K/hooks/pre-tool-use" <<<"$p")
   [ "$(decision_of "$out")" = deny ]
 }
+
+@test "need_lists_match fails on a library loaded in a form it cannot read" {
+  for line in '  . "$KERN_ROOT/hooks/lib/json.sh"' 'source "$KERN_ROOT/hooks/lib/json.sh"' 'for l in json; do . "$KERN_ROOT/hooks/lib/$l.sh"; done'; do
+    { printf '%s\n' "$line"; cat "$K/hooks/pre-tool-use"; } > "$BATS_TEST_TMPDIR/pre-tool-use"
+    run need_lists_match "$BATS_TEST_TMPDIR/pre-tool-use"
+    [ "$status" -eq 1 ] || { echo "accepted: $line"; return 1; }
+    [[ "$output" == *"in a form these checks cannot read"* ]] || false
+  done
+}

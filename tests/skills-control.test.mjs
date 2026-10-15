@@ -59,3 +59,10 @@ test('terse mode tells the voice to answer only what was asked, in numbered orde
   const nums = t.split('## Rules\n')[1].split('\n\n')[0].split('\n').map((l) => l.match(/^(\d+)\./)[1]);
   assert.deepEqual(nums, ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']);
 });
+
+test('mode documents the switch phrases the hook accepts', () => {
+  const { body } = read('mode');
+  assert.match(body, /only when it stands alone on the prompt's first non-blank line/);
+  assert.match(body, /a line over 200 characters never does\./);
+  assert.match(body, /^- terse voice: .*"terse on", "terse voice", "terse mode on"/m);
+});

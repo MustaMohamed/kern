@@ -20,8 +20,8 @@ kern's prompt hook applies the switch before this skill loads. This skill only r
 ## Words
 `terse` and `normal` set the voice. `chat`, `auto` and `html` set the surface. `default` resets both to the settings defaults. `status` changes nothing. Words combine, as in `/kern:mode html terse`. An unknown word changes nothing.
 
-A phrase below also switches, without this skill, only when it stands alone on the prompt's first line: put the phrase alone on the first line, or type `/kern:mode`. A leading "please" or "ok", a trailing "please" or "now", a final "." or "!", and "mode" after "terse" or "normal" are allowed; with anything else on the line, as in "go terse and fix the bug", nothing switches.
-- terse voice: "terse", "go terse", "be terse", "use terse", "enable terse", "turn on terse", "activate terse", "switch to terse", "terse on", "terse mode";
+A phrase below also switches, without this skill, only when it stands alone on the prompt's first non-blank line: put the phrase alone on that line, or type `/kern:mode`. A leading "please", "ok" or "okay" (with or without a comma), any trailing mix of "please" and "now", one or more final "." or "!", extra spaces between words, and "mode" after "terse" or "normal" are allowed; with anything else on the line, as in "go terse and fix the bug", nothing switches, and a line over 200 characters never does.
+- terse voice: "terse", "go terse", "be terse", "use terse", "enable terse", "turn on terse", "activate terse", "switch to terse", "terse on", "terse voice", "terse mode on", "terse mode";
 - normal voice: "normal", "normal mode", "normal voice", "back to normal", "go back to normal", "switch back to normal", "switch to normal", "stop terse", "terse off", "terse mode off", "turn off terse", "disable terse", "exit terse", "quit terse";
 - html surface: "html mode", "go html", "switch to html", "html on";
 - surface back to the settings default, or `auto` when that default is `html`: "stop html", "html off";

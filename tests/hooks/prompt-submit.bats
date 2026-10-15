@@ -239,3 +239,13 @@ expand() {
   out=$(bash "$BATS_TEST_TMPDIR/k/hooks/prompt-submit" 2>/dev/null <<<"$(payload UserPromptSubmit '"prompt":"go terse"')")
   [ -z "$out" ]
 }
+
+@test "a first line over 200 characters never switches and returns at once" {
+  long="go terse$(printf ' .%.0s' $(seq 1 15000))"
+  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  start=$SECONDS
+  printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"%s"}' "$CWD" "$long" |
+    bash "$(kern_root)/hooks/prompt-submit" >/dev/null
+  [ $((SECONDS - start)) -le 3 ]
+  [ "$(st voice)" = normal ]
+}

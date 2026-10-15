@@ -198,5 +198,10 @@
   { "prompt": "fix the bug\nstop terse", "expect": "none", "known_failing": false },
   { "prompt": "<scheduled-task name=y>go terse</scheduled-task>", "expect": "none", "known_failing": false },
   { "prompt": "<teammate-message teammate_id=\"lead\">stop terse</teammate-message>", "expect": "none", "known_failing": false },
-  { "prompt": "<task-notification>terse mode</task-notification>", "expect": "none", "known_failing": false }
+  { "prompt": "<task-notification>terse mode</task-notification>", "expect": "none", "known_failing": false },
+  { "prompt": "terse voice", "expect": "on", "known_failing": false },
+  { "prompt": "terse mode on", "expect": "on", "known_failing": false },
+  { "prompt": "go   terse", "expect": "on", "known_failing": false },
+  { "prompt": "back  to\tnormal", "expect": "off", "known_failing": false },
+  { "prompt": "use terse voice for the logger", "expect": "none", "known_failing": false }
 ]

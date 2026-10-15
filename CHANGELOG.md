@@ -4,6 +4,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- Mode switches: "terse voice" and "terse mode on" switch; extra spaces are folded; a first line over 200 characters never switches.
 - Kernel: no is an acceptable answer, and chat in either voice skips the main AI tells; terse keeps existing comments and shows only changed code.
 - prove-it: evidence before any done, fixed or passing claim. Removes the M0 placeholder skill.
 - Agents implementer, task-reviewer and investigator.

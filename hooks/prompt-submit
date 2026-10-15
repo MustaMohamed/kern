@@ -116,17 +116,22 @@ wrapped() {
   return 1
 }
 
-# natural PROMPT: switches only when the first line, lowercased and trimmed, is a switch phrase and
-# nothing else, apart from a leading "please", "ok" or "okay" and any trailing mix of "please", "now"
-# and a final . or !. A phrase that ends in "terse" or "normal" may add " mode". A line that holds
-# anything more, such as "use terse, descriptive names", never switches.
+# natural PROMPT: switches only when the first non-blank line, lowercased, trimmed and with its runs of
+# blanks folded to one space, is a switch phrase and nothing else, apart from a leading "please", "ok"
+# or "okay" and any trailing mix of "please", "now" and final . or !. A phrase that ends in "terse" or
+# "normal" may add " mode". A line that holds anything more, such as "use terse, descriptive names",
+# never switches, and neither does a line over 200 characters: no phrase is that long, and the ending
+# loop below is quadratic in a long run of strippable endings.
 natural() {
   local p
-  p=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}' | lower |
-    sed -E -e 's/^[[:space:]]+//; s/[[:space:]]+$//' -e ':a' -e 's/[[:space:]]*[.!]+$//; s/,?[[:space:]]+(please|now)$//' -e 'ta' \
-      -e 's/^(please|ok|okay),?[[:space:]]+//; s/(^|[[:space:]])(terse|normal) mode$/\1\2/')
+  p=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}')
+  [ "${#p}" -le 200 ] || return 0
+  p=$(printf '%s\n' "$p" | lower |
+    sed -E -e 's/[[:space:]]+/ /g; s/^ //; s/ $//' -e ':a' -e 's/ ?[.!]+$//; s/,? (please|now)$//' -e 'ta' \
+      -e 's/^(please|ok|okay),? //; s/(^| )(terse|normal) mode$/\1\2/')
   case "$p" in
-    terse | "go terse" | "be terse" | "use terse" | "enable terse" | "turn on terse" | "activate terse" | "switch to terse" | "terse on")
+    terse | "go terse" | "be terse" | "use terse" | "enable terse" | "turn on terse" | "activate terse" | "switch to terse" | "terse on" | \
+      "terse voice" | "terse mode on")
       set_voice terse && SHOW_LINE=1
       ;;
     normal | "normal voice" | "back to normal" | "go back to normal" | "switch back to normal" | "switch to normal" | "stop terse" | \
