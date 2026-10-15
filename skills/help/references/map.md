@@ -14,6 +14,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | `diagnose` | path | Routed row "Bug, failing test, unexpected output"; /kern:diagnose | Root cause before any fix |
 | `define` | path | Routed row "New behaviour and no agreed spec"; /kern:define | Clarify, classify and approve before code |
 | `plan` | path | Routed row "Agreed spec, more than one step"; /kern:plan | Approved spec to ordered, checked tasks |
+| `parallel-work` | path | execute-plan and diagnose; /kern:parallel-work | One worktree per writer, integrate, re-test |
 
 ## Close calls
 - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.

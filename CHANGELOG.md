@@ -14,6 +14,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - diagnose: red-capable loop before hypotheses, fix with a regression test proven by probe; loop-rate for flaky bugs.
 - define: clarify, classify and get an explicit, quoted approval before code; specs carry a Constraints section.
 - plan: approved spec to ordered tasks with exact files and verify commands, checked by plan-check.
+- parallel-work: fan out with one worktree per writer, checked briefs and serial integration.
 
 ## [0.2.1] - 2026-10-14
 
