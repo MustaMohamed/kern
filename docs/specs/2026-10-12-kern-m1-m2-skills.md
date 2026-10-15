@@ -616,7 +616,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/prove-it.acceptance.md` (M2b), ticked in the pilot.
 
-**8. Sources; size.** SP verification-before-completion; PS principle-prove-it-works, poteto-mode:111; PB bug-fix:10; ADR definition-of-done. SKILL.md at most 3,600 bytes; `references/evidence.md` at most 2,100 bytes (the plan's cap).
+**8. Sources; size.** SP verification-before-completion; PS principle-prove-it-works, poteto-mode:111; PB bug-fix:10; ADR definition-of-done. SKILL.md at most 3,800 bytes (raised from 3,600 in M2a Task 25: the Gate hands off to commit or finish-branch, except from inside them); `references/evidence.md` at most 2,100 bytes (the plan's cap).
 
 ---
 ### C8. `self-review` (path, M2)
@@ -716,7 +716,7 @@ The full checklist is `tests/skills/commit.acceptance.md` (M2a), ticked in the M
 name: finish-branch
 description: Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep.
 disable-model-invocation: true
-allowed-tools: Bash(git status *), Bash(git rev-list *), Bash(git rev-parse *), Bash(gh pr list *)
+allowed-tools: Bash(git status *), Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
 ---
 ```
 
@@ -727,12 +727,12 @@ allowed-tools: Bash(git status *), Bash(git rev-list *), Bash(git rev-parse *), 
 **4. Steps**
 0. Defer (A6).
 1. Consent: the user typed `/kern:finish-branch` or asked to push or open a PR in this session, or autopilot is on; otherwise stop. prove-it's Gate Reads this skill, so the check is what stops an unrequested push. (Added in M2a Task 25.)
-2. Find the work and stand in it: the newest execute-plan ledger's `Worktree:` line, else `git worktree list`, else the current checkout. Run `cd <wt>` as its own call, because G1 and G2 judge a push or PR by the session's directory. Check the branch and worktree (`git rev-parse --git-dir` against `git rev-parse --git-common-dir`). On a detached HEAD, offer "create branch <name from branch.pattern> here" (`git switch -c <name>` in that worktree) and go on only after it. Refuse on a protected branch. [SP finishing-a-development-branch:30-44; SE finish-branch: worktree from the ledger, cd in its own call (G2 _g02_here); SP finishing-a-development-branch:44,67-76 (detached HEAD)]
-3. Run `git fetch origin <base>` and report ahead and behind (`git rev-list --left-right --count origin/<base>...HEAD`). Stale: propose a rebase in the worktree and run it only on yes. [SP finishing-a-development-branch:46-51]
+2. Find the work and stand in it: a worktree the user names, else the newest execute-plan ledger's `Worktree:` line still in `git worktree list`, else the current checkout; a detached HEAD in the main checkout stops. Run `cd <wt>` as its own call, because G1 and G2 judge a push or PR by the session's directory. Check the branch and worktree (`git rev-parse --git-dir` against `git rev-parse --git-common-dir`). On a detached HEAD, offer "create branch <name from branch.pattern> here" (`git switch -c <name>` in that worktree) and go on only after it. Refuse on a protected branch. [SP finishing-a-development-branch:30-44; SE finish-branch: worktree from the ledger, cd in its own call (G2 _g02_here); SP finishing-a-development-branch:44,67-76 (detached HEAD)]
+3. Run `git fetch origin <base>` and report ahead and behind (`git rev-list --left-right --count origin/<base>...HEAD`). Stale: propose a rebase in the worktree and run it only on yes. A branch already on origin is warned first: the rebase rewrites published commits, and the push after it is `git push --force-with-lease`; plain force never. [SP finishing-a-development-branch:46-51]
 4. Prove with `test.full` on this tree by following `prove-it`, then record the proven tree with `wt-snap <wt>`. [SP finishing-a-development-branch:14-26]
 5. Read `self-review` and run it. Comment hygiene: `skip: no-comments ships in M3`. [PB opening-a-pr:9]
-6. Size gate: more than `scope_threshold` files or more than `pr.max_lines` changed lines: propose a split. [AD code-review-and-quality:107-111]
-7. Show the menu, then wait: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is. Discard only on the typed word `discard`, after listing what it would destroy: `git -C <wt> status --porcelain -uall`, the branch's commits and the worktree path. [SP finishing-a-development-branch:53-82,132-157; SP finishing-a-development-branch:137-146 (discard listing)]
+6. Size gate: more than `scope_threshold` files or more than `pr.max_lines` changed lines: propose a split. Under autopilot it goes on and the PR body's Scope gives the size. [AD code-review-and-quality:107-111]
+7. Show the menu, then wait: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is. Discard only on the typed word `discard`, after listing what it would destroy: `git -C <wt> status --porcelain -uall --ignored`, the branch's commits and the worktree path. [SP finishing-a-development-branch:53-82,132-157; SP finishing-a-development-branch:137-146 (discard listing)]
 8. Commit by running steps 2 to 6 of `commit`.
 9. Before any push or PR, run `gh pr list --head <branch> --state all --json number,state,headRefOid,url`. A PR whose `headRefOid` is `git rev-parse HEAD`: report its URL and stop. An open PR at an older head: push in step 10, report its URL, and open no new PR. [CDS multi-agent-orchestration dedup; USR; SE finish-branch: dedup on headRefOid]
 10. Push only the proven tree: `git rev-parse HEAD^{tree}` must equal the tree from step 4; when it differs, run `test.full` again on a detached copy of HEAD (`wt-new <slug>-check --detach --base <HEAD sha>`) first. Then run `git push -u origin <branch>` as its own call; G1 asks. Investigate a rejected push; never force it. [SP finishing-a-development-branch:225; SE finish-branch: push only the proven tree]
@@ -752,7 +752,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/finish-branch.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** SP finishing-a-development-branch; PB opening-a-pr; PO pr; AD git-workflow-and-versioning, code-review-and-quality; MM-ship 8. SKILL.md at most 6,000 bytes (raised from 5,000 in M2a Task 25: consent, every exit and the autopilot defaults); `references/pr-body.md`, `push-and-pr.md` and `branch-ops.md` at most 2,000 bytes each. The PR title is single-quoted, with no backtick or `$(`, so G2 can read it literally. The `pause` mode in MM-ship moves to the later `handoff` skill.
+**8. Sources; size.** SP finishing-a-development-branch; PB opening-a-pr; PO pr; AD git-workflow-and-versioning, code-review-and-quality; MM-ship 8. SKILL.md at most 6,400 bytes (raised from 5,000 in M2a Task 25: consent, every exit, the autopilot defaults and a published rebase); `references/pr-body.md` at most 2,000 bytes; `push-and-pr.md`, `branch-ops.md` and `discard.md` at most 2,400 bytes each. The PR title is single-quoted, with no backtick or `$(`, so G2 can read it literally. The `pause` mode in MM-ship moves to the later `handoff` skill.
 
 ---
 
