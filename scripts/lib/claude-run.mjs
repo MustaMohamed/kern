@@ -134,4 +134,15 @@ export function finalText(events) {
   return '';
 }
 
+// runSummary(events): what a snapshot keeps to explain a stop: the last 4000 characters of the final
+// reply, the number of assistant turns, and the last result event's subtype (null when there is none).
+export function runSummary(events) {
+  const results = events.filter((e) => e?.type === 'result');
+  return {
+    final: finalText(events).slice(-4000),
+    turns: events.filter((e) => e?.type === 'assistant').length,
+    subtype: results.length ? (results[results.length - 1].subtype ?? null) : null,
+  };
+}
+
 export const claudeVersion = () => execFileSync('claude', ['--version'], { encoding: 'utf8', timeout: SETUP_TIMEOUT_MS }).trim();

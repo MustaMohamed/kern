@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, PERMISSIONS, ClaudeRunError, claudeVersion, runClaude, runProblem, toolUses, workspace } from './lib/claude-run.mjs';
+import { ISOLATION, PERMISSIONS, ClaudeRunError, claudeVersion, runClaude, runProblem, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { GRADERS, stubMissed } from './lib/exec-grade.mjs';
 import { UsageError, parseArgs, runEval } from './lib/exec-run.mjs';
 
@@ -55,7 +55,7 @@ function runCase(c) {
       try { g = GRADERS[c.id]({ events: run.events, ghLog, git, branch: c.branch }); }
       catch (e) { g = { pass: false, invalid: true, reasons: [`grader error: ${e.message}`] }; }
     }
-    return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status,
+    return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
       commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command) };
   } finally {
     rmSync(dirname(dir), { recursive: true, force: true });

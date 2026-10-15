@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GRADERS, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
-import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem } from '../scripts/lib/claude-run.mjs';
+import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { UsageError, exitCode, parseArgs, runEval } from '../scripts/lib/exec-run.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
@@ -301,4 +301,16 @@ test('finish-split-nine-files: negated replies fail, real proposals pass', () =>
   const verdict = (text) => GRADERS['finish-split-nine-files']({ events: [say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
   for (const no of ['I did not propose a split.', 'No split needed here.', 'There is no need to split this.', 'I will not split this branch.', 'Never split it.']) assert.equal(verdict(no), false, no);
   for (const yes of ['I propose splitting the branch.', 'Split into two PRs?', 'Consider splitting into smaller PRs.', 'I recommend a split: 5 and 4 files.']) assert.equal(verdict(yes), true, yes);
+});
+
+test('runSummary keeps the final reply tail, the assistant turn count and the result subtype', () => {
+  const long = 'a'.repeat(5000) + 'END';
+  const events = [say('first'), bash('ls'), say(long), { type: 'result', subtype: 'error_max_turns', is_error: false, result: long }];
+  const s = runSummary(events);
+  assert.equal(s.turns, 3);
+  assert.equal(s.subtype, 'error_max_turns');
+  assert.equal(s.final.length, 4000);
+  assert.ok(s.final.endsWith('END'));
+  assert.deepEqual(runSummary([say('hi')]), { final: 'hi', turns: 1, subtype: null });
+  assert.deepEqual(runSummary([]), { final: '', turns: 0, subtype: null });
 });
