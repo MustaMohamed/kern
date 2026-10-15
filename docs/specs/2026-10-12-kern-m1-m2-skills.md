@@ -796,7 +796,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/recall.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** LOC recall (adapted from PS recall), PS ketchup, SP diagnosing-superpowers context-safety. Hard-coded MoneyApp and infinito sources in LOC become `tracker` and `workflow_records`. SKILL.md at most 7,200 bytes (raised from 6,500 in M2a Task 28: every source exit goes to Sources skipped, and the `[unverified, <source> unavailable]` tag); `references/transcripts.md` at most 2,200 bytes (the plan's cap).
+**8. Sources; size.** LOC recall (adapted from PS recall), PS ketchup, SP diagnosing-superpowers context-safety. Hard-coded MoneyApp and infinito sources in LOC become `tracker` and `workflow_records`. SKILL.md at most 7,200 bytes (raised from 6,500 in M2a Task 28: every source exit goes to Sources skipped, and the `[unverified, <source> unavailable]` tag); `references/transcripts.md` at most 2,200 bytes (the plan's cap); `references/chat.md` at most 2,000 bytes (added in M2a Task 28: chat mode and its rules).
 
 ---
 ## D. Agents
