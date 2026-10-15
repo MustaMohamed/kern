@@ -4,7 +4,7 @@
 load ../helpers/common
 
 # The lines each hook runs right after `export KERN_ROOT`, comments aside.
-HARDEN='case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
+HARDEN='case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]* | ??????????*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
 export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
   "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"'
 
@@ -67,4 +67,18 @@ setup() {
   grep -q ':: -C .* log --no-show-signature --format=%s -30' "$L"
   run grep -v -F -e "$want" "$L"
   [ "$status" -eq 1 ] || { printf '%s\n' "$output"; return 1; }
+}
+
+@test "a GIT_CONFIG_COUNT of more than 9 digits counts as none, so pre-tool-use decides as usual" {
+  local c base
+  git -C "$R" switch -q -c feat
+  printf 'more\n' >>"$R/README.md"
+  git -C "$R" -c core.fsmonitor=false add README.md
+  base=$(POSIXLY_CORRECT=1 bash "$K/hooks/pre-tool-use" <<<"$(bash_payload "git commit -m 'add more'")")
+  [[ "$base" == *'"permissionDecision":"'* ]] || false
+  # The first wraps in bash arithmetic; the second wraps the key index negative, which export rejects.
+  for c in 99999999999999999999 9223372036854775807; do
+    run env GIT_CONFIG_COUNT="$c" POSIXLY_CORRECT=1 bash "$K/hooks/pre-tool-use" <<<"$(bash_payload "git commit -m 'add more'")"
+    [ "$status" -eq 0 ] && [ "$output" = "$base" ] || { echo "$c: status $status: $output"; return 1; }
+  done
 }
