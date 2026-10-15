@@ -7,7 +7,9 @@
 # Needs nothing. aliases_load sets KERN_ALIASES and the _KA_* table; alias_expand sets ALIAS_EXP.
 
 # _ALIASES_AWK: reads a snapshot and prints `<hex of name><TAB>expansion` for each alias whose
-# expansion holds a word that is git or gh (by its last path part, any case, quotes removed). Lines are
+# expansion holds a word that is git or gh (by its last path part, any case, quotes removed), and for
+# each alias whose expansion ends in a blank, which zsh's trailing-space rule lets expand the word after
+# it; such an expansion is printed with one space at its end and no other expansion ends in one. Lines are
 # `alias [--] name=value`, with a CRLF read as LF; value is a bare word, single-quoted text with '\''
 # for a quote, or backslash escapes. A value in $'...' or double quotes, an unclosed quote, a control
 # byte, a name holding a quote, a slash, a $, a backtick, a backslash or a byte outside printable ASCII,
@@ -79,16 +81,20 @@ function gitword(v,    w, n, k, b, P) {
 }
 END {
   for (i = 1; i <= cnt; i++) {
-    nm = order[i]; v = val[nm]; split("", seen); seen[nm] = 1
+    # ts: the expansion ends in a blank, its own or that of an alias whose value ends it.
+    nm = order[i]; v = val[nm]; split("", seen); seen[nm] = 1; ts = v ~ /[ \t]$/
     for (d = 0; d < 8; d++) {
       hd = head(v)
       if (hd == "" || !(hd in val) || (hd in seen) || length(v) > 4096) break
       seen[hd] = 1
       n = split(v, w, /[ \t]+/); pre = ""; rest = ""
       for (k = 1; k <= n; k++) if (w[k] != "") { if (k < hk) pre = pre w[k] " "; else if (k > hk) rest = rest " " w[k] }
+      if (rest == "" && val[hd] ~ /[ \t]$/) ts = 1
       v = pre val[hd] rest
     }
-    if (gitword(v)) print hx[nm] "\t" v
+    sub(/[ \t]+$/, "", v)
+    if (ts) v = v " "
+    if (gitword(v) || ts) print hx[nm] "\t" v
   }
 }'
 
@@ -150,15 +156,34 @@ $(git_words "$1")
 EOF
 }
 
+# _alias_var WORD VAR: sets VAR to the name of the _KA_ variable of the alias WORD; exit 1 when WORD
+# is no alias aliases_load set. Each byte of WORD must be one of _ALIAS_CHARS, so the hex is one to one.
+_alias_var() {
+  local h="" c i=0
+  [ "${#1}" -le 256 ] || return 1
+  while [ "$i" -lt "${#1}" ]; do
+    c=${1:i:1}
+    case "$_ALIAS_CHARS" in *"$c"*) ;; *) return 1 ;; esac
+    printf -v c '%02x' "'$c"
+    h="$h$c"
+    i=$((i + 1))
+  done
+  h="_KA_$h"
+  [ -n "${!h-}" ] || return 1
+  printf -v "$2" '%s' "$h"
+}
+
 # alias_expand SEG: when the head word of the simple command SEG is an alias aliases_load set, sets
-# ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. As zsh does, the head
+# ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. When the expansion ends
+# in a blank, the word after the alias is replaced too when it is such an alias, as zsh's trailing-space
+# rule does, and so on, at most 8 times. As zsh does, the head
 # word is the first word after unquoted NAME=value words, redirections (with a target in the next word
 # when none is attached) and the reserved words if then elif else do while until ! { time nocorrect
 # coproc and repeat with its count; zsh does not expand an alias after command, builtin, exec, noglob
 # or -, and neither does this. A word with a quote, a backslash, a $ or a backtick is never an alias, as
 # in zsh, and ends the search.
 alias_expand() {
-  local rest="$1" pre="" w t h c i=0 skip=0
+  local rest="$1" pre="" w t v skip=0 n=0
   [ -n "${KERN_ALIASES-}" ] || return 1
   while :; do
     rest=${rest#"${rest%%[!"$_ALIAS_BLANK"]*}"}
@@ -189,17 +214,19 @@ alias_expand() {
     pre="$pre$w "
     rest=${rest#"$w"}
   done
-  [ "${#w}" -le 256 ] || return 1
-  h=""
-  while [ "$i" -lt "${#w}" ]; do
-    c=${w:i:1}
-    case "$_ALIAS_CHARS" in *"$c"*) ;; *) return 1 ;; esac
-    printf -v c '%02x' "'$c"
-    h="$h$c"
-    i=$((i + 1))
+  _alias_var "$w" v || return 1
+  pre="$pre${!v}"
+  rest=${rest#"$w"}
+  while [ "$n" -lt 8 ]; do
+    case "$pre" in *' ') ;; *) break ;; esac
+    t=${rest#"${rest%%[!"$_ALIAS_BLANK"]*}"}
+    w=${t%%["$_ALIAS_BLANK"]*}
+    case "$w" in '' | *[\"\'\\\$\`]*) break ;; esac
+    _alias_var "$w" v || break
+    pre="$pre${!v}"
+    rest=${t#"$w"}
+    n=$((n + 1))
   done
-  h="_KA_$h"
-  [ -n "${!h-}" ] || return 1
   # shellcheck disable=SC2034 # read by git_words
-  ALIAS_EXP="$pre${!h}${rest#"$w"}"
+  ALIAS_EXP="$pre$rest"
 }

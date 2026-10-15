@@ -314,3 +314,27 @@ noalias_hook() {
   done
   expect none "prc --title t --body b" "rel v1" "isc --title t --body-file b.md" "prv 1 --approve" "pdb"
 }
+
+@test "an alias whose value ends in a blank expands the word after it, as zsh does, at most 8 times" {
+  local h c w8 w9 mode want
+  h=$(noalias_hook)
+  snap "alias -- _='sudo '" "alias -- gpf!='git push --force'" "alias -- n='nice '"
+  for mode in off on; do
+    set_autopilot "$mode"
+    all "_ gpf! origin main"
+    [ "$(decision_of "$output")" = deny ] || { echo "$mode: $output"; return 1; }
+    [[ "$output" == *"kern G1"* ]] || false
+    same "_ gpf! origin main" "sudo git push --force origin main"
+    # Without a git or gh alias after it, `_` is judged as before.
+    for c in "_ git status" "_ ls -la" "_ 'gpf!' origin main" "_ X=1 gpf! origin main"; do
+      want=$(env KERN_GUARDS= bash "$h" <<<"$(bash_payload "$c")")
+      all "$c"
+      [ "$output" = "$want" ] || { printf '%s, %s:\n%s\n%s\n' "$mode" "$c" "$output" "$want"; return 1; }
+    done
+  done
+  # n is `nice `: gpf! is the 8th word after the head n in w8, which expands; the 9th in w9 does not.
+  w8="n n n n n n n n gpf! origin main"
+  w9="n n n n n n n n n gpf! origin main"
+  expect deny "$w8"
+  expect none "$w9"
+}
