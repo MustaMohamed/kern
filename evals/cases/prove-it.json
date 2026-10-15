@@ -23,7 +23,7 @@
         "prompt": "Explain why the CI job is slow"
       },
       {
-        "prompt": "Explain what this test asserts about the exit code"
+        "prompt": "Explain what fixed and passing mean in this commit message"
       }
     ]
   },
