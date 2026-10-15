@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# gh stand-in for the exec evals: logs every call to $KERN_EXEC_LOG and answers from $KERN_EXEC_PR
+# (none, open-at-head or open-older). It never reaches a network; a call it does not know fails.
+printf '%s\n' "$*" >>"${KERN_EXEC_LOG:?KERN_EXEC_LOG is not set}"
+pr_json() { printf '[{"number":7,"state":"OPEN","headRefOid":"%s","url":"https://example.invalid/pr/7"}]\n' "$1"; }
+case "$1 $2" in
+  "pr list")
+    case "${KERN_EXEC_PR:-none}" in
+      open-at-head) case "$*" in *--jq*) echo OPEN ;; *) pr_json "$(git rev-parse HEAD)" ;; esac ;;
+      open-older) case "$*" in *--jq*) echo OPEN ;; *) pr_json "$(git rev-parse HEAD~1)" ;; esac ;;
+      *) case "$*" in *--jq*) ;; *) echo '[]' ;; esac ;;
+    esac
+    ;;
+  "pr create") echo "https://example.invalid/pr/8" ;;
+  "pr view") echo '{"number":7,"state":"OPEN","url":"https://example.invalid/pr/7"}' ;;
+  "api user") echo dev ;;
+  "auth status") echo "Logged in to example.invalid account dev" ;;
+  *) echo "gh stub: unhandled call: $*" >&2; exit 1 ;;
+esac
+exit 0
