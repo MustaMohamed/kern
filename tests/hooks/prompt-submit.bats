@@ -249,3 +249,28 @@ expand() {
   [ $((SECONDS - start)) -le 3 ]
   [ "$(st voice)" = normal ]
 }
+
+# padded_switch LENGTH: "go", blanks, "terse", blanks, to exactly LENGTH characters.
+padded_switch() {
+  printf 'go%*sterse%*s' 60 '' $(($1 - 67)) ''
+}
+
+run_prompt() {
+  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"%s"}' "$CWD" "$1" |
+    bash "$(kern_root)/hooks/prompt-submit" >/dev/null
+}
+
+@test "a switch phrase padded with blanks to exactly 200 characters still switches" {
+  p=$(padded_switch 200)
+  [ "${#p}" -eq 200 ]
+  run_prompt "$p"
+  [ "$(st voice)" = terse ]
+}
+
+@test "the same phrase padded to 201 characters does not switch" {
+  p=$(padded_switch 201)
+  [ "${#p}" -eq 201 ]
+  run_prompt "$p"
+  [ "$(st voice)" = normal ]
+}

@@ -2,7 +2,7 @@
 name: finish-branch
 description: "Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep."
 disable-model-invocation: true
-allowed-tools: Bash(git status *), Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
+allowed-tools: Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
 ---
 
 # finish-branch
