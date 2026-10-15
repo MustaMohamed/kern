@@ -672,7 +672,7 @@ name: commit
 description: Commit named files with a message that follows the project's convention, after the checks pass.
 disable-model-invocation: true
 argument-hint: "[files...]"
-allowed-tools: Bash(git status *), Bash(git diff *), Bash(git log *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
+allowed-tools: Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
 ---
 ```
 
@@ -716,7 +716,7 @@ The full checklist is `tests/skills/commit.acceptance.md` (M2a), ticked in the M
 name: finish-branch
 description: Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep.
 disable-model-invocation: true
-allowed-tools: Bash(git status *), Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
+allowed-tools: Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
 ---
 ```
 
