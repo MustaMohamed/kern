@@ -18,7 +18,7 @@ Updated 2026-10-14 for the M2 split: M2a (`docs/plans/2026-10-14-kern-m2a-plan.m
 | `implement` | path | M2a | at most 5.5 KB, 4.2 planned (+5.5 KB refs) | Thin slices, test first, full suite |
 | `diagnose` | path | M2a | at most 6.5 KB, 5.0 planned (+7 KB refs, 2 scripts) | Red-capable loop before any fix |
 | `prove-it` | auto | M2a | at most 3.6 KB, 3.3 planned (+1.8 KB ref) | Evidence before any "done" |
-| `self-review` | path | M2a | at most 5.5 KB, 4.3 planned (+5 KB refs) | Author's pre-PR check and verdict |
+| `self-review` | path | M2a | at most 6.4 KB, 4.3 planned (+5 KB refs) | Author's pre-PR check and verdict |
 | `commit` | slash | M2a | at most 4.2 KB, 4.0 planned | Commit named files to the project convention |
 | `finish-branch` | slash | M2a | at most 5 KB, 4.6 planned (+1.5 KB ref) | Verify, review, then commit / push / draft PR / keep |
 | `recall` | auto | M2a | at most 6.5 KB, 4.7 planned (+2 KB ref) | Rebuild state across sessions; `recall chat` for this thread |
@@ -659,7 +659,7 @@ disable-model-invocation: true
 
 The full checklist is `tests/skills/self-review.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** PS blast-radius; AD doubt-driven-development, code-review-and-quality, constraint-driven-development (+ ADR floor-guard); PO code-review; design page section 3. SKILL.md at most 5,500 bytes; `references/blast-radius.md` at most 2,600 bytes, `doubt-cycle.md` 2,400, `claim-checks.md` 1,700 (the plan's caps).
+**8. Sources; size.** PS blast-radius; AD doubt-driven-development, code-review-and-quality, constraint-driven-development (+ ADR floor-guard); PO code-review; design page section 3. SKILL.md at most 6,400 bytes (raised from 5,500 in M2a Task 23: every script exit needs its action); `references/blast-radius.md` at most 2,600 bytes, `doubt-cycle.md` 2,400, `claim-checks.md` 1,700 (the plan's caps).
 
 ---
 
