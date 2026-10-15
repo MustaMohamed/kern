@@ -515,3 +515,13 @@ bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:
   expect_hook "bash $K/hoo{ks/prompt-sub,x}mit < j.json" 'bash ho{oks/session-st,}art' 'cp src/{a/b,c} /tmp/' \
     'ls x{a/b..c}'
 }
+
+@test "the APFS case folds of s and k in a settings or state path get the vote of the ASCII spelling" {
+  # U+017F (long s) folds to s and U+212A (Kelvin sign) to k, written as their UTF-8 bytes.
+  local s=$'\305\277' k=$'\342\204\252'
+  expect_bash ask "echo x > .claude/${s}ettings.json" "echo x > .claude/${k}ern.yml" "echo x > .claude/${s}ettings.local.json"
+  expect_bash deny "echo on > $CLAUDE_PLUGIN_DATA/${s}essions/a.state"
+  expect_file_tools "$R/.claude/${s}ettings.json" ask
+  expect_file_tools "$R/.claude/${k}ern.local.yml" ask
+  expect_file_tools "$CLAUDE_PLUGIN_DATA/${s}essions/a.state" deny
+}

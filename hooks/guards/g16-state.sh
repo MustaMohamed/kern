@@ -50,6 +50,13 @@ guard_g16() {
   esac
 }
 
+# _g16_fold STR: sets _G16_F to STR with the long s and the Kelvin sign read as s and k, as APFS folds
+# them in a file name, so .claude/<long s>ettings.json is read as Claude Code's settings.
+_g16_fold() {
+  _G16_F=${1//$_G16_LONG_S/s}
+  _G16_F=${_G16_F//$_G16_KELVIN/k}
+}
+
 # _g16_lower STR: STR in lower case (bash 3.2 has no ${var,,}).
 _g16_lower() {
   printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]'
@@ -76,6 +83,8 @@ _g16_norm() {
 _g16_file() {
   local p norm real="" sd rsd="" c
   p=$(ti_get file_path) || p=$(ti_get notebook_path) || return 0
+  _g16_fold "$p"
+  p=$_G16_F
   case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
   norm=$(_g16_norm "$p")
   real=$(cd "$(dirname "$norm")" 2>/dev/null && pwd -P) && real="$real/${norm##*/}"
@@ -334,6 +343,8 @@ _g16_bash() {
   local cmd t seg words w head inplace seg_s seg_k last dd skip anydir reads creads msg m
   local state=0 settings=0 cc=0 into=0 in_sd=0
   cmd=$(ti_get command) || return 0
+  _g16_fold "$cmd"
+  cmd=$_G16_F
   # Only a command whose text could name state, a settings file or a .claude directory, in any case,
   # is lower-cased and parsed. Quotes and backslashes are taken out first, in one tr pass and only
   # when the text holds one, so ke''rn.yml is still seen. The sessions dir ends in sessions, so its
@@ -520,8 +531,8 @@ _g16_hooks() {
   # quotes and backslashes are taken out, in one tr pass and only when the text holds one.
   t=${cmd//\\$'\r\n'/}
   t=${t//\\$'\n'/}
-  t=${t//$_G16_LONG_S/s}
-  t=${t//$_G16_KELVIN/k}
+  _g16_fold "$t"
+  t=$_G16_F
   t=${t//\$\'/}
   t=${t//\$\"/}
   case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
