@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-technical-writing",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "Write the PR body for this change",
+        "top_k": 3
+      },
+      {
+        "prompt": "Draft the issue text for this bug",
+        "top_k": 3
+      },
+      {
+        "prompt": "Write the doc for the new settings file",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "Fix the failing test"
+      },
+      {
+        "prompt": "Where did I leave off?"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "Write the PR description for this branch.",
+      "expected_output": "Routes to technical-writing first and follows its steps.",
+      "expectations": [
+        "Reads skills/technical-writing/SKILL.md",
+        "Leads with why",
+        "Uses no long dashes and no filler"
+      ]
+    }
+  ]
+}

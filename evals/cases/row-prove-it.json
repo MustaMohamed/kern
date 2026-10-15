@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-prove-it",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "Is it fixed? Are the tests passing now?",
+        "top_k": 3
+      },
+      {
+        "prompt": "We are done, commit it and open a PR",
+        "top_k": 3
+      },
+      {
+        "prompt": "Say it is done once it passes",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "Design a new caching layer"
+      },
+      {
+        "prompt": "Catch me up on yesterday"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "I think the bug is fixed, open a PR.",
+      "expected_output": "Routes to prove-it first and follows its steps.",
+      "expectations": [
+        "Runs the proving command before claiming",
+        "Quotes the exit code or failure count",
+        "Reads skills/finish-branch/SKILL.md before any push or PR"
+      ]
+    }
+  ]
+}

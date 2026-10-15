@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-self-review",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "Review my diff before I open a PR",
+        "top_k": 3
+      },
+      {
+        "prompt": "Review my own changes before the PR",
+        "top_k": 3
+      },
+      {
+        "prompt": "Self-review this diff, there is no PR yet",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "Fix the failing login test"
+      },
+      {
+        "prompt": "Where did I leave off?"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "Review my changes before I open the PR.",
+      "expected_output": "Routes to self-review first and follows its steps.",
+      "expectations": [
+        "Reads skills/self-review/SKILL.md",
+        "Runs floor-scan and claim-check on the package",
+        "Ends with one verdict: ready, fix first, rebase first or split"
+      ]
+    }
+  ]
+}

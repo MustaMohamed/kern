@@ -5,6 +5,7 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { parseFrontmatter } from './frontmatter.mjs';
+import { kernelRows } from './kernel-rows.mjs';
 
 export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
 export const AGENT_KEYS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'color', 'maxTurns', 'skills', 'memory', 'background', 'isolation']);
@@ -64,7 +65,9 @@ export function loadModel(root) {
   }
   const kernelPath = join(root, 'kernel', 'kernel.md');
   const kernelText = existsSync(kernelPath) ? readFileSync(kernelPath, 'utf8') : '';
-  const routed = new Set([...kernelText.matchAll(/Read \{KERN\}\/([a-z0-9-]+)\/SKILL\.md/g)].map((m) => m[1]));
+  const routesPath = join(root, 'kernel', 'routes.md');
+  const routesText = existsSync(routesPath) ? readFileSync(routesPath, 'utf8') : '';
+  const routed = new Set([...`${kernelText}\n${routesText}`.matchAll(/Read \{KERN\}\/([a-z0-9-]+)\/SKILL\.md/g)].map((m) => m[1]));
   for (const s of skills) s.tier = s.data['disable-model-invocation'] !== 'true' ? 'auto' : routed.has(s.name) ? 'path' : 'slash';
   const cases = {};
   const casesDir = join(root, 'evals', 'cases');
@@ -86,7 +89,7 @@ export function loadModel(root) {
   const exFile = join(root, 'scripts', 'lint-exemptions.json');
   const exemptions = existsSync(exFile) ? JSON.parse(readFileSync(exFile, 'utf8')) : [];
   const shipped = SHIPPED_DIRS.flatMap((d) => walk(join(root, d)));
-  return { root, skills, agents, exemptions, shipped, kernelText, cases };
+  return { root, skills, agents, exemptions, shipped, kernelText, routesText, cases };
 }
 
 export const err = (rule, path, message) => ({ rule, path, level: 'error', message });
@@ -188,13 +191,18 @@ export const RULES = [
   } },
   { id: 6, check(model) {
     const out = [];
-    for (const line of model.kernelText.split('\n')) {
+    const sources = [['kernel/kernel.md', model.kernelText], ['kernel/routes.md', model.routesText]];
+    if (kernelRows(model.routesText).length && !model.kernelText.includes('{ROOT}/kernel/routes.md')) {
+      out.push(err(6, 'kernel/kernel.md', 'kernel/routes.md holds route rows, but the kernel never names {ROOT}/kernel/routes.md, so no route there is reached'));
+    }
+    for (const [src, text] of sources) for (const line of text.split('\n')) {
       if (!line.trimStart().startsWith('|') || !/\{(KERN|ROOT)\}\//.test(line)) continue;
       const m = line.match(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/);
-      if (!m) { out.push(err(6, 'kernel/kernel.md', `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}`)); continue; }
+      if (!m) { out.push(err(6, src, `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}`)); continue; }
       const target = m[1] === 'KERN' ? join('skills', m[2]) : m[2];
+      if (target === 'kernel/routes.md') { out.push(err(6, src, 'kernel/routes.md is named in the Routing rule, not routed by a row')); continue; }
       const file = join(model.root, target);
-      if (!existsSync(file)) { out.push(err(6, 'kernel/kernel.md', `route ${target} does not exist`)); continue; }
+      if (!existsSync(file)) { out.push(err(6, src, `route ${target} does not exist`)); continue; }
       const body = parseFrontmatter(readFileSync(file, 'utf8')).body.replace(/\r\n/g, '\n');
       const firstH2 = body.split('\n').find((l) => l.startsWith('## '));
       if (firstH2 !== '## Steps') out.push(err(6, target, 'a route file must open with ## Steps'));
@@ -211,25 +219,36 @@ export const RULES = [
     return out;
   } },
   { id: 7, check(model) {
-    if (!existsSync(join(model.root, 'hooks', 'session-start'))) return [];
     const out = [];
+    if (model.routesText.length > 1500) out.push(err(7, 'kernel/routes.md', `routed file ${model.routesText.length} chars, limit 1,500; every routed task reads it`));
+    if (!existsSync(join(model.root, 'hooks', 'session-start'))) return out;
     const tmp = mkdtempSync(join(tmpdir(), 'kern-rule7-'));
     try {
       const repo = join(tmp, 'repo');
       mkdirSync(join(repo, '.claude'), { recursive: true });
-      spawnSync('git', ['init', '-q', repo]);
+      const init = spawnSync('git', ['init', '-q', repo]);
+      if (init.status !== 0) out.push(err(7, 'hooks/session-start', `git init exited ${init.status}, so the kernel was not measured in a repository`));
       const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
       for (const f of ['kern.local.yml', 'kern.yml']) if (existsSync(join(fixture, f))) copyFileSync(join(fixture, f), join(repo, '.claude', f));
       const env = { ...process.env, HOME: join(tmp, 'home'), CLAUDE_PLUGIN_DATA: join(tmp, 'data') };
       const run = (name, payload) => spawnSync('bash', [join(model.root, 'hooks', name)], { input: JSON.stringify(payload), env, encoding: 'utf8' });
       const hook = (name, payload) => run(name, payload).stdout || '';
       const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
+      const ran = (r) => r.status === 0 && (r.stdout || '').trim() !== '';
       const start = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
-      if (start.status !== 0 || !(start.stdout || '').trim()) out.push(err(7, 'hooks/session-start', `exited ${start.status} with ${(start.stdout || '').length} chars of output, so the kernel was not measured`));
+      if (!ran(start)) out.push(err(7, 'hooks/session-start', `exited ${start.status} with ${(start.stdout || '').length} chars of output, so the kernel was not measured`));
       const kernel = norm(start.stdout || '');
       const terse = existsSync(join(model.root, 'modes', 'terse.md')) ? readFileSync(join(model.root, 'modes', 'terse.md'), 'utf8').length : 0;
       if (kernel.length > 4000) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 4,000`));
       if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
+      // Standing cost (design goal 4): the kernel with no project settings, plus every auto skill and agent
+      // description, the text every session carries.
+      for (const f of ['kern.local.yml', 'kern.yml']) rmSync(join(repo, '.claude', f), { force: true });
+      const again = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
+      if (ran(start) && !ran(again)) out.push(err(7, 'hooks/session-start', `exited ${again.status} with no project settings, so the standing cost was not measured`));
+      const bare = norm(again.stdout || '');
+      const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
+      if (bare.length + desc > 4800) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 4,800`));
       const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
       let ctx = '';
       try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }
@@ -289,6 +308,7 @@ export const RULES = [
     const auto = new Set(model.skills.filter((s) => s.tier === 'auto').map((s) => s.name));
     const docs = [...model.skills, ...model.agents].filter((d) => !d.error).map((d) => ({ file: d.file, body: d.body }));
     if (model.kernelText) docs.push({ file: join(model.root, 'kernel', 'kernel.md'), body: model.kernelText });
+    if (model.routesText) docs.push({ file: join(model.root, 'kernel', 'routes.md'), body: model.routesText });
     for (const d of docs) {
       for (const m of d.body.replace(/\r\n/g, '\n').matchAll(/Skill tool with `([a-z0-9:-]+)`/g)) {
         const name = m[1].replace(/^kern:/, '');
@@ -385,6 +405,25 @@ export const RULES = [
       for (const m of text.matchAll(/`((?:Task N|parked|Decision|Worktree|Main|Wave|Applied|Preflight):[^`]*)`/g)) {
         if (!contract.includes(`\`${m[1]}\``)) flag(m[1], 'ledger line format not in docs/plans/contract.md');
       }
+    }
+    return out;
+  } },
+  { id: 12, check(model) {
+    if (!existsSync(join(model.root, 'evals', 'cases'))) return [];
+    const out = [];
+    const need = (key, path) => {
+      const c = model.cases[key];
+      if (!c) { out.push(err(12, path, `no eval cases: evals/cases/${key}.json`)); return; }
+      if (c.parseError) { out.push(err(12, path, `evals/cases/${key}.json is not valid JSON: ${c.parseError}`)); return; }
+      const pc = c.trigger?.positive?.length ?? 0;
+      // A negative marked "grader": "model" is checked by M2b's model-graded runner, not here; it does not count.
+      const nc = c.trigger?.negative?.filter((n) => n.grader !== 'model').length ?? 0;
+      const ec = c.evals?.length ?? 0;
+      if (pc < 3 || nc < 2 || ec < 1) out.push(err(12, path, `evals/cases/${key}.json has ${pc} positive, ${nc} negative, ${ec} behavioural; needs 3, 2, 1`));
+    };
+    for (const s of model.skills.filter((x) => !x.error && x.tier === 'auto')) need(s.name, rel(model, s.file));
+    for (const [src, text] of [['kernel/kernel.md', model.kernelText], ['kernel/routes.md', model.routesText]]) {
+      for (const r of kernelRows(text)) need(`row-${r.route}`, src);
     }
     return out;
   } },

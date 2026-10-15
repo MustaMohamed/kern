@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-recall",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "Resuming after a two-week gap, where are we?",
+        "top_k": 3
+      },
+      {
+        "prompt": "Starting again after a gap, catch me up",
+        "top_k": 3
+      },
+      {
+        "prompt": "I am back after a gap; resume where we stopped",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "Fix the failing test"
+      },
+      {
+        "prompt": "Add a CSV export"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "I am back after a week away. Where did I leave off?",
+      "expected_output": "Routes to recall first and follows its steps.",
+      "expectations": [
+        "Calls the kern:recall skill or Reads its SKILL.md",
+        "States the scope back",
+        "Writes no file"
+      ]
+    }
+  ]
+}

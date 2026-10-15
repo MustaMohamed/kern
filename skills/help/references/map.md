@@ -1,6 +1,6 @@
 # kern map
 
-Installed skills only. The Tier column says how a skill loads. An `auto` skill loads by its description. A `path` skill loads through a kernel Routing row, or when typed. A `slash` skill never loads by its description. It loads when typed, or when a kernel rule or another skill names its file.
+Installed skills only. The Tier column says how a skill loads. An `auto` skill loads by its description. A `path` skill loads through a kernel Routing row, in `kernel/kernel.md` or `kernel/routes.md`, or when typed. A `slash` skill never loads by its description. It loads when typed, or when a kernel rule or another skill names its file.
 
 | Skill | Tier | Reached by | Job |
 |---|---|---|---|

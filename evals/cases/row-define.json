@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-define",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "New behaviour: a CSV export on the reports page, no spec yet",
+        "top_k": 3
+      },
+      {
+        "prompt": "We need new behaviour for archiving old projects and nothing is specced yet",
+        "top_k": 3
+      },
+      {
+        "prompt": "We want new behaviour for team invites and there is no agreed spec",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "The test suite fails on main since this morning"
+      },
+      {
+        "prompt": "Where did I leave off yesterday?"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "Add rate limiting to the public API.",
+      "expected_output": "Routes to define first and follows its steps.",
+      "expectations": [
+        "Reads kernel/routes.md, then skills/define/SKILL.md, before any other tool",
+        "States the class: spike, bounded or architectural",
+        "Writes no code before an explicit yes"
+      ]
+    }
+  ]
+}

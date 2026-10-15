@@ -23,7 +23,12 @@
         "prompt": "Explain why the CI job is slow"
       },
       {
-        "prompt": "Explain what fixed and passing mean in this commit message"
+        "prompt": "Explain what fixed and passing mean in this commit message",
+        "grader": "model"
+      },
+      {
+        "prompt": "What does a passing PR mean for subagent work",
+        "grader": "model"
       }
     ]
   },

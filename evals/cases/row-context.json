@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-context",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "The context is filling up, what should we do?",
+        "top_k": 3
+      },
+      {
+        "prompt": "This phase ends here, wrap up the context",
+        "top_k": 3
+      },
+      {
+        "prompt": "We finished the phase; compact or clear?",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "Add a CSV export"
+      },
+      {
+        "prompt": "Fix the failing test"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "The context is nearly full and the plan phase just ended.",
+      "expected_output": "Routes to context first and follows its steps.",
+      "expectations": [
+        "Reads kernel/context.md",
+        "Proposes clear or compact only at the phase boundary",
+        "Sends bulk reads to subagents"
+      ]
+    }
+  ]
+}

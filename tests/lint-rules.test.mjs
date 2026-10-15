@@ -186,7 +186,7 @@ test('rule 6: a route row in another form, or ## Steps without a numbered list, 
 test('rule 7: an oversized rendered kernel is an error; the real kernel passes', () => {
   const big = '#!/usr/bin/env bash\nhead -c 9500 /dev/zero | tr "\\0" x\n';
   const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
-  assert.deepEqual(rules(lint({ 'hooks/session-start': big, 'hooks/subagent-start': sub })).filter((r) => r === 7), [7]);
+  assert.ok(lint({ 'hooks/session-start': big, 'hooks/subagent-start': sub }).some((f) => f.rule === 7 && f.level === 'error' && /limit 9,000/.test(f.message)));
   const real = runLint(loadModel(join(import.meta.dirname, '..'))).filter((f) => f.rule === 7 && f.level === 'error');
   assert.deepEqual(real, []);
 });
@@ -419,4 +419,67 @@ test('rule 16: a WORK folder is read whole, in any case', () => {
   assert.deepEqual(run('Write WORK/spec-2/x.'), ['WORK/spec-2']);
   assert.deepEqual(run('Write WORK/Plan.'), ['WORK/Plan']);
   assert.deepEqual(run('Write WORK/spec/x.md and WORK/plans.'), []);
+});
+
+// M2a rules 6, 7 and 12 read kernel/routes.md.
+test('rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file', () => {
+  const files = {
+    'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']) + 'Then Read {ROOT}/kernel/routes.md.\n',
+    'kernel/routes.md': '| Bug | Read {KERN}/d/SKILL.md |\n',
+    'skills/tw/SKILL.md': skill('tw', manual()),
+    'skills/d/SKILL.md': skill('d', manual()),
+  };
+  assert.deepEqual(rules(lint(files)), []);
+  assert.equal(loadModel(repo(files)).skills.find((s) => s.name === 'd').tier, 'path', 'a skill routed from routes.md is a path skill');
+  assert.deepEqual(rules(lint({ ...files, 'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']) })), [6]);
+  assert.deepEqual(rules(lint({ ...files, 'kernel/routes.md': '| Bug | Read {KERN}/gone/SKILL.md |\n' })), [6]);
+});
+
+test('rule 7: the routed file has its own cap, and the standing cost has a combined budget', () => {
+  assert.deepEqual(rules(lint({ 'kernel/routes.md': `| x | Read {KERN}/a/SKILL.md |\n${'y'.repeat(1500)}` })).filter((r) => r === 7), [7]);
+  const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
+  const start = (n) => `#!/usr/bin/env bash\nhead -c ${n} /dev/zero | tr "\\0" x\n`;
+  const desc = `description: Use when ${'w'.repeat(280)}.`;
+  const files = (n) => ({ 'hooks/session-start': start(n), 'hooks/subagent-start': sub, 'skills/a/SKILL.md': skill('a', desc) });
+  assert.deepEqual(rules(lint(files(4400))).filter((r) => r === 7), []);
+  const big = lint(files(4600)).filter((f) => f.rule === 7 && f.level === 'error');
+  assert.equal(big.length, 1);
+  assert.match(big[0].message, /^standing cost 48\d\d chars/);
+});
+
+
+const caseJson = (name, p = 3, n = 2, e = 1) => JSON.stringify({
+  skill_name: name,
+  trigger: { positive: Array.from({ length: p }, (_, i) => ({ prompt: `p${i}` })), negative: Array.from({ length: n }, (_, i) => ({ prompt: `n${i}` })) },
+  evals: Array.from({ length: e }, (_, i) => ({ id: i + 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] })),
+});
+
+test('rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists', () => {
+  const base = { 'skills/a/SKILL.md': skill('a', 'description: Use when x.') };
+  assert.deepEqual(rules(lint(base)), [], 'no evals/cases folder: rule 12 is silent');
+  assert.deepEqual(rules(lint({ ...base, 'evals/cases/other.json': caseJson('other') })), [12]);
+  assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': caseJson('a', 2) })), [12]);
+  assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': caseJson('a') })), []);
+  const routed = { ...base, 'evals/cases/a.json': caseJson('a'), 'kernel/kernel.md': 'Then Read {ROOT}/kernel/routes.md.\n', 'kernel/routes.md': '| Bug | Read {KERN}/d/SKILL.md |\n', 'skills/d/SKILL.md': skill('d', 'description: d\ndisable-model-invocation: true') };
+  assert.deepEqual(rules(lint(routed)), [12]);
+  assert.deepEqual(rules(lint({ ...routed, 'evals/cases/row-d.json': caseJson('row-d') })), []);
+});
+
+test('rule 7: a session-start that fails without project settings is an error, not a low standing cost', () => {
+  const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
+  const once = '#!/usr/bin/env bash\nmkdir -p "$CLAUDE_PLUGIN_DATA"\n[ -e "$CLAUDE_PLUGIN_DATA/ran" ] && exit 1\ntouch "$CLAUDE_PLUGIN_DATA/ran"\necho kernel\n';
+  const f = lint({ 'hooks/session-start': once, 'hooks/subagent-start': sub }).filter((x) => x.rule === 7 && x.level === 'error');
+  assert.equal(f.length, 1);
+  assert.match(f[0].message, /standing cost was not measured/);
+});
+
+test('rule 12: a case file that is not valid JSON is an error', () => {
+  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.'), 'evals/cases/a.json': '{' })), [12]);
+});
+
+test('rule 12: a model-graded negative does not count toward the minimum of 2', () => {
+  const base = { 'skills/a/SKILL.md': skill('a', 'description: Use when x.') };
+  const withNegatives = (negative) => JSON.stringify({ ...JSON.parse(caseJson('a')), trigger: { positive: [{ prompt: 'p0' }, { prompt: 'p1' }, { prompt: 'p2' }], negative } });
+  assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': withNegatives([{ prompt: 'n0' }, { prompt: 'n1', grader: 'model' }]) })), [12]);
+  assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': withNegatives([{ prompt: 'n0' }, { prompt: 'n1' }, { prompt: 'n2', grader: 'model' }]) })), []);
 });

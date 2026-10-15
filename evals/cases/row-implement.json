@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-implement",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "Make the bounded change we agreed: add the retry flag",
+        "top_k": 3
+      },
+      {
+        "prompt": "Implement the agreed design for this one-file change",
+        "top_k": 3
+      },
+      {
+        "prompt": "Go ahead with the small change we designed",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "Where did I leave off?"
+      },
+      {
+        "prompt": "Explain this stack trace"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "The design for a --dry-run flag is agreed; implement it.",
+      "expected_output": "Routes to implement first and follows its steps.",
+      "expectations": [
+        "Reads skills/implement/SKILL.md first",
+        "Runs a failing test before the first production edit",
+        "Does not commit"
+      ]
+    }
+  ]
+}

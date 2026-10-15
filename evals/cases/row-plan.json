@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-plan",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "The spec is agreed, break it into steps",
+        "top_k": 3
+      },
+      {
+        "prompt": "Spec approved; we need a multi-step plan for the migration",
+        "top_k": 3
+      },
+      {
+        "prompt": "Turn the agreed spec into ordered tasks",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "Fix the typo in the README"
+      },
+      {
+        "prompt": "Why does this test fail?"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "The spec in .kern/specs/export.md is approved. Plan it.",
+      "expected_output": "Routes to plan first and follows its steps.",
+      "expectations": [
+        "Reads skills/plan/SKILL.md first",
+        "Checks the spec status before writing",
+        "Writes the plan with status: draft and stops for approval"
+      ]
+    }
+  ]
+}

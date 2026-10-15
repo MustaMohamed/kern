@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Tier 1 routing evals (design spec 11.1). Adapted from addyosmani/agent-skills scripts/run-evals.js (MIT), deterministic tier only.
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './lib/is-main.mjs';
 import { loadModel } from './lib/lint-rules.mjs';
 import { buildCorpus, rank, similarity } from './lib/rank.mjs';
+import { kernelRows, routeText } from './lib/kernel-rows.mjs';
 
 const MIN_POSITIVE = 3;
 const MIN_NEGATIVE = 2;
@@ -14,12 +15,21 @@ const COLLISION_WARN = 0.5;
 const COLLISION_ERROR = 0.75;
 
 export function targets(root) {
-  const skills = loadModel(root).skills.filter((s) => s.tier === 'auto' && s.data.description)
+  const model = loadModel(root);
+  const skills = model.skills.filter((s) => s.tier === 'auto' && s.data.description)
     .map((s) => ({ name: s.name, text: s.data.description, kind: 'skill' }));
+  const rows = kernelRows(routeText(model)).map((r) => ({ name: `row-${r.route}`, text: r.when, kind: 'row' }));
   const dPath = join(root, 'evals', 'distractors.json');
   const distractors = existsSync(dPath) ? JSON.parse(readFileSync(dPath, 'utf8')).map((d) => ({ name: d.name, text: d.description, kind: 'distractor' })) : [];
-  return [...skills, ...distractors];
+  return [...skills, ...rows, ...distractors];
 }
+
+// A kernel row and the skill it routes to are one owner: either ranking first is a hit.
+const ownerOf = (name) => name.replace(/^row-/, '');
+
+// A negative marked "grader": "model" is one the lexical ranker cannot judge, such as a question about the words a
+// row uses. It is listed on every run, left out of the checks and minimums here, and checked by M2b's model-graded runner.
+const modelGraded = (n) => n.grader === 'model';
 
 function loadCases(root) {
   const dir = join(root, 'evals', 'cases');
@@ -30,7 +40,7 @@ function loadCases(root) {
   });
 }
 
-export function evaluate(root, { minRank1 }) {
+export function evaluate(root, { minRank1, minHeldout = null }) {
   const all = targets(root);
   const owners = all.filter((t) => t.kind !== 'distractor');
   const corpus = buildCorpus(all);
@@ -38,6 +48,7 @@ export function evaluate(root, { minRank1 }) {
   const cases = loadCases(root);
   const errors = [];
   const warnings = [];
+  const graded = [];
   let positives = 0;
   let rank1 = 0;
 
@@ -58,29 +69,32 @@ export function evaluate(root, { minRank1 }) {
       for (const f of ev.files || []) if (!existsSync(join(root, 'evals', 'fixtures', f))) errors.push(`${c.file}: eval id=${ev.id} fixture not found: evals/fixtures/${f}`);
     }
     for (const p of d.trigger?.positive || []) {
+      if (p.grader !== undefined) errors.push(`${expected}: a positive prompt cannot carry "grader"; only a negative can be model-graded: "${p.prompt}"`);
       positives++;
       const topK = p.top_k || 3;
       const r = rank(p.prompt, corpus);
-      const idx = r.findIndex((x) => x.name === expected);
+      const idx = r.findIndex((x) => ownerOf(x.name) === ownerOf(expected));
       const hit = r[idx];
       if (idx === 0 && hit.score > 0) rank1++;
       if (!hit || hit.score === 0) errors.push(`${expected}: description shares no vocabulary with "${p.prompt}"`);
       else if (idx >= topK) errors.push(`${expected}: positive prompt ranked #${idx + 1} (need top ${topK}): "${p.prompt}"; top: ${r.slice(0, 3).map((x) => `${x.name} ${x.score.toFixed(2)}`).join(', ')}`);
     }
     for (const n of d.trigger?.negative || []) {
+      if (n.grader !== undefined && !modelGraded(n)) errors.push(`${expected}: unknown grader "${n.grader}" for negative "${n.prompt}"; the only grader is "model"`);
+      if (modelGraded(n)) { graded.push({ owner: expected, prompt: n.prompt }); continue; }
       const r = rank(n.prompt, corpus);
-      if (r[0].name === expected && r[0].score > 0) errors.push(`${expected}: ranked #1 for negative prompt "${n.prompt}"`);
+      if (ownerOf(r[0].name) === ownerOf(expected) && r[0].score > 0) errors.push(`${expected}: ranked #1 for negative prompt "${n.prompt}"`);
       if (n.owner) {
         if (!names.has(n.owner)) errors.push(`${c.file}: negative names unknown owner "${n.owner}"`);
         else {
           const oi = r.findIndex((x) => x.name === n.owner);
-          const si = r.findIndex((x) => x.name === expected);
+          const si = r.findIndex((x) => ownerOf(x.name) === ownerOf(expected));
           if (r[oi].score === 0 || oi > si) errors.push(`${expected}: owner ${n.owner} does not outrank it for "${n.prompt}"`);
         }
       }
     }
     const pc = (d.trigger?.positive || []).length;
-    const nc = (d.trigger?.negative || []).length;
+    const nc = (d.trigger?.negative || []).filter((n) => !modelGraded(n)).length;
     const ec = (d.evals || []).length;
     if (pc < MIN_POSITIVE || nc < MIN_NEGATIVE || ec < MIN_EVALS) errors.push(`${expected}: below required minimums (${pc}/${nc}/${ec}; need ${MIN_POSITIVE}/${MIN_NEGATIVE}/${MIN_EVALS})`);
   }
@@ -90,6 +104,7 @@ export function evaluate(root, { minRank1 }) {
     for (let j = i + 1; j < all.length; j++) {
       const a = owners[i].name;
       const b = all[j].name;
+      if (ownerOf(a) === ownerOf(b)) continue;
       const sim = similarity(a, b, corpus);
       if (sim >= COLLISION_ERROR) errors.push(`collision: ${a} and ${b} are ${(sim * 100).toFixed(0)}% similar`);
       else if (sim >= COLLISION_WARN) warnings.push(`overlap: ${a} and ${b} are ${(sim * 100).toFixed(0)}% similar`);
@@ -97,18 +112,39 @@ export function evaluate(root, { minRank1 }) {
   }
 
   const rank1Rate = positives ? Math.floor((rank1 / positives) * 100) : null;
-  if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the baseline ${minRank1}%`);
-  return { errors, warnings, rank1Rate };
+  if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the floor ${minRank1}%`);
+
+  // Held-out organic prompts (evals/heldout.json), frozen by a test: never reworded to pass.
+  let heldoutRate = null;
+  const hPath = join(root, 'evals', 'heldout.json');
+  if (existsSync(hPath)) {
+    const held = JSON.parse(readFileSync(hPath, 'utf8'));
+    let hits = 0;
+    for (const h of held) {
+      if (!owners.some((t) => ownerOf(t.name) === h.owner)) { errors.push(`heldout: no owner "${h.owner}" for "${h.prompt}"`); continue; }
+      const r = rank(h.prompt, corpus);
+      if (ownerOf(r[0].name) === h.owner && r[0].score > 0) hits++;
+    }
+    heldoutRate = held.length ? Math.floor((hits / held.length) * 100) : null;
+    if (minHeldout != null && heldoutRate !== null && heldoutRate < minHeldout) errors.push(`held-out rank-1 rate ${heldoutRate}% is below the floor ${minHeldout}%`);
+  }
+  return { errors, warnings, rank1Rate, heldoutRate, modelGraded: graded };
 }
 
 if (isMain(import.meta.url)) {
-  const root = fileURLToPath(new URL('..', import.meta.url));
+  const root = resolve(process.argv.slice(2).find((a) => !a.startsWith('--')) || fileURLToPath(new URL('..', import.meta.url)));
   const basePath = join(root, 'evals', 'baseline.json');
   const baseline = JSON.parse(readFileSync(basePath, 'utf8'));
-  const r = evaluate(root, { minRank1: baseline.min_rank1 });
+  // evals/floors.json holds fixed floors a test pins; the baseline only rises above them.
+  const fPath = join(root, 'evals', 'floors.json');
+  const floors = existsSync(fPath) ? JSON.parse(readFileSync(fPath, 'utf8')) : { rank1: 0, heldout_rank1: null };
+  const minRank1 = Math.max(baseline.min_rank1, floors.rank1);
+  const r = evaluate(root, { minRank1, minHeldout: floors.heldout_rank1 });
   for (const w of r.warnings) console.log(`warn: ${w}`);
   for (const e of r.errors) console.log(`error: ${e}`);
-  console.log(`rank-1 rate: ${r.rank1Rate ?? 'n/a'}% (baseline ${baseline.min_rank1}%)`);
+  for (const m of r.modelGraded) console.log(`model-graded, not checked here: ${m.owner}: "${m.prompt}"`);
+  console.log(`rank-1 rate: ${r.rank1Rate ?? 'n/a'}% (baseline ${baseline.min_rank1}%, fixed floor ${floors.rank1}%)`);
+  if (r.heldoutRate !== null) console.log(`held-out rank-1 rate: ${r.heldoutRate}% (fixed floor ${floors.heldout_rank1}%)`);
   if (process.argv.includes('--update-baseline') && !r.errors.length && r.rank1Rate !== null && r.rank1Rate > baseline.min_rank1) {
     writeFileSync(basePath, JSON.stringify({ min_rank1: r.rank1Rate }, null, 2) + '\n');
     console.log(`baseline raised to ${r.rank1Rate}%`);

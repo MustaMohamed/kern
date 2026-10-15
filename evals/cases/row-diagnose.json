@@ -1,0 +1,40 @@
+{
+  "skill_name": "row-diagnose",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "This test is failing and I do not know why",
+        "top_k": 3
+      },
+      {
+        "prompt": "There is a bug: the export returns unexpected output",
+        "top_k": 3
+      },
+      {
+        "prompt": "Users report a bug where totals are wrong",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "Add a new settings page"
+      },
+      {
+        "prompt": "Write the PR description"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "npm test fails on the sum test; fix it.",
+      "expected_output": "Routes to diagnose first and follows its steps.",
+      "expectations": [
+        "Reads skills/diagnose/SKILL.md first",
+        "Runs the failing command before stating a hypothesis",
+        "Adds a regression test that was red before the fix"
+      ]
+    }
+  ]
+}
