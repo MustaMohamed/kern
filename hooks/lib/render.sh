@@ -95,7 +95,7 @@ EOT
   line=""
   for dir in "$KERN_ROOT"/skills/*/; do
     job=$(basename "$dir")
-    case "$job" in mode | autopilot | help | hello) continue ;; esac
+    case "$job" in mode | autopilot | help) continue ;; esac
     name=$(settings_get "overrides.$job" '')
     if [ -z "$name" ] && [ -n "${KERN_MAIN-}" ]; then
       if [ -f "$KERN_MAIN/.claude/skills/$job/SKILL.md" ] || [ -f "$KERN_MAIN/.claude/commands/$job.md" ]; then

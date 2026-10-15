@@ -10,10 +10,10 @@ No claim of done, fixed, passing or verified without a fresh run on the real art
 ## Steps
 
 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
-1. Name the claim and its proving command from `references/evidence.md`. Resolve commands with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`, else `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect <key>`, and print each with its source.
+1. Name the claim and its proving command from `references/evidence.md`. Resolve commands with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`, else `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect <key>`, and print each with its source. When both exit 3, no command is known: ask the user for it, and label the claim guess until it runs.
 2. Run it fresh and in full on the tree that will be integrated: the worktree, when the work lives there.
 3. Read the exit code, the failure count and the whole output. Inconclusive, skipped, zero tests run, or the wrong environment counts as a fail. Suspect the observation method before the system.
-4. For a new guard or regression test, take the change's patch (the `.patch` beside a `wt-diff` package) and run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <change.patch> -- <test command>`; it must print `probe: fail-then-pass ok`. The allow case uses a value a real caller sends. Exit 3 is reported as "probe inconclusive", never as a pass.
+4. For a new guard or regression test, make the change's patch with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>` (it writes `<package>.patch` beside the package it prints) and run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <change.patch> -- <test command>`; it must print `probe: fail-then-pass ok`. The allow case uses a value a real caller sends. Exit 3 is reported as "probe inconclusive", never as a pass.
 5. For "requirements met", re-read the acceptance lines from `spec.source` and tick each one against evidence.
 6. For a subagent's "success", read its worktree diff yourself with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>` and open the artifacts it names.
 7. State each claim with its evidence as `claim: command, result`, or label it measured, inferred or guess.
@@ -31,7 +31,7 @@ Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words
 
 ## Outputs
 
-Chat lines `claim: command, result`. Nothing is written.
+Chat lines `claim: command, result`. Only `wt-diff` writes: a review package and its `.patch` under `WORK/reviews/`.
 
 ## Stops and autopilot
 

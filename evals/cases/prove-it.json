@@ -2,13 +2,29 @@
   "skill_name": "prove-it",
   "trigger": {
     "positive": [
-      { "prompt": "I think that fixes the null check, the tests should be passing now, right?", "top_k": 3 },
-      { "prompt": "The subagent reported success on the migration task. Can we say it is done?", "top_k": 3 },
-      { "prompt": "Before you commit and push the PR, make sure the build is verified.", "top_k": 3 }
+      {
+        "prompt": "I think that fixes the null check, the tests should be passing now, right?",
+        "top_k": 3
+      },
+      {
+        "prompt": "The subagent reported success on the migration task. Can we say it is done?",
+        "top_k": 3
+      },
+      {
+        "prompt": "Before you commit and push the PR, make sure the build is verified.",
+        "top_k": 3
+      }
     ],
     "negative": [
-      { "prompt": "What does this regex match: ^a+b$" },
-      { "prompt": "Explain why the CI job is slow" }
+      {
+        "prompt": "What does this regex match: ^a+b$"
+      },
+      {
+        "prompt": "Explain why the CI job is slow"
+      },
+      {
+        "prompt": "Explain what this test asserts about the exit code"
+      }
     ]
   },
   "evals": [
