@@ -1,5 +1,6 @@
 # shellcheck shell=bash
-# Shell and git parsing for guards. Needs settings.sh. Reads CWD and KERN_MAIN.
+# Shell and git parsing for guards. Needs settings.sh; uses aliases.sh when it is loaded. Reads CWD and
+# KERN_MAIN.
 
 # A newline inside one record (quoted text, or the inside of $( )) is printed as this byte, so a
 # caller that reads records line by line never takes a quoted line for a command.
@@ -157,6 +158,16 @@ git_words() {
   local seg inner body first
   _split_words "$1" | while IFS= read -r seg; do
     printf '%s\n' "$seg"
+    # A record whose head word is an alias that runs git or gh (aliases.sh) is judged as its expansion
+    # too, split again after it. The record itself stays, so no vote the command got without aliases is
+    # lost, and a guard that allows only a command starting with git or gh never allows an alias. The
+    # expansion's own words are not expanded again: zsh does not re-expand the alias it is expanding,
+    # and the table already followed the head-word chain.
+    if [ -z "${_GW_NOALIAS-}" ] && declare -F alias_expand >/dev/null && alias_expand "$seg"; then
+      _GW_NOALIAS=1
+      git_words "$ALIAS_EXP"
+      _GW_NOALIAS=
+    fi
     # shellcheck disable=SC2016 # a literal $( in the text
     case "$seg" in
       *'$('* | *'`'*)

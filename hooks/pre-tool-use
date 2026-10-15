@@ -43,6 +43,8 @@ need() {
 . "$KERN_ROOT/hooks/lib/state.sh" || no_lib state.sh
 # shellcheck source=hooks/lib/decide.sh
 . "$KERN_ROOT/hooks/lib/decide.sh" || no_lib decide.sh
+# shellcheck source=hooks/lib/aliases.sh
+. "$KERN_ROOT/hooks/lib/aliases.sh" || no_lib aliases.sh
 # shellcheck source=hooks/lib/gitctx.sh
 . "$KERN_ROOT/hooks/lib/gitctx.sh" || no_lib gitctx.sh
 # Every function each library defines, so a truncated library fails closed for the guards too. A
@@ -55,6 +57,7 @@ need state.sh prompt_hashes
 need decide.sh vote fail_closed emit_decision
 need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words git_sub cmd_head in_main_checkout
 need gitctx.sh current_branch base_branch_name branch_protected push_targets with_timeout gh_sub word_value word_has
+need aliases.sh alias_snapshot aliases_load alias_expand
 
 # unparseable WHAT: fail closed on input the JSON reader could not parse, and stop.
 unparseable() {
@@ -90,6 +93,8 @@ AGENT=$(json_get agent_type) || case $? in 1) AGENT="" ;; *) unparseable agent_t
 # Monitor runs a shell command from the same `command` key, so every guard reads it as Bash.
 [ "$TOOL" = Monitor ] && TOOL=Bash
 kern_enabled || exit 0
+# The shell's aliases that run git or gh, so git_words judges `gp` as `git push` too.
+[ "$TOOL" = Bash ] && aliases_load
 
 # The guards kern ships, so a missing guard file fails closed. A guard file that does not source to
 # the end fails closed too, and its guard does not run.
