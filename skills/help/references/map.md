@@ -9,6 +9,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | `help` | slash | `/kern:help`, `/kern:help setup`, `/kern:help check` | This map, fixes for a run, and project settings |
 | `technical-writing` | path | Kernel row "Prose others read", or `/kern:technical-writing` | Docs, PR bodies, issues and commit messages |
 | `unslop` | slash | The kernel's Reply rule, technical-writing step 5, or `/kern:unslop` | Rules for prose others read |
+| `prove-it` | auto | Its description; routed row "About to say done, fixed or passing, commit, or open a PR" | Evidence before any done, fixed or passing |
 
 ## Close calls
 - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
