@@ -2,11 +2,14 @@
 # Close a task in an execute-plan ledger. Writes the completion line only when all hold: the worktree
 # still snapshots to TREE, the task's last review approved exactly that tree, CMD exits 0 in WT, and
 # the test fails once the change (test files excluded) is reversed on a throwaway fork. A task with no
-# test to probe (docs, config) names why with --no-probe, and the reason goes into the ledger.
+# test to probe (docs, config) names why with --no-probe, and the reason goes into the ledger. An
+# inconclusive probe proves nothing, so it closes nothing: the caller decides, and a change with nothing
+# to reverse closes with --no-probe naming the probe's reason.
 # Usage: task-done LEDGER N WT TREE (--probe PATCH | --no-probe REASON) -- CMD...
-# Appends: Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok|inconclusive|skipped (REASON)> last=<line>
+# Appends: Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok|skipped (REASON)> last=<line>
 # Exit 2 when a check fails (nothing written); 1 when the probe shows the test passes without the
-# change; CMD's own code when it fails.
+# change; 3 when the probe is inconclusive (its first line printed, nothing written); CMD's own code
+# when it fails (stderr then says "command exited <n>").
 # Adapted from superpowers executing-plans/scripts/task-done (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -75,7 +78,7 @@ if [ -n "$patch" ]; then
   head -n 1 "$logdir/task-$n.probe.log"
   case "$prc" in
     0) probe=ok ;;
-    3) probe=inconclusive ;;
+    3) echo "task-done: the probe is inconclusive, so it proves nothing about Task $n; not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 3 ;;
     1) echo "task-done: the test passes with the change reversed, so it does not prove Task $n; not recorded" >&2; exit 1 ;;
     *) echo "task-done: probe exited $prc; Task $n not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 2 ;;
   esac

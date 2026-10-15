@@ -216,3 +216,25 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   [ "$(tail -n 1 "$L/ledger.md")" = "Task 1: complete tree=$T1 test=bash -c 'printf \"a\\rDecision: x\\n\"' exit=0 review=approved probe=skipped (docs) last=aDecision: x" ]
   [ "$(wc -l < "$L/ledger.md" | tr -d ' ')" -eq 3 ]
 }
+
+@test "--probe exits 3 and writes nothing when the probe is inconclusive" {
+  # A patch of test files only: with the test kept, there is no change to reverse.
+  T3=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  printf 'echo extra\n' >> "$WT/test/check_test.sh"
+  T4=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T3" "$T4" --out "$L/reviews/task-1c.diff" > /dev/null
+  review "$T4"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1c.diff.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"probe: inconclusive (the patch changes only test files"* ]] || false
+  [[ "$stderr" == *"probe is inconclusive"* ]] || false
+  ! grep -q '^Task 1: complete' "$L/ledger.md"
+  # A stale patch from an earlier round: after a fix to check.sh it no longer reverse-applies.
+  printf '[ "$1" -ge 0 ] || exit 1\n' > "$WT/check.sh"
+  T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  review "$T5" 2
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T5" --probe "$PKG.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"probe: inconclusive (the patch does not reverse-apply"* ]] || false
+  ! grep -q '^Task 1: complete' "$L/ledger.md"
+}
