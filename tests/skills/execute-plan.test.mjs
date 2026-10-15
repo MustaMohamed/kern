@@ -30,7 +30,7 @@ test('execute-plan sections, steps, scripts and red flags', () => {
     'Batch small tasks', 'closed in its fork through steps 6 to 10', 'ledger-open --summary', 'One fix subagent gets the complete findings list',
     'main: unchanged', 'run them only on yes', '`<ledger>` below is `<ledger dir>/ledger.md`', 'briefs/task-N.brief.md', 'dispatch only on `brief-check: ok`',
     '--no-probe']);
-  assertMaxBytes(SKILL, 12000);
+  assertMaxBytes(SKILL, 12400);
 });
 
 test('ledger format and model table', () => {
@@ -52,10 +52,12 @@ export const PINS = {
     'Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines.'],
   1: ['run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-open <plan>`', "exits 2 when the plan has no `status: approved` with the user's quoted words, or when the dir holds another plan's ledger: stop and report it",
     "Never edit the plan's approval.", 'The mode is the typed one, else `execution:`.',
+    'Line formats and how to append them: `references/ledger-format.md`.',
     'If the ledger already held lines past `Main:`, or after compaction, read `references/resume.md` and continue where it says.'],
-  2: ['Once, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>`', 'any exit but 0 is a plan defect: stop before Task 1 and report its output', 'Then `plan-check --graph <plan>`',
-    'each `overlap` row becomes a `Preflight:` line with its ruling', 'keep the `wave` rows for step 4'],
-  3: ['one todo per task', 'Once: a spec or scope conflict the graph does not show stops before Task 1 to ask', 'a mechanical one gets a `Decision:` line.'],
+  2: ['Steps 2 and 3 run on every invocation, fresh or resumed,', 'add a `Preflight:`, `Decision:` or `parked:` line only when the ledger lacks that exact line.',
+    'Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>`', 'any exit but 0 is a plan defect: stop before any task and report its output', 'Then `plan-check --graph <plan>`',
+    'each `overlap` row becomes a `Preflight:` line with its ruling', "this run's `wave` rows feed step 4"],
+  3: ['one todo per task', 'A spec or scope conflict the graph does not show: stop and ask; record the answer, or a mechanical call, as a `Decision:` line.'],
   4: ['at most `parallel.max`', 'unless parallel-work step 1 finds an overlap', 'spawn them in one message as `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/SKILL.md` step 4 does',
     'Others run serially, in task order.', 'into one dispatch and one review over their joined Files lists'],
   5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --base <plan base>`', "(`<plan-slug>`: the ledger dir's name)",
@@ -69,7 +71,7 @@ export const PINS = {
   inline: ['in the plan worktree, with absolute paths and `git -C`'],
   delegate: ['`${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/brief-template.md`', 'SCOPE the `.files` paths, the worktree and `<base-ref>` (the plan branch)',
     'CONTEXT `briefs/task-N.md`, the upstream Interfaces and the step 3 rulings', 'VERIFY `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-check <wt> <base-ref>` first',
-    'REPORT `<ledger dir>/reports/task-N.md`', 'Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/brief-check` on it', '(else fix each printed line)',
+    'REPORT `<ledger dir>/reports/task-N.md`, each round opening with its `Status:` line', 'Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/brief-check` on it', '(else fix each printed line)',
     '`kern:implementer` with its model, the brief, worktree, `<base-ref>`, report path and implement SKILL.md path', 'kern made the worktree'],
   7: ['Status line (none: BLOCKED).', 'DONE_WITH_CONCERNS: read the concerns, then review.', 'NEEDS_CONTEXT: answer from the plan or spec, else ask the user, then resume the implementer.',
     'go one model tier up (a `Decision:` line)', 'a task that must be split: stop with a split proposal'],
@@ -112,12 +114,13 @@ export const PINS = {
     "Limit: no guard yet stops an Edit or Write that forges a script's line; that guard is deferred to M3.",
     'A task is done only when its `Task N: complete` line exists. Where a run resumes is in `resume.md`.'],
   resume: ['Read this when the ledger already holds lines past `Main:`, and after compaction.', 'Trust the ledger and the worktrees over memory.',
-    'Steps 2 and 3 ran already', 'r is 1 plus its review lines.', 'The first case that holds, in this order:', '1. No `Worktree:` line: step 5.',
+    'Steps 2 and 3 run again on every invocation and add only the lines the ledger lacks', 'plan-check and its `wave` rows come from this run',
+    'a step 3 conflict with no `Decision:` line is asked again (under autopilot, parked once)', 'r is 1 plus its review lines.', 'The first case that holds, in this order:', '1. No `Worktree:` line: step 5.',
     '2. A task on a `Wave:` line has its `Task N: complete` line but no `Applied: Task N patch=<path>` line: step 11 for it, before the final review or any later task.',
     'A task a `parked:` line holds stays out, with every task blocked by it.', '3. The first task in task order with no `Task N: complete` line, by its last line, `minor (deferred)` lines skipped:',
     '- none: step 6.', 'keep that tree as `tree-before`, with no second `task-start`', 'A snapshot still equal to it means nothing landed: dispatch again.',
-    'A changed snapshot: review it at step 8 as round r.', 'a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9',
-    'an r of 4 is past the cap, so stop with a split proposal', '`Task N: fix round=<r> tree=<id>`: resume that round', "a fresh snapshot that differs from its tree is the round's `tree-after`",
+    "A changed snapshot goes to step 8 as round r only once the implementer has stopped, its report holding that round's `Status:` line", 'until then wait for it or resume it (step and inline: finish the change first)', 'a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9',
+    'an r of 4 is past the cap, so stop with a split proposal', '`Task N: fix round=<r> tree=<id>`: resume that round', "a fresh snapshot that differs from its tree is the round's `tree-after` once the implementer has stopped, as above.",
     '- an approving review: step 10.', '4. Every task complete and applied: step 12.', "A wave task resumes in the fork its `Wave:` line names.", 'Never re-dispatch a completed task.',
     "Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`. The next round gets that file.",
     'is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.'],
@@ -138,6 +141,15 @@ test('execute-plan pins each step, the modes, the stops and the ledger rules', (
     const text = where[k] ?? s[Number(k)];
     for (const n of needles) assert.ok(text.includes(n), `${k}: must contain: ${n}`);
   }
+});
+
+test('execute-plan reruns its plan checks on every invocation and writes only missing lines', () => {
+  const { body } = readDoc(SKILL);
+  const s = steps(body);
+  const resume = readDoc(RESUME).raw;
+  // Fix round 2: a once-only step 2 or 3 skipped plan-check, the wave rows and an unanswered step 3 stop on resume.
+  for (const n of [2, 3]) assert.ok(!/\bOnce\b/i.test(s[n]), `step ${n} must run on every invocation, not once`);
+  for (const bad of ['ran already', 'rebuild only the todo list']) assert.ok(!resume.includes(bad), `resume.md must not say: ${bad}`);
 });
 
 test('execute-plan orders each gate after what it needs', () => {
@@ -173,7 +185,7 @@ test('execute-plan red flags tell the reader what to do', () => {
   const rows = (section(body, '## Red flags') ?? '').split('\n').filter((l) => /^\| "/.test(l));
   assert.equal(rows.length, 6);
   for (const n of ['Fix them or reach round 3 and escalate.', 'Resume the implementer, then re-review.', 'Stop with a split proposal.', 'Re-review every fix.',
-    'Adjudicate only at the cap, in a Decision line; until then, argue it in the re-review.', 'Write each line as it happens.']) {
+    'Argue it in the re-review. At the cap, the split proposal names it.', 'Write each line as it happens.']) {
     assert.ok(rows.some((r) => r.includes(n)), `red flags must contain: ${n}`);
   }
 });
