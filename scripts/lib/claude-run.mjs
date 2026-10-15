@@ -85,7 +85,10 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   const run = spawnSync('claude', argv, { cwd, input, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: childEnv(process.env, env) });
   if (run.error?.code === 'ENOENT') throw new ClaudeRunError('claude is not on PATH', true);
   if (run.error?.code === 'ETIMEDOUT') throw new ClaudeRunError(`claude timed out after ${timeoutMs} ms`);
-  if (run.error) throw new ClaudeRunError(`claude could not run: ${run.error.message}`, true);
+  // EPIPE: the child exited before it read all of stdin. That is the child's own result (its status or
+  // signal, handled below), not a failure to run it; a missing status as well means it never ran.
+  const earlyExit = run.error?.code === 'EPIPE' && (run.status !== null || run.signal);
+  if (run.error && !earlyExit) throw new ClaudeRunError(`claude could not run: ${run.error.message}`, true);
   if (run.status === 126 || run.status === 127) throw new ClaudeRunError(`claude exited ${run.status}: ${(run.stderr || '').trim()}`, true);
   if (run.status === null) throw new ClaudeRunError(`claude was killed by ${run.signal}`);
   const events = [];

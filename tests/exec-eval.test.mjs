@@ -145,9 +145,11 @@ test('a gh call the transcript shows ran but the stub never logged makes the run
 });
 
 // A stand-in claude on PATH: never the real one, so these tests spend nothing.
-function fakeClaude(body) {
+// By default it drains stdin first: a child that exits before reading it races spawnSync's stdin write
+// (EPIPE on Linux). drain: false makes that race the test.
+function fakeClaude(body, { drain = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'fc-'));
-  writeFileSync(join(dir, 'claude'), `#!/bin/sh\n${body}\n`);
+  writeFileSync(join(dir, 'claude'), `#!/bin/sh\n${drain ? 'cat > /dev/null\n' : ''}${body}\n`);
   chmodSync(join(dir, 'claude'), 0o755);
   return { PATH: `${dir}:/usr/bin:/bin` };
 }
@@ -189,6 +191,17 @@ test('the gh stub logs every call, answers pr list from the case, and fails on a
   assert.match(odd.stderr, /unhandled call: repo delete x/);
   assert.equal(readFileSync(log, 'utf8').split('\n').filter(Boolean).length, 6);
   assert.notEqual(spawnSync(stub, ['pr', 'list'], { env: { PATH: '/usr/bin:/bin' } }).status, 0, 'no log path, no run');
+});
+
+test('a child that exits without reading stdin is its own result: invalid, not a fatal "could not run"', () => {
+  // A prompt big enough to fill the pipe makes the EPIPE certain rather than a race.
+  const big = 'x'.repeat(1024 * 1024);
+  for (const [code, want] of [[0, /printed no events/], [3, /exited 3/]]) {
+    const r = runClaude({ cwd: work(), prompts: [big], model: 'm', env: fakeClaude(`exit ${code}`, { drain: false }) });
+    assert.equal(r.status, code);
+    assert.match(runProblem(r), want);
+  }
+  assert.throws(() => runClaude({ cwd: work(), prompts: [big], model: 'm', env: fakeClaude('exit 127', { drain: false }) }), (e) => e.fatal && /exited 127/.test(e.message));
 });
 
 test('runClaude refuses a workspace outside the OS temp dir, or one that is the temp dir itself', () => {
