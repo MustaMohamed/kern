@@ -19,7 +19,7 @@ Gate: are you asserting on the mock itself? Unmock it or delete the assertion.
 
 ## Mutation check
 
-Before you finish, mutate the code and see a test fail. Run `probe --mutate <file>:<line>` on a new condition: it inverts that condition in a throwaway fork, never in the worktree, and `probe: mutation caught` means a test notices. `probe: mutation survived` means the behaviour is unprotected or the test is tautological. Also ask what a wrong constant, a wrong branch, a missing side effect or an empty return would do.
+Before you finish, mutate the code and see a test fail. Run `probe --mutate <file>:<line>` on a new condition: it inverts the first operator on that line in a throwaway fork, never in the worktree, and `probe: mutation caught` means a test notices. `probe: mutation survived` means the behaviour is unprotected or the test is tautological. Also ask what a wrong constant, a wrong branch, a missing side effect or an empty return would do.
 Gate: does at least one test fail for each realistic mutation?
 
 ## Tautological tests

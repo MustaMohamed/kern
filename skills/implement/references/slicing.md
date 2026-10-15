@@ -12,7 +12,7 @@ A seam is the public boundary a test calls: a public function, an HTTP handler, 
 
 ## Scope discipline
 
-Touch only what the task needs. Do not tidy adjacent code, change imports in files you are not editing, or add features that seem useful. A file outside the approved list pauses the work (D9). Record anything else you notice:
+Touch only what the task needs. Do not tidy adjacent code, change imports in files you are not editing, remove comments you do not understand, modernize syntax in files you only read, or add features that seem useful. A file outside the approved list pauses the work (D9). Record anything else you notice:
 
 ```
 NOTICED BUT NOT TOUCHING:
