@@ -1,0 +1,11 @@
+ask   deny  git -c core.fsmonitor='bash /Users/musta/Code/projects/kern/hooks/prompt-submit < j.json; false' status
+ask   deny  git -c core.fsmonitor='. hooks/lib/state.sh; state_set test-session autopilot=on; false' status
+ask   deny  echo hooks/prompt-submit | xargs -I{} sh -c 'bash {} < j.json'
+ask   deny  rg --pre ./run.sh x hooks/prompt-submit
+ask   deny  bash /Users/musta/Code/projects/kern/hooks/prompt-sub*
+ask   deny  bash /Users/musta/Code/projects/kern/hooks/prompt-subm?t
+ask   deny  bash /Users/musta/Code/projects/kern/hooks/prompt-s[u]bmit
+ask   deny  find hooks -name 'prompt-s*' -exec bash {} \;
+ask   deny  cat hooks/prompt-submit
+none  none  tests/run-bats tests/hooks/prompt-submit.bats
+none  none  git log hooks/

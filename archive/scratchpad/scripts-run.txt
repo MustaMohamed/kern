@@ -1,0 +1,189 @@
+1..188
+ok 1 a complete brief passes, including a field continued on indented lines
+ok 2 a missing field and an empty field are each named
+ok 3 VERIFY must start with the entry check
+ok 4 a field whose text is on the next indented line counts
+ok 5 a label inside a word does not count, and an unreadable file exits 2
+ok 6 a field still holding the template placeholder is not filled in
+ok 7 a complete CRLF brief still passes
+ok 8 a CRLF brief with an empty field reports it
+ok 9 a CRLF brief with a placeholder field reports it
+ok 10 VERIFY: a lookalike, a later mention or a bare wt-check is refused
+ok 11 VERIFY: the plugin-root and bare forms with worktree and base pass
+ok 12 every placeholder is caught, bare or with words appended
+ok 13 claim-check flags unknown commit ids and absolute claims only
+ok 14 claim-check passes a diff with a known commit id
+ok 15 probe passes when the test fails without the guard
+ok 16 probe reports a test that does not cover the guard
+ok 17 probe is inconclusive when the test fails with the guard in place
+ok 18 probe is inconclusive when the patch does not reverse-apply
+ok 19 probe is inconclusive when the test cannot run without the guard
+ok 20 a patch that also adds the test is inconclusive without --exclude-tests
+ok 21 --exclude-tests keeps the new test in the fork and reverses only the guard
+ok 22 --exclude-tests on a patch of tests only is inconclusive
+ok 23 a command that names a file the reversed fork lacks is inconclusive, never ok
+ok 24 --mutate: an inverted condition the test catches is ok
+ok 25 --mutate: a test that ignores the condition lets the mutation survive
+ok 26 --mutate on a line with no condition is inconclusive
+ok 27 a tool only in an ignored directory makes the probe inconclusive, never ok
+ok 28 --mutate: a tool only in an ignored directory is inconclusive
+ok 29 a patch git cannot read is inconclusive
+ok 30 no probe worktree remains after a non-zero exit
+ok 31 clones at the pinned commit
+ok 32 second run is a no-op
+ok 33 missing commit exits 3 and removes the partial clone
+ok 34 copy source is copied
+ok 35 missing copy source exits 3
+ok 36 a failing git source is not swallowed
+ok 37 a failing re-run keeps the previous good clone
+ok 38 a failing copy keeps the previous copy
+ok 39 unknown key exits 2
+ok 40 each floor move is reported with its class
+ok 41 a clean diff exits 0 with no output
+ok 42 focused tests count as test-made-easier
+ok 43 type escapes and other suppressions are silenced-checker
+ok 44 a Rust #[ignore] is test-made-easier
+ok 45 a lowered coverage threshold is bar-lowered; a raised one is not
+ok 46 strict typing turned off or removed is bar-lowered
+ok 47 a lint rule turned off is bar-lowered
+ok 48 a CI step removed or made non-blocking is bar-lowered
+ok 49 a ratchet.<metric> key guards its value in both directions
+ok 50 a reformatted or moved assertion is not removed
+ok 51 a renamed test file is not a deleted test
+ok 52 content lines that start with ++ or -- are content, not headers
+ok 53 an untracked new file is scanned through its intent-to-add diff
+ok 54 a wt-diff package is read past its header sections
+ok 55 input with no diff --git header exits 2; an unreadable input exits 2
+ok 56 suppressions in a doc file are not hits
+ok 57 removed assertions in JUnit, Rust, unittest and testify styles are assertion-removed
+ok 58 a removed require('y') import in a test file is not an assertion
+ok 59 every threshold on one line is checked
+ok 60 base_branch from origin/HEAD
+ok 61 commit.convention needs 60% of at least 5 subjects
+ok 62 commit.convention not detectable on mixed subjects exits 3
+ok 63 test, typecheck and lint from package.json with the lockfile's manager
+ok 64 no runner at all exits 3 and names what it looked for
+ok 65 branch.pattern from remote branch names
+ok 66 pr.template and an unknown key
+ok 67 the npm init placeholder test script is not a test runner
+ok 68 more than one scripts object in package.json is ambiguous
+ok 69 test.focused evidence does not claim a path argument works
+ok 70 kern-root prints the main root and the common dir from a linked worktree
+ok 71 kern-root outside a repo exits 2
+ok 72 kern-dir creates WORK/sub at the main root and adds the exclude line once
+ok 73 kern-dir creates a nested folder such as ledgers/<slug>
+ok 74 kern-dir refuses a work dir with tracked files and a bad name
+ok 75 kern-dir adds a newline before its exclude line when the file lacks one
+ok 76 kern-dir refuses a work_dir of ., .git*, or starting with a colon
+ok 77 task-brief extracts one task plus the global constraints
+ok 78 a Task heading inside a fence is ignored
+ok 79 a missing task exits 2 and writes nothing
+ok 80 task-start appends a start line
+ok 81 task-start refuses a missing ledger and a short tree id
+ok 82 ledger-open creates the ledger with its identity and the main checkout's state
+ok 83 ledger-open reuses its own ledger and refuses another plan's
+ok 84 ledger-open refuses a plan that is not approved, or approved without the user's words
+ok 85 ledger-open --summary lists decisions, parked and deferred lines and checks the main checkout
+ok 86 ledger-open refuses an unclosed frontmatter and writes nothing
+ok 87 a refusal writes nothing into a fresh DIR
+ok 88 ledger-open outside a git repository exits 2 and writes no ledger
+ok 89 ledger-open --summary fails when the main checkout state cannot be read
+ok 90 ledger-open refuses when git status fails and does not record an empty-input hash
+ok 91 the recorded status hash equals git status --porcelain piped to git hash-object
+ok 92 task-start refuses a multi-line tree and writes nothing
+ok 93 a sound plan passes
+ok 94 --graph prints the overlap and the waves
+ok 95 --files prints a task's paths without line ranges
+ok 96 --files prints a trailing /** or /* as its directory
+ok 97 two tasks on one shared service must be ordered
+ok 98 a shared_services entry orders tasks that both mention it
+ok 99 a consumer must be blocked by its producer, and cannot come first
+ok 100 a task blocked by a later task, a gap in numbering and a missing Run/Expected pair are errors
+ok 101 an acceptance criterion no task covers is an error
+ok 102 placeholders, an unapproved approval and a missing spec are errors
+ok 103 a spec needs its sections and an approval with the user's words
+ok 104 usage errors exit 2
+ok 105 a CRLF plan lints like an LF plan, and still fails when it is bad
+ok 106 a shared_services entry matches a whole word, not a longer word
+ok 107 a spec with no acceptance criteria, or a spec: that is not a .md file, is an error
+ok 108 an unclosed frontmatter is an error
+ok 109 --graph and --files refuse a spec, and --files refuses a missing task
+ok 110 a directory path overlaps a path inside it, and a longer name does not
+ok 111 --graph keeps a directory and a file inside it out of one wave
+ok 112 an Acceptance line with no leading number list is an error
+ok 113 an Acceptance range covers every number in it
+ok 114 only the leading Acceptance list counts, not numbers in the prose after it
+ok 115 an unclosed code fence is an error at its opening line
+ok 116 redis-cli counts as using the redis service
+ok 117 a backticked none is not an interface name
+ok 118 task-review appends the verdict line and deferred minors
+ok 119 task-review refuses a bad verdict, a fourth round and a short tree id
+ok 120 task-done refuses a task with no review and writes nothing
+ok 121 task-done refuses a review of an older tree, and a review with issues
+ok 122 task-done refuses a worktree edited after its review
+ok 123 an approved, unchanged tree with a passing command is recorded with its last output line
+ok 124 a failing command is not recorded and keeps its exit code
+ok 125 --probe records ok when the test fails with the change reversed
+ok 126 --probe refuses a task whose test passes without the change
+ok 127 task-done needs --probe PATCH or --no-probe REASON, and writes nothing without one
+ok 128 task-done quotes arguments with spaces in the ledger line
+ok 129 task-done refuses an empty --probe patch, an unsnappable worktree and an unreadable ledger
+ok 130 task-done refuses a malformed last review line
+ok 131 task-review refuses a TREE holding a newline, and writes nothing
+ok 132 task-done refuses a newline or carriage return in REASON or CMD, and writes nothing
+ok 133 a later needs-fixes line for the same tree overrides an earlier approval
+ok 134 an approval for Task 1 does not close Task 10, nor the reverse
+ok 135 task-review and task-done refuse uppercase and non-ASCII tree ids under a UTF-8 locale
+ok 136 --probe refuses a directory
+ok 137 task-review refuses a carriage return in a --minor text
+ok 138 task-done strips a carriage return from the last output line
+ok 139 each worktree lands in its bucket with evidence
+ok 140 a fork is listed as detached; the main checkout is never listed
+ok 141 without gh the buckets come from local state and say so
+ok 142 --days 0 marks every worktree idle
+ok 143 wt-audit changes nothing: status, index and worktree list are the same after it runs
+ok 144 a worktree with thousands of recent files is still listed
+ok 145 a bad --days value exits 2
+ok 146 a worktree whose git status fails is unknown, not empty
+ok 147 a clean worktree with no resolvable base ref is unknown, not empty
+ok 148 fork carries modified and untracked files and snapshots to the same tree
+ok 149 fork carries a deletion and a binary file
+ok 150 a fork passes wt-check
+ok 151 an existing fork path exits 2
+ok 152 wt-apply applies a worker's patch into the plan worktree
+ok 153 wt-apply applies a binary patch
+ok 154 a conflicting patch exits 3 and leaves the destination unchanged
+ok 155 a missing patch file exits 2
+ok 156 a fork made from another directory reads worktree.setup from the main checkout
+ok 157 a failing worktree.setup removes the fork
+ok 158 diff.noprefix in the user's git config changes neither forks nor patches
+ok 159 wt-new creates a branch worktree off origin/main
+ok 160 wt-new fetches before branching
+ok 161 wt-new keeps the main checkout status clean
+ok 162 wt-new --detach --base SHA makes a detached worktree at that commit
+ok 163 wt-new copies files named in .worktreeinclude
+ok 164 wt-new runs worktree.setup and writes the marker
+ok 165 a failing worktree.setup exits 2
+ok 166 an existing branch is refused
+ok 167 a branch.pattern placeholder wt-new cannot fill asks for --branch
+ok 168 a bad slug exits 2
+ok 169 no origin remote exits 2 with a message
+ok 170 wt-new works when the repo path has a space
+ok 171 wt-check passes for a fresh kern worktree
+ok 172 wt-check rejects the main checkout
+ok 173 wt-check rejects a base that is not an ancestor
+ok 174 wt-check rejects a worktree without the setup marker
+ok 175 an unchanged worktree snapshots to HEAD's tree
+ok 176 snapshot includes untracked files and skips ignored ones
+ok 177 snapshot drops a deleted tracked file
+ok 178 the real index and status are untouched
+ok 179 same state gives the same tree; a change gives a new one
+ok 180 wt-diff writes a package and a patch and lists changed paths
+ok 181 wt-diff defaults the package into WORK/reviews
+ok 182 identical trees exit 3
+ok 183 a bad tree exits 2
+ok 184 wt-snap and wt-diff work under a path with a space
+ok 185 wt-diff --allow passes when every changed path is allowed
+ok 186 wt-diff --allow exits 4, names each extra path and still writes the package
+ok 187 an allowed directory needs its trailing slash
+ok 188 an allowed entry ending in * covers every path that starts with it

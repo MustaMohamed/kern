@@ -1,0 +1,64 @@
+fin -> r2: same 8604, tighter 696, looser-eq-unmod 0, LOOSER 0, ERROR 0, unmatched 0
+  tighter         x12   none->deny  | cd @SD@ && nocorrect cd /tmp && echo x > foo
+  tighter         x12   none->ask   | cd @HC@ && noglob time cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | noglob time cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && noglob ! cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | noglob ! cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && nice noglob cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | nice noglob cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && noglob nice cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | noglob nice cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->deny  | cd @SD@ && sudo noglob cd /tmp; echo x > foo
+  tighter         x12   none->ask   | cd @HC@ && sudo noglob cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | sudo noglob cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->deny  | cd @SD@ && env noglob cd /tmp; echo x > foo
+  tighter         x12   none->ask   | cd @HC@ && env noglob cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | env noglob cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && noglob env cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | noglob env cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && timeout 5 noglob cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | timeout 5 noglob cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && noglob command cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | noglob command cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && command noglob cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | command noglob cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && nice cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | nice cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->deny  | cd @SD@ && env cd /tmp; echo x > foo
+  tighter         x12   none->ask   | cd @HC@ && env cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | env cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && nohup cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | nohup cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && timeout 5 cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | timeout 5 cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && command cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | command cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->deny  | cd @SD@ && sudo cd /tmp; echo x > foo
+  tighter         x12   none->ask   | cd @HC@ && sudo cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | sudo cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->ask   | cd @HC@ && exec cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | exec cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->deny  | cd @SD@ && time cd /tmp; echo x > foo
+  tighter         x12   none->ask   | cd @HC@ && time cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | time cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->deny  | cd @SD@ && ! cd /tmp; echo x > foo
+  tighter         x12   none->ask   | cd @HC@ && ! cd /tmp; sed -i '' s/a/b/ settings.json
+  tighter         x12   none->deny  | ! cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+  tighter         x12   none->deny  | cd @SD@ && if cd /tmp; then echo x > foo; fi
+  tighter         x12   none->ask   | cd @HC@ && if cd /tmp; then sed -i '' s/a/b/ settings.json; fi
+  tighter         x12   none->deny  | if cd /tmp; then cp docs/plans/ok.md docs/plans/y.md; fi
+  tighter         x8    none->deny  | cd @SD@ && noglob cd /tmp; echo x > foo
+  tighter         x8    none->ask   | cd @HC@ && noglob cd /tmp; echo {} > settings.json
+  tighter         x8    none->deny  | cd @SD@ && noglob time cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && noglob ! cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && nice noglob cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && noglob nice cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && noglob env cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && timeout 5 noglob cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && noglob command cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && command noglob cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && nice cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && nohup cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && timeout 5 cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && command cd /tmp; echo x > foo
+  tighter         x8    none->deny  | cd @SD@ && exec cd /tmp; echo x > foo

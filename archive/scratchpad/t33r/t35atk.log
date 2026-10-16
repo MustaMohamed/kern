@@ -1,0 +1,49 @@
+tighter|off|main|base=ask|head=deny|unmod=deny|noglob git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|nocorrect git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|coproc git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|repeat 1 git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|repeat $N git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|repeat -1+2 git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|repeat 1 repeat 1 git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|repeat '1' git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|repeat 0 git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|noglob nocorrect git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|sudo noglob git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|noglob sudo git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|env X=1 noglob git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|nice noglob git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|command noglob git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|noglob command git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|nocorrect env git push --force origin main
+tighter|off|main|base=ask|head=deny|unmod=deny|time noglob git push --force origin main
+same|off|main|base=ask|head=ask|unmod=ask|noglob git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|nocorrect git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|coproc git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|repeat 1 git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|repeat $N git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|repeat -1+2 git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|repeat 1 repeat 1 git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|repeat '1' git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|repeat 0 git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|noglob nocorrect git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|sudo noglob git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|noglob sudo git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|env X=1 noglob git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|nice noglob git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|command noglob git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|noglob command git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|nocorrect env git push origin main
+same|off|main|base=ask|head=ask|unmod=ask|time noglob git push origin main
+tighter|off|main|base=none|head=deny|unmod=deny|noglob eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|nocorrect eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|coproc eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|repeat 1 eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|repeat $N eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|repeat -1+2 eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|repeat 1 repeat 1 eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|repeat '1' eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|repeat 0 eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|noglob nocorrect eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|sudo noglob eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|noglob sudo eval 'git push --force origin main'
+tighter|off|main|base=none|head=deny|unmod=deny|env X=1 noglob eval 'git push --force origin main'

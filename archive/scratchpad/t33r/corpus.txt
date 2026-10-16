@@ -1,0 +1,103 @@
+git push --force origin main
+git push origin main
+git push --force-with-lease origin feat
+gpf! origin main
+gp origin main
+g push --force origin main
+_ gpf! origin main
+_ X=1 gpf! origin main
+_ 'gpf!' origin main
+sudo git push --force origin main
+grt && git push --force origin main
+grt && git push origin feat
+grt && git push --force-with-lease origin feat
+grt && git commit -m "feat: add creds"
+git commit -m "feat: add creds"
+cd /tmp && gpf! origin main
+echo $(gpf! origin main)
+eval 'gpf! origin main'
+eval "gp origin main"
+bash -c 'gpf! origin main'
+gst | cat
+gst && git push --force origin main
+gst || git push origin main
+gst@NL@git push --force origin main
+cat <<EOT@NL@gpf! origin main@NL@EOT
+cat <<EOT | sh@NL@gpf! origin main@NL@EOT
+gh pr create --title t --body b
+gh pr merge 1 --admin
+git commit -m "x" --no-verify
+git reset --hard HEAD~1
+grhh HEAD~1
+git clean -fdx
+gclean
+git stash clear
+gstc
+git branch -D feat
+gbD feat
+git checkout -- .
+gco -- .
+git add -A && git commit -m "feat: x"
+gaa && gcmsg "feat: x"
+gwip
+time gpf! origin main
+! gpf! origin main
+if gpf! origin main; then :; fi
+nocorrect gpf! origin main
+repeat 2 gpf! origin main
+coproc gpf! origin main
+noglob gpf! origin main
+command gpf! origin main
+2>&1 gpf! origin main
+X='a b' gpf! origin main
+gpf! origin main # comment
+{ gpf! origin main; }
+( gpf! origin main )
+gpf! origin main &
+gpf! origin main | tee log
+cd @HC@ && grt && sed -i '' s/a/b/ settings.json
+cd @HC@ && sed -i '' s/a/b/ settings.json
+cd @HC@ && ls && echo x > settings.json
+cd @HC@ && true && cp /tmp/x settings.local.json
+cd @SD@ && ls && echo x > foo
+cd @SD@ && grt && echo x > foo
+cd @SD@ && gst && echo x > foo
+echo x > @SD@/test-session.state
+grt && echo x > @SD@/test-session.state
+psql -h prod-db.internal -c 'DELETE FROM x'
+echo 'DELETE FROM x' | psql -h prod-db.internal
+gst; psql -h prod-db.internal -c 'DELETE FROM x'
+grt && psql -h prod-db.internal -c 'DELETE FROM x'
+ssh prod-db.internal 'rm -rf /'
+gst; ssh prod-db.internal 'rm -rf /'
+git push origin production
+gp origin production
+npm publish
+gst && npm publish
+grt && npm publish
+echo 'status: approved' >> docs/plans/x.md
+grt && echo 'status: approved' >> docs/plans/x.md
+ls && echo 'status: approved' >> docs/plans/x.md
+cd docs && ls && sed -i '' 's/draft/approved/' plans/x.md
+gh pr review 1 --approve
+gh api repos/o/r/pulls/1/merge -X PUT
+git push -u origin feat
+git push -u origin feat | cat
+git push -u origin feat | tee log
+git status && git push -u origin feat
+cd @WT@ && git push --force-with-lease origin feat
+ls && git push --force-with-lease origin feat
+true; git push --force-with-lease origin feat
+x2 git push --force origin main
+pipe git push --force origin main
+semi git push --force origin main
+q
+r gpf! origin main
+big
+e gpf! origin main
+export GIT_DIR=/x; git push origin main
+env git push --force origin main
+sudo git push --force origin main
+if true; then git push --force origin main; fi
+time git push --force origin main
+nocorrect git push --force origin main

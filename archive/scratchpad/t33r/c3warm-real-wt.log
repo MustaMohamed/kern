@@ -1,0 +1,206 @@
+real wt off same     base=deny  head=deny  | git push --force origin main
+real wt off same     base=ask   head=ask   | git push origin main
+real wt off same     base=deny  head=deny  | git push --force-with-lease origin feat
+real wt off tighter  base=      head=deny  | gpf! origin main
+real wt off tighter  base=      head=ask   | gp origin main
+real wt off tighter  base=      head=deny  | g push --force origin main
+real wt off tighter  base=      head=ask   | _ gpf! origin main
+real wt off same     base=      head=      | _ X=1 gpf! origin main
+real wt off same     base=      head=      | _ 'gpf!' origin main
+real wt off same     base=deny  head=deny  | sudo git push --force origin main
+real wt off same     base=deny  head=deny  | grt && git push --force origin main
+real wt off same     base=ask   head=ask   | grt && git push origin feat
+real wt off same     base=deny  head=deny  | grt && git push --force-with-lease origin feat
+real wt off same     base=deny  head=deny  | grt && git commit -m "feat: add creds"
+real wt off same     base=deny  head=deny  | git commit -m "feat: add creds"
+real wt off tighter  base=      head=deny  | cd /tmp && gpf! origin main
+real wt off tighter  base=      head=deny  | echo $(gpf! origin main)
+real wt off tighter  base=      head=deny  | eval 'gpf! origin main'
+real wt off tighter  base=      head=ask   | eval "gp origin main"
+real wt off tighter  base=      head=deny  | bash -c 'gpf! origin main'
+real wt off same     base=      head=      | gst | cat
+real wt off same     base=deny  head=deny  | gst && git push --force origin main
+real wt off same     base=ask   head=ask   | gst || git push origin main
+real wt off same     base=deny  head=deny  | gst // git push --force origin main
+real wt off same     base=      head=      | cat <<EOT // gpf! origin main // EOT
+real wt off same     base=      head=      | cat <<EOT | sh // gpf! origin main // EOT
+real wt off same     base=deny  head=deny  | gh pr create --title t --body b
+real wt off same     base=ask   head=ask   | gh pr merge 1 --admin
+real wt off same     base=deny  head=deny  | git commit -m "x" --no-verify
+real wt off same     base=      head=      | git reset --hard HEAD~1
+real wt off same     base=      head=      | grhh HEAD~1
+real wt off same     base=      head=      | git clean -fdx
+real wt off same     base=      head=      | gclean
+real wt off same     base=      head=      | git stash clear
+real wt off same     base=      head=      | gstc
+real wt off same     base=ask   head=ask   | git branch -D feat
+real wt off tighter  base=      head=ask   | gbD feat
+real wt off same     base=      head=      | git checkout -- .
+real wt off same     base=      head=      | gco -- .
+real wt off same     base=deny  head=deny  | git add -A && git commit -m "feat: x"
+real wt off tighter  base=      head=deny  | gaa && gcmsg "feat: x"
+real wt off tighter  base=      head=deny  | gwip
+real wt off tighter  base=      head=deny  | time gpf! origin main
+real wt off tighter  base=      head=deny  | ! gpf! origin main
+real wt off tighter  base=      head=deny  | if gpf! origin main; then :; fi
+real wt off tighter  base=      head=ask   | nocorrect gpf! origin main
+real wt off tighter  base=      head=ask   | repeat 2 gpf! origin main
+real wt off tighter  base=      head=ask   | coproc gpf! origin main
+real wt off same     base=      head=      | noglob gpf! origin main
+real wt off same     base=      head=      | command gpf! origin main
+real wt off tighter  base=      head=deny  | 2>&1 gpf! origin main
+real wt off tighter  base=      head=deny  | X='a b' gpf! origin main
+real wt off tighter  base=      head=deny  | gpf! origin main # comment
+real wt off tighter  base=      head=deny  | { gpf! origin main; }
+real wt off tighter  base=      head=deny  | ( gpf! origin main )
+real wt off tighter  base=      head=deny  | gpf! origin main &
+real wt off tighter  base=      head=deny  | gpf! origin main | tee log
+real wt off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real wt off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/home/.claude && sed -i '' s/a/b/ settings.json
+real wt off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/home/.claude && ls && echo x > settings.json
+real wt off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/home/.claude && true && cp /tmp/x settings.local.json
+real wt off same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions && ls && echo x > foo
+real wt off same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions && grt && echo x > foo
+real wt off same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions && gst && echo x > foo
+real wt off same     base=deny  head=deny  | echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions/test-session.state
+real wt off same     base=deny  head=deny  | grt && echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions/test-session.state
+real wt off same     base=deny  head=deny  | psql -h prod-db.internal -c 'DELETE FROM x'
+real wt off same     base=deny  head=deny  | echo 'DELETE FROM x' | psql -h prod-db.internal
+real wt off same     base=deny  head=deny  | gst; psql -h prod-db.internal -c 'DELETE FROM x'
+real wt off same     base=deny  head=deny  | grt && psql -h prod-db.internal -c 'DELETE FROM x'
+real wt off same     base=deny  head=deny  | ssh prod-db.internal 'rm -rf /'
+real wt off same     base=deny  head=deny  | gst; ssh prod-db.internal 'rm -rf /'
+real wt off same     base=ask   head=ask   | git push origin production
+real wt off tighter  base=      head=ask   | gp origin production
+real wt off same     base=ask   head=ask   | npm publish
+real wt off same     base=ask   head=ask   | gst && npm publish
+real wt off same     base=ask   head=ask   | grt && npm publish
+real wt off same     base=deny  head=deny  | echo 'status: approved' >> docs/plans/x.md
+real wt off same     base=deny  head=deny  | grt && echo 'status: approved' >> docs/plans/x.md
+real wt off same     base=deny  head=deny  | ls && echo 'status: approved' >> docs/plans/x.md
+real wt off same     base=deny  head=deny  | cd docs && ls && sed -i '' 's/draft/approved/' plans/x.md
+real wt off same     base=ask   head=ask   | gh pr review 1 --approve
+real wt off same     base=ask   head=ask   | gh api repos/o/r/pulls/1/merge -X PUT
+real wt off same     base=allow head=allow | git push -u origin feat
+real wt off same     base=allow head=allow | git push -u origin feat | cat
+real wt off same     base=ask   head=ask   | git push -u origin feat | tee log
+real wt off same     base=ask   head=ask   | git status && git push -u origin feat
+real wt off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/wt && git push --force-with-lease origin feat
+real wt off same     base=deny  head=deny  | ls && git push --force-with-lease origin feat
+real wt off same     base=deny  head=deny  | true; git push --force-with-lease origin feat
+real wt off same     base=ask   head=ask   | x2 git push --force origin main
+real wt off same     base=ask   head=ask   | pipe git push --force origin main
+real wt off same     base=ask   head=ask   | semi git push --force origin main
+real wt off same     base=      head=      | q
+real wt off same     base=      head=      | r gpf! origin main
+real wt off same     base=      head=      | big
+real wt off same     base=      head=      | e gpf! origin main
+real wt off same     base=ask   head=ask   | export GIT_DIR=/x; git push origin main
+real wt off same     base=deny  head=deny  | env git push --force origin main
+real wt off same     base=deny  head=deny  | sudo git push --force origin main
+real wt off same     base=deny  head=deny  | if true; then git push --force origin main; fi
+real wt off same     base=deny  head=deny  | time git push --force origin main
+real wt off same     base=ask   head=ask   | nocorrect git push --force origin main
+real wt on same     base=deny  head=deny  | git push --force origin main
+real wt on same     base=deny  head=deny  | git push origin main
+real wt on same     base=deny  head=deny  | git push --force-with-lease origin feat
+real wt on tighter  base=      head=deny  | gpf! origin main
+real wt on tighter  base=      head=deny  | gp origin main
+real wt on tighter  base=      head=deny  | g push --force origin main
+real wt on tighter  base=      head=deny  | _ gpf! origin main
+real wt on same     base=      head=      | _ X=1 gpf! origin main
+real wt on same     base=      head=      | _ 'gpf!' origin main
+real wt on same     base=deny  head=deny  | sudo git push --force origin main
+real wt on same     base=deny  head=deny  | grt && git push --force origin main
+real wt on same     base=deny  head=deny  | grt && git push origin feat
+real wt on same     base=deny  head=deny  | grt && git push --force-with-lease origin feat
+real wt on same     base=deny  head=deny  | grt && git commit -m "feat: add creds"
+real wt on same     base=deny  head=deny  | git commit -m "feat: add creds"
+real wt on tighter  base=      head=deny  | cd /tmp && gpf! origin main
+real wt on tighter  base=      head=deny  | echo $(gpf! origin main)
+real wt on tighter  base=      head=deny  | eval 'gpf! origin main'
+real wt on tighter  base=      head=deny  | eval "gp origin main"
+real wt on tighter  base=      head=deny  | bash -c 'gpf! origin main'
+real wt on same     base=      head=      | gst | cat
+real wt on same     base=deny  head=deny  | gst && git push --force origin main
+real wt on same     base=deny  head=deny  | gst || git push origin main
+real wt on same     base=deny  head=deny  | gst // git push --force origin main
+real wt on same     base=      head=      | cat <<EOT // gpf! origin main // EOT
+real wt on same     base=deny  head=deny  | cat <<EOT | sh // gpf! origin main // EOT
+real wt on same     base=deny  head=deny  | gh pr create --title t --body b
+real wt on same     base=deny  head=deny  | gh pr merge 1 --admin
+real wt on same     base=deny  head=deny  | git commit -m "x" --no-verify
+real wt on same     base=      head=      | git reset --hard HEAD~1
+real wt on same     base=      head=      | grhh HEAD~1
+real wt on same     base=      head=      | git clean -fdx
+real wt on same     base=      head=      | gclean
+real wt on same     base=      head=      | git stash clear
+real wt on same     base=      head=      | gstc
+real wt on same     base=deny  head=deny  | git branch -D feat
+real wt on tighter  base=      head=deny  | gbD feat
+real wt on same     base=      head=      | git checkout -- .
+real wt on same     base=      head=      | gco -- .
+real wt on same     base=deny  head=deny  | git add -A && git commit -m "feat: x"
+real wt on tighter  base=      head=deny  | gaa && gcmsg "feat: x"
+real wt on tighter  base=      head=deny  | gwip
+real wt on tighter  base=      head=deny  | time gpf! origin main
+real wt on tighter  base=      head=deny  | ! gpf! origin main
+real wt on tighter  base=      head=deny  | if gpf! origin main; then :; fi
+real wt on tighter  base=      head=deny  | nocorrect gpf! origin main
+real wt on tighter  base=      head=deny  | repeat 2 gpf! origin main
+real wt on tighter  base=      head=deny  | coproc gpf! origin main
+real wt on same     base=      head=      | noglob gpf! origin main
+real wt on same     base=      head=      | command gpf! origin main
+real wt on tighter  base=      head=deny  | 2>&1 gpf! origin main
+real wt on tighter  base=      head=deny  | X='a b' gpf! origin main
+real wt on tighter  base=      head=deny  | gpf! origin main # comment
+real wt on tighter  base=      head=deny  | { gpf! origin main; }
+real wt on tighter  base=      head=deny  | ( gpf! origin main )
+real wt on tighter  base=      head=deny  | gpf! origin main &
+real wt on tighter  base=      head=deny  | gpf! origin main | tee log
+real wt on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real wt on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/home/.claude && sed -i '' s/a/b/ settings.json
+real wt on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/home/.claude && ls && echo x > settings.json
+real wt on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/home/.claude && true && cp /tmp/x settings.local.json
+real wt on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions && ls && echo x > foo
+real wt on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions && grt && echo x > foo
+real wt on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions && gst && echo x > foo
+real wt on same     base=deny  head=deny  | echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions/test-session.state
+real wt on same     base=deny  head=deny  | grt && echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/data/sessions/test-session.state
+real wt on same     base=deny  head=deny  | psql -h prod-db.internal -c 'DELETE FROM x'
+real wt on same     base=deny  head=deny  | echo 'DELETE FROM x' | psql -h prod-db.internal
+real wt on same     base=deny  head=deny  | gst; psql -h prod-db.internal -c 'DELETE FROM x'
+real wt on same     base=deny  head=deny  | grt && psql -h prod-db.internal -c 'DELETE FROM x'
+real wt on same     base=deny  head=deny  | ssh prod-db.internal 'rm -rf /'
+real wt on same     base=deny  head=deny  | gst; ssh prod-db.internal 'rm -rf /'
+real wt on same     base=deny  head=deny  | git push origin production
+real wt on tighter  base=      head=deny  | gp origin production
+real wt on same     base=deny  head=deny  | npm publish
+real wt on same     base=deny  head=deny  | gst && npm publish
+real wt on same     base=deny  head=deny  | grt && npm publish
+real wt on same     base=deny  head=deny  | echo 'status: approved' >> docs/plans/x.md
+real wt on same     base=deny  head=deny  | grt && echo 'status: approved' >> docs/plans/x.md
+real wt on same     base=deny  head=deny  | ls && echo 'status: approved' >> docs/plans/x.md
+real wt on same     base=deny  head=deny  | cd docs && ls && sed -i '' 's/draft/approved/' plans/x.md
+real wt on same     base=deny  head=deny  | gh pr review 1 --approve
+real wt on same     base=deny  head=deny  | gh api repos/o/r/pulls/1/merge -X PUT
+real wt on same     base=allow head=allow | git push -u origin feat
+real wt on same     base=allow head=allow | git push -u origin feat | cat
+real wt on same     base=deny  head=deny  | git push -u origin feat | tee log
+real wt on same     base=deny  head=deny  | git status && git push -u origin feat
+real wt on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.at1jMo/wt && git push --force-with-lease origin feat
+real wt on same     base=deny  head=deny  | ls && git push --force-with-lease origin feat
+real wt on same     base=deny  head=deny  | true; git push --force-with-lease origin feat
+real wt on same     base=deny  head=deny  | x2 git push --force origin main
+real wt on same     base=deny  head=deny  | pipe git push --force origin main
+real wt on same     base=deny  head=deny  | semi git push --force origin main
+real wt on same     base=      head=      | q
+real wt on same     base=      head=      | r gpf! origin main
+real wt on same     base=      head=      | big
+real wt on same     base=      head=      | e gpf! origin main
+real wt on same     base=deny  head=deny  | export GIT_DIR=/x; git push origin main
+real wt on same     base=deny  head=deny  | env git push --force origin main
+real wt on same     base=deny  head=deny  | sudo git push --force origin main
+real wt on same     base=deny  head=deny  | if true; then git push --force origin main; fi
+real wt on same     base=deny  head=deny  | time git push --force origin main
+real wt on same     base=deny  head=deny  | nocorrect git push --force origin main

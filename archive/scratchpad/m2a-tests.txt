@@ -1,0 +1,258 @@
+T1:
+  None :: wt-new creates a branch worktree off origin/main
+  None :: wt-new fetches before branching
+  None :: wt-new keeps the main checkout status clean
+  None :: wt-new --detach --base SHA makes a detached worktree at that commit
+  None :: wt-new copies files named in .worktreeinclude
+  None :: wt-new runs worktree.setup and writes the marker
+  None :: a failing worktree.setup exits 2
+  None :: an existing branch is refused
+  None :: a branch.pattern placeholder wt-new cannot fill asks for --branch
+  None :: a bad slug exits 2
+  None :: no origin remote exits 2 with a message
+  None :: wt-new works when the repo path has a space
+  None :: wt-check passes for a fresh kern worktree
+  None :: wt-check rejects the main checkout
+  None :: wt-check rejects a base that is not an ancestor
+  None :: wt-check rejects a worktree without the setup marker
+T2:
+  None :: an unchanged worktree snapshots to HEAD's tree
+  None :: snapshot includes untracked files and skips ignored ones
+  None :: snapshot drops a deleted tracked file
+  None :: the real index and status are untouched
+  None :: same state gives the same tree; a change gives a new one
+  None :: wt-diff writes a package and a patch and lists changed paths
+  None :: wt-diff defaults the package into WORK/reviews
+  None :: identical trees exit 3
+  None :: a bad tree exits 2
+  None :: wt-snap and wt-diff work under a path with a space
+  None :: wt-diff --allow passes when every changed path is allowed
+  None :: wt-diff --allow exits 4, names each extra path and still writes the package
+  None :: an allowed directory needs its trailing slash
+T3:
+  None :: fork carries modified and untracked files and snapshots to the same tree
+  None :: fork carries a deletion and a binary file
+  None :: a fork passes wt-check
+  None :: an existing fork path exits 2
+  None :: wt-apply applies a worker's patch into the plan worktree
+  None :: wt-apply applies a binary patch
+  None :: a conflicting patch exits 3 and leaves the destination unchanged
+  None :: a missing patch file exits 2
+T4:
+  None :: each worktree lands in its bucket with evidence
+  None :: a fork is listed as detached; the main checkout is never listed
+  None :: without gh the buckets come from local state and say so
+  None :: --days 0 marks every worktree idle
+  None :: wt-audit changes nothing: status, index and worktree list are the same after it runs
+  None :: a bad --days value exits 2
+T5:
+  None :: each floor move is reported with its class
+  None :: a clean diff exits 0 with no output
+  None :: focused tests count as test-made-easier
+  None :: type escapes and other suppressions are silenced-checker
+  None :: a Rust #[ignore] is test-made-easier
+  None :: a lowered coverage threshold is bar-lowered; a raised one is not
+  None :: strict typing turned off or removed is bar-lowered
+  None :: a lint rule turned off is bar-lowered
+  None :: a CI step removed or made non-blocking is bar-lowered
+  None :: a ratchet.<metric> key guards its value in both directions
+  None :: a reformatted or moved assertion is not removed
+  None :: a renamed test file is not a deleted test
+  None :: content lines that start with ++ or -- are content, not headers
+  None :: an untracked new file is scanned through its intent-to-add diff
+  None :: a wt-diff package is read past its header sections
+  None :: input with no diff --git header exits 2; an unreadable input exits 2
+  None :: suppressions in a doc file are not hits
+T6:
+  None :: claim-check flags unknown commit ids and absolute claims only
+  None :: claim-check passes a diff with a known commit id
+  None :: probe passes when the test fails without the guard
+  None :: probe reports a test that does not cover the guard
+  None :: probe is inconclusive when the test fails with the guard in place
+  None :: probe is inconclusive when the patch does not reverse-apply
+  None :: probe is inconclusive when the test cannot run without the guard
+  None :: a patch that also adds the test is inconclusive without --exclude-tests
+  None :: --exclude-tests keeps the new test in the fork and reverses only the guard
+  None :: --exclude-tests on a patch of tests only is inconclusive
+  None :: a command that names a file the reversed fork lacks is inconclusive, never ok
+  None :: --mutate: an inverted condition the test catches is ok
+  None :: --mutate: a test that ignores the condition lets the mutation survive
+  None :: --mutate on a line with no condition is inconclusive
+T7:
+  None :: every labelled diff exists, and there are 12 seeded moves and 8 decoys
+  None :: floor-scan and claim-check find every seeded move and no decoy
+T8:
+  None :: task-brief extracts one task plus the global constraints
+  None :: a Task heading inside a fence is ignored
+  None :: a missing task exits 2 and writes nothing
+  None :: task-start appends a start line
+  None :: task-start refuses a missing ledger and a short tree id
+  None :: ledger-open creates the ledger with its identity and the main checkout's state
+  None :: ledger-open reuses its own ledger and refuses another plan's
+  None :: ledger-open refuses a plan that is not approved, or approved without the user's words
+  None :: ledger-open --summary lists decisions, parked and deferred lines and checks the main checkout
+T9:
+  None :: task-review appends the verdict line and deferred minors
+  None :: task-review refuses a bad verdict, a fourth round and a short tree id
+  None :: task-done refuses a task with no review and writes nothing
+  None :: task-done refuses a review of an older tree, and a review with issues
+  None :: task-done refuses a worktree edited after its review
+  None :: an approved, unchanged tree with a passing command is recorded with its last output line
+  None :: a failing command is not recorded and keeps its exit code
+  None :: --probe records ok when the test fails with the change reversed
+  None :: --probe refuses a task whose test passes without the change
+  None :: task-done quotes arguments with spaces in the ledger line
+T10:
+  None :: a complete brief passes, including a field continued on indented lines
+  None :: a missing field and an empty field are each named
+  None :: VERIFY must start with the entry check
+  None :: a field whose text is on the next indented line counts
+  None :: a label inside a word does not count, and an unreadable file exits 2
+T11:
+  None :: a sound plan passes
+  None :: --graph prints the overlap and the waves
+  None :: --files prints a task's paths without line ranges
+  None :: two tasks on one shared service must be ordered
+  None :: a shared_services entry orders tasks that both mention it
+  None :: a consumer must be blocked by its producer, and cannot come first
+  None :: a task blocked by a later task, a gap in numbering and a missing Run/Expected pair are errors
+  None :: an acceptance criterion no task covers is an error
+  None :: placeholders, an unapproved approval and a missing spec are errors
+  None :: a spec needs its sections and an approval with the user's words
+  None :: usage errors exit 2
+T12:
+  None :: read commands get no G18 vote
+  None :: pipes and stderr to /dev/null stay allowed
+  None :: writes and unknown commands are denied
+  None :: a file redirect is denied
+  None :: a denied command anywhere in a chain denies the call
+  None :: other agents and the main session get no G18 vote
+  None :: autopilot changes nothing for G18
+  None :: the dispatcher lists g18 among the guards it expects
+T13:
+  None :: implementer frontmatter, sections and return contract
+  None :: task-reviewer frontmatter, sections and verdict lines
+  None :: investigator frontmatter, sections, labels and no file writes
+T14:
+  None :: a quote of the user's last message approves
+  None :: a quote with other spacing and case still matches the same line
+  None :: one whole line of a longer message approves; part of a line does not
+  None :: an invented quote is denied
+  None :: sounds good and whatever you think are not a yes
+  None :: a quote from an earlier message, or from a wrapped one, is denied
+  None :: a draft changed after the user's message is denied
+  None :: a missing approved: quote is denied
+  None :: under autopilot even a real quote is denied
+  None :: other files and draft edits get no G20 vote
+  None :: a Bash write of approved into a spec is denied; a read is not
+  None :: a Write of a new plan with a real quote approves
+  None :: prompt_hashes folds case, blanks and a final . or !, one hash per line
+  None :: the dispatcher lists g20 among the guards it expects
+T15:
+  tests/lint-rules.test.mjs :: rule 5: Skill tool references name auto or built-in skills
+  tests/lint-rules.test.mjs :: rule 5: agent Read paths resolve
+  tests/lint-rules.test.mjs :: rule 9: auto skills need Steps; slash skills need Steps first
+  tests/lint-rules.test.mjs :: rule 9: a slash skill without Steps passes with an exemption
+  tests/lint-rules.test.mjs :: rule 9: agents need an output contract section
+  tests/lint-rules.test.mjs :: rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+  tests/lint-rules.test.mjs :: rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+T16:
+  tests/lint-rules.test.mjs :: prove-it frontmatter is the spec text
+  tests/lint-rules.test.mjs :: prove-it sections, steps, gate and red flags
+  tests/lint-rules.test.mjs :: evidence reference
+  tests/lint-rules.test.mjs :: the M0 placeholder is gone
+T17:
+  tests/lint-rules.test.mjs :: implement frontmatter
+  tests/lint-rules.test.mjs :: implement sections, steps and red flags
+  tests/lint-rules.test.mjs :: implement references
+T18:
+  tests/lint-rules.test.mjs :: diagnose frontmatter
+  tests/lint-rules.test.mjs :: diagnose sections, steps and red flags
+  tests/lint-rules.test.mjs :: diagnose references
+  tests/lint-rules.test.mjs :: finds the test file that creates the path
+  tests/lint-rules.test.mjs :: reports no polluter when none creates it
+  tests/lint-rules.test.mjs :: refuses when the path already exists
+  tests/lint-rules.test.mjs :: a steady command is 0 red, with a median in seconds
+  tests/lint-rules.test.mjs :: a flaky command reports its red count
+  tests/lint-rules.test.mjs :: a bad N or a missing -- exits 2
+  tests/lint-rules.test.mjs :: each backticked command in forensics.md and investigator.md is on G18's allowlist
+T19:
+  tests/lint-rules.test.mjs :: define frontmatter
+  tests/lint-rules.test.mjs :: define sections, steps, the standing gate and red flags
+  tests/lint-rules.test.mjs :: define references
+T20:
+  tests/lint-rules.test.mjs :: plan frontmatter
+  tests/lint-rules.test.mjs :: plan sections and steps
+  tests/lint-rules.test.mjs :: plan templates are contracts task-brief and plan-check can read
+T21:
+  tests/lint-rules.test.mjs :: parallel-work frontmatter
+  tests/lint-rules.test.mjs :: parallel-work sections and steps
+  tests/lint-rules.test.mjs :: brief template fields and worktrees reference
+T22:
+  tests/lint-rules.test.mjs :: execute-plan frontmatter
+  tests/lint-rules.test.mjs :: execute-plan sections, steps, scripts and red flags
+  tests/lint-rules.test.mjs :: ledger format and model table
+T23:
+  tests/lint-rules.test.mjs :: self-review frontmatter
+  tests/lint-rules.test.mjs :: self-review sections and steps
+  tests/lint-rules.test.mjs :: self-review references
+T24:
+  tests/lint-rules.test.mjs :: commit frontmatter
+  tests/lint-rules.test.mjs :: commit sections, steps and red flags
+T25:
+  tests/lint-rules.test.mjs :: finish-branch frontmatter
+  tests/lint-rules.test.mjs :: finish-branch sections, steps and red flags
+  tests/lint-rules.test.mjs :: PR body template
+  tests/skills/prove-it.test.mjs :: the gate hands a commit to commit and a push or PR to finish-branch
+T26:
+  tests/skills/prove-it.test.mjs :: commit: a -F message under .kern/tmp passes; a temp file outside it fails
+  tests/skills/prove-it.test.mjs :: finish-branch: the menu comes before any push or PR
+  tests/skills/prove-it.test.mjs :: finish-branch under autopilot: the draft PR carries --draft and --title, and ready never runs
+  tests/skills/prove-it.test.mjs :: finish-branch: a PR at this head stops; one at an older head gets the push
+  tests/skills/prove-it.test.mjs :: the isolation flags keep user settings, MCP servers and saved sessions out
+  tests/skills/prove-it.test.mjs :: a headless run pre-approves the tools a task needs, since it cannot answer a prompt
+  tests/skills/prove-it.test.mjs :: the dry run lists every case without calling claude
+  tests/skills/prove-it.test.mjs :: commit: git commit -F with the message file under WORK/tmp is allowed
+  tests/skills/prove-it.test.mjs :: commit: a message file outside the main worktree is denied
+  tests/skills/prove-it.test.mjs :: finish-branch: the draft PR command with --title and a WORK body file is allowed after dedup
+  tests/skills/prove-it.test.mjs :: finish-branch: an open PR for the branch denies a second one
+  tests/skills/prove-it.test.mjs :: finish-branch: gh pr ready and a non-draft PR are denied
+  tests/skills/prove-it.test.mjs :: finish-branch: the push of the current branch is allowed; a cd in the same call is not
+  evals/exec/fixtures/app/package.json :: sum adds
+T27:
+  evals/exec/fixtures/app/package.json :: this project's sessions, newest first, worktree sessions included, children and old ones skipped
+  evals/exec/fixtures/app/package.json :: --days widens the window
+  evals/exec/fixtures/app/package.json :: --topic adds this project's matching prompts only
+  evals/exec/fixtures/app/package.json :: a bad option exits 2
+T28:
+  evals/exec/fixtures/app/package.json :: recall frontmatter
+  evals/exec/fixtures/app/package.json :: recall sections, steps and the source lines it keeps
+  evals/exec/fixtures/app/package.json :: transcripts reference
+  evals/exec/fixtures/app/package.json :: the C11 acceptance checks are behavioural cases
+T29:
+  tests/voice.test.mjs :: terse keeps existing comments and shows only changed code
+  tests/voice.test.mjs :: the normal voice skips the main AI tells, in the kernel and in subagent returns
+  tests/hooks/session-start.bats :: the Reply section carries the candor line and the AI-tell line
+  tests/hooks/subagent-start.bats :: subagent returns skip preamble, praise and closing offers
+T30:
+  tests/skills-control.test.mjs :: kernelRows parses skill and kernel-file routes and skips other lines
+  tests/skills-control.test.mjs :: targets add the rows of both files after skills and before distractors
+  tests/skills-control.test.mjs :: a row and its own skill count as one owner
+  tests/skills-control.test.mjs :: a routed row without a case file is an error
+  tests/skills-control.test.mjs :: held-out prompts give their own rate, held to their own floor
+  tests/skills-control.test.mjs :: the fixed floors and the frozen held-out set are pinned
+  tests/lint-rules.test.mjs :: rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file
+  tests/lint-rules.test.mjs :: rule 7: the routed file has its own cap, and the standing cost has a combined budget
+  tests/lint-rules.test.mjs :: rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists
+T31:
+  tests/hooks/git-hardening.bats :: the fixture's fsmonitor program runs for a plain git call
+  tests/hooks/git-hardening.bats :: session-start runs git without the repo's fsmonitor program
+  tests/hooks/git-hardening.bats :: every hook exports the hardened git config before it runs git
+  tests/hooks/subagent-start.bats :: normal voice adds no terse line
+  tests/hooks/subagent-start.bats :: kern: off prints nothing
+  tests/hooks/subagent-start.bats :: a bad session id falls back to the settings voice
+T32:
+  tests/hooks/prompt-submit.bats :: a first line over 200 characters never switches and returns at once
+  tests/hooks/pre-tool-use.bats :: need_lists_match fails on a library loaded in a form it cannot read
+T33:
+  tests/hooks/pre-tool-use.bats :: a task is opened, changed, packaged, reviewed and closed without a commit

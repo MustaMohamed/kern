@@ -1,0 +1,5 @@
+alias -- to='timeout 5 '
+alias -- eu='env -u X '
+alias -- su='sudo -u root '
+alias -- gpf!='git push --force'
+alias -- n='nice '

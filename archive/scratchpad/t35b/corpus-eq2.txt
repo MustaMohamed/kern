@@ -1,0 +1,6 @@
+noglob cat @HC@/settings.json
+cat @HC@/settings.json
+noglob ls @HC@
+ls @HC@
+noglob bash -c 'git status'
+bash -c 'git status'

@@ -1,0 +1,29 @@
+cd @SD@ && \cd /tmp; echo x > foo
+cd @SD@ && "cd" /tmp; echo x > foo
+cd @SD@ && c''d /tmp; echo x > foo
+cd @SD@ && CD /tmp; echo x > foo
+cd @SD@ && /usr/bin/cd /tmp; echo x > foo
+cd @SD@ && builtin cd /tmp; echo x > foo
+cd @SD@ && command -p cd /tmp; echo x > foo
+cd @SD@ && ( cd /tmp ); echo x > foo
+cd @SD@ && cd /tmp | cat; echo x > foo
+cd @SD@ && cd /tmp & echo x > foo
+cd @SD@ && { cd /tmp; }; echo x > foo
+cd @SD@ && cd() { :; }; cd /tmp; echo x > foo
+cd @SD@ && 'X=1' cd /tmp; echo x > foo
+cd @SD@ && '2>/dev/null' cd /tmp; echo x > foo
+cd @SD@ && X\=1 cd /tmp; echo x > foo
+cd @SD@ && >cd cd /tmp; echo x > foo
+cd @SD@ && 2> cd /tmp; echo x > foo
+cd @SD@ && X='a b' cd /tmp; echo x > foo
+cd @SD@ && if cd /tmp; then :; fi; echo x > foo
+\cd @YD@; cp src.md dst.md
+CD @YD@; cp src.md dst.md
+'X=1' cd @YD@; cp src.md dst.md
+( cd @YD@ ); cp src.md dst.md
+cd @YD@ | cat; cp src.md dst.md
+cd @YD@ && cd - && cp src.md dst.md
+pushd @YD@ && popd && cp src.md dst.md
+cd @YD@; cd ~-; cp src.md dst.md
+cd @YD@; cd +1; cp src.md dst.md
+cd @YD@ && cd "$OLDPWD" && cp src.md dst.md

@@ -1,0 +1,49 @@
+1..24
+ok 1 gpf! origin main is denied like git push --force, in both modes
+ok 2 gp to a protected branch asks even with push.policy auto
+ok 3 each alias is judged exactly like its expansion
+ok 4 the head word is found after assignments and in every simple command of a chain
+ok 5 a quoted or escaped head word, or an alias in argument position, is not expanded
+ok 6 an alias to a command that is not git or gh is unaffected
+ok 7 a missing or unreadable snapshot changes nothing
+ok 8 malformed alias lines are ignored and the lines after them still count
+ok 9 the newest snapshot is read
+ok 10 the head word is found after zsh's reserved words and redirections, as zsh finds it
+ok 11 command, builtin, noglob, exec and - are not followed, as zsh does not expand after them
+ok 12 the original command still counts: an alias cannot hide a git or gh word
+ok 13 an alias command is never allowed unattended, and the investigator still may not run one
+ok 14 alias names are encoded one to one, and a chain, a cycle and a self-reference resolve
+ok 15 snapshot text is never run: substitutions, backticks, ; and newlines stay inert
+ok 16 a missing, empty or unparseable snapshot gives exactly the output of a hook with no aliases
+ok 17 CRLF, NUL bytes, a long line and 10,000 aliases leave the hook working
+ok 18 aliases.sh never aborts a shell under set -eu, and never sets a name outside _KA_
+ok 19 a _KA_ variable from the environment is never an alias
+ok 20 an alias is not skipped by a guard that reads the command text first, and without a snapshot nothing changes
+ok 21 an alias whose value ends in a space expands the word after it, as zsh does, 8 times, then fails closed
+ok 22 an assignment with a quote or $ before the alias does not hide it
+not ok 23 git_words prints the command's own records as without aliases, then each expansion after all of them
+# (in test file tests/hooks/aliases.bats, line 372)
+#   `[ "${got:0:${#want}}" = "$want" ] || { printf '%s\n--\n%s\n' "$want" "$got"; return 1; }' failed
+# cd /x
+# gst
+# echo y $(gp; cd /z)
+# gp
+# cd /z
+# X=1 gpf! origin main
+# --
+# cd /x
+# gst
+# 	git status
+# echo y $(gp; cd /z)
+# gp
+# 	git push
+# cd /z
+# X=1 gpf! origin main
+# 	X=1 git push --force origin main
+not ok 24 with aliases loaded, no command gets a weaker decision than without them, in both modes
+# (in test file tests/hooks/aliases.bats, line 435)
+#   `{ printf '%s, %s, %s:\nwithout: %s\nwith:    %s\n' "$mode" "$s" "$c" "$want" "$got"; return 1; }' failed
+# off, omz, cd /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-LrBFgF/test/24/home/.claude && grt && sed -i '' s/a/b/ settings.json:
+# without: {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"kern G16: Claude Code settings set permissions and hooks; the user confirms each write"}}
+# with:
+EXIT=1

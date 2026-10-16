@@ -1,0 +1,5 @@
+alias -- gpf!='git push --force'
+alias -- _='sudo '
+alias -- n='nice '
+alias -- gst='git status'
+alias -- tb='nice	'

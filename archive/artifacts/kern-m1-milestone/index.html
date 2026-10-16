@@ -1,0 +1,294 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>kern M1 Milestone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one report column in the build-ledger style of the progress page; verdict, numbers, what ships, how it was checked, the source comparison matrix, then limits and next steps. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #18202c;
+  --muted: #5b6577;
+  --line: #dde1e8;
+  --accent: #2c55c9;
+  --accent-soft: #e6ecfb;
+  --good: #1f8a5b;
+  --good-soft: #e3f3eb;
+  --warn: #b7791f;
+  --warn-soft: #fbf0dc;
+  --risk: #c2413b;
+  --risk-soft: #f9e4e2;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --surface: #18202b; --ink: #e6e9ef; --muted: #9aa4b5; --line: #2a3442;
+    --accent: #7d9cf5; --accent-soft: #1f2a46; --good: #4cc38a; --good-soft: #16352a;
+    --warn: #e0a948; --warn-soft: #3a2e17; --risk: #f07a73; --risk-soft: #3d1f1f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #18202b; --ink: #e6e9ef; --muted: #9aa4b5; --line: #2a3442;
+  --accent: #7d9cf5; --accent-soft: #1f2a46; --good: #4cc38a; --good-soft: #16352a;
+  --warn: #e0a948; --warn-soft: #3a2e17; --risk: #f07a73; --risk-soft: #3d1f1f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1060px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 56px; display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: 0.005em; }
+h1 { font-size: clamp(28px, 4.2vw, 40px); line-height: 1.1; }
+h2 { font-size: 23px; }
+h3 { font-size: 16px; }
+p { margin: 0; max-width: 70ch; }
+ul { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.muted { color: var(--muted); }
+code { font-family: var(--font-mono); font-size: 0.88em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+section { display: grid; gap: 16px; }
+.sec-head { display: grid; gap: 4px; }
+header { display: grid; gap: 12px; }
+.statusline { font-family: var(--font-mono); font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.statusline b { color: var(--ink); font-weight: 500; }
+
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.fig { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; }
+.fig .n { font-family: var(--font-display); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.fig .k { font-size: 12.5px; color: var(--muted); }
+
+.ships { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.ship { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.ship h3 { font-size: 15.5px; }
+.ship p, .ship li { font-size: 14px; }
+.ship .tag { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent); }
+
+.pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.stage { padding: 14px 16px; border-right: 1px solid var(--line); display: grid; gap: 4px; align-content: start; }
+.stage:last-child { border-right: 0; }
+.stage .n { font-family: var(--font-display); font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stage .what { font-size: 13px; color: var(--muted); }
+.stage strong { font-size: 14px; }
+@media (max-width: 760px) { .stage { border-right: 0; border-bottom: 1px solid var(--line); } .stage:last-child { border-bottom: 0; } }
+
+.board { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); background: var(--bg); white-space: nowrap; }
+.matrix { min-width: 760px; }
+.matrix td.comp { font-weight: 600; white-space: nowrap; }
+.matrix td.r { text-align: center; width: 9%; }
+.rk { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; }
+.rk.r1 { background: var(--good-soft); color: var(--good); }
+.rk.r2 { background: var(--accent-soft); color: var(--accent); }
+.rk.r3, .rk.r4, .rk.r5 { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.rk.na { background: transparent; color: var(--muted); }
+.why { font-size: 13px; color: var(--muted); }
+.legend { font-size: 13px; color: var(--muted); }
+
+.probe { min-width: 560px; }
+.v { font-family: var(--font-mono); font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; font-weight: 500; }
+.v.allow { background: var(--risk-soft); color: var(--risk); }
+.v.ask { background: var(--warn-soft); color: var(--warn); }
+.v.deny { background: var(--good-soft); color: var(--good); }
+.v.block { background: var(--good-soft); color: var(--good); }
+.v.okallow { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+
+.rank { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.rrow { display: grid; grid-template-columns: 3em 9em minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.rrow .num { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rrow.top .num { color: var(--good); }
+.rrow .src { font-family: var(--font-display); font-weight: 600; font-size: 16px; }
+.rrow p { font-size: 14px; }
+@media (max-width: 560px) { .rrow { grid-template-columns: 2.4em minmax(0, 1fr); } .rrow p { grid-column: 2; } }
+
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+@media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+.list { display: grid; border-top: 1px solid var(--line); }
+.item { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.item .tag { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+.item p { font-size: 14px; }
+.item.up .tag { color: var(--accent); }
+
+.next { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.step { border-left: 2px solid var(--line); padding: 4px 0 4px 14px; display: grid; gap: 2px; }
+.step.cur { border-left-color: var(--warn); }
+.step p { font-size: 14px; }
+footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">kern plugin · milestone report · 13 Oct 2026</div>
+    <h1>M1 is built, reviewed four ways and checked live; 0.2.0 is ready to tag</h1>
+    <p class="muted">M1 gives Claude Code a kernel that routes work to the right skill, a terse voice, a per-session autopilot grant, layered settings, and eleven guards that enforce human-in-the-loop rules in code. Every task was reviewed on its own, then the whole branch was reviewed twice, fuzzed, and put through the built-in code review. You ran the live checks today.</p>
+    <div class="statusline">
+      <span>repo <b>~/Code/projects/kern</b></span>
+      <span>main at <b>f8ba240</b></span>
+      <span>backup <b>backup/m1-wip</b></span>
+      <span>main on GitHub <b>92cecaa</b> (M0)</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="figs">
+      <div class="fig"><span class="n" id="f-bats">456</span><span class="k">bats tests on bash 3.2 and 5, all passing</span></div>
+      <div class="fig"><span class="n">71</span><span class="k">node lint and skill tests</span></div>
+      <div class="fig"><span class="n">165</span><span class="k">commits since the M0 push</span></div>
+      <div class="fig"><span class="n">196</span><span class="k">rulings in the M1 ledger</span></div>
+      <div class="fig"><span class="n">21,645</span><span class="k">fuzzed commands; none hung</span></div>
+      <div class="fig"><span class="n">1.2%</span><span class="k">of 4,000 real commands denied under autopilot</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">What M1 ships</div>
+      <h2>Six parts, all loaded by hooks rather than left to the model's memory</h2>
+    </div>
+    <div class="ships">
+      <div class="ship"><span class="tag">kernel/ · hooks/session-start</span><h3>Kernel and routing</h3><p>About 3,100 characters injected at session start and after <code>/compact</code>. A routing table sends prose work to <code>technical-writing</code>; project skills and rules outrank kern's own.</p></div>
+      <div class="ship"><span class="tag">skills/mode · modes/terse.md</span><h3>Modes and the terse voice</h3><p>Voice and surface switch only from a typed command or a prompt-initial phrase. The terse voice now answers only what was asked.</p></div>
+      <div class="ship"><span class="tag">skills/autopilot · G16</span><h3>Autopilot grant</h3><p>Only a typed <code>/kern:autopilot on</code> starts it. Every ask becomes a deny, merge and deploy stay human, and the skill states the exact commit, push and PR shapes that pass.</p></div>
+      <div class="ship"><span class="tag">hooks/lib/settings.sh</span><h3>Layered settings</h3><p>Local, project and user files. Safety lists add up across layers, and a committed project file can tighten but never turn kern off or loosen a policy.</p></div>
+      <div class="ship"><span class="tag">hooks/guards · 11 guards</span><h3>Guards that enforce the rules</h3>
+        <ul>
+          <li><b>G00</b>: under autopilot, denies commands kern cannot read</li>
+          <li><b>G1</b>: git; proven push shape only, force pushes and main-checkout changes ask or deny</li>
+          <li><b>G2 to G4</b>: draft PRs, review posting, untrusted text in bodies</li>
+          <li><b>G5, G6</b>: commit convention and attribution, secret scans</li>
+          <li><b>G13</b>: protected hosts are read-only (your V1 host)</li>
+          <li><b>G14, G15</b>: tracker and chat writes, deploys and publishes</li>
+          <li><b>G16</b>: kern state and settings, and Claude Code's own settings</li>
+        </ul>
+      </div>
+      <div class="ship"><span class="tag">skills/help · unslop · technical-writing</span><h3>Help and writing</h3><p><code>/kern:help</code> maps kern and sets a project up without touching a tracked file. <code>unslop</code> and <code>technical-writing</code> are ported from your local copy and pstack.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">How it was checked</div>
+      <h2>Five layers of review, each catching what the last one could not</h2>
+    </div>
+    <div class="pipe">
+      <div class="stage"><span class="eyebrow">per task</span><span class="n">20</span><strong>tasks reviewed</strong><span class="what">Implementer, then review, then fix rounds. Two tasks (9a, 12a) were added by review.</span></div>
+      <div class="stage"><span class="eyebrow">whole branch</span><span class="n">2</span><strong>opus reviews</strong><span class="what">Found the critical bug: a control byte made the hook print invalid JSON and drop every decision.</span></div>
+      <div class="stage"><span class="eyebrow">fuzz</span><span class="n">21,645</span><strong>mutated commands</strong><span class="what">No input hung. Found 179 invalid-JSON cases and a cubic parser.</span></div>
+      <div class="stage"><span class="eyebrow">/code-review</span><span class="n">15</span><strong>findings, all closed</strong><span class="what">Its main point: unrecognised commands got no vote. G00 is the answer.</span></div>
+      <div class="stage"><span class="eyebrow">live</span><span class="n">4 / 4</span><strong>checks pass</strong><span class="what">Mode survives <code>/compact</code>, floor holds, ask honoured under bypassPermissions.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Compared with the sources</div>
+      <h2>kern ranks first on every component it took from the four plugins</h2>
+      <p class="muted">Rank 1 is best for kern's goals: one portable workflow, gated by default, fit for strict rules like CDS. Measured against pinned copies of superpowers 6.4.1, pstack 0.15.17, mattpocock/skills 1.3.1, addyosmani/agent-skills 0.6.12 and caveman 3.2.0. A dash means the source has no counterpart.</p>
+    </div>
+    <div class="board">
+      <table class="matrix">
+        <thead><tr><th>Component</th><th>kern</th><th>superpowers</th><th>pstack</th><th>pocock</th><th>addy</th><th>caveman</th><th>Why kern leads</th></tr></thead>
+        <tbody>
+          <tr><td class="comp">Kernel and routing</td><td class="r"><span class="rk r1">1</span></td><td class="r"><span class="rk r2">2</span></td><td class="r"><span class="rk r5">5</span></td><td class="r"><span class="rk r4">4</span></td><td class="r"><span class="rk r3">3</span></td><td class="r"><span class="rk na">–</span></td><td class="why">Lowest standing cost (about 3.1k chars against superpowers' 5.8k) and the only router that ranks project skills above itself.</td></tr>
+          <tr><td class="comp">Layered settings</td><td class="r"><span class="rk r1">1</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk r3">3</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk r2">2</span></td><td class="why">No project layer can loosen the floor, and every worktree reads the same file.</td></tr>
+          <tr><td class="comp">help</td><td class="r"><span class="rk r1">1</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk r2">2</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk r3">3</span></td><td class="why">Sets a project up without touching a tracked file; pstack's poteto-help is its ancestor at nearly three times the size.</td></tr>
+          <tr><td class="comp">mode and terse voice</td><td class="r"><span class="rk r1">1</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk r2">2</span></td><td class="why">An agent's message cannot switch the voice, at a third of caveman's standing cost. caveman has the better parser and token stats.</td></tr>
+          <tr><td class="comp">autopilot</td><td class="r"><span class="rk r1">1</span></td><td class="r"><span class="rk r2">2</span></td><td class="r"><span class="rk r3">3</span></td><td class="r"><span class="rk r5">5</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk na">–</span></td><td class="why">The only grant the model cannot start and hooks bound. superpowers' executing-plans commits unasked; pstack's ralph-loop caps iterations, which kern lacks.</td></tr>
+          <tr><td class="comp">Guards</td><td class="r"><span class="rk r1">1</span></td><td class="r"><span class="rk r4">4</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk r2">2</span></td><td class="r"><span class="rk r3">3</span></td><td class="r"><span class="rk na">–</span></td><td class="why">The only source that enforces CDS-style rules in code. pocock's one guard is a 20-line grep that <code>git -C . push</code> walks past.</td></tr>
+          <tr><td class="comp">unslop</td><td class="r"><span class="rk r1">1</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk r3">3</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk na">–</span></td><td class="why">Your local catalog with no standing cost and no clash with terse; your local copy ranks 2nd.</td></tr>
+          <tr><td class="comp">technical-writing</td><td class="r"><span class="rk r1">1</span></td><td class="r"><span class="rk na">–</span></td><td class="r"><span class="rk r2">2</span></td><td class="r"><span class="rk r4">4</span></td><td class="r"><span class="rk r3">3</span></td><td class="r"><span class="rk r5">5</span></td><td class="why">pstack's standard plus steps, reached by routing; a live check showed a commit message reading it first.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Same commands, two guards</div>
+      <h2>kern against the only other pre-tool guard in the sources</h2>
+      <p class="muted">Each command was piped into pocock's <code>git-guardrails-claude-code</code> and into kern's dispatcher, with a protected host set. kern's column is at today's head.</p>
+    </div>
+    <div class="board">
+      <table class="probe">
+        <thead><tr><th>Command</th><th>pocock</th><th>kern</th></tr></thead>
+        <tbody>
+          <tr><td><code>git push origin main</code></td><td><span class="v block">block</span></td><td><span class="v ask">ask</span> G1</td></tr>
+          <tr><td><code>git -C . push origin main</code></td><td><span class="v allow">allow</span></td><td><span class="v ask">ask</span> G1</td></tr>
+          <tr><td><code>echo "do not git push"</code></td><td><span class="v ask">block</span> false positive</td><td><span class="v okallow">allow</span></td></tr>
+          <tr><td><code>gh pr merge 1</code></td><td><span class="v allow">allow</span></td><td><span class="v ask">ask</span> floor</td></tr>
+          <tr><td>ssh deletion on the protected host</td><td><span class="v allow">allow</span></td><td><span class="v deny">deny</span> G13</td></tr>
+          <tr><td><code>LOCK TABLES</code> through the tunnel port</td><td><span class="v allow">allow</span></td><td><span class="v deny">deny</span> G13</td></tr>
+          <tr><td><code>git stash</code> in the main checkout</td><td><span class="v allow">allow</span></td><td><span class="v ask">ask</span> G1</td></tr>
+          <tr><td>Write <code>Bash(*)</code> into <code>.claude/settings.local.json</code></td><td>n/a</td><td><span class="v ask">ask</span> G16, deny under autopilot</td></tr>
+          <tr><td><code>python3 -c</code> one-liner that pushes</td><td><span class="v allow">allow</span></td><td><span class="v allow">allow</span> accepted limit</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Overall</div>
+      <h2>How much each source serves kern's goals</h2>
+    </div>
+    <div class="rank">
+      <div class="rrow top"><span class="num">1</span><span class="src">kern</span><p>Enforced human gates, a read-only model for protected hosts and project-first precedence, at about 3.1k standing characters.</p></div>
+      <div class="rrow"><span class="num">2</span><span class="src">pstack</span><p>The most content: technical-writing, help, unslop's catalog and the steps idea. Cursor-native and autonomy-leaning ("i want everything merged" overnight).</p></div>
+      <div class="rrow"><span class="num">3</span><span class="src">caveman</span><p>The voice and the hook design kern's prompt and subagent hooks follow. Needs node and costs about 9.4k standing characters.</p></div>
+      <div class="rrow"><span class="num">4</span><span class="src">superpowers</span><p>The session-start delivery path and the subagent-driven process that built kern. No guards, and executing-plans commits unasked.</p></div>
+      <div class="rrow"><span class="num">5</span><span class="src">addy</span><p>The eval harness kern's route-eval adapts, and specialist skills. Its safety is prose, and its skill listing alone is 9.3k characters.</p></div>
+      <div class="rrow"><span class="num">6</span><span class="src">pocock</span><p>The one upstream guard, which a <code>-C</code> flag bypasses, and a confirm-before-write setup pattern.</p></div>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div style="display:grid; gap:12px; min-width:0">
+      <div class="sec-head">
+        <div class="eyebrow">Where a source does better</div>
+        <h2>Worth taking into M2</h2>
+      </div>
+      <div class="list">
+        <div class="item up"><span class="tag">pstack</span><p>ralph-loop enforces a stop condition and an iteration cap in a hook. kern's autopilot only asks for a stop predicate.</p></div>
+        <div class="item up"><span class="tag">caveman</span><p>Token stats and a corpus-tested switch parser. kern's terse voice is checked by one live run.</p></div>
+        <div class="item up"><span class="tag">addy</span><p>25 behavioural eval cases and an ADR shape. kern's M1 skills have text tests only.</p></div>
+        <div class="item up"><span class="tag">superpowers</span><p>Ships a Windows hook runner. kern's CI runs Linux; bash 3.2 runs only in the Mac's <code>ci-local</code>.</p></div>
+        <div class="item up"><span class="tag">kern</span><p>Kernel "ask first" items with no guard yet: a local <code>rm</code>, spend, permission changes outside settings files.</p></div>
+      </div>
+    </div>
+    <div style="display:grid; gap:12px; min-width:0">
+      <div class="sec-head">
+        <div class="eyebrow">Accepted limits</div>
+        <h2>What the guards knowingly do not catch</h2>
+      </div>
+      <div class="list">
+        <div class="item"><span class="tag">interpreters</span><p>Code in a script file, a python here-doc or a <code>python -c</code> one-liner. Shells are read; other languages are not.</p></div>
+        <div class="item"><span class="tag">aliases</span><p>Shell-snapshot aliases such as <code>gpf!</code>. M2 reads the snapshot and catches them.</p></div>
+        <div class="item"><span class="tag">config</span><p><code>GIT_CONFIG*</code> environment settings, ssh config aliases and client config files that name a host.</p></div>
+        <div class="item"><span class="tag">size</span><p>Commands over about 40 KB reach the 20-second hook timeout and are blocked. M2 parses each command once.</p></div>
+        <div class="item"><span class="tag">deploys</span><p>Package scripts such as <code>npm run deploy</code>; kern cannot see what they run.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Next</div>
+      <h2>What happens from here</h2>
+    </div>
+    <div class="next">
+      <div class="step cur"><span class="eyebrow">now</span><p>Final reviewer check and full suite on the last fix round</p></div>
+      <div class="step"><span class="eyebrow">then</span><p>Commit 0.2.0 with the live-check results, push <code>main</code>, push the <code>v0.2.0</code> tag, watch CI</p></div>
+      <div class="step"><span class="eyebrow">M2</span><p>Rule on the pre-flight findings; move new routing rows out of the kernel; catch snapshot aliases; parse each command once</p></div>
+      <div class="step"><span class="eyebrow">pilot</span><p>You run kern on two projects, one of them CDS, then superpowers goes off</p></div>
+    </div>
+  </section>
+
+  <footer>Sources: the M1 ledger at <span class="mono">.superpowers/sdd/2026-10-12-kern-m1-plan/progress.md</span>, the source comparison measured against <span class="mono">.upstream/</span>, the /code-review findings and its re-reviews, and your live-check sessions. Test counts are from <span class="mono">scripts/ci-local</span> on macOS and a Linux container.</footer>
+</div>
+
+</body></html>

@@ -1,0 +1,382 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>kern Build Progress</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one build-ledger column. Track first, then what M0 and M1 shipped, the audit, the M2 review verdict, the M2a/M2b plan side by side, and next steps. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #18202c;
+  --muted: #5b6577;
+  --line: #dde1e8;
+  --accent: #2c55c9;
+  --done: #1f8a5b;
+  --review: #b7791f;
+  --queued: #8a93a3;
+  --risk: #c2413b;
+  --accent-soft: #e4eafb;
+  --done-soft: #e3f3eb;
+  --review-soft: #fbf0dc;
+  --queued-soft: #eceef2;
+  --risk-soft: #f9e4e2;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --surface: #18202b; --ink: #e6e9ef; --muted: #9aa4b5; --line: #2a3442;
+    --accent: #7d9cf5; --done: #4cc38a; --review: #e0a948; --queued: #7c8697; --risk: #f07a73;
+    --accent-soft: #1d2847; --done-soft: #16352a; --review-soft: #3a2e17; --queued-soft: #222b37; --risk-soft: #3d1f1f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #18202b; --ink: #e6e9ef; --muted: #9aa4b5; --line: #2a3442;
+  --accent: #7d9cf5; --done: #4cc38a; --review: #e0a948; --queued: #7c8697; --risk: #f07a73;
+  --accent-soft: #1d2847; --done-soft: #16352a; --review-soft: #3a2e17; --queued-soft: #222b37; --risk-soft: #3d1f1f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 56px; display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: 0.005em; }
+h1 { font-size: clamp(28px, 4.2vw, 40px); line-height: 1.1; }
+h2 { font-size: 22px; line-height: 1.25; }
+h3 { font-size: 16px; }
+p { margin: 0; max-width: 70ch; }
+ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+li { max-width: 70ch; }
+.mono { font-family: var(--font-mono); font-size: 0.92em; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.muted { color: var(--muted); }
+code { font-family: var(--font-mono); font-size: 0.88em; background: var(--queued-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+
+header { display: grid; gap: 12px; }
+.statusline { font-family: var(--font-mono); font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.statusline b { color: var(--ink); font-weight: 500; }
+
+section { display: grid; gap: 16px; }
+.sec-head { display: grid; gap: 4px; }
+
+/* Milestone track: widths follow estimated hours */
+.track { display: grid; grid-template-columns: 5fr 12fr 23fr 14fr; gap: 6px; }
+.ms { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.ms .bar { height: 10px; border-radius: 3px; background: var(--queued-soft); overflow: hidden; display: flex; }
+.ms .bar span { display: block; height: 100%; }
+.ms .bar .d { background: var(--done); }
+.ms .bar .p { background: repeating-linear-gradient(135deg, var(--accent) 0 6px, var(--accent-soft) 6px 12px); }
+.ms .lab { display: grid; gap: 2px; min-width: 0; }
+.ms .lab strong { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+.ms .lab span { font-size: 12.5px; color: var(--muted); }
+.later { font-size: 13px; color: var(--muted); }
+@media (max-width: 680px) { .track { grid-template-columns: 1fr; gap: 14px; } }
+
+/* Numbers */
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.fig { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; align-content: start; }
+.fig .n { font-family: var(--font-display); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.fig .k { font-size: 12.5px; color: var(--muted); }
+
+/* Output inventory */
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+@media (max-width: 780px) { .cols { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.panel .tagline { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.list { display: grid; border-top: 1px solid var(--line); }
+.item { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.item .tag { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+.item p { font-size: 14px; }
+.item.sev .tag { color: var(--risk); }
+
+/* Tables */
+.board { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 600px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); background: var(--bg); }
+td.k { font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+td.sub { color: var(--muted); font-size: 13px; }
+.chip { display: inline-block; font-family: var(--font-mono); font-size: 11.5px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; font-weight: 500; }
+.chip.done { background: var(--done-soft); color: var(--done); }
+.chip.below { background: var(--risk-soft); color: var(--risk); }
+.chip.plan { background: var(--accent-soft); color: var(--accent); }
+.chip.review { background: var(--review-soft); color: var(--review); }
+
+/* Coverage stacked bars, drawn to scale: 1 mechanism = 1/58 of the widest bar */
+.cov { display: grid; gap: 10px; }
+.cov-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) 3em; gap: 12px; align-items: center; }
+.cov-row .src { font-family: var(--font-mono); font-size: 13px; }
+.cov-row .tot { font-family: var(--font-mono); font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.stack { display: flex; height: 18px; border-radius: 3px; overflow: hidden; background: var(--queued-soft); }
+.stack span { display: block; height: 100%; }
+.s-eq { background: var(--done); }
+.s-pl { background: var(--accent); }
+.s-gap { background: var(--risk); }
+.s-rej { background: var(--queued); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+/* Plan cards */
+.plan { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 780px) { .plan { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 6px; padding: 16px 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.card .meta { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.card h4 { margin: 0; font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.card .blk { display: grid; gap: 6px; }
+.card li { font-size: 14px; }
+.gate { background: var(--accent-soft); border-radius: 4px; padding: 10px 12px; font-size: 14px; }
+
+.patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.pat { border-left: 2px solid var(--risk); padding: 2px 0 2px 12px; display: grid; gap: 3px; }
+.pat strong { font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+.pat p { font-size: 13.5px; color: var(--muted); }
+
+.goal { background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; padding: 16px 18px; display: grid; gap: 8px; }
+.goal p.big { font-family: var(--font-display); font-size: 19px; line-height: 1.35; font-weight: 500; }
+
+.next { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.step { border-left: 2px solid var(--line); padding: 4px 0 4px 14px; display: grid; gap: 2px; }
+.step.cur { border-left-color: var(--accent); }
+.step .eyebrow { font-size: 11px; }
+.step p { font-size: 14px; }
+.step.cur .eyebrow { color: var(--accent); }
+
+footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">kern plugin · build report · 14 Oct 2026</div>
+    <h1>kern 0.2.1 is out; M2 is split into a build and a proof</h1>
+    <p class="muted">M0 and M1 are done and released. A source audit and a review of the M2 plan against the master goal found that M2, as written, would not beat its sources. M2 is now two milestones: M2a builds the workflow with its gates in code, and M2b proves it against superpowers, pocock and a no-plugin control.</p>
+    <div class="statusline">
+      <span>repo <b>~/Code/projects/kern</b></span>
+      <span>GitHub main <b>a2524ab</b> (CI green)</span>
+      <span>tags <b>v0.2.0</b> <b>v0.2.1</b></span>
+      <span>local, not pushed <b>7ec3bb6</b> <b>e53ad7b</b> (spec)</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Milestones · first build</div>
+      <h2>Where the build stands</h2>
+      <p class="muted">Bar widths follow the estimated hours. Hatched means planned.</p>
+    </div>
+    <div class="track" role="list">
+      <div class="ms" role="listitem">
+        <div class="bar" aria-label="M0 done"><span class="d" style="width:100%"></span></div>
+        <div class="lab"><strong>M0 · Repo and tooling</strong><span>done · 12 Oct</span></div>
+      </div>
+      <div class="ms" role="listitem">
+        <div class="bar" aria-label="M1 done"><span class="d" style="width:100%"></span></div>
+        <div class="lab"><strong>M1 · Kernel, modes, guards</strong><span>done · 0.2.0 on 13 Oct, 0.2.1 on 14 Oct</span></div>
+      </div>
+      <div class="ms" role="listitem">
+        <div class="bar" aria-label="M2a planned"><span class="p" style="width:100%"></span></div>
+        <div class="lab"><strong>M2a · Workflow build</strong><span>planned · 20–26 h · release 0.3.0</span></div>
+      </div>
+      <div class="ms" role="listitem">
+        <div class="bar" aria-label="M2b planned"><span class="p" style="width:100%"></span></div>
+        <div class="lab"><strong>M2b · Proof and pilot</strong><span>planned · 12–16 h · release 0.4.0</span></div>
+      </div>
+    </div>
+    <p class="later">After the first build: M3 review and feedback, M4 visual pages, M5 specialist skills, M6 learning loop and nightly evals. Full framework about 91–127 hours.</p>
+  </section>
+
+  <section>
+    <div class="figs">
+      <div class="fig"><span class="n">450</span><span class="k">hook tests passing on bash 3.2 and bash 5</span></div>
+      <div class="fig"><span class="n">72</span><span class="k">node lint and skill tests passing</span></div>
+      <div class="fig"><span class="n">205</span><span class="k">commits in the kern repo</span></div>
+      <div class="fig"><span class="n">11</span><span class="k">guards on every tool call</span></div>
+      <div class="fig"><span class="n">200</span><span class="k">voice-switch phrases in the test corpus</span></div>
+      <div class="fig"><span class="n">216</span><span class="k">source mechanisms audited</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Output of M0 and M1</div>
+      <h2>What exists today</h2>
+    </div>
+    <div class="cols">
+      <div class="panel">
+        <div class="tagline"><h3>M0 · Repo and tooling</h3><span class="chip done">done</span><span class="mono muted">92cecaa · 20 commits</span></div>
+        <ul>
+          <li>Private repo <code>MustaMohamed/kern</code> that is its own plugin marketplace</li>
+          <li>Plugin and marketplace manifests, MIT licence, NOTICE and upstream credits for five sources</li>
+          <li>Skill linter with 15 rules, routing evals, version check and release script</li>
+          <li>GitHub CI plus <code>scripts/ci-local</code>, which runs everything on bash 3.2 and in Ubuntu</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="tagline"><h3>M1 · Kernel, modes, guards</h3><span class="chip done">0.2.0 + 0.2.1</span><span class="mono muted">183 commits</span></div>
+        <ul>
+          <li>A 3k-character kernel loaded at every session start and into every subagent: routing, evidence rules, ask-first list</li>
+          <li>Voice modes (<code>normal</code>, <code>terse</code>) and a per-session <code>/kern:autopilot</code> that only you can turn on</li>
+          <li>Layered settings: <code>.claude/kern.local.yml</code>, a committed <code>kern.yml</code> that cannot loosen anything, and your user file</li>
+          <li>Skills: <code>mode</code>, <code>autopilot</code>, <code>help</code> with setup and check, <code>unslop</code>, <code>technical-writing</code></li>
+          <li>Live-checked with you: modes survive <code>/compact</code>, Claude cannot write its own state or merge under autopilot</li>
+        </ul>
+      </div>
+    </div>
+    <div class="board">
+      <table>
+        <thead><tr><th>Guard</th><th>What it stops</th><th>Under autopilot</th></tr></thead>
+        <tbody>
+          <tr><td class="k">G00</td><td>Commands kern cannot read: names built at run time, unparseable shell, code piped into a shell</td><td class="sub">denied</td></tr>
+          <tr><td class="k">G1</td><td>Git writes in the main checkout, force pushes, pushes to protected branches, merges</td><td class="sub">only a proven push shape passes</td></tr>
+          <tr><td class="k">G2 · G3 · G4</td><td>Non-draft or duplicate PRs, self-approval and unlabelled review comments, shell-interpolated comment bodies</td><td class="sub">draft PR after dedup</td></tr>
+          <tr><td class="k">G5 · G6</td><td>Commits off convention or with attribution, <code>git add -A</code>, secrets and <code>never_commit</code> paths</td><td class="sub">proven commit shape passes</td></tr>
+          <tr><td class="k">G13</td><td>Anything but a provable read to a protected host such as V1 production</td><td class="sub">denied in both modes</td></tr>
+          <tr><td class="k">G14 · G15</td><td>Tracker and chat writes; deploys and publishes from 76 tool names</td><td class="sub">closed allow list · denied</td></tr>
+          <tr><td class="k">G16</td><td>Writes to kern's session state and to Claude Code's own settings files</td><td class="sub">denied</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Release 0.2.1 · 14 Oct</div>
+      <h2>What the source audit and three review rounds fixed</h2>
+    </div>
+    <div class="list">
+      <div class="item sev"><span class="tag">safety</span><p>With a hook library missing, kern made no decision, so a force push to main went through unguarded. Hooks now ask, or deny under <code>bypassPermissions</code>, when any library or function fails to load.</p></div>
+      <div class="item sev"><span class="tag">voice</span><p>The first fix made 27 everyday prompts switch the voice, such as "use terse variable names". Under the stop rule it was redesigned: a switch fires only when the phrase stands alone on the first line. 200 cases test it.</p></div>
+      <div class="item"><span class="tag">quiet</span><p>Scheduled-task prompts get no mode line or terse reminder.</p></div>
+      <div class="item"><span class="tag">tidy</span><p>Session state files untouched for 30 days are removed at session start.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Master goal · design spec goal 0</div>
+      <h2>Kern must beat each source in its own category</h2>
+    </div>
+    <div class="goal">
+      <p class="big">For each category of work, kern is at least as strong as the strongest of its five sources, with the strongest mechanism enforced in code where code can.</p>
+      <p class="muted">Measured three ways: a coverage re-audit at each milestone close that counts only built and tested work, head-to-head evals on seeded fixtures for planning, debugging and review, and side-by-side pilot runs against superpowers.</p>
+    </div>
+    <div class="panel">
+      <div class="tagline"><h3>Source coverage audit</h3><span class="muted" style="font-size:13px">216 mechanisms from five sources and your own local skills, mapped to kern</span></div>
+      <div class="legend">
+        <span><i class="s-eq"></i>kern equal or better (79)</span>
+        <span><i class="s-pl"></i>planned in a milestone (61)</span>
+        <span><i class="s-gap"></i>gap, now homed (34)</span>
+        <span><i class="s-rej"></i>rejected with a reason (42)</span>
+      </div>
+      <div class="cov" role="list">
+        <div class="cov-row" role="listitem"><span class="src">pstack</span><div class="stack" style="width:100%" aria-label="pstack: 20 equal, 16 planned, 12 gaps, 10 rejected"><span class="s-eq" style="width:34.48%"></span><span class="s-pl" style="width:27.59%"></span><span class="s-gap" style="width:20.69%"></span><span class="s-rej" style="width:17.24%"></span></div><span class="tot">58</span></div>
+        <div class="cov-row" role="listitem"><span class="src">addy</span><div class="stack" style="width:77.59%" aria-label="addy: 14 equal, 17 planned, 5 gaps, 9 rejected"><span class="s-eq" style="width:31.11%"></span><span class="s-pl" style="width:37.78%"></span><span class="s-gap" style="width:11.11%"></span><span class="s-rej" style="width:20%"></span></div><span class="tot">45</span></div>
+        <div class="cov-row" role="listitem"><span class="src">caveman</span><div class="stack" style="width:65.52%" aria-label="caveman: 17 equal, 3 planned, 11 gaps, 7 rejected"><span class="s-eq" style="width:44.74%"></span><span class="s-pl" style="width:7.89%"></span><span class="s-gap" style="width:28.95%"></span><span class="s-rej" style="width:18.42%"></span></div><span class="tot">38</span></div>
+        <div class="cov-row" role="listitem"><span class="src">superpowers</span><div class="stack" style="width:60.34%" aria-label="superpowers: 15 equal, 7 planned, 4 gaps, 9 rejected"><span class="s-eq" style="width:42.86%"></span><span class="s-pl" style="width:20%"></span><span class="s-gap" style="width:11.43%"></span><span class="s-rej" style="width:25.71%"></span></div><span class="tot">35</span></div>
+        <div class="cov-row" role="listitem"><span class="src">pocock</span><div class="stack" style="width:60.34%" aria-label="pocock: 11 equal, 16 planned, 1 gap, 7 rejected"><span class="s-eq" style="width:31.43%"></span><span class="s-pl" style="width:45.71%"></span><span class="s-gap" style="width:2.86%"></span><span class="s-rej" style="width:20%"></span></div><span class="tot">35</span></div>
+        <div class="cov-row" role="listitem"><span class="src">local</span><div class="stack" style="width:8.62%" aria-label="local: 2 equal, 2 planned, 1 gap"><span class="s-eq" style="width:40%"></span><span class="s-pl" style="width:40%"></span><span class="s-gap" style="width:20%"></span></div><span class="tot">5</span></div>
+      </div>
+      <p class="muted" style="font-size:13.5px">The 34 gaps now have homes: 4 shipped in 0.2.1, 13 in M2a, 2 in M2b, 7 in M3, 5 in M5, 3 in M6. Rejections cite a goal, for example "merge everything overnight" conflicts with gated-by-default.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">M2 plan review against goal 0</div>
+      <h2>As written, every M2 workflow category fell below its strongest source</h2>
+      <p class="muted">Three read-only reviewers compared each category with the strongest source mechanism. Infrastructure held up; the workflow skills did not.</p>
+    </div>
+    <div class="board">
+      <table>
+        <thead><tr><th>Category</th><th>Strongest source</th><th>Verdict</th><th>Biggest gap, now planned as a fix</th></tr></thead>
+        <tbody>
+          <tr><td>define · plan</td><td class="sub">superpowers brainstorming and writing-plans, pstack check-plan</td><td><span class="chip below">below</span></td><td>Approval is self-claimed; plan ordering is checked by hand</td></tr>
+          <tr><td>execute-plan</td><td class="sub">superpowers subagent-driven development</td><td><span class="chip below">below</span></td><td><code>task-done</code> stamped a review that never happened</td></tr>
+          <tr><td>implement · prove-it</td><td class="sub">superpowers TDD and verification, addy</td><td><span class="chip below">below</span></td><td><code>probe</code> passed when the patch deleted the test</td></tr>
+          <tr><td>diagnose · self-review</td><td class="sub">pocock diagnosing-bugs and code-review, pstack blast-radius</td><td><span class="chip below">below</span></td><td>Dropped mechanisms; no spec check; no seeded eval</td></tr>
+          <tr><td>commit · finish-branch</td><td class="sub">addy git workflow, superpowers finishing</td><td><span class="chip below">below</span></td><td>Skill text conflicts with kern's own G2 and G5</td></tr>
+          <tr><td>routing · evals · pilot</td><td class="sub">addy eval runner, caveman eval isolation</td><td><span class="chip below">below</span></td><td>No comparison with any source; evals ran on your own config</td></tr>
+          <tr><td>worktrees · snapshots · agents</td><td class="sub">superpowers scripts and prompts</td><td><span class="chip done">meets or exceeds</span></td><td>Commit-free snapshots and forks beat the source</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="patterns">
+      <div class="pat"><strong>Gates in prose</strong><p>Approval, review, RED and plan ordering were trusted, not checked.</p></div>
+      <div class="pat"><strong>Silent drops</strong><p>About 9 kept mechanisms never reached the plan.</p></div>
+      <div class="pat"><strong>Text vs guards</strong><p>Commit files and PR flags that kern's own guards would deny.</p></div>
+      <div class="pat"><strong>No comparison</strong><p>Nothing measured kern against a source.</p></div>
+      <div class="pat"><strong>Eval validity</strong><p>False passes and results thrown away.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Plan · your call: split M2</div>
+      <h2>M2a builds the workflow; M2b proves it beats the sources</h2>
+    </div>
+    <div class="plan">
+      <div class="card">
+        <div><h3>M2a · Workflow build</h3><div class="meta"><span>20–26 h</span><span>release 0.3.0</span><span class="chip plan">planned</span></div></div>
+        <div class="blk"><h4>Output</h4>
+          <ul>
+            <li>11 skills: define, plan, execute-plan, parallel-work, implement, diagnose, prove-it, self-review, commit, finish-branch, recall</li>
+            <li>3 agents: implementer, task-reviewer, read-only investigator (guard G18)</li>
+            <li>Worktree scripts: <code>wt-new</code>, <code>wt-fork</code>, <code>wt-snap</code>, <code>wt-diff</code>, <code>wt-apply</code>, <code>wt-audit</code></li>
+            <li>Check scripts: floor-scan, claim checks, the fail-then-pass <code>probe</code>, <code>plan-check</code> with task-graph checks</li>
+          </ul>
+        </div>
+        <div class="blk"><h4>Gates moved into code</h4>
+          <ul>
+            <li><code>task-done</code> refuses a tree nobody reviewed</li>
+            <li><code>ledger-open</code> refuses an unapproved plan or someone else's ledger</li>
+            <li>An approval counts only if the quote matches a real prompt from you</li>
+            <li>Commit and PR steps use the exact shapes G2 and G5 prove</li>
+          </ul>
+        </div>
+        <div class="gate"><strong>Done when</strong> every skill's tests pass, including commit and PR runs against a fake <code>gh</code>, and an unreviewed task cannot close.</div>
+      </div>
+      <div class="card">
+        <div><h3>M2b · Proof and pilot</h3><div class="meta"><span>12–16 h</span><span>release 0.4.0</span><span class="chip plan">planned</span></div></div>
+        <div class="blk"><h4>Output</h4>
+          <ul>
+            <li>Behaviour eval runner and an isolated adherence grader with negative cases, snapshots committed</li>
+            <li>Head-to-head suites with hidden answer keys, 3 runs per arm, graded blind</li>
+            <li>Coverage re-audit of every M2 row, each citing the test that pins it</li>
+            <li>Measured standing cost, kept within about 1.2k tokens per session</li>
+            <li>Side-by-side pilot on two projects, one of them cds-app-rewrite</li>
+          </ul>
+        </div>
+        <div class="board" style="border-radius:4px">
+          <table style="min-width:420px">
+            <thead><tr><th>Category</th><th>Seeded fixtures</th><th>Arms</th></tr></thead>
+            <tbody>
+              <tr><td>Planning</td><td class="sub">Specs with hidden traps: shared files, a second writer, ambiguity</td><td class="sub">kern, superpowers, no plugin</td></tr>
+              <tr><td>Debugging</td><td class="sub">Repos where the root cause sits away from the symptom</td><td class="sub">kern, superpowers, pocock, no plugin</td></tr>
+              <tr><td>Review</td><td class="sub">A branch with 6 seeded bugs and 3 decoys, plus 20 labelled diffs</td><td class="sub">kern, superpowers, pocock</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="gate"><strong>Done when</strong> kern finds at least as many key items as the strongest arm in each category, with no more false alarms, and you rate it at least equal to superpowers on the same pilot tasks. Then superpowers is switched off.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Next</div>
+      <h2>What happens from here</h2>
+    </div>
+    <div class="next">
+      <div class="step cur"><span class="eyebrow">needs you</span><p>Run <code>/add-dir /Users/musta/Code/projects/kern</code>, then say go</p></div>
+      <div class="step"><span class="eyebrow">then</span><p>One planner writes the M2a and M2b plans, checked against today's code</p></div>
+      <div class="step"><span class="eyebrow">then</span><p>Pre-flight on the new and changed tasks; you review the plans</p></div>
+      <div class="step"><span class="eyebrow">then</span><p>M2a Task 1, built subagent-driven like M1</p></div>
+    </div>
+  </section>
+
+  <footer>Sources: the M1 ledger <span class="mono">.superpowers/sdd/2026-10-12-kern-m1-plan/progress.md</span>, <span class="mono">docs/specs/coverage.md</span>, the reviews in <span class="mono">docs/research/</span>, and <span class="mono">git log</span> in the kern repo. Hour figures are estimates from the design spec.</footer>
+</div>
+
+</body></html>

@@ -1,0 +1,172 @@
+1..30
+ok 1 gpf! origin main is denied like git push --force, in both modes
+ok 2 gp to a protected branch asks even with push.policy auto
+ok 3 each alias is judged exactly like its expansion
+ok 4 the head word is found after assignments and in every simple command of a chain
+ok 5 a quoted or escaped head word, or an alias in argument position, is not expanded
+ok 6 an alias to a command that is not git or gh is unaffected
+ok 7 a missing or unreadable snapshot changes nothing
+ok 8 malformed alias lines are ignored and the lines after them still count
+ok 9 the newest snapshot is read
+ok 10 the head word is found after zsh's reserved words and redirections, as zsh finds it
+ok 11 command, builtin, noglob, exec and - are not followed, as zsh does not expand after them
+ok 12 the original command still counts: an alias cannot hide a git or gh word
+ok 13 an alias command is never allowed unattended, and the investigator still may not run one
+ok 14 alias names are encoded one to one, and a chain, a cycle and a self-reference resolve
+not ok 15 snapshot text is never run: substitutions, backticks, ; and newlines stay inert
+# (in test file tests/hooks/aliases.bats, line 223)
+#   `[ -z "$output" ] || { echo "ran: $output"; return 1; }' failed
+# ran: h1
+# h2
+# h3
+# h9
+ok 16 a missing, empty or unparseable snapshot gives exactly the output of a hook with no aliases
+ok 17 CRLF, NUL bytes, a long line and 10,000 aliases leave the hook working
+ok 18 aliases.sh never aborts a shell under set -eu, and never sets a name outside _KA_
+ok 19 a _KA_ variable from the environment is never an alias
+ok 20 an alias is not skipped by a guard that reads the command text first, and without a snapshot nothing changes
+ok 21 an alias whose value ends in a space expands the word after it, as zsh does, 8 times, then fails closed
+ok 22 an assignment with a quote or $ before the alias does not hide it
+ok 23 git_words prints the command's own records as without aliases, then each expansion after all of them
+not ok 24 with aliases loaded, no command gets a weaker decision than without them, in both modes, a forged cache included
+# (in test file tests/hooks/aliases.bats, line 443)
+#   `{ printf '%s, %s, %s:\nwithout: %s\nwith:    %s\n' "$mode" "$s" "$c" "$want" "$got"; return 1; }' failed
+# off, omz, gp -u origin feat:
+# without:
+# with:
+# BATS_GUARANTEED_MINIMUM_VERSION=0.0.0
+# LDFLAGS=-L/opt/homebrew/opt/ruby/lib
+# CLAUDE_CODE_MESSAGING_TOKEN=f97a36ded15fc7319579b743488b6c0a
+# BATS_RUNLOG_FILE=/dev/null
+# NoDefaultCurrentDirectoryInExePath=1
+# CLAUDE_EFFORT=xhigh
+# WARP_CLI_AGENT_PROTOCOL_VERSION=1
+# TERM_PROGRAM=WarpTerminal
+# CLAUDE_CODE_BRIDGE_SESSION_ID=session_014cQK1BPpR2rA5TarYqk6dv
+# ANDROID_HOME=/Users/musta/Library/Android/sdk
+# SHELL=/bin/zsh
+# WARP_HONOR_PS1=0
+# TERM=xterm-256color
+# BATS_LINE_REFERENCE_FORMAT=comma_line
+# BATS_TEST_RETRIES=0
+# CLAUDE_CODE_CHILD_SESSION=1
+# CLAUDE_PID=9306
+# TMPDIR=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/
+# CPPFLAGS=-I/opt/homebrew/opt/ruby/include
+# HOMEBREW_REPOSITORY=/opt/homebrew
+# BATS_RUN_TMPDIR=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs
+# BATS_LIBDIR=lib
+# WARP_PROMPT_NODE_VERSION_ENABLED=1
+# GIT_CONFIG_VALUE_0=false
+# BATS_WARNING_FILE=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/warnings.log
+# TERM_PROGRAM_VERSION=v0.2026.10.07.08.29.stable_00
+# WARP_TERMINAL_SESSION_UUID=77ee791e37d34c71957dc4912351d5fa
+# CCGUI_CLI_LOGIN_AUTHORIZED=1
+# YARN_IGNORE_NODE=1
+# GIT_CONFIG_VALUE_1=/dev/null
+# KERN_ROOT=/private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/mut3-source
+# FPATH=/Users/musta/.oh-my-zsh/plugins/git:/Users/musta/.oh-my-zsh/functions:/Users/musta/.oh-my-zsh/completions:/Users/musta/.oh-my-zsh/custom/functions:/Users/musta/.oh-my-zsh/custom/completions:/Users/musta/.oh-my-zsh/cache/completions:/opt/homebrew/share/zsh/site-functions:/usr/local/share/zsh/site-functions:/usr/share/zsh/site-functions:/usr/share/zsh/5.9/functions
+# NODE_OPTIONS=--openssl-legacy-provider
+# ANDROID_SDK_ROOT=/Users/musta/Library/Android/sdk
+# VOLTA_HOME=/Users/musta/.volta
+# BATS_LIB_PATH=/usr/lib/bats
+# BATS_END_CODE_QUOTE='
+# BATS_TMPDIR=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T
+# ZSH=/Users/musta/.oh-my-zsh
+# BATS_ROOT=/Users/musta/.local
+# AI_AGENT=claude-code_2-1-300_agent
+# GIT_EDITOR=true
+# BATS_SUITE_TMPDIR=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/suite
+# USER=musta
+# LS_COLORS=di=1;36:ln=35:so=32:pi=33:ex=31:bd=34;46:cd=34;43:su=30;41:sg=30;46:tw=30;42:ow=30;43
+# BATS_CWD=/private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/mut3-source
+# COMMAND_MODE=unix2003
+# KERN_MAIN=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/test/24/repo
+# BATS_ROOT_PID=32167
+# HOMEBREW_CORE_GIT_REMOTE=/https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/homebrew-core.git
+# SSH_AUTH_SOCK=/var/run/com.apple.launchd.vT2zTDsFTo/Listeners
+# CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+# BATS_TEMPDIR_CLEANUP=1
+# WARP_SSH_REUSE_CONTROL_MASTER=0
+# WARP_IS_LOCAL_SHELL_SESSION=1
+# __CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0
+# WARP_USE_SSH_WRAPPER=1
+# PAGER=less
+# LSCOLORS=Gxfxcxdxbxegedabagacad
+# CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000
+# BATS_RUN_LOGS_DIRECTORY=
+# PATH=/Users/musta/.local/libexec/bats-core:/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/tmp.W8LTmIWmT7:/Users/musta/.bun/bin:/Users/musta/.local/bin:/Users/musta/.antigravity/antigravity/bin:/Users/musta/.volta/bin:/opt/homebrew/opt/ruby/bin:/Users/musta/.bun/bin:/Applications/Docker.app/Contents/Resources/bin:/Users/musta/bin:/usr/local/bin:/Library/Frameworks/Python.framework/Versions/3.7/bin:/Users/musta/.volta/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/Library/Apple/usr/bin:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/Users/musta/Library/Application Support/JetBrains/Toolbox/scripts:/Users/musta/.dotnet/tools:/Users/musta/Library/Android/sdk/emulator:/Users/musta/Library/Android/sdk/tools:/Users/musta/Library/Android/sdk/tools/bin:/Users/musta/Library/Android/sdk/platform-tools:/Users/musta/Library/Android/sdk/cmdline-tools/latest/bin:/Applications/Warp.app/Contents/Resources/bin
+# ENABLE_LSP_TOOL=true
+# CLAUDE_CODE_VERSION=2.1.296 (Claude Code)
+# GIT_CONFIG_KEY_0=core.fsmonitor
+# __CFBundleIdentifier=dev.warp.Warp-Stable
+# GIT_CONFIG_KEY_1=core.hooksPath
+# KERN_GUARDS=
+# DOTNET_ROOT=/usr/local/share/dotnet
+# PWD=/tmp
+# BATS_TEST_NUMBER=24
+# JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
+# P9K_SSH=0
+# CLAUDE_PLUGIN_ROOT=/private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/mut3-source
+# BATS_FILE_TMPDIR=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/file/1
+# LANG=C.UTF-8
+# GIT_CONFIG_COUNT=2
+# WARP_FOCUS_URL=warp://session/77ee791e37d34c71957dc4912351d5fa
+# BATS_SAVED_PATH=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/tmp.W8LTmIWmT7:/Users/musta/.bun/bin:/Users/musta/.local/bin:/Users/musta/.antigravity/antigravity/bin:/Users/musta/.volta/bin:/opt/homebrew/opt/ruby/bin:/Users/musta/.bun/bin:/Applications/Docker.app/Contents/Resources/bin:/Users/musta/bin:/usr/local/bin:/Library/Frameworks/Python.framework/Versions/3.7/bin:/Users/musta/.volta/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/Library/Apple/usr/bin:/usr/local/share/dotnet:~/.dotnet/tools:/usr/local/go/bin:/Users/musta/Library/Application Support/JetBrains/Toolbox/scripts:/Users/musta/.dotnet/tools:/Users/musta/Library/Android/sdk/emulator:/Users/musta/Library/Android/sdk/tools:/Users/musta/Library/Android/sdk/tools/bin:/Users/musta/Library/Android/sdk/platform-tools:/Users/musta/Library/Android/sdk/cmdline-tools/latest/bin:/Applications/Warp.app/Contents/Resources/bin
+# XPC_FLAGS=0x0
+# BATS_TEST_NAME=test_with_aliases_loaded-2c_no_command_gets_a_weaker_decision_than_without_them-2c_in_both_modes-2c_a_forged_cache_included
+# BATS_TEST_DESCRIPTION=with aliases loaded, no command gets a weaker decision than without them, in both modes, a forged cache included
+# BATS_TEST_SOURCE=/private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/mut3-source/tests/hooks/aliases.bats
+# CLAUDE_CODE_SESSION_ATTENDED=1
+# BATS_BEGIN_CODE_QUOTE=`
+# XPC_SERVICE_NAME=0
+# BATS_SUITE_TEST_NUMBER=24
+# BATS_OUT=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/test/24.out
+# HOME=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/test/24/home
+# SHLVL=7
+# HOMEBREW_BREW_GIT_REMOTE=/https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/brew.git
+# CWD=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/test/24/wt
+# BATS_LIBEXEC=/Users/musta/.local/libexec/bats-core
+# ANDROID_AVD_HOME=/Users/musta/.android/avd
+# CLAUDE_CODE_EXECPATH=/Users/musta/.local/share/claude/versions/2.1.300
+# HOMEBREW_PREFIX=/opt/homebrew
+# BATS_TEST_FILENAME=/private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/mut3-source/tests/hooks/aliases.bats
+# LESS=-R
+# LOGNAME=musta
+# BATS_VERSION=1.14.0
+# LC_CTYPE=UTF-8
+# KERN_SHELL_SNAPSHOT=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/test/24/omz.sh
+# BATS_RUN_ERREXIT=
+# COREPACK_ENABLE_AUTO_PIN=0
+# SSH_SOCKET_DIR=~/.ssh
+# BATS_TEST_TMPDIR=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/test/24
+# BUN_INSTALL=/Users/musta/.bun
+# BATS_TEST_FILE_NUMBER=1
+# CLAUDE_CODE_SESSION_ID=f869eca6-5423-48df-a8fd-cb9929a686e0
+# WARP_CLIENT_VERSION=v0.2026.10.07.08.29.stable_00
+# INFOPATH=/opt/homebrew/share/info:
+# HOMEBREW_CELLAR=/opt/homebrew/Cellar
+# _P9K_SSH_TTY=/dev/ttys000
+# OSLogRateLimit=64
+# CLAUDE_PLUGIN_DATA=/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-k65zKs/test/24/data
+# CONDA_CHANGEPS1=false
+# CLAUDE_CODE_MESSAGING_SOCKET=/tmp/cc-socks/9306.sock
+# CLAUDECODE=1
+# COLORTERM=truecolor
+# BASH_FUNC_bats_readlinkf%%=() {  readlink -f "$1"
+# }
+# OLDPWD=/
+# _=/usr/bin/env
+# /
+ok 25 past 8 trailing-space words the marker is a record of its own, so expansions through nocorrect, watch or a wrapper's value still fail closed
+ok 26 the head search keeps each $( )'s own quotes, so a quote or a parenthesis inside one does not hide the alias
+not ok 27 the parsed alias table is cached in the state dir, and the next call reads the cache
+# (in test file tests/hooks/aliases.bats, line 528)
+#   `[ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }' failed
+#
+ok 28 a cache is rebuilt when the snapshot's path, size or modification time changes
+not ok 29 a forged cache is data: substitutions and backticks in it run nothing, and lines without a hex name are skipped
+# (in test file tests/hooks/aliases.bats, line 568)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+ok 30 a cache that cannot be written, or a symlinked cache or state dir, changes nothing
+EXIT=1

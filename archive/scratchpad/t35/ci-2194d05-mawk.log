@@ -1,0 +1,210 @@
+awk: mawk 1.3.4 20240123
+bash: 5.2.21(1)-release
+1000
+1..189
+ok 1 git_words splits chains and keeps quoted separators
+ok 2 git_words also prints the bodies of bash -c, eval, $( ) and backticks
+ok 3 git and gh are seen behind shells, wrappers, groups and keywords
+ok 4 a shell's -c is read in a cluster of any case, after options, -- or -, and value long options
+ok 5 zsh's --emulate takes the next word, so the -c after it is read
+ok 6 a redirection among a shell's options is not its script
+ok 7 env -S splits its line with quotes, as env does
+ok 8 a shell that runs a -c script reads its here-doc as data, in any cluster form
+ok 9 git is seen behind wrapper options, env -S, shell options, timeout and nice
+ok 10 git is seen after zsh's noglob, nocorrect, coproc and repeat with its count, and in an eval or a shell after them
+ok 11 a leading redirection is not the command name
+ok 12 a << inside quotes in $( ) hides nothing
+ok 13 a shell reading a here-doc runs its body: the body stays as records
+ok 14 a shell here-doc after a closed $( ) keeps its body
+ok 15 a << inside a top-level (( )) is not a here-doc
+ok 16 a << inside ${ }, $[ ], $(( )) or a NAME[ ] subscript is not a here-doc
+ok 17 a here-doc after a closed ${ } or subscript, or inside $( ) in one, is still a here-doc
+ok 18 a # after an escaped separator is not a comment; after a line continuation it is
+ok 19 a here-string is not a here-doc
+ok 20 the commit form with a here-doc message gives one git segment, and the message is data
+ok 21 here-doc bodies are skipped, and the commands after them are still seen
+ok 22 a quoted multi-line argument stays in its record
+ok 23 a 1,000-line here-doc runs through git_words in under a second
+ok 24 a backslash-newline is dropped, not read as a space
+ok 25 quoted parentheses stay inside their word
+ok 26 redirections never split a command
+ok 27 git_sub reads -C, skips env and global options
+ok 28 git_sub skips each global option of git 2.54, and the next word where it takes a value
+ok 29 gh_sub, word_value and word_has
+ok 30 current_branch reads HEAD by symbolic-ref, past a tag of the same name
+ok 31 push_targets: refspecs, deletes and the current branch
+ok 32 push_targets skips redirections
+ok 33 _shell_words: a word that starts with an unquoted # is a comment to the newline
+ok 34 _shell_words: a # inside a word, quoted or escaped is kept
+ok 35 _shell_words splits a redirection from the word before it
+ok 36 push_targets: a redirection glued to the branch, and @
+ok 37 a committed base_branch adds a protected branch; origin/HEAD, or else main and the like, stay protected
+ok 38 push_targets prints * for every-branch pushes, and * is protected
+ok 39 push_targets strips heads/ and reads deletes
+ok 40 with_timeout returns promptly when the command finishes
+ok 41 with_timeout stops a slow command and its children
+ok 42 git is seen behind wrapper long options that take a value
+ok 43 git is seen after an append assignment, an attached env -S line, and a wrapper or shell in another case
+ok 44 Write under the sessions dir is denied in both modes
+ok 45 Edit of another file: no vote
+ok 46 a .. path into the sessions dir is denied
+ok 47 an upper-cased path to the sessions dir is denied
+ok 48 a symlinked dir that resolves to the sessions dir is denied
+ok 49 a Bash write into the sessions dir is denied
+ok 50 every Bash write shape against session state is denied
+ok 51 any command but a reader that names a state path is denied
+ok 52 a glob that matches the state file once ~ is expanded is denied
+ok 53 plain reads, git commands and messages naming state or settings: no vote
+ok 54 a shell reading a here-doc runs its body as commands
+ok 55 a # that bash does not read as a comment hides no state write
+ok 56 a misread << hides no state write
+ok 57 a double-quoted state target is denied
+ok 58 reads of a state file, and a commit message naming one: no vote
+ok 59 the session id counts only as the state file name: scratchpad writes pass
+ok 60 reads of session state: no vote
+ok 61 a Monitor command writing the state file is denied
+ok 62 a scheduled prompt or relayed message carrying /kern:autopilot is denied
+ok 63 relayed text that opens with a mode or autopilot command is denied
+ok 64 relayed text that only mentions a mode command: no vote
+ok 65 a RemoteTrigger whose nested body carries a kern command is denied; a list passes
+ok 66 a scheduled prompt without kern commands: no vote
+ok 67 a Skill call to the mode or autopilot skill is denied; other skills pass
+ok 68 a write to a kern settings file asks, and denies under autopilot
+ok 69 reading a kern settings file: no vote
+ok 70 a command that names neither state nor settings costs G16 no lower-casing; any case still counts
+ok 71 a settings path spelled with ., .. or // or split by quotes is still a settings path
+ok 72 a copy, move or link into a .claude directory is a settings write
+ok 73 a write to Claude Code's own settings asks, and denies under autopilot; plain reads get no vote
+ok 74 settings files and .claude directories follow the state model: any head but a reader asks
+ok 75 a cd whose target kern cannot know keeps the .claude and sessions-dir reading; under autopilot it is denied
+ok 76 a relative cd is followed as text: one that comes back into a .claude directory is in it again
+ok 77 a cd that can go back (-, ~-, +N, popd, $X) takes back the reading an earlier cd in the command cleared
+ok 78 a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd after one keeps the reading
+ok 79 only a plain cd is followed: one behind a modifier, a reserved word or a wrapper keeps the reading
+ok 80 a quoted or escaped assignment or redirect before a cd is a command name, so the cd is not plain
+ok 81 an upper-case CD runs /usr/bin/cd on macOS and does not move, so it keeps the reading
+ok 82 git reads only through its read-only subcommands; any other git naming settings or .claude asks
+ok 83 a settings write under a directory with a space asks; only a message option's text is read as a sentence
+ok 84 a command that reads but can run code, and names a hook or state_set, asks; under autopilot it is denied
+ok 85 a glob, brace or zsh group after hooks/ that could name a hook asks; under autopilot it is denied
+ok 86 running, sourcing or reading a hook, or calling a state function, asks; under autopilot it is denied
+ok 87 a hooks directory named elsewhere in the command, or reached by a glob, makes a hook's bare name ask
+ok 88 a command that names no kern hook, such as a hook's test file, gets no hook vote
+ok 89 inside a hooks directory a bare hook name, or a glob that could match one, asks
+ok 90 when awk cannot read the command for kern's hook code, G16 fails closed
+ok 91 when awk fails on one reading and no reading hits, G16 fails closed in both modes
+ok 92 when awk fails on one reading and another reading hits, G16 asks with its own reason; under autopilot it is denied
+ok 93 a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied
+ok 94 an escaped backslash, or a backslash before CR LF, does not join the lines; the next line still asks
+ok 95 a hooks directory on one line and a hook on the next still ask, as they did before lines were joined
+ok 96 the APFS case folds of s and k inside a hook path are read as s and k; asks, and under autopilot is denied
+ok 97 a brace group that spans a slash asks, and under autopilot is denied
+ok 98 the APFS case folds of s and k in a settings or state path get the vote of the ASCII spelling
+ok 99 P1 two Edits: an invented quote while draft, then the status flip
+ok 100 P1b two Edits: a real quote while draft, then the flip, is changed after the message
+ok 101 P2 non-answers with a final question mark or comma
+ok 102 P3 a quote with no hash matches no record, recorded or empty
+ok 103 P4 an empty prompt replaces the last one's lines
+ok 104 P5 frontmatter forms G20 reads as approved
+ok 105 P6 a CRLF file and a multi-line old_string
+ok 106 P6b a CRLF Write
+ok 107 P7 a second frontmatter block is read by neither G20 nor ledger-open
+ok 108 P8 a byte order mark and blanks after the opening ---
+ok 109 P9 an Edit with an empty old_string writes a new file
+ok 110 P10 a Markdown name in another case
+ok 111 P11 curly quotes in the file, straight ones in old_string
+ok 112 P12 a user line that holds double quotes can be quoted whole
+ok 113 P13 perl in place, in any option form
+ok 114 P14 python -c and node -e with the path inside the code
+ok 115 P15 python reading its script from a here-doc
+ok 116 P16 tee, a here-doc, printf, sudo and env
+ok 117 P17 cp, cat, tee, dd, ln, rsync, install, git mv and a two-step mv from a prepared file
+ok 118 P18 cp of a prepared Markdown file into the specs directory
+ok 119 P19 a glob, find -exec, xargs and a loop variable, with approved in the command
+ok 120 P20 the word split by quotes or in capitals
+ok 121 P21 a shell write to an approved file without the word
+ok 122 P21b a write after a cd behind noglob, nocorrect, repeat or coproc is judged from both directories
+ok 123 P21c a cd with a modifier word after its name, in a redirect or an assignment, still moves
+ok 124 P21d a cd behind a wrapper, a reserved word or a modifier chain: G20 judges from both directories
+ok 125 P21e a quoted or escaped assignment or redirect before a cd is a command name: G20 judges from both directories
+ok 126 P21f a cd that can go back (-, ~-, +N, $OLDPWD, popd) or a builtin cd: G20 judges from every directory it may be in
+ok 127 P21g G20 follows up to 16 directories; past that a relative write is denied, a read is not
+ok 128 P21h 110 Markdown writes after four maybe cds, 16 directories, are judged in under 10 s
+ok 129 P22 reads and kern's own scripts get no G20 vote
+ok 130 P23 accepted limit: a new file has no draft to be older than the message
+ok 131 P24 the quote comes from the first approved: line
+ok 132 P25 a quote over 500 characters matches nothing
+ok 133 P26 a prompt that starts with a system-reminder replaces the user's lines
+ok 134 P27 a byte order mark before the first ---
+ok 135 P28 bash -c, eval, command substitution, a path with a space, perl -0777
+ok 136 P29 Monitor is read as Bash
+ok 137 P30 an approved file approved again with a fresh real quote
+ok 138 P31 accepted limit: a teammate message wrapped() misses counts as the user's
+ok 139 P32 a write through a non-Markdown symlink to a spec
+ok 140 P33 option clusters tell the script from the files
+ok 141 P34 accepted false deny: perl inline code that reads, with approved and a Markdown name
+ok 142 P35 accepted limit: a script run by name is not seen
+ok 143 C1 a --- with trailing blanks closes the frontmatter for G20, ledger-open and plan-check alike
+ok 144 C1 a --- with a CR closes the frontmatter for G20, ledger-open and plan-check alike
+ok 145 C1 an opening --- with trailing blanks: G20 denies the approval ledger-open would accept
+ok 146 I2 sed deleting a closing --- turns staged body lines into frontmatter
+ok 147 I2 tail of a staged file whose first line is not --- into a plan
+ok 148 I3 running kern's prompt-submit to forge the user's message asks G16, and is denied under autopilot
+ok 149 I3 sourcing kern's state library to call state_set asks G16, and is denied under autopilot
+ok 150 N1 negations are not a yes
+ok 151 N2 an Edit whose old_string is not in the file, writing a status line, fails closed
+ok 152 N3 the changed-after message says how to approve
+ok 153 a quote of the user's last message approves
+ok 154 a quote with other spacing and case still matches the same line
+ok 155 one whole line of a longer message approves; part of a line does not
+ok 156 an invented quote is denied
+ok 157 sounds good and whatever you think are not a yes
+ok 158 a quote from an earlier message, or from a wrapped one, is denied
+ok 159 a draft changed after the user's message is denied
+ok 160 a missing approved: quote is denied
+ok 161 under autopilot even a real quote is denied
+ok 162 other files and draft edits get no G20 vote
+ok 163 a Bash write of approved into a spec is denied; a read is not
+ok 164 a Write of a new plan with a real quote approves
+ok 165 an Edit of draft to approved is checked though new_string has no status line
+ok 166 an Edit that changes the approved: line of an approved file is checked
+ok 167 replace_all is honoured when the edit is applied
+ok 168 an approved file edited below its frontmatter gets no vote
+ok 169 a Markdown file outside the work dir is checked too
+ok 170 gawk -i inplace, and cp or mv of an approved file onto a spec, are denied
+ok 171 prompt_hashes folds case, blanks and a final . or !, one hash per line
+ok 172 the dispatcher lists g20 among the guards it expects
+ok 173 input the dispatcher cannot read gives ask
+ok 174 under autopilot, unreadable input that names its session gives deny
+ok 175 under autopilot, input with no readable session id still never allows
+ok 176 a deny and an ask in one call: deny wins and only deny reasons print
+ok 177 a reason that echoes control bytes still prints JSON that parses
+not ok 178 a 10 KB UTF-8 assignment before a command runs every guard in under 2 s
+# (in test file tests/hooks/pre-tool-use.bats, line 110)
+#   `[ "$(decision_of "$output")" = none ]' failed
+# /tmp/k/tests/hooks/pre-tool-use.bats: line 105: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)
+# perl: warning: Setting locale failed.
+# perl: warning: Please check that your locale settings:
+# 	LANGUAGE = (unset),
+# 	LC_ALL = "en_US.UTF-8",
+# 	LANG = "en_US.UTF-8"
+#     are supported and installed on your system.
+# perl: warning: Falling back to the standard locale ("C").
+# perl: warning: Setting locale failed.
+# perl: warning: Please check that your locale settings:
+# 	LANGUAGE = (unset),
+# 	LC_ALL = "en_US.UTF-8",
+# 	LANG = "en_US.UTF-8"
+#     are supported and installed on your system.
+# perl: warning: Falling back to the standard locale ("C").
+ok 179 a guard file that does not load fails closed
+ok 180 a guard file that stops loading partway, or a missing guard file, fails closed
+ok 181 a hook library that does not load gives ask, or deny under bypassPermissions
+ok 182 with POSIXLY_CORRECT set, a missing hook library still gives the G0 ask
+ok 183 a hook library that sources but lacks a function the dispatcher calls gives ask
+ok 184 pre-tool-use checks every function each library it loads defines
+ok 185 a gitctx.sh that sources but lacks git_words gives the G0 ask
+ok 186 the dispatcher's list of guard ids names every guard file
+ok 187 decision_of tells output with no decision from no output
+ok 188 KERN_GUARDS limits the guards under bats only
+ok 189 need_lists_match fails on a library loaded in a form it cannot read

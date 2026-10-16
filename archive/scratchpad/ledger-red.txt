@@ -1,0 +1,7 @@
+1..2
+not ok 1 ledger-open refuses a plan or a spec: line that is not a Markdown name, and writes nothing
+# (in test file tests/scripts/ledger.bats, line 162)
+#   `[ "$status" -eq 2 ]' failed
+not ok 2 ledger-open takes a Markdown name in any case, and spec: none
+# (in test file tests/scripts/ledger.bats, line 186)
+#   `[ "$output" = "$REPO/.kern/ledgers/upper" ]' failed

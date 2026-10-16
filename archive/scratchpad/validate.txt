@@ -1,0 +1,3 @@
+Validating marketplace manifest: /Users/musta/Code/projects/kern/.claude-plugin/marketplace.json
+
+✔ Validation passed

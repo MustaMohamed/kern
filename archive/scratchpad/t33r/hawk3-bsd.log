@@ -1,0 +1,59 @@
+c00.txt rc=0 t=0s out=X='' |gpf!| origin main
+c01.txt rc=0 t=0s out=X='a b' |gpf!| o
+c02.txt rc=0 t=0s out=X=$(true) Y=1 |gpf!| o
+c03.txt rc=0 t=0s out=X=$(a; b) |gpf!| o
+c04.txt rc=0 t=0s out=X=$(echo ")" ) |gpf!
+c05.txt rc=0 t=0s out=
+c06.txt rc=0 t=0s out=
+c07.txt rc=0 t=0s out=
+c08.txt rc=0 t=0s out=X=`echo a b` |gpf!| o
+c09.txt rc=0 t=0s out=
+c10.txt rc=0 t=0s out=X=${a:-{b}} |gpf!
+c11.txt rc=0 t=0s out=
+c12.txt rc=0 t=0s out=X="$(echo "a b")" |gpf!| o
+c13.txt rc=0 t=0s out=X=a\ b |gpf!
+c14.txt rc=0 t=0s out=
+c15.txt rc=0 t=0s out=2>&1 X='' |gpf!
+c16.txt rc=0 t=0s out=> f X='' |gpf!
+c17.txt rc=0 t=0s out=X='' repeat 2 |gpf!
+c18.txt rc=0 t=0s out=X='' if |gpf!
+c19.txt rc=0 t=0s out=
+c20.txt rc=0 t=0s out=X=')' |gpf!
+c21.txt rc=0 t=0s out=X=$((1+2)) |gpf!
+c22.txt rc=0 t=0s out=X="'" |gpf!
+c23.txt rc=0 t=0s out=X=$'a b' |gpf!
+c24.txt rc=0 t=0s out=X='ab' |gpf!| o
+c25.txt rc=0 t=0s out=X='' |$(touch /tmp/never-t33r)| x
+c26.txt rc=0 t=0s out=X='' |'gpf!'| o
+c27.txt rc=0 t=0s out=X='' |\gpf!| o
+c28.txt rc=0 t=0s out=X='' >out |gpf!| o
+c29.txt rc=0 t=0s out=X='' { |gpf!| o
+c30.txt rc=0 t=0s out=X='' time |gpf!| o
+c31.txt rc=0 t=0s out=X=$(a)$(b) |gpf!
+c32.txt rc=0 t=0s out=X="a\"b" |gpf!
+c33.txt rc=0 t=0s out=X=$( ( a ) ) |gpf!
+c34.txt rc=0 t=0s out=X=${a//\}/x} |gpf!
+c35.txt rc=0 t=0s out=X=`a\`b` |gpf!
+c36.txt rc=0 t=1s out=	X='' |gpf!
+c37.txt rc=0 t=0s out=X='' 	 |gpf!
+c38.txt rc=0 t=0s out=X=$("a)") |gpf!
+c39.txt rc=0 t=0s out=X="$(a)"'b' |gpf!
+c40.txt rc=0 t=0s out=
+c41.txt rc=0 t=0s out=X='a' |'a'| Y=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+c42.txt rc=0 t=0s out=X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a' X='a
+c50.txt rc=0 t=0s out=X=$(printf "%s" a) |gpf!| origin main
+c51.txt rc=0 t=0s out=X=$(echo "(") |gpf!| o
+c52.txt rc=0 t=0s out=X=$(echo ")" ) |gpf!| o
+c53.txt rc=0 t=0s out=X=${Y:-"}"} |gpf!| o
+c54.txt rc=0 t=0s out=X="$(echo "a b")" |gpf!| o
+c55.txt rc=0 t=0s out=X="$(echo ')')" |gpf!| o
+c56.txt rc=0 t=0s out=X=$(a "$(b "c d")" e) |gpf!| o
+c57.txt rc=0 t=0s out=X=$(a `b c` d) |gpf!| o
+c58.txt rc=0 t=0s out=X=${Y:-"$(echo "}")"} |gpf!| o
+c59.txt rc=0 t=0s out=X=${Y:-'"'} |gpf!| o
+c60.txt rc=0 t=0s out=X=${Y:-"${Z:-"a b"}"} |gpf!| o
+c61.txt rc=0 t=0s out=
+c62.txt rc=0 t=0s out=
+c63.txt rc=0 t=0s out=
+c64.txt rc=0 t=0s out=
+c65.txt rc=0 t=0s out=

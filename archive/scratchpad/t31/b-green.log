@@ -1,0 +1,26 @@
+1..25
+ok 1 startup prints the kernel with every placeholder filled
+ok 2 the rendered kernel stays under 4,000 characters with no settings
+ok 3 startup and clear reset the mode; compact and resume keep it
+ok 4 terse from settings appends the terse rules
+ok 5 the summary lists set keys, overrides, routes, floor keys and unknown keys
+ok 6 a long summary keeps every override in full and stays within 600 characters
+ok 7 kern: off prints nothing
+ok 8 outside a git repository the kernel still renders from user settings
+ok 9 a lower-layer autopilot deny is named in the kernel
+ok 10 a committed loosening value is ignored, so the summary does not list it as set
+ok 11 state files untouched for 30 days are removed; recent ones and other names stay
+ok 12 the current session's state file stays however old it is
+ok 13 a symlink named like a state file stays, and so does its target
+ok 14 a symlinked state dir is left alone
+ok 15 a state dir kern cannot write to does not stop session-start
+ok 16 a library session-start cannot load gives one line that says so
+ok 17 with POSIXLY_CORRECT set, a missing library still gives the one line
+ok 18 session-start checks every function each library it loads defines
+ok 19 the Reply section carries the candor line and the AI-tell line
+ok 20 git older than 2.31, or a git version that cannot be read, gets one line saying the hardening may not apply
+ok 21 git 2.31 or later gets no git line
+ok 22 the fixture's fsmonitor program runs for a plain git call
+ok 23 session-start runs git without the repo's fsmonitor program
+ok 24 every hook exports the hardened git config right after KERN_ROOT, before it runs git
+ok 25 every git a hook runs, its children's too, gets both pairs after the environment's own

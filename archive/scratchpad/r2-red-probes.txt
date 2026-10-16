@@ -1,0 +1,7 @@
+1..2
+not ok 1 I3 running kern's prompt-submit to forge the user's message asks G16, and is denied under autopilot
+# (in test file tests/hooks/g20-probes.bats, line 398)
+#   `[ "$(decision_of "$output")" = ask ]' failed
+not ok 2 I3 sourcing kern's state library to call state_set asks G16, and is denied under autopilot
+# (in test file tests/hooks/g20-probes.bats, line 407)
+#   `[ "$(decision_of "$output")" = ask ]' failed

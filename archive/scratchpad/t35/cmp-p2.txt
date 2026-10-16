@@ -1,0 +1,82 @@
+tighter real    wt   off #186 ask   -> deny  | (cd .); git commit -m x
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #187 ask   -> deny  | (cd .); git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #188 ask   -> deny  | cd . && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #189 ask   -> deny  | cd src && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #190 ask   -> deny  | pushd src && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #191 ask   -> deny  | GIT_INDEX_FILE=.git/index git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #192 ask   -> deny  | env -C src git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #193 ask   -> deny  | git --git-dir=.git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #194 ask   -> deny  | cd /tmp && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #186 ask   -> deny  | (cd .); git commit -m x
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #187 ask   -> deny  | (cd .); git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #188 ask   -> deny  | cd . && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #189 ask   -> deny  | cd src && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #190 ask   -> deny  | pushd src && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #191 ask   -> deny  | GIT_INDEX_FILE=.git/index git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #192 ask   -> deny  | env -C src git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or inde
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key; G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #193 ask   -> deny  | git --git-dir=.git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #194 ask   -> deny  | cd /tmp && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #186 ask   -> deny  | (cd .); git commit -m x
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #187 ask   -> deny  | (cd .); git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #188 ask   -> deny  | cd . && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #189 ask   -> deny  | cd src && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #190 ask   -> deny  | pushd src && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #191 ask   -> deny  | GIT_INDEX_FILE=.git/index git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #192 ask   -> deny  | env -C src git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #193 ask   -> deny  | git --git-dir=.git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #194 ask   -> deny  | cd /tmp && git commit -m "feat: add creds"
+    base: kern G5: commit (message checks pass); G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see
+    p2: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+TOTAL 3504 compared (0 unmatched): same 3477, tighter 27, LOOSER 0, ERROR 0

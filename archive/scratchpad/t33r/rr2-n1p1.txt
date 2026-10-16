@@ -1,0 +1,29 @@
+cd @SD@ && noglob time cd /tmp; echo x > foo
+cd @SD@ && time cd /tmp; echo x > foo
+cd @SD@ && noglob command cd /tmp; echo x > foo
+cd @SD@ && command noglob cd /tmp; echo x > foo
+cd @SD@ && noglob ! cd /tmp; echo x > foo
+cd @SD@ && nocorrect nocorrect cd /tmp; echo x > foo
+cd @SD@ && nocorrect cd /tmp; echo x > foo
+cd @SD@ && cd /tmp; echo x > foo
+noglob time cd /tmp; cp src.md dst.md
+time cd /tmp; cp src.md dst.md
+noglob ! cd /tmp; cp src.md dst.md
+cd /tmp; cp src.md dst.md
+cd @SD@ && command cd /tmp; echo x > foo
+cd @SD@ && nice cd /tmp; echo x > foo
+cd @SD@ && env cd /tmp; echo x > foo
+cd @SD@ && nohup cd /tmp; echo x > foo
+cd @SD@ && timeout 5 cd /tmp; echo x > foo
+cd @HC@ && command cd /tmp; sed -i '' s/a/b/ settings.json
+command cd /tmp; cp src.md dst.md
+cd @SD@ && noglob nice cd /tmp; echo x > foo
+cd @SD@ && nice noglob cd /tmp; echo x > foo
+cd @SD@ && sudo noglob cd /tmp; echo x > foo
+cd @SD@ && env noglob cd /tmp; echo x > foo
+cd @SD@ && noglob env cd /tmp; echo x > foo
+cd @SD@ && timeout 5 noglob cd /tmp; echo x > foo
+cd @SD@ && repeat 1 time cd /tmp; echo x > foo
+cd @SD@ && nocorrect noglob cd /tmp; echo x > foo
+cd @HC@ && noglob time cd /tmp; sed -i '' s/a/b/ settings.json
+cd @HC@ && noglob ! cd /tmp; sed -i '' s/a/b/ settings.json

@@ -1,0 +1,68 @@
+git status
+git status --short
+git log --oneline -5
+git log -p -- src
+git diff
+git diff --cached
+git show HEAD
+git branch
+git branch -a
+git remote -v
+git fetch
+git stash list
+git rev-parse --show-toplevel
+git add README.md
+git commit -m "fix: x"
+git push -u origin feat
+git checkout -b x
+git switch main
+ls
+ls -la
+ls docs
+cat README.md
+cat docs/plans/x.md
+head -5 README.md
+tail -n 20 README.md
+grep -rn foo src
+rg foo
+wc -l README.md
+npm test
+npm run build
+npm ci
+node --test
+python3 -m pytest
+make
+pwd
+echo hello
+mkdir -p build
+rm -rf build
+touch src/x.ts
+cp README.md /tmp/x
+mv /tmp/x /tmp/y
+find . -name '*.md'
+sed -n 1,5p README.md
+jq . package.json
+cd src && ls
+cd docs && cat plans/x.md
+cd .. && ls
+cd /tmp && ls
+cd "$(git rev-parse --show-toplevel)" && npm test
+cd .claude && ls
+cat ~/.claude/settings.json
+ls ~/.claude
+gh pr list
+gh pr view 1
+tests/run-bats tests/hooks
+shellcheck x.sh
+time npm test
+git -C . status
+noglob git status
+noglob ls *.md
+noglob find . -name *.md
+noglob curl https://example.com/?a=1
+repeat 3 echo hi
+nocorrect npm test
+coproc cat
+noglob git log --format=%H -1
+repeat 2 git status
+noglob npm run build

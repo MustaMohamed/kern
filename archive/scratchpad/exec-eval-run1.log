@@ -1,0 +1,8 @@
+PASS commit-work-file
+PASS finish-menu-first
+FAIL finish-split-nine-files: no split proposal for nine files over scope_threshold 4
+PASS finish-autopilot-draft
+PASS finish-pr-at-head
+PASS finish-pr-older-head
+snapshot: /Users/musta/Code/projects/kern/evals/snapshots/exec-2026-10-15.json
+exit=1

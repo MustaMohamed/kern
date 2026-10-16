@@ -1,0 +1,9 @@
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; ls notes.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd /tmp; ls notes.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; ls notes.md
+noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; ls notes.md
+noglob cd /d0; noglob cd /d1; noglob cd /d2; noglob cd /d3; noglob cd /d4; noglob cd /d5; noglob cd /d6; noglob cd /d7; noglob cd /d8; noglob cd /d9; noglob cd /d10; noglob cd /d11; noglob cd /d12; noglob cd /d13; noglob cd /d14; ls notes.md
+noglob cd /d0; noglob cd /d1; noglob cd /d2; noglob cd /d3; noglob cd /d4; noglob cd /d5; noglob cd /d6; noglob cd /d7; noglob cd /d8; noglob cd /d9; noglob cd /d10; noglob cd /d11; noglob cd /d12; noglob cd /d13; noglob cd /d14; noglob cd /d15; ls notes.md
+cd @YD@ && builtin cd @XD@ && cp src.md dst.md
+cd @YD@ && noglob cd @XD@ && cp src.md dst.md
+cd @YD@ && cd @XD@ && cp src.md dst.md

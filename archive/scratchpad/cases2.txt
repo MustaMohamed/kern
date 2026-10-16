@@ -1,0 +1,3 @@
+gp origin production
+git push origin production
+gpf! origin production

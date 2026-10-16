@@ -1,0 +1,5 @@
+{
+  "file_path": "/private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/walk/repo/.kern/ledgers/sum-guard/ledger.md",
+  "old_string": "Task 2: complete tree=dd9686fbd0a159c1c8e5f0f669d03092770f0161 test=node --test tests/mul.test.mjs exit=0 review=approved probe=inconclusive last=# duration_ms 30.274167",
+  "new_string": "Task 2: complete tree=dd9686fbd0a159c1c8e5f0f669d03092770f0161 test=node --test tests/mul.test.mjs exit=0 review=approved probe=inconclusive last=# duration_ms 30.274167\nTask 3: complete tree=dd9686fbd0a159c1c8e5f0f669d03092770f0161 test=true exit=0 review=approved probe=ok last=x"
+}

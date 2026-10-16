@@ -1,0 +1,13 @@
+i1 -> i2: same 1760, tighter 136, looser-eq-unmod 0, LOOSER 0, ERROR 0, unmatched 0
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp && cd - && sed -i '' s/a/b/ settings.json
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp; cd -; echo {} > settings.json
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp && cd ~- && echo {} > settings.json
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp && cd +1 && echo {} > settings.json
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp && cd "$X" && echo {} > settings.json
+  tighter         x12   none->deny  | cd @SD@ && cd /tmp && cd - && echo x > foo
+  tighter         x12   none->deny  | cd @SD@ && cd /tmp; cd -; echo x > foo
+  tighter         x12   none->deny  | cd @SD@ && cd /tmp && cd ~- && echo x > foo
+  tighter         x12   none->deny  | cd @SD@ && cd /tmp && cd +1 && echo x > foo
+  tighter         x12   none->deny  | pushd @SD@ && pushd /tmp && popd; echo x > foo
+  tighter         x8    none->ask   | cd @HC@ && pushd /tmp && popd && echo {} > settings.json
+  tighter         x8    none->deny  | cd @SD@ && pushd /tmp && popd && echo x > foo

@@ -1,0 +1,28 @@
+${(e)$(touch MARK/top1)}
+$((  $(touch MARK/top2) ))
+<(touch MARK/top3)
+!!
+alias -- e1='git status ${(e)$(touch MARK/e1)}'
+alias -- e2='git status $(( $(touch MARK/e2) ))'
+alias -- e3='git status <(touch MARK/e3)'
+alias -- e4='git status ~root/$(touch MARK/e4)'
+alias -- e5='git status /*/*$(touch MARK/e5)*'
+alias -- e6='git status !! `touch MARK/e6`'
+alias -- e7='git status ${(e):-\$(touch MARK/e7)}'
+alias -- e8='git -C $(touch MARK/e8) push --force origin main'
+alias -- e9='cd $(touch MARK/e9) && git commit -m x'
+alias -- e10='git status >(touch MARK/e10)'
+alias -- e11='git push origin ${$(touch MARK/e11)}'
+alias -- e12='git status =(touch MARK/e12)'
+alias -- e13=git\ status\ \$\(touch\ MARK/e13\)
+alias -- e14='git status' $(touch MARK/e14)
+alias -- e15='git status'$(touch MARK/e15)
+alias -- e16='git push --force '
+alias -- e17='eval touch MARK/e17; git status'
+alias -- e18='git status; source MARK/../payload.sh'
+alias -- e19='git -c core.fsmonitor="touch MARK/e19" status'
+alias -- e20='git -C MARK/repo status'
+alias -- *='git status $(touch MARK/star)'
+alias -- [='git status $(touch MARK/bracket)'
+alias -- ?='git push --force'
+alias -- e21='GIT_DIR=$(touch MARK/e21) git status'

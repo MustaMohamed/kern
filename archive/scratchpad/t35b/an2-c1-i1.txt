@@ -1,0 +1,21 @@
+c1 -> i1: same 1782, tighter 86, looser-eq-unmod 0, LOOSER 28, ERROR 0, unmatched 0
+  LOOSER          x12   deny->none  | cd @SD@ && nocorrect cd /tmp && echo x > foo
+       c1: kern G16: commands may not write kern session state
+       i1: 
+  LOOSER          x8    deny->none  | cd @SD@ && noglob cd /tmp; echo x > foo
+       c1: kern G16: commands may not write kern session state
+       i1: 
+  LOOSER          x8     ask->none  | cd @HC@ && noglob cd /tmp; echo {} > settings.json
+       c1: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+       i1: 
+  tighter         x12    ask->deny  | cd . && git push --force-with-lease origin feat
+  tighter         x12   none->deny  | noglob cd docs/plans && echo note >> ok.md
+  tighter         x12   none->ask   | noglob cd src && git add -- a.txt
+  tighter         x8    none->deny  | repeat 1 cd docs/plans && echo note >> ok.md
+  tighter         x6     ask->deny  | pushd /tmp && git push --force-with-lease origin feat
+  tighter         x6     ask->deny  | env -C /tmp git push --force-with-lease origin feat
+  tighter         x6    none->ask   | noglob cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | nocorrect cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | repeat 1 cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | repeat 2 cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | repeat $N cd @R@ && git clean -fdx

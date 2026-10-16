@@ -1,0 +1,293 @@
+1..292
+ok 1 git_words splits chains and keeps quoted separators
+ok 2 git_words also prints the bodies of bash -c, eval, $( ) and backticks
+ok 3 git and gh are seen behind shells, wrappers, groups and keywords
+ok 4 a shell's -c is read in a cluster of any case, after options, -- or -, and value long options
+ok 5 zsh's --emulate takes the next word, so the -c after it is read
+ok 6 a redirection among a shell's options is not its script
+ok 7 env -S splits its line with quotes, as env does
+ok 8 a shell that runs a -c script reads its here-doc as data, in any cluster form
+ok 9 git is seen behind wrapper options, env -S, shell options, timeout and nice
+ok 10 git is seen after zsh's noglob, nocorrect, coproc and repeat with its count, and in an eval or a shell after them
+ok 11 a leading redirection is not the command name
+ok 12 a << inside quotes in $( ) hides nothing
+ok 13 a shell reading a here-doc runs its body: the body stays as records
+ok 14 a shell here-doc after a closed $( ) keeps its body
+ok 15 a << inside a top-level (( )) is not a here-doc
+ok 16 a << inside ${ }, $[ ], $(( )) or a NAME[ ] subscript is not a here-doc
+ok 17 a here-doc after a closed ${ } or subscript, or inside $( ) in one, is still a here-doc
+ok 18 a # after an escaped separator is not a comment; after a line continuation it is
+ok 19 a here-string is not a here-doc
+ok 20 the commit form with a here-doc message gives one git segment, and the message is data
+ok 21 here-doc bodies are skipped, and the commands after them are still seen
+ok 22 a quoted multi-line argument stays in its record
+ok 23 a 1,000-line here-doc runs through git_words in under a second
+ok 24 a backslash-newline is dropped, not read as a space
+ok 25 quoted parentheses stay inside their word
+ok 26 redirections never split a command
+ok 27 git_sub reads -C, skips env and global options
+ok 28 git_sub skips each global option of git 2.54, and the next word where it takes a value
+ok 29 gh_sub, word_value and word_has
+ok 30 current_branch reads HEAD by symbolic-ref, past a tag of the same name
+ok 31 push_targets: refspecs, deletes and the current branch
+ok 32 push_targets skips redirections
+ok 33 _shell_words: a word that starts with an unquoted # is a comment to the newline
+ok 34 _shell_words: a # inside a word, quoted or escaped is kept
+ok 35 _shell_words splits a redirection from the word before it
+ok 36 push_targets: a redirection glued to the branch, and @
+ok 37 a committed base_branch adds a protected branch; origin/HEAD, or else main and the like, stay protected
+ok 38 push_targets prints * for every-branch pushes, and * is protected
+ok 39 push_targets strips heads/ and reads deletes
+ok 40 with_timeout returns promptly when the command finishes
+ok 41 with_timeout stops a slow command and its children
+ok 42 git is seen behind wrapper long options that take a value
+ok 43 git is seen after an append assignment, an attached env -S line, and a wrapper or shell in another case
+ok 44 a command name built at run time is denied
+ok 45 each shape the G00 ruling keeps is denied under autopilot
+ok 46 a non-sh interpreter's inline code, here-doc or pipe gets no vote: an accepted limit
+ok 47 a program or script operand that is $VAR/literal-path gets no vote: an accepted limit
+ok 48 a shell script kern did not unwrap is denied: another shell, or sh -c not at the head
+ok 49 a shell reading a pipe, a here-string, an fd or a process substitution is denied
+ok 50 a command name built at run time after xargs or find -exec, or a script name source reads
+ok 51 a shell whose script operand is stdin or an fd reads that stream
+ok 52 the commands autopilot runs every day get no vote from G00, with every guard running
+ok 53 ordinary commands get no vote from G00 under autopilot
+ok 54 G00 votes nothing outside autopilot or for other tools
+ok 55 an eval or a here-doc shell after zsh's noglob, nocorrect, coproc or repeat is denied in both modes
+ok 56 under autopilot the review's bypass shapes are denied with every guard running
+ok 57 status in the main checkout: no vote
+ok 58 switch in the main checkout asks, denied under autopilot
+ok 59 reset --hard, stash and clean in the main checkout ask
+ok 60 the same commands in a linked worktree: no vote
+ok 61 a chained or substituted main-checkout command is still seen
+ok 62 stash list and clean -n are read-only: no vote
+ok 63 plain force push is denied in both modes
+ok 64 push of a feature branch asks; push.policy auto allows; deny denies
+ok 65 push to the base branch asks even with push.policy auto, and is denied under autopilot
+ok 66 autopilot allows a push of the current non-protected branch only
+ok 67 force-with-lease: own branch asks; a branch with another author is denied
+ok 68 force-with-lease under autopilot needs rebase.push: autopilot
+ok 69 merge asks; gh pr merge asks; both denied under autopilot
+ok 70 worktree remove --force and branch -D ask
+ok 71 kern: off disables the guard
+ok 72 unparseable input asks, and the reason names it
+ok 73 autopilot denies main-checkout operations, merges and discards
+ok 74 pull in the main checkout asks; in a linked worktree: no vote
+ok 75 abbreviated long options and short clusters are read as git reads them
+ok 76 a remote delete asks whatever push.policy says, and is denied under autopilot
+ok 77 push.policy deny denies under autopilot too
+ok 78 autopilot allows a push only in the plain shape
+ok 79 push.policy auto allows only the plain shape
+ok 80 remote.<name>.push or mirror config makes a push unproven
+ok 81 autopilot lease: current branch only, bare option, no other flags
+ok 82 --force-if-includes follows the lease rules
+ok 83 lease: another author's commit on the remote branch only is denied
+ok 84 lease to a remote that git remote does not list is denied
+ok 85 after cd, --git-dir or GIT_DIR the directory is unknown
+ok 86 a cd behind noglob, nocorrect, coproc or repeat leaves the directory known
+ok 87 gh pr merge with -R or --repo asks, and is denied under autopilot
+ok 88 --no-verify skips the pre-push hook, so the push is never allowed
+ok 89 an allowed push may pipe into tail, head, grep or cat with options only
+ok 90 --dry-run is a safe push option
+ok 91 an unknown push shape names the fix in its reason
+ok 92 a tag named like the current branch does not hide it
+ok 93 a tag named like a branch.protected branch does not hide it
+ok 94 shell expansion in a push record is never allowed
+ok 95 a branch or remote name outside the safe characters is never allowed
+ok 96 a glob or ~ in a push record is never allowed
+ok 97 shell expansion or a glob in a filter is never allowed
+ok 98 remote and url config that redirects a push makes it unproven
+ok 99 lease: a missing origin/<base> counts as not own
+ok 100 lease: the source of src:dst is what gets checked
+ok 101 git and gh are matched case-insensitively
+ok 102 an explicit lease value under autopilot names the bare option
+ok 103 a push URL rewritten for this remote is unproven; an unrelated rewrite is not
+ok 104 a detached HEAD names itself in the reason
+ok 105 a trailing comment does not hide a command
+ok 106 git behind a command kern cannot read asks, and is denied under autopilot
+ok 107 a word git that runs no git command, or a read-only one, gets no vote
+ok 108 echo git push asks: a word git before one of git's commands that writes is not read further
+ok 109 an append assignment or a wrapper in another case does not hide git from G1's own checks
+ok 110 git behind a command with -c or --config-env among its options asks, whatever word follows
+ok 111 a hidden git with no word after it gets no vote, and GIT_CONFIG in the text changes nothing
+ok 112 lease push to a protected branch names the force; over another author's commits it is denied
+ok 113 a push through -C into another repository is never allowed, as G5 never allows such a commit
+ok 114 env -C, env --chdir, sudo -D and sudo -R leave the directory unknown, as cd does
+ok 115 send-pack and http-push push refs: they ask, are denied under autopilot, and their force forms are denied
+ok 116 send-email asks, and is denied under autopilot
+ok 117 imap-send asks like send-email, and is denied under autopilot
+ok 118 env -S reads its value as words, so a -C inside it leaves the directory unknown
+ok 119 G5: a passing -F message asks interactively and is allowed under autopilot
+ok 120 G5: a subject off convention is denied in both modes
+ok 121 G5: with commit.convention unset, the convention kern-detect finds is checked, and none when it finds none
+ok 122 G5: the convention detected from signed history runs no program that repo config names
+ok 123 G5: a missing ticket id from the branch is denied
+ok 124 G5: an AI attribution trailer is denied unless commit.attribution allows it
+ok 125 G5: a message built by command substitution cannot be checked: ask, deny under autopilot
+ok 126 G5: commit.policy auto allows a passing commit; deny denies it
+ok 127 G5: git add -A and commit -a ask, denied under autopilot; git add -- path: no vote
+ok 128 G6: a staged private key is denied without printing it
+ok 129 G6: a clean staged change: no vote
+ok 130 G6: never_commit paths are denied
+ok 131 G6: a push scans the outgoing commits
+ok 132 G5 allows a proven commit under autopilot and commit.policy auto
+ok 133 G5: commands chained, substituted, redirected or wrapped around a commit are never allowed
+ok 134 G5: commit options other than -m, -F, -q and -v are never allowed
+ok 135 G5: global git options, environment and other repositories are never allowed
+ok 136 G5: a commit on a protected branch or a detached HEAD is never allowed
+ok 137 G5: the -F file must be a regular file in the repo, outside .git, and not ignored unless in .kern
+ok 138 G5: a here-doc message asks with the retry form and is denied under autopilot
+ok 139 G5: a multi-line -m message is read line by line
+ok 140 G5: a -C or -c commit name is never read as a git log option
+ok 141 G5: git add -A in any spelling asks and is denied under autopilot
+ok 142 G5: git add of named paths: no vote
+ok 143 G5: broad staging chained into a commit is never allowed
+ok 144 G6: a key staged by git add in the same command is denied under autopilot
+ok 145 G6: a commit of paths, -i, -o, -p or -a in any spelling asks: kern scans only staged content
+ok 146 G6: a commit in another repository is denied under autopilot
+ok 147 G6: a secret in the commit message is denied without printing it
+ok 148 G6: repo config cannot hide the staged diff or run a program
+ok 149 G6: an added line that starts with ++ is scanned and its text never printed
+ok 150 G6: a push scans what the target remote lacks, whatever upstream says
+ok 151 G6: with no tracking refs anywhere the whole history is scanned and nothing asks
+ok 152 G6: a push of another branch scans that branch
+ok 153 G6: a push with no upstream and no origin/HEAD is scanned
+ok 154 G6: content added only in a merge commit is scanned
+ok 155 G6: a secret in a pushed commit message is denied without printing it
+ok 156 G6: PGP, Stripe, AWS STS and fine-grained GitHub keys are denied
+ok 157 G6: never_commit globs match nested paths and a bracketed list
+ok 158 G6: a push source kern cannot resolve asks instead of going unscanned
+ok 159 G6: attributes, diff.relative and invalid UTF-8 cannot hide an added line
+ok 160 G6: repo-configured programs never run in a scan
+ok 161 G6: a push walk that does not finish asks
+ok 162 G6: a clean merge of main brings in nothing new: no vote
+ok 163 G6: never_commit reads staged names: a removal passes, a non-ASCII name is caught
+ok 164 G6: sk- needs a non-word character before it, and file names are not scanned
+ok 165 G6: after cd, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= it could not scan
+ok 166 G6: after a cd it still scans this repository, so a staged secret is denied in both modes
+ok 167 G5 and G6: a cd behind noglob, nocorrect, coproc or repeat leaves the directory known
+ok 168 G6: push : and a matching push scan every branch
+ok 169 G6: a message line that looks like a diff is still read as the message
+ok 170 G6: replace refs and log.showRoot cannot hide pushed content
+ok 171 G5: attribution variants and a --trailer are denied, interactive and default policy
+ok 172 G5: the ticket id must be followed by a non-alphanumeric character or the end
+ok 173 G5: git add of a word that expands is wide
+ok 174 G5: git add of the worktree root spelled in another case is wide
+ok 175 git: a subcommand outside git's own commands asks in G1, G5 and G6, whatever config says
+ok 176 git: git's own commands keep their behaviour
+ok 177 G1: a lease push reads authors without running gpg from log.showSignature
+ok 178 G6: a forged \037, \001 or NUL in a pushed message cannot hide its text
+ok 179 G6: a NUL earlier on a line cannot hide a key, staged or pushed
+ok 180 G6: i18n.logOutputEncoding cannot hide a pushed message
+ok 181 G6: a push that carries config, or goes to a mirror remote, could not be scanned
+ok 182 G6: env -C or --chdir could not be scanned, and the autopilot deny holds
+ok 183 G6: GIT_DIR= inside a message or an argument is not an assignment
+ok 184 G6: the gitleaks pass is bounded and its overrun asks
+ok 185 G6: the scan budget counts from the dispatcher's start, so time spent by G2 leaves less
+ok 186 G6: a message walk that does not finish asks
+ok 187 G6: an export behind a wrapper still leaves the next git command unscanned
+ok 188 G6: gitleaks reads a pushed commit's message as well as its patch
+ok 189 git: a global option G1 does not know asks, so it cannot hide the command after it
+ok 190 G6: an append assignment, a wrapper in another case or a sudo long option still leaves git unscanned
+ok 191 G6: send-pack and http-push could not be scanned
+ok 192 G6: git add, merge or another index or HEAD change earlier in the command leaves the scan stale
+ok 193 G6: stash pop or apply, pull, update-index, read-tree, update-ref, branch -f, commit-tree and notes leave the scan stale
+ok 194 G6: a -C or GIT_DIR inside env -S could not be scanned
+ok 195 Write under the sessions dir is denied in both modes
+ok 196 Edit of another file: no vote
+ok 197 a .. path into the sessions dir is denied
+ok 198 an upper-cased path to the sessions dir is denied
+ok 199 a symlinked dir that resolves to the sessions dir is denied
+ok 200 a Bash write into the sessions dir is denied
+ok 201 every Bash write shape against session state is denied
+ok 202 any command but a reader that names a state path is denied
+ok 203 a glob that matches the state file once ~ is expanded is denied
+ok 204 plain reads, git commands and messages naming state or settings: no vote
+ok 205 a shell reading a here-doc runs its body as commands
+ok 206 a # that bash does not read as a comment hides no state write
+ok 207 a misread << hides no state write
+ok 208 a double-quoted state target is denied
+ok 209 reads of a state file, and a commit message naming one: no vote
+ok 210 the session id counts only as the state file name: scratchpad writes pass
+ok 211 reads of session state: no vote
+ok 212 a Monitor command writing the state file is denied
+ok 213 a scheduled prompt or relayed message carrying /kern:autopilot is denied
+ok 214 relayed text that opens with a mode or autopilot command is denied
+ok 215 relayed text that only mentions a mode command: no vote
+ok 216 a RemoteTrigger whose nested body carries a kern command is denied; a list passes
+ok 217 a scheduled prompt without kern commands: no vote
+ok 218 a Skill call to the mode or autopilot skill is denied; other skills pass
+ok 219 a write to a kern settings file asks, and denies under autopilot
+ok 220 reading a kern settings file: no vote
+ok 221 a command that names neither state nor settings costs G16 no lower-casing; any case still counts
+ok 222 a settings path spelled with ., .. or // or split by quotes is still a settings path
+ok 223 a copy, move or link into a .claude directory is a settings write
+ok 224 a write to Claude Code's own settings asks, and denies under autopilot; plain reads get no vote
+ok 225 settings files and .claude directories follow the state model: any head but a reader asks
+ok 226 a cd whose target kern cannot know keeps the .claude and sessions-dir reading; under autopilot it is denied
+ok 227 a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd after one keeps the reading
+ok 228 git reads only through its read-only subcommands; any other git naming settings or .claude asks
+ok 229 a settings write under a directory with a space asks; only a message option's text is read as a sentence
+ok 230 a command that reads but can run code, and names a hook or state_set, asks; under autopilot it is denied
+ok 231 a glob, brace or zsh group after hooks/ that could name a hook asks; under autopilot it is denied
+ok 232 running, sourcing or reading a hook, or calling a state function, asks; under autopilot it is denied
+ok 233 a hooks directory named elsewhere in the command, or reached by a glob, makes a hook's bare name ask
+ok 234 a command that names no kern hook, such as a hook's test file, gets no hook vote
+ok 235 inside a hooks directory a bare hook name, or a glob that could match one, asks
+ok 236 when awk cannot read the command for kern's hook code, G16 fails closed
+ok 237 when awk fails on one reading and no reading hits, G16 fails closed in both modes
+ok 238 when awk fails on one reading and another reading hits, G16 asks with its own reason; under autopilot it is denied
+ok 239 a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied
+ok 240 an escaped backslash, or a backslash before CR LF, does not join the lines; the next line still asks
+ok 241 a hooks directory on one line and a hook on the next still ask, as they did before lines were joined
+ok 242 the APFS case folds of s and k inside a hook path are read as s and k; asks, and under autopilot is denied
+ok 243 a brace group that spans a slash asks, and under autopilot is denied
+ok 244 the APFS case folds of s and k in a settings or state path get the vote of the ASCII spelling
+ok 245 P1 two Edits: an invented quote while draft, then the status flip
+ok 246 P1b two Edits: a real quote while draft, then the flip, is changed after the message
+ok 247 P2 non-answers with a final question mark or comma
+ok 248 P3 a quote with no hash matches no record, recorded or empty
+ok 249 P4 an empty prompt replaces the last one's lines
+ok 250 P5 frontmatter forms G20 reads as approved
+ok 251 P6 a CRLF file and a multi-line old_string
+ok 252 P6b a CRLF Write
+ok 253 P7 a second frontmatter block is read by neither G20 nor ledger-open
+ok 254 P8 a byte order mark and blanks after the opening ---
+ok 255 P9 an Edit with an empty old_string writes a new file
+ok 256 P10 a Markdown name in another case
+ok 257 P11 curly quotes in the file, straight ones in old_string
+ok 258 P12 a user line that holds double quotes can be quoted whole
+ok 259 P13 perl in place, in any option form
+ok 260 P14 python -c and node -e with the path inside the code
+ok 261 P15 python reading its script from a here-doc
+ok 262 P16 tee, a here-doc, printf, sudo and env
+ok 263 P17 cp, cat, tee, dd, ln, rsync, install, git mv and a two-step mv from a prepared file
+ok 264 P18 cp of a prepared Markdown file into the specs directory
+ok 265 P19 a glob, find -exec, xargs and a loop variable, with approved in the command
+ok 266 P20 the word split by quotes or in capitals
+ok 267 P21 a shell write to an approved file without the word
+ok 268 P21b a write after a cd behind noglob, nocorrect, coproc or repeat, which may not move
+ok 269 P22 reads and kern's own scripts get no G20 vote
+ok 270 P23 accepted limit: a new file has no draft to be older than the message
+ok 271 P24 the quote comes from the first approved: line
+ok 272 P25 a quote over 500 characters matches nothing
+ok 273 P26 a prompt that starts with a system-reminder replaces the user's lines
+ok 274 P27 a byte order mark before the first ---
+ok 275 P28 bash -c, eval, command substitution, a path with a space, perl -0777
+ok 276 P29 Monitor is read as Bash
+ok 277 P30 an approved file approved again with a fresh real quote
+ok 278 P31 accepted limit: a teammate message wrapped() misses counts as the user's
+ok 279 P32 a write through a non-Markdown symlink to a spec
+ok 280 P33 option clusters tell the script from the files
+ok 281 P34 accepted false deny: perl inline code that reads, with approved and a Markdown name
+ok 282 P35 accepted limit: a script run by name is not seen
+ok 283 C1 a --- with trailing blanks closes the frontmatter for G20, ledger-open and plan-check alike
+ok 284 C1 a --- with a CR closes the frontmatter for G20, ledger-open and plan-check alike
+ok 285 C1 an opening --- with trailing blanks: G20 denies the approval ledger-open would accept
+ok 286 I2 sed deleting a closing --- turns staged body lines into frontmatter
+ok 287 I2 tail of a staged file whose first line is not --- into a plan
+ok 288 I3 running kern's prompt-submit to forge the user's message asks G16, and is denied under autopilot
+ok 289 I3 sourcing kern's state library to call state_set asks G16, and is denied under autopilot
+ok 290 N1 negations are not a yes
+ok 291 N2 an Edit whose old_string is not in the file, writing a status line, fails closed
+ok 292 N3 the changed-after message says how to approve

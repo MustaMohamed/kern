@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+# kern UserPromptSubmit and UserPromptExpansion: applies mode and autopilot switches the user typed,
+# then prints the mode line and a short reminder when the session is outside the default preset.
+# Plain stdout is added to Claude's context.
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+# Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
+# hooks, so a repository's own config cannot run code through a kern hook (git 2.31+ reads
+# GIT_CONFIG_COUNT). The two pairs go after the pairs the environment already holds, which still apply
+# (a container's safe.directory, for one). KERN_GC is their number; a count that is not a number of
+# at most 9 digits counts as none.
+case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]* | ??????????*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
+export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
+  "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"
+for lib in json settings state render; do
+  # shellcheck source=/dev/null
+  . "$KERN_ROOT/hooks/lib/$lib.sh"
+done
+
+# Wrappers Claude Code puts around prompts it starts itself. A wrapped prompt never switches anything.
+KERN_WRAPPER_TAGS="<task-notification <cross-session-message <scheduled-task <teammate-message <channel-message <agent-message"
+
+# shellcheck disable=SC2034 # read by the json.sh functions
+KERN_INPUT=$(cat)
+EVENT=$(json_get hook_event_name) || EVENT=UserPromptSubmit
+SID=$(json_get session_id) || exit 0
+CWD=$(json_get cwd) || CWD="$PWD"
+KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+export CWD KERN_MAIN
+kern_enabled || exit 0
+state_file "$SID" >/dev/null || exit 0
+state_get "$SID" voice >/dev/null 2>&1 || state_reset "$SID"
+
+NOTICE=""
+SHOW_LINE=0
+CHANGED_VOICE=""
+CHANGED_SURFACE=""
+AP_TURNED_ON=0
+SCHEDULED=0
+
+lower() { tr '[:upper:]' '[:lower:]'; }
+
+# apply_mode ARGS: words combine; an unknown word changes nothing.
+apply_mode() {
+  local args w voice="" surface="" reset=0
+  args=$(printf '%s' "$1" | lower)
+  SHOW_LINE=1
+  for w in $args; do
+    case "$w" in
+      terse | normal) voice="$w" ;;
+      chat | auto | html) surface="$w" ;;
+      default) reset=1 ;;
+      status) ;;
+      *)
+        NOTICE="kern: mode argument not recognized, mode unchanged."
+        return 0
+        ;;
+    esac
+  done
+  if [ "$reset" = 1 ]; then
+    [ -n "$voice" ] || voice=$(settings_get mode.voice normal)
+    [ -n "$surface" ] || surface=$(settings_get mode.surface auto)
+  fi
+  set_voice "$voice"
+  set_surface "$surface"
+}
+
+set_voice() {
+  [ -n "$1" ] || return 0
+  [ "$(state_get "$SID" voice 2>/dev/null)" = "$1" ] && return 0
+  state_set "$SID" "voice=$1" && CHANGED_VOICE="$1"
+}
+
+set_surface() {
+  [ -n "$1" ] || return 0
+  [ "$(state_get "$SID" surface 2>/dev/null)" = "$1" ] && return 0
+  state_set "$SID" "surface=$1" && CHANGED_SURFACE="$1"
+}
+
+# apply_autopilot ARGS ALLOW_ON: ALLOW_ON is 1 only for a command the user typed.
+apply_autopilot() {
+  local arg denier
+  arg=$(printf '%s' "$1" | lower | awk '{ print $1 }')
+  SHOW_LINE=1
+  case "$arg" in
+    on)
+      [ "$2" = 1 ] || return 0
+      if denier=$(autopilot_denied_by); then
+        NOTICE="kern: autopilot denied by $denier."
+        return 0
+      fi
+      if [ "$(state_get "$SID" autopilot 2>/dev/null)" != on ]; then
+        state_set "$SID" autopilot=on "since=$(now_iso)" && AP_TURNED_ON=1
+      fi
+      ;;
+    off) state_set "$SID" autopilot=off ;;
+    "" | status) ;;
+    *) NOTICE="kern: autopilot argument not recognized; use on, off or status." ;;
+  esac
+}
+
+# dispatch NAME ARGS ALLOW_ON: NAME is a command name with or without the leading slash.
+dispatch() {
+  case "${1#/}" in
+    kern:mode | mode) apply_mode "$2" ;;
+    kern:autopilot | autopilot) apply_autopilot "$2" "$3" ;;
+  esac
+}
+
+# wrapped TRIM: true when the prompt itself starts with a wrapper tag.
+wrapped() {
+  local t
+  for t in $KERN_WRAPPER_TAGS; do
+    case "$1" in "$t"*) return 0 ;; esac
+  done
+  return 1
+}
+
+# natural PROMPT: switches only when the first non-blank line, lowercased, trimmed and with its runs of
+# blanks folded to one space, is a switch phrase and nothing else, apart from a leading "please", "ok"
+# or "okay" and any trailing mix of "please", "now" and final . or !. A phrase that ends in "terse" or
+# "normal" may add " mode". A line that holds anything more, such as "use terse, descriptive names",
+# never switches, and neither does a line over 200 characters: no phrase is that long, and the ending
+# loop below is quadratic in a long run of strippable endings.
+natural() {
+  local p
+  p=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}')
+  [ "${#p}" -le 200 ] || return 0
+  p=$(printf '%s\n' "$p" | lower |
+    sed -E -e 's/[[:space:]]+/ /g; s/^ //; s/ $//' -e ':a' -e 's/ ?[.!]+$//; s/,? (please|now)$//' -e 'ta' \
+      -e 's/^(please|ok|okay),? //; s/(^| )(terse|normal) mode$/\1\2/')
+  case "$p" in
+    terse | "go terse" | "be terse" | "use terse" | "enable terse" | "turn on terse" | "activate terse" | "switch to terse" | "terse on" | \
+      "terse voice" | "terse mode on")
+      set_voice terse && SHOW_LINE=1
+      ;;
+    normal | "normal voice" | "back to normal" | "go back to normal" | "switch back to normal" | "switch to normal" | "stop terse" | \
+      "terse off" | "terse mode off" | "turn off terse" | "disable terse" | "exit terse" | "quit terse")
+      set_voice normal && SHOW_LINE=1
+      ;;
+    "html mode" | "go html" | "switch to html" | "html on") set_surface html && SHOW_LINE=1 ;;
+    "stop html" | "html off") set_surface "$(settings_get mode.surface auto | sed 's/^html$/auto/')" && SHOW_LINE=1 ;;
+    "chat only" | "chat mode") set_surface chat && SHOW_LINE=1 ;;
+    "stop autopilot" | "autopilot off") state_set "$SID" autopilot=off && SHOW_LINE=1 ;;
+  esac
+  return 0
+}
+
+if [ "$EVENT" = UserPromptExpansion ]; then
+  ETYPE=$(json_get expansion_type) || ETYPE=""
+  NAME=$(json_get command_name) || NAME=""
+  ARGS=$(json_get command_args) || ARGS=""
+  SRC=$(json_get command_source) || SRC=""
+  PROMPT=$(json_get prompt) || PROMPT=""
+  case "${NAME#/}" in
+    kern:mode | kern:autopilot) [ "$ETYPE" = slash_command ] && dispatch "$NAME" "$ARGS" 1 ;;
+    mode | autopilot)
+      case "$PROMPT" in
+        "/kern:${NAME#/}"* | "/${NAME#/}"*) [ "$ETYPE" = slash_command ] && [ "$SRC" = plugin ] && dispatch "$NAME" "$ARGS" 1 ;;
+      esac
+      ;;
+  esac
+else
+  PROMPT=$(json_get prompt) || PROMPT=""
+  TRIM=$(printf '%s' "$PROMPT" | sed -n '/[^[:space:]]/,$p' | sed '1s/^[[:space:]]*//')
+  if wrapped "$TRIM"; then
+    case "$TRIM" in "<scheduled-task"*) SCHEDULED=1 ;; esac
+    TRIM=""
+  else
+    # The user's own words, hashed line by line, so G20 can check an approved: quote against them. A
+    # wrapped prompt is not the user's and records nothing; any other prompt, even an empty one,
+    # replaces the last one's lines.
+    state_set "$SID" "prompt_hashes=$(printf '%s\n' "$TRIM" | prompt_hashes)"
+  fi
+  case "$TRIM" in
+    "") ;;
+    "<command-message>"* | "<command-name>"*)
+      NAME=$(printf '%s' "$TRIM" | sed -n 's/.*<command-name>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*<\/command-name>.*/\1/p' | head -n 1)
+      ARGS=$(printf '%s' "$TRIM" | tr '\n' ' ' | sed -n 's/.*<command-args>[[:space:]]*\([^<]*\)<\/command-args>.*/\1/p' | head -n 1)
+      dispatch "$NAME" "$ARGS" 0
+      ;;
+    /kern:mode* | /kern:autopilot*)
+      NAME=$(printf '%s' "$TRIM" | awk 'NR == 1 { print $1 }')
+      ARGS=$(printf '%s' "$TRIM" | awk 'NR == 1 { $1 = ""; sub(/^ /, ""); print }')
+      dispatch "$NAME" "$ARGS" 1
+      ;;
+    /*) ;;
+    *) natural "$TRIM" ;;
+  esac
+fi
+
+[ "$EVENT" = UserPromptExpansion ] && [ "$SHOW_LINE" = 0 ] && exit 0
+[ -n "$NOTICE" ] && printf '%s\n' "$NOTICE"
+case "$CHANGED_VOICE" in
+  terse) cat "$KERN_ROOT/modes/terse.md" ;;
+  normal) printf 'kern: voice is normal again; the terse rules no longer apply.\n' ;;
+esac
+if [ -n "$CHANGED_SURFACE" ]; then
+  if [ -f "$KERN_ROOT/skills/visual/SKILL.md" ]; then
+    printf 'kern: surface is now %s.\n' "$CHANGED_SURFACE"
+  else
+    printf 'kern: surface is now %s. Visual pages arrive with the visual skill, which is not installed; replies stay in chat until then.\n' "$CHANGED_SURFACE"
+  fi
+fi
+LINE=$(mode_line "$SID")
+if [ "$AP_TURNED_ON" = 1 ] || { autopilot_on "$SID" && [ "${CLAUDE_CODE_ENTRYPOINT#sdk}" = "${CLAUDE_CODE_ENTRYPOINT-}" ]; }; then
+  [ "$SCHEDULED" = 1 ] || printf '%s\n' "$LINE"
+  printf '%s\n' "autopilot ON: commit with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or \$( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly, commands spelled out: no wrapper, no cd, no run-time-built name, no shell script or code piped to a shell, no gh alias; git add in its own call, before the commit; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls."
+  exit 0
+fi
+if [ "$SHOW_LINE" = 1 ] || [ -n "$CHANGED_VOICE$CHANGED_SURFACE" ]; then
+  printf '%s\n' "$LINE"
+  exit 0
+fi
+# Headless and scheduled runs get no reminder.
+case "${CLAUDE_CODE_ENTRYPOINT-}" in sdk*) exit 0 ;; esac
+[ "$SCHEDULED" = 1 ] && exit 0
+case "$LINE" in
+  *"voice=normal surface=auto autopilot=off"*) ;;
+  *voice=terse*) printf '%s\nkern: terse voice: answer first, answer only what was asked, short sentences, no ceremony, payload exact; persisted text plain.\n' "$LINE" ;;
+  *) printf '%s\n' "$LINE" ;;
+esac
+exit 0

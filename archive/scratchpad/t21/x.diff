@@ -1,0 +1,26 @@
+# Review package: 9e5bff989c7a..bc42a1e0f57b
+
+## Files changed
+M	a.txt
+M	src/s.txt
+
+## Stat
+ a.txt     | 2 +-
+ src/s.txt | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/a.txt b/a.txt
+index 7898192..1fcb152 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1 @@
+-a
++out
+diff --git a/src/s.txt b/src/s.txt
+index b478595..435c0d1 100644
+--- a/src/s.txt
++++ b/src/s.txt
+@@ -1 +1,2 @@
+ s
++w2

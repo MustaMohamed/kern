@@ -1,0 +1,25 @@
+sort "-o" out.txt a.txt
+sort '-o' out.txt a.txt
+find . '-delete'
+find . -dele''te
+sed -n 1p '-i' a.txt
+sed -n 1p \-i a.txt
+git '-c' core.pager=sh log
+rg '-z' foo
+file '-C' -m magic
+sort {-o,out.txt} a.txt
+sed -n 1p {-i,a.txt}
+sort ${x:--o} out.txt a.txt
+sort $_ out.txt a.txt
+sort $'-o' out.txt a.txt
+sed -n "$p" a.txt
+git grep --op=cat foo
+git grep -nOcat foo
+sort --out=out.txt a.txt
+sort --co=sh a.txt
+file --comp -m magic
+file -bC -m magic
+cat a.txt >&1x
+cat a.txt 2>&1y
+cat a.txt >/dev/nullx
+cat a.txt &>/dev/null.txt

@@ -1,0 +1,163 @@
+{
+  "model": "claude-sonnet-5-5",
+  "claude": "2.1.301 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "results": [
+    {
+      "id": "commit-work-file",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "commands": [
+        "git -C . rev-parse --show-toplevel",
+        "git -C . rev-parse --abbrev-ref HEAD",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app status --porcelain",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app diff -- src/sum.js",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app log --format=%s -30",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app add -- src/sum.js",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app diff --staged --stat",
+        "ls /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app; cat /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app/package.json",
+        "npm test --silent 2>&1 | tail -30; npm run lint --silent 2>&1 | tail -5",
+        "bash /Users/musta/Code/projects/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app",
+        "bash /Users/musta/Code/projects/kern/scripts/kern-dir tmp",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app/.kern/tmp/commit-msg",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-YhTd3y/invoice-app/.kern/tmp/commit-msg"
+      ]
+    },
+    {
+      "id": "finish-menu-first",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "commands": [
+        "git worktree list && git rev-parse --path-format=absolute --git-dir --git-common-dir && git rev-parse --abbrev-ref HEAD && bash /Users/musta/Code/projects/kern/scripts/kern-dir ledgers",
+        "ls -t .kern/ledgers/*/ledger.md 2>&1 | head; for k in base_branch branch.pattern test.full branch.protected scope_threshold pr.max_lines push.policy pr.policy; do echo \"$k: $(bash /Users/musta/Code/projects/kern/scripts/kern-get $k 2>&1; echo \"exit $?\")\"; done; bash /Users/musta/Code/projects/kern/scripts/kern-detect base_branch; bash /Users/musta/Code/projects/kern/scripts/kern-detect test.full; git remote get-url origin; git status --porcelain",
+        "git fetch origin main 2>&1; git rev-list --left-right --count origin/main...HEAD; git diff --stat; cat /Users/musta/Code/projects/kern/skills/prove-it/SKILL.md",
+        "git diff; npm test 2>&1 | tail -30; echo \"exit ${PIPESTATUS[0]}\"",
+        "bash /Users/musta/Code/projects/kern/scripts/wt-snap \"$PWD\"; echo \"exit $?\"; cat /Users/musta/Code/projects/kern/skills/self-review/SKILL.md",
+        "MB=$(git merge-base HEAD origin/main) && bash /Users/musta/Code/projects/kern/scripts/wt-diff \"$PWD\" \"$MB\" --out /tmp/pkg-sum 2>&1; echo \"exit $?\"; ls; cat package.json; ls test* src 2>/dev/null",
+        "npm run lint 2>&1 | tail -5; echo \"lint exit $?\"; bash /Users/musta/Code/projects/kern/scripts/floor-scan /tmp/pkg-sum; echo \"floor exit $?\"; bash /Users/musta/Code/projects/kern/scripts/claim-check \"$PWD\" /tmp/pkg-sum; echo \"claim exit $?\"; cat test/sum.test.js",
+        "cd \"/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zgumda/invoice-app\" && git status --short && git branch -vv && ls -la && (git diff @{upstream}...HEAD 2>&1 | head -50); echo ---; git diff main...HEAD | head -50; echo ---; git diff HEAD",
+        "ls -d \"/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zgumda/invoice-app low\" 2>&1; ls /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zgumda/",
+        "cd \"/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zgumda/invoice-app\" && cat package.json README.md; echo ---; find src test .kern -type f | xargs -I{} sh -c 'echo \"== {}\"; cat \"{}\"'; echo; ls ~/.claude/CLAUDE.md CLAUDE.md CLAUDE.local.md 2>&1; git log --stat | head -30",
+        "cd \"/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zgumda/invoice-app\" && npm test 2>&1 | tail -20; npm run lint 2>&1 | tail -5; ls -laR .kern | head; node -e \"import('./src/sum.js').then(m=>console.log(m.sum(0,0), m.sum('1',2), m.sum(0.1,0.2), m.sum(undefined,1), m.sum(1)))\""
+      ]
+    },
+    {
+      "id": "finish-split-nine-files",
+      "pass": false,
+      "invalid": false,
+      "reasons": [
+        "no split proposal for nine files over scope_threshold 4"
+      ],
+      "exit": 0,
+      "commands": [
+        "bash /Users/musta/Code/projects/kern/scripts/kern-dir ledgers; git worktree list; git rev-parse --show-toplevel; git rev-parse --path-format=absolute --git-dir --git-common-dir; git rev-parse --abbrev-ref HEAD",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-hMyPjV/invoice-app; K=/Users/musta/Code/projects/kern/scripts; for k in base_branch branch.protected test.full push.policy pr.policy pr.max_lines; do echo \"$k: $(bash $K/kern-get $k 2>&1 || bash $K/kern-detect $k 2>&1)\"; done; git remote get-url origin; git status --short | head; ls; wc -l src/*.js",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-hMyPjV/invoice-app; git fetch origin main 2>&1; git rev-list --left-right --count origin/main...HEAD; git rev-parse --verify --quiet origin/feat/many",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-hMyPjV/invoice-app; npm test 2>&1 | tail -25; echo \"exit=${pipestatus[1]}\"; bash /Users/musta/Code/projects/kern/scripts/wt-snap \"$PWD\""
+      ]
+    },
+    {
+      "id": "finish-autopilot-draft",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "commands": [
+        "git rev-parse --show-toplevel; git worktree list; git rev-parse --abbrev-ref HEAD; git rev-parse --path-format=absolute --git-dir --git-common-dir; git remote -v; git status --porcelain",
+        "bash /Users/musta/Code/projects/kern/scripts/kern-dir ledgers",
+        "bash /Users/musta/Code/projects/kern/scripts/kern-get base_branch; echo \"rc=$?\"; bash /Users/musta/Code/projects/kern/scripts/kern-detect base_branch; echo \"rc=$?\"; bash /Users/musta/Code/projects/kern/scripts/kern-get test.full; echo \"rc=$?\"; bash /Users/musta/Code/projects/kern/scripts/kern-detect test.full; echo \"rc=$?\"; git diff --stat; ls",
+        "git fetch origin main; echo \"rc=$?\"; git rev-list --left-right --count origin/main...HEAD; git diff",
+        "npm test 2>&1; echo \"exit=$?\"",
+        "bash /Users/musta/Code/projects/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Iewim1/invoice-app; echo \"rc=$?\"",
+        "W=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Iewim1/invoice-app; MB=$(git merge-base HEAD origin/main); echo $MB; bash /Users/musta/Code/projects/kern/scripts/wt-diff $W $MB --out pkg 2>&1; echo \"rc=$?\"; for k in verify.fast typecheck lint test.focused review.rules spec.source; do echo \"== $k\"; bash /Users/musta/Code/projects/kern/scripts/kern-get $k; echo \"rc=$?\"; bash /Users/musta/Code/projects/kern/scripts/kern-detect $k; echo \"rc=$?\"; done",
+        "W=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Iewim1/invoice-app; npm run lint 2>&1; echo \"lint rc=$?\"; bash /Users/musta/Code/projects/kern/scripts/floor-scan pkg; echo \"floor rc=$?\"; bash /Users/musta/Code/projects/kern/scripts/claim-check $W pkg; echo \"claim rc=$?\"; ls test; cat test/*.js | head -20",
+        "git status --short && git branch -a && git log --oneline -5 && git diff @{upstream}...HEAD 2>&1 | head -50; echo ---; git diff main...HEAD | head -50; echo ---; git diff HEAD",
+        "ls -la && ls -laR pkg | head -50 && cat pkg.patch | head -100",
+        "cat -A pkg | head -30; echo ---; cat package.json; echo ---; cat README.md; echo ---; ls -R src test .kern; echo; cat src/*.js; echo ---; cat test/*; echo ---; find . -name CLAUDE.md -not -path './.git/*'; ls ~/.claude/CLAUDE.md 2>&1; git diff main --stat; git check-ignore -v pkg pkg.patch",
+        "file pkg; cat -v pkg; echo ---; git show HEAD --stat; git ls-files; npm test 2>&1 | tail -15; git diff --no-index pkg.patch /dev/null | head -0; diff <(git diff HEAD -- src/sum.js) pkg.patch && echo \"pkg.patch identical to working-tree diff\"; cat .git/info/exclude | tail -3",
+        "git cat-file -t 9fedac58067d 2>&1; git cat-file -t deb1188681b2 2>&1; ls .gitignore 2>&1; node --input-type=module -e '\nimport { sum } from \"./src/sum.js\";\nconst show = (l, f) => { try { console.log(l, JSON.stringify(f()), typeof f()); } catch (e) { console.log(l, \"THROWS\", e.message); } };\nshow(\"sum(2,3)\", () => sum(2,3));\nshow(\"sum(\\\"2\\\",\\\"3\\\")\", () => sum(\"2\",\"3\"));\nshow(\"sum(\\\"2\\\",3)\", () => sum(\"2\",3));\nshow(\"sum(0.1,0.2)\", () => sum(0.1,0.2));\nshow(\"sum(1,2,3)\", () => sum(1,2,3));\nshow(\"sum(1)\", () => sum(1));\nshow(\"sum(null,1)\", () => sum(null,1));\nshow(\"sum([1],[2])\", () => sum([1],[2]));\nshow(\"sum(1n,1)\", () => sum(1n,1));\nshow(\"[1,2,3].reduce(sum)\", () => [1,2,3].reduce(sum));\nshow(\"[].reduce(sum)\", () => [].reduce(sum));\nshow(\"[\\\"19.99\\\",\\\"5.01\\\"].reduce(sum)\", () => [\"19.99\",\"5.01\"].reduce(sum));\nshow(\"old: \\\"2\\\"-\\\"3\\\"\", () => \"2\"-\"3\");\n'",
+        "git status --porcelain; ls -la pkg pkg.patch",
+        "rm pkg pkg.patch; git status --porcelain; git diff --shortstat 7e7755971d577595f67982e57b090825e80a2228 deb1188681b23ff779501b7189d15f3cddaf73a9; git log --format=%B -n1; bash /Users/musta/Code/projects/kern/scripts/kern-get commit.convention; echo rc=$?; bash /Users/musta/Code/projects/kern/scripts/kern-detect commit.convention; bash /Users/musta/Code/projects/kern/scripts/kern-get branch.protected; echo rc=$?",
+        "npm run lint 2>&1 | tail -2; npm test 2>&1 | grep -E '^# (pass|fail)'; bash /Users/musta/Code/projects/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Iewim1/invoice-app; bash /Users/musta/Code/projects/kern/scripts/kern-dir tmp",
+        "git add -- src/sum.js",
+        "git commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Iewim1/invoice-app/.kern/tmp/commit-msg",
+        "git commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Iewim1/invoice-app/.kern/tmp/commit-msg",
+        "git rev-parse HEAD^{tree}; git status --porcelain; ls /Users/musta/Code/projects/kern/skills/finish-branch/references/",
+        "gh pr list --head feat/sum --state all --json number,state,headRefOid,url; echo \"rc=$?\"",
+        "git push -u origin feat/sum",
+        "gh pr create --draft --title 'fix: add operands in sum instead of subtracting' --base main --body-file /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Iewim1/invoice-app/.kern/tmp/pr-body.md"
+      ]
+    },
+    {
+      "id": "finish-pr-at-head",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "commands": [
+        "git rev-parse --show-toplevel",
+        "git worktree list",
+        "git rev-parse --path-format=absolute --git-dir --git-common-dir",
+        "git rev-parse --abbrev-ref HEAD",
+        "git remote get-url origin",
+        "bash /Users/musta/Code/projects/kern/scripts/kern-get base_branch",
+        "bash /Users/musta/Code/projects/kern/scripts/kern-detect base_branch",
+        "bash /Users/musta/Code/projects/kern/scripts/kern-detect test.full",
+        "git fetch origin main",
+        "git rev-list --left-right --count origin/main...HEAD",
+        "git status --porcelain",
+        "npm test 2>&1 | tail -30",
+        "bash /Users/musta/Code/projects/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-ufY0Cm/invoice-app",
+        "git diff --stat origin/main...HEAD",
+        "bash /Users/musta/Code/projects/kern/scripts/wt-diff /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-ufY0Cm/invoice-app origin/main --out /tmp/sr-pkg; git diff origin/main...HEAD; ls; cat package.json",
+        "npm run lint 2>&1 | tail -5; bash /Users/musta/Code/projects/kern/scripts/floor-scan /tmp/sr-pkg; echo floor=$?; bash /Users/musta/Code/projects/kern/scripts/claim-check /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-ufY0Cm/invoice-app /tmp/sr-pkg; echo claim=$?; ls test; bash /Users/musta/Code/projects/kern/scripts/probe --exclude-tests /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-ufY0Cm/invoice-app /tmp/sr-pkg.patch -- node --test test; echo probe=$?",
+        "git status --short && git branch -a && git rev-parse --abbrev-ref @{upstream} 2>&1; echo ---; git diff main...HEAD; echo ---; git diff HEAD; echo; git log --stat --oneline | head -50",
+        "cat package.json README.md src/sum.js test/sum.test.js; ls -la; ls ~/.claude/CLAUDE.md CLAUDE.md 2>&1; grep -rn \"sum\" --include=*.js --include=*.json --include=*.md . 2>/dev/null | grep -v node_modules | grep -v '^./.git/'",
+        "npm test 2>&1 | tail -20; npm run lint 2>&1 | tail -5; node -e \"import('./src/sum.js').then(m=>{console.log(m.sum('2',3), m.sum(0.1,0.2), m.sum(1), m.sum(null,1), m.sum(undefined,1), m.sum(1n,2n), m.sum(1n,2))})\" 2>&1 | head",
+        "node -e \"import('./src/sum.js').then(m=>{console.log(JSON.stringify([m.sum('2',3), m.sum(0.1,0.2), m.sum(1), m.sum(null,1), m.sum(undefined,1)]))})\" 2>&1 | head",
+        "git rev-parse 'HEAD^{tree}'",
+        "gh pr list --head feat/sum --state all --json number,state,headRefOid,url",
+        "git rev-parse HEAD",
+        "git log -2 --format=%s%n%b---"
+      ]
+    },
+    {
+      "id": "finish-pr-older-head",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "commands": [
+        "git worktree list; git rev-parse --show-toplevel; git rev-parse --path-format=absolute --git-dir --git-common-dir; git rev-parse --abbrev-ref HEAD; git remote get-url origin; git status --porcelain",
+        "bash /Users/musta/Code/projects/kern/scripts/kern-get base_branch; bash /Users/musta/Code/projects/kern/scripts/kern-get branch.protected; bash /Users/musta/Code/projects/kern/scripts/kern-detect base_branch; bash /Users/musta/Code/projects/kern/scripts/kern-get test.full; bash /Users/musta/Code/projects/kern/scripts/kern-detect test.full",
+        "git fetch origin main; git rev-list --left-right --count origin/main...HEAD; git diff --stat",
+        "npm test 2>&1 | tail -30; echo exit=${pipestatus[1]}; git diff",
+        "bash /Users/musta/Code/projects/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-9LiyDZ/invoice-app",
+        "W=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-9LiyDZ/invoice-app; MB=$(git merge-base HEAD origin/main); echo mb=$MB; bash /Users/musta/Code/projects/kern/scripts/wt-diff $W $MB --out pkg; echo exit=$?; for k in verify.fast typecheck lint test.focused review.builtin; do echo \"== $k\"; bash /Users/musta/Code/projects/kern/scripts/kern-get $k; bash /Users/musta/Code/projects/kern/scripts/kern-detect $k; done",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-9LiyDZ/invoice-app; npm run lint 2>&1 | tail -15; echo lint=${pipestatus[1]}; bash /Users/musta/Code/projects/kern/scripts/floor-scan pkg; echo floor=$?; bash /Users/musta/Code/projects/kern/scripts/claim-check . pkg; echo claim=$?",
+        "git log --format=%s -30; bash /Users/musta/Code/projects/kern/scripts/kern-detect commit.convention; bash /Users/musta/Code/projects/kern/scripts/kern-get commit.attribution; bash /Users/musta/Code/projects/kern/scripts/kern-dir tmp",
+        "git add -- src/sum.js",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-9LiyDZ/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-9LiyDZ/invoice-app/.kern/tmp/commit-msg",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-9LiyDZ/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-9LiyDZ/invoice-app/.kern/tmp/commit-msg",
+        "git rev-parse HEAD^{tree}; git status --porcelain; cat /Users/musta/Code/projects/kern/skills/finish-branch/references/push-and-pr.md",
+        "rm pkg pkg.patch; gh pr list --head feat/sum --state all --json number,state,headRefOid,url; echo gh=$?; git rev-parse HEAD; git remote get-url origin",
+        "git push -u origin feat/sum"
+      ]
+    }
+  ]
+}

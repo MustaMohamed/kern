@@ -1,0 +1,452 @@
+TAP version 13
+# Subtest: parses CRLF frontmatter
+ok 1 - parses CRLF frontmatter
+  ---
+  duration_ms: 0.845916
+  type: 'test'
+  ...
+# Subtest: strips quotes and keeps colons in values
+ok 2 - strips quotes and keeps colons in values
+  ---
+  duration_ms: 0.103416
+  type: 'test'
+  ...
+# Subtest: block scalars are an error
+ok 3 - block scalars are an error
+  ---
+  duration_ms: 0.06175
+  type: 'test'
+  ...
+# Subtest: tiers: auto, path when a kernel row routes to it, else slash
+ok 4 - tiers: auto, path when a kernel row routes to it, else slash
+  ---
+  duration_ms: 1.688083
+  type: 'test'
+  ...
+# Subtest: a clean auto skill passes
+ok 5 - a clean auto skill passes
+  ---
+  duration_ms: 1.813333
+  type: 'test'
+  ...
+# Subtest: rule 1: missing frontmatter, name mismatch, non-kebab dir
+ok 6 - rule 1: missing frontmatter, name mismatch, non-kebab dir
+  ---
+  duration_ms: 1.828875
+  type: 'test'
+  ...
+# Subtest: rule 2: unknown skill key and ignored plugin-agent keys
+ok 7 - rule 2: unknown skill key and ignored plugin-agent keys
+  ---
+  duration_ms: 1.177541
+  type: 'test'
+  ...
+# Subtest: rule 3: auto limit and trigger, manual limit, agent limit, totals
+ok 8 - rule 3: auto limit and trigger, manual limit, agent limit, totals
+  ---
+  duration_ms: 3.425625
+  type: 'test'
+  ...
+# Subtest: rule 4: referenced files must exist
+ok 9 - rule 4: referenced files must exist
+  ---
+  duration_ms: 0.646083
+  type: 'test'
+  ...
+# Subtest: rule 8: machine paths and listed names in shipped files
+ok 10 - rule 8: machine paths and listed names in shipped files
+  ---
+  duration_ms: 0.665
+  type: 'test'
+  ...
+# Subtest: rule 8: names come from scripts/lint-names.txt, comments ignored
+ok 11 - rule 8: names come from scripts/lint-names.txt, comments ignored
+  ---
+  duration_ms: 1.260708
+  type: 'test'
+  ...
+# Subtest: rule 10: exemption needs a reason, and suppresses its finding
+ok 12 - rule 10: exemption needs a reason, and suppresses its finding
+  ---
+  duration_ms: 1.173791
+  type: 'test'
+  ...
+# Subtest: rule 11: long dashes and curly quotes
+ok 13 - rule 11: long dashes and curly quotes
+  ---
+  duration_ms: 0.799084
+  type: 'test'
+  ...
+# Subtest: rule 11: scans any non-binary shipped file, skips binaries
+ok 14 - rule 11: scans any non-binary shipped file, skips binaries
+  ---
+  duration_ms: 0.831708
+  type: 'test'
+  ...
+# Subtest: rule 4: existing references pass, repo-root fallback, anchors and ./
+ok 15 - rule 4: existing references pass, repo-root fallback, anchors and ./
+  ---
+  duration_ms: 2.515875
+  type: 'test'
+  ...
+# Subtest: rule 6: a route must exist and open with \#\# Steps
+ok 16 - rule 6: a route must exist and open with \#\# Steps
+  ---
+  duration_ms: 3.166834
+  type: 'test'
+  ...
+# Subtest: rule 6: every user-reachable skill is in the help map
+ok 17 - rule 6: every user-reachable skill is in the help map
+  ---
+  duration_ms: 1.485625
+  type: 'test'
+  ...
+# Subtest: rule 6: a route row in another form, or \#\# Steps without a numbered list, is an error
+ok 18 - rule 6: a route row in another form, or \#\# Steps without a numbered list, is an error
+  ---
+  duration_ms: 1.358
+  type: 'test'
+  ...
+# Subtest: rule 7: an oversized rendered kernel is an error; the real kernel passes
+ok 19 - rule 7: an oversized rendered kernel is an error; the real kernel passes
+  ---
+  duration_ms: 478.110916
+  type: 'test'
+  ...
+# Subtest: rule 13: hooks and the settings table agree
+ok 20 - rule 13: hooks and the settings table agree
+  ---
+  duration_ms: 1.519542
+  type: 'test'
+  ...
+# Subtest: rule 15: hook-shape fixtures and runner exist once hooks exist
+ok 21 - rule 15: hook-shape fixtures and runner exist once hooks exist
+  ---
+  duration_ms: 479.524542
+  type: 'test'
+  ...
+# Subtest: rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not
+ok 22 - rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not
+  ---
+  duration_ms: 1.212125
+  type: 'test'
+  ...
+# Subtest: rule 7: a session-start that fails or prints nothing is an error
+ok 23 - rule 7: a session-start that fails or prints nothing is an error
+  ---
+  duration_ms: 59.576542
+  type: 'test'
+  ...
+# Subtest: rule 7: its temp directory is removed when a check throws
+ok 24 - rule 7: its temp directory is removed when a check throws
+  ---
+  duration_ms: 14.831083
+  type: 'test'
+  ...
+# Subtest: rule 13: single-quoted keys are reads; a policy_for with a variable is an error
+ok 25 - rule 13: single-quoted keys are reads; a policy_for with a variable is an error
+  ---
+  duration_ms: 1.488875
+  type: 'test'
+  ...
+# Subtest: rule 13: a hook's need list names functions, so it reads no settings key
+ok 26 - rule 13: a hook's need list names functions, so it reads no settings key
+  ---
+  duration_ms: 0.436958
+  type: 'test'
+  ...
+# Subtest: rule 15: every fixture case but no-settings carries a settings file
+ok 27 - rule 15: every fixture case but no-settings carries a settings file
+  ---
+  duration_ms: 60.043
+  type: 'test'
+  ...
+# Subtest: rule 5: Skill tool references name auto or built-in skills
+ok 28 - rule 5: Skill tool references name auto or built-in skills
+  ---
+  duration_ms: 1.968625
+  type: 'test'
+  ...
+# Subtest: rule 5: the kernel and agents are scanned, fenced blocks included
+ok 29 - rule 5: the kernel and agents are scanned, fenced blocks included
+  ---
+  duration_ms: 1.44675
+  type: 'test'
+  ...
+# Subtest: rule 5: agent Read paths resolve
+ok 30 - rule 5: agent Read paths resolve
+  ---
+  duration_ms: 0.90725
+  type: 'test'
+  ...
+# Subtest: rule 9: auto skills need Steps; slash skills need Steps first
+ok 31 - rule 9: auto skills need Steps; slash skills need Steps first
+  ---
+  duration_ms: 1.445917
+  type: 'test'
+  ...
+# Subtest: rule 9: Steps must be an H2 outside a fence and not a longer heading
+ok 32 - rule 9: Steps must be an H2 outside a fence and not a longer heading
+  ---
+  duration_ms: 1.407875
+  type: 'test'
+  ...
+# Subtest: rule 9: an unclosed fence is reported, not read as a pass
+ok 33 - rule 9: an unclosed fence is reported, not read as a pass
+  ---
+  duration_ms: 0.349125
+  type: 'test'
+  ...
+# Subtest: rule 9: CRLF files are read like LF files
+ok 34 - rule 9: CRLF files are read like LF files
+  ---
+  duration_ms: 1.512708
+  type: 'test'
+  ...
+# Subtest: rule 9: a slash skill without Steps passes with an exemption
+ok 35 - rule 9: a slash skill without Steps passes with an exemption
+  ---
+  duration_ms: 0.573208
+  type: 'test'
+  ...
+# Subtest: rule 9: agents need an output contract section
+ok 36 - rule 9: agents need an output contract section
+  ---
+  duration_ms: 1.223125
+  type: 'test'
+  ...
+# Subtest: rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+ok 37 - rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+  ---
+  duration_ms: 2.531583
+  type: 'test'
+  ...
+# Subtest: rule 9: Red flags must be a real H2 with the Thought | Reality header
+ok 38 - rule 9: Red flags must be a real H2 with the Thought | Reality header
+  ---
+  duration_ms: 2.04825
+  type: 'test'
+  ...
+# Subtest: rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+ok 39 - rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+  ---
+  duration_ms: 1.190625
+  type: 'test'
+  ...
+# Subtest: rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read
+ok 40 - rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read
+  ---
+  duration_ms: 3.34375
+  type: 'test'
+  ...
+# Subtest: fence parser: a fence closed by the other marker stays open and is reported
+ok 41 - fence parser: a fence closed by the other marker stays open and is reported
+  ---
+  duration_ms: 0.361375
+  type: 'test'
+  ...
+# Subtest: fence parser: a longer fence holds a shorter fence line
+ok 42 - fence parser: a longer fence holds a shorter fence line
+  ---
+  duration_ms: 0.687583
+  type: 'test'
+  ...
+# Subtest: fence parser: an opener indented 0 to 3 spaces counts, 4 does not
+ok 43 - fence parser: an opener indented 0 to 3 spaces counts, 4 does not
+  ---
+  duration_ms: 1.039542
+  type: 'test'
+  ...
+# Subtest: rule 16: a script name is read whole, dots, slashes and underscores included
+ok 44 - rule 16: a script name is read whole, dots, slashes and underscores included
+  ---
+  duration_ms: 3.670042
+  type: 'test'
+  ...
+# Subtest: rule 16: a WORK folder is read whole, in any case
+ok 45 - rule 16: a WORK folder is read whole, in any case
+  ---
+  duration_ms: 1.688
+  type: 'test'
+  ...
+# Subtest: rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file
+ok 46 - rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file
+  ---
+  duration_ms: 2.822416
+  type: 'test'
+  ...
+# Subtest: rule 7: the routed file has its own cap, and the standing cost has a combined budget
+ok 47 - rule 7: the routed file has its own cap, and the standing cost has a combined budget
+  ---
+  duration_ms: 64.037667
+  type: 'test'
+  ...
+# Subtest: rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists
+ok 48 - rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists
+  ---
+  duration_ms: 4.097417
+  type: 'test'
+  ...
+# Subtest: rule 7: a session-start that fails without project settings is an error, not a low standing cost
+ok 49 - rule 7: a session-start that fails without project settings is an error, not a low standing cost
+  ---
+  duration_ms: 31.568625
+  type: 'test'
+  ...
+# Subtest: rule 12: a case file that is not valid JSON is an error
+ok 50 - rule 12: a case file that is not valid JSON is an error
+  ---
+  duration_ms: 1.055083
+  type: 'test'
+  ...
+# Subtest: rule 12: a model-graded negative does not count toward the minimum of 2
+not ok 51 - rule 12: a model-graded negative does not count toward the minimum of 2
+  ---
+  duration_ms: 0.989375
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:480:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + []
+    - [
+    -   12
+    - ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 12
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:483:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: kernelRows parses skill and kernel-file routes and skips other lines
+ok 52 - kernelRows parses skill and kernel-file routes and skips other lines
+  ---
+  duration_ms: 1.031959
+  type: 'test'
+  ...
+# Subtest: targets add the rows of both files after skills and before distractors
+ok 53 - targets add the rows of both files after skills and before distractors
+  ---
+  duration_ms: 2.502292
+  type: 'test'
+  ...
+# Subtest: a row and its own skill count as one owner
+ok 54 - a row and its own skill count as one owner
+  ---
+  duration_ms: 2.559417
+  type: 'test'
+  ...
+# Subtest: a routed row without a case file is an error
+ok 55 - a routed row without a case file is an error
+  ---
+  duration_ms: 1.835541
+  type: 'test'
+  ...
+# Subtest: held-out prompts give their own rate, held to their own floor
+ok 56 - held-out prompts give their own rate, held to their own floor
+  ---
+  duration_ms: 1.594
+  type: 'test'
+  ...
+# Subtest: the fixed floors and the frozen held-out set are pinned
+ok 57 - the fixed floors and the frozen held-out set are pinned
+  ---
+  duration_ms: 0.446
+  type: 'test'
+  ...
+# Subtest: a model-graded negative is skipped by the lexical check and listed in the output
+not ok 58 - a model-graded negative is skipped by the lexical check and listed in the output
+  ---
+  duration_ms: 4.092458
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:109:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + [
+    +   'recall: ranked #1 for negative prompt "catch me up"'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'recall: ranked #1 for negative prompt "catch me up"'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:114:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: a positive that carries the grader flag is an error
+not ok 59 - a positive that carries the grader flag is an error
+  ---
+  duration_ms: 1.89575
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:121:1'
+  failureType: 'testCodeFailure'
+  error: '[]'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:123:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: only lexically checked negatives count toward the minimum
+not ok 60 - only lexically checked negatives count toward the minimum
+  ---
+  duration_ms: 2.1665
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:126:1'
+  failureType: 'testCodeFailure'
+  error: '["recall: ranked #1 for negative prompt \\"catch me up\\""]'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:128:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..60
+# tests 60
+# suites 0
+# pass 56
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1297.027459

@@ -1,0 +1,39 @@
+killed   floors missing check
+killed   floors finite check
+killed   setup exit
+killed   Math.max -> floors only
+killed   Math.max -> baseline only
+killed   minHeldout wiring
+killed   heldout missing when required
+killed   heldout invalid JSON catch
+killed   heldout array check
+killed   heldout entry shape
+killed   heldout unknown owner
+killed   empty corpus
+killed   ownerOf by kind
+killed   positive grader error
+killed   unknown grader error
+killed   model-graded skip
+killed   route-eval minimum counts lexical only
+killed   CLI prints model-graded
+killed   rule 7 fixture check
+killed   rule 7 header requirement
+SURVIVED rule 7 exit requirement
+killed   rule 7 start not rendered
+killed   rule 7 again not rendered
+killed   rule 7 git init
+killed   rule 7 routes.md cap
+killed   rule 7 standing cost
+killed   rule 6 kernel names routes.md
+killed   rule 6 reads routes.md
+killed   rule 12 flagged positive
+killed   rule 12 invalid JSON
+killed   rule 12 lexical negatives only
+killed   rule 12 rows of routes.md
+killed   routed tier from routes.md
+killed   routed tier from rows only
+SURVIVED rule 5 scans routes.md
+killed   parseRow routes.md error
+killed   parseRow bare-form error
+SURVIVED routeRows drops errors
+mutations: 38, killed: 35, survived: 3 (rule 7 exit requirement; rule 5 scans routes.md; routeRows drops errors)

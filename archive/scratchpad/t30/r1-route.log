@@ -1,0 +1,5 @@
+model-graded, not checked here: prove-it: "Explain what fixed and passing mean in this commit message"
+model-graded, not checked here: prove-it: "What does a passing PR mean for subagent work"
+rank-1 rate: 88% (baseline 88%, fixed floor 85%)
+held-out rank-1 rate: 36% (fixed floor 32%)
+route-eval: passed

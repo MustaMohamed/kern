@@ -1,0 +1,175 @@
+TAP version 13
+# Subtest: finish-branch frontmatter
+not ok 1 - finish-branch frontmatter
+  ---
+  duration_ms: 1.633084
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:23:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      {
+    +   'allowed-tools': 'Bash(git status *), Bash(git rev-list *), Bash(git rev-parse *), Bash(gh pr list *)',
+    -   'allowed-tools': 'Bash(git status *), Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)',
+        'disable-model-invocation': 'true',
+        description: 'Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep.',
+        name: 'finish-branch'
+      }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    name: 'finish-branch'
+    description: 'Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep.'
+    disable-model-invocation: 'true'
+    allowed-tools: 'Bash(git status *), Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)'
+  actual:
+    name: 'finish-branch'
+    description: 'Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep.'
+    disable-model-invocation: 'true'
+    allowed-tools: 'Bash(git status *), Bash(git rev-list *), Bash(git rev-parse *), Bash(gh pr list *)'
+  operator: 'deepStrictEqual'
+  stack: |-
+    assertFrontmatter (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:43:10)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:24:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: finish-branch sections, steps and red flags
+not ok 2 - finish-branch sections, steps and red flags
+  ---
+  duration_ms: 0.405209
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:32:1'
+  failureType: 'testCodeFailure'
+  error: 'skills/finish-branch/SKILL.md must contain: `Worktree:` path'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    assertContains (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:64:35)
+    assertOnce (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:14:3)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:39:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: branch-ops reference: rebase, proven-tree check, discard
+not ok 3 - branch-ops reference: rebase, proven-tree check, discard
+  ---
+  duration_ms: 0.299625
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:66:1'
+  failureType: 'testCodeFailure'
+  error: 'skills/finish-branch/references/branch-ops.md must contain: If `git rev-parse --verify --quiet origin/<branch>` prints a SHA, the branch is published'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    assertContains (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:64:35)
+    assertOnce (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:14:3)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:68:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: push-and-pr reference: dedup, push, PR
+not ok 4 - push-and-pr reference: dedup, push, PR
+  ---
+  duration_ms: 0.214042
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:86:1'
+  failureType: 'testCodeFailure'
+  error: "skills/finish-branch/references/push-and-pr.md must contain: A PR counts only if its URL is this repo's, the one `git remote get-url origin` names; check that before reporting a URL."
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    assertContains (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:64:35)
+    assertOnce (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:14:3)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:88:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: PR body template
+ok 5 - PR body template
+  ---
+  duration_ms: 0.334625
+  type: 'test'
+  ...
+# Subtest: prove-it frontmatter is the spec text
+ok 6 - prove-it frontmatter is the spec text
+  ---
+  duration_ms: 1.180917
+  type: 'test'
+  ...
+# Subtest: prove-it sections, steps, gate and red flags
+ok 7 - prove-it sections, steps, gate and red flags
+  ---
+  duration_ms: 0.314
+  type: 'test'
+  ...
+# Subtest: evidence reference
+ok 8 - evidence reference
+  ---
+  duration_ms: 0.383208
+  type: 'test'
+  ...
+# Subtest: the M0 placeholder is gone
+ok 9 - the M0 placeholder is gone
+  ---
+  duration_ms: 0.078875
+  type: 'test'
+  ...
+# Subtest: the gate hands a commit to commit and a push or PR to finish-branch
+not ok 10 - the gate hands a commit to commit and a push or PR to finish-branch
+  ---
+  duration_ms: 0.29975
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/prove-it.test.mjs:37:1'
+  failureType: 'testCodeFailure'
+  error: 'skills/prove-it/SKILL.md must contain: unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step)'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    assertContains (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:64:35)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/prove-it.test.mjs:38:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 5
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 37.036833

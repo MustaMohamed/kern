@@ -1,0 +1,4 @@
+grep -F -n 'x>y' /a.jsonl | cut -c1-300
+grep -F -n x\>y /a.jsonl
+grep -n 'x.y' /a.jsonl | cut -c1-300
+grep -F -n 'a|b' /a.jsonl

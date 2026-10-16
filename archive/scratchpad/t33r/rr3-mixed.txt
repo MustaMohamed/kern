@@ -1,0 +1,11 @@
+git commit -m "fix CD"
+ls CDROM
+echo CD-ROM > notes.txt
+cd /tmp && echo "CD" > notes.txt
+cat @HC@/settings.json # CD player
+cd @HC@ && cd agents && echo CD && sed -i '' s/a/b/ settings.json
+cd @HC@ && cd agents && sed -i '' s/a/b/ settings.json
+cd @SD@ && cd /tmp && echo "burn a CD" > foo
+cd @SD@ && cd /tmp && echo "burn a cd" > foo
+git log --grep CD -- @HC@/settings.json
+cd docs && echo "PUSHD note" >> notes.md

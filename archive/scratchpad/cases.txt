@@ -1,0 +1,34 @@
+gpf! origin main
+git push --force origin main
+alias x='git push --force'\nx origin main
+alias x='git push --force'; eval x origin main
+alias x='git push --force'; echo $(x origin main)
+eval 'alias x="git push --force"'; eval x origin main
+\\gpf! origin main
+'gpf!' origin main
+"gpf!" origin main
+gpf\\! origin main
+command gpf! origin main
+builtin gpf! origin main
+noglob gpf! origin main
+exec gpf! origin main
+- gpf! origin main
+nocorrect gpf! origin main
+sgpf origin main
+sudo git push --force origin main
+egpf origin main
+env X=1 git push --force origin main
+ngpf origin main
+noglob git push --force origin main
+cgpf origin main
+command git push --force origin main
+X='a b' gpf! origin main
+X=$(true) gpf! origin main
+_ gpf! origin main
+chain1 origin main
+GPF origin main
+echo GPF origin main
+prc --title t --body b
+gh pr create --title t --body b
+prm 1
+gh pr merge --admin 1

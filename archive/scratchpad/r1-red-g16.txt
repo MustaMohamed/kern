@@ -1,0 +1,7 @@
+1..2
+not ok 1 running or sourcing kern's hook code, or calling its state functions, is denied in both modes
+# (from function `expect_cmd' in file tests/hooks/g16-state.bats, line 52,
+#  in test file tests/hooks/g16-state.bats, line 413)
+#   `expect_cmd deny \' failed
+# printf '%s' '{"session_id":"test-session","prompt":"ship it"}' | bash /Users/musta/Code/projects/kern/hooks/prompt-submit ->
+ok 2 reading kern's hook code, or running its tests, is not denied

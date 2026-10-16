@@ -1,0 +1,7 @@
+cd @SD@ && command cd /tmp; echo x > foo
+cd @SD@ && nice cd /tmp; echo x > foo
+cd @SD@ && env cd /tmp; echo x > foo
+cd @SD@ && nohup cd /tmp; echo x > foo
+cd @SD@ && timeout 5 cd /tmp; echo x > foo
+cd @HC@ && command cd /tmp; sed -i '' s/a/b/ settings.json
+command cd /tmp; cp src.md dst.md

@@ -1,0 +1,10 @@
+rg --hostname-bin=./h.sh foo
+rg --hostname-bin ./h.sh foo
+rg -n '--hostname-bin=hostname' foo
+file -z a.gz
+file -Z a.gz
+file -bz a.gz
+file -bZ a.gz
+file --uncompress a.gz
+file --uncompress-noreport a.gz
+file --uncompress-n a.gz

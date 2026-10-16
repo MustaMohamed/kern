@@ -1,0 +1,60 @@
+1..50
+ok 1 Write under the sessions dir is denied in both modes
+ok 2 Edit of another file: no vote
+ok 3 a .. path into the sessions dir is denied
+ok 4 an upper-cased path to the sessions dir is denied
+ok 5 a symlinked dir that resolves to the sessions dir is denied
+ok 6 a Bash write into the sessions dir is denied
+ok 7 every Bash write shape against session state is denied
+ok 8 any command but a reader that names a state path is denied
+ok 9 a glob that matches the state file once ~ is expanded is denied
+ok 10 plain reads, git commands and messages naming state or settings: no vote
+ok 11 a shell reading a here-doc runs its body as commands
+ok 12 a # that bash does not read as a comment hides no state write
+ok 13 a misread << hides no state write
+ok 14 a double-quoted state target is denied
+ok 15 reads of a state file, and a commit message naming one: no vote
+ok 16 the session id counts only as the state file name: scratchpad writes pass
+ok 17 reads of session state: no vote
+ok 18 a Monitor command writing the state file is denied
+ok 19 a scheduled prompt or relayed message carrying /kern:autopilot is denied
+ok 20 relayed text that opens with a mode or autopilot command is denied
+ok 21 relayed text that only mentions a mode command: no vote
+ok 22 a RemoteTrigger whose nested body carries a kern command is denied; a list passes
+ok 23 a scheduled prompt without kern commands: no vote
+ok 24 a Skill call to the mode or autopilot skill is denied; other skills pass
+ok 25 a write to a kern settings file asks, and denies under autopilot
+ok 26 reading a kern settings file: no vote
+ok 27 a command that names neither state nor settings costs G16 no lower-casing; any case still counts
+ok 28 a settings path spelled with ., .. or // or split by quotes is still a settings path
+ok 29 a copy, move or link into a .claude directory is a settings write
+ok 30 a write to Claude Code's own settings asks, and denies under autopilot; plain reads get no vote
+ok 31 settings files and .claude directories follow the state model: any head but a reader asks
+not ok 32 a cd whose target kern cannot know keeps the .claude and sessions-dir reading; under autopilot it is denied
+# (from function `expect_cmd' in file tests/hooks/g16-state.bats, line 52,
+#  in test file tests/hooks/g16-state.bats, line 386)
+#   `expect_cmd ask "${cc[@]}"' failed
+# cd ~/.claude && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i "" s/a/b/ settings.json ->
+not ok 33 a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd after one keeps the reading
+# (from function `expect_cmd' in file tests/hooks/g16-state.bats, line 52,
+#  in test file tests/hooks/g16-state.bats, line 405)
+#   `expect_cmd ask "cd ~/.claude && coproc cd /tmp; echo {} > settings.json" \' failed
+# cd ~/.claude && coproc cd /tmp; echo {} > settings.json ->
+ok 34 git reads only through its read-only subcommands; any other git naming settings or .claude asks
+ok 35 a settings write under a directory with a space asks; only a message option's text is read as a sentence
+ok 36 a command that reads but can run code, and names a hook or state_set, asks; under autopilot it is denied
+ok 37 a glob, brace or zsh group after hooks/ that could name a hook asks; under autopilot it is denied
+ok 38 running, sourcing or reading a hook, or calling a state function, asks; under autopilot it is denied
+ok 39 a hooks directory named elsewhere in the command, or reached by a glob, makes a hook's bare name ask
+ok 40 a command that names no kern hook, such as a hook's test file, gets no hook vote
+ok 41 inside a hooks directory a bare hook name, or a glob that could match one, asks
+ok 42 when awk cannot read the command for kern's hook code, G16 fails closed
+ok 43 when awk fails on one reading and no reading hits, G16 fails closed in both modes
+ok 44 when awk fails on one reading and another reading hits, G16 asks with its own reason; under autopilot it is denied
+ok 45 a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied
+ok 46 an escaped backslash, or a backslash before CR LF, does not join the lines; the next line still asks
+ok 47 a hooks directory on one line and a hook on the next still ask, as they did before lines were joined
+ok 48 the APFS case folds of s and k inside a hook path are read as s and k; asks, and under autopilot is denied
+ok 49 a brace group that spans a slash asks, and under autopilot is denied
+ok 50 the APFS case folds of s and k in a settings or state path get the vote of the ASCII spelling
+EXIT=1

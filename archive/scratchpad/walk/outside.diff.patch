@@ -1,0 +1,26 @@
+diff --git a/notes.txt b/notes.txt
+new file mode 100644
+index 0000000000000000000000000000000000000000..587be6b4c3f93f93c489c0111bba5596147a26cb
+--- /dev/null
++++ b/notes.txt
+@@ -0,0 +1 @@
++x
+diff --git a/src/sum.js b/src/sum.js
+index 86bc41cc44cde20d777775412a1a9e8ac974c009..f10717452e1e42229684627602ce3c2947e9f4be 100644
+--- a/src/sum.js
++++ b/src/sum.js
+@@ -1 +1,4 @@
+-export function sum(a, b) { return a + b; }
++export function sum(a, b) {
++  if (typeof a !== 'number' || typeof b !== 'number') throw new TypeError('sum takes numbers');
++  return a + b;
++}
+diff --git a/test/sum.test.js b/test/sum.test.js
+index bafbf1a2e7bfdaafd9f97ecb360529e58c583116..79e040cde96fc85af5fc0a4798e39bd4fdb94507 100644
+--- a/test/sum.test.js
++++ b/test/sum.test.js
+@@ -2,3 +2,4 @@ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+ import { sum } from '../src/sum.js';
+ test('sum adds', () => { assert.equal(sum(1, 2), 3); });
++test('sum rejects a string', () => { assert.throws(() => sum('1', 2), TypeError); });

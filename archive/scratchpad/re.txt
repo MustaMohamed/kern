@@ -1,0 +1,13 @@
+^# kern ledger: /.+$
+^Main: /\S+ branch=\S+ status=[0-9a-f]{40}$
+^Worktree: /\S+ branch=\S+ base-tree=[0-9a-f]{40}$
+^Preflight: Task [0-9]+ x Task [0-9]+: [^:]+: .+$
+^Decision: [^;]+; why: [^;]+; cost if wrong: .+$
+^Task [0-9]+: start tree=[0-9a-f]{40} at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$
+^Task [0-9]+: review round=[123] tree=[0-9a-f]{40} spec=(compliant|issues) quality=(approved|needs-fixes)$
+^Task [0-9]+: minor \(deferred\): .+$
+^Task [0-9]+: fix round=[23] tree=[0-9a-f]{40}$
+^Task [0-9]+: complete tree=[0-9a-f]{40} test=.+ exit=0 review=approved probe=(ok|inconclusive|skipped \(.+\)) last=.*$
+^Wave: tasks [0-9 ]+ forks=/.+$
+^Applied: Task [0-9]+ patch=/\S+$
+^parked: [^;]+; default: [^;]+; why: .+$

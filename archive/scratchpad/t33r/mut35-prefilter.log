@@ -1,0 +1,128 @@
+1..118
+ok 1 git_words splits chains and keeps quoted separators
+ok 2 git_words also prints the bodies of bash -c, eval, $( ) and backticks
+ok 3 git and gh are seen behind shells, wrappers, groups and keywords
+ok 4 a shell's -c is read in a cluster of any case, after options, -- or -, and value long options
+ok 5 zsh's --emulate takes the next word, so the -c after it is read
+ok 6 a redirection among a shell's options is not its script
+ok 7 env -S splits its line with quotes, as env does
+ok 8 a shell that runs a -c script reads its here-doc as data, in any cluster form
+ok 9 git is seen behind wrapper options, env -S, shell options, timeout and nice
+not ok 10 git is seen after zsh's noglob, nocorrect, coproc and repeat with its count, and in an eval or a shell after them
+# (from function `finds' in file tests/hooks/gitctx.bats, line 25,
+#  in test file tests/hooks/gitctx.bats, line 131)
+#   `finds "$c" push' failed
+# no git push in: noglob eval "git push origin main"
+# noglob eval "git push origin main"
+ok 11 a leading redirection is not the command name
+ok 12 a << inside quotes in $( ) hides nothing
+ok 13 a shell reading a here-doc runs its body: the body stays as records
+ok 14 a shell here-doc after a closed $( ) keeps its body
+ok 15 a << inside a top-level (( )) is not a here-doc
+ok 16 a << inside ${ }, $[ ], $(( )) or a NAME[ ] subscript is not a here-doc
+ok 17 a here-doc after a closed ${ } or subscript, or inside $( ) in one, is still a here-doc
+ok 18 a # after an escaped separator is not a comment; after a line continuation it is
+ok 19 a here-string is not a here-doc
+ok 20 the commit form with a here-doc message gives one git segment, and the message is data
+ok 21 here-doc bodies are skipped, and the commands after them are still seen
+ok 22 a quoted multi-line argument stays in its record
+ok 23 a 1,000-line here-doc runs through git_words in under a second
+ok 24 a backslash-newline is dropped, not read as a space
+ok 25 quoted parentheses stay inside their word
+ok 26 redirections never split a command
+ok 27 git_sub reads -C, skips env and global options
+ok 28 git_sub skips each global option of git 2.54, and the next word where it takes a value
+ok 29 gh_sub, word_value and word_has
+ok 30 current_branch reads HEAD by symbolic-ref, past a tag of the same name
+ok 31 push_targets: refspecs, deletes and the current branch
+ok 32 push_targets skips redirections
+ok 33 _shell_words: a word that starts with an unquoted # is a comment to the newline
+ok 34 _shell_words: a # inside a word, quoted or escaped is kept
+ok 35 _shell_words splits a redirection from the word before it
+ok 36 push_targets: a redirection glued to the branch, and @
+ok 37 a committed base_branch adds a protected branch; origin/HEAD, or else main and the like, stay protected
+ok 38 push_targets prints * for every-branch pushes, and * is protected
+ok 39 push_targets strips heads/ and reads deletes
+ok 40 with_timeout returns promptly when the command finishes
+ok 41 with_timeout stops a slow command and its children
+ok 42 git is seen behind wrapper long options that take a value
+ok 43 git is seen after an append assignment, an attached env -S line, and a wrapper or shell in another case
+ok 44 a command name built at run time is denied
+ok 45 each shape the G00 ruling keeps is denied under autopilot
+ok 46 a non-sh interpreter's inline code, here-doc or pipe gets no vote: an accepted limit
+ok 47 a program or script operand that is $VAR/literal-path gets no vote: an accepted limit
+ok 48 a shell script kern did not unwrap is denied: another shell, or sh -c not at the head
+ok 49 a shell reading a pipe, a here-string, an fd or a process substitution is denied
+ok 50 a command name built at run time after xargs or find -exec, or a script name source reads
+ok 51 a shell whose script operand is stdin or an fd reads that stream
+ok 52 the commands autopilot runs every day get no vote from G00, with every guard running
+ok 53 ordinary commands get no vote from G00 under autopilot
+ok 54 G00 votes nothing outside autopilot or for other tools
+not ok 55 an eval or a here-doc shell after zsh's noglob, nocorrect, coproc or repeat is denied in both modes
+# (in test file tests/hooks/g00-unproven.bats, line 159)
+#   `[ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }' failed
+# on: noglob eval 'git push --force origin main' ->
+ok 56 under autopilot the review's bypass shapes are denied with every guard running
+ok 57 status in the main checkout: no vote
+ok 58 switch in the main checkout asks, denied under autopilot
+ok 59 reset --hard, stash and clean in the main checkout ask
+ok 60 the same commands in a linked worktree: no vote
+ok 61 a chained or substituted main-checkout command is still seen
+ok 62 stash list and clean -n are read-only: no vote
+ok 63 plain force push is denied in both modes
+ok 64 push of a feature branch asks; push.policy auto allows; deny denies
+ok 65 push to the base branch asks even with push.policy auto, and is denied under autopilot
+ok 66 autopilot allows a push of the current non-protected branch only
+ok 67 force-with-lease: own branch asks; a branch with another author is denied
+ok 68 force-with-lease under autopilot needs rebase.push: autopilot
+ok 69 merge asks; gh pr merge asks; both denied under autopilot
+ok 70 worktree remove --force and branch -D ask
+ok 71 kern: off disables the guard
+ok 72 unparseable input asks, and the reason names it
+ok 73 autopilot denies main-checkout operations, merges and discards
+ok 74 pull in the main checkout asks; in a linked worktree: no vote
+ok 75 abbreviated long options and short clusters are read as git reads them
+ok 76 a remote delete asks whatever push.policy says, and is denied under autopilot
+ok 77 push.policy deny denies under autopilot too
+ok 78 autopilot allows a push only in the plain shape
+ok 79 push.policy auto allows only the plain shape
+ok 80 remote.<name>.push or mirror config makes a push unproven
+ok 81 autopilot lease: current branch only, bare option, no other flags
+ok 82 --force-if-includes follows the lease rules
+ok 83 lease: another author's commit on the remote branch only is denied
+ok 84 lease to a remote that git remote does not list is denied
+ok 85 after cd, --git-dir or GIT_DIR the directory is unknown
+ok 86 a cd behind noglob, nocorrect, coproc or repeat leaves the directory known
+ok 87 gh pr merge with -R or --repo asks, and is denied under autopilot
+ok 88 --no-verify skips the pre-push hook, so the push is never allowed
+ok 89 an allowed push may pipe into tail, head, grep or cat with options only
+ok 90 --dry-run is a safe push option
+ok 91 an unknown push shape names the fix in its reason
+ok 92 a tag named like the current branch does not hide it
+ok 93 a tag named like a branch.protected branch does not hide it
+ok 94 shell expansion in a push record is never allowed
+ok 95 a branch or remote name outside the safe characters is never allowed
+ok 96 a glob or ~ in a push record is never allowed
+ok 97 shell expansion or a glob in a filter is never allowed
+ok 98 remote and url config that redirects a push makes it unproven
+ok 99 lease: a missing origin/<base> counts as not own
+ok 100 lease: the source of src:dst is what gets checked
+ok 101 git and gh are matched case-insensitively
+ok 102 an explicit lease value under autopilot names the bare option
+ok 103 a push URL rewritten for this remote is unproven; an unrelated rewrite is not
+ok 104 a detached HEAD names itself in the reason
+ok 105 a trailing comment does not hide a command
+ok 106 git behind a command kern cannot read asks, and is denied under autopilot
+ok 107 a word git that runs no git command, or a read-only one, gets no vote
+ok 108 echo git push asks: a word git before one of git's commands that writes is not read further
+ok 109 an append assignment or a wrapper in another case does not hide git from G1's own checks
+ok 110 git behind a command with -c or --config-env among its options asks, whatever word follows
+ok 111 a hidden git with no word after it gets no vote, and GIT_CONFIG in the text changes nothing
+ok 112 lease push to a protected branch names the force; over another author's commits it is denied
+ok 113 a push through -C into another repository is never allowed, as G5 never allows such a commit
+ok 114 env -C, env --chdir, sudo -D and sudo -R leave the directory unknown, as cd does
+ok 115 send-pack and http-push push refs: they ask, are denied under autopilot, and their force forms are denied
+ok 116 send-email asks, and is denied under autopilot
+ok 117 imap-send asks like send-email, and is denied under autopilot
+ok 118 env -S reads its value as words, so a -C inside it leaves the directory unknown
+EXIT=1

@@ -1,0 +1,1774 @@
+TAP version 13
+# Subtest: implementer frontmatter, sections and return contract
+ok 1 - implementer frontmatter, sections and return contract
+  ---
+  duration_ms: 3.742042
+  type: 'test'
+  ...
+# Subtest: task-reviewer frontmatter, sections and verdict lines
+ok 2 - task-reviewer frontmatter, sections and verdict lines
+  ---
+  duration_ms: 0.290042
+  type: 'test'
+  ...
+# Subtest: investigator frontmatter, sections, labels and no file writes
+ok 3 - investigator frontmatter, sections, labels and no file writes
+  ---
+  duration_ms: 0.2345
+  type: 'test'
+  ...
+# Subtest: commit: a -F message under .kern/tmp passes; a temp file outside it fails
+ok 4 - commit: a -F message under .kern/tmp passes; a temp file outside it fails
+  ---
+  duration_ms: 1.2
+  type: 'test'
+  ...
+# Subtest: commit: the git -C forms the skill prescribes pass, and -A or . is rejected in either form
+ok 5 - commit: the git -C forms the skill prescribes pass, and -A or . is rejected in either form
+  ---
+  duration_ms: 0.393375
+  type: 'test'
+  ...
+# Subtest: commit: a relative .kern/tmp message path is accepted
+ok 6 - commit: a relative .kern/tmp message path is accepted
+  ---
+  duration_ms: 0.061875
+  type: 'test'
+  ...
+# Subtest: commit: commit -a, add -u and add * fail, by command and by outcome (the decoys are committed)
+ok 7 - commit: commit -a, add -u and add * fail, by command and by outcome (the decoys are committed)
+  ---
+  duration_ms: 1.373375
+  type: 'test'
+  ...
+# Subtest: shellSegments drops redirections, so 2>&1 and >/dev/null are not arguments
+ok 8 - shellSegments drops redirections, so 2>&1 and >/dev/null are not arguments
+  ---
+  duration_ms: 0.238625
+  type: 'test'
+  ...
+# Subtest: finish-branch: every gh pr create must carry --draft and --title; the split needs a proposal
+ok 9 - finish-branch: every gh pr create must carry --draft and --title; the split needs a proposal
+  ---
+  duration_ms: 0.950209
+  type: 'test'
+  ...
+# Subtest: gitCalls drops -C and -c, reads past && and ;, and ignores other commands
+ok 10 - gitCalls drops -C and -c, reads past && and ;, and ignores other commands
+  ---
+  duration_ms: 0.130791
+  type: 'test'
+  ...
+# Subtest: finish-branch: the menu comes before any push or PR
+ok 11 - finish-branch: the menu comes before any push or PR
+  ---
+  duration_ms: 0.100667
+  type: 'test'
+  ...
+# Subtest: finish-branch: nine files stop at a split proposal, with a -C push counted too
+ok 12 - finish-branch: nine files stop at a split proposal, with a -C push counted too
+  ---
+  duration_ms: 0.253291
+  type: 'test'
+  ...
+# Subtest: finish-branch under autopilot: the draft PR carries --draft and --title, and ready never runs
+ok 13 - finish-branch under autopilot: the draft PR carries --draft and --title, and ready never runs
+  ---
+  duration_ms: 0.266334
+  type: 'test'
+  ...
+# Subtest: finish-branch: a PR at this head stops; one at an older head gets the push
+ok 14 - finish-branch: a PR at this head stops; one at an older head gets the push
+  ---
+  duration_ms: 0.152375
+  type: 'test'
+  ...
+# Subtest: the isolation flags keep user settings, MCP servers and saved sessions out
+ok 15 - the isolation flags keep user settings, MCP servers and saved sessions out
+  ---
+  duration_ms: 0.031541
+  type: 'test'
+  ...
+# Subtest: a headless run pre-approves the tools a task needs, since it cannot answer a prompt
+ok 16 - a headless run pre-approves the tools a task needs, since it cannot answer a prompt
+  ---
+  duration_ms: 0.025375
+  type: 'test'
+  ...
+# Subtest: the dry run lists every case without calling claude
+ok 17 - the dry run lists every case without calling claude
+  ---
+  duration_ms: 39.374458
+  type: 'test'
+  ...
+# Subtest: a gh call the transcript shows ran but the stub never logged makes the run invalid; hook-only lines do not
+ok 18 - a gh call the transcript shows ran but the stub never logged makes the run invalid; hook-only lines do not
+  ---
+  duration_ms: 0.555584
+  type: 'test'
+  ...
+# Subtest: runClaude: a missing binary, exit 126 or 127, a timeout and a signal all throw; none is a result
+ok 19 - runClaude: a missing binary, exit 126 or 127, a timeout and a signal all throw; none is a result
+  ---
+  duration_ms: 415.469583
+  type: 'test'
+  ...
+# Subtest: runClaude: a non-zero exit is returned for the caller to fail on, with stdin as stream-json turns and the budget cap
+ok 20 - runClaude: a non-zero exit is returned for the caller to fail on, with stdin as stream-json turns and the budget cap
+  ---
+  duration_ms: 144.292125
+  type: 'test'
+  ...
+# Subtest: the gh stub logs every call, answers pr list from the case, and fails on a call it does not know
+ok 21 - the gh stub logs every call, answers pr list from the case, and fails on a call it does not know
+  ---
+  duration_ms: 105.129042
+  type: 'test'
+  ...
+# Subtest: runClaude refuses a workspace outside the OS temp dir, or one that is the temp dir itself
+ok 22 - runClaude refuses a workspace outside the OS temp dir, or one that is the temp dir itself
+  ---
+  duration_ms: 70.114958
+  type: 'test'
+  ...
+# Subtest: the child environment is an allowlist: auth and config in, other credentials out
+ok 23 - the child environment is an allowlist: auth and config in, other credentials out
+  ---
+  duration_ms: 0.115625
+  type: 'test'
+  ...
+# Subtest: runClaude gives the child that allowlist, not the caller environment
+ok 24 - runClaude gives the child that allowlist, not the caller environment
+  ---
+  duration_ms: 71.621667
+  type: 'test'
+  ...
+# Subtest: runProblem: only a clean exit with a success result may be graded
+ok 25 - runProblem: only a clean exit with a success result may be graded
+  ---
+  duration_ms: 561.621334
+  type: 'test'
+  ...
+# Subtest: every M1 event is wired in exec form
+ok 26 - every M1 event is wired in exec form
+  ---
+  duration_ms: 0.85125
+  type: 'test'
+  ...
+# Subtest: the guard dispatcher fails closed and sees every guarded tool
+ok 27 - the guard dispatcher fails closed and sees every guarded tool
+  ---
+  duration_ms: 0.343792
+  type: 'test'
+  ...
+# Subtest: kern itself is MIT
+ok 28 - kern itself is MIT
+  ---
+  duration_ms: 1.585083
+  type: 'test'
+  ...
+# Subtest: every upstream source has a licence file and a NOTICE entry
+ok 29 - every upstream source has a licence file and a NOTICE entry
+  ---
+  duration_ms: 0.925375
+  type: 'test'
+  ...
+# Subtest: NOTICE reproduces caveman NOTICE verbatim
+ok 30 - NOTICE reproduces caveman NOTICE verbatim
+  ---
+  duration_ms: 0.808459
+  type: 'test'
+  ...
+# Subtest: caveman licence is Apache-2.0
+ok 31 - caveman licence is Apache-2.0
+  ---
+  duration_ms: 0.473542
+  type: 'test'
+  ...
+# Subtest: NOTICE has a file map section
+ok 32 - NOTICE has a file map section
+  ---
+  duration_ms: 0.126959
+  type: 'test'
+  ...
+# Subtest: parses CRLF frontmatter
+ok 33 - parses CRLF frontmatter
+  ---
+  duration_ms: 0.590125
+  type: 'test'
+  ...
+# Subtest: strips quotes and keeps colons in values
+ok 34 - strips quotes and keeps colons in values
+  ---
+  duration_ms: 1.6915
+  type: 'test'
+  ...
+# Subtest: block scalars are an error
+ok 35 - block scalars are an error
+  ---
+  duration_ms: 0.255375
+  type: 'test'
+  ...
+# Subtest: tiers: auto, path when a kernel row routes to it, else slash
+ok 36 - tiers: auto, path when a kernel row routes to it, else slash
+  ---
+  duration_ms: 2.633417
+  type: 'test'
+  ...
+# Subtest: a clean auto skill passes
+ok 37 - a clean auto skill passes
+  ---
+  duration_ms: 1.974125
+  type: 'test'
+  ...
+# Subtest: rule 1: missing frontmatter, name mismatch, non-kebab dir
+ok 38 - rule 1: missing frontmatter, name mismatch, non-kebab dir
+  ---
+  duration_ms: 2.417791
+  type: 'test'
+  ...
+# Subtest: rule 2: unknown skill key and ignored plugin-agent keys
+ok 39 - rule 2: unknown skill key and ignored plugin-agent keys
+  ---
+  duration_ms: 1.2665
+  type: 'test'
+  ...
+# Subtest: rule 3: auto limit and trigger, manual limit, agent limit, totals
+ok 40 - rule 3: auto limit and trigger, manual limit, agent limit, totals
+  ---
+  duration_ms: 9.240167
+  type: 'test'
+  ...
+# Subtest: rule 4: referenced files must exist
+ok 41 - rule 4: referenced files must exist
+  ---
+  duration_ms: 0.886416
+  type: 'test'
+  ...
+# Subtest: rule 8: machine paths and listed names in shipped files
+ok 42 - rule 8: machine paths and listed names in shipped files
+  ---
+  duration_ms: 0.767833
+  type: 'test'
+  ...
+# Subtest: rule 8: names come from scripts/lint-names.txt, comments ignored
+ok 43 - rule 8: names come from scripts/lint-names.txt, comments ignored
+  ---
+  duration_ms: 2.356792
+  type: 'test'
+  ...
+# Subtest: rule 10: exemption needs a reason, and suppresses its finding
+ok 44 - rule 10: exemption needs a reason, and suppresses its finding
+  ---
+  duration_ms: 2.266042
+  type: 'test'
+  ...
+# Subtest: rule 11: long dashes and curly quotes
+ok 45 - rule 11: long dashes and curly quotes
+  ---
+  duration_ms: 0.876208
+  type: 'test'
+  ...
+# Subtest: rule 11: scans any non-binary shipped file, skips binaries
+ok 46 - rule 11: scans any non-binary shipped file, skips binaries
+  ---
+  duration_ms: 1.034875
+  type: 'test'
+  ...
+# Subtest: rule 4: existing references pass, repo-root fallback, anchors and ./
+ok 47 - rule 4: existing references pass, repo-root fallback, anchors and ./
+  ---
+  duration_ms: 2.315958
+  type: 'test'
+  ...
+# Subtest: rule 6: a route must exist and open with \#\# Steps
+ok 48 - rule 6: a route must exist and open with \#\# Steps
+  ---
+  duration_ms: 4.852
+  type: 'test'
+  ...
+# Subtest: rule 6: every user-reachable skill is in the help map
+ok 49 - rule 6: every user-reachable skill is in the help map
+  ---
+  duration_ms: 3.533
+  type: 'test'
+  ...
+# Subtest: rule 6: a route row in another form, or \#\# Steps without a numbered list, is an error
+ok 50 - rule 6: a route row in another form, or \#\# Steps without a numbered list, is an error
+  ---
+  duration_ms: 2.788792
+  type: 'test'
+  ...
+# Subtest: rule 7: an oversized rendered kernel is an error; the real kernel passes
+ok 51 - rule 7: an oversized rendered kernel is an error; the real kernel passes
+  ---
+  duration_ms: 429.073959
+  type: 'test'
+  ...
+# Subtest: rule 13: hooks and the settings table agree
+ok 52 - rule 13: hooks and the settings table agree
+  ---
+  duration_ms: 1.846667
+  type: 'test'
+  ...
+# Subtest: rule 15: hook-shape fixtures and runner exist once hooks exist
+ok 53 - rule 15: hook-shape fixtures and runner exist once hooks exist
+  ---
+  duration_ms: 391.340833
+  type: 'test'
+  ...
+# Subtest: rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not
+ok 54 - rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not
+  ---
+  duration_ms: 1.062375
+  type: 'test'
+  ...
+# Subtest: rule 7: a session-start that fails or prints nothing is an error
+ok 55 - rule 7: a session-start that fails or prints nothing is an error
+  ---
+  duration_ms: 52.153792
+  type: 'test'
+  ...
+# Subtest: rule 7: its temp directory is removed when a check throws
+ok 56 - rule 7: its temp directory is removed when a check throws
+  ---
+  duration_ms: 16.3905
+  type: 'test'
+  ...
+# Subtest: rule 13: single-quoted keys are reads; a policy_for with a variable is an error
+ok 57 - rule 13: single-quoted keys are reads; a policy_for with a variable is an error
+  ---
+  duration_ms: 1.768625
+  type: 'test'
+  ...
+# Subtest: rule 13: a hook's need list names functions, so it reads no settings key
+ok 58 - rule 13: a hook's need list names functions, so it reads no settings key
+  ---
+  duration_ms: 0.559625
+  type: 'test'
+  ...
+# Subtest: rule 15: every fixture case but no-settings carries a settings file
+ok 59 - rule 15: every fixture case but no-settings carries a settings file
+  ---
+  duration_ms: 57.889042
+  type: 'test'
+  ...
+# Subtest: rule 5: Skill tool references name auto or built-in skills
+ok 60 - rule 5: Skill tool references name auto or built-in skills
+  ---
+  duration_ms: 2.198458
+  type: 'test'
+  ...
+# Subtest: rule 5: the kernel and agents are scanned, fenced blocks included
+ok 61 - rule 5: the kernel and agents are scanned, fenced blocks included
+  ---
+  duration_ms: 1.318458
+  type: 'test'
+  ...
+# Subtest: rule 5: agent Read paths resolve
+ok 62 - rule 5: agent Read paths resolve
+  ---
+  duration_ms: 0.794584
+  type: 'test'
+  ...
+# Subtest: rule 9: auto skills need Steps; slash skills need Steps first
+ok 63 - rule 9: auto skills need Steps; slash skills need Steps first
+  ---
+  duration_ms: 1.438
+  type: 'test'
+  ...
+# Subtest: rule 9: Steps must be an H2 outside a fence and not a longer heading
+ok 64 - rule 9: Steps must be an H2 outside a fence and not a longer heading
+  ---
+  duration_ms: 1.605542
+  type: 'test'
+  ...
+# Subtest: rule 9: an unclosed fence is reported, not read as a pass
+ok 65 - rule 9: an unclosed fence is reported, not read as a pass
+  ---
+  duration_ms: 0.368625
+  type: 'test'
+  ...
+# Subtest: rule 9: CRLF files are read like LF files
+ok 66 - rule 9: CRLF files are read like LF files
+  ---
+  duration_ms: 1.279959
+  type: 'test'
+  ...
+# Subtest: rule 9: a slash skill without Steps passes with an exemption
+ok 67 - rule 9: a slash skill without Steps passes with an exemption
+  ---
+  duration_ms: 0.517709
+  type: 'test'
+  ...
+# Subtest: rule 9: agents need an output contract section
+ok 68 - rule 9: agents need an output contract section
+  ---
+  duration_ms: 1.228166
+  type: 'test'
+  ...
+# Subtest: rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+ok 69 - rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+  ---
+  duration_ms: 2.716125
+  type: 'test'
+  ...
+# Subtest: rule 9: Red flags must be a real H2 with the Thought | Reality header
+ok 70 - rule 9: Red flags must be a real H2 with the Thought | Reality header
+  ---
+  duration_ms: 2.595
+  type: 'test'
+  ...
+# Subtest: rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+ok 71 - rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+  ---
+  duration_ms: 1.131958
+  type: 'test'
+  ...
+# Subtest: rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read
+ok 72 - rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read
+  ---
+  duration_ms: 2.807125
+  type: 'test'
+  ...
+# Subtest: fence parser: a fence closed by the other marker stays open and is reported
+ok 73 - fence parser: a fence closed by the other marker stays open and is reported
+  ---
+  duration_ms: 0.349541
+  type: 'test'
+  ...
+# Subtest: fence parser: a longer fence holds a shorter fence line
+ok 74 - fence parser: a longer fence holds a shorter fence line
+  ---
+  duration_ms: 0.663708
+  type: 'test'
+  ...
+# Subtest: fence parser: an opener indented 0 to 3 spaces counts, 4 does not
+ok 75 - fence parser: an opener indented 0 to 3 spaces counts, 4 does not
+  ---
+  duration_ms: 0.94475
+  type: 'test'
+  ...
+# Subtest: rule 16: a script name is read whole, dots, slashes and underscores included
+ok 76 - rule 16: a script name is read whole, dots, slashes and underscores included
+  ---
+  duration_ms: 2.735375
+  type: 'test'
+  ...
+# Subtest: rule 16: a WORK folder is read whole, in any case
+ok 77 - rule 16: a WORK folder is read whole, in any case
+  ---
+  duration_ms: 1.406583
+  type: 'test'
+  ...
+# Subtest: rank orders by shared vocabulary
+ok 78 - rank orders by shared vocabulary
+  ---
+  duration_ms: 0.688875
+  type: 'test'
+  ...
+# Subtest: zero-score prompt is an error, not a crash
+ok 79 - zero-score prompt is an error, not a crash
+  ---
+  duration_ms: 2.456291
+  type: 'test'
+  ...
+# Subtest: auto skill without a case file is an error
+ok 80 - auto skill without a case file is an error
+  ---
+  duration_ms: 1.52175
+  type: 'test'
+  ...
+# Subtest: below minimums is an error
+ok 81 - below minimums is an error
+  ---
+  duration_ms: 2.707125
+  type: 'test'
+  ...
+# Subtest: a distractor that outranks the skill fails the positive
+ok 82 - a distractor that outranks the skill fails the positive
+  ---
+  duration_ms: 2.09125
+  type: 'test'
+  ...
+# Subtest: rank-1 rate below the baseline fails
+ok 83 - rank-1 rate below the baseline fails
+  ---
+  duration_ms: 1.927583
+  type: 'test'
+  ...
+# Subtest: collision between two auto skills is an error
+ok 84 - collision between two auto skills is an error
+  ---
+  duration_ms: 1.260375
+  type: 'test'
+  ...
+# Subtest: overlap between descriptions is a warning
+ok 85 - overlap between descriptions is a warning
+  ---
+  duration_ms: 1.196292
+  type: 'test'
+  ...
+# Subtest: skill ranked \#1 for a negative prompt is an error
+ok 86 - skill ranked \#1 for a negative prompt is an error
+  ---
+  duration_ms: 2.075583
+  type: 'test'
+  ...
+# Subtest: declared owner must outrank the skill
+ok 87 - declared owner must outrank the skill
+  ---
+  duration_ms: 2.651375
+  type: 'test'
+  ...
+# Subtest: unknown owner is an error
+ok 88 - unknown owner is an error
+  ---
+  duration_ms: 0.827542
+  type: 'test'
+  ...
+# Subtest: every labelled diff exists, and there are 12 seeded moves and 8 decoys
+ok 89 - every labelled diff exists, and there are 12 seeded moves and 8 decoys
+  ---
+  duration_ms: 2.592083
+  type: 'test'
+  ...
+# Subtest: floor-scan and claim-check find every seeded move and no decoy
+ok 90 - floor-scan and claim-check find every seeded move and no decoy
+  ---
+  duration_ms: 982.818542
+  type: 'test'
+  ...
+# Subtest: mode frontmatter matches spec B1
+ok 91 - mode frontmatter matches spec B1
+  ---
+  duration_ms: 0.780041
+  type: 'test'
+  ...
+# Subtest: autopilot frontmatter matches spec B2
+ok 92 - autopilot frontmatter matches spec B2
+  ---
+  duration_ms: 2.130875
+  type: 'test'
+  ...
+# Subtest: both read the hook line first and never write the state file
+ok 93 - both read the hook line first and never write the state file
+  ---
+  duration_ms: 0.838959
+  type: 'test'
+  ...
+# Subtest: autopilot lists the floor and who can turn it on
+ok 94 - autopilot lists the floor and who can turn it on
+  ---
+  duration_ms: 0.32425
+  type: 'test'
+  ...
+# Subtest: autopilot off reads the ledgers dir without creating it
+ok 95 - autopilot off reads the ledgers dir without creating it
+  ---
+  duration_ms: 0.257084
+  type: 'test'
+  ...
+# Subtest: terse mode tells the voice to answer only what was asked, in numbered order
+ok 96 - terse mode tells the voice to answer only what was asked, in numbered order
+  ---
+  duration_ms: 0.223
+  type: 'test'
+  ...
+# Subtest: help frontmatter matches spec B3, description quoted
+ok 97 - help frontmatter matches spec B3, description quoted
+  ---
+  duration_ms: 0.668166
+  type: 'test'
+  ...
+# Subtest: setup writes only after an explicit yes and never touches tracked files
+ok 98 - setup writes only after an explicit yes and never touches tracked files
+  ---
+  duration_ms: 0.115917
+  type: 'test'
+  ...
+# Subtest: the template parses as kern settings and every key in it is documented
+ok 99 - the template parses as kern settings and every key in it is documented
+  ---
+  duration_ms: 0.708083
+  type: 'test'
+  ...
+# Subtest: check compares keys with kernel/settings.md and names the floor keys the hooks ignore
+ok 100 - check compares keys with kernel/settings.md and names the floor keys the hooks ignore
+  ---
+  duration_ms: 1.096583
+  type: 'test'
+  ...
+# Subtest: setup defers the work dir to kern-dir; allowed-tools covers its read-only calls
+ok 101 - setup defers the work dir to kern-dir; allowed-tools covers its read-only calls
+  ---
+  duration_ms: 0.184417
+  type: 'test'
+  ...
+# Subtest: the template sets no key: every line is a comment or blank
+ok 102 - the template sets no key: every line is a comment or blank
+  ---
+  duration_ms: 0.108792
+  type: 'test'
+  ...
+# Subtest: unslop: path-tier frontmatter and the upstream sections in order
+ok 103 - unslop: path-tier frontmatter and the upstream sections in order
+  ---
+  duration_ms: 0.959917
+  type: 'test'
+  ...
+# Subtest: technical-writing: opens with Steps that apply unslop, then the standard
+ok 104 - technical-writing: opens with Steps that apply unslop, then the standard
+  ---
+  duration_ms: 0.144084
+  type: 'test'
+  ...
+# Subtest: commit frontmatter
+ok 105 - commit frontmatter
+  ---
+  duration_ms: 0.760042
+  type: 'test'
+  ...
+# Subtest: commit sections, steps and red flags
+ok 106 - commit sections, steps and red flags
+  ---
+  duration_ms: 1.532375
+  type: 'test'
+  ...
+# Subtest: commit ledger-tasks reference
+ok 107 - commit ledger-tasks reference
+  ---
+  duration_ms: 0.410125
+  type: 'test'
+  ...
+# Subtest: define frontmatter
+ok 108 - define frontmatter
+  ---
+  duration_ms: 1.266
+  type: 'test'
+  ...
+# Subtest: define sections, steps, the standing gate and red flags
+ok 109 - define sections, steps, the standing gate and red flags
+  ---
+  duration_ms: 0.461709
+  type: 'test'
+  ...
+# Subtest: define references
+ok 110 - define references
+  ---
+  duration_ms: 0.435208
+  type: 'test'
+  ...
+# Subtest: define pins its approval rules
+ok 111 - define pins its approval rules
+  ---
+  duration_ms: 0.346167
+  type: 'test'
+  ...
+# Subtest: diagnose frontmatter
+ok 112 - diagnose frontmatter
+  ---
+  duration_ms: 0.826584
+  type: 'test'
+  ...
+# Subtest: diagnose sections, steps and red flags
+ok 113 - diagnose sections, steps and red flags
+  ---
+  duration_ms: 0.960125
+  type: 'test'
+  ...
+# Subtest: diagnose references
+ok 114 - diagnose references
+  ---
+  duration_ms: 0.411833
+  type: 'test'
+  ...
+# Subtest: execute-plan frontmatter
+ok 115 - execute-plan frontmatter
+  ---
+  duration_ms: 1.638334
+  type: 'test'
+  ...
+# Subtest: execute-plan sections, steps, scripts and red flags
+ok 116 - execute-plan sections, steps, scripts and red flags
+  ---
+  duration_ms: 0.951542
+  type: 'test'
+  ...
+# Subtest: ledger format and model table
+ok 117 - ledger format and model table
+  ---
+  duration_ms: 0.333667
+  type: 'test'
+  ...
+# Subtest: execute-plan pins each step, the modes, the stops and the ledger rules
+ok 118 - execute-plan pins each step, the modes, the stops and the ledger rules
+  ---
+  duration_ms: 1.237375
+  type: 'test'
+  ...
+# Subtest: execute-plan reruns its plan checks on every invocation and writes only missing lines
+ok 119 - execute-plan reruns its plan checks on every invocation and writes only missing lines
+  ---
+  duration_ms: 0.263959
+  type: 'test'
+  ...
+# Subtest: execute-plan orders each gate after what it needs
+ok 120 - execute-plan orders each gate after what it needs
+  ---
+  duration_ms: 0.227375
+  type: 'test'
+  ...
+# Subtest: execute-plan red flags tell the reader what to do
+ok 121 - execute-plan red flags tell the reader what to do
+  ---
+  duration_ms: 0.310291
+  type: 'test'
+  ...
+# Subtest: finish-branch frontmatter
+ok 122 - finish-branch frontmatter
+  ---
+  duration_ms: 2.000167
+  type: 'test'
+  ...
+# Subtest: finish-branch sections, steps and red flags
+ok 123 - finish-branch sections, steps and red flags
+  ---
+  duration_ms: 1.552458
+  type: 'test'
+  ...
+# Subtest: branch-ops reference: rebase and the proven-tree check
+ok 124 - branch-ops reference: rebase and the proven-tree check
+  ---
+  duration_ms: 0.562959
+  type: 'test'
+  ...
+# Subtest: discard reference
+ok 125 - discard reference
+  ---
+  duration_ms: 0.197083
+  type: 'test'
+  ...
+# Subtest: push-and-pr reference: dedup, push, PR
+ok 126 - push-and-pr reference: dedup, push, PR
+  ---
+  duration_ms: 0.2835
+  type: 'test'
+  ...
+# Subtest: PR body template
+ok 127 - PR body template
+  ---
+  duration_ms: 0.140833
+  type: 'test'
+  ...
+# Subtest: implement frontmatter
+ok 128 - implement frontmatter
+  ---
+  duration_ms: 0.800292
+  type: 'test'
+  ...
+# Subtest: implement sections, steps and red flags
+ok 129 - implement sections, steps and red flags
+  ---
+  duration_ms: 0.973708
+  type: 'test'
+  ...
+# Subtest: implement references
+ok 130 - implement references
+  ---
+  duration_ms: 0.283791
+  type: 'test'
+  ...
+# Subtest: parallel-work frontmatter
+ok 131 - parallel-work frontmatter
+  ---
+  duration_ms: 1.654291
+  type: 'test'
+  ...
+# Subtest: parallel-work sections and steps
+ok 132 - parallel-work sections and steps
+  ---
+  duration_ms: 0.47075
+  type: 'test'
+  ...
+# Subtest: parallel-work pins the drain mapping, entry check, package location, teardown and stops
+ok 133 - parallel-work pins the drain mapping, entry check, package location, teardown and stops
+  ---
+  duration_ms: 0.162583
+  type: 'test'
+  ...
+# Subtest: brief template fields and worktrees reference
+ok 134 - brief template fields and worktrees reference
+  ---
+  duration_ms: 12.12675
+  type: 'test'
+  ...
+# Subtest: worktrees teardown pins the force check
+ok 135 - worktrees teardown pins the force check
+  ---
+  duration_ms: 0.117333
+  type: 'test'
+  ...
+# Subtest: a filled brief passes brief-check
+ok 136 - a filled brief passes brief-check
+  ---
+  duration_ms: 8.659417
+  type: 'test'
+  ...
+# Subtest: plan frontmatter
+ok 137 - plan frontmatter
+  ---
+  duration_ms: 1.280125
+  type: 'test'
+  ...
+# Subtest: plan sections and steps
+ok 138 - plan sections and steps
+  ---
+  duration_ms: 0.43525
+  type: 'test'
+  ...
+# Subtest: plan templates are contracts task-brief and plan-check can read
+ok 139 - plan templates are contracts task-brief and plan-check can read
+  ---
+  duration_ms: 0.332333
+  type: 'test'
+  ...
+# Subtest: plan pins its approval, lookup and autopilot rules
+ok 140 - plan pins its approval, lookup and autopilot rules
+  ---
+  duration_ms: 0.209083
+  type: 'test'
+  ...
+# Subtest: plan pins order, routing and stop rules
+ok 141 - plan pins order, routing and stop rules
+  ---
+  duration_ms: 0.203458
+  type: 'test'
+  ...
+# Subtest: prove-it frontmatter is the spec text
+ok 142 - prove-it frontmatter is the spec text
+  ---
+  duration_ms: 1.292291
+  type: 'test'
+  ...
+# Subtest: prove-it sections, steps, gate and red flags
+ok 143 - prove-it sections, steps, gate and red flags
+  ---
+  duration_ms: 0.446667
+  type: 'test'
+  ...
+# Subtest: evidence reference
+ok 144 - evidence reference
+  ---
+  duration_ms: 0.183875
+  type: 'test'
+  ...
+# Subtest: the M0 placeholder is gone
+ok 145 - the M0 placeholder is gone
+  ---
+  duration_ms: 0.071125
+  type: 'test'
+  ...
+# Subtest: the gate hands a commit to commit and a push or PR to finish-branch
+ok 146 - the gate hands a commit to commit and a push or PR to finish-branch
+  ---
+  duration_ms: 0.1385
+  type: 'test'
+  ...
+# Subtest: self-review frontmatter
+ok 147 - self-review frontmatter
+  ---
+  duration_ms: 1.054459
+  type: 'test'
+  ...
+# Subtest: self-review sections and steps
+ok 148 - self-review sections and steps
+  ---
+  duration_ms: 0.49775
+  type: 'test'
+  ...
+# Subtest: self-review exits, order and dispatches
+ok 149 - self-review exits, order and dispatches
+  ---
+  duration_ms: 0.257833
+  type: 'test'
+  ...
+# Subtest: self-review references
+ok 150 - self-review references
+  ---
+  duration_ms: 0.525875
+  type: 'test'
+  ...
+# Subtest: self-review text hygiene
+ok 151 - self-review text hygiene
+  ---
+  duration_ms: 0.409709
+  type: 'test'
+  ...
+# Subtest: agreeing versions pass
+ok 152 - agreeing versions pass
+  ---
+  duration_ms: 1.229541
+  type: 'test'
+  ...
+# Subtest: manifest mismatch fails
+ok 153 - manifest mismatch fails
+  ---
+  duration_ms: 0.597792
+  type: 'test'
+  ...
+# Subtest: no release heading is a clear failure
+ok 154 - no release heading is a clear failure
+  ---
+  duration_ms: 0.776
+  type: 'test'
+  ...
+# Subtest: a stale Unreleased bullet already in the base fails
+ok 155 - a stale Unreleased bullet already in the base fails
+  ---
+  duration_ms: 0.6025
+  type: 'test'
+  ...
+# Subtest: a newly added Unreleased bullet passes
+ok 156 - a newly added Unreleased bullet passes
+  ---
+  duration_ms: 0.534959
+  type: 'test'
+  ...
+# Subtest: an empty Unreleased section fails even with no base
+ok 157 - an empty Unreleased section fails even with no base
+  ---
+  duration_ms: 0.356417
+  type: 'test'
+  ...
+# Subtest: a non-shipped change passes without a bullet
+ok 158 - a non-shipped change passes without a bullet
+  ---
+  duration_ms: 0.336792
+  type: 'test'
+  ...
+# Subtest: --pr compares HEAD changelog against the base ref
+ok 159 - --pr compares HEAD changelog against the base ref
+  ---
+  duration_ms: 216.425583
+  type: 'test'
+  ...
+# Subtest: bump follows semver
+ok 160 - bump follows semver
+  ---
+  duration_ms: 0.347416
+  type: 'test'
+  ...
+# Subtest: release moves Unreleased bullets under the new version
+ok 161 - release moves Unreleased bullets under the new version
+  ---
+  duration_ms: 1.271125
+  type: 'test'
+  ...
+# Subtest: release keeps sub-headings and wrapped lines
+ok 162 - release keeps sub-headings and wrapped lines
+  ---
+  duration_ms: 0.86025
+  type: 'test'
+  ...
+# Subtest: release refuses an empty Unreleased section
+ok 163 - release refuses an empty Unreleased section
+  ---
+  duration_ms: 0.503875
+  type: 'test'
+  ...
+# Subtest: CLI runs when reached through a symlink
+ok 164 - CLI runs when reached through a symlink
+  ---
+  duration_ms: 26.180042
+  type: 'test'
+  ...
+1..164
+# tests 164
+# suites 0
+# pass 164
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1491.555667
+lint: clean
+versions: agree
+rank-1 rate: 66% (baseline 0%)
+route-eval: passed
+Validating marketplace manifest: /Users/musta/Code/projects/kern/.claude-plugin/marketplace.json
+
+✔ Validation passed
+Validating plugin manifest: /Users/musta/Code/projects/kern/.claude-plugin/plugin.json
+
+✔ Validation passed
+1..209
+ok 1 a complete brief passes, including a field continued on indented lines
+ok 2 a missing field and an empty field are each named
+ok 3 VERIFY must start with the entry check
+ok 4 a field whose text is on the next indented line counts
+ok 5 a label inside a word does not count, and an unreadable file exits 2
+ok 6 a field still holding the template placeholder is not filled in
+ok 7 a complete CRLF brief still passes
+ok 8 a CRLF brief with an empty field reports it
+ok 9 a CRLF brief with a placeholder field reports it
+ok 10 VERIFY: a lookalike, a later mention or a bare wt-check is refused
+ok 11 VERIFY: the plugin-root and bare forms with worktree and base pass
+ok 12 every placeholder is caught, bare or with words appended
+ok 13 claim-check flags unknown commit ids and absolute claims only
+ok 14 claim-check passes a diff with a known commit id
+ok 15 probe passes when the test fails without the guard
+ok 16 probe reports a test that does not cover the guard
+ok 17 probe is inconclusive when the test fails with the guard in place
+ok 18 probe is inconclusive when the patch does not reverse-apply
+ok 19 probe is inconclusive when the test cannot run without the guard
+ok 20 a patch that also adds the test is inconclusive without --exclude-tests
+ok 21 --exclude-tests keeps the new test in the fork and reverses only the guard
+ok 22 --exclude-tests on a patch of tests only is inconclusive
+ok 23 a command that names a file the reversed fork lacks is inconclusive, never ok
+ok 24 --mutate: an inverted condition the test catches is ok
+ok 25 --mutate: a test that ignores the condition lets the mutation survive
+ok 26 --mutate on a line with no condition is inconclusive
+ok 27 a tool only in an ignored directory makes the probe inconclusive, never ok
+ok 28 --mutate: a tool only in an ignored directory is inconclusive
+ok 29 a patch git cannot read is inconclusive
+ok 30 no probe worktree remains after a non-zero exit
+ok 31 clones at the pinned commit
+ok 32 second run is a no-op
+ok 33 missing commit exits 3 and removes the partial clone
+ok 34 copy source is copied
+ok 35 missing copy source exits 3
+ok 36 a failing git source is not swallowed
+ok 37 a failing re-run keeps the previous good clone
+ok 38 a failing copy keeps the previous copy
+ok 39 unknown key exits 2
+ok 40 finds the test file that creates the path
+ok 41 reports no polluter when none creates it
+ok 42 refuses when the path already exists
+ok 43 a test command that cannot run exits 2, not a clean no-polluter
+ok 44 a runner that fails on every file proves nothing and exits 2
+ok 45 a mix of passing and failing runs still reports no polluter
+ok 46 a glob that matches nothing exits 2
+ok 47 a missing test command exits 2
+ok 48 a test file name with spaces is run and named whole
+ok 49 each floor move is reported with its class
+ok 50 a clean diff exits 0 with no output
+ok 51 focused tests count as test-made-easier
+ok 52 type escapes and other suppressions are silenced-checker
+ok 53 a Rust #[ignore] is test-made-easier
+ok 54 a lowered coverage threshold is bar-lowered; a raised one is not
+ok 55 strict typing turned off or removed is bar-lowered
+ok 56 a lint rule turned off is bar-lowered
+ok 57 a CI step removed or made non-blocking is bar-lowered
+ok 58 a ratchet.<metric> key guards its value in both directions
+ok 59 a reformatted or moved assertion is not removed
+ok 60 a renamed test file is not a deleted test
+ok 61 content lines that start with ++ or -- are content, not headers
+ok 62 an untracked new file is scanned through its intent-to-add diff
+ok 63 a wt-diff package is read past its header sections
+ok 64 input with no diff --git header exits 2; an unreadable input exits 2
+ok 65 suppressions in a doc file are not hits
+ok 66 removed assertions in JUnit, Rust, unittest and testify styles are assertion-removed
+ok 67 a removed require('y') import in a test file is not an assertion
+ok 68 every threshold on one line is checked
+ok 69 closed stdin exits 1 with a message
+ok 70 answers print as KEY=VALUE with CR removed
+ok 71 base_branch from origin/HEAD
+ok 72 commit.convention needs 60% of at least 5 subjects
+ok 73 commit.convention not detectable on mixed subjects exits 3
+ok 74 test, typecheck and lint from package.json with the lockfile's manager
+ok 75 no runner at all exits 3 and names what it looked for
+ok 76 branch.pattern from remote branch names
+ok 77 pr.template and an unknown key
+ok 78 the npm init placeholder test script is not a test runner
+ok 79 more than one scripts object in package.json is ambiguous
+ok 80 test.focused evidence does not claim a path argument works
+ok 81 kern-root prints the main root and the common dir from a linked worktree
+ok 82 kern-root outside a repo exits 2
+ok 83 kern-dir creates WORK/sub at the main root and adds the exclude line once
+ok 84 kern-dir creates a nested folder such as ledgers/<slug>
+ok 85 kern-dir refuses a work dir with tracked files and a bad name
+ok 86 kern-dir adds a newline before its exclude line when the file lacks one
+ok 87 kern-dir refuses a work_dir of ., .git*, or starting with a colon
+ok 88 task-brief extracts one task plus the global constraints
+ok 89 a Task heading inside a fence is ignored
+ok 90 a missing task exits 2 and writes nothing
+ok 91 task-start appends a start line
+ok 92 task-start refuses a missing ledger and a short tree id
+ok 93 ledger-open creates the ledger with its identity and the main checkout's state
+ok 94 ledger-open reuses its own ledger and refuses another plan's
+ok 95 ledger-open refuses a plan that is not approved, or approved without the user's words
+ok 96 ledger-open --summary lists decisions, parked and deferred lines and checks the main checkout
+ok 97 ledger-open refuses an unclosed frontmatter and writes nothing
+ok 98 ledger-open refuses a plan or a spec: line that is not a Markdown name, and writes nothing
+ok 99 ledger-open takes a Markdown name in any case, and spec: none
+ok 100 a refusal writes nothing into a fresh DIR
+ok 101 ledger-open outside a git repository exits 2 and writes no ledger
+ok 102 ledger-open --summary fails when the main checkout state cannot be read
+ok 103 ledger-open refuses when git status fails and does not record an empty-input hash
+ok 104 the recorded status hash equals git status --porcelain piped to git hash-object
+ok 105 task-start refuses a multi-line tree and writes nothing
+ok 106 a steady command is 0 red, with a median in seconds
+ok 107 a flaky command reports its red count
+ok 108 a bad N or a missing -- exits 2
+ok 109 a command that cannot run exits 2, not N/N red
+ok 110 a leading-zero N is read as decimal
+ok 111 a ten-digit N is rejected
+ok 112 a missing command exits 2
+ok 113 a sound plan passes
+ok 114 --graph prints the overlap and the waves
+ok 115 --files prints a task's paths without line ranges
+ok 116 --files prints a trailing /** or /* as its directory
+ok 117 two tasks on one shared service must be ordered
+ok 118 a shared_services entry orders tasks that both mention it
+ok 119 a consumer must be blocked by its producer, and cannot come first
+ok 120 a task blocked by a later task, a gap in numbering and a missing Run/Expected pair are errors
+ok 121 an acceptance criterion no task covers is an error
+ok 122 placeholders, an unapproved approval and a missing spec are errors
+ok 123 a spec needs its sections and an approval with the user's words
+ok 124 usage errors exit 2
+ok 125 a CRLF plan lints like an LF plan, and still fails when it is bad
+ok 126 a shared_services entry matches a whole word, not a longer word
+ok 127 a spec with no acceptance criteria, or a spec: that is not a .md file, is an error
+ok 128 an unclosed frontmatter is an error
+ok 129 --graph and --files refuse a spec, and --files refuses a missing task
+ok 130 a directory path overlaps a path inside it, and a longer name does not
+ok 131 --graph keeps a directory and a file inside it out of one wave
+ok 132 an Acceptance line with no leading number list is an error
+ok 133 an Acceptance range covers every number in it
+ok 134 only the leading Acceptance list counts, not numbers in the prose after it
+ok 135 an unclosed code fence is an error at its opening line
+ok 136 redis-cli counts as using the redis service
+ok 137 a backticked none is not an interface name
+ok 138 task-review appends the verdict line and deferred minors
+ok 139 task-review refuses a bad verdict, a fourth round and a short tree id
+ok 140 task-done refuses a task with no review and writes nothing
+ok 141 task-done refuses a review of an older tree, and a review with issues
+ok 142 task-done refuses a worktree edited after its review
+ok 143 an approved, unchanged tree with a passing command is recorded with its last output line
+ok 144 a failing command is not recorded and keeps its exit code
+ok 145 --probe records ok when the test fails with the change reversed
+ok 146 --probe refuses a task whose test passes without the change
+ok 147 task-done needs --probe PATCH or --no-probe REASON, and writes nothing without one
+ok 148 task-done quotes arguments with spaces in the ledger line
+ok 149 task-done refuses an empty --probe patch, an unsnappable worktree and an unreadable ledger
+ok 150 task-done refuses a malformed last review line
+ok 151 task-review refuses a TREE holding a newline, and writes nothing
+ok 152 task-done refuses a newline or carriage return in REASON or CMD, and writes nothing
+ok 153 a later needs-fixes line for the same tree overrides an earlier approval
+ok 154 an approval for Task 1 does not close Task 10, nor the reverse
+ok 155 task-review and task-done refuse uppercase and non-ASCII tree ids under a UTF-8 locale
+ok 156 --probe refuses a directory
+ok 157 task-review refuses a carriage return in a --minor text
+ok 158 task-done strips a carriage return from the last output line
+ok 159 --probe exits 3 and writes nothing when the probe is inconclusive
+ok 160 each worktree lands in its bucket with evidence
+ok 161 a fork is listed as detached; the main checkout is never listed
+ok 162 without gh the buckets come from local state and say so
+ok 163 --days 0 marks every worktree idle
+ok 164 wt-audit changes nothing: status, index and worktree list are the same after it runs
+ok 165 a worktree with thousands of recent files is still listed
+ok 166 a bad --days value exits 2
+ok 167 a worktree whose git status fails is unknown, not empty
+ok 168 a clean worktree with no resolvable base ref is unknown, not empty
+ok 169 fork carries modified and untracked files and snapshots to the same tree
+ok 170 fork carries a deletion and a binary file
+ok 171 a fork passes wt-check
+ok 172 an existing fork path exits 2
+ok 173 wt-apply applies a worker's patch into the plan worktree
+ok 174 wt-apply applies a binary patch
+ok 175 a conflicting patch exits 3 and leaves the destination unchanged
+ok 176 a missing patch file exits 2
+ok 177 a fork made from another directory reads worktree.setup from the main checkout
+ok 178 a failing worktree.setup removes the fork
+ok 179 diff.noprefix in the user's git config changes neither forks nor patches
+ok 180 wt-new creates a branch worktree off origin/main
+ok 181 wt-new fetches before branching
+ok 182 wt-new keeps the main checkout status clean
+ok 183 wt-new --detach --base SHA makes a detached worktree at that commit
+ok 184 wt-new copies files named in .worktreeinclude
+ok 185 wt-new runs worktree.setup and writes the marker
+ok 186 a failing worktree.setup exits 2
+ok 187 an existing branch is refused
+ok 188 a branch.pattern placeholder wt-new cannot fill asks for --branch
+ok 189 a bad slug exits 2
+ok 190 no origin remote exits 2 with a message
+ok 191 wt-new works when the repo path has a space
+ok 192 wt-check passes for a fresh kern worktree
+ok 193 wt-check rejects the main checkout
+ok 194 wt-check rejects a base that is not an ancestor
+ok 195 wt-check rejects a worktree without the setup marker
+ok 196 an unchanged worktree snapshots to HEAD's tree
+ok 197 snapshot includes untracked files and skips ignored ones
+ok 198 snapshot drops a deleted tracked file
+ok 199 the real index and status are untouched
+ok 200 same state gives the same tree; a change gives a new one
+ok 201 wt-diff writes a package and a patch and lists changed paths
+ok 202 wt-diff defaults the package into WORK/reviews
+ok 203 identical trees exit 3
+ok 204 a bad tree exits 2
+ok 205 wt-snap and wt-diff work under a path with a space
+ok 206 wt-diff --allow passes when every changed path is allowed
+ok 207 wt-diff --allow exits 4, names each extra path and still writes the package
+ok 208 an allowed directory needs its trailing slash
+ok 209 an allowed entry ending in * covers every path that starts with it
+1..557
+ok 1 a command name built at run time is denied
+ok 2 each shape the G00 ruling keeps is denied under autopilot
+ok 3 a non-sh interpreter's inline code, here-doc or pipe gets no vote: an accepted limit
+ok 4 a program or script operand that is $VAR/literal-path gets no vote: an accepted limit
+ok 5 a shell script kern did not unwrap is denied: another shell, or sh -c not at the head
+ok 6 a shell reading a pipe, a here-string, an fd or a process substitution is denied
+ok 7 a command name built at run time after xargs or find -exec, or a script name source reads
+ok 8 a shell whose script operand is stdin or an fd reads that stream
+ok 9 the commands autopilot runs every day get no vote from G00, with every guard running
+ok 10 ordinary commands get no vote from G00 under autopilot
+ok 11 G00 votes nothing outside autopilot or for other tools
+ok 12 under autopilot the review's bypass shapes are denied with every guard running
+ok 13 status in the main checkout: no vote
+ok 14 switch in the main checkout asks, denied under autopilot
+ok 15 reset --hard, stash and clean in the main checkout ask
+ok 16 the same commands in a linked worktree: no vote
+ok 17 a chained or substituted main-checkout command is still seen
+ok 18 stash list and clean -n are read-only: no vote
+ok 19 plain force push is denied in both modes
+ok 20 push of a feature branch asks; push.policy auto allows; deny denies
+ok 21 push to the base branch asks even with push.policy auto, and is denied under autopilot
+ok 22 autopilot allows a push of the current non-protected branch only
+ok 23 force-with-lease: own branch asks; a branch with another author is denied
+ok 24 force-with-lease under autopilot needs rebase.push: autopilot
+ok 25 merge asks; gh pr merge asks; both denied under autopilot
+ok 26 worktree remove --force and branch -D ask
+ok 27 kern: off disables the guard
+ok 28 unparseable input asks, and the reason names it
+ok 29 autopilot denies main-checkout operations, merges and discards
+ok 30 pull in the main checkout asks; in a linked worktree: no vote
+ok 31 abbreviated long options and short clusters are read as git reads them
+ok 32 a remote delete asks whatever push.policy says, and is denied under autopilot
+ok 33 push.policy deny denies under autopilot too
+ok 34 autopilot allows a push only in the plain shape
+ok 35 push.policy auto allows only the plain shape
+ok 36 remote.<name>.push or mirror config makes a push unproven
+ok 37 autopilot lease: current branch only, bare option, no other flags
+ok 38 --force-if-includes follows the lease rules
+ok 39 lease: another author's commit on the remote branch only is denied
+ok 40 lease to a remote that git remote does not list is denied
+ok 41 after cd, --git-dir or GIT_DIR the directory is unknown
+ok 42 gh pr merge with -R or --repo asks, and is denied under autopilot
+ok 43 --no-verify skips the pre-push hook, so the push is never allowed
+ok 44 an allowed push may pipe into tail, head, grep or cat with options only
+ok 45 --dry-run is a safe push option
+ok 46 an unknown push shape names the fix in its reason
+ok 47 a tag named like the current branch does not hide it
+ok 48 a tag named like a branch.protected branch does not hide it
+ok 49 shell expansion in a push record is never allowed
+ok 50 a branch or remote name outside the safe characters is never allowed
+ok 51 a glob or ~ in a push record is never allowed
+ok 52 shell expansion or a glob in a filter is never allowed
+ok 53 remote and url config that redirects a push makes it unproven
+ok 54 lease: a missing origin/<base> counts as not own
+ok 55 lease: the source of src:dst is what gets checked
+ok 56 git and gh are matched case-insensitively
+ok 57 an explicit lease value under autopilot names the bare option
+ok 58 a push URL rewritten for this remote is unproven; an unrelated rewrite is not
+ok 59 a detached HEAD names itself in the reason
+ok 60 a trailing comment does not hide a command
+ok 61 git behind a command kern cannot read asks, and is denied under autopilot
+ok 62 a word git that runs no git command, or a read-only one, gets no vote
+ok 63 echo git push asks: a word git before one of git's commands that writes is not read further
+ok 64 an append assignment or a wrapper in another case does not hide git from G1's own checks
+ok 65 git behind a command with -c or --config-env among its options asks, whatever word follows
+ok 66 a hidden git with no word after it gets no vote, and GIT_CONFIG in the text changes nothing
+ok 67 lease push to a protected branch names the force; over another author's commits it is denied
+ok 68 a push through -C into another repository is never allowed, as G5 never allows such a commit
+ok 69 env -C, env --chdir, sudo -D and sudo -R leave the directory unknown, as cd does
+ok 70 send-pack and http-push push refs: they ask, are denied under autopilot, and their force forms are denied
+ok 71 send-email asks, and is denied under autopilot
+ok 72 imap-send asks like send-email, and is denied under autopilot
+ok 73 env -S reads its value as words, so a -C inside it leaves the directory unknown
+ok 74 G2: a non-draft PR is denied in both modes
+ok 75 G2: a draft with no existing PR asks; pr.policy auto allows; autopilot allows
+ok 76 G2: an open PR for the head is denied; a merged one asks
+ok 77 G2: gh failing means dedup unknown: ask, deny under autopilot
+ok 78 G2: gh pr ready asks, denied under autopilot
+ok 79 G3: self-approval is denied; approving another author's PR asks
+ok 80 G3: a review body without a taxonomy label is denied; with one it asks
+ok 81 G3: every posting is denied under autopilot
+ok 82 G3: gh api review post checks every body; a GET is not a post
+ok 83 G3: code-review --comment through the Skill tool asks; plain code-review: no vote
+ok 84 G4: inline --body is denied; --body-file passes G4
+ok 85 G4: gh api -f body= is denied
+ok 86 G2: an autopilot draft is allowed only alone, literal, with nothing before it
+ok 87 G2: pr.policy auto allows only the proven draft; pr.policy deny holds under autopilot
+ok 88 G2: the duplicate check never reads another repo or head; -R, GH_REPO, cd and --head are unproven
+ok 89 G2: an open PR is still found for a draft that is unproven only past the repo and head
+ok 90 G2: draft is the last --draft setting, read as gh reads flags
+ok 91 G2: people, labels, projects, milestones and attachments are not allowed unattended
+ok 92 G2: gh -R before the verb is seen; --undo=false is not an undo
+ok 93 G2, G3: a body file must be a regular file in the repo: not a symlink, .git, ignored or outside
+ok 94 G4: attached and = forms of -b, release notes and api body fields are denied in both modes
+ok 95 G3: review.post_policy auto allows only the proven shape
+ok 96 G3: review body labels are read as gh reads the flags, and a label is a whole word
+ok 97 G3: approval in any form is checked for self-approval, against the PR being approved
+ok 98 G3: an approval whose author lookup fails asks, denied under autopilot
+ok 99 G3: gh api writes ask; only a REST POST of a PR review or review comment follows the policy
+ok 100 G3: --input is read whole: a key and its value on different lines, CRLF included
+ok 101 G2, G3, G4: gh by path or in another case is still gh
+ok 102 G2, G3 and G4 parse only a command that holds gh, quoted forms too, and the gh guards parse it once
+ok 103 G4: a short cluster reaching the text flag through booleans is inline text; close and reopen comments too
+ok 104 G3: a clustered approval with an attached body file is a self-approval
+ok 105 G3: an approval whose pr view lookup fails asks, denied under autopilot
+ok 106 G2: gh behind a command kern cannot read asks, and is denied under autopilot
+ok 107 G2: a word gh before no gh command group, or before a read-only one, gets no vote
+ok 108 G2: gh's group aliases behind another command ask, and are denied under autopilot
+ok 109 G2: gh pr new is gh pr create
+ok 110 G4: the text of issue new, release new and pr new is read as their create verbs' text
+ok 111 G2: a gh alias or extension asks, and is denied under autopilot; gh alias set, import and delete ask
+ok 112 G2: the list of gh's own commands is gh 2.100.0's, where that gh is installed
+ok 113 G3: a pr comment body without a taxonomy label asks, denied under autopilot; a review body's is denied
+ok 114 G2: an unproven draft's reason names the whole flag set an allowed draft may carry
+ok 115 G2: gh extension install and upgrade ask, and are denied under autopilot; list and search do not
+ok 116 G5: a passing -F message asks interactively and is allowed under autopilot
+ok 117 G5: a subject off convention is denied in both modes
+ok 118 G5: with commit.convention unset, the convention kern-detect finds is checked, and none when it finds none
+ok 119 G5: the convention detected from signed history runs no program that repo config names
+ok 120 G5: a missing ticket id from the branch is denied
+ok 121 G5: an AI attribution trailer is denied unless commit.attribution allows it
+ok 122 G5: a message built by command substitution cannot be checked: ask, deny under autopilot
+ok 123 G5: commit.policy auto allows a passing commit; deny denies it
+ok 124 G5: git add -A and commit -a ask, denied under autopilot; git add -- path: no vote
+ok 125 G6: a staged private key is denied without printing it
+ok 126 G6: a clean staged change: no vote
+ok 127 G6: never_commit paths are denied
+ok 128 G6: a push scans the outgoing commits
+ok 129 G5 allows a proven commit under autopilot and commit.policy auto
+ok 130 G5: commands chained, substituted, redirected or wrapped around a commit are never allowed
+ok 131 G5: commit options other than -m, -F, -q and -v are never allowed
+ok 132 G5: global git options, environment and other repositories are never allowed
+ok 133 G5: a commit on a protected branch or a detached HEAD is never allowed
+ok 134 G5: the -F file must be a regular file in the repo, outside .git, and not ignored unless in .kern
+ok 135 G5: a here-doc message asks with the retry form and is denied under autopilot
+ok 136 G5: a multi-line -m message is read line by line
+ok 137 G5: a -C or -c commit name is never read as a git log option
+ok 138 G5: git add -A in any spelling asks and is denied under autopilot
+ok 139 G5: git add of named paths: no vote
+ok 140 G5: broad staging chained into a commit is never allowed
+ok 141 G6: a key staged by git add in the same command is denied under autopilot
+ok 142 G6: a commit of paths, -i, -o, -p or -a in any spelling asks: kern scans only staged content
+ok 143 G6: a commit in another repository is denied under autopilot
+ok 144 G6: a secret in the commit message is denied without printing it
+ok 145 G6: repo config cannot hide the staged diff or run a program
+ok 146 G6: an added line that starts with ++ is scanned and its text never printed
+ok 147 G6: a push scans what the target remote lacks, whatever upstream says
+ok 148 G6: with no tracking refs anywhere the whole history is scanned and nothing asks
+ok 149 G6: a push of another branch scans that branch
+ok 150 G6: a push with no upstream and no origin/HEAD is scanned
+ok 151 G6: content added only in a merge commit is scanned
+ok 152 G6: a secret in a pushed commit message is denied without printing it
+ok 153 G6: PGP, Stripe, AWS STS and fine-grained GitHub keys are denied
+ok 154 G6: never_commit globs match nested paths and a bracketed list
+ok 155 G6: a push source kern cannot resolve asks instead of going unscanned
+ok 156 G6: attributes, diff.relative and invalid UTF-8 cannot hide an added line
+ok 157 G6: repo-configured programs never run in a scan
+ok 158 G6: a push walk that does not finish asks
+ok 159 G6: a clean merge of main brings in nothing new: no vote
+ok 160 G6: never_commit reads staged names: a removal passes, a non-ASCII name is caught
+ok 161 G6: sk- needs a non-word character before it, and file names are not scanned
+ok 162 G6: after cd, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= it could not scan
+ok 163 G6: push : and a matching push scan every branch
+ok 164 G6: a message line that looks like a diff is still read as the message
+ok 165 G6: replace refs and log.showRoot cannot hide pushed content
+ok 166 G5: attribution variants and a --trailer are denied, interactive and default policy
+ok 167 G5: the ticket id must be followed by a non-alphanumeric character or the end
+ok 168 G5: git add of a word that expands is wide
+ok 169 G5: git add of the worktree root spelled in another case is wide
+ok 170 git: a subcommand outside git's own commands asks in G1, G5 and G6, whatever config says
+ok 171 git: git's own commands keep their behaviour
+ok 172 G1: a lease push reads authors without running gpg from log.showSignature
+ok 173 G6: a forged \037, \001 or NUL in a pushed message cannot hide its text
+ok 174 G6: a NUL earlier on a line cannot hide a key, staged or pushed
+ok 175 G6: i18n.logOutputEncoding cannot hide a pushed message
+ok 176 G6: a push that carries config, or goes to a mirror remote, could not be scanned
+ok 177 G6: env -C or --chdir could not be scanned, and the autopilot deny holds
+ok 178 G6: GIT_DIR= inside a message or an argument is not an assignment
+ok 179 G6: the gitleaks pass is bounded and its overrun asks
+ok 180 G6: the scan budget counts from the dispatcher's start, so time spent by G2 leaves less
+ok 181 G6: a message walk that does not finish asks
+ok 182 G6: an export behind a wrapper still leaves the next git command unscanned
+ok 183 G6: gitleaks reads a pushed commit's message as well as its patch
+ok 184 git: a global option G1 does not know asks, so it cannot hide the command after it
+ok 185 G6: an append assignment, a wrapper in another case or a sudo long option still leaves git unscanned
+ok 186 G6: send-pack and http-push could not be scanned
+ok 187 G6: git add, merge or another index or HEAD change earlier in the command leaves the scan stale
+ok 188 G6: stash pop or apply, pull, update-index, read-tree, update-ref, branch -f, commit-tree and notes leave the scan stale
+ok 189 G6: a -C or GIT_DIR inside env -S could not be scanned
+ok 190 G13: inactive until protected_targets is set
+ok 191 G13: a copy to the target is denied; a copy from it is not
+ok 192 G13: mutating SQL against the target is denied; SELECT is not
+ok 193 G13: a write over ssh to the target is denied in both modes
+ok 194 G13: an ssh remote command off the read list is denied, Windows and PowerShell included
+ok 195 G13: ssh to a target names it in any case, as user@host, a URL, a jump or a HostName option
+ok 196 G13: ssh to a target with no remote command, a shell, or input on stdin is denied
+ok 197 G13: an ssh behind a path, another case, quotes or a wrapper is still read
+ok 198 G13: ssh reads, tunnels and other hosts get no vote
+ok 199 G13: SQL to a target is SELECT, SHOW, DESCRIBE, EXPLAIN or WITH with no write, lock, file or wait
+ok 200 G13: LOCK TABLES and GET_LOCK against a target are denied in both modes
+ok 201 G13: SQL reads against a target, and SQL words outside a client, get no vote
+ok 202 G13: SQL input G13 cannot read is denied: files of any name, pipes, here-docs, run-time text, none at all
+ok 203 G13: a host:port entry protects a database behind an SSH tunnel
+ok 204 G13: mysqldump of a target needs --single-transaction and no lock option; pg_dump reads
+ok 205 G13: scp or rsync to a target is denied by its last positional word, in any case or URL form
+ok 206 G13: rsync --remove-source-files, --delete or a remote command touching a target is denied
+ok 207 G13: an scp or rsync behind a path, another case or a wrapper is still read
+ok 208 G13: copies from a target and to other hosts get no vote
+ok 209 G13: sftp to a target runs only read verbs, from a batch file, here-doc, here-string or pipe
+ok 210 G13: sqlite3 votes only when its file is a target
+ok 211 G13: autossh and plink are read as ssh; other network clients naming a target are denied
+ok 212 G13: loopback spellings and abbreviated long options still reach a host:port target
+ok 213 G13: ssh over a shared connection is judged as if on a target
+ok 214 G13: a carriage return splits a remote command; another control character denies
+ok 215 G13: SQL files are read only for a target, and denied above 1 MB
+ok 216 G13: a backslash-newline joins words before G13 reads them
+ok 217 G13: PowerShell formatting, Get- cmdlets and property reads are reads; a method call is not
+ok 218 G13: one host:path sftp operand is a get from the target
+ok 219 G13: a cmd or powershell wrapper in a remote command to a target denies, in both modes
+ok 220 G13: SQL to a target that needs more than plain lexing denies, in both modes
+ok 221 G14: a tracker write asks, a read does not vote, autopilot denies
+ok 222 G14: tracker.policy auto allows tracker writes but never chat messages
+ok 223 G14: mcp.write_servers adds a server; gh issue writes ask
+ok 224 G15: deploys and publishes ask, denied under autopilot
+ok 225 G15: read-only infra commands do not vote
+ok 226 G15: a push to a deploy.envs branch asks
+ok 227 G15: git in another case or by path still pushes to a deploy branch
+ok 228 G14: tracker.policy auto allows a gh issue or label write only in a proven shape
+ok 229 G15: a push from a detached HEAD asks when deploy.envs is set, denied under autopilot
+ok 230 G15: a push of every branch or a pattern asks when deploy.envs is set, denied under autopilot
+ok 231 G15: a tool behind a wrapper, an assignment, a path or another case asks, denied under autopilot
+ok 232 G15: a deploy verb after global options asks; the verb must be a whole word
+ok 233 G15: a runner and its options are stripped
+ok 234 G15: gcloud, helm delete, flyctl, gh run rerun, docker stack, uv, wrangler, netlify, vercel, serverless, firebase and cloudformation ask
+ok 235 G15: ordinary commands do not vote
+ok 236 G15: quotes, backslashes and a backslash-newline do not hide a tool
+ok 237 G15: a tool name as any later word asks; quoted text stays one word
+ok 238 G15: a bare vercel with only options asks where vercel runs
+ok 239 G15: a command inside one quoted word is split: ssh, a shell's -c, su -c, script -c and watch
+ok 240 G15: a shell's -c is read in a cluster of any case, and after a plus
+ok 241 G15: the round-1 table rows ask
+ok 242 G15: a read verb first, --dry-run, words after --, rollout reads and s3 downloads do not vote
+ok 243 G15: a move from a bucket, mvnw, and su --command= or an attached -c ask
+ok 244 G15: the final rider's rows ask; their read forms do not
+ok 245 G15: a last record that starts with an assignment, a wrapper, ! or a redirect gets no vote under autopilot
+ok 246 G15: a failed judge or a failed parse asks
+ok 247 G13 and G15: a 10 KB inline PR body passes every guard in under 2 s in a UTF-8 locale
+ok 248 G15: every tool in the table asks for each of its verbs, in any case, and passes the prefilter
+ok 249 G14: tracker.policy auto allows only a family's listed tools, the family matched as a server token
+ok 250 G14: camelCase names and push, run, retry, play, fork, schedule, duplicate, restore and unshare are writes
+ok 251 G14: gh issue new is create; deletes, develop, pin, unpin, unlock and label clone ask under tracker.policy auto
+ok 252 G14: a gh write still votes when gh is in another case, a path or split by quotes
+ok 253 G14: every github MCP write asks under tracker.policy auto, whatever its arguments
+ok 254 G14: Linear save_issue asks under auto when it sets a delegate, an assignee, or a team on an update
+ok 255 G14: an action whose first word is a read verb never votes
+ok 256 G14: copilot, dismiss, manage, star, unstar, cancel, spawn, stop and convert are writes
+ok 257 G14: Linear save_project asks under auto: it moves projects between teams and sets a lead
+ok 258 G14: a read-first name with a strong write verb after it still votes
+ok 259 Write under the sessions dir is denied in both modes
+ok 260 Edit of another file: no vote
+ok 261 a .. path into the sessions dir is denied
+ok 262 an upper-cased path to the sessions dir is denied
+ok 263 a symlinked dir that resolves to the sessions dir is denied
+ok 264 a Bash write into the sessions dir is denied
+ok 265 every Bash write shape against session state is denied
+ok 266 any command but a reader that names a state path is denied
+ok 267 a glob that matches the state file once ~ is expanded is denied
+ok 268 plain reads, git commands and messages naming state or settings: no vote
+ok 269 a shell reading a here-doc runs its body as commands
+ok 270 a # that bash does not read as a comment hides no state write
+ok 271 a misread << hides no state write
+ok 272 a double-quoted state target is denied
+ok 273 reads of a state file, and a commit message naming one: no vote
+ok 274 the session id counts only as the state file name: scratchpad writes pass
+ok 275 reads of session state: no vote
+ok 276 a Monitor command writing the state file is denied
+ok 277 a scheduled prompt or relayed message carrying /kern:autopilot is denied
+ok 278 relayed text that opens with a mode or autopilot command is denied
+ok 279 relayed text that only mentions a mode command: no vote
+ok 280 a RemoteTrigger whose nested body carries a kern command is denied; a list passes
+ok 281 a scheduled prompt without kern commands: no vote
+ok 282 a Skill call to the mode or autopilot skill is denied; other skills pass
+ok 283 a write to a kern settings file asks, and denies under autopilot
+ok 284 reading a kern settings file: no vote
+ok 285 a command that names neither state nor settings costs G16 no lower-casing; any case still counts
+ok 286 a settings path spelled with ., .. or // or split by quotes is still a settings path
+ok 287 a copy, move or link into a .claude directory is a settings write
+ok 288 a write to Claude Code's own settings asks, and denies under autopilot; plain reads get no vote
+ok 289 settings files and .claude directories follow the state model: any head but a reader asks
+ok 290 git reads only through its read-only subcommands; any other git naming settings or .claude asks
+ok 291 a settings write under a directory with a space asks; only a message option's text is read as a sentence
+ok 292 a command that reads but can run code, and names a hook or state_set, asks; under autopilot it is denied
+ok 293 a glob, brace or zsh group after hooks/ that could name a hook asks; under autopilot it is denied
+ok 294 running, sourcing or reading a hook, or calling a state function, asks; under autopilot it is denied
+ok 295 a hooks directory named elsewhere in the command, or reached by a glob, makes a hook's bare name ask
+ok 296 a command that names no kern hook, such as a hook's test file, gets no hook vote
+ok 297 inside a hooks directory a bare hook name, or a glob that could match one, asks
+ok 298 when awk cannot read the command for kern's hook code, G16 fails closed
+ok 299 when awk fails on one reading and no reading hits, G16 fails closed in both modes
+ok 300 when awk fails on one reading and another reading hits, G16 asks with its own reason; under autopilot it is denied
+ok 301 a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied
+ok 302 an escaped backslash, or a backslash before CR LF, does not join the lines; the next line still asks
+ok 303 a hooks directory on one line and a hook on the next still ask, as they did before lines were joined
+ok 304 the APFS case folds of s and k inside a hook path are read as s and k; asks, and under autopilot is denied
+ok 305 a brace group that spans a slash asks, and under autopilot is denied
+ok 306 the APFS case folds of s and k in a settings or state path get the vote of the ASCII spelling
+ok 307 each backticked command in forensics.md and investigator.md is on G18's allowlist
+ok 308 G18 still denies writes and programs the investigator must not run
+ok 309 the parity check fails when a command that G18 denies is planted in a reference
+ok 310 read commands get no G18 vote
+ok 311 pipes and stderr to /dev/null stay allowed
+ok 312 writes and unknown commands are denied
+ok 313 an option word built by quotes, escapes or expansion is still denied
+ok 314 abbreviated long options and short-option clusters are still denied
+ok 315 an option that runs a program is denied: rg --hostname-bin, file -z and -Z
+ok 316 a redirect that only looks like 2>&1 or /dev/null is denied
+ok 317 quoted arguments, git's @{ } and stream redirects stay allowed
+ok 318 a file redirect is denied
+ok 319 a denied command anywhere in a chain denies the call
+ok 320 other agents and the main session get no G18 vote
+ok 321 autopilot changes nothing for G18
+ok 322 the dispatcher lists g18 among the guards it expects
+ok 323 P1 two Edits: an invented quote while draft, then the status flip
+ok 324 P1b two Edits: a real quote while draft, then the flip, is changed after the message
+ok 325 P2 non-answers with a final question mark or comma
+ok 326 P3 a quote with no hash matches no record, recorded or empty
+ok 327 P4 an empty prompt replaces the last one's lines
+ok 328 P5 frontmatter forms G20 reads as approved
+ok 329 P6 a CRLF file and a multi-line old_string
+ok 330 P6b a CRLF Write
+ok 331 P7 a second frontmatter block is read by neither G20 nor ledger-open
+ok 332 P8 a byte order mark and blanks after the opening ---
+ok 333 P9 an Edit with an empty old_string writes a new file
+ok 334 P10 a Markdown name in another case
+ok 335 P11 curly quotes in the file, straight ones in old_string
+ok 336 P12 a user line that holds double quotes can be quoted whole
+ok 337 P13 perl in place, in any option form
+ok 338 P14 python -c and node -e with the path inside the code
+ok 339 P15 python reading its script from a here-doc
+ok 340 P16 tee, a here-doc, printf, sudo and env
+ok 341 P17 cp, cat, tee, dd, ln, rsync, install, git mv and a two-step mv from a prepared file
+ok 342 P18 cp of a prepared Markdown file into the specs directory
+ok 343 P19 a glob, find -exec, xargs and a loop variable, with approved in the command
+ok 344 P20 the word split by quotes or in capitals
+ok 345 P21 a shell write to an approved file without the word
+ok 346 P22 reads and kern's own scripts get no G20 vote
+ok 347 P23 accepted limit: a new file has no draft to be older than the message
+ok 348 P24 the quote comes from the first approved: line
+ok 349 P25 a quote over 500 characters matches nothing
+ok 350 P26 a prompt that starts with a system-reminder replaces the user's lines
+ok 351 P27 a byte order mark before the first ---
+ok 352 P28 bash -c, eval, command substitution, a path with a space, perl -0777
+ok 353 P29 Monitor is read as Bash
+ok 354 P30 an approved file approved again with a fresh real quote
+ok 355 P31 accepted limit: a teammate message wrapped() misses counts as the user's
+ok 356 P32 a write through a non-Markdown symlink to a spec
+ok 357 P33 option clusters tell the script from the files
+ok 358 P34 accepted false deny: perl inline code that reads, with approved and a Markdown name
+ok 359 P35 accepted limit: a script run by name is not seen
+ok 360 C1 a --- with trailing blanks closes the frontmatter for G20, ledger-open and plan-check alike
+ok 361 C1 a --- with a CR closes the frontmatter for G20, ledger-open and plan-check alike
+ok 362 C1 an opening --- with trailing blanks: G20 denies the approval ledger-open would accept
+ok 363 I2 sed deleting a closing --- turns staged body lines into frontmatter
+ok 364 I2 tail of a staged file whose first line is not --- into a plan
+ok 365 I3 running kern's prompt-submit to forge the user's message asks G16, and is denied under autopilot
+ok 366 I3 sourcing kern's state library to call state_set asks G16, and is denied under autopilot
+ok 367 N1 negations are not a yes
+ok 368 N2 an Edit whose old_string is not in the file, writing a status line, fails closed
+ok 369 N3 the changed-after message says how to approve
+ok 370 a quote of the user's last message approves
+ok 371 a quote with other spacing and case still matches the same line
+ok 372 one whole line of a longer message approves; part of a line does not
+ok 373 an invented quote is denied
+ok 374 sounds good and whatever you think are not a yes
+ok 375 a quote from an earlier message, or from a wrapped one, is denied
+ok 376 a draft changed after the user's message is denied
+ok 377 a missing approved: quote is denied
+ok 378 under autopilot even a real quote is denied
+ok 379 other files and draft edits get no G20 vote
+ok 380 a Bash write of approved into a spec is denied; a read is not
+ok 381 a Write of a new plan with a real quote approves
+ok 382 an Edit of draft to approved is checked though new_string has no status line
+ok 383 an Edit that changes the approved: line of an approved file is checked
+ok 384 replace_all is honoured when the edit is applied
+ok 385 an approved file edited below its frontmatter gets no vote
+ok 386 a Markdown file outside the work dir is checked too
+ok 387 gawk -i inplace, and cp or mv of an approved file onto a spec, are denied
+ok 388 prompt_hashes folds case, blanks and a final . or !, one hash per line
+ok 389 the dispatcher lists g20 among the guards it expects
+ok 390 git_words splits chains and keeps quoted separators
+ok 391 git_words also prints the bodies of bash -c, eval, $( ) and backticks
+ok 392 git and gh are seen behind shells, wrappers, groups and keywords
+ok 393 a shell's -c is read in a cluster of any case, after options, -- or -, and value long options
+ok 394 zsh's --emulate takes the next word, so the -c after it is read
+ok 395 a redirection among a shell's options is not its script
+ok 396 env -S splits its line with quotes, as env does
+ok 397 a shell that runs a -c script reads its here-doc as data, in any cluster form
+ok 398 git is seen behind wrapper options, env -S, shell options, timeout and nice
+ok 399 a leading redirection is not the command name
+ok 400 a << inside quotes in $( ) hides nothing
+ok 401 a shell reading a here-doc runs its body: the body stays as records
+ok 402 a shell here-doc after a closed $( ) keeps its body
+ok 403 a << inside a top-level (( )) is not a here-doc
+ok 404 a << inside ${ }, $[ ], $(( )) or a NAME[ ] subscript is not a here-doc
+ok 405 a here-doc after a closed ${ } or subscript, or inside $( ) in one, is still a here-doc
+ok 406 a # after an escaped separator is not a comment; after a line continuation it is
+ok 407 a here-string is not a here-doc
+ok 408 the commit form with a here-doc message gives one git segment, and the message is data
+ok 409 here-doc bodies are skipped, and the commands after them are still seen
+ok 410 a quoted multi-line argument stays in its record
+ok 411 a 1,000-line here-doc runs through git_words in under a second
+ok 412 a backslash-newline is dropped, not read as a space
+ok 413 quoted parentheses stay inside their word
+ok 414 redirections never split a command
+ok 415 git_sub reads -C, skips env and global options
+ok 416 git_sub skips each global option of git 2.54, and the next word where it takes a value
+ok 417 gh_sub, word_value and word_has
+ok 418 current_branch reads HEAD by symbolic-ref, past a tag of the same name
+ok 419 push_targets: refspecs, deletes and the current branch
+ok 420 push_targets skips redirections
+ok 421 _shell_words: a word that starts with an unquoted # is a comment to the newline
+ok 422 _shell_words: a # inside a word, quoted or escaped is kept
+ok 423 _shell_words splits a redirection from the word before it
+ok 424 push_targets: a redirection glued to the branch, and @
+ok 425 a committed base_branch adds a protected branch; origin/HEAD, or else main and the like, stay protected
+ok 426 push_targets prints * for every-branch pushes, and * is protected
+ok 427 push_targets strips heads/ and reads deletes
+ok 428 with_timeout returns promptly when the command finishes
+ok 429 with_timeout stops a slow command and its children
+ok 430 git is seen behind wrapper long options that take a value
+ok 431 git is seen after an append assignment, an attached env -S line, and a wrapper or shell in another case
+ok 432 json_get decodes escapes and ignores a key-like string inside a value
+ok 433 json_get: absent key is 1, a non-string value is 1, unterminated input is 2
+ok 434 json_get_raw returns objects, arrays and literals with nested braces in strings
+ok 435 json_escape round-trips quotes, backslashes, tabs and newlines
+ok 436 json_escape output parses as a JSON string for every byte below 0x20
+ok 437 json_ok accepts one object with surrounding whitespace and rejects the rest
+ok 438 ti_get reads from TOOL_INPUT
+ok 439 a 200 KB value parses in under 5 seconds
+ok 440 json_get finds tool_input.command in a realistic PreToolUse payload
+ok 441 a found key with a missing or truncated value is 2 with no output
+ok 442 a 400 KB value scans in linear time: an absent key and tool_input each take about a second at most
+ok 443 589 KB of structural input outside strings scans in linear time
+ok 444 recorded typed /kern:mode terse switches the voice
+ok 445 recorded typed /kern:autopilot on turns autopilot on
+ok 446 the recorded background report never switches anything
+ok 447 the recorded SubagentStart payload yields SubagentStart JSON
+ok 448 the recorded subagent PreToolUse payload parses: the dispatcher prints nothing or JSON
+ok 449 input the dispatcher cannot read gives ask
+ok 450 under autopilot, unreadable input that names its session gives deny
+ok 451 under autopilot, input with no readable session id still never allows
+ok 452 a deny and an ask in one call: deny wins and only deny reasons print
+ok 453 a reason that echoes control bytes still prints JSON that parses
+ok 454 a 10 KB UTF-8 assignment before a command runs every guard in under 2 s
+ok 455 a guard file that does not load fails closed
+ok 456 a guard file that stops loading partway, or a missing guard file, fails closed
+ok 457 a hook library that does not load gives ask, or deny under bypassPermissions
+ok 458 with POSIXLY_CORRECT set, a missing hook library still gives the G0 ask
+ok 459 a hook library that sources but lacks a function the dispatcher calls gives ask
+ok 460 pre-tool-use checks every function each library it loads defines
+ok 461 a gitctx.sh that sources but lacks git_words gives the G0 ask
+ok 462 the dispatcher's list of guard ids names every guard file
+ok 463 decision_of tells output with no decision from no output
+ok 464 KERN_GUARDS limits the guards under bats only
+ok 465 expansion kern:mode terse switches voice and injects the terse rules
+ok 466 the envelope form of a typed command switches too
+ok 467 an unknown mode word changes nothing and is not echoed
+ok 468 autopilot on from a typed command; off by natural language
+ok 469 the per-prompt autopilot line names the allowed shapes and the user
+ok 470 autopilot on is refused when settings deny it
+ok 471 wrapped prompts never switch: task notification, cross-session, scheduled task
+ok 472 natural language never turns autopilot on
+ok 473 natural language: a phrase alone on the first line switches; negations and questions do not
+ok 474 surface and autopilot phrases switch only alone on the first line
+ok 475 reminder only outside the default preset
+ok 476 a slash command for another skill is not parsed as natural language
+ok 477 only a slash_command expansion switches state
+ok 478 a bare mode command counts only from the plugin source
+ok 479 autopilot on is refused when a lower layer denies under a higher allowed layer
+ok 480 a pasted command envelope never turns autopilot on
+ok 481 a raw submit of /kern:autopilot on turns it on
+ok 482 autopilot off by natural language works when a wrapper tag appears later in the prompt
+ok 483 a wrapped prompt under autopilot keeps state and still prints the autopilot line
+ok 484 a scheduled-task prompt prints no mode line and no terse reminder
+ok 485 a scheduled-task prompt under autopilot prints the autopilot line only
+ok 486 a headless sdk run with voice=terse prints no reminder
+ok 487 every mode-activation corpus case switches as expected; known failures still fail
+ok 488 with settings.sh missing, prompt-submit exits 0 and prints nothing
+ok 489 startup prints the kernel with every placeholder filled
+ok 490 the rendered kernel stays under 4,000 characters with no settings
+ok 491 startup and clear reset the mode; compact and resume keep it
+ok 492 terse from settings appends the terse rules
+ok 493 the summary lists set keys, overrides, routes, floor keys and unknown keys
+ok 494 a long summary keeps every override in full and stays within 600 characters
+ok 495 kern: off prints nothing
+ok 496 outside a git repository the kernel still renders from user settings
+ok 497 a lower-layer autopilot deny is named in the kernel
+ok 498 a committed loosening value is ignored, so the summary does not list it as set
+ok 499 state files untouched for 30 days are removed; recent ones and other names stay
+ok 500 the current session's state file stays however old it is
+ok 501 a symlink named like a state file stays, and so does its target
+ok 502 a symlinked state dir is left alone
+ok 503 a state dir kern cannot write to does not stop session-start
+ok 504 a library session-start cannot load gives one line that says so
+ok 505 with POSIXLY_CORRECT set, a missing library still gives the one line
+ok 506 session-start checks every function each library it loads defines
+ok 507 local beats shared beats user; default when unset; 3 with no default
+ok 508 the four list keys add up across layers, brackets dropped per layer; other keys take the highest
+ok 509 a union drops repeated values, keeping each at its first place
+ok 510 a project protected_targets cannot drop the user's: G13 still denies a write to the user's host
+ok 511 comments, quotes, colons and hashes inside values
+ok 512 CRLF settings files read the same
+ok 513 a linked worktree reads the main checkout's untracked settings
+ok 514 kern-get prints value and source; exit 3 when unset
+ok 515 policy_for maps values; draft-after-approval and junk read as ask
+ok 516 unknown keys are listed; families such as overrides.<job> are known
+ok 517 kern: off disables; list_has trims
+ok 518 list_has keeps items that start or end with t, in branch.protected and deploy.envs
+ok 519 list_has reads a YAML flow list in brackets
+ok 520 policy_for never loosens floor actions: merge and deploy read as ask
+ok 521 a committed kern: off is ignored; the local and the user file still turn kern off
+ok 522 a committed kern: off does not hide a lower layer's on
+ok 523 a committed policy may be ask or deny, never auto: auto reads as unset
+ok 524 a committed policy auto falls through to the user file, and local and user auto still work
+ok 525 a committed policy deny beats a user auto, and the user file's protections stay
+ok 526 a committed rebase.push: autopilot reads as unset; the local and user files still set it
+ok 527 a tracked kern.local.yml gets the committed-file rules: its kern: off cannot disable the user's protection
+ok 528 a tracked kern.local.yml may still tighten: deny and ask count
+ok 529 an untracked kern.local.yml still turns kern off and sets auto
+ok 530 a tracked KERN.LOCAL.YML on a case-insensitive file system gets the committed-file rules
+ok 531 a committed symlinked .claude holding kern.local.yml cannot turn kern off or drop protection
+ok 532 a .claude that is a submodule cannot turn kern off or drop protection
+ok 533 a .claude holding its own .git, or a symlinked kern.local.yml, cannot loosen
+ok 534 a symlinked .claude pointing outside the main worktree cannot loosen
+ok 535 commit: git -C <wt> commit -F with the message file under the main worktree's .kern/tmp is allowed
+ok 536 commit: a plain git commit -F from inside the worktree is allowed too
+ok 537 commit: a message file outside the main worktree is denied, with and without -C
+ok 538 commit: git -C <wt> add -- <files> gets no kern vote
+ok 539 finish-branch: the draft PR command with a single-quoted --title and a body file under .kern/tmp is allowed
+ok 540 finish-branch: an open PR for the branch denies a second one
+ok 541 finish-branch: gh pr ready and a non-draft PR are denied
+ok 542 finish-branch: the push of the current branch is allowed; a cd in the same call is not
+ok 543 finish-branch: under autopilot the lease push is denied, which backs 'autopilot never rebases'
+ok 544 state_reset writes defaults with mode 0600
+ok 545 state_reset takes mode.voice and mode.surface from settings and rejects junk
+ok 546 state_set updates one key and keeps the others
+ok 547 bad session ids, bad keys, newlines and symlinks are refused
+ok 548 autopilot_on needs the state and no denied setting
+ok 549 autopilot_on is off when any layer denies, even under a higher allowed layer
+ok 550 a symlinked sessions dir is refused on read
+ok 551 state_reset discards a garbled old file under a UTF-8 locale
+ok 552 session ids are ASCII-only whatever the locale
+ok 553 autopilot_denied_by names the denying layer, even under a higher allowed layer
+ok 554 autopilot_denied_by exits 1 when no layer denies
+ok 555 valid SubagentStart JSON under 1,200 characters
+ok 556 terse voice reaches the subagent
+ok 557 with settings.sh missing, subagent-start exits 0 and prints nothing or valid JSON
+hook-shape: 8 cases passed
+ci-local: all steps passed

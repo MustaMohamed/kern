@@ -1,0 +1,3 @@
+{
+  "command": "printf '%s\\n' 'Decision: the approved spec wins; why: binding; cost if wrong: none' >> /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/walk/repo/.kern/ledgers/sum-guard/ledger.md"
+}

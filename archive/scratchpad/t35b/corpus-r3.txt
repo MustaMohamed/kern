@@ -1,0 +1,47 @@
+cd @SD@ && 'X=1' cd /tmp; echo x > foo
+cd @HC@ && 'X=1' cd /tmp; sed -i '' s/a/b/ settings.json
+'X=1' cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+cd @SD@ && X\=1 cd /tmp; echo x > foo
+cd @HC@ && X\=1 cd /tmp; sed -i '' s/a/b/ settings.json
+X\=1 cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+cd @SD@ && '2>/dev/null' cd /tmp; echo x > foo
+cd @HC@ && '2>/dev/null' cd /tmp; sed -i '' s/a/b/ settings.json
+'2>/dev/null' cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+cd @SD@ && "X=1" cd /tmp; echo x > foo
+cd @HC@ && "X=1" cd /tmp; sed -i '' s/a/b/ settings.json
+"X=1" cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+cd @SD@ && X=1 cd /tmp; echo x > foo
+cd @HC@ && X=1 cd /tmp; sed -i '' s/a/b/ settings.json
+X=1 cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+cd @SD@ && 2>/dev/null cd /tmp; echo x > foo
+cd @HC@ && 2>/dev/null cd /tmp; sed -i '' s/a/b/ settings.json
+2>/dev/null cd /tmp; cp docs/plans/ok.md docs/plans/y.md
+cd /tmp && cd - && cp docs/plans/ok.md docs/plans/y.md
+cd /tmp; cd -; cp docs/plans/ok.md docs/plans/y.md
+pushd /tmp && popd && cp docs/plans/ok.md docs/plans/y.md
+cd /tmp && cd ~- && cp docs/plans/ok.md docs/plans/y.md
+cd /tmp && cd "$OLDPWD" && cp docs/plans/ok.md docs/plans/y.md
+cd /tmp && cd +1 && cp docs/plans/ok.md docs/plans/y.md
+cd /tmp && cd -- - && cp docs/plans/ok.md docs/plans/y.md
+cd /tmp && builtin cd @R@ && cp docs/plans/ok.md docs/plans/y.md
+builtin cd docs/plans && echo note >> ok.md
+cd /tmp && cp docs/plans/ok.md docs/plans/y.md
+cd @SD@ && CD /tmp; echo x > foo
+cd @HC@ && CD /tmp; sed -i '' s/a/b/ settings.json
+cd @SD@ && Cd /tmp; echo x > foo
+cd @HC@ && Cd /tmp; sed -i '' s/a/b/ settings.json
+cd @SD@ && cD /tmp; echo x > foo
+cd @HC@ && cD /tmp; sed -i '' s/a/b/ settings.json
+cd @SD@ && PUSHD /tmp; echo x > foo
+cd @HC@ && PUSHD /tmp; sed -i '' s/a/b/ settings.json
+git commit -m "fix: CD pipeline" && cd src && ls
+cd src && git log --grep CD && cd ..
+nice cd /tmp/k1; nice cd /tmp/k2; nice cd /tmp/k3; nice cd /tmp/k4; nice cd /tmp/k5; nice cd /tmp/k6; nice cd /tmp/k7; nice cd /tmp/k8; nice cd /tmp/k9; nice cd /tmp/k10; nice cd /tmp/k11; nice cd /tmp/k12; nice cd /tmp/k13; nice cd /tmp/k14; nice cd /tmp/k15; echo x >> notes.md
+nice cd /tmp/k1; nice cd /tmp/k2; nice cd /tmp/k3; nice cd /tmp/k4; nice cd /tmp/k5; nice cd /tmp/k6; nice cd /tmp/k7; nice cd /tmp/k8; nice cd /tmp/k9; nice cd /tmp/k10; nice cd /tmp/k11; nice cd /tmp/k12; nice cd /tmp/k13; nice cd /tmp/k14; nice cd /tmp/k15; cp docs/plans/ok.md dst.md
+nice cd /tmp/k1; nice cd /tmp/k2; nice cd /tmp/k3; nice cd /tmp/k4; nice cd /tmp/k5; nice cd /tmp/k6; nice cd /tmp/k7; nice cd /tmp/k8; nice cd /tmp/k9; nice cd /tmp/k10; nice cd /tmp/k11; nice cd /tmp/k12; nice cd /tmp/k13; nice cd /tmp/k14; nice cd /tmp/k15; nice cd /tmp/k16; echo x >> notes.md
+nice cd /tmp/k1; nice cd /tmp/k2; nice cd /tmp/k3; nice cd /tmp/k4; nice cd /tmp/k5; nice cd /tmp/k6; nice cd /tmp/k7; nice cd /tmp/k8; nice cd /tmp/k9; nice cd /tmp/k10; nice cd /tmp/k11; nice cd /tmp/k12; nice cd /tmp/k13; nice cd /tmp/k14; nice cd /tmp/k15; nice cd /tmp/k16; ls notes.md
+nice cd /tmp/k1; nice cd /tmp/k2; nice cd /tmp/k3; nice cd /tmp/k4; nice cd /tmp/k5; nice cd /tmp/k6; nice cd /tmp/k7; nice cd /tmp/k8; nice cd /tmp/k9; nice cd /tmp/k10; nice cd /tmp/k11; nice cd /tmp/k12; nice cd /tmp/k13; nice cd /tmp/k14; nice cd /tmp/k15; nice cd /tmp/k16; echo x > @R@/out.txt && ls notes.md
+nice cd /tmp/k1; nice cd /tmp/k2; nice cd /tmp/k3; nice cd /tmp/k4; nice cd /tmp/k5; nice cd /tmp/k6; nice cd /tmp/k7; nice cd /tmp/k8; nice cd /tmp/k9; nice cd /tmp/k10; nice cd /tmp/k11; nice cd /tmp/k12; nice cd /tmp/k13; nice cd /tmp/k14; nice cd /tmp/k15; nice cd /tmp/k16; cd @R@ && echo x >> notes.md
+if cd a; then ls; fi; if cd b; then ls; fi; if cd c; then ls; fi; if cd d; then ls; fi; if cd e; then ls; fi; ls notes.md
+nice cd a; nice cd b; nice cd c; nice cd d; echo x >> notes1.md; echo x >> notes2.md; echo x >> notes3.md; echo x >> notes4.md; echo x >> notes5.md; echo x >> notes6.md; echo x >> notes7.md; echo x >> notes8.md; echo x >> notes9.md; echo x >> notes10.md; echo x >> notes11.md; echo x >> notes12.md; echo x >> notes13.md; echo x >> notes14.md; echo x >> notes15.md; echo x >> notes16.md; echo x >> notes17.md; echo x >> notes18.md; echo x >> notes19.md; echo x >> notes20.md; echo x >> notes21.md; echo x >> notes22.md; echo x >> notes23.md; echo x >> notes24.md; echo x >> notes25.md; echo x >> notes26.md; echo x >> notes27.md; echo x >> notes28.md; echo x >> notes29.md; echo x >> notes30.md; echo x >> notes31.md; echo x >> notes32.md; echo x >> notes33.md; echo x >> notes34.md; echo x >> notes35.md; echo x >> notes36.md; echo x >> notes37.md; echo x >> notes38.md; echo x >> notes39.md; echo x >> notes40.md; echo x >> notes41.md; echo x >> notes42.md; echo x >> notes43.md; echo x >> notes44.md; echo x >> notes45.md; echo x >> notes46.md; echo x >> notes47.md; echo x >> notes48.md; echo x >> notes49.md; echo x >> notes50.md; echo x >> notes51.md; echo x >> notes52.md; echo x >> notes53.md; echo x >> notes54.md; echo x >> notes55.md; echo x >> notes56.md; echo x >> notes57.md; echo x >> notes58.md; echo x >> notes59.md; echo x >> notes60.md; 
+nice cd a; nice cd b; nice cd c; nice cd d; cp docs/plans/ok.md y1.md; cp docs/plans/ok.md y2.md; cp docs/plans/ok.md y3.md; cp docs/plans/ok.md y4.md; cp docs/plans/ok.md y5.md; cp docs/plans/ok.md y6.md; cp docs/plans/ok.md y7.md; cp docs/plans/ok.md y8.md; cp docs/plans/ok.md y9.md; cp docs/plans/ok.md y10.md; cp docs/plans/ok.md y11.md; cp docs/plans/ok.md y12.md; cp docs/plans/ok.md y13.md; cp docs/plans/ok.md y14.md; cp docs/plans/ok.md y15.md; cp docs/plans/ok.md y16.md; cp docs/plans/ok.md y17.md; cp docs/plans/ok.md y18.md; cp docs/plans/ok.md y19.md; cp docs/plans/ok.md y20.md; cp docs/plans/ok.md y21.md; cp docs/plans/ok.md y22.md; cp docs/plans/ok.md y23.md; cp docs/plans/ok.md y24.md; cp docs/plans/ok.md y25.md; cp docs/plans/ok.md y26.md; cp docs/plans/ok.md y27.md; cp docs/plans/ok.md y28.md; cp docs/plans/ok.md y29.md; cp docs/plans/ok.md y30.md; cp docs/plans/ok.md y31.md; cp docs/plans/ok.md y32.md; cp docs/plans/ok.md y33.md; cp docs/plans/ok.md y34.md; cp docs/plans/ok.md y35.md; cp docs/plans/ok.md y36.md; cp docs/plans/ok.md y37.md; cp docs/plans/ok.md y38.md; cp docs/plans/ok.md y39.md; cp docs/plans/ok.md y40.md; cp docs/plans/ok.md y41.md; cp docs/plans/ok.md y42.md; cp docs/plans/ok.md y43.md; cp docs/plans/ok.md y44.md; cp docs/plans/ok.md y45.md; cp docs/plans/ok.md y46.md; cp docs/plans/ok.md y47.md; cp docs/plans/ok.md y48.md; cp docs/plans/ok.md y49.md; cp docs/plans/ok.md y50.md; cp docs/plans/ok.md y51.md; cp docs/plans/ok.md y52.md; cp docs/plans/ok.md y53.md; cp docs/plans/ok.md y54.md; cp docs/plans/ok.md y55.md; cp docs/plans/ok.md y56.md; cp docs/plans/ok.md y57.md; cp docs/plans/ok.md y58.md; cp docs/plans/ok.md y59.md; cp docs/plans/ok.md y60.md; 

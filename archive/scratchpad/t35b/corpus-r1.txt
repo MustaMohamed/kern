@@ -1,0 +1,67 @@
+cd @R@ 2> noglob && git clean -fdx
+cd @R@ > repeat && git clean -fdx
+X=' noglob' cd @R@ && git clean -fdx
+cd @R@ <<< nocorrect && git reset --hard
+cd @R@ # noglob@NL@git clean -fdx
+cd repeat && git clean -fdx
+pushd @R@ >/dev/null 2>&1 <<< coproc; git clean -fdx
+cd docs/plans 2> noglob && echo note >> ok.md
+X=' repeat' cd docs/plans && echo note >> ok.md
+cd docs 2> nocorrect && cp plans/ok.md plans/x.md
+cd src 2> noglob && git add -- a.txt
+cd src <<< repeat && git add -- a.txt
+cd src 2> noglob && git commit -m "feat: add creds"
+X=' nocorrect' cd src && git commit -m "feat: add creds"
+noglob cd @R@ && git clean -fdx
+nocorrect cd @R@ && git clean -fdx
+repeat 1 cd @R@ && git clean -fdx
+repeat 2 cd @R@ && git clean -fdx
+repeat $N cd @R@ && git clean -fdx
+coproc cd @R@; git clean -fdx
+repeat 0 cd @R@; git clean -fdx
+'coproc' cd @R@; git clean -fdx
+noglob repeat 1 cd @R@; git clean -fdx
+cd @R@ && git clean -fdx
+cd . && git push --force-with-lease origin feat
+pushd /tmp && git push --force-with-lease origin feat
+env -C /tmp git push --force-with-lease origin feat
+noglob cd . && git push --force-with-lease origin feat
+coproc cd /tmp; git push --force-with-lease origin feat
+cd . && git push origin feat
+cd src && git push -u origin feat
+noglob cd docs/plans && echo note >> ok.md
+repeat 1 cd docs/plans && echo note >> ok.md
+coproc cd /tmp; echo note >> docs/plans/ok.md
+repeat 0 cd /tmp; echo note >> docs/plans/ok.md
+cd docs/plans && echo note >> ok.md
+noglob cd src && git add -- a.txt
+coproc cd /tmp; git add -- src/a.txt
+cd @HC@ && cd /tmp && cd - && sed -i '' s/a/b/ settings.json
+cd @HC@ && cd /tmp; cd -; echo {} > settings.json
+cd @HC@ && pushd /tmp && popd && echo {} > settings.json
+cd @HC@ && cd /tmp && cd ~- && echo {} > settings.json
+cd @HC@ && cd /tmp && cd +1 && echo {} > settings.json
+cd @HC@ && cd /tmp && cd "$X" && echo {} > settings.json
+cd @SD@ && cd /tmp && cd - && echo x > foo
+cd @SD@ && cd /tmp; cd -; echo x > foo
+cd @SD@ && pushd /tmp && popd && echo x > foo
+cd @SD@ && cd /tmp && cd ~- && echo x > foo
+cd @SD@ && cd /tmp && cd +1 && echo x > foo
+pushd @SD@ && pushd /tmp && popd; echo x > foo
+cd @SD@ && popd
+cd @HC@ && cd /tmp && cd - && cd /tmp && echo {} > settings.json
+cd @HC@ && cd agents && cd .. && sed -i '' s/a/b/ settings.json
+cd @HC@/agents && cd .. && echo {} > settings.json
+cd .claude/agents && cd .. && cp /tmp/x .
+cd .claude && ls && cd .. && git add .
+cd @HC@ && cd agents && echo {} > settings.json
+cd @HC@ && cd /nonexistent; sed -i '' s/a/b/ settings.json
+cd @HC@ && noglob cd /tmp; echo {} > settings.json
+cd @HC@ && coproc cd /tmp; echo {} > settings.json
+cd @HC@ && 'repeat' 1 cd /tmp; echo {} > settings.json
+cd @HC@ && repeat $n cd /tmp; echo {} > settings.json
+noglob cd @HC@ && echo {} > settings.json
+cd src && ls && cd .. && git status
+cd docs && cat plans/x.md && cd .. && npm test
+pushd src && ls && popd
+cd /tmp && cd - && git status

@@ -1,0 +1,23 @@
+cd @SD@ && 'X=1' cd /tmp; echo x > foo
+cd @SD@ && X\=1 cd /tmp; echo x > foo
+cd @SD@ && '2>/dev/null' cd /tmp; echo x > foo
+'X=1' cd @YD@; cp src.md dst.md
+cd @SD@ && X='a b' cd /tmp; echo x > foo
+cd @SD@ && CD /tmp; echo x > foo
+cd @SD@ && Cd /tmp; echo x > foo
+cd @SD@ && PUSHD /tmp; echo x > foo
+cd @HC@ && CD /tmp; sed -i '' s/a/b/ settings.json
+cd @YD@ && cd - && cp src.md dst.md
+pushd @YD@ && popd && cp src.md dst.md
+cd @YD@; cd ~-; cp src.md dst.md
+cd @YD@; cd +1; cp src.md dst.md
+cd @YD@ && cd "$OLDPWD" && cp src.md dst.md
+cd @YD@ && cd -2 && cp src.md dst.md
+pushd @YD@; pushd /tmp; popd; popd; cp src.md dst.md
+pushd @YD@; pushd /tmp; popd; cp src.md dst.md
+cd @YD@ && builtin cd @XD@ && cp src.md dst.md
+cd @YD@ && builtin pushd @XD@ && cp src.md dst.md
+cd - && cp src.md dst.md
+cd @YD@ && cd @XD@ && cd - && cd - && cp src.md dst.md
+cd @YD@ && cd && cp src.md dst.md
+cd @YD@ && pushd && cp src.md dst.md

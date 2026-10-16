@@ -1,0 +1,22 @@
+import { writeFileSync } from 'node:fs';
+const rows = {
+  define: [['New behaviour: a CSV export on the reports page, no spec yet', 'We need new behaviour for archiving old projects and nothing is specced yet', 'We want new behaviour for team invites and there is no agreed spec'], ['The test suite fails on main since this morning', 'Where did I leave off yesterday?'], 'Add rate limiting to the public API.', ['Reads kernel/routes.md, then skills/define/SKILL.md, before any other tool', 'States the class: spike, bounded or architectural', 'Writes no code before an explicit yes']],
+  plan: [['The spec is agreed, break it into steps', 'Spec approved; we need a multi-step plan for the migration', 'Turn the agreed spec into ordered tasks'], ['Fix the typo in the README', 'Why does this test fail?'], 'The spec in .kern/specs/export.md is approved. Plan it.', ['Reads skills/plan/SKILL.md first', 'Checks the spec status before writing', 'Writes the plan with status: draft and stops for approval']],
+  'execute-plan': [['Execute the agreed plan in .kern/plans/export.md', 'Start executing the approved plan task by task', 'Run the plan we agreed on'], ['What does this function return?', 'Rename this variable'], 'Execute .kern/plans/export.md in delegate mode.', ['Reads skills/execute-plan/SKILL.md first', 'Runs ledger-open before any task', 'Creates the ledger before dispatching']],
+  implement: [['Make the bounded change we agreed: add the retry flag', 'Implement the agreed design for this one-file change', 'Go ahead with the small change we designed'], ['Where did I leave off?', 'Explain this stack trace'], 'The design for a --dry-run flag is agreed; implement it.', ['Reads skills/implement/SKILL.md first', 'Runs a failing test before the first production edit', 'Does not commit']],
+  diagnose: [['This test is failing and I do not know why', 'There is a bug: the export returns unexpected output', 'Users report a bug where totals are wrong'], ['Add a new settings page', 'Write the PR description'], 'npm test fails on the sum test; fix it.', ['Reads skills/diagnose/SKILL.md first', 'Runs the failing command before stating a hypothesis', 'Adds a regression test that was red before the fix']],
+  'prove-it': [['Is it fixed? Are the tests passing now?', 'We are done, commit it and open a PR', 'Say it is done once it passes'], ['Design a new caching layer', 'Catch me up on yesterday'], 'I think the bug is fixed, open a PR.', ['Runs the proving command before claiming', 'Quotes the exit code or failure count', 'Reads skills/finish-branch/SKILL.md before any push or PR']],
+  'self-review': [['Review my diff before I open a PR', 'Review my own changes before the PR', 'Self-review this diff, there is no PR yet'], ['Fix the failing login test', 'Where did I leave off?'], 'Review my changes before I open the PR.', ['Reads skills/self-review/SKILL.md', 'Runs floor-scan and claim-check on the package', 'Ends with one verdict: ready, fix first, rebase first or split']],
+  recall: [['Resuming after a two-week gap, where are we?', 'Starting again after a gap, catch me up', 'I am back after a gap; resume where we stopped'], ['Fix the failing test', 'Add a CSV export'], 'I am back after a week away. Where did I leave off?', ['Calls the kern:recall skill or Reads its SKILL.md', 'States the scope back', 'Writes no file']],
+  'technical-writing': [['Write the PR body for this change', 'Draft the issue text for this bug', 'Write the doc for the new settings file'], ['Fix the failing test', 'Where did I leave off?'], 'Write the PR description for this branch.', ['Reads skills/technical-writing/SKILL.md', 'Leads with why', 'Uses no long dashes and no filler']],
+  context: [['The context is filling up, what should we do?', 'This phase ends here, wrap up the context', 'We finished the phase; compact or clear?'], ['Add a CSV export', 'Fix the failing test'], 'The context is nearly full and the plan phase just ended.', ['Reads kernel/context.md', 'Proposes clear or compact only at the phase boundary', 'Sends bulk reads to subagents']],
+};
+for (const [route, [pos, neg, prompt, expectations]] of Object.entries(rows)) {
+  const name = `row-${route}`;
+  const data = {
+    skill_name: name,
+    trigger: { positive: pos.map((p) => ({ prompt: p, top_k: 3 })), negative: neg.map((p) => ({ prompt: p })) },
+    evals: [{ id: 1, kind: 'dialogue', prompt, expected_output: `Routes to ${route} first and follows its steps.`, expectations }],
+  };
+  writeFileSync(`evals/cases/${name}.json`, JSON.stringify(data, null, 2) + '\n');
+}

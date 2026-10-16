@@ -1,0 +1,50 @@
+1..18
+not ok 1 gpf! origin main is denied like git push --force, in both modes
+# (in test file tests/hooks/aliases.bats, line 78)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 2 gp to a protected branch asks even with push.policy auto
+# (in test file tests/hooks/aliases.bats, line 90)
+#   `[ "$(decision_of "$output")" = ask ]' failed
+not ok 3 each alias is judged exactly like its expansion
+# (from function `same' in file tests/hooks/aliases.bats, line 46,
+#  in test file tests/hooks/aliases.bats, line 96)
+#   `same "gcan!" "git commit --verbose --all --no-edit --amend"' failed
+# gcan! ->
+# git commit --verbose --all --no-edit --amend -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"kern G5: git commit -a stages every change; stage named files with git add -- <paths>; G5: commit (message checks pass); G6: kern scans only staged content; git commit --all commits worktree content it does not read"}}
+not ok 4 the head word is found after assignments and in every simple command of a chain
+# (in test file tests/hooks/aliases.bats, line 106)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+ok 5 a quoted or escaped head word, or an alias in argument position, is not expanded
+ok 6 an alias to a command that is not git or gh is unaffected
+ok 7 a missing or unreadable snapshot changes nothing
+not ok 8 malformed alias lines are ignored and the lines after them still count
+# (in test file tests/hooks/aliases.bats, line 141)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+ok 9 the newest snapshot is read
+not ok 10 the head word is found after zsh's reserved words and redirections, as zsh finds it
+# (in test file tests/hooks/aliases.bats, line 158)
+#   `[ "$(decision_of "$output")" != none ] || { echo "${f//%/gpf!} -> none"; return 1; }' failed
+# if gpf! origin main; then :; fi -> none
+ok 11 command, builtin, noglob, exec and - are not followed, as zsh does not expand after them
+ok 12 the original command still counts: an alias cannot hide a git or gh word
+not ok 13 an alias command is never allowed unattended, and the investigator still may not run one
+# (in test file tests/hooks/aliases.bats, line 183)
+#   `[ "$(decision_of "$output")" = ask ]' failed
+not ok 14 alias names are encoded one to one, and a chain, a cycle and a self-reference resolve
+# (from function `expect' in file tests/hooks/aliases.bats, line 61,
+#  in test file tests/hooks/aliases.bats, line 196)
+#   `expect deny "a-b origin main" "s1 main" "git push --force origin main" "l2 origin main"' failed
+# a-b origin main ->
+not ok 15 snapshot text is never run: substitutions, backticks, ; and newlines stay inert
+# (in test file tests/hooks/aliases.bats, line 220)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+ok 16 a missing, empty or unparseable snapshot gives exactly the output of a hook with no aliases
+not ok 17 CRLF, NUL bytes, a long line and 10,000 aliases leave the hook working
+# (from function `expect' in file tests/hooks/aliases.bats, line 61,
+#  in test file tests/hooks/aliases.bats, line 250)
+#   `expect deny "crlf origin main" "last origin main"' failed
+# crlf origin main ->
+not ok 18 aliases.sh never aborts a shell under set -eu, and never sets a name outside _KA_
+# (in test file tests/hooks/aliases.bats, line 269)
+#   `[ "$status" -eq 0 ] || { echo "$s: $output"; return 1; }' failed
+# /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-6x5oY0/test/18/odd.sh: _: line 1: /Users/musta/Code/projects/kern/hooks/lib/aliases.sh: No such file or directory

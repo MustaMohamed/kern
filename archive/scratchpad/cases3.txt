@@ -1,0 +1,7 @@
+rel v1
+gh release create v1
+ghrel v1
+wfr deploy.yml
+gh workflow run deploy.yml
+prc --title t --body-file b.md
+gh pr create --title t --body-file b.md

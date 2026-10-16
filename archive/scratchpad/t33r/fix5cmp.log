@@ -1,0 +1,176 @@
+tighter main off head=ask   fix=deny  | nocorrect git push --force origin main
+        head: kern G1: git inside nocorrect cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter main off head=ask   fix=deny  | noglob git push --force origin main
+        head: kern G1: git inside noglob cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter main off head=ask   fix=deny  | repeat 2 git push --force origin main
+        head: kern G1: git inside repeat cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter main off head=ask   fix=deny  | coproc git push --force origin main
+        head: kern G1: git inside coproc cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+same    main off head=ask   fix=ask   | nocorrect git push -u origin feat
+same    main off head=      fix=      | noglob git status
+tighter main off head=ask   fix=deny  | noglob gh pr create --title t --body b
+        head: kern G2: gh inside noglob cannot be checked; run gh directly
+        fix:  kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+same    main off head=ask   fix=ask   | nocorrect npm publish
+same    main off head=deny  fix=deny  | noglob psql -h prod-db.internal -c 'DELETE FROM x'
+LOOSER  main off head=deny  fix=      | noglob cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.5WejDn/data/sessions/test-session.state
+        head: kern G16: commands may not write kern session state
+        fix:  
+same    main off head=deny  fix=deny  | noglob echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.5WejDn/data/sessions/test-session.state
+tighter main off head=ask   fix=deny  | nocorrect sudo git push --force origin main
+        head: kern G1: git inside nocorrect cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter main off head=ask   fix=deny  | _ gpf! origin main
+        head: kern G1: git inside nocorrect cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter main off head=      fix=deny  | noglob eval 'git push --force origin main'
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter main off head=      fix=deny  | noglob sh -c 'git push --force origin main'
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter main off head=      fix=deny  | noglob bash <<EOF⏎git push --force origin main⏎EOF
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+same    main off head=ask   fix=ask   | noglob git commit -m "feat: x"
+same    main off head=ask   fix=ask   | noglob gh pr merge 1
+same    main off head=      fix=      | repeat 3 echo hi
+same    main off head=      fix=      | noglob ls -la
+same    main off head=      fix=      | nocorrect rm -rf build
+same    main off head=      fix=      | coproc cat
+same    main off head=      fix=      | repeat
+same    main off head=      fix=      | noglob
+same    main off head=      fix=      | nocorrect
+same    main off head=deny  fix=deny  | [kern:investigator] noglob git log
+same    main off head=deny  fix=deny  | [kern:investigator] nocorrect git log --stat
+same    main off head=deny  fix=deny  | [kern:investigator] repeat 2 git status
+same    main off head=deny  fix=deny  | [kern:investigator] noglob git push origin feat
+same    main off head=deny  fix=deny  | [kern:investigator] noglob rm -rf x
+same    main on  head=deny  fix=deny  | nocorrect git push --force origin main
+same    main on  head=deny  fix=deny  | noglob git push --force origin main
+same    main on  head=deny  fix=deny  | repeat 2 git push --force origin main
+same    main on  head=deny  fix=deny  | coproc git push --force origin main
+same    main on  head=deny  fix=deny  | nocorrect git push -u origin feat
+same    main on  head=      fix=      | noglob git status
+same    main on  head=deny  fix=deny  | noglob gh pr create --title t --body b
+same    main on  head=deny  fix=deny  | nocorrect npm publish
+same    main on  head=deny  fix=deny  | noglob psql -h prod-db.internal -c 'DELETE FROM x'
+LOOSER  main on  head=deny  fix=      | noglob cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.5WejDn/data/sessions/test-session.state
+        head: kern G16: commands may not write kern session state
+        fix:  
+same    main on  head=deny  fix=deny  | noglob echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.5WejDn/data/sessions/test-session.state
+same    main on  head=deny  fix=deny  | nocorrect sudo git push --force origin main
+same    main on  head=deny  fix=deny  | _ gpf! origin main
+tighter main on  head=      fix=deny  | noglob eval 'git push --force origin main'
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+same    main on  head=deny  fix=deny  | noglob sh -c 'git push --force origin main'
+tighter main on  head=      fix=deny  | noglob bash <<EOF⏎git push --force origin main⏎EOF
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+same    main on  head=deny  fix=deny  | noglob git commit -m "feat: x"
+same    main on  head=deny  fix=deny  | noglob gh pr merge 1
+same    main on  head=      fix=      | repeat 3 echo hi
+same    main on  head=      fix=      | noglob ls -la
+same    main on  head=      fix=      | nocorrect rm -rf build
+same    main on  head=      fix=      | coproc cat
+same    main on  head=      fix=      | repeat
+same    main on  head=      fix=      | noglob
+same    main on  head=      fix=      | nocorrect
+same    main on  head=deny  fix=deny  | [kern:investigator] noglob git log
+same    main on  head=deny  fix=deny  | [kern:investigator] nocorrect git log --stat
+same    main on  head=deny  fix=deny  | [kern:investigator] repeat 2 git status
+same    main on  head=deny  fix=deny  | [kern:investigator] noglob git push origin feat
+same    main on  head=deny  fix=deny  | [kern:investigator] noglob rm -rf x
+tighter wt off head=ask   fix=deny  | nocorrect git push --force origin main
+        head: kern G1: git inside nocorrect cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter wt off head=ask   fix=deny  | noglob git push --force origin main
+        head: kern G1: git inside noglob cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter wt off head=ask   fix=deny  | repeat 2 git push --force origin main
+        head: kern G1: git inside repeat cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter wt off head=ask   fix=deny  | coproc git push --force origin main
+        head: kern G1: git inside coproc cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+same    wt off head=ask   fix=ask   | nocorrect git push -u origin feat
+same    wt off head=      fix=      | noglob git status
+tighter wt off head=ask   fix=deny  | noglob gh pr create --title t --body b
+        head: kern G2: gh inside noglob cannot be checked; run gh directly
+        fix:  kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+same    wt off head=ask   fix=ask   | nocorrect npm publish
+same    wt off head=deny  fix=deny  | noglob psql -h prod-db.internal -c 'DELETE FROM x'
+LOOSER  wt off head=deny  fix=      | noglob cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.5WejDn/data/sessions/test-session.state
+        head: kern G16: commands may not write kern session state
+        fix:  
+same    wt off head=deny  fix=deny  | noglob echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.5WejDn/data/sessions/test-session.state
+tighter wt off head=ask   fix=deny  | nocorrect sudo git push --force origin main
+        head: kern G1: git inside nocorrect cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter wt off head=ask   fix=deny  | _ gpf! origin main
+        head: kern G1: git inside nocorrect cannot be checked; run git directly
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter wt off head=      fix=deny  | noglob eval 'git push --force origin main'
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter wt off head=      fix=deny  | noglob sh -c 'git push --force origin main'
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter wt off head=      fix=deny  | noglob bash <<EOF⏎git push --force origin main⏎EOF
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+same    wt off head=ask   fix=ask   | noglob git commit -m "feat: x"
+same    wt off head=ask   fix=ask   | noglob gh pr merge 1
+same    wt off head=      fix=      | repeat 3 echo hi
+same    wt off head=      fix=      | noglob ls -la
+same    wt off head=      fix=      | nocorrect rm -rf build
+same    wt off head=      fix=      | coproc cat
+same    wt off head=      fix=      | repeat
+same    wt off head=      fix=      | noglob
+same    wt off head=      fix=      | nocorrect
+same    wt off head=deny  fix=deny  | [kern:investigator] noglob git log
+same    wt off head=deny  fix=deny  | [kern:investigator] nocorrect git log --stat
+same    wt off head=deny  fix=deny  | [kern:investigator] repeat 2 git status
+same    wt off head=deny  fix=deny  | [kern:investigator] noglob git push origin feat
+same    wt off head=deny  fix=deny  | [kern:investigator] noglob rm -rf x
+same    wt on  head=deny  fix=deny  | nocorrect git push --force origin main
+same    wt on  head=deny  fix=deny  | noglob git push --force origin main
+same    wt on  head=deny  fix=deny  | repeat 2 git push --force origin main
+same    wt on  head=deny  fix=deny  | coproc git push --force origin main
+same    wt on  head=deny  fix=deny  | nocorrect git push -u origin feat
+same    wt on  head=      fix=      | noglob git status
+same    wt on  head=deny  fix=deny  | noglob gh pr create --title t --body b
+same    wt on  head=deny  fix=deny  | nocorrect npm publish
+same    wt on  head=deny  fix=deny  | noglob psql -h prod-db.internal -c 'DELETE FROM x'
+LOOSER  wt on  head=deny  fix=      | noglob cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.5WejDn/data/sessions/test-session.state
+        head: kern G16: commands may not write kern session state
+        fix:  
+same    wt on  head=deny  fix=deny  | noglob echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.5WejDn/data/sessions/test-session.state
+same    wt on  head=deny  fix=deny  | nocorrect sudo git push --force origin main
+same    wt on  head=deny  fix=deny  | _ gpf! origin main
+tighter wt on  head=      fix=deny  | noglob eval 'git push --force origin main'
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+same    wt on  head=deny  fix=deny  | noglob sh -c 'git push --force origin main'
+tighter wt on  head=      fix=deny  | noglob bash <<EOF⏎git push --force origin main⏎EOF
+        head: 
+        fix:  kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+same    wt on  head=deny  fix=deny  | noglob git commit -m "feat: x"
+same    wt on  head=deny  fix=deny  | noglob gh pr merge 1
+same    wt on  head=      fix=      | repeat 3 echo hi
+same    wt on  head=      fix=      | noglob ls -la
+same    wt on  head=      fix=      | nocorrect rm -rf build
+same    wt on  head=      fix=      | coproc cat
+same    wt on  head=      fix=      | repeat
+same    wt on  head=      fix=      | noglob
+same    wt on  head=      fix=      | nocorrect
+same    wt on  head=deny  fix=deny  | [kern:investigator] noglob git log
+same    wt on  head=deny  fix=deny  | [kern:investigator] nocorrect git log --stat
+same    wt on  head=deny  fix=deny  | [kern:investigator] repeat 2 git status
+same    wt on  head=deny  fix=deny  | [kern:investigator] noglob git push origin feat
+same    wt on  head=deny  fix=deny  | [kern:investigator] noglob rm -rf x

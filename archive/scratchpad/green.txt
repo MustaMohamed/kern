@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: finish-branch frontmatter
+ok 1 - finish-branch frontmatter
+  ---
+  duration_ms: 1.386792
+  type: 'test'
+  ...
+# Subtest: finish-branch sections, steps and red flags
+ok 2 - finish-branch sections, steps and red flags
+  ---
+  duration_ms: 1.001
+  type: 'test'
+  ...
+# Subtest: branch-ops reference: rebase, proven-tree check, discard
+ok 3 - branch-ops reference: rebase, proven-tree check, discard
+  ---
+  duration_ms: 0.375
+  type: 'test'
+  ...
+# Subtest: push-and-pr reference: dedup, push, PR
+ok 4 - push-and-pr reference: dedup, push, PR
+  ---
+  duration_ms: 0.325208
+  type: 'test'
+  ...
+# Subtest: PR body template
+ok 5 - PR body template
+  ---
+  duration_ms: 0.425792
+  type: 'test'
+  ...
+# Subtest: prove-it frontmatter is the spec text
+ok 6 - prove-it frontmatter is the spec text
+  ---
+  duration_ms: 1.330083
+  type: 'test'
+  ...
+# Subtest: prove-it sections, steps, gate and red flags
+ok 7 - prove-it sections, steps, gate and red flags
+  ---
+  duration_ms: 0.541125
+  type: 'test'
+  ...
+# Subtest: evidence reference
+ok 8 - evidence reference
+  ---
+  duration_ms: 0.411417
+  type: 'test'
+  ...
+# Subtest: the M0 placeholder is gone
+ok 9 - the M0 placeholder is gone
+  ---
+  duration_ms: 0.103709
+  type: 'test'
+  ...
+# Subtest: the gate hands a commit to commit and a push or PR to finish-branch
+ok 10 - the gate hands a commit to commit and a push or PR to finish-branch
+  ---
+  duration_ms: 0.147375
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 42.830708

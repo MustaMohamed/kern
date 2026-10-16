@@ -1,0 +1,57 @@
+h0 -> fin: same 7746, tighter 434, looser-eq-unmod 0, LOOSER 28, ERROR 0, unmatched 0
+  LOOSER          x12   deny->none  | cd @SD@ && nocorrect cd /tmp && echo x > foo
+       h0: kern G16: commands may not write kern session state
+       fin: 
+  LOOSER          x8    deny->none  | cd @SD@ && noglob cd /tmp; echo x > foo
+       h0: kern G16: commands may not write kern session state
+       fin: 
+  LOOSER          x8     ask->none  | cd @HC@ && noglob cd /tmp; echo {} > settings.json
+       h0: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+       fin: 
+  tighter         x12    ask->deny  | cd . && git push --force-with-lease origin feat
+  tighter         x12   none->deny  | cd docs/plans 2> noglob && echo note >> ok.md
+  tighter         x12   none->deny  | cd docs 2> nocorrect && cp plans/ok.md plans/x.md
+  tighter         x12   none->ask   | cd src 2> noglob && git add -- a.txt
+  tighter         x12   none->ask   | cd src <<< repeat && git add -- a.txt
+  tighter         x12   none->deny  | noglob cd docs/plans && echo note >> ok.md
+  tighter         x12   none->ask   | noglob cd src && git add -- a.txt
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp && cd - && sed -i '' s/a/b/ settings.json
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp; cd -; echo {} > settings.json
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp && cd ~- && echo {} > settings.json
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp && cd +1 && echo {} > settings.json
+  tighter         x12   none->ask   | cd @HC@ && cd /tmp && cd "$X" && echo {} > settings.json
+  tighter         x12   none->deny  | cd @SD@ && cd /tmp && cd - && echo x > foo
+  tighter         x12   none->deny  | cd @SD@ && cd /tmp; cd -; echo x > foo
+  tighter         x12   none->deny  | cd @SD@ && cd /tmp && cd ~- && echo x > foo
+  tighter         x12   none->deny  | cd @SD@ && cd /tmp && cd +1 && echo x > foo
+  tighter         x12   none->deny  | pushd @SD@ && pushd /tmp && popd; echo x > foo
+  tighter         x12   none->ask   | cd @HC@ && cd agents && cd .. && sed -i '' s/a/b/ settings.json
+  tighter         x12   none->ask   | cd @HC@/agents && cd .. && echo {} > settings.json
+  tighter         x12   none->ask   | cd .claude/agents && cd .. && cp /tmp/x .
+  tighter         x12   none->ask   | noglob cd @R@ && git clean -fdx
+  tighter         x12   none->ask   | nocorrect cd @R@ && git clean -fdx
+  tighter         x12   none->ask   | repeat 1 cd @R@ && git clean -fdx
+  tighter         x12   none->ask   | repeat $N cd @R@ && git clean -fdx
+  tighter         x8    none->deny  | X=' repeat' cd docs/plans && echo note >> ok.md
+  tighter         x8    none->deny  | repeat 1 cd docs/plans && echo note >> ok.md
+  tighter         x8    none->ask   | cd @HC@ && pushd /tmp && popd && echo {} > settings.json
+  tighter         x8    none->deny  | cd @SD@ && pushd /tmp && popd && echo x > foo
+  tighter         x6     ask->deny  | cd @WT@ && git push --force-with-lease origin feat
+  tighter         x6     ask->deny  | pushd /tmp && git push --force-with-lease origin feat
+  tighter         x6     ask->deny  | env -C /tmp git push --force-with-lease origin feat
+  tighter         x6    none->ask   | cd @R@ 2> noglob && git clean -fdx
+  tighter         x6    none->ask   | cd @R@ > repeat && git clean -fdx
+  tighter         x6    none->ask   | X=' noglob' cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | cd @R@ <<< nocorrect && git reset --hard
+  tighter         x6    none->ask   | cd @R@ # noglob@NL@git clean -fdx
+  tighter         x6    none->ask   | cd repeat && git clean -fdx
+  tighter         x6    none->ask   | pushd @R@ >/dev/null 2>&1 <<< coproc; git clean -fdx
+  tighter         x6    none->ask   | repeat 2 cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | repeat -1+2 cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | repeat 1 repeat 1 cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | repeat '1' cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | sudo noglob cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | noglob sudo cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | env X=1 noglob cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | command noglob cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | noglob command cd @R@ && git clean -fdx

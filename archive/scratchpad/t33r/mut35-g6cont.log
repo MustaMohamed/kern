@@ -1,0 +1,82 @@
+1..76
+ok 1 G5: a passing -F message asks interactively and is allowed under autopilot
+ok 2 G5: a subject off convention is denied in both modes
+ok 3 G5: with commit.convention unset, the convention kern-detect finds is checked, and none when it finds none
+ok 4 G5: the convention detected from signed history runs no program that repo config names
+ok 5 G5: a missing ticket id from the branch is denied
+ok 6 G5: an AI attribution trailer is denied unless commit.attribution allows it
+ok 7 G5: a message built by command substitution cannot be checked: ask, deny under autopilot
+ok 8 G5: commit.policy auto allows a passing commit; deny denies it
+ok 9 G5: git add -A and commit -a ask, denied under autopilot; git add -- path: no vote
+ok 10 G6: a staged private key is denied without printing it
+ok 11 G6: a clean staged change: no vote
+ok 12 G6: never_commit paths are denied
+ok 13 G6: a push scans the outgoing commits
+ok 14 G5 allows a proven commit under autopilot and commit.policy auto
+ok 15 G5: commands chained, substituted, redirected or wrapped around a commit are never allowed
+ok 16 G5: commit options other than -m, -F, -q and -v are never allowed
+ok 17 G5: global git options, environment and other repositories are never allowed
+ok 18 G5: a commit on a protected branch or a detached HEAD is never allowed
+ok 19 G5: the -F file must be a regular file in the repo, outside .git, and not ignored unless in .kern
+ok 20 G5: a here-doc message asks with the retry form and is denied under autopilot
+ok 21 G5: a multi-line -m message is read line by line
+ok 22 G5: a -C or -c commit name is never read as a git log option
+ok 23 G5: git add -A in any spelling asks and is denied under autopilot
+ok 24 G5: git add of named paths: no vote
+ok 25 G5: broad staging chained into a commit is never allowed
+ok 26 G6: a key staged by git add in the same command is denied under autopilot
+ok 27 G6: a commit of paths, -i, -o, -p or -a in any spelling asks: kern scans only staged content
+ok 28 G6: a commit in another repository is denied under autopilot
+ok 29 G6: a secret in the commit message is denied without printing it
+ok 30 G6: repo config cannot hide the staged diff or run a program
+ok 31 G6: an added line that starts with ++ is scanned and its text never printed
+ok 32 G6: a push scans what the target remote lacks, whatever upstream says
+ok 33 G6: with no tracking refs anywhere the whole history is scanned and nothing asks
+ok 34 G6: a push of another branch scans that branch
+ok 35 G6: a push with no upstream and no origin/HEAD is scanned
+ok 36 G6: content added only in a merge commit is scanned
+ok 37 G6: a secret in a pushed commit message is denied without printing it
+ok 38 G6: PGP, Stripe, AWS STS and fine-grained GitHub keys are denied
+ok 39 G6: never_commit globs match nested paths and a bracketed list
+ok 40 G6: a push source kern cannot resolve asks instead of going unscanned
+ok 41 G6: attributes, diff.relative and invalid UTF-8 cannot hide an added line
+ok 42 G6: repo-configured programs never run in a scan
+ok 43 G6: a push walk that does not finish asks
+ok 44 G6: a clean merge of main brings in nothing new: no vote
+ok 45 G6: never_commit reads staged names: a removal passes, a non-ASCII name is caught
+ok 46 G6: sk- needs a non-word character before it, and file names are not scanned
+ok 47 G6: after cd, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= it could not scan
+not ok 48 G6: after a cd it still scans this repository, so a staged secret is denied in both modes
+# (in test file tests/hooks/g05-g06-commit.bats, line 711)
+#   `expect deny g06 "$c" || return 1' failed
+# want deny, got ask for: (cd .); git commit -m 'CDS-2465: x'
+# {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"kern G6: could not scan: git commit after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see"}}
+ok 49 G5 and G6: a cd behind noglob, nocorrect, coproc or repeat leaves the directory known
+ok 50 G6: push : and a matching push scan every branch
+ok 51 G6: a message line that looks like a diff is still read as the message
+ok 52 G6: replace refs and log.showRoot cannot hide pushed content
+ok 53 G5: attribution variants and a --trailer are denied, interactive and default policy
+ok 54 G5: the ticket id must be followed by a non-alphanumeric character or the end
+ok 55 G5: git add of a word that expands is wide
+ok 56 G5: git add of the worktree root spelled in another case is wide
+ok 57 git: a subcommand outside git's own commands asks in G1, G5 and G6, whatever config says
+ok 58 git: git's own commands keep their behaviour
+ok 59 G1: a lease push reads authors without running gpg from log.showSignature
+ok 60 G6: a forged \037, \001 or NUL in a pushed message cannot hide its text
+ok 61 G6: a NUL earlier on a line cannot hide a key, staged or pushed
+ok 62 G6: i18n.logOutputEncoding cannot hide a pushed message
+ok 63 G6: a push that carries config, or goes to a mirror remote, could not be scanned
+ok 64 G6: env -C or --chdir could not be scanned, and the autopilot deny holds
+ok 65 G6: GIT_DIR= inside a message or an argument is not an assignment
+ok 66 G6: the gitleaks pass is bounded and its overrun asks
+ok 67 G6: the scan budget counts from the dispatcher's start, so time spent by G2 leaves less
+ok 68 G6: a message walk that does not finish asks
+ok 69 G6: an export behind a wrapper still leaves the next git command unscanned
+ok 70 G6: gitleaks reads a pushed commit's message as well as its patch
+ok 71 git: a global option G1 does not know asks, so it cannot hide the command after it
+ok 72 G6: an append assignment, a wrapper in another case or a sudo long option still leaves git unscanned
+ok 73 G6: send-pack and http-push could not be scanned
+ok 74 G6: git add, merge or another index or HEAD change earlier in the command leaves the scan stale
+ok 75 G6: stash pop or apply, pull, update-index, read-tree, update-ref, branch -f, commit-tree and notes leave the scan stale
+ok 76 G6: a -C or GIT_DIR inside env -S could not be scanned
+EXIT=1

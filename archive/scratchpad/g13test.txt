@@ -1,0 +1,4 @@
+  snap "alias -- pdb='git status && psql -h prod-db.internal -c '\\''DELETE FROM x'\\'''"
+  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
+  expect deny "pdb"
+  same "pdb" "git status && psql -h prod-db.internal -c 'DELETE FROM x'"

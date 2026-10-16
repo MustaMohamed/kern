@@ -1,0 +1,754 @@
+TAP version 13
+# Subtest: parses CRLF frontmatter
+ok 1 - parses CRLF frontmatter
+  ---
+  duration_ms: 0.929125
+  type: 'test'
+  ...
+# Subtest: strips quotes and keeps colons in values
+ok 2 - strips quotes and keeps colons in values
+  ---
+  duration_ms: 0.144667
+  type: 'test'
+  ...
+# Subtest: block scalars are an error
+ok 3 - block scalars are an error
+  ---
+  duration_ms: 0.078833
+  type: 'test'
+  ...
+# Subtest: tiers: auto, path when a kernel row routes to it, else slash
+ok 4 - tiers: auto, path when a kernel row routes to it, else slash
+  ---
+  duration_ms: 2.021916
+  type: 'test'
+  ...
+# Subtest: a clean auto skill passes
+ok 5 - a clean auto skill passes
+  ---
+  duration_ms: 1.919166
+  type: 'test'
+  ...
+# Subtest: rule 1: missing frontmatter, name mismatch, non-kebab dir
+ok 6 - rule 1: missing frontmatter, name mismatch, non-kebab dir
+  ---
+  duration_ms: 2.551125
+  type: 'test'
+  ...
+# Subtest: rule 2: unknown skill key and ignored plugin-agent keys
+ok 7 - rule 2: unknown skill key and ignored plugin-agent keys
+  ---
+  duration_ms: 1.848375
+  type: 'test'
+  ...
+# Subtest: rule 3: auto limit and trigger, manual limit, agent limit, totals
+ok 8 - rule 3: auto limit and trigger, manual limit, agent limit, totals
+  ---
+  duration_ms: 4.382709
+  type: 'test'
+  ...
+# Subtest: rule 4: referenced files must exist
+ok 9 - rule 4: referenced files must exist
+  ---
+  duration_ms: 1.053042
+  type: 'test'
+  ...
+# Subtest: rule 8: machine paths and listed names in shipped files
+ok 10 - rule 8: machine paths and listed names in shipped files
+  ---
+  duration_ms: 1.025208
+  type: 'test'
+  ...
+# Subtest: rule 8: names come from scripts/lint-names.txt, comments ignored
+ok 11 - rule 8: names come from scripts/lint-names.txt, comments ignored
+  ---
+  duration_ms: 1.922792
+  type: 'test'
+  ...
+# Subtest: rule 10: exemption needs a reason, and suppresses its finding
+ok 12 - rule 10: exemption needs a reason, and suppresses its finding
+  ---
+  duration_ms: 1.044125
+  type: 'test'
+  ...
+# Subtest: rule 11: long dashes and curly quotes
+ok 13 - rule 11: long dashes and curly quotes
+  ---
+  duration_ms: 3.309459
+  type: 'test'
+  ...
+# Subtest: rule 11: scans any non-binary shipped file, skips binaries
+ok 14 - rule 11: scans any non-binary shipped file, skips binaries
+  ---
+  duration_ms: 1.715584
+  type: 'test'
+  ...
+# Subtest: rule 4: existing references pass, repo-root fallback, anchors and ./
+ok 15 - rule 4: existing references pass, repo-root fallback, anchors and ./
+  ---
+  duration_ms: 2.228833
+  type: 'test'
+  ...
+# Subtest: rule 6: a route must exist and open with \#\# Steps
+ok 16 - rule 6: a route must exist and open with \#\# Steps
+  ---
+  duration_ms: 2.702833
+  type: 'test'
+  ...
+# Subtest: rule 6: every user-reachable skill is in the help map
+ok 17 - rule 6: every user-reachable skill is in the help map
+  ---
+  duration_ms: 1.473042
+  type: 'test'
+  ...
+# Subtest: rule 6: a route row in another form, or \#\# Steps without a numbered list, is an error
+ok 18 - rule 6: a route row in another form, or \#\# Steps without a numbered list, is an error
+  ---
+  duration_ms: 1.360708
+  type: 'test'
+  ...
+# Subtest: rule 7: an oversized rendered kernel is an error; the real kernel passes
+ok 19 - rule 7: an oversized rendered kernel is an error; the real kernel passes
+  ---
+  duration_ms: 657.545834
+  type: 'test'
+  ...
+# Subtest: rule 13: hooks and the settings table agree
+ok 20 - rule 13: hooks and the settings table agree
+  ---
+  duration_ms: 2.030958
+  type: 'test'
+  ...
+# Subtest: rule 15: hook-shape fixtures and runner exist once hooks exist
+ok 21 - rule 15: hook-shape fixtures and runner exist once hooks exist
+  ---
+  duration_ms: 499.489417
+  type: 'test'
+  ...
+# Subtest: rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not
+ok 22 - rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not
+  ---
+  duration_ms: 1.172584
+  type: 'test'
+  ...
+# Subtest: rule 7: a session-start that fails or prints nothing is an error
+ok 23 - rule 7: a session-start that fails or prints nothing is an error
+  ---
+  duration_ms: 54.929125
+  type: 'test'
+  ...
+# Subtest: rule 7: its temp directory is removed when a check throws
+ok 24 - rule 7: its temp directory is removed when a check throws
+  ---
+  duration_ms: 14.213292
+  type: 'test'
+  ...
+# Subtest: rule 13: single-quoted keys are reads; a policy_for with a variable is an error
+ok 25 - rule 13: single-quoted keys are reads; a policy_for with a variable is an error
+  ---
+  duration_ms: 1.452208
+  type: 'test'
+  ...
+# Subtest: rule 13: a hook's need list names functions, so it reads no settings key
+ok 26 - rule 13: a hook's need list names functions, so it reads no settings key
+  ---
+  duration_ms: 0.448625
+  type: 'test'
+  ...
+# Subtest: rule 15: every fixture case but no-settings carries a settings file
+ok 27 - rule 15: every fixture case but no-settings carries a settings file
+  ---
+  duration_ms: 57.358458
+  type: 'test'
+  ...
+# Subtest: rule 5: Skill tool references name auto or built-in skills
+ok 28 - rule 5: Skill tool references name auto or built-in skills
+  ---
+  duration_ms: 1.989792
+  type: 'test'
+  ...
+# Subtest: rule 5: the kernel and agents are scanned, fenced blocks included
+ok 29 - rule 5: the kernel and agents are scanned, fenced blocks included
+  ---
+  duration_ms: 1.38925
+  type: 'test'
+  ...
+# Subtest: rule 5: agent Read paths resolve
+ok 30 - rule 5: agent Read paths resolve
+  ---
+  duration_ms: 0.798083
+  type: 'test'
+  ...
+# Subtest: rule 9: auto skills need Steps; slash skills need Steps first
+ok 31 - rule 9: auto skills need Steps; slash skills need Steps first
+  ---
+  duration_ms: 1.38025
+  type: 'test'
+  ...
+# Subtest: rule 9: Steps must be an H2 outside a fence and not a longer heading
+ok 32 - rule 9: Steps must be an H2 outside a fence and not a longer heading
+  ---
+  duration_ms: 1.894375
+  type: 'test'
+  ...
+# Subtest: rule 9: an unclosed fence is reported, not read as a pass
+ok 33 - rule 9: an unclosed fence is reported, not read as a pass
+  ---
+  duration_ms: 0.517334
+  type: 'test'
+  ...
+# Subtest: rule 9: CRLF files are read like LF files
+ok 34 - rule 9: CRLF files are read like LF files
+  ---
+  duration_ms: 1.826958
+  type: 'test'
+  ...
+# Subtest: rule 9: a slash skill without Steps passes with an exemption
+ok 35 - rule 9: a slash skill without Steps passes with an exemption
+  ---
+  duration_ms: 0.909166
+  type: 'test'
+  ...
+# Subtest: rule 9: agents need an output contract section
+ok 36 - rule 9: agents need an output contract section
+  ---
+  duration_ms: 1.287958
+  type: 'test'
+  ...
+# Subtest: rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+ok 37 - rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+  ---
+  duration_ms: 3.44075
+  type: 'test'
+  ...
+# Subtest: rule 9: Red flags must be a real H2 with the Thought | Reality header
+ok 38 - rule 9: Red flags must be a real H2 with the Thought | Reality header
+  ---
+  duration_ms: 2.415583
+  type: 'test'
+  ...
+# Subtest: rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+ok 39 - rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+  ---
+  duration_ms: 1.318292
+  type: 'test'
+  ...
+# Subtest: rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read
+ok 40 - rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read
+  ---
+  duration_ms: 3.4395
+  type: 'test'
+  ...
+# Subtest: fence parser: a fence closed by the other marker stays open and is reported
+ok 41 - fence parser: a fence closed by the other marker stays open and is reported
+  ---
+  duration_ms: 0.404458
+  type: 'test'
+  ...
+# Subtest: fence parser: a longer fence holds a shorter fence line
+ok 42 - fence parser: a longer fence holds a shorter fence line
+  ---
+  duration_ms: 1.713292
+  type: 'test'
+  ...
+# Subtest: fence parser: an opener indented 0 to 3 spaces counts, 4 does not
+ok 43 - fence parser: an opener indented 0 to 3 spaces counts, 4 does not
+  ---
+  duration_ms: 1.190333
+  type: 'test'
+  ...
+# Subtest: rule 16: a script name is read whole, dots, slashes and underscores included
+ok 44 - rule 16: a script name is read whole, dots, slashes and underscores included
+  ---
+  duration_ms: 3.209791
+  type: 'test'
+  ...
+# Subtest: rule 16: a WORK folder is read whole, in any case
+ok 45 - rule 16: a WORK folder is read whole, in any case
+  ---
+  duration_ms: 1.68125
+  type: 'test'
+  ...
+# Subtest: rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file
+ok 46 - rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file
+  ---
+  duration_ms: 4.061959
+  type: 'test'
+  ...
+# Subtest: rule 7: the routed file has its own cap, and the standing cost has a combined budget
+ok 47 - rule 7: the routed file has its own cap, and the standing cost has a combined budget
+  ---
+  duration_ms: 71.985833
+  type: 'test'
+  ...
+# Subtest: rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists
+ok 48 - rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists
+  ---
+  duration_ms: 3.934541
+  type: 'test'
+  ...
+# Subtest: rule 7: a session-start that fails without project settings is an error, not a low standing cost
+ok 49 - rule 7: a session-start that fails without project settings is an error, not a low standing cost
+  ---
+  duration_ms: 32.33475
+  type: 'test'
+  ...
+# Subtest: rule 12: a case file that is not valid JSON is an error
+ok 50 - rule 12: a case file that is not valid JSON is an error
+  ---
+  duration_ms: 0.611
+  type: 'test'
+  ...
+# Subtest: rule 12: a model-graded negative does not count toward the minimum of 2
+ok 51 - rule 12: a model-graded negative does not count toward the minimum of 2
+  ---
+  duration_ms: 1.010375
+  type: 'test'
+  ...
+# Subtest: rule 7: a render without the kernel header line is an error, not a low standing cost
+not ok 52 - rule 7: a render without the kernel header line is an error, not a low standing cost
+  ---
+  duration_ms: 26.603166
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:496:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + []
+    - [
+    -   'hooks/session-start'
+    - ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'hooks/session-start'
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:499:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: rule 7: a missing long-settings fixture is an error
+not ok 53 - rule 7: a missing long-settings fixture is an error
+  ---
+  duration_ms: 26.2395
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:504:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + []
+    - [
+    -   'tests/fixtures/projects/long-settings'
+    - ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'tests/fixtures/projects/long-settings'
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:506:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: rule 7: a git init that fails is an error
+ok 54 - rule 7: a git init that fails is an error
+  ---
+  duration_ms: 17.476917
+  type: 'test'
+  ...
+# Subtest: rule 6: a row that routes to kernel/routes.md is an error
+ok 55 - rule 6: a row that routes to kernel/routes.md is an error
+  ---
+  duration_ms: 0.419708
+  type: 'test'
+  ...
+# Subtest: rule 12: a positive that carries the grader flag is an error
+not ok 56 - rule 12: a positive that carries the grader flag is an error
+  ---
+  duration_ms: 0.678458
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:528:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + []
+    - [
+    -   12
+    - ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 12
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:532:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: tiers: a Read in prose, not in a row, does not make a path skill
+not ok 57 - tiers: a Read in prose, not in a row, does not make a path skill
+  ---
+  duration_ms: 0.512209
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:536:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    'path' !== 'slash'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'slash'
+  actual: 'path'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/lint-rules.test.mjs:538:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: kernelRows parses skill and kernel-file routes and skips other lines
+ok 58 - kernelRows parses skill and kernel-file routes and skips other lines
+  ---
+  duration_ms: 1.129375
+  type: 'test'
+  ...
+# Subtest: targets add the rows of both files after skills and before distractors
+ok 59 - targets add the rows of both files after skills and before distractors
+  ---
+  duration_ms: 2.490042
+  type: 'test'
+  ...
+# Subtest: a row and its own skill count as one owner
+ok 60 - a row and its own skill count as one owner
+  ---
+  duration_ms: 3.488875
+  type: 'test'
+  ...
+# Subtest: a routed row without a case file is an error
+ok 61 - a routed row without a case file is an error
+  ---
+  duration_ms: 2.184291
+  type: 'test'
+  ...
+# Subtest: held-out prompts give their own rate, held to their own floor
+ok 62 - held-out prompts give their own rate, held to their own floor
+  ---
+  duration_ms: 2.359959
+  type: 'test'
+  ...
+# Subtest: the fixed floors and the frozen held-out set are pinned
+ok 63 - the fixed floors and the frozen held-out set are pinned
+  ---
+  duration_ms: 0.556917
+  type: 'test'
+  ...
+# Subtest: a model-graded negative is skipped by the lexical check and listed in the output
+ok 64 - a model-graded negative is skipped by the lexical check and listed in the output
+  ---
+  duration_ms: 39.841166
+  type: 'test'
+  ...
+# Subtest: a positive that carries the grader flag is an error
+ok 65 - a positive that carries the grader flag is an error
+  ---
+  duration_ms: 1.763625
+  type: 'test'
+  ...
+# Subtest: only lexically checked negatives count toward the minimum
+ok 66 - only lexically checked negatives count toward the minimum
+  ---
+  duration_ms: 1.995834
+  type: 'test'
+  ...
+# Subtest: a negative with a grader other than model is an error
+ok 67 - a negative with a grader other than model is an error
+  ---
+  duration_ms: 2.301083
+  type: 'test'
+  ...
+# Subtest: kernelRows takes only the rows rule 6 accepts
+not ok 68 - kernelRows takes only the rows rule 6 accepts
+  ---
+  duration_ms: 1.007042
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:137:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      [
+        {
+    +     route: 'diagnose',
+    +     when: 'Bug \\'
+    +   },
+    +   {
+    +     route: 'diagnose',
+    +     when: 'a'
+    +   },
+    +   {
+    +     route: 'routes',
+    +     when: 'More'
+    +   },
+    +   {
+    +     route: 'technical-writing',
+    +     when: 'Prose'
+    +   },
+    +   {
+          route: 'recall',
+          when: 'Gap'
+        }
+      ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0:
+      when: 'Gap'
+      route: 'recall'
+  actual:
+    0:
+      when: 'Bug \\'
+      route: 'diagnose'
+    1:
+      when: 'a'
+      route: 'diagnose'
+    2:
+      when: 'More'
+      route: 'routes'
+    3:
+      when: 'Prose'
+      route: 'technical-writing'
+    4:
+      when: 'Gap'
+      route: 'recall'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:138:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: only a kernel row folds into the skill it routes to; a distractor named row-<x> does not
+not ok 69 - only a kernel row folds into the skill it routes to; a distractor named row-<x> does not
+  ---
+  duration_ms: 1.42775
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:148:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + [
+    +   'a: ranked #1 for negative prompt "deploy the release to production"'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'a: ranked #1 for negative prompt "deploy the release to production"'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:154:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: held-out entries name a known owner
+ok 70 - held-out entries name a known owner
+  ---
+  duration_ms: 1.80825
+  type: 'test'
+  ...
+# Subtest: a missing, empty or malformed held-out set is an error once a floor is set
+not ok 71 - a missing, empty or malformed held-out set is an error once a floor is set
+  ---
+  duration_ms: 3.055583
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:163:1'
+  failureType: 'testCodeFailure'
+  error: '[]'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:165:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: no case positives under a rank-1 floor is an error
+not ok 72 - no case positives under a rank-1 floor is an error
+  ---
+  duration_ms: 0.332959
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:173:1'
+  failureType: 'testCodeFailure'
+  error: '[]'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:175:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: the model-graded negatives are pinned: flagging one more means editing this list
+ok 73 - the model-graded negatives are pinned: flagging one more means editing this list
+  ---
+  duration_ms: 9.095375
+  type: 'test'
+  ...
+# Subtest: the CLI enforces the baseline, the fixed rank-1 floor and the held-out floor
+ok 74 - the CLI enforces the baseline, the fixed rank-1 floor and the held-out floor
+  ---
+  duration_ms: 129.108583
+  type: 'test'
+  ...
+# Subtest: the CLI fails with a message, never a default, when a gate file is missing or malformed
+not ok 75 - the CLI fails with a message, never a default, when a gate file is missing or malformed
+  ---
+  duration_ms: 1.542292
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:216:1'
+  failureType: 'testCodeFailure'
+  error: 'The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null'
+  code: 'ERR_INVALID_ARG_TYPE'
+  name: 'TypeError'
+  stack: |-
+    writeFileSync (node:fs:2439:5)
+    repo (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:19:5)
+    fixture (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:45:10)
+    cli (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:190:16)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/route-eval-rows.test.mjs:231:15)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+  ...
+# Subtest: rank orders by shared vocabulary
+ok 76 - rank orders by shared vocabulary
+  ---
+  duration_ms: 0.680875
+  type: 'test'
+  ...
+# Subtest: zero-score prompt is an error, not a crash
+ok 77 - zero-score prompt is an error, not a crash
+  ---
+  duration_ms: 2.126667
+  type: 'test'
+  ...
+# Subtest: auto skill without a case file is an error
+ok 78 - auto skill without a case file is an error
+  ---
+  duration_ms: 1.275042
+  type: 'test'
+  ...
+# Subtest: below minimums is an error
+ok 79 - below minimums is an error
+  ---
+  duration_ms: 1.545375
+  type: 'test'
+  ...
+# Subtest: a distractor that outranks the skill fails the positive
+ok 80 - a distractor that outranks the skill fails the positive
+  ---
+  duration_ms: 1.388084
+  type: 'test'
+  ...
+# Subtest: rank-1 rate below the baseline fails
+ok 81 - rank-1 rate below the baseline fails
+  ---
+  duration_ms: 1.650584
+  type: 'test'
+  ...
+# Subtest: collision between two auto skills is an error
+ok 82 - collision between two auto skills is an error
+  ---
+  duration_ms: 1.514
+  type: 'test'
+  ...
+# Subtest: overlap between descriptions is a warning
+ok 83 - overlap between descriptions is a warning
+  ---
+  duration_ms: 2.121334
+  type: 'test'
+  ...
+# Subtest: skill ranked \#1 for a negative prompt is an error
+ok 84 - skill ranked \#1 for a negative prompt is an error
+  ---
+  duration_ms: 1.396792
+  type: 'test'
+  ...
+# Subtest: declared owner must outrank the skill
+ok 85 - declared owner must outrank the skill
+  ---
+  duration_ms: 2.449041
+  type: 'test'
+  ...
+# Subtest: unknown owner is an error
+ok 86 - unknown owner is an error
+  ---
+  duration_ms: 1.171333
+  type: 'test'
+  ...
+1..86
+# tests 86
+# suites 0
+# pass 77
+# fail 9
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1583.542

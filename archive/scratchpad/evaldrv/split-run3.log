@@ -1,0 +1,28 @@
+{
+ "final": "Self-review verdict is `ready`, but the size gate stops the run, so nothing is committed or pushed yet.\n\n**Proof (on tree `1efaabe`)**\n- `npm test` (source: `package.json` scripts.test): exit 0, 1 pass, 0 fail.\n- `npm run lint`: exit 0. The script only runs `node --check src/sum.js`.\n- Typecheck: not detectable here, so it was skipped.\n- `floor-scan` and `claim-check`: exit 0, no hits.\n- Spec lane: skipped, no spec.\n- Probes: not applicable, since there is no new test and no new conditional.\n- Blast radius: `sum` has no callers outside `src/sum.js`.\n\n**Findings from the built-in review**\n- **should-fix:** `src/v1.js` to `src/v9.js` are unused. Nothing imports them, and each one just repeats its filename as a constant.\n- **pre-existing:** `sum` uses plain float addition, so `sum(0.1, 0.2)` returns `0.30000000000000004`. For an invoice app you will probably want integer cents.\n- **pre-existing:** `sum('2', 3)` returns `'23'`, and `sum(1)` returns `NaN`. There is no input validation.\n- **nit:** the `lint` script covers one file only, and the single test covers only `sum(2, 3)`.\n\n**Size gate**\n- The diff is 10 files, +10/−1, against `scope_threshold` 4.\n- Only `src/sum.js` is a real change: the `a - b` to `a + b` fix.\n- The other nine are the unused `v1` to `v9` files.\n\n**Decision for you:** should I split this?\n1. **Split (recommended):** commit and push the `sum.js` fix on its own, and keep `v1` to `v9` out of the PR. A one-line fix is easier to review, cherry-pick or revert alone.\n2. **No split:** go on with all 10 files, then pick from the menu (commit, push, or draft PR).\n\nReply `split` or `no`. If `no`, I'll show the menu.",
+ "turns": 30,
+ "subtype": "success",
+ "reasons": [
+  "no split proposal for nine files over scope_threshold 4"
+ ],
+ "commands": [
+  "bash /Users/musta/Code/projects/kern/scripts/kern-dir ledgers; git worktree list; git rev-parse --show-toplevel; git rev-parse --path-format=absolute --git-dir --git-common-dir; git rev-parse --abbrev-ref HEAD",
+  "for k in base_branch branch.protected test.full push.policy pr.policy; do echo \"$k: $(bash /Users/musta/Code/projects/kern/scripts/kern-get $k 2>&1 || bash /Users/musta/Code/projects/kern/scripts/kern-detect $k 2>&1) [$?]\"; done; git remote get-url origin; echo remote=$?",
+  "git fetch origin main; echo fetch=$?; git rev-list --left-right --count origin/main...HEAD",
+  "npm test 2>&1 | tail -40; echo exit=${pipestatus[1]}",
+  "bash /Users/musta/Code/projects/kern/scripts/wt-snap \"$PWD\"; echo exit=$?",
+  "sed -n 1,40p /Users/musta/Code/projects/kern/skills/self-review/references/rounds.md; MB=$(git merge-base HEAD origin/main); echo mb=$MB; git diff $MB; for f in src/v*.js; do echo \"== $f\"; cat $f; done; cat src/sum.js; ls; ls test* 2>/dev/null",
+  "R=$(bash /Users/musta/Code/projects/kern/scripts/kern-dir reviews); echo $R; ls $R 2>/dev/null; P=$R/feat-many-1.diff; bash /Users/musta/Code/projects/kern/scripts/wt-diff \"$PWD\" 2defb5b93c5d52ea3d7a4f41f3bcd74ae3fe7466 --out $P; echo wtdiff=$?; bash /Users/musta/Code/projects/kern/scripts/floor-scan $P; echo floor=$?; bash /Users/musta/Code/projects/kern/scripts/claim-check \"$PWD\" $P; echo claim=$?; for k in verify.fast typecheck lint test.focused; do echo \"$k: $(bash /Users/musta/Code/projects/kern/scripts/kern-get $k 2>&1; echo \"[$?]\") | $(bash /Users/musta/Code/projects/kern/scripts/kern-detect $k 2>&1; echo \"[$?]\")\"; done; cat test/sum.test.js",
+  "npm run lint 2>&1 | tail -15; echo exit=${pipestatus[1]}; grep -n '\"scripts\"' -A6 package.json",
+  "git status --short && git branch -a && git log --oneline -5 && git diff main...HEAD --stat; echo ---; git diff HEAD",
+  "ls -la && ls -la src && find . -name 'CLAUDE*.md' -not -path './node_modules/*'; ls ~/.claude/CLAUDE.md 2>&1",
+  "for f in src/*.js; do echo \"== $f\"; cat -A $f; done; echo; echo == package.json; cat package.json; echo == README; cat README.md; echo == test; ls -R test; cat test/*; echo == .claude; ls -R .claude .kern; ",
+  "for f in src/*.js package.json README.md test/*; do echo \"== $f\"; cat \"$f\"; echo; done; echo \"== dirs\"; ls -R .claude .kern test",
+  "cat .claude/kern.local.yml; echo ---; head -50 .kern/reviews/feat-many-1.diff; echo ---; head -50 .kern/reviews/feat-many-1.diff.patch; echo ---; git check-ignore -v .kern .claude; git status --short --ignored | head; npm test 2>&1 | tail -20; npm run lint 2>&1 | tail -5",
+  "grep -rnE \"v[1-9]\\b|sum\" --include=*.js --include=*.json --include=*.md . 2>/dev/null | grep -v '^./.git/' | grep -v '^./.kern/'; echo ---; git show HEAD --stat | head -20; git stash list; node -e \"import('./src/sum.js').then(m=>console.log(m.sum(0.1,0.2), m.sum('2',3), m.sum(undefined,1), m.sum(1)))\"",
+  "rg -n \"sum|v[1-9]\\b\" --glob '!.kern' --glob '!node_modules' . | head; git diff --shortstat 2defb5b 1efaabe1ce316b075fae25ce28f97c365f107222"
+ ]
+}
+FAIL finish-split-nine-files: no split proposal for nine files over scope_threshold 4
+--case run: no snapshot written; a full run writes it
+exit=1

@@ -1,0 +1,20 @@
+noglob cd @YD@; echo x > t.md
+noglob cd @YD@; echo x >> t.md
+noglob cd @YD@; echo x 2>t.md
+noglob cd @YD@; echo x &>t.md
+noglob cd @YD@; echo x >| t.md
+noglob cd @YD@; tee t.md </dev/null
+noglob cd @YD@; tee -a ./t.md </dev/null
+noglob cd @YD@; cp /dev/null t.md
+noglob cd @YD@; install -m 644 /dev/null t.md
+noglob cd @YD@; dd if=/dev/null of=t.md
+noglob cd @YD@; cat > t.md <<EOF@NL@x@NL@EOF
+noglob cd @YD@; sed -i '' s/a/b/ t.md
+noglob cd @YD@; /bin/cp /dev/null t.md
+noglob cd @YD@; /bin/echo x > t.md
+noglob cd @YD@; /usr/bin/tee ./t.md </dev/null
+noglob cd @YD@; truncate -s 0 t.md
+noglob cd @YD@; /bin/cp /dev/null --target-directory=. 
+noglob cd @YD@; echo $(cat /dev/null) > t.md
+noglob cd @YD@; /bin/cp -t . /dev/null
+echo x > t.md

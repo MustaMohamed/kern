@@ -1,0 +1,95 @@
+1..16
+not ok 1 this project's sessions, newest first, worktree sessions included, children and old ones skipped
+# (in test file tests/scripts/recall-sessions.bats, line 32)
+#   `[ "$status" -eq 0 ]' failed
+not ok 2 a sibling project whose slug starts with the main slug is never listed
+# (in test file tests/scripts/recall-sessions.bats, line 42)
+#   `[ "$status" -eq 0 ]' failed
+not ok 3 --days widens the window
+# (in test file tests/scripts/recall-sessions.bats, line 49)
+#   `[ "${#lines[@]}" -eq 4 ]' failed
+not ok 4 --topic adds this project's matching prompts only
+# (in test file tests/scripts/recall-sessions.bats, line 54)
+#   `[ "$(printf '%s\n' "$output" | grep -c '^prompt')" -eq 1 ]' failed
+not ok 5 --topic skips a prompt from a sibling project whose path starts with the main path
+# (in test file tests/scripts/recall-sessions.bats, line 62)
+#   `[ "$status" -eq 0 ]' failed
+not ok 6 --topic takes a worktree prompt
+# (in test file tests/scripts/recall-sessions.bats, line 71)
+#   `[ "$(printf '%s\n' "$output" | grep -c '^prompt')" -eq 2 ]' failed
+not ok 7 --topic finds a word after an escaped quote and still reads the fields behind it
+# (in test file tests/scripts/recall-sessions.bats, line 78)
+#   `[ "$status" -eq 0 ]' failed
+not ok 8 --topic reads past a display that ends in an escaped backslash
+# (in test file tests/scripts/recall-sessions.bats, line 85)
+#   `[ "$status" -eq 0 ]' failed
+not ok 9 --topic reads a history line that ends in a carriage return
+# (in test file tests/scripts/recall-sessions.bats, line 92)
+#   `[ "$status" -eq 0 ]' failed
+not ok 10 --topic skips prompts older than the window
+# (in test file tests/scripts/recall-sessions.bats, line 99)
+#   `[ "$status" -eq 0 ]' failed
+not ok 11 no ~/.claude/projects and no history is an empty answer, not an error
+# (in test file tests/scripts/recall-sessions.bats, line 106)
+#   `[ "$status" -eq 0 ]' failed
+ok 12 an unreadable transcript folder is an error, not an empty list
+ok 13 an unreadable history file is an error
+not ok 14 a bad option exits 2
+# (in test file tests/scripts/recall-sessions.bats, line 131)
+#   `[ "$status" -eq 2 ]' failed
+not ok 15 an empty --topic exits 2
+# (in test file tests/scripts/recall-sessions.bats, line 136)
+#   `[ "$status" -eq 2 ]' failed
+not ok 16 outside a git repository exits 2
+# (in test file tests/scripts/recall-sessions.bats, line 142)
+#   `[ "$status" -eq 2 ]' failed
+
+The following warnings were encountered during tests:
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 31)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --days 3650` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 41)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --days 3650` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 48)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic FLOCI` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 53)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic floci` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 61)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic floci` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 70)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic floci` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 77)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic c:\tmp` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 84)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic with crlf` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 91)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic ancient` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 98)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic floci` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 105)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 113)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic floci` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 123)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --days soon` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 130)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions --topic ` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 135)
+BW01: `run`'s command `bash /Users/musta/Code/projects/kern/scripts/recall-sessions` exited with code 127, indicating 'Command not found'. Use run's return code checks, e.g. `run -127`, to fix this message.
+      (from function `run' in file /Users/musta/.local/lib/bats-core/test_functions.bash, line 442,
+       in test file tests/scripts/recall-sessions.bats, line 141)

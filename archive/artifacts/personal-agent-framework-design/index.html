@@ -1,0 +1,644 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Personal Agent Framework Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: design document with a sticky section index on wide screens, single column on phones. Source colors encode which plugin a mechanism comes from. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f4;
+  --ink: #14181d;
+  --ink-2: #47505c;
+  --muted: #6c7581;
+  --line: #dce1e7;
+  --accent: #0e6b56;
+  --accent-bg: #e3f3ee;
+  --src-sp: #5b5f97;
+  --src-sp-bg: #ecedf7;
+  --src-ps: #2a78d6;
+  --src-ps-bg: #e6f0fb;
+  --src-po: #c4561f;
+  --src-po-bg: #fbeee6;
+  --src-ad: #12895f;
+  --src-ad-bg: #e4f4ec;
+  --src-cv: #8a6d00;
+  --src-cv-bg: #faf3d9;
+  --good: #0ca30c; --good-bg: #e7f5e7;
+  --warn: #c98500; --warn-bg: #fff6dd;
+  --crit: #d03b3b; --crit-bg: #fbeaea;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1114; --surface: #161a1f; --surface-2: #1d2229; --ink: #e8ecf1; --ink-2: #b3bcc7; --muted: #8a94a1; --line: #2b323b;
+    --accent: #4cc5a2; --accent-bg: #15302a;
+    --src-sp: #a9adf0; --src-sp-bg: #23243a; --src-ps: #6fa8ee; --src-ps-bg: #182638; --src-po: #f0935f; --src-po-bg: #34231a; --src-ad: #4fcf9b; --src-ad-bg: #15302a; --src-cv: #e0c050; --src-cv-bg: #322a10;
+    --good-bg: #16301b; --warn: #e6a92a; --warn-bg: #362d16; --crit-bg: #3a1d1d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1114; --surface: #161a1f; --surface-2: #1d2229; --ink: #e8ecf1; --ink-2: #b3bcc7; --muted: #8a94a1; --line: #2b323b;
+  --accent: #4cc5a2; --accent-bg: #15302a;
+  --src-sp: #a9adf0; --src-sp-bg: #23243a; --src-ps: #6fa8ee; --src-ps-bg: #182638; --src-po: #f0935f; --src-po-bg: #34231a; --src-ad: #4fcf9b; --src-ad-bg: #15302a; --src-cv: #e0c050; --src-cv-bg: #322a10;
+  --good-bg: #16301b; --warn: #e6a92a; --warn-bg: #362d16; --crit-bg: #3a1d1d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.shell { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 36px 72px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 36px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; display: grid; gap: 2px; font-size: 13px; }
+nav.toc a { color: var(--ink-2); text-decoration: none; padding: 4px 8px; border-radius: 6px; display: flex; gap: 8px; }
+nav.toc a:hover, nav.toc a:focus-visible { background: var(--surface-2); color: var(--ink); outline: none; }
+nav.toc a .n { font-family: var(--font-mono); color: var(--muted); font-size: 11.5px; min-width: 16px; }
+main { min-width: 0; display: grid; gap: 52px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; line-height: 1.15; text-wrap: balance; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 700; }
+h2 { font-size: 26px; font-weight: 600; }
+h3 { font-size: 17px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+code { font-family: var(--font-mono); font-size: 0.85em; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--ink-2); font-size: 17px; }
+section { display: grid; gap: 16px; scroll-margin-top: 16px; }
+.sh { display: grid; gap: 6px; }
+.sh .eyebrow b { color: var(--accent); font-weight: 600; }
+.sh p { color: var(--ink-2); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 12px; min-width: 0; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+.note { font-size: 13.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; max-width: 86ch; }
+.small { font-size: 13px; color: var(--muted); max-width: 86ch; }
+
+/* sources */
+.src { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.src.sp { background: var(--src-sp-bg); color: var(--src-sp); }
+.src.ps { background: var(--src-ps-bg); color: var(--src-ps); }
+.src.po { background: var(--src-po-bg); color: var(--src-po); }
+.src.ad { background: var(--src-ad-bg); color: var(--src-ad); }
+.src.cv { background: var(--src-cv-bg); color: var(--src-cv); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; align-items: center; }
+
+/* architecture */
+.layers { display: grid; gap: 8px; }
+.layer { display: grid; grid-template-columns: 170px 1fr; gap: 14px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.layer .ln { font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+.layer .ln small { display: block; font-family: var(--font-mono); font-weight: 400; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.layer .lc { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-family: var(--font-mono); font-size: 12px; padding: 3px 8px; border-radius: 6px; background: var(--surface-2); color: var(--ink); white-space: nowrap; }
+.pill.a { background: var(--accent-bg); color: var(--accent); font-weight: 500; }
+.layer.kernel { border-color: var(--accent); }
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; counter-reset: f; }
+.fstep { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px; font-size: 13px; color: var(--ink-2); display: grid; gap: 4px; align-content: start; counter-increment: f; }
+.fstep b { color: var(--ink); font-size: 13.5px; }
+.fstep b::before { content: counter(f) ". "; font-family: var(--font-mono); color: var(--muted); font-weight: 400; }
+
+/* tables */
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+thead th { font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 500; background: var(--surface-2); white-space: nowrap; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+tbody th { font-weight: 600; font-size: 13.5px; }
+tbody th .to { display: block; font-family: var(--font-mono); font-weight: 500; font-size: 11.5px; color: var(--accent); margin-top: 3px; }
+td.empty { color: var(--muted); }
+.power { min-width: 1080px; }
+.power td { width: 20%; }
+.power td .src { margin-bottom: 4px; }
+.cat { min-width: 880px; }
+.tier { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
+.tier.auto { background: var(--accent-bg); color: var(--accent); }
+.tier.path { background: var(--warn-bg); color: var(--ink); }
+.tier.slash { background: var(--surface-2); color: var(--ink-2); }
+.tier.agent { background: var(--src-sp-bg); color: var(--src-sp); }
+.tier.hook { background: var(--crit-bg); color: var(--ink); }
+
+/* bars */
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: 210px 1fr 70px; gap: 10px; align-items: center; font-size: 13px; }
+.bar { height: 12px; background: var(--surface-2); border-radius: 0 4px 4px 0; position: relative; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 0 4px 4px 0; }
+.bar-row .v { font-family: var(--font-mono); font-size: 12px; text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ladder { display: grid; gap: 6px; counter-reset: l; }
+.rung { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: baseline; font-size: 14px; counter-increment: l; }
+.rung::before { content: counter(l); font-family: var(--font-display); font-weight: 600; font-size: 18px; color: var(--accent); }
+
+/* modes */
+.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.mode { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.mode .mn { font-family: var(--font-mono); font-size: 14px; font-weight: 500; }
+.mode p { font-size: 13.5px; color: var(--ink-2); }
+.mock { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.mock-top { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.mock-top i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); display: inline-block; }
+.mock-body { display: grid; grid-template-columns: 170px minmax(0, 1fr); min-height: 260px; }
+.mock-side { border-right: 1px solid var(--line); padding: 12px; display: grid; gap: 4px; align-content: start; font-size: 12.5px; }
+.mock-side span { padding: 4px 6px; border-radius: 5px; color: var(--ink-2); }
+.mock-side span.on { background: var(--accent-bg); color: var(--accent); font-weight: 500; }
+.mock-main { padding: 14px 16px; display: grid; gap: 10px; align-content: start; }
+.mock-sec { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.mock-sec .t { font-weight: 600; font-size: 13.5px; }
+.mock-sec .d { font-size: 12.5px; color: var(--ink-2); }
+.btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn { font-size: 12px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.btn.ok { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; }
+.opt { border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 12px; color: var(--ink-2); }
+.opt.rec { border-color: var(--accent); }
+.opt b { display: block; color: var(--ink); font-size: 12.5px; }
+.mock-one { padding: 16px; display: grid; gap: 12px; }
+.mq { font-weight: 600; font-size: 15px; }
+.variants { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.var { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 6px; font-size: 12px; color: var(--ink-2); position: relative; }
+.var.rec { border: 2px solid var(--accent); }
+.var b { color: var(--ink); font-size: 12.5px; }
+.wf { display: grid; gap: 4px; background: var(--surface-2); border-radius: 6px; padding: 8px; height: 86px; align-content: start; }
+.wf i { display: block; height: 8px; border-radius: 3px; background: var(--line); }
+.wf i.h { height: 12px; width: 60%; }
+.wf i.s { width: 70%; }
+.wf i.b { margin-top: auto; height: 14px; width: 45%; background: var(--accent); opacity: .7; }
+.wf.split { grid-template-columns: 2fr 1fr; }
+.wf.split > span { display: grid; gap: 4px; align-content: start; }
+.dot-radio { position: absolute; top: 10px; right: 10px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); }
+.var.rec .dot-radio { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 8px var(--accent); }
+.nf { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; color: var(--muted); }
+.sendrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12.5px; color: var(--muted); }
+
+/* safety */
+.chip { font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+.chip.on { background: var(--good-bg); }
+.chip.cfg { background: var(--warn-bg); }
+.chip.skill { background: var(--surface-2); }
+.chip.loose { background: var(--accent-bg); color: var(--accent); }
+.chip.same { background: var(--surface-2); color: var(--muted); }
+
+/* milestones */
+.ms { display: grid; gap: 10px; }
+.m { display: grid; grid-template-columns: 52px 1fr 120px; gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.m .id { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--accent); }
+.m .hrs { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); text-align: right; }
+.m p { font-size: 13.5px; color: var(--ink-2); }
+.m.usable { border-color: var(--accent); }
+.decisions { display: grid; gap: 10px; }
+.dec { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; }
+.dec .q { font-weight: 600; }
+.dec .r { font-size: 13.5px; color: var(--ink-2); }
+.dec .r b { color: var(--accent); }
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  nav.toc { position: static; display: flex; flex-wrap: wrap; gap: 4px; }
+  nav.toc a { background: var(--surface); border: 1px solid var(--line); }
+}
+@media (max-width: 640px) {
+  .shell { padding-inline: 16px; padding-block: 24px 56px; }
+  .layer { grid-template-columns: 1fr; gap: 6px; }
+  .bar-row { grid-template-columns: 1fr 60px; }
+  .bar-row > span:first-child { grid-column: 1 / -1; }
+  .mock-body { grid-template-columns: 1fr; }
+  .mock-side { border-right: 0; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; }
+  .m { grid-template-columns: 40px 1fr; }
+  .m .hrs { grid-column: 2; text-align: left; }
+}
+</style>
+
+<div class="shell">
+<nav class="toc" aria-label="Sections">
+  <a href="#understanding"><span class="n">0</span>Understanding</a>
+  <a href="#architecture"><span class="n">1</span>Architecture</a>
+  <a href="#power"><span class="n">2</span>Power map</a>
+  <a href="#catalogue"><span class="n">3</span>Skill catalogue</a>
+  <a href="#kernel"><span class="n">4</span>Kernel</a>
+  <a href="#modes"><span class="n">5</span>Modes and pages</a>
+  <a href="#safety"><span class="n">6</span>Safety and autopilot</a>
+  <a href="#profile"><span class="n">7</span>Project profile</a>
+  <a href="#quality"><span class="n">8</span>Quality and learning</a>
+  <a href="#build"><span class="n">9</span>Build order</a>
+  <a href="#decisions"><span class="n">10</span>Decisions</a>
+</nav>
+
+<main>
+<header class="sh">
+  <div class="eyebrow">Design for review · 12 Oct 2026 · working name <code>fw</code></div>
+  <h1>Personal Agent Framework Design</h1>
+  <p class="lede">One Claude Code plugin that takes the strongest mechanism from superpowers, pstack, mattpocock/skills and addyosmani/agent-skills in each category, plus caveman's terse voice, and runs the same way in every project you open.</p>
+  <p class="small"><code>fw</code> is a placeholder until you pick a name (decision 1). Each section ends where you can approve it or ask for changes.</p>
+  <p class="note"><b>Revision 2.</b> The project settings file is now local and untracked by default. Five skills load automatically instead of nine; the kernel routes to the rest. Autopilot turns on only from a command you type, and a guard stops Claude from switching it itself. The guard table now shows interactive and autopilot behaviour side by side.</p>
+  <p class="note"><b>Revision 3.</b> <code>take-feedback</code> gains <code>rebase</code> and <code>drive</code> modes and works with stacked PRs: GitHub's <code>gh stack</code> first, plain <code>git rebase --update-refs</code> as a fallback, single PRs by default. A new guard, G17, gates every <code>gh stack</code> command.</p>
+  <p class="note"><b>Revision 4.</b> Review runs Claude Code's built-in <code>code-review</code> as one lane beside the framework's own reviewers, then merges and verifies the findings. See the new pr-review panel in section 3.</p>
+  <p class="note"><b>Revision 5.</b> html mode is visual pages, not a portal. A page replaces text when options, variants or a design are easier to see. Questions on a page can be answered there, and Claude carries on without a trip to the terminal, or answered in the terminal as usual.</p>
+</header>
+
+<section id="understanding">
+  <div class="sh"><div class="eyebrow"><b>0</b> · Understanding</div><h2>What this is for</h2></div>
+  <div class="two">
+    <div class="panel"><h3>What you said</h3>
+      <ul class="plain">
+        <li>Your own framework, built by categorizing every skill in the four plugins and combining the strongest parts.</li>
+        <li>Wide (every phase of the work) and deep (rigorous within each phase).</li>
+        <li>A personal plugin in its own repo, portable across all your projects. Not CDS-specific.</li>
+        <li>Claude Code only.</li>
+        <li>Gated by default, with an opt-in autopilot per session.</li>
+        <li>Three modes: <code>caveman</code>-style terse, <code>html</code> for visual pages (options, variants, designs) you can answer on the page or in the terminal, and <code>auto</code> as the default.</li>
+      </ul></div>
+    <div class="panel"><h3>What I assumed</h3>
+      <ul class="plain">
+        <li>Each project's CLAUDE.md, rules and own skills win over the framework.</li>
+        <li>Depth lives in on-demand reference files, so "wide" does not cost context every session.</li>
+        <li>The framework tests itself in CI, and a learning loop turns repeated mistakes into checks.</li>
+        <li>All four sources are MIT and caveman is Apache-2.0, so their text can be reused with attribution. The caveman name is a trademark and is not reused.</li>
+        <li>Superpowers stays installed until the framework can do its job.</li>
+      </ul></div>
+  </div>
+  <p class="note"><b>Done looks like:</b> one install on any machine. One router. Every superpowers job still covered, plus pstack's proof discipline, mattpocock's debugging gate, addy's specialist skills and evals, and visual pages for options, variants and designs that you can answer by clicking.</p>
+</section>
+
+<section id="architecture">
+  <div class="sh"><div class="eyebrow"><b>1</b> · Architecture</div><h2>Six layers, one always-on</h2><p>Only the kernel and five skill descriptions load every session. Everything else loads when a kernel route or a slash command reaches it.</p></div>
+  <div class="layers">
+    <div class="layer kernel"><div class="ln">Kernel<small>hook, every session</small></div><div class="lc"><span class="pill a">precedence</span><span class="pill a">routing table</span><span class="pill a">autonomy tiers</span><span class="pill a">evidence rule</span><span class="pill a">reply contract</span><span class="pill a">active mode</span></div></div>
+    <div class="layer"><div class="ln">Phase skills<small>the spine</small></div><div class="lc"><span class="pill">define</span><span class="pill">plan</span><span class="pill">execute-plan</span><span class="pill">prove-it</span><span class="pill">self-review</span><span class="pill">pr-review</span><span class="pill">finish-branch</span><span class="pill">ship-check</span></div></div>
+    <div class="layer"><div class="ln">Disciplines<small>cross-cutting, kernel-routed</small></div><div class="lc"><span class="pill">implement</span><span class="pill">diagnose</span><span class="pill">take-feedback</span><span class="pill">recall</span><span class="pill">write-skill</span></div></div>
+    <div class="layer"><div class="ln">Specialists<small>fire on context or slash</small></div><div class="lc"><span class="pill">architect</span><span class="pill">explain</span><span class="pill">domain-model</span><span class="pill">prototype</span><span class="pill">perf</span><span class="pill">refactor</span><span class="pill">expand-contract</span><span class="pill">build-ui</span><span class="pill">verify-app</span><span class="pill">triage</span><span class="pill">no-comments</span></div></div>
+    <div class="layer"><div class="ln">References<small>read on demand</small></div><div class="lc"><span class="pill">project-contract</span><span class="pill">principles</span><span class="pill">stacks/*</span><span class="pill">checklists</span><span class="pill">model-selection</span><span class="pill">unslop</span><span class="pill">technical-writing</span></div></div>
+    <div class="layer"><div class="ln">Runtime<small>agents, hooks, pages</small></div><div class="lc"><span class="pill">9 agents</span><span class="pill">guard hooks G1 to G17</span><span class="pill">mode state</span><span class="pill">page server, on demand</span><span class="pill">eval suite</span></div></div>
+  </div>
+  <div class="panel">
+    <div class="eyebrow">One task, end to end</div>
+    <div class="flow">
+      <div class="fstep"><b>Session starts</b>Hook injects the kernel and the active mode. Subagents get a 1.2k-char kernel.</div>
+      <div class="fstep"><b>Route</b>Kernel matches the task, reads the skill, copies its steps into the todo list verbatim.</div>
+      <div class="fstep"><b>Read the project</b>Skill reads the profile: base branch, test command, tracker, conventions.</div>
+      <div class="fstep"><b>Work</b>Agents run in their own worktrees. Guards ask before risky git and tracker actions.</div>
+      <div class="fstep"><b>Show</b>Options, variants and designs open as a visual page. Answer there or in the terminal.</div>
+      <div class="fstep"><b>Prove</b>prove-it needs a command and its output before "done".</div>
+      <div class="fstep"><b>Learn</b>Corrections and repeats route to /fw:retro and /fw:correct.</div>
+    </div>
+  </div>
+</section>
+
+<section id="power">
+  <div class="sh"><div class="eyebrow"><b>2</b> · Power map</div><h2>What each source contributes, per category</h2><p>The merged skill takes the cell contents in each row. Empty cells mean that source has nothing better to offer there.</p></div>
+  <div class="legend"><span class="src sp">SP superpowers</span><span class="src ps">PS pstack</span><span class="src po">PO mattpocock</span><span class="src ad">AD addy</span><span class="src cv">CV caveman</span></div>
+  <div class="tw"><table class="power">
+    <thead><tr><th>Category</th><th>superpowers</th><th>pstack</th><th>mattpocock</th><th>addy</th></tr></thead>
+    <tbody>
+      <tr><th>Router and autonomy<span class="to">kernel</span></th><td><span class="src sp">SP</span><br>Injected at start, clear and compact. "CLAUDE.md wins" clause</td><td><span class="src ps">PS</span><br>Trigger table, steps copied verbatim with <code>skip: reason</code>. Autonomy tiers, inverted to gated</td><td><span class="src po">PO</span><br>Invocation tiers: auto, slash-only, path-reached</td><td><span class="src ad">AD</span><br>Core behaviours: surface assumptions, stop when confused, scope discipline</td></tr>
+      <tr><th>Clarify and specify<span class="to">define</span></th><td><span class="src sp">SP</span><br>Hard approval gate. Spike, bounded and architectural paths</td><td><span class="src ps">PS</span><br>Experience-first principle</td><td><span class="src po">PO</span><br>Design questions batched, each with a recommended answer. Questionnaires for stakeholders</td><td><span class="src ad">AD</span><br>Intent questions one at a time with a guess. Spec, then stop the turn</td></tr>
+      <tr><th>Design and domain<span class="to">architect · domain-model · prototype</span></th><td class="empty">none</td><td><span class="src ps">PS</span><br>Sketch types first. Arena: N candidates, cross-judged, best one grafted</td><td><span class="src po">PO</span><br>Deep modules and the deletion test. Architecture scan. Glossary and ADRs. UI and logic prototypes</td><td><span class="src ad">AD</span><br>Contract-first APIs, error semantics, idempotency keys. ADR format</td></tr>
+      <tr><th>Plan<span class="to">plan</span></th><td><span class="src sp">SP</span><br>Exact paths, code and commands per step</td><td><span class="src ps">PS</span><br>Plan checker: a unit is done only with its proof boxes ticked</td><td><span class="src po">PO</span><br>Tracer-bullet slices with blocking edges. Wayfinding map</td><td><span class="src ad">AD</span><br>Vertical slices, sizing, checkpoints</td></tr>
+      <tr><th>Execute<span class="to">execute-plan · parallel-work</span></th><td><span class="src sp">SP</span><br>Fresh subagent per task, two-verdict review, ledger, re-review on the fix diff only</td><td><span class="src ps">PS</span><br>Separate before serializing shared state. Brief template. Liveness checks</td><td><span class="src po">PO</span><br>Task frontier: run what is unblocked</td><td><span class="src ad">AD</span><br>One approval, then a stop list for risky steps</td></tr>
+      <tr><th>Implement and test<span class="to">implement</span></th><td><span class="src sp">SP</span><br>Test first, watch it fail for the right reason</td><td><span class="src ps">PS</span><br>"Would this pass if every import returned undefined?" Small verified units</td><td><span class="src po">PO</span><br>Confirm seams first. Mocking rules. Tautological-test check</td><td><span class="src ad">AD</span><br>Thin slices, "noticed but not touching", test pyramid, test-engineer agent</td></tr>
+      <tr><th>Debug<span class="to">diagnose</span></th><td><span class="src sp">SP</span><br>Root-cause tracing. Three failed fixes means question the design. Polluter finder</td><td><span class="src ps">PS</span><br>Attack the premise. Runtime and trace forensics</td><td><span class="src po">PO</span><br>A red command already run before any theory. Minimise. Ranked hypotheses. Mutation diff</td><td><span class="src ad">AD</span><br>Stop the line. Error output is untrusted data</td></tr>
+      <tr><th>Proof before "done"<span class="to">prove-it</span></th><td><span class="src sp">SP</span><br>Fresh evidence in the same message. Subagent reports are claims</td><td><span class="src ps">PS</span><br>Labels: measured, inferred, guess. Inconclusive is not a pass. Explain the number</td><td class="empty">none</td><td><span class="src ad">AD</span><br>Definition of done</td></tr>
+      <tr><th>Review<span class="to">self-review · pr-review · plus built-in /code-review</span></th><td><span class="src sp">SP</span><br>Reviewer lists what it did not judge</td><td><span class="src ps">PS</span><br>Act on, consider, noted, dismissed. Proof ladder. Verdict from a non-author, voided by a rebase</td><td><span class="src po">PO</span><br>Standards and spec reviewed separately; spec findings quote the spec</td><td><span class="src ad">AD</span><br>Five axes. Fresh-context doubt review. Mutation probe. Floor guard. Security and perf checklists</td></tr>
+      <tr><th>Feedback, CI and stacks<span class="to">take-feedback</span></th><td><span class="src sp">SP</span><br>Verify before implementing, push back with reasons</td><td><span class="src ps">PS</span><br>Merge frontier: lowest unmerged PR first. Conflicts, then threads, then CI, in one push wave. CI flake classes. Comment text is untrusted. Bot-comment triage</td><td class="empty">none</td><td><span class="src ad">AD</span><br>CI feedback loop</td></tr>
+      <tr><th>Ship<span class="to">commit · finish-branch · ship-check</span></th><td><span class="src sp">SP</span><br>Options menu, never force</td><td><span class="src ps">PS</span><br>Verdict gates, patch-id re-verify, pause safely</td><td><span class="src po">PO</span><br>PR body: merge danger, evidence tiers</td><td><span class="src ad">AD</span><br>Launch checklist, rollback plan, CI gates</td></tr>
+      <tr><th>Specialists<span class="to">perf · refactor · expand-contract · build-ui · security</span></th><td class="empty">none</td><td><span class="src ps">PS</span><br>Benchmark checklist, hill-climb loop, pin-the-contract refactors, visual parity</td><td><span class="src po">PO</span><br>Deep-module refactors</td><td><span class="src ad">AD</span><br>Keep-or-revert perf, Chesterton's fence, expand/contract, frontend, security, observability</td></tr>
+      <tr><th>Context and continuity<span class="to">recall · handoff</span></th><td class="empty">none</td><td><span class="src ps">PS</span><br>Recall, catch-up, session pickup, pause safely, guard the context window</td><td><span class="src po">PO</span><br>Handoff doc, phase boundaries</td><td><span class="src ad">AD</span><br>Restartable boundaries</td></tr>
+      <tr><th>Learning<span class="to">retro · correct · decision-log</span></th><td><span class="src sp">SP</span><br>Session diagnosis</td><td><span class="src ps">PS</span><br>Correct: architecture over types over lint over tests over docs, proven on a past mistake. Decision trail</td><td><span class="src po">PO</span><br>Deterministic checks first. Out-of-scope ledger</td><td class="empty">none</td></tr>
+      <tr><th>Framework quality<span class="to">write-skill · skill-eval · CI</span></th><td><span class="src sp">SP</span><br>Pressure-tested skills, red then green</td><td><span class="src ps">PS</span><br>Blinded eval playbook</td><td><span class="src po">PO</span><br>Only observed failures change a skill</td><td><span class="src ad">AD</span><br>Skill lint, routing evals gated in CI, behavioral evals</td></tr>
+      <tr><th>Voice and surface<span class="to">mode · visual · unslop</span></th><td><span class="src sp">SP</span><br>Two-way visual companion (clicks flow back)</td><td><span class="src ps">PS</span><br>Unslop, technical writing, plain restatement, "reminder" mode idea</td><td><span class="src po">PO</span><br>HTML report pages, plain re-pitch</td><td class="empty">none <span class="src cv">CV</span> per-session terse state with negation guards</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="catalogue">
+  <div class="sh"><div class="eyebrow"><b>3</b> · Skill catalogue</div><h2>38 skills, 9 agents</h2><p>Four invocation tiers keep the per-session cost low. <span class="tier auto">auto</span> descriptions load every session. <span class="tier path">path</span> skills are slash-only but the kernel reads them by path when a route fires. <span class="tier slash">slash</span> skills run only when you type them.</p></div>
+  <div class="tw"><table class="cat">
+    <thead><tr><th>Group</th><th>Skill</th><th>Tier</th><th>Job</th><th>Main sources</th></tr></thead>
+    <tbody>
+      <tr><th rowspan="3">Control</th><td><code>mode</code></td><td><span class="tier slash">slash</span></td><td>Switch voice and surface: auto, terse, html</td><td><span class="src cv">CV</span> <span class="src sp">SP</span></td></tr>
+      <tr><td><code>autopilot</code></td><td><span class="tier slash">slash</span></td><td>Per-session grant for commits and draft PRs</td><td><span class="src ps">PS</span></td></tr>
+      <tr><td><code>help</code></td><td><span class="tier slash">slash</span></td><td>Map of the framework; <code>help setup</code> writes the project profile</td><td><span class="src ps">PS</span> <span class="src po">PO</span></td></tr>
+      <tr><th rowspan="7">Define</th><td><code>define</code></td><td><span class="tier path">path</span></td><td>Clarify, specify, get approval</td><td><span class="src sp">SP</span> <span class="src ad">AD</span> <span class="src po">PO</span></td></tr>
+      <tr><td><code>plan</code></td><td><span class="tier path">path</span></td><td>Task breakdown with files, proofs, blocking edges</td><td><span class="src sp">SP</span> <span class="src po">PO</span> <span class="src ad">AD</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>architect</code></td><td><span class="tier slash">slash</span></td><td>Interfaces and structure, with a scan mode</td><td><span class="src ps">PS</span> <span class="src po">PO</span> <span class="src ad">AD</span></td></tr>
+      <tr><td><code>domain-model</code></td><td><span class="tier path">path</span></td><td>Glossary and decision records, written on request</td><td><span class="src po">PO</span> <span class="src ad">AD</span></td></tr>
+      <tr><td><code>prototype</code></td><td><span class="tier path">path</span></td><td>Throwaway logic or UI variants in a worktree</td><td><span class="src po">PO</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>explain</code></td><td><span class="tier slash">slash</span></td><td>How, why, teach and research modes</td><td><span class="src ps">PS</span> <span class="src po">PO</span> <span class="src ad">AD</span></td></tr>
+      <tr><td><code>triage</code></td><td><span class="tier slash">slash</span></td><td>Issue intake with tracker adapters; every write is a draft</td><td><span class="src po">PO</span></td></tr>
+      <tr><th rowspan="8">Build</th><td><code>execute-plan</code></td><td><span class="tier path">path</span></td><td>Per-task subagents, two-verdict review, ledger</td><td><span class="src sp">SP</span> <span class="src ad">AD</span> <span class="src po">PO</span></td></tr>
+      <tr><td><code>parallel-work</code></td><td><span class="tier path">path</span></td><td>Worktree per agent, serialize overlaps</td><td><span class="src sp">SP</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>implement</code></td><td><span class="tier path">path</span></td><td>Thin slices, test first</td><td><span class="src sp">SP</span> <span class="src po">PO</span> <span class="src ad">AD</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>diagnose</code></td><td><span class="tier path">path</span></td><td>Red command, minimise, hypotheses, three-fix stop</td><td><span class="src po">PO</span> <span class="src sp">SP</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>expand-contract</code></td><td><span class="tier auto">auto</span></td><td>Shape changes that keep old data working</td><td><span class="src ad">AD</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>build-ui</code></td><td><span class="tier auto">auto</span></td><td>UI work, scoped to UI file paths</td><td><span class="src ad">AD</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>perf</code></td><td><span class="tier slash">slash</span></td><td>Measure, keep or revert, explain the number</td><td><span class="src ad">AD</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>refactor</code></td><td><span class="tier slash">slash</span></td><td>Pin the contract, subtract first</td><td><span class="src ps">PS</span> <span class="src ad">AD</span></td></tr>
+      <tr><th rowspan="6">Verify and review</th><td><code>prove-it</code></td><td><span class="tier auto">auto</span></td><td>Evidence before any "done"</td><td><span class="src sp">SP</span> <span class="src ps">PS</span> <span class="src ad">AD</span></td></tr>
+      <tr><td><code>self-review</code></td><td><span class="tier path">path</span></td><td>Blast radius, floor guard, fresh-context doubt pass</td><td><span class="src ps">PS</span> <span class="src ad">AD</span></td></tr>
+      <tr><td><code>pr-review</code></td><td><span class="tier slash">slash</span></td><td>Parallel review lanes: built-in code-review plus code, spec and security agents, merged and verified</td><td><span class="src sp">SP</span> <span class="src ps">PS</span> <span class="src po">PO</span> <span class="src ad">AD</span></td></tr>
+      <tr><td><code>take-feedback</code></td><td><span class="tier path">path</span></td><td>Review comments, CI, rebases and merge-readiness, for single PRs and stacks</td><td><span class="src sp">SP</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>verify-app</code></td><td><span class="tier slash">slash</span></td><td>Run the project's browser or runtime check</td><td><span class="src ps">PS</span> <span class="src ad">AD</span></td></tr>
+      <tr><td><code>no-comments</code></td><td><span class="tier slash">slash</span></td><td>Comment hygiene with the comment-sicko agent</td><td><span class="src ps">PS</span></td></tr>
+      <tr><th rowspan="3">Ship</th><td><code>commit</code></td><td><span class="tier slash">slash</span></td><td>Message per project convention</td><td><span class="src ad">AD</span> <span class="src sp">SP</span></td></tr>
+      <tr><td><code>finish-branch</code></td><td><span class="tier slash">slash</span></td><td>Options menu, draft PR with dedup</td><td><span class="src sp">SP</span> <span class="src ps">PS</span> <span class="src po">PO</span></td></tr>
+      <tr><td><code>ship-check</code></td><td><span class="tier slash">slash</span></td><td>Go/no-go, deploy proof, rollback plan</td><td><span class="src ad">AD</span> <span class="src ps">PS</span></td></tr>
+      <tr><th rowspan="5">Context and learning</th><td><code>recall</code></td><td><span class="tier auto">auto</span></td><td>Rebuild state; <code>recall chat</code> catches up on the thread</td><td><span class="src ps">PS</span></td></tr>
+      <tr><td><code>handoff</code></td><td><span class="tier slash">slash</span></td><td>Pause and hand off cleanly</td><td><span class="src po">PO</span> <span class="src ps">PS</span></td></tr>
+      <tr><td><code>retro</code></td><td><span class="tier slash">slash</span></td><td>Session review, deterministic checks first</td><td><span class="src po">PO</span> <span class="src sp">SP</span></td></tr>
+      <tr><td><code>correct</code></td><td><span class="tier slash">slash</span></td><td>Turn a repeat mistake into a check</td><td><span class="src ps">PS</span></td></tr>
+      <tr><td><code>decision-log</code></td><td><span class="tier path">path</span></td><td>Decision trail for long or unattended runs</td><td><span class="src ps">PS</span></td></tr>
+      <tr><th rowspan="4">Writing and pages</th><td><code>visual</code></td><td><span class="tier path">path</span></td><td>Build a visual page, ask questions on it, wait for the answer</td><td><span class="src sp">SP</span> <span class="src po">PO</span></td></tr>
+      <tr><td><code>unslop</code></td><td><span class="tier path">path</span></td><td>Rules for any prose others read</td><td><span class="src ps">PS</span></td></tr>
+      <tr><td><code>technical-writing</code></td><td><span class="tier path">path</span></td><td>Docs, PR bodies, commit messages</td><td><span class="src ps">PS</span></td></tr>
+      <tr><td><code>plain</code></td><td><span class="tier slash">slash</span></td><td>Restate the last answer in plain words</td><td><span class="src ps">PS</span> <span class="src po">PO</span></td></tr>
+      <tr><th rowspan="2">Framework</th><td><code>write-skill</code></td><td><span class="tier auto">auto</span></td><td>Author or edit a skill, rule or agent</td><td><span class="src sp">SP</span> <span class="src po">PO</span> <span class="src ad">AD</span></td></tr>
+      <tr><td><code>skill-eval</code></td><td><span class="tier slash">slash</span></td><td>Run lint, routing and behavioral evals</td><td><span class="src ad">AD</span> <span class="src ps">PS</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="two">
+    <div class="panel"><h3>Agents</h3><p style="font-size:13.5px;color:var(--ink-2)"><code>implementer</code>, <code>task-reviewer</code> (spec then quality), <code>code-reviewer</code>, <code>spec-reviewer</code>, <code>security-auditor</code>, <code>test-engineer</code>, <code>perf-auditor</code>, <code>comment-sicko</code>, <code>investigator</code> (read-only). Each declares its tools; reviewers and the investigator cannot edit.</p></div>
+    <div class="panel"><h3>Description budget</h3>
+      <div class="bars">
+        <div class="bar-row"><span>5 auto skills: prove-it, recall, write-skill, expand-contract, build-ui</span><span class="bar"><i style="width:83%"></i></span><span class="v">~1,250</span></div>
+        <div class="bar-row"><span>Budget cap</span><span class="bar"><i style="width:100%;opacity:.35"></i></span><span class="v">1,500</span></div>
+      </div>
+      <p class="small">A user-level plugin pays this cost in every project, so the cap is tight. define, plan, implement, diagnose and take-feedback are reached by kernel routes instead. With the kernel, about 1.3k tokens a session, against superpowers' 1.5k.</p></div>
+  </div>
+  <div class="panel" id="pr-review">
+    <h3>pr-review: four lanes, one merged result</h3>
+    <p style="font-size:13.5px;color:var(--ink-2)">The built-in <code>code-review</code> is strongest on correctness bugs, and it already runs as its own background subagent. The framework's reviewers cover what it does not look for: the spec, the project's rules, design, tests and security. They run side by side, and their findings merge into one list.</p>
+    <div class="tw"><table style="min-width:720px">
+      <thead><tr><th>Lane</th><th>Runs as</th><th>Looks for</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><th>A · built-in code-review</th><td>The main session calls the Skill tool with a target (a ref range such as <code>main...branch</code>, a PR number or a branch). The review runs as a background subagent, alongside lanes B to D</td><td>Correctness bugs, plus reuse, simplification and efficiency cleanups</td><td>Always, when the Claude Code version has it</td></tr>
+        <tr><th>B · code-reviewer agent</th><td>Background subagent, read-only tools</td><td>The project's review rules, design, readability, test quality, floor-guard results (G7)</td><td>Always</td></tr>
+        <tr><th>C · spec-reviewer agent</th><td>Background subagent, read-only tools</td><td>Does the diff do what the spec and acceptance criteria say? Each finding quotes the spec line</td><td>When a spec or issue exists</td></tr>
+        <tr><th>D · security-auditor agent</th><td>Background subagent, read-only tools</td><td>Auth, tenant scoping, injection, secrets, data exposure</td><td>When the diff touches <code>review.sensitive_paths</code> or auth and data code</td></tr>
+      </tbody>
+    </table></div>
+    <div class="two">
+      <div>
+        <div class="eyebrow" style="margin-bottom:6px">Merge</div>
+        <ul class="plain" style="font-size:13.5px">
+          <li>Findings are deduplicated by file, line and claim, and each one keeps the lanes that raised it.</li>
+          <li>A finding two lanes agree on goes straight in.</li>
+          <li>A finding from one lane only, the built-in included, gets a verify pass first: a fresh subagent tries a fail-then-pass probe (G10). Unproven findings are listed separately as "plausible". The local built-in has no documented verify pass of its own, so the framework supplies one.</li>
+          <li>The result uses the project's labels (<code>review.taxonomy</code>), and in html mode becomes a visual page with one card per finding.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="eyebrow" style="margin-bottom:6px">Rules for the built-in lane</div>
+        <ul class="plain" style="font-size:13.5px">
+          <li>Always pass an explicit effort and <code>--max-findings</code>. The built-in remembers the last values typed, even across sessions, so leaving them out gives different results run to run. Side effect: your own later manual <code>/code-review</code> runs may reuse the framework's values; <code>--max-findings default</code> resets that one.</li>
+          <li>Never <code>--comment</code> from inside a review. It posts to the PR immediately, with no confirmation. Posting goes through the framework's draft and approval step instead (G3). <code>--fix</code> only runs in a worktree, from <code>take-feedback</code>, after you pick which findings to fix.</li>
+          <li>Round 1 runs all lanes. Round 2 and later run the built-in alone on <code>&lt;last-reviewed&gt;...HEAD</code>, at a lower effort. The spec lane re-runs only if the spec changed.</li>
+          <li><code>self-review</code> runs the built-in at low effort on your uncommitted diff before a PR exists.</li>
+          <li>If the built-in is missing, lanes B to D run alone. The built-in <code>/security-review</code> can be added as lane E with <code>review.builtin.security: on</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="panel" id="take-feedback">
+    <h3>take-feedback: modes and stacked PRs</h3>
+    <div class="tw"><table style="min-width:720px">
+      <thead><tr><th>Mode</th><th>What it does</th><th>Ends at</th></tr></thead>
+      <tbody>
+        <tr><th><code>check</code></th><td>Read-only status: checks, threads, mergeability. For stacks, <code>gh stack view --json</code> shows which layers need a rebase</td><td>A report</td></tr>
+        <tr><th><code>threads</code></th><td>The default. Verify each review comment against the code, fix real ones with a failing test first, draft replies with reasons for the rest</td><td>Fixes staged, replies drafted, you approve the push and the posts</td></tr>
+        <tr><th><code>ci</code></th><td>Classify a red build before any rerun: one fresh build for a flake, the same failure twice is not a flake, a failure outside the diff means a stale base</td><td>Green, or a rebase proposal, or a diagnosis</td></tr>
+        <tr><th><code>rebase</code></th><td>Bring a branch or a whole stack up to date with its base, resolve mechanical conflicts, re-verify every layer</td><td>Rebased locally; pushing asks (see G1 and G17)</td></tr>
+        <tr><th><code>drive</code></th><td>Loop conflicts, rebase, threads, CI until the PR or stack is merge-ready. Watches with <code>gh pr checks --watch</code> in the background. Unattended only under autopilot</td><td>Merge-ready. Never merges</td></tr>
+      </tbody>
+    </table></div>
+    <div class="two">
+      <div>
+        <div class="eyebrow" style="margin-bottom:6px">Stack providers, picked by <code>stack.tool</code> or detected</div>
+        <ul class="plain" style="font-size:13.5px">
+          <li><b><code>gh-stack</code></b>, GitHub's stacked PRs extension: <code>gh stack rebase</code> for the cascade, <code>--continue</code> or <code>--abort</code> on conflicts, then <code>gh stack sync</code>, which pushes every branch atomically with <code>--force-with-lease</code>. New PRs go through <code>gh stack submit --auto</code>, which opens them as drafts.</li>
+          <li><b><code>git</code></b>, for stacks without a tool: <code>git rebase --update-refs</code> moves every branch in the chain in one pass, and <code>gh pr edit --base</code> fixes the chain after a layer merges.</li>
+          <li><b><code>none</code></b>, the default: single PRs, plain <code>git rebase</code> onto the base branch.</li>
+          <li>Graphite or git-spice adapters can be added later behind the same five steps: view, rebase, continue or abort, push, submit.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="eyebrow" style="margin-bottom:6px">Rules for stacks</div>
+        <ul class="plain" style="font-size:13.5px">
+          <li>Work the lowest unmerged PR first. Fix a finding in the lowest branch that owns the code, then cascade upward. Upstack threads wait for the next push wave.</li>
+          <li>One stack, one worktree. <code>gh stack</code> checks branches out as it rebases, so stack commands never run in your main checkout, and no other worktree may hold a stack branch.</li>
+          <li>Mechanical conflicts (imports, formatting, adjacent edits) are resolved. A conflict where both sides changed behaviour stops the rebase with <code>--abort</code>, which restores every branch, and goes to you with a conflict report.</li>
+          <li>After a rebase, each layer's patch-id is compared (G11). An unchanged patch-id keeps its review verdict; a changed one is re-tested and re-reviewed on the delta.</li>
+          <li>Pushes use <code>--force-with-lease</code> only, and only on your own non-protected PR branches. A branch with another author's commits counts as shared and is never force-pushed.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="kernel">
+  <div class="sh"><div class="eyebrow"><b>4</b> · Kernel</div><h2>The always-on router, under 4,000 characters</h2><p>Injected by the plugin's SessionStart hook on startup, <code>/clear</code> and compaction, together with a short summary of the project's settings. A 3,163-character draft exists. Claude Code caps hook context at 10,000 characters, so this leaves room.</p></div>
+  <div class="two">
+    <div class="panel"><div class="eyebrow">Sections and character budgets</div>
+      <div class="bars">
+        <div class="bar-row"><span>Routing table, 11 rows</span><span class="bar"><i style="width:100%"></i></span><span class="v">1,100</span></div>
+        <div class="bar-row"><span>Autonomy, safety floor, autopilot</span><span class="bar"><i style="width:59%"></i></span><span class="v">650</span></div>
+        <div class="bar-row"><span>Project settings summary</span><span class="bar"><i style="width:55%"></i></span><span class="v">600</span></div>
+        <div class="bar-row"><span>Precedence</span><span class="bar"><i style="width:38%"></i></span><span class="v">420</span></div>
+        <div class="bar-row"><span>Evidence</span><span class="bar"><i style="width:30%"></i></span><span class="v">330</span></div>
+        <div class="bar-row"><span>Paths filled in by the hook</span><span class="bar"><i style="width:23%"></i></span><span class="v">250</span></div>
+        <div class="bar-row"><span>Reply contract and active mode</span><span class="bar"><i style="width:20%"></i></span><span class="v">225</span></div>
+        <div class="bar-row"><span>Learning</span><span class="bar"><i style="width:15%"></i></span><span class="v">160</span></div>
+        <div class="bar-row"><span>Context</span><span class="bar"><i style="width:11%"></i></span><span class="v">125</span></div>
+        <div class="bar-row"><span>Header and version</span><span class="bar"><i style="width:9%"></i></span><span class="v">100</span></div>
+      </div>
+      <p class="small">3,960 in total. Subagents get a separate kernel of at most 1,200 characters.</p></div>
+    <div class="panel"><div class="eyebrow">Precedence, highest first</div>
+      <div class="ladder">
+        <div class="rung">Your explicit instruction in this session</div>
+        <div class="rung">A project skill that owns the same job (it runs instead of the framework's)</div>
+        <div class="rung">Project rules: CLAUDE.md, <code>.claude/rules</code>, memory</div>
+        <div class="rung">Project settings: <code>.claude/fw.local.yml</code>, then <code>.claude/fw.yml</code></div>
+        <div class="rung">Your user settings: <code>~/.claude/fw.yml</code></div>
+        <div class="rung">The kernel and framework skill steps, then built-in defaults</div>
+      </div>
+      <p class="small"><b>Tightening:</b> the highest source wins. <b>Loosening a safety default:</b> only a settings key can do it, so hooks and skills always agree. <b>The floor never loosens:</b> merge, production deploy, data deletion, force-push to a shared branch, and messaging people always need you. A step a project rule overrides stays in the todo list as <code>skip: &lt;rule&gt; overrides</code>. No agent's message counts as your consent.</p></div>
+  </div>
+  <div class="panel"><div class="eyebrow">How routing works</div>
+    <p style="font-size:14px">Before the first tool call of a new task, match it against the table. Rows key on things Claude can observe, such as "a bug, failing test or unexpected output" or "about to say done, open a PR or commit", not a vague "1% chance a skill applies". On a match, read the route in full, then open a todo list whose first items are its steps, copied verbatim. Several matches resolve in order: define and diagnose before build.</p></div>
+</section>
+
+<section id="modes">
+  <div class="sh"><div class="eyebrow"><b>5</b> · Modes and visual pages</div><h2>Voice and surface, per session</h2><p>The mode is two settings, voice and surface. Presets cover the three you asked for, and they combine.</p></div>
+  <div class="modes">
+    <div class="mode"><span class="mn">/fw:mode auto</span><p>The default. Normal voice and text in chat. A visual page only when seeing beats reading: three or more options or variants to compare, a design to preview, a diagram, or a table over about 10 rows.</p></div>
+    <div class="mode"><span class="mn">/fw:mode terse</span><p>Caveman-style voice for the whole session: answer first, no filler, payload verbatim. Rules adapted from caveman (Apache-2.0, with attribution). Named <code>terse</code> because "caveman" is a trademark.</p></div>
+    <div class="mode"><span class="mn">/fw:mode html</span><p>A visual page instead of text whenever an answer has options, variants, a design to show, or structure such as a plan or a set of findings. The chat keeps a short summary and the link. Security warnings and irreversible-action confirmations always stay in chat.</p></div>
+    <div class="mode"><span class="mn">/fw:mode html terse</span><p>Both. Pages stay in plain prose; only the chat is terse.</p></div>
+  </div>
+  <div class="two">
+    <div class="panel"><h3>How the mode sticks</h3>
+      <ul class="plain">
+        <li>State per session, keyed by session id, under <code>${CLAUDE_PLUGIN_DATA}</code>. It survives compaction and resume; <code>/clear</code> and new sessions reset to your default.</li>
+        <li>SessionStart injects only the active mode's rules. UserPromptSubmit applies switches, adds a short reminder outside the default mode, and passes in any page answers Claude has not seen yet.</li>
+        <li>Natural-language switches ("go terse", "stop html") work, with guards against negations and questions.</li>
+        <li>Optional status-line badge. A plugin cannot add a status line, so <code>help setup</code> prints a two-line snippet for your settings.</li>
+        <li><code>/fw:autopilot on</code> works the same way: the hook reads it from the prompt you type. Claude cannot invoke a slash-only skill, and guard G16 denies any tool call that writes to the mode state directory, so Claude cannot turn autopilot on by itself.</li>
+      </ul></div>
+    <div class="panel"><h3>What a visual page is</h3>
+      <ul class="plain">
+        <li>A page in place of a block of text, when visuals help: options side by side, UI variants and mockups, a design to look at before it is built, a diagram, a comparison table.</li>
+        <li>One page per output. Not an app: no dashboard, no navigation, no driving Claude Code from the browser.</li>
+        <li>Claude writes the content; the framework wraps it in one design system with light and dark themes, option cards, variant frames and diagrams.</li>
+        <li>Pages are files in the working directory, so you can reopen any of them later.</li>
+      </ul></div>
+  </div>
+  <div class="panel"><h3>Answering on the page or in the terminal</h3>
+    <ul class="plain">
+      <li>When a page asks something, it shows the choices, a note field and a Send button.</li>
+      <li><b>Answer on the page:</b> press Send and Claude carries on by itself, with no trip back to the terminal. While a page waits, Claude runs a small background command that ends the moment you send. Claude Code resumes Claude when a background command ends, and the command hands over your answer.</li>
+      <li><b>Answer in the terminal:</b> type as usual. Claude stops waiting, uses what you typed, and the page marks the question as answered.</li>
+      <li>The page talks to a tiny local server, started only when a page has a question. It listens on 127.0.0.1 only, puts a random key in the URL, makes no network calls, and stops when idle or when the session ends. Adapted from superpowers' visual companion (MIT), without its tracking beacon.</li>
+      <li>No node, or an SSH session: the page opens as a static file and you answer in the terminal.</li>
+    </ul></div>
+  <div class="mock" role="img" aria-label="Sketch of a visual page asking which checkout layout to build, with three variant wireframes, a note field, a Send to Claude button and a hint to answer in the terminal instead">
+    <div class="mock-top"><i></i><i></i><i></i><span>127.0.0.1:52817 · checkout layout</span></div>
+    <div class="mock-one">
+      <span class="mq">Which checkout layout should we build?</span>
+      <div class="variants">
+        <div class="var rec"><span class="dot-radio"></span><span class="wf"><i class="h"></i><i></i><i class="s"></i><i></i><i class="b"></i></span><b>A · One page</b><span>Recommended. Fewest steps to pay</span></div>
+        <div class="var"><span class="dot-radio"></span><span class="wf"><i class="h"></i><i></i><i class="s"></i><i class="b"></i></span><b>B · Two steps</b><span>Address first, then payment</span></div>
+        <div class="var"><span class="dot-radio"></span><span class="wf split"><span><i class="h"></i><i></i><i class="s"></i><i class="b"></i></span><span><i></i><i></i><i></i></span></span><b>C · Summary sidebar</b><span>Order total always visible</span></div>
+      </div>
+      <div class="nf">Note for Claude (optional)</div>
+      <div class="sendrow"><span class="btn ok">Send to Claude</span><span>or type your answer in the terminal</span></div>
+    </div>
+  </div>
+  <p class="small">Page kinds share one design system: options and variants, design preview, diagram, plan overview, and review findings.</p>
+</section>
+
+<section id="safety">
+  <div class="sh"><div class="eyebrow"><b>6</b> · Safety and autopilot</div><h2>Conservative by default, loosened only by name</h2><p>A project loosens a default only with a settings key. Text in CLAUDE.md can tighten but never loosen, so hooks and skills always agree. Autopilot needs two things: the project allows it (<code>autopilot: allowed</code>, the default) and you typed <code>/fw:autopilot on</code> in this session.</p></div>
+  <div class="tw"><table style="min-width:760px">
+    <thead><tr><th>Default</th><th>Rule</th><th>Under autopilot</th></tr></thead>
+    <tbody>
+      <tr><th>D1</th><td>No commits unless you ask</td><td><span class="chip loose">loosened</span> commits allowed when the message passes the convention and attribution checks; <code>git add -A</code> denied</td></tr>
+      <tr><th>D2</th><td>No push, PR, tracker write, deploy or external write without approval</td><td><span class="chip loose">loosened</span> push the current non-protected branch, open a draft PR after a dedup check. Everything else in this row is denied outright, since nobody is there to answer a prompt</td></tr>
+      <tr><th>D3</th><td>Never checkout, switch, reset --hard, stash, bisect or clean in the main checkout; each writing agent gets a worktree</td><td><span class="chip same">unchanged</span></td></tr>
+      <tr><th>D4</th><td>Tasks sharing files or a local service (database, ports) run one at a time</td><td><span class="chip same">unchanged</span></td></tr>
+      <tr><th>D5</th><td>Judgment calls go to you. Mechanical choices are logged and listed at the end</td><td><span class="chip same">unchanged</span>, parked so independent tasks continue</td></tr>
+      <tr><th>D6</th><td>No silent fallbacks. A missing project setting is asked for, not guessed</td><td><span class="chip same">unchanged</span></td></tr>
+      <tr><th>D7</th><td>Stored shapes change by expand/contract; old data works at every step</td><td><span class="chip same">unchanged</span></td></tr>
+      <tr><th>D8</th><td>Production and any declared read-only system stay read-only</td><td><span class="chip same">unchanged</span></td></tr>
+      <tr><th>D9</th><td>Touching a file outside the approved plan pauses for confirmation</td><td><span class="chip same">unchanged</span></td></tr>
+      <tr><th>D10</th><td>Fix loops stop after 3 rounds with a split proposal</td><td><span class="chip same">unchanged</span></td></tr>
+      <tr><th>D11</th><td>New behaviour ships with tests</td><td><span class="chip same">unchanged</span></td></tr>
+      <tr><th>D12</th><td>Secrets are never printed</td><td><span class="chip same">unchanged</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="tw"><table style="min-width:860px">
+    <thead><tr><th>Guard</th><th>Default</th><th>Interactive</th><th>Autopilot</th></tr></thead>
+    <tbody>
+      <tr><th>G1 git safety</th><td><span class="chip on">on</span></td><td>In the main checkout, switch, reset --hard, stash, clean and rebase ask. Push and merge ask. Plain <code>--force</code> is denied. <code>--force-with-lease</code> on your own non-protected PR branch asks</td><td>Main-checkout operations, protected-branch pushes, plain force and merge are denied. Pushing the current non-protected branch is allowed. <code>--force-with-lease</code> is allowed only when <code>rebase.push: autopilot</code> and only for your own branches in the current stack</td></tr>
+      <tr><th>G2 PR create</th><td><span class="chip on">on</span></td><td>Non-draft or duplicate PRs denied; otherwise ask</td><td>Draft allowed after the dedup check. Non-draft and <code>gh pr ready</code> denied</td></tr>
+      <tr><th>G3 review posting</th><td><span class="chip on">on</span></td><td>Self-approval and untagged comments denied; posting asks. A Skill call to <code>code-review</code> whose raw input contains <code>--comment</code> asks; <code>--fix</code> in the main checkout asks</td><td>All posting denied, including <code>code-review --comment</code></td></tr>
+      <tr><th>G4 untrusted text</th><td><span class="chip on">on</span></td><td colspan="2">Shell-interpolated comment bodies denied; a body file is required</td></tr>
+      <tr><th>G5 commit</th><td><span class="chip on">on</span></td><td>Commit asks; message checked against the convention; attribution trailers denied; <code>git add -A</code> asks</td><td>Commit allowed when the checks pass; <code>git add -A</code> and failing messages denied</td></tr>
+      <tr><th>G6 secrets</th><td><span class="chip on">on</span></td><td colspan="2">Staged changes scanned on commit and push (gitleaks when present, redacted grep fallback); never-commit paths denied</td></tr>
+      <tr><th>G14 tracker and chat writes</th><td><span class="chip on">on</span></td><td>Ask before write calls from tracker or chat MCP servers</td><td>Denied</td></tr>
+      <tr><th>G15 deploy and publish</th><td><span class="chip on">on</span></td><td>Ask on workflow runs, releases, publishes, terraform, kubectl, helm and pushes to deploy branches</td><td>Denied</td></tr>
+      <tr><th>G16 mode state</th><td><span class="chip on">on</span></td><td colspan="2">Any tool call that writes to the mode and autopilot state directory is denied</td></tr>
+      <tr><th>G17 gh stack</th><td><span class="chip on">on</span></td><td><code>merge</code> denied: in a non-interactive session it merges the whole stack without prompting, so you run it yourself. <code>rebase</code>, <code>sync</code> and navigation are denied in the main checkout and allowed in the stack worktree. <code>sync</code> and <code>push</code> ask. <code>submit</code> asks and must use <code>--auto</code> without <code>--open</code>. <code>link</code> and <code>unstack</code> ask. <code>modify</code> needs a terminal and is denied</td><td><code>merge</code>, <code>link</code>, <code>unstack</code>, <code>modify</code> and <code>submit --open</code> denied. <code>sync</code> and <code>push</code> allowed when <code>rebase.push: autopilot</code>. <code>submit --auto</code> allowed after the dedup check</td></tr>
+      <tr><th>G7 floor guard</th><td><span class="chip cfg">opt-in</span></td><td>Advisory at the end of a turn: new suppressions, skipped or deleted tests, removed asserts, empty catch, debug prints</td><td>On, and blocks ending the turn until resolved</td></tr>
+      <tr><th>G13 protected targets</th><td><span class="chip cfg">when set</span></td><td colspan="2">Copies to and mutating SQL against hosts, DSNs or cloud profiles the project lists are denied</td></tr>
+      <tr><th>G9 to G12</th><td><span class="chip skill">by skills</span></td><td colspan="2">Claim checks, fail-then-pass probe, verdict validity by patch-id, CI flake classes. Scripts that skills run on demand</td></tr>
+    </tbody>
+  </table></div>
+  <p class="small">Hooks use bash, POSIX tools and git; gh, jq and gitleaks are used when present. A hook that cannot parse its input asks instead of allowing (denies under autopilot). Plugin and project hooks run together; when they disagree, Claude Code applies the strictest: deny, then ask, then allow. An edit-time typecheck guard was dropped: projects keep their own, and it must exit 2 for Claude to see failures. The Skill tool's input fields are not documented, so G3 matches <code>--comment</code> in the raw input text. That is best effort; the skill's own rule never to pass <code>--comment</code>, and G3's check on <code>gh</code> posting commands, back it up. The M3 spike tests all three.</p>
+</section>
+
+<section id="profile">
+  <div class="sh"><div class="eyebrow"><b>7</b> · Project profile</div><h2>How each project plugs in</h2><p>A flat <code>key: value</code> file, readable by both skills and bash hooks. Anything the repo can show (base branch, test commands, commit style) is detected; the file only overrides it. <code>/fw:help setup</code> proposes the rest and writes the file only after you confirm.</p></div>
+  <div class="panel"><div class="eyebrow">Three files, later ones winning</div>
+    <ul class="plain" style="font-size:13.5px">
+      <li><code>~/.claude/fw.yml</code>: your defaults across all projects, and <code>fw_repo</code>, the path to your plugin checkout for framework fixes.</li>
+      <li><code>.claude/fw.yml</code>: optional and shared. Committed only if a team wants it.</li>
+      <li><code>.claude/fw.local.yml</code>: <b>the default</b>. Kept untracked through <code>.git/info/exclude</code>, so the framework never adds a file to a team's repo.</li>
+    </ul></div>
+  <div class="two">
+    <div class="panel"><div class="eyebrow">Keys, grouped</div>
+      <ul class="plain" style="font-size:13.5px">
+        <li><b>Repo:</b> <code>base_branch</code>, <code>worktree.setup</code>, <code>shared_services</code>, <code>work_dir</code></li>
+        <li><b>Checks:</b> <code>test.focused</code>, <code>test.full</code>, <code>typecheck</code>, <code>lint</code>, <code>verify.fast</code>, <code>verify.browser</code></li>
+        <li><b>Git:</b> <code>commit.convention</code>, <code>commit.policy</code>, <code>branch.pattern</code>, <code>push.policy</code>, <code>pr.policy</code>, <code>pr.template</code></li>
+        <li><b>Stacks:</b> <code>stack.tool</code> (<code>gh-stack</code>, <code>git</code> or <code>none</code>; detected when unset), <code>rebase.push</code> (<code>ask</code> by default, <code>autopilot</code> to allow lease pushes under autopilot)</li>
+        <li><b>Review:</b> <code>review.taxonomy</code>, <code>review.rounds</code>, <code>review.rules</code>, <code>review.sensitive_paths</code>, <code>security.rules</code></li>
+        <li><b>Built-in review:</b> <code>review.builtin</code> (<code>on</code> by default), <code>review.builtin.effort</code> (<code>high</code>), <code>review.builtin.delta_effort</code> (<code>medium</code>), <code>review.builtin.max_findings</code> (<code>15</code>), <code>review.builtin.security</code> (<code>off</code>)</li>
+        <li><b>Work tracking:</b> <code>tracker</code>, <code>tracker.first</code>, <code>spec.source</code></li>
+        <li><b>Risk:</b> <code>autopilot</code>, <code>allow</code>, <code>scope_threshold</code>, <code>protected_targets</code>, <code>deploy.envs</code>, <code>deploy.proof</code>, <code>never_commit</code></li>
+        <li><b>Learning:</b> <code>lessons</code> (where this project's lessons go), <code>rule_bar</code></li>
+        <li><b>Overrides:</b> <code>overrides.&lt;job&gt;</code> names a project skill that replaces a framework skill</li>
+        <li><b>Stack:</b> <code>stack</code> picks reference files such as <code>stacks/typescript.md</code> or <code>stacks/go.md</code></li>
+      </ul></div>
+    <div class="panel"><div class="eyebrow">Example: CDS, in .claude/fw.local.yml</div>
+<pre style="margin:0;font-family:var(--font-mono);font-size:12px;line-height:1.6;overflow-x:auto;color:var(--ink-2)">tracker: linear
+tracker.first: true
+commit.convention: "^CDS-[0-9]+: "
+pr.policy: draft-after-approval
+review.taxonomy: Bug,Suggestion,Nit
+review.rounds: fanout-first-then-single
+scope_threshold: 4
+verify.browser: node scripts/cds-session.mjs
+protected_targets: $SSH_HOST
+overrides.pr-review: pr-review
+overrides.commit: commit
+lessons: .claude/lessons-learned.md
+stack: typescript,nestjs,react</pre>
+      <p class="small">Base branch and test commands are detected, so they are not listed. CDS keeps its own <code>pr-review</code> and <code>commit</code> skills; the framework defers to them and its hooks still apply. The file is untracked, so CDS's repo does not change.</p></div>
+  </div>
+  <p class="note">Working files (specs, plans, ledgers, visual pages) default to <code>$(git rev-parse --git-common-dir)/fw/</code>. Every worktree of the repo shares that directory, git never tracks it, and no <code>.gitignore</code> edit is needed. A project can set <code>work_dir: docs/specs</code> to keep specs in the repo instead.</p>
+</section>
+
+<section id="quality">
+  <div class="sh"><div class="eyebrow"><b>8</b> · Quality and learning</div><h2>The framework tests itself</h2></div>
+  <div class="two">
+    <div class="panel"><h3>In the plugin repo's CI</h3>
+      <ul class="plain">
+        <li><b>Lint on every PR.</b> 14 rules: Claude Code frontmatter keys, description limits per tier, kernel routes that point at real files, size budgets, hook output shape, <code>claude plugin validate --strict</code>.</li>
+        <li><b>Routing evals on every PR.</b> Adapted from addy: each skill has prompts that should and should not trigger it, and your other installed skills act as distractors. The pass floor only rises.</li>
+        <li><b>Behavioral evals, nightly or on demand.</b> <code>claude plugin eval</code> cases with the model pinned, superpowers-style pressure tests, and a kernel-adherence grader that checks the first todo list matches the route's steps.</li>
+      </ul></div>
+    <div class="panel"><h3>The learning loop</h3>
+      <ul class="plain">
+        <li>A correction or repeat in any project routes to <code>/fw:retro</code> or <code>/fw:correct</code>.</li>
+        <li>Project-specific lessons land in that project's rules, under its own bar for adding rules.</li>
+        <li>Framework lessons become a change to a skill or a guard in the plugin repo, shipped with an eval that fails before and passes after.</li>
+        <li>Prefer a check to more prose: architecture, then types, lint, tests, docs. Once a check enforces something, delete the prose rule.</li>
+        <li>Rejected changes go in an out-of-scope ledger so they are not proposed again.</li>
+      </ul></div>
+  </div>
+</section>
+
+<section id="build">
+  <div class="sh"><div class="eyebrow"><b>9</b> · Build order</div><h2>Usable after M2, complete after M6</h2><p>Each milestone ends with something you can run in a real project. Superpowers stays installed until M2 passes a pilot.</p></div>
+  <div class="ms">
+    <div class="m"><span class="id">M0</span><div><b>Repo and test setup</b><p>plugin.json, marketplace.json, LICENSE and NOTICE crediting the five sources, skill lint and routing eval scripts adapted from addy, CI.</p></div><span class="hrs">4 to 6 h</span></div>
+    <div class="m"><span class="id">M1</span><div><b>Kernel, profile, modes state, guards</b><p>SessionStart, SubagentStart and UserPromptSubmit hooks; <code>mode</code> and <code>autopilot</code>; terse voice; guards G1 to G6 and G14 to G16; settings files and <code>help setup</code>.</p></div><span class="hrs">10 to 14 h</span></div>
+    <div class="m usable"><span class="id">M2</span><div><b>Core loop</b><p>define, plan, execute-plan, parallel-work, implement, diagnose, prove-it, self-review, commit, finish-branch, recall. Pilot on two projects, then switch superpowers off.</p></div><span class="hrs">16 to 22 h</span></div>
+    <div class="m"><span class="id">M3</span><div><b>Review loop and stacks</b><p>pr-review with its four lanes (built-in code-review plus three agents) and the merge-and-verify step, take-feedback with all five modes, the gh-stack and git stack providers, guard G17, no-comments, security references, scripts G7 and G9 to G12. Starts with a one-hour spike: run <code>gh stack rebase</code> and <code>sync</code> inside a linked worktree on a throwaway repo, to confirm the one-stack-one-worktree rule holds.</p></div><span class="hrs">14 to 20 h</span></div>
+    <div class="m"><span class="id">M4</span><div><b>Visual pages</b><p>Page renderer and design system, option and variant components, the on-demand answer server, the background wait that resumes Claude on Send, terminal answers, static fallback, auto thresholds.</p></div><span class="hrs">10 to 14 h</span></div>
+    <div class="m"><span class="id">M5</span><div><b>Specialists</b><p>architect, explain, domain-model, prototype, perf, refactor, expand-contract, build-ui, verify-app, ship-check, triage, stack references.</p></div><span class="hrs">14 to 20 h</span></div>
+    <div class="m"><span class="id">M6</span><div><b>Learning and evals</b><p>retro, correct, decision-log, skill-eval, behavioral eval suite, nightly runs.</p></div><span class="hrs">10 to 14 h</span></div>
+  </div>
+  <p class="small">About 78 to 110 hours in total. These are estimates from the four category maps, not measurements.</p>
+</section>
+
+<section id="decisions">
+  <div class="sh"><div class="eyebrow"><b>10</b> · Decisions</div><h2>Five calls for you, each with a recommendation</h2></div>
+  <div class="decisions">
+    <div class="dec"><span class="q">1. The framework's name</span><span class="r">It becomes the slash prefix (<code>/name:define</code>), the profile file name and the repo name. Short and easy to type works best. <b>No recommendation; your call.</b></span></div>
+    <div class="dec"><span class="q">2. Terse voice: own mode or keep the caveman plugin</span><span class="r"><b>Recommended: own <code>terse</code> mode, then uninstall caveman.</b> Two plugins tracking mode state would fight; caveman would keep injecting after you switch to html.</span></div>
+    <div class="dec"><span class="q">3. Where working files live</span><span class="r"><b>Recommended: the git common directory</b>, shared by all worktrees, never tracked. Alternatives: a <code>.fw/</code> folder excluded through <code>.git/info/exclude</code>, or <code>docs/specs</code> committed when you ask.</span></div>
+    <div class="dec"><span class="q">4. Repo visibility</span><span class="r"><b>Recommended: private GitHub repo</b> with its own marketplace file, so any machine installs it with two commands. Public later is possible; the NOTICE file already covers attribution.</span></div>
+    <div class="dec"><span class="q">5. Scope of the first build</span><span class="r"><b>Recommended: M0 to M2 first</b>, pilot it, then decide on M3 to M6. M2 already replaces superpowers.</span></div>
+  </div>
+</section>
+</main>
+</div>
+
+</body></html>

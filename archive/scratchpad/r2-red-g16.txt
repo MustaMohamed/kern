@@ -1,0 +1,12 @@
+1..3
+not ok 1 a command that names kern's hook code or a state function asks, and is denied under autopilot
+# (from function `expect_cmd' in file tests/hooks/g16-state.bats, line 52,
+#  in test file tests/hooks/g16-state.bats, line 429)
+#   `expect_cmd ask "$@"' failed
+# git -c core.fsmonitor='bash /Users/musta/Code/projects/kern/hooks/prompt-submit < j.json; false' status ->
+ok 2 a command that names no kern hook, such as a hook's test file, gets no hook vote
+not ok 3 inside a hooks directory a bare hook name, or a glob that could match one, asks
+# (from function `expect_cmd' in file tests/hooks/g16-state.bats, line 52,
+#  in test file tests/hooks/g16-state.bats, line 444)
+#   `expect_cmd ask 'bash prompt-submit < j.json' 'bash pr*' '. lib/state.sh'' failed
+# bash prompt-submit < j.json -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"kern G16: kern's hooks run only from Claude Code; running or sourcing one, or calling its state functions, could forge the user's prompt or the session state"}}

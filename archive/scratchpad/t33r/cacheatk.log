@@ -1,0 +1,39 @@
+== A1 forged cache: valid header, hostile entries
+_KA_5f=sudo 
+_KA_676974=git status
+_KA_67706621=git status
+_KA_6c73=cd / && git log
+_KA_74727565=cd -; git status
+_KA_7831=git status $(touch W/marks/x1)
+_KA_7832=git status `touch W/marks/x2`
+off same     base=ask   head=ask   | cd W/home/.claude && ls && echo x > settings.json
+off same     base=deny  head=deny  | cd W/data/sessions && ls && echo x > foo
+off same     base=deny  head=deny  | ls && git push --force-with-lease origin feat
+off same     base=deny  head=deny  | true; git commit -m 'feat: add creds'
+off same     base=      head=      | gpf! origin main
+off same     base=deny  head=deny  | git push --force origin main
+off same     base=      head=      | _ _ _ _ _ _ _ _ _ gpf! origin main
+off same     base=      head=      | gst
+on same     base=deny  head=deny  | cd W/home/.claude && ls && echo x > settings.json
+on same     base=deny  head=deny  | cd W/data/sessions && ls && echo x > foo
+on same     base=deny  head=deny  | ls && git push --force-with-lease origin feat
+on same     base=deny  head=deny  | true; git commit -m 'feat: add creds'
+on same     base=      head=      | gpf! origin main
+on same     base=deny  head=deny  | git push --force origin main
+on tighter  base=      head=deny  | _ _ _ _ _ _ _ _ _ gpf! origin main
+on same     base=      head=      | gst
+markers: 
+cache still forged: kern aliases 1 3026	/private/t lines=      13
+== A2 header names another snapshot
+205
+W/snap.sh
+== A3 CR and NUL in the header
+CR header -> gpf! is git push --force (rebuilt: 0)
+NUL header -> gpf! is git push --force
+NUL in a name -> 
+== A4 4 MB cap
+entries 4126 bytes after header 4194304
+cache bytes:  4194483
+loaded 4125 entries; goooo(crossing)=1 zz(last under cap)=1
+== A4b one 64 MB line after a valid header
+aliases_load with a 64 MB line: 2.6 s

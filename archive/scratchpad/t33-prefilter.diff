@@ -1,0 +1,129 @@
+diff --color -ru --label a/hooks --label b/hooks /Users/musta/Code/projects/kern/hooks/guards/g02-pr.sh pf/hooks/guards/g02-pr.sh
+--- a/hooks
++++ b/hooks
+@@ -35,7 +35,7 @@
+   local cmd sub i=0
+   cmd=$(ti_get command) || return 0
+   # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
+-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   _gh_load "$cmd"
+   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
+     sub=$(gh_sub "${_GH_RECS[$i]}") || sub=""
+diff --color -ru --label a/hooks --label b/hooks /Users/musta/Code/projects/kern/hooks/guards/g03-review.sh pf/hooks/guards/g03-review.sh
+--- a/hooks
++++ b/hooks
+@@ -24,7 +24,7 @@
+   local cmd i=0
+   cmd=$(ti_get command) || return 0
+   # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
+-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   _gh_load "$cmd"
+   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
+     case "$(gh_sub "${_GH_RECS[$i]}")" in
+diff --color -ru --label a/hooks --label b/hooks /Users/musta/Code/projects/kern/hooks/guards/g04-untrusted.sh pf/hooks/guards/g04-untrusted.sh
+--- a/hooks
++++ b/hooks
+@@ -7,7 +7,7 @@
+   local cmd seg sub words w
+   cmd=$(ti_get command) || return 0
+   # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
+-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   while IFS= read -r seg; do
+     sub=$(gh_sub "$seg") || continue
+     # gh's aliases (pr new, issue new, release new) read as the commands they name (g02-pr.sh).
+diff --color -ru --label a/hooks --label b/hooks /Users/musta/Code/projects/kern/hooks/guards/g14-tracker.sh pf/hooks/guards/g14-tracker.sh
+--- a/hooks
++++ b/hooks
+@@ -195,7 +195,7 @@
+ _g14_gh() {
+   local cmd sub i=0
+   cmd=$(ti_get command) || return 0
+-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   _gh_load "$cmd"
+   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
+     sub=$(gh_sub "${_GH_RECS[$i]}")
+diff --color -ru --label a/hooks --label b/hooks /Users/musta/Code/projects/kern/hooks/guards/g15-deploy.sh pf/hooks/guards/g15-deploy.sh
+--- a/hooks
++++ b/hooks
+@@ -185,7 +185,7 @@
+   [ "$TOOL" = Bash ] || return 0
+   local cmd out line seen=0 got=0 envs="" parsed dir rest sub t
+   cmd=$(ti_get command) || return 0
+-  _g15_named "$cmd" || return 0
++  _g15_named "$cmd ${KERN_ALIAS_TEXT-}" || return 0
+   # A failed parse or judge leaves no `.`, so G15 asks.
+   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
+   out=$(set -o pipefail; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK") || out=""
+diff --color -ru --label a/hooks --label b/hooks /Users/musta/Code/projects/kern/hooks/lib/aliases.sh pf/hooks/lib/aliases.sh
+--- a/hooks
++++ b/hooks
+@@ -137,6 +137,19 @@
+   return 0
+ }
+ 
++# alias_text CMD: the expansion of each record of CMD (git_words, from gitctx.sh) whose head word is an
++# alias aliases_load set, one per line. A guard that skips a command whose text lacks a name it reads
++# (gh, push) reads this text too, so an alias such as prc='gh pr create' is not skipped.
++alias_text() {
++  local rec
++  [ -n "${KERN_ALIASES-}" ] || return 0
++  while IFS= read -r rec; do
++    if alias_expand "$rec"; then printf '%s\n' "$ALIAS_EXP"; fi
++  done <<EOF
++$(git_words "$1")
++EOF
++}
++
+ # alias_expand SEG: when the head word of the simple command SEG is an alias aliases_load set, sets
+ # ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. As zsh does, the head
+ # word is the first word after unquoted NAME=value words, redirections (with a target in the next word
+diff --color -ru --label a/hooks --label b/hooks /Users/musta/Code/projects/kern/hooks/pre-tool-use pf/hooks/pre-tool-use
+--- a/hooks
++++ b/hooks
+@@ -57,7 +57,7 @@
+ need decide.sh vote fail_closed emit_decision
+ need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words git_sub cmd_head in_main_checkout
+ need gitctx.sh current_branch base_branch_name branch_protected push_targets with_timeout gh_sub word_value word_has
+-need aliases.sh alias_snapshot aliases_load alias_expand
++need aliases.sh alias_snapshot aliases_load alias_text alias_expand
+ 
+ # unparseable WHAT: fail closed on input the JSON reader could not parse, and stop.
+ unparseable() {
+@@ -95,6 +95,12 @@
+ kern_enabled || exit 0
+ # The shell's aliases that run git or gh, so git_words judges `gp` as `git push` too.
+ [ "$TOOL" = Bash ] && aliases_load
++# The expansions in this command, which G2, G3, G4, G14 and G15 read with its text before they parse it.
++# shellcheck disable=SC2034 # read by the guard files
++{
++  KERN_ALIAS_TEXT=""
++  [ -n "${KERN_ALIASES-}" ] && KERN_ALIAS_TEXT=$(alias_text "$(ti_get command 2>/dev/null)")
++}
+ 
+ # The guards kern ships, so a missing guard file fails closed. A guard file that does not source to
+ # the end fails closed too, and its guard does not run.
+--- a/tests/hooks/aliases.bats
++++ b/tests/hooks/aliases.bats
+@@ -274,4 +274,18 @@
+ @test "a _KA_ variable from the environment is never an alias" {
+   run env _KA_7878='git push --force' bash "$(kern_root)/hooks/pre-tool-use" <<<"$(bash_payload "xx origin main")"
+   [ "$(decision_of "$output")" = none ]
++}
++
++@test "a gh alias whose name lacks gh, or a push alias, is not skipped by a guard that reads the command text first" {
++  snap "alias -- prc='gh pr create'" "alias -- rel='gh release create'" "alias -- isc='gh issue create'" \
++    "alias -- prv='gh pr review'" "alias -- up='git push'"
++  mkdir -p "$R/.claude"
++  printf 'deploy.envs: production\n' >"$R/.claude/kern.local.yml"
++  expect deny "prc --title t --body b"
++  same "prc --title t --body b" "gh pr create --title t --body b"
++  same "rel v1" "gh release create v1"
++  same "isc --title t --body-file b.md" "gh issue create --title t --body-file b.md"
++  same "prv 1 --approve" "gh pr review 1 --approve"
++  same "up origin production" "git push origin production"
++  expect ask "rel v1" "isc --title t --body-file b.md"
+ }

@@ -1,0 +1,4 @@
+i2 -> fin: same 1860, tighter 36, looser-eq-unmod 0, LOOSER 0, ERROR 0, unmatched 0
+  tighter         x12   none->ask   | cd @HC@ && cd agents && cd .. && sed -i '' s/a/b/ settings.json
+  tighter         x12   none->ask   | cd @HC@/agents && cd .. && echo {} > settings.json
+  tighter         x12   none->ask   | cd .claude/agents && cd .. && cp /tmp/x .

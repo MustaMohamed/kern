@@ -1,0 +1,91 @@
+noglob eval 'git push --force origin main'
+nocorrect eval 'git push --force origin main'
+repeat 1 eval 'git push --force origin main'
+coproc eval 'git push --force origin main'
+noglob sh <<EOF@NL@git push --force origin main@NL@EOF
+nocorrect bash <<EOF@NL@git push --force origin main@NL@EOF
+repeat -1+2 git push --force origin main
+repeat -1+2 eval 'git push --force origin main'
+repeat 1 -- git push --force origin main
+noglob nocorrect eval 'git push --force origin main'
+nocorrect noglob eval 'git push --force origin main'
+'noglob' eval 'git push --force origin main'
+\noglob eval 'git push --force origin main'
+noglob eval "$X"
+repeat 2 eval "$X"
+noglob zsh -c 'echo hi'
+noglob bash -c 'git status'
+noglob sh -c "$X"
+coproc zsh
+noglob source /dev/stdin
+noglob git push origin feat
+noglob git push -u origin feat
+noglob git commit -m "feat: x"
+noglob git commit -m "x"
+noglob gh pr create --title t --body b
+noglob gh pr create --draft --title t
+repeat 1 gh pr merge 1
+noglob npm publish
+noglob semantic-release
+noglob git push origin production
+noglob psql -h prod-db.internal -c 'DELETE FROM x'
+noglob env -S 'psql -h prod-db.internal -c DELETE'
+noglob cat @SD@/test-session.state
+noglob echo x > @SD@/test-session.state
+noglob rm @SD@/test-session.state
+NOGLOB cat @SD@/test-session.state
+noglob cat @HC@/settings.json
+noglob ls @HC@
+noglob sed -i '' s/a/b/ @HC@/settings.json
+noglob tee docs/plans/x.md
+repeat 1 sed -i '' 's/draft/approved/' docs/plans/x.md
+noglob cd . && git push --force-with-lease origin feat
+noglob cd . && git commit -m "feat: add creds"
+noglob cd @HC@ && sed -i '' s/a/b/ settings.json
+cd @HC@ && noglob cd "$X" && sed -i '' s/a/b/ settings.json
+cd @HC@ && coproc cd /tmp; sed -i '' s/a/b/ settings.json
+cd @HC@ && repeat 0 cd /tmp; sed -i '' s/a/b/ settings.json
+cd @HC@ && 'coproc' cd /tmp; sed -i '' s/a/b/ settings.json
+cd @SD@ && coproc cd /tmp; echo x > foo
+cd @SD@ && repeat 0 cd /tmp; echo x > foo
+cd @SD@ && noglob cd /tmp; echo x > foo
+cd @SD@ && nocorrect cd /tmp && echo x > foo
+(cd .); git commit -m x
+(cd .); git commit -m "feat: add creds"
+cd . && git commit -m "feat: add creds"
+cd src && git commit -m "feat: add creds"
+pushd src && git commit -m "feat: add creds"
+GIT_INDEX_FILE=.git/index git commit -m "feat: add creds"
+env -C src git commit -m "feat: add creds"
+git --git-dir=.git commit -m "feat: add creds"
+cd /tmp && git commit -m "feat: add creds"
+cd . && git push origin feat
+cd . && git push --force-with-lease origin feat
+cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+cd @HC@ && cd $X && echo {} > settings.json
+cd @HC@ && cd - && echo {} > settings.json
+cd @HC@ && cd && echo {} > settings.json
+cd @HC@ && pushd && echo {} > settings.json
+cd @HC@ && cd +1 && echo {} > settings.json
+cd @HC@ && cd -- - && echo {} > settings.json
+cd @HC@ && cd ~/.c* && echo {} > settings.json
+cd @HC@ && cd ~me && echo {} > settings.json
+cd @HC@ && cd a b && echo {} > settings.json
+cd @HC@ && cd `pwd` && echo {} > settings.json
+cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+cd @HC@ && cd /tmp && echo {} > settings.json
+cd @HC@ && cd ~ && echo {} > settings.json
+cd @HC@ && cd .. && echo {} > settings.json
+cd @HC@ && cd . && echo {} > settings.json
+cd @HC@ && cd ../.claude && echo {} > settings.json
+cd .claude && ls && cd .. && git add .
+cd .claude && cd "$X" && cp /tmp/x .
+cd @SD@ && cd "$(pwd)" && echo x > foo
+cd @SD@ && cd - && echo x > foo
+cd @SD@ && cd . && echo x > foo
+cd @SD@ && cd sub && echo x > foo
+cd @SD@ && cd .. && echo x > foo
+cd @SD@ && cd /tmp && echo x > foo
+cd @SD@ && cd $X && cd sub && echo x > foo
+cd "$(git rev-parse --show-toplevel)" && sed -i '' s/a/b/ settings.json
+cd $X && echo x > foo

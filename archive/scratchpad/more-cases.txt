@@ -1,0 +1,27 @@
+git log --oneline -5
+git diff --text
+git grep -n foo -- '*.sh'
+git show HEAD:a.txt
+rg -n --glob '*.ts' foo
+find . -name '*.txt' -type f
+sort -t, -k2 a.txt
+cat<a.txt
+wc -l < a.txt
+sed -n 1p a.txt\ -i
+file -c a.txt
+cat a.txt >/dev/null 2>&1
+cat a.txt 1>&2
+sed -n 1p a.txt # -i
+find . -exe\c rm x ;
+git grep -iO foo
+git grep -O foo
+sort -o/dev/null a.txt
+ls >&-
+git log $(echo -c)
+git log `echo -c`
+sed -n -e 1p a.txt
+sed -n '1,$p' a.txt
+sed -n 1p
+sed -n
+cat a.txt >| x
+cat a.txt <> x

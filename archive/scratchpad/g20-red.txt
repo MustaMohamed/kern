@@ -1,0 +1,54 @@
+1..20
+ok 1 a quote of the user's last message approves
+ok 2 a quote with other spacing and case still matches the same line
+not ok 3 one whole line of a longer message approves; part of a line does not
+# (in test file tests/hooks/g20.bats, line 47)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 4 an invented quote is denied
+# (in test file tests/hooks/g20.bats, line 53)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 5 sounds good and whatever you think are not a yes
+# (in test file tests/hooks/g20.bats, line 60)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 6 a quote from an earlier message, or from a wrapped one, is denied
+# (in test file tests/hooks/g20.bats, line 71)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 7 a draft changed after the user's message is denied
+# (in test file tests/hooks/g20.bats, line 81)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 8 a missing approved: quote is denied
+# (in test file tests/hooks/g20.bats, line 88)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 9 under autopilot even a real quote is denied
+# (in test file tests/hooks/g20.bats, line 96)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+ok 10 other files and draft edits get no G20 vote
+not ok 11 a Bash write of approved into a spec is denied; a read is not
+# (in test file tests/hooks/g20.bats, line 110)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+ok 12 a Write of a new plan with a real quote approves
+not ok 13 an Edit of draft to approved is checked though new_string has no status line
+# (in test file tests/hooks/g20.bats, line 136)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 14 an Edit that changes the approved: line of an approved file is checked
+# (in test file tests/hooks/g20.bats, line 144)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 15 replace_all is honoured when the edit is applied
+# (in test file tests/hooks/g20.bats, line 155)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+ok 16 an approved file edited below its frontmatter gets no vote
+not ok 17 a Markdown file outside the work dir is checked too
+# (in test file tests/hooks/g20.bats, line 168)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 18 gawk -i inplace, and cp or mv of an approved file onto a spec, are denied
+# (in test file tests/hooks/g20.bats, line 175)
+#   `[ "$(decision_of "$output")" = deny ]' failed
+not ok 19 prompt_hashes folds case, blanks and a final . or !, one hash per line
+# (in test file tests/hooks/g20.bats, line 188)
+#   `[ "$(printf 'one\ntwo\n' | prompt_hashes | wc -w | tr -d ' ')" -eq 2 ]' failed
+# /Users/musta/Code/projects/kern/tests/hooks/g20.bats: line 187: prompt_hashes: command not found
+# /Users/musta/Code/projects/kern/tests/hooks/g20.bats: line 187: prompt_hashes: command not found
+# /Users/musta/Code/projects/kern/tests/hooks/g20.bats: line 188: prompt_hashes: command not found
+not ok 20 the dispatcher lists g20 among the guards it expects
+# (in test file tests/hooks/g20.bats, line 192)
+#   `grep -q '^KERN_GUARD_IDS=".* g20[ "]' "$K/hooks/pre-tool-use"' failed

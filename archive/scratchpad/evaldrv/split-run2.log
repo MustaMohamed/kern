@@ -1,0 +1,14 @@
+{
+ "final": "I stopped at step 4 because `npm test` fails, so nothing was committed, pushed or opened as a PR.\n\n- **Work location:** the main checkout on `feat/many`, with no linked worktree or ledger. The base is fresh, 0 behind and 0 ahead of `origin/main`.\n- **Test result:** `npm test` ran 1 test, with 0 passing and 1 failing. `sum.test.js:6` expects `sum(2, 3)` to equal 5 and gets -1.\n- **Cause:** `src/sum.js:1` is `export const sum = (a, b) => a - b;`, which subtracts. That file is tracked in the initial commit and isn't part of your changes. Your branch only adds the untracked `src/v1.js` through `src/v9.js`, so it inherited the failure.\n\nI haven't changed anything. Changing `-` to `+` in `src/sum.js` should fix it, but I haven't made that edit.\n\n**Decision for you:**\n1. Let me fix `sum.js` and rerun finish-branch. I recommend this, but the fix would land in the same commit as the v1–v9 files unless you want it separate.\n2. Skip the fix and finish anyway. I wouldn't, because the proof step requires a green run.\n\nA later step will also flag the size gate. Nine new files is above your `scope_threshold` of 4, so it will propose a split.",
+ "turns": 11,
+ "subtype": "success",
+ "commands": [
+  "pwd && git worktree list && bash /Users/musta/Code/projects/kern/scripts/kern-dir ledgers; git rev-parse --path-format=absolute --git-dir --git-common-dir; git rev-parse --abbrev-ref HEAD; git remote get-url origin; for k in base_branch branch.pattern test.full branch.protected push.policy pr.policy pr.dedup pr.max_lines; do echo \"$k: $(bash /Users/musta/Code/projects/kern/scripts/kern-get $k 2>&1) [$?]\"; done",
+  "for k in base_branch branch.pattern test.full pr.template commit.convention tracker; do echo \"$k: $(bash /Users/musta/Code/projects/kern/scripts/kern-detect $k 2>&1) [$?]\"; done; git fetch origin main 2>&1; git rev-list --left-right --count origin/main...HEAD; ls; cat package.json 2>/dev/null | head -30; wc -l src/v*.js",
+  "npm test 2>&1 | tail -30; echo \"exit ${PIPESTATUS[0]}\"; bash /Users/musta/Code/projects/kern/scripts/wt-snap \"$PWD\"",
+  "cat src/sum.js test/sum.test.js; git status --short | head"
+ ]
+}
+PASS finish-split-nine-files
+--case run: no snapshot written; a full run writes it
+exit=0

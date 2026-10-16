@@ -1,0 +1,3 @@
+file a.txt
+file -b a.txt
+rg -n foo src

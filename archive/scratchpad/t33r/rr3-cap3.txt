@@ -1,0 +1,2 @@
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; echo x > out.txt; ls notes.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; echo x > /tmp/out.txt; ls notes.md

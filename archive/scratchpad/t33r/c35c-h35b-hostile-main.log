@@ -1,0 +1,206 @@
+hostile main off same     base=deny  head=deny  | git push --force origin main
+hostile main off same     base=ask   head=ask   | git push origin main
+hostile main off same     base=deny  head=deny  | git push --force-with-lease origin feat
+hostile main off same     base=      head=      | gpf! origin main
+hostile main off same     base=      head=      | gp origin main
+hostile main off same     base=      head=      | g push --force origin main
+hostile main off same     base=      head=      | _ gpf! origin main
+hostile main off same     base=      head=      | _ X=1 gpf! origin main
+hostile main off same     base=      head=      | _ 'gpf!' origin main
+hostile main off same     base=deny  head=deny  | sudo git push --force origin main
+hostile main off same     base=deny  head=deny  | grt && git push --force origin main
+hostile main off same     base=ask   head=ask   | grt && git push origin feat
+hostile main off same     base=deny  head=deny  | grt && git push --force-with-lease origin feat
+hostile main off same     base=ask   head=ask   | grt && git commit -m "feat: add creds"
+hostile main off same     base=ask   head=ask   | git commit -m "feat: add creds"
+hostile main off same     base=      head=      | cd /tmp && gpf! origin main
+hostile main off same     base=      head=      | echo $(gpf! origin main)
+hostile main off same     base=      head=      | eval 'gpf! origin main'
+hostile main off same     base=      head=      | eval "gp origin main"
+hostile main off same     base=      head=      | bash -c 'gpf! origin main'
+hostile main off same     base=      head=      | gst | cat
+hostile main off same     base=deny  head=deny  | gst && git push --force origin main
+hostile main off same     base=ask   head=ask   | gst || git push origin main
+hostile main off same     base=deny  head=deny  | gst // git push --force origin main
+hostile main off same     base=      head=      | cat <<EOT // gpf! origin main // EOT
+hostile main off same     base=      head=      | cat <<EOT | sh // gpf! origin main // EOT
+hostile main off same     base=deny  head=deny  | gh pr create --title t --body b
+hostile main off same     base=ask   head=ask   | gh pr merge 1 --admin
+hostile main off same     base=ask   head=ask   | git commit -m "x" --no-verify
+hostile main off same     base=ask   head=ask   | git reset --hard HEAD~1
+hostile main off same     base=      head=      | grhh HEAD~1
+hostile main off same     base=ask   head=ask   | git clean -fdx
+hostile main off same     base=      head=      | gclean
+hostile main off same     base=ask   head=ask   | git stash clear
+hostile main off same     base=      head=      | gstc
+hostile main off same     base=ask   head=ask   | git branch -D feat
+hostile main off same     base=      head=      | gbD feat
+hostile main off same     base=ask   head=ask   | git checkout -- .
+hostile main off same     base=      head=      | gco -- .
+hostile main off same     base=ask   head=ask   | git add -A && git commit -m "feat: x"
+hostile main off same     base=      head=      | gaa && gcmsg "feat: x"
+hostile main off same     base=      head=      | gwip
+hostile main off same     base=      head=      | time gpf! origin main
+hostile main off same     base=      head=      | ! gpf! origin main
+hostile main off same     base=      head=      | if gpf! origin main; then :; fi
+hostile main off same     base=      head=      | nocorrect gpf! origin main
+hostile main off same     base=      head=      | repeat 2 gpf! origin main
+hostile main off same     base=      head=      | coproc gpf! origin main
+hostile main off same     base=      head=      | noglob gpf! origin main
+hostile main off same     base=      head=      | command gpf! origin main
+hostile main off same     base=      head=      | 2>&1 gpf! origin main
+hostile main off same     base=      head=      | X='a b' gpf! origin main
+hostile main off same     base=      head=      | gpf! origin main # comment
+hostile main off same     base=      head=      | { gpf! origin main; }
+hostile main off same     base=      head=      | ( gpf! origin main )
+hostile main off same     base=      head=      | gpf! origin main &
+hostile main off same     base=      head=      | gpf! origin main | tee log
+hostile main off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/home/.claude && grt && sed -i '' s/a/b/ settings.json
+hostile main off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/home/.claude && sed -i '' s/a/b/ settings.json
+hostile main off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/home/.claude && ls && echo x > settings.json
+hostile main off same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/home/.claude && true && cp /tmp/x settings.local.json
+hostile main off same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions && ls && echo x > foo
+hostile main off same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions && grt && echo x > foo
+hostile main off same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions && gst && echo x > foo
+hostile main off same     base=deny  head=deny  | echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions/test-session.state
+hostile main off same     base=deny  head=deny  | grt && echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions/test-session.state
+hostile main off same     base=deny  head=deny  | psql -h prod-db.internal -c 'DELETE FROM x'
+hostile main off same     base=deny  head=deny  | echo 'DELETE FROM x' | psql -h prod-db.internal
+hostile main off same     base=deny  head=deny  | gst; psql -h prod-db.internal -c 'DELETE FROM x'
+hostile main off same     base=deny  head=deny  | grt && psql -h prod-db.internal -c 'DELETE FROM x'
+hostile main off same     base=deny  head=deny  | ssh prod-db.internal 'rm -rf /'
+hostile main off same     base=deny  head=deny  | gst; ssh prod-db.internal 'rm -rf /'
+hostile main off same     base=ask   head=ask   | git push origin production
+hostile main off same     base=      head=      | gp origin production
+hostile main off same     base=ask   head=ask   | npm publish
+hostile main off same     base=ask   head=ask   | gst && npm publish
+hostile main off same     base=ask   head=ask   | grt && npm publish
+hostile main off same     base=deny  head=deny  | echo 'status: approved' >> docs/plans/x.md
+hostile main off same     base=deny  head=deny  | grt && echo 'status: approved' >> docs/plans/x.md
+hostile main off same     base=deny  head=deny  | ls && echo 'status: approved' >> docs/plans/x.md
+hostile main off same     base=deny  head=deny  | cd docs && ls && sed -i '' 's/draft/approved/' plans/x.md
+hostile main off same     base=ask   head=ask   | gh pr review 1 --approve
+hostile main off same     base=ask   head=ask   | gh api repos/o/r/pulls/1/merge -X PUT
+hostile main off same     base=ask   head=ask   | git push -u origin feat
+hostile main off same     base=ask   head=ask   | git push -u origin feat | cat
+hostile main off same     base=ask   head=ask   | git push -u origin feat | tee log
+hostile main off same     base=ask   head=ask   | git status && git push -u origin feat
+hostile main off same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/wt && git push --force-with-lease origin feat
+hostile main off same     base=deny  head=deny  | ls && git push --force-with-lease origin feat
+hostile main off same     base=deny  head=deny  | true; git push --force-with-lease origin feat
+hostile main off same     base=deny  head=deny  | x2 git push --force origin main
+hostile main off same     base=deny  head=deny  | pipe git push --force origin main
+hostile main off same     base=deny  head=deny  | semi git push --force origin main
+hostile main off same     base=deny  head=deny  | q
+hostile main off same     base=      head=      | r gpf! origin main
+hostile main off same     base=      head=      | big
+hostile main off same     base=      head=      | e gpf! origin main
+hostile main off same     base=ask   head=ask   | export GIT_DIR=/x; git push origin main
+hostile main off same     base=deny  head=deny  | env git push --force origin main
+hostile main off same     base=deny  head=deny  | sudo git push --force origin main
+hostile main off same     base=deny  head=deny  | if true; then git push --force origin main; fi
+hostile main off same     base=deny  head=deny  | time git push --force origin main
+hostile main off same     base=deny  head=deny  | nocorrect git push --force origin main
+hostile main on same     base=deny  head=deny  | git push --force origin main
+hostile main on same     base=deny  head=deny  | git push origin main
+hostile main on same     base=deny  head=deny  | git push --force-with-lease origin feat
+hostile main on same     base=      head=      | gpf! origin main
+hostile main on same     base=      head=      | gp origin main
+hostile main on same     base=      head=      | g push --force origin main
+hostile main on same     base=      head=      | _ gpf! origin main
+hostile main on same     base=      head=      | _ X=1 gpf! origin main
+hostile main on same     base=      head=      | _ 'gpf!' origin main
+hostile main on same     base=deny  head=deny  | sudo git push --force origin main
+hostile main on same     base=deny  head=deny  | grt && git push --force origin main
+hostile main on same     base=deny  head=deny  | grt && git push origin feat
+hostile main on same     base=deny  head=deny  | grt && git push --force-with-lease origin feat
+hostile main on same     base=deny  head=deny  | grt && git commit -m "feat: add creds"
+hostile main on same     base=deny  head=deny  | git commit -m "feat: add creds"
+hostile main on same     base=      head=      | cd /tmp && gpf! origin main
+hostile main on same     base=      head=      | echo $(gpf! origin main)
+hostile main on same     base=      head=      | eval 'gpf! origin main'
+hostile main on same     base=      head=      | eval "gp origin main"
+hostile main on same     base=      head=      | bash -c 'gpf! origin main'
+hostile main on same     base=      head=      | gst | cat
+hostile main on same     base=deny  head=deny  | gst && git push --force origin main
+hostile main on same     base=deny  head=deny  | gst || git push origin main
+hostile main on same     base=deny  head=deny  | gst // git push --force origin main
+hostile main on same     base=      head=      | cat <<EOT // gpf! origin main // EOT
+hostile main on same     base=deny  head=deny  | cat <<EOT | sh // gpf! origin main // EOT
+hostile main on same     base=deny  head=deny  | gh pr create --title t --body b
+hostile main on same     base=deny  head=deny  | gh pr merge 1 --admin
+hostile main on same     base=deny  head=deny  | git commit -m "x" --no-verify
+hostile main on same     base=deny  head=deny  | git reset --hard HEAD~1
+hostile main on same     base=      head=      | grhh HEAD~1
+hostile main on same     base=deny  head=deny  | git clean -fdx
+hostile main on same     base=      head=      | gclean
+hostile main on same     base=deny  head=deny  | git stash clear
+hostile main on same     base=      head=      | gstc
+hostile main on same     base=deny  head=deny  | git branch -D feat
+hostile main on same     base=      head=      | gbD feat
+hostile main on same     base=deny  head=deny  | git checkout -- .
+hostile main on same     base=      head=      | gco -- .
+hostile main on same     base=deny  head=deny  | git add -A && git commit -m "feat: x"
+hostile main on same     base=      head=      | gaa && gcmsg "feat: x"
+hostile main on same     base=      head=      | gwip
+hostile main on same     base=      head=      | time gpf! origin main
+hostile main on same     base=      head=      | ! gpf! origin main
+hostile main on same     base=      head=      | if gpf! origin main; then :; fi
+hostile main on same     base=      head=      | nocorrect gpf! origin main
+hostile main on same     base=      head=      | repeat 2 gpf! origin main
+hostile main on same     base=      head=      | coproc gpf! origin main
+hostile main on same     base=      head=      | noglob gpf! origin main
+hostile main on same     base=      head=      | command gpf! origin main
+hostile main on same     base=      head=      | 2>&1 gpf! origin main
+hostile main on same     base=      head=      | X='a b' gpf! origin main
+hostile main on same     base=      head=      | gpf! origin main # comment
+hostile main on same     base=      head=      | { gpf! origin main; }
+hostile main on same     base=      head=      | ( gpf! origin main )
+hostile main on same     base=      head=      | gpf! origin main &
+hostile main on same     base=      head=      | gpf! origin main | tee log
+hostile main on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/home/.claude && grt && sed -i '' s/a/b/ settings.json
+hostile main on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/home/.claude && sed -i '' s/a/b/ settings.json
+hostile main on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/home/.claude && ls && echo x > settings.json
+hostile main on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/home/.claude && true && cp /tmp/x settings.local.json
+hostile main on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions && ls && echo x > foo
+hostile main on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions && grt && echo x > foo
+hostile main on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions && gst && echo x > foo
+hostile main on same     base=deny  head=deny  | echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions/test-session.state
+hostile main on same     base=deny  head=deny  | grt && echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/data/sessions/test-session.state
+hostile main on same     base=deny  head=deny  | psql -h prod-db.internal -c 'DELETE FROM x'
+hostile main on same     base=deny  head=deny  | echo 'DELETE FROM x' | psql -h prod-db.internal
+hostile main on same     base=deny  head=deny  | gst; psql -h prod-db.internal -c 'DELETE FROM x'
+hostile main on same     base=deny  head=deny  | grt && psql -h prod-db.internal -c 'DELETE FROM x'
+hostile main on same     base=deny  head=deny  | ssh prod-db.internal 'rm -rf /'
+hostile main on same     base=deny  head=deny  | gst; ssh prod-db.internal 'rm -rf /'
+hostile main on same     base=deny  head=deny  | git push origin production
+hostile main on same     base=      head=      | gp origin production
+hostile main on same     base=deny  head=deny  | npm publish
+hostile main on same     base=deny  head=deny  | gst && npm publish
+hostile main on same     base=deny  head=deny  | grt && npm publish
+hostile main on same     base=deny  head=deny  | echo 'status: approved' >> docs/plans/x.md
+hostile main on same     base=deny  head=deny  | grt && echo 'status: approved' >> docs/plans/x.md
+hostile main on same     base=deny  head=deny  | ls && echo 'status: approved' >> docs/plans/x.md
+hostile main on same     base=deny  head=deny  | cd docs && ls && sed -i '' 's/draft/approved/' plans/x.md
+hostile main on same     base=deny  head=deny  | gh pr review 1 --approve
+hostile main on same     base=deny  head=deny  | gh api repos/o/r/pulls/1/merge -X PUT
+hostile main on same     base=deny  head=deny  | git push -u origin feat
+hostile main on same     base=deny  head=deny  | git push -u origin feat | cat
+hostile main on same     base=deny  head=deny  | git push -u origin feat | tee log
+hostile main on same     base=deny  head=deny  | git status && git push -u origin feat
+hostile main on same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.618mxp/wt && git push --force-with-lease origin feat
+hostile main on same     base=deny  head=deny  | ls && git push --force-with-lease origin feat
+hostile main on same     base=deny  head=deny  | true; git push --force-with-lease origin feat
+hostile main on same     base=deny  head=deny  | x2 git push --force origin main
+hostile main on same     base=deny  head=deny  | pipe git push --force origin main
+hostile main on same     base=deny  head=deny  | semi git push --force origin main
+hostile main on same     base=deny  head=deny  | q
+hostile main on same     base=      head=      | r gpf! origin main
+hostile main on same     base=      head=      | big
+hostile main on same     base=      head=      | e gpf! origin main
+hostile main on same     base=deny  head=deny  | export GIT_DIR=/x; git push origin main
+hostile main on same     base=deny  head=deny  | env git push --force origin main
+hostile main on same     base=deny  head=deny  | sudo git push --force origin main
+hostile main on same     base=deny  head=deny  | if true; then git push --force origin main; fi
+hostile main on same     base=deny  head=deny  | time git push --force origin main
+hostile main on same     base=deny  head=deny  | nocorrect git push --force origin main

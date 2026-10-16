@@ -1,0 +1,8 @@
+#!/bin/bash
+f=$(mktemp /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/r4shim/in.XXXXXX); cat > "$f"
+case "$*" in *subagent-start*)
+  if [ -n "${FAIL2-}" ] && grep -q 'fail' "$f"; then exit 2; fi
+  if [ -n "${FAIL1-}" ] && grep -qx 'il.*' "$f"; then exit 2; fi
+  if [ -n "${FAILALL-}" ]; then exit 2; fi ;;
+esac
+exec /usr/bin/awk "$@" < "$f"

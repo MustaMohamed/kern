@@ -1,0 +1,60 @@
+1..54
+ok 1 P1 two Edits: an invented quote while draft, then the status flip
+ok 2 P1b two Edits: a real quote while draft, then the flip, is changed after the message
+ok 3 P2 non-answers with a final question mark or comma
+ok 4 P3 a quote with no hash matches no record, recorded or empty
+ok 5 P4 an empty prompt replaces the last one's lines
+ok 6 P5 frontmatter forms G20 reads as approved
+ok 7 P6 a CRLF file and a multi-line old_string
+ok 8 P6b a CRLF Write
+ok 9 P7 a second frontmatter block is read by neither G20 nor ledger-open
+ok 10 P8 a byte order mark and blanks after the opening ---
+ok 11 P9 an Edit with an empty old_string writes a new file
+ok 12 P10 a Markdown name in another case
+ok 13 P11 curly quotes in the file, straight ones in old_string
+ok 14 P12 a user line that holds double quotes can be quoted whole
+ok 15 P13 perl in place, in any option form
+ok 16 P14 python -c and node -e with the path inside the code
+ok 17 P15 python reading its script from a here-doc
+ok 18 P16 tee, a here-doc, printf, sudo and env
+ok 19 P17 cp, cat, tee, dd, ln, rsync, install, git mv and a two-step mv from a prepared file
+ok 20 P18 cp of a prepared Markdown file into the specs directory
+ok 21 P19 a glob, find -exec, xargs and a loop variable, with approved in the command
+ok 22 P20 the word split by quotes or in capitals
+ok 23 P21 a shell write to an approved file without the word
+ok 24 P21b a write after a cd behind noglob, nocorrect, repeat or coproc is judged from both directories
+ok 25 P21c a cd with a modifier word after its name, in a redirect or an assignment, still moves
+ok 26 P21d a cd behind a wrapper, a reserved word or a modifier chain: G20 judges from both directories
+ok 27 P21e a quoted or escaped assignment or redirect before a cd is a command name: G20 judges from both directories
+ok 28 P21f a cd that can go back (-, ~-, +N, $OLDPWD, popd) or a builtin cd: G20 judges from every directory it may be in
+not ok 29 P21g G20 follows up to 16 directories; past that a relative write is denied, a read is not
+# (from function `deny' in file tests/hooks/g20-probes.bats, line 28,
+#  in test file tests/hooks/g20-probes.bats, line 296)
+#   `b "${c15}cp src.md dst.md"; deny' failed
+# expected deny:
+ok 30 P21h 110 Markdown writes after four maybe cds, 16 directories, are judged in under 10 s
+ok 31 P22 reads and kern's own scripts get no G20 vote
+ok 32 P23 accepted limit: a new file has no draft to be older than the message
+ok 33 P24 the quote comes from the first approved: line
+ok 34 P25 a quote over 500 characters matches nothing
+ok 35 P26 a prompt that starts with a system-reminder replaces the user's lines
+ok 36 P27 a byte order mark before the first ---
+ok 37 P28 bash -c, eval, command substitution, a path with a space, perl -0777
+ok 38 P29 Monitor is read as Bash
+ok 39 P30 an approved file approved again with a fresh real quote
+ok 40 P31 accepted limit: a teammate message wrapped() misses counts as the user's
+ok 41 P32 a write through a non-Markdown symlink to a spec
+ok 42 P33 option clusters tell the script from the files
+ok 43 P34 accepted false deny: perl inline code that reads, with approved and a Markdown name
+ok 44 P35 accepted limit: a script run by name is not seen
+ok 45 C1 a --- with trailing blanks closes the frontmatter for G20, ledger-open and plan-check alike
+ok 46 C1 a --- with a CR closes the frontmatter for G20, ledger-open and plan-check alike
+ok 47 C1 an opening --- with trailing blanks: G20 denies the approval ledger-open would accept
+ok 48 I2 sed deleting a closing --- turns staged body lines into frontmatter
+ok 49 I2 tail of a staged file whose first line is not --- into a plan
+ok 50 I3 running kern's prompt-submit to forge the user's message asks G16, and is denied under autopilot
+ok 51 I3 sourcing kern's state library to call state_set asks G16, and is denied under autopilot
+ok 52 N1 negations are not a yes
+ok 53 N2 an Edit whose old_string is not in the file, writing a status line, fails closed
+ok 54 N3 the changed-after message says how to approve
+EXIT=1

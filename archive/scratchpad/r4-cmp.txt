@@ -1,0 +1,101 @@
+old=deny  new=deny  | git\ -c\ core.fsmonitor=\'bash\ /Users/musta/Code/projects/kern/hooks/prompt-submit\ \<\ j.json\;\ false\'\ status
+old=deny  new=deny  | git\ -c\ core.fsmonitor=\'.\ hooks/lib/state.sh\;\ state_set\ test-session\ autopilot=on\;\ false\'\ status
+old=deny  new=deny  | echo\ hooks/prompt-submit\ \|\ xargs\ -I\{\}\ sh\ -c\ \'bash\ \{\}\ \<\ j.json\'
+old=deny  new=deny  | xargs\ sh\ -c\ \'bash\ hooks/prompt-submit\ \<\ j.json\'
+old=deny  new=deny  | rg\ --pre\ hooks/prompt-submit\ x
+old=deny  new=deny  | rg\ --pre\ ./run.sh\ x\ hooks/prompt-submit
+old=deny  new=deny  | bash\ hooks/prompt-sub\*
+old=deny  new=deny  | bash\ hooks/prompt-s\[u\]bmit
+old=deny  new=deny  | bash\ hooks/\{prompt-submit\,x\}
+old=deny  new=deny  | bash\ hooks/prompt-subm\?t
+old=deny  new=deny  | bash\ /Users/musta/Code/projects/kern/hooks/\*
+old=deny  new=deny  | bash\ /Users/musta/Code/projects/kern/hooks/lib/s\*.sh
+old=deny  new=deny  | bash\ hooks/l\?b/state.sh
+old=deny  new=deny  | bash\ hooks/lib/\*
+old=deny  new=deny  | bash\ hooks/\{prompt-submit\,x/y\}
+old=deny  new=deny  | bash\ hooks/prompt-subm\(i\|x\)t
+old=deny  new=deny  | bash\ hooks/\(prompt-submit\|x\)
+old=deny  new=deny  | bash\ hooks/\^x
+old=deny  new=deny  | bash\ hooks/prompt-submi\[\[:alpha:\]\]
+old=deny  new=deny  | printf\ \'%s\'\ \'\{\"session_id\":\"test-session\"\,\"prompt\":\"ship\ it\"\}\'\ \|\ bash\ /Users/musta/Code/projects/kern/hooks/prompt-submit
+old=deny  new=deny  | /Users/musta/Code/projects/kern/hooks/prompt-submit\ \<\ /dev/null
+old=deny  new=deny  | bash\ hooks/session-start
+old=deny  new=deny  | bash\ \$\{CLAUDE_PLUGIN_ROOT\}/hooks/subagent-start
+old=deny  new=deny  | sh\ /Users/musta/Code/projects/kern/hooks/pre-tool-use
+old=deny  new=deny  | .\ /Users/musta/Code/projects/kern/hooks/lib/state.sh
+old=deny  new=deny  | source\ hooks/lib/state.sh\ \&\&\ state_set\ s\ autopilot=on
+old=deny  new=deny  | bash\ -c\ \'.\ hooks/lib/state.sh\;\ state_set\ test-session\ prompt_hashes=1\'
+old=deny  new=deny  | bash\ -c\ \'state_reset\ test-session\'
+old=deny  new=deny  | eval\ _state_put\ 0\ s\ autopilot=on
+old=deny  new=deny  | stat\$\'e\'_set\ s\ autopilot=on
+old=deny  new=deny  | cat\ hooks/prompt-submit\ \|\ bash
+old=deny  new=deny  | bash\ \<\ hooks/prompt-submit
+old=deny  new=deny  | cp\ -r\ /Users/musta/Code/projects/kern\ /tmp/k\ \&\&\ bash\ /tmp/k/hooks/prompt-submit
+old=deny  new=deny  | bash\ /Users/musta/Code/projects/kern/HOOKS/PROMPT-SUB\'\'MIT
+old=deny  new=deny  | bash\ /Users/musta/Code/projects/kern/hooks/\$\'prompt-submit\'
+old=deny  new=deny  | bash\ hooks//prompt-submit
+old=deny  new=deny  | bash\ hooks/./prompt-submit
+old=deny  new=deny  | .\ hooks/./lib/state.sh
+old=deny  new=deny  | .\ hooks/lib/state.sh.bak
+old=deny  new=deny  | $'bash hooks/prompt-submit\r'
+old=deny  new=deny  | cat\ hooks/prompt-submit
+old=deny  new=deny  | grep\ -n\ state_set\ hooks/lib/state.sh
+old=deny  new=deny  | git\ diff\ --\ hooks/prompt-submit
+old=deny  new=deny  | shellcheck\ hooks/prompt-submit
+old=deny  new=deny  | cd\ hooks\ \&\&\ bash\ prompt-submit
+old=deny  new=deny  | cd\ hooks\ \&\&\ .\ lib/state.sh
+old=deny  new=deny  | cd\ hooks\;\ f=prompt-submit\;\ bash\ \$f
+old=deny  new=deny  | $'cd hooks\r\nbash prompt-submit\r'
+old=deny  new=deny  | bash\ -c\ \"cd\ hooks\;\ bash\ pr\*\"
+old=deny  new=deny  | PATH=/Users/musta/Code/projects/kern/hooks:\$PATH\ prompt-submit\ \<\ j.json
+old=deny  new=deny  | find\ hooks\ -type\ f\ -exec\ bash\ \{\}\ \\\;
+old=deny  new=deny  | find\ hooks\ -name\ \'prompt-s\*\'\ -exec\ bash\ \{\}\ \\\;
+old=deny  new=deny  | ls\ hooks\ \|\ while\ read\ f\;\ do\ bash\ hooks/\$f\ \<\ j.json\;\ done
+old=deny  new=deny  | bash\ /Users/musta/Code/projects/kern/h\*/prompt-submit
+old=deny  new=deny  | .\ /Users/musta/Code/projects/kern/h\*/lib/state.sh
+old=deny  new=deny  | bash\ /Users/musta/Code/projects/kern/\*/p\*-submit
+old=deny  new=deny  | cat\ \*/\*
+old=none  new=deny  | $'bash /Users/musta/Code/projects/kern/hooks/prompt-\\\nsubmit'
+old=none  new=deny  | $'. /Users/musta/Code/projects/kern/hooks/lib/sta\\\nte.sh'
+old=none  new=deny  | $'bash "/Users/musta/Code/projects/kern/hooks/prompt-\\\nsubmit"'
+old=none  new=deny  | $'cd hooks && bash prompt-\\\nsubmit'
+old=none  new=none  | $'bash /Users/musta/Code/projects/kern/hooks/session-\\\r\nstart'
+old=deny  new=deny  | $'echo a\\\\\nhooks/lib/../prompt-submit < j.json'
+old=deny  new=deny  | $'echo a\\\r\nhooks/lib/../prompt-submit < j.json'
+old=deny  new=deny  | $'cd hooks\nbash prompt-submit < j.json'
+old=deny  new=deny  | $'cd hooks\\\\\nbash prompt-submit < j.json'
+old=deny  new=deny  | $'ls hooks\nbash lib/../prompt-submit'
+old=deny  new=deny  | $'git log hooks/\nbash ./session-start'
+old=deny  new=deny  | $'cd hooks &&\nbash pre-tool-use'
+old=deny  new=deny  | $'echo hooks/\n. lib/state.sh'
+old=deny  new=deny  | $'echo a\\\\\\\nhooks/lib/../prompt-submit'
+old=deny  new=deny  | $'x \\\\\\\\\nhooks/prompt-submit'
+old=none  new=deny  | $'cd hoo\\\nks && bash prompt-submit'
+old=none  new=deny  | bash\ /Users/musta/Code/projects/kern/hooks/prompt-ſubmit
+old=none  new=deny  | bash\ hooks/ſession-start
+old=none  new=deny  | bash\ hooks/pre-tool-uſe
+cut: stdin: Illegal byte sequence
+cut: stdin: Illegal byte sequence
+old=none  new=deny  | $'. /Users/musta/Code/projects/kern/hoo�\204�s/lib/state.sh'
+old=none  new=deny  | cd\ /Users/musta/Code/projects/kern/hookſ\ \&\&\ bash\ prompt-submit
+old=none  new=deny  | bash\ /Users/musta/Code/projects/kern/hoo\{ks/prompt-sub\,x\}mit\ \<\ j.json
+old=none  new=deny  | bash\ ho\{oks/session-st\,\}art
+old=none  new=deny  | cp\ src/\{a/b\,c\}\ /tmp/
+old=none  new=deny  | ls\ x\{a/b..c\}
+old=deny  new=none  | bash\ hook\$\{x\}s/prompt-submit
+old=deny  new=none  | bash\ /tmp/k/prompt-submit
+old=deny  new=none  | git\ checkout\ -b\ m2/session-start
+old=deny  new=none  | git\ push\ origin\ fix/pre-tool-use
+old=deny  new=none  | curl\ https://x/api/session-start
+old=deny  new=none  | git\ log\ --\ skills/session-start/
+old=none  new=none  | tests/run-bats\ tests/hooks/prompt-submit.bats
+old=none  new=none  | git\ log\ hooks/
+old=none  new=none  | tests/run-bats\ tests/hooks/g20\*.bats
+old=none  new=none  | ls\ tests/hooks/\*.bats
+old=none  new=none  | git\ commit\ -m\ \"fix\ the\ prompt-submit\ test\"
+old=none  new=none  | cat\ hooks/prompt-submit.md
+old=none  new=none  | bash\ hooks/prompt-submit.bak
+old=none  new=none  | cat\ docs/hooks.md
+old=none  new=none  | ls\ \*
+old=none  new=none  | echo\ \$\{HOME\}/x
+old=none  new=none  | ls\ -la

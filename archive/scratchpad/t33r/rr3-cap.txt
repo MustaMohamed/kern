@@ -1,0 +1,24 @@
+builtin cd a; builtin cd b; builtin cd c; builtin cd d; cp src.md dst.md
+builtin cd a; builtin cd b; builtin cd c; builtin cd d; builtin cd /tmp; ls notes.md
+builtin cd a; builtin cd b; builtin cd c; builtin cd d; builtin cd e; ls notes.md
+builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; ls notes.md
+if cd docs; then ls; fi; if cd plans; then ls; fi; if cd a; then ls; fi; if cd b; then ls; fi; if cd c; then ls; fi; ls notes.md
+builtin cd /a; builtin cd /b; builtin cd /c; builtin cd /d; builtin cd /e; builtin cd /f; builtin cd /g; builtin cd /h; builtin cd /i; builtin cd /j; builtin cd /k; builtin cd /l; builtin cd /m; builtin cd /n; builtin cd /o; ls notes.md
+builtin cd /a; builtin cd /b; builtin cd /c; builtin cd /d; builtin cd /e; builtin cd /f; builtin cd /g; builtin cd /h; builtin cd /i; builtin cd /j; builtin cd /k; builtin cd /l; builtin cd /m; builtin cd /n; builtin cd /o; builtin cd /p; ls notes.md
+builtin cd @YD@; cp src.md dst.md
+builtin cd @YD@; builtin cd a; builtin cd b; builtin cd c; builtin cd d; cp src.md dst.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; ls notes.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd /tmp; ls notes.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; ls notes.md
+noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; noglob cd /tmp; ls notes.md
+noglob cd /d0; noglob cd /d1; noglob cd /d2; noglob cd /d3; noglob cd /d4; noglob cd /d5; noglob cd /d6; noglob cd /d7; noglob cd /d8; noglob cd /d9; noglob cd /d10; noglob cd /d11; noglob cd /d12; noglob cd /d13; noglob cd /d14; ls notes.md
+noglob cd /d0; noglob cd /d1; noglob cd /d2; noglob cd /d3; noglob cd /d4; noglob cd /d5; noglob cd /d6; noglob cd /d7; noglob cd /d8; noglob cd /d9; noglob cd /d10; noglob cd /d11; noglob cd /d12; noglob cd /d13; noglob cd /d14; noglob cd /d15; ls notes.md
+cd @YD@ && builtin cd @XD@ && cp src.md dst.md
+cd @YD@ && noglob cd @XD@ && cp src.md dst.md
+cd @YD@ && cd @XD@ && cp src.md dst.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; echo x > out.txt
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; echo x > /tmp/out.txt
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; echo x > /tmp/out.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; cd /tmp; echo x > out.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; cd /tmp; cd -; echo x > t.md
+noglob cd a; noglob cd b; noglob cd c; noglob cd d; noglob cd e; cat src.md

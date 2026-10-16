@@ -1,0 +1,14 @@
+diff --git a/a.txt b/a.txt
+index 78981922613b2afb6025042ff6bd878ac1994e85..1fcb1529f8e5e43037c4710ce09da0becd28823a 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1 @@
+-a
++out
+diff --git a/src/s.txt b/src/s.txt
+index b4785957bc986dc39c629de9fac9df46972c00fc..435c0d17bb0aae89359d4573015131a6998618ba 100644
+--- a/src/s.txt
++++ b/src/s.txt
+@@ -1 +1,2 @@
+ s
++w2

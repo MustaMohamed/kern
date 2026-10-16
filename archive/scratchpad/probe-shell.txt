@@ -1,0 +1,9 @@
+cat a.txt >&1x
+cat a.txt 2>&1y
+sort "-o" q1.txt a.txt
+sort {-o,q2.txt} a.txt
+sort ${x:--o} q3.txt a.txt
+echo -o >/dev/null; sort $_ q4.txt a.txt
+sort $'-o' q5.txt a.txt
+sort -\o q6.txt a.txt
+cat a.txt >/dev/null2

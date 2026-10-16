@@ -1,0 +1,70 @@
+1..64
+ok 1 status in the main checkout: no vote
+ok 2 switch in the main checkout asks, denied under autopilot
+ok 3 reset --hard, stash and clean in the main checkout ask
+ok 4 the same commands in a linked worktree: no vote
+ok 5 a chained or substituted main-checkout command is still seen
+ok 6 stash list and clean -n are read-only: no vote
+ok 7 plain force push is denied in both modes
+ok 8 push of a feature branch asks; push.policy auto allows; deny denies
+ok 9 push to the base branch asks even with push.policy auto, and is denied under autopilot
+ok 10 autopilot allows a push of the current non-protected branch only
+ok 11 force-with-lease: own branch asks; a branch with another author is denied
+ok 12 force-with-lease under autopilot needs rebase.push: autopilot
+ok 13 merge asks; gh pr merge asks; both denied under autopilot
+ok 14 worktree remove --force and branch -D ask
+ok 15 kern: off disables the guard
+ok 16 unparseable input asks, and the reason names it
+ok 17 autopilot denies main-checkout operations, merges and discards
+ok 18 pull in the main checkout asks; in a linked worktree: no vote
+ok 19 abbreviated long options and short clusters are read as git reads them
+ok 20 a remote delete asks whatever push.policy says, and is denied under autopilot
+ok 21 push.policy deny denies under autopilot too
+ok 22 autopilot allows a push only in the plain shape
+ok 23 push.policy auto allows only the plain shape
+ok 24 remote.<name>.push or mirror config makes a push unproven
+ok 25 autopilot lease: current branch only, bare option, no other flags
+ok 26 --force-if-includes follows the lease rules
+ok 27 lease: another author's commit on the remote branch only is denied
+ok 28 lease to a remote that git remote does not list is denied
+ok 29 after cd, --git-dir or GIT_DIR the directory is unknown
+not ok 30 a push after a cd is judged where it would run without the cd too, so its deny holds
+# (from function `expect' in file tests/hooks/g01-git.bats, line 28,
+#  in test file tests/hooks/g01-git.bats, line 314)
+#   `expect deny "cd . && git push --force-with-lease origin feat" "pushd /tmp && git push --force-with-lease origin feat" \' failed
+# cd . && git push --force-with-lease origin feat -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"kern G1: git push after cd, --git-dir or --work-tree, or under env -C or sudo -D: what it pushes is unknown; run git -C <dir> push instead of cd, env -C, sudo -D, --git-dir or --work-tree"}}
+ok 31 a cd behind noglob, nocorrect or repeat N moves, as zsh moves it; one under coproc or repeat 0 does not
+ok 32 a modifier word after the command name, in a redirect, an assignment or a comment, leaves a cd a move
+ok 33 gh pr merge with -R or --repo asks, and is denied under autopilot
+ok 34 --no-verify skips the pre-push hook, so the push is never allowed
+ok 35 an allowed push may pipe into tail, head, grep or cat with options only
+ok 36 --dry-run is a safe push option
+ok 37 an unknown push shape names the fix in its reason
+ok 38 a tag named like the current branch does not hide it
+ok 39 a tag named like a branch.protected branch does not hide it
+ok 40 shell expansion in a push record is never allowed
+ok 41 a branch or remote name outside the safe characters is never allowed
+ok 42 a glob or ~ in a push record is never allowed
+ok 43 shell expansion or a glob in a filter is never allowed
+ok 44 remote and url config that redirects a push makes it unproven
+ok 45 lease: a missing origin/<base> counts as not own
+ok 46 lease: the source of src:dst is what gets checked
+ok 47 git and gh are matched case-insensitively
+ok 48 an explicit lease value under autopilot names the bare option
+ok 49 a push URL rewritten for this remote is unproven; an unrelated rewrite is not
+ok 50 a detached HEAD names itself in the reason
+ok 51 a trailing comment does not hide a command
+ok 52 git behind a command kern cannot read asks, and is denied under autopilot
+ok 53 a word git that runs no git command, or a read-only one, gets no vote
+ok 54 echo git push asks: a word git before one of git's commands that writes is not read further
+ok 55 an append assignment or a wrapper in another case does not hide git from G1's own checks
+ok 56 git behind a command with -c or --config-env among its options asks, whatever word follows
+ok 57 a hidden git with no word after it gets no vote, and GIT_CONFIG in the text changes nothing
+ok 58 lease push to a protected branch names the force; over another author's commits it is denied
+ok 59 a push through -C into another repository is never allowed, as G5 never allows such a commit
+ok 60 env -C, env --chdir, sudo -D and sudo -R leave the directory unknown, as cd does
+ok 61 send-pack and http-push push refs: they ask, are denied under autopilot, and their force forms are denied
+ok 62 send-email asks, and is denied under autopilot
+ok 63 imap-send asks like send-email, and is denied under autopilot
+ok 64 env -S reads its value as words, so a -C inside it leaves the directory unknown
+EXIT=1

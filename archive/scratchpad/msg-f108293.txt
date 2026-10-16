@@ -1,0 +1,4 @@
+M2: judge shell-snapshot aliases as the git or gh they run
+
+An alias such as gpf!='git push --force' ran git with no git word in the command, so every git guard missed it; the user asked for it in M2. The alias record stays beside its expansion, so a snapshot that is not the session's cannot remove a deny or an ask, and an alias is never allowed unattended.
+

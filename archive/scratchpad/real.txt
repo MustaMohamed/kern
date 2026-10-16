@@ -1,0 +1,10 @@
+Self-review verdict is `ready`, but the size gate stops the run, so nothing is committed or pushed yet.
+
+**Size gate** - The diff is 10 files, +10/-1, against `scope_threshold` 4.
+
+**Decision for you:** should I split this?
+
+1. **Split (recommended):** commit and push the `sum.js` fix on its own, and keep `v1` to `v9` out of the PR.
+2. **No split:** go on with all 10 files, then pick from the menu (commit, push, or draft PR).
+
+Reply `split` or `no`. If `no`, I'll show the menu.

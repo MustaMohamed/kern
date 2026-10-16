@@ -1,0 +1,96 @@
+1..95
+ok 1 Write under the sessions dir is denied in both modes
+ok 2 Edit of another file: no vote
+ok 3 a .. path into the sessions dir is denied
+ok 4 an upper-cased path to the sessions dir is denied
+ok 5 a symlinked dir that resolves to the sessions dir is denied
+ok 6 a Bash write into the sessions dir is denied
+ok 7 every Bash write shape against session state is denied
+ok 8 any command but a reader that names a state path is denied
+ok 9 a glob that matches the state file once ~ is expanded is denied
+ok 10 plain reads, git commands and messages naming state or settings: no vote
+ok 11 a shell reading a here-doc runs its body as commands
+ok 12 a # that bash does not read as a comment hides no state write
+ok 13 a misread << hides no state write
+ok 14 a double-quoted state target is denied
+ok 15 reads of a state file, and a commit message naming one: no vote
+ok 16 the session id counts only as the state file name: scratchpad writes pass
+ok 17 reads of session state: no vote
+ok 18 a Monitor command writing the state file is denied
+ok 19 a scheduled prompt or relayed message carrying /kern:autopilot is denied
+ok 20 relayed text that opens with a mode or autopilot command is denied
+ok 21 relayed text that only mentions a mode command: no vote
+ok 22 a RemoteTrigger whose nested body carries a kern command is denied; a list passes
+ok 23 a scheduled prompt without kern commands: no vote
+ok 24 a Skill call to the mode or autopilot skill is denied; other skills pass
+ok 25 a write to a kern settings file asks, and denies under autopilot
+ok 26 reading a kern settings file: no vote
+ok 27 a command that names neither state nor settings costs G16 no lower-casing; any case still counts
+ok 28 a settings path spelled with ., .. or // or split by quotes is still a settings path
+ok 29 a copy, move or link into a .claude directory is a settings write
+ok 30 a write to Claude Code's own settings asks, and denies under autopilot; plain reads get no vote
+ok 31 settings files and .claude directories follow the state model: any head but a reader asks
+ok 32 git reads only through its read-only subcommands; any other git naming settings or .claude asks
+ok 33 a settings write under a directory with a space asks; only a message option's text is read as a sentence
+ok 34 a command that reads but can run code, and names a hook or state_set, asks; under autopilot it is denied
+ok 35 a glob, brace or zsh group after hooks/ that could name a hook asks; under autopilot it is denied
+ok 36 running, sourcing or reading a hook, or calling a state function, asks; under autopilot it is denied
+ok 37 a hooks directory named elsewhere in the command, or reached by a glob, makes a hook's bare name ask
+ok 38 a command that names no kern hook, such as a hook's test file, gets no hook vote
+ok 39 inside a hooks directory a bare hook name, or a glob that could match one, asks
+ok 40 when awk cannot read the command for kern's hook code, G16 fails closed
+ok 41 when awk fails on one reading and no reading hits, G16 fails closed in both modes
+ok 42 when awk fails on one reading and another reading hits, G16 asks with its own reason; under autopilot it is denied
+ok 43 a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied
+ok 44 an escaped backslash, or a backslash before CR LF, does not join the lines; the next line still asks
+ok 45 a hooks directory on one line and a hook on the next still ask, as they did before lines were joined
+ok 46 the APFS case folds of s and k inside a hook path are read as s and k; asks, and under autopilot is denied
+ok 47 a brace group that spans a slash asks, and under autopilot is denied
+ok 48 the APFS case folds of s and k in a settings or state path get the vote of the ASCII spelling
+ok 49 P1 two Edits: an invented quote while draft, then the status flip
+ok 50 P1b two Edits: a real quote while draft, then the flip, is changed after the message
+ok 51 P2 non-answers with a final question mark or comma
+ok 52 P3 a quote with no hash matches no record, recorded or empty
+ok 53 P4 an empty prompt replaces the last one's lines
+ok 54 P5 frontmatter forms G20 reads as approved
+ok 55 P6 a CRLF file and a multi-line old_string
+ok 56 P6b a CRLF Write
+ok 57 P7 a second frontmatter block is read by neither G20 nor ledger-open
+ok 58 P8 a byte order mark and blanks after the opening ---
+ok 59 P9 an Edit with an empty old_string writes a new file
+ok 60 P10 a Markdown name in another case
+ok 61 P11 curly quotes in the file, straight ones in old_string
+ok 62 P12 a user line that holds double quotes can be quoted whole
+ok 63 P13 perl in place, in any option form
+ok 64 P14 python -c and node -e with the path inside the code
+ok 65 P15 python reading its script from a here-doc
+ok 66 P16 tee, a here-doc, printf, sudo and env
+ok 67 P17 cp, cat, tee, dd, ln, rsync, install, git mv and a two-step mv from a prepared file
+ok 68 P18 cp of a prepared Markdown file into the specs directory
+ok 69 P19 a glob, find -exec, xargs and a loop variable, with approved in the command
+ok 70 P20 the word split by quotes or in capitals
+ok 71 P21 a shell write to an approved file without the word
+ok 72 P22 reads and kern's own scripts get no G20 vote
+ok 73 P23 accepted limit: a new file has no draft to be older than the message
+ok 74 P24 the quote comes from the first approved: line
+ok 75 P25 a quote over 500 characters matches nothing
+ok 76 P26 a prompt that starts with a system-reminder replaces the user's lines
+ok 77 P27 a byte order mark before the first ---
+ok 78 P28 bash -c, eval, command substitution, a path with a space, perl -0777
+ok 79 P29 Monitor is read as Bash
+ok 80 P30 an approved file approved again with a fresh real quote
+ok 81 P31 accepted limit: a teammate message wrapped() misses counts as the user's
+ok 82 P32 a write through a non-Markdown symlink to a spec
+ok 83 P33 option clusters tell the script from the files
+ok 84 P34 accepted false deny: perl inline code that reads, with approved and a Markdown name
+ok 85 P35 accepted limit: a script run by name is not seen
+ok 86 C1 a --- with trailing blanks closes the frontmatter for G20, ledger-open and plan-check alike
+ok 87 C1 a --- with a CR closes the frontmatter for G20, ledger-open and plan-check alike
+ok 88 C1 an opening --- with trailing blanks: G20 denies the approval ledger-open would accept
+ok 89 I2 sed deleting a closing --- turns staged body lines into frontmatter
+ok 90 I2 tail of a staged file whose first line is not --- into a plan
+ok 91 I3 running kern's prompt-submit to forge the user's message asks G16, and is denied under autopilot
+ok 92 I3 sourcing kern's state library to call state_set asks G16, and is denied under autopilot
+ok 93 N1 negations are not a yes
+ok 94 N2 an Edit whose old_string is not in the file, writing a status line, fails closed
+ok 95 N3 the changed-after message says how to approve

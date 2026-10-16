@@ -1,0 +1,622 @@
+tighter hostile main off #103 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #104 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #105 ask   -> deny  | noglob git push --force origin main
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #106 ask   -> deny  | repeat 2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #107 ask   -> deny  | coproc git push --force origin main
+    p3c: kern G1: git inside coproc cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #110 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+LOOSER  hostile main off #113 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+tighter hostile main off #117 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #118 none  -> deny  | noglob sh -c 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #119 none  -> deny  | noglob bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #134 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #135 none  -> deny  | nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #136 none  -> deny  | repeat 1 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #137 none  -> deny  | coproc eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #138 none  -> deny  | noglob sh <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #139 none  -> deny  | nocorrect bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #140 ask   -> deny  | repeat -1+2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #141 none  -> deny  | repeat -1+2 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #142 ask   -> deny  | repeat 1 -- git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #143 none  -> deny  | noglob nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #144 none  -> deny  | nocorrect noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #145 none  -> deny  | 'noglob' eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #146 none  -> deny  | \noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile main off #158 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+tighter hostile main off #162 none  -> ask   | noglob semantic-release
+    p3c: 
+    fin: kern G15: deploy or publish: semantic-release
+tighter hostile main off #165 none  -> deny  | noglob env -S 'psql -h prod-db.internal -c DELETE'
+    p3c: 
+    fin: kern G13: SQL to protected target prod-db.internal: statement starting `delete` is not a read; run it yourself with ! if it only reads
+LOOSER  hostile main off #166 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  hostile main off #169 deny  -> none  | NOGLOB cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  hostile main off #170 ask   -> none  | noglob cat @HC@/settings.json
+    p3c: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+    fin: 
+LOOSER  hostile main off #171 ask   -> none  | noglob ls @HC@
+    p3c: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+    fin: 
+tighter real    main off #7   ask   -> deny  | _ gpf! origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #46  ask   -> deny  | nocorrect gpf! origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #47  ask   -> deny  | repeat 2 gpf! origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #48  ask   -> deny  | coproc gpf! origin main
+    p3c: kern G1: git inside coproc cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #103 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #104 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #105 ask   -> deny  | noglob git push --force origin main
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #106 ask   -> deny  | repeat 2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #107 ask   -> deny  | coproc git push --force origin main
+    p3c: kern G1: git inside coproc cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #110 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+LOOSER  real    main off #113 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+tighter real    main off #115 ask   -> deny  | nocorrect sudo git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #116 ask   -> deny  | _ gpf! origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #117 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #118 none  -> deny  | noglob sh -c 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #119 none  -> deny  | noglob bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #134 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #135 none  -> deny  | nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #136 none  -> deny  | repeat 1 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #137 none  -> deny  | coproc eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #138 none  -> deny  | noglob sh <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #139 none  -> deny  | nocorrect bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #103 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #104 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #105 ask   -> deny  | noglob git push --force origin main
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #106 ask   -> deny  | repeat 2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #107 ask   -> deny  | coproc git push --force origin main
+    p3c: kern G1: git inside coproc cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #140 ask   -> deny  | repeat -1+2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #141 none  -> deny  | repeat -1+2 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #142 ask   -> deny  | repeat 1 -- git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #143 none  -> deny  | noglob nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #144 none  -> deny  | nocorrect noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #145 none  -> deny  | 'noglob' eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    main off #146 none  -> deny  | \noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #110 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+LOOSER  real    wt   off #113 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+tighter real    wt   off #115 ask   -> deny  | nocorrect sudo git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #116 ask   -> deny  | _ gpf! origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #117 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #118 none  -> deny  | noglob sh -c 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #119 none  -> deny  | noglob bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #120 ask   -> deny  | noglob git commit -m "feat: x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    main off #158 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+tighter real    main off #162 none  -> ask   | noglob semantic-release
+    p3c: 
+    fin: kern G15: deploy or publish: semantic-release
+tighter real    main off #165 none  -> deny  | noglob env -S 'psql -h prod-db.internal -c DELETE'
+    p3c: 
+    fin: kern G13: SQL to protected target prod-db.internal: statement starting `delete` is not a read; run it yourself with ! if it only reads
+LOOSER  real    main off #166 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  real    main off #169 deny  -> none  | NOGLOB cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+tighter real    wt   off #134 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #135 none  -> deny  | nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #136 none  -> deny  | repeat 1 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #137 none  -> deny  | coproc eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #138 none  -> deny  | noglob sh <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #139 none  -> deny  | nocorrect bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+LOOSER  real    main off #170 ask   -> none  | noglob cat @HC@/settings.json
+    p3c: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+    fin: 
+LOOSER  real    main off #171 ask   -> none  | noglob ls @HC@
+    p3c: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+    fin: 
+tighter real    main off #174 none  -> deny  | repeat 1 sed -i '' 's/draft/approved/' docs/plans/x.md
+    p3c: 
+    fin: kern G20: set or change an approval with the Edit or Write tool, so kern can check the user's quote
+tighter real    wt   off #140 ask   -> deny  | repeat -1+2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #141 none  -> deny  | repeat -1+2 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #142 ask   -> deny  | repeat 1 -- git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #143 none  -> deny  | noglob nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #144 none  -> deny  | nocorrect noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #145 none  -> deny  | 'noglob' eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #146 none  -> deny  | \noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #156 ask   -> deny  | noglob git commit -m "feat: x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #157 ask   -> deny  | noglob git commit -m "x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter real    wt   off #158 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+tighter real    wt   off #162 none  -> ask   | noglob semantic-release
+    p3c: 
+    fin: kern G15: deploy or publish: semantic-release
+tighter real    wt   off #165 none  -> deny  | noglob env -S 'psql -h prod-db.internal -c DELETE'
+    p3c: 
+    fin: kern G13: SQL to protected target prod-db.internal: statement starting `delete` is not a read; run it yourself with ! if it only reads
+LOOSER  real    wt   off #166 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  real    wt   off #169 deny  -> none  | NOGLOB cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  real    wt   off #170 ask   -> none  | noglob cat @HC@/settings.json
+    p3c: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+    fin: 
+LOOSER  real    wt   off #171 ask   -> none  | noglob ls @HC@
+    p3c: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+    fin: 
+tighter real    wt   off #174 none  -> deny  | repeat 1 sed -i '' 's/draft/approved/' docs/plans/x.md
+    p3c: 
+    fin: kern G20: set or change an approval with the Edit or Write tool, so kern can check the user's quote
+tighter hostile wt   off #103 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #46  ask   -> deny  | nocorrect gpf! origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #104 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #47  ask   -> deny  | repeat 2 gpf! origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #105 ask   -> deny  | noglob git push --force origin main
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter real    wt   off #48  ask   -> deny  | coproc gpf! origin main
+    p3c: kern G1: git inside coproc cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #106 ask   -> deny  | repeat 2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #107 ask   -> deny  | coproc git push --force origin main
+    p3c: kern G1: git inside coproc cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #110 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+LOOSER  hostile wt   off #113 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+tighter hostile wt   off #117 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #118 none  -> deny  | noglob sh -c 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #119 none  -> deny  | noglob bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #120 ask   -> deny  | noglob git commit -m "feat: x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #134 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #135 none  -> deny  | nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #136 none  -> deny  | repeat 1 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #137 none  -> deny  | coproc eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #138 none  -> deny  | noglob sh <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #139 none  -> deny  | nocorrect bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #140 ask   -> deny  | repeat -1+2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #141 none  -> deny  | repeat -1+2 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #142 ask   -> deny  | repeat 1 -- git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #143 none  -> deny  | noglob nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #144 none  -> deny  | nocorrect noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #145 none  -> deny  | 'noglob' eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #146 none  -> deny  | \noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter hostile wt   off #156 ask   -> deny  | noglob git commit -m "feat: x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #157 ask   -> deny  | noglob git commit -m "x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter hostile wt   off #158 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+tighter hostile wt   off #162 none  -> ask   | noglob semantic-release
+    p3c: 
+    fin: kern G15: deploy or publish: semantic-release
+tighter hostile wt   off #165 none  -> deny  | noglob env -S 'psql -h prod-db.internal -c DELETE'
+    p3c: 
+    fin: kern G13: SQL to protected target prod-db.internal: statement starting `delete` is not a read; run it yourself with ! if it only reads
+LOOSER  hostile wt   off #166 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  hostile wt   off #169 deny  -> none  | NOGLOB cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  hostile wt   off #170 ask   -> none  | noglob cat @HC@/settings.json
+    p3c: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+    fin: 
+LOOSER  hostile wt   off #171 ask   -> none  | noglob ls @HC@
+    p3c: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+    fin: 
+tighter none    main off #103 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #104 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #105 ask   -> deny  | noglob git push --force origin main
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #106 ask   -> deny  | repeat 2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #107 ask   -> deny  | coproc git push --force origin main
+    p3c: kern G1: git inside coproc cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #110 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+LOOSER  none    main off #113 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+tighter none    main off #115 ask   -> deny  | nocorrect sudo git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #117 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #118 none  -> deny  | noglob sh -c 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #119 none  -> deny  | noglob bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #134 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #135 none  -> deny  | nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #136 none  -> deny  | repeat 1 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #137 none  -> deny  | coproc eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #138 none  -> deny  | noglob sh <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #139 none  -> deny  | nocorrect bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #140 ask   -> deny  | repeat -1+2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #141 none  -> deny  | repeat -1+2 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #142 ask   -> deny  | repeat 1 -- git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #143 none  -> deny  | noglob nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #144 none  -> deny  | nocorrect noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #145 none  -> deny  | 'noglob' eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #146 none  -> deny  | \noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    main off #158 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+tighter none    main off #162 none  -> ask   | noglob semantic-release
+    p3c: 
+    fin: kern G15: deploy or publish: semantic-release
+tighter none    main off #165 none  -> deny  | noglob env -S 'psql -h prod-db.internal -c DELETE'
+    p3c: 
+    fin: kern G13: SQL to protected target prod-db.internal: statement starting `delete` is not a read; run it yourself with ! if it only reads
+LOOSER  none    main off #166 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  none    main off #169 deny  -> none  | NOGLOB cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+tighter real    wt   off #7   ask   -> deny  | _ gpf! origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+LOOSER  none    main off #170 ask   -> none  | noglob cat @HC@/settings.json
+    p3c: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+    fin: 
+LOOSER  none    main off #171 ask   -> none  | noglob ls @HC@
+    p3c: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+    fin: 
+tighter none    main off #174 none  -> deny  | repeat 1 sed -i '' 's/draft/approved/' docs/plans/x.md
+    p3c: 
+    fin: kern G20: set or change an approval with the Edit or Write tool, so kern can check the user's quote
+tighter none    wt   off #103 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #104 ask   -> deny  | nocorrect git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #105 ask   -> deny  | noglob git push --force origin main
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #106 ask   -> deny  | repeat 2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #107 ask   -> deny  | coproc git push --force origin main
+    p3c: kern G1: git inside coproc cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #110 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+LOOSER  none    wt   off #113 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+tighter none    wt   off #115 ask   -> deny  | nocorrect sudo git push --force origin main
+    p3c: kern G1: git inside nocorrect cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #117 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #118 none  -> deny  | noglob sh -c 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #119 none  -> deny  | noglob bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #120 ask   -> deny  | noglob git commit -m "feat: x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #134 none  -> deny  | noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #135 none  -> deny  | nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #136 none  -> deny  | repeat 1 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #137 none  -> deny  | coproc eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #138 none  -> deny  | noglob sh <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #139 none  -> deny  | nocorrect bash <<EOF@NL@git push --force origin main@NL@EOF
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #140 ask   -> deny  | repeat -1+2 git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #141 none  -> deny  | repeat -1+2 eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #142 ask   -> deny  | repeat 1 -- git push --force origin main
+    p3c: kern G1: git inside repeat cannot be checked; run git directly
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #143 none  -> deny  | noglob nocorrect eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #144 none  -> deny  | nocorrect noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #145 none  -> deny  | 'noglob' eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #146 none  -> deny  | \noglob eval 'git push --force origin main'
+    p3c: 
+    fin: kern G1: plain force push (--force, -f, +refspec or --mirror); use --force-with-lease on your own branch
+tighter none    wt   off #156 ask   -> deny  | noglob git commit -m "feat: x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #157 ask   -> deny  | noglob git commit -m "x"
+    p3c: kern G1: git inside noglob cannot be checked; run git directly
+    fin: kern G6: possible secret, not committed or pushed: creds.txt:1 aws-access-key
+tighter none    wt   off #158 ask   -> deny  | noglob gh pr create --title t --body b
+    p3c: kern G2: gh inside noglob cannot be checked; run gh directly
+    fin: kern G2: open PRs as drafts: add --draft; G4: pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline
+tighter none    wt   off #162 none  -> ask   | noglob semantic-release
+    p3c: 
+    fin: kern G15: deploy or publish: semantic-release
+tighter none    wt   off #165 none  -> deny  | noglob env -S 'psql -h prod-db.internal -c DELETE'
+    p3c: 
+    fin: kern G13: SQL to protected target prod-db.internal: statement starting `delete` is not a read; run it yourself with ! if it only reads
+LOOSER  none    wt   off #166 deny  -> none  | noglob cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  none    wt   off #169 deny  -> none  | NOGLOB cat @SD@/test-session.state
+    p3c: kern G16: commands may not write kern session state
+    fin: 
+LOOSER  none    wt   off #170 ask   -> none  | noglob cat @HC@/settings.json
+    p3c: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+    fin: 
+LOOSER  none    wt   off #171 ask   -> none  | noglob ls @HC@
+    p3c: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+    fin: 
+tighter none    wt   off #174 none  -> deny  | repeat 1 sed -i '' 's/draft/approved/' docs/plans/x.md
+    p3c: 
+    fin: kern G20: set or change an approval with the Edit or Write tool, so kern can check the user's quote
+TOTAL 1704 compared (2 unmatched): same 1497, tighter 177, LOOSER 30, ERROR 0

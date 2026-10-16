@@ -1,0 +1,155 @@
+diff --git a/hooks/guards/g02-pr.sh b/hooks/guards/g02-pr.sh
+index 7d1cd1b..c80e15f 100644
+--- a/hooks/guards/g02-pr.sh
++++ b/hooks/guards/g02-pr.sh
+@@ -35,7 +35,7 @@ guard_g02() {
+   local cmd sub i=0
+   cmd=$(ti_get command) || return 0
+   # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
+-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   _gh_load "$cmd"
+   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
+     sub=$(gh_sub "${_GH_RECS[$i]}") || sub=""
+diff --git a/hooks/guards/g03-review.sh b/hooks/guards/g03-review.sh
+index 42965a6..c0479d7 100644
+--- a/hooks/guards/g03-review.sh
++++ b/hooks/guards/g03-review.sh
+@@ -24,7 +24,7 @@ guard_g03() {
+   local cmd i=0
+   cmd=$(ti_get command) || return 0
+   # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
+-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   _gh_load "$cmd"
+   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
+     case "$(gh_sub "${_GH_RECS[$i]}")" in
+diff --git a/hooks/guards/g04-untrusted.sh b/hooks/guards/g04-untrusted.sh
+index a3ab596..d73ed5d 100644
+--- a/hooks/guards/g04-untrusted.sh
++++ b/hooks/guards/g04-untrusted.sh
+@@ -7,7 +7,7 @@ guard_g04() {
+   local cmd seg sub words w
+   cmd=$(ti_get command) || return 0
+   # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
+-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   while IFS= read -r seg; do
+     sub=$(gh_sub "$seg") || continue
+     # gh's aliases (pr new, issue new, release new) read as the commands they name (g02-pr.sh).
+diff --git a/hooks/guards/g13-protected.sh b/hooks/guards/g13-protected.sh
+index 81b477c..7407771 100644
+--- a/hooks/guards/g13-protected.sh
++++ b/hooks/guards/g13-protected.sh
+@@ -19,7 +19,7 @@ guard_g13() {
+   case "$cmd" in *'\u'*) cmd=$(_g13_unescape "$cmd") ;; esac
+   case "$cmd" in *\\$'\n'*) cmd=$(_g13_join "$cmd") ;; esac
+   # Cheap prefilter before settings_get: some client or transfer name, quotes and backslashes removed.
+-  _g13_flat "$cmd"
++  _g13_flat "$cmd ${KERN_ALIAS_TEXT-}"
+   _g13_names "$_G13_FLAT" || return 0
+   list=$(settings_get protected_targets '')
+   [ -n "$list" ] || return 0
+diff --git a/hooks/guards/g14-tracker.sh b/hooks/guards/g14-tracker.sh
+index d94a034..63d3557 100644
+--- a/hooks/guards/g14-tracker.sh
++++ b/hooks/guards/g14-tracker.sh
+@@ -195,7 +195,7 @@ _g14_decide() {
+ _g14_gh() {
+   local cmd sub i=0
+   cmd=$(ti_get command) || return 0
+-  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "$cmd ${KERN_ALIAS_TEXT-}" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   _gh_load "$cmd"
+   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
+     sub=$(gh_sub "${_GH_RECS[$i]}")
+diff --git a/hooks/guards/g15-deploy.sh b/hooks/guards/g15-deploy.sh
+index 6e2efde..69cdf25 100644
+--- a/hooks/guards/g15-deploy.sh
++++ b/hooks/guards/g15-deploy.sh
+@@ -185,7 +185,7 @@ guard_g15() {
+   [ "$TOOL" = Bash ] || return 0
+   local cmd out line seen=0 got=0 envs="" parsed dir rest sub t
+   cmd=$(ti_get command) || return 0
+-  _g15_named "$cmd" || return 0
++  _g15_named "$cmd ${KERN_ALIAS_TEXT-}" || return 0
+   # A failed parse or judge leaves no `.`, so G15 asks.
+   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
+   out=$(set -o pipefail; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK") || out=""
+diff --git a/hooks/lib/aliases.sh b/hooks/lib/aliases.sh
+index 147d6e0..c1f1555 100644
+--- a/hooks/lib/aliases.sh
++++ b/hooks/lib/aliases.sh
+@@ -137,6 +137,19 @@ aliases_load() {
+   return 0
+ }
+ 
++# alias_text CMD: the expansion of each record of CMD (git_words, from gitctx.sh) whose head word is an
++# alias aliases_load set, one per line. A guard that skips a command whose text lacks a name it reads
++# (gh, push) reads this text too, so an alias such as prc='gh pr create' is not skipped.
++alias_text() {
++  local rec
++  [ -n "${KERN_ALIASES-}" ] || return 0
++  while IFS= read -r rec; do
++    if alias_expand "$rec"; then printf '%s\n' "$ALIAS_EXP"; fi
++  done <<EOF
++$(git_words "$1")
++EOF
++}
++
+ # alias_expand SEG: when the head word of the simple command SEG is an alias aliases_load set, sets
+ # ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. As zsh does, the head
+ # word is the first word after unquoted NAME=value words, redirections (with a target in the next word
+diff --git a/hooks/pre-tool-use b/hooks/pre-tool-use
+index 8386dbb..d4bccc4 100755
+--- a/hooks/pre-tool-use
++++ b/hooks/pre-tool-use
+@@ -57,7 +57,7 @@ need state.sh prompt_hashes
+ need decide.sh vote fail_closed emit_decision
+ need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words git_sub cmd_head in_main_checkout
+ need gitctx.sh current_branch base_branch_name branch_protected push_targets with_timeout gh_sub word_value word_has
+-need aliases.sh alias_snapshot aliases_load alias_expand
++need aliases.sh alias_snapshot aliases_load alias_text alias_expand
+ 
+ # unparseable WHAT: fail closed on input the JSON reader could not parse, and stop.
+ unparseable() {
+@@ -95,6 +95,12 @@ AGENT=$(json_get agent_type) || case $? in 1) AGENT="" ;; *) unparseable agent_t
+ kern_enabled || exit 0
+ # The shell's aliases that run git or gh, so git_words judges `gp` as `git push` too.
+ [ "$TOOL" = Bash ] && aliases_load
++# The expansions in this command, which G2, G3, G4, G13, G14 and G15 read with its text before they parse it.
++# shellcheck disable=SC2034 # read by the guard files
++{
++  KERN_ALIAS_TEXT=""
++  [ -n "${KERN_ALIASES-}" ] && KERN_ALIAS_TEXT=$(alias_text "$(ti_get command 2>/dev/null)")
++}
+ 
+ # The guards kern ships, so a missing guard file fails closed. A guard file that does not source to
+ # the end fails closed too, and its guard does not run.
+diff --git a/tests/hooks/aliases.bats b/tests/hooks/aliases.bats
+index 6327ec2..df93dfb 100644
+--- a/tests/hooks/aliases.bats
++++ b/tests/hooks/aliases.bats
+@@ -275,3 +275,22 @@ noalias_hook() {
+   run env _KA_7878='git push --force' bash "$(kern_root)/hooks/pre-tool-use" <<<"$(bash_payload "xx origin main")"
+   [ "$(decision_of "$output")" = none ]
+ }
++
++@test "an alias is not skipped by a guard that reads the command text first: gh, push, a deploy or a protected host" {
++  snap "alias -- prc='gh pr create'" "alias -- rel='gh release create'" "alias -- isc='gh issue create'" \
++    "alias -- prv='gh pr review'" "alias -- up='git push'"
++  mkdir -p "$R/.claude"
++  printf 'deploy.envs: production\n' >"$R/.claude/kern.local.yml"
++  expect deny "prc --title t --body b"
++  same "prc --title t --body b" "gh pr create --title t --body b"
++  same "rel v1" "gh release create v1"
++  same "isc --title t --body-file b.md" "gh issue create --title t --body-file b.md"
++  same "prv 1 --approve" "gh pr review 1 --approve"
++  same "up origin production" "git push origin production"
++  expect ask "rel v1" "isc --title t --body-file b.md"
++  snap "alias -- pdb='git status && psql -h prod-db.internal -c '\\''DELETE FROM x'\\'''"
++  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
++  # G13 cannot find the alias's psql in the command text, so it also reads it as fed by a pipe.
++  expect deny "pdb"
++  [[ "$output" == *"statement starting \`delete\` is not a read"* ]] || false
++}

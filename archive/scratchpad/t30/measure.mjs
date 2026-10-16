@@ -1,0 +1,30 @@
+// Measures the rendered kernel as lint rule 7 does: longest fixture settings, no settings, standing cost.
+import { mkdtempSync, mkdirSync, copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+const root = process.argv[2];
+const { loadModel } = await import(join(root, 'scripts/lib/lint-rules.mjs'));
+const model = loadModel(root);
+const tmp = mkdtempSync(join(tmpdir(), 'kern-measure-'));
+const repo = join(tmp, 'repo');
+mkdirSync(join(repo, '.claude'), { recursive: true });
+const init = spawnSync('git', ['init', '-q', repo]);
+if (init.status !== 0) throw new Error(`git init exited ${init.status}`);
+const env = { ...process.env, HOME: join(tmp, 'home'), CLAUDE_PLUGIN_DATA: join(tmp, 'data') };
+const norm = (s) => s.split(root.replace(/\/$/, '')).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
+const run = () => {
+  const r = spawnSync('bash', [join(root, 'hooks', 'session-start')], { input: JSON.stringify({ session_id: 'm', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' }), env, encoding: 'utf8' });
+  if (r.status !== 0 || !r.stdout.trim()) throw new Error(`session-start exited ${r.status}`);
+  return r.stdout;
+};
+const bareRaw = run();
+const fixture = join(root, 'tests/fixtures/projects/long-settings');
+for (const f of ['kern.local.yml', 'kern.yml']) if (existsSync(join(fixture, f))) copyFileSync(join(fixture, f), join(repo, '.claude', f));
+const longRaw = run();
+rmSync(tmp, { recursive: true, force: true });
+const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
+const routes = existsSync(join(root, 'kernel/routes.md')) ? readFileSync(join(root, 'kernel/routes.md'), 'utf8').length : 0;
+console.log(JSON.stringify({ kernelNoSettings: norm(bareRaw).length, kernelLongest: norm(longRaw).length, routesMd: routes, descriptions: desc, standingCost: norm(bareRaw).length + desc }));
+console.log('--- bare output head ---');
+console.log(bareRaw.split('\n').slice(0, 3).join('\n'));

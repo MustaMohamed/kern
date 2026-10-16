@@ -1,0 +1,346 @@
+<title>kern M2a Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a build sheet. Header with the numbers, the workflow as a pipeline, the gates moved into code, the build order in checkpoint phases with hours drawn to scale, goal-0 claims, budget, done-when, and the decision. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #18202c;
+  --muted: #5b6577;
+  --line: #dde1e8;
+  --accent: #2c55c9;
+  --done: #1f8a5b;
+  --review: #b7791f;
+  --queued: #8a93a3;
+  --risk: #c2413b;
+  --accent-soft: #e4eafb;
+  --done-soft: #e3f3eb;
+  --review-soft: #fbf0dc;
+  --queued-soft: #eceef2;
+  --risk-soft: #f9e4e2;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --surface: #18202b; --ink: #e6e9ef; --muted: #9aa4b5; --line: #2a3442;
+    --accent: #7d9cf5; --done: #4cc38a; --review: #e0a948; --queued: #7c8697; --risk: #f07a73;
+    --accent-soft: #1d2847; --done-soft: #16352a; --review-soft: #3a2e17; --queued-soft: #222b37; --risk-soft: #3d1f1f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #18202b; --ink: #e6e9ef; --muted: #9aa4b5; --line: #2a3442;
+  --accent: #7d9cf5; --done: #4cc38a; --review: #e0a948; --queued: #7c8697; --risk: #f07a73;
+  --accent-soft: #1d2847; --done-soft: #16352a; --review-soft: #3a2e17; --queued-soft: #222b37; --risk-soft: #3d1f1f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 56px; display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: 0.005em; }
+h1 { font-size: clamp(28px, 4.2vw, 40px); line-height: 1.1; }
+h2 { font-size: 22px; line-height: 1.25; }
+h3 { font-size: 16px; }
+p { margin: 0; max-width: 70ch; }
+ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+li { max-width: 72ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.muted { color: var(--muted); }
+.mono { font-family: var(--font-mono); font-size: 0.92em; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--queued-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+header { display: grid; gap: 12px; }
+section { display: grid; gap: 16px; }
+.sec-head { display: grid; gap: 4px; }
+.pill { display: inline-block; font-family: var(--font-mono); font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--review-soft); color: var(--review); font-weight: 500; }
+
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.fig { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; align-content: start; }
+.fig .n { font-family: var(--font-display); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.fig .k { font-size: 12.5px; color: var(--muted); }
+
+/* Pipeline */
+.pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; counter-reset: st; }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; position: relative; min-width: 0; }
+.stage::before { counter-increment: st; content: counter(st); font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.stage h3 { font-size: 15px; }
+.stage p { font-size: 13px; color: var(--muted); }
+.stage .gate { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent); background: var(--accent-soft); border-radius: 3px; padding: 2px 6px; justify-self: start; overflow-wrap: anywhere; }
+
+/* Tables */
+.board { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); background: var(--bg); }
+td.sub { color: var(--muted); font-size: 13px; }
+.chip { display: inline-block; font-family: var(--font-mono); font-size: 11.5px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; font-weight: 500; }
+.chip.ex { background: var(--done-soft); color: var(--done); }
+.chip.me { background: var(--accent-soft); color: var(--accent); }
+
+/* Build order */
+.phases { display: grid; gap: 14px; }
+.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.phase-head { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.phase-head h3 { font-size: 15px; }
+.phase-head .mono { color: var(--muted); font-size: 12.5px; }
+.phase-head .ck { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--done); }
+.trow { display: grid; grid-template-columns: 3.2em minmax(0, 1.25fr) minmax(0, 1.5fr) 7.5em; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); align-items: start; }
+.trow:last-child { border-bottom: 0; }
+.trow .id { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); padding-top: 1px; }
+.trow .t { font-weight: 500; font-size: 14px; }
+.trow .o { font-size: 12.5px; color: var(--muted); }
+.hrs { display: grid; gap: 3px; }
+.hrs .bar { height: 7px; background: var(--queued-soft); border-radius: 2px; overflow: hidden; }
+.hrs .bar span { display: block; height: 100%; background: var(--accent); }
+.hrs small { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+@media (max-width: 720px) {
+  .trow { grid-template-columns: 3em minmax(0, 1fr) 5.5em; }
+  .trow .o { grid-column: 2 / -1; }
+}
+
+/* Budget bar, drawn to scale: full width = 4,800 chars */
+.budget { display: grid; gap: 8px; }
+.bbar { display: flex; height: 22px; border-radius: 3px; overflow: hidden; background: var(--queued-soft); border: 1px solid var(--line); }
+.bbar span { display: block; height: 100%; }
+.b-k { background: var(--accent); }
+.b-d { background: var(--done); }
+.blegend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.blegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 780px) { .cols { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.panel li { font-size: 14px; }
+.decide { background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; padding: 16px 18px; display: grid; gap: 10px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.opt { border-left: 2px solid var(--line); padding: 2px 0 2px 12px; display: grid; gap: 2px; }
+.opt strong { font-family: var(--font-display); font-weight: 600; }
+.opt p { font-size: 13.5px; color: var(--muted); }
+.opt.rec { border-left-color: var(--accent); }
+footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">kern plugin · M2a plan · 14 Oct 2026</div>
+    <h1>M2a: the workflow, with its gates in code</h1>
+    <p class="muted">M2a builds kern's working loop: define a change, plan it, run it task by task in worktrees with a review of each task, prove it, commit it and open a draft PR. Where the M2 plan trusted the model, M2a puts a script or a guard in front of the step, with a test that fails first. M2b, next round, proves the result beats the sources.</p>
+    <div><span class="pill">waiting for your approval</span></div>
+  </header>
+
+  <section>
+    <div class="figs">
+      <div class="fig"><span class="n">34</span><span class="k">tasks, each test-first</span></div>
+      <div class="fig"><span class="n">~38 h</span><span class="k">estimated build time</span></div>
+      <div class="fig"><span class="n">11</span><span class="k">skills, plus 3 agents</span></div>
+      <div class="fig"><span class="n">2</span><span class="k">new guards: G18 and G20</span></div>
+      <div class="fig"><span class="n">156</span><span class="k">decided items traced to a task and a test</span></div>
+      <div class="fig"><span class="n">0.3.0</span><span class="k">release at the end</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">How M2a works</div>
+      <h2>One change, from request to draft PR</h2>
+      <p class="muted">Each stage is a skill. The blue line under it is the check that runs as code, not as an instruction to the model.</p>
+    </div>
+    <div class="pipe">
+      <div class="stage"><h3>define</h3><p>Clarify the ask, write a spec with a Constraints section, get your explicit yes.</p><span class="gate">G20 checks your quote</span></div>
+      <div class="stage"><h3>plan</h3><p>Slice the spec into tasks with exact files, interfaces and tests.</p><span class="gate">plan-check --graph</span></div>
+      <div class="stage"><h3>execute-plan</h3><p>Open a ledger, brief each task, run it in its own worktree.</p><span class="gate">ledger-open · brief-check</span></div>
+      <div class="stage"><h3>implement</h3><p>Write the failing test first, then the code, inside the task's worktree.</p><span class="gate">probe: fails, then passes</span></div>
+      <div class="stage"><h3>review per task</h3><p>A read-only reviewer judges the exact tree, with no commits needed.</p><span class="gate">task-done refuses an unreviewed tree</span></div>
+      <div class="stage"><h3>self-review</h3><p>Spec lane, blast radius, floor scan, a doubt pass in fresh context.</p><span class="gate">floor-scan · claim-check</span></div>
+      <div class="stage"><h3>commit</h3><p>One commit per reviewed task, message in the convention you use.</p><span class="gate">G5 proven shape</span></div>
+      <div class="stage"><h3>finish-branch</h3><p>Push the proven tree, open a draft PR, never merge.</p><span class="gate">G1 · G2 draft and dedup</span></div>
+    </div>
+    <p class="muted" style="font-size:13.5px">Around the loop: <code>diagnose</code> for bugs, <code>parallel-work</code> for independent tasks in forks, <code>recall</code> to rebuild state after a break, and <code>prove-it</code> before any "done".</p>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Gates moved into code</div>
+      <h2>What the model could claim before, and what checks it now</h2>
+    </div>
+    <div class="board">
+      <table>
+        <thead><tr><th>Step</th><th>In the old M2 plan</th><th>In M2a</th><th>Task</th></tr></thead>
+        <tbody>
+          <tr><td>Spec or plan approved</td><td class="sub">The model writes <code>status: approved</code> and your words</td><td>G20 denies it unless the quote is a whole line of your last message, and always under autopilot</td><td class="mono">14</td></tr>
+          <tr><td>Task reviewed</td><td class="sub"><code>task-done</code> stamped <code>review=approved</code> with no review</td><td><code>task-done</code> re-snapshots the worktree and refuses unless an approved review names that exact tree</td><td class="mono">9</td></tr>
+          <tr><td>Test fails without the change</td><td class="sub">Self-reported</td><td><code>probe</code> reverts only the fix in a throwaway fork and checks the test goes red</td><td class="mono">6, 22</td></tr>
+          <tr><td>Plan ordering</td><td class="sub">Built by hand</td><td><code>plan-check</code> requires order between tasks that share a file, matched interfaces, every criterion covered, no cycles</td><td class="mono">11</td></tr>
+          <tr><td>Brief complete</td><td class="sub">Prose rule</td><td><code>brief-check</code> before every dispatch; template placeholders fail</td><td class="mono">10</td></tr>
+          <tr><td>Edits outside the plan</td><td class="sub">Prose rule</td><td><code>wt-diff --allow</code> stops on any path outside the task's files</td><td class="mono">2</td></tr>
+          <tr><td>Investigator read-only</td><td class="sub">Tools list only</td><td>G18 allowlist; <code>sed -i</code>, <code>sort -o</code> and file writes denied</td><td class="mono">12</td></tr>
+          <tr><td>Commit and PR</td><td class="sub">Skill text that kern's own guards denied</td><td>Message and body files where G2 and G5 accept them, <code>--title</code>, dedup on the head commit</td><td class="mono">24, 25</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Build order</div>
+      <h2>Ten phases, each ending at a full CI run</h2>
+      <p class="muted"><code>scripts/ci-local</code> runs after every phase and the build stops if anything is red. Bars show estimated hours, full width is 2 h.</p>
+    </div>
+    <div class="phases">
+      <div class="phase">
+        <div class="phase-head"><h3>1 · Worktrees and review packages</h3><span class="mono">3.5 h</span><span class="ck">checkpoint after Task 3</span></div>
+        <div class="trow"><span class="id">T1</span><span class="t">Worktree creation and the entry check</span><span class="o"><code>wt-new</code>, <code>wt-check</code>, fresh <code>origin/&lt;base&gt;</code></span><span class="hrs"><span class="bar"><span style="width:75%"></span></span><small>1.5 h</small></span></div>
+        <div class="trow"><span class="id">T2</span><span class="t">Snapshot trees, review packages, allowed paths</span><span class="o"><code>wt-snap</code>, <code>wt-diff --allow</code></span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+        <div class="trow"><span class="id">T3</span><span class="t">Forks and serial integration</span><span class="o"><code>wt-fork</code>, <code>wt-apply</code></span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>2 · Proof checks</h3><span class="mono">4.25 h</span><span class="ck">checkpoint after Task 7</span></div>
+        <div class="trow"><span class="id">T4</span><span class="t">Worktree audit</span><span class="o"><code>wt-audit</code>: worktrees left by earlier sessions</span><span class="hrs"><span class="bar"><span style="width:37.5%"></span></span><small>0.75 h</small></span></div>
+        <div class="trow"><span class="id">T5</span><span class="t">Floor scan with a lowered-bar class</span><span class="o"><code>floor-scan</code>: skipped tests, removed asserts, loosened thresholds</span><span class="hrs"><span class="bar"><span style="width:75%"></span></span><small>1.5 h</small></span></div>
+        <div class="trow"><span class="id">T6</span><span class="t">Claim checks and the fail-then-pass probe</span><span class="o"><code>claim-check</code>, <code>probe --exclude-tests</code>, <code>--mutate</code></span><span class="hrs"><span class="bar"><span style="width:62.5%"></span></span><small>1.25 h</small></span></div>
+        <div class="trow"><span class="id">T7</span><span class="t">Seeded-diff set for review checks</span><span class="o">20 labelled diffs: 12 seeded, 8 decoys</span><span class="hrs"><span class="bar"><span style="width:37.5%"></span></span><small>0.75 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>3 · Ledger and plan gates</h3><span class="mono">4.25 h</span><span class="ck">checkpoint after Task 11</span></div>
+        <div class="trow"><span class="id">T8</span><span class="t">Ledger identity, briefs, task start</span><span class="o"><code>ledger-open</code>, <code>task-brief</code>, <code>task-start</code></span><span class="hrs"><span class="bar"><span style="width:62.5%"></span></span><small>1.25 h</small></span></div>
+        <div class="trow"><span class="id">T9</span><span class="t">Review lines and task completion</span><span class="o"><code>task-review</code>, <code>task-done --probe</code></span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+        <div class="trow"><span class="id">T10</span><span class="t">Complete briefs before a spawn</span><span class="o"><code>brief-check</code></span><span class="hrs"><span class="bar"><span style="width:25%"></span></span><small>0.5 h</small></span></div>
+        <div class="trow"><span class="id">T11</span><span class="t">Plans and specs linted in code</span><span class="o"><code>plan-check</code> with graph checks</span><span class="hrs"><span class="bar"><span style="width:75%"></span></span><small>1.5 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>4 · Guards, agents, lint</h3><span class="mono">4.75 h</span><span class="ck">checkpoint after Task 15</span></div>
+        <div class="trow"><span class="id">T12</span><span class="t">Guard G18, the read-only investigator</span><span class="o">Allowlist of read commands for the investigator</span><span class="hrs"><span class="bar"><span style="width:62.5%"></span></span><small>1.25 h</small></span></div>
+        <div class="trow"><span class="id">T13</span><span class="t">The three M2 agents</span><span class="o">implementer, task-reviewer, investigator</span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+        <div class="trow"><span class="id">T14</span><span class="t">Guard G20, approvals that quote you</span><span class="o">Any Markdown file that sets <code>status: approved</code></span><span class="hrs"><span class="bar"><span style="width:75%"></span></span><small>1.5 h</small></span></div>
+        <div class="trow"><span class="id">T15</span><span class="t">Lint rules 5, 9 and 16</span><span class="o">Red-flag tables, contract drift</span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>5 · Build and debug skills</h3><span class="mono">3.5 h</span><span class="ck">checkpoint after Task 18</span></div>
+        <div class="trow"><span class="id">T16</span><span class="t"><code>prove-it</code></span><span class="o">Evidence before "done"; replaces the M0 placeholder skill</span><span class="hrs"><span class="bar"><span style="width:37.5%"></span></span><small>0.75 h</small></span></div>
+        <div class="trow"><span class="id">T17</span><span class="t"><code>implement</code></span><span class="o">Test first, RED checked by probe, mutation on a fork</span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+        <div class="trow"><span class="id">T18</span><span class="t"><code>diagnose</code></span><span class="o">Loop first, forensics rules, <code>loop-rate</code>, <code>find-polluter</code></span><span class="hrs"><span class="bar"><span style="width:87.5%"></span></span><small>1.75 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>6 · Define, plan, run</h3><span class="mono">4.75 h</span><span class="ck">checkpoint after Task 22</span></div>
+        <div class="trow"><span class="id">T19</span><span class="t"><code>define</code></span><span class="o">Spec with Constraints, red flags, your quoted yes</span><span class="hrs"><span class="bar"><span style="width:62.5%"></span></span><small>1.25 h</small></span></div>
+        <div class="trow"><span class="id">T20</span><span class="t"><code>plan</code></span><span class="o">Spike route for unknowns, prefactor slices</span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+        <div class="trow"><span class="id">T21</span><span class="t"><code>parallel-work</code></span><span class="o">Forks, status mapping, timeouts for silent workers</span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+        <div class="trow"><span class="id">T22</span><span class="t"><code>execute-plan</code></span><span class="o">Ledger, per-task review, waves closed in their forks</span><span class="hrs"><span class="bar"><span style="width:75%"></span></span><small>1.5 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>7 · Review and ship</h3><span class="mono">4.5 h</span><span class="ck">checkpoint after Task 26</span></div>
+        <div class="trow"><span class="id">T23</span><span class="t"><code>self-review</code></span><span class="o">Spec lane, where grep stops, doubt pass</span><span class="hrs"><span class="bar"><span style="width:50%"></span></span><small>1 h</small></span></div>
+        <div class="trow"><span class="id">T24</span><span class="t"><code>commit</code></span><span class="o">One commit per reviewed task, proven tree</span><span class="hrs"><span class="bar"><span style="width:37.5%"></span></span><small>0.75 h</small></span></div>
+        <div class="trow"><span class="id">T25</span><span class="t"><code>finish-branch</code></span><span class="o">Draft PR, dedup on the head commit, no merge</span><span class="hrs"><span class="bar"><span style="width:62.5%"></span></span><small>1.25 h</small></span></div>
+        <div class="trow"><span class="id">T26</span><span class="t">Execution evals for commit and PR</span><span class="o">Real runs against a fake <code>gh</code> that records every call</span><span class="hrs"><span class="bar"><span style="width:75%"></span></span><small>1.5 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>8 · Recall, voice, routing</h3><span class="mono">4.5 h</span><span class="ck">checkpoint after Task 30</span></div>
+        <div class="trow"><span class="id">T27</span><span class="t"><code>recall-sessions</code></span><span class="o">This project's past sessions only</span><span class="hrs"><span class="bar"><span style="width:37.5%"></span></span><small>0.75 h</small></span></div>
+        <div class="trow"><span class="id">T28</span><span class="t"><code>recall</code></span><span class="o">Rebuild state from ledgers and live checks</span><span class="hrs"><span class="bar"><span style="width:62.5%"></span></span><small>1.25 h</small></span></div>
+        <div class="trow"><span class="id">T29</span><span class="t">Reply and voice rules</span><span class="o">Candor line, AI tells in normal voice, two terse rules</span><span class="hrs"><span class="bar"><span style="width:25%"></span></span><small>0.5 h</small></span></div>
+        <div class="trow"><span class="id">T30</span><span class="t">Routed file and routing evals</span><span class="o"><code>kernel/routes.md</code>, fixed rank floors, held-out prompts</span><span class="hrs"><span class="bar"><span style="width:100%"></span></span><small>2 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>9 · Hardening</h3><span class="mono">3 h</span><span class="ck">checkpoint after Task 33</span></div>
+        <div class="trow"><span class="id">T31</span><span class="t">Hardened git in hooks</span><span class="o">Repo config cannot run code during a guard; SubagentStart tests</span><span class="hrs"><span class="bar"><span style="width:37.5%"></span></span><small>0.75 h</small></span></div>
+        <div class="trow"><span class="id">T32</span><span class="t">0.2.1 follow-ups</span><span class="o">Length cap on voice switches, stricter drift test, doc wording</span><span class="hrs"><span class="bar"><span style="width:37.5%"></span></span><small>0.75 h</small></span></div>
+        <div class="trow"><span class="id">T33</span><span class="t">Shell-snapshot aliases</span><span class="o"><code>gpf!</code> judged as <code>git push --force</code></span><span class="hrs"><span class="bar"><span style="width:75%"></span></span><small>1.5 h</small></span></div>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><h3>10 · Release</h3><span class="mono">1.25 h</span><span class="ck">full CI, then release</span></div>
+        <div class="trow"><span class="id">T34</span><span class="t">CI for M2a and release 0.3.0</span><span class="o">macOS job, install smoke test, exec evals (asked first), tag</span><span class="hrs"><span class="bar"><span style="width:62.5%"></span></span><small>1.25 h</small></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Goal 0 · what M2a claims</div>
+      <h2>Against the strongest source in each category</h2>
+      <p class="muted">These are claims until M2b measures them head to head. "Exceeds" means M2a enforces in code what the source leaves to the model.</p>
+    </div>
+    <div class="board">
+      <table>
+        <thead><tr><th>Category</th><th>Strongest source</th><th>What M2a adds</th><th>Claim</th></tr></thead>
+        <tbody>
+          <tr><td>define, plan</td><td class="sub">superpowers brainstorming and writing-plans; pstack check-plan</td><td>Approval checked against your words; plan graph checked in code</td><td><span class="chip ex">exceeds</span></td></tr>
+          <tr><td>execute-plan, parallel-work</td><td class="sub">superpowers subagent-driven development; pstack orchestrate</td><td>Review of the exact tree without commits; gates as scripts</td><td><span class="chip ex">exceeds</span></td></tr>
+          <tr><td>implement, prove-it</td><td class="sub">superpowers TDD and verification; addy</td><td>Fail-then-pass proven by <code>probe</code>; mutation on a fork</td><td><span class="chip ex">exceeds</span></td></tr>
+          <tr><td>diagnose</td><td class="sub">pocock diagnosing-bugs; superpowers debugging</td><td>Every dropped mechanism restored; flake rate measured</td><td><span class="chip me">meets</span></td></tr>
+          <tr><td>self-review</td><td class="sub">pocock code-review; pstack blast-radius; addy</td><td>Spec lane, seeded-diff set in CI</td><td><span class="chip me">meets</span></td></tr>
+          <tr><td>commit, finish-branch</td><td class="sub">addy git workflow; superpowers finishing</td><td>Guards prove draft, dedup and message shape</td><td><span class="chip ex">exceeds</span></td></tr>
+          <tr><td>recall</td><td class="sub">your local recall; pstack recall</td><td>Session finder as a tested script; tags checked against live state</td><td><span class="chip ex">exceeds</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div class="panel">
+      <div class="sec-head"><div class="eyebrow">Standing cost</div><h3>Every session pays this, and it fits</h3></div>
+      <div class="budget">
+        <div class="bbar" role="img" aria-label="Kernel 3,487 characters plus descriptions 945 characters, 4,432 of a 4,800 character budget">
+          <span class="b-k" style="width:72.65%"></span><span class="b-d" style="width:19.69%"></span>
+        </div>
+        <div class="blegend">
+          <span><i class="b-k"></i>kernel 3,487</span>
+          <span><i class="b-d"></i>skill and agent descriptions 945</span>
+          <span>total 4,432 of 4,800 chars</span>
+        </div>
+      </div>
+      <p class="muted" style="font-size:13.5px">The routing rows moved to <code>kernel/routes.md</code> (759 chars), read once per routed task instead of every session. A lint rule fails the build above 4,800.</p>
+    </div>
+    <div class="panel">
+      <div class="sec-head"><div class="eyebrow">Done when</div><h3>M2a acceptance</h3></div>
+      <ul>
+        <li>Every unit, hook and node test passes on bash 3.2 and on Ubuntu</li>
+        <li>commit and finish-branch pass real runs against the fake <code>gh</code></li>
+        <li>A task cannot close without an approved review of its exact tree</li>
+        <li>floor-scan finds all seeded problems with no false alarms</li>
+        <li>Routing stays above its fixed floors</li>
+        <li>Standing cost within 4,800 characters</li>
+        <li>Release 0.3.0 tagged and CI green</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div class="panel">
+      <div class="sec-head"><div class="eyebrow">Checked before building</div><h3>Pre-flight result</h3></div>
+      <ul>
+        <li>Two agents built the plan's code in scratch clones and ran every step</li>
+        <li>32 findings, 3 of them High; all fixed in the plan</li>
+        <li>Each High fix measured failing first, then passing, on bash 3.2 and Ubuntu</li>
+        <li>Every skill file within its size cap</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="sec-head"><div class="eyebrow">Not in M2a</div><h3>Left for M2b or later</h3></div>
+      <ul>
+        <li>M2b: head-to-head evals for planning, debugging and review; the behaviour runner; the pilot</li>
+        <li>M3: the parser rework and the local <code>rm</code> guard</li>
+        <li>Confirmed only on the first CI run: <code>/usr/bin/time</code> on Ubuntu, the install job, mawk</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="decide">
+      <div class="eyebrow">Your decision</div>
+      <h2>Approve M2a and start building?</h2>
+      <div class="opts">
+        <div class="opt rec"><strong>Approve and start</strong><p>I commit and push the plans and spec changes, then start Task 1. Each task is built and reviewed by subagents, with a backup push after each.</p></div>
+        <div class="opt"><strong>Commit only</strong><p>Save the plans on main and wait for your go before Task 1.</p></div>
+        <div class="opt"><strong>Change something</strong><p>Name a task, a gate or the order, and I update the plan first.</p></div>
+      </div>
+      <p class="muted" style="font-size:13.5px">Reply in the terminal.</p>
+    </div>
+  </section>
+
+  <footer>Source: <span class="mono">docs/plans/2026-10-14-kern-m2a-plan.md</span> (34 tasks, 9,171 lines), the traceability table, and the two pre-flight reports. Hours are the plan's estimates.</footer>
+</div>

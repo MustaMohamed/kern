@@ -1,0 +1,12 @@
+cd @SD@ && noglob time cd /tmp; echo x > foo
+cd @SD@ && time cd /tmp; echo x > foo
+cd @SD@ && noglob command cd /tmp; echo x > foo
+cd @SD@ && command noglob cd /tmp; echo x > foo
+cd @SD@ && noglob ! cd /tmp; echo x > foo
+cd @SD@ && nocorrect nocorrect cd /tmp; echo x > foo
+cd @SD@ && nocorrect cd /tmp; echo x > foo
+cd @SD@ && cd /tmp; echo x > foo
+noglob time cd /tmp; cp src.md dst.md
+time cd /tmp; cp src.md dst.md
+noglob ! cd /tmp; cp src.md dst.md
+cd /tmp; cp src.md dst.md

@@ -1,0 +1,9 @@
+builtin cd a; builtin cd b; builtin cd c; builtin cd d; cp src.md dst.md
+builtin cd a; builtin cd b; builtin cd c; builtin cd d; builtin cd /tmp; ls notes.md
+builtin cd a; builtin cd b; builtin cd c; builtin cd d; builtin cd e; ls notes.md
+builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; builtin cd /tmp; ls notes.md
+if cd docs; then ls; fi; if cd plans; then ls; fi; if cd a; then ls; fi; if cd b; then ls; fi; if cd c; then ls; fi; ls notes.md
+builtin cd /a; builtin cd /b; builtin cd /c; builtin cd /d; builtin cd /e; builtin cd /f; builtin cd /g; builtin cd /h; builtin cd /i; builtin cd /j; builtin cd /k; builtin cd /l; builtin cd /m; builtin cd /n; builtin cd /o; ls notes.md
+builtin cd /a; builtin cd /b; builtin cd /c; builtin cd /d; builtin cd /e; builtin cd /f; builtin cd /g; builtin cd /h; builtin cd /i; builtin cd /j; builtin cd /k; builtin cd /l; builtin cd /m; builtin cd /n; builtin cd /o; builtin cd /p; ls notes.md
+builtin cd @YD@; cp src.md dst.md
+builtin cd @YD@; builtin cd a; builtin cd b; builtin cd c; builtin cd d; cp src.md dst.md

@@ -1,0 +1,96 @@
+real main off c00 same     base=ask   head=ask   | 	cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main off c01 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude &&	grt	&&	sed -i '' s/a/b/ settings.json
+real main off c02 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude // 	grt // 	sed -i '' s/a/b/ settings.json
+real main off c03 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main off c04 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main off c05 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main off c06 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main off c07 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/data/sessions && ls && echo x > foo
+real main off c08 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/data/sessions // 	ls // 	echo x > foo
+real main off c09 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/data/sessions && ls && echo x > foo
+real main off c10 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && tb && sed -i '' s/a/b/ settings.json
+real main off c11 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && tl && sed -i '' s/a/b/ settings.json
+real main off c12 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && tc && sed -i '' s/a/b/ settings.json
+real main off c13 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && cdx && sed -i '' s/a/b/ settings.json
+real main off c14 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && sub && sed -i '' s/a/b/ settings.json
+real main off c15 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && echo $(grt) && sed -i '' s/a/b/ settings.json
+real main off c16 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && x=$(grt; ls) && sed -i '' s/a/b/ settings.json
+real main off c17 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && echo $(echo $(grt)) && sed -i '' s/a/b/ settings.json
+real main off c18 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && echo `grt` && sed -i '' s/a/b/ settings.json
+real main off c19 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && eval grt && sed -i '' s/a/b/ settings.json
+real main off c20 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && eval 'grt; ls' && sed -i '' s/a/b/ settings.json
+real main off c21 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/data/sessions && eval ls && echo x > foo
+real main off c22 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && bash -c grt && sed -i '' s/a/b/ settings.json
+real main off c23 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && GRT && sed -i '' s/a/b/ settings.json
+real main off c24 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && GrT; sed -i '' s/a/b/ settings.json
+real main off c25 same     base=ask   head=ask   | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && LS; echo x > settings.json
+real main off c26 same     base=ask   head=ask   | grt && git commit -m "feat: add creds"
+real main off c27 same     base=ask   head=ask   | 	grt	&&	git commit -m "feat: add creds"
+real main off c28 same     base=ask   head=ask   | grt // 	git commit -m "feat: add creds"
+real main off c29 same     base=ask   head=ask   | grt && git commit -m "feat: add creds"
+real main off c30 same     base=ask   head=ask   | echo $(grt) && git commit -m "feat: add creds"
+real main off c31 same     base=ask   head=ask   | eval grt; git commit -m "feat: add creds"
+real main off c32 same     base=ask   head=ask   | tb; git commit -m "feat: add creds"
+real main off c33 same     base=ask   head=ask   | tl; git commit -m "feat: add creds"
+real main off c34 same     base=ask   head=ask   | sub && git commit -m "feat: add creds"
+real main off c35 same     base=ask   head=ask   | GRT && git commit -m "feat: add creds"
+real main off c36 same     base=deny  head=deny  | grt && git push --force-with-lease origin feat
+real main off c37 same     base=deny  head=deny  | grt && git push --force-with-lease origin feat
+real main off c38 same     base=deny  head=deny  | eval grt; git push --force-with-lease origin feat
+real main off c39 same     base=deny  head=deny  | echo $(grt) && git push --force-with-lease origin feat
+real main off c40 same     base=deny  head=deny  | cdx; git push --force-with-lease origin feat
+real main off c41 same     base=deny  head=deny  | true; git push --force-with-lease origin feat
+real main off c42 same     base=ask   head=ask   | cat <<-EOF // 	grt // 	EOF // git commit -m "feat: add creds"
+real main off c43 same     base=ask   head=ask   | cat <<-EOF | sh // 	grt // 	EOF // git commit -m "feat: add creds"
+real main off c44 same     base=ask   head=ask   | gaa && git commit -m "feat: x"
+real main off c45 same     base=      head=      | _ _ _ _ _ _ _ _ _ gpf! origin main
+real main off c46 tighter  base=      head=ask   | X=$(printf "%s" a) gpf! origin main
+real main off c47 tighter  base=      head=ask   | X=$(echo "(") gpf! origin main
+real main on c00 same     base=deny  head=deny  | 	cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main on c01 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude &&	grt	&&	sed -i '' s/a/b/ settings.json
+real main on c02 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude // 	grt // 	sed -i '' s/a/b/ settings.json
+real main on c03 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main on c04 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main on c05 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main on c06 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && grt && sed -i '' s/a/b/ settings.json
+real main on c07 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/data/sessions && ls && echo x > foo
+real main on c08 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/data/sessions // 	ls // 	echo x > foo
+real main on c09 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/data/sessions && ls && echo x > foo
+real main on c10 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && tb && sed -i '' s/a/b/ settings.json
+real main on c11 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && tl && sed -i '' s/a/b/ settings.json
+real main on c12 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && tc && sed -i '' s/a/b/ settings.json
+real main on c13 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && cdx && sed -i '' s/a/b/ settings.json
+real main on c14 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && sub && sed -i '' s/a/b/ settings.json
+real main on c15 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && echo $(grt) && sed -i '' s/a/b/ settings.json
+real main on c16 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && x=$(grt; ls) && sed -i '' s/a/b/ settings.json
+real main on c17 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && echo $(echo $(grt)) && sed -i '' s/a/b/ settings.json
+real main on c18 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && echo `grt` && sed -i '' s/a/b/ settings.json
+real main on c19 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && eval grt && sed -i '' s/a/b/ settings.json
+real main on c20 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && eval 'grt; ls' && sed -i '' s/a/b/ settings.json
+real main on c21 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/data/sessions && eval ls && echo x > foo
+real main on c22 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && bash -c grt && sed -i '' s/a/b/ settings.json
+real main on c23 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && GRT && sed -i '' s/a/b/ settings.json
+real main on c24 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && GrT; sed -i '' s/a/b/ settings.json
+real main on c25 same     base=deny  head=deny  | cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.LvA6Wk/home/.claude && LS; echo x > settings.json
+real main on c26 same     base=deny  head=deny  | grt && git commit -m "feat: add creds"
+real main on c27 same     base=deny  head=deny  | 	grt	&&	git commit -m "feat: add creds"
+real main on c28 same     base=deny  head=deny  | grt // 	git commit -m "feat: add creds"
+real main on c29 same     base=deny  head=deny  | grt && git commit -m "feat: add creds"
+real main on c30 same     base=deny  head=deny  | echo $(grt) && git commit -m "feat: add creds"
+real main on c31 same     base=deny  head=deny  | eval grt; git commit -m "feat: add creds"
+real main on c32 same     base=deny  head=deny  | tb; git commit -m "feat: add creds"
+real main on c33 same     base=deny  head=deny  | tl; git commit -m "feat: add creds"
+real main on c34 same     base=deny  head=deny  | sub && git commit -m "feat: add creds"
+real main on c35 same     base=deny  head=deny  | GRT && git commit -m "feat: add creds"
+real main on c36 same     base=deny  head=deny  | grt && git push --force-with-lease origin feat
+real main on c37 same     base=deny  head=deny  | grt && git push --force-with-lease origin feat
+real main on c38 same     base=deny  head=deny  | eval grt; git push --force-with-lease origin feat
+real main on c39 same     base=deny  head=deny  | echo $(grt) && git push --force-with-lease origin feat
+real main on c40 same     base=deny  head=deny  | cdx; git push --force-with-lease origin feat
+real main on c41 same     base=deny  head=deny  | true; git push --force-with-lease origin feat
+real main on c42 same     base=deny  head=deny  | cat <<-EOF // 	grt // 	EOF // git commit -m "feat: add creds"
+real main on c43 same     base=deny  head=deny  | cat <<-EOF | sh // 	grt // 	EOF // git commit -m "feat: add creds"
+real main on c44 same     base=deny  head=deny  | gaa && git commit -m "feat: x"
+real main on c45 tighter  base=      head=deny  | _ _ _ _ _ _ _ _ _ gpf! origin main
+real main on c46 tighter  base=      head=deny  | X=$(printf "%s" a) gpf! origin main
+real main on c47 tighter  base=      head=deny  | X=$(echo "(") gpf! origin main

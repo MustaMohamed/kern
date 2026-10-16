@@ -1,0 +1,150 @@
+TAP version 13
+# Subtest: finish-branch frontmatter
+not ok 1 - finish-branch frontmatter
+  ---
+  duration_ms: 0.47875
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:17:1'
+  failureType: 'testCodeFailure'
+  error: 'skills/finish-branch/SKILL.md exists'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    readDoc (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:13:10)
+    assertFrontmatter (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:41:13)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:18:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: finish-branch sections, steps and red flags
+not ok 2 - finish-branch sections, steps and red flags
+  ---
+  duration_ms: 0.559541
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:26:1'
+  failureType: 'testCodeFailure'
+  error: 'skills/finish-branch/SKILL.md exists'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    readDoc (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:13:10)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:27:25)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: push and PR reference
+not ok 3 - push and PR reference
+  ---
+  duration_ms: 0.139083
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:53:1'
+  failureType: 'testCodeFailure'
+  error: 'skills/finish-branch/references/push-and-pr.md exists'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    readDoc (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:13:10)
+    assertHeadings (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:48:29)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:54:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: PR body template
+not ok 4 - PR body template
+  ---
+  duration_ms: 0.069
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:68:1'
+  failureType: 'testCodeFailure'
+  error: 'skills/finish-branch/references/pr-body.md exists'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    readDoc (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:13:10)
+    assertHeadings (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:48:29)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/finish-branch.test.mjs:69:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: prove-it frontmatter is the spec text
+ok 5 - prove-it frontmatter is the spec text
+  ---
+  duration_ms: 0.9895
+  type: 'test'
+  ...
+# Subtest: prove-it sections, steps, gate and red flags
+ok 6 - prove-it sections, steps, gate and red flags
+  ---
+  duration_ms: 0.471583
+  type: 'test'
+  ...
+# Subtest: evidence reference
+ok 7 - evidence reference
+  ---
+  duration_ms: 0.150875
+  type: 'test'
+  ...
+# Subtest: the M0 placeholder is gone
+ok 8 - the M0 placeholder is gone
+  ---
+  duration_ms: 0.060834
+  type: 'test'
+  ...
+# Subtest: the gate hands a commit to commit and a push or PR to finish-branch
+not ok 9 - the gate hands a commit to commit and a push or PR to finish-branch
+  ---
+  duration_ms: 0.299666
+  type: 'test'
+  location: '/Users/musta/Code/projects/kern/tests/skills/prove-it.test.mjs:37:1'
+  failureType: 'testCodeFailure'
+  error: 'skills/prove-it/SKILL.md must contain: for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    assertContains (file:///Users/musta/Code/projects/kern/tests/helpers/md.mjs:64:35)
+    TestContext.<anonymous> (file:///Users/musta/Code/projects/kern/tests/skills/prove-it.test.mjs:38:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 4
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 37.073875

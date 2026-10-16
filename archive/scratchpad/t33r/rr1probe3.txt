@@ -1,0 +1,10 @@
+cd @SD@ && noglob nice cd /tmp; echo x > foo
+cd @SD@ && nice noglob cd /tmp; echo x > foo
+cd @SD@ && sudo noglob cd /tmp; echo x > foo
+cd @SD@ && env noglob cd /tmp; echo x > foo
+cd @SD@ && noglob env cd /tmp; echo x > foo
+cd @SD@ && timeout 5 noglob cd /tmp; echo x > foo
+cd @SD@ && repeat 1 time cd /tmp; echo x > foo
+cd @SD@ && nocorrect noglob cd /tmp; echo x > foo
+cd @HC@ && noglob time cd /tmp; sed -i '' s/a/b/ settings.json
+cd @HC@ && noglob ! cd /tmp; sed -i '' s/a/b/ settings.json

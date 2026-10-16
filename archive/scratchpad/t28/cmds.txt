@@ -1,0 +1,32 @@
+grep -n widget /Users/x/s.jsonl | cut -c1-300
+grep -n -i widget /Users/x/s.jsonl | cut -c1-300
+grep -c widget /Users/x/s.jsonl
+grep -nE "a|b" /Users/x/s.jsonl | cut -c1-300
+grep -n 'a\|b' /Users/x/s.jsonl | cut -c1-300
+grep -n widget /Users/x/s.jsonl | head -n 20 | cut -c1-300
+grep -n widget /a.jsonl /b.jsonl | cut -c1-300
+wc -c /Users/x/s.jsonl
+wc -c /a.jsonl /b.jsonl
+sed -n 12,40p /Users/x/s.jsonl
+sed -n 12p /Users/x/s.jsonl | wc -c
+sed -n 12p /Users/x/s.jsonl | cut -c1-500
+sed -n 12,40p /a.jsonl | cut -c1-500
+sed -n 12,40p /a.jsonl; sed -n 50,60p /a.jsonl
+head -c 2000 /Users/x/s.jsonl
+head -n 5 /Users/x/s.jsonl
+tail -n 5 /Users/x/s.jsonl
+jq -r .message /Users/x/s.jsonl
+jq -r 'select(.type=="user") | .message.content' /Users/x/s.jsonl
+jq -r '.message.content[0].text' /Users/x/s.jsonl | cut -c1-300
+sed -n 12p /Users/x/s.jsonl | jq -r .type
+sed -n 12p /Users/x/s.jsonl | cut -c1-500 | jq .
+grep -n widget /Users/x/s.jsonl | awk -F: '{print $1}'
+grep -n widget /Users/x/s.jsonl | cut -d: -f1
+grep -n widget /Users/x/s.jsonl | sort -n | uniq
+grep -n widget /Users/x/s.jsonl | cut -c1-300 | head -20
+grep -n widget /Users/x/s.jsonl | cut -c1-300 | tail -5
+grep -c widget /a.jsonl /b.jsonl
+grep -o widget.\{0,80\} /a.jsonl
+grep -n -o '"text":"[^"]\{0,200\}' /a.jsonl
+grep -n widget /a.jsonl | wc -l
+ls -l /a/b

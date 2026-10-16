@@ -1,0 +1,7 @@
+ evals/cases/row-self-review.json |   2 +-
+ scripts/lib/kernel-rows.mjs      |  31 ++++++++----
+ scripts/lib/lint-rules.mjs       |  31 +++++++-----
+ scripts/route-eval.mjs           |  57 +++++++++++++++++----
+ tests/lint-rules.test.mjs        |  70 +++++++++++++++++++++++---
+ tests/route-eval-rows.test.mjs   | 106 +++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 255 insertions(+), 42 deletions(-)

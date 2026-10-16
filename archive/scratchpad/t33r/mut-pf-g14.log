@@ -1,0 +1,28 @@
+1..21
+ok 1 gpf! origin main is denied like git push --force, in both modes
+ok 2 gp to a protected branch asks even with push.policy auto
+ok 3 each alias is judged exactly like its expansion
+ok 4 the head word is found after assignments and in every simple command of a chain
+ok 5 a quoted or escaped head word, or an alias in argument position, is not expanded
+ok 6 an alias to a command that is not git or gh is unaffected
+ok 7 a missing or unreadable snapshot changes nothing
+ok 8 malformed alias lines are ignored and the lines after them still count
+ok 9 the newest snapshot is read
+ok 10 the head word is found after zsh's reserved words and redirections, as zsh finds it
+ok 11 command, builtin, noglob, exec and - are not followed, as zsh does not expand after them
+ok 12 the original command still counts: an alias cannot hide a git or gh word
+ok 13 an alias command is never allowed unattended, and the investigator still may not run one
+ok 14 alias names are encoded one to one, and a chain, a cycle and a self-reference resolve
+ok 15 snapshot text is never run: substitutions, backticks, ; and newlines stay inert
+ok 16 a missing, empty or unparseable snapshot gives exactly the output of a hook with no aliases
+ok 17 CRLF, NUL bytes, a long line and 10,000 aliases leave the hook working
+ok 18 aliases.sh never aborts a shell under set -eu, and never sets a name outside _KA_
+ok 19 a _KA_ variable from the environment is never an alias
+not ok 20 an alias is not skipped by a guard that reads the command text first, and without a snapshot nothing changes
+# (from function `same' in file tests/hooks/aliases.bats, line 46,
+#  in test file tests/hooks/aliases.bats, line 299)
+#   `same "isc --title t --body-file b.md" "gh issue create --title t --body-file b.md"' failed
+# isc --title t --body-file b.md ->
+# gh issue create --title t --body-file b.md -> {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"kern G14: gh issue create writes to the tracker"}}
+ok 21 an alias whose value ends in a blank expands the word after it, as zsh does, at most 8 times
+EXIT=1

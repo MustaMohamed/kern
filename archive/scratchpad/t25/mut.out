@@ -1,0 +1,23 @@
+baseline: # fail 0
+size swap => # fail 1
+stale thr => # fail 1
+opt1 sha => # fail 1
+older head no push => # fail 1
+tree cmp => # fail 1
+ready => # fail 1
+author check loosened => # fail 1
+published inverted => # fail 1
+autopilot lease sentence => # fail 1
+lease vote => # fail 1
+discard force by agent => # fail 1
+stale force => # fail 1
+slug no sha => # fail 1
+gate loop => # fail 1
+autopilot stale removal => # fail 1
+ls -t => # fail 1
+frontmatter rev-list => # fail 1
+rejected explanation => # fail 1
+others commits rebase => # fail 1
+count 0 A PR counts only
+control => NOT APPLIED
+END

@@ -1,0 +1,3 @@
+cd @XD@ 2> noglob && cp src.md dst.md
+cd @XD@ <<< repeat && git add notes.txt
+cd @XD@ 2> noglob && git add notes.txt

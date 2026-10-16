@@ -1,0 +1,673 @@
+tighter none    main on  #200 none  -> deny  | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #201 none  -> deny  | cd @HC@ && pushd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #202 none  -> deny  | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #203 none  -> deny  | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #204 none  -> deny  | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #205 none  -> deny  | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #206 none  -> deny  | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #207 none  -> deny  | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #208 none  -> deny  | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #215 none  -> deny  | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main on  #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main on  #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main on  #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main on  #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main on  #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main off #200 none  -> ask   | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #201 none  -> ask   | cd @HC@ && pushd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #202 none  -> ask   | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #203 none  -> ask   | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #204 none  -> ask   | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #205 none  -> ask   | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #206 none  -> ask   | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #207 none  -> ask   | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #208 none  -> ask   | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #215 none  -> ask   | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+tighter none    main off #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main off #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main off #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main off #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main off #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main off #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   off #200 none  -> ask   | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #201 none  -> ask   | cd @HC@ && pushd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #202 none  -> ask   | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #203 none  -> ask   | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #204 none  -> ask   | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #205 none  -> ask   | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #206 none  -> ask   | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #207 none  -> ask   | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #208 none  -> ask   | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   on  #200 none  -> deny  | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #202 none  -> deny  | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #203 none  -> deny  | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #204 none  -> deny  | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #205 none  -> deny  | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #206 none  -> deny  | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #207 none  -> deny  | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #208 none  -> deny  | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   off #215 none  -> ask   | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+tighter none    wt   off #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   off #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   off #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   off #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   on  #215 none  -> deny  | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   on  #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   on  #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   on  #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   off #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   off #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   on  #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   on  #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main off #197 none  -> ask   | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #198 none  -> ask   | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #199 none  -> ask   | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   on  #197 none  -> deny  | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #198 none  -> deny  | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #199 none  -> deny  | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #197 none  -> deny  | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #198 none  -> deny  | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #199 none  -> deny  | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main off #200 none  -> ask   | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #202 none  -> ask   | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #203 none  -> ask   | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #204 none  -> ask   | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #205 none  -> ask   | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #206 none  -> ask   | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #207 none  -> ask   | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #208 none  -> ask   | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #215 none  -> ask   | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+tighter hostile main off #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main off #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main off #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main off #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   on  #200 none  -> deny  | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #201 none  -> deny  | cd @HC@ && pushd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #202 none  -> deny  | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #203 none  -> deny  | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #204 none  -> deny  | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #205 none  -> deny  | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #206 none  -> deny  | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #207 none  -> deny  | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #208 none  -> deny  | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main off #197 none  -> ask   | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #198 none  -> ask   | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #199 none  -> ask   | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main off #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main off #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   on  #215 none  -> deny  | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write (autopilot: nobody to ask)
+tighter none    wt   on  #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   on  #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   on  #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   on  #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   on  #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    wt   on  #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   off #197 none  -> ask   | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #198 none  -> ask   | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #199 none  -> ask   | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   on  #197 none  -> deny  | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #198 none  -> deny  | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #199 none  -> deny  | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   off #197 none  -> ask   | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #198 none  -> ask   | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #199 none  -> ask   | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile main on  #197 none  -> deny  | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #198 none  -> deny  | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #199 none  -> deny  | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #200 none  -> deny  | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #201 none  -> deny  | cd @HC@ && pushd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #202 none  -> deny  | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #203 none  -> deny  | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #204 none  -> deny  | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #205 none  -> deny  | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #206 none  -> deny  | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #207 none  -> deny  | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #208 none  -> deny  | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #215 none  -> deny  | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write (autopilot: nobody to ask)
+tighter real    main on  #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main on  #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main on  #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main on  #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main on  #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main on  #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main off #200 none  -> ask   | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #201 none  -> ask   | cd @HC@ && pushd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #202 none  -> ask   | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #203 none  -> ask   | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #204 none  -> ask   | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #205 none  -> ask   | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #206 none  -> ask   | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #207 none  -> ask   | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #208 none  -> ask   | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    main off #215 none  -> ask   | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+tighter real    main off #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main off #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main off #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main off #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main off #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    main off #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   off #200 none  -> ask   | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #201 none  -> ask   | cd @HC@ && pushd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #202 none  -> ask   | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #203 none  -> ask   | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #204 none  -> ask   | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #205 none  -> ask   | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #206 none  -> ask   | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #207 none  -> ask   | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #208 none  -> ask   | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter real    wt   off #215 none  -> ask   | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+tighter real    wt   off #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   off #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   off #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   off #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   off #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   off #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   on  #200 none  -> deny  | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #201 none  -> deny  | cd @HC@ && pushd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #202 none  -> deny  | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #203 none  -> deny  | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #204 none  -> deny  | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #205 none  -> deny  | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #206 none  -> deny  | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #207 none  -> deny  | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #208 none  -> deny  | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #215 none  -> deny  | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write (autopilot: nobody to ask)
+tighter real    wt   on  #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   on  #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   on  #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   on  #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   on  #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter real    wt   on  #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   off #200 none  -> ask   | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #202 none  -> ask   | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #203 none  -> ask   | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #204 none  -> ask   | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #205 none  -> ask   | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #206 none  -> ask   | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #207 none  -> ask   | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #208 none  -> ask   | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   off #215 none  -> ask   | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write
+tighter hostile wt   off #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   off #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   off #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   off #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   off #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile wt   off #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main on  #200 none  -> deny  | cd @HC@ && cd && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #202 none  -> deny  | cd @HC@ && cd +1 && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #203 none  -> deny  | cd @HC@ && cd -- - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #204 none  -> deny  | cd @HC@ && cd ~/.c* && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #205 none  -> deny  | cd @HC@ && cd ~me && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #206 none  -> deny  | cd @HC@ && cd a b && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #207 none  -> deny  | cd @HC@ && cd `pwd` && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #208 none  -> deny  | cd @HC@ && cd "$X" && cd sub && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #215 none  -> deny  | cd .claude && cd "$X" && cp /tmp/x .
+    p2: 
+    p3: kern G16: a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write (autopilot: nobody to ask)
+tighter hostile main on  #216 none  -> deny  | cd @SD@ && cd "$(pwd)" && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main on  #217 none  -> deny  | cd @SD@ && cd - && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main on  #218 none  -> deny  | cd @SD@ && cd . && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main on  #219 none  -> deny  | cd @SD@ && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main on  #220 none  -> deny  | cd @SD@ && cd .. && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter hostile main on  #222 none  -> deny  | cd @SD@ && cd $X && cd sub && echo x > foo
+    p2: 
+    p3: kern G16: commands may not write kern session state
+tighter none    main on  #197 none  -> deny  | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #198 none  -> deny  | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main on  #199 none  -> deny  | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter none    main off #197 none  -> ask   | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #198 none  -> ask   | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    main off #199 none  -> ask   | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #197 none  -> ask   | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #198 none  -> ask   | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter none    wt   off #199 none  -> ask   | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write
+tighter hostile wt   on  #197 none  -> deny  | cd @HC@ && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #198 none  -> deny  | cd @HC@ && cd $X && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+tighter hostile wt   on  #199 none  -> deny  | cd @HC@ && cd - && echo {} > settings.json
+    p2: 
+    p3: kern G16: Claude Code settings set permissions and hooks; the user confirms each write (autopilot: nobody to ask)
+TOTAL 3504 compared (0 unmatched): same 3280, tighter 224, LOOSER 0, ERROR 0

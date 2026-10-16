@@ -1,0 +1,17 @@
+== A5 TOCTOU: a FIFO renamed over the cache while 400 loads run
+loads: 205 entries=400 hung(alarm 5 s)=0 other=0
+== A6 symlink swapped in for the mktemp file, 300 cold loads
+victim now: ORIGINAL (       9 bytes); cache is symlink: no; stray tmp: 0
+== A7 a read-only state dir with a planted cache; a symlinked state dir; a symlinked cache
+read-only dir, planted cache: entries=1 (1 = planted cache read)
+read-only dir, no cache: entries=205; cache written: no
+symlinked state dir with a planted one-entry cache: entries=205 (205 = not read)
+symlinked cache: entries=205 (205 = not read); planted untouched:        2 lines; cache still symlink: no
+== A8 twenty hooks at once, cold
+decisions:   20 head=deny 
+cache header ok: yes; body equal: yes; stray tmp: 0
+== A9 same size, same mtime second: an edit the cache does not see
+before edit: same     base=      head=      | gx origin main
+after same-size edit, mtime restored (warm cache): same     base=      head=      | gx origin main
+same, cold cache: tighter  base=      head=deny  | gx origin main
+ctime before/after is visible: 1792108237 139826475

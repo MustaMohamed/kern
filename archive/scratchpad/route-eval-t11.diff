@@ -1,0 +1,44 @@
+--- /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/route-eval.m2a.mjs	2026-10-14 14:16:33
++++ scripts/route-eval.mjs	2026-10-14 14:16:33
+@@ -106,21 +106,24 @@
+   const rank1Rate = positives ? Math.floor((rank1 / positives) * 100) : null;
+   if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the floor ${minRank1}%`);
+ 
+-  // Held-out organic prompts (evals/heldout.json), frozen by a test: never reworded to pass.
+-  let heldoutRate = null;
+-  const hPath = join(root, 'evals', 'heldout.json');
+-  if (existsSync(hPath)) {
++  // Held-out organic prompts (evals/heldout.json), and real first prompts from the M2b pilot
++  // (evals/heldout-pilot.json, reported with no floor). Both are frozen by tests: never reworded to pass.
++  const heldRate = (file) => {
++    const hPath = join(root, 'evals', file);
++    if (!existsSync(hPath)) return null;
+     const held = JSON.parse(readFileSync(hPath, 'utf8'));
+     let hits = 0;
+     for (const h of held) {
+-      if (!owners.some((t) => ownerOf(t.name) === h.owner)) { errors.push(`heldout: no owner "${h.owner}" for "${h.prompt}"`); continue; }
++      if (!owners.some((t) => ownerOf(t.name) === h.owner)) { errors.push(`${file}: no owner "${h.owner}" for "${h.prompt}"`); continue; }
+       const r = rank(h.prompt, corpus);
+       if (ownerOf(r[0].name) === h.owner && r[0].score > 0) hits++;
+     }
+-    heldoutRate = held.length ? Math.floor((hits / held.length) * 100) : null;
+-    if (minHeldout != null && heldoutRate !== null && heldoutRate < minHeldout) errors.push(`held-out rank-1 rate ${heldoutRate}% is below the floor ${minHeldout}%`);
+-  }
+-  return { errors, warnings, rank1Rate, heldoutRate };
++    return held.length ? Math.floor((hits / held.length) * 100) : null;
++  };
++  const heldoutRate = heldRate('heldout.json');
++  if (minHeldout != null && heldoutRate !== null && heldoutRate < minHeldout) errors.push(`held-out rank-1 rate ${heldoutRate}% is below the floor ${minHeldout}%`);
++  const pilotRate = heldRate('heldout-pilot.json');
++  return { errors, warnings, rank1Rate, heldoutRate, pilotRate };
+ }
+ 
+ if (isMain(import.meta.url)) {
+@@ -136,6 +139,7 @@
+   for (const e of r.errors) console.log(`error: ${e}`);
+   console.log(`rank-1 rate: ${r.rank1Rate ?? 'n/a'}% (baseline ${baseline.min_rank1}%, fixed floor ${floors.rank1}%)`);
+   if (r.heldoutRate !== null) console.log(`held-out rank-1 rate: ${r.heldoutRate}% (fixed floor ${floors.heldout_rank1}%)`);
++  if (r.pilotRate !== null) console.log(`pilot prompts rank-1 rate: ${r.pilotRate}% (reported, no floor)`);
+   if (process.argv.includes('--update-baseline') && !r.errors.length && r.rank1Rate !== null && r.rank1Rate > baseline.min_rank1) {
+     writeFileSync(basePath, JSON.stringify({ min_rank1: r.rank1Rate }, null, 2) + '\n');
+     console.log(`baseline raised to ${r.rank1Rate}%`);

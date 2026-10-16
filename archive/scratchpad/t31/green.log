@@ -1,0 +1,12 @@
+1..11
+ok 1 the fixture's fsmonitor program runs for a plain git call
+ok 2 session-start runs git without the repo's fsmonitor program
+ok 3 every hook exports the hardened git config right after KERN_ROOT, before it runs git
+ok 4 every git a hook runs, its children's too, gets both pairs after the environment's own
+ok 5 valid SubagentStart JSON under 1,200 characters
+ok 6 terse voice reaches the subagent
+ok 7 with settings.sh missing, subagent-start exits 0 and prints nothing or valid JSON
+ok 8 subagent returns skip preamble, praise and closing offers, and no agent is told to write a bulk file
+ok 9 normal voice adds no terse line
+ok 10 kern: off prints nothing
+ok 11 a bad session id falls back to the settings voice

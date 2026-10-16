@@ -1,0 +1,266 @@
+same|on|main|base=deny|head=deny|unmod=deny|noglob git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|coproc git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|command noglob git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|noglob command git push --force origin main
+same|on|main|base=deny|head=deny|unmod=deny|noglob git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|coproc git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|command noglob git push origin main
+same|on|main|base=deny|head=deny|unmod=deny|noglob command git push origin main
+tighter|on|main|base=none|head=deny|unmod=deny|noglob eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|nocorrect eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|coproc eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|repeat 1 eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|repeat $N eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|repeat -1+2 eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|repeat 1 repeat 1 eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|repeat '1' eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|repeat 0 eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|sudo noglob eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|noglob sudo eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|env X=1 noglob eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|command noglob eval 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|noglob command eval 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|noglob sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|coproc sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|command noglob sh -c 'git push --force origin main'
+same|on|main|base=deny|head=deny|unmod=deny|noglob command sh -c 'git push --force origin main'
+tighter|on|main|base=none|head=deny|unmod=deny|noglob bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|nocorrect bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|coproc bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|repeat 1 bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|repeat $N bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|repeat -1+2 bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|repeat 1 repeat 1 bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|repeat '1' bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|repeat 0 bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|sudo noglob bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|noglob sudo bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|env X=1 noglob bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|command noglob bash <<EOF⏎git push --force origin main⏎EOF
+tighter|on|main|base=none|head=deny|unmod=deny|noglob command bash <<EOF⏎git push --force origin main⏎EOF
+same|on|main|base=deny|head=deny|unmod=deny|noglob gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|coproc gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|command noglob gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|noglob command gh pr create --title t --body b
+same|on|main|base=deny|head=deny|unmod=deny|noglob gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|coproc gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|command noglob gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|noglob command gh pr merge 1
+same|on|main|base=deny|head=deny|unmod=deny|noglob git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|coproc git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|command noglob git commit -m 'feat: add creds'
+same|on|main|base=deny|head=deny|unmod=deny|noglob command git commit -m 'feat: add creds'
+looser-eq|on|main|base=deny|head=none|unmod=none|noglob cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|nocorrect cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|coproc cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat 1 cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat $N cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat -1+2 cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat 1 repeat 1 cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat '1' cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat 0 cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|sudo noglob cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|noglob sudo cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|env X=1 noglob cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|command noglob cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+looser-eq|on|main|base=deny|head=none|unmod=none|noglob command cat /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|noglob echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|coproc echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|command noglob echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|noglob command echo x > /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/data/sessions/test-session.state
+same|on|main|base=deny|head=deny|unmod=deny|noglob sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|coproc sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|command noglob sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|noglob command sed -i '' s/a/b/ /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/home/.claude/settings.json
+same|on|main|base=deny|head=deny|unmod=deny|noglob psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|coproc psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|command noglob psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|noglob command psql -h prod-db.internal -c 'DELETE FROM x'
+same|on|main|base=deny|head=deny|unmod=deny|noglob npm publish
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect npm publish
+same|on|main|base=deny|head=deny|unmod=deny|coproc npm publish
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 npm publish
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N npm publish
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 npm publish
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 npm publish
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' npm publish
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 npm publish
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob npm publish
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo npm publish
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob npm publish
+same|on|main|base=deny|head=deny|unmod=deny|command noglob npm publish
+same|on|main|base=deny|head=deny|unmod=deny|noglob command npm publish
+same|on|main|base=deny|head=deny|unmod=deny|noglob git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|coproc git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|command noglob git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|noglob command git -C /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo clean -fdx
+same|on|main|base=none|head=none|unmod=none|noglob rm -rf build
+same|on|main|base=none|head=none|unmod=none|nocorrect rm -rf build
+same|on|main|base=none|head=none|unmod=none|coproc rm -rf build
+same|on|main|base=none|head=none|unmod=none|repeat 1 rm -rf build
+same|on|main|base=none|head=none|unmod=none|repeat $N rm -rf build
+same|on|main|base=none|head=none|unmod=none|repeat -1+2 rm -rf build
+same|on|main|base=none|head=none|unmod=none|repeat 1 repeat 1 rm -rf build
+same|on|main|base=none|head=none|unmod=none|repeat '1' rm -rf build
+same|on|main|base=none|head=none|unmod=none|repeat 0 rm -rf build
+same|on|main|base=none|head=none|unmod=none|sudo noglob rm -rf build
+same|on|main|base=none|head=none|unmod=none|noglob sudo rm -rf build
+same|on|main|base=none|head=none|unmod=none|env X=1 noglob rm -rf build
+same|on|main|base=none|head=none|unmod=none|command noglob rm -rf build
+same|on|main|base=none|head=none|unmod=none|noglob command rm -rf build
+same|on|main|base=none|head=none|unmod=none|noglob ls
+same|on|main|base=none|head=none|unmod=none|nocorrect ls
+same|on|main|base=none|head=none|unmod=none|coproc ls
+same|on|main|base=none|head=none|unmod=none|repeat 1 ls
+same|on|main|base=none|head=none|unmod=none|repeat $N ls
+same|on|main|base=none|head=none|unmod=none|repeat -1+2 ls
+same|on|main|base=none|head=none|unmod=none|repeat 1 repeat 1 ls
+same|on|main|base=none|head=none|unmod=none|repeat '1' ls
+same|on|main|base=none|head=none|unmod=none|repeat 0 ls
+same|on|main|base=none|head=none|unmod=none|sudo noglob ls
+same|on|main|base=none|head=none|unmod=none|noglob sudo ls
+same|on|main|base=none|head=none|unmod=none|env X=1 noglob ls
+same|on|main|base=none|head=none|unmod=none|command noglob ls
+same|on|main|base=none|head=none|unmod=none|noglob command ls
+looser-eq|on|main|base=deny|head=none|unmod=none|noglob zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|nocorrect zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|coproc zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat 1 zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat $N zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat -1+2 zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat 1 repeat 1 zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat '1' zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|repeat 0 zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|sudo noglob zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|noglob sudo zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|env X=1 noglob zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|command noglob zsh -c 'echo hi'
+looser-eq|on|main|base=deny|head=none|unmod=none|noglob command zsh -c 'echo hi'
+tighter|on|main|base=none|head=deny|unmod=deny|noglob cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|nocorrect cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+same/below-unmod|on|main|base=none|head=none|unmod=deny|coproc cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|repeat 1 cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|repeat $N cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|repeat -1+2 cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|repeat 1 repeat 1 cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|repeat '1' cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+same/below-unmod|on|main|base=none|head=none|unmod=deny|repeat 0 cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|sudo noglob cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|noglob sudo cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|env X=1 noglob cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|command noglob cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+tighter|on|main|base=none|head=deny|unmod=deny|noglob command cd /private/tmp/claude-501/-Users-musta-Code-projects-cds-cds-app-rewrite/f869eca6-5423-48df-a8fd-cb9929a686e0/scratchpad/t33r/w.TF2oK3/repo && git clean -fdx
+same|on|main|base=deny|head=deny|unmod=deny|noglob git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|nocorrect git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|coproc git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|repeat $N git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|repeat -1+2 git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|repeat 1 repeat 1 git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|repeat '1' git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|repeat 0 git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|sudo noglob git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|noglob sudo git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|env X=1 noglob git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|command noglob git push origin production
+same|on|main|base=deny|head=deny|unmod=deny|noglob command git push origin production

@@ -1,0 +1,13 @@
+h0 -> c1: same 1798, tighter 98, looser-eq-unmod 0, LOOSER 0, ERROR 0, unmatched 0
+  tighter         x12   none->deny  | cd docs/plans 2> noglob && echo note >> ok.md
+  tighter         x12   none->deny  | cd docs 2> nocorrect && cp plans/ok.md plans/x.md
+  tighter         x12   none->ask   | cd src 2> noglob && git add -- a.txt
+  tighter         x12   none->ask   | cd src <<< repeat && git add -- a.txt
+  tighter         x8    none->deny  | X=' repeat' cd docs/plans && echo note >> ok.md
+  tighter         x6    none->ask   | cd @R@ 2> noglob && git clean -fdx
+  tighter         x6    none->ask   | cd @R@ > repeat && git clean -fdx
+  tighter         x6    none->ask   | X=' noglob' cd @R@ && git clean -fdx
+  tighter         x6    none->ask   | cd @R@ <<< nocorrect && git reset --hard
+  tighter         x6    none->ask   | cd @R@ # noglob@NL@git clean -fdx
+  tighter         x6    none->ask   | cd repeat && git clean -fdx
+  tighter         x6    none->ask   | pushd @R@ >/dev/null 2>&1 <<< coproc; git clean -fdx

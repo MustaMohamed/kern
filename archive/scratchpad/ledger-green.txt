@@ -1,0 +1,19 @@
+1..18
+ok 1 task-brief extracts one task plus the global constraints
+ok 2 a Task heading inside a fence is ignored
+ok 3 a missing task exits 2 and writes nothing
+ok 4 task-start appends a start line
+ok 5 task-start refuses a missing ledger and a short tree id
+ok 6 ledger-open creates the ledger with its identity and the main checkout's state
+ok 7 ledger-open reuses its own ledger and refuses another plan's
+ok 8 ledger-open refuses a plan that is not approved, or approved without the user's words
+ok 9 ledger-open --summary lists decisions, parked and deferred lines and checks the main checkout
+ok 10 ledger-open refuses an unclosed frontmatter and writes nothing
+ok 11 ledger-open refuses a plan or a spec: line that is not a Markdown name, and writes nothing
+ok 12 ledger-open takes a Markdown name in any case, and spec: none
+ok 13 a refusal writes nothing into a fresh DIR
+ok 14 ledger-open outside a git repository exits 2 and writes no ledger
+ok 15 ledger-open --summary fails when the main checkout state cannot be read
+ok 16 ledger-open refuses when git status fails and does not record an empty-input hash
+ok 17 the recorded status hash equals git status --porcelain piped to git hash-object
+ok 18 task-start refuses a multi-line tree and writes nothing

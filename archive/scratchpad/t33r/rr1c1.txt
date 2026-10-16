@@ -1,0 +1,8 @@
+cd @R@ 2> noglob && git clean -fdx
+cd @R@ > repeat && git clean -fdx
+X=' noglob' cd @R@ && git clean -fdx
+cd @R@ <<< nocorrect && git reset --hard
+cd @R@ # noglob@NL@git clean -fdx
+cd repeat && git clean -fdx
+pushd @R@ >/dev/null 2>&1 <<< coproc; git clean -fdx
+cd @R@ && git clean -fdx

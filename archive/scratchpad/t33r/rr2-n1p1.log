@@ -1,0 +1,116 @@
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob time cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob time cd /tmp; echo x > foo
+off b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && time cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && time cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob command cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob command cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && command noglob cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && command noglob cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob ! cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob ! cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && nocorrect nocorrect cd /tmp; echo x > foo
+off h35b->h35c  same     base=deny  head=deny  | cd W/data/sessions && nocorrect nocorrect cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && nocorrect cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nocorrect cd /tmp; echo x > foo
+off b35 ->h35c  same     base=      head=      | cd W/data/sessions && cd /tmp; echo x > foo
+off h35b->h35c  same     base=      head=      | cd W/data/sessions && cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | noglob time cd /tmp; cp src.md dst.md
+off h35b->h35c  tighter  base=      head=deny  | noglob time cd /tmp; cp src.md dst.md
+off b35 ->h35c  tighter  base=      head=deny  | time cd /tmp; cp src.md dst.md
+off h35b->h35c  tighter  base=      head=deny  | time cd /tmp; cp src.md dst.md
+off b35 ->h35c  same     base=deny  head=deny  | noglob ! cd /tmp; cp src.md dst.md
+off h35b->h35c  tighter  base=      head=deny  | noglob ! cd /tmp; cp src.md dst.md
+off b35 ->h35c  same     base=      head=      | cd /tmp; cp src.md dst.md
+off h35b->h35c  same     base=      head=      | cd /tmp; cp src.md dst.md
+off b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && command cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && command cd /tmp; echo x > foo
+off b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && nice cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nice cd /tmp; echo x > foo
+off b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && env cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && env cd /tmp; echo x > foo
+off b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && nohup cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nohup cd /tmp; echo x > foo
+off b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && timeout 5 cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && timeout 5 cd /tmp; echo x > foo
+off b35 ->h35c  tighter  base=      head=ask   | cd W/home/.claude && command cd /tmp; sed -i '' s/a/b/ settings.json
+off h35b->h35c  tighter  base=      head=ask   | cd W/home/.claude && command cd /tmp; sed -i '' s/a/b/ settings.json
+off b35 ->h35c  tighter  base=      head=deny  | command cd /tmp; cp src.md dst.md
+off h35b->h35c  tighter  base=      head=deny  | command cd /tmp; cp src.md dst.md
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob nice cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob nice cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && nice noglob cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nice noglob cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && sudo noglob cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && sudo noglob cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && env noglob cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && env noglob cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob env cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob env cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && timeout 5 noglob cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && timeout 5 noglob cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && repeat 1 time cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && repeat 1 time cd /tmp; echo x > foo
+off b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && nocorrect noglob cd /tmp; echo x > foo
+off h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nocorrect noglob cd /tmp; echo x > foo
+off b35 ->h35c  same     base=ask   head=ask   | cd W/home/.claude && noglob time cd /tmp; sed -i '' s/a/b/ settings.json
+off h35b->h35c  tighter  base=      head=ask   | cd W/home/.claude && noglob time cd /tmp; sed -i '' s/a/b/ settings.json
+off b35 ->h35c  same     base=ask   head=ask   | cd W/home/.claude && noglob ! cd /tmp; sed -i '' s/a/b/ settings.json
+off h35b->h35c  tighter  base=      head=ask   | cd W/home/.claude && noglob ! cd /tmp; sed -i '' s/a/b/ settings.json
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob time cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob time cd /tmp; echo x > foo
+on b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && time cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && time cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob command cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob command cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && command noglob cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && command noglob cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob ! cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob ! cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && nocorrect nocorrect cd /tmp; echo x > foo
+on h35b->h35c  same     base=deny  head=deny  | cd W/data/sessions && nocorrect nocorrect cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && nocorrect cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nocorrect cd /tmp; echo x > foo
+on b35 ->h35c  same     base=      head=      | cd W/data/sessions && cd /tmp; echo x > foo
+on h35b->h35c  same     base=      head=      | cd W/data/sessions && cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | noglob time cd /tmp; cp src.md dst.md
+on h35b->h35c  tighter  base=      head=deny  | noglob time cd /tmp; cp src.md dst.md
+on b35 ->h35c  tighter  base=      head=deny  | time cd /tmp; cp src.md dst.md
+on h35b->h35c  tighter  base=      head=deny  | time cd /tmp; cp src.md dst.md
+on b35 ->h35c  same     base=deny  head=deny  | noglob ! cd /tmp; cp src.md dst.md
+on h35b->h35c  tighter  base=      head=deny  | noglob ! cd /tmp; cp src.md dst.md
+on b35 ->h35c  same     base=      head=      | cd /tmp; cp src.md dst.md
+on h35b->h35c  same     base=      head=      | cd /tmp; cp src.md dst.md
+on b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && command cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && command cd /tmp; echo x > foo
+on b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && nice cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nice cd /tmp; echo x > foo
+on b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && env cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && env cd /tmp; echo x > foo
+on b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && nohup cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nohup cd /tmp; echo x > foo
+on b35 ->h35c  tighter  base=      head=deny  | cd W/data/sessions && timeout 5 cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && timeout 5 cd /tmp; echo x > foo
+on b35 ->h35c  tighter  base=      head=deny  | cd W/home/.claude && command cd /tmp; sed -i '' s/a/b/ settings.json
+on h35b->h35c  tighter  base=      head=deny  | cd W/home/.claude && command cd /tmp; sed -i '' s/a/b/ settings.json
+on b35 ->h35c  tighter  base=      head=deny  | command cd /tmp; cp src.md dst.md
+on h35b->h35c  tighter  base=      head=deny  | command cd /tmp; cp src.md dst.md
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob nice cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob nice cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && nice noglob cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nice noglob cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && sudo noglob cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && sudo noglob cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && env noglob cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && env noglob cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && noglob env cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && noglob env cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && timeout 5 noglob cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && timeout 5 noglob cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && repeat 1 time cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && repeat 1 time cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/data/sessions && nocorrect noglob cd /tmp; echo x > foo
+on h35b->h35c  tighter  base=      head=deny  | cd W/data/sessions && nocorrect noglob cd /tmp; echo x > foo
+on b35 ->h35c  same     base=deny  head=deny  | cd W/home/.claude && noglob time cd /tmp; sed -i '' s/a/b/ settings.json
+on h35b->h35c  tighter  base=      head=deny  | cd W/home/.claude && noglob time cd /tmp; sed -i '' s/a/b/ settings.json
+on b35 ->h35c  same     base=deny  head=deny  | cd W/home/.claude && noglob ! cd /tmp; sed -i '' s/a/b/ settings.json
+on h35b->h35c  tighter  base=      head=deny  | cd W/home/.claude && noglob ! cd /tmp; sed -i '' s/a/b/ settings.json

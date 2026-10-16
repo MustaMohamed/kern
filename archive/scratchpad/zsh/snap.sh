@@ -1,0 +1,20 @@
+# Snapshot file
+unalias -a 2>/dev/null || true
+alias -- gpf!='echo EXPANDED-gpf'
+alias -- gx='echo EXPANDED-gx'
+alias -- g=gx
+alias -- _='sudo '
+alias -- chain1='echo C1; gx'
+alias -- chain2='time gx'
+alias -- chain3='X=1 gx'
+alias -- self='self2 && echo self'
+alias -- self2='echo S2 && self'
+alias -- tr1='gx '
+alias -- ts1='echo TS1 '
+alias -- inner='echo IN '
+alias -- outer='inner'
+alias -- outer2='inner2 '
+alias -- inner2='echo IN2'
+alias -- t1='t2 '
+alias -- t2='echo T2 '
+alias -- n1='nice '

@@ -1,0 +1,30 @@
+1..11
+ok 1 the fixture's fsmonitor program runs for a plain git call
+not ok 2 session-start runs git without the repo's fsmonitor program
+# (in test file tests/hooks/git-hardening.bats, line 36)
+#   `[ ! -f "$M" ]' failed
+not ok 3 every hook exports the hardened git config right after KERN_ROOT, before it runs git
+# (in test file tests/hooks/git-hardening.bats, line 43)
+#   `[ "$got" = "$HARDEN" ] || { echo "$h does not harden git right after KERN_ROOT"; return 1; }' failed
+# session-start does not harden git right after KERN_ROOT
+not ok 4 every git a hook runs, its children's too, gets both pairs after the environment's own
+# (in test file tests/hooks/git-hardening.bats, line 69)
+#   `[ "$status" -eq 1 ] || { printf '%s\n' "$output"; return 1; }' failed
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo worktree list --porcelain
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo ls-files -s -- :(icase).claude
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo worktree list --porcelain
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo worktree list --porcelain
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo worktree list --porcelain
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo worktree list --porcelain
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo symbolic-ref --short refs/remotes/origin/HEAD
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo rev-parse -q --verify origin/main
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo log --no-show-signature --format=%s -30 origin/main
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo symbolic-ref -q HEAD
+# GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept :: -C /var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/bats-run-nIQpvA/test/4/repo --no-replace-objects -c color.ui=never -c core.fsmonitor=false -c core.quotePath=false -c log.showRoot=true -c i18n.logOutputEncoding=UTF-8 diff --cached --text --no-relative --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/ --diff-filter=d
+ok 5 valid SubagentStart JSON under 1,200 characters
+ok 6 terse voice reaches the subagent
+ok 7 with settings.sh missing, subagent-start exits 0 and prints nothing or valid JSON
+ok 8 subagent returns skip preamble, praise and closing offers, and no agent is told to write a bulk file
+ok 9 normal voice adds no terse line
+ok 10 kern: off prints nothing
+ok 11 a bad session id falls back to the settings voice

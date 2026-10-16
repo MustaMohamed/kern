@@ -1,0 +1,30 @@
+nocorrect git push --force origin main
+noglob git push --force origin main
+repeat 2 git push --force origin main
+coproc git push --force origin main
+nocorrect git push -u origin feat
+noglob git status
+noglob gh pr create --title t --body b
+nocorrect npm publish
+noglob psql -h prod-db.internal -c 'DELETE FROM x'
+noglob cat @SD@/test-session.state
+noglob echo x > @SD@/test-session.state
+nocorrect sudo git push --force origin main
+_ gpf! origin main
+noglob eval 'git push --force origin main'
+noglob sh -c 'git push --force origin main'
+noglob bash <<EOF@NL@git push --force origin main@NL@EOF
+noglob git commit -m "feat: x"
+noglob gh pr merge 1
+repeat 3 echo hi
+noglob ls -la
+nocorrect rm -rf build
+coproc cat
+repeat
+noglob
+nocorrect
+[kern:investigator] noglob git log
+[kern:investigator] nocorrect git log --stat
+[kern:investigator] repeat 2 git status
+[kern:investigator] noglob git push origin feat
+[kern:investigator] noglob rm -rf x

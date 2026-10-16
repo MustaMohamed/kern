@@ -1,0 +1,2 @@
+G=/Users/musta/Code/projects/kern/evals/exec/bin/gh; L=$PWD/log; : > $L
+for m in none open-at-head open-older; do echo "[$m]"; for a in "pr list --head x --state all --json number,state,headRefOid,url" "pr list --head x --state all --json state --jq .[].state" "pr create --draft" "pr view 7" "pr ready 7" "-R o/r pr list"; do out=$(KERN_EXEC_LOG=$L KERN_EXEC_PR=$m $G $a 2>&1); echo "  rc=$? <= $a => ${out:0:110}"; done; done

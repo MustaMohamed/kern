@@ -1,0 +1,25 @@
+cd @HC@/agents && cd .. && sed -i '' s/a/b/ settings.json
+cd @HC@ && cd agents && cd .. && sed -i '' s/a/b/ settings.json
+cd @HC@ && cd . && sed -i '' s/a/b/ settings.json
+cd @HC@//agents//.. && sed -i '' s/a/b/ settings.json
+cd @HC@/agents/../../.claude && sed -i '' s/a/b/ settings.json
+cd @HC@/ && sed -i '' s/a/b/ settings.json
+cd @HC@/. && sed -i '' s/a/b/ settings.json
+cd ~ && cd .claude && sed -i '' s/a/b/ settings.json
+cd ~/ && cd .claude/agents && cd ../ && sed -i '' s/a/b/ settings.json
+cd ~/.claude && cd ~- && sed -i '' s/a/b/ settings.json
+cd @HC@ && cd /tmp && cd - && sed -i '' s/a/b/ settings.json
+cd @HC@ && cd /tmp && cd ~- && sed -i '' s/a/b/ settings.json
+cd @HC@ && pushd /tmp && popd && sed -i '' s/a/b/ settings.json
+cd @HC@ && cd /nonexistent-x; sed -i '' s/a/b/ settings.json
+cd @HC@ && cd -P agents/.. && sed -i '' s/a/b/ settings.json
+cd /TMP && cd @HCU@ && sed -i '' s/a/b/ settings.json
+cd @SD@ && cd .. && cd sessions && echo x > foo
+cd @SD@ && cd /tmp && cd - && echo x > foo
+cd @SD@ && pushd /tmp && popd && echo x > foo
+cd @SD@ && cd /tmp && cd +1 && echo x > foo
+cd @SD@/.. && cd sessions && echo x > foo
+cd @SD@ && cd .. && echo x > foo
+cd .claude && ls && cd .. && git add .
+cd @HC@ && cd .. && sed -i '' s/a/b/ .claude/settings.json
+cd /tmp && cd @HC@/../.claude/./agents/.. && sed -i '' s/a/b/ settings.json

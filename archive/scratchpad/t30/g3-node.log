@@ -1,0 +1,1198 @@
+TAP version 13
+# Subtest: implementer frontmatter, sections and return contract
+ok 1 - implementer frontmatter, sections and return contract
+  ---
+  duration_ms: 2.114458
+  type: 'test'
+  ...
+# Subtest: task-reviewer frontmatter, sections and verdict lines
+ok 2 - task-reviewer frontmatter, sections and verdict lines
+  ---
+  duration_ms: 1.092458
+  type: 'test'
+  ...
+# Subtest: investigator frontmatter, sections, labels and no file writes
+ok 3 - investigator frontmatter, sections, labels and no file writes
+  ---
+  duration_ms: 0.405542
+  type: 'test'
+  ...
+# Subtest: commit: a -F message under .kern/tmp passes; a temp file outside it fails
+ok 4 - commit: a -F message under .kern/tmp passes; a temp file outside it fails
+  ---
+  duration_ms: 1.969041
+  type: 'test'
+  ...
+# Subtest: commit: the git -C forms the skill prescribes pass, and -A or . is rejected in either form
+ok 5 - commit: the git -C forms the skill prescribes pass, and -A or . is rejected in either form
+  ---
+  duration_ms: 0.464292
+  type: 'test'
+  ...
+# Subtest: commit: a relative .kern/tmp message path is accepted
+ok 6 - commit: a relative .kern/tmp message path is accepted
+  ---
+  duration_ms: 0.065916
+  type: 'test'
+  ...
+# Subtest: commit: commit -a, add -u and add * fail, by command and by outcome (the decoys are committed)
+ok 7 - commit: commit -a, add -u and add * fail, by command and by outcome (the decoys are committed)
+  ---
+  duration_ms: 0.87525
+  type: 'test'
+  ...
+# Subtest: shellSegments drops redirections, so 2>&1 and >/dev/null are not arguments
+ok 8 - shellSegments drops redirections, so 2>&1 and >/dev/null are not arguments
+  ---
+  duration_ms: 0.186292
+  type: 'test'
+  ...
+# Subtest: finish-branch: every gh pr create must carry --draft and --title; the split needs a proposal
+ok 9 - finish-branch: every gh pr create must carry --draft and --title; the split needs a proposal
+  ---
+  duration_ms: 0.616875
+  type: 'test'
+  ...
+# Subtest: gitCalls drops -C and -c, reads past && and ;, and ignores other commands
+ok 10 - gitCalls drops -C and -c, reads past && and ;, and ignores other commands
+  ---
+  duration_ms: 0.10525
+  type: 'test'
+  ...
+# Subtest: finish-branch: the menu comes before any push or PR
+ok 11 - finish-branch: the menu comes before any push or PR
+  ---
+  duration_ms: 0.091584
+  type: 'test'
+  ...
+# Subtest: finish-branch: nine files stop at a split proposal, with a -C push counted too
+ok 12 - finish-branch: nine files stop at a split proposal, with a -C push counted too
+  ---
+  duration_ms: 0.252708
+  type: 'test'
+  ...
+# Subtest: finish-branch under autopilot: the draft PR carries --draft and --title, and ready never runs
+ok 13 - finish-branch under autopilot: the draft PR carries --draft and --title, and ready never runs
+  ---
+  duration_ms: 0.270875
+  type: 'test'
+  ...
+# Subtest: finish-branch: a PR at this head stops; one at an older head gets the push
+ok 14 - finish-branch: a PR at this head stops; one at an older head gets the push
+  ---
+  duration_ms: 0.153458
+  type: 'test'
+  ...
+# Subtest: the isolation flags keep user settings, MCP servers and saved sessions out
+ok 15 - the isolation flags keep user settings, MCP servers and saved sessions out
+  ---
+  duration_ms: 0.0325
+  type: 'test'
+  ...
+# Subtest: a headless run pre-approves the tools a task needs, since it cannot answer a prompt
+ok 16 - a headless run pre-approves the tools a task needs, since it cannot answer a prompt
+  ---
+  duration_ms: 0.025834
+  type: 'test'
+  ...
+# Subtest: the dry run lists every case without calling claude
+ok 17 - the dry run lists every case without calling claude
+  ---
+  duration_ms: 33.730834
+  type: 'test'
+  ...
+# Subtest: a gh call the transcript shows ran but the stub never logged makes the run invalid; hook-only lines do not
+ok 18 - a gh call the transcript shows ran but the stub never logged makes the run invalid; hook-only lines do not
+  ---
+  duration_ms: 0.41825
+  type: 'test'
+  ...
+# Subtest: runClaude: a missing binary, exit 126 or 127, a timeout and a signal all throw; none is a result
+ok 19 - runClaude: a missing binary, exit 126 or 127, a timeout and a signal all throw; none is a result
+  ---
+  duration_ms: 573.764084
+  type: 'test'
+  ...
+# Subtest: runClaude: a non-zero exit is returned for the caller to fail on, with stdin as stream-json turns and the budget cap
+ok 20 - runClaude: a non-zero exit is returned for the caller to fail on, with stdin as stream-json turns and the budget cap
+  ---
+  duration_ms: 145.37725
+  type: 'test'
+  ...
+# Subtest: the gh stub logs every call, answers pr list from the case, and fails on a call it does not know
+ok 21 - the gh stub logs every call, answers pr list from the case, and fails on a call it does not know
+  ---
+  duration_ms: 100.541209
+  type: 'test'
+  ...
+# Subtest: runClaude refuses a workspace outside the OS temp dir, or one that is the temp dir itself
+ok 22 - runClaude refuses a workspace outside the OS temp dir, or one that is the temp dir itself
+  ---
+  duration_ms: 73.003209
+  type: 'test'
+  ...
+# Subtest: the child environment is an allowlist: auth and config in, other credentials out
+ok 23 - the child environment is an allowlist: auth and config in, other credentials out
+  ---
+  duration_ms: 0.112
+  type: 'test'
+  ...
+# Subtest: the calling session's own plumbing and other credentials never reach the child
+ok 24 - the calling session's own plumbing and other credentials never reach the child
+  ---
+  duration_ms: 0.109958
+  type: 'test'
+  ...
+# Subtest: runClaude gives the child that allowlist, not the caller environment
+ok 25 - runClaude gives the child that allowlist, not the caller environment
+  ---
+  duration_ms: 72.919958
+  type: 'test'
+  ...
+# Subtest: runProblem: only a clean exit with a success result may be graded
+ok 26 - runProblem: only a clean exit with a success result may be graded
+  ---
+  duration_ms: 504.491166
+  type: 'test'
+  ...
+# Subtest: exit code: 0 only when every case that ran passed, for a full run and a --case run alike
+ok 27 - exit code: 0 only when every case that ran passed, for a full run and a --case run alike
+  ---
+  duration_ms: 0.34475
+  type: 'test'
+  ...
+# Subtest: snapshot: a full run writes it with every result; a --case run writes none
+ok 28 - snapshot: a full run writes it with every result; a --case run writes none
+  ---
+  duration_ms: 0.209083
+  type: 'test'
+  ...
+# Subtest: arguments: a --case with no value, a flag as its value or an unknown id is a usage error before any run
+ok 29 - arguments: a --case with no value, a flag as its value or an unknown id is a usage error before any run
+  ---
+  duration_ms: 62.2915
+  type: 'test'
+  ...
+# Subtest: finish-split-nine-files: negated replies fail, real proposals pass
+ok 30 - finish-split-nine-files: negated replies fail, real proposals pass
+  ---
+  duration_ms: 0.138541
+  type: 'test'
+  ...
+# Subtest: every M1 event is wired in exec form
+ok 31 - every M1 event is wired in exec form
+  ---
+  duration_ms: 1.699333
+  type: 'test'
+  ...
+# Subtest: the guard dispatcher fails closed and sees every guarded tool
+ok 32 - the guard dispatcher fails closed and sees every guarded tool
+  ---
+  duration_ms: 0.972166
+  type: 'test'
+  ...
+# Subtest: kern itself is MIT
+ok 33 - kern itself is MIT
+  ---
+  duration_ms: 0.979291
+  type: 'test'
+  ...
+# Subtest: every upstream source has a licence file and a NOTICE entry
+ok 34 - every upstream source has a licence file and a NOTICE entry
+  ---
+  duration_ms: 1.215167
+  type: 'test'
+  ...
+# Subtest: NOTICE reproduces caveman NOTICE verbatim
+ok 35 - NOTICE reproduces caveman NOTICE verbatim
+  ---
+  duration_ms: 1.284458
+  type: 'test'
+  ...
+# Subtest: caveman licence is Apache-2.0
+ok 36 - caveman licence is Apache-2.0
+  ---
+  duration_ms: 0.482584
+  type: 'test'
+  ...
+# Subtest: NOTICE has a file map section
+ok 37 - NOTICE has a file map section
+  ---
+  duration_ms: 0.10575
+  type: 'test'
+  ...
+# Subtest: parses CRLF frontmatter
+ok 38 - parses CRLF frontmatter
+  ---
+  duration_ms: 1.918583
+  type: 'test'
+  ...
+# Subtest: strips quotes and keeps colons in values
+ok 39 - strips quotes and keeps colons in values
+  ---
+  duration_ms: 0.627042
+  type: 'test'
+  ...
+# Subtest: block scalars are an error
+ok 40 - block scalars are an error
+  ---
+  duration_ms: 0.215
+  type: 'test'
+  ...
+# Subtest: tiers: auto, path when a kernel row routes to it, else slash
+ok 41 - tiers: auto, path when a kernel row routes to it, else slash
+  ---
+  duration_ms: 2.306875
+  type: 'test'
+  ...
+# Subtest: a clean auto skill passes
+ok 42 - a clean auto skill passes
+  ---
+  duration_ms: 1.870584
+  type: 'test'
+  ...
+# Subtest: rule 1: missing frontmatter, name mismatch, non-kebab dir
+ok 43 - rule 1: missing frontmatter, name mismatch, non-kebab dir
+  ---
+  duration_ms: 3.159584
+  type: 'test'
+  ...
+# Subtest: rule 2: unknown skill key and ignored plugin-agent keys
+ok 44 - rule 2: unknown skill key and ignored plugin-agent keys
+  ---
+  duration_ms: 1.889459
+  type: 'test'
+  ...
+# Subtest: rule 3: auto limit and trigger, manual limit, agent limit, totals
+ok 45 - rule 3: auto limit and trigger, manual limit, agent limit, totals
+  ---
+  duration_ms: 5.524125
+  type: 'test'
+  ...
+# Subtest: rule 4: referenced files must exist
+ok 46 - rule 4: referenced files must exist
+  ---
+  duration_ms: 0.659541
+  type: 'test'
+  ...
+# Subtest: rule 8: machine paths and listed names in shipped files
+ok 47 - rule 8: machine paths and listed names in shipped files
+  ---
+  duration_ms: 1.696292
+  type: 'test'
+  ...
+# Subtest: rule 8: names come from scripts/lint-names.txt, comments ignored
+ok 48 - rule 8: names come from scripts/lint-names.txt, comments ignored
+  ---
+  duration_ms: 2.564917
+  type: 'test'
+  ...
+# Subtest: rule 10: exemption needs a reason, and suppresses its finding
+ok 49 - rule 10: exemption needs a reason, and suppresses its finding
+  ---
+  duration_ms: 2.836459
+  type: 'test'
+  ...
+# Subtest: rule 11: long dashes and curly quotes
+ok 50 - rule 11: long dashes and curly quotes
+  ---
+  duration_ms: 0.732459
+  type: 'test'
+  ...
+# Subtest: rule 11: scans any non-binary shipped file, skips binaries
+ok 51 - rule 11: scans any non-binary shipped file, skips binaries
+  ---
+  duration_ms: 1.220583
+  type: 'test'
+  ...
+# Subtest: rule 4: existing references pass, repo-root fallback, anchors and ./
+ok 52 - rule 4: existing references pass, repo-root fallback, anchors and ./
+  ---
+  duration_ms: 2.429667
+  type: 'test'
+  ...
+# Subtest: rule 6: a route must exist and open with \#\# Steps
+ok 53 - rule 6: a route must exist and open with \#\# Steps
+  ---
+  duration_ms: 5.319792
+  type: 'test'
+  ...
+# Subtest: rule 6: every user-reachable skill is in the help map
+ok 54 - rule 6: every user-reachable skill is in the help map
+  ---
+  duration_ms: 3.261208
+  type: 'test'
+  ...
+# Subtest: rule 6: a route row in another form, or \#\# Steps without a numbered list, is an error
+ok 55 - rule 6: a route row in another form, or \#\# Steps without a numbered list, is an error
+  ---
+  duration_ms: 1.807458
+  type: 'test'
+  ...
+# Subtest: rule 7: an oversized rendered kernel is an error; the real kernel passes
+ok 56 - rule 7: an oversized rendered kernel is an error; the real kernel passes
+  ---
+  duration_ms: 553.089167
+  type: 'test'
+  ...
+# Subtest: rule 13: hooks and the settings table agree
+ok 57 - rule 13: hooks and the settings table agree
+  ---
+  duration_ms: 1.8085
+  type: 'test'
+  ...
+# Subtest: rule 15: hook-shape fixtures and runner exist once hooks exist
+ok 58 - rule 15: hook-shape fixtures and runner exist once hooks exist
+  ---
+  duration_ms: 503.716708
+  type: 'test'
+  ...
+# Subtest: rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not
+ok 59 - rule 13: _settings_lookup of a literal key is a read; the generic "$1" form is not
+  ---
+  duration_ms: 1.047875
+  type: 'test'
+  ...
+# Subtest: rule 7: a session-start that fails or prints nothing is an error
+ok 60 - rule 7: a session-start that fails or prints nothing is an error
+  ---
+  duration_ms: 54.649125
+  type: 'test'
+  ...
+# Subtest: rule 7: its temp directory is removed when a check throws
+ok 61 - rule 7: its temp directory is removed when a check throws
+  ---
+  duration_ms: 14.072084
+  type: 'test'
+  ...
+# Subtest: rule 13: single-quoted keys are reads; a policy_for with a variable is an error
+ok 62 - rule 13: single-quoted keys are reads; a policy_for with a variable is an error
+  ---
+  duration_ms: 1.33125
+  type: 'test'
+  ...
+# Subtest: rule 13: a hook's need list names functions, so it reads no settings key
+ok 63 - rule 13: a hook's need list names functions, so it reads no settings key
+  ---
+  duration_ms: 0.640916
+  type: 'test'
+  ...
+# Subtest: rule 15: every fixture case but no-settings carries a settings file
+ok 64 - rule 15: every fixture case but no-settings carries a settings file
+  ---
+  duration_ms: 58.6565
+  type: 'test'
+  ...
+# Subtest: rule 5: Skill tool references name auto or built-in skills
+ok 65 - rule 5: Skill tool references name auto or built-in skills
+  ---
+  duration_ms: 1.792292
+  type: 'test'
+  ...
+# Subtest: rule 5: the kernel and agents are scanned, fenced blocks included
+ok 66 - rule 5: the kernel and agents are scanned, fenced blocks included
+  ---
+  duration_ms: 1.149584
+  type: 'test'
+  ...
+# Subtest: rule 5: agent Read paths resolve
+ok 67 - rule 5: agent Read paths resolve
+  ---
+  duration_ms: 0.764084
+  type: 'test'
+  ...
+# Subtest: rule 9: auto skills need Steps; slash skills need Steps first
+ok 68 - rule 9: auto skills need Steps; slash skills need Steps first
+  ---
+  duration_ms: 1.382792
+  type: 'test'
+  ...
+# Subtest: rule 9: Steps must be an H2 outside a fence and not a longer heading
+ok 69 - rule 9: Steps must be an H2 outside a fence and not a longer heading
+  ---
+  duration_ms: 1.631875
+  type: 'test'
+  ...
+# Subtest: rule 9: an unclosed fence is reported, not read as a pass
+ok 70 - rule 9: an unclosed fence is reported, not read as a pass
+  ---
+  duration_ms: 0.479125
+  type: 'test'
+  ...
+# Subtest: rule 9: CRLF files are read like LF files
+ok 71 - rule 9: CRLF files are read like LF files
+  ---
+  duration_ms: 1.379625
+  type: 'test'
+  ...
+# Subtest: rule 9: a slash skill without Steps passes with an exemption
+ok 72 - rule 9: a slash skill without Steps passes with an exemption
+  ---
+  duration_ms: 0.581625
+  type: 'test'
+  ...
+# Subtest: rule 9: agents need an output contract section
+ok 73 - rule 9: agents need an output contract section
+  ---
+  duration_ms: 1.033417
+  type: 'test'
+  ...
+# Subtest: rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+ok 74 - rule 9: a discipline skill needs a Red flags table of 2 to 6 rows
+  ---
+  duration_ms: 2.31
+  type: 'test'
+  ...
+# Subtest: rule 9: Red flags must be a real H2 with the Thought | Reality header
+ok 75 - rule 9: Red flags must be a real H2 with the Thought | Reality header
+  ---
+  duration_ms: 2.04225
+  type: 'test'
+  ...
+# Subtest: rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+ok 76 - rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract
+  ---
+  duration_ms: 1.374
+  type: 'test'
+  ...
+# Subtest: rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read
+ok 77 - rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read
+  ---
+  duration_ms: 3.452209
+  type: 'test'
+  ...
+# Subtest: fence parser: a fence closed by the other marker stays open and is reported
+ok 78 - fence parser: a fence closed by the other marker stays open and is reported
+  ---
+  duration_ms: 0.343666
+  type: 'test'
+  ...
+# Subtest: fence parser: a longer fence holds a shorter fence line
+ok 79 - fence parser: a longer fence holds a shorter fence line
+  ---
+  duration_ms: 0.661125
+  type: 'test'
+  ...
+# Subtest: fence parser: an opener indented 0 to 3 spaces counts, 4 does not
+ok 80 - fence parser: an opener indented 0 to 3 spaces counts, 4 does not
+  ---
+  duration_ms: 0.977458
+  type: 'test'
+  ...
+# Subtest: rule 16: a script name is read whole, dots, slashes and underscores included
+ok 81 - rule 16: a script name is read whole, dots, slashes and underscores included
+  ---
+  duration_ms: 2.980041
+  type: 'test'
+  ...
+# Subtest: rule 16: a WORK folder is read whole, in any case
+ok 82 - rule 16: a WORK folder is read whole, in any case
+  ---
+  duration_ms: 1.391292
+  type: 'test'
+  ...
+# Subtest: rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file
+ok 83 - rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file
+  ---
+  duration_ms: 2.866208
+  type: 'test'
+  ...
+# Subtest: rule 7: the routed file has its own cap, and the standing cost has a combined budget
+ok 84 - rule 7: the routed file has its own cap, and the standing cost has a combined budget
+  ---
+  duration_ms: 64.922542
+  type: 'test'
+  ...
+# Subtest: rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists
+ok 85 - rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists
+  ---
+  duration_ms: 4.338208
+  type: 'test'
+  ...
+# Subtest: rule 7: a session-start that fails without project settings is an error, not a low standing cost
+ok 86 - rule 7: a session-start that fails without project settings is an error, not a low standing cost
+  ---
+  duration_ms: 31.570833
+  type: 'test'
+  ...
+# Subtest: rule 12: a case file that is not valid JSON is an error
+ok 87 - rule 12: a case file that is not valid JSON is an error
+  ---
+  duration_ms: 0.606833
+  type: 'test'
+  ...
+# Subtest: rule 12: a model-graded negative does not count toward the minimum of 2
+ok 88 - rule 12: a model-graded negative does not count toward the minimum of 2
+  ---
+  duration_ms: 1.003834
+  type: 'test'
+  ...
+# Subtest: kernelRows parses skill and kernel-file routes and skips other lines
+ok 89 - kernelRows parses skill and kernel-file routes and skips other lines
+  ---
+  duration_ms: 0.801041
+  type: 'test'
+  ...
+# Subtest: targets add the rows of both files after skills and before distractors
+ok 90 - targets add the rows of both files after skills and before distractors
+  ---
+  duration_ms: 4.61725
+  type: 'test'
+  ...
+# Subtest: a row and its own skill count as one owner
+ok 91 - a row and its own skill count as one owner
+  ---
+  duration_ms: 4.066416
+  type: 'test'
+  ...
+# Subtest: a routed row without a case file is an error
+ok 92 - a routed row without a case file is an error
+  ---
+  duration_ms: 2.684667
+  type: 'test'
+  ...
+# Subtest: held-out prompts give their own rate, held to their own floor
+ok 93 - held-out prompts give their own rate, held to their own floor
+  ---
+  duration_ms: 2.681583
+  type: 'test'
+  ...
+# Subtest: the fixed floors and the frozen held-out set are pinned
+ok 94 - the fixed floors and the frozen held-out set are pinned
+  ---
+  duration_ms: 0.378583
+  type: 'test'
+  ...
+# Subtest: a model-graded negative is skipped by the lexical check and listed in the output
+ok 95 - a model-graded negative is skipped by the lexical check and listed in the output
+  ---
+  duration_ms: 43.891959
+  type: 'test'
+  ...
+# Subtest: a positive that carries the grader flag is an error
+ok 96 - a positive that carries the grader flag is an error
+  ---
+  duration_ms: 2.223167
+  type: 'test'
+  ...
+# Subtest: only lexically checked negatives count toward the minimum
+ok 97 - only lexically checked negatives count toward the minimum
+  ---
+  duration_ms: 2.731
+  type: 'test'
+  ...
+# Subtest: a negative with a grader other than model is an error
+ok 98 - a negative with a grader other than model is an error
+  ---
+  duration_ms: 2.130542
+  type: 'test'
+  ...
+# Subtest: rank orders by shared vocabulary
+ok 99 - rank orders by shared vocabulary
+  ---
+  duration_ms: 1.877
+  type: 'test'
+  ...
+# Subtest: zero-score prompt is an error, not a crash
+ok 100 - zero-score prompt is an error, not a crash
+  ---
+  duration_ms: 4.915333
+  type: 'test'
+  ...
+# Subtest: auto skill without a case file is an error
+ok 101 - auto skill without a case file is an error
+  ---
+  duration_ms: 2.166209
+  type: 'test'
+  ...
+# Subtest: below minimums is an error
+ok 102 - below minimums is an error
+  ---
+  duration_ms: 1.215791
+  type: 'test'
+  ...
+# Subtest: a distractor that outranks the skill fails the positive
+ok 103 - a distractor that outranks the skill fails the positive
+  ---
+  duration_ms: 1.214125
+  type: 'test'
+  ...
+# Subtest: rank-1 rate below the baseline fails
+ok 104 - rank-1 rate below the baseline fails
+  ---
+  duration_ms: 1.838042
+  type: 'test'
+  ...
+# Subtest: collision between two auto skills is an error
+ok 105 - collision between two auto skills is an error
+  ---
+  duration_ms: 2.689542
+  type: 'test'
+  ...
+# Subtest: overlap between descriptions is a warning
+ok 106 - overlap between descriptions is a warning
+  ---
+  duration_ms: 2.713292
+  type: 'test'
+  ...
+# Subtest: skill ranked \#1 for a negative prompt is an error
+ok 107 - skill ranked \#1 for a negative prompt is an error
+  ---
+  duration_ms: 1.681
+  type: 'test'
+  ...
+# Subtest: declared owner must outrank the skill
+ok 108 - declared owner must outrank the skill
+  ---
+  duration_ms: 3.845875
+  type: 'test'
+  ...
+# Subtest: unknown owner is an error
+ok 109 - unknown owner is an error
+  ---
+  duration_ms: 1.268708
+  type: 'test'
+  ...
+# Subtest: every labelled diff exists, and there are 12 seeded moves and 8 decoys
+ok 110 - every labelled diff exists, and there are 12 seeded moves and 8 decoys
+  ---
+  duration_ms: 1.354708
+  type: 'test'
+  ...
+# Subtest: floor-scan and claim-check find every seeded move and no decoy
+ok 111 - floor-scan and claim-check find every seeded move and no decoy
+  ---
+  duration_ms: 935.403875
+  type: 'test'
+  ...
+# Subtest: mode frontmatter matches spec B1
+ok 112 - mode frontmatter matches spec B1
+  ---
+  duration_ms: 0.868166
+  type: 'test'
+  ...
+# Subtest: autopilot frontmatter matches spec B2
+ok 113 - autopilot frontmatter matches spec B2
+  ---
+  duration_ms: 0.576375
+  type: 'test'
+  ...
+# Subtest: both read the hook line first and never write the state file
+ok 114 - both read the hook line first and never write the state file
+  ---
+  duration_ms: 0.23575
+  type: 'test'
+  ...
+# Subtest: autopilot lists the floor and who can turn it on
+ok 115 - autopilot lists the floor and who can turn it on
+  ---
+  duration_ms: 0.103583
+  type: 'test'
+  ...
+# Subtest: autopilot off reads the ledgers dir without creating it
+ok 116 - autopilot off reads the ledgers dir without creating it
+  ---
+  duration_ms: 0.093042
+  type: 'test'
+  ...
+# Subtest: terse mode tells the voice to answer only what was asked, in numbered order
+ok 117 - terse mode tells the voice to answer only what was asked, in numbered order
+  ---
+  duration_ms: 0.189
+  type: 'test'
+  ...
+# Subtest: help frontmatter matches spec B3, description quoted
+ok 118 - help frontmatter matches spec B3, description quoted
+  ---
+  duration_ms: 0.379458
+  type: 'test'
+  ...
+# Subtest: setup writes only after an explicit yes and never touches tracked files
+ok 119 - setup writes only after an explicit yes and never touches tracked files
+  ---
+  duration_ms: 0.0965
+  type: 'test'
+  ...
+# Subtest: the template parses as kern settings and every key in it is documented
+ok 120 - the template parses as kern settings and every key in it is documented
+  ---
+  duration_ms: 0.592792
+  type: 'test'
+  ...
+# Subtest: check compares keys with kernel/settings.md and names the floor keys the hooks ignore
+ok 121 - check compares keys with kernel/settings.md and names the floor keys the hooks ignore
+  ---
+  duration_ms: 0.491916
+  type: 'test'
+  ...
+# Subtest: setup defers the work dir to kern-dir; allowed-tools covers its read-only calls
+ok 122 - setup defers the work dir to kern-dir; allowed-tools covers its read-only calls
+  ---
+  duration_ms: 0.14325
+  type: 'test'
+  ...
+# Subtest: the template sets no key: every line is a comment or blank
+ok 123 - the template sets no key: every line is a comment or blank
+  ---
+  duration_ms: 0.086125
+  type: 'test'
+  ...
+# Subtest: unslop: path-tier frontmatter and the upstream sections in order
+ok 124 - unslop: path-tier frontmatter and the upstream sections in order
+  ---
+  duration_ms: 0.853042
+  type: 'test'
+  ...
+# Subtest: technical-writing: opens with Steps that apply unslop, then the standard
+ok 125 - technical-writing: opens with Steps that apply unslop, then the standard
+  ---
+  duration_ms: 0.133458
+  type: 'test'
+  ...
+# Subtest: commit frontmatter
+ok 126 - commit frontmatter
+  ---
+  duration_ms: 0.872292
+  type: 'test'
+  ...
+# Subtest: commit sections, steps and red flags
+ok 127 - commit sections, steps and red flags
+  ---
+  duration_ms: 1.562
+  type: 'test'
+  ...
+# Subtest: commit ledger-tasks reference
+ok 128 - commit ledger-tasks reference
+  ---
+  duration_ms: 0.228167
+  type: 'test'
+  ...
+# Subtest: define frontmatter
+ok 129 - define frontmatter
+  ---
+  duration_ms: 1.559792
+  type: 'test'
+  ...
+# Subtest: define sections, steps, the standing gate and red flags
+ok 130 - define sections, steps, the standing gate and red flags
+  ---
+  duration_ms: 0.506833
+  type: 'test'
+  ...
+# Subtest: define references
+ok 131 - define references
+  ---
+  duration_ms: 0.441958
+  type: 'test'
+  ...
+# Subtest: define pins its approval rules
+ok 132 - define pins its approval rules
+  ---
+  duration_ms: 0.2365
+  type: 'test'
+  ...
+# Subtest: diagnose frontmatter
+ok 133 - diagnose frontmatter
+  ---
+  duration_ms: 0.76625
+  type: 'test'
+  ...
+# Subtest: diagnose sections, steps and red flags
+ok 134 - diagnose sections, steps and red flags
+  ---
+  duration_ms: 1.650541
+  type: 'test'
+  ...
+# Subtest: diagnose references
+ok 135 - diagnose references
+  ---
+  duration_ms: 0.412917
+  type: 'test'
+  ...
+# Subtest: execute-plan frontmatter
+ok 136 - execute-plan frontmatter
+  ---
+  duration_ms: 1.506667
+  type: 'test'
+  ...
+# Subtest: execute-plan sections, steps, scripts and red flags
+ok 137 - execute-plan sections, steps, scripts and red flags
+  ---
+  duration_ms: 0.882125
+  type: 'test'
+  ...
+# Subtest: ledger format and model table
+ok 138 - ledger format and model table
+  ---
+  duration_ms: 0.298666
+  type: 'test'
+  ...
+# Subtest: execute-plan pins each step, the modes, the stops and the ledger rules
+ok 139 - execute-plan pins each step, the modes, the stops and the ledger rules
+  ---
+  duration_ms: 1.382583
+  type: 'test'
+  ...
+# Subtest: execute-plan reruns its plan checks on every invocation and writes only missing lines
+ok 140 - execute-plan reruns its plan checks on every invocation and writes only missing lines
+  ---
+  duration_ms: 0.574292
+  type: 'test'
+  ...
+# Subtest: execute-plan orders each gate after what it needs
+ok 141 - execute-plan orders each gate after what it needs
+  ---
+  duration_ms: 0.254417
+  type: 'test'
+  ...
+# Subtest: execute-plan red flags tell the reader what to do
+ok 142 - execute-plan red flags tell the reader what to do
+  ---
+  duration_ms: 0.36625
+  type: 'test'
+  ...
+# Subtest: finish-branch frontmatter
+ok 143 - finish-branch frontmatter
+  ---
+  duration_ms: 1.891709
+  type: 'test'
+  ...
+# Subtest: finish-branch sections, steps and red flags
+ok 144 - finish-branch sections, steps and red flags
+  ---
+  duration_ms: 1.095875
+  type: 'test'
+  ...
+# Subtest: branch-ops reference: rebase and the proven-tree check
+ok 145 - branch-ops reference: rebase and the proven-tree check
+  ---
+  duration_ms: 0.309833
+  type: 'test'
+  ...
+# Subtest: discard reference
+ok 146 - discard reference
+  ---
+  duration_ms: 0.223833
+  type: 'test'
+  ...
+# Subtest: push-and-pr reference: dedup, push, PR
+ok 147 - push-and-pr reference: dedup, push, PR
+  ---
+  duration_ms: 0.398375
+  type: 'test'
+  ...
+# Subtest: PR body template
+ok 148 - PR body template
+  ---
+  duration_ms: 0.15525
+  type: 'test'
+  ...
+# Subtest: implement frontmatter
+ok 149 - implement frontmatter
+  ---
+  duration_ms: 0.758416
+  type: 'test'
+  ...
+# Subtest: implement sections, steps and red flags
+ok 150 - implement sections, steps and red flags
+  ---
+  duration_ms: 1.545458
+  type: 'test'
+  ...
+# Subtest: implement references
+ok 151 - implement references
+  ---
+  duration_ms: 0.3545
+  type: 'test'
+  ...
+# Subtest: parallel-work frontmatter
+ok 152 - parallel-work frontmatter
+  ---
+  duration_ms: 2.576875
+  type: 'test'
+  ...
+# Subtest: parallel-work sections and steps
+ok 153 - parallel-work sections and steps
+  ---
+  duration_ms: 1.200583
+  type: 'test'
+  ...
+# Subtest: parallel-work pins the drain mapping, entry check, package location, teardown and stops
+ok 154 - parallel-work pins the drain mapping, entry check, package location, teardown and stops
+  ---
+  duration_ms: 0.217625
+  type: 'test'
+  ...
+# Subtest: brief template fields and worktrees reference
+ok 155 - brief template fields and worktrees reference
+  ---
+  duration_ms: 11.761167
+  type: 'test'
+  ...
+# Subtest: worktrees teardown pins the force check
+ok 156 - worktrees teardown pins the force check
+  ---
+  duration_ms: 0.132666
+  type: 'test'
+  ...
+# Subtest: a filled brief passes brief-check
+ok 157 - a filled brief passes brief-check
+  ---
+  duration_ms: 10.365208
+  type: 'test'
+  ...
+# Subtest: plan frontmatter
+ok 158 - plan frontmatter
+  ---
+  duration_ms: 1.290083
+  type: 'test'
+  ...
+# Subtest: plan sections and steps
+ok 159 - plan sections and steps
+  ---
+  duration_ms: 0.444875
+  type: 'test'
+  ...
+# Subtest: plan templates are contracts task-brief and plan-check can read
+ok 160 - plan templates are contracts task-brief and plan-check can read
+  ---
+  duration_ms: 0.352375
+  type: 'test'
+  ...
+# Subtest: plan pins its approval, lookup and autopilot rules
+ok 161 - plan pins its approval, lookup and autopilot rules
+  ---
+  duration_ms: 0.236584
+  type: 'test'
+  ...
+# Subtest: plan pins order, routing and stop rules
+ok 162 - plan pins order, routing and stop rules
+  ---
+  duration_ms: 0.216417
+  type: 'test'
+  ...
+# Subtest: prove-it frontmatter is the spec text
+ok 163 - prove-it frontmatter is the spec text
+  ---
+  duration_ms: 1.316667
+  type: 'test'
+  ...
+# Subtest: prove-it sections, steps, gate and red flags
+ok 164 - prove-it sections, steps, gate and red flags
+  ---
+  duration_ms: 0.391042
+  type: 'test'
+  ...
+# Subtest: evidence reference
+ok 165 - evidence reference
+  ---
+  duration_ms: 0.190375
+  type: 'test'
+  ...
+# Subtest: the M0 placeholder is gone
+ok 166 - the M0 placeholder is gone
+  ---
+  duration_ms: 0.072125
+  type: 'test'
+  ...
+# Subtest: the gate hands a commit to commit and a push or PR to finish-branch
+ok 167 - the gate hands a commit to commit and a push or PR to finish-branch
+  ---
+  duration_ms: 0.135875
+  type: 'test'
+  ...
+# Subtest: recall frontmatter
+ok 168 - recall frontmatter
+  ---
+  duration_ms: 0.975542
+  type: 'test'
+  ...
+# Subtest: recall sections, steps and the source lines it keeps
+ok 169 - recall sections, steps and the source lines it keeps
+  ---
+  duration_ms: 0.615792
+  type: 'test'
+  ...
+# Subtest: recall resolves WORK read-only and never calls kern-dir
+ok 170 - recall resolves WORK read-only and never calls kern-dir
+  ---
+  duration_ms: 0.14325
+  type: 'test'
+  ...
+# Subtest: recall gives every script exit an action
+ok 171 - recall gives every script exit an action
+  ---
+  duration_ms: 0.16575
+  type: 'test'
+  ...
+# Subtest: recall pins the unverified tag and the verified-uncommitted rules
+ok 172 - recall pins the unverified tag and the verified-uncommitted rules
+  ---
+  duration_ms: 0.112458
+  type: 'test'
+  ...
+# Subtest: recall dispatches a named agent, model and read-only commands
+ok 173 - recall dispatches a named agent, model and read-only commands
+  ---
+  duration_ms: 0.095708
+  type: 'test'
+  ...
+# Subtest: recall keeps the load-bearing lines a sentence deletion would lose
+ok 174 - recall keeps the load-bearing lines a sentence deletion would lose
+  ---
+  duration_ms: 0.10225
+  type: 'test'
+  ...
+# Subtest: chat reference keeps the ketchup rules
+ok 175 - chat reference keeps the ketchup rules
+  ---
+  duration_ms: 0.182625
+  type: 'test'
+  ...
+# Subtest: transcripts reference
+ok 176 - transcripts reference
+  ---
+  duration_ms: 0.280958
+  type: 'test'
+  ...
+# Subtest: the C11 acceptance checks are behavioural cases
+ok 177 - the C11 acceptance checks are behavioural cases
+  ---
+  duration_ms: 0.345
+  type: 'test'
+  ...
+# Subtest: the recall ledger fixture exists and leaves Task 3 incomplete
+ok 178 - the recall ledger fixture exists and leaves Task 3 incomplete
+  ---
+  duration_ms: 0.836417
+  type: 'test'
+  ...
+# Subtest: self-review frontmatter
+ok 179 - self-review frontmatter
+  ---
+  duration_ms: 1.422209
+  type: 'test'
+  ...
+# Subtest: self-review sections and steps
+ok 180 - self-review sections and steps
+  ---
+  duration_ms: 0.523917
+  type: 'test'
+  ...
+# Subtest: self-review exits, order and dispatches
+ok 181 - self-review exits, order and dispatches
+  ---
+  duration_ms: 0.172041
+  type: 'test'
+  ...
+# Subtest: self-review references
+ok 182 - self-review references
+  ---
+  duration_ms: 0.759875
+  type: 'test'
+  ...
+# Subtest: self-review text hygiene
+ok 183 - self-review text hygiene
+  ---
+  duration_ms: 0.67175
+  type: 'test'
+  ...
+# Subtest: agreeing versions pass
+ok 184 - agreeing versions pass
+  ---
+  duration_ms: 1.533042
+  type: 'test'
+  ...
+# Subtest: manifest mismatch fails
+ok 185 - manifest mismatch fails
+  ---
+  duration_ms: 0.636917
+  type: 'test'
+  ...
+# Subtest: no release heading is a clear failure
+ok 186 - no release heading is a clear failure
+  ---
+  duration_ms: 1.010042
+  type: 'test'
+  ...
+# Subtest: a stale Unreleased bullet already in the base fails
+ok 187 - a stale Unreleased bullet already in the base fails
+  ---
+  duration_ms: 0.82125
+  type: 'test'
+  ...
+# Subtest: a newly added Unreleased bullet passes
+ok 188 - a newly added Unreleased bullet passes
+  ---
+  duration_ms: 0.576375
+  type: 'test'
+  ...
+# Subtest: an empty Unreleased section fails even with no base
+ok 189 - an empty Unreleased section fails even with no base
+  ---
+  duration_ms: 0.432416
+  type: 'test'
+  ...
+# Subtest: a non-shipped change passes without a bullet
+ok 190 - a non-shipped change passes without a bullet
+  ---
+  duration_ms: 0.405208
+  type: 'test'
+  ...
+# Subtest: --pr compares HEAD changelog against the base ref
+ok 191 - --pr compares HEAD changelog against the base ref
+  ---
+  duration_ms: 199.95275
+  type: 'test'
+  ...
+# Subtest: bump follows semver
+ok 192 - bump follows semver
+  ---
+  duration_ms: 0.326084
+  type: 'test'
+  ...
+# Subtest: release moves Unreleased bullets under the new version
+ok 193 - release moves Unreleased bullets under the new version
+  ---
+  duration_ms: 1.207209
+  type: 'test'
+  ...
+# Subtest: release keeps sub-headings and wrapped lines
+ok 194 - release keeps sub-headings and wrapped lines
+  ---
+  duration_ms: 0.683958
+  type: 'test'
+  ...
+# Subtest: release refuses an empty Unreleased section
+ok 195 - release refuses an empty Unreleased section
+  ---
+  duration_ms: 0.4725
+  type: 'test'
+  ...
+# Subtest: CLI runs when reached through a symlink
+ok 196 - CLI runs when reached through a symlink
+  ---
+  duration_ms: 27.347708
+  type: 'test'
+  ...
+# Subtest: terse keeps existing comments and shows only changed code
+ok 197 - terse keeps existing comments and shows only changed code
+  ---
+  duration_ms: 0.466666
+  type: 'test'
+  ...
+# Subtest: the normal voice skips the main AI tells, in the kernel and in subagent returns
+ok 198 - the normal voice skips the main AI tells, in the kernel and in subagent returns
+  ---
+  duration_ms: 0.171083
+  type: 'test'
+  ...
+1..198
+# tests 198
+# suites 0
+# pass 198
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1625.680542
