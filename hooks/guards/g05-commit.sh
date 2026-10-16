@@ -298,7 +298,9 @@ _g05_problems() {
   subject=$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')
   if [ "$(settings_get commit.attribution none)" = none ] &&
     printf '%s\n' "$msg" | grep -Eiq 'co-authored-by:.*(claude|anthropic)|generated (with|by) .*claude|claude-session:|claude\.ai/code|(co-authored-by|assisted-by|generated-by)[[:space:]]*[:=].*(claude|anthropic)'; then
-    echo "attribution trailer present (commit.attribution: none)"
+    # The fix rides in the reason: Claude Code's own attribution reminder asks for the trailer, and
+    # the model reads this text exactly when the commit fails. No ";": the caller joins lines with "; ".
+    echo "attribution trailer present (commit.attribution: none): remove the trailer and commit again"
   fi
   # Unset, the convention is the one kern-detect finds in git log; with none found, none is checked.
   if conv=$(settings_get commit.convention); then

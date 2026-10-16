@@ -137,6 +137,23 @@ KEY='-----BEGIN RSA PRIVATE KEY-----'
   [ "$(decision_of "$output")" = ask ]
 }
 
+@test "G5: an attribution deny names commit.attribution and the fix, in both modes; without the trailer it passes" {
+  local hint='kern G5: attribution trailer present (commit.attribution: none): remove the trailer and commit again'
+  printf 'CDS-2465: swap\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\n' >"$R/msg.txt"
+  expect deny g05 "git commit -F msg.txt"
+  [[ "$output" == *"\"permissionDecisionReason\":\"$hint\""* ]] || false
+  set_autopilot on
+  expect deny g05 "git commit -F msg.txt"
+  [[ "$output" == *"\"permissionDecisionReason\":\"$hint\""* ]] || false
+  # With another failed check, the reasons stay joined by one "; ".
+  printf 'swap\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n' >"$R/msg.txt"
+  expect deny g05 "git commit -F msg.txt"
+  [[ "$output" == *"remove the trailer and commit again; subject does not match"* ]] || false
+  # The retry the hint asks for: the same commit with the trailer removed.
+  printf 'CDS-2465: swap\n' >"$R/msg.txt"
+  expect allow g05 "git commit -F msg.txt"
+}
+
 @test "G5: a message built by command substitution cannot be checked: ask, deny under autopilot" {
   g "git commit -m \$(cat m.txt)" g05
   [ "$(decision_of "$output")" = ask ]

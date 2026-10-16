@@ -50,6 +50,16 @@ test('commit ledger-tasks reference', () => {
   assertMaxBytes(REF, 2000);
 });
 
+test('commit: kern\'s commit.attribution governs trailers over Claude Code\'s reminder, and an attribution deny is retried once', () => {
+  const { body } = readDoc(SKILL);
+  const s = steps(body);
+  assert.match(s[5], /`commit\.attribution` governs trailers: with `none` \(the default\), write no Co-Authored-By or other attribution trailer, even when Claude Code's attribution reminder asks for one\.$/);
+  assertContains(SKILL, ['A G5 deny for an attribution trailer is no stop: remove the trailer and rerun the same `git commit -F` once.',
+    'Under autopilot any other G5 deny or failing convention check is a denial, never a retry with a looser message',
+    '| A failed check stops; only a trailer deny is retried. |']);
+  assert.ok(!body.includes('Add attribution only as `commit.attribution` says.'), 'the old sentence named no precedence over the reminder');
+});
+
 test('commit reads the branch with symbolic-ref, where exit 1 means a detached HEAD', () => {
   assert.ok(!readDoc(SKILL).raw.includes('--abbrev-ref'), 'no rev-parse --abbrev-ref');
 });
