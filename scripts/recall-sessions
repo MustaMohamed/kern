@@ -8,6 +8,7 @@
 # in history order; a prompt with no sessionId shows `-` there.
 # Exit: 0; 2 on a usage error or outside a git repository; 1 when a folder, a file or a command it
 # needs fails (nothing is printed then, so a failure never reads as "no sessions").
+# The records live in ${CLAUDE_CONFIG_DIR:-~/.claude}, written ~/.claude below.
 # A MISSING ~/.claude/projects, transcript folder or history.jsonl is not an error: no records is the
 # truth there, and the answer is empty. One that exists but cannot be read (or a dangling symlink) is
 # an error.
@@ -49,8 +50,10 @@ while [ "${#days}" -gt 1 ] && [ "${days#0}" != "$days" ]; do days=${days#0}; don
 [ "${#days}" -le 6 ] || usage
 MAIN=$(kern_main_root "$PWD") || { echo "recall-sessions: not a git repository" >&2; exit 2; }
 export KERN_MAIN="$MAIN"
-projects="$HOME/.claude/projects"
-hist="$HOME/.claude/history.jsonl"
+# Claude Code keeps projects/ and history.jsonl in CLAUDE_CONFIG_DIR when it is set, else ~/.claude.
+cc="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+projects="$cc/projects"
+hist="$cc/history.jsonl"
 # Claude Code names a project's transcript folder after its path, every character outside A-Z, a-z and
 # 0-9 turned into -.
 slug() { printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9' '-'; }
@@ -63,7 +66,7 @@ need_dir() {
   fi
 }
 [ -r "$HOME" ] && [ -x "$HOME" ] || die "cannot read $HOME"
-need_dir "$HOME/.claude"
+need_dir "$cc"
 need_dir "$projects"
 
 # iso_at SECONDS: local time of an epoch second. GNU date takes -d @S and rejects -r S; BSD date takes

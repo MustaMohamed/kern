@@ -304,3 +304,19 @@ shim() {
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"not a git repository"* ]] || false
 }
+
+@test "CLAUDE_CONFIG_DIR names the folder that holds projects and history.jsonl" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
+  want=$output
+  mv "$HOME/.claude" "$TMP/cc"
+  mkdir -p "$HOME/.claude"
+  CLAUDE_CONFIG_DIR="$TMP/cc" run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  # The same sessions and prompts; each session's path now names the config dir.
+  [ "${output//$TMP\/cc/$HOME/.claude}" = "$want" ]
+  chmod 000 "$TMP/cc/projects"
+  CLAUDE_CONFIG_DIR="$TMP/cc" run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  chmod 755 "$TMP/cc/projects"
+  [ "$status" -eq 1 ]
+}
