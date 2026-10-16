@@ -286,6 +286,38 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   b "cd /tmp && cp src.md dst.md"; none
 }
 
+@test "P21g G20 follows up to 16 directories; past that a relative write is denied, a read is not" {
+  prep "$R/src.md"
+  local i c15="" c16=""
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do c15="${c15}nice cd /tmp/k$i; "; done
+  c16="${c15}nice cd /tmp/k16; "
+  # CWD and 15 targets are 16 directories: judged as usual.
+  b "${c15}echo x >> notes.md"; none
+  b "${c15}cp src.md dst.md"; deny
+  # A 17th: a relative write cannot be judged from every directory, so it is denied.
+  b "${c16}echo x >> notes.md"; deny
+  [[ "$output" == *"more directories than G20 follows"* ]] || false
+  b "${c16}cp $R/src.md dst.md"; deny
+  b "${c16}echo x > out.txt && ls notes.md"; deny
+  # So is any Markdown write: its sources may be relative to a directory G20 did not follow.
+  b "${c16}echo x >> $R/notes.md"; deny
+  # A read, and an absolute write that is not Markdown, get the vote they get anyway; so does a plain cd
+  # to an absolute target, which leaves no directory unfollowed, and if cd x five times then a read.
+  b "${c16}ls notes.md"; none
+  b "${c16}echo x > $R/out.txt && ls notes.md"; none
+  b "${c16}cd $R && echo x >> notes.md"; none
+  b "if cd a; then ls; fi; if cd b; then ls; fi; if cd c; then ls; fi; if cd d; then ls; fi; if cd e; then ls; fi; ls notes.md"; none
+}
+
+@test "P21h sixty Markdown writes after four maybe cds are judged in under 6 s" {
+  local i c="nice cd a; nice cd b; nice cd c; nice cd d; "
+  for i in $(seq 1 60); do c="${c}echo x >> notes$i.md; "; done
+  local t0=$SECONDS
+  b "$c"
+  none
+  [ $((SECONDS - t0)) -lt 6 ] || { echo "took $((SECONDS - t0)) s"; return 1; }
+}
+
 @test "P22 reads and kern's own scripts get no G20 vote" {
   prep "$SPEC"
   b "grep -rn approved .kern/specs/export.md"; none

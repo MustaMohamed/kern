@@ -26,6 +26,7 @@ _G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your ca
 # A right single quote, read as an apostrophe in a non-answer ("don't").
 _G20_RSQ=$'\342\200\231'
 _G20_USE_TOOL="set or change an approval with the Edit or Write tool, so kern can check the user's quote"
+_G20_OVER_WHY="the command may be in more directories than G20 follows (16), after cds it cannot follow for certain, and writes a relative path or a Markdown file; run the cds in a call of their own"
 
 # The frontmatter reader G20 shares with ledger-open and plan-check, so all three agree on where a
 # file's frontmatter ends.
@@ -217,10 +218,10 @@ _g20_file() {
 #
 # State for one command: _G20_W is 1 when the command holds approved (quotes and backslashes taken out,
 # any case), _G20_M when it names a Markdown file. _G20_DIRS holds each directory the command may be in,
-# one per line, and _G20_DIR the one _g20_seg1 judges from; it follows cd. _G20_REC is the simple command
-# _g20_seg1 reads. _G20_WRITES is 1 once a simple command writes a Markdown file. _G20_SRC holds the
-# command's other file words as absolute paths, one per line. _G20_WHY is the deny reason; the first one
-# ends the check.
+# one per line, _G20_SEEN each one it was in, and _G20_DIR the one _g20_seg1 judges from; it follows cd.
+# _G20_OVER is 1 once the set is past its cap. _G20_REC is the simple command _g20_seg reads. _G20_WRITES
+# is 1 once a simple command writes a Markdown file. _G20_SRC holds the command's other file words as
+# absolute paths, an array. _G20_WHY is the deny reason; the first one ends the check.
 
 # _g20_dyn WORD: exit 0 when WORD may name other files at run time: a glob, a $, a backtick or a brace.
 _g20_dyn() {
@@ -228,13 +229,16 @@ _g20_dyn() {
   return 1
 }
 
-# _g20_abs WORD: sets _G20_P to WORD as an absolute path, from _G20_DIR.
+# _g20_abs WORD: sets _G20_P to WORD as an absolute path, from _G20_DIR. A relative WORD sets _G20_REL.
 _g20_abs() {
   case "$1" in
     /*) _G20_P=$1 ;;
     '~') _G20_P=$HOME ;;
     '~'/*) _G20_P="$HOME${1#'~'}" ;;
-    *) _G20_P="$_G20_DIR/$1" ;;
+    *)
+      _G20_P="$_G20_DIR/$1"
+      _G20_REL=1
+      ;;
   esac
 }
 
@@ -246,8 +250,17 @@ _g20_target() {
     _G20_WHY="the command holds the word approved and writes $w, which may be a Markdown file; $_G20_USE_TOOL"
     return 0
   fi
+  # Past the cap (_g20_seg), a relative write cannot be judged from every directory, nor can a Markdown
+  # write's sources.
+  if [ "${_G20_OVER:-0}" = 1 ] && ! _g20_dyn "$w"; then
+    case "$w" in /* | '~' | '~'/*) ;; *) _G20_WHY=$_G20_OVER_WHY; return 0 ;; esac
+  fi
   _g20_abs "$w"
   _g20_md "$w" || _g20_mdfile "$_G20_P" || return 0
+  if [ "${_G20_OVER:-0}" = 1 ]; then
+    _G20_WHY=$_G20_OVER_WHY
+    return 0
+  fi
   _G20_WRITES=1
   if [ "$_G20_W" = 1 ]; then
     _G20_WHY=$_G20_USE_TOOL
@@ -373,8 +386,7 @@ _g20_copy() {
     dir=$_G20_P
     i=0
     while [ "$i" -lt "$ns" ]; do
-      case "${ops[$i]}" in /*) ;; *) _G20_SRC="$_G20_SRC$dir/${ops[$i]}
-" ;; esac
+      case "${ops[$i]}" in /*) ;; *) _G20_SRC+=("$dir/${ops[$i]}") ;; esac
       i=$((i + 1))
     done
   fi
@@ -405,7 +417,12 @@ _g20_cmd() {
       # Only a plain cd is followed for certain (cmd_plain); _g20_seg also judges from where it was. A
       # cd that can go back (-, ~-, +N, -N, a target built at run time, more than one operand, a pushd
       # with none) may land in any directory the command was in, or HOME (_G20_BACK).
-      cmd_plain "$_G20_REC" || _G20_STAY=1
+      _G20_REL=1
+      if [ -z "$_G20_PLAIN" ]; then
+        _G20_PLAIN=0
+        if cmd_plain "$_G20_REC"; then _G20_PLAIN=1; fi
+      fi
+      [ "$_G20_PLAIN" = 1 ] || _G20_STAY=1
       w=""
       n=0
       skip=0
@@ -433,7 +450,7 @@ _g20_cmd() {
         _G20_DIR=$_G20_P
       fi
       ;;
-    popd) _G20_STAY=1; _G20_BACK=1 ;;
+    popd) _G20_REL=1; _G20_STAY=1; _G20_BACK=1 ;;
     sed | perl)
       if [ "$head" = sed ]; then
         _g20_ops ef l '' i "--expression --file --line-length" "--expression --file" "$@"
@@ -569,81 +586,49 @@ _g20_cmd() {
   return 0
 }
 
-# _g20_seg SIMPLE_COMMAND: _g20_seg1 from each directory in _G20_DIRS. The directories after it are each
-# one's _G20_DIR once the command ran, and also each one itself when the command holds a cd G20 does not
-# follow for certain (_G20_STAY, cmd_plain), and every directory the command was in (_G20_SEEN) after a
-# cd that can go back (_G20_BACK). Past 16 directories it denies: it could not judge them all.
+# _g20_seg SIMPLE_COMMAND: _g20_seg1 from each directory in _G20_DIRS, the record's words read once. When
+# nothing in it depends on the directory (no relative path, no cd: _G20_REL stays 0), the first judgement
+# stands for every directory. Otherwise the directories after it are each one's _G20_DIR once the command
+# ran, and also each one itself when the command holds a cd G20 does not follow for certain (_G20_STAY,
+# cmd_plain), and every directory the command was in (_G20_SEEN) after a cd that can go back
+# (_G20_BACK). The set holds at most 16; past that _G20_OVER is set and the rest are not followed, so a
+# relative write or a Markdown write is denied (_g20_target), until a plain cd to an absolute target. A
+# read, and an absolute write that is not Markdown, are judged as before.
 _g20_seg() {
-  local d next="" n=0 nl=$'\n' x back=0
-  while IFS= read -r d; do
-    [ -n "$d" ] || continue
-    _G20_DIR=$d
-    _G20_STAY=0
-    _G20_BACK=0
-    _g20_seg1 "$1"
-    for x in "$_G20_DIR" "$d"; do
-      case "$nl$next" in *"$nl$x$nl"*) ;; *) next="$next$x$nl"; n=$((n + 1)) ;; esac
-      [ "$_G20_STAY" = 1 ] || break
-    done
-    [ "$_G20_BACK" = 0 ] || back=1
-    [ -z "$_G20_WHY" ] || return 0
-  done <<DIRS
-$_G20_DIRS
-DIRS
-  if [ "$back" = 1 ]; then
-    while IFS= read -r x; do
-      [ -n "$x" ] || continue
-      case "$nl$next" in *"$nl$x$nl"*) ;; *) next="$next$x$nl"; n=$((n + 1)) ;; esac
-    done <<SEEN
-$_G20_SEEN
-SEEN
-  fi
-  if [ "$n" -gt 16 ]; then
-    _G20_WHY="the command may be in more directories than G20 follows, after cds it cannot follow for certain; run them in a call of their own"
-    return 0
-  fi
-  _G20_DIRS=$next
-  while IFS= read -r x; do
-    [ -n "$x" ] || continue
-    case "$nl$_G20_SEEN" in *"$nl$x$nl"*) ;; *) _G20_SEEN="$_G20_SEEN$x$nl" ;; esac
-  done <<NEXT
-$next
-NEXT
-}
-
-# _g20_seg1 SIMPLE_COMMAND: its redirect targets, its file words (into _G20_SRC) and its command, from
-# _G20_DIR.
-_g20_seg1() {
-  local w r s f=0 c=0 cw=()
+  local d next="" n=0 nl=$'\n' x back=0 first=1 w r t f=0 dirs=()
   _G20_REC=$1
+  _G20_PLAIN=""
+  # The words do not depend on the directory: the redirect targets (_G20_TGT), the other file words
+  # (_G20_SRCW) and the command without its redirections (_G20_CWA).
+  _G20_TGT=()
+  _G20_SRCW=()
+  _G20_CWA=()
   while IFS= read -r w; do
     if [ "$f" = 1 ]; then
       f=0
-      _g20_target "$w"
+      _G20_TGT+=("$w")
       continue
     fi
     # r: the word without a leading fd number, to read a redirection.
     r=${w#"${w%%[!0123456789]*}"}
-    s=''
+    t=''
     case "$r" in
       '>' | '>>' | '>|' | '&>' | '&>>' | '<>' | '>&') f=1 ;;
-      '&>>'*) _g20_target "${r#'&>>'}" ;;
-      '&>'*) _g20_target "${r#'&>'}" ;;
-      '>>'*) _g20_target "${r#'>>'}" ;;
-      '>|'*) _g20_target "${r#'>|'}" ;;
-      '<>'*) _g20_target "${r#'<>'}" ;;
-      '>&'*) case "${r#'>&'}" in *[!0123456789-]*) _g20_target "${r#'>&'}" ;; esac ;;
-      '>'*) _g20_target "${r#'>'}" ;;
+      '&>>'*) _G20_TGT+=("${r#'&>>'}") ;;
+      '&>'*) _G20_TGT+=("${r#'&>'}") ;;
+      '>>'*) _G20_TGT+=("${r#'>>'}") ;;
+      '>|'*) _G20_TGT+=("${r#'>|'}") ;;
+      '<>'*) _G20_TGT+=("${r#'<>'}") ;;
+      '>&'*) case "${r#'>&'}" in *[!0123456789-]*) _G20_TGT+=("${r#'>&'}") ;; esac ;;
+      '>'*) _G20_TGT+=("${r#'>'}") ;;
       '<<'*) ;;
-      '<'*) s=${r#'<'} ;;
-      *) s=${w#if=} ;;
+      '<'*) t=${r#'<'} ;;
+      *) t=${w#if=} ;;
     esac
-    case "$s" in '' | -*) ;; *) _g20_dyn "$s" || { _g20_abs "$s"; _G20_SRC="$_G20_SRC$_G20_P
-"; } ;; esac
+    case "$t" in '' | -*) ;; *) _g20_dyn "$t" || _G20_SRCW+=("$t") ;; esac
   done <<WORDS
 $(_shell_words "$1")
 WORDS
-  # The command, without its redirections.
   f=0
   while IFS= read -r w; do
     if [ "$f" = 1 ]; then
@@ -654,12 +639,66 @@ WORDS
     case "$r" in
       '>' | '>>' | '>|' | '&>' | '&>>' | '<>' | '>&' | '<' | '<<' | '<<<') f=1 ;;
       '>'* | '&>'* | '<'*) ;;
-      *) cw[c]=$w; c=$((c + 1)) ;;
+      *) _G20_CWA+=("$w") ;;
     esac
   done <<WORDS
 $(_cmd_words "$1")
 WORDS
-  [ "$c" = 0 ] || _g20_cmd "${cw[@]}"
+  while IFS= read -r d; do
+    [ -n "$d" ] && dirs+=("$d")
+  done <<DIRS
+$_G20_DIRS
+DIRS
+  for d in "${dirs[@]}"; do
+    _G20_DIR=$d
+    _G20_STAY=0
+    _G20_BACK=0
+    _G20_REL=0
+    _g20_seg1
+    [ -z "$_G20_WHY" ] || return 0
+    [ "$first" = 0 ] || [ "$_G20_REL" = 1 ] || return 0
+    first=0
+    for x in "$_G20_DIR" "$d"; do
+      case "$nl$next" in
+        *"$nl$x$nl"*) ;;
+        *) if [ "$n" -lt 16 ]; then next="$next$x$nl"; n=$((n + 1)); else _G20_OVER=1; fi ;;
+      esac
+      [ "$_G20_STAY" = 1 ] || break
+    done
+    [ "$_G20_BACK" = 0 ] || back=1
+  done
+  if [ "$back" = 1 ]; then
+    while IFS= read -r x; do
+      [ -n "$x" ] || continue
+      case "$nl$next" in
+        *"$nl$x$nl"*) ;;
+        *) if [ "$n" -lt 16 ]; then next="$next$x$nl"; n=$((n + 1)); else _G20_OVER=1; fi ;;
+      esac
+    done <<SEEN
+$_G20_SEEN
+SEEN
+  fi
+  # A plain cd that takes every directory to one (an absolute target) leaves no directory unfollowed.
+  if [ "$_G20_OVER" = 1 ] && [ "$_G20_PLAIN" = 1 ] && [ "$back" = 0 ] && [ "$n" = 1 ]; then _G20_OVER=0; fi
+  _G20_DIRS=$next
+  while IFS= read -r x; do
+    [ -n "$x" ] || continue
+    case "$nl$_G20_SEEN" in *"$nl$x$nl"*) ;; *) _G20_SEEN="$_G20_SEEN$x$nl" ;; esac
+  done <<NEXT
+$next
+NEXT
+}
+
+# _g20_seg1: the record _g20_seg read, from _G20_DIR: its redirect targets, its other file words (into
+# _G20_SRC as absolute paths) and its command.
+_g20_seg1() {
+  local w
+  for w in ${_G20_TGT[@]+"${_G20_TGT[@]}"}; do _g20_target "$w"; done
+  for w in ${_G20_SRCW[@]+"${_G20_SRCW[@]}"}; do
+    _g20_abs "$w"
+    _G20_SRC+=("$_G20_P")
+  done
+  [ ${#_G20_CWA[@]} = 0 ] || _g20_cmd "${_G20_CWA[@]}"
 }
 
 _g20_bash() {
@@ -674,8 +713,9 @@ _g20_bash() {
   [ "$_G20_W$_G20_M" != 00 ] || return 0
   _G20_DIRS=${CWD:-$PWD}
   _G20_SEEN="${CWD:-$PWD}"$'\n'
+  _G20_OVER=0
   _G20_WRITES=0
-  _G20_SRC=''
+  _G20_SRC=()
   _G20_WHY=''
   while IFS= read -r seg; do
     [ -n "$seg" ] || continue
@@ -685,7 +725,8 @@ _g20_bash() {
 $(git_words "$cmd")
 CMD
   # A command that writes a Markdown file and also names a file holding a status: approved line, in its
-  # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file).
+  # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file). Each path is
+  # read once, the first 64 per directory G20 follows.
   if [ -z "$_G20_WHY" ] && [ "$_G20_WRITES" = 1 ]; then
     while IFS= read -r s; do
       if _g20_holds "$s"; then
@@ -693,7 +734,7 @@ CMD
         break
       fi
     done <<SRC
-$(printf '%s' "$_G20_SRC" | head -n 64)
+$(printf '%s\n' ${_G20_SRC[@]+"${_G20_SRC[@]}"} | LC_ALL=C awk '!s[$0]++' | head -n 1024)
 SRC
   fi
   [ -z "$_G20_WHY" ] || vote deny G20 "$_G20_WHY"
