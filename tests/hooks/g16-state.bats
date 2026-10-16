@@ -470,6 +470,21 @@ expect_cmd() {
     "cd $S && 'cd' /tmp; echo x > foo"
 }
 
+@test "a quoted or escaped assignment or redirect before a cd is a command name, so the cd is not plain" {
+  local pre=("'X=1'" 'X\=1' "'2>/dev/null'" '"X=1"') p cc=() sd=()
+  for p in "${pre[@]}"; do
+    cc+=("cd ~/.claude && $p cd /tmp; sed -i '' s/a/b/ settings.json")
+    sd+=("cd $S && $p cd /tmp; echo x > foo")
+  done
+  expect_cmd ask "${cc[@]}"
+  expect_cmd deny "${sd[@]}"
+  set_autopilot on
+  expect_cmd deny "${cc[@]}" "${sd[@]}"
+  set_autopilot off
+  # Unquoted, they are an assignment and a redirect, and the cd moves.
+  expect_cmd none "cd $S && X=1 cd /tmp; echo x > foo" "cd $S && 2>/dev/null cd /tmp; echo x > foo"
+}
+
 @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
   mkdir -p "$R/.claude"
   # The re-review's probes: a tracked file moved onto kern.local.yml, a removal, and diff --output.

@@ -508,8 +508,11 @@ cmd_plain() {
       sw(buf)
       for (k = 1; k <= sw_n; k++) {
         x = sw_w[k]
-        if (x ~ /^[0-9]*(<|>|&>)/) { if (x ~ /^[0-9]*[<>&|]+$/) k++; continue }
-        if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) continue
+        # A quoted or escaped word is a command name, never an assignment or a redirect: zsh runs a
+        # quoted X=1 as a command. An assignment with a quoted value is read as one too, which only
+        # makes the cd a maybe.
+        if (!sw_q[k] && x ~ /^[0-9]*(<|>|&>)/) { if (x ~ /^[0-9]*[<>&|]+$/) k++; continue }
+        if (!sw_q[k] && x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) continue
         exit x !~ /^(cd|pushd|popd)$/
       }
       exit 1

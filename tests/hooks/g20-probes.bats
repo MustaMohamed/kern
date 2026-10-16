@@ -260,6 +260,15 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   b "cd /tmp; echo note >> .kern/specs/export.md"; none
 }
 
+@test "P21e a quoted or escaped assignment or redirect before a cd is a command name: G20 judges from both directories" {
+  prep "$R/src.md"
+  local p
+  for p in "'X=1'" 'X\=1' "'2>/dev/null'"; do
+    b "$p cd /tmp; cp src.md dst.md"; deny
+  done
+  b "X=1 cd /tmp; cp src.md dst.md"; none
+}
+
 @test "P22 reads and kern's own scripts get no G20 vote" {
   prep "$SPEC"
   b "grep -rn approved .kern/specs/export.md"; none
