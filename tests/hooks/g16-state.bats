@@ -712,3 +712,34 @@ EOF
   expect_file_tools "$R/.claude/${k}ern.local.yml" ask
   expect_file_tools "$CLAUDE_PLUGIN_DATA/${s}essions/a.state" deny
 }
+
+@test "a Write or Edit under kern's hooks directory asks, and under autopilot is denied; a skill file gets no vote" {
+  K=$(kern_root)
+  mkdir -p "$BATS_TEST_TMPDIR/l"
+  ln -s "$K/hooks" "$BATS_TEST_TMPDIR/l/h"
+  ln -s "$K/hooks/guards/g20-approval.sh" "$BATS_TEST_TMPDIR/l/g20.txt"
+  for mode in off on; do
+    set_autopilot "$mode"
+    d=ask
+    [ "$mode" = on ] && d=deny
+    for p in "$K/hooks/guards/g20-approval.sh" "$K/hooks/prompt-submit" "$K/hooks/lib/state.sh" \
+      "$K/hooks/guards/g99-new.sh" "$K/skills/../hooks/pre-tool-use" "$BATS_TEST_TMPDIR/l/h/guards/g01-git.sh" \
+      "$BATS_TEST_TMPDIR/l/g20.txt" "$K/hooks/new-dir/x.sh"; do
+      for t in Write Edit; do
+        run_guard "$(file_payload "$t" "$p")" g16
+        [ "$(decision_of "$output")" = "$d" ] && [[ "$output" == *"kern G16: the target is kern's own hook code"* ]] ||
+          { echo "autopilot $mode: $t $p -> $output"; return 1; }
+      done
+    done
+  done
+  set_autopilot off
+  expect_file_tools "$K/skills/x/SKILL.md" none
+  expect_file_tools "$K/docs/plans/contract.md" none
+  expect_file_tools "$K/tests/hooks/g20.bats" none
+}
+
+@test "a Bash write to a guard file asks, and under autopilot is denied" {
+  K=$(kern_root)
+  expect_hook "sed -i '' s/x/y/ $K/hooks/guards/g20-approval.sh" 'sed -i s/x/y/ hooks/guards/g01-git.sh' \
+    "cp /tmp/g.sh $K/hooks/guards/g20-approval.sh" 'cd hooks/guards && sed -i s/x/y/ g20-approval.sh'
+}

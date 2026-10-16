@@ -7,9 +7,12 @@
 # in any case or indentation, and it must quote one whole line of the user's last message, verbatim,
 # that is not a non-answer such as "sounds good", holds a yes word (yes, ok, go ahead, lgtm and the
 # like), holds no negation or hold word (no, not, don't, wait, later and the like) and does not end in a
-# question mark. The file must be older than that message. prompt-submit records the message's line hashes in the session state, which
-# G16 protects, along with kern's hooks themselves, so the model cannot run prompt-submit to forge the
-# message. Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan with a
+# question mark. The file must be older than that message. prompt-submit records the message's line
+# hashes in the session state. G16 denies a write to that state, and asks before (under autopilot
+# denies) a Write or Edit under kern's hooks/ directory and a Bash command that names a hook entry file,
+# a .sh file under hooks/lib/ or hooks/guards/, or a state function, so the model cannot run
+# prompt-submit to forge the message or edit this guard unseen. A shell write that reaches a hook file
+# without naming its path is not seen (G16's accepted limits). Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan with a
 # Markdown name, and G20, ledger-open and plan-check read frontmatter with one reader
 # (scripts/lib/frontmatter.awk), so every approval ledger-open accepts passed through G20.
 #

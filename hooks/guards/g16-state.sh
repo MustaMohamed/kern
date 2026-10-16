@@ -1,7 +1,9 @@
 # shellcheck shell=bash
 # G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
-# and the user confirms every write to a kern settings file or to Claude Code's own settings, and every
-# command that names kern's hook code or a state function, which could forge the user's prompt.
+# and the user confirms every write to a kern settings file or to Claude Code's own settings, every
+# Write, Edit or NotebookEdit whose target resolves under kern's hooks/ directory, and every command
+# that names kern's hook code (a hook entry file, a .sh file under hooks/lib/ or hooks/guards/) or a
+# state function, which could forge the user's prompt or turn a guard off.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; and any other spelling of a hook path than the ones _g16_hooks reads
@@ -14,12 +16,14 @@ _G16_CC="Claude Code settings set permissions and hooks; the user confirms each 
 _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write"
 _G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool"
+_G16_HOOK_FILE="the target is kern's own hook code, under its hooks directory, which every guard and the approval check rely on; the user confirms each write"
 _G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
 # U+017F (long s) and U+212A (Kelvin sign), in UTF-8: APFS folds them to s and k in a file name.
 _G16_LONG_S=$'\305\277'
 _G16_KELVIN=$'\342\204\252'
 # _G16_HOOK_AWK: reads the command text, lower-cased. Prints `hit` when a line names a hook after
-# hooks/ (or hooks// or hooks/./), a .sh file under hooks/lib/, or a state function as a word; a hook
+# hooks/ (or hooks// or hooks/./), a .sh file under hooks/lib/ or hooks/guards/, or a state function as
+# a word; a hook
 # counts only when the character after it cannot go on a file name, so pre-tool-use.bats does not.
 # Otherwise prints `ctx` when a line names a hooks directory (else `-`), then each word, split at
 # blanks, CR, ; | & < > ) and =.
@@ -29,6 +33,7 @@ BEGIN {
   a = "abcdefghijklmnopqrstuvwxyz0123456789"
   e = "([^" a "._-]|$)"
   hit = "hooks/(/|[.]/)*(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
+  hit = hit "|hooks/guards/[^/ \t\r;|&<>()]*[.]sh"
   hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset)([^" a "_]|$)"
   dir = "(^|[^" a "._-])hooks" e
 }
@@ -78,6 +83,53 @@ _g16_norm() {
   }'
 }
 
+# _g16_phys PATH: prints absolute PATH with its deepest existing directory resolved physically (cd -P,
+# so a symlinked directory and a `..` after one are followed) and the rest as text; exit 1 when even
+# / cannot be entered.
+_g16_phys() {
+  local d="${1%/*}" rest="${1##*/}" r
+  [ -n "$d" ] || d=/
+  while [ ! -d "$d" ]; do
+    rest="${d##*/}/$rest"
+    d=${d%/*}
+    [ -n "$d" ] || d=/
+  done
+  r=$(cd -P "$d" 2>/dev/null && pwd -P) || return 1
+  printf '%s\n' "${r%/}/$rest"
+}
+
+# _g16_hookfile PATH: exit 0 when absolute PATH resolves under kern's hooks/ directory, compared in lower
+# case (APFS opens HOOKS/ as hooks/): as text with `..` resolved, through its physical directory, and
+# through a symlink at its end, followed up to 8 links. kern's root is read as written and physically.
+_g16_hookfile() {
+  local p c l i=0 kr="" kp="" cands
+  kr=$(_g16_lower "$(_g16_norm "$KERN_ROOT/hooks")")
+  kp=$(cd -P "$KERN_ROOT/hooks" 2>/dev/null && pwd -P) && kp=$(_g16_lower "$kp")
+  p=$(_g16_norm "$1")
+  cands=$p
+  p=$(_g16_phys "$p") && cands="$cands
+$p"
+  while [ "$i" -lt 8 ] && [ -L "$p" ] && l=$(readlink "$p"); do
+    case "$l" in /*) ;; *) l="${p%/*}/$l" ;; esac
+    p=$(_g16_phys "$l") || break
+    cands="$cands
+$p
+$(_g16_norm "$p")"
+    i=$((i + 1))
+  done
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    c=$(_g16_lower "$c")
+    case "$c" in "$kr"/*) return 0 ;; esac
+    if [ -n "$kp" ]; then
+      case "$c" in "$kp"/*) return 0 ;; esac
+    fi
+  done <<EOF
+$cands
+EOF
+  return 1
+}
+
 # _g16_file: a Write, Edit or NotebookEdit target, compared in lower case as written, with `..`
 # resolved, and through its physical parent dir, so a case variant or a symlinked dir is seen.
 _g16_file() {
@@ -100,6 +152,10 @@ _g16_file() {
       case "$c" in "$rsd"/*) vote deny G16 "$_G16_STATE_FILE"; return 0 ;; esac
     fi
   done
+  if _g16_hookfile "$norm"; then
+    vote ask G16 "$_G16_HOOK_FILE"
+    return 0
+  fi
   for c in "$p" "$norm" "$real"; do
     case "$(_g16_lower "$c")" in
       */.claude/kern.yml | */.claude/kern.local.yml) vote ask G16 "$_G16_SETTINGS"; return 0 ;;
@@ -642,7 +698,7 @@ _g16_hooks_read() {
   fi
   r=$(printf '%s\n' "$t" | LC_ALL=C awk "$_G16_HOOK_AWK") || return 2
   names=$_G16_HOOK_NAMES
-  for f in "$KERN_ROOT"/hooks/lib/*.sh; do
+  for f in "$KERN_ROOT"/hooks/lib/*.sh "$KERN_ROOT"/hooks/guards/*.sh; do
     [ -e "$f" ] && names="$names ${f##*/}"
   done
   {
