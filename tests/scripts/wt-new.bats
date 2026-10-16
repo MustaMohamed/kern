@@ -97,6 +97,15 @@ setup() {
   [ "$status" -eq 2 ]
 }
 
+@test "a slug with a non-ASCII letter exits 2 under a UTF-8 locale too" {
+  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" "caf$(printf '\303\251')"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"bad slug"* ]] || false
+  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$REPO" "caf$(printf '\303\251')"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"bad slug"* ]] || false
+}
+
 @test "no origin remote exits 2 with a message" {
   git remote remove origin
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-i --base main

@@ -13,7 +13,9 @@ here=$(cd "$(dirname "$0")" && pwd -P)
 [ $# -eq 2 ] || { echo "usage: wt-fork SRC_WT SLUG" >&2; exit 2; }
 src=$(cd "$1" 2> /dev/null && pwd -P) || { echo "wt-fork: no such directory: $1" >&2; exit 2; }
 slug=$2
-case "$slug" in ''|.*|*[!A-Za-z0-9._-]*) echo "wt-fork: bad slug: $slug" >&2; exit 2 ;; esac
+# The letters are listed: a range such as A-Z follows the locale's collation in bash 3.2, and in
+# en_US.UTF-8 takes letters such as e-acute too.
+case "$slug" in ''|.*|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-]*) echo "wt-fork: bad slug: $slug" >&2; exit 2 ;; esac
 MAIN=$(kern_main_root "$src") || { echo "wt-fork: not a git repository: $src" >&2; exit 2; }
 # settings_get reads KERN_MAIN, so worktree.dir and worktree.setup come from MAIN, not the caller's cwd.
 export KERN_MAIN="$MAIN"

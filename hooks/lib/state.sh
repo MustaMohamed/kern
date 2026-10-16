@@ -31,8 +31,11 @@ state_set() {
   _state_put 0 "$@"
 }
 
-# _state_put FRESH SID KEY=VALUE...: FRESH=1 starts from empty content, ignoring any old file.
+# _state_put FRESH SID KEY=VALUE...: FRESH=1 starts from empty content, ignoring any old file. Keys are
+# checked in the C locale: bash 3.2 matches [a-z] by the caller's collation, which in en_US.UTF-8 takes
+# upper-case letters too.
 _state_put() {
+  local LC_ALL=C
   local fresh="$1" sid="$2" f dir tmp kv k v content
   shift 2
   f=$(state_file "$sid") || return 2

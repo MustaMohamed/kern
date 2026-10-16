@@ -53,6 +53,21 @@ autopilot: on"
   [ "$status" -eq 2 ]
 }
 
+@test "an upper-case or non-ASCII key is refused under a UTF-8 locale too" {
+  # bash 3.2 matches a [a-z] range by the locale's collation, where V sorts among the lower-case letters.
+  export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+  run state_set s1 "Voice=terse"
+  [ "$status" -eq 2 ]
+  run state_set s1 "VOICE=terse"
+  [ "$status" -eq 2 ]
+  run state_set s1 "$(printf 'voic\303\251')=terse"
+  [ "$status" -eq 2 ]
+  run state_file "s$(printf '\303\251')1"
+  [ "$status" -eq 2 ]
+  run state_set s1 voice=terse
+  [ "$status" -eq 0 ]
+}
+
 @test "autopilot_on needs the state and no denied setting" {
   state_reset s1
   run autopilot_on s1

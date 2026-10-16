@@ -875,3 +875,12 @@ EOT
     [ "$(decision_of "$output")" = none ] || { echo "$t -> $output"; return 1; }
   done
 }
+
+@test "G13 reads nc after a non-ASCII byte as a word under a UTF-8 locale, as in the C locale" {
+  . "$(kern_root)/hooks/guards/g13-protected.sh"
+  local w="x $(printf '\303\251')nc db.prod 5432"
+  LC_ALL=C _g13_names "$w"
+  export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+  _g13_names "$w"
+  ! _g13_names "x znc y"
+}

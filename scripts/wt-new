@@ -13,7 +13,9 @@ usage() { echo "usage: wt-new SLUG [--detach] [--base REF] [--branch NAME]" >&2;
 [ $# -ge 1 ] || usage
 slug=$1
 shift
-case "$slug" in ''|.*|*[!A-Za-z0-9._-]*) echo "wt-new: bad slug: $slug" >&2; exit 2 ;; esac
+# The letters are listed: a range such as A-Z follows the locale's collation in bash 3.2, and in
+# en_US.UTF-8 takes letters such as e-acute too.
+case "$slug" in ''|.*|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-]*) echo "wt-new: bad slug: $slug" >&2; exit 2 ;; esac
 detach=0 base='' branch=''
 while [ $# -gt 0 ]; do
   case "$1" in

@@ -35,6 +35,15 @@ setup() {
   [ -z "$(git -C "$R" status --porcelain)" ]
 }
 
+@test "kern-dir refuses an upper-case or non-ASCII name under a UTF-8 locale too" {
+  cd "$R"
+  for n in Tmp SPECS "caf$(printf '\303\251')"; do
+    LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 run bash "$K/kern-dir" "$n"
+    [ "$status" -eq 2 ] || { echo "$n -> $status $output"; return 1; }
+  done
+  [ ! -e "$R/.kern/Tmp" ]
+}
+
 @test "kern-dir creates a nested folder such as ledgers/<slug>" {
   cd "$R"
   run bash "$K/kern-dir" ledgers/plan-a

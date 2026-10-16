@@ -57,6 +57,9 @@ _g13_flat() {
 # _g13_names TEXT: exit 0 when TEXT holds a client or transfer name G13 reads, in any case (nc only as
 # a whole word: as a substring it is in too many commands).
 _g13_names() {
+  # [!A-Za-z0-9_-] follows the locale's collation in bash 3.2: in en_US.UTF-8 it leaves out letters
+  # such as e-acute, which the C locale reads as non-word bytes.
+  local LC_ALL=C
   case "$1" in
     *[Ss][Ss][Hh]* | *[Ss][Cc][Pp]* | *[Ff][Tt][Pp]* | *[Rr][Ss][Yy][Nn][Cc]* | *[Mm][Yy][Ss][Qq][Ll]* | \
       *[Mm][Aa][Rr][Ii][Aa][Dd][Bb]* | *[Pp][Ss][Qq][Ll]* | *[Ss][Qq][Ll][Ii][Tt][Ee]* | *[Ss][Qq][Ll][Cc][Mm][Dd]* | \

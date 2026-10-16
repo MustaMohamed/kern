@@ -7,8 +7,10 @@ export KERN_ROOT
 # shellcheck source=hooks/lib/settings.sh
 . "$KERN_ROOT/hooks/lib/settings.sh"
 sub="${1-}"
+# The letters are listed: a range such as a-z follows the locale's collation in bash 3.2, and in
+# en_US.UTF-8 takes upper-case letters too.
 case "$sub" in
-  '' | -* | :* | /* | */ | *//* | */-* | *[!a-z0-9/-]*) echo "kern-dir: name must be lowercase segments of letters, digits and dashes, joined by /" >&2; exit 2 ;;
+  '' | -* | :* | /* | */ | *//* | */-* | *[!abcdefghijklmnopqrstuvwxyz0123456789/-]*) echo "kern-dir: name must be lowercase segments of letters, digits and dashes, joined by /" >&2; exit 2 ;;
 esac
 CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD") || { echo "kern-dir: not a git repository" >&2; exit 2; }
