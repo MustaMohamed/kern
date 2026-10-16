@@ -461,8 +461,9 @@ WORDS
           1:*) ;;
           *) dk=0 ;;
         esac
-        # A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
-        if cmd_mod "$seg"; then dk=0; fi
+        # A cd under coproc or a repeat count that may be 0 may not move (cmd_mod exit 0 or 2).
+        cmd_mod "$seg"
+        [ $? = 1 ] || dk=0
         if [ "$dk" = 1 ]; then
           # A relative target may stay under the sessions dir.
           case "$last" in /* | '~'*) in_sd=$seg_s ;; *) [ "$seg_s" = 0 ] || in_sd=1 ;; esac

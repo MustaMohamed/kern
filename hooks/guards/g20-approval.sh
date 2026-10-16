@@ -400,8 +400,10 @@ _g20_cmd() {
   shift
   case "$head" in
     cd | pushd)
-      # A cd behind noglob, nocorrect, coproc or repeat leaves the directory as it was (cmd_mod).
-      cmd_mod "$_G20_REC" && return 0
+      # A cd under coproc or a repeat count that may be 0 leaves the directory as it was (cmd_mod exit 0
+      # or 2); one behind noglob, nocorrect or repeat N moves, as in zsh.
+      cmd_mod "$_G20_REC"
+      [ $? = 1 ] || return 0
       w=$HOME
       for i in "$@"; do
         case "$i" in -*) ;; *) w=$i; break ;; esac

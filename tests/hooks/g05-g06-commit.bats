@@ -714,16 +714,24 @@ EOT
   done
 }
 
-@test "G5 and G6: a cd behind noglob, nocorrect, coproc or repeat leaves the directory known" {
+@test "G5 and G6: a cd behind noglob, nocorrect or repeat N moves; one under coproc or repeat 0 does not" {
   mkdir -p "$R/sub"
   printf 'a\n' >"$R/sub/a.txt"
   local c
-  for c in "noglob cd sub && git add -- sub/a.txt" "coproc cd /tmp; git add -- sub/a.txt" \
-    "repeat 0 cd /tmp; git commit -m 'CDS-2465: x'" "nocorrect cd sub && git commit -m 'CDS-2465: x'"; do
+  for c in "cd sub && git add -- a.txt" "noglob cd sub && git add -- a.txt" "nocorrect cd sub && git add -- a.txt" \
+    "repeat 1 cd sub && git add -- a.txt"; do
+    expect ask g05 "$c" || return 1
+  done
+  for c in "noglob cd sub && git commit -m 'CDS-2465: x'" "repeat 1 cd sub && git commit -m 'CDS-2465: x'"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+  for c in "coproc cd /tmp; git add -- sub/a.txt" "repeat 0 cd /tmp; git add -- sub/a.txt"; do
+    expect none g05 "$c" || return 1
+  done
+  for c in "coproc cd /tmp; git commit -m 'CDS-2465: x'" "repeat 0 cd /tmp; git commit -m 'CDS-2465: x'"; do
     expect none g06 "$c" || return 1
   done
-  expect none g05 "noglob cd sub && git add -- sub/a.txt"
-  expect ask g05 "cd sub && git add -- sub/a.txt"
 }
 
 @test "G5 and G6: a modifier word after the command name, in a redirect or an assignment, leaves a cd a move" {

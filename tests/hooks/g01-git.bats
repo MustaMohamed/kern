@@ -306,15 +306,32 @@ settings() {
     "git --git-dir=$R/.git push origin feat"
 }
 
-@test "a cd behind noglob, nocorrect, coproc or repeat leaves the directory known" {
+@test "a push after a cd is judged where it would run without the cd too, so its deny holds" {
   W="$BATS_TEST_TMPDIR/wt"
   export CWD="$W"
   printf 'b\n' >"$W/b.txt"; git -C "$W" add b.txt
   git -C "$W" -c user.email=other@example.com commit -q -m b
-  expect deny "noglob cd . && git push --force-with-lease origin feat" \
+  expect deny "cd . && git push --force-with-lease origin feat" "pushd /tmp && git push --force-with-lease origin feat" \
+    "env -C /tmp git push --force-with-lease origin feat" "noglob cd . && git push --force-with-lease origin feat" \
     "nocorrect cd /tmp; git push --force-with-lease origin feat" "coproc cd /tmp; git push --force-with-lease origin feat" \
     "repeat 0 cd /tmp; git push --force-with-lease origin feat"
-  expect ask "cd . && git push --force-with-lease origin feat"
+  g1 "cd . && git push --force-with-lease origin feat"
+  [[ "$output" == *"may hold commits by other authors"* ]] || false
+  settings 'push.policy: auto'
+  set_autopilot on
+  expect deny "cd . && git push origin feat"
+}
+
+@test "a cd behind noglob, nocorrect or repeat N moves, as zsh moves it; one under coproc or repeat 0 does not" {
+  export CWD="$BATS_TEST_TMPDIR/wt"
+  local moves=("cd $R && git clean -fdx" "noglob cd $R && git clean -fdx" "nocorrect cd $R && git clean -fdx"
+    "repeat 1 cd $R && git clean -fdx" "repeat 2 cd $R && git clean -fdx" "repeat \$N cd $R && git clean -fdx")
+  local stays=("coproc cd $R; git clean -fdx" "repeat 0 cd $R; git clean -fdx" "noglob repeat 1 cd $R; git clean -fdx")
+  expect ask "${moves[@]}"
+  expect none "${stays[@]}"
+  set_autopilot on
+  expect deny "${moves[@]}"
+  expect none "${stays[@]}"
 }
 
 @test "a modifier word after the command name, in a redirect, an assignment or a comment, leaves a cd a move" {

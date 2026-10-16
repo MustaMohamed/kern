@@ -82,8 +82,9 @@ _GW_AWK='
   # sw and cw read a string once: split(s, C, "") for its characters and split(s, P, "/") for its last
   # path part. In BWK awk, substr scans the whole string on every call, so substr per character, or
   # sub(/.*\//) on a long word, is quadratic in its length.
-  function sw(buf,   n, q, w, have, i, c, C) {
-    sw_n = 0; n = split(buf, C, ""); q = ""; w = ""; have = 0
+  # sw_q[k] is 1 when word k held a quote or a backslash.
+  function sw(buf,   n, q, w, have, i, c, C, wq) {
+    sw_n = 0; n = split(buf, C, ""); q = ""; w = ""; have = 0; wq = 0
     for (i = 1; i <= n; i++) {
       c = C[i]
       if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
@@ -93,19 +94,22 @@ _GW_AWK='
         else w = w c
         continue
       }
-      if (c == "\\") { i++; w = w C[i]; have = 1; continue }
-      if (c == sq || c == "\"") { q = c; have = 1; continue }
-      if (c == " " || c == "\t" || c == "\n" || c == "\037") { if (have) sw_w[++sw_n] = w; w = ""; have = 0; continue }
+      if (c == "\\") { i++; w = w C[i]; have = 1; wq = 1; continue }
+      if (c == sq || c == "\"") { q = c; have = 1; wq = 1; continue }
+      if (c == " " || c == "\t" || c == "\n" || c == "\037") {
+        if (have) { sw_w[++sw_n] = w; sw_q[sw_n] = wq }
+        w = ""; have = 0; wq = 0; continue
+      }
       # An unquoted, unescaped # that starts a word is a comment, to the newline, as in bash.
       if (c == "#" && !have) { while (i < n && index("\n\037", C[i + 1]) == 0) i++; continue }
       if ((c == "<" || c == ">" || (c == "&" && C[i + 1] == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
-        sw_w[++sw_n] = w; w = ""
+        sw_w[++sw_n] = w; sw_q[sw_n] = wq; w = ""; wq = 0
       }
       w = w c; have = 1
     }
-    if (have) sw_w[++sw_n] = w
+    if (have) { sw_w[++sw_n] = w; sw_q[sw_n] = wq }
   }
-  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0; cw_cnt = 0; cw_mod = 0 }
+  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0; cw_cnt = 0; cw_mod = 0; cw_rw = 0 }
   # cw_line(s): feeds cw the words of the command line s (the value of env -S), split at blanks
   # outside quotes and with the quotes removed, as env -S reads it.
   function cw_line(s,   n, C, i, c, q, w, have) {
@@ -128,15 +132,31 @@ _GW_AWK='
       if (cw_split) { cw_split = 0; cw_line(x) }
       return
     }
-    # The word after repeat is its count, whatever it looks like: zsh reads -1+2 as one.
-    if (cw_cnt) { cw_cnt = 0; return }
+    # The word after repeat is its count, whatever it looks like: zsh reads -1+2 as one. A literal
+    # count of 0 or less runs the command no time; any other count but a literal one may.
+    if (cw_cnt) {
+      cw_cnt = 0
+      if (x ~ /^-?[0-9]+$/ && x + 0 <= 0) cw_mod = 3
+      else if (x !~ /^[0-9]+$/ && cw_mod < 2) cw_mod = 2
+      return
+    }
     if (x ~ /^[0-9]*(<|>|&>)/) { cw_val = (x ~ /^[0-9]*[<>&|]+$/); return }
     if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) return
-    # zsh runs the command after its precommand modifiers noglob and nocorrect, and after coproc and
-    # repeat with its count. cw_mod: one of them came before the command name (cmd_mod).
+    # zsh runs the command after its precommand modifier noglob and its reserved words nocorrect,
+    # coproc and repeat with its count. cw_mod (cmd_mod): 1 when one came before the command name, 2
+    # when the command may then not run in this shell, 3 when it does not: coproc runs it in a
+    # subshell, and a reserved word that is quoted (cw_q, which only cmd_mod sets) or follows noglob or
+    # nocorrect (cw_rw) is a command that is not found.
     if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
-    if (x ~ /^(noglob|nocorrect|coproc)$/) { cw_wrap = ""; cw_mod = 1; return }
-    if (x == "repeat") { cw_wrap = ""; cw_cnt = 1; cw_mod = 1; return }
+    if (x == "noglob") { cw_wrap = ""; cw_rw = 1; if (!cw_mod) cw_mod = 1; return }
+    if (x ~ /^(nocorrect|coproc|repeat)$/) {
+      cw_wrap = ""
+      if (x == "coproc" || cw_q || cw_rw) cw_mod = 3
+      else if (!cw_mod) cw_mod = 1
+      if (x == "nocorrect") cw_rw = 1
+      if (x == "repeat") cw_cnt = 1
+      return
+    }
     # Any case: on a case-insensitive file system ENV and Sudo run env and sudo.
     b = tolower(P[split(x, P, "/")])
     if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
@@ -454,16 +474,22 @@ _cmd_words() {
     END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); for (k = 1; k <= cw_n; k++) print cw_w[k] }'
 }
 
-# cmd_mod CMDLINE: exit 0 when _cmd_words skips noglob, nocorrect, coproc or repeat before the command
-# name of CMDLINE; a modifier word after it (an argument, a redirect target, a comment) does not count.
-# _cmd_words reads through them to the command that runs, but a cd behind one is not known to move the
-# shell: zsh runs a coproc command in a subshell, and repeat 0 runs nothing. So the guards that follow
-# cd keep the directory they had across one. The awk runs only when the text could hold one.
+# cmd_mod CMDLINE: whether the command _cmd_words finds in CMDLINE runs in this shell, read from what it
+# skips before the command name (noglob, nocorrect, coproc, repeat and its count; a modifier word after
+# the name, such as an argument, a redirect target or a comment, does not count). Exit 0 when it does
+# not: coproc runs it in a subshell, repeat 0 runs it no time, and zsh does not find a quoted reserved
+# word, or one after noglob or nocorrect, as a command. Exit 2 when it may not (a repeat count that is
+# not a literal number), and 1 when it does. So a cd behind noglob, nocorrect or repeat 1 moves the
+# shell, as zsh moves it. The awk runs only when the text could hold one of these words.
 cmd_mod() {
   case "$1" in *noglob* | *nocorrect* | *coproc* | *repeat* | *[\"\'\\]*) ;; *) return 1 ;; esac
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     { buf = buf (NR > 1 ? "\037" : "") $0 }
-    END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); exit !cw_mod }'
+    END {
+      sw(buf); cw_reset()
+      for (k = 1; k <= sw_n; k++) { cw_q = sw_q[k]; cw(sw_w[k]) }
+      exit cw_mod == 3 ? 0 : cw_mod == 2 ? 2 : 1
+    }'
 }
 
 # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the

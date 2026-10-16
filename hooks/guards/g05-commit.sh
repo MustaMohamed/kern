@@ -44,7 +44,7 @@ EOT
       esac
     else
       # After a cd, or an exported GIT_DIR or GIT_WORK_TREE, later git commands run where G5 cannot
-      # tell. A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
+      # tell. A cd under coproc or repeat 0 does not move (cmd_mod exit 0).
       case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) cmd_mod "${_G05_RECS[$i]}" || moved=1 ;; esac
       _g05_env_has later GIT_DIR GIT_WORK_TREE && moved=1
     fi

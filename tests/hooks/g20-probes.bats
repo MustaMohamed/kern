@@ -219,12 +219,14 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   b "truncate -s 0 .kern/specs/export.md"; deny
 }
 
-@test "P21b a write after a cd behind noglob, nocorrect, coproc or repeat, which may not move" {
+@test "P21b a cd behind noglob, nocorrect or repeat N moves; one under coproc or repeat 0 does not" {
   prep "$SPEC"
+  b "noglob cd .kern/specs && echo note >> export.md"; deny
+  b "nocorrect cd .kern/specs && echo note >> export.md"; deny
+  b "repeat 1 cd .kern/specs && echo note >> export.md"; deny
   b "coproc cd /tmp; echo note >> .kern/specs/export.md"; deny
   b "repeat 0 cd /tmp; echo note >> .kern/specs/export.md"; deny
-  b "noglob cd /tmp; echo note >> .kern/specs/export.md"; deny
-  b "nocorrect cd /tmp; echo note >> .kern/specs/export.md"; deny
+  b "'coproc' cd /tmp; echo note >> .kern/specs/export.md"; deny
   b "noglob tee -a .kern/specs/export.md"; deny
 }
 

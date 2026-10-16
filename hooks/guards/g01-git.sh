@@ -56,7 +56,8 @@ EOT
     # After a cd, or a GIT_DIR or GIT_WORK_TREE assignment, later git commands run where G1
     # cannot tell; under env -C or sudo -D, so does this one.
     case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=* | *GIT_DIR+=* | *GIT_WORK_TREE+=*) moved=1 ;; esac
-    # A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
+    # A cd under coproc or repeat 0 does not move (cmd_mod exit 0); one behind noglob, nocorrect or
+    # repeat N does, as in zsh.
     case "${w[0]}" in
       cd | pushd | popd) cmd_mod "$rec" || moved=1 ;;
       builtin) case "${w[1]-}" in cd | pushd | popd) cmd_mod "$rec" || moved=1 ;; esac ;;
@@ -166,10 +167,11 @@ _g01_merge() {
 # _g01_git_rec RECORD MOVED git WORDS...: reads git's global options, then checks the subcommand.
 # The directory is empty (unknown) when MOVED is 1 (after cd, or under env -C or sudo -D) or with
 # --git-dir or --work-tree. PLAIN is 1
-# when the record is `git`, then only -C options, then the subcommand.
+# when the record is `git`, then only -C options, then the subcommand. _G01_ALT is where git would run
+# had MOVED been 0, or empty: a cd may stay in this repository, so _g01_push judges a push there too.
 _g01_git_rec() {
-  local rec="$1" dir="${CWD:-$PWD}" plain=1
-  [ "$2" = 1 ] && dir=""
+  local rec="$1" dir="${CWD:-$PWD}" alt="" plain=1
+  if [ "$2" = 1 ]; then alt=$dir; dir=""; fi
   shift 3
   case "$rec" in "git "*) ;; *) plain=0 ;; esac
   while [ $# -gt 0 ]; do
@@ -179,13 +181,16 @@ _g01_git_rec() {
         if [ -n "$dir" ]; then
           case "$2" in /*) dir="$2" ;; *) dir="$dir/$2" ;; esac
         fi
+        if [ -n "$alt" ]; then
+          case "$2" in /*) alt="$2" ;; *) alt="$alt/$2" ;; esac
+        fi
         shift 2
         ;;
       --git-dir | --work-tree)
         [ $# -ge 2 ] || return 0
-        dir=""; plain=0; shift 2
+        dir=""; alt=""; plain=0; shift 2
         ;;
-      --git-dir=* | --work-tree=*) dir=""; plain=0; shift ;;
+      --git-dir=* | --work-tree=*) dir=""; alt=""; plain=0; shift ;;
       -c | --config-env | --namespace | --super-prefix | --attr-source)
         [ $# -ge 2 ] || return 0
         plain=0; shift 2
@@ -200,6 +205,7 @@ _g01_git_rec() {
   done
   [ $# -gt 0 ] || return 0
   _g01_foreign G1 "$1" && return 0
+  _G01_ALT=$alt
   _g01_git "$dir" "$plain" "$@"
 }
 
@@ -632,6 +638,9 @@ EOT
     fix="run git -C <dir> push instead of cd, env -C, sudo -D, --git-dir or --work-tree"
     vote ask G1 "git push after cd, --git-dir or --work-tree, or under env -C or sudo -D: what it pushes is unknown; $fix"
     [ "$AUTOPILOT" = 1 ] && vote deny G1 "git push from an unknown directory under autopilot; $fix"
+    # Judged where it would run without the move too, so that judgement's deny holds; PLAIN 0 never
+    # allows.
+    [ -z "${_G01_ALT-}" ] || _g01_push "$_G01_ALT" 0 "$@"
     return 0
   fi
   cur=$(current_branch "$dir")
