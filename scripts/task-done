@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Close a task in an execute-plan ledger. Writes the completion line only when all hold: the worktree
 # still snapshots to TREE, the task's last review approved exactly that tree, CMD exits 0 in WT, and
-# the test fails once the change (test files excluded) is reversed on a throwaway fork. A task with no
+# the test fails once the change (test files excluded) is reversed on a throwaway fork. The tree and
+# the last review line are read again after CMD and after the probe, and any change refuses. A task with no
 # test to probe (docs, config) names why with --no-probe, and the reason goes into the ledger. An
 # inconclusive probe proves nothing, so it closes nothing: the caller decides, and a change with nothing
 # to reverse closes with --no-probe naming the probe's reason.
@@ -51,6 +52,23 @@ case "$review" in
   *) echo "task-done: Task $n's last review did not approve tree ${tree:0:7}: $review" >&2; exit 2 ;;
 esac
 
+# recheck WHAT: after WHAT ran, the worktree still snapshots to TREE and the task's last review line is
+# the one read above; otherwise nothing is written, since the complete line would name a tree or a
+# review the run no longer matches.
+recheck() {
+  local again last
+  again=$(bash "$here/wt-snap" "$wt") || { echo "task-done: cannot snapshot $wt after $1; Task $n not recorded" >&2; exit 2; }
+  if [ "$again" != "$tree" ]; then
+    echo "task-done: $1 changed $wt (tree ${tree:0:7}, now ${again:0:7}); Task $n not recorded; review the new tree first" >&2
+    exit 2
+  fi
+  last=$(grep "^Task $n: review " "$ledger" | tail -n 1 || true)
+  if [ "$last" != "$review" ]; then
+    echo "task-done: Task $n's last review line changed while $1 ran; Task $n not recorded" >&2
+    exit 2
+  fi
+}
+
 logdir="$(dirname "$ledger")/logs"
 mkdir -p "$logdir"
 log="$logdir/task-$n.log"
@@ -70,6 +88,7 @@ if [ "$rc" -ne 0 ]; then
   echo "task-done: command exited $rc; Task $n not recorded (log: $log)" >&2
   exit "$rc"
 fi
+recheck "the test command"
 
 probe="skipped ($skip)"
 if [ -n "$patch" ]; then
@@ -77,7 +96,10 @@ if [ -n "$patch" ]; then
   bash "$here/probe" --exclude-tests "$wt" "$patch" -- "$@" > "$logdir/task-$n.probe.log" 2>&1 || prc=$?
   head -n 1 "$logdir/task-$n.probe.log"
   case "$prc" in
-    0) probe=ok ;;
+    0)
+      probe=ok
+      recheck "the probe"
+      ;;
     3) echo "task-done: the probe is inconclusive, so it proves nothing about Task $n; not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 3 ;;
     1) echo "task-done: the test passes with the change reversed, so it does not prove Task $n; not recorded" >&2; exit 1 ;;
     *) echo "task-done: probe exited $prc; Task $n not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 2 ;;

@@ -238,3 +238,30 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   [[ "$output" == *"probe: inconclusive (the patch does not reverse-apply"* ]] || false
   ! grep -q '^Task 1: complete' "$L/ledger.md"
 }
+
+@test "a test command that edits the worktree is refused, and nothing is written" {
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- sh -c 'printf "c\n" > f.txt'
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"the test command changed $WT"* ]] || false
+  [ "$(grep -c '^Task 1: complete' "$L/ledger.md")" -eq 0 ]
+}
+
+@test "a review line written while the command runs is refused" {
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- \
+    sh -c "printf 'Task 1: review round=2 tree=$T1 spec=compliant quality=approved\n' >> '$L/ledger.md'"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"last review line changed"* ]] || false
+  [ "$(grep -c '^Task 1: complete' "$L/ledger.md")" -eq 0 ]
+}
+
+@test "a probe run that edits the worktree is refused" {
+  review "$T1"
+  # The test passes in WT; in the probe's fork, with the change reversed, it fails and writes into WT.
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$PKG.patch" -- \
+    sh -c "sh test/check_test.sh || { printf x > '$WT/probe-ran.txt'; exit 1; }"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"the probe changed $WT"* ]] || false
+  [ "$(grep -c '^Task 1: complete' "$L/ledger.md")" -eq 0 ]
+}
