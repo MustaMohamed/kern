@@ -167,13 +167,16 @@ alias_snapshot() {
 # layout changes meaning; the cache header also holds the awk program's length.
 _ALIASES_CACHE_V=1
 
-# _alias_key FILE: prints FILE's size and modification time in seconds, from BSD or GNU stat; exit 1
-# when neither reads it.
+# _alias_key FILE: prints FILE's size, modification time, change time (in seconds) and inode, from BSD or
+# GNU stat; exit 1 when neither reads it. touch can put a modification time back, not a change time.
 _alias_key() {
   local k
-  k=$(stat -f '%z %m' "$1" 2>/dev/null) || k=$(stat -c '%s %Y' "$1" 2>/dev/null) || return 1
-  case "$k" in '' | *[!0123456789\ ]* | ' '* | *' ' | *' '*' '*) return 1 ;; esac
-  case "$k" in *' '*) printf '%s\n' "$k" ;; *) return 1 ;; esac
+  k=$(stat -f '%z %m %c %i' "$1" 2>/dev/null) || k=$(stat -c '%s %Y %Z %i' "$1" 2>/dev/null) || return 1
+  case "$k" in '' | *[!0123456789\ ]* | ' '* | *' ' | *'  '*) return 1 ;; esac
+  # shellcheck disable=SC2086 # digits and single spaces only: four fields
+  set -- $k
+  [ "$#" = 4 ] || return 1
+  printf '%s\n' "$k"
 }
 
 # _alias_table: reads `<hex of name><TAB>expansion` lines on stdin into _KA_<hex>, and sets
@@ -199,12 +202,12 @@ _alias_table() {
 # evaluated. A missing, unreadable or unparseable snapshot sets nothing, which changes nothing, and so
 # does any failure here: it never stops the hook.
 # The parsed table is cached in aliases.cache under the state dir (state.sh), whose first line names the
-# cache format, the snapshot's path, size and modification time; a cache whose first line differs is
-# rebuilt. The cache is read as data by _alias_table, like the parse it replaces, and a forged one can
+# cache format, the snapshot's path, size, modification and change times and inode; a cache whose first
+# line differs, or that is larger than the table can be, is rebuilt without reading its lines. The cache is read as data by _alias_table, like the parse it replaces, and a forged one can
 # only add expansions, as a forged snapshot can. A cache that cannot be read or written leaves the parse
 # as the only source; a symlinked cache or state dir is never used.
 aliases_load() {
-  local snap out h key dir="" cache="" line="" tmp
+  local snap out h key size dir="" cache="" line="" tmp
   KERN_ALIASES=""
   # The table holds only what this snapshot defines, never a _KA_ variable from the environment.
   for h in ${!_KA_@}; do unset "$h"; done
@@ -212,7 +215,8 @@ aliases_load() {
   if declare -F state_dir >/dev/null && key=$(_alias_key "$snap") && dir=$(state_dir); then
     cache="$dir/aliases.cache"
     line="kern aliases $_ALIASES_CACHE_V ${#_ALIASES_AWK}"$'\t'"$snap"$'\t'"$key"
-    if [ -f "$cache" ] && [ ! -L "$cache" ] && [ ! -L "$dir" ] &&
+    if [ -f "$cache" ] && [ ! -L "$cache" ] && [ ! -L "$dir" ] && size=$(_alias_key "$cache") &&
+      [ "${size%% *}" -le $((4194304 + ${#line} + 1)) ] &&
       { IFS= read -r h && [ "$h" = "$line" ] && _alias_table; } 2>/dev/null <"$cache"; then
       return 0
     fi
