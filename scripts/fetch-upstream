@@ -8,10 +8,11 @@ mkdir -p "$dest"
 
 pin() { # key -> "url sha" for git sources
   case "$1" in
-    superpowers) echo "https://github.com/obra/superpowers.git 5bf4e78011075bcfc0dc295f0724994cd123ee71" ;;
-    pstack) echo "https://github.com/cursor/plugins.git 11713c683fe4add4fd403ea880580abbc9e0875f" ;;
+    superpowers) echo "https://github.com/obra/superpowers.git bb92a77741419a4ab5f06e711a283343f1ada0c3" ;;
+    pstack) echo "https://github.com/cursor/plugins.git 182f2ce414e83224915c190d2f63239c1608d0a5" ;;
     pocock) echo "https://github.com/mattpocock/skills.git 49dd158d1076134a641b33efb035946536778336" ;;
-    addy) echo "https://github.com/addyosmani/agent-skills.git 1be8e34187e34647bb83adc3a1323b26ae6f6abe" ;;
+    addy) echo "https://github.com/addyosmani/agent-skills.git aeac41d4d005999432bb7312f7ff06383a91d59d" ;;
+    caveman) echo "https://github.com/JuliusBrussee/caveman.git d262ab3882952a59312ff3537cd86d894523c5ab" ;; # tag v4.0.1
     *) return 1 ;;
   esac
 }
@@ -74,8 +75,12 @@ copy_from() { # key src...
 
 fetch() {
   local key=$1 url sha
+  if [ "$key" = caveman ] && [ -n "${KERN_UPSTREAM_CAVEMAN_SRC:-}" ]; then
+    copy_from caveman "$KERN_UPSTREAM_CAVEMAN_SRC/."
+    return
+  fi
   case "$key" in
-    superpowers|pstack|pocock|addy)
+    superpowers|pstack|pocock|addy|caveman)
       read -r url sha <<<"$(pin "$key")"
       url=$(override "$key" URL "$url")
       sha=$(override "$key" SHA "$sha")
@@ -83,15 +88,10 @@ fetch() {
       clone_at "$key" "$url" "$sha" || rc=$?
       if [ "$rc" -ne 0 ] && [ "$key" = superpowers ] && [ -z "${KERN_UPSTREAM_SUPERPOWERS_URL:-}" ]; then
         echo "superpowers: falling back to the installed cache" >&2
-        copy_from superpowers "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1/."
+        copy_from superpowers "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers/7.0.0/."
         return
       fi
       return "$rc"
-      ;;
-    caveman)
-      local src
-      src=$(override caveman SRC "$HOME/.claude/plugins/cache/caveman/caveman/3.2.0")
-      copy_from caveman "$src/."
       ;;
     local)
       local src

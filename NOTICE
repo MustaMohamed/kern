@@ -6,22 +6,24 @@ kern contains material adapted from the following works. Each is used under
 its licence; full texts are in licenses/.
 
 superpowers, https://github.com/obra/superpowers
-Copyright (c) 2025 Jesse Vincent. MIT License (licenses/superpowers.LICENSE).
+Copyright (c) 2025 Jesse Vincent. MIT License (licenses/superpowers.LICENSE). Version audited: 7.0.0.
 
 pstack (cursor/plugins), https://github.com/cursor/plugins
-Copyright (c) 2026 Lauren Tan. MIT License (licenses/pstack.LICENSE).
+Copyright (c) 2026 Lauren Tan. MIT License (licenses/pstack.LICENSE). Version audited: 0.15.25.
 
 mattpocock/skills, https://github.com/mattpocock/skills
-Copyright (c) 2026 Matt Pocock. MIT License (licenses/pocock.LICENSE).
+Copyright (c) 2026 Matt Pocock. MIT License (licenses/pocock.LICENSE). Version audited: 1.3.1.
 
 addyosmani/agent-skills, https://github.com/addyosmani/agent-skills
-Copyright (c) 2025 Addy Osmani. MIT License (licenses/addy.LICENSE).
+Copyright (c) 2025 Addy Osmani. MIT License (licenses/addy.LICENSE). Version audited: 0.6.13.
 
 caveman, https://github.com/JuliusBrussee/caveman
 Copyright 2026 Julius Brussee. Apache License 2.0 (licenses/caveman.LICENSE).
 kern's terse mode adapts ideas from caveman's mode rules and prompt parser. kern
 does not use the caveman name or its other trademarks. No caveman text is
-copied: the caveman entries in the file map below take ideas only. caveman's
+copied: the caveman entries in the file map below take ideas only. Version
+audited: 4.0.1. Its licence files match those of 3.2.0, the version audited
+before it, so the Apache License 2.0 and the NOTICE below cover both. caveman's
 NOTICE follows.
 
 ----- caveman NOTICE -----
