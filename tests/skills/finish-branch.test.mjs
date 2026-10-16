@@ -26,7 +26,7 @@ test('finish-branch frontmatter', () => {
     name: 'finish-branch',
     description: 'Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep.',
     'disable-model-invocation': 'true',
-    'allowed-tools': 'Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)',
+    'allowed-tools': 'Bash(git rev-parse *), Bash(git symbolic-ref -q --short HEAD), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)',
   });
 });
 
@@ -39,6 +39,7 @@ test('finish-branch sections, steps and red flags', () => {
   assert.equal(s[1], '1. Consent: the user typed `/kern:finish-branch` or asked to push or open a PR in this session, or autopilot is on. Otherwise stop.');
   assertOnce(SKILL, ['A failure no step handles stops the run: report its output.',
     '`Worktree:` path', 'ls -t <dir>/*/ledger.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers`', 'Run `cd <wt>` as its own call', 'git rev-parse --path-format=absolute --git-dir --git-common-dir',
+    '`git symbolic-ref -q --short HEAD` prints the branch; exit 1 means detached:',
     'git switch -c <name>', 'in the main checkout, stop: kern never switches its branch', 'A protected branch: stop',
     'git remote get-url origin', 'git fetch origin <base>', '"base not refreshed"', 'git rev-list --left-right --count <baseref>...HEAD',
     'behind above 0 is stale: offer a rebase per `references/branch-ops.md`.',
@@ -119,4 +120,8 @@ test('PR body template', () => {
   assertHeadings(BODY, ['# PR body', '## Why', '## What changed', '## Scope', '## Tradeoffs', '## Merge danger', '## Verification']);
   assertContains(BODY, ['drop a section with nothing to say', 'about 40 lines', 'smallest useful view', 'Screenshots first']);
   assertMaxBytes(BODY, 2000);
+});
+
+test('finish-branch reads the branch with symbolic-ref, where exit 1 means a detached HEAD', () => {
+  assert.ok(!readDoc(SKILL).raw.includes('--abbrev-ref'), 'no rev-parse --abbrev-ref');
 });

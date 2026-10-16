@@ -19,7 +19,8 @@ test('diagnose sections, steps and red flags', () => {
   const s = steps(body);
   assert.equal(s.length, 10);
   assert.equal(s[0], DEFER);
-  assertContains(SKILL, ['red-capable, deterministic, fast and runnable by an agent', 'form no hypotheses', '[kern-dbg]', 'three failed fixes',
+  assertContains(SKILL, ['a debugger or REPL before logs when the environment has one', "carry it into the commit body's why (commit step 5) or the PR body's Why",
+    'red-capable, deterministic, fast and runnable by an agent', 'form no hypotheses', '[kern-dbg]', 'three failed fixes',
     '${CLAUDE_PLUGIN_ROOT}/skills/implement/SKILL.md', '--detach --base', 'scripts/hitl-loop.template.sh',
     '${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/loop-rate.sh', 'on `model.investigator`', '"stop guessing"', 'then the original scenario',
     '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'blind reproduction', 'references/defense-in-depth.md',

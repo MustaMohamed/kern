@@ -10,7 +10,7 @@ One ledger per plan at `WORK/ledgers/<plan-slug>/ledger.md`, append only, opened
 | `Main: <root> branch=<name> status=<hash>` | `ledger-open` | the main checkout's state, compared at the end by `ledger-open --summary` |
 | `Worktree: <path> branch=<name> base-tree=<id>` | step 5 | the plan worktree and its starting tree |
 | `Preflight: Task A x Task B: <shared file or interface>: <ruling>` | step 2 | one per `plan-check --graph` overlap row |
-| `Decision: <what>; why: <one line>; cost if wrong: <one line>` | any step | a mechanical call made without the user |
+| `Decision: <what>; why: <one line>; cost if wrong: <one line>` | any step | a ruling: the user's answer to a stop, or a mechanical call made without the user |
 | `Task N: start tree=<id> at=<iso>` | `task-start` | dispatch |
 | `Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>` | `task-review` | one per review or re-review |
 | `Task N: minor (deferred): <text>` | `task-review --minor` | a Minor finding for the final review to triage |

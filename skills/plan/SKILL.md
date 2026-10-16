@@ -7,7 +7,7 @@ argument-hint: "[spec path | issue id]"
 
 # plan
 
-Produce a plan a zero-context executor can run, with PR boundaries inside the scope gate. Reached by the kernel row for an agreed spec with more than one step, or as `/kern:plan`.
+Produce a plan a zero-context executor can run, with PR boundaries inside the scope gate. Reached by the kernel row for an agreed spec of more than one step, or `/kern:plan`.
 
 ## Steps
 
@@ -22,7 +22,7 @@ Produce a plan a zero-context executor can run, with PR boundaries inside the sc
 8. Write each task from `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/task-template.md`: exact Files; Interfaces (Consumes, Produces, with signatures); test-first steps with real code; verify commands; Acceptance as a leading list of criterion numbers; Blocked by. No placeholders.
 9. Write the header from `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-template.md`: Goal, issue, spec link, base and promotion path, Global Constraints copied verbatim from the spec's Constraints section, Review Focus, `execution:` empty, `commits: ask`.
 10. Order the riskiest tasks first; add checkpoints and the base-and-head regression check as plan-template.md says.
-11. Write the plan with the Write tool to `<dir>/<slug>.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir plans` prints (exit 2: say why and ask), with `status: draft`. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints (what it checks is in plan-template.md). Then self-review for placeholders and type mismatches; send the plan to one reviewer subagent with `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md` as its brief, round 1 only.
+11. Write the plan with the Write tool to `<dir>/<slug>.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir plans` prints (exit 2: say why and ask), with `status: draft`. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints (what it checks is in plan-template.md). Self-review it for placeholders and type mismatches; send the plan to one fresh general-purpose subagent on `model.reviewer`, with `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md` as its brief, round 1 only.
 12. Present a summary in chat (a visual page only when kern's `visual` skill is installed; else say once "visual pages not installed"). Stop the turn: ask for the yes and the `step`, `inline` or `delegate` choice as a typed reply in chat, never through AskUserQuestion, with your one-line recommendation. A yes with a change request: make it, show it, ask again. A reply that is no explicit yes or names no choice: ask again. After the user's yes message, leave the plan file untouched until the approval edit. On the yes, one Edit sets `status: approved`, `approved: <date>, "<one whole line of the user's yes, verbatim>"` and `execution:` together; run the same plan-check again. Draft tracker sub-issues only on request.
 
 ## Inputs
@@ -32,10 +32,10 @@ Produce a plan a zero-context executor can run, with PR boundaries inside the sc
 | `work_dir` | `.kern` | where plans go |
 | `base_branch`, `deploy.envs` | detected, none | base and promotion path |
 | `scope_threshold` | 4 files | PR size gate |
-| `test.*`, `typecheck`, `lint`, `build` | detected, source printed | verify commands in tasks |
+| `test.*`, `typecheck`, `lint`, `build` | detected, source printed | task verify commands |
 | `checklists`, `shared_services` | see define; none | extra lines; ordering |
 | `tracker`, `tracker.first` | detected, `false` | issue ids and sub-issue drafts |
-| `model.investigator` | `sonnet` | grounding |
+| `model.investigator`, `model.reviewer` | `sonnet` | grounding; review |
 
 ## Outputs
 
@@ -49,7 +49,7 @@ Stops at steps 1, 4 (a spike), 7 and 12. An AskUserQuestion answer records no pr
 
 | Thought | Reality |
 |---|---|
-| "The tasks are obvious" | Write them down. Written tasks surface hidden ordering and forgotten edges. |
+| "The tasks are obvious" | Write them down. Written tasks surface hidden order and missed edges. |
 | "These two tasks can run side by side" | Not when they share a file or a service. plan-check says which. |
 | "I'll work out the unknown in the build" | A question reading cannot settle gets a spike before the plan. |
 | "One big task is simpler" | A task too big for one fresh context ends half done. Slice it. |

@@ -26,7 +26,7 @@ test('commit sections, steps and red flags', () => {
     'git -C <toplevel> diff --staged --stat', 'one commit per complete task, in ledger order', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap', 'HEAD^{tree}', 'On a detached HEAD, stop:', 'On a protected branch, stop and ask',
     '72 characters or fewer', 'never a retry with a looser message', '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md',
     'follow `references/ledger-tasks.md`', 'each staging that task\'s exact paths', 'steps 2 to 6',
-    'the worktree the caller names', 'git -C <toplevel> rev-parse --abbrev-ref HEAD', 'If it fails, stop and report.', 'Never switch branches.',
+    'the worktree the caller names', 'git -C <toplevel> symbolic-ref -q --short HEAD` (exit 1: detached)', 'If it fails, stop and report.', 'Never switch branches.',
     'leave out and name any `never_commit` path', 'a mismatch means it is not what was proven: say so.',
     'those before the last are not proven alone, and the report says so',
     'kern-dir` exits 2', '`wt-snap` fails', 'G5 denies or asks and the user declines', '`git add` or `git commit` fails', 'never `--no-verify`',
@@ -48,4 +48,8 @@ test('commit ledger-tasks reference', () => {
     '`Task <N>: start` line and no complete line contributes the paths in `<ledger dir>/briefs/task-<N>.files`', 'is not committed by path: ask (default: leave it uncommitted).',
     'Autopilot commits each task as it closes', 'the started-task check applies in both', 'reported as already committed, not as a failure']);
   assertMaxBytes(REF, 2000);
+});
+
+test('commit reads the branch with symbolic-ref, where exit 1 means a detached HEAD', () => {
+  assert.ok(!readDoc(SKILL).raw.includes('--abbrev-ref'), 'no rev-parse --abbrev-ref');
 });

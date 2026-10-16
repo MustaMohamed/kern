@@ -94,7 +94,7 @@ test('brief template fields and worktrees reference', () => {
   assert.deepEqual(r.stdout.trim().split('\n'), [...['GOAL', 'SCOPE', 'CONTEXT', 'ACCEPTANCE', 'VERIFY', 'TIMEBOX', 'REPORT', 'STANDING'].map((k) => `placeholder: ${k}`), 'VERIFY must start with the wt-check entry check']);
   assertHeadings('skills/parallel-work/references/worktrees.md', ['# Worktrees', '## Creating', '## Entry check', '## Integration', '## Teardown']);
   assertMaxBytes('skills/parallel-work/references/worktrees.md', 2200);
-  assertContains(TEMPLATE, ['a directory entry ends in /, a prefix in *']);
+  assertContains(TEMPLATE, ['a directory entry ends in /, a prefix in *', 'writes outside SCOPE except the report file', '- Work only in your worktree, except the report file,']);
 });
 
 test('worktrees teardown pins the force check', () => {

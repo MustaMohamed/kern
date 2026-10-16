@@ -70,3 +70,11 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"polluter: ./t d/x y.sh creates polluted"* ]] || false
 }
+
+@test "a test command that reads stdin cannot eat the rest of the file list" {
+  # The runner reads all of stdin before it runs the file; with the list as its stdin it would take
+  # ./t/b.sh and ./t/c.sh, and the search would end after ./t/a.sh with no polluter.
+  run bash "$KERN_ROOT/skills/diagnose/scripts/find-polluter.sh" polluted 't/*.sh' -- sh -c 'cat > /dev/null; sh "$1"' x
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"polluter: ./t/b.sh creates polluted"* ]] || false
+}

@@ -20,7 +20,7 @@ test('plan sections and steps', () => {
   const s = steps(body);
   assert.equal(s.length, 13);
   assert.equal(s[0], DEFER);
-  assertContains(SKILL, ['Not approved: stop and route to define', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
+  assertContains(SKILL, ['one fresh general-purpose subagent on `model.reviewer`', '| `model.investigator`, `model.reviewer` | `sonnet` |', 'Not approved: stop and route to define', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
     '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check', 'gets a spike first', 'prefactor', 'expand, migrate in batches, then contract', "spec's Constraints section",
     'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed']);
   assertMaxBytes(SKILL, 6500);

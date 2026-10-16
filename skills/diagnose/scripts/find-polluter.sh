@@ -42,7 +42,8 @@ while IFS= read -r f; do
   n=$((n + 1))
   echo "[$n/$total] $f"
   rc=0
-  "$@" "$f" > /dev/null 2>&1 || rc=$?
+  # < /dev/null: the file list is this loop's stdin, and a runner that reads stdin would eat the rest.
+  "$@" "$f" < /dev/null > /dev/null 2>&1 || rc=$?
   if [ "$rc" -eq 126 ] || [ "$rc" -eq 127 ]; then
     echo "find-polluter: the test command could not run (exit $rc) on $f" >&2
     exit 2

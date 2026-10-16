@@ -2,7 +2,7 @@
 name: finish-branch
 description: "Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep."
 disable-model-invocation: true
-allowed-tools: Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
+allowed-tools: Bash(git rev-parse *), Bash(git symbolic-ref -q --short HEAD), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
 ---
 
 # finish-branch
@@ -13,7 +13,7 @@ Integrate finished work the user's way, with a fresh base and a review-ready dra
 
 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
 1. Consent: the user typed `/kern:finish-branch` or asked to push or open a PR in this session, or autopilot is on. Otherwise stop.
-2. Find the work: a worktree the user named, else the newest ledger whose `Worktree:` path is still in `git worktree list` (newest first: `ls -t <dir>/*/ledger.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` prints), else `git rev-parse --show-toplevel`; say which. Run `cd <wt>` as its own call: G1 and G2 judge a push or PR by the session's directory. `git rev-parse --path-format=absolute --git-dir --git-common-dir` printing one path twice is the main checkout. `git rev-parse --abbrev-ref HEAD` prints `HEAD` when detached: in a linked worktree, offer "create branch <name from branch.pattern> here" (`git switch -c <name>`) and go on only after it; in the main checkout, stop: kern never switches its branch. A protected branch: stop; ask which worktree has the work.
+2. Find the work: a worktree the user named, else the newest ledger whose `Worktree:` path is still in `git worktree list` (newest first: `ls -t <dir>/*/ledger.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` prints), else `git rev-parse --show-toplevel`; say which. Run `cd <wt>` as its own call: G1 and G2 judge a push or PR by the session's directory. `git rev-parse --path-format=absolute --git-dir --git-common-dir` printing one path twice is the main checkout. `git symbolic-ref -q --short HEAD` prints the branch; exit 1 means detached: in a linked worktree, offer "create branch <name from branch.pattern> here" (`git switch -c <name>`) and go on only after it; in the main checkout, stop: kern never switches its branch. A protected branch: stop; ask which worktree has the work.
 3. Base: `<base>` is `base_branch`. `git remote get-url origin` failing means no remote: `<baseref>` is local `<base>`. Else `<baseref>` is `origin/<base>` after `git fetch origin <base>`; if that fails, report "base not refreshed" and ask to go on with the last fetched one. `git rev-list --left-right --count <baseref>...HEAD` prints behind, then ahead; behind above 0 is stale: offer a rebase per `references/branch-ops.md`.
 4. Prove `test.full` here by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`, then record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Red, or `wt-snap` failing: stop.
 5. Read `${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md` and run it on `<wt>`. Comment hygiene: `skip: no-comments ships in M3`. `fix first`, `split` or no verdict: stop with its report. `rebase first`: handle it as step 3's stale base. `ready`: go on.
