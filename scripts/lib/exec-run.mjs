@@ -42,7 +42,7 @@ export const replyDate = dateStamp;
 // read; with no reply it holds the one line (no reply: <reason>).
 export function writeReply(dir, id, reply, reason) {
   mkdirSync(dir, { recursive: true });
-  const body = reply ? (reply.endsWith('\n') ? reply : `${reply}\n`) : `(no reply: ${reason || 'the run ended with no assistant text'})\n`;
+  const body = reply?.trim() ? (reply.endsWith('\n') ? reply : `${reply}\n`) : `(no reply: ${reason || 'the run ended with no assistant text'})\n`;
   writeFileSync(join(dir, `${id}.txt`), body);
 }
 
@@ -83,7 +83,14 @@ export function runEval({ cases, only, dryRun, runCase, describe, readVersion, w
   }
   const results = [];
   for (const c of cases) {
-    const r = runCase(c, ({ reply, reason } = {}) => saveReply(c.id, reply, reason));
+    // Best effort: a failed write is logged, never thrown, so it cannot end a paid run or hide a verdict.
+    const save = ({ reply, reason } = {}) => {
+      try {
+        if (!/^[\w.-]+$/.test(c.id)) throw new Error('case id is not a safe file name');
+        saveReply(c.id, reply, reason);
+      } catch (e) { log(`replies: could not write ${c.id}: ${e.message}`); }
+    };
+    const r = runCase(c, save);
     results.push(r);
     log(`${r.pass ? 'PASS' : r.invalid ? 'INVALID' : 'FAIL'} ${c.id}${r.pass ? '' : `: ${r.reasons.join('; ')}`}`);
   }

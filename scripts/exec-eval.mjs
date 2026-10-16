@@ -40,7 +40,8 @@ if (!opts.dryRun) {
   }
 }
 
-const REPLIES = join(ROOT, 'evals', 'results', `exec-${dateStamp()}`);
+const DATE = dateStamp();
+const REPLIES = join(ROOT, 'evals', 'results', `exec-${DATE}`);
 
 function runCase(c, save) {
   const prompts = [...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn];
@@ -84,7 +85,7 @@ function runCase(c, save) {
 }
 
 function writeSnapshot(results, claude) {
-  const out = join(ROOT, 'evals', 'snapshots', `exec-${dateStamp()}.json`);
+  const out = join(ROOT, 'evals', 'snapshots', `exec-${DATE}.json`);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(snapshotBody({ model: MODEL, claude, results, userSettings }), null, 2) + '\n');
   console.log(`snapshot: ${out}`);

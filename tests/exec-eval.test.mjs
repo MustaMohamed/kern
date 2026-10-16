@@ -589,3 +589,19 @@ test('replies: a case with an empty reply says why, and a dry run writes nothing
   assert.equal(existsSync(dry.dir), false);
   assert.ok(!dry.lines.some((l) => l.startsWith('replies:')));
 });
+
+test('replies: a save that throws, a whitespace reply and an unsafe case id are handled without changing the run', () => {
+  const lines = [], snaps = [];
+  const code = runEval({ cases: [{ id: 'a' }, { id: '../b' }], only: null, dryRun: false, describe: (c) => c.id, log: (l) => lines.push(l), readVersion: () => 'v',
+    repliesDir: '/r', saveReply: (id) => { if (id === 'a') throw new Error('disk full'); throw new Error('must not be called'); },
+    writeSnapshot: (r) => snaps.push(r),
+    runCase: (c, save) => { save({ reply: 'x' }); return result(c.id, c.id === 'a'); } });
+  assert.equal(code, 1);
+  assert.equal(snaps.length, 1);
+  assert.deepEqual(snaps[0].map((r) => [r.id, r.pass]), [['a', true], ['../b', false]]);
+  assert.ok(lines.includes('replies: could not write a: disk full'));
+  assert.ok(lines.some((l) => l.startsWith('replies: could not write ../b')));
+  const root = mkdtempSync(join(tmpdir(), 'replies-'));
+  writeReply(root, 'w', '  \n ');
+  assert.equal(readFileSync(join(root, 'w.txt'), 'utf8'), '(no reply: the run ended with no assistant text)\n');
+});
