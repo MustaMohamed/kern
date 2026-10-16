@@ -21,9 +21,10 @@ say() {
     bash "$K/hooks/prompt-submit" > /dev/null
 }
 
-# approve QUOTE [PATH]: an Edit that sets status: approved with an approved: line quoting QUOTE.
+# approve QUOTE [PATH]: an Edit that sets status: approved and replaces the placeholder approved: line
+# with one quoting QUOTE.
 approve() {
-  run_guard "$(tool_payload Edit "\"file_path\":\"${2:-$SPEC}\",\"old_string\":\"status: draft\",\"new_string\":\"status: approved\\ndate: 2026-10-14\\napproved: 2026-10-14, \\\"$1\\\"\"")" g20
+  run_guard "$(tool_payload Edit "\"file_path\":\"${2:-$SPEC}\",\"old_string\":\"status: draft\\ndate: 2026-10-14\\napproved: (set only on an explicit yes)\",\"new_string\":\"status: approved\\ndate: 2026-10-14\\napproved: 2026-10-14, \\\"$1\\\"\"")" g20
 }
 
 @test "a quote of the user's last message approves" {
@@ -64,13 +65,60 @@ approve() {
   [ "$(decision_of "$output")" = deny ]
 }
 
+@test "a refusal, a hold or a question is not a yes, though it is a whole line of the user's message" {
+  say "No, not yet.\nDon't approve it yet\nCan you change the title?\nsounds good"
+  for q in 'No, not yet.' "Don't approve it yet" 'Can you change the title?' 'sounds good'; do
+    approve "$q"
+    [ "$(decision_of "$output")" = deny ] || { echo "quote: $q: $output"; return 1; }
+    [[ "$output" == *'is not an explicit yes'* ]] || { echo "quote: $q: $output"; return 1; }
+  done
+}
+
+@test "a line that holds an affirmative word and no negation approves" {
+  say 'ok good, go\nyes, delegate'
+  approve 'ok good, go'
+  [ -z "$output" ]
+  approve 'yes, delegate'
+  [ -z "$output" ]
+}
+
+@test "a line with no affirmative word, or with a hold word, is not a yes" {
+  say 'Change the title first.\nyes, but wait for the review\nGo ahead later\nlooks great'
+  for q in 'Change the title first.' 'yes, but wait for the review' 'Go ahead later' 'looks great'; do
+    approve "$q"
+    [ "$(decision_of "$output")" = deny ] || { echo "quote: $q: $output"; return 1; }
+    [[ "$output" == *'ask the user for an explicit yes, then quote that line'* ]] || { echo "quote: $q: $output"; return 1; }
+  done
+}
+
+@test "an invented quote's reason says to ask for an explicit yes" {
+  say 'yes'
+  approve 'ship it'
+  [[ "$output" == *"ask the user for an explicit yes, then quote that line"* ]] || false
+}
+
+@test "a frontmatter with more than one approved: line, in any case or indentation, is denied" {
+  say 'yes'
+  for second in 'approved: 2026-10-16, \"I never said this\"' '  approved: 2026-10-16, \"yes\"' 'APPROVED: x'; do
+    run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/specs/two.md\",\"content\":\"---\\nstatus: approved\\nApproved: 2026-10-16, \\\"yes\\\"\\n$second\\n---\\n\"")" g20
+    [ "$(decision_of "$output")" = deny ] || { echo "second: $second: $output"; return 1; }
+    [[ "$output" == *'more than one approved: line'* ]] || { echo "second: $second: $output"; return 1; }
+  done
+  approved_spec 'yes'
+  edit '## Problem' 'approved: 2026-10-16, \"yes\"\n## Problem'
+  [ -z "$output" ]
+  edit 'status: approved' 'status: approved\napproved: 2026-10-16, \"yes\"'
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'more than one approved: line'* ]] || false
+}
+
 @test "a quote from an earlier message, or from a wrapped one, is denied" {
   say 'yes'
-  say 'now add the CSV header row'
+  say 'yes, and add the CSV header row'
   approve 'yes'
   [ "$(decision_of "$output")" = deny ]
   say '<task-notification>yes</task-notification>'
-  approve 'now add the CSV header row'
+  approve 'yes, and add the CSV header row'
   [ -z "$output" ]
 }
 
@@ -100,7 +148,7 @@ approve() {
 @test "other files and draft edits get no G20 vote" {
   say 'no'
   # notes.md exists and holds the old_string, so the Edit is judged; it has no frontmatter.
-  printf '%s\n' '# notes' 'status: draft' > "$R/notes.md"
+  printf '%s\n' '# notes' 'status: draft' 'date: 2026-10-14' 'approved: (set only on an explicit yes)' > "$R/notes.md"
   approve 'no' "$R/notes.md"
   [ -z "$output" ]
   run_guard "$(tool_payload Edit "\"file_path\":\"$SPEC\",\"old_string\":\"## Problem\",\"new_string\":\"## Problem\\nstatus: draft\"")" g20

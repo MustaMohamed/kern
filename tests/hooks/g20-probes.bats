@@ -15,6 +15,8 @@ setup() {
   SPEC="$R/.kern/specs/export.md"
   printf '%s\n' '---' 'status: draft' 'date: 2026-10-14' 'approved: (set only on an explicit yes)' '---' '## Problem' > "$SPEC"
   touch -t 202001010000 "$SPEC"
+  # PH: the spec's draft lines, which an approval Edit replaces, so one approved: line is left.
+  PH=$(printf 'status: draft\ndate: 2026-10-14\napproved: (set only on an explicit yes)')
   . "$K/hooks/lib/json.sh"
   cd "$R"
 }
@@ -64,26 +66,26 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
 
 @test "P2 non-answers with a final question mark or comma" {
   say 'maybe?'
-  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "maybe?"')"
+  edit "$PH" "$(printf 'status: approved\napproved: 2026-10-14, "maybe?"')"
   deny
   [[ "$output" == *"not an explicit yes"* ]] || false
   say 'Sounds good,'
-  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "Sounds good,"')"
+  edit "$PH" "$(printf 'status: approved\napproved: 2026-10-14, "Sounds good,"')"
   deny
 }
 
 @test "P3 a quote with no hash matches no record, recorded or empty" {
-  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "..."')"
+  edit "$PH" "$(printf 'status: approved\napproved: 2026-10-14, "..."')"
   deny
   say ''
-  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "..."')"
+  edit "$PH" "$(printf 'status: approved\napproved: 2026-10-14, "..."')"
   deny
 }
 
 @test "P4 an empty prompt replaces the last one's lines" {
   say 'yes'
   say '   '
-  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "yes"')"
+  edit "$PH" "$(printf 'status: approved\napproved: 2026-10-14, "yes"')"
   deny
 }
 
@@ -149,7 +151,7 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
 
 @test "P12 a user line that holds double quotes can be quoted whole" {
   say 'yes, use \"delegate\"'
-  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "yes, use "delegate""')"
+  edit "$PH" "$(printf 'status: approved\napproved: 2026-10-14, "yes, use "delegate""')"
   none
 }
 
@@ -528,7 +530,7 @@ c1_agree() {
 @test "N1 negations are not a yes" {
   for q in 'no' 'Nope.' 'not yet' 'wait' 'stop!' "don't" "$(printf 'Don\342\200\231t')" 'do not'; do
     say "$q"
-    edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "%s"' "$q")"
+    edit "$PH" "$(printf 'status: approved\napproved: 2026-10-14, "%s"' "$q")"
     deny || { echo "quote: $q"; return 1; }
     [[ "$output" == *"is not an explicit yes"* ]] || { echo "quote: $q: $output"; return 1; }
   done
@@ -546,7 +548,7 @@ c1_agree() {
 @test "N3 the changed-after message says how to approve" {
   say 'yes'
   touch -t 203001010000 "$SPEC"
-  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "yes"')"
+  edit "$PH" "$(printf 'status: approved\napproved: 2026-10-14, "yes"')"
   deny
   [[ "$output" == *"set status and approved: in one edit"* ]] || false
 }

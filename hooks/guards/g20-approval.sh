@@ -3,9 +3,11 @@
 # G20 approval: a Markdown file (a spec or plan under the work dir, or the project's own spec system
 # under docs/) becomes `status: approved`, or changes the approved: line of an approved file, only on
 # the user's own words. The check reads the file as it will be after the Write or Edit, so splitting
-# the change over two edits does not get past it. The approved: line must quote one whole line of the
-# user's last message, verbatim, that is not a non-answer such as "sounds good", and the file must be
-# older than that message. prompt-submit records the message's line hashes in the session state, which
+# the change over two edits does not get past it. The frontmatter must hold exactly one approved: line,
+# in any case or indentation, and it must quote one whole line of the user's last message, verbatim,
+# that is not a non-answer such as "sounds good", holds a yes word (yes, ok, go ahead, lgtm and the
+# like), holds no negation or hold word (no, not, don't, wait, later and the like) and does not end in a
+# question mark. The file must be older than that message. prompt-submit records the message's line hashes in the session state, which
 # G16 protects, along with kern's hooks themselves, so the model cannot run prompt-submit to forge the
 # message. Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan with a
 # Markdown name, and G20, ledger-open and plan-check read frontmatter with one reader
@@ -23,6 +25,13 @@
 #   passes. A shell write that hides the path or the word (a script run by name, a word built at run
 #   time, a recursive directory copy, git checkout or apply, a hard link) is not seen.
 _G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess | no | nope | not yet | wait | stop | don't | do not "
+# A quote approves only when its words hold one of _G20_YES and none of _G20_HOLD, and it does not end in
+# a question mark. "good" and "sounds good" are not a yes.
+_G20_YES="yes|y|yep|yeah|ok|okay|sure|go|go ahead|approve|approved|lgtm|ship it|do it|proceed|confirmed|agreed"
+_G20_HOLD="no|nope|nah|not|don't|dont|never|wait|stop|hold|later|cancel"
+_G20_ASK_YES="ask the user for an explicit yes, then quote that line verbatim"
+# An approved: line, bare or quoted, in any case and indentation (grep -i).
+_G20_APPROVED_RE="^[[:space:]]*[\"']?approved[\"']?[[:space:]]*:"
 # A right single quote, read as an apostrophe in a non-answer ("don't").
 _G20_RSQ=$'\342\200\231'
 _G20_USE_TOOL="set or change an approval with the Edit or Write tool, so kern can check the user's quote"
@@ -74,6 +83,18 @@ _g20_lines() {
     LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd][\"']?[[:space:]]*:[[:space:]]*//p"
 }
 
+# _g20_any LIST WORDS: exit 0 when WORDS (blank-padded) holds one of the |-separated words or phrases of
+# LIST as whole words.
+_g20_any() {
+  local rest="$1|" p
+  while [ -n "$rest" ]; do
+    p=${rest%%|*}
+    rest=${rest#*|}
+    case "$2" in *" $p "*) return 0 ;; esac
+  done
+  return 1
+}
+
 # _g20_md PATH: exit 0 when PATH names a Markdown file, in any case (a case-insensitive file system
 # opens spec.Md as spec.md).
 _g20_md() {
@@ -113,7 +134,7 @@ guard_g20() {
 }
 
 _g20_file() {
-  local p base text old='' new all post rc before after lines quote norm qh hashes sf
+  local p base text old='' new all post rc before after lines quote norm words trimmed qh hashes sf
   p=$(ti_get file_path) || return 0
   case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
   _g20_mdfile "$p" || return 0
@@ -170,6 +191,12 @@ _g20_file() {
     vote deny G20 "under autopilot nothing approves a spec or plan; keep status: draft (parked under autopilot) and park the question"
     return 0
   fi
+  # ledger-open reads the first line that starts exactly with approved:, so G20 judges only a
+  # frontmatter where that line is the one it checks.
+  if [ "$(printf '%s\n' "$after" | LC_ALL=C grep -Eic "$_G20_APPROVED_RE")" -gt 1 ]; then
+    vote deny G20 "the frontmatter holds more than one approved: line; keep exactly one, so the quote G20 checks is the one ledger-open reads"
+    return 0
+  fi
   # The quote runs from the first double quote of the first approved: line to its last, so a user's
   # line that holds a double quote can still be quoted whole.
   quote=$(printf '%s\n' "$lines" | head -n 1 | sed -n 's/^[^"]*"\(.*\)".*$/\1/p')
@@ -182,17 +209,26 @@ _g20_file() {
   norm=${norm//$_G20_RSQ/\'}
   case "$_G20_NOT_YES" in
     *" $norm "*)
-      vote deny G20 "\"$quote\" is not an explicit yes; ask the user for one"
+      vote deny G20 "\"$quote\" is not an explicit yes; $_G20_ASK_YES"
       return 0
       ;;
   esac
+  # words: the quote's words, split at anything but a letter, a digit or an apostrophe, with the
+  # apostrophes at a word's ends taken off, padded with blanks.
+  words=" $(printf '%s\n' "$norm" | LC_ALL=C tr -c "[:alnum:]'\n" ' ' |
+    sed -e "s/ '*/ /g" -e "s/'* / /g" -e "s/^'*//" -e "s/'*\$//" -e 's/  */ /g') "
+  trimmed=${quote%"${quote##*[![:space:]]}"}
+  if ! _g20_any "$_G20_YES" "$words" || _g20_any "$_G20_HOLD" "$words" || [ "${trimmed%\?}" != "$trimmed" ]; then
+    vote deny G20 "\"$quote\" is not an explicit yes (it needs a word such as yes, ok or go ahead, no word such as no, not, wait or later, and no final question mark); $_G20_ASK_YES"
+    return 0
+  fi
   # A quote with no hash (blank, or over 500 characters) matches nothing, not an empty record.
   qh=$(printf '%s\n' "$quote" | prompt_hashes)
   hashes=$(state_get "$SID" prompt_hashes 2> /dev/null) || hashes=''
   case " $hashes " in
     *" ${qh:-none} "*) ;;
     *)
-      vote deny G20 "the approved: quote is not a line of the user's last message; quote one whole line of it verbatim, or ask for a yes"
+      vote deny G20 "the approved: quote is not a line of the user's last message; $_G20_ASK_YES"
       return 0
       ;;
   esac
