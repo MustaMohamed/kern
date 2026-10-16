@@ -1,6 +1,6 @@
 {
   "name": "kern",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Personal workflow kernel for Claude Code: routing, guarded autonomy, proof before done, and project settings that defer to each repo's own rules.",
   "author": {
     "name": "Mustafa Mohamed"
