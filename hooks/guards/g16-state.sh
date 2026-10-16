@@ -343,7 +343,7 @@ _g16_redirects() {
 # (accepted limit).
 _g16_bash() {
   local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m sd_f cc_f
-  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir
+  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir mixed
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
   cmd=$_G16_F
@@ -358,6 +358,19 @@ _g16_bash() {
       *[Kk][Ee][Rr][Nn].[Ll][Oo][Cc][Aa][Ll].[Yy][Mm][Ll]* | *[Ss][Ee][Tt][Tt][Ii][Nn][Gg][Ss]*.[Jj][Ss][Oo][Nn]* | \
       *.[Cc][Ll][Aa][Uu][Dd][Ee]*) ;;
     *) return 0 ;;
+  esac
+  # mixed: the command, quotes taken out, holds cd, pushd or popd in another case. An upper-case CD runs
+  # /usr/bin/cd on macOS, which never moves the shell; once the text is lower-cased it would read as a
+  # plain cd, so no cd in such a command is plain.
+  mixed=0
+  case "$t" in
+    *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*)
+      if printf '%s' "$t" | LC_ALL=C awk '
+        { n = split($0, w, /[^A-Za-z]+/); for (i = 1; i <= n; i++) if (w[i] != tolower(w[i]) && tolower(w[i]) ~ /^(cd|pushd|popd)$/) f = 1 }
+        END { exit !f }'; then
+        mixed=1
+      fi
+      ;;
   esac
   cmd=$(_g16_lower "$cmd")
   _G16_SD=$(_g16_lower "$(state_dir)")
@@ -483,7 +496,7 @@ WORDS
         fi
         if [ "$cc_f" = 0 ] && _g16_into "$last"; then cc_f=1; fi
         # Only a plain cd is followed (cmd_plain); any other keeps both readings and adds the target's.
-        if [ "$dk" = 1 ] && cmd_plain "$seg"; then
+        if [ "$dk" = 1 ] && [ "$mixed" = 0 ] && cmd_plain "$seg"; then
           cdir=$t
           in_sd=$sd_f
           _G16_INCC=$cc_f

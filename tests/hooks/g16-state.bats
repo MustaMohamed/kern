@@ -485,6 +485,18 @@ expect_cmd() {
   expect_cmd none "cd $S && X=1 cd /tmp; echo x > foo" "cd $S && 2>/dev/null cd /tmp; echo x > foo"
 }
 
+@test "an upper-case CD runs /usr/bin/cd on macOS and does not move, so it keeps the reading" {
+  local cc=("cd ~/.claude && CD /tmp; sed -i '' s/a/b/ settings.json" "cd ~/.claude && Cd /tmp; echo {} > settings.json"
+    "cd ~/.claude && PUSHD /tmp; echo {} > settings.json")
+  local sd=("cd $S && CD /tmp; echo x > foo" "cd $S && cD /tmp; echo x > foo" "cd $S && C''D /tmp; echo x > foo")
+  expect_cmd ask "${cc[@]}"
+  expect_cmd deny "${sd[@]}"
+  set_autopilot on
+  expect_cmd deny "${cc[@]}" "${sd[@]}"
+  set_autopilot off
+  expect_cmd none "cd $S && cd /tmp; echo x > foo"
+}
+
 @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
   mkdir -p "$R/.claude"
   # The re-review's probes: a tracked file moved onto kern.local.yml, a removal, and diff --output.
