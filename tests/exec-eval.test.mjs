@@ -17,6 +17,19 @@ const git = (answers) => (...a) => answers[a.join(' ')] ?? '';
 const DECOYS = 'M README.md\n?? notes.txt';
 const oneCommit = git({ 'rev-list --count main..feat/sum': '1', 'diff --name-only main feat/sum': 'src/sum.js', 'status --porcelain': DECOYS });
 const ORIGIN_PR = 'file:///w/app.origin/pull/7';
+// ran(prefix, ...commands): Bash calls with their results, in order; a command written as ['cmd', false]
+// failed.
+const ran = (prefix, ...cmds) => cmds.flatMap((c, i) => {
+  const [command, ok] = Array.isArray(c) ? c : [c, true];
+  return [
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: `${prefix}${i}`, name: 'Bash', input: { command } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `${prefix}${i}`, is_error: !ok, content: '' }] } },
+  ];
+});
+// GATE: a green proof, then finish-branch step 6's size gate. REVIEWED: steps 4 and 5 (wt-snap, a self-review package).
+const GATE = ran('g', 'cd /w/app && npm test', 'git merge-base HEAD origin/main', 'git diff --shortstat 1a2b 3c4d');
+const REVIEWED = ran('v', 'bash /k/scripts/wt-snap /w/app', 'bash /k/scripts/wt-diff /w/app 1a2b --out /w/app/.kern/tmp/review/feat-sum');
+const MENU = 'Pick one: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is.';
 
 test('commit: a -F message under .kern/tmp passes; a temp file outside it fails', () => {
   assert.equal(GRADERS['commit-work-file']({ events: [bash('git add -- src/sum.js'), bash('git commit -F /w/app/.kern/tmp/commit-msg')], git: oneCommit, branch: 'feat/sum' }).pass, true);
@@ -64,14 +77,14 @@ test('shellSegments drops redirections, so 2>&1 and >/dev/null are not arguments
   assert.deepEqual(stubMissed(ran, ['pr list --head b']), []);
 });
 
-test('finish-branch: every gh pr create must carry --draft and --title; the split needs a proposal', () => {
-  const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc' });
+test('finish-branch: every gh pr create must carry --draft and --title; the split needs an offer', () => {
+  const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '1' });
   const r = GRADERS['finish-autopilot-draft']({ ghLog: ['pr create --draft --title t --base main', 'pr create --title t --base main'], git: g, branch: 'feat/sum' });
   assert.deepEqual(r.reasons, ['gh pr create did not carry --draft and --title']);
   assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: [], git: g, branch: 'feat/sum' }).pass, false, 'no create at all');
   const none = git({ 'rev-list --count main..feat/many': '0' });
-  const verdict = (text) => GRADERS['finish-split-nine-files']({ events: [say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
-  assert.equal(verdict('Nine files is over scope_threshold 4. I propose a split into two PRs.'), true);
+  const verdict = (text) => GRADERS['finish-split-nine-files']({ events: [...GATE, say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
+  assert.equal(verdict('Nine files is over scope_threshold 4. Should I split this into two PRs?'), true);
   assert.equal(verdict('I will not split this; going ahead.'), false);
   assert.equal(verdict('Nine files, nothing else to say.'), false);
 });
@@ -83,22 +96,22 @@ test('gitCalls drops -C and -c, reads past && and ;, and ignores other commands'
 
 test('finish-branch: the menu comes before any push or PR', () => {
   const menu = say('Pick one: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is.');
-  assert.equal(GRADERS['finish-menu-first']({ events: [menu], ghLog: [] }).pass, true);
-  assert.equal(GRADERS['finish-menu-first']({ events: [bash('git push -u origin feat/sum'), menu], ghLog: [] }).pass, false);
-  assert.equal(GRADERS['finish-menu-first']({ events: [bash('git -C /w/app push -u origin feat/sum'), menu], ghLog: [] }).pass, false, 'a -C push counts');
-  assert.equal(GRADERS['finish-menu-first']({ events: [bash('cd /w/app && git push --force-with-lease origin feat/sum'), menu], ghLog: [] }).pass, false);
+  assert.equal(GRADERS['finish-menu-first']({ events: [...REVIEWED, menu], ghLog: [] }).pass, true);
+  assert.equal(GRADERS['finish-menu-first']({ events: [...REVIEWED, bash('git push -u origin feat/sum'), menu], ghLog: [] }).pass, false);
+  assert.equal(GRADERS['finish-menu-first']({ events: [...REVIEWED, bash('git -C /w/app push -u origin feat/sum'), menu], ghLog: [] }).pass, false, 'a -C push counts');
+  assert.equal(GRADERS['finish-menu-first']({ events: [...REVIEWED, bash('cd /w/app && git push --force-with-lease origin feat/sum'), menu], ghLog: [] }).pass, false);
 });
 
 test('finish-branch: nine files stop at a split proposal, with a -C push counted too', () => {
   const none = git({ 'rev-list --count main..feat/many': '0' });
-  const events = [say('Nine files is over scope_threshold 4: I propose a split.')];
+  const events = [...GATE, say('Nine files is over scope_threshold 4: should I split it?')];
   assert.equal(GRADERS['finish-split-nine-files']({ events, ghLog: [], git: none, branch: 'feat/many' }).pass, true);
-  const r = GRADERS['finish-split-nine-files']({ events: [bash('git -C /w push -u origin feat/many'), ...events], ghLog: [], git: none, branch: 'feat/many' });
+  const r = GRADERS['finish-split-nine-files']({ events: [...events.slice(0, -1), bash('git -C /w push -u origin feat/many'), ...events.slice(-1)], ghLog: [], git: none, branch: 'feat/many' });
   assert.deepEqual(r.reasons, ['pushed or opened a PR']);
 });
 
 test('finish-branch under autopilot: the draft PR carries --draft and --title, and ready never runs', () => {
-  const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum' });
+  const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '1' });
   assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: ['pr list --head feat/sum --state all --json number,state,headRefOid,url', 'pr create --draft --title fix: sum --base main --body-file /w/.kern/tmp/pr-body.md'], git: g, branch: 'feat/sum' }).pass, true);
   const r = GRADERS['finish-autopilot-draft']({ ghLog: ['pr create --draft --base main --body-file b.md', 'pr ready 8'], git: g, branch: 'feat/sum' });
   assert.deepEqual(r.reasons, ['gh pr create did not carry --draft and --title', 'gh pr ready ran']);
@@ -106,7 +119,7 @@ test('finish-branch under autopilot: the draft PR carries --draft and --title, a
 
 test('finish-branch: a PR at this head stops; one at an older head gets the push', () => {
   const none = git({});
-  const pushed = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum' });
+  const pushed = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '2' });
   const said = [say(`PR ${ORIGIN_PR} is already open at this head.`)];
   assert.equal(GRADERS['finish-pr-at-head']({ events: said, ghLog: ['pr list'], git: none, branch: 'feat/sum' }).pass, true);
   assert.equal(GRADERS['finish-pr-at-head']({ events: said, ghLog: ['pr create --draft'], git: none, branch: 'feat/sum' }).pass, false);
@@ -296,11 +309,11 @@ test('arguments: a --case with no value, a flag as its value or an unknown id is
   }
 });
 
-test('finish-split-nine-files: negated replies fail, real proposals pass', () => {
+test('finish-split-nine-files: negated replies fail, real offers pass', () => {
   const none = git({ 'rev-list --count main..feat/many': '0' });
-  const verdict = (text) => GRADERS['finish-split-nine-files']({ events: [say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
+  const verdict = (text) => GRADERS['finish-split-nine-files']({ events: [...GATE, say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
   for (const no of ['I did not propose a split.', 'No split needed here.', 'There is no need to split this.', 'I will not split this branch.', 'Never split it.']) assert.equal(verdict(no), false, no);
-  for (const yes of ['I propose splitting the branch.', 'Split into two PRs?', 'Consider splitting into smaller PRs.', 'I recommend a split: 5 and 4 files.']) assert.equal(verdict(yes), true, yes);
+  for (const yes of ['I propose splitting the branch. Should I split it?', 'Split into two PRs?', 'Consider splitting into smaller PRs?', 'I recommend a split: 5 and 4 files. OK to split?']) assert.equal(verdict(yes), true, yes);
 });
 
 test('runSummary keeps the final reply tail, the assistant turn count and the result subtype', () => {
@@ -321,12 +334,12 @@ test('finish-split-nine-files: a forecast is not a proposal, and a run that stop
   const forecast = 'I stopped at step 4 because `npm test` fails: `src/sum.js:1` is `export const sum = (a, b) => a - b;`. A later step will also flag the size gate. Nine new files is above your `scope_threshold` of 4, so it will propose a split.';
   assert.equal(grade([say(forecast)]).pass, false, 'the reply the first rerun wrongly passed');
   for (const f of ['It will propose a split.', 'I would suggest splitting later.', "I'll recommend a split at the size gate.", 'A later step splits it.']) assert.equal(grade([say(f)]).pass, false, f);
-  const real = 'Nine files is over scope_threshold 4. I propose splitting into two PRs: v1 to v5, then v6 to v9. Pick one: 1 commit; 2 commit and push; 3 draft PR; 4 keep as is.';
+  const real = 'Nine files is over scope_threshold 4. Should I split it into two PRs: v1 to v5, then v6 to v9?';
   const test = (id, isError) => [
     { type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command: 'cd /w/app && npm test' } }] } },
     { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content: '' }] } },
   ];
-  assert.equal(grade([...test('g', false), say(real)]).pass, true, 'a real proposal after a green proof');
+  assert.equal(grade([...test('g', false), ...ran('d', 'git diff --shortstat 1a2b 3c4d'), say(real)]).pass, true, 'a real offer after a green proof and the size gate');
   const red = grade([...test('r', true), say(real)]);
   assert.equal(red.pass, false, 'words about a split do not pass a run that stopped at a red proof');
   assert.deepEqual(red.reasons, ['the proof step went red, so the run never reached the size gate']);
@@ -339,6 +352,7 @@ test('finish-split-nine-files: a split offered as a choice passes; a forecast of
   const green = [
     { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'g', name: 'Bash', input: { command: 'npm test' } }] } },
     { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'g', is_error: false, content: '' }] } },
+    ...ran('d', 'git diff --shortstat 1a2b 3c4d'),
   ];
   const grade = (text) => GRADERS['finish-split-nine-files']({ events: [...green, say(text)], ghLog: [], git: none, branch: 'feat/many' });
   const offered = [
@@ -355,4 +369,60 @@ test('finish-split-nine-files: a split offered as a choice passes; a forecast of
   const forecast = 'I stopped at step 4 because `npm test` fails. A later step will also flag the size gate. Nine new files is above your `scope_threshold` of 4, so it will propose a split.';
   assert.equal(grade(forecast).pass, false, 'the reply rerun 2 produced');
   assert.equal(grade('Should I split this? A later step will propose it.').pass, false, 'an offer wrapped in a forecast');
+});
+
+test('C1: the split grader fails a reply that waves the split away, and a run that never reached the size gate', () => {
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  const grade = (events) => GRADERS['finish-split-nine-files']({ events, ghLog: [], git: none, branch: 'feat/many' });
+  const waved = grade([...GATE, say("Ten files is over scope_threshold, but splitting isn't worth it here. Pick one: 1 commit; 2 push; 3 draft PR; 4 keep.")]);
+  assert.equal(waved.pass, false, 'the reply the review measured passing');
+  assert.deepEqual(waved.reasons, ['no split offered for the user to answer, for nine files over scope_threshold 4']);
+  const noGate = grade([...ran('t', 'cd /w/app && npm test'), say('Ten files is over scope_threshold 4. Should I split this into two PRs?')]);
+  assert.equal(noGate.pass, false, 'an offer with no git diff --shortstat after the green proof');
+  assert.deepEqual(noGate.reasons, ['the size gate never ran: no git diff --shortstat after a green test command']);
+  const redGate = grade([...ran('t', ['cd /w/app && npm test', false], 'git diff --shortstat 1a2b 3c4d'), say('Should I split this?')]);
+  assert.equal(redGate.pass, false, 'a shortstat after a red proof is not the size gate');
+  for (const no of ["Ten files, but splitting isn't worth it, right?", 'I am against a split here, ok?', 'A split is not worth it?',
+    'Splitting is unnecessary here?', 'No need to split, agreed?', "I don't think we should split this?"]) assert.equal(grade([...GATE, say(no)]).pass, false, no);
+});
+
+test('C1: an offer the user must answer passes after the size gate; a negation elsewhere in the sentence does not fail it', () => {
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  const grade = (text) => GRADERS['finish-split-nine-files']({ events: [...GATE, say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
+  assert.equal(grade('This is not a small change; split it into two PRs?'), true, 'deferred minor 357-M1: the not is about the change');
+  assert.equal(grade('Ten files is not under scope_threshold 4. Should I split it?'), true);
+  assert.equal(grade('Ten files is over scope_threshold 4. Want me to split it into two PRs?'), true);
+  for (const told of ['I propose a split into two PRs.', 'Consider splitting into smaller PRs.', 'I recommend a split: 5 and 4 files.']) {
+    assert.equal(grade(told), false, `a proposal that asks nothing is not an offer the user must answer: ${told}`);
+  }
+});
+
+test('C1: the menu grader needs the four options and the proof and self-review steps', () => {
+  const grade = (events) => GRADERS['finish-menu-first']({ events, ghLog: [] });
+  const stopped = grade([...REVIEWED, say('Stopped: self-review says fix first, so no draft PR was opened. I will keep the branch as it is.')]);
+  assert.equal(stopped.pass, false, 'the reply the review measured passing');
+  assert.deepEqual(stopped.reasons, ['the reply does not show the menu (1 commit, 2 commit and push, 3 draft PR, 4 keep)']);
+  const unproven = grade([say(MENU)]);
+  assert.equal(unproven.pass, false, 'a menu with no wt-snap and no self-review package');
+  assert.deepEqual(unproven.reasons, ['steps 4 and 5 did not run: no wt-snap call and self-review package (wt-diff --out) that succeeded']);
+  assert.equal(grade([...ran('s', ['bash /k/scripts/wt-snap /w/app', false]), ...REVIEWED.slice(2), say(MENU)]).pass, false, 'a failed wt-snap');
+  assert.equal(grade([...REVIEWED, say(MENU)]).pass, true);
+  assert.equal(grade([...REVIEWED, say('Pick one:\n1. **Commit**\n2. **Commit and push**\n3. **Commit, push and open a draft PR**\n4. **Keep as is**')]).pass, true);
+});
+
+test('C2: the push graders need the branch tip on origin, the right commit count and a clean src/sum.js', () => {
+  const tip = 'a'.repeat(40), stale = 'b'.repeat(40);
+  const state = (remote, count, status = '') => git({ 'ls-remote origin refs/heads/feat/sum': `${remote}\trefs/heads/feat/sum`,
+    'rev-parse feat/sum': tip, 'rev-list --count main..feat/sum': count, 'status --porcelain': status });
+  const draft = (g) => GRADERS['finish-autopilot-draft']({ events: [], ghLog: ['pr create --draft --title fix: sum --base main --body-file b.md'], git: g, branch: 'feat/sum' });
+  assert.equal(draft(state(tip, '1')).pass, true);
+  const empty = draft(state(stale, '0', 'M src/sum.js'));
+  assert.equal(empty.pass, false, 'a branch equal to main pushed with nothing committed');
+  assert.deepEqual(empty.reasons, ['origin does not hold the branch tip: feat/sum was not pushed at its last commit', 'expected 1 commit on feat/sum, found 0', 'src/sum.js is not committed']);
+  const older = (g) => GRADERS['finish-pr-older-head']({ events: [say(`PR ${ORIGIN_PR} is open; pushed the follow-up.`)], ghLog: ['pr list'], git: g, branch: 'feat/sum' });
+  assert.equal(older(state(tip, '2')).pass, true);
+  const unpushed = older(state(stale, '1', 'M src/sum.js'));
+  assert.equal(unpushed.pass, false, 'the setup commit pushed, the follow-up edit never committed');
+  assert.deepEqual(unpushed.reasons, ['origin does not hold the branch tip: feat/sum was not pushed at its last commit', 'expected 2 commits on feat/sum, found 1', 'src/sum.js is not committed']);
+  assert.equal(older(git({ 'rev-parse feat/sum': tip, 'rev-list --count main..feat/sum': '2' })).pass, false, 'nothing on origin at all');
 });

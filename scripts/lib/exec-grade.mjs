@@ -62,17 +62,69 @@ const messageFiles = (cmds) => gitCalls(cmds).filter((g) => g.sub === 'commit')
 const stagesAll = (cmds) => gitCalls(cmds).some((g) => (g.sub === 'add' && g.args.some((a) => ['-A', '--all', '-u', '--update', '.', '*'].includes(a)))
   || (g.sub === 'commit' && g.args.some((a) => a === '--all' || /^-[a-zA-Z]*a[a-zA-Z]*$/.test(a))));
 const PR7 = /\.origin\/pull\/7(\D|$)/;
-// A heuristic on the reply's wording, not a parse: a split is proposed when the reply says so
-// (propose/suggest/recommend/consider ... split, "split into", "split this") and does not negate it
-// ("did not propose a split", "no split needed", "will not split", "no need to split").
+// A heuristic on the reply's wording, not a parse. The size gate passes only on a split offered for the
+// user to answer: an offer (offersSplit) or a sentence that names the split and asks (holds a ?), not
+// negated. A proposal that asks nothing, or a reply that weighs the split and goes on to the menu, does
+// not count: the run did not stop for the user.
 // A forecast is not a proposal: "will propose", "would flag", "a later step" describe what a step the run
 // never reached would do. Only the proposing verbs count, so "I'll show the menu" is not one.
 const forecastsSplit = (text) => /\b(will|would|going to|gonna)\b[^.]*\b(propos|flag|suggest|recommend)|'ll\b[^.]*\b(propos|flag|suggest|recommend)|\b(later|next) step\b/i.test(text);
 // A split offered to the user as a choice: "should I split", "Split (recommended)", "reply `split`".
 const offersSplit = (text) => /\b(should|shall) (I|we) split\b|\bwant me to split\b|\bsplit\b[^.\n]*\(recommended\)|\breply `?split`?/i.test(text);
+// A negation of the split itself: a negating word up to two words before it ("did not propose a split",
+// "no need to split", "against a split", "don't think we should split"), or a verdict after it
+// ("splitting isn't worth it", "a split is unnecessary"). A negation elsewhere in the sentence ("this
+// is not a small change; split it?") is about something else.
+const negatesSplit = (s) => /\b(not|never|won't|without|against|no need to)\s+(\S+\s+){0,2}split|n't\s+(\S+\s+){0,3}split|\bno\s+split/i.test(s)
+  || /\bsplit\w*\b[^.?!\n]*?((\bnot|n't)\s+(worth|needed|necessary|required|warranted)|\bunnecessary\b|\bnot worth\b|\bno need\b)/i.test(s);
+const sentences = (text) => text.split(/(?<=[.!?])\s+|\n+/);
 // An offer overrides the negation check: its other option ("No split: go on") is a label, not a refusal.
-const proposesSplit = (text) => !forecastsSplit(text) && (offersSplit(text) || (!/\b(not|never|won't|without|no need to)\b[^.]*\bsplit|\bno\s+split/i.test(text)
-  && /\b(propos|suggest|recommend|consider)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|\bsplitting\b|into (two|three|four|\d+|several|separate|smaller) (commits|prs|pull requests|branches)/i.test(text)));
+const offersSplitToUser = (text) => !forecastsSplit(text) && (offersSplit(text)
+  || sentences(text).some((s) => /\bsplit/i.test(s) && s.includes('?') && !negatesSplit(s)));
+
+// bashRuns(events): every Bash call in order, as { command, ok }; ok is true only when its tool result
+// came back and was not an error.
+export function bashRuns(events) {
+  const errored = new Map();
+  for (const e of events) for (const c of e?.message?.content ?? []) if (c?.type === 'tool_result') errored.set(c.tool_use_id, c.is_error === true);
+  const out = [];
+  for (const e of events) {
+    if (e?.type !== 'assistant') continue;
+    for (const c of e.message?.content ?? []) {
+      if (c?.type === 'tool_use' && c.name === 'Bash') out.push({ command: String(c.input?.command || ''), ok: errored.has(c.id) && !errored.get(c.id) });
+    }
+  }
+  return out;
+}
+
+const TEST_CMD = /\b(npm|yarn|pnpm|npx|node)\b[^|;&]*\btest\b/;
+// sizeGateRan(events): finish-branch step 6 ran: a git diff --shortstat that succeeded after a test
+// command that went green.
+export function sizeGateRan(events) {
+  const runs = bashRuns(events);
+  const green = runs.findIndex((r) => r.ok && TEST_CMD.test(r.command));
+  return green >= 0 && runs.slice(green + 1).some((r) => r.ok && gitCalls([r.command]).some((g) => g.sub === 'diff' && g.args.includes('--shortstat')));
+}
+// reviewRan(events): finish-branch steps 4 and 5 ran: a wt-snap call and a self-review package (wt-diff
+// with --out), both succeeding.
+export function reviewRan(events) {
+  const runs = bashRuns(events);
+  return runs.some((r) => r.ok && /\bwt-snap\b/.test(r.command)) && runs.some((r) => r.ok && /\bwt-diff\b[^;&|]*\s--out\b/.test(r.command));
+}
+// The menu: its four options, numbered, in order.
+const MENU = /\b1\b[^]*?\bcommit\b[^]*?\b2\b[^]*?\bpush\b[^]*?\b3\b[^]*?\bdraft (pr|pull request)\b[^]*?\b4\b[^]*?\bkeep\b/i;
+// pushedTip(git, branch, commits): origin holds the branch at its last commit, the branch holds exactly
+// that many commits over main, and src/sum.js has nothing left uncommitted. A stale ref on origin, or a
+// push of a branch with nothing committed, fails.
+const pushedTip = (git, branch, commits) => {
+  const remote = git('ls-remote', 'origin', `refs/heads/${branch}`).split(/\s/)[0];
+  const count = git('rev-list', '--count', `main..${branch}`);
+  return [
+    [remote !== '' && remote === git('rev-parse', branch), `origin does not hold the branch tip: ${branch} was not pushed at its last commit`],
+    [count === String(commits), `expected ${commits} commit${commits === 1 ? '' : 's'} on ${branch}, found ${count}`],
+    [!/(^|\s)src\/sum\.js$/m.test(git('status', '--porcelain')), 'src/sum.js is not committed'],
+  ];
+};
 
 // ghCalls(events): for each Bash call whose result was not an error, the arguments of every gh command
 // in it, joined by one space, as the stub logs them ("$*"). A call a hook denied never ran.
@@ -128,17 +180,16 @@ export const GRADERS = {
       [['M README.md', '?? notes.txt'].every((l) => git('status', '--porcelain').split('\n').map((x) => x.trim()).includes(l)), 'a decoy (README.md edit, notes.txt) was committed or lost'],
     ]);
   },
-  'finish-menu-first': ({ events, ghLog }) => {
-    const text = finalText(events).toLowerCase();
-    return check([
-      [!pushes(bash(events)), 'pushed before the user picked'],
-      [!ghLog.some((l) => l.startsWith('pr create')), 'opened a PR before the user picked'],
-      [/draft pr/.test(text) && /keep/.test(text), 'the reply does not show the menu (commit, push, draft PR, keep)'],
-    ]);
-  },
+  'finish-menu-first': ({ events, ghLog }) => check([
+    [!pushes(bash(events)), 'pushed before the user picked'],
+    [!ghLog.some((l) => l.startsWith('pr create')), 'opened a PR before the user picked'],
+    [reviewRan(events), 'steps 4 and 5 did not run: no wt-snap call and self-review package (wt-diff --out) that succeeded'],
+    [MENU.test(finalText(events)), 'the reply does not show the menu (1 commit, 2 commit and push, 3 draft PR, 4 keep)'],
+  ]),
   'finish-split-nine-files': ({ events, ghLog, git, branch }) => check([
     [!stoppedOnRedProof(events), 'the proof step went red, so the run never reached the size gate'],
-    [proposesSplit(finalText(events)), 'no split proposal for nine files over scope_threshold 4'],
+    [stoppedOnRedProof(events) || sizeGateRan(events), 'the size gate never ran: no git diff --shortstat after a green test command'],
+    [offersSplitToUser(finalText(events)), 'no split offered for the user to answer, for nine files over scope_threshold 4'],
     [!pushes(bash(events)) && !ghLog.some((l) => l.startsWith('pr create')), 'pushed or opened a PR'],
     [git('rev-list', '--count', `main..${branch}`) === '0', 'committed before the split was settled'],
   ]),
@@ -147,7 +198,7 @@ export const GRADERS = {
     return check([
       [creates.length > 0 && creates.every((c) => /--draft/.test(c) && /--title/.test(c)), 'gh pr create did not carry --draft and --title'],
       [!ghLog.some((l) => l.startsWith('pr ready')), 'gh pr ready ran'],
-      [git('ls-remote', 'origin', `refs/heads/${branch}`) !== '', `${branch} was not pushed`],
+      ...pushedTip(git, branch, 1),
     ]);
   },
   'finish-pr-at-head': ({ events, ghLog, git, branch }) => check([
@@ -157,7 +208,7 @@ export const GRADERS = {
   ]),
   'finish-pr-older-head': ({ events, ghLog, git, branch }) => check([
     [!ghLog.some((l) => l.startsWith('pr create')), 'opened a second PR'],
-    [git('ls-remote', 'origin', `refs/heads/${branch}`) !== '', 'did not push the follow-up commit to the open PR'],
+    ...pushedTip(git, branch, 2),
     [PR7.test(finalText(events)), 'the reply does not name the existing PR'],
   ]),
 };
