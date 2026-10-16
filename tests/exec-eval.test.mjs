@@ -3,13 +3,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
-import { UsageError, caseEnv, exitCode, parseArgs, runEval, snapshotBody, userSettingsProblem } from '../scripts/lib/exec-run.mjs';
+import { UsageError, caseEnv, exitCode, parseArgs, replyDate, runEval, snapshotBody, userSettingsProblem, writeReply } from '../scripts/lib/exec-run.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
@@ -556,4 +556,36 @@ test('isolation: a host ~/.claude/kern.yml refuses the run unless KERN_EXEC_ALLO
   assert.match(body.assumes, /Bash is pre-approved/);
   assert.match(body.user_settings, /KERN_EXEC_ALLOW_USER_SETTINGS=1/);
   assert.equal(snapshotBody({ model: 'm', claude: 'v', results: [], userSettings: false }).user_settings, 'none');
+});
+
+// driveReplies: runEval over the real writeReply into a temp dir, with an injected runner that calls save as the real one does.
+const driveReplies = ({ dryRun = false } = {}) => {
+  const root = mkdtempSync(join(tmpdir(), 'replies-'));
+  const lines = [];
+  const dir = join(root, 'evals', 'results', `exec-${replyDate(new Date('2026-10-14T12:00:00Z'))}`);
+  const code = runEval({ cases: [{ id: 'a' }, { id: 'b' }], only: null, dryRun, describe: (c) => c.id, log: (l) => lines.push(l), readVersion: () => 'v',
+    repliesDir: dir, saveReply: (id, reply, reason) => writeReply(dir, id, reply, reason), writeSnapshot: () => {},
+    runCase: (c, save) => {
+      if (c.id === 'a') { save({ reply: 'Split or no?\n\n1. split' }); return result('a', true); }
+      save({ reason: 'claude exited 1' });
+      return result('b', false, true);
+    } });
+  return { code, lines, dir };
+};
+
+test('replies: a run writes one file per case with the reply, and (no reply: ...) for an invalid case', () => {
+  const { dir, lines } = driveReplies();
+  assert.match(dir, /exec-2026-10-14$/);
+  assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'Split or no?\n\n1. split\n');
+  assert.equal(readFileSync(join(dir, 'b.txt'), 'utf8'), '(no reply: claude exited 1)\n');
+  assert.equal(lines.at(-1), `replies: ${dir}`);
+});
+
+test('replies: a case with an empty reply says why, and a dry run writes nothing', () => {
+  const root = mkdtempSync(join(tmpdir(), 'replies-'));
+  writeReply(root, 'c', '');
+  assert.equal(readFileSync(join(root, 'c.txt'), 'utf8'), '(no reply: the run ended with no assistant text)\n');
+  const dry = driveReplies({ dryRun: true });
+  assert.equal(existsSync(dry.dir), false);
+  assert.ok(!dry.lines.some((l) => l.startsWith('replies:')));
 });

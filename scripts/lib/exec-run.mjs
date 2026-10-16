@@ -2,7 +2,7 @@
 // drive it with an injected runner: argument checking, the order of results, the snapshot rule and the
 // one place the exit code is decided.
 
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ISOLATION, PERMISSIONS } from './claude-run.mjs';
 
@@ -34,6 +34,18 @@ export function snapshotBody({ model, claude, results, userSettings }) {
     user_settings: userSettings ? 'a ~/.claude/kern.yml was present and read, allowed by KERN_EXEC_ALLOW_USER_SETTINGS=1' : 'none', results };
 }
 
+// dateStamp(date): the UTC day, YYYY-MM-DD, that names the snapshot file and the replies directory.
+export const dateStamp = (date = new Date()) => date.toISOString().slice(0, 10);
+export const replyDate = dateStamp;
+
+// writeReply(dir, id, reply, reason): <dir>/<id>.txt holds the case's final reply, the text the graders
+// read; with no reply it holds the one line (no reply: <reason>).
+export function writeReply(dir, id, reply, reason) {
+  mkdirSync(dir, { recursive: true });
+  const body = reply ? (reply.endsWith('\n') ? reply : `${reply}\n`) : `(no reply: ${reason || 'the run ended with no assistant text'})\n`;
+  writeFileSync(join(dir, `${id}.txt`), body);
+}
+
 // parseArgs(args, ids): { only, dryRun }. A --case with no value or an id no case has is a usage
 // error: an unrecognised argument must never widen into a paid run of every case.
 export function parseArgs(args, ids) {
@@ -58,8 +70,8 @@ export const exitCode = (results) => (results.length > 0 && results.every((r) =>
 // version first, so a failure there stops the run before any case is paid for; then runs the cases in
 // order, writes the snapshot (results, version) only for a full run with at least one valid case, so an
 // all-INVALID run never replaces a same-day snapshot, and returns the exit code for every non-dry run
-// alike.
-export function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, log }) {
+// alike. Each runCase gets a save({ reply, reason }) to call before its workspace goes; the last line names the replies directory.
+export function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, repliesDir, log }) {
   if (dryRun) {
     for (const c of cases) log(describe(c));
     return 0;
@@ -71,12 +83,13 @@ export function runEval({ cases, only, dryRun, runCase, describe, readVersion, w
   }
   const results = [];
   for (const c of cases) {
-    const r = runCase(c);
+    const r = runCase(c, ({ reply, reason } = {}) => saveReply(c.id, reply, reason));
     results.push(r);
     log(`${r.pass ? 'PASS' : r.invalid ? 'INVALID' : 'FAIL'} ${c.id}${r.pass ? '' : `: ${r.reasons.join('; ')}`}`);
   }
   if (only) log('--case run: no snapshot written; a full run writes it');
   else if (!results.some((r) => !r.invalid)) log('no case was valid: no snapshot written, and any earlier one stays');
   else writeSnapshot(results, version);
+  log(`replies: ${repliesDir}`);
   return exitCode(results);
 }

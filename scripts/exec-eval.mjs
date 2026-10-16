@@ -2,6 +2,8 @@
 // Execution evals for commit and finish-branch: real headless runs on a fixture repo with a bare origin
 // and a gh stub, graded from the tool calls, the stub's call log and git state. Spends tokens: ask the
 // user before a run. Usage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]
+// Each case's final reply goes to evals/results/exec-<date>/<id>.txt (gitignored), or (no reply: <why>) for
+// an invalid case; the last line prints the directory; a --dry-run writes none.
 // A full run writes evals/snapshots/exec-<date>.json (committed) with the model, the Claude Code version,
 // the isolation flags, what a pass assumes and each case's result; a --case run, or a run where no case
 // was valid, writes none. The Claude Code version is read before the first case, and a failure stops the
@@ -13,9 +15,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ClaudeRunError, claudeVersion, runClaude, runProblem, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
+import { ClaudeRunError, claudeVersion, finalText, runClaude, runProblem, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { GRADERS, stubMissed } from './lib/exec-grade.mjs';
-import { UsageError, caseEnv, parseArgs, runEval, snapshotBody, userSettingsProblem } from './lib/exec-run.mjs';
+import { UsageError, caseEnv, dateStamp, parseArgs, runEval, snapshotBody, userSettingsProblem, writeReply } from './lib/exec-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const MODEL = process.env.KERN_EVAL_MODEL || 'claude-sonnet-5-5';
@@ -38,7 +40,9 @@ if (!opts.dryRun) {
   }
 }
 
-function runCase(c) {
+const REPLIES = join(ROOT, 'evals', 'results', `exec-${dateStamp()}`);
+
+function runCase(c, save) {
   const prompts = [...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn];
   const dir = workspace(join(ROOT, 'evals', 'exec', 'fixtures', 'app'), { name: 'invoice-app', origin: true, branch: c.branch, setup: c.setup || [] });
   try {
@@ -56,6 +60,7 @@ function runCase(c) {
       });
     } catch (e) {
       if (!(e instanceof ClaudeRunError) || e.fatal) throw e;
+      save({ reason: e.message });
       return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [] };
     }
     const ghLog = readFileSync(log, 'utf8').split('\n').filter(Boolean);
@@ -69,6 +74,7 @@ function runCase(c) {
       try { g = GRADERS[c.id]({ events: run.events, ghLog, git, branch: c.branch }); }
       catch (e) { g = { pass: false, invalid: true, reasons: [`grader error: ${e.message}`] }; }
     }
+    save(g.invalid ? { reason: g.reasons[0] } : { reply: finalText(run.events) });
     return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
       commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command) };
   } finally {
@@ -78,13 +84,13 @@ function runCase(c) {
 }
 
 function writeSnapshot(results, claude) {
-  const out = join(ROOT, 'evals', 'snapshots', `exec-${new Date().toISOString().slice(0, 10)}.json`);
+  const out = join(ROOT, 'evals', 'snapshots', `exec-${dateStamp()}.json`);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(snapshotBody({ model: MODEL, claude, results, userSettings }), null, 2) + '\n');
   console.log(`snapshot: ${out}`);
 }
 
 process.exit(runEval({
-  cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion: claudeVersion, log: console.log,
+  cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion: claudeVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason), log: console.log,
   describe: (c) => `${c.id}: ${[...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn].map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
 }));
