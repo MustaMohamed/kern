@@ -32,6 +32,22 @@ setup() {
   [ ! -e "$KERN_UPSTREAM_DIR/addy" ]
 }
 
+@test "caveman clones through pin() without a copy source" {
+  unset KERN_UPSTREAM_CAVEMAN_SRC
+  export KERN_UPSTREAM_CAVEMAN_URL="$REMOTE" KERN_UPSTREAM_CAVEMAN_SHA="$SHA1"
+  run bash "$ROOT/scripts/fetch-upstream" caveman
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$KERN_UPSTREAM_DIR/caveman" rev-parse HEAD)" = "$SHA1" ]
+}
+
+@test "caveman defaults to the v4.0.1 pin" {
+  unset KERN_UPSTREAM_CAVEMAN_SRC
+  export KERN_UPSTREAM_CAVEMAN_URL="$REMOTE"
+  run bash "$ROOT/scripts/fetch-upstream" caveman
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"commit d262ab3882952a59312ff3537cd86d894523c5ab not found"* ]] || false
+}
+
 @test "copy source is copied" {
   mkdir -p "$BATS_TEST_TMPDIR/cave"; echo hi > "$BATS_TEST_TMPDIR/cave/NOTICE"
   export KERN_UPSTREAM_CAVEMAN_SRC="$BATS_TEST_TMPDIR/cave"

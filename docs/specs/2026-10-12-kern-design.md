@@ -52,11 +52,13 @@ The name follows the operating-system model: a small always-on kernel routes wor
 
 | Source | Version | Licence | Copyright | Pinned at |
 |---|---|---|---|---|
-| obra/superpowers | 6.4.1 | MIT | 2025 Jesse Vincent | installed cache, sha 5bf4e78 |
-| cursor/plugins, `pstack/` | 0.15.17 | MIT | 2026 Lauren Tan | 11713c6 |
+| obra/superpowers | 7.0.0 | MIT | 2025 Jesse Vincent | bb92a77 |
+| cursor/plugins, `pstack/` | 0.15.25 | MIT | 2026 Lauren Tan | 182f2ce |
 | mattpocock/skills | 1.3.1 | MIT | 2026 Matt Pocock | 49dd158 |
-| addyosmani/agent-skills | 0.6.12 | MIT | 2025 Addy Osmani | 1be8e34 |
-| caveman | 3.2.0 | Apache-2.0 | see its NOTICE | installed cache |
+| addyosmani/agent-skills | 0.6.13 | MIT | 2025 Addy Osmani | aeac41d |
+| caveman | 4.0.1 | Apache-2.0 | see its NOTICE | d262ab3 (tag v4.0.1) |
+
+`UPSTREAM.md` is canonical for pins; this table follows it.
 
 Rules:
 

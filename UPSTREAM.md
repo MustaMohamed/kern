@@ -13,3 +13,5 @@ kern ports text and ideas from these sources. `scripts/fetch-upstream` clones ea
 The `local` key in `fetch-upstream` copies the owner's adapted `recall`, `unslop`, `no-comments` and `comment-sicko` files; they are the owner's own work and need no entry here.
 
 caveman licence: Apache-2.0 from 3.0.0 on, copyright "Copyright 2026 Julius Brussee". The 3.2.0 and 4.0.1 trees hold byte-identical `LICENSE`, `LICENSE-MIT`, `LICENSING.md` and `NOTICE`, so `licenses/caveman.*` and `NOTICE` apply to both. The 2026-10-14 audit read 3.2.0; the 2026-10-17 audit read 4.0.1. kern copies no caveman text. Its terse mode takes ideas from the 3.2.0 and 4.0.1 voice rules and prompt parser, which are identical in the two versions.
+
+The 2026-10-17 audit read caveman 4.0.1 from `.upstream/caveman-4.0.1`, while `scripts/fetch-upstream caveman` writes `.upstream/caveman`.
