@@ -696,6 +696,24 @@ EOT
   done
 }
 
+@test "G6: after a cd it still scans this repository, so a staged secret is denied in both modes" {
+  mkdir -p "$R/sub"
+  printf '%s\n' "$KEY" >"$R/id_rsa"
+  git -C "$R" add id_rsa
+  local c m cmds=(
+    "(cd .); git commit -m 'CDS-2465: x'" "cd . && git commit -m 'CDS-2465: x'"
+    "cd sub && git commit -m 'CDS-2465: x'" "pushd sub && git commit -m 'CDS-2465: x'"
+    "GIT_INDEX_FILE=.git/index git commit -m 'CDS-2465: x'"
+  )
+  for m in off on; do
+    set_autopilot "$m"
+    for c in "${cmds[@]}"; do
+      expect deny g06 "$c" || return 1
+      [[ "$output" == *"possible secret"*"id_rsa:1 private-key"* ]] || false
+    done
+  done
+}
+
 @test "G6: push : and a matching push scan every branch" {
   git -C "$R" switch -q -c CDS-2465/side main
   printf '%s\n' "$KEY" >"$R/s2.txt"

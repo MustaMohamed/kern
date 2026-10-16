@@ -47,7 +47,9 @@ google-api-key|AIza[0-9A-Za-z_-]{35}'
 # checkout, switch, restore, mv, rm, reset, pull, update-index, read-tree, update-ref, commit-tree,
 # stash pop or apply, branch -f, and notes but its list, show and get-ref): G6 reads them as they are
 # at hook time, so a commit or push after it asks that its scan may be stale, and is denied under
-# autopilot.
+# autopilot. A commit or push after MOVED, or under --git-dir, --work-tree, env -C or
+# GIT_INDEX_FILE=, asks that it could not scan, and is denied under autopilot; G6 still scans it
+# where it would run without them, so a secret staged there is denied.
 guard_g06() {
   [ "$TOOL" = Bash ] || return 0
   local cmd rec moved=0 conf=0 stale=""
@@ -97,9 +99,10 @@ guard_g06() {
       *) continue ;;
     esac
     [ -n "$stale" ] && _g06_unscanned "secret scan may be stale: git $stale runs before the $_G05_SUB in this command, and kern reads the index and HEAD as they are now; run it in a call of its own first"
+    # The scan below still runs where kern can look, since a cd may stay in this repository: its
+    # deny holds, and this ask covers what kern cannot see.
     if [ "$moved" = 1 ] || [ "$_G05_MOVED" = 1 ] || _g05_env_has now GIT_INDEX_FILE @cwd; then
       _g06_unscanned "could not scan: git $_G05_SUB after cd, env -C, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see"
-      continue
     fi
     if [ "$_G05_SUB" = push ] &&
       { [ "$conf" = 1 ] || [ "$_G05_CONFIG" = 1 ] || _g05_env_has now 'GIT_CONFIG*' HOME XDG_CONFIG_HOME; }; then
