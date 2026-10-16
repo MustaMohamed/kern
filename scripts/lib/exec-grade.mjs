@@ -80,12 +80,19 @@ const negatesSplit = (s) => /\b(not|never|won't|without|against|no need to)\s+(\
 const sentences = (text) => text.split(/(?<=[.!?])\s+|\n+/);
 // Arguing against the split in other words: "rather than split", "keep it as one", "would only add churn".
 const argues = (s) => /\brather than (to )?split|\b(keep|leave) (it|this|them)\b[^.?!\n]*\bas (one|a single|is)\b|\bonly add churn\b|\bwould only add\b/i.test(s);
-// The finish-branch menu in the reply, in any format (numbers, letters, bullets, prose): commit, push, draft
-// and keep all within 120 characters of each other. Options named far apart are not a menu.
-const showsMenu = (text) => [...text.toLowerCase().matchAll(/commit|push|draft|keep/g)].some((m) => {
-  const w = text.toLowerCase().slice(m.index, m.index + 120);
-  return /commit/.test(w) && /push/.test(w) && /draft/.test(w) && /keep/.test(w);
-});
+// The finish-branch menu in the reply, found by structure. (1) Three or more option lines (numbered,
+// lettered or bulleted at the start of a line), one of them naming commit, push or draft. (2) Three or
+// more inline numbered or lettered markers, or three dashes ("1 commit 2 push", "(a) ...", "- ...") in a reply naming commit, push and draft.
+// (3) A question that joins three or more of commit, push, draft PR and keep with "or".
+const showsMenu = (text) => {
+  const opt = text.split('\n').filter((l) => /^\s*(\d+[.)]|[a-z][.)]|\([a-z]\)|[-*\u2022])\s/i.test(l));
+  if (opt.length >= 3 && opt.some((l) => /commit|push|draft/i.test(l))) return true;
+  const enumerated = (text.match(/(^|[\s:;])(\d+[.)]?|\([a-z]\)|[a-z]\))\s+\w/gi) || []).length;
+  const dashed = (text.match(/(^|[\s:;])[-*\u2022]\s+\w/g) || []).length;
+  if ((enumerated >= 3 || dashed >= 3) && /commit/i.test(text) && /push/i.test(text) && /draft/i.test(text)) return true;
+  return sentences(text).some((s) => s.trim().endsWith('?') && /\bor\b/i.test(s)
+    && [/commit/i, /push/i, /draft/i, /keep/i].filter((r) => r.test(s)).length >= 3);
+};
 // The split case passes on an offer to the user: a stock offer, or a sentence that names the split, asks,
 // and neither negates nor argues against it. Either way the reply must not argue against the split in any
 // sentence and must not show the finish menu: the gate must stop before the menu.
