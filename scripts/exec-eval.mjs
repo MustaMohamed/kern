@@ -3,16 +3,19 @@
 // and a gh stub, graded from the tool calls, the stub's call log and git state. Spends tokens: ask the
 // user before a run. Usage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]
 // A full run writes evals/snapshots/exec-<date>.json (committed) with the model, the Claude Code version,
-// the isolation flags and each case's result; a --case run writes none. Exit 0 only when every case that
+// the isolation flags, what a pass assumes and each case's result; a --case run, or a run where no case
+// was valid, writes none. The Claude Code version is read before the first case, and a failure stops the
+// run. A host ~/.claude/kern.yml refuses the run (exit 2) unless KERN_EXEC_ALLOW_USER_SETTINGS=1: kern's
+// hooks read it past the isolation flags. The hooks read an empty shell snapshot, not the host's. Exit 0 only when every case that
 // ran passed; 2 for a usage error, before anything runs. A claude run that exits non-zero, times out,
 // ends early or cannot start is an invalid case, never a pass; a missing or non-executable claude stops.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, PERMISSIONS, ClaudeRunError, claudeVersion, runClaude, runProblem, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
+import { ClaudeRunError, claudeVersion, runClaude, runProblem, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { GRADERS, stubMissed } from './lib/exec-grade.mjs';
-import { UsageError, parseArgs, runEval } from './lib/exec-run.mjs';
+import { UsageError, caseEnv, parseArgs, runEval, snapshotBody, userSettingsProblem } from './lib/exec-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const MODEL = process.env.KERN_EVAL_MODEL || 'claude-sonnet-5-5';
@@ -26,6 +29,14 @@ try { opts = parseArgs(process.argv.slice(2), all.map((c) => c.id)); } catch (e)
   process.exit(2);
 }
 const cases = all.filter((c) => !opts.only || c.id === opts.only);
+const userSettings = !opts.dryRun && userSettingsProblem(process.env.HOME, {}) !== '';
+if (!opts.dryRun) {
+  const problem = userSettingsProblem(process.env.HOME, process.env);
+  if (problem) {
+    console.error(`exec-eval: ${problem}`);
+    process.exit(2);
+  }
+}
 
 function runCase(c) {
   const prompts = [...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn];
@@ -34,12 +45,14 @@ function runCase(c) {
     if (c.settings) { mkdirSync(join(dir, '.claude'), { recursive: true }); writeFileSync(join(dir, '.claude', 'kern.local.yml'), `${c.settings}\n`); }
     const log = join(dirname(dir), 'gh.log');
     writeFileSync(log, '');
+    const snapshot = join(dirname(dir), 'empty-shell-snapshot.sh');
+    writeFileSync(snapshot, '');
     let run;
     try {
       run = runClaude({
         // 60 turns: finish-branch runs its proof and a whole self-review before the size gate, and 30 was reached; the $3 budget still caps spend.
         cwd: dir, prompts, pluginDirs: [ROOT], model: MODEL, maxTurns: 60,
-        env: { PATH: `${join(ROOT, 'evals', 'exec', 'bin')}:${process.env.PATH}`, KERN_EXEC_LOG: log, KERN_EXEC_PR: c.pr || 'none', GH_TOKEN: 'invalid', GH_HOST: 'example.invalid' },
+        env: caseEnv({ bin: join(ROOT, 'evals', 'exec', 'bin'), path: process.env.PATH, log, pr: c.pr || 'none', snapshot }),
       });
     } catch (e) {
       if (!(e instanceof ClaudeRunError) || e.fatal) throw e;
@@ -64,14 +77,14 @@ function runCase(c) {
   }
 }
 
-function writeSnapshot(results) {
+function writeSnapshot(results, claude) {
   const out = join(ROOT, 'evals', 'snapshots', `exec-${new Date().toISOString().slice(0, 10)}.json`);
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify({ model: MODEL, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, results }, null, 2) + '\n');
+  writeFileSync(out, JSON.stringify(snapshotBody({ model: MODEL, claude, results, userSettings }), null, 2) + '\n');
   console.log(`snapshot: ${out}`);
 }
 
 process.exit(runEval({
-  cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, log: console.log,
+  cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion: claudeVersion, log: console.log,
   describe: (c) => `${c.id}: ${[...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn].map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
 }));

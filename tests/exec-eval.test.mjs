@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
-import { UsageError, exitCode, parseArgs, runEval } from '../scripts/lib/exec-run.mjs';
+import { UsageError, caseEnv, exitCode, parseArgs, runEval, snapshotBody, userSettingsProblem } from '../scripts/lib/exec-run.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
@@ -268,12 +268,14 @@ test('runProblem: only a clean exit with a success result may be graded', () => 
 });
 
 const result = (id, pass, invalid = false) => ({ id, pass, invalid, reasons: pass ? [] : ['why'] });
-const drive = ({ only = null, outcomes }) => {
-  const lines = [], snaps = [], ran = [];
+// drive: runEval with an injected runner. An outcome of 'invalid' is an invalid case.
+const drive = ({ only = null, outcomes, readVersion = () => 'claude 9.9.9' }) => {
+  const lines = [], snaps = [], ran = [], versions = [];
   const cases = [{ id: 'a' }, { id: 'b' }].filter((c) => !only || c.id === only);
-  const code = runEval({ cases, only, dryRun: false, describe: (c) => c.id, log: (l) => lines.push(l),
-    runCase: (c) => { ran.push(c.id); return result(c.id, outcomes[c.id]); }, writeSnapshot: (r) => snaps.push(r) });
-  return { code, lines, snaps, ran };
+  const code = runEval({ cases, only, dryRun: false, describe: (c) => c.id, log: (l) => lines.push(l), readVersion,
+    runCase: (c) => { ran.push(c.id); return outcomes[c.id] === 'invalid' ? result(c.id, false, true) : result(c.id, outcomes[c.id]); },
+    writeSnapshot: (r, v) => { snaps.push(r); versions.push(v); } });
+  return { code, lines, snaps, ran, versions };
 };
 
 test('exit code: 0 only when every case that ran passed, for a full run and a --case run alike', () => {
@@ -425,4 +427,58 @@ test('C2: the push graders need the branch tip on origin, the right commit count
   assert.equal(unpushed.pass, false, 'the setup commit pushed, the follow-up edit never committed');
   assert.deepEqual(unpushed.reasons, ['origin does not hold the branch tip: feat/sum was not pushed at its last commit', 'expected 2 commits on feat/sum, found 1', 'src/sum.js is not committed']);
   assert.equal(older(git({ 'rev-parse feat/sum': tip, 'rev-list --count main..feat/sum': '2' })).pass, false, 'nothing on origin at all');
+});
+
+test('snapshot: a full run where no case was valid writes none, so a same-day good snapshot survives', () => {
+  const allInvalid = drive({ outcomes: { a: 'invalid', b: 'invalid' } });
+  assert.deepEqual(allInvalid.snaps, []);
+  assert.equal(allInvalid.code, 1);
+  assert.match(allInvalid.lines.join('\n'), /no case was valid: no snapshot written/);
+  const oneValid = drive({ outcomes: { a: 'invalid', b: false } });
+  assert.equal(oneValid.snaps.length, 1, 'one valid case is a result worth keeping');
+});
+
+test('the claude version is read before the first case; a failure stops the run before anything is spent', () => {
+  const ok = drive({ outcomes: { a: true, b: true } });
+  assert.deepEqual(ok.versions, ['claude 9.9.9'], 'the snapshot gets the version read up front');
+  const broken = drive({ outcomes: { a: true, b: true }, readVersion: () => { throw new Error('spawnSync claude ENOENT'); } });
+  assert.deepEqual(broken.ran, [], 'no case ran');
+  assert.deepEqual(broken.snaps, []);
+  assert.equal(broken.code, 1);
+  assert.match(broken.lines.join('\n'), /cannot read the claude version \(spawnSync claude ENOENT\); nothing ran/);
+});
+
+test('isolation: the child reads an empty shell snapshot, never the host one', () => {
+  const env = caseEnv({ bin: '/k/evals/exec/bin', path: '/usr/bin', log: '/t/gh.log', pr: 'none', snapshot: '/t/empty-snapshot.sh' });
+  assert.equal(env.KERN_SHELL_SNAPSHOT, '/t/empty-snapshot.sh');
+  assert.equal(env.PATH, '/k/evals/exec/bin:/usr/bin');
+  assert.equal(childEnv({ PATH: '/p', KERN_SHELL_SNAPSHOT: '/host/snapshot-zsh-1.sh' }, env).KERN_SHELL_SNAPSHOT, '/t/empty-snapshot.sh');
+  assert.ok(!('KERN_SHELL_SNAPSHOT' in childEnv({ KERN_SHELL_SNAPSHOT: '/host/snapshot-zsh-1.sh' })), 'the host value is not inherited');
+  const cwd = work();
+  const r = runClaude({ cwd, prompts: ['hi'], model: 'm', env: { ...fakeClaude('env > env.txt; exit 0'), KERN_SHELL_SNAPSHOT: env.KERN_SHELL_SNAPSHOT } });
+  assert.equal(r.status, 0);
+  assert.match(readFileSync(join(cwd, 'env.txt'), 'utf8'), /^KERN_SHELL_SNAPSHOT=\/t\/empty-snapshot\.sh$/m);
+});
+
+test('isolation: a host ~/.claude/kern.yml refuses the run unless KERN_EXEC_ALLOW_USER_SETTINGS=1, and the snapshot says what a pass assumes', () => {
+  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  assert.equal(userSettingsProblem(home, {}), '');
+  mkdirSync(join(home, '.claude'));
+  writeFileSync(join(home, '.claude', 'kern.yml'), 'scope_threshold: 20\n');
+  assert.match(userSettingsProblem(home, {}), /kern\.yml.*KERN_EXEC_ALLOW_USER_SETTINGS=1/);
+  assert.equal(userSettingsProblem(home, { KERN_EXEC_ALLOW_USER_SETTINGS: '1' }), '');
+  const evalRun = (env) => spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/exec-eval.mjs', import.meta.url)), '--case', 'commit-work-file'],
+    { encoding: 'utf8', env: { PATH: '/nonexistent', HOME: home, ...env } });
+  const refused = evalRun({});
+  assert.equal(refused.status, 2);
+  assert.match(refused.stderr, /kern\.yml/);
+  assert.equal(refused.stdout, '', 'nothing ran');
+  const allowed = evalRun({ KERN_EXEC_ALLOW_USER_SETTINGS: '1' });
+  assert.equal(allowed.status, 1, 'allowed, it goes on to the version check, which finds no claude on PATH');
+  assert.match(allowed.stdout, /cannot read the claude version/);
+  assert.doesNotMatch(allowed.stdout, /PASS|FAIL|INVALID/);
+  const body = snapshotBody({ model: 'm', claude: 'v', results: [], userSettings: true });
+  assert.match(body.assumes, /Bash is pre-approved/);
+  assert.match(body.user_settings, /KERN_EXEC_ALLOW_USER_SETTINGS=1/);
+  assert.equal(snapshotBody({ model: 'm', claude: 'v', results: [], userSettings: false }).user_settings, 'none');
 });
