@@ -309,13 +309,13 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   b "if cd a; then ls; fi; if cd b; then ls; fi; if cd c; then ls; fi; if cd d; then ls; fi; if cd e; then ls; fi; ls notes.md"; none
 }
 
-@test "P21h sixty Markdown writes after four maybe cds are judged in under 6 s" {
+@test "P21h 110 Markdown writes after four maybe cds, 16 directories, are judged in under 10 s" {
   local i c="nice cd a; nice cd b; nice cd c; nice cd d; "
-  for i in $(seq 1 60); do c="${c}echo x >> notes$i.md; "; done
+  for i in $(seq 1 110); do c="${c}echo x >> notes$i.md; "; done
   local t0=$SECONDS
   b "$c"
   none
-  [ $((SECONDS - t0)) -lt 6 ] || { echo "took $((SECONDS - t0)) s"; return 1; }
+  [ $((SECONDS - t0)) -lt 10 ] || { echo "took $((SECONDS - t0)) s"; return 1; }
 }
 
 @test "P22 reads and kern's own scripts get no G20 vote" {
