@@ -625,3 +625,95 @@ CASES
   [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
   [ "$(wc -c <"$c")" -lt 100000 ]
 }
+
+# omz_snap: a snapshot shaped as Claude Code writes oh-my-zsh's git plugin: functions in `name () {`
+# blocks with tab-indented bodies, closed by a `}` in column 0, then the aliases.
+omz_snap() {
+  cat >"$SNAPS/snapshot-zsh-1791978476876-cqjrpm.sh" <<'SNAP'
+# Snapshot file
+unalias -a 2>/dev/null || true
+# Functions
+ggf () {
+	local b
+	[[ $# != 1 ]] && b="$(git_current_branch)" 
+	git push --force origin "${b:-$1}"
+}
+ggfl () {
+	local b
+	[[ $# != 1 ]] && b="$(git_current_branch)" 
+	git push --force-with-lease origin "${b:-$1}"
+}
+grename () {
+	if [[ -z "$1" || -z "$2" ]]
+	then
+		echo "Usage: $0 old_branch new_branch"
+		return 1
+	fi
+	git branch -m "$1" "$2"
+	if git push origin :"$1"
+	then
+		git push --set-upstream origin "$2"
+	fi
+}
+gbda () {
+	git branch --no-color --merged | command grep -vE "^([+*]|\s*($(git_main_branch))\s*$)" | command xargs git branch --delete 2> /dev/null
+}
+ghpv () {
+	gh pr view --web
+}
+mkcd () {
+	mkdir -p "$1" && cd "$1"
+}
+alias -- gst='git status'
+SNAP
+  touch -t 203001010000 "$SNAPS/snapshot-zsh-1791978476876-cqjrpm.sh"
+}
+
+@test "a shell function whose body runs git or gh asks, and under autopilot is denied" {
+  omz_snap
+  expect ask "ggf" "ggf feat" "ggfl" "grename feat x" "gbda" "ghpv"
+  all "ggf feat"
+  [[ "$output" == *"kern G1: git kern-shell-function"* ]] || false
+  all "ghpv"
+  [[ "$output" == *"kern G2: gh kern-shell-function"* ]] || false
+  set_autopilot on
+  expect deny "ggf" "ggf feat" "ggfl" "grename feat x" "gbda" "ghpv" "X=1 ggf feat" "true && grename feat x"
+}
+
+@test "a shell function with no git or gh word changes nothing" {
+  omz_snap
+  all "mkcd x"
+  local a="$output"
+  run env KERN_GUARDS= bash "$(noalias_hook)" <<<"$(bash_payload "mkcd x")"
+  [ "$a" = "$output" ] || { printf 'with: %s\nwithout: %s\n' "$a" "$output"; return 1; }
+  [ "$(decision_of "$a")" = none ]
+  set_autopilot on
+  all "mkcd x"
+  [ "$(decision_of "$output")" = none ]
+}
+
+@test "an alias whose head word is a function that runs git is judged as that function" {
+  snap 'ggf () {' '	git push --force origin "$1"' '}' "alias -- gff='ggf'"
+  expect ask "gff feat"
+  set_autopilot on
+  expect deny "gff feat"
+}
+
+@test "function lines have a parse bound of their own, and aliases after them still count" {
+  {
+    printf 'big () {\n'
+    i=0
+    while [ "$i" -lt 12000 ]; do printf '\techo %0100d\n' "$i"; i=$((i + 1)); done
+    printf '}\n'
+    printf 'late () {\n\tgit push --force\n}\n'
+    printf "alias -- gpf!='git push --force'\n"
+  } >"$SNAPS/snapshot-zsh-1791978476876-cqjrpm.sh"
+  touch -t 203001010000 "$SNAPS/snapshot-zsh-1791978476876-cqjrpm.sh"
+  expect none "big" "late"
+  expect deny "gpf! origin main"
+}
+
+@test "a function in bash's declare -f shape is read too" {
+  snap 'ggf () ' '{ ' '    git push --force origin "$1"' '}'
+  expect ask "ggf feat"
+}
