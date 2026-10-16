@@ -10,5 +10,6 @@
 - [ ] The repo has no `origin` remote: the base ref is the local base branch, said once, and the rebase check runs against it.
 - [ ] `origin/<base>` moved on a file the package changed since the merge base: the verdict is `rebase first`, and the skill rebases nothing.
 - [ ] The tree equals the merge base: wt-diff exits 3 and the skill says there is nothing to review.
-- [ ] A new guard test whose probe exits 3: the report says inconclusive and the verdict is `fix first`.
+- [ ] A new guard test whose probe exits 3 for any reason but a new module: the report says inconclusive and the verdict is `fix first`.
+- [ ] The branch adds `src/two.js` and `test/two.test.js`: the probe exits 3 on the missing module, the report says `probe inconclusive: new module`, a `--mutate` probe on the new code's condition runs, and that probe alone does not make the verdict `fix first`.
 - [ ] A second run on the same branch writes `<slug>-2.diff` and a since package; a finding in an added line of the since package, or a package newly over `scope_threshold` paths, gives `split`; the first run never does.

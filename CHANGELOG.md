@@ -13,7 +13,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - help: allows only the exact git commands it prescribes (`git remote -v`, `git rev-parse --git-common-dir`, `git check-ignore -q *`, `git worktree list`); `git remote *`, `git symbolic-ref *` and `git log *` could write config, move HEAD or run a program with no prompt.
 - Mode switches: "terse voice" and "terse mode on" switch; extra spaces are folded; a first line over 200 characters never switches.
 - Kernel: no is an acceptable answer, and chat in either voice skips the main AI tells; terse keeps existing comments and shows only changed code.
-- prove-it: evidence before any done, fixed or passing claim. Removes the M0 placeholder skill.
+- prove-it: evidence before any done, fixed or passing claim; a probe made inconclusive by a module or export the change adds, or a test-only patch, is reported as `probe inconclusive: new module` and the new code is proven with `probe --mutate`. Removes the M0 placeholder skill.
 - Agents implementer, task-reviewer and investigator.
 - floor-scan: the G7 check as a script, with a lowered-bar class and ratchet.<metric> settings keys.
 - Guard G18: kern's read-only investigator may run only allowlisted read commands.
@@ -25,7 +25,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - plan: approved spec to ordered tasks with exact files and verify commands, checked by plan-check.
 - parallel-work: fan out with one worktree per writer, checked briefs and serial integration.
 - execute-plan: ledger, per-task worktree snapshots and two-verdict review without commits; approval, review and RED checked by scripts.
-- self-review: deterministic checks, built-in code-review at low effort, a spec lane, blast radius, probes, verdict.
+- self-review: deterministic checks, built-in code-review at low effort, a spec lane, blast radius, probes, verdict. A guard test's probe that exits 3 because the branch adds the module or export it loads, or because the patch holds only test files, is reported as `probe inconclusive: new module` and does not fail the check; a `probe --mutate` on the new code is the proof, so a branch that adds a module with its test can reach a draft PR.
 - commit: named files, convention-checked message from a file under .kern/tmp, one commit per reviewed task run as `git -C <worktree> commit`, no attribution by default.
 - finish-branch: verify, self-review and size gate before the commit, push or draft PR menu; the PR has a title, a body under .kern/tmp and a dedup on the head commit. prove-it hands commits and PRs to these skills.
 - recall: rebuild state from kern working files, this project's transcripts and live state; replaces the user-level recall skill.

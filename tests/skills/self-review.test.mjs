@@ -44,6 +44,8 @@ test('self-review exits, order and dispatches', () => {
     '`{file}` or `{dir}` replaced by the one test file covering the change, no shell syntax', "one guard alone is implement's per-slice probe",
     '`<file>` is relative to `<wt>`', '`<line>` from the working file', 'probe inverts the first operator on that line',
     'probe exit 1 (no failure, or the mutation survived), 2 and 3 each fail the check', 'exit 3 is reported inconclusive, never as a pass',
+    'For each new guard test', 'But exit 3 for a module or export the patch adds, or a test-only patch, is `probe inconclusive: new module`, not a failure',
+    '`--mutate` on the new code proves it', 'finish-branch step 5',
     // dispatches
     '`kern:task-reviewer` on model `model.reviewer`', '`kern:investigator` on model `model.reviewer`', "the spec's acceptance lines stand in for the plan's acceptance lines and Review Focus",
     'where does this artifact fail this contract?', 'never your claim or reasoning', 'with absolute paths only', 'both absolute paths as scope',
@@ -71,7 +73,9 @@ test('self-review references', () => {
     assertHeadings(`${REF}/${f}`, hs);
     assertMaxBytes(`${REF}/${f}`, max);
   }
-  assertContains(`${REF}/claim-checks.md`, ['probe --exclude-tests', 'probe --mutate', 'probe: mutation caught', 'non-test changes reversed', "implement's per-slice probe", 'Exit 2 is a usage error']);
+  assertContains(`${REF}/claim-checks.md`, ['probe --exclude-tests', 'probe --mutate', 'probe: mutation caught', 'non-test changes reversed', "implement's per-slice probe", 'Exit 2 is a usage error',
+    'shows a guard test fails', 'except when its reason is a module or export the patch adds or the patch holds test files only: report `probe inconclusive: new module`',
+    'prove the new code with `--mutate` on its condition']);
   assertContains(`${REF}/rounds.md`, ['<reviews>/<slug>-<N+1>.diff', 'kern-dir reviews', 'the text after `..`', 'wt-diff <wt> <previous-tree> --out', 'means a first round', '`detached`']);
   assertContains(`${REF}/blast-radius.md`, ['You said so', 'You pointed at the line', 'You showed the bad case can\'t happen', 'You ran it', 'You reproduced it in the app', 'every writer', 'reader sweep only answers who breaks', 'feature flag', 'reported as unproven', 'or "unproven"', 'never make up a caller or an API', 'Paste what happened']);
   assertContains(`${REF}/doubt-cycle.md`, ['Never the claim', '- contract misread: ', '- actionable: a real fault', '- trade-off: ', '- noise: ', 'none was classed actionable', 'assume the author is overconfident', 'say explicitly when no fault turns up', 'under autopilot, park it', 'validating, not doubting', 'goes back to be split']);
