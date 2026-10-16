@@ -368,6 +368,33 @@ expect_cmd() {
     'git commit -m "G16: read .claude, .claude/kern.yml and settings.json"'
 }
 
+@test "a cd whose target kern cannot know keeps the .claude and sessions-dir reading; under autopilot it is denied" {
+  # No operand, -, +N, more than one operand, a word that expands, or a relative path after such a cd.
+  local cc=(
+    'cd ~/.claude && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i "" s/a/b/ settings.json'
+    'cd ~/.claude && cd $X && echo {} > settings.json' 'cd ~/.claude && cd - && echo {} > settings.json'
+    'cd ~/.claude && cd && echo {} > settings.json' 'cd ~/.claude && pushd && echo {} > settings.json'
+    'cd ~/.claude && cd +1 && echo {} > settings.json' 'cd ~/.claude && cd -- - && echo {} > settings.json'
+    'cd ~/.claude && cd ~/.c* && echo {} > settings.json' 'cd ~/.claude && cd ~me && echo {} > settings.json'
+    'cd ~/.claude && cd a b && echo {} > settings.json' 'cd ~/.claude && cd `pwd` && echo {} > settings.json'
+    'cd ~/.claude && cd "$X" && cd sub && echo {} > settings.json'
+  )
+  local sd=(
+    "cd $S && cd \"\$(pwd)\" && echo x > foo" "cd $S && cd - && echo x > foo" "cd $S && cd . && echo x > foo"
+    "cd $S && cd sub && echo x > foo" "cd $S && cd \$X && cd sub && echo x > foo"
+  )
+  expect_cmd ask "${cc[@]}"
+  expect_cmd deny "${sd[@]}"
+  set_autopilot on
+  expect_cmd deny "${cc[@]}"
+  set_autopilot off
+  # A cd to a known target that leaves the directory still ends the reading; an unknown cd from
+  # anywhere else adds none.
+  expect_cmd none 'cd ~/.claude && cd /tmp && echo {} > settings.json' 'cd ~/.claude && cd ~ && echo {} > settings.json' \
+    'cd .claude && ls && cd .. && git add .' "cd $S && cd /tmp && echo x > foo" \
+    'cd "$(git rev-parse --show-toplevel)" && sed -i "" s/a/b/ settings.json' 'cd $X && echo x > foo'
+}
+
 @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
   mkdir -p "$R/.claude"
   # The re-review's probes: a tracked file moved onto kern.local.yml, a removal, and diff --output.

@@ -336,12 +336,13 @@ _g16_redirects() {
 # redirect into state or a settings file counts
 # whatever the head. Every simple command is checked, including the bodies of bash -c, eval, $( ) and
 # backticks; here-doc bodies are data unless a shell reads them. After a cd into the sessions dir,
-# every later non-reading command and redirect counts as a write to it, until a cd elsewhere; after a
-# cd into a .claude directory, `.` and a bare settings.json or settings.local.json are in it. A
-# variable that holds a path is not read (accepted limit).
+# every later non-reading command and redirect counts as a write to it, until a cd to a known target
+# outside it; after a cd into a .claude directory, `.` and a bare settings.json or settings.local.json
+# are in it, until a cd to a known target. A cd whose target kern cannot know keeps both. A variable
+# that holds a path is not read (accepted limit).
 _g16_bash() {
-  local cmd t seg words w head inplace seg_s seg_k last dd skip anydir reads creads msg m
-  local state=0 settings=0 cc=0 into=0 in_sd=0
+  local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m
+  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
   cmd=$_G16_F
@@ -372,6 +373,7 @@ _g16_bash() {
     seg_s=0
     seg_k=""
     last=""
+    nop=0
     dd=0
     skip=0
     anydir=0
@@ -433,6 +435,7 @@ _g16_bash() {
         *)
           t=$w
           last=$w
+          nop=$((nop + 1))
           ;;
       esac
       [ -n "$t" ] && _g16_claude "$t" && anydir=1
@@ -447,8 +450,25 @@ WORDS
       sed | perl) [ "$inplace" = 1 ] || reads=1 ;;
       cd | pushd)
         reads=1
-        in_sd=$seg_s
-        if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi
+        # dk: 1 while kern knows the directory. A target is known when it is one operand that
+        # expands to nothing else: an absolute path, ~ or ~/path, or a relative path from a known
+        # directory. A cd to anything else (no operand, -, +N, two operands, ~user, a $, a glob)
+        # may stay where it is, so it keeps both readings and leaves the directory unknown.
+        case "$nop:$last" in
+          1:*[\$\`*?[\{^#]* | 1:*"$_GW_NL"* | 1:- | 1:+* | 1:=*) dk=0 ;;
+          1:/* | 1:'~' | 1:'~'/*) dk=1 ;;
+          1:'~'*) dk=0 ;;
+          1:*) ;;
+          *) dk=0 ;;
+        esac
+        if [ "$dk" = 1 ]; then
+          # A relative target may stay under the sessions dir.
+          case "$last" in /* | '~'*) in_sd=$seg_s ;; *) [ "$seg_s" = 0 ] || in_sd=1 ;; esac
+          if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi
+        else
+          [ "$seg_s" = 0 ] || in_sd=1
+          if _g16_into "$last"; then _G16_INCC=1; fi
+        fi
         ;;
     esac
     if [ "$reads" = 0 ] && { [ "$seg_s" = 1 ] || [ "$in_sd" = 1 ]; }; then state=1; fi
