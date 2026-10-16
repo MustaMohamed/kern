@@ -88,7 +88,8 @@ function hexname(name,    n, C, i, h) {
 }
 # fnend(): records the function being read when its body ran git or gh.
 function fnend() {
-  if (fn != "" && fk) {
+  # A function named git or gh stores nothing: the guards already judge the command by its head word.
+  if (fn != "" && fk && fn != "git" && fn != "gh") {
     if (!(fn in fv)) forder[++fcnt] = fn
     fv[fn] = fk == 1 ? GITF : fk == 2 ? GHF : GITF "; " GHF; fhx[fn] = fh
   }

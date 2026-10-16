@@ -717,3 +717,19 @@ SNAP
   snap 'ggf () ' '{ ' '    git push --force origin "$1"' '}'
   expect ask "ggf feat"
 }
+
+@test "a function named git or gh stores no expansion: git commands get the plain decision" {
+  rm -f "$SNAPS"/*
+  expect none "git status" "git diff --stat" "git log -1"
+  snap 'git () {' '	command git "$@"' '}' 'gh () {' '	command gh "$@"' '}'
+  expect none "git status" "git diff --stat" "git log -1" "git symbolic-ref -q --short HEAD"
+  set_autopilot on
+  expect none "git status" "git diff --stat" "git log -1"
+}
+
+@test "a git wrapper function leaves oh-my-zsh's ggf asking and denied under autopilot" {
+  snap 'git () {' '	command git "$@"' '}' 'ggf () {' '	git push --force origin "$1"' '}'
+  expect ask "ggf feat"
+  set_autopilot on
+  expect deny "ggf feat"
+}
