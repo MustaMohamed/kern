@@ -371,6 +371,14 @@ test('rule 16: scripts, WORK folders and ledger lines a skill names have a produ
   assert.deepEqual(f.map((x) => x.message.split(':')[0]), ['scripts/wt-gone', 'WORK/drafts', 'Task N']);
 });
 
+test('rule 16: a ledger line spelled `Task <N>` is looked up as `Task N`', () => {
+  const contract = '- `Task N: start tree=<id> at=<iso>`\n- `Task N: complete`\n';
+  const run = (text) => lint({ 'docs/plans/contract.md': contract, 'skills/c/SKILL.md': skill('c', manual(), `\n# c\n\n## Steps\n\n1. ${text}\n`) }).filter((x) => x.rule === 16).map((x) => x.message.split(':').slice(0, 2).join(':'));
+  assert.deepEqual(run('Write `Task <N>: start tree=<id> at=<iso>` and find a `Task <N>: complete` line.'), []);
+  assert.deepEqual(run('Write `Task <N>: done tree=<id>`.'), ['Task <N>: done tree=<id>'], 'drift in the angle-bracket spelling is caught');
+  assert.deepEqual(run('Find a `Task <N>: complete tree=<id> ...` line.'), ['Task <N>: complete tree=<id> ...']);
+});
+
 test('rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read', () => {
   const body = '\n# c\n\n## Steps\n\n1. Read WORK/drafts.\n';
   assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': skill('c', manual(), body) })), []);

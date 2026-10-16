@@ -31,6 +31,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - recall: rebuild state from kern working files, this project's transcripts and live state; replaces the user-level recall skill.
 - Kernel: M2's routes live in kernel/routes.md, which the Routing rule points to, for define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall; routing evals with fixed floors and a frozen held-out set; lint rule 12 and a standing-cost budget.
 - Session state keys, kern-dir names and worktree slugs are checked in the C locale, and G13 reads `nc` as a word the same way: in en_US.UTF-8, bash 3.2 matched `[a-z]` against upper-case letters and letters such as `é`, so `state_set` took the key `Voice`, `kern-dir Tmp` and a `café` slug passed, and G13 skipped `énc` (the first GitHub CI run on macOS failed on the state key).
+- Lint rule 16 reads a ledger line a skill spells `Task <N>: ...` as the contract's `Task N: ...`, so drift in that spelling is caught; commit's ledger reference now names the `Task <N>: complete` line the contract lists.
 - Hooks run git with no fsmonitor program and no repo hooks (git 2.31 or later). With an older git, or one whose version cannot be read, session-start says so in one line.
 
 ## [0.2.1] - 2026-10-14
