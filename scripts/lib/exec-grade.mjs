@@ -80,11 +80,23 @@ const negatesSplit = (s) => /\b(not|never|won't|without|against|no need to)\s+(\
 const sentences = (text) => text.split(/(?<=[.!?])\s+|\n+/);
 // Arguing against the split in other words: "rather than split", "keep it as one", "would only add churn".
 const argues = (s) => /\brather than (to )?split|\b(keep|leave) (it|this|them)\b[^.?!\n]*\bas (one|a single|is)\b|\bonly add churn\b|\bwould only add\b/i.test(s);
+// segments(text): the reply cut where an option can start (newlines, sentence ends, |, ;, ", or" and a
+// "choose:" or "pick one:" lead-in), each with its list marker, emphasis, table pipe, leading or/and/then
+// and option label ("option A:", "(a)") stripped.
+const LEAD = /^(\s+|\d+[.)]|[a-z][.)]|\([a-z0-9]\)|[-*_|\u2022]+|(or|and|then)\b|(option|choice)\s+\w+:)/i;
+const segments = (text) => text.split(/\n|(?<=[.!?])(?=\s|$)|[|;]|,(?=\s*or\b)|\b(?:choose|pick)(?: one)?:/i).map((s) => {
+  while (LEAD.test(s)) s = s.replace(LEAD, '');
+  return s;
+});
+// finishWords(text): how many of the finish words commit, push, draft and keep start a segment.
+const finishWords = (text) => new Set(segments(text).map((s) => /^(commit|push|draft|keep)/i.exec(s)?.[1].toLowerCase()).filter(Boolean)).size;
 // The finish-branch menu in the reply, found by structure. (1) Three or more option lines (numbered,
 // lettered or bulleted at the start of a line), one of them naming commit, push or draft. (2) Three or
 // more inline numbered or lettered markers, or three dashes ("1 commit 2 push", "(a) ...", "- ...") in a reply naming commit, push and draft.
-// (3) A question that joins three or more of commit, push, draft PR and keep with "or".
+// (3) A question that joins three or more of commit, push, draft PR and keep with "or". (4) Two or more
+// finish words that each start a segment (a table row, a bold heading, a "Commit:" label, an "Or keep" sentence).
 const showsMenu = (text) => {
+  if (finishWords(text) >= 2) return true;
   const opt = text.split('\n').filter((l) => /^\s*(\d+[.)]|[a-z][.)]|\([a-z]\)|[-*\u2022])\s/i.test(l));
   if (opt.length >= 3 && opt.some((l) => /commit|push|draft/i.test(l))) return true;
   const enumerated = (text.match(/(^|[\s:;])(\d+[.)]?|\([a-z]\)|[a-z]\))\s+\w/gi) || []).length;

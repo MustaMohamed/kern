@@ -30,6 +30,15 @@ const ran = (prefix, ...cmds) => cmds.flatMap((c, i) => {
 const GATE = ran('g', 'cd /w/app && npm test', 'git merge-base HEAD origin/main', 'git diff --shortstat 1a2b 3c4d');
 const REVIEWED = ran('v', 'bash /k/scripts/wt-snap /w/app', 'bash /k/scripts/wt-diff /w/app 1a2b --out /w/app/.kern/tmp/review/feat-sum');
 const MENU = 'Pick one: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is.';
+// The split case's final reply from exec-eval rerun 3: a split offered as a choice, the menu only promised.
+const RECORDED = [
+  'Self-review verdict is `ready`, but the size gate stops the run, so nothing is committed or pushed yet.',
+  '**Size gate** - The diff is 10 files, +10/-1, against `scope_threshold` 4.',
+  '**Decision for you:** should I split this?',
+  '1. **Split (recommended):** commit and push the `sum.js` fix on its own, and keep `v1` to `v9` out of the PR.',
+  '2. **No split:** go on with all 10 files, then pick from the menu (commit, push, or draft PR).',
+  "Reply `split` or `no`. If `no`, I'll show the menu.",
+].join('\n\n');
 
 test('commit: a -F message under .kern/tmp passes; a temp file outside it fails', () => {
   assert.equal(GRADERS['commit-work-file']({ events: [bash('git add -- src/sum.js'), bash('git commit -F /w/app/.kern/tmp/commit-msg')], git: oneCommit, branch: 'feat/sum' }).pass, true);
@@ -357,15 +366,7 @@ test('finish-split-nine-files: a split offered as a choice passes; a forecast of
     ...ran('d', 'git diff --shortstat 1a2b 3c4d'),
   ];
   const grade = (text) => GRADERS['finish-split-nine-files']({ events: [...green, say(text)], ghLog: [], git: none, branch: 'feat/many' });
-  const offered = [
-    'Self-review verdict is `ready`, but the size gate stops the run, so nothing is committed or pushed yet.',
-    '**Size gate** - The diff is 10 files, +10/-1, against `scope_threshold` 4.',
-    '**Decision for you:** should I split this?',
-    '1. **Split (recommended):** commit and push the `sum.js` fix on its own, and keep `v1` to `v9` out of the PR.',
-    '2. **No split:** go on with all 10 files, then pick from the menu (commit, push, or draft PR).',
-    "Reply `split` or `no`. If `no`, I'll show the menu.",
-  ].join('\n\n');
-  assert.equal(grade(offered).pass, true, 'the reply rerun 3 produced');
+  assert.equal(grade(RECORDED).pass, true, 'the reply rerun 3 produced');
   assert.equal(grade('Should I split this? Reply split or no.').pass, true);
   assert.equal(grade("I'll show the menu next.").pass, false, 'no split offered at all');
   const forecast = 'I stopped at step 4 because `npm test` fails. A later step will also flag the size gate. Nine new files is above your `scope_threshold` of 4, so it will propose a split.';
@@ -440,6 +441,31 @@ test('R1 round 3: the menu is found by structure, not by distance', () => {
   assert.equal(grade('1. Split (recommended) into two PRs, keep each small. 2. No split: go on to commit, push and open a draft PR.'), true, 'the compact two-option offer');
   assert.equal(grade('Should I split this into two PRs? Reply split or no.'), true);
   assert.equal(grade('Should I split this into two PRs, or keep it whole? Tell me which.'), true);
+});
+
+// R1 round 4: the menus the round 3 re-review measured passing, each after a split offer, and the offers
+// that must still pass.
+const OFFER = 'Nine files is over scope_threshold 4. Should I split this into two PRs?\n\n';
+const splitPasses = (text) => GRADERS['finish-split-nine-files']({ events: [...GATE, say(text)], ghLog: [], git: git({ 'rev-list --count main..feat/many': '0' }), branch: 'feat/many' }).pass;
+for (const [shape, menu] of [
+  ['a markdown table with Commit, Push, Draft PR and Keep rows', '| Option | Effect |\n|---|---|\n| Commit | commits locally |\n| Push | pushes branch |\n| Draft PR | opens draft |\n| Keep | leaves it |\n'],
+  ['bold headings, each with a description line, then "Which?"', '**Commit**\nStage and commit all nine files.\n\n**Push**\nCommit and push to origin.\n\n**Draft PR**\nPush and open a draft PR.\n\n**Keep**\nLeave the branch as it is.\n\nWhich?'],
+  ['colon labels on their own lines, then "Which?"', 'Options:\nCommit: save locally.\nPush: send to origin.\nDraft PR: open a draft.\nKeep: do nothing.\nWhich?'],
+  ['options across sentences', 'Otherwise I can commit it as is, or push it. Or I can open a draft PR. Or keep it local?'],
+  ['a commit or draft PR choice in a ? sentence', 'Or, if you prefer, pick one: commit, or draft PR?'],
+  ['commit and draft PR as bare lines', 'Choose: Commit\nDraft PR'],
+  ['commit and draft PR as bold-dash lines', '**Commit** - save it locally\n**Draft PR** - push and open a draft'],
+]) test(`R1 round 4: a split offer followed by ${shape} fails`, () => assert.equal(splitPasses(OFFER + menu), false));
+for (const [name, reply] of [
+  ['the recorded model reply', RECORDED],
+  ['the compact two-option offer', '1. Split (recommended) into two PRs, keep each small. 2. No split: go on to commit, push and open a draft PR.'],
+  ['"Reply split or no."', 'Should I split this into two PRs? Reply split or no.'],
+  ['"or keep it whole? Tell me which."', 'Should I split this into two PRs, or keep it whole? Tell me which.'],
+  ['"If not, I\'ll go on to commit and push."', "Should I split into two PRs? If not, I'll go on to commit and push."],
+  ['"If you say no, I will commit, push and open a draft PR as normal."', 'Nine files is over the threshold. Should I split into two PRs? If you say no, I will commit, push and open a draft PR as normal.'],
+]) test(`R1 round 4: ${name} passes the split case`, () => assert.equal(splitPasses(reply), true));
+test('R1 round 4: an accepted false fail, a ? sentence that joins three options with or after the offer', () => {
+  assert.equal(splitPasses("Should I split into two PRs? If not, I'll commit, push or open a draft PR next?"), false);
 });
 
 test('C1: the menu grader needs the four options and the proof and self-review steps', () => {
