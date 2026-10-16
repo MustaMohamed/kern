@@ -28,7 +28,10 @@ function thr(t, keys,   s, k, v) {
 function added_line(p, ln, t) {
   if (is_doc(p)) return
   if (t ~ /@ts-ignore|@ts-nocheck|@ts-expect-error|eslint-disable|biome-ignore|#[ ]*noqa|#[ ]*type:[ ]*ignore|istanbul ignore|c8 ignore|nosemgrep|gitleaks:allow|Stryker disable|@SuppressWarnings|\/\/[ ]*nolint|NOLINT|pylint:[ ]*disable|rubocop:disable|pyright:[ ]*ignore|pragma:[ ]*no cover|#[ ]*nosec|#\[allow\(|(^|[^A-Za-z_])as[ \t]+any([^A-Za-z0-9_]|$)|as[ \t]+unknown[ \t]+as[ \t]/) hit(p, ln, "silenced-checker", t)
-  if (t ~ /\.(skip|todo)[(.]|(^|[^A-Za-z0-9_.])(xit|xdescribe|xtest|fit|fdescribe)\(|\.only\(|@pytest\.mark\.(skip|xfail)|t\.Skip\(|@Disabled|@Ignore|#\[ignore\]/) hit(p, ln, "test-made-easier", t)
+  # A test runner's call (.skip(, .only(, fit() is read only in a test file: a query's .skip(10) or an
+  # estimator's def fit( is not a test made easier. Skip annotations count in any file.
+  if (is_test(p) && t ~ /\.(skip|todo)[(.]|(^|[^A-Za-z0-9_.])(xit|xdescribe|xtest|fit|fdescribe)\(|\.only\(/) hit(p, ln, "test-made-easier", t)
+  else if (t ~ /@pytest\.mark\.(skip|xfail)|t\.Skip\(|@Disabled|@Ignore|#\[ignore\]/) hit(p, ln, "test-made-easier", t)
   if (t ~ /catch[ ]*(\([^)]*\))?[ ]*\{[ ]*\}|except[^:]*:[ ]*pass[ ]*$|(^|[^A-Za-z])(TODO|FIXME)([^A-Za-z]|$)|[Nn]ot implemented|unimplemented!\(|todo!\(/) hit(p, ln, "unfinished-work", t)
   if (t ~ /console\.(log|debug|trace)\(|(^|[^A-Za-z0-9_.])debugger([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.])print\(|fmt\.Print(ln|f)?\(|binding\.pry|byebug|var_dump\(|dbg!\(|\[kern-dbg\]/) hit(p, ln, "debug-print", t)
   if (is_ci(p) && t ~ /continue-on-error:[ \t]*true|allow_failure:[ \t]*true|\|\|[ \t]*(true|exit 0|:)[ \t]*$/) hit(p, ln, "bar-lowered", t)

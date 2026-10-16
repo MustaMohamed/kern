@@ -209,3 +209,18 @@ count() { printf '%s\n' "$output" | grep -cE "$1" || true; }
   has $'^package\\.json:1\tbar-lowered\tthreshold lines moved from 90 to 50$'
   [ "$(count 'branches moved')" -eq 0 ]
 }
+
+@test "a query .skip(n) or a def fit( outside test files is clean; in a test file it still fires" {
+  printf "export async function page(n) {\n  return User.find().skip(10).limit(n);\n}\n" > src/a.js
+  printf 'class Model:\n    def fit(self, x):\n        return x\n' > model.py
+  scan
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ -z "$output" ]
+  git reset --quiet --hard
+  printf "test('page', async () => {\n  await User.find().skip(10);\n});\n" > test/page.test.js
+  printf 'def fit(x):\n    assert x\n' > test_model.py
+  scan
+  [ "$status" -eq 1 ]
+  has $'^test/page\\.test\\.js:2\ttest-made-easier\t'
+  has $'^test_model\\.py:1\ttest-made-easier\t'
+}
