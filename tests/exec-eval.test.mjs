@@ -5,11 +5,11 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
-import { UsageError, caseEnv, exitCode, parseArgs, replyDate, runEval, snapshotBody, userSettingsProblem, writeReply } from '../scripts/lib/exec-run.mjs';
+import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, userSettingsProblem, writeEvents, writeReply } from '../scripts/lib/exec-run.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
@@ -635,4 +635,76 @@ test('E3: the size gate is a stat diff over two revisions or a range, after the 
   assert.equal(sizeGateRan(ran('f', 'cd /w/app && npm test', ['git diff --shortstat c010ab6 1efaabe', false])), false, 'a diff that failed');
   assert.equal(sizeGateRan(ran('r', ...OCT16_SPLIT)), false, 'the recorded run still fails');
   assert.equal(sizeGateRan(ran('p', ...OCT16_SPLIT, 'git diff --shortstat c010ab6 1efaabe')), true, 'the same run with the prescribed command');
+});
+
+// E4: kern's own state decides whether an autopilot case tested autopilot. No model call: the run is built here.
+const init = (sid) => ({ type: 'system', subtype: 'init', session_id: sid });
+const DONE = { type: 'result', subtype: 'success', is_error: false, result: 'done' };
+const SID = 'a7349ad5-0f2e-4c3b-9d1a-000000000001';
+// configWith(sid, text): a temp config dir whose kern-inline state file for sid holds text (none when null).
+const configWith = (sid, text) => {
+  const cfg = mkdtempSync(join(tmpdir(), 'cfg-'));
+  if (text !== null) {
+    const f = kernStateFile(cfg, sid);
+    mkdirSync(dirname(f), { recursive: true });
+    writeFileSync(f, text);
+  }
+  return cfg;
+};
+// The run's own final state for commit-work-file on 2026-10-16: a reset after /kern:autopilot on.
+const OCT16_OFF = 'voice: normal\nsurface: auto\nautopilot: off\nsince: 2026-10-16T18:37:29Z\nprompt_hashes: 886260830\n';
+
+test('E4: the session id comes from the stream\'s system/init event; the state file is under the config dir\'s kern-inline data', () => {
+  assert.equal(sessionId([init(SID), { type: 'assistant', session_id: 'other' }, init(SID), DONE]), SID);
+  assert.equal(sessionId([DONE]), '', 'no init event');
+  assert.equal(sessionId([init(SID), init('b2')]), '', 'two ids: which session the hooks wrote is unknown');
+  assert.equal(kernStateFile('/c', SID), `/c/plugins/data/kern-inline/sessions/${SID}.state`);
+  assert.equal(claudeConfigDir({ CLAUDE_CONFIG_DIR: '/x/.claude-kern-eval', HOME: '/h' }), '/x/.claude-kern-eval');
+  assert.equal(claudeConfigDir({ HOME: '/h' }), '/h/.claude');
+});
+
+test('E4: an autopilot case whose kern state does not read autopilot: on is INVALID, not FAIL, whatever the grader says', () => {
+  const c = { id: 'commit-work-file', autopilot: true, branch: 'feat/sum' };
+  const run = { status: 0, badLines: 0, stderr: '', events: [init(SID), DONE] };
+  const graded = (verdict) => ({ 'commit-work-file': () => verdict });
+  const FAILED = { pass: false, reasons: ['src/sum.js is not committed'] };
+  const grade = (cfg, { cc = c, verdict = FAILED, events = run.events } = {}) => gradeCase({ c: cc, run: { ...run, events }, ghLog: [], git: () => '', configDir: cfg, graders: graded(verdict) });
+  const off = grade(configWith(SID, OCT16_OFF));
+  assert.equal(off.invalid, true);
+  assert.equal(off.pass, false);
+  assert.match(off.reasons[0], new RegExp(`^autopilot was not on in kern's hooks: .*/kern-inline/sessions/${SID}\\.state says autopilot: off$`));
+  assert.equal(grade(configWith(SID, OCT16_OFF), { verdict: { pass: true, reasons: [] } }).invalid, true, 'a pass with autopilot off did not test autopilot');
+  assert.deepEqual(grade(configWith(SID, 'voice: normal\nautopilot: on\nsince: x\n')), FAILED, 'with autopilot on, the grader decides');
+  assert.deepEqual(grade(configWith(SID, 'autopilot: on\nautopilot: off\n')).invalid, true, 'the last line wins, as state_get reads it');
+  const missing = grade(configWith(SID, null));
+  assert.equal(missing.invalid, true);
+  assert.match(missing.reasons[0], /^autopilot was not on in kern's hooks: cannot read .*\.state \(ENOENT\)$/);
+  assert.match(grade(configWith(SID, OCT16_OFF), { events: [DONE] }).reasons[0], /no single session id/);
+  assert.match(grade(configWith(SID, OCT16_OFF), { events: [init('../../x'), DONE] }).reasons[0], /not a session id kern uses/);
+  assert.deepEqual(grade(configWith(SID, OCT16_OFF), { cc: { ...c, autopilot: false } }), FAILED, 'a case without autopilot never reads the state');
+  assert.match(gradeCase({ c, run: { ...run, status: 1, stderr: 'boom' }, ghLog: [], git: () => '', configDir: '/nonexistent', graders: graded(FAILED) }).reasons[0], /claude exited 1/, 'an invalid run stays invalid for its own reason');
+  assert.equal(autopilotProblem([init(SID), DONE], configWith(SID, 'autopilot: on\n')), '');
+});
+
+test('E4: a run saves each case\'s stream-json events next to its reply, best-effort, and a dry run writes none', () => {
+  const root = mkdtempSync(join(tmpdir(), 'events-'));
+  const dir = join(root, 'exec-2026-10-16');
+  const events = [init(SID), { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', is_error: true, content: 'kern G5: attribution trailer present' }] } }, DONE];
+  const lines = [];
+  const drive = (saveEvents, dryRun = false) => runEval({ cases: [{ id: 'a' }, { id: 'b' }], only: null, dryRun, describe: (c) => c.id, log: (l) => lines.push(l), readVersion: () => 'v',
+    repliesDir: dir, saveReply: (id, reply, reason) => writeReply(dir, id, reply, reason), saveEvents, writeSnapshot: () => {},
+    runCase: (c, save) => { save({ reply: `reply ${c.id}`, events }); return result(c.id, true); } });
+  assert.equal(drive(undefined, true), 0);
+  assert.equal(existsSync(dir), false, 'a dry run writes nothing');
+  assert.equal(drive((id, ev) => writeEvents(dir, id, ev)), 0);
+  const saved = readFileSync(join(dir, 'a.events.jsonl'), 'utf8');
+  assert.ok(saved.endsWith('\n'));
+  assert.deepEqual(saved.trimEnd().split('\n').map((l) => JSON.parse(l)), events, 'one event per line, tool results included');
+  assert.equal(readFileSync(join(dir, 'b.txt'), 'utf8'), 'reply b\n');
+  lines.length = 0;
+  assert.equal(drive((id) => { if (id === 'a') throw new Error('disk full'); }), 0, 'a failed events write changes nothing in the run');
+  assert.ok(lines.includes('replies: could not write a events: disk full'));
+  assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'reply a\n', 'the reply is still written');
+  writeEvents(root, 'empty', []);
+  assert.equal(readFileSync(join(root, 'empty.events.jsonl'), 'utf8'), '');
 });

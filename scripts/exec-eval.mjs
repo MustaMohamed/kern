@@ -3,7 +3,9 @@
 // and a gh stub, graded from the tool calls, the stub's call log and git state. Spends tokens: ask the
 // user before a run. Usage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]
 // Each case's final reply goes to evals/results/exec-<date>/<id>.txt (gitignored), or (no reply: <why>) for
-// an invalid case; the last line prints the directory; a --dry-run writes none.
+// an invalid case, and its stream-json events, tool results included, to <id>.events.jsonl beside it; the
+// last line prints the directory; a --dry-run writes none. A case that turns autopilot on is INVALID when
+// kern's state file for the run's session does not read autopilot: on at the end: it did not test autopilot.
 // A full run writes evals/snapshots/exec-<date>.json (committed) with the model, the Claude Code version,
 // the isolation flags, what a pass assumes and each case's result; a --case run, or a run where no case
 // was valid, writes none. The Claude Code version is read before the first case, and a failure stops the
@@ -15,9 +17,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ClaudeRunError, claudeVersion, finalText, runClaude, runProblem, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
-import { GRADERS, stubMissed } from './lib/exec-grade.mjs';
-import { UsageError, caseEnv, dateStamp, parseArgs, runEval, snapshotBody, userSettingsProblem, writeReply } from './lib/exec-run.mjs';
+import { ClaudeRunError, claudeVersion, finalText, runClaude, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
+import { GRADERS } from './lib/exec-grade.mjs';
+import { UsageError, caseEnv, claudeConfigDir, dateStamp, gradeCase, parseArgs, runEval, snapshotBody, userSettingsProblem, writeEvents, writeReply } from './lib/exec-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const MODEL = process.env.KERN_EVAL_MODEL || 'claude-sonnet-5-5';
@@ -66,16 +68,8 @@ function runCase(c, save) {
     }
     const ghLog = readFileSync(log, 'utf8').split('\n').filter(Boolean);
     const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', timeout: 60 * 1000 }).trim();
-    const missed = stubMissed(run.events, ghLog);
-    let g;
-    const problem = runProblem(run);
-    if (problem) g = { pass: false, invalid: true, reasons: [problem] };
-    else if (missed.length) g = { pass: false, invalid: true, reasons: [`the stub never logged \`gh ${missed[0]}\`: the Bash tool did not see evals/exec/bin first on PATH`] };
-    else {
-      try { g = GRADERS[c.id]({ events: run.events, ghLog, git, branch: c.branch }); }
-      catch (e) { g = { pass: false, invalid: true, reasons: [`grader error: ${e.message}`] }; }
-    }
-    save(g.invalid ? { reason: g.reasons[0] } : { reply: finalText(run.events) });
+    const g = gradeCase({ c, run, ghLog, git, configDir: claudeConfigDir(process.env) });
+    save({ ...(g.invalid ? { reason: g.reasons[0] } : { reply: finalText(run.events) }), events: run.events });
     return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
       commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command) };
   } finally {
@@ -92,6 +86,7 @@ function writeSnapshot(results, claude) {
 }
 
 process.exit(runEval({
-  cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion: claudeVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason), log: console.log,
+  cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion: claudeVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason),
+  saveEvents: (id, events) => writeEvents(REPLIES, id, events), log: console.log,
   describe: (c) => `${c.id}: ${[...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn].map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
 }));

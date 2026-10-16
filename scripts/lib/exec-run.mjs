@@ -2,9 +2,11 @@
 // drive it with an injected runner: argument checking, the order of results, the snapshot rule and the
 // one place the exit code is decided.
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { ISOLATION, PERMISSIONS } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, runProblem } from './claude-run.mjs';
+import { GRADERS, stubMissed } from './exec-grade.mjs';
 
 export class UsageError extends Error {}
 
@@ -46,6 +48,58 @@ export function writeReply(dir, id, reply, reason) {
   writeFileSync(join(dir, `${id}.txt`), body);
 }
 
+// writeEvents(dir, id, events): <dir>/<id>.events.jsonl holds the run's stream-json events, one per line,
+// tool results included, so a deny reason the model never repeated can be read after the run.
+export function writeEvents(dir, id, events) {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${id}.events.jsonl`), events.map((e) => `${JSON.stringify(e)}\n`).join(''));
+}
+
+// claudeConfigDir(env): the config dir the child claude uses, which childEnv passes through.
+export const claudeConfigDir = (env) => env.CLAUDE_CONFIG_DIR || join(env.HOME || homedir(), '.claude');
+
+// sessionId(events): the session id the stream's system/init events name, or '' when there is none or
+// they name more than one.
+export function sessionId(events) {
+  const ids = new Set(events.filter((e) => e?.type === 'system' && e.subtype === 'init' && typeof e.session_id === 'string').map((e) => e.session_id));
+  return ids.size === 1 ? [...ids][0] : '';
+}
+
+// kernStateFile(configDir, sid): kern's state file for session sid when kern is loaded with --plugin-dir,
+// whose CLAUDE_PLUGIN_DATA is <config dir>/plugins/data/kern-inline.
+export const kernStateFile = (configDir, sid) => join(configDir, 'plugins', 'data', 'kern-inline', 'sessions', `${sid}.state`);
+
+// autopilotProblem(events, configDir, read): why kern's hooks did not hold autopilot on at the end of the
+// run, or ''. It reads the session's state file the way state_get does: the last `autopilot: ` line.
+export function autopilotProblem(events, configDir, read = (f) => readFileSync(f, 'utf8')) {
+  const why = "autopilot was not on in kern's hooks";
+  const sid = sessionId(events);
+  if (!sid) return `${why}: the stream has no single session id in a system/init event, so kern's state cannot be read`;
+  if (!/^[A-Za-z0-9_-]+$/.test(sid)) return `${why}: ${JSON.stringify(sid)} is not a session id kern uses`;
+  const f = kernStateFile(configDir, sid);
+  let text;
+  try { text = read(f); } catch (e) { return `${why}: cannot read ${f} (${e.code || e.message})`; }
+  const v = [...text.matchAll(/^autopilot: (.*)$/gm)].pop()?.[1];
+  return v === 'on' ? '' : `${why}: ${f} says autopilot: ${v ?? '(unset)'}`;
+}
+
+// gradeCase({ c, run, ghLog, git, configDir, graders, read }): a case's verdict. INVALID when the run
+// may not be graded (runProblem), when the gh stub missed a call, or, for a case that turns autopilot on,
+// when kern's state for the run does not read autopilot: on (the run did not test autopilot, whatever
+// it did); else the case's grader decides, and a grader that throws is INVALID too.
+export function gradeCase({ c, run, ghLog, git, configDir, graders = GRADERS, read }) {
+  const invalid = (why) => ({ pass: false, invalid: true, reasons: [why] });
+  const problem = runProblem(run);
+  if (problem) return invalid(problem);
+  const missed = stubMissed(run.events, ghLog);
+  if (missed.length) return invalid(`the stub never logged \`gh ${missed[0]}\`: the Bash tool did not see evals/exec/bin first on PATH`);
+  if (c.autopilot) {
+    const off = autopilotProblem(run.events, configDir, read);
+    if (off) return invalid(off);
+  }
+  try { return graders[c.id]({ events: run.events, ghLog, git, branch: c.branch }); } catch (e) { return invalid(`grader error: ${e.message}`); }
+}
+
 // parseArgs(args, ids): { only, dryRun }. A --case with no value or an id no case has is a usage
 // error: an unrecognised argument must never widen into a paid run of every case.
 export function parseArgs(args, ids) {
@@ -70,8 +124,9 @@ export const exitCode = (results) => (results.length > 0 && results.every((r) =>
 // version first, so a failure there stops the run before any case is paid for; then runs the cases in
 // order, writes the snapshot (results, version) only for a full run with at least one valid case, so an
 // all-INVALID run never replaces a same-day snapshot, and returns the exit code for every non-dry run
-// alike. Each runCase gets a save({ reply, reason }) to call before its workspace goes; the last line names the replies directory.
-export function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, repliesDir, log }) {
+// alike. Each runCase gets a save({ reply, reason, events }) to call before its workspace goes; it saves the
+// reply, then the events when saveEvents is given; the last line names the replies directory.
+export function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, saveEvents, repliesDir, log }) {
   if (dryRun) {
     for (const c of cases) log(describe(c));
     return 0;
@@ -84,11 +139,15 @@ export function runEval({ cases, only, dryRun, runCase, describe, readVersion, w
   const results = [];
   for (const c of cases) {
     // Best effort: a failed write is logged, never thrown, so it cannot end a paid run or hide a verdict.
-    const save = ({ reply, reason } = {}) => {
+    const attempt = (what, write) => {
       try {
         if (!/^[\w.-]+$/.test(c.id)) throw new Error('case id is not a safe file name');
-        saveReply(c.id, reply, reason);
-      } catch (e) { log(`replies: could not write ${c.id}: ${e.message}`); }
+        write();
+      } catch (e) { log(`replies: could not write ${c.id}${what}: ${e.message}`); }
+    };
+    const save = ({ reply, reason, events } = {}) => {
+      attempt('', () => saveReply(c.id, reply, reason));
+      if (events && saveEvents) attempt(' events', () => saveEvents(c.id, events));
     };
     const r = runCase(c, save);
     results.push(r);
