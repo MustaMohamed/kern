@@ -726,16 +726,21 @@ $(git_words "$cmd")
 CMD
   # A command that writes a Markdown file and also names a file holding a status: approved line, in its
   # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file). Each path is
-  # read once, the first 64 per directory G20 follows.
+  # read once; past 1024 of them the command is denied, since the rest would go unread.
   if [ -z "$_G20_WHY" ] && [ "$_G20_WRITES" = 1 ]; then
-    while IFS= read -r s; do
-      if _g20_holds "$s"; then
-        _G20_WHY="the command writes a Markdown file and names $(basename "$s"), which holds a status: approved line, so it can copy an approval past the quote check; $_G20_USE_TOOL"
-        break
-      fi
-    done <<SRC
-$(printf '%s\n' ${_G20_SRC[@]+"${_G20_SRC[@]}"} | LC_ALL=C awk '!s[$0]++' | head -n 1024)
+    s=$(printf '%s\n' ${_G20_SRC[@]+"${_G20_SRC[@]}"} | LC_ALL=C awk '!s[$0]++')
+    if [ "$(printf '%s\n' "$s" | wc -l)" -gt 1024 ]; then
+      _G20_WHY="the command writes a Markdown file and names more files than G20 reads (1024), so one could copy an approval past the quote check; write fewer files per call"
+    else
+      while IFS= read -r t; do
+        if _g20_holds "$t"; then
+          _G20_WHY="the command writes a Markdown file and names $(basename "$t"), which holds a status: approved line, so it can copy an approval past the quote check; $_G20_USE_TOOL"
+          break
+        fi
+      done <<SRC
+$s
 SRC
+    fi
   fi
   [ -z "$_G20_WHY" ] || vote deny G20 "$_G20_WHY"
   return 0

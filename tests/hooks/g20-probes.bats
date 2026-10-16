@@ -309,13 +309,29 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   b "if cd a; then ls; fi; if cd b; then ls; fi; if cd c; then ls; fi; if cd d; then ls; fi; if cd e; then ls; fi; ls notes.md"; none
 }
 
-@test "P21h 110 Markdown writes after four maybe cds, 16 directories, are judged in under 10 s" {
-  local i c="nice cd a; nice cd b; nice cd c; nice cd d; "
+@test "P21h G20 reads each record once, not once per directory: 110 writes over 16 directories run few awks" {
+  local i real n c="nice cd a; nice cd b; nice cd c; nice cd d; "
   for i in $(seq 1 110); do c="${c}echo x >> notes$i.md; "; done
-  local t0=$SECONDS
-  b "$c"
+  # An awk shim counts the runs. Reading a record costs a few awks; reading it again from each of the 16
+  # directories would cost over 1,760 more, so the bound is three per record.
+  real=$(command -v awk)
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/bash\necho x >>"%s/awk.log"\nexec %s "$@"\n' "$BATS_TEST_TMPDIR" "$real" >"$BATS_TEST_TMPDIR/bin/awk"
+  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH" b "$c"
   none
-  [ $((SECONDS - t0)) -lt 10 ] || { echo "took $((SECONDS - t0)) s"; return 1; }
+  n=$(wc -l <"$BATS_TEST_TMPDIR/awk.log")
+  [ "$n" -le $((3 * 114)) ] || { echo "$n awk runs for 114 records"; return 1; }
+}
+
+@test "P21i a write that names more than 1024 files is denied; a read is not" {
+  prep "$R/src.md"
+  local i w=""
+  for i in $(seq 0 1029); do w="$w a$i"; done
+  b "cat$w src.md > dst.md"; deny
+  [[ "$output" == *"more files than G20 reads"* ]] || false
+  b "cat$w src.md"; none
+  b "cat a1 src.md > dst.md"; deny
 }
 
 @test "P22 reads and kern's own scripts get no G20 vote" {
