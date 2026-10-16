@@ -628,7 +628,9 @@ test('E3: the size gate is a stat diff over two revisions or a range, after the 
   }
   for (const no of ['git diff --shortstat', 'git diff --shortstat HEAD', 'git diff --stat', 'git diff --numstat HEAD -- src', 'git diff --cached --shortstat',
     'git diff --shortstat $(git merge-base HEAD origin/main)', 'git diff c010ab6 1efaabe', 'git diff --name-only c010ab6 1efaabe', 'git diff --no-index --stat a.js b.js',
-    'bash /k/scripts/wt-diff . c010ab6', 'bash /k/scripts/wt-diff /w/app c010ab6 --out /w/app/.kern/tmp/review/x']) {
+    'bash /k/scripts/wt-diff . c010ab6', 'bash /k/scripts/wt-diff /w/app c010ab6 --out /w/app/.kern/tmp/review/x',
+    'git diff --stat HEAD .', 'git diff --shortstat origin/main src/', 'git diff --numstat a.js b.js', 'git diff --stat HEAD~0 ./src',
+    'git diff --stat HEAD ../app', 'git diff --stat c010ab6 :src/sum.js', 'git diff --shortstat c010ab6 src/sum.js']) {
     assert.equal(after(no), false, no);
   }
   assert.equal(sizeGateRan(ran('b', 'git diff --shortstat c010ab6 1efaabe', 'cd /w/app && npm test')), false, 'before the green test');
@@ -707,4 +709,21 @@ test('E4: a run saves each case\'s stream-json events next to its reply, best-ef
   assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'reply a\n', 'the reply is still written');
   writeEvents(root, 'empty', []);
   assert.equal(readFileSync(join(root, 'empty.events.jsonl'), 'utf8'), '');
+});
+
+test('fix round 1 (I1): with the fixture repo, a literal word counts as a revision only when git resolves it to a tree', () => {
+  // The fake answers rev-parse for main, feat/many, a tree id and a tag with a dot; any other word is not a revision.
+  const repo = git({ 'rev-parse --verify -q main^{tree}': 't1', 'rev-parse --verify -q feat/many^{tree}': 't2', 'rev-parse --verify -q 1efaabe^{tree}': 't3',
+    'rev-parse --verify -q release.next^{tree}': 't4' });
+  const after = (cmd, g = repo) => sizeGateRan(ran('s', 'cd /w/app && npm test', cmd), g);
+  for (const yes of ['git diff --shortstat main feat/many', 'git diff --stat main 1efaabe', 'git diff --numstat release.next 1efaabe', 'git diff --shortstat $MB $T',
+    'git diff --shortstat $(git merge-base HEAD origin/main) 1efaabe', 'git diff --stat origin/main...1efaabe']) assert.equal(after(yes), true, yes);
+  for (const no of ['git diff --stat main src', 'git diff --shortstat feat/many docs', 'git diff --numstat main notes.md', 'git diff --stat HEAD .']) assert.equal(after(no), false, no);
+  const throwing = (...a) => { if (a[0] === 'rev-parse' && a[3] !== 'main^{tree}') throw new Error('exit 1'); return 't'; };
+  assert.equal(after('git diff --stat main src', throwing), false, 'a rev-parse that exits 1 (execFileSync throws) is not a revision');
+  assert.equal(after('git diff --stat main 1a2b3c4', throwing), true, 'a hex id needs no lookup');
+  const grade = (cmd) => GRADERS['finish-split-nine-files']({ events: [...ran('s', 'cd /w/app && npm test', cmd), say(OFFER)], ghLog: [],
+    git: (...a) => (a[0] === 'rev-list' ? '0' : repo(...a)), branch: 'feat/many' });
+  assert.equal(grade('git diff --shortstat main feat/many').pass, true);
+  assert.deepEqual(grade('git diff --shortstat main src').reasons, ['the size gate never ran: no git diff --shortstat, --stat or --numstat over two revisions after a green test command']);
 });

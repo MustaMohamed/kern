@@ -129,9 +129,9 @@ export function bashRuns(events) {
 }
 
 const TEST_CMD = /\b(npm|yarn|pnpm|npx|node)\b[^|;&]*\btest\b/;
-// diffRevs(args): the revision words of a git diff: its words that are not options, up to a `--`. A
-// `$( )` that shellSegments split into words counts as one word.
-const diffRevs = (args) => {
+// diffWords(args): the words of a git diff that are not options, up to a `--`. A `$( )` that
+// shellSegments split into words counts as one word.
+const diffWords = (args) => {
   const out = [];
   let depth = 0;
   for (const a of args) {
@@ -144,22 +144,44 @@ const diffRevs = (args) => {
   }
   return out;
 };
-// statOverRange(g): g is a git diff that prints sizes (--shortstat, --stat, --stat=<n> or --numstat) over
-// two revisions or one A..B or A...B range. A diff against the working tree or the index sees only
-// tracked changes, so it is not step 6's measure.
-const statOverRange = (g) => {
+// A word only a path can be: `.`, `..`, `./x`, `../x`, `:x` (a pathspec magic), or one ending in `/`.
+const PATH_ONLY = /^(\.\.?(\/.*)?|:.*|.*\/)$/;
+// A word only a revision can be: a hex object id, HEAD and its relatives, or one with ~, ^ or @{.
+const REV_ONLY = /^([0-9a-f]{4,40}|HEAD)$|[~^]|@\{/;
+// A last path segment with a file extension (`sum.js`, `notes.md`), read as a path unless git says otherwise.
+const FILE_EXT = /\.[A-Za-z][A-Za-z0-9_-]*$/;
+// isRevision(w, git): w names a commit or tree, not a path. A `$VAR` or `$( )` word is taken as a
+// revision: its value is not known. A range (A..B, A...B) is handled by the caller. With git (the
+// fixture repo), a literal word that could be either is a revision only when `git rev-parse --verify -q
+// <w>^{tree}` resolves it; ^{tree}, not ^{commit}, since step 6's <tree> is wt-snap's tree object. A git
+// that throws (execFileSync on exit 1) or prints nothing says no. Without git, a word with a file
+// extension is a path and any other literal word a revision.
+const isRevision = (w, git) => {
+  if (w.includes('$')) return true;
+  if (PATH_ONLY.test(w)) return false;
+  if (REV_ONLY.test(w)) return true;
+  if (!git) return !FILE_EXT.test(w.replace(/.*\//, ''));
+  try { return git('rev-parse', '--verify', '-q', `${w}^{tree}`) !== ''; } catch { return false; }
+};
+const isRange = (w) => /\.\./.test(w) && !PATH_ONLY.test(w);
+// statOverRange(g, git): g is a git diff that prints sizes (--shortstat, --stat, --stat=<n> or --numstat)
+// over two revisions or one A..B or A...B range, with no path word. A diff against the working tree or
+// the index sees only tracked changes, and a path narrows it, so neither is step 6's measure.
+const statOverRange = (g, git) => {
   if (g.sub !== 'diff' || g.args.includes('--no-index')) return false;
   if (!g.args.some((a) => a === '--shortstat' || a === '--stat' || a === '--numstat' || a.startsWith('--stat='))) return false;
-  const revs = diffRevs(g.args);
-  return revs.length === 2 || (revs.length === 1 && revs[0].includes('..'));
+  const words = diffWords(g.args);
+  if (words.length === 1) return isRange(words[0]);
+  return words.length === 2 && words.every((w) => !isRange(w) && isRevision(w, git));
 };
-// sizeGateRan(events): finish-branch step 6 ran: a stat diff over two revisions (statOverRange) that
-// succeeded after a test command that went green. Self-review's wt-diff is not counted: every finish run
-// runs it in step 5, so it cannot show that step 6 ran.
-export function sizeGateRan(events) {
+// sizeGateRan(events, git): finish-branch step 6 ran: a stat diff over two revisions (statOverRange) that
+// succeeded after a test command that went green. git, the fixture repo's git, settles a word that could
+// be a path or a revision. Self-review's wt-diff is not counted: every finish run runs it in step 5, so
+// it cannot show that step 6 ran.
+export function sizeGateRan(events, git) {
   const runs = bashRuns(events);
   const green = runs.findIndex((r) => r.ok && TEST_CMD.test(r.command));
-  return green >= 0 && runs.slice(green + 1).some((r) => r.ok && gitCalls([r.command]).some(statOverRange));
+  return green >= 0 && runs.slice(green + 1).some((r) => r.ok && gitCalls([r.command]).some((g) => statOverRange(g, git)));
 }
 // reviewRan(events): finish-branch steps 4 and 5 ran: a wt-snap call and a self-review package (wt-diff
 // with --out), both succeeding.
@@ -244,7 +266,7 @@ export const GRADERS = {
   ]),
   'finish-split-nine-files': ({ events, ghLog, git, branch }) => check([
     [!stoppedOnRedProof(events), 'the proof step went red, so the run never reached the size gate'],
-    [stoppedOnRedProof(events) || sizeGateRan(events), 'the size gate never ran: no git diff --shortstat, --stat or --numstat over two revisions after a green test command'],
+    [stoppedOnRedProof(events) || sizeGateRan(events, git), 'the size gate never ran: no git diff --shortstat, --stat or --numstat over two revisions after a green test command'],
     [offersSplitToUser(finalText(events)), 'no split offered for the user to answer, for nine files over scope_threshold 4'],
     [!pushes(bash(events)) && !ghLog.some((l) => l.startsWith('pr create')), 'pushed or opened a PR'],
     [git('rev-list', '--count', `main..${branch}`) === '0', 'committed before the split was settled'],
