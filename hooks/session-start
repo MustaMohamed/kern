@@ -86,8 +86,11 @@ export CWD KERN_MAIN
 kern_enabled || exit 0
 
 if [ -n "$SID" ]; then
+  # A new session has a new id, so a startup for an id that has state is a late or repeated
+  # SessionStart of this session (a headless first prompt can run before it); resetting there would
+  # cancel an autopilot grant the user typed. State is keyed by id: no other session's state is read.
   case "$SOURCE" in
-    compact | resume) state_get "$SID" voice >/dev/null 2>&1 || state_reset "$SID" ;;
+    compact | resume | startup) state_get "$SID" voice >/dev/null 2>&1 || state_reset "$SID" ;;
     *) state_reset "$SID" ;;
   esac
 fi
