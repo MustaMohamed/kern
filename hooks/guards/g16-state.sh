@@ -338,11 +338,12 @@ _g16_redirects() {
 # backticks; here-doc bodies are data unless a shell reads them. After a cd into the sessions dir,
 # every later non-reading command and redirect counts as a write to it, until a cd to a known target
 # outside it; after a cd into a .claude directory, `.` and a bare settings.json or settings.local.json
-# are in it, until a cd to a known target. A cd whose target kern cannot know keeps both. A variable
-# that holds a path is not read (accepted limit).
+# are in it, until a cd to a known target. A cd whose target kern cannot know keeps both, and takes
+# back each one held earlier in the command, as popd does. A variable that holds a path is not read
+# (accepted limit).
 _g16_bash() {
   local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m
-  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1
+  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
   cmd=$_G16_F
@@ -452,8 +453,10 @@ WORDS
         reads=1
         # dk: 1 while kern knows the directory. A target is known when it is one operand that
         # expands to nothing else: an absolute path, ~ or ~/path, or a relative path from a known
-        # directory. A cd to anything else (no operand, -, +N, two operands, ~user, a $, a glob)
-        # may stay where it is, so it keeps both readings and leaves the directory unknown.
+        # directory. A cd to anything else (no operand, -, ~-, +N, two operands, ~user, a $, a glob)
+        # may stay where it is or go back to any directory this command was in, so it keeps both
+        # readings, takes back each one held earlier in the command (sd_seen, cc_seen), and leaves
+        # the directory unknown.
         case "$nop:$last" in
           1:*[\$\`*?[\{^#]* | 1:*"$_GW_NL"* | 1:- | 1:+* | 1:=*) dk=0 ;;
           1:/* | 1:'~' | 1:'~'/*) dk=1 ;;
@@ -469,9 +472,18 @@ WORDS
           case "$last" in /* | '~'*) in_sd=$seg_s ;; *) [ "$seg_s" = 0 ] || in_sd=1 ;; esac
           if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi
         else
-          [ "$seg_s" = 0 ] || in_sd=1
-          if _g16_into "$last"; then _G16_INCC=1; fi
+          [ "$seg_s" = 0 ] && [ "$sd_seen" = 0 ] || in_sd=1
+          if [ "$cc_seen" = 1 ] || _g16_into "$last"; then _G16_INCC=1; fi
         fi
+        [ "$in_sd" = 0 ] || sd_seen=1
+        [ "$_G16_INCC" = 0 ] || cc_seen=1
+        ;;
+      # popd goes back to a directory of the stack, as a cd to an unknown target does. It stays a
+      # command that does not read, as before.
+      popd)
+        dk=0
+        [ "$sd_seen" = 0 ] || in_sd=1
+        [ "$cc_seen" = 0 ] || _G16_INCC=1
         ;;
     esac
     if [ "$reads" = 0 ] && { [ "$seg_s" = 1 ] || [ "$in_sd" = 1 ]; }; then state=1; fi

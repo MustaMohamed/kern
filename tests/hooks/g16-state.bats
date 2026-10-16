@@ -395,6 +395,26 @@ expect_cmd() {
     'cd "$(git rev-parse --show-toplevel)" && sed -i "" s/a/b/ settings.json' 'cd $X && echo x > foo'
 }
 
+@test "a cd that can go back (-, ~-, +N, popd, \$X) takes back the reading an earlier cd in the command cleared" {
+  local cc=(
+    'cd ~/.claude && cd /tmp && cd - && sed -i "" s/a/b/ settings.json' 'cd ~/.claude && cd /tmp; cd -; echo {} > settings.json'
+    'cd ~/.claude && pushd /tmp && popd && echo {} > settings.json' 'cd ~/.claude && cd /tmp && cd ~- && echo {} > settings.json'
+    'cd ~/.claude && cd /tmp && cd +1 && echo {} > settings.json' 'cd ~/.claude && cd /tmp && cd "$X" && echo {} > settings.json'
+  )
+  local sd=(
+    "cd $S && cd /tmp && cd - && echo x > foo" "cd $S && cd /tmp; cd -; echo x > foo" "cd $S && pushd /tmp && popd && echo x > foo"
+    "cd $S && cd /tmp && cd ~- && echo x > foo" "cd $S && cd /tmp && cd +1 && echo x > foo" "pushd $S && pushd /tmp && popd; echo x > foo"
+  )
+  expect_cmd ask "${cc[@]}"
+  expect_cmd deny "${sd[@]}"
+  set_autopilot on
+  expect_cmd deny "${cc[@]}" "${sd[@]}"
+  set_autopilot off
+  # A known target after the cd that went back still ends the reading.
+  expect_cmd none 'cd ~/.claude && cd /tmp && cd - && cd /tmp && echo {} > settings.json' \
+    "cd $S && cd /tmp && cd - && cd /tmp && echo x > foo"
+}
+
 @test "a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd under coproc or repeat 0 keeps the reading" {
   expect_bash deny "noglob tee $S/a.state" "nocorrect cp /tmp/x $S/a.state" "repeat 1 sed -i '' s/off/on/ $S/a.state" \
     "coproc rm -f $S/a.state"
