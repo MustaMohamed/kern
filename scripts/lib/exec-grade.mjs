@@ -80,13 +80,17 @@ const negatesSplit = (s) => /\b(not|never|won't|without|against|no need to)\s+(\
 const sentences = (text) => text.split(/(?<=[.!?])\s+|\n+/);
 // Arguing against the split in other words: "rather than split", "keep it as one", "would only add churn".
 const argues = (s) => /\brather than (to )?split|\b(keep|leave) (it|this|them)\b[^.?!\n]*\bas (one|a single|is)\b|\bonly add churn\b|\bwould only add\b/i.test(s);
-// The finish-branch menu (commit / push / draft PR / keep) in the reply means the run went past the gate.
-const showsMenu = (text) => MENU.test(text);
-// An offer overrides the negation check: its other option ("No split: go on") is a label, not a refusal.
-// A sentence that names the split, asks, and neither negates nor argues against it also counts, but only
-// when the reply does not show the finish menu: the gate must stop before the menu.
-const offersSplitToUser = (text) => !forecastsSplit(text) && (offersSplit(text)
-  || (!showsMenu(text) && sentences(text).some((s) => /\bsplit/i.test(s) && s.includes('?') && !negatesSplit(s) && !argues(s))));
+// The finish-branch menu in the reply, in any format (numbers, letters, bullets, prose): commit, push, draft
+// and keep all within 120 characters of each other. Options named far apart are not a menu.
+const showsMenu = (text) => [...text.toLowerCase().matchAll(/commit|push|draft|keep/g)].some((m) => {
+  const w = text.toLowerCase().slice(m.index, m.index + 120);
+  return /commit/.test(w) && /push/.test(w) && /draft/.test(w) && /keep/.test(w);
+});
+// The split case passes on an offer to the user: a stock offer, or a sentence that names the split, asks,
+// and neither negates nor argues against it. Either way the reply must not argue against the split in any
+// sentence and must not show the finish menu: the gate must stop before the menu.
+const offersSplitToUser = (text) => !forecastsSplit(text) && !showsMenu(text) && !sentences(text).some(argues)
+  && (offersSplit(text) || sentences(text).some((s) => /\bsplit/i.test(s) && s.includes('?') && !negatesSplit(s)));
 
 // bashRuns(events): every Bash call in order, as { command, ok }; ok is true only when its tool result
 // came back and was not an error.
