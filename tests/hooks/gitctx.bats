@@ -122,6 +122,17 @@ EOT
   done
 }
 
+@test "git is seen after zsh's noglob, nocorrect, coproc and repeat with its count, and in an eval or a shell after them" {
+  for c in 'noglob git push' 'nocorrect git push' 'coproc git push' 'repeat 2 git push' 'repeat -1+2 git push' \
+    'repeat $n git push' 'repeat 1 2>/dev/null git push' "'noglob' git push" 'nocorrect noglob git push' \
+    'noglob sudo git push' 'noglob eval "git push origin main"' 'nocorrect eval "git push"' \
+    'repeat 1 eval "git push"' 'coproc eval "git push"' 'noglob sh -c "git push"' \
+    "$(printf '%s\n' 'noglob sh <<EOF' 'git push' 'EOF')" "$(printf '%s\n' 'repeat 1 bash <<EOF' 'git push' 'EOF')"; do
+    finds "$c" push
+  done
+  [ "$(_cmd_words 'repeat -1+2 git push')" = "$(printf 'git\npush')" ]
+}
+
 @test "a leading redirection is not the command name" {
   for c in '2>/dev/null git push --force' '> /dev/null git push' '2>/dev/null bash -c "git push"'; do
     finds "$c" push

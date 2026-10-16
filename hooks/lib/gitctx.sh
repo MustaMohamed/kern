@@ -105,7 +105,7 @@ _GW_AWK='
     }
     if (have) sw_w[++sw_n] = w
   }
-  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0 }
+  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0; cw_cnt = 0 }
   # cw_line(s): feeds cw the words of the command line s (the value of env -S), split at blanks
   # outside quotes and with the quotes removed, as env -S reads it.
   function cw_line(s,   n, C, i, c, q, w, have) {
@@ -128,9 +128,14 @@ _GW_AWK='
       if (cw_split) { cw_split = 0; cw_line(x) }
       return
     }
+    # The word after repeat is its count, whatever it looks like: zsh reads -1+2 as one.
+    if (cw_cnt) { cw_cnt = 0; return }
     if (x ~ /^[0-9]*(<|>|&>)/) { cw_val = (x ~ /^[0-9]*[<>&|]+$/); return }
     if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) return
-    if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
+    # zsh runs the command after its precommand modifiers noglob and nocorrect, and after coproc and
+    # repeat with its count.
+    if (x ~ /^(if|then|elif|else|do|while|until|!|[{]|noglob|nocorrect|coproc)$/) { cw_wrap = ""; return }
+    if (x == "repeat") { cw_wrap = ""; cw_cnt = 1; return }
     # Any case: on a case-insensitive file system ENV and Sudo run env and sudo.
     b = tolower(P[split(x, P, "/")])
     if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
@@ -189,14 +194,15 @@ git_words() {
         ;;
     esac
     # The wrapper pass costs a process, so it runs only when the first word, quotes removed,
-    # is a redirection, an assignment, a keyword, a wrapper, eval or a shell. A wrapper or shell name
-    # matches in any case, as _cmd_words reads it.
+    # is a redirection, an assignment, a keyword, a zsh precommand modifier, a wrapper, eval or a
+    # shell. A wrapper or shell name matches in any case, as _cmd_words reads it.
     # One tr pass strips the quotes, and only when the word holds one: ${first//[...]/} is cubic in
     # the word's length on bash 3.2 in a UTF-8 locale.
     first=${seg%%[[:space:]]*}
     case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | LC_ALL=C tr -d "\"'\\\\") ;; esac
     case "/$first" in
       *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
+        */noglob | */nocorrect | */coproc | */repeat | \
         */[Ee][Vv][Aa][Ll] | */[Cc][Oo][Mm][Mm][Aa][Nn][Dd] | */[Ee][Xx][Ee][Cc] | */[Tt][Ii][Mm][Ee] | \
         */[Nn][Oo][Hh][Uu][Pp] | */[Ss][Uu][Dd][Oo] | */[Ee][Nn][Vv] | */[Tt][Ii][Mm][Ee][Oo][Uu][Tt] | \
         */[Nn][Ii][Cc][Ee] | */[Ss][Hh] | */[Bb][Aa][Ss][Hh] | */[Zz][Ss][Hh] | */[Dd][Aa][Ss][Hh]) ;;
@@ -433,8 +439,9 @@ _shell_words() {
 
 # _cmd_words CMDLINE: the words of a simple command from its command name on, one per line.
 # Skips leading redirections (and the target of one that stands alone), VAR=value and VAR+=value
-# words, the keywords if then elif else do while until ! {, the wrappers command, exec, time, nohup,
-# sudo, env, timeout and nice (any path, any case), and their options. The options in `cw_opt` take a
+# words, the keywords if then elif else do while until ! {, zsh's noglob, nocorrect and coproc, repeat
+# and the word after it (its count), the wrappers command, exec, time, nohup, sudo, env, timeout and
+# nice (any path, any case), and their options. The options in `cw_opt` take a
 # value as the next word (`--opt=value` is one word); timeout's duration follows its options; the
 # value of env -S or --split-string, attached or not and after the flags -0 -i -v in a cluster, is a
 # command line, read as words. Any other option `cw_opt` does not list (a cluster such as -iC, a
@@ -444,6 +451,20 @@ _cmd_words() {
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     { buf = buf (NR > 1 ? "\037" : "") $0 }
     END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); for (k = 1; k <= cw_n; k++) print cw_w[k] }'
+}
+
+# cmd_mod CMDLINE: exit 0 when CMDLINE, quotes and backslashes removed, holds noglob, nocorrect, coproc
+# or repeat as a word. _cmd_words reads through them to the command that runs, but a cd behind one is
+# not known to move the shell: bash runs none of these words, zsh runs a coproc command in a subshell,
+# and repeat 0 runs nothing. So the guards that follow cd keep the directory they had across one.
+cmd_mod() {
+  local t=$1
+  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+  case " $t " in
+    *[[:space:]]noglob[[:space:]]* | *[[:space:]]nocorrect[[:space:]]* | *[[:space:]]coproc[[:space:]]* | \
+      *[[:space:]]repeat[[:space:]]*) return 0 ;;
+  esac
+  return 1
 }
 
 # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the

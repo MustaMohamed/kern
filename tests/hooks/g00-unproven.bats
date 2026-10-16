@@ -148,6 +148,20 @@ g00_all() {
   [ "$(decision_of "$output")" = none ]
 }
 
+@test "an eval or a here-doc shell after zsh's noglob, nocorrect, coproc or repeat is denied in both modes" {
+  local c m
+  for c in "noglob eval 'git push --force origin main'" "nocorrect eval 'git push --force origin main'" \
+    "repeat 1 eval 'git push --force origin main'" "coproc eval 'git push --force origin main'" \
+    "repeat -1+2 git push --force origin main" "$(printf '%s\n' 'noglob sh <<EOF' 'git push --force origin main' 'EOF')"; do
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      [ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }
+      [[ "$output" == *"G1: plain force push"* ]] || false
+    done
+  done
+}
+
 @test "under autopilot the review's bypass shapes are denied with every guard running" {
   for c in 'g=git; $g push --force origin main' "bash -Ec 'git push --force origin main'" \
     "bash -c -- 'git push --force origin main'" \

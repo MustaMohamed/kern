@@ -216,9 +216,10 @@ _g20_file() {
 # run time, is not seen (accepted limit).
 #
 # State for one command: _G20_W is 1 when the command holds approved (quotes and backslashes taken out,
-# any case), _G20_M when it names a Markdown file. _G20_DIR follows cd. _G20_WRITES is 1 once a simple
-# command writes a Markdown file. _G20_SRC holds the command's other file words as absolute paths, one
-# per line. _G20_WHY is the deny reason; the first one ends the check.
+# any case), _G20_M when it names a Markdown file. _G20_DIR follows cd. _G20_REC is the simple command
+# _g20_seg reads. _G20_WRITES is 1 once a simple command writes a Markdown file. _G20_SRC holds the
+# command's other file words as absolute paths, one per line. _G20_WHY is the deny reason; the first one
+# ends the check.
 
 # _g20_dyn WORD: exit 0 when WORD may name other files at run time: a glob, a $, a backtick or a brace.
 _g20_dyn() {
@@ -399,6 +400,8 @@ _g20_cmd() {
   shift
   case "$head" in
     cd | pushd)
+      # A cd behind noglob, nocorrect, coproc or repeat leaves the directory as it was (cmd_mod).
+      cmd_mod "$_G20_REC" && return 0
       w=$HOME
       for i in "$@"; do
         case "$i" in -*) ;; *) w=$i; break ;; esac
@@ -543,6 +546,7 @@ _g20_cmd() {
 # _g20_seg SIMPLE_COMMAND: its redirect targets, its file words (into _G20_SRC) and its command.
 _g20_seg() {
   local w r s f=0 c=0 cw=()
+  _G20_REC=$1
   while IFS= read -r w; do
     if [ "$f" = 1 ]; then
       f=0

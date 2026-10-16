@@ -56,9 +56,10 @@ EOT
     # After a cd, or a GIT_DIR or GIT_WORK_TREE assignment, later git commands run where G1
     # cannot tell; under env -C or sudo -D, so does this one.
     case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=* | *GIT_DIR+=* | *GIT_WORK_TREE+=*) moved=1 ;; esac
+    # A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
     case "${w[0]}" in
-      cd | pushd | popd) moved=1 ;;
-      builtin) case "${w[1]-}" in cd | pushd | popd) moved=1 ;; esac ;;
+      cd | pushd | popd) cmd_mod "$rec" || moved=1 ;;
+      builtin) case "${w[1]-}" in cd | pushd | popd) cmd_mod "$rec" || moved=1 ;; esac ;;
       # Any case: on a case-insensitive file system GIT and GH run git and gh.
       [Gg][Hh] | */[Gg][Hh]) _g01_gh "$rec" "${w[@]}" ;;
       [Gg][Ii][Tt] | */[Gg][Ii][Tt])

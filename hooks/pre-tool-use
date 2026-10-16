@@ -55,7 +55,7 @@ need settings.sh settings_source settings_keys settings_known_keys settings_unkn
 need state.sh state_dir state_file state_get state_set _state_put now_iso state_reset autopilot_denied_by autopilot_on
 need state.sh prompt_hashes
 need decide.sh vote fail_closed emit_decision
-need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words git_sub cmd_head in_main_checkout
+need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words cmd_mod git_sub cmd_head in_main_checkout
 need gitctx.sh current_branch base_branch_name branch_protected push_targets with_timeout gh_sub word_value word_has
 need aliases.sh alias_snapshot _alias_key _alias_table aliases_load alias_text _alias_var alias_expand
 

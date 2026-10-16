@@ -395,6 +395,20 @@ expect_cmd() {
     'cd "$(git rev-parse --show-toplevel)" && sed -i "" s/a/b/ settings.json' 'cd $X && echo x > foo'
 }
 
+@test "a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd after one keeps the reading" {
+  expect_bash deny "noglob tee $S/a.state" "nocorrect cp /tmp/x $S/a.state" "repeat 1 sed -i '' s/off/on/ $S/a.state" \
+    "coproc rm -f $S/a.state"
+  expect_bash ask "noglob sed -i '' s/a/b/ .claude/settings.json" "repeat 2 cp /tmp/x .claude/"
+  # noglob only stops globbing, so a read stays a read; bash, which has no noglob, runs nothing.
+  expect_bash none "noglob cat $S/a.state" "nocorrect grep autopilot $S/a.state" "noglob ls .claude"
+  # bash runs none of these words as a cd, zsh runs coproc's in a subshell and repeat's maybe no time.
+  expect_cmd ask "cd ~/.claude && coproc cd /tmp; echo {} > settings.json" \
+    "cd ~/.claude && repeat 0 cd /tmp; echo {} > settings.json" "cd ~/.claude && 'coproc' cd /tmp; echo {} > settings.json" \
+    "cd ~/.claude && noglob cd /tmp; echo {} > settings.json" "cd ~/.claude && nocorrect cd /tmp; echo {} > settings.json"
+  expect_cmd deny "cd $S && coproc cd /tmp; echo x > foo" "cd $S && repeat 0 cd /tmp; echo x > foo" \
+    "cd $S && noglob cd /tmp; echo x > foo"
+}
+
 @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
   mkdir -p "$R/.claude"
   # The re-review's probes: a tracked file moved onto kern.local.yml, a removal, and diff --output.

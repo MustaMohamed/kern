@@ -299,6 +299,17 @@ settings() {
     "git --git-dir=$R/.git push origin feat"
 }
 
+@test "a cd behind noglob, nocorrect, coproc or repeat leaves the directory known" {
+  W="$BATS_TEST_TMPDIR/wt"
+  export CWD="$W"
+  printf 'b\n' >"$W/b.txt"; git -C "$W" add b.txt
+  git -C "$W" -c user.email=other@example.com commit -q -m b
+  expect deny "noglob cd . && git push --force-with-lease origin feat" \
+    "nocorrect cd /tmp; git push --force-with-lease origin feat" "coproc cd /tmp; git push --force-with-lease origin feat" \
+    "repeat 0 cd /tmp; git push --force-with-lease origin feat"
+  expect ask "cd . && git push --force-with-lease origin feat"
+}
+
 @test "gh pr merge with -R or --repo asks, and is denied under autopilot" {
   expect ask "gh -R o/r pr merge 12 --squash" "gh pr merge --repo o/r 12" "gh --repo=o/r pr merge 12"
   set_autopilot on

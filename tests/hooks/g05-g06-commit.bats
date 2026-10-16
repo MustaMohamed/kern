@@ -714,6 +714,18 @@ EOT
   done
 }
 
+@test "G5 and G6: a cd behind noglob, nocorrect, coproc or repeat leaves the directory known" {
+  mkdir -p "$R/sub"
+  printf 'a\n' >"$R/sub/a.txt"
+  local c
+  for c in "noglob cd sub && git add -- sub/a.txt" "coproc cd /tmp; git add -- sub/a.txt" \
+    "repeat 0 cd /tmp; git commit -m 'CDS-2465: x'" "nocorrect cd sub && git commit -m 'CDS-2465: x'"; do
+    expect none g06 "$c" || return 1
+  done
+  expect none g05 "noglob cd sub && git add -- sub/a.txt"
+  expect ask g05 "cd sub && git add -- sub/a.txt"
+}
+
 @test "G6: push : and a matching push scan every branch" {
   git -C "$R" switch -q -c CDS-2465/side main
   printf '%s\n' "$KEY" >"$R/s2.txt"

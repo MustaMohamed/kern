@@ -63,7 +63,8 @@ guard_g06() {
       continue
     fi
     if ! _g05_split "$rec"; then
-      case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) moved=1 ;; esac
+      # A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
+      case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) cmd_mod "$rec" || moved=1 ;; esac
       _g05_env_has later GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && moved=1
       _g05_env_has later 'GIT_CONFIG*' HOME XDG_CONFIG_HOME && conf=1
       continue
