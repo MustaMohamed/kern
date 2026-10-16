@@ -685,7 +685,7 @@ ssh v1-host 'del C:\x'"
   done
 }
 
-@test "G13 and G15: a 10 KB inline PR body passes every guard in under 2 s in a UTF-8 locale" {
+@test "G13 and G15: a 10 KB inline PR body passes every guard in under 4 s in a UTF-8 locale" {
   local body="" i=0 line cmd t0 t1
   printf 'protected_targets: v1-host\ndeploy.envs: production\n' >"$R/.claude/kern.local.yml"
   # Inline, as Claude writes it: the double quotes, backticks and dollars inside are escaped.
@@ -703,7 +703,8 @@ ssh v1-host 'del C:\x'"
   [ "$status" = 0 ]
   [ "$(decision_of "$output")" = deny ]
   [[ "$output" == *"G4: "* ]] || false
-  [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
+  # 4 s, not 2: shared macOS runners vary (CI took 2020 ms); the cubic strip this catches took 102 s.
+  [ $((t1 - t0)) -lt 4000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
 }
 
 @test "G15: every tool in the table asks for each of its verbs, in any case, and passes the prefilter" {
