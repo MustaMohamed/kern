@@ -7,10 +7,12 @@ patch=$1 dst=$2
 [ -f "$patch" ] || { echo "wt-apply: no such patch: $patch" >&2; exit 2; }
 git -C "$dst" rev-parse --git-dir > /dev/null 2>&1 || { echo "wt-apply: not a git worktree: $dst" >&2; exit 2; }
 patch=$(cd "$(dirname "$patch")" && pwd -P)/$(basename "$patch")
-if ! out=$(git -C "$dst" apply --check --binary "$patch" 2>&1); then
+# --whitespace=nowarn: the user's apply.whitespace (fix, error) must not change the reviewed bytes or
+# report a conflict that does not exist.
+if ! out=$(git -C "$dst" apply --whitespace=nowarn --check --binary "$patch" 2>&1); then
   echo "wt-apply: conflict, nothing applied:"
   printf '%s\n' "$out"
   exit 3
 fi
-git -C "$dst" apply --binary "$patch"
+git -C "$dst" apply --whitespace=nowarn --binary "$patch"
 echo applied

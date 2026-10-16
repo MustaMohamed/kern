@@ -122,3 +122,42 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$(cat "$SRC/w.txt")" = "from worker" ]
 }
+
+@test "apply.whitespace in the user's git config changes neither forks nor applies" {
+  printf '[apply]\n\twhitespace = fix\n' > "$TMP/gitconfig"
+  export GIT_CONFIG_GLOBAL="$TMP/gitconfig"
+  printf 'a  \nb\t\n' > "$SRC/ws.txt"
+  printf 'one  \ntwo\nthree\n' > "$SRC/a.txt"
+  src_tree=$(bash "$KERN_ROOT/scripts/wt-snap" "$SRC")
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-11
+  [ "$status" -eq 0 ]
+  fork=$output
+  [ "$(bash "$KERN_ROOT/scripts/wt-snap" "$fork")" = "$src_tree" ]
+  t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$fork")
+  printf 'worker  \n' > "$fork/w.txt"
+  printf 'one  \ntwo  \nthree\n' > "$fork/a.txt"
+  t1=$(bash "$KERN_ROOT/scripts/wt-snap" "$fork")
+  pkg=$(bash "$KERN_ROOT/scripts/wt-diff" "$fork" "$t0" --out "$TMP/ws.diff" | head -n 1)
+  run bash "$KERN_ROOT/scripts/wt-apply" "$pkg.patch" "$SRC"
+  [ "$status" -eq 0 ]
+  [ "$(bash "$KERN_ROOT/scripts/wt-snap" "$SRC")" = "$t1" ]
+  printf '[apply]\n\twhitespace = error\n' > "$TMP/gitconfig"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-12
+  [ "$status" -eq 0 ]
+  [ "$(bash "$KERN_ROOT/scripts/wt-snap" "$output")" = "$t1" ]
+}
+
+@test "a state the fork cannot take exits 3 and removes the fork" {
+  printf 'new\n' > "$SRC/b.txt"
+  # A post-checkout hook writes b.txt into the new fork, so the patch that adds it cannot apply.
+  hooks=$(git rev-parse --git-common-dir)/hooks
+  mkdir -p "$hooks"
+  printf '#!/bin/sh\nprintf other > b.txt\n' > "$hooks/post-checkout"
+  chmod +x "$hooks/post-checkout"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-13
+  [ "$status" -eq 3 ]
+  [[ "$stderr" == *"could not apply the uncommitted state"* ]] || false
+  [[ "$stderr" == *"fork removed"* ]] || false
+  [ ! -e "$REPO/.claude/worktrees/task-13" ]
+  ! git worktree list | grep -q task-13
+}

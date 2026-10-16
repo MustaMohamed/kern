@@ -175,3 +175,17 @@ setup() {
   [ "$status" -eq 3 ]
   [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
 }
+
+@test "apply.whitespace in the user's git config does not change the reversed fork" {
+  printf '[apply]\n\twhitespace = error\n' > "$TMP/gitconfig"
+  export GIT_CONFIG_GLOBAL="$TMP/gitconfig"
+  # The base line holds trailing blanks, so reversing the patch adds a line with a whitespace error.
+  printf 'exit 0  \n' > check.sh
+  git add check.sh && git commit --quiet -m blanks && git push --quiet origin main
+  wt=$(bash "$KERN_ROOT/scripts/wt-new" probe-ws 2> /dev/null)
+  printf '[ "$1" -ge 0 ]\n' > "$wt/check.sh"
+  git -C "$wt" diff -- check.sh > "$TMP/ws.patch"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$wt" "$TMP/ws.patch" -- sh test-guard.sh
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: fail-then-pass ok" ]
+}

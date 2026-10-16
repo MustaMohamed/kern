@@ -31,7 +31,8 @@ trap 'rm -f "$patch"' EXIT
 git -C "$src" diff-tree -r -p --binary --full-index "$head" "$tree" > "$patch"
 git -C "$MAIN" worktree add --quiet --detach "$path" "$head" >&2
 path=$(cd "$path" && pwd -P)
-if [ -s "$patch" ] && ! git -C "$path" apply --binary "$patch" >&2; then
+# --whitespace=nowarn: the user's apply.whitespace (fix, error) must not change or refuse the state.
+if [ -s "$patch" ] && ! git -C "$path" apply --whitespace=nowarn --binary "$patch" >&2; then
   git -C "$MAIN" worktree remove --force "$path" > /dev/null 2>&1 || true
   echo "wt-fork: could not apply the uncommitted state of $src; fork removed" >&2
   exit 3

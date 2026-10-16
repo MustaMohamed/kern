@@ -104,11 +104,12 @@ if [ -n "$mutate" ]; then
   fi
   cat "$logs/mutated" > "$fork/$mfile"
 else
-  if ! git -C "$fork" apply -R --check ${excludes[@]+"${excludes[@]}"} "$patch" 2> "$logs/apply.err"; then
+  # --whitespace=nowarn: the user's apply.whitespace must not change or refuse the reversed tree.
+  if ! git -C "$fork" apply -R --whitespace=nowarn --check ${excludes[@]+"${excludes[@]}"} "$patch" 2> "$logs/apply.err"; then
     echo "probe: inconclusive (the patch does not reverse-apply: $(head -n 1 "$logs/apply.err"))"
     exit 3
   fi
-  git -C "$fork" apply -R ${excludes[@]+"${excludes[@]}"} "$patch"
+  git -C "$fork" apply -R --whitespace=nowarn ${excludes[@]+"${excludes[@]}"} "$patch"
   for a in "$@"; do
     case "$a" in -* | */) continue ;; esac
     if [ -e "$wt/$a" ] && [ ! -e "$fork/$a" ]; then
