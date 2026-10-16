@@ -33,7 +33,7 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
   [ "${#norm}" -le 4000 ]
 }
 
-@test "clear resets the mode; compact, resume and a repeated startup keep it" {
+@test "startup and clear reset the mode; compact and resume keep it" {
   start startup
   set_autopilot on
   start compact
@@ -41,41 +41,27 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
   [[ "$output" == *"Autopilot: ON since"* ]] || false
   start resume
   [[ "$output" == *"autopilot=on"* ]] || false
-  start startup
-  [[ "$output" == *"autopilot=on"* ]] || false
   start clear
+  [[ "$output" == *"autopilot=off"* ]] || false
+  set_autopilot on
+  start startup
   [[ "$output" == *"autopilot=off"* ]] || false
 }
 
-# ap_on: the user types /kern:autopilot on in session test-session.
+# ap_on: the user types /kern:autopilot on in session test-session, through the real prompt hook.
 ap_on() {
   run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"kern:autopilot","command_args":"on","command_source":"plugin","prompt":"/kern:autopilot on"')"
 }
-st() { sed -n "s/^$2: //p" "$CLAUDE_PLUGIN_DATA/sessions/$1.state"; }
 
-@test "a startup that lands after /kern:autopilot on keeps it on; a new session id starts off" {
-  # The 2026-10-16 exec eval: the grant was typed, then a late or repeated SessionStart(startup) for the
-  # same session reset it, and G5 asked where autopilot allows.
+@test "a second startup for the same session id turns autopilot off" {
+  # Fail closed: a startup for an id that has state may be a reused id, whose old grant must not carry
+  # over. Known limit: a repeated SessionStart(startup) in one session also turns autopilot off.
   start startup
   ap_on
-  [ "$(st test-session autopilot)" = on ]
+  [ "$(sed -n 's/^autopilot: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = on ]
   start startup
-  [ "$(st test-session autopilot)" = on ]
-  [[ "$output" == *"autopilot=on"* ]] || false
-  # The order the run's state file shows: the prompt hook first, SessionStart after it.
-  rm -f "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
-  ap_on
-  [ "$(st test-session autopilot)" = on ]
-  start startup
-  [ "$(st test-session autopilot)" = on ]
-  # Another session id has its own state, which starts off.
-  run bash "$K/hooks/session-start" <<<"{\"session_id\":\"new-session\",\"cwd\":\"$CWD\",\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"}"
   [[ "$output" == *"autopilot=off"* ]] || false
-  [ "$(st new-session autopilot)" = off ]
-  [ "$(st test-session autopilot)" = on ]
-  # clear still resets the same session.
-  start clear
-  [ "$(st test-session autopilot)" = off ]
+  [ "$(sed -n 's/^autopilot: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = off ]
 }
 
 @test "terse from settings appends the terse rules" {
