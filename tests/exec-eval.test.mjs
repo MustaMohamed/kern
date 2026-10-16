@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
+import { GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { UsageError, caseEnv, exitCode, parseArgs, replyDate, runEval, snapshotBody, userSettingsProblem, writeReply } from '../scripts/lib/exec-run.mjs';
 
@@ -382,7 +382,7 @@ test('C1: the split grader fails a reply that waves the split away, and a run th
   assert.deepEqual(waved.reasons, ['no split offered for the user to answer, for nine files over scope_threshold 4']);
   const noGate = grade([...ran('t', 'cd /w/app && npm test'), say('Ten files is over scope_threshold 4. Should I split this into two PRs?')]);
   assert.equal(noGate.pass, false, 'an offer with no git diff --shortstat after the green proof');
-  assert.deepEqual(noGate.reasons, ['the size gate never ran: no git diff --shortstat after a green test command']);
+  assert.deepEqual(noGate.reasons, ['the size gate never ran: no git diff --shortstat, --stat or --numstat over two revisions after a green test command']);
   const redGate = grade([...ran('t', ['cd /w/app && npm test', false], 'git diff --shortstat 1a2b 3c4d'), say('Should I split this?')]);
   assert.equal(redGate.pass, false, 'a shortstat after a red proof is not the size gate');
   for (const no of ["Ten files, but splitting isn't worth it, right?", 'I am against a split here, ok?', 'A split is not worth it?',
@@ -604,4 +604,35 @@ test('replies: a save that throws, a whitespace reply and an unsafe case id are 
   const root = mkdtempSync(join(tmpdir(), 'replies-'));
   writeReply(root, 'w', '  \n ');
   assert.equal(readFileSync(join(root, 'w.txt'), 'utf8'), '(no reply: the run ended with no assistant text)\n');
+});
+
+// The split case's Bash calls from the 2026-10-16 exec eval, workspace path shortened: it sized the
+// change from self-review's wt-diff list and never ran a stat diff over the merge base and the tree.
+const OCT16_SPLIT = [
+  'bash /k/scripts/kern-dir ledgers; git worktree list; git rev-parse --show-toplevel; git rev-parse --path-format=absolute --git-dir --git-common-dir; git symbolic-ref -q --short HEAD',
+  'bash /k/scripts/kern-get base_branch; echo "rc=$?"; bash /k/scripts/kern-detect base_branch; echo "rc=$?"; git remote get-url origin; echo "rc=$?"; git status --porcelain; git diff --stat',
+  'git fetch origin main; echo "rc=$?"; git rev-list --left-right --count origin/main...HEAD; bash /k/scripts/kern-get test.full; echo "rc=$?"; bash /k/scripts/kern-detect test.full; echo "rc=$?"',
+  'npm test 2>&1; echo "exit=$?"',
+  'bash /k/scripts/wt-snap /w/invoice-app; echo "rc=$?"',
+  'MB=$(git merge-base HEAD origin/main) && echo $MB && bash /k/scripts/wt-diff . $MB; echo "rc=$?"; cat src/sum.js; git diff src/sum.js; head -50 src/v*.js; ls',
+  'R=$(bash /k/scripts/kern-dir reviews) && ls $R; bash /k/scripts/wt-diff . c010ab6 --out $R/feat-many-1.diff | head -2',
+  'git diff HEAD; for f in src/v*.js; do echo "=== $f"; cat $f; done; ls; cat CLAUDE.md 2>/dev/null',
+];
+
+test('E3: the size gate is a stat diff over two revisions or a range, after the green test; a working-tree diff or wt-diff is not', () => {
+  const after = (cmd) => sizeGateRan(ran('s', 'cd /w/app && npm test', cmd));
+  for (const yes of ['git diff --shortstat $MB $T', 'git diff --stat $MB $T', 'git diff --numstat origin/main...1efaabe', 'git diff --shortstat c010ab6 1efaabe',
+    'git diff --stat=200 c010ab6..1efaabe', 'git -C /w/app diff --shortstat "$MB" 1efaabe', 'git diff --numstat c010ab6 1efaabe -- src',
+    'MB=$(git merge-base HEAD origin/main) && git diff --shortstat $MB 1efaabe', 'git diff --shortstat $(git merge-base HEAD origin/main) 1efaabe']) {
+    assert.equal(after(yes), true, yes);
+  }
+  for (const no of ['git diff --shortstat', 'git diff --shortstat HEAD', 'git diff --stat', 'git diff --numstat HEAD -- src', 'git diff --cached --shortstat',
+    'git diff --shortstat $(git merge-base HEAD origin/main)', 'git diff c010ab6 1efaabe', 'git diff --name-only c010ab6 1efaabe', 'git diff --no-index --stat a.js b.js',
+    'bash /k/scripts/wt-diff . c010ab6', 'bash /k/scripts/wt-diff /w/app c010ab6 --out /w/app/.kern/tmp/review/x']) {
+    assert.equal(after(no), false, no);
+  }
+  assert.equal(sizeGateRan(ran('b', 'git diff --shortstat c010ab6 1efaabe', 'cd /w/app && npm test')), false, 'before the green test');
+  assert.equal(sizeGateRan(ran('f', 'cd /w/app && npm test', ['git diff --shortstat c010ab6 1efaabe', false])), false, 'a diff that failed');
+  assert.equal(sizeGateRan(ran('r', ...OCT16_SPLIT)), false, 'the recorded run still fails');
+  assert.equal(sizeGateRan(ran('p', ...OCT16_SPLIT, 'git diff --shortstat c010ab6 1efaabe')), true, 'the same run with the prescribed command');
 });

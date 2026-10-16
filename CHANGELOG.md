@@ -35,6 +35,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 - Hooks run git with no fsmonitor program and no repo hooks (git 2.31 or later). With an older git, or one whose version cannot be read, session-start says so in one line.
 - commit: `commit.attribution` governs trailers, so with `none` (the default) no Co-Authored-By trailer is written even when Claude Code's attribution reminder asks for one, and a G5 attribution deny is retried once without the trailer instead of parking under autopilot. G5's deny reason now says to remove the trailer and commit again. On Claude Code's default settings, finish-branch under autopilot parked at its first commit.
 - session-start resets a session's mode on `startup` only when that session has no state yet; `clear` still resets, and `compact` and `resume` still keep it. A late or repeated SessionStart(startup), which a headless run's first prompt can come before, turned autopilot off after `/kern:autopilot on`, so G5 asked where autopilot allows. A new session id still starts with autopilot off.
+- finish-branch: the size gate's `git diff --shortstat <merge-base> <tree>` runs every time, even after self-review listed the files, since `pr.max_lines` reads its line count; a run that sized the change from self-review's file list estimated the lines.
 
 ## [0.2.1] - 2026-10-14
 

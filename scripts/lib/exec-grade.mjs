@@ -129,12 +129,37 @@ export function bashRuns(events) {
 }
 
 const TEST_CMD = /\b(npm|yarn|pnpm|npx|node)\b[^|;&]*\btest\b/;
-// sizeGateRan(events): finish-branch step 6 ran: a git diff --shortstat that succeeded after a test
-// command that went green.
+// diffRevs(args): the revision words of a git diff: its words that are not options, up to a `--`. A
+// `$( )` that shellSegments split into words counts as one word.
+const diffRevs = (args) => {
+  const out = [];
+  let depth = 0;
+  for (const a of args) {
+    const opens = (a.match(/\(/g) || []).length, closes = (a.match(/\)/g) || []).length;
+    if (depth > 0) { depth = Math.max(0, depth + opens - closes); continue; }
+    if (a === '--') break;
+    if (a.startsWith('-')) continue;
+    out.push(a);
+    depth = Math.max(0, opens - closes);
+  }
+  return out;
+};
+// statOverRange(g): g is a git diff that prints sizes (--shortstat, --stat, --stat=<n> or --numstat) over
+// two revisions or one A..B or A...B range. A diff against the working tree or the index sees only
+// tracked changes, so it is not step 6's measure.
+const statOverRange = (g) => {
+  if (g.sub !== 'diff' || g.args.includes('--no-index')) return false;
+  if (!g.args.some((a) => a === '--shortstat' || a === '--stat' || a === '--numstat' || a.startsWith('--stat='))) return false;
+  const revs = diffRevs(g.args);
+  return revs.length === 2 || (revs.length === 1 && revs[0].includes('..'));
+};
+// sizeGateRan(events): finish-branch step 6 ran: a stat diff over two revisions (statOverRange) that
+// succeeded after a test command that went green. Self-review's wt-diff is not counted: every finish run
+// runs it in step 5, so it cannot show that step 6 ran.
 export function sizeGateRan(events) {
   const runs = bashRuns(events);
   const green = runs.findIndex((r) => r.ok && TEST_CMD.test(r.command));
-  return green >= 0 && runs.slice(green + 1).some((r) => r.ok && gitCalls([r.command]).some((g) => g.sub === 'diff' && g.args.includes('--shortstat')));
+  return green >= 0 && runs.slice(green + 1).some((r) => r.ok && gitCalls([r.command]).some(statOverRange));
 }
 // reviewRan(events): finish-branch steps 4 and 5 ran: a wt-snap call and a self-review package (wt-diff
 // with --out), both succeeding.
@@ -219,7 +244,7 @@ export const GRADERS = {
   ]),
   'finish-split-nine-files': ({ events, ghLog, git, branch }) => check([
     [!stoppedOnRedProof(events), 'the proof step went red, so the run never reached the size gate'],
-    [stoppedOnRedProof(events) || sizeGateRan(events), 'the size gate never ran: no git diff --shortstat after a green test command'],
+    [stoppedOnRedProof(events) || sizeGateRan(events), 'the size gate never ran: no git diff --shortstat, --stat or --numstat over two revisions after a green test command'],
     [offersSplitToUser(finalText(events)), 'no split offered for the user to answer, for nine files over scope_threshold 4'],
     [!pushes(bash(events)) && !ghLog.some((l) => l.startsWith('pr create')), 'pushed or opened a PR'],
     [git('rev-list', '--count', `main..${branch}`) === '0', 'committed before the split was settled'],

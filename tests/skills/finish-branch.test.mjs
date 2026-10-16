@@ -125,3 +125,8 @@ test('PR body template', () => {
 test('finish-branch reads the branch with symbolic-ref, where exit 1 means a detached HEAD', () => {
   assert.ok(!readDoc(SKILL).raw.includes('--abbrev-ref'), 'no rev-parse --abbrev-ref');
 });
+
+test('finish-branch: the size command runs every time, since its line count is what pr.max_lines reads', () => {
+  const s = steps(readDoc(SKILL).body);
+  assert.match(s[6], /^6\. Size gate: `git merge-base HEAD <baseref>`, then `git diff --shortstat <merge-base> <tree>` \(step 4's tree, so untracked files count\)\. Always run it, even after self-review listed the files: `pr\.max_lines` reads its line count\. /);
+});
