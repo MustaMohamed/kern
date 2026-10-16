@@ -228,6 +228,16 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   b "noglob tee -a .kern/specs/export.md"; deny
 }
 
+@test "P21c a cd with a modifier word after its name, in a redirect or an assignment, still moves" {
+  prep "$SPEC"
+  b "cd .kern/specs 2> noglob && echo note >> export.md"; deny
+  b "X=' repeat' cd .kern/specs && echo note >> export.md"; deny
+  b "cd .kern/specs <<< coproc && echo note >> export.md"; deny
+  mkdir -p "$R/d"
+  prep "$R/d/src.md"
+  b "cd d 2> nocorrect && cp src.md x.md"; deny
+}
+
 @test "P22 reads and kern's own scripts get no G20 vote" {
   prep "$SPEC"
   b "grep -rn approved .kern/specs/export.md"; none

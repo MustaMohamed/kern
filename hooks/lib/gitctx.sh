@@ -105,7 +105,7 @@ _GW_AWK='
     }
     if (have) sw_w[++sw_n] = w
   }
-  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0; cw_cnt = 0 }
+  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0; cw_cnt = 0; cw_mod = 0 }
   # cw_line(s): feeds cw the words of the command line s (the value of env -S), split at blanks
   # outside quotes and with the quotes removed, as env -S reads it.
   function cw_line(s,   n, C, i, c, q, w, have) {
@@ -133,9 +133,10 @@ _GW_AWK='
     if (x ~ /^[0-9]*(<|>|&>)/) { cw_val = (x ~ /^[0-9]*[<>&|]+$/); return }
     if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) return
     # zsh runs the command after its precommand modifiers noglob and nocorrect, and after coproc and
-    # repeat with its count.
-    if (x ~ /^(if|then|elif|else|do|while|until|!|[{]|noglob|nocorrect|coproc)$/) { cw_wrap = ""; return }
-    if (x == "repeat") { cw_wrap = ""; cw_cnt = 1; return }
+    # repeat with its count. cw_mod: one of them came before the command name (cmd_mod).
+    if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
+    if (x ~ /^(noglob|nocorrect|coproc)$/) { cw_wrap = ""; cw_mod = 1; return }
+    if (x == "repeat") { cw_wrap = ""; cw_cnt = 1; cw_mod = 1; return }
     # Any case: on a case-insensitive file system ENV and Sudo run env and sudo.
     b = tolower(P[split(x, P, "/")])
     if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
@@ -453,18 +454,16 @@ _cmd_words() {
     END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); for (k = 1; k <= cw_n; k++) print cw_w[k] }'
 }
 
-# cmd_mod CMDLINE: exit 0 when CMDLINE, quotes and backslashes removed, holds noglob, nocorrect, coproc
-# or repeat as a word. _cmd_words reads through them to the command that runs, but a cd behind one is
-# not known to move the shell: bash runs none of these words, zsh runs a coproc command in a subshell,
-# and repeat 0 runs nothing. So the guards that follow cd keep the directory they had across one.
+# cmd_mod CMDLINE: exit 0 when _cmd_words skips noglob, nocorrect, coproc or repeat before the command
+# name of CMDLINE; a modifier word after it (an argument, a redirect target, a comment) does not count.
+# _cmd_words reads through them to the command that runs, but a cd behind one is not known to move the
+# shell: zsh runs a coproc command in a subshell, and repeat 0 runs nothing. So the guards that follow
+# cd keep the directory they had across one. The awk runs only when the text could hold one.
 cmd_mod() {
-  local t=$1
-  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
-  case " $t " in
-    *[[:space:]]noglob[[:space:]]* | *[[:space:]]nocorrect[[:space:]]* | *[[:space:]]coproc[[:space:]]* | \
-      *[[:space:]]repeat[[:space:]]*) return 0 ;;
-  esac
-  return 1
+  case "$1" in *noglob* | *nocorrect* | *coproc* | *repeat* | *[\"\'\\]*) ;; *) return 1 ;; esac
+  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+    { buf = buf (NR > 1 ? "\037" : "") $0 }
+    END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); exit !cw_mod }'
 }
 
 # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the

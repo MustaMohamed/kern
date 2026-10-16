@@ -12,6 +12,13 @@ setup() {
 
 g1() { run_guard "$(bash_payload "$1")" g01; }
 
+# cmd_payload CMD: a Bash payload for any command text; quotes, backslashes and newlines are escaped.
+cmd_payload() {
+  local esc
+  esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
+  tool_payload Bash "\"command\":\"$esc\""
+}
+
 # expect DECISION CMD...: G1 gives DECISION for every CMD.
 expect() {
   local want="$1" c
@@ -308,6 +315,26 @@ settings() {
     "nocorrect cd /tmp; git push --force-with-lease origin feat" "coproc cd /tmp; git push --force-with-lease origin feat" \
     "repeat 0 cd /tmp; git push --force-with-lease origin feat"
   expect ask "cd . && git push --force-with-lease origin feat"
+}
+
+@test "a modifier word after the command name, in a redirect, an assignment or a comment, leaves a cd a move" {
+  export CWD="$BATS_TEST_TMPDIR/wt"
+  ln -s "$R" "$BATS_TEST_TMPDIR/wt/repeat"
+  local cmds=(
+    "cd $R 2> noglob && git clean -fdx" "cd $R > repeat && git clean -fdx" "X=' noglob' cd $R && git clean -fdx"
+    "cd $R <<< nocorrect && git reset --hard" "cd repeat && git clean -fdx" "pushd $R >/dev/null 2>&1 <<< coproc; git clean -fdx"
+    "$(printf '%s\n' "cd $R # noglob" 'git clean -fdx')"
+  )
+  local c
+  for c in "${cmds[@]}"; do
+    run_guard "$(cmd_payload "$c")" g01
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+  set_autopilot on
+  for c in "${cmds[@]}"; do
+    run_guard "$(cmd_payload "$c")" g01
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
 }
 
 @test "gh pr merge with -R or --repo asks, and is denied under autopilot" {

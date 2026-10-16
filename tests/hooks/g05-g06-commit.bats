@@ -726,6 +726,20 @@ EOT
   expect ask g05 "cd sub && git add -- sub/a.txt"
 }
 
+@test "G5 and G6: a modifier word after the command name, in a redirect or an assignment, leaves a cd a move" {
+  mkdir -p "$R/sub"
+  printf 'a\n' >"$R/sub/a.txt"
+  local c
+  for c in "cd sub 2> noglob && git add -- a.txt" "cd sub <<< repeat && git add -- a.txt" \
+    "X=' coproc' cd sub && git add -- a.txt" "pushd sub >/dev/null 2>&1 <<< coproc; git add -- a.txt"; do
+    expect ask g05 "$c" || return 1
+  done
+  for c in "cd sub 2> noglob && git commit -m 'CDS-2465: x'" "X=' nocorrect' cd sub && git commit -m 'CDS-2465: x'"; do
+    expect ask g06 "$c" || return 1
+    [[ "$output" == *"could not scan"* ]] || false
+  done
+}
+
 @test "G6: push : and a matching push scan every branch" {
   git -C "$R" switch -q -c CDS-2465/side main
   printf '%s\n' "$KEY" >"$R/s2.txt"
