@@ -14,7 +14,7 @@ The audit of 2026-10-17 re-measured 274 mechanisms against kern 0.3.0 (eee601d) 
 | Source | Mechanisms | Equal or better | Planned | Gap | Rejected | Moved |
 |---|---|---|---|---|---|---|
 | pstack 0.15.25 | 72 | 27 | 29 | 5 | 11 | 15 |
-| superpowers 7.0.0 | 57 | 26 | 10 | 8 | 13 | 5 |
+| superpowers 7.0.0 | 57 | 26 | 10 | 10 | 11 | 5 |
 | addy 0.6.13 | 49 | 20 | 19 | 1 | 9 | 5 |
 | pocock 1.3.1 | 37 | 13 | 16 | 1 | 7 | 3 |
 | caveman 4.0.1 | 54 | 28 | 6 | 2 | 18 | 15 |
@@ -82,6 +82,8 @@ The audit of 2026-10-17 re-measured 274 mechanisms against kern 0.3.0 (eee601d) 
 | 49 | self-review's Standards axis has no baseline of labelled code smells when a repo documents no standards | pocock | M2b, or gap 27 in M5 | S |
 | 50 | Terse mode lacks four clauses: an explicit reply-language instruction wins, quoted text never switches the language, one term per thing, a pronoun only with an obvious referent | caveman 4.0.1 | M2b, or a 0.3.1 patch | S |
 | 51 | A headless session (`sdk-*` entrypoint) starts in the terse voice when the user default is terse, which reaches exec-eval and M2b runs | caveman 4.0.1 | M2b, before its runners spend tokens | S |
+| 52 | define has no fast path: a task the user calls quick and clear still gets a design and a quoted approval. User decision 2026-10-17: such a task skips design and spec approval; commits, pushes and every other floor stay gated. The skills spec C1 gate and D-4's wording change with it | superpowers 7.0.0 | M2b, define | S |
+| 53 | No skill shapes a non-software idea (a talk, a business, a renovation). User decision 2026-10-17: a separate skill, not part of define, which stays software-only (D-2) | superpowers 7.0.0 | M5, with the other Define-group skills, or earlier if wanted | M |
 
 Gaps 35 to 38 all edit define, whose `SKILL.md` is 6,499 bytes against a 6,500-byte cap. The new text goes into references or replaces step text, so together they are closer to M than four S items. Gap 39 meets the same cap in plan.
 
@@ -100,12 +102,12 @@ Rule 4 closed M2a with none left against the sources it audited. The sources hav
 - diagnose: gap 47, the always-on signal (pstack 0.15.25).
 - self-review: gap 49, the smell baseline (pocock code-review). Gap 27 in M5 is the fallback home.
 
-## Pending the user
+## Decided by the user (2026-10-17)
 
-Both rows are in the superpowers table of `docs/research/coverage-2026-10-17/sp-addy.md`. Each stays "pending the user" until answered.
+Both rows are in the superpowers table of `docs/research/coverage-2026-10-17/sp-addy.md`, which keeps the audit's proposed rejections as evidence. The user decided otherwise, and the counts above count both as gaps.
 
-- Row 36, a quick and clear task is done at once with no design and no approval. Proposed rejection: define keeps its gate on every path (D-4, skills spec C1). Alternative: a task the user calls quick and clear skips design and approval.
-- Row 49, brainstorming for any domain. Proposed rejection: kern is software only (D-2). Alternative: define accepts non-software work, because goal 2 says kern covers every job superpowers does.
+- Row 36, a quick and clear task is done at once with no design and no approval. Decision: "let a task I call quick and clear skip design and approval". Now gap 52.
+- Row 49, brainstorming for any domain. Decision: a separate skill covers non-software ideas, and define stays software-only. Now gap 53.
 
 ## Accepted limits
 
