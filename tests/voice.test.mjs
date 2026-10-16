@@ -11,6 +11,6 @@ test('terse keeps existing comments and shows only changed code', () => {
 });
 
 test('the normal voice skips the main AI tells, in the kernel and in subagent returns', () => {
-  assertContains('kernel/kernel.md', ['No is an acceptable answer: say when a scope, proposal or plan is weak, and why.', 'in either voice skip the main AI tells: openers, closing offers, praise, bold-label lists, long dashes, filler.']);
+  assertContains('kernel/kernel.md', ['No is an acceptable answer: say when a scope, proposal or plan is weak, and why.', 'in either voice skip the main AI tells: openers, closing offers, praise, bold-label lists, excess bold, "not just X, but Y", long dashes, filler.']);
   assertContains('kernel/kernel-subagent.md', ['with no preamble, praise or closing offer']);
 });
