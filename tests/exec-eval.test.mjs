@@ -399,6 +399,18 @@ test('C1: an offer the user must answer passes after the size gate; a negation e
   }
 });
 
+test('R1: a reply that argues against the split or shows the finish menu fails the split case', () => {
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  const grade = (text) => GRADERS['finish-split-nine-files']({ events: [...GATE, say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
+  for (const menu of [
+    'Nine files exceeds the split threshold (4), but they form one feature; which option do you want: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is?',
+    "Nine files is over scope_threshold 4, but I'd keep it as one PR rather than split; pick one: 1 commit; 2 commit and push; 3 draft PR; 4 keep as is?",
+    'The size gate is over the threshold, but a split would only add churn; which do you pick: 1 commit; 2 commit and push; 3 draft PR; 4 keep as is?',
+  ]) assert.equal(grade(menu), false, menu);
+  for (const arg of ["I'd keep it as one PR rather than split. Agreed?", 'Keep it as one, no split. OK?', 'Splitting is not worth it here, ok?']) assert.equal(grade(arg), false, arg);
+  assert.equal(grade('Should I split this into two PRs? Reply split or no.'), true);
+});
+
 test('C1: the menu grader needs the four options and the proof and self-review steps', () => {
   const grade = (events) => GRADERS['finish-menu-first']({ events, ghLog: [] });
   const stopped = grade([...REVIEWED, say('Stopped: self-review says fix first, so no draft PR was opened. I will keep the branch as it is.')]);

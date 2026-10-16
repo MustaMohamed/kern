@@ -78,9 +78,15 @@ const offersSplit = (text) => /\b(should|shall) (I|we) split\b|\bwant me to spli
 const negatesSplit = (s) => /\b(not|never|won't|without|against|no need to)\s+(\S+\s+){0,2}split|n't\s+(\S+\s+){0,3}split|\bno\s+split/i.test(s)
   || /\bsplit\w*\b[^.?!\n]*?((\bnot|n't)\s+(worth|needed|necessary|required|warranted)|\bunnecessary\b|\bnot worth\b|\bno need\b)/i.test(s);
 const sentences = (text) => text.split(/(?<=[.!?])\s+|\n+/);
+// Arguing against the split in other words: "rather than split", "keep it as one", "would only add churn".
+const argues = (s) => /\brather than (to )?split|\b(keep|leave) (it|this|them)\b[^.?!\n]*\bas (one|a single|is)\b|\bonly add churn\b|\bwould only add\b/i.test(s);
+// The finish-branch menu (commit / push / draft PR / keep) in the reply means the run went past the gate.
+const showsMenu = (text) => MENU.test(text);
 // An offer overrides the negation check: its other option ("No split: go on") is a label, not a refusal.
+// A sentence that names the split, asks, and neither negates nor argues against it also counts, but only
+// when the reply does not show the finish menu: the gate must stop before the menu.
 const offersSplitToUser = (text) => !forecastsSplit(text) && (offersSplit(text)
-  || sentences(text).some((s) => /\bsplit/i.test(s) && s.includes('?') && !negatesSplit(s)));
+  || (!showsMenu(text) && sentences(text).some((s) => /\bsplit/i.test(s) && s.includes('?') && !negatesSplit(s) && !argues(s))));
 
 // bashRuns(events): every Bash call in order, as { command, ok }; ok is true only when its tool result
 // came back and was not an error.
