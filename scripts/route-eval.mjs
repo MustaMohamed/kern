@@ -133,7 +133,8 @@ export function evaluate(root, { minRank1, minHeldout = null }) {
   if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the floor ${minRank1}%`);
   if (minRank1 !== null && !positives) errors.push('no case positives to rank, so the rank-1 floor cannot be checked');
 
-  // Held-out organic prompts (evals/heldout.json), frozen by a test: never reworded to pass.
+  // Held-out organic prompts (evals/heldout.json), frozen by a test: never reworded to pass. Record a
+  // held-out miss; never edit a row or description to win one, or the set stops measuring anything.
   let heldoutRate = null;
   const held = loadHeldout(root, minHeldout != null, errors);
   if (held) {

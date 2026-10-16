@@ -90,9 +90,10 @@ test('held-out prompts give their own rate, held to their own floor', () => {
 });
 
 test('the fixed floors and the frozen held-out set are pinned', () => {
-  assert.deepEqual(JSON.parse(readFileSync(join(ROOT, 'evals', 'floors.json'), 'utf8')), { rank1: 85, heldout_rank1: 32 });
+  // heldout_rank1 is the measured held-out rate (9 of 25): the lexical ranker is deterministic, so one lost hit fails.
+  assert.deepEqual(JSON.parse(readFileSync(join(ROOT, 'evals', 'floors.json'), 'utf8')), { rank1: 85, heldout_rank1: 36 });
   const sha = createHash('sha256').update(readFileSync(join(ROOT, 'evals', 'heldout.json'))).digest('hex');
-  assert.equal(sha, '9b5cb8271f50835c162805b42066d90206bd46ffd7b0af280992b3d5af2a54c0', 'evals/heldout.json is frozen: fix routing, never the prompts');
+  assert.equal(sha, '9b5cb8271f50835c162805b42066d90206bd46ffd7b0af280992b3d5af2a54c0', 'evals/heldout.json is frozen: record held-out misses; never edit a row or description to win one');
 });
 
 // A negative the lexical ranker cannot judge carries "grader": "model"; M2b's model-graded runner checks it.
