@@ -343,7 +343,7 @@ _g16_redirects() {
 # (accepted limit).
 _g16_bash() {
   local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m
-  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0
+  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
   cmd=$_G16_F
@@ -365,6 +365,8 @@ _g16_bash() {
   _G16_HOME=$(_g16_lower "${HOME-}")
   _G16_DATA=${_G16_SD%/sessions}
   _G16_INCC=0
+  # cdir: the directory while dk is 1, lower-cased text with . and .. resolved as text.
+  cdir=$(_g16_lower "${CWD:-$PWD}")
   while IFS= read -r seg; do
     [ -n "$seg" ] || continue
     # The command name comes first, after the assignments, keywords and wrappers _cmd_words skips.
@@ -468,9 +470,19 @@ WORDS
         cmd_mod "$seg"
         [ $? = 1 ] || dk=0
         if [ "$dk" = 1 ]; then
-          # A relative target may stay under the sessions dir.
-          case "$last" in /* | '~'*) in_sd=$seg_s ;; *) [ "$seg_s" = 0 ] || in_sd=1 ;; esac
-          if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi
+          # A relative target may stay under the sessions dir. The directory is followed as text, so
+          # a relative cd that comes back to a .claude directory (cd agents && cd ..) is in it again.
+          case "$last" in
+            /*) t=$last; in_sd=$seg_s ;;
+            '~'*) t="$_G16_HOME${last#'~'}"; in_sd=$seg_s ;;
+            *) t="$cdir/$last"; [ "$seg_s" = 0 ] || in_sd=1 ;;
+          esac
+          _g16_tidy "$t"
+          cdir=$_G16_T
+          case "$cdir" in
+            */.claude) _G16_INCC=1 ;;
+            *) if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi ;;
+          esac
         else
           [ "$seg_s" = 0 ] && [ "$sd_seen" = 0 ] || in_sd=1
           if [ "$cc_seen" = 1 ] || _g16_into "$last"; then _G16_INCC=1; fi

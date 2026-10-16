@@ -395,6 +395,20 @@ expect_cmd() {
     'cd "$(git rev-parse --show-toplevel)" && sed -i "" s/a/b/ settings.json' 'cd $X && echo x > foo'
 }
 
+@test "a relative cd is followed as text: one that comes back into a .claude directory is in it again" {
+  mkdir -p "$R/.claude/agents" "$HOME/.claude/agents"
+  local cc=(
+    'cd ~/.claude && cd agents && cd .. && sed -i "" s/a/b/ settings.json' 'cd ~/.claude/agents && cd .. && echo {} > settings.json'
+    'cd .claude/agents && cd .. && cp /tmp/x .' 'cd .claude && cd agents/../x/.. && echo {} > settings.local.json'
+  )
+  expect_cmd ask "${cc[@]}"
+  set_autopilot on
+  expect_cmd deny "${cc[@]}"
+  set_autopilot off
+  expect_cmd none 'cd .claude && ls && cd .. && git add .' 'cd ~/.claude && cd agents && echo {} > settings.json' \
+    'cd .claude/agents && cp /tmp/x .'
+}
+
 @test "a cd that can go back (-, ~-, +N, popd, \$X) takes back the reading an earlier cd in the command cleared" {
   local cc=(
     'cd ~/.claude && cd /tmp && cd - && sed -i "" s/a/b/ settings.json' 'cd ~/.claude && cd /tmp; cd -; echo {} > settings.json'
