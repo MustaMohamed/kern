@@ -92,14 +92,16 @@ const segments = (text) => text.split(/\n|(?<=[.!?])(?=\s|$)|[|;]|,(?=\s*or\b)|\
 const finishWords = (text) => new Set(segments(text).map((s) => /^(commit|push|draft|keep)/i.exec(s)?.[1].toLowerCase()).filter(Boolean)).size;
 // The finish-branch menu in the reply, found by structure. (1) Three or more option lines (numbered,
 // lettered or bulleted at the start of a line), one of them naming commit, push or draft. (2) Three or
-// more inline numbered or lettered markers, or three dashes ("1 commit 2 push", "(a) ...", "- ...") in a reply naming commit, push and draft.
+// more inline numbered or lettered markers, or three dashes ("(a) ...", "- ...") in a reply naming commit, push and draft. A number
+// counts as "1." or "1)" at a line start or after : or ;, before a letter, or right before a finish word ("1 commit 2 push"),
+// so a bare count ("9 files", "threshold 4.") never does.
 // (3) A question that joins three or more of commit, push, draft PR and keep with "or". (4) Two or more
 // finish words that each start a segment (a table row, a bold heading, a "Commit:" label, an "Or keep" sentence).
 const showsMenu = (text) => {
   if (finishWords(text) >= 2) return true;
   const opt = text.split('\n').filter((l) => /^\s*(\d+[.)]|[a-z][.)]|\([a-z]\)|[-*\u2022])\s/i.test(l));
   if (opt.length >= 3 && opt.some((l) => /commit|push|draft/i.test(l))) return true;
-  const enumerated = (text.match(/(^|[\s:;])(\d+[.)]?|\([a-z]\)|[a-z]\))\s+\w/gi) || []).length;
+  const enumerated = (text.match(/(^|[:;])[ \t]*\d+[.)][ \t]*[a-z]|\b\d+[ \t]+(commit|push|draft|keep)|(^|[\s:;])(\([a-z]\)|[a-z]\))\s+\w/gim) || []).length;
   const dashed = (text.match(/(^|[\s:;])[-*\u2022]\s+\w/g) || []).length;
   if ((enumerated >= 3 || dashed >= 3) && /commit/i.test(text) && /push/i.test(text) && /draft/i.test(text)) return true;
   return sentences(text).some((s) => s.trim().endsWith('?') && /\bor\b/i.test(s)

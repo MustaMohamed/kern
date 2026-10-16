@@ -467,6 +467,12 @@ for (const [name, reply] of [
 test('R1 round 4: an accepted false fail, a ? sentence that joins three options with or after the offer', () => {
   assert.equal(splitPasses("Should I split into two PRs? If not, I'll commit, push or open a draft PR next?"), false);
 });
+// R1 round 5: a bare count ("9 files", "threshold 4.") is not a menu marker.
+const TWO_OPTIONS = '\n1. Split (recommended): two PRs.\n2. No split: go on to commit, push and open a draft PR.';
+for (const lead of ['Nine files exceeds scope_threshold 4. Should I split this?', 'The diff touches 9 files, over the limit of 4. Should I split this?',
+  'The diff is 9 files over 2 dirs. Should I split this?']) {
+  test(`R1 round 5: "${lead}" with two options passes the split case`, () => assert.equal(splitPasses(lead + TWO_OPTIONS), true));
+}
 
 test('C1: the menu grader needs the four options and the proof and self-review steps', () => {
   const grade = (events) => GRADERS['finish-menu-first']({ events, ghLog: [] });
