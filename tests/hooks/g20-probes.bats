@@ -269,6 +269,23 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   b "X=1 cd /tmp; cp src.md dst.md"; none
 }
 
+@test "P21f a cd that can go back (-, ~-, +N, \$OLDPWD, popd) or a builtin cd: G20 judges from every directory it may be in" {
+  prep "$R/src.md"
+  mkdir -p "$R/d"
+  prep "$R/d/x.md"
+  b "cd /tmp && cd - && cp src.md dst.md"; deny
+  b "cd /tmp; cd -; cp src.md dst.md"; deny
+  b "pushd /tmp && popd && cp src.md dst.md"; deny
+  b "cd /tmp && cd ~- && cp src.md dst.md"; deny
+  b "cd /tmp && cd \"\$OLDPWD\" && cp src.md dst.md"; deny
+  b "cd /tmp && cd +1 && cp src.md dst.md"; deny
+  b "cd /tmp && cd -- - && cp src.md dst.md"; deny
+  b "builtin cd d && echo note >> x.md"; deny
+  b "cd /tmp && builtin cd $R && cp src.md dst.md"; deny
+  # A plain cd to a known target is followed: neither file is in /tmp.
+  b "cd /tmp && cp src.md dst.md"; none
+}
+
 @test "P22 reads and kern's own scripts get no G20 vote" {
   prep "$SPEC"
   b "grep -rn approved .kern/specs/export.md"; none

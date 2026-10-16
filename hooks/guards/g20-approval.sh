@@ -400,15 +400,40 @@ _g20_cmd() {
   case "$head" in *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*) head=$(printf '%s' "$head" | LC_ALL=C tr '[:upper:]' '[:lower:]') ;; esac
   shift
   case "$head" in
+    builtin) case "${1-}" in cd | pushd | popd) _g20_cmd "$@" ;; esac ;;
     cd | pushd)
-      # Only a plain cd is followed for certain (cmd_plain); _g20_seg also judges from where it was.
+      # Only a plain cd is followed for certain (cmd_plain); _g20_seg also judges from where it was. A
+      # cd that can go back (-, ~-, +N, -N, a target built at run time, more than one operand, a pushd
+      # with none) may land in any directory the command was in, or HOME (_G20_BACK).
       cmd_plain "$_G20_REC" || _G20_STAY=1
-      w=$HOME
+      w=""
+      n=0
+      skip=0
       for i in "$@"; do
-        case "$i" in -*) ;; *) w=$i; break ;; esac
+        case "$skip:$i" in
+          0:--) skip=1 ;;
+          0:- | 0:-[0123456789]*) w=-; n=$((n + 1)) ;;
+          0:-*) ;;
+          *) w=$i; n=$((n + 1)) ;;
+        esac
       done
-      _g20_dyn "$w" || { _g20_abs "$w"; _G20_DIR=$_G20_P; }
+      case "$n:$w" in
+        0:) if [ "$head" = pushd ]; then _G20_BACK=1; else w=$HOME; fi ;;
+        1:- | 1:+* | 1:-[0123456789]*) _G20_BACK=1 ;;
+        1:'~' | 1:'~'/*) ;;
+        1:'~'*) _G20_BACK=1 ;;
+        1:*) _g20_dyn "$w" && _G20_BACK=1 ;;
+        *) _G20_BACK=1 ;;
+      esac
+      if [ "$_G20_BACK" = 1 ]; then
+        _G20_STAY=1
+        _G20_DIR=$HOME
+      else
+        _g20_abs "$w"
+        _G20_DIR=$_G20_P
+      fi
       ;;
+    popd) _G20_STAY=1; _G20_BACK=1 ;;
     sed | perl)
       if [ "$head" = sed ]; then
         _g20_ops ef l '' i "--expression --file --line-length" "--expression --file" "$@"
@@ -546,27 +571,44 @@ _g20_cmd() {
 
 # _g20_seg SIMPLE_COMMAND: _g20_seg1 from each directory in _G20_DIRS. The directories after it are each
 # one's _G20_DIR once the command ran, and also each one itself when the command holds a cd G20 does not
-# follow for certain (_G20_STAY, cmd_plain). Past 16 directories it denies: it could not judge them all.
+# follow for certain (_G20_STAY, cmd_plain), and every directory the command was in (_G20_SEEN) after a
+# cd that can go back (_G20_BACK). Past 16 directories it denies: it could not judge them all.
 _g20_seg() {
-  local d next="" n=0 nl=$'\n' x
+  local d next="" n=0 nl=$'\n' x back=0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     _G20_DIR=$d
     _G20_STAY=0
+    _G20_BACK=0
     _g20_seg1 "$1"
     for x in "$_G20_DIR" "$d"; do
       case "$nl$next" in *"$nl$x$nl"*) ;; *) next="$next$x$nl"; n=$((n + 1)) ;; esac
       [ "$_G20_STAY" = 1 ] || break
     done
+    [ "$_G20_BACK" = 0 ] || back=1
     [ -z "$_G20_WHY" ] || return 0
   done <<DIRS
 $_G20_DIRS
 DIRS
+  if [ "$back" = 1 ]; then
+    while IFS= read -r x; do
+      [ -n "$x" ] || continue
+      case "$nl$next" in *"$nl$x$nl"*) ;; *) next="$next$x$nl"; n=$((n + 1)) ;; esac
+    done <<SEEN
+$_G20_SEEN
+SEEN
+  fi
   if [ "$n" -gt 16 ]; then
     _G20_WHY="the command may be in more directories than G20 follows, after cds it cannot follow for certain; run them in a call of their own"
     return 0
   fi
   _G20_DIRS=$next
+  while IFS= read -r x; do
+    [ -n "$x" ] || continue
+    case "$nl$_G20_SEEN" in *"$nl$x$nl"*) ;; *) _G20_SEEN="$_G20_SEEN$x$nl" ;; esac
+  done <<NEXT
+$next
+NEXT
 }
 
 # _g20_seg1 SIMPLE_COMMAND: its redirect targets, its file words (into _G20_SRC) and its command, from
@@ -631,6 +673,7 @@ _g20_bash() {
   case "$t" in *.[Mm][Dd]* | *.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]*) _G20_M=1 ;; esac
   [ "$_G20_W$_G20_M" != 00 ] || return 0
   _G20_DIRS=${CWD:-$PWD}
+  _G20_SEEN="${CWD:-$PWD}"$'\n'
   _G20_WRITES=0
   _G20_SRC=''
   _G20_WHY=''
