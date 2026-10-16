@@ -439,7 +439,8 @@ expect_cmd() {
   # may be 0; it does not find a quoted reserved word as a command. Such a cd keeps the reading.
   expect_cmd ask "cd ~/.claude && coproc cd /tmp; echo {} > settings.json" \
     "cd ~/.claude && repeat 0 cd /tmp; echo {} > settings.json" "cd ~/.claude && 'coproc' cd /tmp; echo {} > settings.json" \
-    "cd ~/.claude && 'repeat' 1 cd /tmp; echo {} > settings.json" "cd ~/.claude && repeat \$n cd /tmp; echo {} > settings.json"
+    "cd ~/.claude && 'repeat' 1 cd /tmp; echo {} > settings.json" "cd ~/.claude && repeat \$n cd /tmp; echo {} > settings.json" \
+    "cd ~/.claude && co''proc cd /tmp; echo {} > settings.json" "cd ~/.claude && no\\correct cd /tmp; echo {} > settings.json"
   expect_cmd deny "cd $S && coproc cd /tmp; echo x > foo" "cd $S && repeat 0 cd /tmp; echo x > foo"
   # A cd behind noglob, nocorrect or repeat 1 moves, as in zsh, and gets the vote of the plain cd.
   expect_cmd none "cd ~/.claude && noglob cd /tmp; echo {} > settings.json" \
