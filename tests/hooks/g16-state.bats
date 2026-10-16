@@ -429,24 +429,45 @@ expect_cmd() {
     "cd $S && cd /tmp && cd - && cd /tmp && echo x > foo"
 }
 
-@test "a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd under coproc or repeat 0 keeps the reading" {
+@test "a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd after one keeps the reading" {
   expect_bash deny "noglob tee $S/a.state" "nocorrect cp /tmp/x $S/a.state" "repeat 1 sed -i '' s/off/on/ $S/a.state" \
     "coproc rm -f $S/a.state"
   expect_bash ask "noglob sed -i '' s/a/b/ .claude/settings.json" "repeat 2 cp /tmp/x .claude/"
   # noglob only stops globbing, so a read stays a read.
   expect_bash none "noglob cat $S/a.state" "nocorrect grep autopilot $S/a.state" "noglob ls .claude"
-  # zsh runs coproc's cd in a subshell, repeat 0's no time, and a count that is not a literal number
-  # may be 0; it does not find a quoted reserved word as a command. Such a cd keeps the reading.
+  # Only a plain cd is followed; one after a modifier keeps the reading and adds the target's.
   expect_cmd ask "cd ~/.claude && coproc cd /tmp; echo {} > settings.json" \
     "cd ~/.claude && repeat 0 cd /tmp; echo {} > settings.json" "cd ~/.claude && 'coproc' cd /tmp; echo {} > settings.json" \
     "cd ~/.claude && 'repeat' 1 cd /tmp; echo {} > settings.json" "cd ~/.claude && repeat \$n cd /tmp; echo {} > settings.json" \
     "cd ~/.claude && co''proc cd /tmp; echo {} > settings.json" "cd ~/.claude && no\\correct cd /tmp; echo {} > settings.json"
   expect_cmd deny "cd $S && coproc cd /tmp; echo x > foo" "cd $S && repeat 0 cd /tmp; echo x > foo"
-  # A cd behind noglob, nocorrect or repeat 1 moves, as in zsh, and gets the vote of the plain cd.
-  expect_cmd none "cd ~/.claude && noglob cd /tmp; echo {} > settings.json" \
-    "cd ~/.claude && nocorrect cd /tmp; echo {} > settings.json" "cd $S && repeat 1 cd /tmp; echo x > foo" \
-    "cd ~/.claude && cd /tmp; echo {} > settings.json"
-  expect_cmd ask "noglob cd ~/.claude && echo {} > settings.json" "repeat 1 cd ~/.claude && echo {} > settings.json"
+  expect_cmd ask "cd ~/.claude && noglob cd /tmp; echo {} > settings.json" \
+    "cd ~/.claude && nocorrect cd /tmp; echo {} > settings.json" \
+    "noglob cd ~/.claude && echo {} > settings.json" "repeat 1 cd ~/.claude && echo {} > settings.json"
+  expect_cmd deny "cd $S && repeat 1 cd /tmp; echo x > foo" "cd $S && nocorrect cd /tmp && echo x > foo" \
+    "cd $S && noglob cd /tmp; echo x > foo"
+}
+
+@test "only a plain cd is followed: one behind a modifier, a reserved word or a wrapper keeps the reading" {
+  local pre=('noglob time' 'noglob !' 'nice noglob' 'noglob nice' 'sudo noglob' 'env noglob' 'noglob env'
+    'timeout 5 noglob' 'noglob command' 'command noglob' 'nice' 'env' 'nohup' 'timeout 5' 'command' 'sudo' 'exec'
+    'time' '!' 'nocorrect' 'noglob' 'repeat 1' 'coproc')
+  local p cc=() sd=()
+  for p in "${pre[@]}"; do
+    cc+=("cd ~/.claude && $p cd /tmp; sed -i '' s/a/b/ settings.json")
+    sd+=("cd $S && $p cd /tmp; echo x > foo")
+  done
+  cc+=('cd ~/.claude && if cd /tmp; then echo {} > settings.json; fi')
+  sd+=("cd $S && if cd /tmp; then echo x > foo; fi")
+  expect_cmd ask "${cc[@]}"
+  expect_cmd deny "${sd[@]}"
+  set_autopilot on
+  expect_cmd deny "${cc[@]}" "${sd[@]}"
+  set_autopilot off
+  # A plain cd, after assignments or redirections too, still ends the reading.
+  expect_cmd none "cd $S && cd /tmp; echo x > foo" "cd $S && X=1 cd /tmp; echo x > foo" \
+    "cd $S && 2>/dev/null cd /tmp; echo x > foo" 'cd ~/.claude && cd /tmp; echo {} > settings.json' \
+    "cd $S && 'cd' /tmp; echo x > foo"
 }
 
 @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {

@@ -216,8 +216,9 @@ _g20_file() {
 # run time, is not seen (accepted limit).
 #
 # State for one command: _G20_W is 1 when the command holds approved (quotes and backslashes taken out,
-# any case), _G20_M when it names a Markdown file. _G20_DIR follows cd. _G20_REC is the simple command
-# _g20_seg reads. _G20_WRITES is 1 once a simple command writes a Markdown file. _G20_SRC holds the
+# any case), _G20_M when it names a Markdown file. _G20_DIRS holds each directory the command may be in,
+# one per line, and _G20_DIR the one _g20_seg1 judges from; it follows cd. _G20_REC is the simple command
+# _g20_seg1 reads. _G20_WRITES is 1 once a simple command writes a Markdown file. _G20_SRC holds the
 # command's other file words as absolute paths, one per line. _G20_WHY is the deny reason; the first one
 # ends the check.
 
@@ -400,10 +401,8 @@ _g20_cmd() {
   shift
   case "$head" in
     cd | pushd)
-      # A cd under coproc or a repeat count that may be 0 leaves the directory as it was (cmd_mod exit 0
-      # or 2); one behind noglob, nocorrect or repeat N moves, as in zsh.
-      cmd_mod "$_G20_REC"
-      [ $? = 1 ] || return 0
+      # Only a plain cd is followed for certain (cmd_plain); _g20_seg also judges from where it was.
+      cmd_plain "$_G20_REC" || _G20_STAY=1
       w=$HOME
       for i in "$@"; do
         case "$i" in -*) ;; *) w=$i; break ;; esac
@@ -545,8 +544,34 @@ _g20_cmd() {
   return 0
 }
 
-# _g20_seg SIMPLE_COMMAND: its redirect targets, its file words (into _G20_SRC) and its command.
+# _g20_seg SIMPLE_COMMAND: _g20_seg1 from each directory in _G20_DIRS. The directories after it are each
+# one's _G20_DIR once the command ran, and also each one itself when the command holds a cd G20 does not
+# follow for certain (_G20_STAY, cmd_plain). Past 16 directories it denies: it could not judge them all.
 _g20_seg() {
+  local d next="" n=0 nl=$'\n' x
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    _G20_DIR=$d
+    _G20_STAY=0
+    _g20_seg1 "$1"
+    for x in "$_G20_DIR" "$d"; do
+      case "$nl$next" in *"$nl$x$nl"*) ;; *) next="$next$x$nl"; n=$((n + 1)) ;; esac
+      [ "$_G20_STAY" = 1 ] || break
+    done
+    [ -z "$_G20_WHY" ] || return 0
+  done <<DIRS
+$_G20_DIRS
+DIRS
+  if [ "$n" -gt 16 ]; then
+    _G20_WHY="the command may be in more directories than G20 follows, after cds it cannot follow for certain; run them in a call of their own"
+    return 0
+  fi
+  _G20_DIRS=$next
+}
+
+# _g20_seg1 SIMPLE_COMMAND: its redirect targets, its file words (into _G20_SRC) and its command, from
+# _G20_DIR.
+_g20_seg1() {
   local w r s f=0 c=0 cw=()
   _G20_REC=$1
   while IFS= read -r w; do
@@ -605,7 +630,7 @@ _g20_bash() {
   case "$t" in *[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd]*) _G20_W=1 ;; esac
   case "$t" in *.[Mm][Dd]* | *.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]*) _G20_M=1 ;; esac
   [ "$_G20_W$_G20_M" != 00 ] || return 0
-  _G20_DIR=${CWD:-$PWD}
+  _G20_DIRS=${CWD:-$PWD}
   _G20_WRITES=0
   _G20_SRC=''
   _G20_WHY=''

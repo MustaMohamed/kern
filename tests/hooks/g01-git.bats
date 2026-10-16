@@ -326,7 +326,8 @@ settings() {
   export CWD="$BATS_TEST_TMPDIR/wt"
   local moves=("cd $R && git clean -fdx" "noglob cd $R && git clean -fdx" "nocorrect cd $R && git clean -fdx"
     "repeat 1 cd $R && git clean -fdx" "repeat 2 cd $R && git clean -fdx" "repeat \$N cd $R && git clean -fdx")
-  local stays=("coproc cd $R; git clean -fdx" "repeat 0 cd $R; git clean -fdx" "noglob repeat 1 cd $R; git clean -fdx")
+  local stays=("coproc cd $R; git clean -fdx" "repeat 0 cd $R; git clean -fdx" "noglob repeat 1 cd $R; git clean -fdx"
+    "co''proc cd $R; git clean -fdx")
   expect ask "${moves[@]}"
   expect none "${stays[@]}"
   set_autopilot on

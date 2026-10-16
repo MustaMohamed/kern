@@ -219,8 +219,10 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   b "truncate -s 0 .kern/specs/export.md"; deny
 }
 
-@test "P21b a cd behind noglob, nocorrect or repeat N moves; one under coproc or repeat 0 does not" {
+@test "P21b a write after a cd behind noglob, nocorrect, repeat or coproc is judged from both directories" {
   prep "$SPEC"
+  b "noglob cd /tmp; echo note >> .kern/specs/export.md"; deny
+  b "nocorrect cd /tmp; echo note >> .kern/specs/export.md"; deny
   b "noglob cd .kern/specs && echo note >> export.md"; deny
   b "nocorrect cd .kern/specs && echo note >> export.md"; deny
   b "repeat 1 cd .kern/specs && echo note >> export.md"; deny
@@ -238,6 +240,24 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
   mkdir -p "$R/d"
   prep "$R/d/src.md"
   b "cd d 2> nocorrect && cp src.md x.md"; deny
+}
+
+@test "P21d a cd behind a wrapper, a reserved word or a modifier chain: G20 judges from both directories" {
+  prep "$SPEC"
+  prep "$R/src.md"
+  mkdir -p "$R/d"
+  prep "$R/d/x.md"
+  local p
+  for p in 'noglob time' 'noglob !' 'nice noglob' 'sudo noglob' 'noglob env' 'noglob command' 'command noglob' \
+    'nice' 'env' 'nohup' 'timeout 5' 'command' 'sudo' 'time' '!'; do
+    b "$p cd /tmp; cp src.md dst.md"; deny
+    b "$p cd /tmp; echo note >> .kern/specs/export.md"; deny
+    b "$p cd d && echo note >> x.md"; deny
+  done
+  b "if cd d; then echo note >> x.md; fi"; deny
+  b "if cd /tmp; then echo note >> .kern/specs/export.md; fi"; deny
+  # A plain cd is followed: the spec is not in /tmp.
+  b "cd /tmp; echo note >> .kern/specs/export.md"; none
 }
 
 @test "P22 reads and kern's own scripts get no G20 vote" {

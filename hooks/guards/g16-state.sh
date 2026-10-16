@@ -342,7 +342,7 @@ _g16_redirects() {
 # back each one held earlier in the command, as popd does. A variable that holds a path is not read
 # (accepted limit).
 _g16_bash() {
-  local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m
+  local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m sd_f cc_f
   local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
@@ -466,26 +466,31 @@ WORDS
           1:*) ;;
           *) dk=0 ;;
         esac
-        # A cd under coproc or a repeat count that may be 0 may not move (cmd_mod exit 0 or 2).
-        cmd_mod "$seg"
-        [ $? = 1 ] || dk=0
+        # sd_f and cc_f: the readings after a move to a known target. A relative target may stay under
+        # the sessions dir. The directory is followed as text, so a relative cd that comes back to a
+        # .claude directory (cd agents && cd ..) is in it again.
+        sd_f=$seg_s
+        cc_f=0
         if [ "$dk" = 1 ]; then
-          # A relative target may stay under the sessions dir. The directory is followed as text, so
-          # a relative cd that comes back to a .claude directory (cd agents && cd ..) is in it again.
           case "$last" in
-            /*) t=$last; in_sd=$seg_s ;;
-            '~'*) t="$_G16_HOME${last#'~'}"; in_sd=$seg_s ;;
-            *) t="$cdir/$last"; [ "$seg_s" = 0 ] || in_sd=1 ;;
+            /*) t=$last ;;
+            '~'*) t="$_G16_HOME${last#'~'}" ;;
+            *) t="$cdir/$last"; [ "$in_sd" = 0 ] || sd_f=1 ;;
           esac
           _g16_tidy "$t"
-          cdir=$_G16_T
-          case "$cdir" in
-            */.claude) _G16_INCC=1 ;;
-            *) if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi ;;
-          esac
+          t=$_G16_T
+          case "$t" in */.claude) cc_f=1 ;; esac
+        fi
+        if [ "$cc_f" = 0 ] && _g16_into "$last"; then cc_f=1; fi
+        # Only a plain cd is followed (cmd_plain); any other keeps both readings and adds the target's.
+        if [ "$dk" = 1 ] && cmd_plain "$seg"; then
+          cdir=$t
+          in_sd=$sd_f
+          _G16_INCC=$cc_f
         else
-          [ "$seg_s" = 0 ] && [ "$sd_seen" = 0 ] || in_sd=1
-          if [ "$cc_seen" = 1 ] || _g16_into "$last"; then _G16_INCC=1; fi
+          dk=0
+          [ "$sd_f" = 0 ] && [ "$sd_seen" = 0 ] || in_sd=1
+          [ "$cc_f" = 0 ] && [ "$cc_seen" = 0 ] || _G16_INCC=1
         fi
         [ "$in_sd" = 0 ] || sd_seen=1
         [ "$_G16_INCC" = 0 ] || cc_seen=1

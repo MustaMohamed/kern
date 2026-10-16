@@ -479,8 +479,9 @@ _cmd_words() {
 # the name, such as an argument, a redirect target or a comment, does not count). Exit 0 when it does
 # not: coproc runs it in a subshell, repeat 0 runs it no time, and zsh does not find a quoted reserved
 # word, or one after noglob or nocorrect, as a command. Exit 2 when it may not (a repeat count that is
-# not a literal number), and 1 when it does. So a cd behind noglob, nocorrect or repeat 1 moves the
-# shell, as zsh moves it. The awk runs only when the text could hold one of these words.
+# not a literal number), and 1 when it does. G1, G5 and G6 count a cd as a move unless it exits 0; G16
+# and G20 follow only a plain cd (cmd_plain). The awk runs only when the text could hold one of these
+# words.
 cmd_mod() {
   case "$1" in *noglob* | *nocorrect* | *coproc* | *repeat* | *[\"\'\\]*) ;; *) return 1 ;; esac
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
@@ -489,6 +490,29 @@ cmd_mod() {
       sw(buf); cw_reset()
       for (k = 1; k <= sw_n; k++) { cw_q = sw_q[k]; cw(sw_w[k]) }
       exit cw_mod == 3 ? 0 : cw_mod == 2 ? 2 : 1
+    }'
+}
+
+# cmd_plain CMDLINE: exit 0 when the command name of CMDLINE is cd, pushd or popd as written, with only
+# assignments and redirections before it. G16 and G20 follow such a cd and no other: a cd behind a zsh
+# modifier or reserved word (noglob, nocorrect, coproc, repeat, time, !, if and the like) or a wrapper
+# (command, builtin, exec, nice, nohup, env, timeout, sudo) may run in a subshell, run a /usr/bin/cd that
+# never moves the shell, or not run at all, and kern does not model each of those as zsh does. On such a
+# cd, G16 keeps its readings and adds the target's (its union), and G20 judges from both directories. G1,
+# G5 and G6 judge where git would run without a move as well, so they count such a cd as a move.
+cmd_plain() {
+  case "$1" in cd | cd[[:space:]]* | pushd | pushd[[:space:]]* | popd | popd[[:space:]]*) return 0 ;; esac
+  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+    { buf = buf (NR > 1 ? "\037" : "") $0 }
+    END {
+      sw(buf)
+      for (k = 1; k <= sw_n; k++) {
+        x = sw_w[k]
+        if (x ~ /^[0-9]*(<|>|&>)/) { if (x ~ /^[0-9]*[<>&|]+$/) k++; continue }
+        if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) continue
+        exit x !~ /^(cd|pushd|popd)$/
+      }
+      exit 1
     }'
 }
 
