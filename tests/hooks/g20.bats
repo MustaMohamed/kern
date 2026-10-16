@@ -241,3 +241,17 @@ approved_spec() {
 @test "the dispatcher lists g20 among the guards it expects" {
   grep -q '^KERN_GUARD_IDS=".* g20[ "]' "$K/hooks/pre-tool-use"
 }
+
+@test "a contraction or cannot holds the approval, with a straight or curly apostrophe" {
+  say "Looks ok, but I can't sign off yet\nWe can't ship this yet\nI cannot approve it\nok, but it isn’t ready\nok, but I won’t sign\nyes it doesnt work"
+  for q in "Looks ok, but I can't sign off yet" "We can't ship this yet" 'I cannot approve it' 'ok, but it isn’t ready' 'ok, but I won’t sign' 'yes it doesnt work'; do
+    approve "$q"
+    [ "$(decision_of "$output")" = deny ] || { echo "quote: $q: $output"; return 1; }
+    [[ "$output" == *'is not an explicit yes'* ]] || { echo "quote: $q: $output"; return 1; }
+  done
+  say 'yes, delegate\nok good, go'
+  approve 'yes, delegate'
+  [ -z "$output" ]
+  approve 'ok good, go'
+  [ -z "$output" ]
+}

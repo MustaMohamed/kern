@@ -31,7 +31,7 @@ _G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your ca
 # A quote approves only when its words hold one of _G20_YES and none of _G20_HOLD, and it does not end in
 # a question mark. "good" and "sounds good" are not a yes.
 _G20_YES="yes|y|yep|yeah|ok|okay|sure|go|go ahead|approve|approved|lgtm|ship it|do it|proceed|confirmed|agreed"
-_G20_HOLD="no|nope|nah|not|don't|dont|never|wait|stop|hold|later|cancel"
+_G20_HOLD="no|nope|nah|not|don't|dont|never|wait|stop|hold|later|cancel|can't|cant|won't|wont|isn't|isnt|aren't|arent|shouldn't|shouldnt|wouldn't|wouldnt|couldn't|couldnt|haven't|havent|hasn't|hasnt|didn't|didnt|doesn't|doesnt|cannot"
 _G20_ASK_YES="ask the user for an explicit yes, then quote that line verbatim"
 # An approved: line, bare or quoted, in any case and indentation (grep -i).
 _G20_APPROVED_RE="^[[:space:]]*[\"']?approved[\"']?[[:space:]]*:"
