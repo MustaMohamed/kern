@@ -1,0 +1,227 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 43ca80e..ed5573a 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,8 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ 
+ ## [Unreleased]
+ 
++- help: allows only the exact git commands it prescribes (`git remote -v`, `git rev-parse --git-common-dir`, `git check-ignore -q *`, `git worktree list`); `git remote *`, `git symbolic-ref *` and `git log *` could write config, move HEAD or run a program with no prompt.
++- Mode switches: "terse voice" and "terse mode on" switch; extra spaces are folded; a first line over 200 characters never switches.
+ - Kernel: no is an acceptable answer, and chat in either voice skips the main AI tells; terse keeps existing comments and shows only changed code.
+ - prove-it: evidence before any done, fixed or passing claim. Removes the M0 placeholder skill.
+ - Agents implementer, task-reviewer and investigator.
+diff --git a/hooks/prompt-submit b/hooks/prompt-submit
+index 936c676..e3f5a5c 100755
+--- a/hooks/prompt-submit
++++ b/hooks/prompt-submit
+@@ -116,17 +116,22 @@ wrapped() {
+   return 1
+ }
+ 
+-# natural PROMPT: switches only when the first line, lowercased and trimmed, is a switch phrase and
+-# nothing else, apart from a leading "please", "ok" or "okay" and any trailing mix of "please", "now"
+-# and a final . or !. A phrase that ends in "terse" or "normal" may add " mode". A line that holds
+-# anything more, such as "use terse, descriptive names", never switches.
++# natural PROMPT: switches only when the first non-blank line, lowercased, trimmed and with its runs of
++# blanks folded to one space, is a switch phrase and nothing else, apart from a leading "please", "ok"
++# or "okay" and any trailing mix of "please", "now" and final . or !. A phrase that ends in "terse" or
++# "normal" may add " mode". A line that holds anything more, such as "use terse, descriptive names",
++# never switches, and neither does a line over 200 characters: no phrase is that long, and the ending
++# loop below is quadratic in a long run of strippable endings.
+ natural() {
+   local p
+-  p=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}' | lower |
+-    sed -E -e 's/^[[:space:]]+//; s/[[:space:]]+$//' -e ':a' -e 's/[[:space:]]*[.!]+$//; s/,?[[:space:]]+(please|now)$//' -e 'ta' \
+-      -e 's/^(please|ok|okay),?[[:space:]]+//; s/(^|[[:space:]])(terse|normal) mode$/\1\2/')
++  p=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}')
++  [ "${#p}" -le 200 ] || return 0
++  p=$(printf '%s\n' "$p" | lower |
++    sed -E -e 's/[[:space:]]+/ /g; s/^ //; s/ $//' -e ':a' -e 's/ ?[.!]+$//; s/,? (please|now)$//' -e 'ta' \
++      -e 's/^(please|ok|okay),? //; s/(^| )(terse|normal) mode$/\1\2/')
+   case "$p" in
+-    terse | "go terse" | "be terse" | "use terse" | "enable terse" | "turn on terse" | "activate terse" | "switch to terse" | "terse on")
++    terse | "go terse" | "be terse" | "use terse" | "enable terse" | "turn on terse" | "activate terse" | "switch to terse" | "terse on" | \
++      "terse voice" | "terse mode on")
+       set_voice terse && SHOW_LINE=1
+       ;;
+     normal | "normal voice" | "back to normal" | "go back to normal" | "switch back to normal" | "switch to normal" | "stop terse" | \
+diff --git a/skills/help/SKILL.md b/skills/help/SKILL.md
+index aac8f24..d004727 100644
+--- a/skills/help/SKILL.md
++++ b/skills/help/SKILL.md
+@@ -3,7 +3,7 @@ name: help
+ description: "Map of kern: which skill fits, fixes for a run that went wrong, and help setup to write this project's settings."
+ disable-model-invocation: true
+ argument-hint: "[setup|check|<question>]"
+-allowed-tools: Read, Bash(git remote *), Bash(git symbolic-ref *), Bash(git log *), Bash(git for-each-ref *), Bash(git worktree list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(git rev-parse *), Bash(git check-ignore *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)
++allowed-tools: Read, Bash(git remote -v), Bash(git rev-parse --git-common-dir), Bash(git check-ignore -q *), Bash(git worktree list), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)
+ ---
+ 
+ # Help
+diff --git a/skills/mode/SKILL.md b/skills/mode/SKILL.md
+index 85753e9..48bdc6d 100644
+--- a/skills/mode/SKILL.md
++++ b/skills/mode/SKILL.md
+@@ -20,8 +20,8 @@ kern's prompt hook applies the switch before this skill loads. This skill only r
+ ## Words
+ `terse` and `normal` set the voice. `chat`, `auto` and `html` set the surface. `default` resets both to the settings defaults. `status` changes nothing. Words combine, as in `/kern:mode html terse`. An unknown word changes nothing.
+ 
+-A phrase below also switches, without this skill, only when it stands alone on the prompt's first line: put the phrase alone on the first line, or type `/kern:mode`. A leading "please" or "ok", a trailing "please" or "now", a final "." or "!", and "mode" after "terse" or "normal" are allowed; with anything else on the line, as in "go terse and fix the bug", nothing switches.
+-- terse voice: "terse", "go terse", "be terse", "use terse", "enable terse", "turn on terse", "activate terse", "switch to terse", "terse on", "terse mode";
++A phrase below also switches, without this skill, only when it stands alone on the prompt's first non-blank line: put the phrase alone on that line, or type `/kern:mode`. A leading "please", "ok" or "okay" (with or without a comma), any trailing mix of "please" and "now", one or more final "." or "!", extra spaces between words, and "mode" after "terse" or "normal" are allowed; with anything else on the line, as in "go terse and fix the bug", nothing switches, and a line over 200 characters never does.
++- terse voice: "terse", "go terse", "be terse", "use terse", "enable terse", "turn on terse", "activate terse", "switch to terse", "terse on", "terse voice", "terse mode on", "terse mode";
+ - normal voice: "normal", "normal mode", "normal voice", "back to normal", "go back to normal", "switch back to normal", "switch to normal", "stop terse", "terse off", "terse mode off", "turn off terse", "disable terse", "exit terse", "quit terse";
+ - html surface: "html mode", "go html", "switch to html", "html on";
+ - surface back to the settings default, or `auto` when that default is `html`: "stop html", "html off";
+diff --git a/tests/fixtures/mode-activation/cases.json b/tests/fixtures/mode-activation/cases.json
+index 748501f..17ddf45 100644
+--- a/tests/fixtures/mode-activation/cases.json
++++ b/tests/fixtures/mode-activation/cases.json
+@@ -198,5 +198,10 @@
+   { "prompt": "fix the bug\nstop terse", "expect": "none", "known_failing": false },
+   { "prompt": "<scheduled-task name=y>go terse</scheduled-task>", "expect": "none", "known_failing": false },
+   { "prompt": "<teammate-message teammate_id=\"lead\">stop terse</teammate-message>", "expect": "none", "known_failing": false },
+-  { "prompt": "<task-notification>terse mode</task-notification>", "expect": "none", "known_failing": false }
++  { "prompt": "<task-notification>terse mode</task-notification>", "expect": "none", "known_failing": false },
++  { "prompt": "terse voice", "expect": "on", "known_failing": false },
++  { "prompt": "terse mode on", "expect": "on", "known_failing": false },
++  { "prompt": "go   terse", "expect": "on", "known_failing": false },
++  { "prompt": "back  to\tnormal", "expect": "off", "known_failing": false },
++  { "prompt": "use terse voice for the logger", "expect": "none", "known_failing": false }
+ ]
+diff --git a/tests/helpers/common.bash b/tests/helpers/common.bash
+index b532444..6923841 100644
+--- a/tests/helpers/common.bash
++++ b/tests/helpers/common.bash
+@@ -79,9 +79,14 @@ parsed_decision() {
+     process.stdout.write(o.hookSpecificOutput.permissionDecision)'
+ }
+ 
+-# need_list HOOK LIB: the functions that hooks/HOOK's `need LIB ...` lines name, sorted, one per line.
++# hook_file HOOK: hooks/HOOK in the repo, or HOOK itself when it is a path (a test's modified copy).
++hook_file() {
++  case "$1" in */*) printf '%s\n' "$1" ;; *) printf '%s/hooks/%s\n' "$(kern_root)" "$1" ;; esac
++}
++
++# need_list HOOK LIB: the functions that HOOK's `need LIB ...` lines name, sorted, one per line.
+ need_list() {
+-  awk -v l="$2" '$1 == "need" && $2 == l { for (i = 3; i <= NF; i++) print $i }' "$(kern_root)/hooks/$1" | sort
++  awk -v l="$2" '$1 == "need" && $2 == l { for (i = 3; i <= NF; i++) print $i }' "$(hook_file "$1")" | sort
+ }
+ 
+ # lib_functions LIB: the functions hooks/lib/LIB defines with `name() {`, sorted, one per line.
+@@ -89,18 +94,28 @@ lib_functions() {
+   sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)() {.*/\1/p' "$(kern_root)/hooks/lib/$1" | sort
+ }
+ 
+-# hook_libs HOOK: the libraries hooks/HOOK sources with a `. "$KERN_ROOT/hooks/lib/X.sh"` line.
++# hook_libs HOOK: the libraries HOOK sources with a `. "$KERN_ROOT/hooks/lib/X.sh"` line.
+ hook_libs() {
+-  sed -n 's|^\. "\$KERN_ROOT/hooks/lib/\([A-Za-z0-9_-]*\.sh\)".*|\1|p' "$(kern_root)/hooks/$1"
++  sed -n 's|^\. "\$KERN_ROOT/hooks/lib/\([A-Za-z0-9_-]*\.sh\)".*|\1|p' "$(hook_file "$1")"
++}
++
++# odd_lib_sources HOOK: lines that load a hooks/lib file in any form but the column-0
++# `. "$KERN_ROOT/hooks/lib/X.sh"` that hook_libs reads (indented, `source`, a loop, a variable path).
++odd_lib_sources() {
++  grep -nE '(^|[;&|[:space:]])(\.|source)[[:space:]].*hooks/lib/' "$(hook_file "$1")" |
++    grep -vE '^[0-9]+:\. "\$KERN_ROOT/hooks/lib/[A-Za-z0-9_-]+\.sh"' || true
+ }
+ 
+-# need_lists_match HOOK: hooks/HOOK has need lines for exactly the libraries it sources, and each
+-# library's need lines name exactly the functions it defines. Prints the difference otherwise.
++# need_lists_match HOOK: HOOK loads its libraries only in the form hook_libs reads, has need lines for
++# exactly those libraries, and each library's need lines name exactly the functions it defines. Prints
++# the difference otherwise.
+ need_lists_match() {
+-  local libs lib
++  local libs lib odd
++  odd=$(odd_lib_sources "$1")
++  [ -z "$odd" ] || { echo "$1 loads a hooks/lib file in a form these checks cannot read: $odd"; return 1; }
+   libs=$(hook_libs "$1")
+   [ -n "$libs" ] || { echo "$1 has no source line for a hooks/lib library"; return 1; }
+-  [ "$(printf '%s\n' "$libs" | sort)" = "$(awk '$1 == "need" { print $2 }' "$(kern_root)/hooks/$1" | sort -u)" ] ||
++  [ "$(printf '%s\n' "$libs" | sort)" = "$(awk '$1 == "need" { print $2 }' "$(hook_file "$1")" | sort -u)" ] ||
+     { echo "$1: its need lines and its source lines name different libraries"; return 1; }
+   for lib in $libs; do
+     [ -n "$(lib_functions "$lib")" ] || { echo "$lib defines no functions"; return 1; }
+diff --git a/tests/hooks/pre-tool-use.bats b/tests/hooks/pre-tool-use.bats
+index 935f4d6..a6e76d9 100644
+--- a/tests/hooks/pre-tool-use.bats
++++ b/tests/hooks/pre-tool-use.bats
+@@ -212,3 +212,12 @@ without_lib() {
+   out=$(unset BATS_TEST_FILENAME; KERN_GUARDS=g01 bash "$K/hooks/pre-tool-use" <<<"$p")
+   [ "$(decision_of "$out")" = deny ]
+ }
++
++@test "need_lists_match fails on a library loaded in a form it cannot read" {
++  for line in '  . "$KERN_ROOT/hooks/lib/json.sh"' 'source "$KERN_ROOT/hooks/lib/json.sh"' 'for l in json; do . "$KERN_ROOT/hooks/lib/$l.sh"; done'; do
++    { printf '%s\n' "$line"; cat "$K/hooks/pre-tool-use"; } > "$BATS_TEST_TMPDIR/pre-tool-use"
++    run need_lists_match "$BATS_TEST_TMPDIR/pre-tool-use"
++    [ "$status" -eq 1 ] || { echo "accepted: $line"; return 1; }
++    [[ "$output" == *"in a form these checks cannot read"* ]] || false
++  done
++}
+diff --git a/tests/hooks/prompt-submit.bats b/tests/hooks/prompt-submit.bats
+index 9fb6b98..1433ea8 100644
+--- a/tests/hooks/prompt-submit.bats
++++ b/tests/hooks/prompt-submit.bats
+@@ -239,3 +239,13 @@ expand() {
+   out=$(bash "$BATS_TEST_TMPDIR/k/hooks/prompt-submit" 2>/dev/null <<<"$(payload UserPromptSubmit '"prompt":"go terse"')")
+   [ -z "$out" ]
+ }
++
++@test "a first line over 200 characters never switches and returns at once" {
++  long="go terse$(printf ' .%.0s' $(seq 1 15000))"
++  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
++  start=$SECONDS
++  printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"%s"}' "$CWD" "$long" |
++    bash "$(kern_root)/hooks/prompt-submit" >/dev/null
++  [ $((SECONDS - start)) -le 3 ]
++  [ "$(st voice)" = normal ]
++}
+diff --git a/tests/skills-control.test.mjs b/tests/skills-control.test.mjs
+index a833c79..3512aac 100644
+--- a/tests/skills-control.test.mjs
++++ b/tests/skills-control.test.mjs
+@@ -59,3 +59,10 @@ test('terse mode tells the voice to answer only what was asked, in numbered orde
+   const nums = t.split('## Rules\n')[1].split('\n\n')[0].split('\n').map((l) => l.match(/^(\d+)\./)[1]);
+   assert.deepEqual(nums, ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']);
+ });
++
++test('mode documents the switch phrases the hook accepts', () => {
++  const { body } = read('mode');
++  assert.match(body, /only when it stands alone on the prompt's first non-blank line/);
++  assert.match(body, /a line over 200 characters never does\./);
++  assert.match(body, /^- terse voice: .*"terse on", "terse voice", "terse mode on"/m);
++});
+diff --git a/tests/skills-help.test.mjs b/tests/skills-help.test.mjs
+index ba6185d..85ce193 100644
+--- a/tests/skills-help.test.mjs
++++ b/tests/skills-help.test.mjs
+@@ -53,7 +53,7 @@ test('setup defers the work dir to kern-dir; allowed-tools covers its read-only
+   assert.match(setup, /bash \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/kern-dir [a-z]/);
+   assert.doesNotMatch(body, /\/\.kern\//);
+   const tools = data['allowed-tools'].split(', ');
+-  for (const t of ['Bash(git rev-parse *)', 'Bash(git check-ignore *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)']) assert.ok(tools.includes(t), t);
++  for (const t of ['Bash(git rev-parse --git-common-dir)', 'Bash(git check-ignore -q *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)']) assert.ok(tools.includes(t), t);
+   assert.ok(!tools.some((t) => t.includes('kern-dir')), 'kern-dir writes, so setup step 6 keeps its permission prompt');
+ });
+ 
+@@ -61,3 +61,15 @@ test('the template sets no key: every line is a comment or blank', () => {
+   const tpl = readFileSync(join(dir, 'templates', 'kern.local.yml'), 'utf8');
+   assert.doesNotMatch(tpl, /^[^#\n]/m);
+ });
++
++test('help allows only the exact git commands it prescribes, so no wildcard can add a write or a program run', () => {
++  assert.equal(
++    data['allowed-tools'],
++    'Read, Bash(git remote -v), Bash(git rev-parse --git-common-dir), Bash(git check-ignore -q *), Bash(git worktree list), ' +
++      'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), ' +
++      'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)',
++  );
++  const git = data['allowed-tools'].split(', ').filter((t) => t.startsWith('Bash(git '));
++  // The only wildcard over git is check-ignore -q, whose options only read; no other git entry ends in *.
++  assert.deepEqual(git.filter((t) => t.endsWith('*)')), ['Bash(git check-ignore -q *)']);
++});

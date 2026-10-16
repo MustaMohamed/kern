@@ -1,0 +1,75 @@
+# Review package: b7c36bd..3bd64cd
+
+## Commits
+3bd64cd M0: run lint, tests, routing evals and plugin validation in CI
+
+## Files changed
+ .github/workflows/ci.yml | 39 +++++++++++++++++++++++++++++++++++++++
+ scripts/ci-local         | 13 +++++++++++++
+ 2 files changed, 52 insertions(+)
+
+## Diff
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..206ecc7
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,39 @@
++name: ci
++on:
++  push:
++  pull_request:
++  workflow_dispatch:
++
++jobs:
++  checks:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          fetch-depth: 0
++      - uses: actions/setup-node@v4
++        with:
++          node-version: '22'
++      - name: Unit tests
++        run: node --test 'tests/**/*.test.mjs'
++      - name: Lint skills
++        run: node scripts/lint-skills.mjs
++      - name: Versions agree
++        run: node scripts/check-version.mjs
++      - name: Unreleased line for shipped changes
++        if: github.event_name == 'pull_request'
++        run: node scripts/check-version.mjs --pr origin/${{ github.base_ref }}
++      - name: Routing evals
++        run: node scripts/route-eval.mjs
++      - name: Install Claude Code
++        run: npm install -g @anthropic-ai/claude-code@2.1.296
++      - name: Validate marketplace and plugin manifests
++        run: |
++          claude plugin validate . --strict
++          claude plugin validate .claude-plugin/plugin.json --strict
++      - name: Install bats and shellcheck
++        run: sudo apt-get update && sudo apt-get install -y bats shellcheck
++      - name: Script tests
++        run: bats tests/scripts
++      - name: Shellcheck
++        run: shellcheck scripts/fetch-upstream scripts/ci-local
+diff --git a/scripts/ci-local b/scripts/ci-local
+new file mode 100755
+index 0000000..3be1503
+--- /dev/null
++++ b/scripts/ci-local
+@@ -0,0 +1,13 @@
++#!/usr/bin/env bash
++# Runs the CI job's steps locally, in the same order, before a push.
++set -euo pipefail
++cd "$(dirname "$0")/.."
++node --test 'tests/**/*.test.mjs'
++node scripts/lint-skills.mjs
++node scripts/check-version.mjs
++node scripts/route-eval.mjs
++claude plugin validate . --strict
++claude plugin validate .claude-plugin/plugin.json --strict
++bats tests/scripts
++shellcheck scripts/fetch-upstream scripts/ci-local
++echo "ci-local: all steps passed"

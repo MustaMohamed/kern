@@ -1,0 +1,35 @@
+# M2a pre-flight, Global Constraints + Tasks 16-34 (part 1)
+
+Verdict: ready once findings 1-7 are fixed; 8-16 wording.
+Inputs unchanged: m2a plan 0a50b28d..., contract 267ad049..., skills spec c827efb0..., traceability 9c42e421.... Real repo untouched; scratch deleted.
+Method: scratch clone + current docs; Task 1-15 producers written from the plan; 20 seeded diffs generated; Tasks 16-34 applied in order; upstream reference files stubbed with required headings (forensics.md stub holds the plan's example commands). Ran: every Step 2 and pass step of T16-34; node --test 138/138; lint-skills clean; route-eval; seeded-diffs; tests/run-bats tests/scripts 146/146 and tests/hooks 498/498 on /bin/bash 3.2; T34 shellcheck glob -S warning; ci-local shellcheck lines; claude plugin validate both manifests; guard decisions for exec-eval command shapes under autopilot with the gh stub (traced in a main checkout). Traced only: claude -p exec evals (T26 S8, T34 S6), CI macOS and install jobs, mawk (not installed), T33 S6 cost (needs the user's real snapshot, not read).
+
+| # | Sev | Task, line | Problem | Fix |
+|---|---|---|---|---|
+| 1 | Medium | T18 g18-parity.bats 4749-4777; S2 4782 | Parity test passes before forensics.md exists (ok 7): grep fails on the missing file, `|| true` swallows it, investigator.md commands fill $cmds; S2 Expected wrong; pin survives a rename/delete. | Assert [ -f .../forensics.md ]; grep forensics.md separately and require at least one command from it; fix S2 Expected. |
+| 2 | Medium | T29 7364-7366 | Subagent Return line keeps "Put bulk in a file and return its path."; subagent-start injects it into every agent (no agent_type filter), including kern:investigator and task-reviewer; contradicts "You write no file" (T13 test). | Drop the sentence (~40 chars) or add "; an agent with no Write tool names the command instead" (1,131 of 1,200 now). |
+| 3 | Medium | T22 steps 1, 6, 8, 10 (5756+) | <ledger> undefined: ledger-open prints the dir; task-start, task-review, task-done need <dir>/ledger.md and exit 2 "no ledger at ..." given the dir. | Step 1 defines <ledger> as <ledger dir>/ledger.md, or write the path in steps 6, 8, 10. |
+| 4 | Medium | T22 steps 4, 6; T21 step 3 | Waves go through parallel-work, which spawns only on brief-check: ok, but task-brief output fails brief-check (9 missing: lines, exit 1, measured); serial delegate never runs brief-check though Architecture says every brief is checked; the unfilled brief template passes brief-check (measured). | Before dispatch, wrap task-brief output in a brief-template brief (CONTEXT names briefs/task-N.md, VERIFY starts with ... (truncated) |
+
+# part 2: end of 4, findings 5-10
+
+| 4 | (fix cont.) | | | ... and run brief-check, or make task-brief emit the nine fields. Task 10: reject field text equal to the template placeholder text (unfilled template passes today, measured). |
+| 5 | Medium | T26 exec-eval.mjs 6725-6778, INVALID check | Hooks inherit the stub's PATH, so G2's dedup calls are logged by the stub (two "pr list --head feat/sum --state all --json state --jq .[].state" lines per gh pr create, measured). When the Bash tool's shell loses the stub, ghLog is still non-empty, so the case reports FAIL, not INVALID. | INVALID when any gh command in the transcript has no matching stub line (compare arguments), or ignore "--jq .[].state" lines in that check. |
+| 6 | Medium (inferred) | T26 evals/exec/cases.json 6808, fixture package.json 6833 | Fixture has no typecheck or lint; verify.fast unresolvable (kern-detect typecheck/lint exit 3; verify.fast not a kern-detect key); commit step 4 runs prove-it, which asks for a missing command; autopilot denies asking -> "expected one new commit" fails for a fixture reason. | Add "lint": "node --check src/sum.js" to the fixture package.json, or _claude/kern.local.yml with verify.fast: npm test. |
+| 7 | Medium | T34 Step 6 staleness rule | Lists only skills/commit, finish-branch, prove-it and g01, g02, g05; Tasks 30-33 change pre-tool-use, gitctx.sh (alias expansion in git_words), state.sh, prompt-submit, kernel routing; a Task 26 snapshot stays "fresh". | Add hooks/pre-tool-use, hooks/lib/*.sh, kernel/*.md, or always run the exec evals at Task 34. |
+| 8 | Low | T30 Step 6 7576 | Expected "# fail 0" but the floors/held-out pin fails until Step 8 writes evals/floors.json and evals/heldout.json (53 pass, 1 fail, ENOENT). | Say it fails until Step 8, or move the check to Step 9. |
+| 9 | Low | T26 Step 7 | Expected "# pass 6"; the file has 7 tests (measured). | Say 7. |
+| 10 | Low | File map T26 row | Names tests/skills/ship-commands.bats; the task writes tests/hooks/ship-commands.bats. | Fix the row. |
+
+# part 3: findings 11-16, measurements, verdict
+
+| 11 | Low | T19 spec-template 5148, T20 plan-template 5393 | "Copy everything below the line": the line is the frontmatter's opening ---; copying below leaves no frontmatter; plan-check "no frontmatter", exit 1 (measured). | "Copy from the first --- line to the end". |
+| 12 | Low | T21 parallel-work 5560 | Step 5 (VERIFY starts with wt-check) comes after step 3's brief-check and step 4's spawn; step 7 runs wt-diff without --out, so the package lands in WORK/reviews/. | Fold step 5 into step 3; step 7 --out <ledger dir>/reviews/<worker>.diff. |
+| 13 | Low | T30 Step 5 7760 | "the two lines" — three (kernelPath, kernelText, routed); replacing two leaves a duplicate const kernelPath (SyntaxError). | "the three lines". |
+| 14 | Low | T30 Step 8 7932 | Pinned sha is of the text plus a trailing newline (9b5cb82... with, ac45620... without). | Say "with a trailing newline". |
+| 15 | Low | T16, T22, T23 reference caps vs skills spec section 8 | evidence.md spec 1.8 KB vs cap 2,100; ledger-format.md spec 1.2 KB vs cap 2,600 (text 2,055); claim-checks.md spec 1 KB vs cap 1,700 (text 1,348). | Align the spec sizes with the plan's caps. |
+| 16 | Low (inferred) | T34 CI jobs 8722-8758 | Not run: loop-rate.sh needs /usr/bin/time on Ubuntu; install job needs marketplace add/install without auth; mawk unverified. | Confirm on the first CI run. |
+
+Measured SKILL.md bytes vs caps (all within): prove-it 3,335/3,600; implement 4,223/5,500; diagnose 4,967/6,500; define 5,743/6,500; plan 4,950/6,500; parallel-work 3,923/5,000; execute-plan 9,166/10,000; self-review 4,334/5,500; commit 3,997/4,200; finish-branch 4,636/5,000; recall 4,653/6,500. References: evidence 1,506; spec-template 2,077; plan-template 1,015; task-template 1,141; brief-template 1,448; ledger-format 2,055; model-selection 974; claim-checks 1,348; pr-body 1,199; kernel/routes.md 759 chars. Descriptions: auto 522 (prove-it 257, recall 265), agents 423, total 945. Rendered kernel after T29-33 (root 52 chars): 3,567 / 3,962 at a 152-char path; ~3,492 / 3,887 at a 77-char path (plan: 3,487 / 3,926). Subagent kernel 755 rendered; rule 7 count 943, or 1,131 terse, cap 1,200. Combined ~3,492 + 945 = 4,437 of ~4,800 (plan 4,432). Session-start <4,000 test and lint rule 7 pass.
+
+Verdict: ready after fixes 1-7; 8-16 wording or alignment.

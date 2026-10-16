@@ -1,0 +1,286 @@
+diff --git a/skills/finish-branch/SKILL.md b/skills/finish-branch/SKILL.md
+index d05e74c..06eef09 100644
+--- a/skills/finish-branch/SKILL.md
++++ b/skills/finish-branch/SKILL.md
+@@ -2,7 +2,7 @@
+ name: finish-branch
+ description: "Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep."
+ disable-model-invocation: true
+-allowed-tools: Bash(git status *), Bash(git rev-list *), Bash(git rev-parse *), Bash(gh pr list *)
++allowed-tools: Bash(git status *), Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
+ ---
+ 
+ # finish-branch
+@@ -13,13 +13,13 @@ Integrate finished work the user's way, with a fresh base and a review-ready dra
+ 
+ 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+ 1. Consent: the user typed `/kern:finish-branch` or asked to push or open a PR in this session, or autopilot is on. Otherwise stop.
+-2. Find the work: a worktree the user named, else the newest `ledger.md` (`ls -t`) under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` whose `Worktree:` line names a path still in `git worktree list`, else `git rev-parse --show-toplevel`; say which. Run `cd <wt>` as its own call: G1 and G2 judge a push or PR by the session's directory. `git rev-parse --path-format=absolute --git-dir --git-common-dir` printing one path twice is the main checkout. `git rev-parse --abbrev-ref HEAD` prints `HEAD` when detached: in a linked worktree, offer "create branch <name from branch.pattern> here" (`git switch -c <name>`) and go on only after it; in the main checkout, stop: kern never switches its branch. A protected branch: stop; ask which worktree has the work.
++2. Find the work: a worktree the user named, else the newest ledger whose `Worktree:` path is still in `git worktree list` (newest first: `ls -t <dir>/*/ledger.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` prints), else `git rev-parse --show-toplevel`; say which. Run `cd <wt>` as its own call: G1 and G2 judge a push or PR by the session's directory. `git rev-parse --path-format=absolute --git-dir --git-common-dir` printing one path twice is the main checkout. `git rev-parse --abbrev-ref HEAD` prints `HEAD` when detached: in a linked worktree, offer "create branch <name from branch.pattern> here" (`git switch -c <name>`) and go on only after it; in the main checkout, stop: kern never switches its branch. A protected branch: stop; ask which worktree has the work.
+ 3. Base: `<base>` is `base_branch`. `git remote get-url origin` failing means no remote: `<baseref>` is local `<base>`. Else `<baseref>` is `origin/<base>` after `git fetch origin <base>`; if that fails, report "base not refreshed" and ask to go on with the last fetched one. `git rev-list --left-right --count <baseref>...HEAD` prints behind, then ahead; behind above 0 is stale: offer a rebase per `references/branch-ops.md`.
+ 4. Prove `test.full` here by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`, then record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Red, or `wt-snap` failing: stop.
+ 5. Read `${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md` and run it on `<wt>`. Comment hygiene: `skip: no-comments ships in M3`. `fix first`, `split` or no verdict: stop with its report. `rebase first`: handle it as step 3's stale base. `ready`: go on.
+ 6. Size gate: `git merge-base HEAD <baseref>`, then `git diff --shortstat <merge-base> <tree>` (step 4's tree, so untracked files count). Files changed above `scope_threshold`, or insertions plus deletions above `pr.max_lines`: propose a split; stop on yes, go on on no.
+-7. Show the menu, then wait: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is. Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`. Option 4: report the branch and `<wt>`; stop. Discard only on the typed word `discard`, per `references/branch-ops.md`.
+-8. Commit, for options 1 to 3: nothing to commit when `git status --porcelain` prints nothing; else run steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md` on `<wt>`; its stops stop this skill. Then offer a rebase step 3 put off. Option 1 ends with the short SHA.
++7. Show the menu, then wait: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is. Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`. Option 4: report the branch and `<wt>`; stop. Discard only on the typed word `discard`, per `references/discard.md`.
++8. Commit, for options 1 to 3: nothing to commit when `git status --porcelain` prints nothing; else run steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md` on `<wt>`; its stops stop this skill, and its proof is its own, apart from step 4's. Then offer a rebase step 3 put off. Option 1 ends with the short SHA.
+ 9. Dedup, before any push or PR: `references/push-and-pr.md`, section Dedup.
+ 10. Push, for options 2 and 3: `references/branch-ops.md`, section Proven tree, then `references/push-and-pr.md`, section Push.
+ 11. Draft PR, for option 3: `references/push-and-pr.md`, section PR. Report the URL; the worktree stays.
+@@ -43,7 +43,7 @@ A commit, push or draft PR, per the choice; a chat report: SHA, branch, PR URL,
+ 
+ Ask at each stop as a typed reply in chat, never through AskUserQuestion. A G1 or G2 prompt is the confirmation; a declined prompt or a denial stops, reported. `references/push-and-pr.md` says how `push.policy` and `pr.policy` meet them.
+ 
+-Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Under autopilot every kern ask is a denial, nothing is rebased or discarded, no teardown runs, and the menu resolves to option 3 after the dedup check, or to the highest option step 7 left. A stop parks as `parked: <question>; default: <choice>; why: <one line>`. Defaults: a stale base or `rebase first`: no rebase; go on, the PR body's Merge danger saying so (why: a draft cannot merge; a rebase changes what was proven). A failed fetch: the last fetched ref. The size gate: go on, Scope giving the size (why: a split is the user's scope call; a draft can be closed). Dedup: per its section. Any other stop ends the run, `fix first`, `split` and a failed or unrunnable proven-tree check included.
++Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Under autopilot every kern ask is a denial, nothing is rebased or discarded, no teardown runs but the stale-check removal in `references/branch-ops.md`, and the menu resolves to option 3, or the highest option step 7 left: commit, then the dedup check, then the push and PR. A stop parks as `parked: <question>; default: <choice>; why: <one line>`. Defaults: a stale base or `rebase first`: no rebase; go on, the PR body's Merge danger saying so (why: a draft cannot merge; a rebase changes what was proven). A failed fetch: the last fetched ref. The size gate: go on, Scope giving the size (why: a split is the user's scope call; a draft can be closed). Dedup: per its section. Stray untracked files can park the finish at commit's "no files, no commit" default. Any other stop ends the run, `fix first`, `split` and a failed or unrunnable proven-tree check included.
+ 
+ ## Red flags
+ 
+@@ -53,4 +53,4 @@ Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `ke
+ | "A PR exists, so there is nothing to push" | A PR at an older head gets the new commits. Only a PR at this head stops. |
+ | "'Yeah, get rid of it' counts as confirmation" | Only the typed word `discard` deletes work. |
+ | "The PR is up, so the worktree is clutter" | Review fixes happen in that worktree. It stays until the work lands. |
+-| "The push was rejected; force will fix it" | A rejected push means the remote moved. Investigate; never force it. |
++| "The push was rejected; force will fix it" | The remote moved, unless this run rebased. Investigate; never a plain force. |
+diff --git a/skills/finish-branch/references/branch-ops.md b/skills/finish-branch/references/branch-ops.md
+index a4e3436..0138659 100644
+--- a/skills/finish-branch/references/branch-ops.md
++++ b/skills/finish-branch/references/branch-ops.md
+@@ -1,20 +1,11 @@
+ # Branch operations
+ 
+-Under autopilot only the proven-tree check runs, without its teardown. `git worktree remove --force` never runs here: `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md` allows it only under five conditions, the first needing a `wt-apply`.
++Rebase and the proven-tree check. Under autopilot only the check runs, without its teardown; its removal of an earlier run's check path is not a teardown.
+ 
+ ## Rebase
+ 
+-For a stale base (step 3) or a `rebase first` verdict (step 5). Propose `git rebase <baseref>` and run it only on yes; on no, go on. git refuses a rebase over uncommitted changes: then offer it again after step 8's commit, and if refused again, go on. A rebase stopped by a conflict: run `git rebase --abort`, report the conflicting paths, and stop. After a rebase in step 3 or 5, run again from step 4; after one in step 8, the check below proves the new tree.
++For a stale base (step 3) or a `rebase first` verdict (step 5). If `git rev-parse --verify --quiet origin/<branch>` prints a SHA, the branch is published: warn that a rebase rewrites published commits and needs the lease push in `push-and-pr.md`, and offer it only if `git log --format=%ae <baseref>..HEAD origin/<branch>` prints only `git config user.email`; else G1 denies that push, so go on stale. Run `git rebase <baseref>` only on yes; on no, go on. git refuses a rebase over uncommitted changes: offer it again after step 8's commit; refused again, go on. A rebase stopped by a conflict: run `git rebase --abort`, report the conflicting paths, and stop. After a rebase in step 3 or 5, rerun from step 4; after one in step 8, the check below proves the new tree.
+ 
+ ## Proven tree
+ 
+-Push only the proven tree: `git rev-parse HEAD^{tree}` must equal the tree from step 4. If not, run `git rev-parse HEAD`, then `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>-check --detach --base <HEAD sha>` (`<slug>`: the base name of `<wt>`). A non-zero exit: report its output and ask; no push. Else `cd` to the path it prints, run `test.full`, then `cd <wt>`, each its own call. Red: no push; name what the commit left out (`git status --porcelain`). Then propose `git worktree remove <check>`, run on yes; a refusal keeps it, reported.
+-
+-## Discard
+-
+-Only on the typed word `discard`. In the main checkout, discard stops: it would need a reset or clean there.
+-
+-1. List what it destroys: `git status --porcelain -uall --ignored` (a remove deletes ignored files too), the branch's commits (`git log --oneline <baseref>..HEAD`) and `<wt>`. Wait for the typed word.
+-2. `cd` to the main checkout, the first `git worktree list` line, as its own call.
+-3. Run `git worktree remove <wt>`, then `git branch -D <branch>` (G1 asks), then `git worktree prune`, each its own call. A refused remove stops: report the files that blocked it; the worktree and branch stay.
+-4. Report what went, and that remote branches and PRs stay.
++Push only the proven tree: `git rev-parse HEAD^{tree}` must equal the tree from finish-branch step 4; commit's own proof is separate. If not, run `git rev-parse HEAD`, then `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>-check-<sha7> --detach --base <HEAD sha>` (`<slug>`: `<wt>`'s base name; `<sha7>`: the SHA's first 7 characters). Exit 2 with `path exists` means an earlier run left that check: run plain `git worktree remove <path>`, under autopilot too, then wt-new again. Any other non-zero exit, or a refused remove: report its output and ask; no push. Else `cd` to the path it prints, run `test.full`, then `cd <wt>`, each its own call. Red: no push. If wt-new said `worktree.setup` is unset, a red may be the environment: check that before blaming the commit; else name what the commit left out (`git status --porcelain`). Then propose plain `git worktree remove <check>`, never `--force`, and run it on yes; a refusal keeps it, reported.
+diff --git a/skills/finish-branch/references/discard.md b/skills/finish-branch/references/discard.md
+new file mode 100644
+index 0000000..9a007d6
+--- /dev/null
++++ b/skills/finish-branch/references/discard.md
+@@ -0,0 +1,8 @@
++# Discard
++
++Only on the typed word `discard`, never under autopilot. In the main checkout, discard stops: it would need a reset or clean there. `git worktree remove --force` never runs here: `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md` allows it only under five conditions, the first needing a `wt-apply`.
++
++1. List what it destroys: `git status --porcelain -uall --ignored` (a remove deletes ignored files too), the branch's commits (`git log --oneline <baseref>..HEAD`) and `<wt>`. Wait for the word.
++2. `cd` to the main checkout, the first `git worktree list` line, as its own call.
++3. Run `git worktree remove <wt>`, then `git branch -D <branch>` (G1 asks), then `git worktree prune`, each its own call. A refused remove stops; the worktree and branch stay. Report the files that blocked it, and print `git worktree remove --force <wt>` and `git branch -D <branch>` for the user to type with the `!` prefix.
++4. Report what went, and that remote branches and PRs stay.
+diff --git a/skills/finish-branch/references/push-and-pr.md b/skills/finish-branch/references/push-and-pr.md
+index 07acc34..09215ed 100644
+--- a/skills/finish-branch/references/push-and-pr.md
++++ b/skills/finish-branch/references/push-and-pr.md
+@@ -4,7 +4,7 @@ Steps 9 to 11. Each command runs from `<wt>` as its own call: no `cd`, wrapper o
+ 
+ ## Dedup
+ 
+-Run `gh pr list --head <branch> --state all --json number,state,headRefOid,url`, whatever `pr.dedup` says (its one value is `on`).
++Run `gh pr list --head <branch> --state all --json number,state,headRefOid,url`, whatever `pr.dedup` says (its one value is `on`). A PR counts only if its URL is this repo's (`git remote get-url origin`); check before reporting it.
+ - A PR whose `headRefOid` is `git rev-parse HEAD`, in any state: report its URL and stop.
+ - An open PR at an older head: push, report its URL, and open no new PR.
+ - Only merged or closed PRs: push, then ask before a new PR. Autopilot parks with no PR (why: a second PR for a branch is the user's call).
+@@ -12,8 +12,8 @@ Run `gh pr list --head <branch> --state all --json number,state,headRefOid,url`,
+ 
+ ## Push
+ 
+-`git push -u origin <branch>`. Under `push.policy: ask` G1 asks, and its prompt is the confirmation; under `auto` or autopilot it allows this shape to a branch that is not protected; `deny` denies every push. A denial, a declined prompt or a failing pre-push hook stops: report it, never `--no-verify`. Rejected: the remote moved. Run `git fetch origin <branch>`, show `git log --oneline HEAD..origin/<branch>` and stop; never force.
++`git push -u origin <branch>`. Under `push.policy: ask` G1 asks, and its prompt is the confirmation; under `auto` or autopilot it allows this shape to a branch that is not protected; `deny` denies every push. After this run's rebase of a published branch, push with `git push --force-with-lease origin <branch>` instead, as its own call: G1 asks when every commit past the base is the user's, else denies. Autopilot never rebases, so never lease-pushes. A denial, a declined prompt or a failing pre-push hook stops: report it, never `--no-verify`. A plain push rejected right after this run's rebase is that rebase: it rewrote published commits, so use the lease push. Any other rejection means the remote moved: run `git fetch origin <branch>`, show `git log --oneline HEAD..origin/<branch>` and stop. Never a plain force.
+ 
+ ## PR
+ 
+-Write the body from `pr.template`, else `references/pr-body.md`, with the Write tool (Read it first if it exists) to `<dir>/pr-body.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints (exit 2: stop). Run `gh pr create --draft --title '<subject per commit.convention>' --base <base> --body-file <dir>/pr-body.md`; it needs `--title` because no terminal can prompt for one. In the quotes write each `'` in it as `'\''`, with no backtick and no `$` before `(`: G2 cannot check those. `pr.policy` meets G2 as `push.policy` meets G1, and G2 allows only this draft shape, for a branch with no PR. G2 denies a PR that is not a draft, and `gh pr ready` is never run. A failure: report it, say the branch is pushed, and stop; never retry another shape.
++Write the body from `pr.template`, else `references/pr-body.md`, with the Write tool (Read it first if it exists) to `<dir>/pr-body.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints (exit 2: stop). Run `gh pr create --draft --title '<subject per commit.convention>' --base <base> --body-file <dir>/pr-body.md`; it needs `--title` because no terminal can prompt for one. In the quotes write each `'` in it as `'\''`. A subject with a backtick, or a `$` before `(`, is reworded for the title without them: G2 cannot check those. `pr.policy` meets G2 as `push.policy` meets G1, and G2 allows only this draft shape, for a branch with no PR. G2 denies a PR that is not a draft, and `gh pr ready` is never run. A failure: report it, say the branch is pushed and stop; never retry another shape.
+diff --git a/skills/prove-it/SKILL.md b/skills/prove-it/SKILL.md
+index 46fc41c..4d5fd95 100644
+--- a/skills/prove-it/SKILL.md
++++ b/skills/prove-it/SKILL.md
+@@ -18,7 +18,7 @@ No claim of done, fixed, passing or verified without a fresh run on the real art
+ 6. For a subagent's "success", read its worktree diff yourself with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>` and open the artifacts it names.
+ 7. State each claim with its evidence as `claim: command, result`, or label it measured, inferred or guess.
+ 
+-Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words done, fixed, passing, verified. Then, for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`; for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`; and follow its steps.
++Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words done, fixed, passing, verified. Then, unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step), for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`; for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`; and follow its steps.
+ 
+ ## Inputs
+ 
+diff --git a/tests/skills/finish-branch.acceptance.md b/tests/skills/finish-branch.acceptance.md
+index be64e28..c39a602 100644
+--- a/tests/skills/finish-branch.acceptance.md
++++ b/tests/skills/finish-branch.acceptance.md
+@@ -9,3 +9,4 @@
+ - [ ] prove-it's gate reads finish-branch before a push the user did not ask for: it stops at the consent step.
+ - [ ] gh logged out: the push runs; no PR is opened, and the gh output is reported.
+ - [ ] Typed `discard` in a worktree with untracked files: the listing names them and the ignored files; the plain remove is refused and the worktree stays.
++- [ ] A stale base on a branch already on origin: the rebase offer warns that the push becomes `git push --force-with-lease origin <branch>`; after a yes, G1 asks for that push.
+diff --git a/tests/skills/finish-branch.test.mjs b/tests/skills/finish-branch.test.mjs
+index 834593d..870ece7 100644
+--- a/tests/skills/finish-branch.test.mjs
++++ b/tests/skills/finish-branch.test.mjs
+@@ -6,9 +6,11 @@ import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMa
+ const SKILL = 'skills/finish-branch/SKILL.md';
+ const OPS = 'skills/finish-branch/references/branch-ops.md';
+ const PUSH = 'skills/finish-branch/references/push-and-pr.md';
++const DISC = 'skills/finish-branch/references/discard.md';
+ const BODY = 'skills/finish-branch/references/pr-body.md';
+ 
+-// Each pin occurs exactly once in its file, so removing it fails the test.
++// Each pin occurs exactly once in its file, so removing it fails the test. Pins are whole clauses,
++// so a swapped condition or outcome inside one fails too.
+ function assertOnce(rel, needles) {
+   assertContains(rel, needles);
+   const { raw } = readDoc(rel);
+@@ -24,7 +26,7 @@ test('finish-branch frontmatter', () => {
+     name: 'finish-branch',
+     description: 'Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep.',
+     'disable-model-invocation': 'true',
+-    'allowed-tools': 'Bash(git status *), Bash(git rev-list *), Bash(git rev-parse *), Bash(gh pr list *)',
++    'allowed-tools': 'Bash(git status *), Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)',
+   });
+ });
+ 
+@@ -36,54 +38,81 @@ test('finish-branch sections, steps and red flags', () => {
+   assert.equal(s[0], DEFER);
+   assert.equal(s[1], '1. Consent: the user typed `/kern:finish-branch` or asked to push or open a PR in this session, or autopilot is on. Otherwise stop.');
+   assertOnce(SKILL, ['A failure no step handles stops the run: report its output.',
+-    '`Worktree:` line', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers`', 'Run `cd <wt>` as its own call', 'git rev-parse --path-format=absolute --git-dir --git-common-dir',
++    '`Worktree:` path', 'ls -t <dir>/*/ledger.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers`', 'Run `cd <wt>` as its own call', 'git rev-parse --path-format=absolute --git-dir --git-common-dir',
+     'git switch -c <name>', 'in the main checkout, stop: kern never switches its branch', 'A protected branch: stop',
+-    'git remote get-url origin', 'git fetch origin <base>', '"base not refreshed"', 'git rev-list --left-right --count <baseref>...HEAD', 'offer a rebase per `references/branch-ops.md`',
++    'git remote get-url origin', 'git fetch origin <base>', '"base not refreshed"', 'git rev-list --left-right --count <baseref>...HEAD',
++    'behind above 0 is stale: offer a rebase per `references/branch-ops.md`.',
+     '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'Red, or `wt-snap` failing: stop.',
+-    '${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md', 'skip: no-comments ships in M3', '`fix first`, `split` or no verdict: stop', '`rebase first`: handle it as step 3\'s stale base',
+-    'git diff --shortstat <merge-base> <tree>', 'untracked files count', 'insertions plus deletions above `pr.max_lines`', 'propose a split',
++    '${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md', 'skip: no-comments ships in M3', '`fix first`, `split` or no verdict: stop', '`rebase first`: handle it as step 3\'s stale base', '`ready`: go on.',
++    'git diff --shortstat <merge-base> <tree>', 'untracked files count', 'insertions plus deletions above `pr.max_lines`', 'propose a split; stop on yes, go on on no.',
+     '1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is', 'Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`',
+-    'typed word `discard`, per `references/branch-ops.md`',
+-    'nothing to commit', 'steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'its stops stop this skill', 'offer a rebase step 3 put off',
++    'typed word `discard`, per `references/discard.md`',
++    'nothing to commit', 'steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'its stops stop this skill', 'its proof is its own, apart from step 4\'s',
++    'offer a rebase step 3 put off', 'Option 1 ends with the short SHA.',
+     'Dedup, before any push or PR: `references/push-and-pr.md`, section Dedup', '`references/branch-ops.md`, section Proven tree, then `references/push-and-pr.md`, section Push',
+     'Draft PR, for option 3: `references/push-and-pr.md`, section PR', 'the worktree stays',
+     'never through AskUserQuestion', 'A G1 or G2 prompt is the confirmation; a declined prompt or a denial stops',
+     'an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`', "else the kernel's \"Autopilot:\" line",
+-    'every kern ask is a denial', 'nothing is rebased or discarded, no teardown runs', 'the menu resolves to option 3 after the dedup check',
++    'every kern ask is a denial', 'nothing is rebased or discarded, no teardown runs but the stale-check removal in `references/branch-ops.md`',
++    'the menu resolves to option 3, or the highest option step 7 left: commit, then the dedup check, then the push and PR',
+     'parked: <question>; default: <choice>; why: <one line>', 'a stale base or `rebase first`: no rebase; go on', 'A failed fetch: the last fetched ref.',
+-    'The size gate: go on', 'Dedup: per its section.', '`fix first`, `split` and a failed or unrunnable proven-tree check included',
+-    '"Tests passed earlier this session"', 'Only a PR at this head stops.', 'Only the typed word `discard` deletes work.', 'never force it']);
++    'The size gate: go on', 'Dedup: per its section.', 'Stray untracked files can park the finish at commit\'s "no files, no commit" default.',
++    '`fix first`, `split` and a failed or unrunnable proven-tree check included',
++    '"Tests passed earlier this session"', 'Only a PR at this head stops.', 'Only the typed word `discard` deletes work.',
++    'The remote moved, unless this run rebased. Investigate; never a plain force.']);
+   assertNoSubstitution(SKILL);
+-  assertMaxBytes(SKILL, 6000);
++  assertMaxBytes(SKILL, 6400);
+ });
+ 
+-test('branch-ops reference: rebase, proven-tree check, discard', () => {
+-  assertHeadings(OPS, ['# Branch operations', '## Rebase', '## Proven tree', '## Discard']);
+-  assertOnce(OPS, ['Under autopilot only the proven-tree check runs, without its teardown.', '`git worktree remove --force` never runs here', 'the first needing a `wt-apply`',
+-    'run it only on yes; on no, go on', 'git refuses a rebase over uncommitted changes', 'if refused again, go on', 'git rebase --abort', 'run again from step 4',
+-    '`git rev-parse HEAD^{tree}` must equal the tree from step 4', 'wt-new <slug>-check --detach --base <HEAD sha>', 'non-zero exit: report its output and ask; no push',
+-    'then `cd <wt>`', 'Red: no push', '`git worktree remove <check>`, run on yes',
+-    'In the main checkout, discard stops', 'status --porcelain -uall --ignored', 'a remove deletes ignored files too', 'git log --oneline <baseref>..HEAD',
+-    '`git worktree remove <wt>`', 'git branch -D <branch>', 'git worktree prune', 'A refused remove stops', 'remote branches and PRs stay']);
++test('branch-ops reference: rebase and the proven-tree check', () => {
++  assertHeadings(OPS, ['# Branch operations', '## Rebase', '## Proven tree']);
++  assertOnce(OPS, ['Under autopilot only the check runs, without its teardown; its removal of an earlier run\'s check path is not a teardown.',
++    'If `git rev-parse --verify --quiet origin/<branch>` prints a SHA, the branch is published', 'warn that a rebase rewrites published commits and needs the lease push in `push-and-pr.md`',
++    'offer it only if `git log --format=%ae <baseref>..HEAD origin/<branch>` prints only `git config user.email`; else G1 denies that push, so go on stale.',
++    'Run `git rebase <baseref>` only on yes; on no, go on.', 'git refuses a rebase over uncommitted changes: offer it again after step 8\'s commit; refused again, go on.',
++    'A rebase stopped by a conflict: run `git rebase --abort`, report the conflicting paths, and stop.',
++    'After a rebase in step 3 or 5, rerun from step 4; after one in step 8, the check below proves the new tree.',
++    '`git rev-parse HEAD^{tree}` must equal the tree from finish-branch step 4; commit\'s own proof is separate.',
++    'If not, run `git rev-parse HEAD`, then', 'wt-new <slug>-check-<sha7> --detach --base <HEAD sha>', '`<sha7>`: the SHA\'s first 7 characters',
++    'Exit 2 with `path exists` means an earlier run left that check: run plain `git worktree remove <path>`, under autopilot too, then wt-new again.',
++    'Any other non-zero exit, or a refused remove: report its output and ask; no push.',
++    'then `cd <wt>`', 'Red: no push.', 'If wt-new said `worktree.setup` is unset, a red may be the environment: check that before blaming the commit',
++    'Then propose plain `git worktree remove <check>`, never `--force`, and run it on yes; a refusal keeps it, reported.']);
+   assertNoSubstitution(OPS);
+-  assertMaxBytes(OPS, 2000);
++  assertMaxBytes(OPS, 2400);
++});
++
++test('discard reference', () => {
++  assertHeadings(DISC, ['# Discard']);
++  assertOnce(DISC, ['Only on the typed word `discard`, never under autopilot.', 'In the main checkout, discard stops',
++    '`git worktree remove --force` never runs here', 'the first needing a `wt-apply`',
++    'status --porcelain -uall --ignored', 'a remove deletes ignored files too', 'git log --oneline <baseref>..HEAD',
++    'Run `git worktree remove <wt>`, then `git branch -D <branch>` (G1 asks), then `git worktree prune`', 'A refused remove stops; the worktree and branch stay.',
++    'print `git worktree remove --force <wt>` and `git branch -D <branch>` for the user to type with the `!` prefix', 'remote branches and PRs stay']);
++  assertNoSubstitution(DISC);
++  assertMaxBytes(DISC, 2400);
+ });
+ 
+ test('push-and-pr reference: dedup, push, PR', () => {
+   assertHeadings(PUSH, ['# Push and PR', '## Dedup', '## Push', '## PR']);
+   assertOnce(PUSH, ['no `cd`, wrapper or expansion',
+     'gh pr list --head <branch> --state all --json number,state,headRefOid,url', 'whatever `pr.dedup` says',
+-    'whose `headRefOid` is `git rev-parse HEAD`, in any state: report its URL and stop', 'open no new PR',
+-    'Only merged or closed PRs: push, then ask before a new PR', 'Autopilot parks with no PR', 'gh missing, logged out or failing', 'push, but open no PR',
++    'A PR counts only if its URL is this repo\'s (`git remote get-url origin`); check before reporting it.',
++    'whose `headRefOid` is `git rev-parse HEAD`, in any state: report its URL and stop', 'An open PR at an older head: push, report its URL, and open no new PR.',
++    'Only merged or closed PRs: push, then ask before a new PR', 'Autopilot parks with no PR', 'gh missing, logged out or failing: report its output; push, but open no PR.',
+     'git push -u origin <branch>', 'Under `push.policy: ask` G1 asks', 'under `auto` or autopilot it allows this shape', '`deny` denies every push',
+-    'never `--no-verify`', 'git log --oneline HEAD..origin/<branch>', 'never force.',
++    'After this run\'s rebase of a published branch, push with `git push --force-with-lease origin <branch>` instead, as its own call',
++    'G1 asks when every commit past the base is the user\'s, else denies', 'Autopilot never rebases, so never lease-pushes.',
++    'never `--no-verify`', 'A plain push rejected right after this run\'s rebase is that rebase: it rewrote published commits, so use the lease push.',
++    'Any other rejection means the remote moved', 'git log --oneline HEAD..origin/<branch>', 'Never a plain force.',
+     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`', '(exit 2: stop)', 'else `references/pr-body.md`',
+     "gh pr create --draft --title '<subject per commit.convention>' --base <base> --body-file <dir>/pr-body.md",
+-    'no terminal can prompt for one', "write each `'` in it as `'\\''`", 'no backtick and no `$` before `(`',
++    'no terminal can prompt for one', "write each `'` in it as `'\\''`",
++    'A subject with a backtick, or a `$` before `(`, is reworded for the title without them',
+     '`pr.policy` meets G2 as `push.policy` meets G1', 'only this draft shape, for a branch with no PR', '`gh pr ready` is never run',
+-    'say the branch is pushed', 'never retry another shape']);
++    'say the branch is pushed and stop', 'never retry another shape']);
+   assertNoSubstitution(PUSH);
+-  assertMaxBytes(PUSH, 2000);
++  assertMaxBytes(PUSH, 2400);
+ });
+ 
+ test('PR body template', () => {
+diff --git a/tests/skills/prove-it.test.mjs b/tests/skills/prove-it.test.mjs
+index ff796f1..4bba38e 100644
+--- a/tests/skills/prove-it.test.mjs
++++ b/tests/skills/prove-it.test.mjs
+@@ -21,7 +21,7 @@ test('prove-it sections, steps, gate and red flags', () => {
+   assert.equal(s.length, 8);
+   assert.equal(s[0], DEFER);
+   assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'probe: fail-then-pass ok', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff', 'claim: command, result', 'Gate: steps 1 to 7 hold', 'zero tests run', '| Thought | Reality |']);
+-  assertMaxBytes(SKILL, 3600);
++  assertMaxBytes(SKILL, 3800);
+ });
+ 
+ test('evidence reference', () => {
+@@ -35,5 +35,5 @@ test('the M0 placeholder is gone', () => {
+ });
+ 
+ test('the gate hands a commit to commit and a push or PR to finish-branch', () => {
+-  assertContains(SKILL, ['for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`']);
++  assertContains(SKILL, ['unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step)', 'for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`']);
+ });

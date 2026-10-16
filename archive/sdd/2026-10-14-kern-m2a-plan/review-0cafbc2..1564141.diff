@@ -1,0 +1,1127 @@
+# Review package: 0cafbc2..HEAD
+
+## Commits
+1564141 M2: G20, ledger-open and plan-check read frontmatter one way
+5aae040 M2: G16 denies running kern's hooks or calling its state functions
+
+## Files changed
+ CHANGELOG.md                 |   1 +
+ hooks/guards/g16-state.sh    |  80 +++++++-
+ hooks/guards/g20-approval.sh | 131 ++++++++-----
+ scripts/ledger-open          |  12 +-
+ scripts/lib/frontmatter.awk  |  19 ++
+ scripts/plan-check           |  11 +-
+ tests/hooks/g16-state.bats   |  25 +++
+ tests/hooks/g20-probes.bats  | 431 +++++++++++++++++++++++++++++++++++++++++++
+ tests/hooks/g20.bats         |   2 +
+ 9 files changed, 658 insertions(+), 54 deletions(-)
+
+## Diff
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 037c084..df4521a 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,19 +1,20 @@
+ # Changelog
+ 
+ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as defined in docs/specs/2026-10-12-kern-design.md section 12.
+ 
+ ## [Unreleased]
+ 
+ - Agents implementer, task-reviewer and investigator.
+ - floor-scan: the G7 check as a script, with a lowered-bar class and ratchet.<metric> settings keys.
+ - Guard G18: kern's read-only investigator may run only allowlisted read commands.
++- Guard G16 denies, in both modes, a command that runs or sources kern's hook code or calls its state functions. Running prompt-submit with a made-up prompt could forge the user's message or turn autopilot on.
+ - Guard G20: a Markdown spec or plan becomes approved, or changes its approved: line, only with a quote of the user's last message, judged on the file as the edit leaves it; never under autopilot.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+ - PreToolUse asks, or denies under `bypassPermissions`, when a hook library cannot load or lacks a function it defines. In 0.2.0 a missing `settings.sh` or `decide.sh` gave no decision at all. session-start says when kern did not load.
+ - pre-tool-use and session-start leave POSIX mode first, so `POSIXLY_CORRECT` cannot skip that check.
+ - A natural-language voice switch fires only when the phrase stands alone on the first line, such as `go terse`, `turn off terse mode` or `back to normal`, with a leading `please` or `ok` and a trailing `please`, `now`, `.` or `!` allowed. More phrases switch, and prompts such as `use terse variable names` no longer do. A 200-case corpus tests the hook.
+ - No mode line or terse reminder on scheduled-task prompts.
+ - session-start removes session state files untouched for 30 days.
+ 
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index 14bf472..b4f0dc6 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -1,25 +1,29 @@
+ # shellcheck shell=bash
+ # G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
+ # and the user confirms every write to a kern settings file or to Claude Code's own settings.
+ 
+ _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
+ _G16_STATE_CMD="commands may not write kern session state"
+ _G16_SETTINGS="kern settings change guard policy; the user confirms each write"
+ _G16_CC="Claude Code settings set permissions and hooks; the user confirms each write"
+ _G16_TAB=$'\t'
+ _G16_INTO="a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write"
++_G16_HOOKS="kern's hooks run only from Claude Code; running or sourcing one, or calling its state functions, could forge the user's prompt or the session state"
+ 
+ guard_g16() {
+   case "$TOOL" in
+     Write | Edit | NotebookEdit) _g16_file ;;
+-    Bash) _g16_bash ;;
++    Bash)
++      _g16_bash
++      _g16_hooks
++      ;;
+     CronCreate | ScheduleWakeup | RemoteTrigger | SendMessage) _g16_relay ;;
+     Skill) _g16_skill ;;
+   esac
+ }
+ 
+ # _g16_lower STR: STR in lower case (bash 3.2 has no ${var,,}).
+ _g16_lower() {
+   printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]'
+ }
+ 
+@@ -435,20 +439,94 @@ REDIRECTS
+   done <<SEGMENTS
+ $(git_words "$cmd")
+ SEGMENTS
+   [ "$state" = 1 ] && vote deny G16 "$_G16_STATE_CMD"
+   [ "$settings" = 1 ] && vote ask G16 "$_G16_SETTINGS"
+   [ "$cc" = 1 ] && vote ask G16 "$_G16_CC"
+   [ "$into" = 1 ] && vote ask G16 "$_G16_INTO"
+   return 0
+ }
+ 
++# _g16_hookfile WORD: exit 0 when the lower-cased WORD names, by its tail, a file of kern's hook code:
++# prompt-submit, session-start, subagent-start or pre-tool-use, bare or after a slash, or a library
++# under hooks/lib/ (or lib/<name>.sh, after a cd into hooks). Test files such as pre-tool-use.bats do
++# not count.
++_g16_hookfile() {
++  case "$1" in
++    prompt-submit | session-start | subagent-start | pre-tool-use | */prompt-submit | */session-start | \
++      */subagent-start | */pre-tool-use | *hooks/lib/* | lib/json.sh | lib/settings.sh | lib/state.sh | \
++      lib/decide.sh | lib/gitctx.sh | lib/render.sh) return 0 ;;
++  esac
++  return 1
++}
++
++# _g16_hooks: running or sourcing kern's hook code, or calling its state functions, could forge what
++# the hooks record: prompt-submit run with a made-up prompt rewrites the user's last message and can
++# turn autopilot on, and state_set writes any key. Denied in both modes. A simple command that only
++# reads (cat, grep, git, shellcheck, sed without -i, find with no action that runs) may name the hook
++# files, unless the same command also runs a shell, source, . or eval, which could read them from a
++# pipe. Every simple command is checked, including the bodies of bash -c, eval and $( ). A path or a
++# function name built at run time is not seen (accepted limit).
++_g16_hooks() {
++  local cmd t seg words w head reads named=0 shell=0 run=0
++  cmd=$(ti_get command) || return 0
++  # Only a command whose text, in any case and with quotes and backslashes taken out, could name hook
++  # code or a state function is lower-cased and parsed; the parse reads the command as written.
++  t=$cmd
++  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
++  case "$t" in
++    *[Pp][Rr][Oo][Mm][Pp][Tt]-[Ss][Uu][Bb][Mm][Ii][Tt]* | *[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ss][Tt][Aa][Rr][Tt]* | \
++      *[Ss][Uu][Bb][Aa][Gg][Ee][Nn][Tt]-[Ss][Tt][Aa][Rr][Tt]* | *[Pp][Rr][Ee]-[Tt][Oo][Oo][Ll]-[Uu][Ss][Ee]* | \
++      *[Hh][Oo][Oo][Kk][Ss]/[Ll][Ii][Bb]* | *[Ll][Ii][Bb]/*.[Ss][Hh]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | \
++      *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]*) ;;
++    *) return 0 ;;
++  esac
++  cmd=$(_g16_lower "$cmd")
++  while IFS= read -r seg; do
++    [ -n "$seg" ] || continue
++    words=$(_cmd_words "$seg")
++    head=${words%%$'\n'*}
++    head=${head##*/}
++    case "$head" in
++      state_set | _state_put | state_reset) run=1 ;;
++      sh | bash | zsh | dash | ksh | fish | source | . | eval) shell=1 ;;
++    esac
++    reads=0
++    case "$head" in
++      cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | echo | printf | \
++        test | '[' | git | shellcheck | shfmt | bat | nl | od | xxd | hexdump | strings | cksum | md5 | md5sum | shasum | \
++        sha1sum | sha256sum | basename | dirname | realpath | readlink | cd | pushd) reads=1 ;;
++      sed)
++        reads=1
++        while IFS= read -r w; do
++          case "$w" in --in-place* | -i* | -[!-]*i*) reads=0 ;; esac
++        done <<EOT
++$words
++EOT
++        ;;
++      find) word_has "$words" -exec -execdir -ok -okdir -delete || reads=1 ;;
++    esac
++    while IFS= read -r w; do
++      _g16_hookfile "$w" || continue
++      if [ "$reads" = 1 ]; then named=1; else run=1; fi
++    done <<EOT
++$words
++EOT
++  done <<SEGMENTS
++$(git_words "$cmd")
++SEGMENTS
++  if [ "$run" = 1 ] || { [ "$named" = 1 ] && [ "$shell" = 1 ]; }; then
++    vote deny G16 "$_G16_HOOKS"
++  fi
++  return 0
++}
++
+ # _g16_relay: a scheduled or relayed prompt whose text, after leading whitespace, opens with a mode
+ # or autopilot command. A mention later in the text passes. RemoteTrigger keeps its routine prompt
+ # inside a nested body and a remote run starts its own session with it, so any mention there counts.
+ _g16_relay() {
+   local k t
+   if [ "$TOOL" = RemoteTrigger ]; then
+     case "$(_g16_lower "$TOOL_INPUT")" in
+       */kern:autopilot* | */kern:mode*) vote deny G16 "$TOOL may not carry /kern:autopilot or /kern:mode; only the user types them" ;;
+     esac
+     return 0
+diff --git a/hooks/guards/g20-approval.sh b/hooks/guards/g20-approval.sh
+index 93455e6..dbed097 100644
+--- a/hooks/guards/g20-approval.sh
++++ b/hooks/guards/g20-approval.sh
+@@ -1,67 +1,77 @@
+ # shellcheck shell=bash
+ # shellcheck disable=SC2154  # TOOL, CWD, SID and AUTOPILOT are set by hooks/pre-tool-use
+ # G20 approval: a Markdown file (a spec or plan under the work dir, or the project's own spec system
+ # under docs/) becomes `status: approved`, or changes the approved: line of an approved file, only on
+ # the user's own words. The check reads the file as it will be after the Write or Edit, so splitting
+ # the change over two edits does not get past it. The approved: line must quote one whole line of the
+ # user's last message, verbatim, that is not a non-answer such as "sounds good", and the file must be
+ # older than that message. prompt-submit records the message's line hashes in the session state, which
+-# G16 protects. Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan
+-# with a Markdown name, so every approval it accepts passed through G20.
++# G16 protects, along with kern's hooks themselves, so the model cannot run prompt-submit to forge the
++# message. Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan with a
++# Markdown name, and G20, ledger-open and plan-check read frontmatter with one reader
++# (scripts/lib/frontmatter.awk), so every approval ledger-open accepts passed through G20.
+ #
+ # Accepted limits:
+ # - "The user's last message" is the last prompt prompt-submit does not read as wrapped. A prompt
+ #   Claude Code starts itself that wrapped() misses counts as the user's, and its lines can be quoted.
+ # - An AskUserQuestion answer is a tool result, not a prompt, so it is not recorded and cannot approve;
+ #   define and plan ask for the yes as a typed reply.
+ # - The approval does not bind the content. An approved file whose approved: lines stay the same can be
+ #   rewritten by Edit or Write, the approval edit itself may change the body, and a new file has no
+ #   draft to be older than the message, so removing a draft and writing it anew with a real quote passes.
+ # - The hash is djb2, not a cryptographic hash: a quote built to collide with a line of the message
+ #   passes. A shell write that hides the path or the word (a script run by name, a word built at run
+ #   time, a recursive directory copy, git checkout or apply, a hard link) is not seen.
+-_G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess "
++_G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess | no | nope | not yet | wait | stop | don't | do not "
++# A right single quote, read as an apostrophe in a non-answer ("don't").
++_G20_RSQ=$'\342\200\231'
+ _G20_USE_TOOL="set or change an approval with the Edit or Write tool, so kern can check the user's quote"
+ 
+-# _G20_FM_AWK: prints the frontmatter (the lines between a first line --- and the next ---) of the text
+-# it reads, after replacing ENVIRON G20_OLD with G20_NEW: the first match, or every match when G20_ALL
+-# is true. An empty G20_OLD replaces nothing. Line ends are read as Claude Code's Edit reads them: CRLF
+-# as LF, and when G20_OLD is not found, curly quotes as straight ones. A UTF-8 BOM before the first
+-# ---, and blanks after a ---, are ignored, so the reading is never narrower than a YAML parser's.
++# The frontmatter reader G20 shares with ledger-open and plan-check, so all three agree on where a
++# file's frontmatter ends.
++_G20_FM_FILE="$KERN_ROOT/scripts/lib/frontmatter.awk"
++
++# A status: approved line, bare or quoted, in any case, with any blanks around the colon and an optional
++# comment after it.
++_G20_STATUS_RE="^[[:space:]]*[\"']?status[\"']?[[:space:]]*:[[:space:]]*[\"']?approved[\"']?[[:space:]]*(#.*)?\$"
++
++# _G20_EDIT_AWK: prints the text it reads after replacing ENVIRON G20_OLD with G20_NEW: the first
++# match, or every match when G20_ALL is true. Line ends are read as Claude Code's Edit reads them: CRLF
++# as LF, and when G20_OLD is not found, curly quotes as straight ones. Exit 4 when G20_OLD is still not
++# found.
+ # shellcheck disable=SC2016 # awk text
+-_G20_FM_AWK='
++_G20_EDIT_AWK='
+ function straight(s) { gsub("\342\200\230|\342\200\231", "\047", s); gsub("\342\200\234|\342\200\235", "\"", s); return s }
+ { sub(/\r$/, ""); t = t $0 "\n" }
+ END {
+   o = ENVIRON["G20_OLD"]
+-  if (o != "") {
+-    if (!index(t, o)) { t = straight(t); o = straight(o) }
+-    out = ""; r = t
+-    while ((i = index(r, o)) > 0) {
+-      out = out substr(r, 1, i - 1) ENVIRON["G20_NEW"]; r = substr(r, i + length(o))
+-      if (ENVIRON["G20_ALL"] != "true") break
+-    }
+-    t = out r
++  if (!index(t, o)) { t = straight(t); o = straight(o) }
++  if (!index(t, o)) exit 4
++  out = ""; r = t
++  while ((i = index(r, o)) > 0) {
++    out = out substr(r, 1, i - 1) ENVIRON["G20_NEW"]; r = substr(r, i + length(o))
++    if (ENVIRON["G20_ALL"] != "true") break
+   }
+-  n = split(t, L, "\n")
+-  for (k = 1; k <= n; k++) sub(/\r$/, "", L[k])
+-  sub(/^\357\273\277/, "", L[1])
+-  if (L[1] !~ /^---[ \t]*$/) exit
+-  for (k = 2; k <= n && L[k] !~ /^---[ \t]*$/; k++) print L[k]
++  printf "%s", out r
+ }'
+ 
+-# _g20_approved FRONTMATTER: exit 0 when FRONTMATTER sets status: approved, bare or quoted, in any
+-# case, with any blanks around the colon and an optional comment after it.
++# _g20_approved FRONTMATTER: exit 0 when a line of FRONTMATTER sets status: approved.
+ _g20_approved() {
+-  printf '%s\n' "$1" |
+-    LC_ALL=C grep -Eiq "^[[:space:]]*[\"']?status[\"']?[[:space:]]*:[[:space:]]*[\"']?approved[\"']?[[:space:]]*(#.*)?\$"
++  printf '%s\n' "$1" | LC_ALL=C grep -Eiq "$_G20_STATUS_RE"
++}
++
++# _g20_holds FILE: exit 0 when any line of FILE sets status: approved, in its frontmatter or not. A
++# shell edit can turn body lines into frontmatter (sed deleting a ---, tail dropping a first line), so
++# for a shell write every line counts.
++_g20_holds() {
++  [ -f "$1" ] && [ -r "$1" ] && LC_ALL=C grep -Eiq "$_G20_STATUS_RE" "$1" 2> /dev/null
+ }
+ 
+ # _g20_lines FRONTMATTER: the value of every approved: line, in order.
+ _g20_lines() {
+   printf '%s\n' "$1" |
+     LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd][\"']?[[:space:]]*:[[:space:]]*//p"
+ }
+ 
+ # _g20_md PATH: exit 0 when PATH names a Markdown file, in any case (a case-insensitive file system
+ # opens spec.Md as spec.md).
+@@ -77,106 +87,136 @@ _g20_mdfile() {
+   _g20_md "$p" && return 0
+   while [ "$i" -lt 8 ] && [ -L "$p" ]; do
+     l=$(readlink "$p") || return 1
+     case "$l" in /*) p=$l ;; *) p="${p%/*}/$l" ;; esac
+     _g20_md "$p" && return 0
+     i=$((i + 1))
+   done
+   return 1
+ }
+ 
+-# _g20_front FILE: the frontmatter of FILE as it is now; nothing when FILE is not a readable file.
+-_g20_front() {
+-  [ -f "$1" ] && [ -r "$1" ] || return 0
+-  G20_OLD='' LC_ALL=C awk "$_G20_FM_AWK" "$1" 2> /dev/null
++# _g20_fm NAME: sets _G20_FM to the frontmatter of the text on stdin (NAME's), read by the shared
++# reader; an unclosed block counts to its end. Fails closed, and returns 1, when the reader cannot run.
++_g20_fm() {
++  local rc=0
++  _G20_FM=$(LC_ALL=C awk -v fm_print=1 -f "$_G20_FM_FILE" 2> /dev/null) || rc=$?
++  case "$rc" in 0 | 3) return 0 ;; esac
++  fail_closed "G20 could not read the frontmatter of $1 to judge an approval"
++  return 1
+ }
+ 
+ guard_g20() {
+   case "$TOOL" in
+     Write | Edit) _g20_file ;;
+     Bash) _g20_bash ;;
+   esac
+ }
+ 
+ _g20_file() {
+-  local p text old='' new all before after lines quote norm qh hashes sf
++  local p base text old='' new all post rc before after lines quote norm qh hashes sf
+   p=$(ti_get file_path) || return 0
+   case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
+   _g20_mdfile "$p" || return 0
+-  before=$(_g20_front "$p")
++  base=$(basename "$p")
++  before=''
++  if [ -f "$p" ] && [ -r "$p" ]; then
++    _g20_fm "$base" < "$p" || return 0
++    before=$_G20_FM
++  fi
+   if [ "$TOOL" = Edit ]; then
+     old=$(ti_get old_string && printf x) || return 0
+     old=${old%x}
+   fi
+   if [ "$TOOL" = Write ] || [ -z "$old" ]; then
+     # An Edit with an empty old_string writes new_string as the whole file. $( ) drops trailing
+     # newlines; the x keeps them.
+     if [ "$TOOL" = Write ]; then
+       text=$(ti_get content && printf x) || return 0
+     else
+       text=$(ti_get new_string && printf x) || return 0
+     fi
+-    after=$(printf '%s' "${text%x}" | G20_OLD='' LC_ALL=C awk "$_G20_FM_AWK")
++    _g20_fm "$base" <<< "${text%x}" || return 0
+   else
+-    [ -f "$p" ] || return 0
+     new=$(ti_get new_string && printf x) || return 0
++    new=${new%x}
+     all=$(KERN_INPUT="${TOOL_INPUT-}" json_get_raw replace_all 2> /dev/null) || all=false
+-    after=$(G20_OLD="$old" G20_NEW="${new%x}" G20_ALL="$all" LC_ALL=C awk "$_G20_FM_AWK" "$p") ||
+-      { fail_closed "G20 could not read $(basename "$p") to judge the Edit for an approval"; return 0; }
++    rc=4
++    if [ -f "$p" ]; then
++      rc=0
++      post=$(G20_OLD="$old" G20_NEW="$new" G20_ALL="$all" LC_ALL=C awk "$_G20_EDIT_AWK" "$p" 2> /dev/null) || rc=$?
++    fi
++    case "$rc" in
++      0) _g20_fm "$base" <<< "$post" || return 0 ;;
++      4)
++        # G20's model of the Edit found nothing to replace. If Claude Code's own matching differs, an
++        # Edit that writes a status or approved: line could approve unseen, so it fails closed.
++        if printf '%s\n' "$new" | LC_ALL=C grep -Eiq "^[[:space:]]*[\"']?(status|approved)[\"']?[[:space:]]*:"; then
++          vote deny G20 "old_string is not in $base as G20 reads it, so it cannot judge an Edit that writes a status or approved: line; read the file and edit it again"
++        fi
++        return 0
++        ;;
++      *)
++        fail_closed "G20 could not read $base to judge the Edit for an approval"
++        return 0
++        ;;
++    esac
+   fi
++  after=$_G20_FM
+   _g20_approved "$after" || return 0
+   lines=$(_g20_lines "$after")
+   # An approved file whose approved: lines stay the same is not being approved now.
+   if _g20_approved "$before" && [ "$(_g20_lines "$before")" = "$lines" ]; then return 0; fi
+   if [ "${AUTOPILOT:-0}" = 1 ]; then
+     vote deny G20 "under autopilot nothing approves a spec or plan; keep status: draft (parked under autopilot) and park the question"
+     return 0
+   fi
+   # The quote runs from the first double quote of the first approved: line to its last, so a user's
+   # line that holds a double quote can still be quoted whole.
+   quote=$(printf '%s\n' "$lines" | head -n 1 | sed -n 's/^[^"]*"\(.*\)".*$/\1/p')
+   if [ -z "$quote" ]; then
+     vote deny G20 "status: approved needs an approved: line with the date and the user's words in double quotes, in the same edit"
+     return 0
+   fi
+   norm=$(printf '%s\n' "$quote" | LC_ALL=C tr '[:upper:]' '[:lower:]' |
+     sed -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //' -e 's/ $//' -e 's/[.!?,;:]*$//' -e 's/ $//')
++  norm=${norm//$_G20_RSQ/\'}
+   case "$_G20_NOT_YES" in
+     *" $norm "*)
+       vote deny G20 "\"$quote\" is not an explicit yes; ask the user for one"
+       return 0
+       ;;
+   esac
+   # A quote with no hash (blank, or over 500 characters) matches nothing, not an empty record.
+   qh=$(printf '%s\n' "$quote" | prompt_hashes)
+   hashes=$(state_get "$SID" prompt_hashes 2> /dev/null) || hashes=''
+   case " $hashes " in
+     *" ${qh:-none} "*) ;;
+     *)
+       vote deny G20 "the approved: quote is not a line of the user's last message; quote one whole line of it verbatim, or ask for a yes"
+       return 0
+       ;;
+   esac
+   # The draft must be older than the state file, which prompt-submit rewrites on each user prompt. bash
+   # 3.2 compares whole seconds, so a draft from the same second as the prompt counts as changed after it.
+   sf=$(state_file "$SID" 2> /dev/null) || sf=''
+   if [ -f "$p" ] && ! { [ -n "$sf" ] && [ "$sf" -nt "$p" ]; }; then
+-    vote deny G20 "$(basename "$p") changed after the user's last message; show the draft again and get a fresh yes"
++    vote deny G20 "$base changed after the user's last message; set status and approved: in one edit, on a draft unchanged since the user's yes, so ask for the yes again"
+   fi
+ }
+ 
+ # A shell command that writes a Markdown file could set or change an approval without the quote
+ # check. _g20_bash reads each simple command (git_words) and denies when one writes a Markdown file
+ # (a redirect; an operand of sed -i, perl -i, awk or gawk -i inplace, ed, ex, vi, vim, tee, truncate or
+ # sponge; dd of=; the destination of cp, mv, install, ln, rsync, ditto or git mv; the same inside
+-# find -exec and xargs) and the command holds the word approved, or the file is approved now, or the
+-# command names another file whose frontmatter is approved (cp, cat or tee from a prepared file). A
++# find -exec and xargs) and the command holds the word approved, or the file holds a status: approved
++# line now, or the command names another file that does (cp, cat, tee or tail from a prepared file);
++# any line counts, not only frontmatter, because a shell edit can move body lines into it. A
+ # script interpreter running inline code (python -c, node -e, a here-doc on stdin) is denied when the
+ # command holds both approved and a Markdown name. With approved in the command, a destination built
+ # at run time (a glob, a variable, find's {}) is denied too. A script run by name, or a word built at
+ # run time, is not seen (accepted limit).
+ #
+ # State for one command: _G20_W is 1 when the command holds approved (quotes and backslashes taken out,
+ # any case), _G20_M when it names a Markdown file. _G20_DIR follows cd. _G20_WRITES is 1 once a simple
+ # command writes a Markdown file. _G20_SRC holds the command's other file words as absolute paths, one
+ # per line. _G20_WHY is the deny reason; the first one ends the check.
+ 
+@@ -205,22 +245,22 @@ _g20_target() {
+     return 0
+   fi
+   _g20_abs "$w"
+   _g20_md "$w" || _g20_mdfile "$_G20_P" || return 0
+   _G20_WRITES=1
+   if [ "$_G20_W" = 1 ]; then
+     _G20_WHY=$_G20_USE_TOOL
+     return 0
+   fi
+   _g20_dyn "$w" && return 0
+-  if _g20_approved "$(_g20_front "$_G20_P")"; then
+-    _G20_WHY="$(basename "$_G20_P") is approved, and a shell write to it skips the quote check; $_G20_USE_TOOL"
++  if _g20_holds "$_G20_P"; then
++    _G20_WHY="$(basename "$_G20_P") holds a status: approved line, and a shell write to it skips the quote check; $_G20_USE_TOOL"
+   fi
+ }
+ 
+ # _g20_inline WORD...: exit 0 when an interpreter given these arguments runs inline code: a -c, -e,
+ # --eval or similar option, an eval subcommand, a - operand, or no operand at all (a script on
+ # stdin). A first operand that is a file name is a script run by name.
+ _g20_inline() {
+   local w
+   for w in "$@"; do
+     case "$w" in -c* | -e* | -E* | -p* | -r* | --eval* | --print* | --command* | -[Cc]ommand* | -[!-]*c | -[!-]*e | eval) return 0 ;; esac
+@@ -563,26 +603,25 @@ _g20_bash() {
+   _G20_WRITES=0
+   _G20_SRC=''
+   _G20_WHY=''
+   while IFS= read -r seg; do
+     [ -n "$seg" ] || continue
+     _g20_seg "$seg"
+     [ -z "$_G20_WHY" ] || break
+   done <<CMD
+ $(git_words "$cmd")
+ CMD
+-  # A command that writes a Markdown file and also names a file whose frontmatter is approved can copy
+-  # that frontmatter in (cp, cat or tee from a prepared file).
++  # A command that writes a Markdown file and also names a file holding a status: approved line, in its
++  # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file).
+   if [ -z "$_G20_WHY" ] && [ "$_G20_WRITES" = 1 ]; then
+     while IFS= read -r s; do
+-      [ -f "$s" ] || continue
+-      if _g20_approved "$(_g20_front "$s")"; then
+-        _G20_WHY="the command writes a Markdown file and names $(basename "$s"), whose frontmatter is approved, so it can copy an approval past the quote check; $_G20_USE_TOOL"
++      if _g20_holds "$s"; then
++        _G20_WHY="the command writes a Markdown file and names $(basename "$s"), which holds a status: approved line, so it can copy an approval past the quote check; $_G20_USE_TOOL"
+         break
+       fi
+     done <<SRC
+ $(printf '%s' "$_G20_SRC" | head -n 64)
+ SRC
+   fi
+   [ -z "$_G20_WHY" ] || vote deny G20 "$_G20_WHY"
+   return 0
+ }
+diff --git a/scripts/ledger-open b/scripts/ledger-open
+index 2b1d302..377a1f7 100755
+--- a/scripts/ledger-open
++++ b/scripts/ledger-open
+@@ -51,23 +51,29 @@ plan=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
+ real=$plan
+ hops=0
+ while [ -L "$real" ] && [ "$hops" -lt 8 ]; do
+   link=$(readlink "$real") || { echo "ledger-open: cannot read the symlink $real" >&2; exit 2; }
+   case "$link" in /*) real=$link ;; *) real=$(dirname "$real")/$link ;; esac
+   hops=$((hops + 1))
+ done
+ for name in "$plan" "$real"; do
+   markdown "$name" || { echo "ledger-open: $name is not a Markdown file; G20 checks approvals only in .md files" >&2; exit 2; }
+ done
+-# The frontmatter is the block between a first line of --- and the next ---.
+-fm=$(awk 'NR == 1 { if ($0 != "---") exit; opened = 1; next } $0 == "---" { closed = 1; exit } { print } END { if (opened && !closed) exit 3 }' "$plan") ||
+-  { echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2; }
++# The frontmatter as G20 reads it (scripts/lib/frontmatter.awk), so an approval G20 never saw cannot
++# open a ledger.
++rc=0
++fm=$(LC_ALL=C awk -v fm_print=1 -f "$here/lib/frontmatter.awk" "$plan") || rc=$?
++case "$rc" in
++  0) ;;
++  3) echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2 ;;
++  *) echo "ledger-open: could not read the frontmatter of $plan" >&2; exit 2 ;;
++esac
+ spec=$(printf '%s\n' "$fm" | sed -n 's/^spec:[[:space:]]*//p' | head -n 1 | sed 's/[[:space:]]*$//')
+ case "$spec" in
+   '' | none) ;;
+   *) markdown "$spec" || { echo "ledger-open: $plan: spec: $spec is not a Markdown file; G20 checks approvals only in .md files" >&2; exit 2; } ;;
+ esac
+ status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
+ approved=$(printf '%s\n' "$fm" | sed -n 's/^approved:[[:space:]]*//p' | head -n 1)
+ [ "$status" = approved ] || { echo "ledger-open: $plan has status: ${status:-none}; execute-plan runs only an approved plan" >&2; exit 2; }
+ printf '%s' "$approved" | grep -Eq '[0-9]{4}-[0-9]{2}-[0-9]{2}.*"[^"]+"' ||
+   { echo "ledger-open: $plan has no approved: line with a date and the user's quoted words" >&2; exit 2; }
+diff --git a/scripts/lib/frontmatter.awk b/scripts/lib/frontmatter.awk
+new file mode 100644
+index 0000000..d8df51b
+--- /dev/null
++++ b/scripts/lib/frontmatter.awk
+@@ -0,0 +1,19 @@
++# The frontmatter reader that guard G20, ledger-open and plan-check share, so all three agree on which
++# lines are a file's frontmatter: from a first line --- up to the next --- line. A --- line is read
++# with trailing blanks and a trailing CR dropped, and the first line also with a UTF-8 byte order mark
++# dropped. If they disagreed, a file could hold an approval that G20 never saw and ledger-open accepts.
++#
++# fm_delim(s, first): s is a --- line; first: s is the file's first line.
++function fm_delim(s, first) {
++  if (first) sub(/^\357\273\277/, "", s)
++  sub(/[ \t\r]+$/, "", s)
++  return s == "---"
++}
++
++# Run with -v fm_print=1 to print the frontmatter lines of the input, each without a trailing CR. Exit 3
++# when the block opens and never closes; its lines are still printed. A program that loads this file
++# for fm_delim alone leaves fm_print unset, and these rules do nothing.
++fm_print && FNR == 1 { if (!fm_delim($0, 1)) exit; fm_open = 1; next }
++fm_print && fm_delim($0, 0) { fm_closed = 1; exit }
++fm_print { sub(/\r$/, ""); print }
++END { if (fm_print && fm_open && !fm_closed) exit 3 }
+diff --git a/scripts/plan-check b/scripts/plan-check
+index 65e2cd5..66b24d5 100755
+--- a/scripts/plan-check
++++ b/scripts/plan-check
+@@ -32,38 +32,41 @@ else
+ fi
+ [ -f "$file" ] || { echo "plan-check: no such file: $file" >&2; exit 2; }
+ 
+ MAIN=$(kern_main_root "$PWD" 2> /dev/null) || MAIN=''
+ export KERN_MAIN="$MAIN"
+ SHARED=$(settings_get shared_services '' 2> /dev/null || true)
+ WD=$(settings_get work_dir .kern 2> /dev/null || echo .kern)
+ 
+ # Acceptance numbers of the plan's spec, when the spec: line names a file that resolves.
+ ACCEPT='' SPECPATH='' SPECBAD=''
+-spec=$(awk '{ sub(/\r$/, "") } NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1 && /^spec:/ { sub(/^spec:[ \t]*/, ""); print }' "$file")
++# The frontmatter as G20 and ledger-open read it: one reader, so the three agree on where it ends.
++FM_AWK=$(cat "$here/lib/frontmatter.awk") || { echo "plan-check: cannot read $here/lib/frontmatter.awk" >&2; exit 2; }
++spec=$(LC_ALL=C awk -v fm_print=1 "$FM_AWK" "$file" | sed -n 's/^spec:[[:blank:]]*//p') || [ "$?" = 3 ] ||
++  { echo "plan-check: could not read the frontmatter of $file" >&2; exit 2; }
+ case "$spec" in
+   *.md)
+     case "$spec" in WORK/*) spec="$MAIN/${WD%/}/${spec#WORK/}" ;; esac
+     for c in "$spec" "$(dirname "$file")/$spec" "$MAIN/$spec"; do
+       if [ -f "$c" ]; then SPECPATH=$c; break; fi
+     done
+     if [ -n "$SPECPATH" ]; then
+       ACCEPT=$(awk '{ sub(/\r$/, "") } /^## / { on = ($0 ~ /^## Acceptance criteria/) ; next } on && /^[0-9]+\. / { sub(/\..*/, ""); printf "%s ", $0 }' "$SPECPATH")
+     else
+       ACCEPT=MISSING
+     fi
+     ;;
+   *) SPECBAD=1 ;;
+ esac
+ 
+ DASH=$(printf '\342\200\223|\342\200\224') CURLY=$(printf '\342\200\230|\342\200\231|\342\200\234|\342\200\235') \
+-  MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec LC_ALL=C awk -v sq="'" '
++  MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec LC_ALL=C awk -v sq="'" "$FM_AWK"'
+ function problem(ln, msg) { printf "%s:%d: %s\n", FILENAME, ln, msg; bad = 1 }
+ function spans(s, out,   k, t) {
+   k = 0
+   while (match(s, /`[^`]+`/)) { out[++k] = substr(s, RSTART + 1, RLENGTH - 2); s = substr(s, RSTART + RLENGTH) }
+   return k
+ }
+ function first(s) { sub(/^[ \t]+/, "", s); sub(/[ \t(].*/, "", s); return s }
+ function has(list, x) { return index(" " list " ", " " x " ") > 0 }
+ function covers(p, q) {
+   if (p == q) return 1
+@@ -76,22 +79,22 @@ function mentions(txt, w,   pos, before, after, rest, off) {
+   while ((pos = index(rest, w)) > 0) {
+     before = (off + pos > 1) ? substr(txt, off + pos - 1, 1) : " "
+     after = substr(txt, off + pos + length(w), 1)
+     if (before !~ /[A-Za-z0-9_]/ && after !~ /[A-Za-z0-9_]/) return 1
+     off += pos; rest = substr(txt, off + 1)
+   }
+   return 0
+ }
+ { sub(/\r$/, "") }
+ BEGIN { shared_n = split(tolower(ENVIRON["SHARED"]), shared, /[ \t]*,[ \t]*/) }
+-NR == 1 && $0 == "---" { infm = 1; fmstart = 1; next }
+-infm && $0 == "---" { infm = 0; fmclosed = 1; next }
++NR == 1 && fm_delim($0, 1) { infm = 1; fmstart = 1; next }
++infm && fm_delim($0, 0) { infm = 0; fmclosed = 1; next }
+ infm { k = $0; sub(/:.*/, "", k); v = $0; sub(/^[^:]*:[ \t]*/, "", v); fm[k] = v; fmline[k] = NR; next }
+ /^[ \t]*(```|~~~)/ { fence = !fence; if (fence) fenceline = NR; if (cur) text[cur] = text[cur] " " tolower($0); next }
+ fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
+ {
+   prose = $0; gsub(/`[^`]*`/, "", prose)
+   if (prose ~ ENVIRON["DASH"]) problem(NR, "long dash")
+   if (prose ~ ENVIRON["CURLY"]) problem(NR, "curly quote")
+   if (prose ~ /(^|[^A-Za-z])(TBD|TODO)([^A-Za-z]|$)/ || tolower(prose) ~ /similar to task|add appropriate|fill in|implement later/) problem(NR, "placeholder: " $0)
+ }
+ /^## / { h2[$0] = 1; field = ""; if (cur) { cur = "" } }
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index 15069ae..c8cd59e 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -399,10 +399,35 @@ expect_cmd() {
+   expect_cmd deny 'echo kern: off > "my dir/.claude/kern.local.yml"'
+   set_autopilot off
+   expect_cmd none 'gh pr create --draft --title "Guard .claude/settings.json" --body-file b.md' \
+     'git commit -m "G16: read .claude, .claude/kern.yml and settings.json"' \
+     'gh issue create -t "fix .claude/kern.yml" -b "see .claude/settings.json"' \
+     'git commit --message="move to .claude/settings.local.json"' \
+     'gh pr create --draft --title="Guard .claude" --body-file b.md' \
+     'git commit -m "fix: x" -m "see .claude/kern.yml"' 'git commit -am "fix .claude/kern.yml"'
+   expect_cmd ask 'rsync -m "my dir/.claude/settings.json" /tmp/'
+ }
++
++@test "running or sourcing kern's hook code, or calling its state functions, is denied in both modes" {
++  K=$(kern_root)
++  # shellcheck disable=SC2016 # literal ${CLAUDE_PLUGIN_ROOT}, as Claude would write it
++  expect_cmd deny \
++    "printf '%s' '{\"session_id\":\"test-session\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit" \
++    "$K/hooks/prompt-submit < /dev/null" 'bash hooks/session-start' 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start' \
++    "sh $K/hooks/pre-tool-use" ". $K/hooks/lib/state.sh" 'source hooks/lib/state.sh && state_set s autopilot=on' \
++    "bash -c '. hooks/lib/state.sh; state_set test-session prompt_hashes=1'" "bash -c 'state_reset test-session'" \
++    'eval _state_put 0 s autopilot=on' 'cat hooks/prompt-submit | bash' 'bash < hooks/prompt-submit' \
++    "cp -r $K /tmp/k && bash /tmp/k/hooks/prompt-submit" 'cd hooks && bash prompt-submit' 'cd hooks && . lib/state.sh'
++  set_autopilot on
++  expect_cmd deny "bash $K/hooks/prompt-submit"
++}
++
++@test "reading kern's hook code, or running its tests, is not denied" {
++  local c
++  for c in 'cat hooks/prompt-submit' 'grep -n state_set hooks/lib/state.sh' 'shellcheck -x hooks/prompt-submit hooks/lib/state.sh' \
++    'git diff -- hooks/prompt-submit' 'git add -- hooks/prompt-submit hooks/lib/state.sh' 'sed -n 1,20p hooks/lib/state.sh' \
++    'tests/run-bats tests/hooks/pre-tool-use.bats tests/hooks/prompt-submit.bats' 'git commit -m "fix state_set in prompt-submit"'; do
++    . "$(kern_root)/hooks/lib/json.sh"
++    run_guard "$(tool_payload Bash "\"command\":\"$(printf '%s' "$c" | json_escape)\"")" g16
++    [ "$(decision_of "$output")" != deny ] || { echo "$c -> $output"; return 1; }
++  done
++}
+diff --git a/tests/hooks/g20-probes.bats b/tests/hooks/g20-probes.bats
+new file mode 100644
+index 0000000..97279d4
+--- /dev/null
++++ b/tests/hooks/g20-probes.bats
+@@ -0,0 +1,431 @@
++#!/usr/bin/env bats
++# G20 probes: ways to write an approval without the user's words, each through the real dispatcher and
++# the real prompt-submit hook. g20.bats holds the contract tests; this file holds the attacks found in
++# self-review and review, and the accepted limits as they stand.
++
++load ../helpers/common
++
++setup() {
++  R="$BATS_TEST_TMPDIR/repo"
++  make_repo "$R"
++  R=$(cd "$R" && pwd -P)
++  kern_env "$R"
++  K="$(kern_root)"
++  mkdir -p "$R/.kern/specs" "$R/.kern/plans" "$CLAUDE_PLUGIN_DATA/sessions"
++  SPEC="$R/.kern/specs/export.md"
++  printf '%s\n' '---' 'status: draft' 'date: 2026-10-14' 'approved: (set only on an explicit yes)' '---' '## Problem' > "$SPEC"
++  touch -t 202001010000 "$SPEC"
++  . "$K/hooks/lib/json.sh"
++  cd "$R"
++}
++
++# say PROMPT: the user's message, through the real prompt-submit hook. PROMPT holds no double quote.
++say() {
++  printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"%s"}' "$CWD" "$1" |
++    bash "$K/hooks/prompt-submit" > /dev/null
++}
++
++deny() { [ "$(decision_of "$output")" = deny ] || { echo "expected deny: $output"; return 1; }; }
++none() { [ -z "$output" ] || { echo "expected no vote: $output"; return 1; }; }
++
++# b COMMAND: G20 on a Bash COMMAND, which may hold any character.
++b() { run_guard "$(tool_payload Bash "\"command\":\"$(printf '%s' "$1" | json_escape)\"")" "${2:-g20}"; }
++
++# write PATH TEXT: G20 on a Write of TEXT, which may hold any character.
++write() { run_guard "$(tool_payload Write "\"file_path\":\"$1\",\"content\":\"$(printf '%s' "$2" | json_escape)\"")" g20; }
++
++# edit OLD NEW [PATH] [REPLACE_ALL]: G20 on an Edit; OLD and NEW may hold any character.
++edit() {
++  run_guard "$(tool_payload Edit "\"file_path\":\"${3:-$SPEC}\",\"old_string\":\"$(printf '%s' "$1" | json_escape)\",\"new_string\":\"$(printf '%s' "$2" | json_escape)\",\"replace_all\":${4:-false}")" g20
++}
++
++# approval QUOTE: frontmatter lines that approve with QUOTE.
++approval() { printf -- '---\nstatus: approved\napproved: 2026-10-14, "%s"\n---\n' "$1"; }
++
++# prep FILE: a prepared file whose frontmatter is approved with an invented quote.
++prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '---' > "$1"; }
++
++@test "P1 two Edits: an invented quote while draft, then the status flip" {
++  say 'yes'
++  edit 'approved: (set only on an explicit yes)' 'approved: 2026-10-14, "ship it"'
++  none
++  printf '%s\n' '---' 'status: draft' 'approved: 2026-10-14, "ship it"' '---' > "$SPEC"
++  edit 'status: draft' 'status: approved'
++  deny
++}
++
++@test "P1b two Edits: a real quote while draft, then the flip, is changed after the message" {
++  say 'yes'
++  printf '%s\n' '---' 'status: draft' 'approved: 2026-10-14, "yes"' '---' > "$SPEC"
++  edit 'status: draft' 'status: approved'
++  deny
++  [[ "$output" == *"changed after the user's last message"* ]] || false
++}
++
++@test "P2 non-answers with a final question mark or comma" {
++  say 'maybe?'
++  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "maybe?"')"
++  deny
++  [[ "$output" == *"not an explicit yes"* ]] || false
++  say 'Sounds good,'
++  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "Sounds good,"')"
++  deny
++}
++
++@test "P3 a quote with no hash matches no record, recorded or empty" {
++  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "..."')"
++  deny
++  say ''
++  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "..."')"
++  deny
++}
++
++@test "P4 an empty prompt replaces the last one's lines" {
++  say 'yes'
++  say '   '
++  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "yes"')"
++  deny
++}
++
++@test "P5 frontmatter forms G20 reads as approved" {
++  say 'no thanks'
++  for s in 'status:  approved' 'status: "approved"' "status: 'approved'" 'Status: Approved' 'status: approved # ok' \
++    'status : approved' 'status:approved'; do
++    write "$R/.kern/specs/n.md" "$(printf -- '---\n%s\napproved: 2026-10-14, "x"\n---\n' "$s")"
++    deny || { echo "form: $s"; return 1; }
++  done
++}
++
++@test "P6 a CRLF file and a multi-line old_string" {
++  printf -- '---\r\nstatus: draft\r\napproved: (set only on an explicit yes)\r\n---\r\n' > "$SPEC"
++  touch -t 202001010000 "$SPEC"
++  say 'yes'
++  edit "$(printf 'status: draft\napproved: (set only on an explicit yes)')" "$(printf 'status: approved\napproved: 2026-10-14, "ship it"')"
++  deny
++}
++
++@test "P6b a CRLF Write" {
++  say 'yes'
++  write "$R/a.md" "$(printf -- '---\r\nstatus: approved\r\napproved: 2026-10-14, "ship it"\r\n---\r\n')"
++  deny
++}
++
++@test "P7 a second frontmatter block is read by neither G20 nor ledger-open" {
++  say 'yes'
++  printf '%s\n' '---' 'status: draft' '---' '---' 'status: approved' 'approved: 2026-10-14, "ship it"' '---' > "$R/two.md"
++  run bash "$K/scripts/ledger-open" "$R/two.md"
++  [ "$status" -eq 2 ]
++}
++
++@test "P8 a byte order mark and blanks after the opening ---" {
++  say 'yes'
++  write "$R/a.md" "$(printf '\357\273\277'; approval 'ship it')"
++  deny
++  write "$R/a.md" "$(printf -- '---  \nstatus: approved\napproved: 2026-10-14, "ship it"\n---\n')"
++  deny
++}
++
++@test "P9 an Edit with an empty old_string writes a new file" {
++  say 'yes'
++  edit '' "$(approval 'ship it')" "$R/new.md"
++  deny
++}
++
++@test "P10 a Markdown name in another case" {
++  say 'yes'
++  write "$R/.kern/specs/export.Md" "$(approval 'ship it')"
++  deny
++  write "$R/x.MARKDOWN" "$(approval 'ship it')"
++  deny
++}
++
++@test "P11 curly quotes in the file, straight ones in old_string" {
++  printf '%s\n' '---' 'title: “x”' 'status: draft' '---' > "$SPEC"
++  touch -t 202001010000 "$SPEC"
++  say 'yes'
++  edit "$(printf 'title: "x"\nstatus: draft')" "$(printf 'title: x\nstatus: approved\napproved: 2026-10-14, "ship it"')"
++  deny
++}
++
++@test "P12 a user line that holds double quotes can be quoted whole" {
++  say 'yes, use \"delegate\"'
++  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "yes, use "delegate""')"
++  none
++}
++
++@test "P13 perl in place, in any option form" {
++  b "perl -pi -e 's/draft/approved/' .kern/specs/export.md"; deny
++  b "perl -i -pe 's/draft/approved/' .kern/specs/export.md"; deny
++  b "perl -pi.bak -e 's/draft/approved/' .kern/specs/export.md"; deny
++}
++
++@test "P14 python -c and node -e with the path inside the code" {
++  b "python3 -c \"import pathlib;p=pathlib.Path('.kern/specs/export.md');p.write_text(p.read_text().replace('draft','approved'))\""
++  deny
++  b "node -e \"require('fs').writeFileSync('x.md','status: approved')\""
++  deny
++}
++
++@test "P15 python reading its script from a here-doc" {
++  b "$(printf '%s\n' "python3 - <<'PY'" 'import pathlib' "p = pathlib.Path('.kern/specs/export.md')" \
++    "p.write_text(p.read_text().replace('draft', 'approved'))" 'PY')"
++  deny
++}
++
++@test "P16 tee, a here-doc, printf, sudo and env" {
++  b "printf 'status: approved' | tee .kern/specs/export.md"; deny
++  b "$(printf '%s\n' "cat > .kern/specs/new.md <<'EOF'" '---' 'status: approved' '---' 'EOF')"; deny
++  b "printf -- '---\\nstatus: approved\\n---\\n' > x.md"; deny
++  b "sudo tee -a x.md <<< 'status: approved'"; deny
++  b "env sed -i s/draft/approved/ .kern/specs/export.md"; deny
++}
++
++@test "P17 cp, cat, tee, dd, ln, rsync, install, git mv and a two-step mv from a prepared file" {
++  prep "$R/p.txt"
++  b "cp p.txt .kern/specs/export.md"; deny
++  b "cat p.txt > .kern/specs/export.md"; deny
++  b "tee .kern/specs/export.md < p.txt"; deny
++  b "dd if=p.txt of=.kern/specs/export.md"; deny
++  b "ln -sf ../../p.txt .kern/specs/export.md"; deny
++  b "rsync p.txt .kern/specs/export.md"; deny
++  b "install -m 644 p.txt .kern/specs/export.md"; deny
++  b "git mv p.txt .kern/specs/new.md"; deny
++  b "mv p.txt .kern/specs/export.md.tmp && mv .kern/specs/export.md.tmp .kern/specs/export.md"; deny
++}
++
++@test "P18 cp of a prepared Markdown file into the specs directory" {
++  mkdir -p "$R/tmp"
++  prep "$R/tmp/export.md"
++  b "cp tmp/export.md .kern/specs/"; deny
++  b "cp -t .kern/specs tmp/export.md"; deny
++}
++
++@test "P19 a glob, find -exec, xargs and a loop variable, with approved in the command" {
++  b "sed -i '' s/draft/approved/ .kern/specs/*"; deny
++  b "find .kern -name '*.md' -exec sed -i '' s/draft/approved/ {} +"; deny
++  b "ls .kern/specs/*.md | xargs sed -i '' s/draft/approved/"; deny
++  b "for f in .kern/specs/*; do sed -i '' s/draft/approved/ \$f; done"; deny
++}
++
++@test "P20 the word split by quotes or in capitals" {
++  b "sed -i '' s/draft/appro''ved/ .kern/specs/export.md"; deny
++  b "sed -i '' s/draft/APPROVED/ .kern/specs/export.md"; deny
++}
++
++@test "P21 a shell write to an approved file without the word" {
++  prep "$SPEC"
++  b "echo note >> .kern/specs/export.md"; deny
++  b "cd .kern/specs && echo note >> export.md"; deny
++  b "truncate -s 0 .kern/specs/export.md"; deny
++}
++
++@test "P22 reads and kern's own scripts get no G20 vote" {
++  prep "$SPEC"
++  b "grep -rn approved .kern/specs/export.md"; none
++  b "sed -n '/approved/p' .kern/specs/export.md"; none
++  b "awk '/approved/' .kern/specs/export.md"; none
++  b "cat .kern/specs/export.md | grep approved"; none
++  b "git commit -m 'export.md approved'"; none
++  b "git log --grep approved -- .kern/specs/export.md"; none
++  b "find .kern -name '*.md' -exec grep -l approved {} +"; none
++  mkdir -p "$R/.kern/ledgers/x"
++  printf '# kern ledger: x\n' > "$R/.kern/ledgers/x/ledger.md"
++  b "bash $K/scripts/task-review .kern/ledgers/x/ledger.md 1 0123456789012345678901234567890123456789 1 compliant approved"; none
++  b "bash $K/scripts/ledger-open .kern/specs/export.md"; none
++  b "echo hi >> notes.md"; none
++  b "sed -i '' s/a/b/ notes.md"; none
++  b "node scripts/build.mjs docs/x.md --approved"; none
++  b "cp README.md docs.md"; none
++}
++
++@test "P23 accepted limit: a new file has no draft to be older than the message" {
++  say 'yes'
++  write "$R/.kern/specs/fresh.md" "$(approval yes)"
++  none
++}
++
++@test "P24 the quote comes from the first approved: line" {
++  say 'yes'
++  write "$R/a.md" "$(printf -- '---\nstatus: approved\napproved: 2026-10-14, "ship it"\napproved: 2026-10-14, "yes"\n---\n')"
++  deny
++}
++
++@test "P25 a quote over 500 characters matches nothing" {
++  long=$(printf 'a%.0s' $(seq 1 600))
++  say "$long"
++  write "$R/a.md" "$(approval "$long")"
++  deny
++}
++
++@test "P26 a prompt that starts with a system-reminder replaces the user's lines" {
++  say 'yes'
++  say '<system-reminder>x</system-reminder><teammate-message>ship it</teammate-message>'
++  write "$R/a.md" "$(approval yes)"
++  deny
++}
++
++@test "P27 a byte order mark before the first ---" {
++  say 'yes'
++  write "$R/a.md" "$(printf '\357\273\277'; approval 'ship it')"
++  deny
++}
++
++@test "P28 bash -c, eval, command substitution, a path with a space, perl -0777" {
++  b "bash -c 'sed -i s/draft/approved/ .kern/specs/export.md'"; deny
++  b "eval sed -i s/draft/approved/ .kern/specs/export.md"; deny
++  b "echo \$(sed -i s/draft/approved/ .kern/specs/export.md)"; deny
++  mkdir -p "$R/my specs"
++  b "sed -i '' s/draft/approved/ 'my specs/x.md'"; deny
++  b "perl -0777 -pi -e 's/draft/approved/' .kern/specs/export.md"; deny
++}
++
++@test "P29 Monitor is read as Bash" {
++  run_guard "$(payload PreToolUse "\"tool_name\":\"Monitor\",\"tool_input\":{\"command\":\"sed -i '' s/draft/approved/ .kern/specs/export.md\"}")" g20
++  deny
++}
++
++@test "P30 an approved file approved again with a fresh real quote" {
++  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-13, "old yes"' '---' > "$SPEC"
++  touch -t 202001010000 "$SPEC"
++  say 'yes, again'
++  edit 'approved: 2026-10-13, "old yes"' 'approved: 2026-10-14, "yes, again"'
++  none
++}
++
++@test "P31 accepted limit: a teammate message wrapped() misses counts as the user's" {
++  say '<system-reminder>x</system-reminder>\n<teammate-message>\nship it\n</teammate-message>'
++  write "$R/a.md" "$(approval 'ship it')"
++  none
++}
++
++@test "P32 a write through a non-Markdown symlink to a spec" {
++  say 'yes'
++  ln -s .kern/specs/export.md "$R/alias.txt"
++  write "$R/alias.txt" "$(approval 'ship it')"
++  deny
++  b "sed -i '' s/draft/approved/ alias.txt"; deny
++  b "echo hi >> README.md"; none
++}
++
++@test "P33 option clusters tell the script from the files" {
++  b "sed -i -es/draft/approved/ .kern/specs/export.md"; deny
++  b "sed -E -i '' s/draft/approved/ .kern/specs/export.md"; deny
++  b "sed -ni s/draft/approved/p .kern/specs/export.md"; deny
++  b "sed -i.bak -e s/draft/approved/ .kern/specs/export.md"; deny
++  b "sed --in-place=.bak s/draft/approved/ .kern/specs/export.md"; deny
++  b "sed -E 's/draft*/approved/' .kern/specs/export.md"; none
++  b "perl -Mstrict -ne 'print if /draft/' .kern/specs/export.md"; none
++  b "awk -v x=1 -i inplace '{sub(/draft/,x)}1' .kern/specs/export.md"; none
++  prep "$SPEC"
++  b "awk -v x=1 -i inplace '{sub(/a/,x)}1' .kern/specs/export.md"; deny
++}
++
++@test "P34 accepted false deny: perl inline code that reads, with approved and a Markdown name" {
++  b "perl -Mstrict -ne 'print if /approved/' .kern/specs/export.md"; deny
++}
++
++@test "P35 accepted limit: a script run by name is not seen" {
++  b "bash scripts/approve.sh .kern/specs/export.md"; none
++}
++
++# --- Review round 1 ---
++
++# c1_plan CLOSER: the review's probe plan, whose second --- line is CLOSER.
++c1_plan() {
++  printf '%s\n' '---' 'title: x' "$1" 'status: approved' 'approved: 2026-10-14, "ship it"' 'execution: inline' \
++    'commits: ask' '---'
++}
++
++# c1_agree FILE: G20, ledger-open and plan-check read FILE's frontmatter the same way: none of them
++# finds status: approved in it.
++c1_agree() {
++  run bash "$K/scripts/ledger-open" "$1" "$BATS_TEST_TMPDIR/l"
++  [ "$status" -eq 2 ] || { echo "ledger-open: $output"; return 1; }
++  [[ "$output" == *"has status: none"* ]] || { echo "ledger-open: $output"; return 1; }
++  [ ! -e "$BATS_TEST_TMPDIR/l" ]
++  run bash "$K/scripts/plan-check" "$1"
++  [[ "$output" == *'plan status is draft or approved, not ""'* ]] || { echo "plan-check: $output"; return 1; }
++}
++
++@test "C1 a --- with trailing blanks closes the frontmatter for G20, ledger-open and plan-check alike" {
++  say 'yes'
++  printf '\n### Task 1: One\n' > "$BATS_TEST_TMPDIR/task"
++  text="$(c1_plan '---  ')$(printf '\n'; cat "$BATS_TEST_TMPDIR/task")"
++  write "$R/.kern/plans/p2.md" "$text"
++  none
++  printf '%s\n' "$text" > "$R/.kern/plans/p2.md"
++  c1_agree "$R/.kern/plans/p2.md"
++}
++
++@test "C1 a --- with a CR closes the frontmatter for G20, ledger-open and plan-check alike" {
++  say 'yes'
++  text="$(c1_plan "$(printf -- '---\r')")$(printf '\n\n### Task 1: One')"
++  write "$R/.kern/plans/p3.md" "$text"
++  none
++  printf '%s\n' "$text" > "$R/.kern/plans/p3.md"
++  c1_agree "$R/.kern/plans/p3.md"
++}
++
++@test "C1 an opening --- with trailing blanks: G20 denies the approval ledger-open would accept" {
++  say 'yes'
++  text=$(printf '%s\n' '---  ' 'status: approved' 'approved: 2026-10-14, "ship it"' 'execution: inline' 'commits: ask' '---')
++  write "$R/.kern/plans/p6.md" "$text"
++  deny
++  printf '%s\n' "$text" > "$R/.kern/plans/p6.md"
++  run bash "$K/scripts/ledger-open" "$R/.kern/plans/p6.md" "$BATS_TEST_TMPDIR/l"
++  [ "$status" -eq 0 ]
++}
++
++@test "I2 sed deleting a closing --- turns staged body lines into frontmatter" {
++  printf '%s\n' '---' 'title: x' '---' 'status: approved' 'approved: 2026-10-14, "ship it"' 'execution: inline' \
++    'commits: ask' '---' > "$R/.kern/plans/p4.md"
++  b "sed -i '' 3d .kern/plans/p4.md"
++  deny
++  [[ "$output" == *"p4.md holds a status: approved line"* ]] || false
++}
++
++@test "I2 tail of a staged file whose first line is not --- into a plan" {
++  printf '%s\n' 'x' '---' 'status: approved' 'approved: 2026-10-14, "ship it"' 'execution: inline' 'commits: ask' \
++    '---' > "$R/.kern/staged.md"
++  b "tail -n +2 .kern/staged.md > .kern/plans/p5.md"
++  deny
++  [[ "$output" == *"staged.md, which holds a status: approved line"* ]] || false
++}
++
++@test "I3 running kern's prompt-submit to forge the user's message is denied by G16" {
++  b "printf '%s' '{\"session_id\":\"test-session\",\"cwd\":\"$R\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit" g16
++  deny
++  [[ "$output" == *"kern G16: "*"kern's hooks"* ]] || false
++}
++
++@test "I3 sourcing kern's state library to call state_set is denied by G16" {
++  b "bash -c '. hooks/lib/state.sh; state_set test-session prompt_hashes=1'" g16
++  deny
++  [[ "$output" == *"kern G16: "*"kern's hooks"* ]] || false
++}
++
++@test "N1 negations are not a yes" {
++  for q in 'no' 'Nope.' 'not yet' 'wait' 'stop!' "don't" "$(printf 'Don\342\200\231t')" 'do not'; do
++    say "$q"
++    edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "%s"' "$q")"
++    deny || { echo "quote: $q"; return 1; }
++    [[ "$output" == *"is not an explicit yes"* ]] || { echo "quote: $q: $output"; return 1; }
++  done
++}
++
++@test "N2 an Edit whose old_string is not in the file, writing a status line, fails closed" {
++  say 'yes'
++  edit 'status: drafty' "$(printf 'status: approved\napproved: 2026-10-14, "yes"')"
++  deny
++  [[ "$output" == *"old_string is not in export.md"* ]] || false
++  edit 'no such text' 'plain words'
++  none
++}
++
++@test "N3 the changed-after message says how to approve" {
++  say 'yes'
++  touch -t 203001010000 "$SPEC"
++  edit 'status: draft' "$(printf 'status: approved\napproved: 2026-10-14, "yes"')"
++  deny
++  [[ "$output" == *"set status and approved: in one edit"* ]] || false
++}
+diff --git a/tests/hooks/g20.bats b/tests/hooks/g20.bats
+index ccb223a..8b26fb8 100644
+--- a/tests/hooks/g20.bats
++++ b/tests/hooks/g20.bats
+@@ -92,20 +92,22 @@ approve() {
+ @test "under autopilot even a real quote is denied" {
+   say 'yes'
+   printf 'autopilot: on\n' >> "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+   approve 'yes'
+   [ "$(decision_of "$output")" = deny ]
+   [[ "$output" == *"under autopilot nothing approves"* ]] || false
+ }
+ 
+ @test "other files and draft edits get no G20 vote" {
+   say 'no'
++  # notes.md exists and holds the old_string, so the Edit is judged; it has no frontmatter.
++  printf '%s\n' '# notes' 'status: draft' > "$R/notes.md"
+   approve 'no' "$R/notes.md"
+   [ -z "$output" ]
+   run_guard "$(tool_payload Edit "\"file_path\":\"$SPEC\",\"old_string\":\"## Problem\",\"new_string\":\"## Problem\\nstatus: draft\"")" g20
+   [ -z "$output" ]
+ }
+ 
+ @test "a Bash write of approved into a spec is denied; a read is not" {
+   run_guard "$(bash_payload "sed -i '' s/draft/approved/ .kern/specs/export.md")" g20
+   [ "$(decision_of "$output")" = deny ]
+   run_guard "$(bash_payload "grep -n approved .kern/specs/export.md")" g20

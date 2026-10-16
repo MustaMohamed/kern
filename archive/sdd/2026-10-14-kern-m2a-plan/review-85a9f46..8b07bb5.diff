@@ -1,0 +1,31 @@
+# Review package: 85a9f46..HEAD
+
+## Commits
+8b07bb5 M2: wt-check exports KERN_MAIN after setting MAIN
+
+## Files changed
+ scripts/wt-check | 1 +
+ 1 file changed, 1 insertion(+)
+
+## Diff
+diff --git a/scripts/wt-check b/scripts/wt-check
+index bae69c5..6a3248e 100755
+--- a/scripts/wt-check
++++ b/scripts/wt-check
+@@ -10,15 +10,16 @@ here=$(cd "$(dirname "$0")" && pwd -P)
+ wt=$1 base=$2
+ fail() { echo "$1"; exit 1; }
+ 
+ [ -d "$wt" ] || fail "no such directory: $wt"
+ wt=$(cd "$wt" && pwd -P)
+ top=$(git -C "$wt" rev-parse --show-toplevel 2> /dev/null) || fail "not a git worktree: $wt"
+ gitdir=$(git -C "$wt" rev-parse --path-format=absolute --git-dir)
+ common=$(git -C "$wt" rev-parse --path-format=absolute --git-common-dir)
+ [ "$gitdir" != "$common" ] || fail "not a linked worktree (this is the main checkout): $wt"
+ MAIN=$(kern_main_root "$wt") || fail "cannot resolve the main worktree for $wt"
++export KERN_MAIN="$MAIN"
+ [ "$(cd "$top" && pwd -P)" != "$(cd "$MAIN" && pwd -P)" ] || fail "worktree is the main checkout: $wt"
+ git -C "$wt" rev-parse --verify --quiet "$base^{commit}" > /dev/null || fail "unknown base ref: $base"
+ git -C "$wt" merge-base --is-ancestor "$base" HEAD || fail "base $base is not an ancestor of HEAD in $wt"
+ [ -f "$gitdir/kern-setup-done" ] || fail "setup marker missing in $wt: create worktrees with wt-new or wt-fork"
+ echo ok

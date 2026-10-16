@@ -1,0 +1,732 @@
+diff --git a/hooks/guards/g02-pr.sh b/hooks/guards/g02-pr.sh
+index 2a470cd..6fde1dc 100644
+--- a/hooks/guards/g02-pr.sh
++++ b/hooks/guards/g02-pr.sh
+@@ -26,6 +26,8 @@ guard_g02() {
+   [ "$TOOL" = Bash ] || return 0
+   local cmd i=0
+   cmd=$(ti_get command) || return 0
++  # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
++  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   _gh_load "$cmd"
+   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
+     case "$(gh_sub "${_GH_RECS[$i]}")" in
+@@ -70,14 +72,17 @@ EOT
+   done
+ }
+ 
+-# _gh_load CMD: the simple commands of CMD in _GH_RECS, and CMD in _GH_CMD.
++# _gh_load CMD: the simple commands of CMD in _GH_RECS, and CMD in _GH_CMD. G2, G3 and G14 load
++# the same command, so a second load of it keeps the records the first one read.
+ _gh_load() {
+   local rec
++  [ "${_GH_LOADED-}" = 1 ] && [ "$_GH_CMD" = "$1" ] && return 0
+   _GH_CMD=$1
+   _GH_RECS=()
+   while IFS= read -r rec; do [ -n "$rec" ] && _GH_RECS+=("$rec"); done <<EOT
+ $(git_words "$1")
+ EOT
++  _GH_LOADED=1
+ }
+ 
+ # _gh_args RECORD N: the words of a gh record after `gh` and its N command words (2 for `pr create`,
+diff --git a/hooks/guards/g03-review.sh b/hooks/guards/g03-review.sh
+index d382c68..6040c3a 100644
+--- a/hooks/guards/g03-review.sh
++++ b/hooks/guards/g03-review.sh
+@@ -23,6 +23,8 @@ guard_g03() {
+   esac
+   local cmd i=0
+   cmd=$(ti_get command) || return 0
++  # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
++  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   _gh_load "$cmd"
+   while [ "$i" -lt "${#_GH_RECS[@]}" ]; do
+     case "$(gh_sub "${_GH_RECS[$i]}")" in
+diff --git a/hooks/guards/g04-untrusted.sh b/hooks/guards/g04-untrusted.sh
+index d8899f7..d2e2279 100644
+--- a/hooks/guards/g04-untrusted.sh
++++ b/hooks/guards/g04-untrusted.sh
+@@ -6,6 +6,8 @@ guard_g04() {
+   [ "$TOOL" = Bash ] || return 0
+   local cmd seg sub words w
+   cmd=$(ti_get command) || return 0
++  # Only a command whose text holds gh, in any case or split by quotes or a backslash, is parsed.
++  case "$cmd" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
+   while IFS= read -r seg; do
+     sub=$(gh_sub "$seg") || continue
+     case "$sub" in
+diff --git a/hooks/guards/g05-commit.sh b/hooks/guards/g05-commit.sh
+index 152a7bc..affc99e 100644
+--- a/hooks/guards/g05-commit.sh
++++ b/hooks/guards/g05-commit.sh
+@@ -279,15 +279,22 @@ EOT
+ 
+ # _g05_problems DIR MESSAGE: one line per failed check; nothing when the message passes.
+ _g05_problems() {
+-  local dir="$1" msg="$2" subject conv idre branch id
++  local dir="$1" msg="$2" subject conv src idre branch id
+   subject=$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')
+   if [ "$(settings_get commit.attribution none)" = none ] &&
+     printf '%s\n' "$msg" | grep -Eiq 'co-authored-by:.*(claude|anthropic)|generated (with|by) .*claude|claude-session:|claude\.ai/code|(co-authored-by|assisted-by|generated-by)[[:space:]]*[:=].*(claude|anthropic)'; then
+     echo "attribution trailer present (commit.attribution: none)"
+   fi
+-  conv=$(settings_get commit.convention '')
++  # Unset, the convention is the one kern-detect finds in git log; with none found, none is checked.
++  if conv=$(settings_get commit.convention); then
++    src=""
++  else
++    conv=$(cd "$dir" && bash "$KERN_ROOT/scripts/kern-detect" commit.convention 2>/dev/null) || conv=""
++    conv=${conv%%$'\t'*}
++    src=", detected from git log"
++  fi
+   if [ -n "$conv" ] && ! printf '%s\n' "$subject" | grep -Eq -- "$conv"; then
+-    echo "subject does not match commit.convention $conv"
++    echo "subject does not match commit.convention $conv$src"
+   fi
+   idre=$(settings_get commit.id_from_branch '[A-Z][A-Z0-9]+-[0-9]+')
+   branch=$(current_branch "$dir")
+diff --git a/hooks/guards/g06-secrets.sh b/hooks/guards/g06-secrets.sh
+index 082437b..6fb2866 100644
+--- a/hooks/guards/g06-secrets.sh
++++ b/hooks/guards/g06-secrets.sh
+@@ -7,14 +7,18 @@
+ # NULs turned into \001 first. Records are read with G5's _g05_split, _g05_env_has and _g05_message
+ # and options with G1's _g01_opts: the dispatcher sources every guard before it calls any.
+ 
+-# Seconds one walk may run, and seconds every walk and gitleaks of one call may run together, so a
+-# push stays inside the 20 s hook timeout. Under bats, KERN_SCAN_SECS shortens both.
++# Seconds one walk may run, and the second after the dispatcher's start by which every walk and
++# gitleaks must end, so the whole call, the guards before G6 included, stays inside the 20 s hook
++# timeout. Under bats, KERN_SCAN_SECS shortens both.
+ _G06_SECS=8
+ _G06_BUDGET=14
+ if [ -n "${BATS_TEST_FILENAME-}" ] && [ -n "${KERN_SCAN_SECS-}" ]; then
+   _G06_SECS=$KERN_SCAN_SECS
+   _G06_BUDGET=$((KERN_SCAN_SECS * 3))
+ fi
++# The budget's clock starts when the dispatcher sources this file, before it runs any guard. SECONDS
++# is read as a difference: bash takes its start value from the environment when SECONDS is set there.
++_G06_T0=$SECONDS
+ 
+ # Diff options for every patch G6 reads. A staged diff also takes --diff-filter=d; a push walk does
+ # not, because in git log it drops whole commits, and _g06_parse skips the names of deleted files
+@@ -43,7 +47,6 @@ guard_g06() {
+   [ "$TOOL" = Bash ] || return 0
+   local cmd rec moved=0 conf=0
+   cmd=$(ti_get command) || return 0
+-  _G06_T0=$SECONDS
+   while IFS= read -r rec; do
+     [ -n "$rec" ] || continue
+     if ! _g06_ready; then
+@@ -104,10 +107,10 @@ _g06_git() {
+     -c log.showRoot=true -c i18n.logOutputEncoding=UTF-8 "$@" 2>/dev/null
+ }
+ 
+-# _g06_secs CAP: the seconds the next walk may run: CAP, or what is left of _G06_BUDGET for this call
+-# when that is less; 0 when it is spent.
++# _g06_secs CAP: the seconds the next walk may run: CAP, or what is left of _G06_BUDGET when that is
++# less; 0 when it is spent.
+ _g06_secs() {
+-  local left=$((_G06_BUDGET - (SECONDS - ${_G06_T0:-$SECONDS})))
++  local left=$((_G06_BUDGET - (SECONDS - _G06_T0)))
+   [ "$left" -gt 0 ] || left=0
+   if [ "$left" -lt "$1" ]; then printf '%s\n' "$left"; else printf '%s\n' "$1"; fi
+ }
+diff --git a/hooks/guards/g15-deploy.sh b/hooks/guards/g15-deploy.sh
+index 4832cbf..bbf02cc 100644
+--- a/hooks/guards/g15-deploy.sh
++++ b/hooks/guards/g15-deploy.sh
+@@ -174,7 +174,8 @@ _G15_AWK='
+       print "D\t" substr(out, 1, 60)
+       next
+     }
+-    if (cw_w[1] == "git" || cw_w[1] ~ /\/git$/) for (k = 2; k <= cw_n; k++) if (cw_w[k] == "push") { print "P\t" $0; next }
++    b = tolower(cw_w[1])
++    if (b == "git" || b ~ /\/git$/) for (k = 2; k <= cw_n; k++) if (cw_w[k] == "push") { print "P\t" $0; next }
+   }
+   END { print "." }
+ '
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index 7da10c4..de288a9 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -157,6 +157,13 @@ _g16_redirects() {
+ _g16_bash() {
+   local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0
+   cmd=$(ti_get command) || return 0
++  # _g16_names on the raw text, in any case, before the four tr processes below. The sessions dir
++  # ends in sessions, so its path needs no pattern of its own.
++  case "$cmd" in
++    *[Ss][Ee][Ss][Ss][Ii][Oo][Nn][Ss]* | *.[Ss][Tt][Aa][Tt][Ee]* | *[Kk][Ee][Rr][Nn].[Yy][Mm][Ll]* | \
++      *[Kk][Ee][Rr][Nn].[Ll][Oo][Cc][Aa][Ll].[Yy][Mm][Ll]*) ;;
++    *) return 0 ;;
++  esac
+   cmd=$(_g16_lower "$cmd")
+   _G16_SD=$(_g16_lower "$(state_dir)")
+   _G16_SID=$(_g16_lower "${SID-}")
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index d33c3cd..c0fc398 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -95,8 +95,11 @@ git_words() {
+     # The wrapper pass costs two processes, so it runs only when the first word, quotes removed,
+     # is a redirection, an assignment, a keyword, a wrapper, eval or a shell. A wrapper or shell name
+     # matches in any case, as _cmd_words reads it.
++    # One tr pass strips the quotes, and only when the word holds one: ${first//[...]/} is cubic in
++    # the word's length on bash 3.2 in a UTF-8 locale.
+     first=${seg%%[[:space:]]*}
+-    case "/${first//[\"\'\\]/}" in
++    case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | LC_ALL=C tr -d "\"'\\\\") ;; esac
++    case "/$first" in
+       *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
+         */[Ee][Vv][Aa][Ll] | */[Cc][Oo][Mm][Mm][Aa][Nn][Dd] | */[Ee][Xx][Ee][Cc] | */[Tt][Ii][Mm][Ee] | \
+         */[Nn][Oo][Hh][Uu][Pp] | */[Ss][Uu][Dd][Oo] | */[Ee][Nn][Vv] | */[Tt][Ii][Mm][Ee][Oo][Uu][Tt] | \
+@@ -327,7 +330,8 @@ git_sub() {
+ $(_cmd_words "$1")
+ EOT
+   n=${#w[@]}
+-  case "${w[0]}" in git | */git) ;; *) return 1 ;; esac
++  # Any case: on a case-insensitive file system GIT runs git.
++  case "${w[0]}" in [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) return 1 ;; esac
+   while [ "$i" -lt "$n" ]; do
+     case "${w[$i]}" in
+       -C)
+diff --git a/hooks/lib/json.sh b/hooks/lib/json.sh
+index f745c82..380aaad 100644
+--- a/hooks/lib/json.sh
++++ b/hooks/lib/json.sh
+@@ -81,12 +81,21 @@ json_get_raw() {
+   printf '%s' "${KERN_INPUT-}" | LC_ALL=C awk -v key="$1" -v mode=raw "$_KERN_JSON_AWK"
+ }
+ 
+-# json_escape: stdin escaped for the body of a JSON string, without the surrounding quotes.
++# json_escape: stdin escaped for the body of a JSON string, without the surrounding quotes. Every
++# byte below 0x20 is escaped (tab, CR and newline as \t, \r and \n, the rest as \u00XX): reasons
++# echo command words, and json_get decodes \b and \f to raw bytes.
+ json_escape() {
+-  local tab cr
+-  tab=$(printf '\t'); cr=$(printf '\r')
+-  LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/${tab}/\\\\t/g" -e "s/${cr}/\\\\r/g" |
+-    LC_ALL=C awk 'BEGIN { sep = "" } { printf "%s%s", sep, $0; sep = "\\n" }'
++  LC_ALL=C awk '
++    BEGIN {
++      for (i = 1; i < 32; i++) if (i != 10) { c = sprintf("%c", i); e[c] = sprintf("\\u%04x", i); cls = cls c }
++      e["\t"] = "\\t"; e["\r"] = "\\r"; e["\\"] = "\\\\"; e["\""] = "\\\""
++      re = "[" cls "\\\\\"]"
++    }
++    {
++      s = $0; out = ""
++      while (match(s, re)) { out = out substr(s, 1, RSTART - 1) e[substr(s, RSTART, 1)]; s = substr(s, RSTART + 1) }
++      printf "%s%s%s", (NR > 1 ? "\\n" : ""), out, s
++    }'
+ }
+ 
+ # json_ok: exit 0 when $KERN_INPUT is one object: starts with { and ends with } after trimming.
+diff --git a/hooks/lib/render.sh b/hooks/lib/render.sh
+index 9732cd1..3c2d46b 100644
+--- a/hooks/lib/render.sh
++++ b/hooks/lib/render.sh
+@@ -1,7 +1,8 @@
+ # shellcheck shell=bash
+ # Template rendering for the kernel and the subagent kernel. Literal replacement (no regex), so
+-# values may hold any character. Values come from K_VERSION, K_ROOT, K_KERN, K_MODE, K_AUTOPILOT,
+-# K_VOICE and K_SETTINGS; a line that is exactly {SETTINGS} or {VOICE} is replaced by that value.
++# values may hold any character: {VERSION}, {ROOT_PATH}, {MODE} and {AUTOPILOT} take K_VERSION,
++# K_ROOT, K_MODE and K_AUTOPILOT, and a line that is exactly {SETTINGS} or {VOICE} is replaced by
++# K_SETTINGS or K_VOICE.
+ 
+ # render_template FILE
+ render_template() {
+@@ -58,7 +59,7 @@ KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy
+ # is cut and no character is split.
+ settings_summary() {
+   local out="" f files="" k v job name dir seen="" line sets="" unknown floor tail="" room sep e
+-  local more=" ... (more: /kern:help check)"
++  local more=" ... (more: bash {ROOT}/scripts/kern-get <key>)"
+   if [ -z "${KERN_MAIN-}" ]; then
+     out="Not a git repository: user settings only."
+   else
+diff --git a/hooks/lib/settings.sh b/hooks/lib/settings.sh
+index b471a73..9dd2633 100644
+--- a/hooks/lib/settings.sh
++++ b/hooks/lib/settings.sh
+@@ -49,18 +49,35 @@ _settings_lookup() {
+     END { if (found) { print val; exit 0 } exit 1 }' "$1"
+ }
+ 
+-# settings_get KEY [DEFAULT]: prints the resolved value. Exit 0 found or defaulted, 3 unset.
++# The list keys whose layers add up, so a project file cannot drop an entry a lower file sets.
++_KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
++
++# settings_get KEY [DEFAULT]: prints the resolved value. Exit 0 found or defaulted, 3 unset. A key in
++# _KERN_UNION_KEYS joins the values of every layer that sets it, highest first, with ", ", and drops
++# one pair of brackets around each layer's value ([a, b]).
+ settings_get() {
+-  local f v
++  local f v out="" found=0
+   while IFS= read -r f; do
+     [ -f "$f" ] || continue
+-    if v=$(_settings_lookup "$f" "$1"); then
+-      printf '%s\n' "$v"
+-      return 0
+-    fi
++    v=$(_settings_lookup "$f" "$1") || continue
++    case "$_KERN_UNION_KEYS" in
++      *" $1 "*)
++        found=1
++        case "$v" in "["*"]") v=${v#\[}; v=${v%\]} ;; esac
++        [ -n "$v" ] && out="${out:+$out, }$v"
++        ;;
++      *)
++        printf '%s\n' "$v"
++        return 0
++        ;;
++    esac
+   done <<EOT
+ $(_settings_files)
+ EOT
++  if [ "$found" = 1 ]; then
++    printf '%s\n' "$out"
++    return 0
++  fi
+   if [ $# -ge 2 ]; then
+     printf '%s\n' "$2"
+     return 0
+@@ -68,19 +85,20 @@ EOT
+   return 3
+ }
+ 
+-# settings_source KEY: prints the file that sets KEY, or `default`. Exit 0 always.
++# settings_source KEY: prints the file that sets KEY, or `default`. Exit 0 always. A key in
++# _KERN_UNION_KEYS prints every file that sets it, joined with ", ".
+ settings_source() {
+-  local f
++  local f out=""
+   while IFS= read -r f; do
+     [ -f "$f" ] || continue
+-    if _settings_lookup "$f" "$1" >/dev/null; then
+-      printf '%s\n' "$f"
+-      return 0
+-    fi
++    _settings_lookup "$f" "$1" >/dev/null || continue
++    case "$_KERN_UNION_KEYS" in *" $1 "*) out="${out:+$out, }$f"; continue ;; esac
++    printf '%s\n' "$f"
++    return 0
+   done <<EOT
+ $(_settings_files)
+ EOT
+-  printf 'default\n'
++  printf '%s\n' "${out:-default}"
+ }
+ 
+ # settings_keys FILE: every key set in FILE, one per line.
+diff --git a/hooks/pre-tool-use b/hooks/pre-tool-use
+index 3100885..62cdec0 100755
+--- a/hooks/pre-tool-use
++++ b/hooks/pre-tool-use
+@@ -49,16 +49,23 @@ AGENT=$(json_get agent_type) || case $? in 1) AGENT="" ;; *) unparseable agent_t
+ [ "$TOOL" = Monitor ] && TOOL=Bash
+ kern_enabled || exit 0
+ 
+-for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
+-  # shellcheck source=/dev/null
+-  . "$f"
+-done
++# The guards kern ships, so a missing guard file fails closed. A guard file that does not source to
++# the end fails closed too, and its guard does not run.
++KERN_GUARD_IDS="g01 g02 g03 g04 g05 g06 g13 g14 g15 g16"
++ids=" $KERN_GUARD_IDS "
++bad=" "
+ for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
+   id=$(basename "$f" .sh)
+   id=${id%%-*}
++  case "$ids" in *" $id "*) ;; *) ids="$ids$id " ;; esac
++  # shellcheck source=/dev/null
++  . "$f" || bad="$bad$id "
++done
++for id in $ids; do
+   if [ -n "${KERN_GUARDS-}" ] && [ -n "${BATS_TEST_FILENAME-}" ]; then
+     case ",$KERN_GUARDS," in *",$id,"*) ;; *) continue ;; esac
+   fi
++  case "$bad" in *" $id "*) fail_closed "guard $id did not load"; continue ;; esac
+   declare -F "guard_$id" >/dev/null || { fail_closed "guard $id did not load"; continue; }
+   "guard_$id"
+ done
+diff --git a/hooks/prompt-submit b/hooks/prompt-submit
+index b8809cd..7f73c54 100755
+--- a/hooks/prompt-submit
++++ b/hooks/prompt-submit
+@@ -182,7 +182,7 @@ fi
+ LINE=$(mode_line "$SID")
+ if [ "$AP_TURNED_ON" = 1 ] || { autopilot_on "$SID" && [ "${CLAUDE_CODE_ENTRYPOINT#sdk}" = "${CLAUDE_CODE_ENTRYPOINT-}" ]; }; then
+   printf '%s\n' "$LINE"
+-  printf 'autopilot ON: commit when convention and attribution checks pass (no git add -A); push the current non-protected branch; draft PR after dedup; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the human; park judgment calls.\n'
++  printf '%s\n' "autopilot ON: commit with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or \$( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly: no wrapper, no cd first; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls."
+   exit 0
+ fi
+ if [ "$SHOW_LINE" = 1 ] || [ -n "$CHANGED_VOICE$CHANGED_SURFACE" ]; then
+diff --git a/tests/fixtures/projects/long-settings/expect.txt b/tests/fixtures/projects/long-settings/expect.txt
+index 7348c3c..751653e 100644
+--- a/tests/fixtures/projects/long-settings/expect.txt
++++ b/tests/fixtures/projects/long-settings/expect.txt
+@@ -1 +1 @@
+-(more: /kern:help check)
++(more: bash {ROOT}/scripts/kern-get <key>)
+diff --git a/tests/helpers/common.bash b/tests/helpers/common.bash
+index 1d50120..d7ffdfd 100644
+--- a/tests/helpers/common.bash
++++ b/tests/helpers/common.bash
+@@ -58,11 +58,25 @@ run_guard() {
+   run env KERN_GUARDS="$guards" bash "$(kern_root)/hooks/pre-tool-use" <<<"$1"
+ }
+ 
+-# decision_of OUTPUT: allow|ask|deny|none.
++# decision_of OUTPUT: allow|ask|deny; none when OUTPUT is empty, error when OUTPUT holds no decision
++# but is not empty (a bash error, for example).
+ decision_of() {
+   local d
+   d=$(printf '%s' "$1" | sed -n 's/.*"permissionDecision":"\([a-z]*\)".*/\1/p')
+-  printf '%s\n' "${d:-none}"
++  if [ -n "$d" ]; then
++    printf '%s\n' "$d"
++  elif [ -n "$1" ]; then
++    printf 'error\n'
++  else
++    printf 'none\n'
++  fi
++}
++
++# parsed_decision OUTPUT: the permissionDecision of OUTPUT as JSON.parse reads it; fails when OUTPUT
++# is not valid JSON.
++parsed_decision() {
++  printf '%s' "$1" | node -e 'const o = JSON.parse(require("fs").readFileSync(0, "utf8"));
++    process.stdout.write(o.hookSpecificOutput.permissionDecision)'
+ }
+ 
+ # set_autopilot on|off: writes the session state the hooks read (tests only; G16 guards real sessions).
+diff --git a/tests/hooks/g02-g04-gh.bats b/tests/hooks/g02-g04-gh.bats
+index 7d5c60c..389686b 100644
+--- a/tests/hooks/g02-g04-gh.bats
++++ b/tests/hooks/g02-g04-gh.bats
+@@ -412,6 +412,24 @@ gh_log() {
+   expect ask '/usr/bin/gh pr comment 12 --body-file c.md'
+ }
+ 
++@test "G2, G3 and G4 parse only a command that holds gh, quoted forms too, and the gh guards parse it once" {
++  local real
++  real=$(command -v awk)
++  # An awk shim logs each split of a command into simple commands (_split_words).
++  printf '#!/bin/bash\ncase "$*" in *"function emit("*) echo split >>"%s/split.log" ;; esac\nexec %s "$@"\n' \
++    "$BATS_TEST_TMPDIR" "$real" >"$BATS_TEST_TMPDIR/bin/awk"
++  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
++  g "ls -la; git status" g02,g03,g04,g14
++  [ "$(decision_of "$output")" = none ]
++  [ ! -e "$BATS_TEST_TMPDIR/split.log" ]
++  g "gh pr list" g02,g03,g14
++  [ "$(grep -c . "$BATS_TEST_TMPDIR/split.log")" -eq 1 ]
++  policy 'review.post_policy: auto'
++  export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
++  expect deny "g''h pr review 12 --approve"
++  expect deny 'G\H pr comment 12 --body hi'
++}
++
+ @test "G4: a short cluster reaching the text flag through booleans is inline text; close and reopen comments too" {
+   set_autopilot on
+   expect deny 'gh issue create -wbhi'
+diff --git a/tests/hooks/g05-g06-commit.bats b/tests/hooks/g05-g06-commit.bats
+index 55fa577..3d6c103 100644
+--- a/tests/hooks/g05-g06-commit.bats
++++ b/tests/hooks/g05-g06-commit.bats
+@@ -85,6 +85,22 @@ KEY='-----BEGIN RSA PRIVATE KEY-----'
+   [ "$(decision_of "$output")" = deny ]
+ }
+ 
++@test "G5: with commit.convention unset, the convention kern-detect finds is checked, and none when it finds none" {
++  rm "$R/.claude/kern.local.yml"
++  g "git commit -m 'CDS-2465 swap'" g05
++  [ "$(decision_of "$output")" = ask ]
++  for i in 1 2 3 4 5; do git -C "$R" commit -q --allow-empty -m "CDS-$i: step $i"; done
++  git -C "$R" push -q origin HEAD:main
++  g "git commit -m 'CDS-2465 swap'" g05
++  [ "$(decision_of "$output")" = deny ]
++  [[ "$output" == *'commit.convention ^[A-Z][A-Z0-9]+-[0-9]+: , detected from git log'* ]] || false
++  g "git commit -m 'CDS-2465: swap'" g05
++  [ "$(decision_of "$output")" = ask ]
++  printf 'commit.convention:\n' >"$R/.claude/kern.local.yml"
++  g "git commit -m 'CDS-2465 swap'" g05
++  [ "$(decision_of "$output")" = ask ]
++}
++
+ @test "G5: a missing ticket id from the branch is denied" {
+   printf 'commit.convention: ".*"\n' >"$R/.claude/kern.local.yml"
+   g "git commit -m 'swap MinIO'" g05
+@@ -910,6 +926,17 @@ key AKIAABCDEFGHIJKLMNOP"
+   [[ "$output" == *"gitleaks reports a secret"* ]] || false
+ }
+ 
++@test "G6: the scan budget counts from the dispatcher's start, so time spent by G2 leaves less" {
++  mkdir -p "$BATS_TEST_TMPDIR/slow"
++  printf '#!/bin/sh\nsleep 3\n' >"$BATS_TEST_TMPDIR/slow/gh"
++  chmod +x "$BATS_TEST_TMPDIR/slow/gh"
++  git -C "$R" commit -q --allow-empty -m 'CDS-2465: s'
++  export KERN_SCAN_SECS=1
++  PATH="$BATS_TEST_TMPDIR/slow:$PATH"
++  run_guard "$(cmd_payload "gh pr create --draft --title x --body-file b.md && git push -u origin CDS-2465/replace-minio")" g02,g06
++  [[ "$output" == *"G6: secret scan did not finish"* ]] || false
++}
++
+ @test "G6: a message walk that does not finish asks" {
+   local real
+   real=$(command -v git)
+diff --git a/tests/hooks/g13-g15.bats b/tests/hooks/g13-g15.bats
+index 8e34527..87d66c4 100644
+--- a/tests/hooks/g13-g15.bats
++++ b/tests/hooks/g13-g15.bats
+@@ -420,6 +420,14 @@ ssh v1-host 'del C:\x'"
+   [ "$(decision_of "$output")" = none ]
+ }
+ 
++@test "G15: git in another case or by path still pushes to a deploy branch" {
++  printf 'deploy.envs: production\n' >"$R/.claude/kern.local.yml"
++  for c in "GIT push origin feat:production" "/usr/bin/Git push origin HEAD:production" "Git -C . push origin HEAD:production"; do
++    g "$c" g15
++    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
++  done
++}
++
+ @test "G14: tracker.policy auto allows a gh issue or label write only in a proven shape" {
+   printf 'tracker.policy: auto\n' >"$R/.claude/kern.local.yml"
+   printf 'Body\n' >"$R/c.md"
+@@ -644,23 +652,24 @@ ssh v1-host 'del C:\x'"
+   done
+ }
+ 
+-@test "G13 and G15: a 10 KB here-doc PR body passes every guard in under 2 s in a UTF-8 locale" {
++@test "G13 and G15: a 10 KB inline PR body passes every guard in under 2 s in a UTF-8 locale" {
+   local body="" i=0 line cmd t0 t1
+   printf 'protected_targets: v1-host\ndeploy.envs: production\n' >"$R/.claude/kern.local.yml"
+-  line="- Fixed the \`npm publish\` step so it doesn't \"push\" to production's main branch; see docs/release.md (ssh, scp, kubectl apply)."
++  # Inline, as Claude writes it: the double quotes, backticks and dollars inside are escaped.
++  line='- Fixed the \`npm publish\` step so it doesn'\''t \"push\" to production'\''s main branch, a naïve \$PATH fix; see docs/release.md (ssh, scp, kubectl apply).'
+   while [ "${#body}" -lt 10240 ]; do
+     i=$((i + 1))
+     body="$body$i. $line
+ "
+   done
+-  cmd="gh pr create --title 'M1: x' --body \"\$(cat <<'EOF'
+-${body}EOF
+-)\""
++  cmd="gh pr create --title 'M1: x' --body \"$body\""
+   export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+   t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+   gx "$cmd" ""
+   t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+   [ "$status" = 0 ]
++  [ "$(decision_of "$output")" = deny ]
++  [[ "$output" == *"G4: "* ]] || false
+   [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
+ }
+ 
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index f42652a..f0211b0 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -277,3 +277,19 @@ expect_cmd() {
+   expect_bash ask "echo kern: off >> .claude/kern.local.yml"
+   expect_bash none "cat .claude/kern.local.yml" "grep policy $R/.claude/kern.yml"
+ }
++
++@test "a command that names neither state nor settings costs G16 no lower-casing; any case still counts" {
++  local real
++  real=$(command -v tr)
++  mkdir -p "$BATS_TEST_TMPDIR/bin"
++  # A tr shim logs each lower-casing call.
++  printf '#!/bin/bash\ncase "$*" in *"[:upper:]"*) echo tr >>"%s/tr.log" ;; esac\nexec %s "$@"\n' \
++    "$BATS_TEST_TMPDIR" "$real" >"$BATS_TEST_TMPDIR/bin/tr"
++  chmod +x "$BATS_TEST_TMPDIR/bin/tr"
++  PATH="$BATS_TEST_TMPDIR/bin:$PATH"
++  run_guard "$(bash_payload "ls -la")" g16
++  [ "$(decision_of "$output")" = none ]
++  [ ! -e "$BATS_TEST_TMPDIR/tr.log" ]
++  expect_bash ask "echo kern: off >> .Claude/Kern.Local.YML" "sed -i '' s/ask/auto/ $R/.claude/KERN.yml"
++  expect_bash deny "echo on > $(printf '%s' "$S" | tr '[:lower:]' '[:upper:]')/A.State"
++}
+diff --git a/tests/hooks/json.bats b/tests/hooks/json.bats
+index b2b3cef..7c03d41 100644
+--- a/tests/hooks/json.bats
++++ b/tests/hooks/json.bats
+@@ -42,6 +42,21 @@ next \ end' ]
+   [ "$output" = 'a \"q\"\tb\\c\nd' ]
+ }
+ 
++@test "json_escape output parses as a JSON string for every byte below 0x20" {
++  s='a "q" \ b'
++  for i in $(seq 1 31); do
++    # shellcheck disable=SC2059 # the format is the octal escape
++    printf -v c "\\$(printf '%03o' "$i")"
++    s="$s$c."
++  done
++  printf '%s' "$s" >"$BATS_TEST_TMPDIR/raw"
++  printf '"%s"' "$(printf '%s' "$s" | json_escape)" >"$BATS_TEST_TMPDIR/json"
++  run node -e 'const fs = require("fs");
++    process.exit(JSON.parse(fs.readFileSync(process.argv[1], "utf8")) === fs.readFileSync(process.argv[2], "utf8") ? 0 : 3)' \
++    "$BATS_TEST_TMPDIR/json" "$BATS_TEST_TMPDIR/raw"
++  [ "$status" -eq 0 ]
++}
++
+ @test "json_ok accepts one object with surrounding whitespace and rejects the rest" {
+   KERN_INPUT='  {"a":1}
+ '
+diff --git a/tests/hooks/pre-tool-use.bats b/tests/hooks/pre-tool-use.bats
+index 1eb0bb7..990489b 100644
+--- a/tests/hooks/pre-tool-use.bats
++++ b/tests/hooks/pre-tool-use.bats
+@@ -67,6 +67,42 @@ feed() {
+   [[ "$output" != *"kern settings"* ]] || false
+ }
+ 
++@test "a reason that echoes control bytes still prints JSON that parses" {
++  # Tab, newline and 0x1f split words and json_get reads a raw 0x01 as a backslash, so those never
++  # reach this reason; json.bats covers them.
++  b=""
++  for i in $(seq 2 30); do
++    case "$i" in 9 | 10) continue ;; esac
++    # shellcheck disable=SC2059 # the format is the octal escape
++    printf -v c "\\$(printf '%03o' "$i")"
++    b="$b$c"
++  done
++  printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"git x%sy"}}' \
++    "$CWD" "$b" >"$BATS_TEST_TMPDIR/in"
++  run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
++  [ "$(parsed_decision "$output")" = ask ]
++  [[ "$output" == *"git x"*'\u0002'*'\u001e'*"y is not"* ]] || false
++  # json_get decodes \b, so one appended record used to remove every decision under autopilot.
++  set_autopilot on
++  printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"git push --force origin main; git x\\by"}}' \
++    "$CWD" >"$BATS_TEST_TMPDIR/in"
++  run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
++  [ "$(parsed_decision "$output")" = deny ]
++}
++
++@test "a 10 KB UTF-8 assignment before a command runs every guard in under 2 s" {
++  local blob t0 t1
++  # shellcheck disable=SC2046 # one argument per character
++  blob=$(printf 'é%.0s' $(seq 5120))
++  export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
++  t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
++  run_guard "$(bash_payload "X='$blob' ls")" ""
++  t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
++  [ "$status" -eq 0 ]
++  [ "$(decision_of "$output")" = none ]
++  [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
++}
++
+ @test "a guard file that does not load fails closed" {
+   mkdir -p "$BATS_TEST_TMPDIR/k"
+   cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
+@@ -77,6 +113,33 @@ feed() {
+   [[ "$output" == *'"kern G0: guard g99 did not load"'* ]] || false
+ }
+ 
++@test "a guard file that stops loading partway, or a missing guard file, fails closed" {
++  mkdir -p "$BATS_TEST_TMPDIR/k"
++  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
++  printf 'guard_g01() { _g01_missing; }\nif then\n' >"$BATS_TEST_TMPDIR/k/hooks/guards/g01-git.sh"
++  run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload ls)"
++  [ "$(decision_of "$output")" = ask ]
++  [[ "$output" == *'"kern G0: guard g01 did not load"'* ]] || false
++  cp "$K/hooks/guards/g01-git.sh" "$BATS_TEST_TMPDIR/k/hooks/guards/"
++  rm "$BATS_TEST_TMPDIR/k/hooks/guards/g13-protected.sh"
++  run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload ls)"
++  [ "$(decision_of "$output")" = ask ]
++  [[ "$output" == *'"kern G0: guard g13 did not load"'* ]] || false
++}
++
++@test "the dispatcher's list of guard ids names every guard file" {
++  ids=$(sed -n 's/^KERN_GUARD_IDS="\(.*\)"$/\1/p' "$K/hooks/pre-tool-use")
++  files=$(cd "$K/hooks/guards" && for f in g*.sh; do printf '%s ' "${f%%-*}"; done)
++  [ -n "$ids" ]
++  [ "$ids " = "$files" ]
++}
++
++@test "decision_of tells output with no decision from no output" {
++  [ "$(decision_of "")" = none ]
++  [ "$(decision_of "pre-tool-use: line 9: _g01_x: command not found")" = error ]
++  [ "$(decision_of '{"hookSpecificOutput":{"permissionDecision":"ask"}}')" = ask ]
++}
++
+ @test "KERN_GUARDS limits the guards under bats only" {
+   p=$(payload PreToolUse "\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/sessions/test-session.state\"}")
+   run_guard "$p" g01
+diff --git a/tests/hooks/prompt-submit.bats b/tests/hooks/prompt-submit.bats
+index 048fe31..596a108 100644
+--- a/tests/hooks/prompt-submit.bats
++++ b/tests/hooks/prompt-submit.bats
+@@ -47,6 +47,17 @@ expand() {
+   [ "$(st autopilot)" = off ]
+ }
+ 
++@test "the per-prompt autopilot line names the allowed shapes and the user" {
++  expand kern:autopilot on
++  submit "next task"
++  [[ "$output" == *"autopilot ON:"* ]] || false
++  for s in "one -m '<msg>' or -F <file>" "git push [-u] <remote> <current-branch>" "no wrapper" "no cd" \
++    "need the user"; do
++    [[ "$output" == *"$s"* ]] || { echo "missing: $s"; echo "$output"; return 1; }
++  done
++  [[ "$output" != *human* ]] || false
++}
++
+ @test "autopilot on is refused when settings deny it" {
+   mkdir -p "$R/.claude"; printf 'autopilot: denied\n' >"$R/.claude/kern.local.yml"
+   expand kern:autopilot on
+diff --git a/tests/hooks/session-start.bats b/tests/hooks/session-start.bats
+index cfcddf9..677a9a2 100644
+--- a/tests/hooks/session-start.bats
++++ b/tests/hooks/session-start.bats
+@@ -102,7 +102,7 @@ YML
+   summary=$(printf '%s\n' "$output" | sed '1,/^## Project settings$/d')
+   [[ "$summary" == *"commit -> project skill commit"* ]] || false
+   [[ "$summary" == *"self-review -> project skill self-review"* ]] || false
+-  [[ "$summary" == *"(more: /kern:help check)"* ]] || false
++  [[ "$summary" == *"(more: bash {ROOT}/scripts/kern-get <key>)"* ]] || false
+   before_set=${summary%%"Set: "*}
+   [[ "$before_set" == *"Overrides (follow the project skill, say so in one line): "* ]] || false
+   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+diff --git a/tests/hooks/settings.bats b/tests/hooks/settings.bats
+index 7766aac..0438973 100644
+--- a/tests/hooks/settings.bats
++++ b/tests/hooks/settings.bats
+@@ -29,6 +29,31 @@ setup() {
+   [ "$(settings_source nope)" = default ]
+ }
+ 
++@test "the four list keys add up across layers, brackets dropped per layer; other keys take the highest" {
++  printf 'protected_targets: db.internal\nnever_commit: [*.pem]\ndeploy.envs:\nbase_branch: develop\n' \
++    >"$R/.claude/kern.local.yml"
++  printf 'branch.protected: release\ndeploy.envs: staging\n' >"$R/.claude/kern.yml"
++  printf 'protected_targets: v1-host\nnever_commit: .env, *.key\nbranch.protected: [prod]\ndeploy.envs: production\nbase_branch: trunk\n' \
++    >"$HOME/.claude/kern.yml"
++  [ "$(settings_get protected_targets)" = "db.internal, v1-host" ]
++  [ "$(settings_get never_commit)" = "*.pem, .env, *.key" ]
++  [ "$(settings_get branch.protected)" = "release, prod" ]
++  [ "$(settings_get deploy.envs)" = "staging, production" ]
++  [ "$(settings_get base_branch)" = develop ]
++  [ "$(settings_source protected_targets)" = "$RP/.claude/kern.local.yml, $HOME/.claude/kern.yml" ]
++  [ "$(settings_source base_branch)" = "$RP/.claude/kern.local.yml" ]
++  rm "$HOME/.claude/kern.yml" "$R/.claude/kern.yml"
++  [ "$(settings_get never_commit)" = "*.pem" ]
++  [ "$(settings_get branch.protected dflt)" = dflt ]
++}
++
++@test "a project protected_targets cannot drop the user's: G13 still denies a write to the user's host" {
++  printf 'protected_targets: db.internal\n' >"$R/.claude/kern.local.yml"
++  printf 'protected_targets: v1-host\n' >"$HOME/.claude/kern.yml"
++  run_guard "$(bash_payload "ssh v1-host 'rm -f /data/x'")" g13
++  [ "$(decision_of "$output")" = deny ]
++}
++
+ @test "comments, quotes, colons and hashes inside values" {
+   cat >"$R/.claude/kern.local.yml" <<'YML'
+ # comment line

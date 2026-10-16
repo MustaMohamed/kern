@@ -1,0 +1,156 @@
+# Review package: ee65653..367a526
+
+## Commits
+367a526 M0: compare real paths in CLI entry guards
+
+## Files changed
+ scripts/check-version.mjs |  5 +++--
+ scripts/lib/is-main.mjs   | 12 ++++++++++++
+ scripts/release.mjs       |  5 +++--
+ tests/versions.test.mjs   | 11 ++++++++++-
+ 4 files changed, 28 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/scripts/check-version.mjs b/scripts/check-version.mjs
+index 47e124b..70d0bb6 100644
+--- a/scripts/check-version.mjs
++++ b/scripts/check-version.mjs
+@@ -1,17 +1,18 @@
+ #!/usr/bin/env node
+ // Lint rule 14: manifests and the newest CHANGELOG release agree; shipped changes add an Unreleased line.
+ // Idea from addyosmani/agent-skills scripts/validate-versions.js (MIT); the code is written for kern.
+ import { readFileSync } from 'node:fs';
+-import { join, resolve } from 'node:path';
++import { join } from 'node:path';
+ import { execFileSync } from 'node:child_process';
+ import { fileURLToPath } from 'node:url';
++import { isMain } from './lib/is-main.mjs';
+ 
+ const SHIPPED = /^(skills|agents|kernel|modes|hooks)\//;
+ const json = (root, p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
+ 
+ export function unreleasedBullets(changelog) {
+   const m = changelog.match(/^## \[Unreleased\]\n([\s\S]*?)(?=^## \[|(?![\s\S]))/m);
+   return m ? m[1].split('\n').filter((l) => /^- /.test(l)) : [];
+ }
+ 
+ export function checkVersions(root) {
+@@ -25,21 +26,21 @@ export function checkVersions(root) {
+   else if (release !== plugin) problems.push(`newest CHANGELOG release ${release} != plugin.json ${plugin}`);
+   return problems;
+ }
+ 
+ export function checkUnreleased(root, changedFiles) {
+   if (!changedFiles.some((f) => SHIPPED.test(f))) return [];
+   const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
+   return unreleasedBullets(changelog).length ? [] : ['shipped files changed but ## [Unreleased] has no bullet'];
+ }
+ 
+-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
++if (isMain(import.meta.url)) {
+   const root = fileURLToPath(new URL('..', import.meta.url));
+   const problems = checkVersions(root);
+   const i = process.argv.indexOf('--pr');
+   if (i > 0) {
+     const base = process.argv[i + 1];
+     const changed = execFileSync('git', ['-C', root, 'diff', '--name-only', `${base}...HEAD`], { encoding: 'utf8' }).split('\n').filter(Boolean);
+     problems.push(...checkUnreleased(root, changed));
+   }
+   for (const p of problems) console.log(`error: ${p}`);
+   console.log(problems.length ? 'versions: FAILED' : 'versions: agree');
+diff --git a/scripts/lib/is-main.mjs b/scripts/lib/is-main.mjs
+new file mode 100644
+index 0000000..17cc8d3
+--- /dev/null
++++ b/scripts/lib/is-main.mjs
+@@ -0,0 +1,12 @@
++// True when the importing module is the script Node was started with, comparing real paths so a symlinked path still counts.
++import { realpathSync } from 'node:fs';
++import { fileURLToPath } from 'node:url';
++
++export function isMain(importMetaUrl) {
++  if (!process.argv[1]) return false;
++  try {
++    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(importMetaUrl));
++  } catch {
++    return false;
++  }
++}
+diff --git a/scripts/release.mjs b/scripts/release.mjs
+index 8a6b245..806aa15 100644
+--- a/scripts/release.mjs
++++ b/scripts/release.mjs
+@@ -1,15 +1,16 @@
+ #!/usr/bin/env node
+ // Bumps both manifests and the CHANGELOG. Prints the tag command; never commits, tags or pushes.
+ import { readFileSync, writeFileSync } from 'node:fs';
+-import { join, resolve } from 'node:path';
++import { join } from 'node:path';
+ import { fileURLToPath } from 'node:url';
++import { isMain } from './lib/is-main.mjs';
+ 
+ export function bump(version, part) {
+   const [ma, mi, pa] = version.split('.').map(Number);
+   if (part === 'major') return `${ma + 1}.0.0`;
+   if (part === 'minor') return `${ma}.${mi + 1}.0`;
+   if (part === 'patch') return `${ma}.${mi}.${pa + 1}`;
+   throw new Error(`unknown part ${part}; use major, minor or patch`);
+ }
+ 
+ export function release(root, part, date) {
+@@ -24,15 +25,15 @@ export function release(root, part, date) {
+   const next = bump(plugin.version, part);
+   plugin.version = next;
+   market.plugins[0].version = next;
+   const updated = log.replace(/^## \[Unreleased\]\n[\s\S]*?(?=^## \[)/m, () => `## [Unreleased]\n\n## [${next}] - ${date}\n\n${block}\n\n`);
+   writeFileSync(pluginPath, JSON.stringify(plugin, null, 2) + '\n');
+   writeFileSync(marketPath, JSON.stringify(market, null, 2) + '\n');
+   writeFileSync(logPath, updated);
+   return next;
+ }
+ 
+-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
++if (isMain(import.meta.url)) {
+   const root = fileURLToPath(new URL('..', import.meta.url));
+   const next = release(root, process.argv[2], new Date().toISOString().slice(0, 10));
+   console.log(`released ${next}; review the diff, commit, then run: git tag v${next}`);
+ }
+diff --git a/tests/versions.test.mjs b/tests/versions.test.mjs
+index dfe7d89..22d63a8 100644
+--- a/tests/versions.test.mjs
++++ b/tests/versions.test.mjs
+@@ -1,13 +1,15 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
++import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
++import { execFileSync } from 'node:child_process';
++import { fileURLToPath } from 'node:url';
+ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+ import { checkVersions, checkUnreleased } from '../scripts/check-version.mjs';
+ import { bump, release } from '../scripts/release.mjs';
+ 
+ function repo({ plugin = '0.1.0', market = '0.1.0', changelog }) {
+   const root = mkdtempSync(join(tmpdir(), 'kern-ver-'));
+   mkdirSync(join(root, '.claude-plugin'));
+   writeFileSync(join(root, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'kern', version: plugin }, null, 2) + '\n');
+   writeFileSync(join(root, '.claude-plugin/marketplace.json'), JSON.stringify({ name: 'kern', plugins: [{ name: 'kern', version: market, source: './' }] }, null, 2) + '\n');
+@@ -54,10 +56,17 @@ test('release moves Unreleased bullets under the new version', () => {
+ test('release keeps sub-headings and wrapped lines', () => {
+   const root = repo({});
+   writeFileSync(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Add a,\n  wrapped.\n\n## [0.1.0] - 2026-10-12\n\n- First.\n');
+   release(root, 'patch', '2026-11-02');
+   assert.match(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'), /## \[0\.1\.1\] - 2026-11-02\n\n### Added\n\n- Add a,\n  wrapped\.\n\n## \[0\.1\.0\]/);
+ });
+ 
+ test('release refuses an empty Unreleased section', () => {
+   assert.throws(() => release(repo({}), 'patch', '2026-11-01'), /Unreleased is empty/);
+ });
++
++test('CLI runs when reached through a symlink', () => {
++  const tmp = mkdtempSync(join(tmpdir(), 'kern-link-'));
++  symlinkSync(fileURLToPath(new URL('..', import.meta.url)), join(tmp, 'link'));
++  const out = execFileSync(process.execPath, [join(tmp, 'link', 'scripts', 'check-version.mjs')], { encoding: 'utf8' });
++  assert.match(out, /versions: agree/);
++});

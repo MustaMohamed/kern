@@ -1,0 +1,310 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 4c0487d..604c581 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -19,6 +19,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ - self-review: deterministic checks, built-in code-review at low effort, a spec lane, blast radius, probes, verdict.
+ - commit: named files, convention-checked message from a file under .kern/tmp, one commit per reviewed task run as `git -C <worktree> commit`, no attribution by default.
+ - finish-branch: verify, self-review and size gate before the commit, push or draft PR menu; the PR has a title, a body under .kern/tmp and a dedup on the head commit. prove-it hands commits and PRs to these skills.
++- recall: rebuild state from kern working files, this project's transcripts and live state; replaces the user-level recall skill.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+diff --git a/evals/cases/recall.json b/evals/cases/recall.json
+new file mode 100644
+index 0000000..42e273c
+--- /dev/null
++++ b/evals/cases/recall.json
+@@ -0,0 +1,71 @@
++{
++  "skill_name": "recall",
++  "trigger": {
++    "positive": [
++      { "prompt": "Where did I leave off on the floci swap?", "top_k": 3 },
++      { "prompt": "Catch me up on the billing work, I have been away for days", "top_k": 3 },
++      { "prompt": "I got lost in these PRs. What remains?", "top_k": 3 }
++    ],
++    "negative": [
++      { "prompt": "Add a CSV export to the reports page" },
++      { "prompt": "Rename the config loader to settings loader" }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "Where did I leave off on the export feature?",
++      "expected_output": "States the scope back, checks kern ledgers and live PR state, and returns a brief with one tag per thread and one next move, writing no files.",
++      "expectations": [
++        "Says the window, topic and workspace back before mining",
++        "Checks PR or branch state with gh or git before tagging a thread",
++        "Gives exactly one tag per thread and one next move",
++        "Writes no file"
++      ]
++    },
++    {
++      "id": 2,
++      "kind": "execution",
++      "files": ["recall-ledger"],
++      "prompt": "Where did I leave off on the export plan?",
++      "expected_output": "Reads the ledger, sees Tasks 1 and 2 complete and Task 3 started but not complete, and names Task 3 as the next move.",
++      "expectations": [
++        "Reads .kern/ledgers/export/ledger.md before any transcript",
++        "Names Task 3 of the export plan as the next move",
++        "Writes no file"
++      ]
++    },
++    {
++      "id": 3,
++      "kind": "dialogue",
++      "prompt": "recall chat",
++      "expected_output": "Opens with the action-item count, then what happened by importance, then each action item with the decision, options, a recommendation and what happens with no answer.",
++      "expectations": [
++        "The first sentence gives the action-item count, or says there are none",
++        "Each action item has a recommendation",
++        "Treats notifications and subagent results as reports, not as the user's messages"
++      ]
++    },
++    {
++      "id": 4,
++      "kind": "dialogue",
++      "prompt": "Resume session 7f3a",
++      "expected_output": "Points to claude --resume and stops without mining transcripts.",
++      "expectations": [
++        "Names claude --resume",
++        "Reads no transcript and runs no recall-sessions"
++      ]
++    },
++    {
++      "id": 5,
++      "kind": "dialogue",
++      "prompt": "What does recall mean in machine learning metrics?",
++      "expected_output": "Answers the question directly; recall does not run.",
++      "expectations": [
++        "Does not read skills/recall/SKILL.md or call the recall skill",
++        "Answers with the precision and recall definition"
++      ]
++    }
++  ]
++}
+diff --git a/evals/fixtures/recall-ledger/_kern/ledgers/export/ledger.md b/evals/fixtures/recall-ledger/_kern/ledgers/export/ledger.md
+new file mode 100644
+index 0000000..3c1b14e
+--- /dev/null
++++ b/evals/fixtures/recall-ledger/_kern/ledgers/export/ledger.md
+@@ -0,0 +1,9 @@
++# kern ledger: /work/app/.kern/plans/export.md
++Main: /work/app branch=main status=0000000000000000000000000000000000000000
++Task 1: start tree=1111111111111111111111111111111111111111 at=2026-10-10T09:00:00Z
++Task 1: review round=1 tree=2222222222222222222222222222222222222222 spec=compliant quality=approved
++Task 1: complete tree=2222222222222222222222222222222222222222 test=npm test exit=0 review=approved probe=ok last=# pass 4
++Task 2: start tree=2222222222222222222222222222222222222222 at=2026-10-10T10:00:00Z
++Task 2: review round=1 tree=3333333333333333333333333333333333333333 spec=compliant quality=approved
++Task 2: complete tree=3333333333333333333333333333333333333333 test=npm test exit=0 review=approved probe=ok last=# pass 6
++Task 3: start tree=3333333333333333333333333333333333333333 at=2026-10-10T11:00:00Z
+diff --git a/skills/help/references/map.md b/skills/help/references/map.md
+index c88c7bc..b10e5e1 100644
+--- a/skills/help/references/map.md
++++ b/skills/help/references/map.md
+@@ -19,6 +19,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
+ | `self-review` | path | Routed row "Review requested on your own diff, no PR yet"; /kern:self-review | Author's check before a PR |
+ | `commit` | slash | /kern:commit | One commit of named files, or one per reviewed task, per the project's convention |
+ | `finish-branch` | slash | /kern:finish-branch; prove-it's gate for a push or PR | Verify, review, then commit, push, draft PR or keep |
++| `recall` | auto | Its description; routed row "Starting or resuming after a gap" | Rebuild state across sessions; recall chat for this thread |
+ 
+ ## Close calls
+ - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
+diff --git a/skills/recall/SKILL.md b/skills/recall/SKILL.md
+new file mode 100644
+index 0000000..49ad75f
+--- /dev/null
++++ b/skills/recall/SKILL.md
+@@ -0,0 +1,58 @@
++---
++name: recall
++description: 'Use when starting or resuming work and state must be rebuilt first: "where did I leave off", "catch me up on X", "what remains", "I got lost in these PRs", a session after days away, or "recall chat" for this thread since my last message. Not for one named session.'
++---
++
++# recall
++
++Rebuild the current state from kern's working files, transcripts and live git, forge and tracker state, then hand back a short brief. Write nothing to disk: live state is the only source of truth, and the brief is a reply. The one exception is `wt-snap`, which adds git objects and changes no file, ref or index.
++
++## Steps
++
++0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
++1. Route. One named prior session: point to `claude --resume` and stop. A full state capsule already in the prompt: skip the mining. `recall chat`: go to step 9.
++2. Lock the scope and say it back: the window (7 days unless stated; never turn "all" into "recent"), the topic, and the workspace (never another project's transcripts unasked). Adjacent work stays out unless it blocks this.
++3. Read kern's working files first. Find `WORK` with two separate commands, never `kern-dir`, which creates folders and edits `.git/info/exclude`: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern` prints the folder name, a tab and its source; `git rev-parse --path-format=absolute --git-common-dir` prints a path whose parent is the main checkout, from a linked worktree too. `WORK` is that parent plus the folder name. A missing `WORK` is not an error: say there are no kern working files. Else read `WORK/ledgers/*/ledger.md` (incomplete tasks and `parked:` lines) and the status lines of `WORK/plans/*` and `WORK/specs/*`. List kern worktrees with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit`; a non-zero exit, or a worktree in the `unknown` bucket, goes in Sources skipped with its evidence, never as clean. Memory files are context, never state.
++4. Find the sessions with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions --days <n>`, adding `--topic <topic>` only when a topic was named (an empty topic is a usage error). `session` lines (time, id, bytes, absolute path) are this project's transcripts, its worktrees' included, newest first; with a topic, `prompt` lines are its prompts that name it (`-` is an unknown session id). The newest session is usually this one; skip it (`references/transcripts.md`). Exit 1 (a record could not be read) or 2 never means there were no sessions: quote its message, name transcripts in Sources skipped, tag nothing from transcripts, and go on with live state.
++5. Mine in parallel: dispatch `kern:investigator` on model `model.miner`, one per 2 to 4 transcripts, with the absolute paths from the `session` lines, one question (for the topic: goal, decisions, open threads, corrections and artifacts of each session) and a return budget of 15 lines per session. It may run only read commands: `grep -n` the topic first (pipe to `cut -c1-300` to bound the lines), `wc -c` before reading, and `sed -n <first>,<last>p` with line numbers and p only; narrow any record over 500 characters (`sed -n <n>p <file>` piped to `wc -c` measures one). If it reports a command the allowlist blocks, run that command yourself; never widen the guard. Two sessions or fewer: read them directly, measuring the same way.
++6. When a feature, ticket or bug is named, sweep `tracker` and `workflow_records` in parallel with step 5 (a key unset: `tracker` is detected, `workflow_records` is none; no tracker found is said once). A source that did not run (tracker tools absent or erroring, `gh` missing, `gh auth status` failing) goes in Sources skipped; a null result from a source that ran is a finding.
++7. Verify every PR, branch, issue and claim the mining inherited against live `git`, `gh` and the tracker before tagging it. For squash merges, trust `gh pr list --head <branch> --state all`, not `git branch --merged`. A source that cannot be reached (no remote, `gh` or the tracker unavailable) leaves the thread with the unverified tag. `[verified, uncommitted]` needs `<wt>`, the path on the ledger's `Worktree:` line, and that work's last `tree=` equals a fresh `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. A differing tree means the work moved: tag by its PR or branch. A `<wt>` that is not in `git worktree list`, or a `wt-snap` that fails, rules the tag out: use `[unverified, worktree unavailable]` and say the worktree is gone.
++8. Write the brief per the output contract below.
++9. `recall chat`: gather your own work, subagent reports and others' messages since the user's last message; notifications and subagent results are not the user's messages. Check the live state of each PR, CI run and agent; reply with the action-item count first, then what happened by importance, then per action item: the decision, why now, the options with their cost, a recommendation, and what happens with no answer. An item still waiting from before the user's last message counts; work you can do yourself is not an action item. List what could not be checked.
++
++## Output contract
++
++- Capsule: at most 5 bullets on what this work is and where it stands.
++- Threads: one line each with exactly one tag: `[merged #N]`, `[open PR #N]`, `[in flight <branch>]`, `[verified, uncommitted]`, `[reverted #N]`, `[blocked, <why>]`, `[parked]`, `[planned, not started]`, or `[unverified, <source> unavailable]` for a thread whose live state could not be checked; a transcript alone never earns a stronger tag. A branch left behind after its PR merged is `[merged #N]` with "cleanup pending" on the same line.
++- Problems: at most 5, the recurring ones.
++- Next move: one concrete action. An incomplete ledger task is the next move when one exists.
++- Sources skipped: one line naming each source that did not run, or omit.
++
++Cite transcript findings by session id and live findings by PR, issue or ticket number. When the brief outgrows a screen, cut detail before threads.
++
++## Inputs
++
++| Key | Default | Use |
++|---|---|---|
++| `tracker` | detected | issue states |
++| `workflow_records` | none | extra per-ticket records to sweep |
++| `work_dir` | `.kern` | ledgers, plans, specs |
++| `model.miner` | `haiku` | transcript miners |
++
++## Outputs
++
++Chat only (a page only when kern's `visual` skill is installed and the brief is long; otherwise say once "visual pages not installed"). Nothing is written.
++
++## Stops and autopilot
++
++Read-only, the same under autopilot; `wt-snap` is the one exception named above. No step asks a question: a failed source is named in Sources skipped and the brief goes on.
++
++## Red flags
++
++| Thought | Reality |
++|---|---|
++| "The transcript says it merged" | Transcripts are history. Check `gh` or `git` first. |
++| "recall-sessions printed nothing, so no work" | Empty output with exit 0 is no sessions. A non-zero exit is a failed source. |
++| "I'll read the whole transcript here" | Slice, measure, delegate. |
++| "A status file will make next time faster" | Next time runs this skill. |
++| "My work on X means everything this week" | Widening buries the thread. Keep the topic. |
+diff --git a/skills/recall/references/transcripts.md b/skills/recall/references/transcripts.md
+new file mode 100644
+index 0000000..a3a6fcb
+--- /dev/null
++++ b/skills/recall/references/transcripts.md
+@@ -0,0 +1,19 @@
++# Where the records are
++
++recall reads four kinds of record. It never writes any of them.
++
++## Transcripts
++
++`~/.claude/projects/<slug>/*.jsonl`, one file per session. `<slug>` is the workspace path with every character outside A-Z, a-z and 0-9 turned into `-`. Sessions of kern worktrees live under sibling slugs `<slug>--claude-worktrees-<name>`. Skip the per-session child folders (`subagents/`, `tool-results/`, `workflows/`): they are not the user's chat. Order by modification time, never by name; the newest is usually the running session.
++
++## Prompt index
++
++`~/.claude/history.jsonl` holds every project's prompts and indexes command-line sessions only; desktop sessions never appear there. Do not grep it: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions` reads it and the transcript folders together and keeps only this project's lines.
++
++## Working files
++
++kern's `WORK` folders: `ledgers/`, `plans/` and `specs/` under the main checkout's `work_dir`. A ledger's incomplete task is the strongest next move. Memory files are distilled and dated: context, never state.
++
++## Live state
++
++`git` (branches, worktrees, `git log --since`), `gh` (PRs, issues, checks) and the tracker named by `tracker`; `workflow_records` names any further per-ticket records. A transcript is history and live state is truth. A source that is unavailable is named in the brief, and its threads are tagged unverified.
+diff --git a/tests/skills/recall.acceptance.md b/tests/skills/recall.acceptance.md
+new file mode 100644
+index 0000000..0c0bc50
+--- /dev/null
++++ b/tests/skills/recall.acceptance.md
+@@ -0,0 +1,7 @@
++# recall: acceptance checks (the skills spec's C11; run during the M2b pilot and by M2b's runner)
++
++- [ ] "Where did I leave off on the floci swap?": scope stated back; transcripts found with recall-sessions and mined by subagents; PR states checked with `gh`; one tag per thread; no file written.
++- [ ] A ledger shows Task 3 of 5 incomplete: the brief names it as the next move.
++- [ ] "recall chat" after a long background run: the action-item count comes first.
++- [ ] "Resume session 7f3a": points to `claude --resume`, no mining.
++- [ ] "What does recall mean in ML?": recall stays quiet.
+diff --git a/tests/skills/recall.test.mjs b/tests/skills/recall.test.mjs
+new file mode 100644
+index 0000000..45498fe
+--- /dev/null
++++ b/tests/skills/recall.test.mjs
+@@ -0,0 +1,86 @@
++// tests/skills/recall.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
++import { join } from 'node:path';
++import { ROOT, readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
++
++const SKILL = 'skills/recall/SKILL.md';
++const REF = 'skills/recall/references/transcripts.md';
++
++// Every pinned line must occur exactly once, so removing it fails the test and no second copy hides the removal.
++function assertOnce(rel, needles) {
++  const { raw } = readDoc(rel);
++  for (const n of needles) assert.equal(raw.split(n).length - 1, 1, `${rel} must contain exactly once: ${n}`);
++}
++
++test('recall frontmatter', () => {
++  assertFrontmatter(SKILL, {
++    name: 'recall',
++    description: 'Use when starting or resuming work and state must be rebuilt first: "where did I leave off", "catch me up on X", "what remains", "I got lost in these PRs", a session after days away, or "recall chat" for this thread since my last message. Not for one named session.',
++  });
++});
++
++test('recall sections, steps and the source lines it keeps', () => {
++  const { body } = readDoc(SKILL);
++  assert.deepEqual(h2s(body), ['## Steps', '## Output contract', '## Inputs', '## Outputs', '## Stops and autopilot', '## Red flags']);
++  const s = steps(body);
++  assert.equal(s.length, 10);
++  assert.equal(s[0], DEFER);
++  assertOnce(SKILL, ['claude --resume', 'never turn "all" into "recent"', 'WORK/ledgers', 'gh pr list --head <branch> --state all', '[planned, not started]',
++    'Write nothing to disk', 'action-item count first', '${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit',
++    'equals a fresh `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'which adds git objects', 'Memory files are context, never state',
++    'Adjacent work stays out unless it blocks this', 'cut detail before threads', 'notifications and subagent results are not the user\'s messages',
++    'work you can do yourself is not an action item', 'claim the mining inherited']);
++  assert.ok(!readDoc(SKILL).raw.includes('history.jsonl'), 'recall finds prompts through recall-sessions, which filters by project');
++  assert.ok(!readDoc(SKILL).raw.includes('$('), 'no command substitution in a command the skill prescribes');
++  assertMaxBytes(SKILL, 7200);
++});
++
++test('recall resolves WORK read-only and never calls kern-dir', () => {
++  assertOnce(SKILL, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern`', '`git rev-parse --path-format=absolute --git-common-dir`',
++    'never `kern-dir`, which creates folders and edits `.git/info/exclude`', 'from a linked worktree too',
++    'A missing `WORK` is not an error: say there are no kern working files']);
++  assert.ok(!readDoc(SKILL).raw.includes('scripts/kern-dir'), 'recall never calls kern-dir');
++});
++
++test('recall gives every script exit an action', () => {
++  assertOnce(SKILL, ['adding `--topic <topic>` only when a topic was named (an empty topic is a usage error)',
++    'Exit 1 (a record could not be read) or 2 never means there were no sessions', 'name transcripts in Sources skipped, tag nothing from transcripts, and go on with live state',
++    'a non-zero exit, or a worktree in the `unknown` bucket, goes in Sources skipped with its evidence, never as clean',
++    'A source that did not run (tracker tools absent or erroring, `gh` missing, `gh auth status` failing) goes in Sources skipped',
++    'a null result from a source that ran is a finding']);
++});
++
++test('recall pins the unverified tag and the verified-uncommitted rules', () => {
++  assertOnce(SKILL, ['`[unverified, <source> unavailable]`', 'a transcript alone never earns a stronger tag',
++    '`<wt>`, the path on the ledger\'s `Worktree:` line', 'A `<wt>` that is not in `git worktree list`, or a `wt-snap` that fails, rules the tag out',
++    'use `[unverified, worktree unavailable]` and say the worktree is gone', 'A differing tree means the work moved: tag by its PR or branch',
++    'The one exception is `wt-snap`', '`wt-snap` is the one exception named above']);
++});
++
++test('recall dispatches a named agent, model and read-only commands', () => {
++  assertOnce(SKILL, ['dispatch `kern:investigator` on model `model.miner`', 'the absolute paths from the `session` lines', 'a return budget of 15 lines per session',
++    'It may run only read commands', '`grep -n` the topic first', '`wc -c` before reading', '`sed -n <first>,<last>p` with line numbers and p only',
++    'If it reports a command the allowlist blocks, run that command yourself; never widen the guard']);
++});
++
++test('transcripts reference', () => {
++  assertHeadings(REF, ['# Where the records are', '## Transcripts', '## Prompt index', '## Working files', '## Live state']);
++  assertContains(REF, ['recall-sessions']);
++  assertMaxBytes(REF, 2200);
++});
++
++test('the C11 acceptance checks are behavioural cases', () => {
++  const c = JSON.parse(readFileSync(join(ROOT, 'evals', 'cases', 'recall.json'), 'utf8'));
++  assert.equal(c.evals.length, 5);
++  const text = JSON.stringify(c.evals);
++  for (const needle of ['next move', 'action-item count', 'claude --resume', 'recall mean in machine learning']) assert.ok(text.includes(needle), needle);
++});
++
++test('the recall ledger fixture exists and leaves Task 3 incomplete', () => {
++  const ledger = readFileSync(join(ROOT, 'evals', 'fixtures', 'recall-ledger', '_kern', 'ledgers', 'export', 'ledger.md'), 'utf8');
++  assert.match(ledger, /^Task 2: complete /m);
++  assert.match(ledger, /^Task 3: start /m);
++  assert.doesNotMatch(ledger, /^Task 3: complete /m);
++});

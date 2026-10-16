@@ -1,0 +1,500 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 6b3aef1..49f5b79 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -5,9 +5,9 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ ## [Unreleased]
+ 
+ - Guards read through zsh's precommand modifiers `noglob` and `nocorrect`, and through `coproc` and `repeat` with its count, to the command after them. `noglob eval 'git push --force origin main'`, `nocorrect eval`, `repeat 1 eval`, `coproc eval`, `repeat -1+2 git push --force origin main` and `noglob sh <<EOF` with a push in its body are denied in both modes, where under autopilot they got no vote. A command behind one gets the vote it gets alone, so `noglob cat <state file>` is a read, as `cat` is. G1, G5 and G6 count a `cd` behind `noglob`, `nocorrect` or `repeat N` as a move, and judge where git would run both with and without it; one under `coproc`, `repeat 0`, or a reserved word zsh does not find as one (quoted, or after `noglob` or `nocorrect`) is not a move for them. A modifier word after the command name, such as `cd x 2> noglob`, changes nothing.
+-- Guards G16 and G20 follow a `cd`, `pushd` or `popd` only when it is the command name of its simple command, with only assignments and redirections before it. A `cd` behind a zsh modifier or reserved word (`noglob`, `nocorrect`, `coproc`, `repeat`, `time`, `!`, `if`) or a wrapper (`command`, `builtin`, `exec`, `nice`, `nohup`, `env`, `timeout`, `sudo`) may run in a subshell, run `/usr/bin/cd`, which never moves the shell, or not run at all. On such a `cd` G16 keeps its readings and adds the target's, and G20 judges from both directories, up to 16 of them (past that it denies). So `cd <sessions> && nice cd /tmp; echo x > foo` and `noglob time cd /tmp; cp approved.md x.md` are denied, where they got no vote.
++- Guards G16 and G20 follow a `cd`, `pushd` or `popd` only when it is the command name of its simple command, with only unquoted assignments and redirections before it (zsh runs a quoted `'X=1'` or `'2>/dev/null'` as a command). An upper-case `CD`, which on macOS runs `/usr/bin/cd`, is not plain either: G16 reads every `cd` in a command that holds one as a maybe. A `cd` behind a zsh modifier or reserved word (`noglob`, `nocorrect`, `coproc`, `repeat`, `time`, `!`, `if`) or a wrapper (`command`, `builtin`, `exec`, `nice`, `nohup`, `env`, `timeout`, `sudo`) may run in a subshell, run `/usr/bin/cd`, which never moves the shell, or not run at all. On such a `cd` G16 keeps its readings and adds the target's, and G20 judges from both directories, up to 16 of them; past that it denies a relative or Markdown write, and judges a read as before. G20 reads each simple command once, and judges it once when nothing in it depends on the directory. So `cd <sessions> && nice cd /tmp; echo x > foo` and `noglob time cd /tmp; cp approved.md x.md` are denied, where they got no vote. G20 takes `builtin cd`, and a `cd` that can go back (`cd -`, `cd ~-`, `cd +1`, a target built at run time such as `"$OLDPWD"`, `popd`), as a maybe too, and adds HOME and every directory the command was in.
+ - Guard G1 judges a push after a `cd`, or under `env -C` or `sudo -D`, where it would run without the move too, so that judgement's deny holds: `cd . && git push --force-with-lease origin feat` over another author's commit is denied, where it asked. The ask that the directory is unknown stays, and is still denied under autopilot.
+-- Guard G16 keeps its reading of a `cd` into a `.claude` directory or the sessions dir across a later `cd` whose target it cannot know: no operand, `-`, `+N`, two operands, `~user`, a `$`, a backtick or a glob, or a relative path after one of these. So `cd ~/.claude && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json` asks, and is denied under autopilot, where before it got no vote; a write after such a `cd` from the sessions dir stays denied. Such a `cd`, and `popd`, can go back to a directory the command was in, so it also takes back every reading held earlier in the command: `cd <sessions> && cd /tmp && cd - && echo x > foo` is denied, and `cd ~/.claude && cd /tmp && cd ~- && sed -i '' s/a/b/ settings.json` asks. A `cd .`, or any relative `cd` from the sessions dir, keeps the reading too. A `cd` to an absolute path, `~` or `~/path` still ends it. G16 follows a `cd` to a known target as text, so a relative `cd` that leaves a `.claude` directory ends that reading, and one that comes back into it, as in `cd ~/.claude && cd agents && cd .. && sed -i '' s/a/b/ settings.json`, restores it. Known limits: a `cd` to a known target that fails, followed by `;`, is still taken as a move (`cd ~/.claude && cd /nonexistent; sed -i '' s/a/b/ settings.json` gets no vote); so are bash's `pushd -n`, which does not move, a `cd` that runs in a subshell, a pipeline or the background (`( cd /tmp )`, `cd /tmp | cat`), and an upper-case `CD`, which on macOS runs `/usr/bin/cd`, since G16 reads the command in lower case; a relative `cd` that CDPATH (or zsh's cdpath) resolves elsewhere is followed as if from the current directory; and a path through a symlink into the sessions dir is not read as the sessions dir, since G16 matches state by path text.
++- Guard G16 keeps its reading of a `cd` into a `.claude` directory or the sessions dir across a later `cd` whose target it cannot know: no operand, `-`, `+N`, two operands, `~user`, a `$`, a backtick or a glob, or a relative path after one of these. So `cd ~/.claude && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json` asks, and is denied under autopilot, where before it got no vote; a write after such a `cd` from the sessions dir stays denied. Such a `cd`, and `popd`, can go back to a directory the command was in, so it also takes back every reading held earlier in the command: `cd <sessions> && cd /tmp && cd - && echo x > foo` is denied, and `cd ~/.claude && cd /tmp && cd ~- && sed -i '' s/a/b/ settings.json` asks. A `cd .`, or any relative `cd` from the sessions dir, keeps the reading too. A `cd` to an absolute path, `~` or `~/path` still ends it. G16 follows a `cd` to a known target as text, so a relative `cd` that leaves a `.claude` directory ends that reading, and one that comes back into it, as in `cd ~/.claude && cd agents && cd .. && sed -i '' s/a/b/ settings.json`, restores it. Known limits: a `cd` to a known target that fails, followed by `;`, is still taken as a move (`cd ~/.claude && cd /nonexistent; sed -i '' s/a/b/ settings.json` gets no vote); so are bash's `pushd -n`, which does not move, and a `cd` that runs in a subshell, a pipeline or the background (`( cd /tmp )`, `cd /tmp | cat`); a relative `cd` that CDPATH (or zsh's cdpath) resolves elsewhere is followed as if from the current directory; and a path through a symlink into the sessions dir is not read as the sessions dir, since G16 matches state by path text.
+ - Guard G6 still scans the current repository for a commit or push after a `cd`, or under `env -C`, `--git-dir`, `--work-tree`, `GIT_DIR=` or `GIT_INDEX_FILE=`, so a secret staged there is denied in both modes; before, `(cd .); git commit -m x` with a staged key only asked. The ask that it could not scan the moved part stays, and is still denied under autopilot.
+ - Guards judge a Bash command whose head word is a shell alias from the Claude Code shell snapshot, such as `gpf! origin main`, as the git or gh command it expands to, as well as itself. With aliases loaded, the guards read the command's own simple commands exactly as without aliases, in the same order and context, then every expansion after all of them, so an alias can only add votes: it never removes a deny or an ask, and never gets an allow, which kern gives only to a command that starts with git or gh. The head word is found after assignments (quoted ones included), redirections and zsh's reserved words (`if`, `!`, `time` and the like), in each simple command, `$( )` and `eval`. An alias whose value ends in a space, such as `_='sudo '`, also expands the word after it, as zsh's trailing-space rule does, so `_ gpf! origin main` is judged as `sudo git push --force origin main`; past 8 such words, a word that is still an alias is denied under autopilot. G2, G3, G4, G13, G14 and G15, which skip a command whose text names no gh, push, deploy tool or network client, read the expansion's text too, so `prc` for `gh pr create`, `gp origin production` as a push to a deploy branch, and an alias that runs psql against a protected target are judged. kern reads the snapshot as text and never runs it; a missing, unreadable or unparseable snapshot changes nothing. It caches the parsed table in its state dir, keyed by the snapshot's path, size, modification and change times and inode, and reads the cache as data the same way; a forged cache, like a forged snapshot, can only add votes. This removes the 0.2.0 known limit on shell aliases. Known limits, left for M3: the newest snapshot stands in for the session's, which the hook input does not name; an alias defined and used in one Bash call through `eval`, `$( )` or a backtick is not judged interactively (G00 denies the definition under autopilot); nor is an alias past another alias's head word, a global alias, a `$'...'` or double-quoted alias value, a chain of aliases deeper than 8, or interactively an alias past 8 trailing-space words; an expansion no longer sets context for the command's later records, so `gaa && git commit -m x` loses G6's stale-index reason (its decision stays); a snapshot with thousands of aliases slows every Bash call, by about 0.6 s for 10,000; G16 and G20 match only the command's own text, not an alias's expansion; and the shell-snapshots folder is writable, so kern reads a newer snapshot written there, though that can only add votes, never remove a deny or an ask or add an allow.
+ - help: allows only the exact git commands it prescribes (`git remote -v`, `git rev-parse --git-common-dir`, `git check-ignore -q *`, `git worktree list`); `git remote *`, `git symbolic-ref *` and `git log *` could write config, move HEAD or run a program with no prompt.
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index 579225c..9258c77 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -343,7 +343,7 @@ _g16_redirects() {
+ # (accepted limit).
+ _g16_bash() {
+   local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m sd_f cc_f
+-  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir
++  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir mixed
+   cmd=$(ti_get command) || return 0
+   _g16_fold "$cmd"
+   cmd=$_G16_F
+@@ -359,6 +359,19 @@ _g16_bash() {
+       *.[Cc][Ll][Aa][Uu][Dd][Ee]*) ;;
+     *) return 0 ;;
+   esac
++  # mixed: the command, quotes taken out, holds cd, pushd or popd in another case. An upper-case CD runs
++  # /usr/bin/cd on macOS, which never moves the shell; once the text is lower-cased it would read as a
++  # plain cd, so no cd in such a command is plain.
++  mixed=0
++  case "$t" in
++    *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*)
++      if printf '%s' "$t" | LC_ALL=C awk '
++        { n = split($0, w, /[^A-Za-z]+/); for (i = 1; i <= n; i++) if (w[i] != tolower(w[i]) && tolower(w[i]) ~ /^(cd|pushd|popd)$/) f = 1 }
++        END { exit !f }'; then
++        mixed=1
++      fi
++      ;;
++  esac
+   cmd=$(_g16_lower "$cmd")
+   _G16_SD=$(_g16_lower "$(state_dir)")
+   _G16_SID=$(_g16_lower "${SID-}")
+@@ -483,7 +496,7 @@ WORDS
+         fi
+         if [ "$cc_f" = 0 ] && _g16_into "$last"; then cc_f=1; fi
+         # Only a plain cd is followed (cmd_plain); any other keeps both readings and adds the target's.
+-        if [ "$dk" = 1 ] && cmd_plain "$seg"; then
++        if [ "$dk" = 1 ] && [ "$mixed" = 0 ] && cmd_plain "$seg"; then
+           cdir=$t
+           in_sd=$sd_f
+           _G16_INCC=$cc_f
+diff --git a/hooks/guards/g20-approval.sh b/hooks/guards/g20-approval.sh
+index c6176a1..44aa60f 100644
+--- a/hooks/guards/g20-approval.sh
++++ b/hooks/guards/g20-approval.sh
+@@ -26,6 +26,7 @@ _G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your ca
+ # A right single quote, read as an apostrophe in a non-answer ("don't").
+ _G20_RSQ=$'\342\200\231'
+ _G20_USE_TOOL="set or change an approval with the Edit or Write tool, so kern can check the user's quote"
++_G20_OVER_WHY="the command may be in more directories than G20 follows (16), after cds it cannot follow for certain, and writes a relative path or a Markdown file; run the cds in a call of their own"
+ 
+ # The frontmatter reader G20 shares with ledger-open and plan-check, so all three agree on where a
+ # file's frontmatter ends.
+@@ -217,10 +218,10 @@ _g20_file() {
+ #
+ # State for one command: _G20_W is 1 when the command holds approved (quotes and backslashes taken out,
+ # any case), _G20_M when it names a Markdown file. _G20_DIRS holds each directory the command may be in,
+-# one per line, and _G20_DIR the one _g20_seg1 judges from; it follows cd. _G20_REC is the simple command
+-# _g20_seg1 reads. _G20_WRITES is 1 once a simple command writes a Markdown file. _G20_SRC holds the
+-# command's other file words as absolute paths, one per line. _G20_WHY is the deny reason; the first one
+-# ends the check.
++# one per line, _G20_SEEN each one it was in, and _G20_DIR the one _g20_seg1 judges from; it follows cd.
++# _G20_OVER is 1 once the set is past its cap. _G20_REC is the simple command _g20_seg reads. _G20_WRITES
++# is 1 once a simple command writes a Markdown file. _G20_SRC holds the command's other file words as
++# absolute paths, an array. _G20_WHY is the deny reason; the first one ends the check.
+ 
+ # _g20_dyn WORD: exit 0 when WORD may name other files at run time: a glob, a $, a backtick or a brace.
+ _g20_dyn() {
+@@ -228,13 +229,16 @@ _g20_dyn() {
+   return 1
+ }
+ 
+-# _g20_abs WORD: sets _G20_P to WORD as an absolute path, from _G20_DIR.
++# _g20_abs WORD: sets _G20_P to WORD as an absolute path, from _G20_DIR. A relative WORD sets _G20_REL.
+ _g20_abs() {
+   case "$1" in
+     /*) _G20_P=$1 ;;
+     '~') _G20_P=$HOME ;;
+     '~'/*) _G20_P="$HOME${1#'~'}" ;;
+-    *) _G20_P="$_G20_DIR/$1" ;;
++    *)
++      _G20_P="$_G20_DIR/$1"
++      _G20_REL=1
++      ;;
+   esac
+ }
+ 
+@@ -246,8 +250,17 @@ _g20_target() {
+     _G20_WHY="the command holds the word approved and writes $w, which may be a Markdown file; $_G20_USE_TOOL"
+     return 0
+   fi
++  # Past the cap (_g20_seg), a relative write cannot be judged from every directory, nor can a Markdown
++  # write's sources.
++  if [ "${_G20_OVER:-0}" = 1 ] && ! _g20_dyn "$w"; then
++    case "$w" in /* | '~' | '~'/*) ;; *) _G20_WHY=$_G20_OVER_WHY; return 0 ;; esac
++  fi
+   _g20_abs "$w"
+   _g20_md "$w" || _g20_mdfile "$_G20_P" || return 0
++  if [ "${_G20_OVER:-0}" = 1 ]; then
++    _G20_WHY=$_G20_OVER_WHY
++    return 0
++  fi
+   _G20_WRITES=1
+   if [ "$_G20_W" = 1 ]; then
+     _G20_WHY=$_G20_USE_TOOL
+@@ -373,8 +386,7 @@ _g20_copy() {
+     dir=$_G20_P
+     i=0
+     while [ "$i" -lt "$ns" ]; do
+-      case "${ops[$i]}" in /*) ;; *) _G20_SRC="$_G20_SRC$dir/${ops[$i]}
+-" ;; esac
++      case "${ops[$i]}" in /*) ;; *) _G20_SRC+=("$dir/${ops[$i]}") ;; esac
+       i=$((i + 1))
+     done
+   fi
+@@ -400,15 +412,45 @@ _g20_cmd() {
+   case "$head" in *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*) head=$(printf '%s' "$head" | LC_ALL=C tr '[:upper:]' '[:lower:]') ;; esac
+   shift
+   case "$head" in
++    builtin) case "${1-}" in cd | pushd | popd) _g20_cmd "$@" ;; esac ;;
+     cd | pushd)
+-      # Only a plain cd is followed for certain (cmd_plain); _g20_seg also judges from where it was.
+-      cmd_plain "$_G20_REC" || _G20_STAY=1
+-      w=$HOME
++      # Only a plain cd is followed for certain (cmd_plain); _g20_seg also judges from where it was. A
++      # cd that can go back (-, ~-, +N, -N, a target built at run time, more than one operand, a pushd
++      # with none) may land in any directory the command was in, or HOME (_G20_BACK).
++      _G20_REL=1
++      if [ -z "$_G20_PLAIN" ]; then
++        _G20_PLAIN=0
++        if cmd_plain "$_G20_REC"; then _G20_PLAIN=1; fi
++      fi
++      [ "$_G20_PLAIN" = 1 ] || _G20_STAY=1
++      w=""
++      n=0
++      skip=0
+       for i in "$@"; do
+-        case "$i" in -*) ;; *) w=$i; break ;; esac
++        case "$skip:$i" in
++          0:--) skip=1 ;;
++          0:- | 0:-[0123456789]*) w=-; n=$((n + 1)) ;;
++          0:-*) ;;
++          *) w=$i; n=$((n + 1)) ;;
++        esac
+       done
+-      _g20_dyn "$w" || { _g20_abs "$w"; _G20_DIR=$_G20_P; }
++      case "$n:$w" in
++        0:) if [ "$head" = pushd ]; then _G20_BACK=1; else w=$HOME; fi ;;
++        1:- | 1:+* | 1:-[0123456789]*) _G20_BACK=1 ;;
++        1:'~' | 1:'~'/*) ;;
++        1:'~'*) _G20_BACK=1 ;;
++        1:*) _g20_dyn "$w" && _G20_BACK=1 ;;
++        *) _G20_BACK=1 ;;
++      esac
++      if [ "$_G20_BACK" = 1 ]; then
++        _G20_STAY=1
++        _G20_DIR=$HOME
++      else
++        _g20_abs "$w"
++        _G20_DIR=$_G20_P
++      fi
+       ;;
++    popd) _G20_REL=1; _G20_STAY=1; _G20_BACK=1 ;;
+     sed | perl)
+       if [ "$head" = sed ]; then
+         _g20_ops ef l '' i "--expression --file --line-length" "--expression --file" "$@"
+@@ -544,64 +586,49 @@ _g20_cmd() {
+   return 0
+ }
+ 
+-# _g20_seg SIMPLE_COMMAND: _g20_seg1 from each directory in _G20_DIRS. The directories after it are each
+-# one's _G20_DIR once the command ran, and also each one itself when the command holds a cd G20 does not
+-# follow for certain (_G20_STAY, cmd_plain). Past 16 directories it denies: it could not judge them all.
++# _g20_seg SIMPLE_COMMAND: _g20_seg1 from each directory in _G20_DIRS, the record's words read once. When
++# nothing in it depends on the directory (no relative path, no cd: _G20_REL stays 0), the first judgement
++# stands for every directory. Otherwise the directories after it are each one's _G20_DIR once the command
++# ran, and also each one itself when the command holds a cd G20 does not follow for certain (_G20_STAY,
++# cmd_plain), and every directory the command was in (_G20_SEEN) after a cd that can go back
++# (_G20_BACK). The set holds at most 16; past that _G20_OVER is set and the rest are not followed, so a
++# relative write or a Markdown write is denied (_g20_target), until a plain cd to an absolute target. A
++# read, and an absolute write that is not Markdown, are judged as before.
+ _g20_seg() {
+-  local d next="" n=0 nl=$'\n' x
+-  while IFS= read -r d; do
+-    [ -n "$d" ] || continue
+-    _G20_DIR=$d
+-    _G20_STAY=0
+-    _g20_seg1 "$1"
+-    for x in "$_G20_DIR" "$d"; do
+-      case "$nl$next" in *"$nl$x$nl"*) ;; *) next="$next$x$nl"; n=$((n + 1)) ;; esac
+-      [ "$_G20_STAY" = 1 ] || break
+-    done
+-    [ -z "$_G20_WHY" ] || return 0
+-  done <<DIRS
+-$_G20_DIRS
+-DIRS
+-  if [ "$n" -gt 16 ]; then
+-    _G20_WHY="the command may be in more directories than G20 follows, after cds it cannot follow for certain; run them in a call of their own"
+-    return 0
+-  fi
+-  _G20_DIRS=$next
+-}
+-
+-# _g20_seg1 SIMPLE_COMMAND: its redirect targets, its file words (into _G20_SRC) and its command, from
+-# _G20_DIR.
+-_g20_seg1() {
+-  local w r s f=0 c=0 cw=()
++  local d next="" n=0 nl=$'\n' x back=0 first=1 w r t f=0 dirs=()
+   _G20_REC=$1
++  _G20_PLAIN=""
++  # The words do not depend on the directory: the redirect targets (_G20_TGT), the other file words
++  # (_G20_SRCW) and the command without its redirections (_G20_CWA).
++  _G20_TGT=()
++  _G20_SRCW=()
++  _G20_CWA=()
+   while IFS= read -r w; do
+     if [ "$f" = 1 ]; then
+       f=0
+-      _g20_target "$w"
++      _G20_TGT+=("$w")
+       continue
+     fi
+     # r: the word without a leading fd number, to read a redirection.
+     r=${w#"${w%%[!0123456789]*}"}
+-    s=''
++    t=''
+     case "$r" in
+       '>' | '>>' | '>|' | '&>' | '&>>' | '<>' | '>&') f=1 ;;
+-      '&>>'*) _g20_target "${r#'&>>'}" ;;
+-      '&>'*) _g20_target "${r#'&>'}" ;;
+-      '>>'*) _g20_target "${r#'>>'}" ;;
+-      '>|'*) _g20_target "${r#'>|'}" ;;
+-      '<>'*) _g20_target "${r#'<>'}" ;;
+-      '>&'*) case "${r#'>&'}" in *[!0123456789-]*) _g20_target "${r#'>&'}" ;; esac ;;
+-      '>'*) _g20_target "${r#'>'}" ;;
++      '&>>'*) _G20_TGT+=("${r#'&>>'}") ;;
++      '&>'*) _G20_TGT+=("${r#'&>'}") ;;
++      '>>'*) _G20_TGT+=("${r#'>>'}") ;;
++      '>|'*) _G20_TGT+=("${r#'>|'}") ;;
++      '<>'*) _G20_TGT+=("${r#'<>'}") ;;
++      '>&'*) case "${r#'>&'}" in *[!0123456789-]*) _G20_TGT+=("${r#'>&'}") ;; esac ;;
++      '>'*) _G20_TGT+=("${r#'>'}") ;;
+       '<<'*) ;;
+-      '<'*) s=${r#'<'} ;;
+-      *) s=${w#if=} ;;
++      '<'*) t=${r#'<'} ;;
++      *) t=${w#if=} ;;
+     esac
+-    case "$s" in '' | -*) ;; *) _g20_dyn "$s" || { _g20_abs "$s"; _G20_SRC="$_G20_SRC$_G20_P
+-"; } ;; esac
++    case "$t" in '' | -*) ;; *) _g20_dyn "$t" || _G20_SRCW+=("$t") ;; esac
+   done <<WORDS
+ $(_shell_words "$1")
+ WORDS
+-  # The command, without its redirections.
+   f=0
+   while IFS= read -r w; do
+     if [ "$f" = 1 ]; then
+@@ -612,12 +639,66 @@ WORDS
+     case "$r" in
+       '>' | '>>' | '>|' | '&>' | '&>>' | '<>' | '>&' | '<' | '<<' | '<<<') f=1 ;;
+       '>'* | '&>'* | '<'*) ;;
+-      *) cw[c]=$w; c=$((c + 1)) ;;
++      *) _G20_CWA+=("$w") ;;
+     esac
+   done <<WORDS
+ $(_cmd_words "$1")
+ WORDS
+-  [ "$c" = 0 ] || _g20_cmd "${cw[@]}"
++  while IFS= read -r d; do
++    [ -n "$d" ] && dirs+=("$d")
++  done <<DIRS
++$_G20_DIRS
++DIRS
++  for d in "${dirs[@]}"; do
++    _G20_DIR=$d
++    _G20_STAY=0
++    _G20_BACK=0
++    _G20_REL=0
++    _g20_seg1
++    [ -z "$_G20_WHY" ] || return 0
++    [ "$first" = 0 ] || [ "$_G20_REL" = 1 ] || return 0
++    first=0
++    for x in "$_G20_DIR" "$d"; do
++      case "$nl$next" in
++        *"$nl$x$nl"*) ;;
++        *) if [ "$n" -lt 16 ]; then next="$next$x$nl"; n=$((n + 1)); else _G20_OVER=1; fi ;;
++      esac
++      [ "$_G20_STAY" = 1 ] || break
++    done
++    [ "$_G20_BACK" = 0 ] || back=1
++  done
++  if [ "$back" = 1 ]; then
++    while IFS= read -r x; do
++      [ -n "$x" ] || continue
++      case "$nl$next" in
++        *"$nl$x$nl"*) ;;
++        *) if [ "$n" -lt 16 ]; then next="$next$x$nl"; n=$((n + 1)); else _G20_OVER=1; fi ;;
++      esac
++    done <<SEEN
++$_G20_SEEN
++SEEN
++  fi
++  # A plain cd that takes every directory to one (an absolute target) leaves no directory unfollowed.
++  if [ "$_G20_OVER" = 1 ] && [ "$_G20_PLAIN" = 1 ] && [ "$back" = 0 ] && [ "$n" = 1 ]; then _G20_OVER=0; fi
++  _G20_DIRS=$next
++  while IFS= read -r x; do
++    [ -n "$x" ] || continue
++    case "$nl$_G20_SEEN" in *"$nl$x$nl"*) ;; *) _G20_SEEN="$_G20_SEEN$x$nl" ;; esac
++  done <<NEXT
++$next
++NEXT
++}
++
++# _g20_seg1: the record _g20_seg read, from _G20_DIR: its redirect targets, its other file words (into
++# _G20_SRC as absolute paths) and its command.
++_g20_seg1() {
++  local w
++  for w in ${_G20_TGT[@]+"${_G20_TGT[@]}"}; do _g20_target "$w"; done
++  for w in ${_G20_SRCW[@]+"${_G20_SRCW[@]}"}; do
++    _g20_abs "$w"
++    _G20_SRC+=("$_G20_P")
++  done
++  [ ${#_G20_CWA[@]} = 0 ] || _g20_cmd "${_G20_CWA[@]}"
+ }
+ 
+ _g20_bash() {
+@@ -631,8 +712,10 @@ _g20_bash() {
+   case "$t" in *.[Mm][Dd]* | *.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]*) _G20_M=1 ;; esac
+   [ "$_G20_W$_G20_M" != 00 ] || return 0
+   _G20_DIRS=${CWD:-$PWD}
++  _G20_SEEN="${CWD:-$PWD}"$'\n'
++  _G20_OVER=0
+   _G20_WRITES=0
+-  _G20_SRC=''
++  _G20_SRC=()
+   _G20_WHY=''
+   while IFS= read -r seg; do
+     [ -n "$seg" ] || continue
+@@ -642,7 +725,8 @@ _g20_bash() {
+ $(git_words "$cmd")
+ CMD
+   # A command that writes a Markdown file and also names a file holding a status: approved line, in its
+-  # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file).
++  # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file). Each path is
++  # read once, the first 64 per directory G20 follows.
+   if [ -z "$_G20_WHY" ] && [ "$_G20_WRITES" = 1 ]; then
+     while IFS= read -r s; do
+       if _g20_holds "$s"; then
+@@ -650,7 +734,7 @@ CMD
+         break
+       fi
+     done <<SRC
+-$(printf '%s' "$_G20_SRC" | head -n 64)
++$(printf '%s\n' ${_G20_SRC[@]+"${_G20_SRC[@]}"} | LC_ALL=C awk '!s[$0]++' | head -n 1024)
+ SRC
+   fi
+   [ -z "$_G20_WHY" ] || vote deny G20 "$_G20_WHY"
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index d4f8626..fe52871 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -508,8 +508,11 @@ cmd_plain() {
+       sw(buf)
+       for (k = 1; k <= sw_n; k++) {
+         x = sw_w[k]
+-        if (x ~ /^[0-9]*(<|>|&>)/) { if (x ~ /^[0-9]*[<>&|]+$/) k++; continue }
+-        if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) continue
++        # A quoted or escaped word is a command name, never an assignment or a redirect: zsh runs a
++        # quoted X=1 as a command. An assignment with a quoted value is read as one too, which only
++        # makes the cd a maybe.
++        if (!sw_q[k] && x ~ /^[0-9]*(<|>|&>)/) { if (x ~ /^[0-9]*[<>&|]+$/) k++; continue }
++        if (!sw_q[k] && x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) continue
+         exit x !~ /^(cd|pushd|popd)$/
+       }
+       exit 1
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index 6902da9..37c64af 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -470,6 +470,33 @@ expect_cmd() {
+     "cd $S && 'cd' /tmp; echo x > foo"
+ }
+ 
++@test "a quoted or escaped assignment or redirect before a cd is a command name, so the cd is not plain" {
++  local pre=("'X=1'" 'X\=1' "'2>/dev/null'" '"X=1"') p cc=() sd=()
++  for p in "${pre[@]}"; do
++    cc+=("cd ~/.claude && $p cd /tmp; sed -i '' s/a/b/ settings.json")
++    sd+=("cd $S && $p cd /tmp; echo x > foo")
++  done
++  expect_cmd ask "${cc[@]}"
++  expect_cmd deny "${sd[@]}"
++  set_autopilot on
++  expect_cmd deny "${cc[@]}" "${sd[@]}"
++  set_autopilot off
++  # Unquoted, they are an assignment and a redirect, and the cd moves.
++  expect_cmd none "cd $S && X=1 cd /tmp; echo x > foo" "cd $S && 2>/dev/null cd /tmp; echo x > foo"
++}
++
++@test "an upper-case CD runs /usr/bin/cd on macOS and does not move, so it keeps the reading" {
++  local cc=("cd ~/.claude && CD /tmp; sed -i '' s/a/b/ settings.json" "cd ~/.claude && Cd /tmp; echo {} > settings.json"
++    "cd ~/.claude && PUSHD /tmp; echo {} > settings.json")
++  local sd=("cd $S && CD /tmp; echo x > foo" "cd $S && cD /tmp; echo x > foo" "cd $S && C''D /tmp; echo x > foo")
++  expect_cmd ask "${cc[@]}"
++  expect_cmd deny "${sd[@]}"
++  set_autopilot on
++  expect_cmd deny "${cc[@]}" "${sd[@]}"
++  set_autopilot off
++  expect_cmd none "cd $S && cd /tmp; echo x > foo"
++}
++
+ @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
+   mkdir -p "$R/.claude"
+   # The re-review's probes: a tracked file moved onto kern.local.yml, a removal, and diff --output.
+diff --git a/tests/hooks/g20-probes.bats b/tests/hooks/g20-probes.bats
+index a1fd983..4929f7a 100644
+--- a/tests/hooks/g20-probes.bats
++++ b/tests/hooks/g20-probes.bats
+@@ -260,6 +260,64 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
+   b "cd /tmp; echo note >> .kern/specs/export.md"; none
+ }
+ 
++@test "P21e a quoted or escaped assignment or redirect before a cd is a command name: G20 judges from both directories" {
++  prep "$R/src.md"
++  local p
++  for p in "'X=1'" 'X\=1' "'2>/dev/null'"; do
++    b "$p cd /tmp; cp src.md dst.md"; deny
++  done
++  b "X=1 cd /tmp; cp src.md dst.md"; none
++}
++
++@test "P21f a cd that can go back (-, ~-, +N, \$OLDPWD, popd) or a builtin cd: G20 judges from every directory it may be in" {
++  prep "$R/src.md"
++  mkdir -p "$R/d"
++  prep "$R/d/x.md"
++  b "cd /tmp && cd - && cp src.md dst.md"; deny
++  b "cd /tmp; cd -; cp src.md dst.md"; deny
++  b "pushd /tmp && popd && cp src.md dst.md"; deny
++  b "cd /tmp && cd ~- && cp src.md dst.md"; deny
++  b "cd /tmp && cd \"\$OLDPWD\" && cp src.md dst.md"; deny
++  b "cd /tmp && cd +1 && cp src.md dst.md"; deny
++  b "cd /tmp && cd -- - && cp src.md dst.md"; deny
++  b "builtin cd d && echo note >> x.md"; deny
++  b "cd /tmp && builtin cd $R && cp src.md dst.md"; deny
++  # A plain cd to a known target is followed: neither file is in /tmp.
++  b "cd /tmp && cp src.md dst.md"; none
++}
++
++@test "P21g G20 follows up to 16 directories; past that a relative write is denied, a read is not" {
++  prep "$R/src.md"
++  local i c15="" c16=""
++  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do c15="${c15}nice cd /tmp/k$i; "; done
++  c16="${c15}nice cd /tmp/k16; "
++  # CWD and 15 targets are 16 directories: judged as usual.
++  b "${c15}echo x >> notes.md"; none
++  b "${c15}cp src.md dst.md"; deny
++  # A 17th: a relative write cannot be judged from every directory, so it is denied.
++  b "${c16}echo x >> notes.md"; deny
++  [[ "$output" == *"more directories than G20 follows"* ]] || false
++  b "${c16}cp $R/src.md dst.md"; deny
++  b "${c16}echo x > out.txt && ls notes.md"; deny
++  # So is any Markdown write: its sources may be relative to a directory G20 did not follow.
++  b "${c16}echo x >> $R/notes.md"; deny
++  # A read, and an absolute write that is not Markdown, get the vote they get anyway; so does a plain cd
++  # to an absolute target, which leaves no directory unfollowed, and if cd x five times then a read.
++  b "${c16}ls notes.md"; none
++  b "${c16}echo x > $R/out.txt && ls notes.md"; none
++  b "${c16}cd $R && echo x >> notes.md"; none
++  b "if cd a; then ls; fi; if cd b; then ls; fi; if cd c; then ls; fi; if cd d; then ls; fi; if cd e; then ls; fi; ls notes.md"; none
++}
++
++@test "P21h 110 Markdown writes after four maybe cds, 16 directories, are judged in under 10 s" {
++  local i c="nice cd a; nice cd b; nice cd c; nice cd d; "
++  for i in $(seq 1 110); do c="${c}echo x >> notes$i.md; "; done
++  local t0=$SECONDS
++  b "$c"
++  none
++  [ $((SECONDS - t0)) -lt 10 ] || { echo "took $((SECONDS - t0)) s"; return 1; }
++}
++
+ @test "P22 reads and kern's own scripts get no G20 vote" {
+   prep "$SPEC"
+   b "grep -rn approved .kern/specs/export.md"; none

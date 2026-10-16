@@ -1,0 +1,266 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index c2426db..15ffa1c 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ - implement: thin slices, failing test first, mutation and fail-then-pass probes, full suite.
+ - diagnose: red-capable loop before hypotheses, fix with a regression test proven by probe; loop-rate for flaky bugs.
+ - define: clarify, classify and get an explicit, quoted approval before code; specs carry a Constraints section.
++- plan: approved spec to ordered tasks with exact files and verify commands, checked by plan-check.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+diff --git a/skills/help/references/map.md b/skills/help/references/map.md
+index e0c78a8..2af33f6 100644
+--- a/skills/help/references/map.md
++++ b/skills/help/references/map.md
+@@ -13,6 +13,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
+ | `implement` | path | Routed row "One bounded change with an agreed design"; /kern:implement | Thin slices, test first, full suite |
+ | `diagnose` | path | Routed row "Bug, failing test, unexpected output"; /kern:diagnose | Root cause before any fix |
+ | `define` | path | Routed row "New behaviour and no agreed spec"; /kern:define | Clarify, classify and approve before code |
++| `plan` | path | Routed row "Agreed spec, more than one step"; /kern:plan | Approved spec to ordered, checked tasks |
+ 
+ ## Close calls
+ - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
+diff --git a/skills/plan/SKILL.md b/skills/plan/SKILL.md
+new file mode 100644
+index 0000000..7fe79ac
+--- /dev/null
++++ b/skills/plan/SKILL.md
+@@ -0,0 +1,55 @@
++---
++name: plan
++description: Turn an approved spec into ordered tasks with exact files, test-first steps, verify commands and blocking edges.
++disable-model-invocation: true
++argument-hint: "[spec path | issue id]"
++---
++
++# plan
++
++Produce a plan a zero-context executor can run, with PR boundaries inside the scope gate. Reached by the kernel row for an agreed spec with more than one step, or typed as `/kern:plan`.
++
++## Steps
++
++0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
++1. Check preconditions: a spec with `status: approved`, or issue acceptance criteria the user pointed to. Not approved: stop and route to define, writing nothing. A plan for this spec exists: update it in place. An unfinished plan for other work: stop and ask. Look for existing PRs with `gh pr list --search <id> --state all`; if gh fails or is not signed in: say so and ask. Get `tracker` from `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get tracker`, else `kern-detect tracker`; both exit 3: ask.
++2. Skip the plan for 1 or 2 files with an obvious approach: say so, write nothing, and the kernel routes to implement.
++3. Ground the plan with `kern:investigator` subagents on `model.investigator` (default `sonnet`): file pointers, conventions, stored shapes and their writers. Get each verify command (`test.focused`, `test.full`, `typecheck`, `lint`, `build`) from `kern-get`, else `kern-detect`, and name its source in the plan; both exit 3: ask.
++4. Send open product questions to the user as options with a recommendation; send fact questions to subagents. A question that reading cannot settle (does this library do X?) gets a spike first, through define step 8 in a `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug> --detach` worktree (exit 2: say why and ask).
++5. Write a falsifiable done predicate per acceptance criterion, and the baseline to capture before any change.
++6. Map the files, then build the dependency graph bottom-up.
++7. Slice into vertical tracer bullets sized for one fresh context. Make the change easy first: a behaviour-preserving prefactor is its own task before the feature. Stored shapes, and a wide mechanical refactor whose call sites span the codebase, change by expand, migrate in batches, then contract. One PR is one change, within `scope_threshold` files or an explicit scope confirmation from the user. Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel.
++8. Write each task from `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/task-template.md`: exact Files (create, modify, test); Interfaces (Consumes, Produces, with signatures); test-first steps with real code; verify commands; Acceptance as a leading list of criterion numbers; Blocked by; one line per `checklists` item. No placeholders.
++9. Write the header from `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-template.md`: Goal, issue, spec link, base and promotion path, Global Constraints copied verbatim from the spec's Constraints section, Review Focus (inputs the spec implies but no test exercises, each pinned to a task), `execution:` empty, `commits: ask`.
++10. Order the riskiest tasks first, put a checkpoint every 2 or 3 tasks, and add a regression check that runs the same scenario on base and head.
++11. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints: structure, ordering of shared files and services, each consumed name blocked by its producer, every acceptance number covered. Then self-review for placeholders and type consistency, and send the plan to one reviewer subagent with `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md` as its brief, round 1 only.
++12. Write the plan with the Write tool to `<dir>/<slug>.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir plans` prints (exit 2: say why and ask), with `status: draft`; present a summary in chat (a visual page only when kern's `visual` skill is installed; otherwise say once "visual pages not installed"). Stop the turn: ask for the yes and the `step`, `inline` or `delegate` choice as a typed reply in chat, never through AskUserQuestion, with your one-line recommendation. After the user's yes message, leave the plan file untouched until the approval edit; revising after feedback is fine. On the yes, one Edit sets `status: approved`, `approved: <date>, "<one whole line of the user's yes, verbatim>"` and `execution:` together; run the same plan-check again. Draft tracker sub-issues only on request.
++
++## Inputs
++
++| Key | Default | Use |
++|---|---|---|
++| `work_dir` | `.kern` | where plans go |
++| `base_branch`, `deploy.envs` | detected, none | base and promotion path |
++| `scope_threshold` | 4 files | PR size gate |
++| `test.*`, `typecheck`, `lint`, `build` | detected, source printed | verify commands in tasks |
++| `checklists`, `shared_services` | see define; none | extra lines; ordering |
++| `tracker` | detected | issue ids and sub-issue drafts |
++| `model.investigator` | `sonnet` | grounding |
++
++## Outputs
++
++`WORK/plans/<slug>.md`; a summary in chat.
++
++## Stops and autopilot
++
++Stops at steps 1, 4 (a spike), 7 and 12. An AskUserQuestion answer records no prompt line, so Guard G20 denies it. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on, G20 denies any approval: write the plan with `status: draft`, give each open question in the reply as `parked: <question>; default: <choice>; why: <one line>`. execute-plan runs only an approved plan.
++
++## Red flags
++
++| Thought | Reality |
++|---|---|
++| "The tasks are obvious" | Write them down. Written tasks surface hidden ordering and forgotten edges. |
++| "These two tasks can run side by side" | Not when they share a file or a service. plan-check says which. |
++| "I'll work out the unknown during the build" | A question reading cannot settle gets a spike before the plan. |
++| "One big task is simpler" | A task too big for one fresh context will be half done. Slice it. |
+diff --git a/skills/plan/references/plan-review.md b/skills/plan/references/plan-review.md
+new file mode 100644
+index 0000000..44b4905
+--- /dev/null
++++ b/skills/plan/references/plan-review.md
+@@ -0,0 +1,21 @@
++# Plan reviewer brief
++
++You review one plan as a fresh reader. You receive the plan path, the spec path and plan-check's clean output, nothing about how the plan was written. You read and report; you never edit. Round 1 only.
++
++## What to check
++
++- Spec coverage in substance: each acceptance line is met by what its task builds, beyond plan-check's number match.
++- An Interfaces signature that two tasks read differently.
++- A Review Focus line pinned to no task.
++- A task too big for one fresh context.
++- A step that tells the executor what to do without showing the code or command.
++
++## Calibration
++
++Flag only what would make an executor build the wrong thing or get stuck. Wording and style are not findings. Approve unless a gap would do that.
++
++## Output
++
++`Verdict: approve | revise`
++
++Then one line per finding: `<task number>: problem. fix.`
+diff --git a/skills/plan/references/plan-template.md b/skills/plan/references/plan-template.md
+new file mode 100644
+index 0000000..08a3c64
+--- /dev/null
++++ b/skills/plan/references/plan-template.md
+@@ -0,0 +1,34 @@
++# Plan template
++
++Copy from the first `---` line to the end into `WORK/plans/<slug>.md`. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` checks the result.
++
++---
++status: draft
++spec: WORK/specs/<slug>.md
++issue: (tracker id, or none)
++base: <base branch>; promotion: <branch chain, or none>
++approved: (set only on an explicit yes, in the same edit as status: approved: the date, then one whole line of the user's message in double quotes)
++execution:
++commits: ask
++---
++
++**Goal:** one sentence.
++
++**Architecture:** two or three sentences.
++
++## Global Constraints
++
++The spec's Constraints lines (Always, Ask first, Never), verbatim, then one line each for other exact values the spec fixes. Every task's brief includes this section.
++
++## Review Focus
++
++Inputs or conditions the spec implies but no test exercises, most likely first, each naming the task whose test pins it.
++
++## File map
++
++| Path | Task | Responsibility |
++|---|---|---|
++
++### Task 1: <name>
++
++(Tasks follow `task-template.md`. Put a checkpoint step every 2 or 3 tasks.)
+diff --git a/skills/plan/references/task-template.md b/skills/plan/references/task-template.md
+new file mode 100644
+index 0000000..f0714d4
+--- /dev/null
++++ b/skills/plan/references/task-template.md
+@@ -0,0 +1,26 @@
++# Task template
++
++Every task is the smallest unit with its own test cycle that a reviewer could reject on its own.
++
++### Task N: <name>
++
++**Files:**
++- Create: `exact/path`
++- Modify: `exact/path:start-end`
++- Test: `exact/test/path`
++
++**Interfaces:**
++- Consumes: names and signatures this task uses from earlier tasks.
++- Produces: names, parameters and return types later tasks rely on.
++
++**Blocked by:** Task numbers, or none.
++
++**Acceptance:** the spec's acceptance lines this task satisfies, as a leading list of numbers or ranges such as `1, 3-4` (plan-check parses only that list; a value with no leading list is an error).
++
++- [ ] Step 1: Write the failing test (the real test code).
++- [ ] Step 2: Run it to verify it fails. Run: `<command>`. Expected: `<the failure and why>`.
++- [ ] Step 3: Write the minimal implementation (the real code).
++- [ ] Step 4: Run it to verify it passes. Run: `<command>`. Expected: `<pass line>`.
++- [ ] Step 5: Run the checklist lines: one line per `checklists` item, each with its check.
++
++No placeholders: no "TBD", no "add error handling", no "similar to Task N", no step that says what to do without showing it. `plan-check` fails a task without Files, Consumes and Produces, Blocked by, Acceptance, or a `Run:` and `Expected:` pair.
+diff --git a/tests/skills/plan.acceptance.md b/tests/skills/plan.acceptance.md
+new file mode 100644
+index 0000000..be15a5f
+--- /dev/null
++++ b/tests/skills/plan.acceptance.md
+@@ -0,0 +1,7 @@
++# plan: acceptance checks (run during the M2b pilot)
++
++- [ ] An approved spec with 3 capabilities: tasks with exact Files and Interfaces; test commands detected with their source named; two tasks touching `db/migrations` ordered by Blocked by; plan-check prints nothing.
++- [ ] A spec with `status: draft`: it stops and routes to define; nothing is written.
++- [ ] "Rename this helper in two files": no plan; routed to implement.
++- [ ] A PR slice over `scope_threshold`: it asks to confirm or split before writing.
++- [ ] A question no reading settles: a spike in a detached worktree before the plan.
+diff --git a/tests/skills/plan.test.mjs b/tests/skills/plan.test.mjs
+new file mode 100644
+index 0000000..8975a9f
+--- /dev/null
++++ b/tests/skills/plan.test.mjs
+@@ -0,0 +1,63 @@
++// tests/skills/plan.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
++
++const SKILL = 'skills/plan/SKILL.md';
++
++test('plan frontmatter', () => {
++  assertFrontmatter(SKILL, {
++    name: 'plan',
++    description: 'Turn an approved spec into ordered tasks with exact files, test-first steps, verify commands and blocking edges.',
++    'disable-model-invocation': 'true',
++    'argument-hint': '[spec path | issue id]',
++  });
++});
++
++test('plan sections and steps', () => {
++  const { body } = readDoc(SKILL);
++  assert.deepEqual(h2s(body), ['## Steps', '## Inputs', '## Outputs', '## Stops and autopilot', '## Red flags']);
++  const s = steps(body);
++  assert.equal(s.length, 13);
++  assert.equal(s[0], DEFER);
++  assertContains(SKILL, ['Not approved: stop and route to define', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
++    '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check', 'gets a spike first', 'prefactor', 'expand, migrate in batches, then contract', "spec's Constraints section",
++    'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed']);
++  assertMaxBytes(SKILL, 6500);
++});
++
++test('plan templates are contracts task-brief and plan-check can read', () => {
++  assertHeadings('skills/plan/references/plan-template.md', ['# Plan template', '## Global Constraints', '## Review Focus', '## File map']);
++  assertContains('skills/plan/references/plan-template.md', ['Copy from the first `---` line to the end', 'status: draft', 'approved: (set only on an explicit yes', 'execution:', 'commits: ask', '### Task 1:', 'Always, Ask first, Never']);
++  assertMaxBytes('skills/plan/references/plan-template.md', 2200);
++  assertHeadings('skills/plan/references/task-template.md', ['# Task template', '### Task N: <name>']);
++  assertContains('skills/plan/references/task-template.md', ['**Files:**', '**Interfaces:**', 'Consumes:', 'Produces:', '**Blocked by:**', '**Acceptance:**', 'Run it to verify it fails', 'Expected:', '`plan-check` fails a task']);
++  assertMaxBytes('skills/plan/references/task-template.md', 2200);
++  assertHeadings('skills/plan/references/plan-review.md', ['# Plan reviewer brief', '## What to check', '## Calibration', '## Output']);
++  assertMaxBytes('skills/plan/references/plan-review.md', 1400);
++});
++
++test('plan pins its approval, lookup and autopilot rules', () => {
++  const skill = readDoc(SKILL).raw;
++  const gate = 'ask for the yes and the `step`, `inline` or `delegate` choice as a typed reply in chat, never through AskUserQuestion';
++  assert.equal(skill.split(gate).length - 1, 1, 'the AskUserQuestion rule is stated at the approval step');
++  assertContains(SKILL, [
++    'An AskUserQuestion answer records no prompt line, so Guard G20 denies it',
++    "After the user's yes message, leave the plan file untouched until the approval edit",
++    'one Edit sets `status: approved`, `approved: <date>, "<one whole line of the user\'s yes, verbatim>"` and `execution:` together',
++    'run the same plan-check again',
++    'on per the latest kern signal',
++    'a turn with no mode line changes nothing',
++    'write the plan with `status: draft`',
++    'parked: <question>; default: <choice>; why: <one line>',
++    '${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md',
++    '${CLAUDE_PLUGIN_ROOT}/skills/plan/references/task-template.md',
++    '${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-template.md',
++    'bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir plans',
++    'both exit 3: ask',
++    'gh fails or is not signed in: say so and ask',
++    'wt-new <slug> --detach',
++  ]);
++  assertContains('skills/plan/references/task-template.md', ['as a leading list of numbers or ranges such as `1, 3-4`', 'plan-check parses only that list']);
++  assertContains('skills/plan/references/plan-review.md', ['`Verdict: approve | revise`', 'Round 1 only']);
++});

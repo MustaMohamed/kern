@@ -1,0 +1,877 @@
+# Review package: 3bd64cd..1c5eaff
+
+## Commits
+1c5eaff M0: record acceptance
+dacc7fe M0: record plan corrections made during execution
+
+## Files changed
+ CHANGELOG.md                          |  2 +
+ docs/plans/2026-10-12-kern-m0-plan.md | 80 ++++++++++++++++++++++++-----------
+ docs/plans/2026-10-12-kern-m1-plan.md | 38 +++++++++++------
+ docs/plans/contract.md                |  2 +-
+ 4 files changed, 85 insertions(+), 37 deletions(-)
+
+## Diff
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 8b063d8..f118720 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,9 +1,11 @@
+ # Changelog
+ 
+ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as defined in docs/specs/2026-10-12-kern-design.md section 12.
+ 
+ ## [Unreleased]
+ 
++- M0 accepted: plugin validates, CI green, marketplace install works.
++
+ ## [0.1.0] - 2026-10-12
+ 
+ - Repo, manifests, licences, lint, routing evals and CI with a placeholder skill.
+diff --git a/docs/plans/2026-10-12-kern-m0-plan.md b/docs/plans/2026-10-12-kern-m0-plan.md
+index 4d57404..54ff331 100644
+--- a/docs/plans/2026-10-12-kern-m0-plan.md
++++ b/docs/plans/2026-10-12-kern-m0-plan.md
+@@ -333,21 +333,21 @@ for k in "${keys[@]}"; do
+   fetch "$k" || status=$?
+ done
+ exit "$status"
+ ```
+ 
+ Note: `copy_from superpowers "$cache/."` copies the directory's contents; `cp -R "$src" "$dir"/` with a trailing `/.` copies contents, and without it copies the named directory into `$dir`, which is what the `local` key wants (`.upstream/local/recall/...`).
+ 
+ - [ ] **Step 4: Run the tests to verify they pass**
+ 
+ Run: `chmod +x scripts/fetch-upstream && bats tests/scripts/fetch-upstream.bats && shellcheck scripts/fetch-upstream`
+-Expected: `7 tests, 0 failures`; shellcheck prints nothing.
++Expected: all 7 tests pass (`1..7` and seven `ok` lines when not on a terminal, `7 tests, 0 failures` on one); shellcheck prints nothing.
+ 
+ - [ ] **Step 5: Fetch the real sources**
+ 
+ Run: `bash scripts/fetch-upstream`
+ Expected: six lines, one per key, exit 0. `ls .upstream` shows `addy caveman local pocock pstack superpowers`. If superpowers fell back to the cache, record that in Task 3's `UPSTREAM.md` row.
+ 
+ - [ ] **Step 6: Commit**
+ 
+ ```bash
+ git add -- scripts/fetch-upstream tests/scripts/fetch-upstream.bats
+@@ -621,21 +621,21 @@ Expected: `exit=0`. If a warning fails `--strict`, fix the field it names; do no
+ ```bash
+ git add -- .claude-plugin CHANGELOG.md skills/hello/SKILL.md
+ git commit -m "M0: add plugin and marketplace manifests with a placeholder skill" -m "The repo is its own marketplace (source ./), so one install command works on any machine."
+ ```
+ 
+ ---
+ 
+ ### Task 5: Skill lint (rules 1, 2, 3, 4, 8, 10, 11)
+ 
+ **Files:**
+-- Create: `scripts/lib/frontmatter.mjs`, `scripts/lib/lint-rules.mjs`, `scripts/lint-skills.mjs`, `scripts/lint-exemptions.json`
++- Create: `scripts/lib/frontmatter.mjs`, `scripts/lib/lint-rules.mjs`, `scripts/lint-skills.mjs`, `scripts/lint-exemptions.json`, `scripts/lint-names.txt`
+ - Test: `tests/lint-rules.test.mjs`
+ 
+ **Interfaces:**
+ - Consumes: `skills/*/SKILL.md`, `agents/*.md` (none yet).
+ - Produces (M1 and M2 add rules through these):
+   - `parseFrontmatter(src: string) -> { data: Record<string,string>, body: string, error: string|null }`
+   - `loadModel(root: string) -> { root, skills: Skill[], agents: Agent[], exemptions: Exemption[], shipped: string[], kernelText: string, cases: Record<string, object> }` where `Skill = { name, dir, file, tier: 'auto'|'path'|'slash', data, body, error }` (`data` is the parsed frontmatter; tier is `auto` without `disable-model-invocation: true`, `path` when `kernel/kernel.md` has a row reading `Read {KERN}/<name>/SKILL.md`, else `slash`), `Agent = { name, base, file, data, body, error }`, `Exemption = { rule: number, path: string, reason: string }`, `shipped` is every file under the shipped dirs (absolute paths), `kernelText` is `kernel/kernel.md` or `''`, and `cases` maps an `evals/cases/*.json` basename (no extension) to its parsed JSON or `{ parseError }`.
+   - `RULES: Array<{ id: number, check(model) -> Finding[] }>` where `Finding = { rule: number, path: string, level: 'error'|'warn', message: string }`
+   - `runLint(model) -> Finding[]` applies every rule, then drops findings matched by an exemption (same rule and path).
+   - CLI `node scripts/lint-skills.mjs [root]` prints `<level> <path>: rule <n>: <message>` per finding and exits 1 when any error remains.
+@@ -776,20 +776,21 @@ export function parseFrontmatter(src) {
+     data[kv[1]] = value;
+   }
+   return { data, body: text.slice(m[0].length), error: null };
+ }
+ ```
+ 
+ - [ ] **Step 4: Write `scripts/lib/lint-rules.mjs`**
+ 
+ ```js
+ // kern lint rules (design spec 11.2). Pure checks over a loaded model; the CLI is scripts/lint-skills.mjs.
++// Rule set informed by addyosmani/agent-skills scripts/lib/skill-lint.js (MIT); the code is written for kern.
+ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+ import { join, relative } from 'node:path';
+ import { parseFrontmatter } from './frontmatter.mjs';
+ 
+ export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
+ export const AGENT_KEYS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'color', 'maxTurns', 'skills', 'memory', 'background', 'isolation']);
+ export const AGENT_KEYS_IGNORED_IN_PLUGINS = new Set(['permissionMode', 'hooks', 'mcpServers', 'initialPrompt']);
+ export const SHIPPED_DIRS = ['skills', 'agents', 'kernel', 'modes', 'hooks'];
+ export const LIMITS = { auto: 300, manual: 120, agent: 150, autoTotal: 1500, autoPlusAgents: 2500 };
+ const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+@@ -912,22 +913,24 @@ export const RULES = [
+       const local = [...s.body.matchAll(/`((?:references|templates|scripts|prompts)\/[\w./-]+)`|\]\(((?:references|templates|scripts|prompts)\/[\w./-]+)\)/g)].map((m) => m[1] || m[2]);
+       for (const r of local) if (!existsSync(join(model.root, 'skills', s.dir, r))) out.push(err(4, p, `referenced file missing: ${r}`));
+       const rooted = [...s.body.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)].map((m) => m[1].replace(/[.,;:]+$/, ''));
+       for (const r of rooted) if (!existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: \${CLAUDE_PLUGIN_ROOT}/${r}`));
+     }
+     return out;
+   } },
+   { id: 8, check(model) {
+     const out = [];
+     const names = (process.env.KERN_LINT_NAMES || '').split(',').map((n) => n.trim()).filter(Boolean);
+-    const namesFile = join(model.root, '.lint-names');
+-    if (existsSync(namesFile)) names.push(...readFileSync(namesFile, 'utf8').split('\n').map((n) => n.trim()).filter(Boolean));
++    for (const f of ['.lint-names', 'scripts/lint-names.txt']) {
++      const namesFile = join(model.root, f);
++      if (existsSync(namesFile)) names.push(...readFileSync(namesFile, 'utf8').split('\n').map((n) => n.trim()).filter((n) => n && !n.startsWith('#')));
++    }
+     const nameRes = names.map((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'));
+     for (const f of model.shipped) {
+       const text = readFileSync(f, 'utf8');
+       const p = rel(model, f);
+       if (MACHINE_PATH.test(text)) out.push(err(8, p, 'machine-specific path'));
+       for (const re of nameRes) if (re.test(text)) out.push(err(8, p, `personal name matches ${re.source}`));
+     }
+     return out;
+   } },
+   { id: 10, check(model) {
+@@ -969,29 +972,39 @@ for (const f of findings) console.log(`${f.level} ${f.path}: rule ${f.rule}: ${f
+ const errors = findings.filter((f) => f.level === 'error').length;
+ console.log(errors ? `lint: ${errors} error(s)` : 'lint: clean');
+ process.exit(errors ? 1 : 0);
+ ```
+ 
+ `scripts/lint-exemptions.json`:
+ ```json
+ []
+ ```
+ 
++`scripts/lint-names.txt` (tracked, so CI checks names too; `.lint-names` stays for local additions):
++```text
++# Personal names and handles that must not appear in shipped files (lint rule 8).
++Mustafa
++Mohamed
++MustaMohamed
++musta
++heyinfinito
++```
++
+ - [ ] **Step 6: Run the tests to verify they pass**
+ 
+ Run: `node --test tests/lint-rules.test.mjs && node scripts/lint-skills.mjs`
+ Expected: `# fail 0`; then `lint: clean` on the real repo.
+ 
+ - [ ] **Step 7: Commit**
+ 
+ ```bash
+-git add -- scripts/lib/frontmatter.mjs scripts/lib/lint-rules.mjs scripts/lint-skills.mjs scripts/lint-exemptions.json tests/lint-rules.test.mjs
++git add -- scripts/lib/frontmatter.mjs scripts/lib/lint-rules.mjs scripts/lint-skills.mjs scripts/lint-exemptions.json scripts/lint-names.txt tests/lint-rules.test.mjs
+ git commit -m "M0: add skill lint rules 1, 2, 3, 4, 8, 10 and 11" -m "Description budgets and plugin-agent keys are checked mechanically so later milestones cannot drift past them."
+ ```
+ 
+ ---
+ 
+ ### Task 6: Version agreement and releases (rule 14)
+ 
+ **Files:**
+ - Create: `scripts/check-version.mjs`, `scripts/release.mjs`
+ - Test: `tests/versions.test.mjs`
+@@ -1055,35 +1068,43 @@ test('bump follows semver', () => {
+ 
+ test('release moves Unreleased bullets under the new version', () => {
+   const root = repo({});
+   writeFileSync(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n- Add a.\n\n## [0.1.0] - 2026-10-12\n\n- First.\n');
+   assert.equal(release(root, 'minor', '2026-11-01'), '0.2.0');
+   const log = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
+   assert.match(log, /## \[Unreleased\]\n\n## \[0\.2\.0\] - 2026-11-01\n\n- Add a\.\n/);
+   assert.deepEqual(checkVersions(root), []);
+ });
+ 
++test('release keeps sub-headings and wrapped lines', () => {
++  const root = repo({});
++  writeFileSync(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Add a,\n  wrapped.\n\n## [0.1.0] - 2026-10-12\n\n- First.\n');
++  release(root, 'patch', '2026-11-02');
++  assert.match(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'), /## \[0\.1\.1\] - 2026-11-02\n\n### Added\n\n- Add a,\n  wrapped\.\n\n## \[0\.1\.0\]/);
++});
++
+ test('release refuses an empty Unreleased section', () => {
+   assert.throws(() => release(repo({}), 'patch', '2026-11-01'), /Unreleased is empty/);
+ });
+ ```
+ 
+ - [ ] **Step 2: Run them to verify they fail**
+ 
+ Run: `node --test tests/versions.test.mjs`
+ Expected: FAIL with `Cannot find module '.../scripts/check-version.mjs'`.
+ 
+ - [ ] **Step 3: Write `scripts/check-version.mjs`**
+ 
+ ```js
+ #!/usr/bin/env node
+ // Lint rule 14: manifests and the newest CHANGELOG release agree; shipped changes add an Unreleased line.
++// Idea from addyosmani/agent-skills scripts/validate-versions.js (MIT); the code is written for kern.
+ import { readFileSync } from 'node:fs';
+ import { join, resolve } from 'node:path';
+ import { execFileSync } from 'node:child_process';
+ import { fileURLToPath } from 'node:url';
+ 
+ const SHIPPED = /^(skills|agents|kernel|modes|hooks)\//;
+ const json = (root, p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
+ 
+ export function unreleasedBullets(changelog) {
+   const m = changelog.match(/^## \[Unreleased\]\n([\s\S]*?)(?=^## \[|(?![\s\S]))/m);
+@@ -1124,43 +1145,42 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
+ ```
+ 
+ - [ ] **Step 4: Write `scripts/release.mjs`**
+ 
+ ```js
+ #!/usr/bin/env node
+ // Bumps both manifests and the CHANGELOG. Prints the tag command; never commits, tags or pushes.
+ import { readFileSync, writeFileSync } from 'node:fs';
+ import { join, resolve } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+-import { unreleasedBullets } from './check-version.mjs';
+ 
+ export function bump(version, part) {
+   const [ma, mi, pa] = version.split('.').map(Number);
+   if (part === 'major') return `${ma + 1}.0.0`;
+   if (part === 'minor') return `${ma}.${mi + 1}.0`;
+   if (part === 'patch') return `${ma}.${mi}.${pa + 1}`;
+   throw new Error(`unknown part ${part}; use major, minor or patch`);
+ }
+ 
+ export function release(root, part, date) {
+   const pluginPath = join(root, '.claude-plugin/plugin.json');
+   const marketPath = join(root, '.claude-plugin/marketplace.json');
+   const logPath = join(root, 'CHANGELOG.md');
+   const plugin = JSON.parse(readFileSync(pluginPath, 'utf8'));
+   const market = JSON.parse(readFileSync(marketPath, 'utf8'));
+   const log = readFileSync(logPath, 'utf8');
+-  const bullets = unreleasedBullets(log);
+-  if (!bullets.length) throw new Error('Unreleased is empty; add a line before releasing');
++  const block = (log.match(/^## \[Unreleased\]\n([\s\S]*?)(?=^## \[)/m)?.[1] || '').trim();
++  if (!block) throw new Error('Unreleased is empty; add a line before releasing');
+   const next = bump(plugin.version, part);
+   plugin.version = next;
+   market.plugins[0].version = next;
+-  const updated = log.replace(/^## \[Unreleased\]\n[\s\S]*?(?=^## \[)/m, `## [Unreleased]\n\n## [${next}] - ${date}\n\n${bullets.join('\n')}\n\n`);
++  const updated = log.replace(/^## \[Unreleased\]\n[\s\S]*?(?=^## \[)/m, () => `## [Unreleased]\n\n## [${next}] - ${date}\n\n${block}\n\n`);
+   writeFileSync(pluginPath, JSON.stringify(plugin, null, 2) + '\n');
+   writeFileSync(marketPath, JSON.stringify(market, null, 2) + '\n');
+   writeFileSync(logPath, updated);
+   return next;
+ }
+ 
+ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+   const root = fileURLToPath(new URL('..', import.meta.url));
+   const next = release(root, process.argv[2], new Date().toISOString().slice(0, 10));
+   console.log(`released ${next}; review the diff, commit, then run: git tag v${next}`);
+@@ -1182,21 +1202,21 @@ git commit -m "M0: check manifest and changelog versions, and script releases"
+ ---
+ 
+ ### Task 7: Routing evals (tier 1)
+ 
+ **Files:**
+ - Create: `scripts/lib/rank.mjs` (ported), `scripts/route-eval.mjs`, `evals/cases/hello.json`, `evals/distractors.json`, `evals/baseline.json`, `evals/fixtures/hello/README.md`
+ - Test: `tests/route-eval.test.mjs`
+ - Modify: `NOTICE` (file map line)
+ 
+ **Interfaces:**
+-- Consumes: `loadModel(root)` from Task 5 (auto skills are `tier === 'auto'`).
++- Consumes: `loadModel(root)` from Task 5 (auto skills are `tier === 'auto'`); `isMain(import.meta.url)` from `scripts/lib/is-main.mjs` (Task 6 fix round: compares real paths so a symlinked path still runs the CLI).
+ - Produces:
+   - `rank.mjs`: `tokenize(text) -> string[]`, `buildCorpus(docs: {name, text}[]) -> Corpus`, `rank(prompt, corpus) -> {name, score}[]` (descending), `similarity(nameA, nameB, corpus) -> number`.
+   - `route-eval.mjs`: `targets(root) -> {name, text, kind: 'skill'|'distractor'}[]`, owners first and distractors last (M2 adds `kind: 'row'` for kernel rows, placed before the distractors), `evaluate(root, { minRank1 }) -> { errors: string[], warnings: string[], rank1Rate: number|null }`; CLI `node scripts/route-eval.mjs [--update-baseline]` exits 1 on any error.
+   - Case file shape (addy's): `{ "skill_name": "<name>", "trigger": { "positive": [{ "prompt", "top_k" }], "negative": [{ "prompt", "owner"? }] }, "evals": [{ "id", "kind": "execution"|"dialogue", "prompt", "expected_output", "expectations": [], "files"? }] }`.
+   - `evals/baseline.json`: `{ "min_rank1": <integer percent> }`; the run fails below it; `--update-baseline` raises it to the current rate and never lowers it.
+ 
+ - [ ] **Step 1: Write the failing tests**
+ 
+ ```js
+ // tests/route-eval.test.mjs
+@@ -1250,26 +1270,27 @@ test('below minimums is an error', () => {
+     'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello'),
+     'evals/cases/a.json': caseFile('a', ['hello kern'], ['deploy prod']),
+     'evals/distractors.json': [],
+     'evals/baseline.json': { min_rank1: 0 },
+   });
+   assert.ok(evaluate(root, { minRank1: 0 }).errors.some((e) => /below required minimums/.test(e)));
+ });
+ 
+ test('a distractor that outranks the skill fails the positive', () => {
+   const root = repo({
+-    'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello'),
+-    'evals/cases/a.json': { ...caseFile('a', ['write a plan for tasks', 'plan tasks', 'task plan writing'], ['deploy prod', 'weather today']), trigger: { positive: [{ prompt: 'write a plan for tasks', top_k: 1 }, { prompt: 'hello kern', top_k: 3 }, { prompt: 'greeting kern', top_k: 3 }], negative: [{ prompt: 'deploy prod' }, { prompt: 'weather today' }] } },
++    'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello or showing a plan'),
++    'evals/cases/a.json': { ...caseFile('a', [], []), trigger: { positive: [{ prompt: 'write a plan for tasks', top_k: 1 }, { prompt: 'hello kern', top_k: 3 }, { prompt: 'greeting kern', top_k: 3 }], negative: [{ prompt: 'deploy prod' }, { prompt: 'weather today' }] } },
+     'evals/distractors.json': [{ name: 'writing-plans', description: 'Use when writing a plan for multi-step tasks' }],
+     'evals/baseline.json': { min_rank1: 0 },
+   });
+-  assert.ok(evaluate(root, { minRank1: 0 }).errors.some((e) => /positive prompt ranked/.test(e) || /shares no vocabulary/.test(e)));
++  const errors = evaluate(root, { minRank1: 0 }).errors;
++  assert.ok(errors.some((e) => /positive prompt ranked #2/.test(e)), errors.join('\n'));
+ });
+ 
+ test('rank-1 rate below the baseline fails', () => {
+   const root = repo({
+     'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello'),
+     'evals/cases/a.json': caseFile('a', ['hello kern', 'greeting kern', 'kern hello there'], ['deploy prod', 'weather today']),
+     'evals/distractors.json': [],
+     'evals/baseline.json': { min_rank1: 100 },
+   });
+   assert.deepEqual(evaluate(root, { minRank1: 100 }).errors, []);
+@@ -1318,22 +1339,23 @@ export function similarity(a, b, corpus) {
+ ```
+ 
+ The angle-bracket comment is an executor instruction: replace it with the copied lines. Check: `grep -c 'export function' scripts/lib/rank.mjs` prints `7` (tokenize, termFreq, vec, cosine, buildCorpus, rank, similarity), and the tokenizer check `[ 'conflict', 'branch' ]` when given `'conflicts branching'`; run it as `node -e "import('./scripts/lib/rank.mjs').then(m => console.log(m.tokenize('conflicts branching')))"`.
+ 
+ - [ ] **Step 4: Write `scripts/route-eval.mjs`**
+ 
+ ```js
+ #!/usr/bin/env node
+ // Tier 1 routing evals (design spec 11.1). Adapted from addyosmani/agent-skills scripts/run-evals.js (MIT), deterministic tier only.
+ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+-import { join, resolve } from 'node:path';
++import { join } from 'node:path';
+ import { fileURLToPath } from 'node:url';
++import { isMain } from './lib/is-main.mjs';
+ import { loadModel } from './lib/lint-rules.mjs';
+ import { buildCorpus, rank, similarity } from './lib/rank.mjs';
+ 
+ const MIN_POSITIVE = 3;
+ const MIN_NEGATIVE = 2;
+ const MIN_EVALS = 1;
+ const COLLISION_WARN = 0.5;
+ const COLLISION_ERROR = 0.75;
+ 
+ export function targets(root) {
+@@ -1417,21 +1439,21 @@ export function evaluate(root, { minRank1 }) {
+       if (sim >= COLLISION_ERROR) errors.push(`collision: ${a} and ${b} are ${(sim * 100).toFixed(0)}% similar`);
+       else if (sim >= COLLISION_WARN) warnings.push(`overlap: ${a} and ${b} are ${(sim * 100).toFixed(0)}% similar`);
+     }
+   }
+ 
+   const rank1Rate = positives ? Math.floor((rank1 / positives) * 100) : null;
+   if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the baseline ${minRank1}%`);
+   return { errors, warnings, rank1Rate };
+ }
+ 
+-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
++if (isMain(import.meta.url)) {
+   const root = fileURLToPath(new URL('..', import.meta.url));
+   const basePath = join(root, 'evals', 'baseline.json');
+   const baseline = JSON.parse(readFileSync(basePath, 'utf8'));
+   const r = evaluate(root, { minRank1: baseline.min_rank1 });
+   for (const w of r.warnings) console.log(`warn: ${w}`);
+   for (const e of r.errors) console.log(`error: ${e}`);
+   console.log(`rank-1 rate: ${r.rank1Rate ?? 'n/a'}% (baseline ${baseline.min_rank1}%)`);
+   if (process.argv.includes('--update-baseline') && !r.errors.length && r.rank1Rate !== null && r.rank1Rate > baseline.min_rank1) {
+     writeFileSync(basePath, JSON.stringify({ min_rank1: r.rank1Rate }, null, 2) + '\n');
+     console.log(`baseline raised to ${r.rank1Rate}%`);
+@@ -1473,68 +1495,73 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
+ `evals/distractors.json` (third-party skills likely to sit beside kern; descriptions shortened from superpowers 6.4.1):
+ ```json
+ [
+   { "name": "writing-plans", "description": "Use when you have a spec or requirements for a multi-step task, before touching code" },
+   { "name": "systematic-debugging", "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes" },
+   { "name": "brainstorming", "description": "Use before any creative work: creating features, building components, adding functionality" },
+   { "name": "verification-before-completion", "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs" }
+ ]
+ ```
+ 
+-Before writing it, check each description against `.upstream/superpowers/skills/<name>/SKILL.md` and keep the upstream trigger wording; append a NOTICE file-map line `- evals/distractors.json: superpowers skills/*/SKILL.md descriptions (shortened)`.
++Before writing it, check each description against `.upstream/superpowers/skills/<name>/SKILL.md` and use the upstream description's first clause verbatim. Append three lines under `## File map` in NOTICE:
++```text
++- evals/distractors.json: superpowers skills/*/SKILL.md descriptions (first clauses)
++- scripts/lib/rank.mjs: addy scripts/run-evals.js lines 62-102 and 121-139
++- scripts/route-eval.mjs: addy scripts/run-evals.js runDeterministic (adapted)
++```
+ 
+ `evals/baseline.json`:
+ ```json
+ { "min_rank1": 0 }
+ ```
+ 
+ `evals/fixtures/hello/README.md`:
+ ```markdown
+ Fixture directory for execution evals. Dialogue evals need no files.
+ ```
+ 
+ - [ ] **Step 6: Run the tests and the real eval**
+ 
+-Run: `node --test tests/route-eval.test.mjs && node scripts/route-eval.mjs --update-baseline`
+-Expected: `# fail 0`; then `route-eval: passed` and `baseline raised to <n>%` with n at least 67. If a hello positive ranks below a distractor, reword the hello description (keep it under 300 chars and the trigger phrase) rather than the prompt.
++Run: `node --test tests/route-eval.test.mjs && node scripts/route-eval.mjs`
++Expected: `# fail 0`; then `route-eval: passed`. Leave `evals/baseline.json` at 0: a one-skill placeholder corpus would set a floor that M2 cannot hold once `hello` is gone; M2 raises it with `--update-baseline` after its real auto skills land. If a hello positive ranks below a distractor, reword the hello description (keep it under 300 chars and the trigger phrase) rather than the prompt.
+ 
+ - [ ] **Step 7: Commit**
+ 
+ ```bash
+ git add -- scripts/lib/rank.mjs scripts/route-eval.mjs evals tests/route-eval.test.mjs NOTICE
+ git commit -m "M0: add tier 1 routing evals with distractors and a rank-1 floor" -m "Descriptions are scored against real neighbouring skills, and the floor only rises."
+ ```
+ 
+ ---
+ 
+ ### Task 8: CI
+ 
+ **Files:**
+ - Create: `.github/workflows/ci.yml`, `scripts/ci-local`
+-- Modify: `NOTICE` (file map lines for everything ported so far)
+ 
+ **Interfaces:**
+ - Consumes: every CLI from Tasks 2 to 7.
+ - Produces: job `checks` that M1 extends with `bats tests/hooks tests/scripts` and shellcheck lines, and `scripts/ci-local` that runs the same steps locally (M1 and M2 append to both).
+ 
+ - [ ] **Step 1: Write `scripts/ci-local`**
+ 
+ ```bash
+ #!/usr/bin/env bash
+ # Runs the CI job's steps locally, in the same order, before a push.
+ set -euo pipefail
+ cd "$(dirname "$0")/.."
+ node --test 'tests/**/*.test.mjs'
+ node scripts/lint-skills.mjs
+ node scripts/check-version.mjs
+ node scripts/route-eval.mjs
+ claude plugin validate . --strict
++claude plugin validate .claude-plugin/plugin.json --strict
+ bats tests/scripts
+ shellcheck scripts/fetch-upstream scripts/ci-local
+ echo "ci-local: all steps passed"
+ ```
+ 
+ - [ ] **Step 2: Run it to verify it passes locally**
+ 
+ Run: `chmod +x scripts/ci-local && scripts/ci-local`
+ Expected: last line `ci-local: all steps passed`.
+ 
+@@ -1563,59 +1590,64 @@ jobs:
+         run: node scripts/lint-skills.mjs
+       - name: Versions agree
+         run: node scripts/check-version.mjs
+       - name: Unreleased line for shipped changes
+         if: github.event_name == 'pull_request'
+         run: node scripts/check-version.mjs --pr origin/${{ github.base_ref }}
+       - name: Routing evals
+         run: node scripts/route-eval.mjs
+       - name: Install Claude Code
+         run: npm install -g @anthropic-ai/claude-code@2.1.296
+-      - name: Validate plugin
+-        run: claude plugin validate . --strict
++      - name: Validate marketplace and plugin manifests
++        run: |
++          claude plugin validate . --strict
++          claude plugin validate .claude-plugin/plugin.json --strict
+       - name: Install bats and shellcheck
+         run: sudo apt-get update && sudo apt-get install -y bats shellcheck
+       - name: Script tests
+         run: bats tests/scripts
+       - name: Shellcheck
+         run: shellcheck scripts/fetch-upstream scripts/ci-local
+ ```
+ 
+ - [ ] **Step 4: Commit**
+ 
+ ```bash
+ git add -- .github/workflows/ci.yml scripts/ci-local
+ git commit -m "M0: run lint, tests, routing evals and plugin validation in CI"
+ ```
+ 
+ - [ ] **Step 5: Create the GitHub repo and push (outward action)**
+ 
+ Ask the user: "Create the private GitHub repo `kern` under your account and push `main`?" Only on a yes:
+ ```bash
+ gh repo create kern --private --source . --remote origin --push
+-gh run watch --exit-status "$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId')"
++id=""
++for i in $(seq 1 30); do id=$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId // empty'); [ -n "$id" ] && break; sleep 2; done
++gh run watch --exit-status "$id"
+ ```
+ Expected: the `ci` run ends green. If `claude plugin validate` fails in CI because it needs a login, replace that CI step with `node scripts/check-version.mjs` (already present) plus a note in `README.md` that `scripts/ci-local` validates the plugin before each push, and commit that change as `M0: validate the plugin locally when CI cannot log in`.
+ 
+ ---
+ 
+ ### Task 9: M0 acceptance
+ 
+ **Files:** none.
+ 
+ - [ ] **Step 1: Run the acceptance checks**
+ 
+ ```bash
+ claude plugin validate . --strict; echo "validate exit=$?"
++claude plugin validate .claude-plugin/plugin.json --strict; echo "plugin validate exit=$?"
+ scripts/ci-local
+ gh run list --limit 1 --json conclusion --jq '.[0].conclusion'
+ ```
+-Expected: `validate exit=0`; `ci-local: all steps passed`; `success` (or the documented local-validation fallback from Task 8).
++Expected: `validate exit=0` and `plugin validate exit=0`; `ci-local: all steps passed`; `success` (or the documented local-validation fallback from Task 8).
+ 
+ - [ ] **Step 2: Install from the marketplace on this machine**
+ 
+ In a Claude Code session: `/plugin marketplace add <owner>/kern`, then `/plugin install kern@kern`. In a throwaway directory, ask "hello kern".
+ Expected: the `hello` skill loads and replies with `kern 0.1.0 is installed.` Uninstall afterwards with `/plugin uninstall kern@kern` so superpowers stays the only router until the M2 pilot; development continues with `claude --plugin-dir ~/Code/projects/kern`.
+ 
+ - [ ] **Step 3: Record the result**
+ 
+-Append under `## [Unreleased]` in `CHANGELOG.md`: `- M0 accepted: plugin validates, CI green, marketplace install works.` Commit as `M0: record acceptance`.
++Append under `## [Unreleased]` in `CHANGELOG.md`: `- M0 accepted: plugin validates, CI green, marketplace install works.` Then run `git add -- CHANGELOG.md && git commit -m "M0: record acceptance"`.
+diff --git a/docs/plans/2026-10-12-kern-m1-plan.md b/docs/plans/2026-10-12-kern-m1-plan.md
+index fadb2da..834c3a4 100644
+--- a/docs/plans/2026-10-12-kern-m1-plan.md
++++ b/docs/plans/2026-10-12-kern-m1-plan.md
+@@ -41,20 +41,22 @@ Every command runs from the repo root, `~/Code/projects/kern`, unless a step say
+ | `review.taxonomy` default | design `blocker,suggestion,nit` | `blocker,should-fix,nit,pre-existing` | Skills spec A5 |
+ | `scope_threshold` default | design "unset" | `4` | Skills spec A5 |
+ | G13 protected targets | in the guard table, in no milestone | M1, Task 13 | A guard with no milestone would never ship |
+ | G14 | MCP writes | MCP writes plus `gh issue` and `gh label` writes | D2 covers tracker writes however they are made |
+ | G16 | state-file writes | also CronCreate, ScheduleWakeup, RemoteTrigger, SendMessage and Skill calls that carry `/kern:autopilot` or `/kern:mode` | A scheduled or relayed prompt must not switch state |
+ | `help check` table | `KERN/kernel/config.md` | `kernel/settings.md` | One key table, checked by lint rule 13 |
+ | `help` description | unquoted, contains `: ` | quoted | A YAML parser rejects the unquoted form |
+ | New key | none | `mcp.write_servers` (G14) | Lets a project name a tracker server kern does not know |
+ | Kernel rendering | contract: `sed` | `awk` literal replacement | Values may hold `|`, `&` and `/` without escaping |
+ 
++- Expected bats counts in this plan are written in the pretty format (`N tests, 0 failures`), which prints only on a terminal. When output is piped, the same result is `1..N` followed by N `ok` lines and no `not ok`.
++
+ ## Review Focus
+ 
+ 1. **A git command hidden in a chain, a `$( )`, backticks or `bash -c '...'`.** The user expects G1 to see `cd x && git stash` and `bash -c 'git switch main'` the same as a bare command. Pinned: Task 10 test `a chained or substituted main-checkout command is still seen`; Task 9 `gitctx.bats` tests the splitter.
+ 2. **A session running inside a linked worktree.** Settings, `.kern/` and the main-checkout test must resolve from the main worktree root, or a worktree session sees no settings and every guard misjudges "main checkout". Pinned: Task 3 test `a linked worktree reads the main checkout's untracked settings`; Task 4 test `kern-dir creates WORK/sub at the main root`; Task 10 test `the same commands in a linked worktree: no vote`.
+ 3. **A prompt Claude Code starts itself that contains `/kern:autopilot on`:** a background subagent report, a cross-session message, a scheduled task, or a CronCreate Claude writes. None may switch autopilot on. Pinned: Task 8 test `wrapped prompts never switch`; Task 9 test `a scheduled prompt or relayed message carrying /kern:autopilot is denied`.
+ 4. **A very large tool input, such as a 200 KB Write.** The guard dispatcher parses every Write; a quadratic parser would stall each one. Pinned: Task 2 test `a 200 KB value parses in under 5 seconds`.
+ 5. **`gh` missing, offline or slow during the PR duplicate check.** The guard must not allow a PR it could not check, and must not hang the session. Pinned: Task 11 test `gh failing means dedup unknown`; Task 9 test `with_timeout returns promptly when the command finishes`.
+ 
+ ## File map
+ 
+@@ -75,21 +77,21 @@ Every command runs from the repo root, `~/Code/projects/kern`, unless a step say
+ | `hooks/guards/g13-protected.sh`, `g14-tracker.sh`, `g15-deploy.sh`, `tests/hooks/g13-g15.bats` | 13 | G13, G14, G15 |
+ | `skills/mode/SKILL.md`, `skills/autopilot/SKILL.md` | 14 | Mode and autopilot skills |
+ | `skills/unslop/SKILL.md`, `skills/technical-writing/SKILL.md` | 15 | Writing skills (ports) |
+ | `skills/help/**`, lint rule 6, `scripts/lint-exemptions.json` | 16 | Help skill, map, setup, check |
+ | lint rules 7, 13, 15, `tests/fixtures/projects/*`, `tests/hook-shape.sh`, CI | 17 | Size, key and hook-shape checks in CI |
+ | `NOTICE`, `CHANGELOG.md`, manifests | 18 | Acceptance, live checks, release 0.2.0 |
+ 
+ ## Interfaces M2 relies on
+ 
+ - Kernel route row (contract): `| <when, observable> | Read {KERN}/<skill>/SKILL.md |` in `kernel/kernel.md` under `## Routing`; a kernel file route reads `Read {ROOT}/kernel/<file>.md`. Lint rule 6 resolves both and requires the target's first H2 to be `## Steps` followed by a numbered list. M2 also replaces the routing sentence "Non-trivial work with no match: write a short plan as a todo list first." with "Several matches: define and diagnose before build. Non-trivial work with no match: plan."
+-- Settings summary (`settings_summary` in `hooks/lib/render.sh`), at most 600 chars, lines in this order, each present only when non-empty: `Main worktree: <path>` (or `Not a git repository: user settings only.`), `Settings files: <list>`, `Set: key=value; ...`, `Overrides (follow the project skill, say so in one line): <job> -> project skill <name>; ...`, `Routes: <name> -> <value>; ...`, `Ignored, floor actions have no key: <keys>`, `Unknown keys, ignored: <keys>`. Overrides cover every directory under `skills/` except `mode`, `autopilot`, `help` and `hello`, so each M2 skill gets defer detection with no hook change.
++- Settings summary (`settings_summary` in `hooks/lib/render.sh`), at most 600 chars, lines in this order, each present only when non-empty except `Settings files:`, which is always printed: `Main worktree: <path>` (or `Not a git repository: user settings only.`), `Settings files: <list>`, `Set: key=value; ...`, `Overrides (follow the project skill, say so in one line): <job> -> project skill <name>; ...`, `Routes: <name> -> <value>; ...`, `Ignored, floor actions have no key: <keys>`, `Unknown keys, ignored: <keys>`. Overrides cover every directory under `skills/` except `mode`, `autopilot`, `help` and `hello`, so each M2 skill gets defer detection with no hook change.
+ - Mode line: `kern mode: voice=<normal|terse> surface=<chat|auto|html> autopilot=<on|off>`, printed by `mode_line SID` in `hooks/lib/render.sh`. `session-start` prints it in the kernel header; `prompt-submit` prints it on every `/kern:mode` or `/kern:autopilot` turn, outside the default preset, and under autopilot.
+ - Votes (`hooks/lib/decide.sh`): `vote allow|ask|deny G<n> "<reason>"`; strictest wins (deny, ask, allow); the reason shown is the winning level's reasons joined by `; ` with the prefix `kern `. `fail_closed "<reason>"` votes `ask` as `G0`. Under autopilot a final `ask` becomes `deny`.
+ - Adding a guard (M2 adds `g18`): create `hooks/guards/g18-<name>.sh` defining `guard_g18()`; the dispatcher sources every `hooks/guards/g*.sh` and calls `guard_<id>` where `<id>` is the file name up to the first `-`. Variables a guard reads: `TOOL`, `TOOL_INPUT` (raw JSON of `tool_input`), `AGENT` (`agent_type`, empty in the main session), `CWD`, `SID`, `KERN_MAIN`, `AUTOPILOT` (`1` or `0`). Helpers: `ti_get KEY`, `git_words`, `git_sub`, `gh_sub`, `cmd_head`, `_shell_words`, `word_has`, `word_value`, `in_main_checkout`, `current_branch`, `branch_protected`, `base_branch_name`, `push_targets`, `with_timeout`, `settings_get`, `policy_for`, `list_has`. Test it with `run_guard "<payload>" g18` from `tests/helpers/common.bash`.
+ - Test helpers (`tests/helpers/common.bash`): `kern_root`, `make_repo DIR`, `kern_env DIR`, `payload EVENT FIELDS`, `bash_payload CMD`, `run_guard PAYLOAD [GUARDS]`, `decision_of OUTPUT`, `set_autopilot on|off`, `fake_gh`. Run bats through `tests/run-bats`.
+ - Spike record: `docs/spikes/m1-payloads.md` holds the line `agent_type in subagent PreToolUse: <value or absent>`.
+ 
+ ---
+ 
+ ### Task 1: Payload spike
+ 
+@@ -153,20 +155,21 @@ Tell the user, in full sentences: "Please open a second terminal and run `cd <SP
+ cd "$SPIKE/repo" && claude -p --plugin-dir "$SPIKE/plugin" "/kern:mode terse" >/dev/null; cd -
+ wc -l "$SPIKE/plugin/hooks/payloads.log"
+ ```
+ Expected: at least 10 log lines.
+ 
+ - [ ] **Step 4: Answer each question from the log and write the record**
+ 
+ Run these and read the output:
+ 
+ ```bash
++SPIKE=${SPIKE:?set SPIKE to the path Step 1 printed}
+ L="$SPIKE/plugin/hooks/payloads.log"
+ grep -c '"UserPromptExpansion"' "$L"
+ grep '"UserPromptExpansion"' "$L" | grep -o '"command_name":"[^"]*"' | sort -u
+ grep '"UserPromptExpansion"' "$L" | grep -o '"command_source":"[^"]*"' | sort -u
+ grep '"UserPromptSubmit"' "$L" | grep -o '"prompt":"[^"]\{0,120\}' | head -8
+ grep '"PreToolUse"' "$L" | grep -o '"agent_type":"[^"]*"' | sort -u
+ grep '"SubagentStart"' "$L" | grep -o '"agent_[a-z]*":"[^"]*"' | sort -u
+ grep '"SessionStart"' "$L" | grep -o '"source":"[^"]*"\|"session_id":"[^"]*"'
+ cut -f1 "$L" | sort | uniq -c
+ ```
+@@ -204,46 +207,48 @@ The hooks in Tasks 6 to 9 already handle every documented shape; these branches
+ 4. Background report wrapper tag is one of `<task-notification`, `<cross-session-message`, `<scheduled-task`, `<teammate-message`, `<channel-message`: covered. Another tag: add it to `KERN_WRAPPER_TAGS` in `hooks/prompt-submit` (Task 8) and add it to the test `wrapped prompts never switch`.
+ 5. SubagentStart context reached the subagent (yes): keep JSON `additionalContext`. No: record it in the M2 risk list; execute-plan briefs will carry the subagent kernel text instead (M2 Task 7 reads this line).
+ 6. `agent_type` in subagent PreToolUse is recorded verbatim for M2's G18.
+ 7. Headless `CLAUDE_CODE_ENTRYPOINT` starts with `sdk`: the reminder skip in Task 8 works as written. Another value `<v>`: in Task 8 change `case "${CLAUDE_CODE_ENTRYPOINT-}" in sdk*) exit 0 ;; esac` to `case "${CLAUDE_CODE_ENTRYPOINT-}" in sdk* | <v>) exit 0 ;; esac`, and change the autopilot-line condition `[ "${CLAUDE_CODE_ENTRYPOINT#sdk}" = "${CLAUDE_CODE_ENTRYPOINT-}" ]` to `case "${CLAUDE_CODE_ENTRYPOINT-}" in sdk* | <v>) false ;; *) true ;; esac`.
+ 8. `/clear` session id: recorded only. State resets on `source: clear` either way.
+ 
+ - [ ] **Step 6: Save sanitized fixtures**
+ 
+ ```bash
+ mkdir -p tests/fixtures/payloads
++SPIKE=${SPIKE:?set SPIKE to the path Step 1 printed}
++L="$SPIKE/plugin/hooks/payloads.log"
+ save() { # save NAME EVENT GREP_PATTERN
+   grep "\"$2\"" "$L" | grep -- "$3" | head -n 1 | cut -f2- |
+     sed -e 's/"session_id":"[^"]*"/"session_id":"test-session"/' \
+         -e "s#$SPIKE/repo#/tmp/kern-fixture#g" \
+         -e 's#"transcript_path":"[^"]*"#"transcript_path":"/tmp/kern-fixture/t.jsonl"#' >"tests/fixtures/payloads/$1.json"
+   [ -s "tests/fixtures/payloads/$1.json" ] || rm -f "tests/fixtures/payloads/$1.json"
+ }
+ save expansion-mode UserPromptExpansion 'mode'
+ save expansion-autopilot UserPromptExpansion 'autopilot'
+ save submit-slash-mode UserPromptSubmit 'kern:mode'
+-save submit-task-notification UserPromptSubmit 'task-notification\|cross-session\|SPIKE\|git log'
++save submit-task-notification UserPromptSubmit '<task-notification\|<cross-session-message\|<scheduled-task'
+ save subagent-start SubagentStart 'investigator'
+-save pretooluse-subagent PreToolUse 'investigator'
++save pretooluse-subagent PreToolUse '"agent_type"'
+ save sessionstart-clear SessionStart '"source":"clear"'
+ ls tests/fixtures/payloads
+ for f in tests/fixtures/payloads/*.json; do node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$f" || echo "BAD $f"; done
+ grep -l "$HOME" tests/fixtures/payloads/*.json || echo "no home paths"
+ ```
+ Expected: the fixture files that fired, no `BAD` line, and `no home paths`. If a home path remains (for example in `transcript_path`), replace it with `/tmp/kern-fixture` by hand.
+ 
+ - [ ] **Step 7: Commit and clean up**
+ 
+ ```bash
+ git add -- docs/spikes/m1-payloads.md tests/fixtures/payloads
+ git commit -m "M1: record real hook payloads and the decisions they drive" -m "Mode and autopilot parsing, subagent context and G18 depend on payload shapes the docs leave open."
+-rm -rf "$(dirname "$SPIKE")"
++rm -rf "$(dirname "${SPIKE:?set SPIKE to the path Step 1 printed}")"
+ ```
+ 
+ ---
+ 
+ ### Task 2: Test helpers and JSON reading
+ 
+ **Files:**
+ - Create: `tests/helpers/common.bash`, `tests/run-bats`, `hooks/lib/json.sh`
+ - Test: `tests/hooks/json.bats`
+ 
+@@ -280,20 +285,21 @@ make_repo() {
+   git -C "$dir" remote set-head origin main >/dev/null
+ }
+ 
+ # kern_env DIR: isolates HOME and plugin data under the test tmpdir and points CWD at DIR.
+ kern_env() {
+   export HOME="$BATS_TEST_TMPDIR/home"
+   export CLAUDE_PLUGIN_DATA="$BATS_TEST_TMPDIR/data"
+   export CLAUDE_PLUGIN_ROOT
+   CLAUDE_PLUGIN_ROOT="$(kern_root)"
+   mkdir -p "$HOME/.claude" "$CLAUDE_PLUGIN_DATA"
++  unset CLAUDE_CODE_ENTRYPOINT
+   export CWD="$1"
+ }
+ 
+ # payload EVENT JSON_FIELDS: a hook input object with session_id test-session and cwd $CWD.
+ # JSON_FIELDS is the inside of an object, for example '"tool_name":"Bash","tool_input":{...}'.
+ payload() {
+   printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"%s",%s}' "$CWD" "$1" "$2"
+ }
+ 
+ # bash_payload COMMAND: a PreToolUse payload for the Bash tool. COMMAND must not hold a double quote
+@@ -1296,21 +1302,21 @@ case "$key" in
+   *)
+     echo "usage: kern-detect base_branch|branch.pattern|commit.convention|test.focused|test.full|typecheck|lint|build|tracker|pr.template" >&2
+     exit 2
+     ;;
+ esac
+ ```
+ 
+ - [ ] **Step 6: Run the tests to verify they pass**
+ 
+ Run: `chmod +x scripts/kern-root scripts/kern-dir scripts/kern-detect && tests/run-bats tests/scripts/kern-dir.bats tests/scripts/kern-detect.bats`
+-Expected: `11 tests, 0 failures`.
++Expected: all 12 tests pass (5 in kern-dir.bats, 7 in kern-detect.bats).
+ 
+ - [ ] **Step 7: Check detection on a real repo, read-only**
+ 
+ Run: `(cd ~/Code/projects/cds/cds-app-rewrite && for k in base_branch branch.pattern commit.convention test.full typecheck lint build tracker pr.template; do printf '%s: ' "$k"; bash ~/Code/projects/kern/scripts/kern-detect "$k" 2>&1; done)`
+ Expected: one line per key with a value and evidence, for example `commit.convention: ^[A-Z][A-Z0-9]+-[0-9]+: <TAB>24 of the last 30 subjects start with ID: `. The script writes nothing.
+ 
+ - [ ] **Step 8: Commit**
+ 
+ ```bash
+ git add -- scripts/kern-root scripts/kern-dir scripts/kern-detect tests/scripts/kern-dir.bats tests/scripts/kern-detect.bats
+@@ -1566,21 +1572,21 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
+   [[ "$output" == *"voice=terse"* ]] || false
+   [[ "$output" == *"# kern terse voice"* ]] || false
+ }
+ 
+ @test "the summary lists set keys, overrides, routes, floor keys and unknown keys" {
+   mkdir -p "$R/.claude/skills/technical-writing"
+   printf -- '---\nname: technical-writing\n---\n' >"$R/.claude/skills/technical-writing/SKILL.md"
+   printf 'push.policy: auto\nmerge.policy: auto\nroute.define: off\nfoo.bar: 1\n' >"$R/.claude/kern.local.yml"
+   start startup
+   [[ "$output" == *"Settings files: .claude/kern.local.yml"* ]] || false
+-  [[ "$output" == *"Set: push.policy=auto"* ]] || false
++  [[ "$output" == *"push.policy=auto"* ]] || false
+   [[ "$output" == *"technical-writing -> project skill technical-writing"* ]] || false
+   [[ "$output" == *"Routes: define -> off"* ]] || false
+   [[ "$output" == *"Ignored, floor actions have no key: merge.policy"* ]] || false
+   [[ "$output" == *"Unknown keys, ignored: foo.bar"* ]] || false
+ }
+ 
+ @test "kern: off prints nothing" {
+   printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+   start startup
+   [ -z "$output" ]
+@@ -2104,20 +2110,27 @@ expand() {
+   submit "fix the bug"
+   [[ "$output" == *"kern mode: voice=terse"* ]] || false
+   [ "${#output}" -le 200 ]
+ }
+ 
+ @test "a slash command for another skill is not parsed as natural language" {
+   submit '<command-name>/other</command-name><command-args>go terse</command-args>'
+   [ "$(st voice)" = normal ]
+ }
+ 
++@test "only a slash_command expansion switches state" {
++  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"mcp_prompt","command_name":"kern:autopilot","command_args":"on","command_source":"plugin","prompt":"/kern:autopilot on"')"
++  [ "$(st autopilot)" != on ]
++  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"mcp_prompt","command_name":"kern:mode","command_args":"terse","command_source":"plugin","prompt":"/kern:mode terse"')"
++  [ "$(st voice)" = normal ]
++}
++
+ @test "a bare mode command counts only from the plugin source" {
+   run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"mode","command_args":"terse","command_source":"project","prompt":"/mode terse"')"
+   [ "$(st voice)" = normal ]
+ }
+ ```
+ 
+ `tests/hooks/payloads.bats` (replays Task 1's recorded payloads; a missing fixture is skipped):
+ ```bash
+ #!/usr/bin/env bats
+ # Replays the payloads recorded in Task 1 through the hooks. A missing fixture means that event never
+@@ -2312,29 +2325,30 @@ natural() {
+   esac
+   return 0
+ }
+ 
+ # _nl_ok FIRST: the trigger is the whole first line or is followed by punctuation or "and".
+ _nl_ok() {
+   printf '%s\n' "$1" | grep -Eq '^(terse mode|go terse|be terse|switch to terse|terse on|normal mode|back to normal|stop terse|terse off|normal voice|html mode|go html|switch to html|html on|stop html|html off|chat only|chat mode|stop autopilot|autopilot off)([[:space:]]*[.!,;:]|[[:space:]]+(and|then|now|please)([[:space:]]|$)|[[:space:]]*$)'
+ }
+ 
+ if [ "$EVENT" = UserPromptExpansion ]; then
++  ETYPE=$(json_get expansion_type) || ETYPE=""
+   NAME=$(json_get command_name) || NAME=""
+   ARGS=$(json_get command_args) || ARGS=""
+   SRC=$(json_get command_source) || SRC=""
+   PROMPT=$(json_get prompt) || PROMPT=""
+   case "${NAME#/}" in
+-    kern:mode | kern:autopilot) dispatch "$NAME" "$ARGS" 1 ;;
++    kern:mode | kern:autopilot) [ "$ETYPE" = slash_command ] && dispatch "$NAME" "$ARGS" 1 ;;
+     mode | autopilot)
+       case "$PROMPT" in
+-        "/kern:${NAME#/}"* | "/${NAME#/}"*) [ "$SRC" = plugin ] && dispatch "$NAME" "$ARGS" 1 ;;
++        "/kern:${NAME#/}"* | "/${NAME#/}"*) [ "$ETYPE" = slash_command ] && [ "$SRC" = plugin ] && dispatch "$NAME" "$ARGS" 1 ;;
+       esac
+       ;;
+   esac
+ else
+   PROMPT=$(json_get prompt) || PROMPT=""
+   wrapped "$PROMPT" && exit 0
+   TRIM=$(printf '%s' "$PROMPT" | sed -n '/[^[:space:]]/,$p' | sed '1s/^[[:space:]]*//')
+   case "$TRIM" in
+     "<command-message>"* | "<command-name>"*)
+       NAME=$(printf '%s' "$TRIM" | sed -n 's/.*<command-name>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*<\/command-name>.*/\1/p' | head -n 1)
+@@ -4423,21 +4437,21 @@ _g15_vote() {
+ ```
+ 
+ - [ ] **Step 6: Run every hook test**
+ 
+ Run: `tests/run-bats tests/hooks tests/scripts`
+ Expected: every file passes; payload tests may skip.
+ 
+ - [ ] **Step 7: Time one Bash call through all guards**
+ 
+ Run: `P='{"session_id":"t","cwd":"'"$PWD"'","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"npm test && git status"}}'; time (printf '%s' "$P" | bash hooks/pre-tool-use)`
+-Expected: `real` under 0.5 s and no output (no guard votes).
++Expected: `real` under 1 s and no output (no guard votes).
+ 
+ - [ ] **Step 8: Commit**
+ 
+ ```bash
+ git add -- hooks/guards/g13-protected.sh hooks/guards/g14-tracker.sh hooks/guards/g15-deploy.sh tests/hooks/g13-g15.bats
+ git commit -m "M1: add G13, G14 and G15 for protected targets, trackers and deploys" -m "Writes to read-only systems, tracker and chat writes, and deploys are outward actions the user approves; G13 had no milestone in the spec."
+ ```
+ 
+ ---
+ 
+@@ -4550,21 +4564,21 @@ allowed-tools: Read
+ 
+ # Autopilot
+ 
+ A per-session grant for unattended runs. kern's prompt hook turns it on only from a command the user typed; this skill reports the result.
+ 
+ ## Steps
+ 1. Read the `kern mode:` line the hook injected this turn. No such line: reply "the hook did not run; autopilot is off". Never write the state file and never report "on" without the hook line.
+ 2. `on`, and the line says `autopilot=on`: list what is allowed, what is denied, the floor, and how to stop (`/kern:autopilot off`, "stop autopilot", or `/clear`). Then ask for, or propose, a checkable stop predicate for the run, such as "stop when every task in the plan has a complete ledger line or one is parked".
+ 3. `on`, and the hook reported "autopilot denied by <file>": name the file and the `autopilot: denied` key. Do not suggest changing it unless the user asks.
+ 4. `status`: on or off, since when, the settings source of `autopilot`, and the `rebase.push` value.
+-5. `off`: confirm, then list the `parked:` lines in `.kern/ledgers/*/ledger.md` written since autopilot turned on.
++5. `off`: confirm, then list the `parked:` lines in `WORK/ledgers/*/ledger.md` (`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` prints that directory) written since autopilot turned on.
+ 
+ ## What autopilot allows
+ - Commit when the message passes the convention and attribution checks. `git add -A` stays denied.
+ - Push the current branch when it is not protected.
+ - Open a draft PR after the duplicate check.
+ - Push with `--force-with-lease` only when settings say `rebase.push: autopilot`, and only to your own branches.
+ 
+ Every other action that would ask is denied, because nobody is there to answer. Merge, deploy, review posting and tracker writes always need the user. Judgment calls are parked with the default chosen, and work that does not depend on them continues.
+ 
+ ## Who can turn it on
+@@ -5230,21 +5244,21 @@ Append to the steps of job `checks` in `.github/workflows/ci.yml`, after the exi
+ 
+ ```yaml
+       - name: Hook tests
+         run: tests/run-bats tests/hooks
+       - name: Hook shape over fixture projects
+         run: bash tests/hook-shape.sh
+       - name: Shellcheck hooks and kern scripts
+         run: shellcheck -x -S warning hooks/lib/*.sh hooks/guards/*.sh hooks/session-start hooks/subagent-start hooks/prompt-submit hooks/pre-tool-use scripts/kern-root scripts/kern-get scripts/kern-dir scripts/kern-detect tests/hook-shape.sh tests/run-bats tests/helpers/common.bash
+ ```
+ 
+-In `scripts/ci-local`, replace `tests/run-bats tests/scripts` with `tests/run-bats tests/scripts` and insert before the final `echo` line:
++In `scripts/ci-local` and in the `Script tests` step of `.github/workflows/ci.yml`, replace `bats tests/scripts` with `tests/run-bats tests/scripts`. Then, in `scripts/ci-local`, insert before the final `echo` line:
+ 
+ ```bash
+ tests/run-bats tests/hooks
+ bash tests/hook-shape.sh
+ shellcheck -x -S warning hooks/lib/*.sh hooks/guards/*.sh hooks/session-start hooks/subagent-start hooks/prompt-submit hooks/pre-tool-use scripts/kern-root scripts/kern-get scripts/kern-dir scripts/kern-detect tests/hook-shape.sh tests/run-bats tests/helpers/common.bash
+ ```
+ 
+ `-S warning` keeps shellcheck's informational notes (single quotes around awk programs) out of the exit code.
+ 
+ - [ ] **Step 8: Run the whole local CI**
+@@ -5268,21 +5282,21 @@ git commit -m "M1: check kernel size, settings keys and hook shape in CI" -m "Th
+ - Possibly modify: `hooks/lib/decide.sh` (Step 4 branch only)
+ 
+ **Interfaces:**
+ - Consumes: everything above; `node scripts/release.mjs minor` from M0.
+ - Produces: kern 0.2.0 with the M1 acceptance list met (design section 14): hook-shape tests pass on all fixtures; rendered kernel under 4,000 chars; mode switches survive compaction; G16 denies a state write; each guard's bats tests pass in both modes.
+ 
+ - [ ] **Step 1: Run the automated acceptance checks**
+ 
+ ```bash
+ scripts/ci-local
+-for g in g01 g02-g04 g05-g06 g13-g15 g16; do tests/run-bats tests/hooks/$g*.bats | tail -1; done
++for g in g01 g02-g04 g05-g06 g13-g15 g16; do tests/run-bats tests/hooks/$g*.bats | grep -E '^(1\.\.|not ok)'; done
+ T=$(mktemp -d); git init -q "$T"
+ printf '{"session_id":"acc","source":"startup","cwd":"%s"}' "$T" | HOME="$T" CLAUDE_PLUGIN_DATA="$T/d" bash hooks/session-start | sed "s#$PWD#/Users/someone/.claude/plugins/cache/kern/kern/0.2.0#g" | wc -c
+ ```
+ Expected: `ci-local: all steps passed`; each guard file ends with `0 failures` (every guard file has interactive and autopilot cases); the kernel size line is under 4000.
+ 
+ - [ ] **Step 2: Live check: a mode switch survives compaction**
+ 
+ Prepare a throwaway project with superpowers and caveman disabled:
+ ```bash
+ P=$(mktemp -d)/kern-live; mkdir -p "$P/.claude"; git init -q "$P"; git -C "$P" commit -q --allow-empty -m init
+diff --git a/docs/plans/contract.md b/docs/plans/contract.md
+index 3ef1001..e819583 100644
+--- a/docs/plans/contract.md
++++ b/docs/plans/contract.md
+@@ -164,15 +164,15 @@ Subject `M<n>: <imperative summary>` (72 chars or fewer), body says why. No attr
+ 
+ ### Additions from the M1 plan
+ 
+ - `json.sh`: `json_get` and `json_get_raw` also exit 2 on malformed input (unterminated string). `ti_get KEY` reads `$TOOL_INPUT`, the raw `tool_input` JSON the dispatcher sets.
+ - `settings.sh` also provides `settings_source KEY` (file or `default`; `settings_get` runs in command substitution, so it cannot set `SETTINGS_SOURCE` for the caller), `settings_keys FILE`, `settings_known_keys`, and `list_has LIST ITEM`.
+ - New library `hooks/lib/render.sh`: `render_template FILE` (awk literal replacement of `{VERSION}`, `{ROOT}`, `{KERN}`, `{MODE}`, `{AUTOPILOT}` from `K_*` variables; a line that is exactly `{SETTINGS}` or `{VOICE}` becomes that value; replaces the contract's sed rendering), `kern_version`, `mode_line SID`, `autopilot_text SID`, `settings_summary`, `KERN_FLOOR_KEYS`.
+ - New file `modes/terse-subagent.md`: the one-line terse voice for subagents (the full `modes/terse.md` would break the 1,200-character subagent budget).
+ - `decide.sh`: the reason printed is the winning level's reasons, each `G<n>: <reason>`, joined by `; `, prefixed `kern `. `fail_closed` votes as `G0`.
+ - `gitctx.sh` also provides `_split_words`, `_subst_bodies`, `_shell_words`, `cmd_head`, `current_branch`, `base_branch_name`, `push_targets DIR REST`, `with_timeout SECS CMD...`, `gh_sub CMDLINE`, `word_value WORDS FLAG...`, `word_has WORDS FLAG...`.
+ - Dispatcher variables a guard reads: `TOOL`, `TOOL_INPUT`, `AGENT`, `CWD`, `SID`, `KERN_MAIN`, `AUTOPILOT`.
+-- `kern-dir SUB`: SUB is lowercase letters, digits and dashes. `branch.pattern` uses `{id}` and `{slug}`; `test.focused` uses `{file}`.
++- `kern-dir SUB`: SUB is one or more lowercase segments of letters, digits and dashes joined by `/` (for example `ledgers/plan-a`). `branch.pattern` uses `{id}` and `{slug}`; `test.focused` uses `{file}`.
+ - New settings key `mcp.write_servers` (G14). G14 also covers `gh issue` and `gh label` writes. G16 also denies CronCreate, ScheduleWakeup, RemoteTrigger, SendMessage and Skill calls whose input contains `kern:autopilot` or `kern:mode`.
+ - `tests/run-bats ARGS...` runs bats with `/bin/bash` first on PATH on macOS. `tests/helpers/common.bash` also provides `kern_env DIR`, `payload EVENT FIELDS`, `bash_payload CMD`, `run_guard PAYLOAD [GUARDS]`, `decision_of OUTPUT`, `set_autopilot on|off`, `fake_gh`.
+ - Lint rule 6 (M1) also resolves `Read {ROOT}/<path>` rows (the context route), and checks the help map's first column (`` | `<skill>` | ``). M1 consumes the "M0 as written" model (`loadModel`, `RULES` entries `{ id, check(model) }`, findings `{ rule, path, level, message }`), not the earlier `ctx` shape above.
+ - `scripts/lint-exemptions.json` gains `{ "rule": 6, "path": "skills/hello/SKILL.md", ... }`; M2 removes it with the `hello` skill.

@@ -1,0 +1,340 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 93e949d..9770fa1 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,7 +4,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ 
+ ## [Unreleased]
+ 
+-- Guards judge a Bash command whose head word is a shell alias from the Claude Code shell snapshot, such as `gpf! origin main`, as the git or gh command it expands to, as well as itself. With aliases loaded, the guards read the command's own simple commands exactly as without aliases, in the same order and context, then every expansion after all of them, so an alias can only add votes: it never removes a deny or an ask, and never gets an allow, which kern gives only to a command that starts with git or gh. The head word is found after assignments (quoted ones included), redirections and zsh's reserved words (`if`, `!`, `time` and the like), in each simple command, `$( )` and `eval`. An alias whose value ends in a space, such as `_='sudo '`, also expands the word after it, as zsh's trailing-space rule does, so `_ gpf! origin main` is judged as `sudo git push --force origin main`; past 8 such words, a word that is still an alias is denied under autopilot. G2, G3, G4, G13, G14 and G15, which skip a command whose text names no gh, push, deploy tool or network client, read the expansion's text too, so `prc` for `gh pr create`, `gp origin production` as a push to a deploy branch, and an alias that runs psql against a protected target are judged. kern reads the snapshot as text and never runs it; a missing, unreadable or unparseable snapshot changes nothing. This removes the 0.2.0 known limit on shell aliases. Known limits, left for M3: the newest snapshot stands in for the session's, which the hook input does not name; an alias defined and used in one Bash call through `eval`, `$( )` or a backtick is not judged interactively (G00 denies the definition under autopilot); nor is an alias past another alias's head word, a global alias, a `$'...'` or double-quoted alias value, a chain of aliases deeper than 8, or interactively an alias past 8 trailing-space words; an expansion no longer sets context for the command's later records, so `gaa && git commit -m x` loses G6's stale-index reason (its decision stays); a snapshot with thousands of aliases slows every Bash call, by about 0.6 s for 10,000; G16 and G20 match only the command's own text, not an alias's expansion; and the shell-snapshots folder is writable, so kern reads a newer snapshot written there, though that can only add votes, never remove a deny or an ask or add an allow.
++- Guards judge a Bash command whose head word is a shell alias from the Claude Code shell snapshot, such as `gpf! origin main`, as the git or gh command it expands to, as well as itself. With aliases loaded, the guards read the command's own simple commands exactly as without aliases, in the same order and context, then every expansion after all of them, so an alias can only add votes: it never removes a deny or an ask, and never gets an allow, which kern gives only to a command that starts with git or gh. The head word is found after assignments (quoted ones included), redirections and zsh's reserved words (`if`, `!`, `time` and the like), in each simple command, `$( )` and `eval`. An alias whose value ends in a space, such as `_='sudo '`, also expands the word after it, as zsh's trailing-space rule does, so `_ gpf! origin main` is judged as `sudo git push --force origin main`; past 8 such words, a word that is still an alias is denied under autopilot. G2, G3, G4, G13, G14 and G15, which skip a command whose text names no gh, push, deploy tool or network client, read the expansion's text too, so `prc` for `gh pr create`, `gp origin production` as a push to a deploy branch, and an alias that runs psql against a protected target are judged. kern reads the snapshot as text and never runs it; a missing, unreadable or unparseable snapshot changes nothing. It caches the parsed table in its state dir, keyed by the snapshot's path, size and modification time, and reads the cache as data the same way; a forged cache, like a forged snapshot, can only add votes. This removes the 0.2.0 known limit on shell aliases. Known limits, left for M3: the newest snapshot stands in for the session's, which the hook input does not name; an alias defined and used in one Bash call through `eval`, `$( )` or a backtick is not judged interactively (G00 denies the definition under autopilot); nor is an alias past another alias's head word, a global alias, a `$'...'` or double-quoted alias value, a chain of aliases deeper than 8, or interactively an alias past 8 trailing-space words; an expansion no longer sets context for the command's later records, so `gaa && git commit -m x` loses G6's stale-index reason (its decision stays); a snapshot with thousands of aliases slows every Bash call, by about 0.6 s for 10,000; G16 and G20 match only the command's own text, not an alias's expansion; and the shell-snapshots folder is writable, so kern reads a newer snapshot written there, though that can only add votes, never remove a deny or an ask or add an allow.
+ - help: allows only the exact git commands it prescribes (`git remote -v`, `git rev-parse --git-common-dir`, `git check-ignore -q *`, `git worktree list`); `git remote *`, `git symbolic-ref *` and `git log *` could write config, move HEAD or run a program with no prompt.
+ - Mode switches: "terse voice" and "terse mode on" switch; extra spaces are folded; a first line over 200 characters never switches.
+ - Kernel: no is an acceptable answer, and chat in either voice skips the main AI tells; terse keeps existing comments and shows only changed code.
+diff --git a/docs/plans/contract.md b/docs/plans/contract.md
+index ce968ea..68c41c1 100644
+--- a/docs/plans/contract.md
++++ b/docs/plans/contract.md
+@@ -99,9 +99,11 @@ SessionStart uses an empty matcher and branches on `source` inside the script, b
+ 
+ `aliases.sh` (M2a Task 33; loaded by `hooks/pre-tool-use` before `gitctx.sh`, and `aliases_load` runs for the Bash tool only):
+ - `alias_snapshot`: prints the shell snapshot to read, or exits 1. `KERN_SHELL_SNAPSHOT` names one (tests); otherwise the newest `snapshot-*.sh` under `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/shell-snapshots`.
+-- `aliases_load`: sets `_KA_<hex of the name>` (two hex digits per byte) to the expansion of each alias whose expansion holds a word that is git or gh (last path part, any case, quotes removed), and of each alias whose expansion ends in a space (a tab does not count, as in zsh; stored with one space at its end), and `KERN_ALIASES=1` when there is one; it first unsets any `_KA_` variable already set. Nothing from the snapshot is evaluated: awk reads at most its first 4 MB as text. A missing, unreadable or unparseable snapshot sets nothing, and no failure stops the hook.
++- `aliases_load`: sets `_KA_<hex of the name>` (two hex digits per byte) to the expansion of each alias whose expansion holds a word that is git or gh (last path part, any case, quotes removed), and of each alias whose expansion ends in a space (a tab does not count, as in zsh; stored with one space at its end), and `KERN_ALIASES=1` when there is one; it first unsets any `_KA_` variable already set. Nothing from the snapshot is evaluated: awk reads at most its first 4 MB as text. A missing, unreadable or unparseable snapshot sets nothing, and no failure stops the hook. The parsed table is cached in `$(state_dir)/aliases.cache` (mode 0600, written to a `mktemp` file in that dir and renamed over the cache): a first line `kern aliases <_ALIASES_CACHE_V> <length of _ALIASES_AWK><TAB><snapshot path><TAB><size> <mtime>`, then the `<hex><TAB>expansion` lines. A cache whose first line differs is rebuilt; a symlinked cache file or state dir is never read or written through; a cache that cannot be written is skipped silently.
++- `_alias_key FILE`: prints FILE's size and modification time in seconds (BSD or GNU `stat`); exit 1 when neither reads it.
++- `_alias_table`: reads `<hex><TAB>expansion` lines on stdin into `_KA_<hex>` as data, the way `aliases_load` reads the parse and the cache: a line whose name is not hex digits is skipped, and reading stops after 4 MB.
+ - `alias_text CMD`: prints the expansion of each record of `git_words CMD` whose head word is such an alias, one per line. `hooks/pre-tool-use` sets `KERN_ALIAS_TEXT` to it for the Bash tool when `KERN_ALIASES` is set, and G2, G3, G4, G13, G14 and G15 match their text prefilter (gh, push, deploy tool and client names) against the command and `KERN_ALIAS_TEXT`.
+-- `alias_expand SEG`: sets `ALIAS_EXP` to SEG with its head word replaced; exit 1 when that word is not such an alias. The head word is the first word after `NAME=value` words, redirections (with a separate target word) and zsh's reserved words `if then elif else do while until ! { time nocorrect coproc` and `repeat` with its count, as zsh finds it; not after `command`, `builtin`, `exec`, `noglob` or `-`, where zsh does not expand. An assignment word holding a quote, `$` or a backslash hands the search to `_ALIAS_HEAD_AWK`, which splits words at blanks outside quotes, `$( )`, `${ }` and backticks. When the expansion ends in a space, the word right after the alias is replaced too when it is such an alias, as zsh's trailing-space rule does, 8 times; a 9th word that is still such an alias becomes the command name `$KERN_ALIAS_PAST_8`, which G00 reads as built at run time (deny under autopilot; no vote interactively, as without aliases).
++- `alias_expand SEG`: sets `ALIAS_EXP` to SEG with its head word replaced; exit 1 when that word is not such an alias. The head word is the first word after `NAME=value` words, redirections (with a separate target word) and zsh's reserved words `if then elif else do while until ! { time nocorrect coproc` and `repeat` with its count, as zsh finds it; not after `command`, `builtin`, `exec`, `noglob` or `-`, where zsh does not expand. An assignment word holding a quote, `$` or a backslash hands the search to `_ALIAS_HEAD_AWK`, which splits words at blanks outside quotes, `$( )`, `${ }` and backticks, each `$( )` and `${ }` keeping its own quote state. When the expansion ends in a space, the word right after the alias is replaced too when it is such an alias, as zsh's trailing-space rule does, 8 times; a 9th word that is still such an alias starts a record of its own (after `; `) whose command name is `$KERN_ALIAS_PAST_8`, which G00 reads as built at run time whatever the expansions before it start with (deny under autopilot; no vote interactively, as without aliases).
+ - `_alias_var WORD VAR`: sets VAR to the name of WORD's `_KA_` variable; exit 1 when WORD is no such alias or holds a byte outside the name characters.
+ - Parsing: `alias [--] name=value` lines, a CRLF read as LF; value bare, single-quoted with `'\''`, or backslash-escaped. Skipped: `$'...'` and double-quoted values, unclosed quotes, a control byte in the value, names holding a quote, `/`, `$`, a backtick, a backslash or a byte outside printable ASCII, names over 256 bytes, lines over 4096 bytes, and alias lines after the first 1 MB of them. The head-word chain is followed as zsh does: each name at most once, at most 8 times, while the expansion is at most 4096 bytes.
+ - Accepted limits: the hook input and environment do not name the session's snapshot (measured 2026-10-14: one snapshot per Claude Code process; the Bash tool runs `zsh -c 'source <snapshot> && eval ...'`), so the newest stands in for it. Not followed: aliases inside an expansion other than its head-word chain, global aliases, and an alias defined in the same Bash call and run through `eval`, `$( )` or a backtick (G00 denies an alias definition under autopilot). Over-expansion, harmless because expansions only add votes: G16 runs `git_words` on the lowercased command, so its lookup can find an alias zsh would not run (`gbD` is looked up as `gbd`); and an alias is expanded inside `bash -c`, `sh -c` and ssh remote command text too, where the snapshot's aliases are not defined. An expansion sets no context for the command's own later records: `gaa && git commit -m x` loses G6's stale-index reason, though the decision is unchanged.
+diff --git a/hooks/lib/aliases.sh b/hooks/lib/aliases.sh
+index 3422a48..5428efe 100644
+--- a/hooks/lib/aliases.sh
++++ b/hooks/lib/aliases.sh
+@@ -102,7 +102,8 @@ END {
+ # _ALIAS_HEAD_AWK: for a simple command whose leading words include an assignment that holds a quote, a
+ # $ or a backslash (X='a b' gpf!), prints three lines: the text before the head word, the head word and
+ # the text after it, all as written. Words are split at blanks outside quotes, $( ), ${ } and backticks;
+-# the words skipped are those alias_expand skips. Prints nothing when there is no head word. A word it
++# each $( ) or ${ } keeps its own quote state, so a quote inside one closes there. The words skipped are
++# those alias_expand skips. Prints nothing when there is no head word. A word it
+ # splits wrongly can only add or miss an expansion record, which git_words prints after the command's
+ # own records.
+ # shellcheck disable=SC2016 # awk text
+@@ -120,10 +121,11 @@ END {
+       if (q == sq) { if (c == sq) q = ""; continue }
+       if (c == "\\") { i++; continue }
+       if (q == "`") { if (c == "`") q = ""; continue }
+-      if (c == "$" && (C[i + 1] == "(" || C[i + 1] == "{")) { d++; i++; continue }
+-      if (d && (c == "(" || c == "{")) { d++; continue }
+-      if (d && (c == ")" || c == "}")) { d--; continue }
+-      if (q == "\"") { if (c == "\"" && !d) q = ""; continue }
++      # QS[d]: the quote open outside the $( ) or ${ } at depth d, restored when it closes.
++      if (c == "$" && (C[i + 1] == "(" || C[i + 1] == "{")) { QS[++d] = q; q = ""; i++; continue }
++      if (q == "\"") { if (c == "\"") q = ""; continue }
++      if (d && (c == "(" || c == "{")) { QS[++d] = ""; continue }
++      if (d && (c == ")" || c == "}")) { q = QS[d--]; continue }
+       if (c == sq || c == "\"" || c == "`") { q = c; continue }
+       if (!d && (c == " " || c == "\t")) break
+     }
+@@ -161,25 +163,67 @@ alias_snapshot() {
+   printf '%s\n' "$newest"
+ }
+ 
++# _ALIASES_CACHE_V: the format of the alias cache. Bump it when _ALIASES_AWK's output or the cache
++# layout changes meaning; the cache header also holds the awk program's length.
++_ALIASES_CACHE_V=1
++
++# _alias_key FILE: prints FILE's size and modification time in seconds, from BSD or GNU stat; exit 1
++# when neither reads it.
++_alias_key() {
++  local k
++  k=$(stat -f '%z %m' "$1" 2>/dev/null) || k=$(stat -c '%s %Y' "$1" 2>/dev/null) || return 1
++  case "$k" in '' | *[!0123456789\ ]* | ' '* | *' ' | *' '*' '*) return 1 ;; esac
++  case "$k" in *' '*) printf '%s\n' "$k" ;; *) return 1 ;; esac
++}
++
++# _alias_table: reads `<hex of name><TAB>expansion` lines on stdin into _KA_<hex>, and sets
++# KERN_ALIASES=1 for each it keeps. The lines are data: a line whose name is not hex digits is skipped,
++# nothing in a line is evaluated, and reading stops after 4 MB.
++_alias_table() {
++  local h v t=0
++  while IFS=$'\t' read -r h v; do
++    t=$((t + ${#h} + ${#v} + 2))
++    [ "$t" -le 4194304 ] || break
++    case "$h" in '' | *[!0123456789abcdef]*) continue ;; esac
++    [ -n "$v" ] || continue
++    printf -v "_KA_$h" '%s' "$v"
++    KERN_ALIASES=1
++  done
++  return 0
++}
++
+ # aliases_load: sets one variable _KA_<hex of name> per alias whose expansion holds a git or gh word,
+ # holding its expansion, and KERN_ALIASES=1 when there is at least one. Names are hex-encoded because
+ # alias names hold characters such as ! and - that a variable name cannot; two hex digits per byte keep
+ # distinct names apart. The snapshot is read as text by awk, at most its first 4 MB; nothing from it is
+ # evaluated. A missing, unreadable or unparseable snapshot sets nothing, which changes nothing, and so
+ # does any failure here: it never stops the hook.
++# The parsed table is cached in aliases.cache under the state dir (state.sh), whose first line names the
++# cache format, the snapshot's path, size and modification time; a cache whose first line differs is
++# rebuilt. The cache is read as data by _alias_table, like the parse it replaces, and a forged one can
++# only add expansions, as a forged snapshot can. A cache that cannot be read or written leaves the parse
++# as the only source; a symlinked cache or state dir is never used.
+ aliases_load() {
+-  local snap out h v
++  local snap out h key dir="" cache="" line="" tmp
+   KERN_ALIASES=""
+   # The table holds only what this snapshot defines, never a _KA_ variable from the environment.
+   for h in ${!_KA_@}; do unset "$h"; done
+   snap=$(alias_snapshot) || return 0
++  if declare -F state_dir >/dev/null && key=$(_alias_key "$snap") && dir=$(state_dir); then
++    cache="$dir/aliases.cache"
++    line="kern aliases $_ALIASES_CACHE_V ${#_ALIASES_AWK}"$'\t'"$snap"$'\t'"$key"
++    if [ -f "$cache" ] && [ ! -L "$cache" ] && [ ! -L "$dir" ] &&
++      { IFS= read -r h && [ "$h" = "$line" ] && _alias_table; } 2>/dev/null <"$cache"; then
++      return 0
++    fi
++  fi
+   out=$(set -o pipefail; head -c 4194304 2>/dev/null <"$snap" | LC_ALL=C awk -v sq="'" "$_ALIASES_AWK" 2>/dev/null) || return 0
+-  while IFS=$'\t' read -r h v; do
+-    case "$h" in '' | *[!0123456789abcdef]*) continue ;; esac
+-    [ -n "$v" ] || continue
+-    printf -v "_KA_$h" '%s' "$v"
+-    KERN_ALIASES=1
+-  done <<<"$out"
++  _alias_table <<<"$out"
++  # A new file in the state dir, then a rename over the cache, so a planted symlink is never written through.
++  if [ -n "$cache" ] && (umask 077 && mkdir -p "$dir") 2>/dev/null && [ ! -L "$dir" ] &&
++    tmp=$(mktemp "$dir/.aliases.cache.XXXXXX" 2>/dev/null); then
++    { printf '%s\n' "$line" "$out" >"$tmp" && mv -f "$tmp" "$cache"; } 2>/dev/null || rm -f "$tmp" 2>/dev/null
++  fi
+   return 0
+ }
+ 
+@@ -216,8 +260,9 @@ _alias_var() {
+ # alias_expand SEG: when the head word of the simple command SEG is an alias aliases_load set, sets
+ # ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. When the expansion ends
+ # in a space, the word after the alias is replaced too when it is such an alias, as zsh's trailing-space
+-# rule does, and so on, at most 8 times; a 9th word that is still such an alias becomes the command name
+-# $KERN_ALIAS_PAST_8, which G00 reads as built at run time, so autopilot denies it. As zsh does, the
++# rule does, and so on, at most 8 times; a 9th word that is still such an alias starts a record of its
++# own whose command name is $KERN_ALIAS_PAST_8, which G00 reads as built at run time, so autopilot denies
++# it whatever word the expansions before it start with (nocorrect, watch). As zsh does, the
+ # head word is the first word after NAME=value words, redirections (with a target in the next word when
+ # none is attached) and the reserved words if then elif else do while until ! { time nocorrect coproc
+ # and repeat with its count; zsh does not expand an alias after command, builtin, exec, noglob or -, and
+@@ -282,7 +327,7 @@ EOF
+     _alias_var "$w" v || break
+     if [ "$n" -ge 8 ]; then
+       # shellcheck disable=SC2016 # a literal $, for G00
+-      pre="$pre"'$KERN_ALIAS_PAST_8 '
++      pre="$pre"'; $KERN_ALIAS_PAST_8 '
+       break
+     fi
+     pre="$pre${!v}"
+diff --git a/hooks/pre-tool-use b/hooks/pre-tool-use
+index 72542fe..9689fa5 100755
+--- a/hooks/pre-tool-use
++++ b/hooks/pre-tool-use
+@@ -57,7 +57,7 @@ need state.sh prompt_hashes
+ need decide.sh vote fail_closed emit_decision
+ need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words git_sub cmd_head in_main_checkout
+ need gitctx.sh current_branch base_branch_name branch_protected push_targets with_timeout gh_sub word_value word_has
+-need aliases.sh alias_snapshot aliases_load alias_text _alias_var alias_expand
++need aliases.sh alias_snapshot _alias_key _alias_table aliases_load alias_text _alias_var alias_expand
+ 
+ # unparseable WHAT: fail closed on input the JSON reader could not parse, and stop.
+ unparseable() {
+diff --git a/tests/hooks/aliases.bats b/tests/hooks/aliases.bats
+index 7ec2aa5..d256661 100644
+--- a/tests/hooks/aliases.bats
++++ b/tests/hooks/aliases.bats
+@@ -374,8 +374,8 @@ noalias_hook() {
+   case "$got" in *$'\n\t'* | $'\t'*) echo "marker left in: $got"; return 1 ;; esac
+ }
+ 
+-@test "with aliases loaded, no command gets a weaker decision than without them, in both modes" {
+-  local h c mode want got s rank_want rank_got W SD
++@test "with aliases loaded, no command gets a weaker decision than without them, in both modes, a forged cache included" {
++  local h c mode want got s rank_want rank_got W SD forged
+   h=$(noalias_hook)
+   W="$BATS_TEST_TMPDIR/wt"
+   SD="$CLAUDE_PLUGIN_DATA/sessions"
+@@ -423,12 +423,20 @@ alias -- gst='git status'
+ alias -- grt='cd "$(git rev-parse --show-toplevel || echo .)"'
+ SNAP
+   rank() { case "$(decision_of "$1")" in deny) echo 3 ;; ask) echo 2 ;; none) echo 1 ;; allow) echo 0 ;; *) echo 9 ;; esac; }
++  # A forged cache: the hostile table under a first line that matches the oh-my-zsh snapshot.
++  KERN_SHELL_SNAPSHOT="$BATS_TEST_TMPDIR/omz.sh" bash "$(kern_root)/hooks/pre-tool-use" <<<"$(bash_payload ls)" >/dev/null
++  forged="$BATS_TEST_TMPDIR/forged.cache"
++  { head -n 1 "$SD/aliases.cache"
++    bash -c '. "$1/hooks/lib/aliases.sh"; LC_ALL=C awk -v sq="'"'"'" "$_ALIASES_AWK" <"$2"' _ "$(kern_root)" "$BATS_TEST_TMPDIR/hostile.sh"
++  } >"$forged"
++  [ "$(wc -l <"$forged")" -gt 10 ]
+   for mode in off on; do
+     set_autopilot "$mode"
+     while IFS= read -r c; do
+       want=$(env KERN_GUARDS= bash "$h" <<<"$(bash_payload "$c")")
+       rank_want=$(rank "$want")
+-      for s in omz hostile; do
++      for s in omz hostile forged; do
++        if [ "$s" = forged ]; then cp "$forged" "$SD/aliases.cache"; s=omz; fi
+         got=$(env KERN_GUARDS= KERN_SHELL_SNAPSHOT="$BATS_TEST_TMPDIR/$s.sh" bash "$(kern_root)/hooks/pre-tool-use" <<<"$(bash_payload "$c")")
+         rank_got=$(rank "$got")
+         [ "$rank_got" != 9 ] && [ "$rank_got" -ge "$rank_want" ] ||
+@@ -459,3 +467,132 @@ x2 git push --force origin main
+ CORPUS
+   done
+ }
++
++@test "past 8 trailing-space words the marker is a record of its own, so expansions through nocorrect, watch or a wrapper's value still fail closed" {
++  local a c i cmds=()
++  # The oh-my-zsh shape: _ is `sudo `, and sudo is `nocorrect sudo`.
++  snap "alias -- _='sudo '" "alias -- sudo='nocorrect sudo'" "alias -- gpf!='git push --force'" \
++    "alias -- w='watch '" "alias -- to='timeout 5 '" "alias -- eu='env -u X '" "alias -- sr='sudo -u root '"
++  for a in "_ 9" "_ 12" "w 9" "to 9" "eu 9" "sr 9"; do
++    c=""
++    for ((i = 0; i < ${a#* }; i++)); do c="$c${a% *} "; done
++    cmds+=("${c}gpf! origin main")
++  done
++  set_autopilot on
++  expect deny "${cmds[@]}"
++  all "${cmds[0]}"
++  [[ "$output" == *'kern G00: '*'$KERN_ALIAS_PAST_8'* ]] || { echo "$output"; return 1; }
++  # Eight words still expand in full: `_ ×8 gpf!` is `nocorrect sudo ×8 git push --force`.
++  all "_ _ _ _ _ _ _ _ gpf! origin main"
++  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
++  # Interactively G00 votes nothing, so these get no vote, as without aliases.
++  set_autopilot off
++  expect none "${cmds[0]}" "${cmds[2]}"
++}
++
++@test "the head search keeps each \$( )'s own quotes, so a quote or a parenthesis inside one does not hide the alias" {
++  local c
++  cat >"$BATS_TEST_TMPDIR/cases" <<'CASES'
++X=$(printf "%s" a) gpf! origin main
++X=$(echo "(") gpf! origin main
++X=$(echo ")" ) gpf! origin main
++X="$(echo "a b")" gpf! origin main
++X=$(a "$(b "c d")" e) gpf! origin main
++X=${Y:-"}"} gpf! origin main
++X=$(echo 'a ) b') gpf! origin main
++X='' 'gpf!' origin main
++CASES
++  run bash -c '. "$1/hooks/lib/aliases.sh"
++    while IFS= read -r c; do printf "%s" "$c" | LC_ALL=C awk -v sq="'"'"'" "$_ALIAS_HEAD_AWK" | sed -n 2p; done <"$2"' \
++    _ "$(kern_root)" "$BATS_TEST_TMPDIR/cases"
++  [ "$output" = $'gpf!\ngpf!\ngpf!\ngpf!\ngpf!\ngpf!\ngpf!\n\'gpf!\'' ] || { echo "$output"; return 1; }
++  set_autopilot on
++  # \" is a quote once the JSON payload is decoded.
++  for c in 'X=$(printf \"%s\" a) gpf! origin main' 'X=$(echo \"(\") gpf! origin main' 'X=$(echo \")\" ) gpf! origin main'; do
++    run_guard "$(payload PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}")"
++    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
++    [[ "$output" == *"kern G1"* ]] || { echo "$c -> $output"; return 1; }
++  done
++}
++
++@test "the parsed alias table is cached in the state dir, and the next call reads the cache" {
++  local c="$CLAUDE_PLUGIN_DATA/sessions/aliases.cache" first
++  all "gpf! origin main"
++  [ "$(decision_of "$output")" = deny ]
++  [ -f "$c" ]
++  first=$(head -n 1 "$c")
++  [[ "$first" == "kern aliases "*$'\t'"$SNAPS/snapshot-zsh-1791935887205-ewlszo.sh"$'\t'* ]] || { echo "$first"; return 1; }
++  # zz is in the cache only (7a7a is its hex): its vote shows the cache was read, not the snapshot.
++  printf '%s\n7a7a\tgit push --force\n' "$first" >"$c"
++  all "zz origin main"
++  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
++}
++
++@test "a cache is rebuilt when the snapshot's path, size or modification time changes" {
++  local c="$CLAUDE_PLUGIN_DATA/sessions/aliases.cache" f="$SNAPS/snapshot-zsh-1791978476876-cqjrpm.sh"
++  snap "alias -- x='git push --force'"
++  expect deny "x origin main"
++  # Same size, later time.
++  printf "alias -- x='git status --abc'\n" >"$f"
++  touch -t 203101010000 "$f"
++  expect none "x origin main"
++  # Other size, same time.
++  printf "alias -- x='git push --force --verbose'\n" >"$f"
++  touch -t 203101010000 "$f"
++  expect deny "x origin main"
++  # Another snapshot path.
++  printf "alias -- x='git status --abc'\n" >"$BATS_TEST_TMPDIR/other.sh"
++  KERN_SHELL_SNAPSHOT="$BATS_TEST_TMPDIR/other.sh" all "x origin main"
++  [ "$(decision_of "$output")" = none ] || { echo "$output"; return 1; }
++  [[ "$(head -n 1 "$c")" == *$'\t'"$BATS_TEST_TMPDIR/other.sh"$'\t'* ]] || false
++}
++
++@test "a forged cache is data: substitutions and backticks in it run nothing, and lines without a hex name are skipped" {
++  local c="$CLAUDE_PLUGIN_DATA/sessions/aliases.cache" m="$BATS_TEST_TMPDIR/marks" first cmd
++  mkdir -p "$m"
++  all ls
++  first=$(head -n 1 "$c")
++  # h1, h2 and h3 are 6831, 6832 and 6833.
++  {
++    printf '%s\n' "$first"
++    printf '6831\tgit status $(touch %s/c1)\n' "$m"
++    printf '6832\tgit status `touch %s/c2`\n' "$m"
++    printf '$(touch %s/c3)\tgit push --force\n' "$m"
++    printf 'touch %s/c4\n; touch %s/c5\n`touch %s/c6`\n' "$m" "$m" "$m"
++    printf '6833\tgit push --force\n'
++  } >"$c"
++  for cmd in h1 h2 "h3 origin main"; do
++    all "$cmd"
++    [ "$(decision_of "$output")" != error ] || { echo "$cmd -> $output"; return 1; }
++  done
++  [ "$(decision_of "$output")" = deny ]
++  run ls -A "$m"
++  [ -z "$output" ] || { echo "ran: $output"; return 1; }
++}
++
++@test "a cache that cannot be written, or a symlinked cache or state dir, changes nothing" {
++  local sd="$CLAUDE_PLUGIN_DATA/sessions" want
++  all "gpf! origin main"
++  want=$output
++  [ "$(decision_of "$want")" = deny ]
++  rm -rf "$sd"
++  mkdir -p "$sd"
++  chmod 500 "$sd"
++  all "gpf! origin main"
++  chmod 700 "$sd"
++  [ "$output" = "$want" ] || { echo "$output"; return 1; }
++  [ ! -e "$sd/aliases.cache" ]
++  # A symlinked cache is replaced by a rename, never written through.
++  printf 'keep\n' >"$BATS_TEST_TMPDIR/target"
++  ln -s "$BATS_TEST_TMPDIR/target" "$sd/aliases.cache"
++  all "gpf! origin main"
++  [ "$output" = "$want" ] || { echo "$output"; return 1; }
++  [ "$(cat "$BATS_TEST_TMPDIR/target")" = keep ]
++  # A symlinked state dir is neither read nor written.
++  rm -rf "$sd"
++  mkdir -p "$BATS_TEST_TMPDIR/real-sessions"
++  ln -s "$BATS_TEST_TMPDIR/real-sessions" "$sd"
++  all "gpf! origin main"
++  [ "$output" = "$want" ] || { echo "$output"; return 1; }
++  [ ! -e "$BATS_TEST_TMPDIR/real-sessions/aliases.cache" ]
++}

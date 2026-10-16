@@ -1,0 +1,62 @@
+# Review package: 2d79931..HEAD
+
+## Commits
+92cbf69 M2: ledger-open hashes git status byte for byte
+
+## Files changed
+ scripts/ledger-open       | 2 +-
+ tests/scripts/ledger.bats | 9 +++++++++
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/scripts/ledger-open b/scripts/ledger-open
+index 73b03d4..1054baa 100755
+--- a/scripts/ledger-open
++++ b/scripts/ledger-open
+@@ -11,21 +11,21 @@ here=$(cd "$(dirname "$0")" && pwd -P)
+ # shellcheck source=/dev/null
+ . "$here/../hooks/lib/settings.sh"
+ 
+ # main_state: "<main root> branch=<name> status=<hash of git status --porcelain>".
+ main_state() {
+   local m b st
+   m=$(kern_main_root "$PWD") || { echo "ledger-open: not a git repository" >&2; exit 2; }
+   b=$(git -C "$m" symbolic-ref -q --short HEAD 2> /dev/null) || b='(detached)'
+   # Read first: a failing git status inside a pipe or printf argument would be hashed as empty input.
+   st=$(git --no-optional-locks -C "$m" status --porcelain) || { echo "ledger-open: git status failed in $m" >&2; exit 2; }
+-  printf '%s branch=%s status=%s\n' "$m" "$b" "$(printf '%s' "$st" | git hash-object --stdin)"
++  printf '%s branch=%s status=%s\n' "$m" "$b" "$({ [ -z "$st" ] || printf '%s\n' "$st"; } | git hash-object --stdin)"
+ }
+ 
+ if [ "${1-}" = --summary ]; then
+   [ $# -eq 2 ] && [ -f "$2/ledger.md" ] || { echo "usage: ledger-open --summary DIR (DIR holds ledger.md)" >&2; exit 2; }
+   grep -E '^(Decision:|parked:|Preflight:|Task [0-9]+: minor \(deferred\):)' "$2/ledger.md" || true
+   rec=$(sed -n 's/^Main: //p' "$2/ledger.md" | head -n 1)
+   now=$(main_state)
+   if [ "$rec" = "$now" ]; then
+     echo "main: unchanged"
+     exit 0
+diff --git a/tests/scripts/ledger.bats b/tests/scripts/ledger.bats
+index b98a40a..c6cdfdd 100644
+--- a/tests/scripts/ledger.bats
++++ b/tests/scripts/ledger.bats
+@@ -186,10 +186,19 @@ approved_plan() {
+ }
+ 
+ @test "ledger-open refuses when git status fails and does not record an empty-input hash" {
+   REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+   approved_plan "$TMP/a.md"
+   printf 'garbage' > "$REPO/.git/index"
+   run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/fresh"
+   [ "$status" -ne 0 ]
+   [ ! -e "$TMP/fresh/ledger.md" ]
+ }
++
++@test "the recorded status hash equals git status --porcelain piped to git hash-object" {
++  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
++  printf 'x\n' > "$REPO/stray.txt"
++  approved_plan "$TMP/a.md"
++  dir=$(bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l" 2> /dev/null)
++  want=$(git status --porcelain | git hash-object --stdin)
++  grep -q "status=$want\$" "$dir/ledger.md"
++}

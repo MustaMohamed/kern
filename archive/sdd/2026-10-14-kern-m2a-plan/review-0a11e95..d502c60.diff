@@ -1,0 +1,125 @@
+diff --git a/skills/plan/SKILL.md b/skills/plan/SKILL.md
+index 7fe79ac..9d87593 100644
+--- a/skills/plan/SKILL.md
++++ b/skills/plan/SKILL.md
+@@ -7,23 +7,23 @@ argument-hint: "[spec path | issue id]"
+ 
+ # plan
+ 
+-Produce a plan a zero-context executor can run, with PR boundaries inside the scope gate. Reached by the kernel row for an agreed spec with more than one step, or typed as `/kern:plan`.
++Produce a plan a zero-context executor can run, with PR boundaries inside the scope gate. Reached by the kernel row for an agreed spec with more than one step, or as `/kern:plan`.
+ 
+ ## Steps
+ 
+ 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+-1. Check preconditions: a spec with `status: approved`, or issue acceptance criteria the user pointed to. Not approved: stop and route to define, writing nothing. A plan for this spec exists: update it in place. An unfinished plan for other work: stop and ask. Look for existing PRs with `gh pr list --search <id> --state all`; if gh fails or is not signed in: say so and ask. Get `tracker` from `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get tracker`, else `kern-detect tracker`; both exit 3: ask.
+-2. Skip the plan for 1 or 2 files with an obvious approach: say so, write nothing, and the kernel routes to implement.
+-3. Ground the plan with `kern:investigator` subagents on `model.investigator` (default `sonnet`): file pointers, conventions, stored shapes and their writers. Get each verify command (`test.focused`, `test.full`, `typecheck`, `lint`, `build`) from `kern-get`, else `kern-detect`, and name its source in the plan; both exit 3: ask.
+-4. Send open product questions to the user as options with a recommendation; send fact questions to subagents. A question that reading cannot settle (does this library do X?) gets a spike first, through define step 8 in a `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug> --detach` worktree (exit 2: say why and ask).
+-5. Write a falsifiable done predicate per acceptance criterion, and the baseline to capture before any change.
++1. Check preconditions: a spec file with `status: approved`. Not approved: stop and route to define, writing nothing; issue acceptance criteria alone are not approved (its bounded path records them as an approved short spec). A plan for this spec exists: update it in place. An unfinished plan for other work: stop and ask. Look for existing PRs with `gh pr list --search <id> --state all` (no issue id: the slug or title words); if gh fails or is not signed in: say so and ask. Get `tracker` from `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get tracker`, else `kern-detect tracker`; both exit 3: ask.
++2. Skip the plan for 1 or 2 files with an obvious approach: say so, write nothing; the kernel routes to implement.
++3. Ground it with `kern:investigator` subagents on `model.investigator`: file pointers, conventions, stored shapes and their writers. Get each verify command (`test.*`, `typecheck`, `lint`, `build`) from `kern-get`, else `kern-detect`, naming its source in the plan; both exit 3: ask.
++4. Product questions go to the user as options with a recommendation; fact questions go to subagents. A question that reading cannot settle (does this library do X?) gets a spike first, through define step 8 in a `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug> --detach` worktree (exit 2: say why and ask). Record its answer under Open questions as the branch or SHA plus the evidence.
++5. Write a falsifiable done predicate per acceptance criterion, and the baseline to capture first.
+ 6. Map the files, then build the dependency graph bottom-up.
+-7. Slice into vertical tracer bullets sized for one fresh context. Make the change easy first: a behaviour-preserving prefactor is its own task before the feature. Stored shapes, and a wide mechanical refactor whose call sites span the codebase, change by expand, migrate in batches, then contract. One PR is one change, within `scope_threshold` files or an explicit scope confirmation from the user. Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel.
+-8. Write each task from `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/task-template.md`: exact Files (create, modify, test); Interfaces (Consumes, Produces, with signatures); test-first steps with real code; verify commands; Acceptance as a leading list of criterion numbers; Blocked by; one line per `checklists` item. No placeholders.
+-9. Write the header from `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-template.md`: Goal, issue, spec link, base and promotion path, Global Constraints copied verbatim from the spec's Constraints section, Review Focus (inputs the spec implies but no test exercises, each pinned to a task), `execution:` empty, `commits: ask`.
+-10. Order the riskiest tasks first, put a checkpoint every 2 or 3 tasks, and add a regression check that runs the same scenario on base and head.
+-11. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints: structure, ordering of shared files and services, each consumed name blocked by its producer, every acceptance number covered. Then self-review for placeholders and type consistency, and send the plan to one reviewer subagent with `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md` as its brief, round 1 only.
+-12. Write the plan with the Write tool to `<dir>/<slug>.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir plans` prints (exit 2: say why and ask), with `status: draft`; present a summary in chat (a visual page only when kern's `visual` skill is installed; otherwise say once "visual pages not installed"). Stop the turn: ask for the yes and the `step`, `inline` or `delegate` choice as a typed reply in chat, never through AskUserQuestion, with your one-line recommendation. After the user's yes message, leave the plan file untouched until the approval edit; revising after feedback is fine. On the yes, one Edit sets `status: approved`, `approved: <date>, "<one whole line of the user's yes, verbatim>"` and `execution:` together; run the same plan-check again. Draft tracker sub-issues only on request.
++7. Slice into vertical tracer bullets, each demoable on its own and sized for one fresh context, never a horizontal layer. Make the change easy first: a behaviour-preserving prefactor is its own task before the feature. Stored shapes, and a wide mechanical refactor whose call sites span the codebase, change by expand, migrate in batches, then contract, the contract task blocked by every migrate batch. One PR is one change, within `scope_threshold` files, else stop and ask the user to confirm the scope or split. Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel.
++8. Write each task from `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/task-template.md`: exact Files; Interfaces (Consumes, Produces, with signatures); test-first steps with real code; verify commands; Acceptance as a leading list of criterion numbers; Blocked by; one line per `checklists` item. No placeholders.
++9. Write the header from `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-template.md`: Goal, issue, spec link, base and promotion path, Global Constraints copied verbatim from the spec's Constraints section, Review Focus (inputs no test exercises, each pinned to a task), `execution:` empty, `commits: ask`.
++10. Order the riskiest tasks first, add a checkpoint every 2 or 3 tasks and a regression check running the same scenario on base and head.
++11. Write the plan with the Write tool to `<dir>/<slug>.md`, `<dir>` being what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir plans` prints (exit 2: say why and ask), with `status: draft`. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints: structure, ordering of shared files and services, each consumed name blocked by its producer, every acceptance number covered. Then self-review for placeholders and type mismatches; send the plan to one reviewer subagent with `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md` as its brief, round 1 only.
++12. Present a summary in chat (a visual page only when kern's `visual` skill is installed; else say once "visual pages not installed"). Stop the turn: ask for the yes and the `step`, `inline` or `delegate` choice as a typed reply in chat, never through AskUserQuestion, with your one-line recommendation. A yes with a change request: make it, show it, ask again. A reply that is no explicit yes or names no choice: ask again. After the user's yes message, leave the plan file untouched until the approval edit. On the yes, one Edit sets `status: approved`, `approved: <date>, "<one whole line of the user's yes, verbatim>"` and `execution:` together; run the same plan-check again. Draft tracker sub-issues only on request.
+ 
+ ## Inputs
+ 
+@@ -34,7 +34,7 @@ Produce a plan a zero-context executor can run, with PR boundaries inside the sc
+ | `scope_threshold` | 4 files | PR size gate |
+ | `test.*`, `typecheck`, `lint`, `build` | detected, source printed | verify commands in tasks |
+ | `checklists`, `shared_services` | see define; none | extra lines; ordering |
+-| `tracker` | detected | issue ids and sub-issue drafts |
++| `tracker`, `tracker.first` | detected, `false` | issue ids and sub-issue drafts |
+ | `model.investigator` | `sonnet` | grounding |
+ 
+ ## Outputs
+@@ -43,7 +43,7 @@ Produce a plan a zero-context executor can run, with PR boundaries inside the sc
+ 
+ ## Stops and autopilot
+ 
+-Stops at steps 1, 4 (a spike), 7 and 12. An AskUserQuestion answer records no prompt line, so Guard G20 denies it. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on, G20 denies any approval: write the plan with `status: draft`, give each open question in the reply as `parked: <question>; default: <choice>; why: <one line>`. execute-plan runs only an approved plan.
++Stops at steps 1, 4 (a spike), 7 and 12. An AskUserQuestion answer records no prompt line, so Guard G20 denies it. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on, every stop parks, as G20 denies any approval: the step 4 spike is not run and the step 7 scope question takes its default; write the plan with `status: draft`; put each as `parked: <question>; default: <choice>; why: <one line>` under Open questions in the plan and in the reply. execute-plan runs only an approved plan.
+ 
+ ## Red flags
+ 
+@@ -51,5 +51,5 @@ Stops at steps 1, 4 (a spike), 7 and 12. An AskUserQuestion answer records no pr
+ |---|---|
+ | "The tasks are obvious" | Write them down. Written tasks surface hidden ordering and forgotten edges. |
+ | "These two tasks can run side by side" | Not when they share a file or a service. plan-check says which. |
+-| "I'll work out the unknown during the build" | A question reading cannot settle gets a spike before the plan. |
+-| "One big task is simpler" | A task too big for one fresh context will be half done. Slice it. |
++| "I'll work out the unknown in the build" | A question reading cannot settle gets a spike before the plan. |
++| "One big task is simpler" | A task too big for one fresh context ends half done. Slice it. |
+diff --git a/skills/plan/references/plan-template.md b/skills/plan/references/plan-template.md
+index 08a3c64..4a8a518 100644
+--- a/skills/plan/references/plan-template.md
++++ b/skills/plan/references/plan-template.md
+@@ -24,6 +24,10 @@ The spec's Constraints lines (Always, Ask first, Never), verbatim, then one line
+ 
+ Inputs or conditions the spec implies but no test exercises, most likely first, each naming the task whose test pins it.
+ 
++## Open questions
++
++A spike's answer: the branch or SHA plus the evidence. Under autopilot, each `parked: <question>; default: <choice>; why: <one line>` line. Else none.
++
+ ## File map
+ 
+ | Path | Task | Responsibility |
+diff --git a/tests/skills/plan.test.mjs b/tests/skills/plan.test.mjs
+index 8975a9f..6a8de19 100644
+--- a/tests/skills/plan.test.mjs
++++ b/tests/skills/plan.test.mjs
+@@ -27,7 +27,7 @@ test('plan sections and steps', () => {
+ });
+ 
+ test('plan templates are contracts task-brief and plan-check can read', () => {
+-  assertHeadings('skills/plan/references/plan-template.md', ['# Plan template', '## Global Constraints', '## Review Focus', '## File map']);
++  assertHeadings('skills/plan/references/plan-template.md', ['# Plan template', '## Global Constraints', '## Review Focus', '## Open questions', '## File map']);
+   assertContains('skills/plan/references/plan-template.md', ['Copy from the first `---` line to the end', 'status: draft', 'approved: (set only on an explicit yes', 'execution:', 'commits: ask', '### Task 1:', 'Always, Ask first, Never']);
+   assertMaxBytes('skills/plan/references/plan-template.md', 2200);
+   assertHeadings('skills/plan/references/task-template.md', ['# Task template', '### Task N: <name>']);
+@@ -61,3 +61,30 @@ test('plan pins its approval, lookup and autopilot rules', () => {
+   assertContains('skills/plan/references/task-template.md', ['as a leading list of numbers or ranges such as `1, 3-4`', 'plan-check parses only that list']);
+   assertContains('skills/plan/references/plan-review.md', ['`Verdict: approve | revise`', 'Round 1 only']);
+ });
++
++test('plan pins order, routing and stop rules', () => {
++  const { body } = readDoc(SKILL);
++  const s = steps(body);
++  const w = s[11].indexOf('kern-dir plans');
++  assert.ok(w >= 0 && w < s[11].indexOf('scripts/plan-check'), 'step 11 writes the plan before it runs plan-check');
++  assert.ok(!s[12].includes('kern-dir plans') && !s[12].includes('Write tool'), 'step 12 writes nothing new');
++  assertContains(SKILL, [
++    'A plan for this spec exists: update it in place',
++    'An unfinished plan for other work: stop and ask',
++    'issue acceptance criteria alone are not approved (its bounded path records them as an approved short spec)',
++    '(no issue id: the slug or title words)',
++    'else stop and ask the user to confirm the scope or split',
++    'Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel',
++    'round 1 only',
++    'each demoable on its own',
++    'the contract task blocked by every migrate batch',
++    'Record its answer under Open questions as the branch or SHA plus the evidence',
++    'A yes with a change request: make it, show it, ask again',
++    'A reply that is no explicit yes or names no choice: ask again',
++    '`tracker`, `tracker.first`',
++    'every stop parks',
++    'the step 4 spike is not run and the step 7 scope question takes its default',
++    'under Open questions in the plan and in the reply',
++  ]);
++  assertContains('skills/plan/references/plan-template.md', ['## Open questions', 'branch or SHA plus the evidence', '`parked: <question>; default: <choice>; why: <one line>`']);
++});

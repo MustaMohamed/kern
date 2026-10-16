@@ -1,0 +1,554 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 1f831b1..92668ab 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,8 +4,9 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ 
+ ## [Unreleased]
+ 
+-- Guards read through zsh's precommand modifiers `noglob` and `nocorrect`, and through `coproc` and `repeat` with its count, to the command after them. `noglob eval 'git push --force origin main'`, `nocorrect eval`, `repeat 1 eval`, `coproc eval`, `repeat -1+2 git push --force origin main` and `noglob sh <<EOF` with a push in its body are denied in both modes, where under autopilot they got no vote. A command behind one gets the vote it gets alone, so `noglob cat <state file>` is a read, as `cat` is. No guard takes a `cd` behind one as a move: bash runs none of these words, zsh runs a `coproc` command in a subshell, and `repeat 0` runs nothing.
+-- Guard G16 keeps its reading of a `cd` into a `.claude` directory or the sessions dir across a later `cd` whose target it cannot know: no operand, `-`, `+N`, two operands, `~user`, a `$`, a backtick or a glob, or a relative path after one of these. So `cd ~/.claude && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json` asks, and is denied under autopilot, where before it got no vote; a write after such a `cd` from the sessions dir stays denied. A `cd .`, or any relative `cd` from the sessions dir, keeps the reading too. A `cd` to an absolute path, `~` or `~/path` still ends it, and for `.claude` so does a relative `cd` from a known directory.
++- Guards read through zsh's precommand modifiers `noglob` and `nocorrect`, and through `coproc` and `repeat` with its count, to the command after them. `noglob eval 'git push --force origin main'`, `nocorrect eval`, `repeat 1 eval`, `coproc eval`, `repeat -1+2 git push --force origin main` and `noglob sh <<EOF` with a push in its body are denied in both modes, where under autopilot they got no vote. A command behind one gets the vote it gets alone, so `noglob cat <state file>` is a read, as `cat` is. A `cd` behind `noglob`, `nocorrect` or `repeat N` moves, as zsh moves it, and gets the vote the plain `cd` gets; one under `coproc` (a subshell), `repeat 0`, or a reserved word zsh does not find as one (quoted, or after `noglob` or `nocorrect`) does not move. A modifier word after the command name, such as `cd x 2> noglob`, changes nothing.
++- Guard G1 judges a push after a `cd`, or under `env -C` or `sudo -D`, where it would run without the move too, so that judgement's deny holds: `cd . && git push --force-with-lease origin feat` over another author's commit is denied, where it asked. The ask that the directory is unknown stays, and is still denied under autopilot.
++- Guard G16 keeps its reading of a `cd` into a `.claude` directory or the sessions dir across a later `cd` whose target it cannot know: no operand, `-`, `+N`, two operands, `~user`, a `$`, a backtick or a glob, or a relative path after one of these. So `cd ~/.claude && cd "$(git rev-parse --show-toplevel || echo .)" && sed -i '' s/a/b/ settings.json` asks, and is denied under autopilot, where before it got no vote; a write after such a `cd` from the sessions dir stays denied. Such a `cd`, and `popd`, can go back to a directory the command was in, so it also takes back every reading held earlier in the command: `cd <sessions> && cd /tmp && cd - && echo x > foo` is denied, and `cd ~/.claude && cd /tmp && cd ~- && sed -i '' s/a/b/ settings.json` asks. A `cd .`, or any relative `cd` from the sessions dir, keeps the reading too. A `cd` to an absolute path, `~` or `~/path` still ends it. G16 follows a `cd` to a known target as text, so a relative `cd` that leaves a `.claude` directory ends that reading, and one that comes back into it, as in `cd ~/.claude && cd agents && cd .. && sed -i '' s/a/b/ settings.json`, restores it. Known limits: a `cd` to a known target that fails, followed by `;`, is still taken as a move (`cd ~/.claude && cd /nonexistent; sed -i '' s/a/b/ settings.json` gets no vote); so is bash's `pushd -n`, which does not move, and a `cd` that runs in a subshell, a pipeline, the background or behind a wrapper (`( cd /tmp )`, `cd /tmp | cat`, `sudo cd /tmp`, zsh's `command cd /tmp`); a relative `cd` that CDPATH (or zsh's cdpath) resolves elsewhere is followed as if from the current directory; and a path through a symlink into the sessions dir is not read as the sessions dir, since G16 matches state by path text.
+ - Guard G6 still scans the current repository for a commit or push after a `cd`, or under `env -C`, `--git-dir`, `--work-tree`, `GIT_DIR=` or `GIT_INDEX_FILE=`, so a secret staged there is denied in both modes; before, `(cd .); git commit -m x` with a staged key only asked. The ask that it could not scan the moved part stays, and is still denied under autopilot.
+ - Guards judge a Bash command whose head word is a shell alias from the Claude Code shell snapshot, such as `gpf! origin main`, as the git or gh command it expands to, as well as itself. With aliases loaded, the guards read the command's own simple commands exactly as without aliases, in the same order and context, then every expansion after all of them, so an alias can only add votes: it never removes a deny or an ask, and never gets an allow, which kern gives only to a command that starts with git or gh. The head word is found after assignments (quoted ones included), redirections and zsh's reserved words (`if`, `!`, `time` and the like), in each simple command, `$( )` and `eval`. An alias whose value ends in a space, such as `_='sudo '`, also expands the word after it, as zsh's trailing-space rule does, so `_ gpf! origin main` is judged as `sudo git push --force origin main`; past 8 such words, a word that is still an alias is denied under autopilot. G2, G3, G4, G13, G14 and G15, which skip a command whose text names no gh, push, deploy tool or network client, read the expansion's text too, so `prc` for `gh pr create`, `gp origin production` as a push to a deploy branch, and an alias that runs psql against a protected target are judged. kern reads the snapshot as text and never runs it; a missing, unreadable or unparseable snapshot changes nothing. It caches the parsed table in its state dir, keyed by the snapshot's path, size, modification and change times and inode, and reads the cache as data the same way; a forged cache, like a forged snapshot, can only add votes. This removes the 0.2.0 known limit on shell aliases. Known limits, left for M3: the newest snapshot stands in for the session's, which the hook input does not name; an alias defined and used in one Bash call through `eval`, `$( )` or a backtick is not judged interactively (G00 denies the definition under autopilot); nor is an alias past another alias's head word, a global alias, a `$'...'` or double-quoted alias value, a chain of aliases deeper than 8, or interactively an alias past 8 trailing-space words; an expansion no longer sets context for the command's later records, so `gaa && git commit -m x` loses G6's stale-index reason (its decision stays); a snapshot with thousands of aliases slows every Bash call, by about 0.6 s for 10,000; G16 and G20 match only the command's own text, not an alias's expansion; and the shell-snapshots folder is writable, so kern reads a newer snapshot written there, though that can only add votes, never remove a deny or an ask or add an allow.
+ - help: allows only the exact git commands it prescribes (`git remote -v`, `git rev-parse --git-common-dir`, `git check-ignore -q *`, `git worktree list`); `git remote *`, `git symbolic-ref *` and `git log *` could write config, move HEAD or run a program with no prompt.
+diff --git a/hooks/guards/g01-git.sh b/hooks/guards/g01-git.sh
+index 27798b2..817c08d 100644
+--- a/hooks/guards/g01-git.sh
++++ b/hooks/guards/g01-git.sh
+@@ -56,7 +56,8 @@ EOT
+     # After a cd, or a GIT_DIR or GIT_WORK_TREE assignment, later git commands run where G1
+     # cannot tell; under env -C or sudo -D, so does this one.
+     case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=* | *GIT_DIR+=* | *GIT_WORK_TREE+=*) moved=1 ;; esac
+-    # A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
++    # A cd under coproc or repeat 0 does not move (cmd_mod exit 0); one behind noglob, nocorrect or
++    # repeat N does, as in zsh.
+     case "${w[0]}" in
+       cd | pushd | popd) cmd_mod "$rec" || moved=1 ;;
+       builtin) case "${w[1]-}" in cd | pushd | popd) cmd_mod "$rec" || moved=1 ;; esac ;;
+@@ -166,10 +167,11 @@ _g01_merge() {
+ # _g01_git_rec RECORD MOVED git WORDS...: reads git's global options, then checks the subcommand.
+ # The directory is empty (unknown) when MOVED is 1 (after cd, or under env -C or sudo -D) or with
+ # --git-dir or --work-tree. PLAIN is 1
+-# when the record is `git`, then only -C options, then the subcommand.
++# when the record is `git`, then only -C options, then the subcommand. _G01_ALT is where git would run
++# had MOVED been 0, or empty: a cd may stay in this repository, so _g01_push judges a push there too.
+ _g01_git_rec() {
+-  local rec="$1" dir="${CWD:-$PWD}" plain=1
+-  [ "$2" = 1 ] && dir=""
++  local rec="$1" dir="${CWD:-$PWD}" alt="" plain=1
++  if [ "$2" = 1 ]; then alt=$dir; dir=""; fi
+   shift 3
+   case "$rec" in "git "*) ;; *) plain=0 ;; esac
+   while [ $# -gt 0 ]; do
+@@ -179,13 +181,16 @@ _g01_git_rec() {
+         if [ -n "$dir" ]; then
+           case "$2" in /*) dir="$2" ;; *) dir="$dir/$2" ;; esac
+         fi
++        if [ -n "$alt" ]; then
++          case "$2" in /*) alt="$2" ;; *) alt="$alt/$2" ;; esac
++        fi
+         shift 2
+         ;;
+       --git-dir | --work-tree)
+         [ $# -ge 2 ] || return 0
+-        dir=""; plain=0; shift 2
++        dir=""; alt=""; plain=0; shift 2
+         ;;
+-      --git-dir=* | --work-tree=*) dir=""; plain=0; shift ;;
++      --git-dir=* | --work-tree=*) dir=""; alt=""; plain=0; shift ;;
+       -c | --config-env | --namespace | --super-prefix | --attr-source)
+         [ $# -ge 2 ] || return 0
+         plain=0; shift 2
+@@ -200,6 +205,7 @@ _g01_git_rec() {
+   done
+   [ $# -gt 0 ] || return 0
+   _g01_foreign G1 "$1" && return 0
++  _G01_ALT=$alt
+   _g01_git "$dir" "$plain" "$@"
+ }
+ 
+@@ -632,6 +638,9 @@ EOT
+     fix="run git -C <dir> push instead of cd, env -C, sudo -D, --git-dir or --work-tree"
+     vote ask G1 "git push after cd, --git-dir or --work-tree, or under env -C or sudo -D: what it pushes is unknown; $fix"
+     [ "$AUTOPILOT" = 1 ] && vote deny G1 "git push from an unknown directory under autopilot; $fix"
++    # Judged where it would run without the move too, so that judgement's deny holds; PLAIN 0 never
++    # allows.
++    [ -z "${_G01_ALT-}" ] || _g01_push "$_G01_ALT" 0 "$@"
+     return 0
+   fi
+   cur=$(current_branch "$dir")
+diff --git a/hooks/guards/g05-commit.sh b/hooks/guards/g05-commit.sh
+index 1a59453..e831faf 100644
+--- a/hooks/guards/g05-commit.sh
++++ b/hooks/guards/g05-commit.sh
+@@ -44,7 +44,7 @@ EOT
+       esac
+     else
+       # After a cd, or an exported GIT_DIR or GIT_WORK_TREE, later git commands run where G5 cannot
+-      # tell. A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
++      # tell. A cd under coproc or repeat 0 does not move (cmd_mod exit 0).
+       case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) cmd_mod "${_G05_RECS[$i]}" || moved=1 ;; esac
+       _g05_env_has later GIT_DIR GIT_WORK_TREE && moved=1
+     fi
+diff --git a/hooks/guards/g06-secrets.sh b/hooks/guards/g06-secrets.sh
+index e4a6918..7fce39d 100644
+--- a/hooks/guards/g06-secrets.sh
++++ b/hooks/guards/g06-secrets.sh
+@@ -63,7 +63,7 @@ guard_g06() {
+       continue
+     fi
+     if ! _g05_split "$rec"; then
+-      # A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
++      # A cd under coproc or repeat 0 does not move (cmd_mod exit 0).
+       case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) cmd_mod "$rec" || moved=1 ;; esac
+       _g05_env_has later GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && moved=1
+       _g05_env_has later 'GIT_CONFIG*' HOME XDG_CONFIG_HOME && conf=1
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index 7c4ebc7..24f908a 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -338,11 +338,12 @@ _g16_redirects() {
+ # backticks; here-doc bodies are data unless a shell reads them. After a cd into the sessions dir,
+ # every later non-reading command and redirect counts as a write to it, until a cd to a known target
+ # outside it; after a cd into a .claude directory, `.` and a bare settings.json or settings.local.json
+-# are in it, until a cd to a known target. A cd whose target kern cannot know keeps both. A variable
+-# that holds a path is not read (accepted limit).
++# are in it, until a cd to a known target. A cd whose target kern cannot know keeps both, and takes
++# back each one held earlier in the command, as popd does. A variable that holds a path is not read
++# (accepted limit).
+ _g16_bash() {
+   local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m
+-  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1
++  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir
+   cmd=$(ti_get command) || return 0
+   _g16_fold "$cmd"
+   cmd=$_G16_F
+@@ -364,6 +365,8 @@ _g16_bash() {
+   _G16_HOME=$(_g16_lower "${HOME-}")
+   _G16_DATA=${_G16_SD%/sessions}
+   _G16_INCC=0
++  # cdir: the directory while dk is 1, lower-cased text with . and .. resolved as text.
++  cdir=$(_g16_lower "${CWD:-$PWD}")
+   while IFS= read -r seg; do
+     [ -n "$seg" ] || continue
+     # The command name comes first, after the assignments, keywords and wrappers _cmd_words skips.
+@@ -452,8 +455,10 @@ WORDS
+         reads=1
+         # dk: 1 while kern knows the directory. A target is known when it is one operand that
+         # expands to nothing else: an absolute path, ~ or ~/path, or a relative path from a known
+-        # directory. A cd to anything else (no operand, -, +N, two operands, ~user, a $, a glob)
+-        # may stay where it is, so it keeps both readings and leaves the directory unknown.
++        # directory. A cd to anything else (no operand, -, ~-, +N, two operands, ~user, a $, a glob)
++        # may stay where it is or go back to any directory this command was in, so it keeps both
++        # readings, takes back each one held earlier in the command (sd_seen, cc_seen), and leaves
++        # the directory unknown.
+         case "$nop:$last" in
+           1:*[\$\`*?[\{^#]* | 1:*"$_GW_NL"* | 1:- | 1:+* | 1:=*) dk=0 ;;
+           1:/* | 1:'~' | 1:'~'/*) dk=1 ;;
+@@ -461,16 +466,36 @@ WORDS
+           1:*) ;;
+           *) dk=0 ;;
+         esac
+-        # A cd behind noglob, nocorrect, coproc or repeat is not known to move (cmd_mod).
+-        if cmd_mod "$seg"; then dk=0; fi
++        # A cd under coproc or a repeat count that may be 0 may not move (cmd_mod exit 0 or 2).
++        cmd_mod "$seg"
++        [ $? = 1 ] || dk=0
+         if [ "$dk" = 1 ]; then
+-          # A relative target may stay under the sessions dir.
+-          case "$last" in /* | '~'*) in_sd=$seg_s ;; *) [ "$seg_s" = 0 ] || in_sd=1 ;; esac
+-          if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi
++          # A relative target may stay under the sessions dir. The directory is followed as text, so
++          # a relative cd that comes back to a .claude directory (cd agents && cd ..) is in it again.
++          case "$last" in
++            /*) t=$last; in_sd=$seg_s ;;
++            '~'*) t="$_G16_HOME${last#'~'}"; in_sd=$seg_s ;;
++            *) t="$cdir/$last"; [ "$seg_s" = 0 ] || in_sd=1 ;;
++          esac
++          _g16_tidy "$t"
++          cdir=$_G16_T
++          case "$cdir" in
++            */.claude) _G16_INCC=1 ;;
++            *) if _g16_into "$last"; then _G16_INCC=1; else _G16_INCC=0; fi ;;
++          esac
+         else
+-          [ "$seg_s" = 0 ] || in_sd=1
+-          if _g16_into "$last"; then _G16_INCC=1; fi
++          [ "$seg_s" = 0 ] && [ "$sd_seen" = 0 ] || in_sd=1
++          if [ "$cc_seen" = 1 ] || _g16_into "$last"; then _G16_INCC=1; fi
+         fi
++        [ "$in_sd" = 0 ] || sd_seen=1
++        [ "$_G16_INCC" = 0 ] || cc_seen=1
++        ;;
++      # popd goes back to a directory of the stack, as a cd to an unknown target does. It stays a
++      # command that does not read, as before.
++      popd)
++        dk=0
++        [ "$sd_seen" = 0 ] || in_sd=1
++        [ "$cc_seen" = 0 ] || _G16_INCC=1
+         ;;
+     esac
+     if [ "$reads" = 0 ] && { [ "$seg_s" = 1 ] || [ "$in_sd" = 1 ]; }; then state=1; fi
+diff --git a/hooks/guards/g20-approval.sh b/hooks/guards/g20-approval.sh
+index 10336e3..51b89be 100644
+--- a/hooks/guards/g20-approval.sh
++++ b/hooks/guards/g20-approval.sh
+@@ -400,8 +400,10 @@ _g20_cmd() {
+   shift
+   case "$head" in
+     cd | pushd)
+-      # A cd behind noglob, nocorrect, coproc or repeat leaves the directory as it was (cmd_mod).
+-      cmd_mod "$_G20_REC" && return 0
++      # A cd under coproc or a repeat count that may be 0 leaves the directory as it was (cmd_mod exit 0
++      # or 2); one behind noglob, nocorrect or repeat N moves, as in zsh.
++      cmd_mod "$_G20_REC"
++      [ $? = 1 ] || return 0
+       w=$HOME
+       for i in "$@"; do
+         case "$i" in -*) ;; *) w=$i; break ;; esac
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index 10c880d..d957f5e 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -82,8 +82,9 @@ _GW_AWK='
+   # sw and cw read a string once: split(s, C, "") for its characters and split(s, P, "/") for its last
+   # path part. In BWK awk, substr scans the whole string on every call, so substr per character, or
+   # sub(/.*\//) on a long word, is quadratic in its length.
+-  function sw(buf,   n, q, w, have, i, c, C) {
+-    sw_n = 0; n = split(buf, C, ""); q = ""; w = ""; have = 0
++  # sw_q[k] is 1 when word k held a quote or a backslash.
++  function sw(buf,   n, q, w, have, i, c, C, wq) {
++    sw_n = 0; n = split(buf, C, ""); q = ""; w = ""; have = 0; wq = 0
+     for (i = 1; i <= n; i++) {
+       c = C[i]
+       if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
+@@ -93,19 +94,22 @@ _GW_AWK='
+         else w = w c
+         continue
+       }
+-      if (c == "\\") { i++; w = w C[i]; have = 1; continue }
+-      if (c == sq || c == "\"") { q = c; have = 1; continue }
+-      if (c == " " || c == "\t" || c == "\n" || c == "\037") { if (have) sw_w[++sw_n] = w; w = ""; have = 0; continue }
++      if (c == "\\") { i++; w = w C[i]; have = 1; wq = 1; continue }
++      if (c == sq || c == "\"") { q = c; have = 1; wq = 1; continue }
++      if (c == " " || c == "\t" || c == "\n" || c == "\037") {
++        if (have) { sw_w[++sw_n] = w; sw_q[sw_n] = wq }
++        w = ""; have = 0; wq = 0; continue
++      }
+       # An unquoted, unescaped # that starts a word is a comment, to the newline, as in bash.
+       if (c == "#" && !have) { while (i < n && index("\n\037", C[i + 1]) == 0) i++; continue }
+       if ((c == "<" || c == ">" || (c == "&" && C[i + 1] == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
+-        sw_w[++sw_n] = w; w = ""
++        sw_w[++sw_n] = w; sw_q[sw_n] = wq; w = ""; wq = 0
+       }
+       w = w c; have = 1
+     }
+-    if (have) sw_w[++sw_n] = w
++    if (have) { sw_w[++sw_n] = w; sw_q[sw_n] = wq }
+   }
+-  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0; cw_cnt = 0 }
++  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0; cw_cnt = 0; cw_mod = 0; cw_rw = 0 }
+   # cw_line(s): feeds cw the words of the command line s (the value of env -S), split at blanks
+   # outside quotes and with the quotes removed, as env -S reads it.
+   function cw_line(s,   n, C, i, c, q, w, have) {
+@@ -128,14 +132,31 @@ _GW_AWK='
+       if (cw_split) { cw_split = 0; cw_line(x) }
+       return
+     }
+-    # The word after repeat is its count, whatever it looks like: zsh reads -1+2 as one.
+-    if (cw_cnt) { cw_cnt = 0; return }
++    # The word after repeat is its count, whatever it looks like: zsh reads -1+2 as one. A literal
++    # count of 0 or less runs the command no time; any other count but a literal one may.
++    if (cw_cnt) {
++      cw_cnt = 0
++      if (x ~ /^-?[0-9]+$/ && x + 0 <= 0) cw_mod = 3
++      else if (x !~ /^[0-9]+$/ && cw_mod < 2) cw_mod = 2
++      return
++    }
+     if (x ~ /^[0-9]*(<|>|&>)/) { cw_val = (x ~ /^[0-9]*[<>&|]+$/); return }
+     if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) return
+-    # zsh runs the command after its precommand modifiers noglob and nocorrect, and after coproc and
+-    # repeat with its count.
+-    if (x ~ /^(if|then|elif|else|do|while|until|!|[{]|noglob|nocorrect|coproc)$/) { cw_wrap = ""; return }
+-    if (x == "repeat") { cw_wrap = ""; cw_cnt = 1; return }
++    # zsh runs the command after its precommand modifier noglob and its reserved words nocorrect,
++    # coproc and repeat with its count. cw_mod (cmd_mod): 1 when one came before the command name, 2
++    # when the command may then not run in this shell, 3 when it does not: coproc runs it in a
++    # subshell, and a reserved word that is quoted (cw_q, which only cmd_mod sets) or follows noglob or
++    # nocorrect (cw_rw) is a command that is not found.
++    if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
++    if (x == "noglob") { cw_wrap = ""; cw_rw = 1; if (!cw_mod) cw_mod = 1; return }
++    if (x ~ /^(nocorrect|coproc|repeat)$/) {
++      cw_wrap = ""
++      if (x == "coproc" || cw_q || cw_rw) cw_mod = 3
++      else if (!cw_mod) cw_mod = 1
++      if (x == "nocorrect") cw_rw = 1
++      if (x == "repeat") cw_cnt = 1
++      return
++    }
+     # Any case: on a case-insensitive file system ENV and Sudo run env and sudo.
+     b = tolower(P[split(x, P, "/")])
+     if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
+@@ -453,18 +474,22 @@ _cmd_words() {
+     END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); for (k = 1; k <= cw_n; k++) print cw_w[k] }'
+ }
+ 
+-# cmd_mod CMDLINE: exit 0 when CMDLINE, quotes and backslashes removed, holds noglob, nocorrect, coproc
+-# or repeat as a word. _cmd_words reads through them to the command that runs, but a cd behind one is
+-# not known to move the shell: bash runs none of these words, zsh runs a coproc command in a subshell,
+-# and repeat 0 runs nothing. So the guards that follow cd keep the directory they had across one.
++# cmd_mod CMDLINE: whether the command _cmd_words finds in CMDLINE runs in this shell, read from what it
++# skips before the command name (noglob, nocorrect, coproc, repeat and its count; a modifier word after
++# the name, such as an argument, a redirect target or a comment, does not count). Exit 0 when it does
++# not: coproc runs it in a subshell, repeat 0 runs it no time, and zsh does not find a quoted reserved
++# word, or one after noglob or nocorrect, as a command. Exit 2 when it may not (a repeat count that is
++# not a literal number), and 1 when it does. So a cd behind noglob, nocorrect or repeat 1 moves the
++# shell, as zsh moves it. The awk runs only when the text could hold one of these words.
+ cmd_mod() {
+-  local t=$1
+-  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+-  case " $t " in
+-    *[[:space:]]noglob[[:space:]]* | *[[:space:]]nocorrect[[:space:]]* | *[[:space:]]coproc[[:space:]]* | \
+-      *[[:space:]]repeat[[:space:]]*) return 0 ;;
+-  esac
+-  return 1
++  case "$1" in *noglob* | *nocorrect* | *coproc* | *repeat* | *[\"\'\\]*) ;; *) return 1 ;; esac
++  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
++    { buf = buf (NR > 1 ? "\037" : "") $0 }
++    END {
++      sw(buf); cw_reset()
++      for (k = 1; k <= sw_n; k++) { cw_q = sw_q[k]; cw(sw_w[k]) }
++      exit cw_mod == 3 ? 0 : cw_mod == 2 ? 2 : 1
++    }'
+ }
+ 
+ # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the
+diff --git a/tests/hooks/g01-git.bats b/tests/hooks/g01-git.bats
+index 89b826b..ff52097 100644
+--- a/tests/hooks/g01-git.bats
++++ b/tests/hooks/g01-git.bats
+@@ -12,6 +12,13 @@ setup() {
+ 
+ g1() { run_guard "$(bash_payload "$1")" g01; }
+ 
++# cmd_payload CMD: a Bash payload for any command text; quotes, backslashes and newlines are escaped.
++cmd_payload() {
++  local esc
++  esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
++  tool_payload Bash "\"command\":\"$esc\""
++}
++
+ # expect DECISION CMD...: G1 gives DECISION for every CMD.
+ expect() {
+   local want="$1" c
+@@ -299,15 +306,52 @@ settings() {
+     "git --git-dir=$R/.git push origin feat"
+ }
+ 
+-@test "a cd behind noglob, nocorrect, coproc or repeat leaves the directory known" {
++@test "a push after a cd is judged where it would run without the cd too, so its deny holds" {
+   W="$BATS_TEST_TMPDIR/wt"
+   export CWD="$W"
+   printf 'b\n' >"$W/b.txt"; git -C "$W" add b.txt
+   git -C "$W" -c user.email=other@example.com commit -q -m b
+-  expect deny "noglob cd . && git push --force-with-lease origin feat" \
++  expect deny "cd . && git push --force-with-lease origin feat" "pushd /tmp && git push --force-with-lease origin feat" \
++    "env -C /tmp git push --force-with-lease origin feat" "noglob cd . && git push --force-with-lease origin feat" \
+     "nocorrect cd /tmp; git push --force-with-lease origin feat" "coproc cd /tmp; git push --force-with-lease origin feat" \
+     "repeat 0 cd /tmp; git push --force-with-lease origin feat"
+-  expect ask "cd . && git push --force-with-lease origin feat"
++  g1 "cd . && git push --force-with-lease origin feat"
++  [[ "$output" == *"may hold commits by other authors"* ]] || false
++  settings 'push.policy: auto'
++  set_autopilot on
++  expect deny "cd . && git push origin feat"
++}
++
++@test "a cd behind noglob, nocorrect or repeat N moves, as zsh moves it; one under coproc or repeat 0 does not" {
++  export CWD="$BATS_TEST_TMPDIR/wt"
++  local moves=("cd $R && git clean -fdx" "noglob cd $R && git clean -fdx" "nocorrect cd $R && git clean -fdx"
++    "repeat 1 cd $R && git clean -fdx" "repeat 2 cd $R && git clean -fdx" "repeat \$N cd $R && git clean -fdx")
++  local stays=("coproc cd $R; git clean -fdx" "repeat 0 cd $R; git clean -fdx" "noglob repeat 1 cd $R; git clean -fdx")
++  expect ask "${moves[@]}"
++  expect none "${stays[@]}"
++  set_autopilot on
++  expect deny "${moves[@]}"
++  expect none "${stays[@]}"
++}
++
++@test "a modifier word after the command name, in a redirect, an assignment or a comment, leaves a cd a move" {
++  export CWD="$BATS_TEST_TMPDIR/wt"
++  ln -s "$R" "$BATS_TEST_TMPDIR/wt/repeat"
++  local cmds=(
++    "cd $R 2> noglob && git clean -fdx" "cd $R > repeat && git clean -fdx" "X=' noglob' cd $R && git clean -fdx"
++    "cd $R <<< nocorrect && git reset --hard" "cd repeat && git clean -fdx" "pushd $R >/dev/null 2>&1 <<< coproc; git clean -fdx"
++    "$(printf '%s\n' "cd $R # noglob" 'git clean -fdx')"
++  )
++  local c
++  for c in "${cmds[@]}"; do
++    run_guard "$(cmd_payload "$c")" g01
++    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
++  done
++  set_autopilot on
++  for c in "${cmds[@]}"; do
++    run_guard "$(cmd_payload "$c")" g01
++    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
++  done
+ }
+ 
+ @test "gh pr merge with -R or --repo asks, and is denied under autopilot" {
+diff --git a/tests/hooks/g05-g06-commit.bats b/tests/hooks/g05-g06-commit.bats
+index e0151af..aa6b99a 100644
+--- a/tests/hooks/g05-g06-commit.bats
++++ b/tests/hooks/g05-g06-commit.bats
+@@ -714,16 +714,38 @@ EOT
+   done
+ }
+ 
+-@test "G5 and G6: a cd behind noglob, nocorrect, coproc or repeat leaves the directory known" {
++@test "G5 and G6: a cd behind noglob, nocorrect or repeat N moves; one under coproc or repeat 0 does not" {
+   mkdir -p "$R/sub"
+   printf 'a\n' >"$R/sub/a.txt"
+   local c
+-  for c in "noglob cd sub && git add -- sub/a.txt" "coproc cd /tmp; git add -- sub/a.txt" \
+-    "repeat 0 cd /tmp; git commit -m 'CDS-2465: x'" "nocorrect cd sub && git commit -m 'CDS-2465: x'"; do
++  for c in "cd sub && git add -- a.txt" "noglob cd sub && git add -- a.txt" "nocorrect cd sub && git add -- a.txt" \
++    "repeat 1 cd sub && git add -- a.txt"; do
++    expect ask g05 "$c" || return 1
++  done
++  for c in "noglob cd sub && git commit -m 'CDS-2465: x'" "repeat 1 cd sub && git commit -m 'CDS-2465: x'"; do
++    expect ask g06 "$c" || return 1
++    [[ "$output" == *"could not scan"* ]] || false
++  done
++  for c in "coproc cd /tmp; git add -- sub/a.txt" "repeat 0 cd /tmp; git add -- sub/a.txt"; do
++    expect none g05 "$c" || return 1
++  done
++  for c in "coproc cd /tmp; git commit -m 'CDS-2465: x'" "repeat 0 cd /tmp; git commit -m 'CDS-2465: x'"; do
+     expect none g06 "$c" || return 1
+   done
+-  expect none g05 "noglob cd sub && git add -- sub/a.txt"
+-  expect ask g05 "cd sub && git add -- sub/a.txt"
++}
++
++@test "G5 and G6: a modifier word after the command name, in a redirect or an assignment, leaves a cd a move" {
++  mkdir -p "$R/sub"
++  printf 'a\n' >"$R/sub/a.txt"
++  local c
++  for c in "cd sub 2> noglob && git add -- a.txt" "cd sub <<< repeat && git add -- a.txt" \
++    "X=' coproc' cd sub && git add -- a.txt" "pushd sub >/dev/null 2>&1 <<< coproc; git add -- a.txt"; do
++    expect ask g05 "$c" || return 1
++  done
++  for c in "cd sub 2> noglob && git commit -m 'CDS-2465: x'" "X=' nocorrect' cd sub && git commit -m 'CDS-2465: x'"; do
++    expect ask g06 "$c" || return 1
++    [[ "$output" == *"could not scan"* ]] || false
++  done
+ }
+ 
+ @test "G6: push : and a matching push scan every branch" {
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index 0362162..35141b2 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -395,18 +395,58 @@ expect_cmd() {
+     'cd "$(git rev-parse --show-toplevel)" && sed -i "" s/a/b/ settings.json' 'cd $X && echo x > foo'
+ }
+ 
+-@test "a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd after one keeps the reading" {
++@test "a relative cd is followed as text: one that comes back into a .claude directory is in it again" {
++  mkdir -p "$R/.claude/agents" "$HOME/.claude/agents"
++  local cc=(
++    'cd ~/.claude && cd agents && cd .. && sed -i "" s/a/b/ settings.json' 'cd ~/.claude/agents && cd .. && echo {} > settings.json'
++    'cd .claude/agents && cd .. && cp /tmp/x .' 'cd .claude && cd agents/../x/.. && echo {} > settings.local.json'
++  )
++  expect_cmd ask "${cc[@]}"
++  set_autopilot on
++  expect_cmd deny "${cc[@]}"
++  set_autopilot off
++  expect_cmd none 'cd .claude && ls && cd .. && git add .' 'cd ~/.claude && cd agents && echo {} > settings.json' \
++    'cd .claude/agents && cp /tmp/x .'
++}
++
++@test "a cd that can go back (-, ~-, +N, popd, \$X) takes back the reading an earlier cd in the command cleared" {
++  local cc=(
++    'cd ~/.claude && cd /tmp && cd - && sed -i "" s/a/b/ settings.json' 'cd ~/.claude && cd /tmp; cd -; echo {} > settings.json'
++    'cd ~/.claude && pushd /tmp && popd && echo {} > settings.json' 'cd ~/.claude && cd /tmp && cd ~- && echo {} > settings.json'
++    'cd ~/.claude && cd /tmp && cd +1 && echo {} > settings.json' 'cd ~/.claude && cd /tmp && cd "$X" && echo {} > settings.json'
++  )
++  local sd=(
++    "cd $S && cd /tmp && cd - && echo x > foo" "cd $S && cd /tmp; cd -; echo x > foo" "cd $S && pushd /tmp && popd && echo x > foo"
++    "cd $S && cd /tmp && cd ~- && echo x > foo" "cd $S && cd /tmp && cd +1 && echo x > foo" "pushd $S && pushd /tmp && popd; echo x > foo"
++  )
++  expect_cmd ask "${cc[@]}"
++  expect_cmd deny "${sd[@]}"
++  set_autopilot on
++  expect_cmd deny "${cc[@]}" "${sd[@]}"
++  set_autopilot off
++  # A known target after the cd that went back still ends the reading.
++  expect_cmd none 'cd ~/.claude && cd /tmp && cd - && cd /tmp && echo {} > settings.json' \
++    "cd $S && cd /tmp && cd - && cd /tmp && echo x > foo"
++}
++
++@test "a command after zsh's noglob, nocorrect, coproc or repeat is judged as itself; a cd under coproc or repeat 0 keeps the reading" {
+   expect_bash deny "noglob tee $S/a.state" "nocorrect cp /tmp/x $S/a.state" "repeat 1 sed -i '' s/off/on/ $S/a.state" \
+     "coproc rm -f $S/a.state"
+   expect_bash ask "noglob sed -i '' s/a/b/ .claude/settings.json" "repeat 2 cp /tmp/x .claude/"
+-  # noglob only stops globbing, so a read stays a read; bash, which has no noglob, runs nothing.
++  # noglob only stops globbing, so a read stays a read.
+   expect_bash none "noglob cat $S/a.state" "nocorrect grep autopilot $S/a.state" "noglob ls .claude"
+-  # bash runs none of these words as a cd, zsh runs coproc's in a subshell and repeat's maybe no time.
++  # zsh runs coproc's cd in a subshell, repeat 0's no time, and a count that is not a literal number
++  # may be 0; it does not find a quoted reserved word as a command. Such a cd keeps the reading.
+   expect_cmd ask "cd ~/.claude && coproc cd /tmp; echo {} > settings.json" \
+     "cd ~/.claude && repeat 0 cd /tmp; echo {} > settings.json" "cd ~/.claude && 'coproc' cd /tmp; echo {} > settings.json" \
+-    "cd ~/.claude && noglob cd /tmp; echo {} > settings.json" "cd ~/.claude && nocorrect cd /tmp; echo {} > settings.json"
+-  expect_cmd deny "cd $S && coproc cd /tmp; echo x > foo" "cd $S && repeat 0 cd /tmp; echo x > foo" \
+-    "cd $S && noglob cd /tmp; echo x > foo"
++    "cd ~/.claude && 'repeat' 1 cd /tmp; echo {} > settings.json" "cd ~/.claude && repeat \$n cd /tmp; echo {} > settings.json" \
++    "cd ~/.claude && co''proc cd /tmp; echo {} > settings.json" "cd ~/.claude && no\\correct cd /tmp; echo {} > settings.json"
++  expect_cmd deny "cd $S && coproc cd /tmp; echo x > foo" "cd $S && repeat 0 cd /tmp; echo x > foo"
++  # A cd behind noglob, nocorrect or repeat 1 moves, as in zsh, and gets the vote of the plain cd.
++  expect_cmd none "cd ~/.claude && noglob cd /tmp; echo {} > settings.json" \
++    "cd ~/.claude && nocorrect cd /tmp; echo {} > settings.json" "cd $S && repeat 1 cd /tmp; echo x > foo" \
++    "cd ~/.claude && cd /tmp; echo {} > settings.json"
++  expect_cmd ask "noglob cd ~/.claude && echo {} > settings.json" "repeat 1 cd ~/.claude && echo {} > settings.json"
+ }
+ 
+ @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
+diff --git a/tests/hooks/g20-probes.bats b/tests/hooks/g20-probes.bats
+index d760132..461bb9f 100644
+--- a/tests/hooks/g20-probes.bats
++++ b/tests/hooks/g20-probes.bats
+@@ -219,15 +219,27 @@ prep() { printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '-
+   b "truncate -s 0 .kern/specs/export.md"; deny
+ }
+ 
+-@test "P21b a write after a cd behind noglob, nocorrect, coproc or repeat, which may not move" {
++@test "P21b a cd behind noglob, nocorrect or repeat N moves; one under coproc or repeat 0 does not" {
+   prep "$SPEC"
++  b "noglob cd .kern/specs && echo note >> export.md"; deny
++  b "nocorrect cd .kern/specs && echo note >> export.md"; deny
++  b "repeat 1 cd .kern/specs && echo note >> export.md"; deny
+   b "coproc cd /tmp; echo note >> .kern/specs/export.md"; deny
+   b "repeat 0 cd /tmp; echo note >> .kern/specs/export.md"; deny
+-  b "noglob cd /tmp; echo note >> .kern/specs/export.md"; deny
+-  b "nocorrect cd /tmp; echo note >> .kern/specs/export.md"; deny
++  b "'coproc' cd /tmp; echo note >> .kern/specs/export.md"; deny
+   b "noglob tee -a .kern/specs/export.md"; deny
+ }
+ 
++@test "P21c a cd with a modifier word after its name, in a redirect or an assignment, still moves" {
++  prep "$SPEC"
++  b "cd .kern/specs 2> noglob && echo note >> export.md"; deny
++  b "X=' repeat' cd .kern/specs && echo note >> export.md"; deny
++  b "cd .kern/specs <<< coproc && echo note >> export.md"; deny
++  mkdir -p "$R/d"
++  prep "$R/d/src.md"
++  b "cd d 2> nocorrect && cp src.md x.md"; deny
++}
++
+ @test "P22 reads and kern's own scripts get no G20 vote" {
+   prep "$SPEC"
+   b "grep -rn approved .kern/specs/export.md"; none

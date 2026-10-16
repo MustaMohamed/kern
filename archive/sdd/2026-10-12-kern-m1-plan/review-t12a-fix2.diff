@@ -1,0 +1,125 @@
+diff --git a/hooks/guards/g01-git.sh b/hooks/guards/g01-git.sh
+index 0595bef..23d6c10 100644
+--- a/hooks/guards/g01-git.sh
++++ b/hooks/guards/g01-git.sh
+@@ -74,8 +74,10 @@ shortlog for-each-ref merge-base name-rev count-objects var "
+ # global options; when the next word is one of git's own commands outside _G01_READ_ONLY, G1 asks,
+ # deny under autopilot. Any other word after it (curl in `apt-get install git curl`, an option git
+ # rejects) gets no vote. Quoted text is one word, so `grep -rn "git push" docs` holds no word git,
+-# while `echo git push` asks. A -c or --config-env that sets alias.* (any case) asks whatever word
+-# follows, since the alias may stand for any command; an alias set in git config is not seen.
++# while `echo git push` asks. Config set in the same command may turn any word into any command (an
++# alias, help.autocorrect, include.path), so a -c or --config-env among the global options, or
++# GIT_CONFIG anywhere in the command (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT, ...), asks whatever
++# word follows. An alias set in git config by an earlier call is not seen.
+ _g01_hidden() {
+   local head="$1" al
+   shift
+@@ -85,19 +87,20 @@ _g01_hidden() {
+       *) shift; continue ;;
+     esac
+     al=0
++    case "$_G01_CMD" in *GIT_CONFIG*) al=1 ;; esac
+     while [ $# -gt 0 ]; do
+       case "$1" in
+         -c | --config-env)
++          al=1
+           shift
+-          case "${1-}" in [Aa][Ll][Ii][Aa][Ss].*) al=1 ;; esac
+           [ $# -gt 0 ] && shift
+           ;;
+-        --config-env=[Aa][Ll][Ii][Aa][Ss].*) al=1; shift ;;
++        --config-env=*) al=1; shift ;;
+         -C | --git-dir | --work-tree | --namespace | --super-prefix | --attr-source | --shallow-file)
+           shift
+           [ $# -gt 0 ] && shift
+           ;;
+-        --git-dir=* | --work-tree=* | --namespace=* | --config-env=* | --super-prefix=* | --attr-source=* | \
++        --git-dir=* | --work-tree=* | --namespace=* | --super-prefix=* | --attr-source=* | \
+           --exec-path=* | -p | -P | --paginate | --no-pager | --bare | --no-replace-objects | --no-lazy-fetch | \
+           --no-optional-locks | --no-advice | --literal-pathspecs | --no-literal-pathspecs | --glob-pathspecs | \
+           --noglob-pathspecs | --icase-pathspecs) shift ;;
+diff --git a/hooks/guards/g02-pr.sh b/hooks/guards/g02-pr.sh
+index 362494f..2a470cd 100644
+--- a/hooks/guards/g02-pr.sh
++++ b/hooks/guards/g02-pr.sh
+@@ -15,12 +15,12 @@ help/h/b"
+ # the body from elsewhere, open an editor or a browser, or name another repo.
+ _GH_CREATE_SAFE="title body-file base head draft fill fill-first fill-verbose dry-run no-maintainer-edit"
+ _GH_READY_OPTS="undo/-/b repo/R/v help/h/b"
+-# gh 2.100.0's command groups (`gh help`) that ask when gh runs behind another command
+-# (_g02_hidden): all but browse, search and status, which only read or open a browser. help and
+-# version are not listed there either.
+-_G02_GROUPS=" auth codespace discussion gist issue org pr project release repo skill cache run workflow \
+-agent-task alias api attestation completion config copilot extension gpg-key label licenses preview \
+-ruleset secret ssh-key variable "
++# gh 2.100.0's command groups (`gh help`) and their aliases (`gh help <group>`) that ask when gh runs
++# behind another command (_g02_hidden): all but browse, search and status, which only read or open a
++# browser. help and version are not listed there either.
++_G02_GROUPS=" auth codespace cs discussion gist issue org pr project release repo skill skills cache run \
++workflow agent-task agent-tasks agent agents alias api attestation at completion config copilot extension \
++extensions ext gpg-key label licenses preview ruleset rs secret ssh-key variable "
+ 
+ guard_g02() {
+   [ "$TOOL" = Bash ] || return 0
+diff --git a/tests/hooks/g01-git.bats b/tests/hooks/g01-git.bats
+index 03963a4..6857fc0 100644
+--- a/tests/hooks/g01-git.bats
++++ b/tests/hooks/g01-git.bats
+@@ -563,20 +563,28 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
+   [[ "$output" == *"after cd, --git-dir or --work-tree"* ]] || false
+ }
+ 
+-@test "git behind a command that sets an alias with -c or --config-env asks, whatever word follows" {
+-  local c
++@test "git behind a command with -c, --config-env or GIT_CONFIG in the command asks, whatever word follows" {
++  local c cmds=(
++    "caffeinate git -c alias.p=push p --force origin main"
++    "caffeinate git -c help.autocorrect=immediate psuh --force origin main"
++    "caffeinate git --config-env=help.autocorrect=V psuh --force origin main"
++    "caffeinate git -c include.path=/tmp/a.cfg p --force origin main"
++    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push caffeinate git p --force origin main"
++    "GIT_CONFIG_PARAMETERS=\"'alias.p=push'\" caffeinate git p --force origin main"
++    "export GIT_CONFIG_PARAMETERS=\"'alias.p=push'\"; caffeinate git p --force origin main"
++  )
+   g1 "caffeinate git -c alias.p=push p --force origin main"
+   [ "$(decision_of "$output")" = ask ]
+   [[ "$output" == *"git inside caffeinate cannot be checked; run git directly"* ]] || false
++  g1 "caffeinate git -c color.ui=never log -1"
++  [ "$(decision_of "$output")" = ask ]
+   set_autopilot on
+-  for c in "caffeinate git -c alias.p=push p --force origin main" "caffeinate git -c ALIAS.p=push p" \
+-    "caffeinate git --config-env=alias.p=V p" "caffeinate git --no-pager --config-env Alias.p=V p" \
+-    "xargs git -c alias.s=status s"; do
++  for c in "${cmds[@]}" "caffeinate git -c ALIAS.p=push p" "caffeinate git --no-pager --config-env Alias.p=V p" \
++    "xargs git -c alias.s=status s" "caffeinate git -c color.ui=never log -1"; do
+     g1q "$c"
+     [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+   done
+-  for c in "caffeinate git -c color.ui=never log -1" "caffeinate git -c core.x=alias.y status" \
+-    "caffeinate git --config-env=core.x=V status"; do
++  for c in "caffeinate git --no-pager log -1" "echo GIT_CONFIG_COUNT=1" "GIT_CONFIG_COUNT=0 git status"; do
+     g1q "$c"
+     [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+   done
+diff --git a/tests/hooks/g02-g04-gh.bats b/tests/hooks/g02-g04-gh.bats
+index 6e2e771..2ac3684 100644
+--- a/tests/hooks/g02-g04-gh.bats
++++ b/tests/hooks/g02-g04-gh.bats
+@@ -466,3 +466,16 @@ gh_log() {
+     expect none "$c" || return 1
+   done
+ }
++
++@test "G2: gh's group aliases behind another command ask, and are denied under autopilot" {
++  local c
++  g "caffeinate gh cs delete --all --force" g02
++  [ "$(decision_of "$output")" = ask ]
++  set_autopilot on
++  for c in "caffeinate gh cs delete --all --force" "caffeinate gh ext install o/evil" "caffeinate gh extensions x" \
++    "caffeinate gh rs x" "caffeinate gh at x" "caffeinate gh agent x" "caffeinate gh agents x" \
++    "caffeinate gh agent-tasks x" "caffeinate gh skills x"; do
++    g "$c" g02
++    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
++  done
++}

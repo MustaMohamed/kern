@@ -1,0 +1,988 @@
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index 511a473..d32c0a8 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -1,26 +1,212 @@
+ # shellcheck shell=bash
+-# G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it.
++# G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
++# and the user confirms every write to a kern settings file.
++
++_G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
++_G16_STATE_CMD="commands may not write kern session state"
++_G16_SETTINGS="kern settings change guard policy; the user confirms each write"
+ 
+ guard_g16() {
+-  local p sd
+-  sd=$(state_dir)
+   case "$TOOL" in
+-    Write | Edit | NotebookEdit)
+-      p=$(ti_get file_path) || p=$(ti_get notebook_path) || p=""
+-      case "$p" in
+-        "$sd"/* | */plugins/data/kern*/sessions/*) vote deny G16 "kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot" ;;
+-      esac
+-      ;;
+-    Bash)
+-      p=$(ti_get command) || p=""
+-      case "$p" in
+-        *"$sd"* | *plugins/data/kern*sessions*) vote deny G16 "commands may not touch kern session state" ;;
+-      esac
+-      ;;
+-    CronCreate | ScheduleWakeup | RemoteTrigger | SendMessage | Skill)
+-      case "$TOOL_INPUT" in
+-        *kern:autopilot* | *kern:mode*) vote deny G16 "$TOOL may not carry /kern:autopilot or /kern:mode; only the user types them" ;;
++    Write | Edit | NotebookEdit) _g16_file ;;
++    Bash) _g16_bash ;;
++    CronCreate | ScheduleWakeup | RemoteTrigger | SendMessage) _g16_relay ;;
++    Skill) _g16_skill ;;
++  esac
++}
++
++# _g16_lower STR: STR in lower case (bash 3.2 has no ${var,,}).
++_g16_lower() {
++  printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]'
++}
++
++# _g16_norm PATH: absolute PATH with `.`, `..` and repeated slashes resolved as text, so a `..`
++# through a directory that does not exist yet is still seen.
++_g16_norm() {
++  printf '%s\n' "$1" | LC_ALL=C awk -F/ '{
++    n = 0
++    for (i = 1; i <= NF; i++) {
++      if ($i == "" || $i == ".") continue
++      if ($i == "..") { if (n) n--; continue }
++      s[++n] = $i
++    }
++    out = ""
++    for (i = 1; i <= n; i++) out = out "/" s[i]
++    print (out == "" ? "/" : out)
++  }'
++}
++
++# _g16_file: a Write, Edit or NotebookEdit target, compared in lower case as written, with `..`
++# resolved, and through its physical parent dir, so a case variant or a symlinked dir is seen.
++_g16_file() {
++  local p norm real="" sd rsd="" c
++  p=$(ti_get file_path) || p=$(ti_get notebook_path) || return 0
++  case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
++  norm=$(_g16_norm "$p")
++  real=$(cd "$(dirname "$norm")" 2>/dev/null && pwd -P) && real="$real/${norm##*/}"
++  sd=$(_g16_lower "$(state_dir)")
++  rsd=$(cd "$(state_dir)" 2>/dev/null && pwd -P) && rsd=$(_g16_lower "$rsd")
++  for c in "$p" "$norm" "$real"; do
++    [ -n "$c" ] || continue
++    c=$(_g16_lower "$c")
++    case "$c" in
++      "$sd"/* | */plugins/data/kern*/sessions/*) vote deny G16 "$_G16_STATE_FILE"; return 0 ;;
++    esac
++    if [ -n "$rsd" ]; then
++      case "$c" in "$rsd"/*) vote deny G16 "$_G16_STATE_FILE"; return 0 ;; esac
++    fi
++  done
++  for c in "$p" "$norm" "$real"; do
++    case "$(_g16_lower "$c")" in
++      */.claude/kern.yml | */.claude/kern.local.yml) vote ask G16 "$_G16_SETTINGS"; return 0 ;;
++    esac
++  done
++}
++
++# _g16_names STR: exit 0 when the lower-cased STR mentions session state or a settings file at all.
++_g16_names() {
++  case "$1" in
++    *"$_G16_SD"* | *plugins/data/*sessions* | *claude_plugin_data*sessions* | *.claude/kern.yml* | *.claude/kern.local.yml*) return 0 ;;
++  esac
++  [ -n "$_G16_SID" ] || return 1
++  case "$1" in *"$_G16_SID"*) return 0 ;; esac
++  return 1
++}
++
++# _g16_kind WORD: sets _G16_K to `state` when WORD names session state (the sessions dir, any
++# plugins/data/*/sessions path, $CLAUDE_PLUGIN_DATA/sessions or the session id), `settings` when it
++# names a kern settings file, else empty.
++_g16_kind() {
++  _G16_K=""
++  case "$1" in
++    *"$_G16_SD"* | *plugins/data/*sessions* | *claude_plugin_data*sessions*) _G16_K=state; return 0 ;;
++    *.claude/kern.yml | *.claude/kern.local.yml) _G16_K=settings; return 0 ;;
++  esac
++  [ -n "$_G16_SID" ] || return 0
++  case "$1" in *"$_G16_SID"*) _G16_K=state ;; esac
++}
++
++# _g16_redirects STR: the target word of each `>` or `>>` outside quotes, one per line.
++_g16_redirects() {
++  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
++    { buf = buf (NR > 1 ? " " : "") $0 }
++    END {
++      n = length(buf); q = ""
++      for (i = 1; i <= n; i++) {
++        c = substr(buf, i, 1)
++        if (q == sq) { if (c == sq) q = ""; continue }
++        if (c == "\\") { i++; continue }
++        if (q == "\"") { if (c == "\"") q = ""; continue }
++        if (c == sq || c == "\"") { q = c; continue }
++        if (c != ">") continue
++        while (i < n && index(">|&", substr(buf, i + 1, 1))) i++
++        while (i < n && index(" \t", substr(buf, i + 1, 1))) i++
++        w = ""; wq = ""
++        for (j = i + 1; j <= n; j++) {
++          d = substr(buf, j, 1)
++          if (wq != "") { if (d == wq) wq = ""; else w = w d; continue }
++          if (d == "\\") { j++; w = w substr(buf, j, 1); continue }
++          if (d == sq || d == "\"") { wq = d; continue }
++          if (index(" \t;&|<>()`", d)) break
++          w = w d
++        }
++        if (w != "") print w
++        i = j - 1
++      }
++    }'
++}
++
++# _g16_bash: write shapes (a redirect, tee, sed -i, perl -i, cp, mv, ln, rm, truncate, dd, install)
++# against session state are denied, and against a settings file ask; reads pass. Every simple
++# command is checked, including the bodies of bash -c, eval, $( ) and backticks, and after a cd
++# into the sessions dir every later write counts as a write to it.
++_g16_bash() {
++  local cmd seg words w t head inplace seg_k is_write state=0 settings=0 in_sd=0
++  cmd=$(ti_get command) || return 0
++  cmd=$(_g16_lower "$cmd")
++  _G16_SD=$(_g16_lower "$(state_dir)")
++  _G16_SID=$(_g16_lower "${SID-}")
++  _g16_names "$cmd" || return 0
++  while IFS= read -r seg; do
++    [ -n "$seg" ] || continue
++    # The command name comes first, after the assignments, keywords and wrappers _cmd_words skips.
++    words=$(_cmd_words "$seg")
++    head=""
++    inplace=0
++    seg_k=""
++    while IFS= read -r w; do
++      if [ -z "$head" ]; then
++        head=${w##*/}
++        continue
++      fi
++      case "$w" in --in-place*) inplace=1 ;; --*) ;; -*i*) inplace=1 ;; esac
++      _g16_kind "$w"
++      case "$_G16_K" in
++        state) seg_k=state ;;
++        settings) [ "$seg_k" = state ] || seg_k=settings ;;
+       esac
++    done <<WORDS
++$words
++WORDS
++    is_write=0
++    case "$head" in
++      tee | cp | mv | ln | rm | truncate | dd | install) is_write=1 ;;
++      sed | perl) is_write=$inplace ;;
++      cd | pushd) [ "$seg_k" = state ] && in_sd=1 ;;
++    esac
++    if [ "$is_write" = 1 ]; then
++      [ "$in_sd" = 1 ] && seg_k=state
++      case "$seg_k" in state) state=1 ;; settings) settings=1 ;; esac
++    fi
++    case "$seg" in *">"*) ;; *) continue ;; esac
++    while IFS= read -r t; do
++      case "$t" in '' | /dev/null | /dev/stdout | /dev/stderr | [0-9]) continue ;; esac
++      if [ "$in_sd" = 1 ]; then state=1; continue; fi
++      _g16_kind "$t"
++      case "$_G16_K" in state) state=1 ;; settings) settings=1 ;; esac
++    done <<REDIRECTS
++$(_g16_redirects "$seg")
++REDIRECTS
++  done <<SEGMENTS
++$(git_words "$cmd")
++SEGMENTS
++  [ "$state" = 1 ] && vote deny G16 "$_G16_STATE_CMD"
++  [ "$settings" = 1 ] && vote ask G16 "$_G16_SETTINGS"
++  return 0
++}
++
++# _g16_relay: a scheduled or relayed prompt whose text, after leading whitespace, opens with a mode
++# or autopilot command. A mention later in the text passes. RemoteTrigger keeps its routine prompt
++# inside a nested body and a remote run starts its own session with it, so any mention there counts.
++_g16_relay() {
++  local k t
++  if [ "$TOOL" = RemoteTrigger ]; then
++    case "$(_g16_lower "$TOOL_INPUT")" in
++      */kern:autopilot* | */kern:mode*) vote deny G16 "$TOOL may not carry /kern:autopilot or /kern:mode; only the user types them" ;;
++    esac
++    return 0
++  fi
++  for k in prompt message; do
++    t=$(ti_get "$k") || continue
++    t=$(_g16_lower "$t")
++    t="${t#"${t%%[![:space:]]*}"}"
++    case "${t%%[[:space:]]*}" in
++      /kern:autopilot | /kern:mode | /autopilot | /mode)
++        vote deny G16 "$TOOL may not carry /kern:autopilot or /kern:mode; only the user types them"
++        return 0
++        ;;
++    esac
++  done
++}
++
++# _g16_skill: a Skill call to the mode or autopilot skill.
++_g16_skill() {
++  local s
++  s=$(ti_get skill) || return 0
++  s=$(_g16_lower "$s")
++  case "${s#/}" in
++    kern:autopilot | kern:mode | autopilot | mode)
++      vote deny G16 "Skill may not run kern:autopilot or kern:mode; only the user types them"
+       ;;
+   esac
+ }
+diff --git a/hooks/hooks.json b/hooks/hooks.json
+index 9c6b0bf..af13d30 100644
+--- a/hooks/hooks.json
++++ b/hooks/hooks.json
+@@ -4,6 +4,6 @@
+     "SubagentStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start"] }] }],
+     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/prompt-submit"], "timeout": 10 }] }],
+     "UserPromptExpansion": [{ "matcher": "", "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/prompt-submit"], "timeout": 10 }] }],
+-    "PreToolUse": [{ "matcher": "Bash|Write|Edit|NotebookEdit|Skill|CronCreate|ScheduleWakeup|RemoteTrigger|SendMessage|mcp__.*", "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use"], "timeout": 20, "onFailure": "block" }] }]
++    "PreToolUse": [{ "matcher": "Bash|Monitor|Write|Edit|NotebookEdit|Skill|CronCreate|ScheduleWakeup|RemoteTrigger|SendMessage|mcp__.*", "hooks": [{ "type": "command", "command": "bash", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use"], "timeout": 20, "onFailure": "block" }] }]
+   }
+ }
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index c3e2d2f..fd8ff0e 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -1,9 +1,12 @@
+ # shellcheck shell=bash
+ # Shell and git parsing for guards. Needs settings.sh. Reads CWD and KERN_MAIN.
+ 
+-# git_words CMD: one simple command per line. Splits on ; & && || | and newlines outside quotes,
+-# backticks and $( ). The body of `bash -c '...'`, `sh -c` and `eval '...'` is split again and
+-# printed after its wrapper, so a chained command inside a string is still seen.
++# git_words CMD: one simple command per line. Splits on ; & && || | ( ), the words { and }, and
++# newlines outside quotes, backticks and $( ); a redirection (2>&1, &>, >|) never splits, and a
++# backslash-newline is dropped. The script of an sh-family shell's -c (any path, flags such as -lc,
++# after the wrappers and keywords _cmd_words skips), the arguments of `eval`, and the bodies of $( )
++# and backticks are split again and printed after their wrapper, so a command inside a string is
++# still seen. Out of scope: commands that xargs or find -exec run.
+ git_words() {
+   local seg inner body
+   _split_words "$1" | while IFS= read -r seg; do
+@@ -11,9 +14,14 @@ git_words() {
+     _subst_bodies "$seg" | while IFS= read -r body; do
+       [ -n "$body" ] && git_words "$body"
+     done
+-    inner=$(printf '%s\n' "$seg" | sed -n -E "s/^(env +([A-Za-z_][A-Za-z0-9_]*=[^ ]* +)*)?((ba|z|da)?sh +(-[a-z]+ +)*-c|eval) +//p")
+-    [ -n "$inner" ] || continue
+-    inner=$(_shell_words "$inner" | head -n 1)
++    inner=$(_cmd_words "$seg" | LC_ALL=C awk '
++      NR == 1 { b = $0; sub(/.*\//, "", b); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
++      e { out = out (o++ ? " " : "") $0; next }
++      c { print; exit }
++      /^-[a-z]*c$/ { c = 1; next }
++      /^-/ { next }
++      { exit }
++      END { if (e) print out }')
+     [ -n "$inner" ] && git_words "$inner"
+   done
+ }
+@@ -49,7 +57,8 @@ _subst_bodies() {
+ 
+ _split_words() {
+   printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
+-    function emit(s) { gsub(/^[ \t\n]+|[ \t\n]+$/, "", s); if (s != "") print s }
++    function emit(s) { gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s); if (s != "") print s }
++    function sep(ch) { return ch == "" || index(" \t\n;&|()", ch) > 0 }
+     { buf = buf (NR > 1 ? "\n" : "") $0 }
+     END {
+       n = length(buf); q = ""; depth = 0; start = 1; i = 1
+@@ -67,9 +76,15 @@ _split_words() {
+         if (c == sq || c == "\"" || c == "`") { q = c; i++; continue }
+         if (c == "$" && substr(buf, i + 1, 1) == "(") { depth++; i += 2; continue }
+         if (depth > 0) { if (c == "(") depth++; else if (c == ")") depth--; i++; continue }
+-        if (c == ";" || c == "\n" || c == "&" || c == "|") {
++        p = substr(buf, i - 1, 1)
++        x = substr(buf, i + 1, 1)
++        if ((c == "&" && (p == ">" || p == "<" || x == ">")) || (c == "|" && p == ">")) { i++; continue }
++        if ((c == "{" || c == "}") && (i == 1 || sep(p)) && sep(x)) {
+           emit(substr(buf, start, i - start))
+-          if ((c == "&" || c == "|") && substr(buf, i + 1, 1) == c) i++
++          start = i + 1
++        } else if (c == ";" || c == "\n" || c == "&" || c == "|" || c == "(" || c == ")") {
++          emit(substr(buf, start, i - start))
++          if ((c == "&" || c == "|") && x == c) i++
+           start = i + 1
+         }
+         i++
+@@ -102,24 +117,29 @@ _shell_words() {
+     }'
+ }
+ 
++# _cmd_words CMDLINE: the words of a simple command from its command name on, one per line.
++# Skips leading VAR=value words, the keywords if then elif else do while until ! {, the wrappers
++# command, exec, time, nohup, sudo and env, and their options (-u and -g take a value).
++_cmd_words() {
++  _shell_words "$1" | LC_ALL=C awk '
++    s { print; next }
++    val { val = 0; next }
++    /^[A-Za-z_][A-Za-z0-9_]*=/ { next }
++    /^(if|then|elif|else|do|while|until|!|[{]|command|exec|time|nohup|sudo|env)$/ { next }
++    /^-[ug]$/ { val = 1; next }
++    /^-/ { next }
++    { s = 1; print }'
++}
++
+ # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the
+-# command is not git. Leading VAR=value words and command/exec/time/nohup/sudo are skipped.
++# command is not git. What _cmd_words skips comes first.
+ git_sub() {
+-  local w=() t i=0 n dir="${CWD:-$PWD}" rest=""
++  local w=() t i=1 n dir="${CWD:-$PWD}" rest=""
+   while IFS= read -r t; do w+=("$t"); done <<EOT
+-$(_shell_words "$1")
++$(_cmd_words "$1")
+ EOT
+   n=${#w[@]}
+-  while [ "$i" -lt "$n" ]; do
+-    case "${w[$i]}" in
+-      [A-Za-z_]*=*) i=$((i + 1)) ;;
+-      command | exec | time | nohup | sudo) i=$((i + 1)) ;;
+-      *) break ;;
+-    esac
+-  done
+-  [ "$i" -lt "$n" ] || return 1
+-  case "${w[$i]}" in git | */git) ;; *) return 1 ;; esac
+-  i=$((i + 1))
++  case "${w[0]}" in git | */git) ;; *) return 1 ;; esac
+   while [ "$i" -lt "$n" ]; do
+     case "${w[$i]}" in
+       -C)
+@@ -142,12 +162,10 @@ EOT
+   printf '%s\t%s\t%s\n' "$dir" "$t" "$rest"
+ }
+ 
+-# cmd_head CMDLINE: the first two words of a simple command after env assignments and wrappers.
++# cmd_head CMDLINE: the first two words of a simple command after what _cmd_words skips.
+ cmd_head() {
+-  _shell_words "$1" | awk '
+-    !started && /^[A-Za-z_][A-Za-z0-9_]*=/ { next }
+-    !started && /^(command|exec|time|nohup|sudo)$/ { next }
+-    { started = 1; out = out (n++ ? " " : "") $0; if (n == 2) exit }
++  _cmd_words "$1" | awk '
++    { out = out (n++ ? " " : "") $0; if (n == 2) exit }
+     END { print out }'
+ }
+ 
+@@ -176,9 +194,10 @@ base_branch_name() {
+ }
+ 
+ # branch_protected BRANCH: base branch, branch.protected or deploy.envs. With no resolvable base,
+-# main, master, trunk and develop count as protected.
++# main, master, trunk and develop count as protected. `*` (every branch, from push_targets) does too.
+ branch_protected() {
+   local base
++  [ "$1" = "*" ] && return 0
+   if base=$(base_branch_name); then
+     [ "$1" = "$base" ] && return 0
+   else
+@@ -189,10 +208,12 @@ branch_protected() {
+   return 1
+ }
+ 
+-# push_targets DIR REST: remote branch names a `git push` writes, one per line. `:x` and
+-# --delete targets print as `x`. No refspec means the current branch.
++# push_targets DIR REST: remote branch names a `git push` writes, one per line. `:x`, `-d x` and
++# `--delete x` print `x`; `refs/heads/` and `heads/` are stripped. --all, --mirror, --branches and
++# a refspec holding `*` print `*`. Redirections (2>&1, >file, `> file`) are skipped. No refspec
++# means the current branch.
+ push_targets() {
+-  local dir="$1" w=() t i=0 n pos=0 any=0
++  local dir="$1" w=() t r i=0 n pos=0 any=0
+   while IFS= read -r t; do [ -n "$t" ] && w+=("$t"); done <<EOT
+ $(_shell_words "$2")
+ EOT
+@@ -201,29 +222,41 @@ EOT
+     t="${w[$i]}"
+     i=$((i + 1))
+     case "$t" in
++      '<'* | '>'* | '&>'* | [0-9]*'>'* | [0-9]*'<'*)
++        # An operator with no target attached (`>`, `2>`) takes the next word as its target.
++        r=${t#"${t%%[!0-9]*}"}
++        r=${r#"${r%%[!<>&|]*}"}
++        [ -n "$r" ] || i=$((i + 1))
++        continue
++        ;;
++      --all | --mirror | --branches) any=1; printf '*\n'; continue ;;
+       --repo | --push-option | -o | --receive-pack | --exec) i=$((i + 1)); continue ;;
+       -*) continue ;;
+     esac
+     pos=$((pos + 1))
+     [ "$pos" -eq 1 ] && continue
+     any=1
++    case "$t" in *'*'*) printf '*\n'; continue ;; esac
+     t=${t#+}
+     case "$t" in
+       *:*) t=${t#*:} ;;
+     esac
+     [ "$t" = HEAD ] && t=$(current_branch "$dir")
+-    printf '%s\n' "${t#refs/heads/}"
++    case "$t" in refs/heads/*) t=${t#refs/heads/} ;; heads/*) t=${t#heads/} ;; esac
++    printf '%s\n' "$t"
+   done
+   [ "$any" = 1 ] || current_branch "$dir"
+ }
+ 
+-# with_timeout SECS CMD...: runs CMD, killing it after SECS seconds. Returns CMD's exit code.
++# with_timeout SECS CMD...: runs CMD, killing it after SECS seconds. Returns CMD's exit code. The
++# watchdog kills CMD's children first (with pkill, when present), so a grandchild such as `sleep`
++# cannot hold the caller's $( ) pipe open after CMD dies.
+ with_timeout() {
+   local secs="$1" pid w rc
+   shift
+   "$@" &
+   pid=$!
+-  (sleep "$secs" && kill "$pid") >/dev/null 2>&1 &
++  (sleep "$secs" && { command -v pkill >/dev/null && pkill -P "$pid"; kill "$pid"; }) >/dev/null 2>&1 &
+   w=$!
+   wait "$pid"
+   rc=$?
+@@ -234,12 +267,11 @@ with_timeout() {
+ }
+ 
+ # gh_sub CMDLINE: for `gh <group> <verb> ...` prints `<group> <verb>`; exit 1 for anything else.
++# What _cmd_words skips comes first.
+ gh_sub() {
+   local out
+-  out=$(_shell_words "$1" | awk '
+-    !s && /^[A-Za-z_][A-Za-z0-9_]*=/ { next }
+-    !s && /^(command|exec|time|nohup|sudo)$/ { next }
+-    { s = 1; w[++n] = $0; if (n == 3) exit }
++  out=$(_cmd_words "$1" | awk '
++    { w[++n] = $0; if (n == 3) exit }
+     END { if (w[1] == "gh" && n >= 3) print w[2] " " w[3]; else if (w[1] == "gh" && n == 2) print w[2] }')
+   [ -n "$out" ] || return 1
+   printf '%s\n' "$out"
+diff --git a/hooks/pre-tool-use b/hooks/pre-tool-use
+index b81903a..3100885 100755
+--- a/hooks/pre-tool-use
++++ b/hooks/pre-tool-use
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env bash
+ # kern PreToolUse dispatcher: runs every guard in hooks/guards and prints the strictest vote.
++# shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
+ KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ export KERN_ROOT
+ # shellcheck source=hooks/lib/json.sh
+@@ -13,25 +14,40 @@ export KERN_ROOT
+ # shellcheck source=hooks/lib/gitctx.sh
+ . "$KERN_ROOT/hooks/lib/gitctx.sh"
+ 
++# unparseable WHAT: fail closed on input the JSON reader could not parse, and stop.
++unparseable() {
++  fail_closed "$1 not parseable"
++  emit_decision
++  exit 0
++}
++
+ # shellcheck disable=SC2034 # KERN_INPUT, TOOL and AGENT are read by json.sh and the guard files
+ KERN_INPUT=$(cat)
+-AUTOPILOT=0
+ SID=$(json_get session_id 2>/dev/null) || SID=""
++# cwd is read first because settings, and so autopilot, resolve from it.
++CWD=$(json_get cwd)
++cwd_rc=$?
++[ "$cwd_rc" = 0 ] || CWD="$PWD"
++KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
++export CWD KERN_MAIN
++# shellcheck disable=SC2034 # AUTOPILOT is read by emit_decision and the guard files
++{
++  AUTOPILOT=0
++  [ -n "$SID" ] && autopilot_on "$SID" 2>/dev/null && AUTOPILOT=1
++}
+ # shellcheck disable=SC2034 # TOOL is read by guard files
+ if ! json_ok || ! TOOL=$(json_get tool_name); then
+-  [ -n "$SID" ] && autopilot_on "$SID" 2>/dev/null && AUTOPILOT=1
+-  fail_closed "hook input not parseable"
+-  emit_decision
+-  exit 0
++  unparseable "hook input"
+ fi
+-CWD=$(json_get cwd) || CWD="$PWD"
++[ "$cwd_rc" = 2 ] && unparseable cwd
++# Exit 1 is an absent field and takes the fallback; any other failure is malformed JSON and fails closed.
++# shellcheck disable=SC2034 # read by ti_get and the guard files
++TOOL_INPUT=$(json_get_raw tool_input) || case $? in 1) TOOL_INPUT="{}" ;; *) unparseable tool_input ;; esac
+ # shellcheck disable=SC2034 # read by guard files
+-AGENT=$(json_get agent_type) || AGENT=""
+-TOOL_INPUT=$(json_get_raw tool_input) || TOOL_INPUT="{}"
+-KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+-export CWD KERN_MAIN
++AGENT=$(json_get agent_type) || case $? in 1) AGENT="" ;; *) unparseable agent_type ;; esac
++# Monitor runs a shell command from the same `command` key, so every guard reads it as Bash.
++[ "$TOOL" = Monitor ] && TOOL=Bash
+ kern_enabled || exit 0
+-[ -n "$SID" ] && autopilot_on "$SID" && AUTOPILOT=1
+ 
+ for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
+   # shellcheck source=/dev/null
+@@ -40,9 +56,10 @@ done
+ for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
+   id=$(basename "$f" .sh)
+   id=${id%%-*}
+-  if [ -n "${KERN_GUARDS-}" ]; then
++  if [ -n "${KERN_GUARDS-}" ] && [ -n "${BATS_TEST_FILENAME-}" ]; then
+     case ",$KERN_GUARDS," in *",$id,"*) ;; *) continue ;; esac
+   fi
++  declare -F "guard_$id" >/dev/null || { fail_closed "guard $id did not load"; continue; }
+   "guard_$id"
+ done
+ emit_decision
+diff --git a/tests/helpers/common.bash b/tests/helpers/common.bash
+index e2dc275..1d50120 100644
+--- a/tests/helpers/common.bash
++++ b/tests/helpers/common.bash
+@@ -46,6 +46,12 @@ bash_payload() {
+   payload PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"}"
+ }
+ 
++# tool_payload TOOL FIELDS: a PreToolUse payload whose tool_input object holds FIELDS. Callers pass
++# the fields without braces: bash 3.2 brace-expands a literal {"a":1,"b":2} inside "$( )".
++tool_payload() {
++  payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{$2}"
++}
++
+ # run_guard PAYLOAD [GUARDS]: runs hooks/pre-tool-use with PAYLOAD on stdin.
+ run_guard() {
+   local guards="${2-}"
+diff --git a/tests/hooks-json.test.mjs b/tests/hooks-json.test.mjs
+index bce4134..1364993 100644
+--- a/tests/hooks-json.test.mjs
++++ b/tests/hooks-json.test.mjs
+@@ -21,7 +21,7 @@ test('every M1 event is wired in exec form', () => {
+ test('the guard dispatcher fails closed and sees every guarded tool', () => {
+   const pre = hooks.PreToolUse[0];
+   assert.equal(pre.hooks[0].onFailure, 'block');
+-  for (const tool of ['Bash', 'Write', 'Edit', 'NotebookEdit', 'Skill', 'CronCreate', 'ScheduleWakeup', 'RemoteTrigger', 'SendMessage', 'mcp__claude_ai_Linear__save_issue']) {
++  for (const tool of ['Bash', 'Monitor', 'Write', 'Edit', 'NotebookEdit', 'Skill', 'CronCreate', 'ScheduleWakeup', 'RemoteTrigger', 'SendMessage', 'mcp__claude_ai_Linear__save_issue']) {
+     assert.match(tool, new RegExp(`^(${pre.matcher})$`), tool);
+   }
+ });
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index 913c3ba..0c930c0 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env bats
+-# G16: Claude cannot write kern session state or relay a mode or autopilot command.
++# G16: Claude cannot write kern session state or relay a mode or autopilot command, and the user
++# confirms every write to a kern settings file.
+ 
+ load ../helpers/common
+ 
+@@ -7,6 +8,36 @@ setup() {
+   R="$BATS_TEST_TMPDIR/repo"
+   make_repo "$R"
+   kern_env "$R"
++  S="$CLAUDE_PLUGIN_DATA/sessions"
++  mkdir -p "$S"
++}
++
++# file_payload TOOL PATH: a PreToolUse payload for a Write, Edit or NotebookEdit of PATH.
++file_payload() {
++  local key=file_path
++  [ "$1" = NotebookEdit ] && key=notebook_path
++  payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{\"$key\":\"$2\",\"content\":\"autopilot: on\"}"
++}
++
++# expect_file_tools PATH DECISION: Write, Edit and NotebookEdit of PATH each give DECISION.
++expect_file_tools() {
++  local t
++  for t in Write Edit NotebookEdit; do
++    run_guard "$(file_payload "$t" "$1")" g16
++    [ "$status" -eq 0 ] || { echo "$t $1 -> status $status"; return 1; }
++    [ "$(decision_of "$output")" = "$2" ] || { echo "$t $1 -> $output"; return 1; }
++  done
++}
++
++# expect_bash DECISION COMMAND...: each Bash COMMAND gives DECISION.
++expect_bash() {
++  local d="$1" c
++  shift
++  for c in "$@"; do
++    run_guard "$(bash_payload "$c")" g16
++    [ "$status" -eq 0 ] || { echo "$c -> status $status"; return 1; }
++    [ "$(decision_of "$output")" = "$d" ] || { echo "$c -> $output"; return 1; }
++  done
+ }
+ 
+ @test "Write under the sessions dir is denied in both modes" {
+@@ -19,15 +50,72 @@ setup() {
+ }
+ 
+ @test "Edit of another file: no vote" {
++  expect_file_tools "$S/test-session.state" deny
+   run_guard "$(payload PreToolUse "\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$R/README.md\"}")" g16
++  [ "$status" -eq 0 ]
++  [ -z "$output" ]
+   [ "$(decision_of "$output")" = none ]
+ }
+ 
+-@test "a Bash command naming the sessions dir is denied" {
++@test "a .. path into the sessions dir is denied" {
++  expect_file_tools "$CLAUDE_PLUGIN_DATA/nope/../sessions/test-session.state" deny
++  expect_file_tools "$R/../data/./sessions/test-session.state" deny
++}
++
++@test "an upper-cased path to the sessions dir is denied" {
++  expect_file_tools "$(printf '%s' "$S/test-session.state" | tr '[:lower:]' '[:upper:]')" deny
++}
++
++@test "a symlinked dir that resolves to the sessions dir is denied" {
++  ln -s "$S" "$BATS_TEST_TMPDIR/link"
++  expect_file_tools "$BATS_TEST_TMPDIR/link/test-session.state" deny
++}
++
++@test "a Bash write into the sessions dir is denied" {
+   run_guard "$(bash_payload "echo autopilot: on >> $CLAUDE_PLUGIN_DATA/sessions/test-session.state")" g16
+   [ "$(decision_of "$output")" = deny ]
+ }
+ 
++@test "every Bash write shape against session state is denied" {
++  expect_bash deny \
++    "echo autopilot: on >> ~/.claude/plugins/data/k*/sessions/*.state" \
++    "echo autopilot: on > /X/PLUGINS/DATA/KERN-KERN/SESSIONS/A.STATE" \
++    "echo on > \$CLAUDE_PLUGIN_DATA/sessions/a.state" \
++    "echo on >| $S/a.state" \
++    "printf on | tee -a $S/a.state" \
++    "sed -i '' s/off/on/ $S/a.state" \
++    "perl -pi -e s/off/on/ $S/a.state" \
++    "cp /tmp/x $S/a.state" \
++    "mv /tmp/x $S/a.state" \
++    "ln -sf /tmp/x $S/a.state" \
++    "rm -f $S/a.state" \
++    "truncate -s 0 $S/a.state" \
++    "dd if=/tmp/x of=$S/a.state" \
++    "install -m 600 /tmp/x $S/a.state" \
++    "sudo env A=1 tee $S/a.state" \
++    "sudo -u me tee $S/a.state" \
++    "if true; then rm -f $S/a.state; fi" \
++    "echo on &> $S/a.state" \
++    "bash -c 'echo on > $S/a.state'" \
++    "x=\$(echo on > $S/a.state)" \
++    "cd $S && echo autopilot: on > a.state" \
++    "echo on > /tmp/test-session.state"
++}
++
++@test "reads of session state: no vote" {
++  expect_bash deny "echo autopilot: on >> $S/test-session.state"
++  expect_bash none \
++    "cat $S/test-session.state" \
++    "grep autopilot $S/test-session.state 2>/dev/null" \
++    "ls -la ~/.claude/plugins/data/kern-kern/sessions" \
++    "cat $S/test-session.state > /tmp/copy"
++}
++
++@test "a Monitor command writing the state file is denied" {
++  run_guard "$(tool_payload Monitor "\"command\":\"echo autopilot: on >> $S/test-session.state\",\"description\":\"x\"")" g16
++  [ "$(decision_of "$output")" = deny ]
++}
++
+ @test "a scheduled prompt or relayed message carrying /kern:autopilot is denied" {
+   for t in CronCreate ScheduleWakeup RemoteTrigger SendMessage; do
+     run_guard "$(payload PreToolUse "\"tool_name\":\"$t\",\"tool_input\":{\"prompt\":\"/kern:autopilot on\"}")" g16
+@@ -37,7 +125,72 @@ setup() {
+   [ "$(decision_of "$output")" = deny ]
+ }
+ 
++@test "relayed text that opens with a mode or autopilot command is denied" {
++  run_guard "$(payload PreToolUse "\"tool_name\":\"ScheduleWakeup\",\"tool_input\":{\"prompt\":\"/autopilot on\"}")" g16
++  [ "$(decision_of "$output")" = deny ]
++  run_guard "$(tool_payload SendMessage "\"to\":\"main\",\"message\":\"  /kern:mode terse\"")" g16
++  [ "$(decision_of "$output")" = deny ]
++  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"\\n/mode terse\"}")" g16
++  [ "$(decision_of "$output")" = deny ]
++}
++
++@test "relayed text that only mentions a mode command: no vote" {
++  run_guard "$(tool_payload SendMessage "\"to\":\"main\",\"message\":\"/kern:mode terse\"")" g16
++  [ "$(decision_of "$output")" = deny ]
++  run_guard "$(tool_payload SendMessage "\"to\":\"main\",\"message\":\"ask the user to type /kern:mode terse\"")" g16
++  [ "$status" -eq 0 ]
++  [ "$(decision_of "$output")" = none ]
++  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"/models list\"}")" g16
++  [ "$status" -eq 0 ]
++  [ "$(decision_of "$output")" = none ]
++}
++
++@test "a RemoteTrigger whose nested body carries a kern command is denied; a list passes" {
++  run_guard "$(tool_payload RemoteTrigger "\"action\":\"create\",\"body\":{\"job_config\":{\"prompt\":\"/kern:autopilot on\"}}")" g16
++  [ "$(decision_of "$output")" = deny ]
++  run_guard "$(tool_payload RemoteTrigger "\"action\":\"update\",\"body\":{\"job_config\":{\"prompt\":\"check CI then /Kern:Mode terse\"}}")" g16
++  [ "$(decision_of "$output")" = deny ]
++  run_guard "$(tool_payload RemoteTrigger "\"action\":\"run\",\"body\":{\"routine\":{\"instructions\":\"/kern:autopilot on\"}}")" g16
++  [ "$(decision_of "$output")" = deny ]
++  run_guard "$(tool_payload RemoteTrigger "\"action\":\"list\"")" g16
++  [ "$status" -eq 0 ]
++  [ -z "$output" ]
++  [ "$(decision_of "$output")" = none ]
++}
++
+ @test "a scheduled prompt without kern commands: no vote" {
++  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"/kern:autopilot on\"}")" g16
++  [ "$(decision_of "$output")" = deny ]
+   run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"check CI\"}")" g16
++  [ "$status" -eq 0 ]
++  [ -z "$output" ]
++  [ "$(decision_of "$output")" = none ]
++}
++
++@test "a Skill call to the mode or autopilot skill is denied; other skills pass" {
++  for s in kern:autopilot kern:mode autopilot mode KERN:MODE; do
++    run_guard "$(tool_payload Skill "\"skill\":\"$s\",\"args\":\"on\"")" g16
++    [ "$(decision_of "$output")" = deny ] || { echo "$s -> $output"; return 1; }
++  done
++  run_guard "$(tool_payload Skill "\"skill\":\"kern:help\",\"args\":\"mention /kern:mode\"")" g16
++  [ "$status" -eq 0 ]
+   [ "$(decision_of "$output")" = none ]
+ }
++
++@test "a write to a kern settings file asks, and denies under autopilot" {
++  mkdir -p "$R/.claude"
++  expect_file_tools "$R/.claude/kern.local.yml" ask
++  expect_file_tools "$R/.claude/kern.yml" ask
++  expect_file_tools "$HOME/.claude/kern.yml" ask
++  expect_file_tools "$R/.CLAUDE/KERN.LOCAL.YML" ask
++  [[ "$output" == *'"kern G16: kern settings change guard policy; the user confirms each write"'* ]] || false
++  expect_bash ask "echo kern: off >> .claude/kern.local.yml" "sed -i '' s/ask/auto/ $R/.claude/kern.yml"
++  set_autopilot on
++  expect_file_tools "$R/.claude/kern.local.yml" deny
++  [[ "$output" == *"the user confirms each write (autopilot: nobody to ask)"* ]] || false
++}
++
++@test "reading a kern settings file: no vote" {
++  expect_bash ask "echo kern: off >> .claude/kern.local.yml"
++  expect_bash none "cat .claude/kern.local.yml" "grep policy $R/.claude/kern.yml"
++}
+diff --git a/tests/hooks/gitctx.bats b/tests/hooks/gitctx.bats
+index e23eaa6..2203b89 100644
+--- a/tests/hooks/gitctx.bats
++++ b/tests/hooks/gitctx.bats
+@@ -13,6 +13,29 @@ setup() {
+   export CWD=/tmp
+ }
+ 
++# finds CMD SUB: some simple command that git_words prints for CMD is `git SUB` to git_sub and to cmd_head.
++finds() {
++  local line t hit=""
++  while IFS= read -r line; do
++    t=$(git_sub "$line") || continue
++    if [ "$(printf '%s\n' "$t" | cut -f2)" = "$2" ] && [ "$(cmd_head "$line")" = "git $2" ]; then hit=1; fi
++  done <<EOT
++$(git_words "$1")
++EOT
++  [ -n "$hit" ] || { echo "no git $2 in: $1"; git_words "$1"; return 1; }
++}
++
++# finds_gh CMD: some simple command that git_words prints for CMD is `gh pr create` to gh_sub.
++finds_gh() {
++  local line hit=""
++  while IFS= read -r line; do
++    if [ "$(gh_sub "$line")" = "pr create" ]; then hit=1; fi
++  done <<EOT
++$(git_words "$1")
++EOT
++  [ -n "$hit" ] || { echo "no gh pr create in: $1"; git_words "$1"; return 1; }
++}
++
+ @test "git_words splits chains and keeps quoted separators" {
+   run git_words 'cd x && git push origin main; echo "a;b" | grep q || git status'
+   [ "${lines[0]}" = "cd x" ]
+@@ -30,6 +53,42 @@ setup() {
+   [[ "$output" == *$'\n'"git reset --hard"* ]] || false
+ }
+ 
++@test "git and gh are seen behind shells, wrappers, groups and keywords" {
++  for c in 'bash -lc "git stash"' 'sh -ec "git stash"' '/bin/bash -c "git stash"' \
++    'nohup bash -c "git stash"' 'command git stash' 'exec git stash' 'time git stash' \
++    '(git stash)' '{ git stash; }' 'if true; then git stash; fi' '! git stash' \
++    'sudo -u me git stash' 'sudo -E git stash'; do
++    finds "$c" stash
++    finds_gh "${c/git stash/gh pr create}"
++  done
++  finds 'for b in a; do git push origin $b; done' push
++}
++
++@test "a backslash-newline is dropped, not read as a space" {
++  finds "git \\
++ stash" stash
++  run git_words "git sta\\
++sh"
++  [ "$output" = "git stash" ]
++}
++
++@test "quoted parentheses stay inside their word" {
++  run git_words 'git commit -m "fix (x)" && (git status)'
++  [ "${lines[0]}" = 'git commit -m "fix (x)"' ]
++  [ "${lines[1]}" = "git status" ]
++  [ "${#lines[@]}" -eq 2 ]
++  [ "$(git_sub "${lines[0]}" | cut -f3)" = "-m fix (x)" ]
++}
++
++@test "redirections never split a command" {
++  run git_words 'git push origin 2>&1 | tail -3'
++  [ "${lines[0]}" = "git push origin 2>&1" ]
++  [ "${lines[1]}" = "tail -3" ]
++  run git_words 'git push origin &>/dev/null; git fetch >| log'
++  [ "${lines[0]}" = "git push origin &>/dev/null" ]
++  [ "${lines[1]}" = "git fetch >| log" ]
++}
++
+ @test "git_sub reads -C, skips env and global options" {
+   run git_sub 'FOO=1 git -C /repo -c a=b --no-pager push -u origin "my branch"'
+   [ "$output" = "/repo	push	-u origin my branch" ]
+@@ -58,9 +117,55 @@ setup() {
+   [ "$output" = feat ]
+ }
+ 
++@test "push_targets skips redirections" {
++  R="$BATS_TEST_TMPDIR/repo"
++  make_repo "$R"
++  for rest in 'origin 2>&1' 'origin >/dev/null' 'origin > /dev/null' 'origin 2> err.log' \
++    'origin &>/dev/null' 'origin </dev/null'; do
++    run push_targets "$R" "$rest"
++    [ "$output" = main ] || { echo "$rest -> $output"; return 1; }
++  done
++  run push_targets "$R" "$(git_sub 'git push origin 2>&1' | cut -f3)"
++  [ "$output" = main ]
++}
++
++@test "push_targets prints * for every-branch pushes, and * is protected" {
++  R="$BATS_TEST_TMPDIR/repo"
++  make_repo "$R"
++  for rest in '--all origin' 'origin --mirror' 'origin --branches' \
++    'origin refs/heads/*:refs/heads/*' "origin 'feat/*'"; do
++    run push_targets "$R" "$rest"
++    [ "$output" = '*' ] || { echo "$rest -> $output"; return 1; }
++  done
++  branch_protected '*'
++}
++
++@test "push_targets strips heads/ and reads deletes" {
++  R="$BATS_TEST_TMPDIR/repo"
++  make_repo "$R"
++  run push_targets "$R" "origin heads/rel HEAD:heads/x refs/heads/y"
++  [ "${lines[0]}" = rel ]
++  [ "${lines[1]}" = x ]
++  [ "${lines[2]}" = y ]
++  for rest in 'origin --delete old' '--delete origin old' 'origin -d old' 'origin :old' \
++    'origin :refs/heads/old' 'origin --delete heads/old'; do
++    run push_targets "$R" "$rest"
++    [ "$output" = old ] || { echo "$rest -> $output"; return 1; }
++  done
++}
++
+ @test "with_timeout returns promptly when the command finishes" {
+   start=$(date +%s)
+   out=$(with_timeout 10 echo done)
+   [ "$out" = done ]
+   [ $(($(date +%s) - start)) -lt 3 ]
+ }
++
++@test "with_timeout stops a slow command and its children" {
++  start=$(date +%s)
++  rc=0
++  out=$(with_timeout 1 sh -c 'echo partial; sleep 6') || rc=$?
++  [ "$rc" -ne 0 ]
++  [ "$out" = partial ]
++  [ $(($(date +%s) - start)) -lt 3 ]
++}
+diff --git a/tests/hooks/pre-tool-use.bats b/tests/hooks/pre-tool-use.bats
+new file mode 100644
+index 0000000..1eb0bb7
+--- /dev/null
++++ b/tests/hooks/pre-tool-use.bats
+@@ -0,0 +1,87 @@
++#!/usr/bin/env bats
++# hooks/pre-tool-use: fails closed on input it cannot read and on a guard that did not load, keeps the
++# strictest vote, and honours KERN_GUARDS only under bats.
++
++load ../helpers/common
++
++setup() {
++  R="$BATS_TEST_TMPDIR/repo"
++  make_repo "$R"
++  kern_env "$R"
++  K="$(kern_root)"
++}
++
++# feed N: runs the dispatcher, byte for byte, on the Nth input it cannot read: 1 empty, 2 not JSON,
++# 3 no tool_name, 4 truncated tool_input, 5 unterminated cwd, 6 unterminated agent_type.
++feed() {
++  local in="$BATS_TEST_TMPDIR/in"
++  case "$1" in
++    1) : >"$in" ;;
++    2) printf 'not json' >"$in" ;;
++    3) printf '{"session_id":"test-session","cwd":"%s"}' "$CWD" >"$in" ;;
++    4) printf '{"session_id":"test-session","cwd":"%s","tool_name":"Write","tool_input":{"file_path":"x","content":"a}' "$CWD" >"$in" ;;
++    5) printf '{"session_id":"test-session","tool_name":"Bash","cwd":"/tmp}' >"$in" ;;
++    6) printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"ls"},"agent_type":"x}' "$CWD" >"$in" ;;
++  esac
++  run bash "$K/hooks/pre-tool-use" <"$in"
++}
++
++@test "input the dispatcher cannot read gives ask" {
++  for n in 1 2 3 4 5 6; do
++    feed "$n"
++    [ "$status" -eq 0 ] || { echo "$n -> status $status"; return 1; }
++    [ "$(decision_of "$output")" = ask ] || { echo "$n -> $output"; return 1; }
++  done
++  feed 4
++  [[ "$output" == *'"kern G0: tool_input not parseable"'* ]] || false
++  feed 5
++  [[ "$output" == *'"kern G0: cwd not parseable"'* ]] || false
++  feed 6
++  [[ "$output" == *'"kern G0: agent_type not parseable"'* ]] || false
++}
++
++@test "under autopilot, unreadable input that names its session gives deny" {
++  set_autopilot on
++  for n in 3 4 5 6; do
++    feed "$n"
++    [ "$status" -eq 0 ] || { echo "$n -> status $status"; return 1; }
++    [ "$(decision_of "$output")" = deny ] || { echo "$n -> $output"; return 1; }
++    [[ "$output" == *'(autopilot: nobody to ask)"}}' ]] || { echo "$n -> $output"; return 1; }
++  done
++}
++
++@test "under autopilot, input with no readable session id still never allows" {
++  set_autopilot on
++  for n in 1 2; do
++    feed "$n"
++    [ "$status" -eq 0 ] || { echo "$n -> status $status"; return 1; }
++    [ "$(decision_of "$output")" = ask ] || { echo "$n -> $output"; return 1; }
++  done
++}
++
++@test "a deny and an ask in one call: deny wins and only deny reasons print" {
++  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
++  run_guard "$(bash_payload "echo push.policy: auto >> $R/.claude/kern.local.yml; echo autopilot: on >> $CLAUDE_PLUGIN_DATA/sessions/test-session.state")"
++  [ "$(decision_of "$output")" = deny ]
++  [[ "$output" == *'"kern G16: commands may not write kern session state"'* ]] || false
++  [[ "$output" != *"kern settings"* ]] || false
++}
++
++@test "a guard file that does not load fails closed" {
++  mkdir -p "$BATS_TEST_TMPDIR/k"
++  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
++  printf 'guard_g99() {\n  if then\n}\n' >"$BATS_TEST_TMPDIR/k/hooks/guards/g99-broken.sh"
++  run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload ls)"
++  [ "$status" -eq 0 ]
++  [ "$(decision_of "$output")" = ask ]
++  [[ "$output" == *'"kern G0: guard g99 did not load"'* ]] || false
++}
++
++@test "KERN_GUARDS limits the guards under bats only" {
++  p=$(payload PreToolUse "\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/sessions/test-session.state\"}")
++  run_guard "$p" g01
++  [ "$status" -eq 0 ]
++  [ "$(decision_of "$output")" = none ]
++  out=$(unset BATS_TEST_FILENAME; KERN_GUARDS=g01 bash "$K/hooks/pre-tool-use" <<<"$p")
++  [ "$(decision_of "$out")" = deny ]
++}

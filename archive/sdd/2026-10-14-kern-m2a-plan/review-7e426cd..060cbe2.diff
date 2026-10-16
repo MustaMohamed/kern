@@ -1,0 +1,143 @@
+# Review package: 7e426cd..HEAD
+
+## Commits
+060cbe2 M2: floor-scan catches more assertion styles and every threshold
+
+## Files changed
+ scripts/lib/floor-scan.awk    | 27 ++++++++++++++++-----------
+ tests/scripts/floor-scan.bats | 40 ++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 56 insertions(+), 11 deletions(-)
+
+## Diff
+diff --git a/scripts/lib/floor-scan.awk b/scripts/lib/floor-scan.awk
+index 85b48dc..734087f 100644
+--- a/scripts/lib/floor-scan.awk
++++ b/scripts/lib/floor-scan.awk
+@@ -6,56 +6,61 @@ function is_doc(p) { return p ~ /\.(md|mdx|txt|rst|adoc)$/ }
+ function is_ci(p) { return p ~ /(^|\/)\.github\/workflows\/[^\/]+\.ya?ml$|(^|\/)\.gitlab-ci\.ya?ml$|(^|\/)\.circleci\/config\.ya?ml$|(^|\/)azure-pipelines\.ya?ml$|(^|\/)Jenkinsfile$/ }
+ function is_lintcfg(p) { return p ~ /(^|\/)(\.eslintrc[^\/]*|eslint\.config\.[a-z]+|biome\.jsonc?|\.rubocop\.ya?ml|ruff\.toml|\.flake8|setup\.cfg|pyproject\.toml|\.golangci\.ya?ml)$/ }
+ function is_tscfg(p) { return p ~ /(^|\/)tsconfig[^\/]*\.json$/ }
+ function norm(s) { gsub(/[ \t]/, "", s); gsub(/"/, "'", s); sub(/[;,]+$/, "", s); return s }
+ function hit(p, ln, cls, txt) {
+   sub(/^[ \t]+/, "", txt)
+   if (length(txt) > 120) txt = substr(txt, 1, 120)
+   printf "%s:%d\t%s\t%s\n", p, ln, cls, txt
+   hits++
+ }
+-# thr(t): sets K and V to a threshold key and its number found in t; returns 1 when found.
+-function thr(t, keys,   s) {
+-  if (!match(t, "(" keys ")[\"']?[ \t]*[:=][ \t]*[0-9]+(\\.[0-9]+)?")) return 0
+-  s = substr(t, RSTART, RLENGTH)
+-  K = s; sub(/["']?[ \t]*[:=].*/, "", K)
+-  V = s; sub(/^.*[:=][ \t]*/, "", V)
+-  return 1
++# thr(t, keys): fills TK[1..TN] and TV[1..TN] with every threshold key and number found in t, in order.
++function thr(t, keys,   s, k, v) {
++  TN = 0
++  while (match(t, "(" keys ")[\"']?[ \t]*[:=][ \t]*[0-9]+(\\.[0-9]+)?")) {
++    s = substr(t, RSTART, RLENGTH)
++    t = substr(t, RSTART + RLENGTH)
++    k = s; sub(/["']?[ \t]*[:=].*/, "", k)
++    v = s; sub(/^.*[:=][ \t]*/, "", v)
++    TN++; TK[TN] = k; TV[TN] = v
++  }
++  return TN
+ }
+ function added_line(p, ln, t) {
+   if (is_doc(p)) return
+   if (t ~ /@ts-ignore|@ts-nocheck|@ts-expect-error|eslint-disable|biome-ignore|#[ ]*noqa|#[ ]*type:[ ]*ignore|istanbul ignore|c8 ignore|nosemgrep|gitleaks:allow|Stryker disable|@SuppressWarnings|\/\/[ ]*nolint|NOLINT|pylint:[ ]*disable|rubocop:disable|pyright:[ ]*ignore|pragma:[ ]*no cover|#[ ]*nosec|#\[allow\(|(^|[^A-Za-z_])as[ \t]+any([^A-Za-z0-9_]|$)|as[ \t]+unknown[ \t]+as[ \t]/) hit(p, ln, "silenced-checker", t)
+   if (t ~ /\.(skip|todo)[(.]|(^|[^A-Za-z0-9_.])(xit|xdescribe|xtest|fit|fdescribe)\(|\.only\(|@pytest\.mark\.(skip|xfail)|t\.Skip\(|@Disabled|@Ignore|#\[ignore\]/) hit(p, ln, "test-made-easier", t)
+   if (t ~ /catch[ ]*(\([^)]*\))?[ ]*\{[ ]*\}|except[^:]*:[ ]*pass[ ]*$|(^|[^A-Za-z])(TODO|FIXME)([^A-Za-z]|$)|[Nn]ot implemented|unimplemented!\(|todo!\(/) hit(p, ln, "unfinished-work", t)
+   if (t ~ /console\.(log|debug|trace)\(|(^|[^A-Za-z0-9_.])debugger([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.])print\(|fmt\.Print(ln|f)?\(|binding\.pry|byebug|var_dump\(|dbg!\(|\[kern-dbg\]/) hit(p, ln, "debug-print", t)
+   if (is_ci(p) && t ~ /continue-on-error:[ \t]*true|allow_failure:[ \t]*true|\|\|[ \t]*(true|exit 0|:)[ \t]*$/) hit(p, ln, "bar-lowered", t)
+   if (is_tscfg(p) && t ~ /"(strict|noImplicitAny|strictNullChecks|noUncheckedIndexedAccess|noImplicitReturns)"[ \t]*:[ \t]*false/) hit(p, ln, "bar-lowered", t)
+   if (is_lintcfg(p) && (t ~ /:[ \t]*["']off["'][ \t]*,?[ \t]*$|:[ \t]*0[ \t]*,?[ \t]*$|Enabled:[ \t]*false|(^|[ \t])(extend-)?ignore[ \t]*=|per-file-ignores/)) hit(p, ln, "bar-lowered", t)
+   if (p ~ /(^|\/)package\.json$/ && t ~ /:[ \t]*["']off["'][ \t]*,?[ \t]*$/) hit(p, ln, "bar-lowered", t)
+ }
+ # flush: the buffered lines of one file, paired so a moved or reformatted line is not a change.
+-function flush(   i, t, k, m, d) {
++function flush(   i, j, t, k, m, d, K, V) {
+   if (file == "") return
+   for (i = 1; i <= na; i++) if (!(norm(at[i]) in rset)) added_line(file, al[i], at[i])
+   for (i = 1; i <= nr; i++) {
+     t = rt[i]
+     if (norm(t) in aset) continue
+-    if (is_test(file) && !deleted && t ~ /(^|[^A-Za-z_])(expect|assert|should)([^A-Za-z_]|$)/) hit(file, rl[i], "assertion-removed", t)
++    if (is_test(file) && !deleted && (t ~ /(^|[^A-Za-z_])(expect|assert|should)([^A-Za-z_]|$)/ || t ~ /(^|[^A-Za-z0-9_])(debug_)?assert([A-Z][A-Za-z0-9]*|_[a-z_]+)?([^A-Za-z0-9_]|$)/ || t ~ /(^|[^A-Za-z0-9_])require\.[A-Z]/)) hit(file, rl[i], "assertion-removed", t)
+     if (is_ci(file) && t ~ /^[ \t]*-?[ \t]*(run|script|uses):/) hit(file, rl[i], "bar-lowered", "CI step removed: " t)
+     if (is_tscfg(file) && t ~ /"strict"[ \t]*:[ \t]*true/) hit(file, rl[i], "bar-lowered", "strict removed: " t)
+   }
+   # Thresholds: the k-th removed and k-th added value of one key in this file, in a coverage or
+   # ratchet location. min: lowering loosens; max: raising loosens.
+   for (k in rk) delete rk[k]
+   for (k in ak) delete ak[k]
+-  for (i = 1; i <= nr; i++) if (thr(rt[i], tkeys)) { rk[K]++; rv[K, rk[K]] = V }
+-  for (i = 1; i <= na; i++) if (thr(at[i], tkeys)) {
++  for (i = 1; i <= nr; i++) if (thr(rt[i], tkeys)) for (j = 1; j <= TN; j++) { K = TK[j]; rk[K]++; rv[K, rk[K]] = TV[j] }
++  for (i = 1; i <= na; i++) if (thr(at[i], tkeys)) for (j = 1; j <= TN; j++) {
++    K = TK[j]; V = TV[j]
+     ak[K]++; m = ak[K]
+     if (!((K, m) in rv)) continue
+     d = (K in dir) ? dir[K] : "min"
+     if ((d == "min" && V + 0 < rv[K, m] + 0) || (d == "max" && V + 0 > rv[K, m] + 0))
+       hit(file, al[i], "bar-lowered", ((K in metric) ? "ratchet." metric[K] : "threshold " K) " moved from " rv[K, m] " to " V)
+   }
+   for (k in rv) delete rv[k]
+ }
+ function newfile(   f) {
+   flush()
+diff --git a/tests/scripts/floor-scan.bats b/tests/scripts/floor-scan.bats
+index 5caf705..5b615f8 100644
+--- a/tests/scripts/floor-scan.bats
++++ b/tests/scripts/floor-scan.bats
+@@ -162,10 +162,50 @@ count() { printf '%s\n' "$output" | grep -cE "$1" || true; }
+   [[ "$stderr" == *"no diff --git header"* ]] || false
+   run --separate-stderr bash "$KERN_ROOT/scripts/floor-scan" "$TMP/missing.diff"
+   [ "$status" -eq 2 ]
+ }
+ 
+ @test "suppressions in a doc file are not hits" {
+   printf '# Readme\nUse `// eslint-disable` sparingly. console.log is fine in examples.\n' > README.md
+   scan
+   [ "$status" -eq 0 ]
+ }
++
++@test "removed assertions in JUnit, Rust, unittest and testify styles are assertion-removed" {
++  printf 'class FooTest {\n  void t() {\n    assertEquals(3, sum(1, 2));\n  }\n}\n' > test/FooTest.java
++  mkdir -p tests
++  printf '#[test]\nfn t() {\n    assert_eq!(1, 1);\n    debug_assert!(true);\n    assert_ne!(1, 2);\n}\n' > tests/t.rs
++  printf 'class T(unittest.TestCase):\n    def test_a(self):\n        self.assertEqual(1, 1)\n' > test/test_a.py
++  printf 'func TestA(t *testing.T) {\n\trequire.Equal(t, 1, 1)\n\tassert.Equal(t, 2, 2)\n}\n' > test/a_test.go
++  git add -A && git commit --quiet -m styles
++  printf 'class FooTest {\n  void t() {\n  }\n}\n' > test/FooTest.java
++  printf '#[test]\nfn t() {\n}\n' > tests/t.rs
++  printf 'class T(unittest.TestCase):\n    def test_a(self):\n        pass\n' > test/test_a.py
++  printf 'func TestA(t *testing.T) {\n}\n' > test/a_test.go
++  scan
++  [ "$status" -eq 1 ]
++  has $'^test/FooTest\\.java:3\tassertion-removed\t'
++  has $'^tests/t\\.rs:3\tassertion-removed\t'
++  has $'^tests/t\\.rs:4\tassertion-removed\t'
++  has $'^tests/t\\.rs:5\tassertion-removed\t'
++  has $'^test/test_a\\.py:3\tassertion-removed\t'
++  has $'^test/a_test\\.go:2\tassertion-removed\t'
++  has $'^test/a_test\\.go:3\tassertion-removed\t'
++}
++
++@test "a removed require('y') import in a test file is not an assertion" {
++  printf "const x = require('y');\ntest('a', () => {});\n" > test/imp.test.js
++  git add -A && git commit --quiet -m imp
++  printf "test('a', () => {});\n" > test/imp.test.js
++  scan
++  [ "$(count 'assertion-removed')" -eq 0 ]
++}
++
++@test "every threshold on one line is checked" {
++  printf '{ "branches": 80, "lines": 90 }\n' > package.json
++  git add -A && git commit --quiet -m pkg
++  printf '{ "branches": 80, "lines": 50 }\n' > package.json
++  scan
++  [ "$status" -eq 1 ]
++  has $'^package\\.json:1\tbar-lowered\tthreshold lines moved from 90 to 50$'
++  [ "$(count 'branches moved')" -eq 0 ]
++}

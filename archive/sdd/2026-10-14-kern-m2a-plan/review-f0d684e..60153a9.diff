@@ -1,0 +1,229 @@
+diff --git a/skills/self-review/SKILL.md b/skills/self-review/SKILL.md
+index 8753c83..e5d9a73 100644
+--- a/skills/self-review/SKILL.md
++++ b/skills/self-review/SKILL.md
+@@ -6,28 +6,30 @@ disable-model-invocation: true
+ 
+ # self-review
+ 
+-Find what your diff breaks beyond itself, and run every cheap check, before a PR. Reached by the kernel row for a review of your own diff before a PR, by finish-branch step 4, or typed as `/kern:self-review`.
++Find what your diff breaks beyond itself, and run every cheap check, before a PR. Reached by the kernel row for a review of your own diff, by finish-branch step 4, or typed as `/kern:self-review`.
+ 
+ ## Steps
+ 
+ 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+-1. Scope. `<wt>` is the work's worktree, else the checkout root; `<base>` is `base_branch`. Run `git -C <wt> fetch origin <base>`; if it fails (no remote, offline), ask whether to use the last fetched `origin/<base>`, and report "base not refreshed". Run `git -C <wt> merge-base HEAD origin/<base>`: its output is `<merge-base>`; on failure stop, reporting its output. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <merge-base>`: line 1 is `<package>`, `<package>.patch` sits beside it, lines 3 on are the changed paths. Exit 3 is an empty diff: say there is nothing to review, and stop. Exit 2, a usage error or not a tree: stop and report.
+-2. Deterministic pass, pasting each command and its output. Resolve `verify.fast`, else `typecheck` and `lint`, and `test.focused` (on tests covering the changed paths). Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/floor-scan <package>` and `bash ${CLAUDE_PLUGIN_ROOT}/scripts/claim-check <wt> <package>`. floor-scan exit 1 and claim-check exit 1 are hits, each fixed or justified in the report; any other non-zero exit is a failed check, as is a red `verify.fast` or test. A skipped check counts as failed (`references/claim-checks.md`).
+-3. Built-in lane: call the Skill tool with `code-review`, arguments always explicit: the worktree path as the target for worktree work, the effort from `review.builtin.self_effort`, and `--max-findings` from `review.builtin.max_findings`. Never pass `--comment` and never `--fix`. Unavailable, erroring or `review.builtin: off`: `skip: built-in code-review not available`.
+-4. Spec lane: the spec `spec.source` names, else this work's plan or `WORK/specs` file; a spec in a tracker or PR body is saved under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`. Dispatch `kern:task-reviewer` on model `model.reviewer`, mode `whole-branch`, with absolute paths only: the spec (its Constraints are the Global Constraints), `<package>`, `<wt>`, the `review.rules` files; no report. Say the spec's acceptance lines stand in for the plan's acceptance lines and Review Focus. Ask what is missing or partial, not asked for, or implemented but wrong, each quoting its spec line. No spec: `skip: no spec`.
++1. Scope. `<wt>` is the work's worktree, else the checkout root; `<base>` is `base_branch`. `git -C <wt> remote get-url origin` failing means no remote: `<baseref>` is local `<base>`, said once. Else `<baseref>` is `origin/<base>` after `git -C <wt> fetch origin <base>`; if the fetch fails, ask whether to use the last fetched one, and report "base not refreshed". `git -C <wt> merge-base HEAD <baseref>` prints `<merge-base>`; failure stops the run, output reported. `references/rounds.md` names `<package>` and says what a later round adds. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <merge-base> --out <package>`: line 1 is `<package>`, `<package>.patch` sits beside it, lines 3 on are the changed paths. Exit 3 is an empty diff: say there is nothing to review, and stop; any other non-zero exit stops and reports.
++2. Deterministic pass, pasting commands and output. Resolve `verify.fast`, else `typecheck` and `lint`, and `test.focused` (on tests covering the changes). Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/floor-scan <package>` and `bash ${CLAUDE_PLUGIN_ROOT}/scripts/claim-check <wt> <package>`: exit 1 from either is hits, each fixed or justified in the report; any other non-zero exit, or a red `verify.fast` or test, is a failed check. A skipped check counts as failed (`references/claim-checks.md`).
++3. Built-in lane: call the Skill tool with `code-review`, explicit arguments: the worktree path as the target for worktree work, the effort from `review.builtin.self_effort`, and `--max-findings` from `review.builtin.max_findings`. Never pass `--comment` and never `--fix`. Unavailable, erroring or `review.builtin: off`: `skip: built-in code-review not available`.
++4. Spec lane: the spec `spec.source` names, else this work's plan or `WORK/specs` file; tracker or PR text is saved under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`. Dispatch `kern:task-reviewer` on model `model.reviewer`, mode `whole-branch`, with absolute paths only: the spec (its Constraints are the Global Constraints), `<package>`, `<wt>`, the `review.rules` files; no report. Say the spec's acceptance lines stand in for the plan's acceptance lines and Review Focus. Ask what is missing, partial, not asked for or wrong, each quoting its spec line. No spec: `skip: no spec`.
+ 5. Walk the `review.rules` files the diff touches, reading any not in context.
+-6. Blast radius, when a changed symbol has callers outside its directory or gates behaviour on a property (`references/blast-radius.md`): sweep every writer with `rg` and read each; look where grep stops; push the one fact the change is safe because of down to "ran it"; list Risks and Cleared apart.
+-7. Probes, with `<package>.patch` from step 1 and `<test>` the step 2 `test.focused` command on one test. A new guard test: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <package>.patch -- <test>`. A new conditional: one `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate <file>:<line> <wt> -- <test>`, which mutates a throwaway fork, never the worktree. probe exit 1 (no failure, or the mutation survived) is a finding; probe exit 3 is reported inconclusive, never as a pass; probe exit 2 is a failed check.
++6. Blast radius, when a changed symbol has callers outside its directory or gates behaviour on a property (`references/blast-radius.md`): sweep every writer with `rg` and read each; look where grep stops; prove the one fact it is safe because of; list Risks and Cleared apart.
++7. Probes, with `<package>.patch` from step 1 and `<test>`: `test.focused` with `{file}` or `{dir}` replaced by the one test file covering the change, no shell syntax. For each new test: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <package>.patch -- <test>`; it must fail with the branch's non-test changes reversed (one guard alone is implement's per-slice probe). For a new conditional, one `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate <file>:<line> <wt> -- <test>`: `<file>` is relative to `<wt>`, `<line>` from the working file; probe inverts the first operator on that line in a throwaway fork, never the worktree. probe exit 1 (no failure, or the mutation survived), 2 and 3 each fail the check; exit 3 is reported inconclusive, never as a pass.
+ 8. Doubt cycle, for non-trivial decisions only (`references/doubt-cycle.md`): dispatch `kern:investigator` on model `model.reviewer` with one question, "where does this artifact fail this contract?", both absolute paths as scope, and never your claim or reasoning. Reconcile as that file says; at most 3 cycles.
+-9. Verdict, with findings in `review.taxonomy` classes and a "Declined to judge" list (each behaviour set aside as outside the spec, with why): `ready`, `fix first`, `rebase first` or `split`, the first that applies. `split`: more changed paths than `scope_threshold` that the spec or plan does not approve, or a finding in an earlier self-review round's fix. `fix first`: a failed check, an unresolved hit, a probe exit 1, or a finding in the two highest classes. `rebase first`: `git -C <wt> rev-parse origin/<base>` differs from `<merge-base>` and `git -C <wt> diff --name-only <merge-base> origin/<base>` names a path the package also changed; never rebases here. Else `ready`, never with "base not refreshed" reported.
++9. Verdict: findings in `review.taxonomy` classes (ordered high to low), a "Declined to judge" list (each behaviour set aside as outside the spec, and why), then one verdict, tested in order: `split`, `fix first`, `rebase first`, else `ready`. `split`: a later round where this package has more than `scope_threshold` paths and the previous one did not, or a finding lands in an added line of the since package; a first round never splits. `fix first`: a failed or unrun check (step 2 or 7), an unresolved hit, or a finding in the first two classes (the spec lane's Critical and Important count). `rebase first`: `git -C <wt> rev-parse <baseref>` differs from `<merge-base>` and `git -C <wt> diff --name-only <merge-base> <baseref>` names a path the package also changed, or "base not refreshed" is reported; self-review never rebases. If `fix first` wins, still report a rebase need. A lane skip line is reported and does not change the verdict.
+ 10. Propose lesson candidates for `lessons` (unset: proposals stay in chat); write them only on yes.
+ 
+ ## Inputs
+ 
+-Resolve each key with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`; unset takes the default. `base_branch`, `typecheck`, `lint` and `test.focused` then try `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect <key>`. When both exit 3, ask, and never guess a command.
++Resolve each key with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`; exit 3 takes the table default. Keys defaulting to `detected`, and `typecheck` and `lint`, then try `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect <key>`. When both exit 3, ask, and never guess a command.
+ 
+ | Key | Default |
+ |---|---|
++| `base_branch` | detected |
++| `scope_threshold` | 4 files |
+ | `verify.fast`, `test.focused` | `typecheck` then `lint`; detected |
+ | `review.rules` | CLAUDE.md, `.claude/rules/**`, CONTRIBUTING.md |
+ | `review.taxonomy` | `blocker,should-fix,nit,pre-existing` |
+@@ -40,4 +42,4 @@ A chat report: the deterministic output, findings under Standards and Spec with
+ 
+ ## Stops and autopilot
+ 
+-Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. `fix first` or `split` stops finish-branch. Under autopilot a stop parks as `parked: <question>; default: <choice>; why: <one line>`: a failed fetch goes on with the last fetched ref; an unresolved command leaves its check failed and named; a trade-off is kept and listed. A missing base, a failed merge-base and `wt-diff` exit 2 or 3 end the run; lessons are not written.
++Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. `fix first` or `split` stops finish-branch. Under autopilot a stop parks as `parked: <question>; default: <choice>; why: <one line>`: a failed fetch (origin exists) goes on with the last fetched ref; an unresolved command leaves its check failed and named. A missing base, a failed merge-base and any `wt-diff` non-zero exit end the run; lessons are not written.
+diff --git a/skills/self-review/references/blast-radius.md b/skills/self-review/references/blast-radius.md
+index 6411eac..1c2e3ce 100644
+--- a/skills/self-review/references/blast-radius.md
++++ b/skills/self-review/references/blast-radius.md
+@@ -9,7 +9,7 @@ Take each fact the change's safety rests on as far down this ladder as is cheap,
+ 1. You said so. Worthless alone.
+ 2. You pointed at the line: a real `file:line`, or the library's own source.
+ 3. You showed the bad case can't happen: you walked the failure step by step and it does not reach.
+-4. You ran it: a script or test that calls the real code and fails loud if you are wrong.
++4. You ran it: a script or test that calls the real code and fails loud if you are wrong. Paste what happened.
+ 5. You reproduced it in the app.
+ 
+ A fact you could not get past level 2 is reported as unproven.
+@@ -25,6 +25,6 @@ Read the source of a library you call, at its pinned version and with any local
+ ## Risks and cleared
+ 
+ - The one fact it is safe because of, the level it reached, and the proof, or "unproven".
+-- Risks: how each breaks, `file:line`, how likely, what it costs, and the cheapest check.
++- Risks: never make up a caller or an API. How each breaks, `file:line`, how likely, what it costs, and the cheapest check.
+ - Cleared: what you checked and why it is fine.
+ - Before merging: the smallest test or script that would catch the real bug.
+diff --git a/skills/self-review/references/claim-checks.md b/skills/self-review/references/claim-checks.md
+index 9876cff..aa8726c 100644
+--- a/skills/self-review/references/claim-checks.md
++++ b/skills/self-review/references/claim-checks.md
+@@ -12,7 +12,7 @@ Three scripts run in seconds and catch what reviewers miss. Paste each command a
+ 
+ ## probe
+ 
+-`probe --exclude-tests <wt> <package>.patch -- <test>` proves a guard test fails without its guard and passes with it, keeping the patch's test files in the fork. `probe --mutate <file>:<line> <wt> -- <test>` inverts one condition on a throwaway fork and expects the test to fail. `probe: fail-then-pass ok` and `probe: mutation caught` are the only passes. Exit 1 (the test did not fail, or the mutation survived) is a finding. Exit 3 is inconclusive and reported as such, never as a pass. Exit 2 is a usage error: a failed check.
++`probe --exclude-tests <wt> <package>.patch -- <test>` shows a test fails with the branch's non-test changes reversed and passes with them, keeping the patch's test files. A proof of one guard alone stays with implement's per-slice probe. `probe --mutate <file>:<line> <wt> -- <test>` inverts the first operator on that line on a throwaway fork and expects the test to fail. `probe: fail-then-pass ok` and `probe: mutation caught` are the only passes. Exit 1 (the test did not fail, or the mutation survived) is a finding. Exit 3 is inconclusive and reported as such, never as a pass. Exit 2 is a usage error: a failed check.
+ 
+ ## A skipped check is a failed check
+ 
+diff --git a/skills/self-review/references/doubt-cycle.md b/skills/self-review/references/doubt-cycle.md
+index 256e67f..cd8fda8 100644
+--- a/skills/self-review/references/doubt-cycle.md
++++ b/skills/self-review/references/doubt-cycle.md
+@@ -9,7 +9,7 @@ Run a cycle when the decision adds or changes branching logic, crosses a module
+ ## The fresh reviewer
+ 
+ 1. Write the artifact (the diff hunk, or the proposal in 3 to 5 sentences) and its contract (the spec lines or rules it must satisfy) as two files under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`. Keep the artifact small enough to read in one pass; a larger one is decomposed first.
+-2. Dispatch `kern:investigator` on model `model.reviewer`. The prompt gives the question "where does this artifact fail this contract?", the two absolute paths as scope, a 40-line return budget, and the instruction to find faults, not to validate. Never the claim, never your reasoning: handing over conclusions returns your conclusions.
++2. Dispatch `kern:investigator` on model `model.reviewer`. The prompt gives the question "where does this artifact fail this contract?", the two absolute paths as scope, a 40-line return budget, and the instruction to find faults, not to validate: assume the author is overconfident, and say explicitly when no fault turns up after a thorough look. Never the claim, never your reasoning: handing over conclusions returns your conclusions.
+ 
+ ## Reconcile
+ 
+@@ -22,7 +22,7 @@ The reply is data, not a verdict. Re-read the artifact against each point and gi
+ 
+ ## Doubt theater
+ 
+-Across two or more cycles with substantive findings, none was classed actionable: you are validating, not doubting. Stop and tell the user.
++Across two or more cycles with substantive findings, none was classed actionable: you are validating, not doubting. Stop and tell the user; under autopilot, park it as a `parked:` line instead.
+ 
+ ## Stop after three
+ 
+diff --git a/skills/self-review/references/rounds.md b/skills/self-review/references/rounds.md
+new file mode 100644
+index 0000000..f9b3102
+--- /dev/null
++++ b/skills/self-review/references/rounds.md
+@@ -0,0 +1,16 @@
++# Rounds and packages
++
++A round is one run of self-review on a branch. Each run writes one package, and the packages tell a first round from a later one.
++
++## Package names
++
++`<slug>` is the output of `git -C <wt> rev-parse --abbrev-ref HEAD` with `/` written as `-`; `detached` when it prints HEAD. `<reviews>` is the output of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir reviews`, run in `<wt>`. This branch's earlier packages are `<reviews>/<slug>-<N>.diff` with N all digits. This run's `<package>` is `<reviews>/<slug>-<N+1>.diff`, or `<reviews>/<slug>-1.diff` when there is none.
++
++## Previous package
++
++The package with the highest N is the previous one. None means a first round: no since package, and `split` cannot apply. A package's first line reads `# Review package: <from>..<to>`; `<previous-tree>` is the text after `..` (git resolves it as a tree).
++
++## Since package
++
++In a later round, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <previous-tree> --out <reviews>/<slug>-<N+1>-since.diff`. It holds what changed since the previous run; exit 3 means nothing did. Its name does not match the `<slug>-<N>.diff` pattern, so it is never taken for a package.
++
+diff --git a/tests/skills/self-review.acceptance.md b/tests/skills/self-review.acceptance.md
+index a449643..9d5244b 100644
+--- a/tests/skills/self-review.acceptance.md
++++ b/tests/skills/self-review.acceptance.md
+@@ -6,7 +6,9 @@
+ - [ ] A project with `.claude/skills/self-review/`: kern defers in one line.
+ - [ ] The built-in `code-review` is missing: a skip line appears; the other steps run.
+ - [ ] The built-in lane receives the worktree path as its target and reviews that worktree's diff (record what it reviewed; if a path target is not accepted, note it for M3).
+-- [ ] The branch has no remote: the fetch fails, the skill asks (under autopilot it parks and goes on with the last fetched ref), and the report says "base not refreshed".
++- [ ] `origin` exists but the fetch fails: the skill asks (under autopilot it parks and goes on with the last fetched ref), the report says "base not refreshed", and a clean diff gets `rebase first`.
++- [ ] The repo has no `origin` remote: the base ref is the local base branch, said once, and the rebase check runs against it.
+ - [ ] `origin/<base>` moved on a file the package changed since the merge base: the verdict is `rebase first`, and the skill rebases nothing.
+ - [ ] The tree equals the merge base: wt-diff exits 3 and the skill says there is nothing to review.
+-- [ ] A new guard test whose probe exits 3: the report says inconclusive, and the verdict is not `ready` on that test's account.
++- [ ] A new guard test whose probe exits 3: the report says inconclusive and the verdict is `fix first`.
++- [ ] A second run on the same branch writes `<slug>-2.diff` and a since package; a finding in an added line of the since package, or a package newly over `scope_threshold` paths, gives `split`; the first run never does.
+diff --git a/tests/skills/self-review.test.mjs b/tests/skills/self-review.test.mjs
+index ee6779d..9fe29c9 100644
+--- a/tests/skills/self-review.test.mjs
++++ b/tests/skills/self-review.test.mjs
+@@ -22,31 +22,41 @@ test('self-review sections and steps', () => {
+   assert.equal(s[0], DEFER);
+   assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/floor-scan', '${CLAUDE_PLUGIN_ROOT}/scripts/claim-check', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests',
+     '${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate', 'never the worktree', 'Skill tool with `code-review`', 'Never pass `--comment`', 'skip: built-in code-review not available',
+-    'A skipped check counts as failed', '`ready`, `fix first`, `rebase first` or `split`', 'mode `whole-branch`', 'skip: no spec', 'Declined to judge', 'look where grep stops',
++    'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'look where grep stops',
+     'visual pages not installed']);
+   assert.ok(!readDoc(SKILL).raw.includes('$(git'), 'no command substitution in a command the skill prescribes');
+-  assertMaxBytes(SKILL, 6400);
++  assertMaxBytes(SKILL, 7000);
+ });
+ 
+ test('self-review exits, order and dispatches', () => {
+   assertContains(SKILL, [
+     // scope and its exits
+-    'git -C <wt> fetch origin <base>', 'report "base not refreshed"', 'never with "base not refreshed" reported', 'git -C <wt> merge-base HEAD origin/<base>',
+-    '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <merge-base>', '`<package>.patch` sits beside it', 'with `<package>.patch` from step 1', 'Exit 3 is an empty diff', 'nothing to review',
++    'git -C <wt> remote get-url origin', 'no remote: `<baseref>` is local `<base>`', 'git -C <wt> fetch origin <base>', 'report "base not refreshed"',
++    'git -C <wt> merge-base HEAD <baseref>', 'failure stops the run, output reported', 'references/rounds.md',
++    '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <merge-base> --out <package>', '`<package>.patch` sits beside it', 'lines 3 on are the changed paths',
++    'Exit 3 is an empty diff', 'nothing to review', 'any other non-zero exit stops and reports',
+     // settings resolution
+-    '${CLAUDE_PLUGIN_ROOT}/scripts/kern-get', '${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect', 'never guess a command',
++    '${CLAUDE_PLUGIN_ROOT}/scripts/kern-get', '${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect', 'exit 3 takes the table default', 'never guess a command',
++    '| `scope_threshold` | 4 files |', '| `base_branch` | detected |',
+     // deterministic exits
+-    'floor-scan exit 1', 'claim-check exit 1', 'any other non-zero exit is a failed check',
+-    // probe exits
+-    'probe exit 1 (no failure, or the mutation survived)', 'a probe exit 1,', 'probe exit 3', 'inconclusive', 'never as a pass',
++    'exit 1 from either is hits', 'any other non-zero exit, or a red `verify.fast` or test, is a failed check',
++    // probe
++    '`{file}` or `{dir}` replaced by the one test file covering the change, no shell syntax', "one guard alone is implement's per-slice probe",
++    '`<file>` is relative to `<wt>`', '`<line>` from the working file', 'probe inverts the first operator on that line',
++    'probe exit 1 (no failure, or the mutation survived), 2 and 3 each fail the check', 'exit 3 is reported inconclusive, never as a pass',
+     // dispatches
+-    '`kern:task-reviewer` on model `model.reviewer`', '`kern:task-reviewer`', "the spec's acceptance lines stand in for the plan's acceptance lines and Review Focus",
+-    '`kern:investigator` on model `model.reviewer`', 'where does this artifact fail this contract?', 'never your claim or reasoning', 'with absolute paths only', 'both absolute paths as scope',
+-    // rebase first trigger
+-    'git -C <wt> rev-parse origin/<base>', 'git -C <wt> diff --name-only <merge-base> origin/<base>', 'names a path the package also changed', 'never rebases',
++    '`kern:task-reviewer` on model `model.reviewer`', '`kern:investigator` on model `model.reviewer`', "the spec's acceptance lines stand in for the plan's acceptance lines and Review Focus",
++    'where does this artifact fail this contract?', 'never your claim or reasoning', 'with absolute paths only', 'both absolute paths as scope',
++    // verdict
++    '(ordered high to low)', 'then one verdict, tested in order: `split`, `fix first`, `rebase first`, else `ready`',
++    '`split`: a later round where this package has more than `scope_threshold` paths and the previous one did not',
++    'a finding lands in an added line of the since package', 'a first round never splits',
++    '`fix first`: a failed or unrun check (step 2 or 7), an unresolved hit, or a finding in the first two classes', "(the spec lane's Critical and Important count)",
++    '`rebase first`: `git -C <wt> rev-parse <baseref>` differs from `<merge-base>`', 'git -C <wt> diff --name-only <merge-base> <baseref>', 'names a path the package also changed',
++    'or "base not refreshed" is reported', 'self-review never rebases', 'If `fix first` wins, still report a rebase need', 'A lane skip line is reported and does not change the verdict',
+     // autopilot
+     'never through AskUserQuestion', '`autopilot ON:` reminder', '`kern mode:` line with `autopilot=on`', 'the kernel\'s "Autopilot:" line',
+-    'parked: <question>; default: <choice>; why: <one line>', 'lessons are not written',
++    'parked: <question>; default: <choice>; why: <one line>', 'a failed fetch (origin exists) goes on with the last fetched ref', 'any `wt-diff` non-zero exit end the run', 'lessons are not written',
+   ]);
+ });
+ 
+@@ -54,19 +64,21 @@ test('self-review references', () => {
+   const refs = {
+     'blast-radius.md': [['# Blast radius', '## How sure are you', '## Writer sweep', '## Where grep stops', '## Risks and cleared'], 2600],
+     'doubt-cycle.md': [['# Doubt cycle', '## When a decision is non-trivial', '## The fresh reviewer', '## Reconcile', '## Doubt theater', '## Stop after three'], 2400],
++    'rounds.md': [['# Rounds and packages', '## Package names', '## Previous package', '## Since package'], 1400],
+     'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1700],
+   };
+   for (const [f, [hs, max]] of Object.entries(refs)) {
+     assertHeadings(`${REF}/${f}`, hs);
+     assertMaxBytes(`${REF}/${f}`, max);
+   }
+-  assertContains(`${REF}/claim-checks.md`, ['probe --exclude-tests', 'probe --mutate', 'probe: mutation caught']);
+-  assertContains(`${REF}/blast-radius.md`, ['You said so', 'You pointed at the line', 'You showed the bad case can\'t happen', 'You ran it', 'You reproduced it in the app', 'every writer', 'reader sweep only answers who breaks', 'feature flag', 'unproven']);
+-  assertContains(`${REF}/doubt-cycle.md`, ['Never the claim', 'contract misread', 'actionable', 'trade-off', 'noise', 'none was classed actionable', 'validating, not doubting', 'goes back to be split']);
++  assertContains(`${REF}/claim-checks.md`, ['probe --exclude-tests', 'probe --mutate', 'probe: mutation caught', 'non-test changes reversed', "implement's per-slice probe", 'Exit 2 is a usage error']);
++  assertContains(`${REF}/rounds.md`, ['<reviews>/<slug>-<N+1>.diff', 'kern-dir reviews', 'the text after `..`', 'wt-diff <wt> <previous-tree> --out', 'means a first round', '`detached`']);
++  assertContains(`${REF}/blast-radius.md`, ['You said so', 'You pointed at the line', 'You showed the bad case can\'t happen', 'You ran it', 'You reproduced it in the app', 'every writer', 'reader sweep only answers who breaks', 'feature flag', 'reported as unproven', 'or "unproven"', 'never make up a caller or an API', 'Paste what happened']);
++  assertContains(`${REF}/doubt-cycle.md`, ['Never the claim', '- contract misread: ', '- actionable: a real fault', '- trade-off: ', '- noise: ', 'none was classed actionable', 'assume the author is overconfident', 'say explicitly when no fault turns up', 'under autopilot, park it', 'validating, not doubting', 'goes back to be split']);
+ });
+ 
+ test('self-review text hygiene', () => {
+-  for (const f of [SKILL, `${REF}/blast-radius.md`, `${REF}/doubt-cycle.md`, `${REF}/claim-checks.md`, 'tests/skills/self-review.acceptance.md']) {
++  for (const f of [SKILL, `${REF}/rounds.md`, `${REF}/blast-radius.md`, `${REF}/doubt-cycle.md`, `${REF}/claim-checks.md`, 'tests/skills/self-review.acceptance.md']) {
+     const { raw } = readDoc(f);
+     assert.ok(!/[—–‘’“”]/.test(raw), `${f}: no long dashes or curly quotes`);
+   }

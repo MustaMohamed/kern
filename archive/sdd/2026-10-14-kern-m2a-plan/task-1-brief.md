@@ -1,0 +1,404 @@
+### Task 1: Worktree creation and the entry check
+
+**Files:**
+- Create: `scripts/lib/wt-common.sh`, `scripts/wt-new`, `scripts/wt-check`
+- Test: `tests/helpers/wt.bash`, `tests/scripts/wt-new.bats`
+
+**Interfaces:**
+- Consumes: `hooks/lib/settings.sh`: `kern_main_root [dir]`, `settings_get KEY [DEFAULT]` (reads `$KERN_MAIN/.claude/kern.local.yml`, `$KERN_MAIN/.claude/kern.yml`, `$HOME/.claude/kern.yml`; exit 3 when unset with no default). `scripts/kern-detect base_branch` prints `value<TAB>evidence`.
+- Produces:
+  - `wt-new SLUG [--detach] [--base REF] [--branch NAME]`: prints the physical worktree path; exit 0, or 2 on any error.
+  - `wt-check WT BASE_REF`: prints `ok` (exit 0) or the first mismatch (exit 1); usage error exit 2.
+  - `scripts/lib/wt-common.sh` functions `wt_dir`, `wt_exclude_dir DIR`, `wt_include DST`, `wt_setup WT`, `wt_path_free PATH`; marker file `<worktree git dir>/kern-setup-done`.
+  - `tests/helpers/wt.bash`: `KERN_ROOT`, `wt_test_env`, `make_fixture DIR`.
+
+- [ ] **Step 1: Write the test helper**
+
+```bash
+# tests/helpers/wt.bash
+# Fixture repos for the worktree and check-script tests. Each test gets its own HOME,
+# so no user setting or global git config leaks in.
+KERN_ROOT=$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)
+
+wt_test_env() {
+  TMP=$(cd "$BATS_TEST_TMPDIR" && pwd -P)
+  export HOME="$TMP/home"
+  mkdir -p "$HOME"
+  export GIT_CONFIG_NOSYSTEM=1
+  export CLAUDE_PLUGIN_DATA="$TMP/plugin-data"
+}
+
+# make_fixture DIR: a repo on main with one commit, a bare origin at DIR.origin,
+# main pushed and refs/remotes/origin/HEAD set. .gitignore ignores node_modules/ and *.log.
+make_fixture() {
+  local dir=$1
+  git init --quiet --bare --initial-branch=main "$dir.origin"
+  git init --quiet --initial-branch=main "$dir"
+  git -C "$dir" config user.email test@example.com
+  git -C "$dir" config user.name Test
+  git -C "$dir" config commit.gpgsign false
+  printf 'node_modules/\n*.log\n' > "$dir/.gitignore"
+  printf 'one\ntwo\nthree\n' > "$dir/a.txt"
+  git -C "$dir" add .gitignore a.txt
+  git -C "$dir" commit --quiet -m init
+  git -C "$dir" remote add origin "$dir.origin"
+  git -C "$dir" push --quiet origin main
+  git -C "$dir" remote set-head origin main
+}
+```
+
+- [ ] **Step 2: Write the failing tests**
+
+```bash
+#!/usr/bin/env bats
+# tests/scripts/wt-new.bats
+
+bats_require_minimum_version 1.5.0
+load ../helpers/wt
+
+setup() {
+  wt_test_env
+  REPO="$TMP/repo"
+  make_fixture "$REPO"
+  cd "$REPO"
+}
+
+@test "wt-new creates a branch worktree off origin/main" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-a
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.claude/worktrees/feat-a" ]
+  [ "$(git -C "$output" rev-parse --abbrev-ref HEAD)" = "kern/feat-a" ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse origin/main)" ]
+  run git -C "$REPO/.claude/worktrees/feat-a" rev-parse --abbrev-ref '@{upstream}'
+  [ "$status" -ne 0 ]
+}
+
+@test "wt-new fetches before branching" {
+  git clone --quiet "$REPO.origin" "$TMP/other"
+  git -C "$TMP/other" -c user.email=o@example.com -c user.name=O commit --quiet --allow-empty -m newer
+  git -C "$TMP/other" push --quiet origin main
+  newer=$(git -C "$TMP/other" rev-parse HEAD)
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-b
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$newer" ]
+}
+
+@test "wt-new keeps the main checkout status clean" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-c
+  [ "$status" -eq 0 ]
+  [ -z "$(git -C "$REPO" status --porcelain)" ]
+  grep -qxF '/.claude/worktrees/' "$REPO/.git/info/exclude"
+}
+
+@test "wt-new --detach --base SHA makes a detached worktree at that commit" {
+  first=$(git rev-parse HEAD)
+  git commit --quiet --allow-empty -m second
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" bisect-1 --detach --base "$first"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$first" ]
+  [ "$(git -C "$output" rev-parse --abbrev-ref HEAD)" = "HEAD" ]
+}
+
+@test "wt-new copies files named in .worktreeinclude" {
+  printf 'secret.log\n' > .worktreeinclude
+  git add .worktreeinclude && git commit --quiet -m include && git push --quiet origin main
+  printf 'token\n' > secret.log
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-d
+  [ "$status" -eq 0 ]
+  [ "$(cat "$output/secret.log")" = "token" ]
+}
+
+@test "wt-new runs worktree.setup and writes the marker" {
+  mkdir -p .claude
+  printf 'worktree.setup: touch setup-ran\n' > .claude/kern.local.yml
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-e
+  [ "$status" -eq 0 ]
+  [ -f "$output/setup-ran" ]
+  gitdir=$(git -C "$output" rev-parse --path-format=absolute --git-dir)
+  grep -q '^setup: touch setup-ran$' "$gitdir/kern-setup-done"
+}
+
+@test "a failing worktree.setup exits 2" {
+  mkdir -p .claude
+  printf 'worktree.setup: exit 7\n' > .claude/kern.local.yml
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-f
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"worktree.setup failed"* ]] || false
+}
+
+@test "an existing branch is refused" {
+  git branch kern/feat-g
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-g
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"branch exists"* ]] || false
+}
+
+@test "a branch.pattern placeholder wt-new cannot fill asks for --branch" {
+  mkdir -p .claude
+  printf 'branch.pattern: CDS-{n}/{slug}\n' > .claude/kern.local.yml
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-h
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"--branch"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-h --branch CDS-1/feat-h
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse --abbrev-ref HEAD)" = "CDS-1/feat-h" ]
+}
+
+@test "a bad slug exits 2" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" '../escape'
+  [ "$status" -eq 2 ]
+}
+
+@test "no origin remote exits 2 with a message" {
+  git remote remove origin
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-i --base main
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"git fetch origin main failed"* ]] || false
+  [ ! -d "$REPO/.claude/worktrees/feat-i" ]
+}
+
+@test "wt-new works when the repo path has a space" {
+  SPACED="$TMP/my project"
+  make_fixture "$SPACED"
+  cd "$SPACED"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-j
+  [ "$status" -eq 0 ]
+  [ "$output" = "$SPACED/.claude/worktrees/feat-j" ]
+}
+
+@test "wt-check passes for a fresh kern worktree" {
+  wt=$(bash "$KERN_ROOT/scripts/wt-new" feat-k)
+  run bash "$KERN_ROOT/scripts/wt-check" "$wt" origin/main
+  [ "$status" -eq 0 ]
+  [ "$output" = "ok" ]
+}
+
+@test "wt-check rejects the main checkout" {
+  run bash "$KERN_ROOT/scripts/wt-check" "$REPO" origin/main
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not a linked worktree"* ]] || false
+}
+
+@test "wt-check rejects a base that is not an ancestor" {
+  wt=$(bash "$KERN_ROOT/scripts/wt-new" feat-l)
+  git checkout --quiet -b elsewhere
+  git commit --quiet --allow-empty -m elsewhere
+  run bash "$KERN_ROOT/scripts/wt-check" "$wt" elsewhere
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not an ancestor"* ]] || false
+}
+
+@test "wt-check rejects a worktree without the setup marker" {
+  wt=$(bash "$KERN_ROOT/scripts/wt-new" feat-m)
+  rm "$(git -C "$wt" rev-parse --path-format=absolute --git-dir)/kern-setup-done"
+  run bash "$KERN_ROOT/scripts/wt-check" "$wt" origin/main
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"setup marker missing"* ]] || false
+}
+```
+
+The `git checkout` in the ancestor test runs inside the test's own fixture repo under `$BATS_TEST_TMPDIR`, never in a real checkout.
+
+- [ ] **Step 3: Run the tests to verify they fail**
+
+Run: `tests/run-bats tests/scripts/wt-new.bats`
+Expected: every test fails; the first with `bash: .../scripts/wt-new: No such file or directory`.
+
+- [ ] **Step 4: Write `scripts/lib/wt-common.sh`**
+
+```bash
+# shellcheck shell=bash
+# shellcheck disable=SC2154  # MAIN is set by the sourcing script
+# Shared by wt-new and wt-fork. Sourced, never run. Needs hooks/lib/settings.sh and MAIN.
+
+# wt_dir: the directory kern worktrees live in (worktree.dir, default MAIN/.claude/worktrees).
+wt_dir() {
+  local d
+  d=$(settings_get worktree.dir .claude/worktrees)
+  case "$d" in /*) ;; *) d="$MAIN/$d" ;; esac
+  printf '%s\n' "$d"
+}
+
+# wt_path_free PATH: exit 2 when PATH already exists.
+wt_path_free() {
+  if [ -e "$1" ]; then
+    echo "wt: path exists: $1" >&2
+    return 2
+  fi
+}
+
+# wt_exclude_dir DIR: keep a worktree dir inside MAIN out of the main checkout's status.
+# DIR must exist. Appends to the common git dir's info/exclude, which applies to every worktree.
+wt_exclude_dir() {
+  local dir=$1 rel common
+  case "$dir" in "$MAIN"/*) rel=${dir#"$MAIN"/} ;; *) return 0 ;; esac
+  if git -C "$MAIN" check-ignore -q "$rel" 2>/dev/null; then return 0; fi
+  common=$(git -C "$MAIN" rev-parse --path-format=absolute --git-common-dir)
+  mkdir -p "$common/info"
+  if ! grep -qxF "/$rel/" "$common/info/exclude" 2>/dev/null; then
+    printf '/%s/\n' "$rel" >> "$common/info/exclude"
+    echo "kern: added /$rel/ to .git/info/exclude" >&2
+  fi
+}
+
+# wt_include DST: copy untracked files that MAIN/.worktreeinclude names (gitignore syntax) into DST.
+wt_include() {
+  local dst=$1 f wtrel
+  [ -f "$MAIN/.worktreeinclude" ] || return 0
+  wtrel=$(wt_dir)
+  wtrel=${wtrel#"$MAIN"/}
+  git -C "$MAIN" ls-files --others --ignored --directory --exclude-from="$MAIN/.worktreeinclude" |
+    while IFS= read -r f; do
+      f=${f%/}
+      case "$f" in "$wtrel"|"$wtrel"/*|.kern|.kern/*) continue ;; esac
+      [ -e "$dst/$f" ] && continue
+      mkdir -p "$dst/$(dirname "$f")"
+      cp -R "$MAIN/$f" "$dst/$f"
+    done
+}
+
+# wt_setup WT: run worktree.setup in WT and write the marker wt-check looks for.
+wt_setup() {
+  local wt=$1 setup gitdir
+  gitdir=$(git -C "$wt" rev-parse --path-format=absolute --git-dir)
+  if setup=$(settings_get worktree.setup); then
+    if ! (cd "$wt" && bash -c "$setup") > "$gitdir/kern-setup.log" 2>&1; then
+      echo "wt: worktree.setup failed in $wt (log: $gitdir/kern-setup.log)" >&2
+      return 2
+    fi
+    printf 'setup: %s\n' "$setup" > "$gitdir/kern-setup-done"
+  else
+    printf 'setup: none (worktree.setup unset)\n' > "$gitdir/kern-setup-done"
+    echo "wt: worktree.setup is unset; no setup ran in $wt" >&2
+  fi
+}
+```
+
+- [ ] **Step 5: Write `scripts/wt-new`**
+
+`settings_get` reads `KERN_MAIN`, so the script exports it right after it resolves `MAIN`; `worktree.dir`, `branch.pattern` and `worktree.setup` then come from the main worktree's settings, not from the caller's directory.
+
+```bash
+#!/usr/bin/env bash
+# Create a kern worktree off a freshly fetched origin/<base>, copy .worktreeinclude files, run worktree.setup.
+# Usage: wt-new SLUG [--detach] [--base REF] [--branch NAME]
+# A SHA-shaped REF is used as a commit with no fetch (bisection); any other base must fetch from origin.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+# shellcheck source=/dev/null
+. "$here/lib/wt-common.sh"
+
+usage() { echo "usage: wt-new SLUG [--detach] [--base REF] [--branch NAME]" >&2; exit 2; }
+[ $# -ge 1 ] || usage
+slug=$1
+shift
+case "$slug" in ''|.*|*[!A-Za-z0-9._-]*) echo "wt-new: bad slug: $slug" >&2; exit 2 ;; esac
+detach=0 base='' branch=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --detach) detach=1; shift ;;
+    --base) [ $# -ge 2 ] || usage; base=$2; shift 2 ;;
+    --branch) [ $# -ge 2 ] || usage; branch=$2; shift 2 ;;
+    *) usage ;;
+  esac
+done
+
+MAIN=$(kern_main_root "$PWD") || { echo "wt-new: not a git repository" >&2; exit 2; }
+# settings_get reads KERN_MAIN, so worktree.dir and worktree.setup come from MAIN, not the caller's cwd.
+export KERN_MAIN="$MAIN"
+if [ -z "$base" ]; then
+  if ! base=$(settings_get base_branch); then
+    base=$(bash "$here/kern-detect" base_branch | cut -f1) ||
+      { echo "wt-new: base_branch is not set and not detectable; set it in .claude/kern.local.yml" >&2; exit 2; }
+  fi
+fi
+
+if printf '%s' "$base" | grep -Eq '^[0-9a-f]{7,64}$'; then
+  git -C "$MAIN" rev-parse --verify --quiet "$base^{commit}" > /dev/null ||
+    { echo "wt-new: unknown commit $base" >&2; exit 2; }
+  start=$base
+else
+  name=${base#origin/}
+  git -C "$MAIN" fetch --quiet origin "$name" 2> /dev/null ||
+    { echo "wt-new: git fetch origin $name failed; kern branches only off a fresh origin/$name" >&2; exit 2; }
+  start="refs/remotes/origin/$name"
+  git -C "$MAIN" rev-parse --verify --quiet "$start" > /dev/null ||
+    { echo "wt-new: $start is missing after the fetch" >&2; exit 2; }
+fi
+
+dir=$(wt_dir)
+path="$dir/$slug"
+wt_path_free "$path" || exit 2
+mkdir -p "$dir"
+wt_exclude_dir "$dir"
+
+if [ "$detach" = 1 ]; then
+  git -C "$MAIN" worktree add --quiet --detach "$path" "$start" >&2
+else
+  if [ -z "$branch" ]; then
+    pattern=$(settings_get branch.pattern 'kern/{slug}')
+    branch=${pattern//\{slug\}/$slug}
+    case "$branch" in
+      *'{'*) echo "wt-new: branch.pattern has placeholders wt-new cannot fill ($branch); pass --branch NAME" >&2; exit 2 ;;
+    esac
+  fi
+  git -C "$MAIN" check-ref-format --branch "$branch" > /dev/null 2>&1 ||
+    { echo "wt-new: bad branch name: $branch" >&2; exit 2; }
+  if git -C "$MAIN" rev-parse --verify --quiet "refs/heads/$branch" > /dev/null; then
+    echo "wt-new: branch exists: $branch" >&2
+    exit 2
+  fi
+  git -C "$MAIN" worktree add --quiet --no-track -b "$branch" "$path" "$start" >&2
+fi
+
+path=$(cd "$path" && pwd -P)
+wt_include "$path"
+wt_setup "$path" || exit 2
+printf '%s\n' "$path"
+```
+
+- [ ] **Step 6: Write `scripts/wt-check`**
+
+```bash
+#!/usr/bin/env bash
+# Entry check for a worker: a linked kern worktree, not the main checkout, based on BASE_REF, setup done.
+# Usage: wt-check WT BASE_REF    Prints ok (exit 0) or the first mismatch (exit 1).
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+
+[ $# -eq 2 ] || { echo "usage: wt-check WT BASE_REF" >&2; exit 2; }
+wt=$1 base=$2
+fail() { echo "$1"; exit 1; }
+
+[ -d "$wt" ] || fail "no such directory: $wt"
+wt=$(cd "$wt" && pwd -P)
+top=$(git -C "$wt" rev-parse --show-toplevel 2> /dev/null) || fail "not a git worktree: $wt"
+gitdir=$(git -C "$wt" rev-parse --path-format=absolute --git-dir)
+common=$(git -C "$wt" rev-parse --path-format=absolute --git-common-dir)
+[ "$gitdir" != "$common" ] || fail "not a linked worktree (this is the main checkout): $wt"
+MAIN=$(kern_main_root "$wt") || fail "cannot resolve the main worktree for $wt"
+[ "$(cd "$top" && pwd -P)" != "$(cd "$MAIN" && pwd -P)" ] || fail "worktree is the main checkout: $wt"
+git -C "$wt" rev-parse --verify --quiet "$base^{commit}" > /dev/null || fail "unknown base ref: $base"
+git -C "$wt" merge-base --is-ancestor "$base" HEAD || fail "base $base is not an ancestor of HEAD in $wt"
+[ -f "$gitdir/kern-setup-done" ] || fail "setup marker missing in $wt: create worktrees with wt-new or wt-fork"
+echo ok
+```
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `chmod +x scripts/wt-new scripts/wt-check && tests/run-bats tests/scripts/wt-new.bats && shellcheck scripts/wt-new scripts/wt-check scripts/lib/wt-common.sh`
+Expected: `16 tests, 0 failures`; shellcheck prints nothing.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -- scripts/lib/wt-common.sh scripts/wt-new scripts/wt-check tests/helpers/wt.bash tests/scripts/wt-new.bats
+git commit -m "M2: add wt-new and wt-check" -m "Worktrees come off a freshly fetched origin/<base> and carry a setup marker, so workers can verify where they are before the first edit."
+```
+
+---
+

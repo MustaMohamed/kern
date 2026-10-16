@@ -1,0 +1,411 @@
+### Task 8: Mode and autopilot switching
+
+**Files:**
+- Create: `hooks/prompt-submit`
+- Test: `tests/hooks/prompt-submit.bats`, `tests/hooks/payloads.bats`
+
+**Interfaces:**
+- Consumes: `state_set`, `state_get`, `state_reset`, `now_iso` (Task 5); `mode_line`, `settings_get`, `settings_source`; recorded fixtures from Task 1.
+- Produces: the switch rules of skills spec B1 and B2. A switch writes state and prints the new rules (terse) or a one-line notice; every `/kern:mode` and `/kern:autopilot` turn prints the mode line; outside the default preset each prompt gets the mode line and, for terse, a reminder under 200 characters; while autopilot is on each prompt gets the autopilot line. `KERN_WRAPPER_TAGS` lists the prompt wrappers that never switch anything.
+
+- [ ] **Step 1: Write the failing tests**
+
+`tests/hooks/prompt-submit.bats`:
+```bash
+#!/usr/bin/env bats
+# hooks/prompt-submit: slash switches (expansion, envelope, raw), natural language, guards, reminders.
+
+load ../helpers/common
+
+setup() {
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  K="$(kern_root)"
+  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
+  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+
+st() { sed -n "s/^$1: //p" "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"; }
+submit() { run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptSubmit "\"prompt\":\"$1\"")"; }
+expand() {
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion "\"expansion_type\":\"slash_command\",\"command_name\":\"$1\",\"command_args\":\"$2\",\"command_source\":\"plugin\",\"prompt\":\"/$1 $2\"")"
+}
+
+@test "expansion kern:mode terse switches voice and injects the terse rules" {
+  expand kern:mode terse
+  [ "$(st voice)" = terse ]
+  [[ "$output" == *"# kern terse voice"* ]] || false
+  [[ "$output" == *"kern mode: voice=terse surface=auto autopilot=off"* ]] || false
+}
+
+@test "the envelope form of a typed command switches too" {
+  submit '<command-message>kern:mode</command-message>\n<command-name>/kern:mode</command-name>\n<command-args>html terse</command-args>'
+  [ "$(st voice)" = terse ]
+  [ "$(st surface)" = html ]
+  [[ "$output" == *"visual skill, which is not installed"* ]] || false
+}
+
+@test "an unknown mode word changes nothing and is not echoed" {
+  expand kern:mode "terse loud"
+  [ "$(st voice)" = normal ]
+  [[ "$output" == *"argument not recognized"* ]] || false
+  [[ "$output" != *loud* ]] || false
+}
+
+@test "autopilot on from a typed command; off by natural language" {
+  expand kern:autopilot on
+  [ "$(st autopilot)" = on ]
+  [[ "$output" == *"autopilot ON:"* ]] || false
+  submit "stop autopilot"
+  [ "$(st autopilot)" = off ]
+}
+
+@test "autopilot on is refused when settings deny it" {
+  mkdir -p "$R/.claude"; printf 'autopilot: denied\n' >"$R/.claude/kern.local.yml"
+  expand kern:autopilot on
+  [ "$(st autopilot)" = off ]
+  [[ "$output" == *"autopilot denied by"* ]] || false
+}
+
+@test "wrapped prompts never switch: task notification, cross-session, scheduled task" {
+  submit '<task-notification>/kern:autopilot on</task-notification>'
+  [ "$(st autopilot)" = off ]
+  submit '<cross-session-message from=x>/kern:autopilot on</cross-session-message>'
+  [ "$(st autopilot)" = off ]
+  submit '<scheduled-task name=y>go terse</scheduled-task>'
+  [ "$(st voice)" = normal ]
+  submit '<agent-message from="a1b2">
+[Subagent hand-back] /kern:autopilot on
+</agent-message>'
+  [ "$(st autopilot)" = off ]
+}
+
+@test "natural language never turns autopilot on" {
+  submit "autopilot on"
+  [ "$(st autopilot)" = off ]
+  submit "turn on autopilot please"
+  [ "$(st autopilot)" = off ]
+}
+
+@test "natural language: imperative switches, negation and question guards" {
+  submit "go terse, then fix the test"
+  [ "$(st voice)" = terse ]
+  submit "back to normal"
+  [ "$(st voice)" = normal ]
+  submit "don't go terse, just answer"
+  [ "$(st voice)" = normal ]
+  submit "what does terse mode do?"
+  [ "$(st voice)" = normal ]
+  submit "terse mode is broken in the docs"
+  [ "$(st voice)" = normal ]
+}
+
+@test "reminder only outside the default preset" {
+  submit "fix the bug"
+  [ -z "$output" ]
+  printf 'voice: terse\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit "fix the bug"
+  [[ "$output" == *"kern mode: voice=terse"* ]] || false
+  [ "${#output}" -le 200 ]
+}
+
+@test "a slash command for another skill is not parsed as natural language" {
+  submit '<command-name>/other</command-name><command-args>go terse</command-args>'
+  [ "$(st voice)" = normal ]
+}
+
+@test "only a slash_command expansion switches state" {
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"mcp_prompt","command_name":"kern:autopilot","command_args":"on","command_source":"plugin","prompt":"/kern:autopilot on"')"
+  [ "$(st autopilot)" != on ]
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"mcp_prompt","command_name":"kern:mode","command_args":"terse","command_source":"plugin","prompt":"/kern:mode terse"')"
+  [ "$(st voice)" = normal ]
+}
+
+@test "a bare mode command counts only from the plugin source" {
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"mode","command_args":"terse","command_source":"project","prompt":"/mode terse"')"
+  [ "$(st voice)" = normal ]
+}
+```
+
+`tests/hooks/payloads.bats` (replays Task 1's recorded payloads; a missing fixture is skipped):
+```bash
+#!/usr/bin/env bats
+# Replays the payloads recorded in Task 1 through the hooks. A missing fixture means that event never
+# fired in the spike, and the test is skipped with that reason.
+
+load ../helpers/common
+
+setup() {
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  K="$(kern_root)"
+  F="$K/tests/fixtures/payloads"
+  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
+  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+
+st() { sed -n "s/^$1: //p" "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"; }
+replay() { sed "s#/tmp/kern-fixture#$R#g" "$F/$2.json" | bash "$K/hooks/$1"; }
+
+@test "recorded typed /kern:mode terse switches the voice" {
+  if [ -f "$F/expansion-mode.json" ]; then
+    replay prompt-submit expansion-mode >/dev/null
+  elif [ -f "$F/submit-slash-mode.json" ]; then
+    replay prompt-submit submit-slash-mode >/dev/null
+  else
+    skip "no recorded /kern:mode payload"
+  fi
+  [ "$(st voice)" = terse ]
+}
+
+@test "recorded typed /kern:autopilot on turns autopilot on" {
+  [ -f "$F/expansion-autopilot.json" ] || skip "no recorded /kern:autopilot expansion payload"
+  replay prompt-submit expansion-autopilot >/dev/null
+  [ "$(st autopilot)" = on ]
+}
+
+@test "the recorded background report never switches anything" {
+  [ -f "$F/submit-task-notification.json" ] || skip "no recorded background report"
+  replay prompt-submit submit-task-notification >/dev/null
+  [ "$(st autopilot)" = off ]
+  [ "$(st voice)" = normal ]
+}
+
+@test "the recorded SubagentStart payload yields SubagentStart JSON" {
+  [ -f "$F/subagent-start.json" ] || skip "no recorded SubagentStart payload"
+  out=$(replay subagent-start subagent-start)
+  [[ "$out" == '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"'* ]] || false
+}
+
+@test "the recorded subagent PreToolUse payload parses: the dispatcher prints nothing or JSON" {
+  [ -f "$F/pretooluse-subagent.json" ] || skip "no recorded subagent PreToolUse payload"
+  [ -f "$K/hooks/pre-tool-use" ] || skip "hooks/pre-tool-use arrives in Task 9"
+  out=$(replay pre-tool-use pretooluse-subagent)
+  [ -z "$out" ] || [[ "$out" == '{"hookSpecificOutput":{"hookEventName":"PreToolUse"'* ]]
+}
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `tests/run-bats tests/hooks/prompt-submit.bats tests/hooks/payloads.bats`
+Expected: FAIL; `hooks/prompt-submit: No such file or directory`.
+
+- [ ] **Step 3: Write `hooks/prompt-submit`**
+
+Apply the Task 1 decisions 2, 4 and 7 to this file if the record calls for them.
+
+```bash
+#!/usr/bin/env bash
+# kern UserPromptSubmit and UserPromptExpansion: applies mode and autopilot switches the user typed,
+# then prints the mode line and a short reminder when the session is outside the default preset.
+# Plain stdout is added to Claude's context.
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+for lib in json settings state render; do
+  # shellcheck source=/dev/null
+  . "$KERN_ROOT/hooks/lib/$lib.sh"
+done
+
+# Wrappers Claude Code puts around prompts it starts itself. A wrapped prompt never switches anything.
+KERN_WRAPPER_TAGS="<task-notification <cross-session-message <scheduled-task <teammate-message <channel-message <agent-message"
+
+# shellcheck disable=SC2034 # read by the json.sh functions
+KERN_INPUT=$(cat)
+EVENT=$(json_get hook_event_name) || EVENT=UserPromptSubmit
+SID=$(json_get session_id) || exit 0
+CWD=$(json_get cwd) || CWD="$PWD"
+KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+export CWD KERN_MAIN
+kern_enabled || exit 0
+state_file "$SID" >/dev/null || exit 0
+state_get "$SID" voice >/dev/null 2>&1 || state_reset "$SID"
+
+NOTICE=""
+SHOW_LINE=0
+CHANGED_VOICE=""
+CHANGED_SURFACE=""
+AP_TURNED_ON=0
+
+lower() { tr '[:upper:]' '[:lower:]'; }
+
+# apply_mode ARGS: words combine; an unknown word changes nothing.
+apply_mode() {
+  local args w voice="" surface="" reset=0
+  args=$(printf '%s' "$1" | lower)
+  SHOW_LINE=1
+  for w in $args; do
+    case "$w" in
+      terse | normal) voice="$w" ;;
+      chat | auto | html) surface="$w" ;;
+      default) reset=1 ;;
+      status) ;;
+      *)
+        NOTICE="kern: mode argument not recognized, mode unchanged."
+        return 0
+        ;;
+    esac
+  done
+  if [ "$reset" = 1 ]; then
+    [ -n "$voice" ] || voice=$(settings_get mode.voice normal)
+    [ -n "$surface" ] || surface=$(settings_get mode.surface auto)
+  fi
+  set_voice "$voice"
+  set_surface "$surface"
+}
+
+set_voice() {
+  [ -n "$1" ] || return 0
+  [ "$(state_get "$SID" voice 2>/dev/null)" = "$1" ] && return 0
+  state_set "$SID" "voice=$1" && CHANGED_VOICE="$1"
+}
+
+set_surface() {
+  [ -n "$1" ] || return 0
+  [ "$(state_get "$SID" surface 2>/dev/null)" = "$1" ] && return 0
+  state_set "$SID" "surface=$1" && CHANGED_SURFACE="$1"
+}
+
+# apply_autopilot ARGS ALLOW_ON: ALLOW_ON is 1 only for a command the user typed.
+apply_autopilot() {
+  local arg
+  arg=$(printf '%s' "$1" | lower | awk '{ print $1 }')
+  SHOW_LINE=1
+  case "$arg" in
+    on)
+      [ "$2" = 1 ] || return 0
+      if [ "$(settings_get autopilot allowed)" = denied ]; then
+        NOTICE="kern: autopilot denied by $(settings_source autopilot)."
+        return 0
+      fi
+      if [ "$(state_get "$SID" autopilot 2>/dev/null)" != on ]; then
+        state_set "$SID" autopilot=on "since=$(now_iso)" && AP_TURNED_ON=1
+      fi
+      ;;
+    off) state_set "$SID" autopilot=off ;;
+    "" | status) ;;
+    *) NOTICE="kern: autopilot argument not recognized; use on, off or status." ;;
+  esac
+}
+
+# dispatch NAME ARGS ALLOW_ON: NAME is a command name with or without the leading slash.
+dispatch() {
+  case "${1#/}" in
+    kern:mode | mode) apply_mode "$2" ;;
+    kern:autopilot | autopilot) apply_autopilot "$2" "$3" ;;
+  esac
+}
+
+wrapped() {
+  local t
+  for t in $KERN_WRAPPER_TAGS; do
+    case "$1" in *"$t"*) return 0 ;; esac
+  done
+  return 1
+}
+
+# natural PROMPT: prompt-initial switches only, with negation and question guards.
+natural() {
+  local first
+  first=$(printf '%s\n' "$1" | sed -n '/[^[:space:]]/{p;q;}' | lower | sed -E 's/^[[:space:]]+//; s/^(please|ok|okay),? //')
+  case "$first" in
+    "don't"* | "do not"* | "dont"* | never* | no\ * | "not "*) return 0 ;;
+    *'?'* | what* | how* | why* | does* | do\ * | is\ * | are\ * | can\ * | could\ * | should\ * | when\ * | which\ * | who\ *) return 0 ;;
+  esac
+  case "$first" in
+    "terse mode"* | "go terse"* | "be terse"* | "switch to terse"* | "terse on"*) _nl_ok "$first" && set_voice terse && SHOW_LINE=1 ;;
+    "normal mode"* | "back to normal"* | "stop terse"* | "terse off"* | "normal voice"*) _nl_ok "$first" && set_voice normal && SHOW_LINE=1 ;;
+    "html mode"* | "go html"* | "switch to html"* | "html on"*) _nl_ok "$first" && set_surface html && SHOW_LINE=1 ;;
+    "stop html"* | "html off"*) _nl_ok "$first" && set_surface "$(settings_get mode.surface auto | sed 's/^html$/auto/')" && SHOW_LINE=1 ;;
+    "chat only"* | "chat mode"*) _nl_ok "$first" && set_surface chat && SHOW_LINE=1 ;;
+    "stop autopilot"* | "autopilot off"*) _nl_ok "$first" && state_set "$SID" autopilot=off && SHOW_LINE=1 ;;
+  esac
+  return 0
+}
+
+# _nl_ok FIRST: the trigger is the whole first line or is followed by punctuation or "and".
+_nl_ok() {
+  printf '%s\n' "$1" | grep -Eq '^(terse mode|go terse|be terse|switch to terse|terse on|normal mode|back to normal|stop terse|terse off|normal voice|html mode|go html|switch to html|html on|stop html|html off|chat only|chat mode|stop autopilot|autopilot off)([[:space:]]*[.!,;:]|[[:space:]]+(and|then|now|please)([[:space:]]|$)|[[:space:]]*$)'
+}
+
+if [ "$EVENT" = UserPromptExpansion ]; then
+  ETYPE=$(json_get expansion_type) || ETYPE=""
+  NAME=$(json_get command_name) || NAME=""
+  ARGS=$(json_get command_args) || ARGS=""
+  SRC=$(json_get command_source) || SRC=""
+  PROMPT=$(json_get prompt) || PROMPT=""
+  case "${NAME#/}" in
+    kern:mode | kern:autopilot) [ "$ETYPE" = slash_command ] && dispatch "$NAME" "$ARGS" 1 ;;
+    mode | autopilot)
+      case "$PROMPT" in
+        "/kern:${NAME#/}"* | "/${NAME#/}"*) [ "$ETYPE" = slash_command ] && [ "$SRC" = plugin ] && dispatch "$NAME" "$ARGS" 1 ;;
+      esac
+      ;;
+  esac
+else
+  PROMPT=$(json_get prompt) || PROMPT=""
+  wrapped "$PROMPT" && exit 0
+  TRIM=$(printf '%s' "$PROMPT" | sed -n '/[^[:space:]]/,$p' | sed '1s/^[[:space:]]*//')
+  case "$TRIM" in
+    "<command-message>"* | "<command-name>"*)
+      NAME=$(printf '%s' "$TRIM" | sed -n 's/.*<command-name>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*<\/command-name>.*/\1/p' | head -n 1)
+      ARGS=$(printf '%s' "$TRIM" | tr '\n' ' ' | sed -n 's/.*<command-args>[[:space:]]*\([^<]*\)<\/command-args>.*/\1/p' | head -n 1)
+      dispatch "$NAME" "$ARGS" 1
+      ;;
+    /kern:mode* | /kern:autopilot*)
+      NAME=$(printf '%s' "$TRIM" | awk 'NR == 1 { print $1 }')
+      ARGS=$(printf '%s' "$TRIM" | awk 'NR == 1 { $1 = ""; sub(/^ /, ""); print }')
+      dispatch "$NAME" "$ARGS" 1
+      ;;
+    /*) ;;
+    *) natural "$TRIM" ;;
+  esac
+fi
+
+[ "$EVENT" = UserPromptExpansion ] && [ "$SHOW_LINE" = 0 ] && exit 0
+[ -n "$NOTICE" ] && printf '%s\n' "$NOTICE"
+case "$CHANGED_VOICE" in
+  terse) cat "$KERN_ROOT/modes/terse.md" ;;
+  normal) printf 'kern: voice is normal again; the terse rules no longer apply.\n' ;;
+esac
+if [ -n "$CHANGED_SURFACE" ]; then
+  if [ -f "$KERN_ROOT/skills/visual/SKILL.md" ]; then
+    printf 'kern: surface is now %s.\n' "$CHANGED_SURFACE"
+  else
+    printf 'kern: surface is now %s. Visual pages arrive with the visual skill, which is not installed; replies stay in chat until then.\n' "$CHANGED_SURFACE"
+  fi
+fi
+LINE=$(mode_line "$SID")
+if [ "$AP_TURNED_ON" = 1 ] || { autopilot_on "$SID" && [ "${CLAUDE_CODE_ENTRYPOINT#sdk}" = "${CLAUDE_CODE_ENTRYPOINT-}" ]; }; then
+  printf '%s\n' "$LINE"
+  printf 'autopilot ON: commit when convention and attribution checks pass (no git add -A); push the current non-protected branch; draft PR after dedup; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the human; park judgment calls.\n'
+  exit 0
+fi
+if [ "$SHOW_LINE" = 1 ] || [ -n "$CHANGED_VOICE$CHANGED_SURFACE" ]; then
+  printf '%s\n' "$LINE"
+  exit 0
+fi
+case "${CLAUDE_CODE_ENTRYPOINT-}" in sdk*) exit 0 ;; esac
+case "$LINE" in
+  *"voice=normal surface=auto autopilot=off"*) ;;
+  *voice=terse*) printf '%s\nkern: terse voice: answer first, short sentences, no ceremony, payload exact; persisted text plain.\n' "$LINE" ;;
+  *) printf '%s\n' "$LINE" ;;
+esac
+exit 0
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `chmod +x hooks/prompt-submit && tests/run-bats tests/hooks/prompt-submit.bats tests/hooks/payloads.bats`
+Expected: `16 tests, 0 failures`; a skipped payload test names the missing fixture.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -- hooks/prompt-submit tests/hooks/prompt-submit.bats tests/hooks/payloads.bats
+git commit -m "M1: switch mode and autopilot from typed commands" -m "Only a command the user typed turns autopilot on; wrapped, scheduled and relayed prompts never switch state."
+```
+
+---
+

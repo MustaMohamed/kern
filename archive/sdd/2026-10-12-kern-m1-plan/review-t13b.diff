@@ -1,0 +1,1274 @@
+diff --git a/hooks/guards/g13-protected.sh b/hooks/guards/g13-protected.sh
+index 1c1bba7..29ce7fc 100644
+--- a/hooks/guards/g13-protected.sh
++++ b/hooks/guards/g13-protected.sh
+@@ -1,59 +1,987 @@
+ # shellcheck shell=bash
+-# G13 protected targets: no copies to, and no mutating SQL against, anything in protected_targets.
+-# Reading (SELECT, scp from the target, sftp get) stays allowed.
++# G13 protected targets: the hosts in protected_targets are read-only, so G13 proves a read and
++# denies, in both modes, any call to a target it cannot prove reads. A missed write is the costly
++# failure; a read G13 cannot prove is denied, and the user runs it by hand with `!`.
++# An ssh to a target must run a remote command whose every segment (after `cmd /c` and
++# `powershell -Command`) is on a closed read list, with no redirect except to /dev/null, nul or an
++# fd copy, and no input on stdin; `ssh -N` tunnels and `ssh -O` control commands are exempt.
++# SQL to a target must be proven statement by statement (_G13_SQL_AWK); a copy may only come from a
++# target, and sftp may only run read verbs (_G13_XFER_AWK).
++# Targets match the host in any case, as user@host or in a URL; an entry may be host:port.
++# Out of scope (accepted limits): scripts and programs that connect on their own (an extractor, a
++# Perl or Python client), an ssh config alias not listed itself, and names built at run time
++# (variables, ANSI-C quoting).
+ 
+ guard_g13() {
+   [ "$TOOL" = Bash ] || return 0
+-  local list cmd seg rest target
++  local cmd flat list
++  cmd=$(ti_get command) || return 0
++  case "$cmd" in *'\u'*) cmd=$(_g13_unescape "$cmd") ;; esac
++  # Cheap prefilter before settings_get: some client or transfer name, quotes and backslashes removed.
++  flat=${cmd//[\"\'\\]/}
++  _g13_names "$flat" || return 0
+   list=$(settings_get protected_targets '')
+   [ -n "$list" ] || return 0
+-  cmd=$(ti_get command) || return 0
+-  rest="$list,"
+-  while [ -n "$rest" ]; do
+-    target=${rest%%,*}
+-    rest=${rest#*,}
+-    target=$(printf '%s' "$target" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+-    [ -n "$target" ] || continue
+-    case "$cmd" in *"$target"*) ;; *) continue ;; esac
+-    while IFS= read -r seg; do
+-      _g13_segment "$seg" "$target"
+-    done <<EOT
+-$(git_words "$cmd")
++  _g13_scan "$cmd" "$list" 0
++}
++
++# _g13_scan CMD LIST DEPTH: judges each simple command of CMD that names a client.
++_g13_scan() {
++  local rec prev="" fed up
++  while IFS= read -r rec; do
++    if _g13_names "${rec//[\"\'\\]/}"; then
++      fed=0
++      up=""
++      if _g13_fed "$1" "$rec"; then
++        fed=1
++        up=$(_g13_upstream "$1" "$rec" "$prev")
++      fi
++      _g13_judge "$rec" "$2" "$fed" "$1" "$up" "$3"
++    fi
++    prev=$rec
++  done <<EOT
++$(git_words "$1")
+ EOT
+-    _g13_sql "$cmd" "$target"
+-  done
+ }
+ 
+-_g13_segment() {
+-  local seg="$1" target="$2" head last
+-  head=$(cmd_head "$seg")
+-  case "${head%% *}" in
+-    scp | rsync)
+-      last=$(_shell_words "$seg" | tail -n 1)
+-      case "$last" in *"$target"*) vote deny G13 "copy to protected target $target" ;; esac
+-      ;;
+-    sftp)
+-      printf '%s\n' "$seg" | grep -Eiq '(^|[^a-z])(put|rm|rename|mkdir|rmdir|chmod)[[:space:]]' &&
+-        vote deny G13 "sftp write to protected target $target"
+-      ;;
+-    ssh)
+-      case "$seg" in *"$target"*) ;; *) return 0 ;; esac
+-      _shell_words "$seg" | paste -sd ' ' - | grep -Eq '(^|[[:space:];])(rm|mv|cp|del|copy|move|rename|mkdir|rmdir|touch|tee|chmod|chown|systemctl|service|kill)([[:space:];]|$)|>' &&
+-        vote deny G13 "write command over ssh to protected target $target"
+-      ;;
++# _g13_names TEXT: exit 0 when TEXT holds a client or transfer name G13 reads, in any case.
++_g13_names() {
++  case "$1" in
++    *[Ss][Ss][Hh]* | *[Ss][Cc][Pp]* | *[Ss][Ff][Tt][Pp]* | *[Rr][Ss][Yy][Nn][Cc]* | *[Mm][Yy][Ss][Qq][Ll]* | \
++      *[Mm][Aa][Rr][Ii][Aa][Dd][Bb]* | *[Pp][Ss][Qq][Ll]* | *[Ss][Qq][Ll][Ii][Tt][Ee]* | *[Ss][Qq][Ll][Cc][Mm][Dd]* | \
++      *[Pp][Gg]_*) return 0 ;;
+   esac
++  return 1
+ }
+ 
+-# _g13_sql CMD TARGET: mutating SQL in the command, or in a file it feeds with -f, --file or <.
+-_g13_sql() {
+-  local cmd="$1" target="$2" text f
+-  text="$cmd"
+-  for f in $(printf '%s\n' "$cmd" | grep -Eo '(-f|--file=?|<)[[:space:]]*[^[:space:];|&]+\.sql' | sed -E 's/^(-f|--file=?|<)[[:space:]]*//'); do
+-    case "$f" in /*) ;; *) f="$CWD/$f" ;; esac
+-    [ -f "$f" ] && text="$text
+-$(cat "$f")"
++# _g13_unescape CMD: CMD with the JSON escapes \u0000 to \u007f decoded (ti_get leaves \uXXXX as is).
++_g13_unescape() {
++  printf '%s' "$1" | LC_ALL=C awk '
++    BEGIN { for (i = 0; i < 128; i++) hex[sprintf("%04x", i)] = sprintf("%c", i) }
++    { buf = buf (NR > 1 ? "\n" : "") $0 }
++    END {
++      out = ""
++      while (match(buf, /\\u00[0-7][0-9a-fA-F]/)) {
++        out = out substr(buf, 1, RSTART - 1) hex[tolower(substr(buf, RSTART + 2, 4))]
++        buf = substr(buf, RSTART + RLENGTH)
++      }
++      printf "%s", out buf
++    }'
++}
++
++# _g13_fed CMD REC: exit 0 when REC follows a pipe at any place it appears in CMD, or cannot be
++# found there (a record git_words rebuilt), so its stdin may be fed.
++_g13_fed() {
++  local rest="$1" r="${2//$_GW_NL/$'\n'}" pre
++  case "$rest" in *"$r"*) ;; *) return 0 ;; esac
++  while :; do
++    case "$rest" in *"$r"*) ;; *) return 1 ;; esac
++    pre=${rest%%"$r"*}
++    while :; do
++      case "$pre" in *[[:space:]] | *'(' | *'{' | *'!') pre=${pre%?} ;; *) break ;; esac
++    done
++    case "$pre" in *'||') ;; *'|' | *'|&') return 0 ;; esac
++    rest=${rest#*"$r"}
+   done
+-  printf '%s\n' "$text" | grep -Eiq '(^|[^a-z_])(insert[[:space:]]+into|update[[:space:]]+[a-z_."`]+[[:space:]]+set|delete[[:space:]]+from|drop[[:space:]]+(table|database|schema|index|view)|alter[[:space:]]+(table|database|schema)|truncate|create[[:space:]]+(table|database|schema|index)|grant[[:space:]]|revoke[[:space:]]|lock[[:space:]]+tables|set[[:space:]]+global|kill[[:space:]]+[0-9])' &&
+-    vote deny G13 "mutating SQL against protected target $target"
+-  return 0
+ }
++
++# _g13_upstream CMD REC PREV: prints PREV when, at every place REC follows a pipe in CMD, PREV is the
++# command right before that pipe, so PREV's output is REC's input.
++_g13_upstream() {
++  local rest="$1" r="${2//$_GW_NL/$'\n'}" p="${3//$_GW_NL/$'\n'}" pre
++  [ -n "$p" ] || return 0
++  while :; do
++    case "$rest" in *"$r"*) ;; *) break ;; esac
++    pre=${rest%%"$r"*}
++    rest=${rest#*"$r"}
++    while :; do
++      case "$pre" in *[[:space:]] | *'(' | *'{' | *'!') pre=${pre%?} ;; *) break ;; esac
++    done
++    case "$pre" in
++      *'||') continue ;;
++      *'|&') pre=${pre%??} ;;
++      *'|') pre=${pre%?} ;;
++      *) continue ;;
++    esac
++    while :; do
++      case "$pre" in *[[:space:]]) pre=${pre%?} ;; *) break ;; esac
++    done
++    case "$pre" in "$p" | *[[:space:]\;\&\|\(\)\{\}]"$p") ;; *) return 0 ;; esac
++  done
++  printf '%s' "$p"
++}
++
++# _g13_judge REC LIST FED CMD UP DEPTH: denies for each client in the simple command REC that reaches
++# a target in LIST without a proven read. FED is 1 when REC's stdin may come from a pipe, and UP is
++# the command that feeds it when G13 can tell; CMD is the whole command (for PGHOST= and the like set
++# before the client, and for here-doc bodies). A line the judge starts with \001 is a command another
++# host runs (ssh bastion "scp f v1-host:"): it is scanned in turn, two levels deep; one deeper that
++# names a client is denied.
++_g13_judge() {
++  local why out
++  # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
++  if ! out=$(printf '%s' "$1" | G13_TG="$2" G13_FED="$3" G13_CMD="$4" G13_UP="$5" LC_ALL=C \
++    awk -v sq="'" "$_GW_AWK$_G13_AWK$_G13_SQL_AWK$_G13_XFER_AWK" 2>&1); then
++    vote deny G13 "the protected_targets check failed: ${out%%$'\n'*}"
++    return 0
++  fi
++  while IFS= read -r why; do
++    case "$why" in
++      $'\001'*)
++        why=${why#?}
++        why=${why//$_GW_NL/$'\n'}
++        if [ "$6" -lt 2 ]; then
++          _g13_scan "$why" "$2" $(($6 + 1))
++        elif _g13_names "${why//[\"\'\\]/}"; then
++          vote deny G13 "a command run on another host nests too deep to check against protected targets"
++        fi
++        ;;
++      ?*) vote deny G13 "$why" ;;
++    esac
++  done <<EOT
++$out
++EOT
++}
++
++# The judge, run on one simple command with _GW_AWK's functions. qw(STR) splits like sw and marks in
++# qw_r[k] a word that is an unquoted redirection (a quoted '>' is an argument). Every word whose
++# basename, lowercased and without .exe, is a client is judged from there on (a wrapper G13 does not
++# know, such as caffeinate or sshpass, hides nothing); _cmd_words' head is judged too when no word
++# matched (env -S). qw_d[k] marks a word with an unquoted or double-quoted $ or backtick, text the
++# shell builds at run time. Each reason prints once.
++# shellcheck disable=SC2016 # awk text
++_G13_AWK='
++  function qw(buf,   n, q, w, have, i, c, rd, quo, nx, dy) {
++    qw_n = 0; n = length(buf); q = ""; w = ""; have = 0; rd = 0; quo = 0; dy = 0
++    for (i = 1; i <= n; i++) {
++      c = substr(buf, i, 1)
++      if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
++      if (q == "\"") {
++        if (c == "\"") q = ""
++        else if (c == "\\" && index("\"\\$`", substr(buf, i + 1, 1))) { i++; w = w substr(buf, i, 1) }
++        else { w = w c; if (c == "$" || c == "`") dy = 1 }
++        continue
++      }
++      if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; quo = 1; continue }
++      if (c == sq || c == "\"") { q = c; have = 1; quo = 1; continue }
++      if (c == " " || c == "\t" || c == "\n" || c == "\037") {
++        if (have) { qw_w[++qw_n] = w; qw_r[qw_n] = rd; qw_d[qw_n] = dy }
++        w = ""; have = 0; rd = 0; quo = 0; dy = 0; continue
++      }
++      if (c == "#" && !have) { while (i < n && index("\n\037", substr(buf, i + 1, 1)) == 0) i++; continue }
++      nx = substr(buf, i + 1, 1)
++      if (c == "<" || c == ">" || (c == "&" && nx == ">")) {
++        if (have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) { qw_w[++qw_n] = w; qw_r[qw_n] = rd; qw_d[qw_n] = dy; w = ""; quo = 0; rd = 0; dy = 0 }
++        if (!quo && w ~ /^[0-9]*$/) rd = 1
++      }
++      if (c == "$" || c == "`") dy = 1
++      w = w c; have = 1
++    }
++    if (have) { qw_w[++qw_n] = w; qw_r[qw_n] = rd; qw_d[qw_n] = dy }
++  }
++  function base(w) { sub(/.*[\/\\]/, "", w); w = tolower(w); sub(/\.exe$/, "", w); return w }
++  function canon(h) { h = tolower(h); sub(/\.$/, "", h); gsub(/^\[|\]$/, "", h); if (h == "127.0.0.1" || h == "::1") h = "localhost"; return h }
++  # hit(H, P): the target that host H on port P names, else 0.
++  function hit(h, p,   k) {
++    h = canon(h)
++    if (h == "") return 0
++    for (k = 1; k <= tn; k++) if (th[k] == h && (tp[k] == "" || tp[k] == p)) return k
++    return 0
++  }
++  # bnd(S, T, P): S holds the host T, not inside a longer name, followed by :P or ,P when P is set.
++  function bnd(s, t, p,   i, a, l) {
++    l = length(t)
++    while ((i = index(s, t)) > 0) {
++      a = substr(s, i + l, 1)
++      if ((i == 1 || substr(s, i - 1, 1) !~ /[a-z0-9._-]/) && a !~ /[a-z0-9._-]/) {
++        if (p == "") return 1
++        if ((a == ":" || a == ",") && substr(s, i + l + 1, length(p)) == p && substr(s, i + l + 1 + length(p), 1) !~ /[0-9]/) return 1
++      }
++      s = substr(s, i + 1)
++    }
++    return 0
++  }
++  # named(S): the target S names anywhere as a whole host (an option value), else 0.
++  function named(s,   k) {
++    s = tolower(s)
++    for (k = 1; k <= tn; k++) {
++      if (th[k] == "") continue
++      if (bnd(s, th[k], tp[k])) return k
++      if (th[k] == "localhost" && (bnd(s, "127.0.0.1", tp[k]) || bnd(s, "::1", tp[k]))) return k
++    }
++    return 0
++  }
++  # uhost(W): sets UH and UP from [scheme://][user@]host[:port] (UP empty when absent).
++  function uhost(w) {
++    UP = ""
++    sub(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, "", w); sub(/\/.*/, "", w); sub(/.*@/, "", w)
++    if (match(w, /:[0-9]*$/)) { UP = substr(w, RSTART + 1); w = substr(w, 1, RSTART - 1) }
++    UH = w
++  }
++  function unq(s) { gsub(/"/, "", s); gsub(sq, "", s); return s }
++  # deny(S): prints the reason S once, with the way out.
++  function deny(s) { s = s "; run it yourself with ! if it only reads"; if (!(s in said)) { said[s] = 1; print s } }
++  function join(a, i, n,   s) { s = ""; for (; i <= n; i++) s = s (s == "" ? "" : " ") a[i]; return s }
++  # redir(K): W[K] is an unquoted redirection: sets RO (operator, fd number dropped), RT (target) and
++  # RD (the target is built at run time); returns the index of the last word it takes.
++  function redir(k,   w) {
++    w = W[k]
++    match(w, /^[0-9]*(&>>|&>|<<<|<<-|<<|<>|<&|>&|>>|>\||<|>)/)
++    RO = substr(w, RSTART, RLENGTH); sub(/^[0-9]*/, "", RO)
++    RT = substr(w, RLENGTH + 1); RD = D[k]
++    if (RT == "" && k < N) { RT = W[k + 1]; RD = D[k + 1]; return k + 1 }
++    return k
++  }
++
++  # rem(S, D): "" when the remote command S only reads, else what is not proven. Quotes are not
++  # trusted to protect a separator or a redirect: the remote shell may be cmd, which has no quotes.
++  function rem(s, d,   n, segs, i, why) {
++    if (d > 4) return "wrappers nest too deep"
++    why = rredir(s)
++    if (why != "") return why
++    n = split(RS_OUT, segs, /[;&|\n\037(){}`]/)
++    for (i = 1; i <= n; i++) if ((why = rseg(segs[i], d)) != "") return why
++    return ""
++  }
++  # rredir(S): "" when every redirect in S goes to /dev/null, nul, $null or is an fd copy; sets RS_OUT
++  # to S without them.
++  function rredir(s,   out, op, t, why) {
++    out = ""; why = ""
++    while (match(s, /(&>>?|[0-9*]*(>>|>&|>\||<<<|<<-|<<|<>|<&|>|<))[ \t]*/)) {
++      op = substr(s, RSTART, RLENGTH); out = out substr(s, 1, RSTART - 1) " "
++      s = substr(s, RSTART + RLENGTH)
++      match(s, /^[^ \t;&|<>(){}\n\037]*/); t = substr(s, 1, RLENGTH); s = substr(s, RLENGTH + 1)
++      gsub(/[ \t]/, "", op); t = unq(t)
++      if (op ~ /&$/ && t ~ /^([0-9]+|-)$/) continue
++      if (op ~ />/ && op !~ /</ && tolower(t) ~ /^(\/dev\/null|nul|\$null)$/) continue
++      if (why == "") why = "redirect " op t
++    }
++    RS_OUT = out s
++    return why
++  }
++  # rseg(SEG, D): one segment of a remote command: its head must be on the read list.
++  function rseg(seg, d,   n, a, h, i, w) {
++    gsub(/^[ \t]+|[ \t]+$/, "", seg)
++    if (seg == "") return ""
++    n = split(seg, a, /[ \t]+/)
++    h = base(unq(a[1]))
++    if (h == "cmd") return rcmd(a, n, d)
++    if (h == "powershell" || h == "pwsh") return rps(a, n, h, d)
++    if (!(h in READ)) return "`" h "` is not on the read list"
++    for (i = 2; i <= n; i++) {
++      w = unq(a[i])
++      if (h == "find" && tolower(w) ~ /^-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)$/) return "`find " w "` writes or runs a command"
++      if (h == "date" && (w ~ /^-[A-Za-z]*s/ || w ~ /^--set/ || w ~ /^[0-9]/)) return "`date " w "` may set the clock"
++      if (h == "hostname" && w !~ /^-([sfiIdaAvhV]|-short|-fqdn|-long|-ip-address|-all-ip-addresses|-domain|-alias|-all-fqdns|-help|-version)$/) return "`hostname " w "` may set the host name"
++      if (h == "file" && w ~ /^(-[A-Za-z]*C|--compile)/) return "`file " w "` writes a magic file"
++    }
++    return ""
++  }
++  # rcmd: cmd [/x ...] /c|/k COMMAND; any other cmd is a shell.
++  function rcmd(a, n, d,   i, w, rest) {
++    for (i = 2; i <= n; i++) {
++      w = unq(a[i])
++      if (tolower(w) ~ /^\/[ck]/) {
++        rest = substr(a[i], index(a[i], "/") + 2) " " join(a, i + 1, n)
++        if (unq(rest) ~ /^[ \t]*$/) break
++        return rem(rest, d + 1)
++      }
++      if (w !~ /^\/[A-Za-z](:.*)?$/) break
++    }
++    return "`cmd` without /c is a shell"
++  }
++  # rps: powershell or pwsh [options] -Command COMMAND (Windows PowerShell also takes COMMAND bare).
++  function rps(a, n, h, d,   i, w, p, rest) {
++    for (i = 2; i <= n; i++) {
++      w = tolower(unq(a[i]))
++      if (w !~ /^[-\/]/) {
++        if (h == "powershell") return rem(join(a, i, n), d + 1)
++        return "`pwsh` runs a script file"
++      }
++      p = substr(w, 2)
++      if (p ~ /^(c|com|comm|comma|comman|command|commandwithargs|cwa)$/) {
++        rest = join(a, i + 1, n); w = unq(rest); gsub(/[ \t]/, "", w)
++        if (w == "" || w == "-") return "`" h "` reads its command from stdin"
++        return rem(rest, d + 1)
++      }
++      if (p ~ /^(nop|noprofile|noni|noninteractive|nol|nologo|sta|mta|noe|noexit)$/) continue
++      if (p ~ /^(ex|ep|executionpolicy|w|win|windowstyle|if|inp|inputformat|o|of|outputformat|v|version|config|configurationname|wd|workingdirectory|settingsfile)$/) { i++; continue }
++      return "`" h " -" p "` cannot be checked"
++    }
++    return "`" h "` with no command is a shell"
++  }
++
++  # j_ssh(S): ssh at word S. OpenSSH reads options before and after the destination; the first word
++  # after that starts the remote command.
++  function j_ssh(s,   k, w, j, c, v, dest, port, nf, nin, ctl, inc, rc, orc, stdin, t, key, h, why, lc, lt, dyn) {
++    port = 22; dest = ""; rc = ""; orc = ""; nf = 0; nin = 0; ctl = 0; inc = 0; stdin = ""; t = 0; lc = ""; lt = 0; OH = ""; dyn = 0
++    for (k = s + 1; k <= N; k++) {
++      w = W[k]
++      if (R[k]) {
++        k = redir(k)
++        if (RO ~ /^</ && !(RO == "<" && RT == "/dev/null")) stdin = RO
++        continue
++      }
++      if (inc) { rc = rc " " w; dyn = dyn || D[k]; continue }
++      if (w ~ /^-./ && w != "--") {
++        for (j = 2; j <= length(w); j++) {
++          c = substr(w, j, 1)
++          if (index("BbcDEeFIiJLlmOoPpQRSWw", c)) {
++            v = substr(w, j + 1)
++            if (v == "" && k < N) v = W[++k]
++            if (c == "p") port = v
++            else if (c == "J" && !t) t = hops(v)
++            else if (c == "O" || c == "W") ctl = 1
++            else if (c == "o") {
++              key = tolower(v); sub(/[ =].*/, "", key); sub(/^[^ =]*[ =][ \t]*/, "", v)
++              if (key == "port") port = v
++              else if (key == "hostname") OH = v
++              else if (key == "remotecommand") { orc = v; dyn = dyn || D[k] }
++              else if (key == "proxyjump" && !t) t = hops(v)
++              else if (key ~ /^(proxycommand|localcommand|knownhostscommand)$/ && (lt = named(v))) lc = key
++              else if (!t) t = named(v)
++            }
++            break
++          }
++          if (c == "N") nf = 1
++          else if (c == "n") nin = 1
++          else if (c == "G" || c == "V") ctl = 2
++        }
++        continue
++      }
++      if (w == "--") continue
++      if (dest == "") { dest = w; continue }
++      inc = 1; rc = w; dyn = D[k]
++    }
++    if (ctl == 2 || dest == "") return
++    uhost(dest)
++    if (!t) t = hit(UH, UP != "" ? UP : port)
++    if (!t && OH != "") t = hit(OH, UP != "" ? UP : port)
++    if (lc != "") { deny("ssh -o " lc " runs a command that names protected target " tr[lt] "; kern cannot check it"); return }
++    # Another host may reach a target in turn (ssh bastion "scp f v1-host:"): the caller checks its
++    # command as a command line.
++    if (!t) { if (rc != "") print "\001" rc; if (orc != "") print "\001" orc; return }
++    h = tr[t]
++    if (rc == "" && orc == "") {
++      if (nf || ctl) return
++      deny("ssh to protected target " h " with no remote command opens a shell")
++      return
++    }
++    if (!nin && stdin != "") deny("ssh to protected target " h " with input on stdin (" stdin ")")
++    else if (!nin && FED) deny("ssh to protected target " h " with input piped to it")
++    if (dyn) deny("ssh to protected target " h ": the remote command is built at run time ($ or a backtick)")
++    if (rc != "" && (why = rem(rc, 0)) != "") deny("ssh to protected target " h ": " why)
++    if (orc != "" && (why = rem(orc, 0)) != "") deny("ssh -o RemoteCommand to protected target " h ": " why)
++  }
++  # hops(V): the target a comma list of jump hosts names, else 0.
++  function hops(v,   n, a, i, t) {
++    n = split(v, a, ",")
++    for (i = 1; i <= n; i++) { uhost(a[i]); if ((t = hit(UH, UP != "" ? UP : 22))) return t }
++    return 0
++  }
++
++  function judge(b, k) {
++    if (b == "ssh") j_ssh(k)
++    else if (b == "scp") j_scp(k)
++    else if (b == "rsync") j_rsync(k)
++    else if (b == "sftp") j_sftp(k)
++    else if (b in SQLFAM) j_sql(k, b)
++  }
++
++  BEGIN {
++    FED = ENVIRON["G13_FED"] == 1
++    nt = split(ENVIRON["G13_TG"], ta, ",")
++    for (k = 1; k <= nt; k++) {
++      e = ta[k]; gsub(/^[ \t\[]+|[ \t\]]+$/, "", e)
++      if (e == "") continue
++      tr[++tn] = e
++      uhost(e); th[tn] = canon(UH); tp[tn] = UP
++    }
++    nr = split("ls cat head tail grep wc stat file du df pwd whoami hostname uname date id echo sha256sum md5sum find " \
++      "dir type findstr where ver get-childitem get-content select-string get-item test-path get-filehash measure-object " \
++      "gci gc sls", ra, " ")
++    for (k = 1; k <= nr; k++) READ[ra[k]] = 1
++    JUDGE["ssh"] = 1
++    CMDTXT = ENVIRON["G13_CMD"]
++  }
++  { buf = buf (NR > 1 ? "\037" : "") $0 }
++  END {
++    qw(buf); N = qw_n
++    for (k = 1; k <= N; k++) { W[k] = qw_w[k]; R[k] = qw_r[k]; D[k] = qw_d[k] }
++    found = 0
++    for (k = 1; k <= N; k++) if (!R[k] && ((b = base(W[k])) in JUDGE)) { found = 1; judge(b, k) }
++    if (found) exit
++    cw_reset()
++    for (k = 1; k <= N; k++) cw(W[k])
++    if (!cw_n || !((b = base(cw_w[1])) in JUDGE)) exit
++    N = cw_n
++    for (k = 1; k <= N; k++) { W[k] = cw_w[k]; R[k] = (k > 1 && W[k] ~ /^[0-9]*(<|>|&>)/); D[k] = (W[k] ~ /[$`]/) }
++    judge(b, 1)
++  }
++'
++
++# The SQL judge, appended to _G13_AWK. A client reaches a target when its host (-h, --host, a URL, a
++# conninfo host=, PGHOST= or MYSQL_HOST= in the command, else localhost) and its port (likewise, else
++# the client default) name one, or an option value names one as a whole host; sqlite3 when its file
++# is one. Then every statement in -e, -c, -Q, --init-command and every input file (-f, -i, <) is
++# proven: it starts with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH and holds no write, lock,
++# file or wait word, for every way the client may lex its strings. Piped, here-doc or run-time input,
++# a file G13 cannot read, and no statement at all are denied.
++# shellcheck disable=SC2016 # awk text
++_G13_SQL_AWK='
++  function j_sql(s, b,   fam, k, w, j, c, v, x, opt, pos, t, i, h, why, role) {
++    fam = SQLFAM[b]
++    nh = 0; np = 0; nst = 0; bad = ""; stdin = ""; dyn = 0; single = 0; locks = ""; pos = 0; dbf = ""; FBT = 0; vars = ""
++    for (k = s + 1; k <= N; k++) {
++      w = W[k]
++      if (R[k]) {
++        k = redir(k)
++        if (RO == "<") sqlfile(RT)
++        else if (RO ~ /^</) stdin = RO
++        continue
++      }
++      if (fam == "lite" && w ~ /^-/) {
++        opt = w; sub(/^--/, "-", opt)
++        if ((opt in LITEV) && k < N) {
++          v = W[++k]
++          if (opt == "-cmd") sqlst(v, D[k])
++          else if (opt == "-init") sqlfile(v)
++        }
++        continue
++      }
++      if (w ~ /^--./) {
++        opt = w; v = ""; x = 0
++        if ((j = index(w, "=")) > 0) { opt = substr(w, 1, j - 1); v = substr(w, j + 1); x = 1 }
++        role = ((b SUBSEP opt) in LONG) ? LONG[b, opt] : LONG[fam, opt]
++        if (role != "") {
++          if (!x && k < N) v = W[++k]
++          sqlopt(role, v, D[k], fam)
++        } else {
++          if (x) fb(v)
++          if (b ~ /dump$/) dumpopt(opt, v, x)
++        }
++        continue
++      }
++      if (w ~ /^-./) {
++        if (fam == "ms") {
++          c = substr(w, 2, 1)
++          if (index(SQLV[b], c)) { v = substr(w, 3); if (v == "" && k < N) v = W[++k]; sqlopt(ROLE[b, c], v, D[k], fam) }
++          continue
++        }
++        for (j = 2; j <= length(w); j++) {
++          c = substr(w, j, 1)
++          if (index(SQLV[b], c)) {
++            v = substr(w, j + 1)
++            if (v == "" && k < N) v = W[++k]
++            sqlopt(ROLE[b, c], v, D[k], fam)
++            break
++          }
++          if (fam == "my" && index("p#", c)) break
++          if (b ~ /dump$/ && index("lxF", c)) locks = locks " -" c
++          if (b == "psql" && c == "l") ST[++nst] = "\\l"
++        }
++        continue
++      }
++      if (fam == "lite") { if (++pos == 1) dbf = w; else sqlst(w, D[k]); continue }
++      conn(w); fb(w)
++    }
++    if (fam == "lite") t = litehit(dbf, s)
++    else {
++      if (nh == 0) { envscan(fam, "h"); H[++nh] = "localhost" }
++      if (np == 0) { envscan(fam, "p"); P[++np] = DEFPORT[fam] }
++      t = 0
++      for (i = 1; i <= nh && !t; i++) for (j = 1; j <= np && !t; j++) t = hit(H[i], P[j])
++      if (!t) t = FBT
++    }
++    if (!t) return
++    h = tr[t]
++    if (b in SQLREAD) return
++    if (b ~ /dump$/) {
++      if (!single) deny(b " of protected target " h " without --single-transaction locks tables")
++      if (locks != "") deny(b " of protected target " h " with" locks " takes a lock or writes")
++      return
++    }
++    if (!(b in SQLRUN)) { deny(b " against protected target " h ": kern proves reads only for mysql, mariadb, psql, sqlite3, sqlcmd, mysqldump and pg_dump"); return }
++    if (FED) deny("SQL to protected target " h " with input piped to " b)
++    if (stdin != "") deny("SQL to protected target " h " with input from " stdin)
++    if (bad != "") deny("SQL to protected target " h ": cannot read " bad)
++    if (dyn) deny("SQL to protected target " h " built at run time ($ or a backtick)")
++    if (nst == 0) { deny("SQL to protected target " h " with no statement opens an interactive " b); return }
++    for (i = 1; i <= nst; i++) if ((why = sqlok(ST[i], fam)) != "") { deny("SQL to protected target " h ": " why); break }
++    if (vars != "" && (index(vars, ";") || (why = sqlkw(sqlstrip(vars, fam, 1), fam, "")) != "")) deny("SQL to protected target " h ": a psql variable holds SQL")
++  }
++  # sqlopt(ROLE, V, DYN, FAM): h host, P port, S sqlcmd server, e statement, f file, d database or
++  # conninfo, v psql variable; anything else may still name a target.
++  function sqlopt(role, v, dy, fam,   n, a, i) {
++    if (role == "h") { n = split(v, a, ","); for (i = 1; i <= n; i++) H[++nh] = a[i] }
++    else if (role == "P") { n = split(v, a, ","); for (i = 1; i <= n; i++) P[++np] = a[i] }
++    else if (role == "S") sqlserver(v)
++    else if (role == "e") sqlst(v, dy)
++    else if (role == "f") { n = split(v, a, fam == "ms" ? "," : "\001"); for (i = 1; i <= n; i++) sqlfile(a[i]) }
++    else if (role == "d") { conn(v); fb(v) }
++    else if (role == "v") { sub(/^[^=]*=/, "", v); vars = vars " " v }
++    else fb(v)
++  }
++  # sqlserver(V): sqlcmd [tcp:]host[\instance][,port].
++  function sqlserver(v) {
++    sub(/^[A-Za-z]+:/, "", v)
++    if (match(v, /,[0-9]+$/)) { P[++np] = substr(v, RSTART + 1); v = substr(v, 1, RSTART - 1) }
++    sub(/\\.*/, "", v)
++    H[++nh] = v
++  }
++  function sqlst(v, dy) { ST[++nst] = v; if (dy) dyn = 1 }
++  function sqlfile(f,   t) {
++    if (f ~ /^(-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/) { stdin = "stdin"; return }
++    t = slurp(f)
++    if (SLURP_OK) ST[++nst] = t
++    else if (bad == "") bad = f
++  }
++  function slurp(f,   line, t, r) {
++    if (f ~ /^~\//) f = ENVIRON["HOME"] substr(f, 2)
++    else if (f !~ /^\//) f = ENVIRON["CWD"] "/" f
++    t = ""; SLURP_OK = 0
++    while ((r = (getline line < f)) > 0) t = t line "\n"
++    if (r < 0) return ""
++    close(f); SLURP_OK = 1
++    return t
++  }
++  # conn(W): hosts and ports from a URL or a conninfo string.
++  function conn(w,   hp, n, a, i, k, kv) {
++    if (w ~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\//) {
++      hp = w; sub(/^[^:]*:\/\//, "", hp); sub(/[\/?].*/, "", hp); sub(/.*@/, "", hp)
++      n = split(hp, a, ",")
++      for (i = 1; i <= n; i++) { uhost(a[i]); if (UH != "") H[++nh] = UH; if (UP != "") P[++np] = UP }
++      hp = w; sub(/^[^?]*\??/, "", hp); gsub(/&/, " ", hp); w = hp
++    }
++    n = split(w, a, /[ \t]+/)
++    for (i = 1; i <= n; i++) {
++      if (!(k = index(a[i], "="))) continue
++      kv = tolower(substr(a[i], 1, k - 1))
++      if (kv == "host" || kv == "hostaddr") sqlopt("h", substr(a[i], k + 1))
++      else if (kv == "port") sqlopt("P", substr(a[i], k + 1))
++    }
++  }
++  # fb(V): remembers the first target V names as a whole host.
++  function fb(v) { if (!FBT) FBT = named(v) }
++  # envscan(FAM, KIND): hosts or ports assigned anywhere in the command (PGHOST=x psql, export ...).
++  function envscan(fam, kind,   names, n, a, i, s, v) {
++    names = ENVN[fam, kind]
++    n = split(names, a, " ")
++    for (i = 1; i <= n; i++) {
++      s = CMDTXT
++      while (match(s, "(^|[^A-Za-z0-9_])" a[i] "=[^ \t;&|)]*")) {
++        v = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
++        sub(/^[^=]*=/, "", v); v = unq(v)
++        if (kind == "p") P[++np] = v
++        else if (a[i] == "SQLCMDSERVER") sqlserver(v)
++        else H[++nh] = v
++      }
++    }
++  }
++  # litehit(F, S): the target the sqlite3 file F is, or a path target any later word holds.
++  function litehit(f, s,   k, e, lf, i) {
++    lf = lpath(f)
++    for (k = 1; k <= tn; k++) {
++      e = tolower(tr[k])
++      if (index(e, "/")) { if (f != "" && lf == lpath(e)) return k; for (i = s + 1; i <= N; i++) if (index(tolower(W[i]), e)) return k }
++      else if (f != "" && (tolower(f) == e || substr(lf, length(lf) - length(e)) == "/" e)) return k
++    }
++    return 0
++  }
++  function lpath(p) {
++    if (p ~ /^~\//) p = ENVIRON["HOME"] substr(p, 2)
++    else if (p !~ /^\//) p = ENVIRON["CWD"] "/" p
++    return tolower(p)
++  }
++  function dumpopt(opt, v, x,   off) {
++    off = x && tolower(v) ~ /^(0|off|false)$/
++    if (opt == "--single-transaction") single = !off
++    else if (opt ~ /^--(skip|disable)-single-transaction$/) single = 0
++    else if (!off && opt ~ /^--(lock-tables|lock-all-tables|master-data|source-data|flush-logs|flush-privileges|delete-master-logs|delete-source-logs|dump-slave|dump-replica|lock-for-backup)$/) locks = locks " " opt
++  }
++
++  # sqlok(TEXT, FAM): "" when every statement in TEXT reads, under each way FAM may lex strings
++  # (mysql: backslash escapes on or off; psql: in E strings only, or everywhere).
++  function sqlok(text, fam,   n, a, i, why) {
++    n = split(LEX[fam], a, " ")
++    for (i = 1; i <= n; i++) if ((why = sqlvar(text, fam, a[i])) != "") return why
++    return ""
++  }
++  function sqlvar(text, fam, bs,   s, c, e, rest, n, a, i, why, line, out) {
++    gsub(/\037/, "\n", text)
++    s = sqlstrip(text, fam, bs)
++    if (fam == "my") {
++      while (match(s, /\\./)) {
++        c = substr(s, RSTART + 1, 1)
++        if (c != "g" && c != "G") return "mysql client command \\" c
++        s = substr(s, 1, RSTART - 1) ";" substr(s, RSTART + 2)
++      }
++    } else if (fam == "pg") {
++      while (match(s, /\\[^ \t\n;]*/)) {
++        c = substr(s, RSTART + 1, RLENGTH - 1); e = RSTART; rest = substr(s, RSTART)
++        if (c !~ /^(d[A-Za-z+]*|l\+?|x|q|g|gx|conninfo|timing)$/) return "psql meta-command \\" c
++        s = substr(s, 1, e - 1) ";" (match(rest, /\n/) ? substr(rest, RSTART) : "")
++      }
++    } else {
++      n = split(s, a, "\n"); out = ""
++      for (i = 1; i <= n; i++) {
++        line = a[i]
++        if (fam == "lite" && line ~ /^[ \t]*\./) {
++          c = line; sub(/^[ \t]*\./, "", c); sub(/[ \t].*/, "", c)
++          if (!(tolower(c) in LITEDOT)) return "sqlite3 dot command ." c
++          line = ";"
++        }
++        if (fam == "ms") {
++          if (tolower(line) ~ /^[ \t]*go([ \t]+[0-9]+)?[ \t]*$/) line = ";"
++          else if (line ~ /^[ \t]*(:|!!)/) return "sqlcmd command " line
++          else if (index(line, "$(")) return "sqlcmd variable in " line
++        }
++        out = out line "\n"
++      }
++      s = out
++    }
++    n = split(s, a, ";")
++    for (i = 1; i <= n; i++) if ((why = sqlstmt(a[i], fam)) != "") return why
++    return ""
++  }
++  # sqlstrip(S, FAM, BS): S with comments removed and strings and quoted names replaced by an empty
++  # string; a MySQL /*! or /*M! comment is code. BS 1: a backslash escapes in every string; e: only
++  # in an E string; 0: never. psql also has dollar quotes; only mysql has # comments and backticks.
++  function sqlstrip(s, fam, bs,   n, i, c, nx, out, j, q, esc, e, tag) {
++    n = length(s); out = ""
++    for (i = 1; i <= n; i++) {
++      c = substr(s, i, 1); nx = substr(s, i + 1, 1)
++      if ((c == "-" && nx == "-" && index(" \t\n", substr(s, i + 2, 1))) || (c == "#" && fam == "my")) {
++        while (i < n && substr(s, i + 1, 1) != "\n") i++
++        out = out " "; continue
++      }
++      if (c == "/" && nx == "*") {
++        if (substr(s, i + 2, 1) == "!" || substr(s, i + 2, 2) == "M!") {
++          i += (substr(s, i + 2, 1) == "!") ? 2 : 3
++          while (substr(s, i + 1, 1) ~ /[0-9]/) i++
++          out = out " "; continue
++        }
++        e = index(substr(s, i + 2), "*/")
++        if (!e) break
++        i += e + 2; out = out " "; continue
++      }
++      if (c == "*" && nx == "/") { i++; out = out " "; continue }
++      if (c == sq || c == "\"" || (c == "`" && fam == "my")) {
++        esc = (bs == 1) || (bs == "e" && c == sq && i > 1 && substr(s, i - 1, 1) ~ /[eE]/ && (i == 2 || substr(s, i - 2, 1) !~ /[A-Za-z0-9_]/))
++        for (j = i + 1; j <= n; j++) {
++          q = substr(s, j, 1)
++          if (esc && q == "\\") { j++; continue }
++          if (q == c) { if (substr(s, j + 1, 1) == c) { j++; continue }; break }
++        }
++        out = out " "; i = j; continue
++      }
++      if (c == "$" && fam == "pg" && (i == 1 || substr(s, i - 1, 1) !~ /[A-Za-z0-9_$]/) && match(substr(s, i), /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/)) {
++        tag = substr(s, i, RLENGTH)
++        e = index(substr(s, i + RLENGTH), tag)
++        if (!e) { out = out " "; break }
++        i += RLENGTH + e + length(tag) - 2; out = out " "; continue
++      }
++      out = out c
++    }
++    return out
++  }
++  # sqlstmt(ST, FAM): one statement starts with a read word and holds no write, lock, file or wait word.
++  function sqlstmt(st, fam,   rest, n, tk, x, i, w) {
++    rest = tolower(st); n = 0
++    while (match(rest, /[a-z_][a-z0-9_$]*/)) { tk[++n] = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH) }
++    x = tolower(st); gsub(/^[ \t\n(]+/, "", x)
++    if (x == "") return ""
++    if (!n || !(tk[1] in SQLHEAD) || index(x, tk[1]) != 1) { x = substr(x, 1, 24); gsub(/[\n\t]/, " ", x); return "statement `" x "` is not a read" }
++    return sqlkw(st, fam, tk[1])
++  }
++  # sqlkw(S, FAM, HEAD): "" unless S holds a write, lock, file or wait word.
++  function sqlkw(s, fam, head,   rest, w, p) {
++    rest = tolower(s); p = ""
++    while (match(rest, /[a-z_][a-z0-9_$]*/)) {
++      w = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
++      if (head == "show" && (w == "create" || w == "set")) { p = w; continue }
++      if ((w in SQLANY) || (fam == "ms" && (w in MSANY)) || w ~ /^(pg_advisory_|pg_try_advisory_|pg_stat_reset|pg_replication_origin_)/) return "`" w "` writes, locks or waits"
++      if (w == "share" && (p == "for" || p == "key")) return "`" p " share` locks rows"
++      p = w
++    }
++    return ""
++  }
++  BEGIN {
++    n = split("mysql mariadb mysqldump mariadb-dump mysqladmin mariadb-admin mysqlimport mariadb-import mysqlcheck " \
++      "mariadb-check mysqlshow mariadb-show mysqlpump mysqlslap mariadb-slap mysqlbinlog mariadb-binlog mysql_upgrade " \
++      "mariadb-upgrade mysqlsh", a, " ")
++    for (i = 1; i <= n; i++) { SQLFAM[a[i]] = "my"; SQLV[a[i]] = "hPSu"; ROLE[a[i], "h"] = "h"; ROLE[a[i], "P"] = "P" }
++    SQLV["mysql"] = SQLV["mariadb"] = "DehPSu"; ROLE["mysql", "e"] = ROLE["mariadb", "e"] = "e"
++    SQLV["mysqldump"] = SQLV["mariadb-dump"] = "hPSurwT"
++    n = split("psql pg_dump pg_dumpall pg_restore pg_isready", a, " ")
++    for (i = 1; i <= n; i++) { SQLFAM[a[i]] = "pg"; ROLE[a[i], "h"] = "h"; ROLE[a[i], "p"] = "P"; ROLE[a[i], "d"] = "d" }
++    SQLV["psql"] = "cdfhpUvoLPFRT"; ROLE["psql", "c"] = "e"; ROLE["psql", "f"] = "f"; ROLE["psql", "v"] = "v"
++    SQLV["pg_dump"] = "dfFhjnNpSTtUZe"; SQLV["pg_dumpall"] = "dfhlpSU"; SQLV["pg_restore"] = "dfFhIjLnNpPSTtUe"; SQLV["pg_isready"] = "dhptU"
++    SQLFAM["sqlite3"] = SQLFAM["sqlite"] = "lite"
++    SQLFAM["sqlcmd"] = "ms"; SQLV["sqlcmd"] = "SUPdQqiovHltswacfkyYmLAGeh"
++    ROLE["sqlcmd", "S"] = "S"; ROLE["sqlcmd", "Q"] = ROLE["sqlcmd", "q"] = "e"; ROLE["sqlcmd", "i"] = "f"
++    n = split("my pg ms", a, " ")
++    for (i = 1; i <= n; i++) { LONG[a[i], "--host"] = "h"; LONG[a[i], "--port"] = "P" }
++    LONG["mysql", "--execute"] = LONG["mariadb", "--execute"] = "e"
++    LONG["mysql", "--init-command"] = LONG["mariadb", "--init-command"] = "e"
++    LONG["mysql", "--init-command-add"] = LONG["mariadb", "--init-command-add"] = "e"
++    LONG["pg", "--dbname"] = "d"; LONG["psql", "--command"] = "e"; LONG["psql", "--file"] = "f"
++    LONG["psql", "--set"] = LONG["psql", "--variable"] = "v"
++    LONG["ms", "--server"] = "S"; LONG["ms", "--query"] = "e"; LONG["ms", "--input-file"] = "f"
++    n = split("-cmd -init -separator -newline -nullvalue -vfs -mmap -heap -maxsize -escape", a, " ")
++    for (i = 1; i <= n; i++) LITEV[a[i]] = 1
++    n = split("tables schema indexes indices databases headers mode dbinfo quit exit show help width fullschema", a, " ")
++    for (i = 1; i <= n; i++) LITEDOT[a[i]] = 1
++    DEFPORT["my"] = 3306; DEFPORT["pg"] = 5432; DEFPORT["ms"] = 1433
++    ENVN["my", "h"] = "MYSQL_HOST"; ENVN["my", "p"] = "MYSQL_TCP_PORT"
++    ENVN["pg", "h"] = "PGHOST PGHOSTADDR"; ENVN["pg", "p"] = "PGPORT"; ENVN["ms", "h"] = "SQLCMDSERVER"
++    LEX["my"] = "1 0"; LEX["pg"] = "e 1"; LEX["lite"] = "0 1"; LEX["ms"] = "0 1"
++    n = split("mysql mariadb psql sqlite3 sqlite sqlcmd", a, " ")
++    for (i = 1; i <= n; i++) SQLRUN[a[i]] = 1
++    n = split("pg_dump pg_dumpall pg_isready mysqlshow mariadb-show mysqlbinlog mariadb-binlog", a, " ")
++    for (i = 1; i <= n; i++) SQLREAD[a[i]] = 1
++    n = split("select show describe desc explain with", a, " ")
++    for (i = 1; i <= n; i++) SQLHEAD[a[i]] = 1
++    n = split("insert update delete merge drop create alter grant revoke lock unlock into outfile dumpfile " \
++      "get_lock release_lock release_all_locks sleep benchmark pg_sleep pg_sleep_for pg_sleep_until " \
++      "pg_terminate_backend pg_cancel_backend pg_reload_conf pg_rotate_logfile pg_switch_wal pg_switch_xlog " \
++      "pg_promote pg_create_restore_point set_config setval nextval lo_import lo_export lo_unlink lo_create " \
++      "lo_creat lo_put lo_from_bytea lo_truncate pg_file_write pg_file_unlink pg_file_rename pg_file_sync dblink " \
++      "dblink_exec dblink_connect dblink_send_query query_to_xml query_to_xml_and_xmlschema query_to_xmlschema " \
++      "pg_drop_replication_slot pg_create_physical_replication_slot pg_create_logical_replication_slot " \
++      "pg_logical_emit_message pg_backup_start pg_backup_stop pg_start_backup pg_stop_backup " \
++      "pg_import_system_collations pg_wal_replay_pause pg_wal_replay_resume sys_exec sys_eval master_pos_wait " \
++      "source_pos_wait wait_for_executed_gtid_set wait_until_sql_thread_after_gtids", a, " ")
++    for (i = 1; i <= n; i++) SQLANY[a[i]] = 1
++    n = split("exec execute kill shutdown truncate backup restore dbcc waitfor reconfigure openrowset " \
++      "opendatasource openquery bulk", a, " ")
++    for (i = 1; i <= n; i++) MSANY[a[i]] = 1
++    for (b in SQLFAM) JUDGE[b] = 1
++  }
++'
++
++# The transfer judge, appended to _G13_AWK. A remote operand is scp://, sftp:// or rsync://
++# [user@]host[:port]/..., host::module, or [user@]host:path with the colon before any slash. scp and
++# rsync deny a copy whose destination, the last positional word, is on a target; rsync also denies
++# --remove-source-files, --delete* and a remote command (--rsync-path, -M) when any operand is on a
++# target. A long rsync option written without = is read both with and without a value, so the last
++# positional is never guessed wrong. sftp to a target runs only read verbs, read from -b, a
++# here-string, the command's only here-doc, a < file, or a pipe from echo, printf or cat.
++# shellcheck disable=SC2016 # awk text
++_G13_XFER_AWK='
++  function isremote(w) {
++    return w ~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\// || (index(w, ":") && (!index(w, "/") || index(w, ":") < index(w, "/")))
++  }
++  # ohit(W, PORT, DPORT): the target the remote operand W names; DPORT is the port of host::module.
++  function ohit(w, port, dport,   h) {
++    if (w ~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\//) { uhost(w); return hit(UH, UP != "" ? UP : (w ~ /^rsync:/ ? dport : port)) }
++    h = substr(w, 1, index(w, ":") - 1); sub(/.*@/, "", h)
++    return hit(h, substr(w, index(w, ":") + 1, 1) == ":" ? dport : port)
++  }
++  # oval(TOOL, V): an ssh -o option of scp, sftp or rsync -e. Sets O_PORT for Port; returns the
++  # target its value names. A command option that names a target is denied.
++  function oval(tool, v,   key, t) {
++    key = tolower(v); sub(/[ =].*/, "", key); sub(/^[^ =]*[ =][ \t]*/, "", v)
++    if (key == "port") O_PORT = v
++    if (!(t = named(v))) return 0
++    if (key ~ /^(proxycommand|localcommand|knownhostscommand|remotecommand)$/) deny(tool " -o " key " runs a command that names protected target " tr[t] "; kern cannot check it")
++    return t
++  }
++  function j_scp(s,   k, w, j, c, v, n, a, t, port, ot, x) {
++    n = 0; port = 22; ot = 0
++    for (k = s + 1; k <= N; k++) {
++      w = W[k]
++      if (R[k]) { k = redir(k); continue }
++      if (w ~ /^-./) {
++        for (j = 2; j <= length(w); j++) {
++          c = substr(w, j, 1)
++          if (index("cDFiJloPSX", c)) {
++            v = substr(w, j + 1)
++            if (v == "" && k < N) v = W[++k]
++            if (c == "P") port = v
++            else if (c == "J" && !ot) ot = hops(v)
++            else if (c == "o") { O_PORT = ""; x = oval("scp", v); if (!ot) ot = x; if (O_PORT != "") port = O_PORT }
++            break
++          }
++        }
++        continue
++      }
++      a[++n] = w
++    }
++    if (n < 2 || !isremote(a[n])) return
++    if ((t = ohit(a[n], port, 22)) || (t = ot)) deny("scp copy to protected target " tr[t])
++  }
++  function j_rsync(s,   k, w, j, c, v, x, pa, pb, na, nb, pend, rm, del, rc, i, t, touch, sp) {
++    na = 0; nb = 0; pend = 0; rm = 0; del = 0; rc = ""; RT_OT = 0; sp = 22
++    for (k = s + 1; k <= N; k++) {
++      w = W[k]
++      if (R[k]) { k = redir(k); continue }
++      if (w == "--") { for (k++; k <= N; k++) if (!R[k]) { pa[++na] = W[k]; pb[++nb] = W[k] }; break }
++      if (w ~ /^--./) {
++        pend = 0; x = w; sub(/=.*/, "", x); v = ""
++        if (index(w, "=")) v = substr(w, index(w, "=") + 1)
++        else if (x ~ /^--(rsh|rsync-path|remote-option)$/) { if (k < N) v = W[++k] }
++        else pend = 1
++        if (x ~ /^--(remove-source-files|remove-sent-files)$/ || (x == "--remote-option" && v ~ /remove-s(ource|ent)-files/)) rm = 1
++        if (x ~ /^--del/ || (x == "--remote-option" && v ~ /^--del/)) del = 1
++        if (x ~ /^--(rsync-path|remote-option)$/) rc = x
++        if (x == "--rsh") sp = rsh(v, sp)
++        continue
++      }
++      if (w ~ /^-./) {
++        pend = 0
++        for (j = 2; j <= length(w); j++) {
++          c = substr(w, j, 1)
++          if (index("efBTM@", c)) {
++            v = substr(w, j + 1)
++            if (v == "" && k < N) v = W[++k]
++            if (c == "e") sp = rsh(v, sp)
++            if (c == "M") { rc = "-M"; if (v ~ /remove-s(ource|ent)-files/) rm = 1; if (v ~ /^--del/) del = 1 }
++            break
++          }
++        }
++        continue
++      }
++      pa[++na] = w
++      if (pend) pend = 0
++      else pb[++nb] = w
++    }
++    touch = 0
++    for (i = 1; i <= na; i++) if ((t = rhit(pa[i], sp))) {
++      touch = t
++      if (na >= 2 && i == na) deny("rsync to protected target " tr[t])
++    }
++    for (i = 1; i <= nb; i++) if ((t = rhit(pb[i], sp))) {
++      touch = t
++      if (nb >= 2 && i == nb) deny("rsync to protected target " tr[t])
++    }
++    if (!touch) return
++    if (rm) deny("rsync --remove-source-files deletes on protected target " tr[touch])
++    if (del) deny("rsync --delete touching protected target " tr[touch])
++    if (rc != "") deny("rsync " rc " runs a remote command on protected target " tr[touch])
++  }
++  # rhit(W, PORT): the target the rsync operand W is on: by its host, or any remote operand when -e
++  # names a target.
++  function rhit(w, port,   t) {
++    if (!isremote(w)) return 0
++    t = ohit(w, port, 873)
++    return t ? t : RT_OT
++  }
++  # rsh(V, PORT): an rsync -e command. Notes in RT_OT the target it names; returns its -p port.
++  function rsh(v, port,   n, a, i, t) {
++    n = split(v, a, /[ \t]+/)
++    for (i = 1; i <= n; i++) {
++      if (a[i] == "-p" && i < n) port = a[i + 1]
++      else if (a[i] ~ /^-p[0-9]+$/) port = substr(a[i], 3)
++      else if (a[i] == "-o" && i < n) { O_PORT = ""; if ((t = oval("rsync -e", a[i + 1]))) RT_OT = t; if (O_PORT != "") port = O_PORT }
++    }
++    if (!RT_OT) RT_OT = named(v)
++    return port
++  }
++  function j_sftp(s,   k, w, j, c, v, n, a, t, port, ot, bf, stdin, rt, rd, txt, why, h, x) {
++    n = 0; port = 22; ot = 0; bf = ""; stdin = ""; rt = ""; rd = 0
++    for (k = s + 1; k <= N; k++) {
++      w = W[k]
++      if (R[k]) { k = redir(k); if (RO ~ /^</) { stdin = RO; rt = RT; rd = RD }; continue }
++      if (w ~ /^-./) {
++        for (j = 2; j <= length(w); j++) {
++          c = substr(w, j, 1)
++          if (index("BbcDFiJloPRSsX", c)) {
++            v = substr(w, j + 1)
++            if (v == "" && k < N) v = W[++k]
++            if (c == "b") bf = v
++            else if (c == "P") port = v
++            else if (c == "J" && !ot) ot = hops(v)
++            else if (c == "o") { O_PORT = ""; x = oval("sftp", v); if (!ot) ot = x; if (O_PORT != "") port = O_PORT }
++            break
++          }
++        }
++        continue
++      }
++      a[++n] = w
++    }
++    if (n < 1) return
++    if (a[1] ~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\//) { uhost(a[1]); t = hit(UH, UP != "" ? UP : port) }
++    else { h = a[1]; sub(/:.*/, "", h); sub(/.*@/, "", h); t = hit(h, port) }
++    if (!t) t = ot
++    if (!t) return
++    h = "sftp to protected target " tr[t]
++    if (bf != "" && bf != "-") { txt = slurp(bf); if (!SLURP_OK) { deny(h ": cannot read batch file " bf); return } }
++    else if (stdin == "<<<") { if (rd) { deny(h ": the here-string is built at run time"); return }; txt = rt }
++    else if (stdin ~ /^<<-?$/) {
++      txt = hdbody()
++      if (HDN != 1) { deny(h ": the command holds more than one here-doc"); return }
++      if (!HDQ && txt ~ /[$`]/) { deny(h ": the here-doc expands $ or a backtick"); return }
++    }
++    else if (stdin == "<") { txt = slurp(rt); if (!SLURP_OK) { deny(h ": cannot read " rt); return } }
++    else if (stdin != "") { deny(h " with input from " stdin); return }
++    else if (FED) { txt = upstream(); if (txt == "\001") { deny(h " with input piped from a command kern cannot read"); return } }
++    else { deny(h " with no batch opens an interactive session"); return }
++    if ((why = sftpok(txt)) != "") deny(h ": " why)
++  }
++  function sftpok(text,   n, a, i, l, v) {
++    gsub(/\037/, "\n", text)
++    n = split(text, a, "\n")
++    for (i = 1; i <= n; i++) {
++      l = a[i]; sub(/^[ \t]+/, "", l)
++      if (l == "" || l ~ /^#/) continue
++      sub(/^[-@]+/, "", l)
++      v = tolower(l); sub(/[ \t].*/, "", v)
++      if (!(v in SFTPREAD)) return "`" v "` is not a read"
++    }
++    return ""
++  }
++  # upstream(): what the piped command G13_UP prints: echo, printf with a literal format or %s\n, or
++  # cat of files G13 can read; "\001" when G13 cannot tell.
++  function upstream(   n, k, b, t, f) {
++    if (ENVIRON["G13_UP"] == "") return "\001"
++    qw(ENVIRON["G13_UP"]); n = qw_n
++    for (k = 1; k <= n; k++) if (qw_r[k] || qw_d[k]) return "\001"
++    b = base(qw_w[1]); t = ""
++    if (b == "echo") {
++      for (k = 2; k <= n && qw_w[k] ~ /^-[neE]+$/; k++) ;
++      for (; k <= n; k++) t = t (t == "" ? "" : " ") qw_w[k]
++      gsub(/\\n/, "\n", t); return t
++    }
++    if (b == "printf" && n >= 2) {
++      if (qw_w[2] == "%s\\n") { for (k = 3; k <= n; k++) t = t qw_w[k] "\n"; return t }
++      if (index(qw_w[2], "%")) return "\001"
++      t = qw_w[2]; gsub(/\\n/, "\n", t); return t
++    }
++    if (b == "cat" && n >= 2) {
++      for (k = 2; k <= n; k++) { if (qw_w[k] ~ /^-/) return "\001"; f = slurp(qw_w[k]); if (!SLURP_OK) return "\001"; t = t f }
++      return t
++    }
++    return "\001"
++  }
++  # hdbody(): the body of the only here-doc in the command. Sets HDN to the number of << operators and
++  # HDQ when the delimiter is quoted (the body is not expanded).
++  function hdbody(   tmp, i, nl, L, k, line, p, off, d, dash, out) {
++    HDN = 0; HDQ = 0; tmp = CMDTXT
++    while ((i = index(tmp, "<<")) > 0) { if (substr(tmp, i + 2, 1) != "<") HDN++; tmp = substr(tmp, i + (substr(tmp, i + 2, 1) == "<" ? 3 : 2)) }
++    if (HDN != 1) return ""
++    nl = split(CMDTXT, L, "\n"); p = 0
++    for (k = 1; k <= nl && !p; k++) {
++      tmp = L[k]; off = 0
++      while ((i = index(tmp, "<<")) > 0) {
++        if (substr(tmp, i + 2, 1) != "<") { p = off + i; break }
++        off += i + 2; tmp = substr(tmp, i + 3)
++      }
++    }
++    if (!p) return ""
++    line = L[--k]; d = substr(line, p + 2); dash = 0
++    if (substr(d, 1, 1) == "-") { dash = 1; d = substr(d, 2) }
++    sub(/^[ \t]+/, "", d)
++    match(d, /^[^ \t;&|<>()]*/); d = substr(d, 1, RLENGTH)
++    HDQ = (d ~ /["\\]/ || index(d, sq) > 0)
++    d = unq(d); gsub(/\\/, "", d)
++    out = ""
++    for (k++; k <= nl; k++) { line = L[k]; if (dash) sub(/^\t+/, "", line); if (line == d) break; out = out line "\n" }
++    return out
++  }
++  BEGIN {
++    JUDGE["scp"] = JUDGE["rsync"] = JUDGE["sftp"] = 1
++    n = split("get reget ls dir cd lcd lls pwd lpwd help exit quit bye version progress", a, " ")
++    for (i = 1; i <= n; i++) SFTPREAD[a[i]] = 1
++  }
++'
+diff --git a/tests/hooks/g13-g15.bats b/tests/hooks/g13-g15.bats
+index 70d436d..41c7035 100644
+--- a/tests/hooks/g13-g15.bats
++++ b/tests/hooks/g13-g15.bats
+@@ -14,6 +14,21 @@ g() { run_guard "$(bash_payload "$1")" "$2"; }
+ mcp() { run_guard "$(payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{}")" g14; }
+ # mcpi TOOL FIELDS: G14 on an MCP call whose tool_input holds FIELDS (passed without braces).
+ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
++# gx CMD: G13 on CMD, which may hold double quotes, backslashes and newlines.
++gx() {
++  local esc
++  esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
++  run_guard "$(bash_payload "$esc")" g13
++}
++# g13_all DECISION CMD...: G13 decides DECISION on every CMD.
++g13_all() {
++  local want="$1" c
++  shift
++  for c in "$@"; do
++    gx "$c"
++    [ "$(decision_of "$output")" = "$want" ] || { echo "$c -> $output"; return 1; }
++  done
++}
+ 
+ @test "G13: inactive until protected_targets is set" {
+   g "scp a.txt v1-host:/data/" g13
+@@ -48,6 +63,210 @@ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
+   [ "$(decision_of "$output")" = deny ]
+ }
+ 
++@test "G13: an ssh remote command off the read list is denied, Windows and PowerShell included" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "ssh v1-host 'DEL C:\data\x'" "ssh v1-host 'ren C:\data\x y'" "ssh v1-host 'perl app2020arcp.pl'" \
++    "ssh v1-host 'sed -i s/a/b/ /data/x'" "ssh v1-host 'net stop mysql'" "ssh v1-host 'taskkill /im perl.exe'" \
++    "ssh v1-host 'powershell -c Remove-Item C:\data\x'" "ssh v1-host 'powershell -c Set-Content C:\data\x hi'" \
++    "ssh v1-host 'powershell -NoProfile -Command \"Get-Item C:\x | Remove-Item\"'" \
++    "ssh v1-host 'powershell -Command (Get-Item C:\x).Delete()'" "ssh v1-host 'powershell -EncodedCommand ZABpAHIA'" \
++    "ssh v1-host 'cmd /c \"dir C:\data && del C:\data\x\"'" "ssh v1-host 'dir C:\data & del C:\data\x'" \
++    "ssh v1-host 'ls /data; rm -f /data/x'" "ssh v1-host 'cat /data/x > /data/y'" "ssh v1-host 'ls \$(rm -f /data/x)'" \
++    "ssh v1-host 'find /data -name x -delete'" "ssh v1-host 'find /data -exec rm {} +'" "ssh v1-host 'date -s 2020-01-01'" \
++    "ssh v1-host 'hostname newname'" "ssh v1-host 'ls -la | xargs rm'"
++  set_autopilot on
++  g13_all deny "ssh v1-host 'DEL C:\data\x'"
++}
++
++@test "G13: ssh to a target names it in any case, as user@host, a URL, a jump or a HostName option" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "ssh admin@v1-host 'rm -f /data/x'" "ssh ssh://admin@v1-host:22 'rm -f /data/x'" \
++    "ssh -p 22 V1-HOST 'rm -f /data/x'" "ssh v1-host -t 'rm -f /data/x'" "ssh -o RemoteCommand='rm -f /data/x' v1-host" \
++    "ssh -J v1-host localhost 'rm -f /data/x'" "ssh -o HostName=v1-host alias 'rm -f /data/x'" \
++    "ssh -o ProxyCommand='ssh v1-host rm -f /data/x' other ls"
++}
++
++@test "G13: ssh to a target with no remote command, a shell, or input on stdin is denied" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "ssh v1-host" "ssh -t v1-host bash" "ssh v1-host bash < fix.sh" "ssh v1-host 'bash -s' < fix.sh" \
++    "ssh v1-host < fix.sh" "cat fix.sh | ssh v1-host bash" "cat fix.sh | ssh v1-host 'cat /data/x'" \
++    "ssh v1-host cat <<< 'rm -f /data/x'" "ssh v1-host cmd" "ssh v1-host 'cmd /k'" "ssh v1-host powershell" \
++    "ssh v1-host 'powershell -Command -'" "ssh v1-host 'pwsh fix.ps1'" "ssh -s v1-host sftp"
++  g13_all deny "ssh v1-host <<'EOF'
++rm -f /data/x
++EOF"
++}
++
++@test "G13: an ssh behind a path, another case, quotes or a wrapper is still read" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "/usr/bin/ssh v1-host 'rm -f /data/x'" "SSH v1-host 'rm -f /data/x'" "s''sh v1-host 'rm -f /data/x'" \
++    "caffeinate ssh v1-host 'rm -f /data/x'" "sudo -u admin ssh v1-host 'rm -f /data/x'" \
++    "sshpass -p x ssh v1-host 'rm -f /data/x'" "bash -c \"ssh v1-host 'rm -f /data/x'\"" \
++    "env -S 'ssh v1-host rm -f /data/x'" "ls && ssh v1-host 'rm -f /data/x' | tail -n 1"
++}
++
++@test "G13: ssh reads, tunnels and other hosts get no vote" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all none "ssh v1-host ls 2>/dev/null" "ssh v1-host 'dir C:\data' 2>&1" "ssh v1-host 'cat /data/x' > local.txt" \
++    "ssh v1-host 'ls /data/rm-backups'" "ssh v1-host 'ls -la /data | grep x | wc -l'" "ssh v1-host 'type C:\data\x.txt'" \
++    "ssh v1-host 'findstr /i error C:\logs\app.log'" "ssh v1-host 'cmd /c dir C:\data'" \
++    "ssh v1-host 'powershell -NoProfile -Command \"Get-ChildItem C:\data | Measure-Object\"'" \
++    "ssh v1-host 'Get-Content C:\logs\a.log -Tail 20'" "ssh v1-host 'find /data -name x 2>/dev/null'" \
++    "ssh v1-host 'hostname; whoami; ver'" "ssh v1-host 'gci C:\data | sls error'" "ssh v1-host 'date +%F'" \
++    "ssh -n v1-host ls < fix.sh" "ssh -N -L 3307:localhost:3306 v1-host" "ssh -fN -L 3307:127.0.0.1:3306 admin@v1-host" \
++    "ssh -O exit v1-host" "ssh other-host 'rm -f /tmp/x'" "ssh v1-host-2 'rm -f /tmp/x'" \
++    "git commit -m 'ssh v1-host is read-only'" "grep -rn 'ssh v1-host' docs"
++}
++
++@test "G13: SQL to a target is SELECT, SHOW, DESCRIBE, EXPLAIN or WITH with no write, lock, file or wait" {
++  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "psql -h prod-db.internal -c 'UPDATE users2 SET a=1'" "psql -h prod-db.internal -c 'UPDATE users u SET a=1'" \
++    "psql -h prod-db.internal -c 'UPDATE ONLY users SET a=1'" "psql -h prod-db.internal -c 'UPDATE/**/users/**/SET a=1'" \
++    "mysql -h prod-db.internal -e 'INSERT users VALUES (1)'" "mysql -h prod-db.internal -e 'REPLACE INTO users VALUES (1)'" \
++    "psql -h prod-db.internal -c 'MERGE INTO users USING x ON true WHEN MATCHED THEN DELETE'" \
++    "psql -h prod-db.internal -c \"COPY users FROM '/tmp/x.csv'\"" "psql -h prod-db.internal -c 'DROP FUNCTION f()'" \
++    "psql -h prod-db.internal -c 'CREATE OR REPLACE VIEW v AS SELECT 1'" "mysql -h prod-db.internal -e 'RENAME TABLE a TO b'" \
++    "psql -h prod-db.internal -c 'CALL purge()'" "psql -h prod-db.internal -c 'VACUUM FULL users'" \
++    "mysql -h prod-db.internal -e 'KILL QUERY 5'" "mysql -h prod-db.internal -e 'SET PERSIST max_connections=1'" \
++    "psql -h prod-db.internal -c 'SELECT pg_terminate_backend(5)'" "psql -h prod-db.internal -c \"SELECT nextval('s')\"" \
++    "mysql -h prod-db.internal -e \"SELECT * FROM users INTO OUTFILE '/tmp/x'\"" \
++    "mysql -h prod-db.internal -e 'SELECT * FROM users FOR UPDATE'" "psql -h prod-db.internal -c 'SELECT * FROM users FOR SHARE'" \
++    "mysql -h prod-db.internal -e 'SELECT * FROM users LOCK IN SHARE MODE'" "mysql -h prod-db.internal -e 'SELECT SLEEP(100)'" \
++    "mysql -h prod-db.internal -e 'SELECT BENCHMARK(1000000, MD5(1))'" \
++    "psql -h prod-db.internal -c 'WITH d AS (DELETE FROM users RETURNING *) SELECT * FROM d'" \
++    "mysql -h prod-db.internal -e 'SELECT 1; DELETE FROM users'" "mysql -h prod-db.internal -e 'SELECT 1 /*!50000 ; DELETE FROM users */'" \
++    "mysql -h prod-db.internal -e \"SELECT 'a\\'; DELETE FROM users; -- '\"" \
++    "psql -h prod-db.internal -c \"SELECT E'x\\'', 'y\\'; DELETE FROM users; --'\"" \
++    "mysql -h prod-db.internal -e 'SELECT 1' --init-command='DELETE FROM users'" \
++    "mysql -h prod-db.internal -e 'SELECT 1\\! rm -rf /tmp/x'" "sqlcmd -S prod-db.internal -Q 'SELECT 1 DELETE FROM users'"
++}
++
++@test "G13: LOCK TABLES and GET_LOCK against a target are denied in both modes" {
++  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
++  for ap in off on; do
++    set_autopilot "$ap"
++    g13_all deny "mysql -h prod-db.internal -e 'LOCK TABLES users READ'" "psql -h prod-db.internal -c 'LOCK TABLE users'" \
++      "mysql -h prod-db.internal -e \"SELECT GET_LOCK('x', 10)\"" "mysql -h prod-db.internal -e 'UNLOCK TABLES'"
++  done
++}
++
++@test "G13: SQL reads against a target, and SQL words outside a client, get no vote" {
++  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
++  printf 'SELECT id FROM users;\n-- never DELETE here\nSHOW TABLES;\n' >"$R/read.sql"
++  g13_all none "mysql -h prod-db.internal -e 'SHOW GRANTS'" "mysql -h prod-db.internal -e 'SHOW CREATE TABLE users'" \
++    "mysql -h prod-db.internal -Nse 'SELECT id FROM users LIMIT 1'" "psql -h prod-db.internal -Atc 'SELECT 1'" \
++    "psql -h prod-db.internal -c \"SELECT 'update x set' FROM t\"" \
++    "psql -h prod-db.internal -c 'SELECT * FROM users WHERE note = \$\$truncate\$\$'" \
++    "mysql -h prod-db.internal -e 'SELECT REPLACE(name, \"a\", \"b\") FROM users; DESCRIBE users; EXPLAIN SELECT 1'" \
++    "mysql -h prod-db.internal -e 'SELECT 1 -- DELETE FROM users'" "mysql -h prod-db.internal -e 'SELECT * FROM t\\G'" \
++    "psql -h prod-db.internal -c 'WITH x AS (SELECT 1) SELECT * FROM x'" "psql -h prod-db.internal -f read.sql" \
++    "mysql -h prod-db.internal < read.sql" "psql -h prod-db.internal -l" "pg_dump -h prod-db.internal -f out.sql appdb" \
++    "mysql -h other-db -e 'DELETE FROM users'" "git commit -m 'docs: never DELETE FROM users on prod-db.internal'" \
++    "grep -rn 'DROP TABLE' docs/prod-db.internal.md"
++}
++
++@test "G13: SQL input G13 cannot read is denied: files of any name, pipes, here-docs, run-time text, none at all" {
++  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
++  printf 'DELETE FROM users;\n' >"$R/fix.txt"
++  printf 'DELETE FROM users;\n' >"$R/fix"
++  printf 'DELETE FROM users;\n' >"$R/fix.psql"
++  printf 'DELETE FROM users;\n' >"$HOME/fix.sql"
++  g13_all deny "mysql -h prod-db.internal < fix.txt" "mysql -h prod-db.internal < fix" "mysql -h prod-db.internal <fix.txt" \
++    "cat fix.txt | mysql -h prod-db.internal" "psql -h prod-db.internal -f ~/fix.sql" "psql -h prod-db.internal -f fix.psql" \
++    "psql -h prod-db.internal -f missing.sql" "mysql -h prod-db.internal <<< 'SELECT 1'" \
++    "psql -h prod-db.internal -c \"\$(cat fix.txt)\"" "mysql -h prod-db.internal -e \"SELECT \$(cat fix.txt)\"" \
++    "mysql -h prod-db.internal" "caffeinate psql -h prod-db.internal -c 'UPDATE users SET a=1'" \
++    "PSQL -h prod-db.internal -c 'UPDATE users SET a=1'" "/usr/bin/mysql -h prod-db.internal -e 'DELETE FROM users'" \
++    "PGHOST=prod-db.internal psql -c 'DELETE FROM users'" "mysqladmin -h prod-db.internal shutdown" \
++    "pg_restore -h prod-db.internal -d app dump.bin"
++  g13_all deny "psql -h prod-db.internal <<'EOF'
++DELETE FROM users;
++EOF"
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "ssh v1-host \"ls \$(cat names.txt)\""
++}
++
++@test "G13: a host:port entry protects a database behind an SSH tunnel" {
++  printf 'protected_targets: 127.0.0.1:3307\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "mysql -h 127.0.0.1 -P 3307 -e 'DELETE FROM users'" "mysql -h127.0.0.1 -P3307 -e 'DELETE FROM users'" \
++    "mysql --host=localhost --port=3307 -e 'DELETE FROM users'" "mysql --host 127.0.0.1 --port 3307 -e 'LOCK TABLES users READ'" \
++    "mysql -P 3307 -e 'DELETE FROM users'" "MYSQL_TCP_PORT=3307 mysql -h 127.0.0.1 -e 'DELETE FROM users'" \
++    "psql postgresql://u@localhost:3307/app -c 'DELETE FROM users'" \
++    "psql 'host=127.0.0.1 port=3307 dbname=app' -c 'DELETE FROM users'"
++  g13_all none "mysql -h 127.0.0.1 -P 3306 -e 'DELETE FROM users'" "mysql -h 127.0.0.1 -e 'DELETE FROM users'" \
++    "mysql -h 127.0.0.1 -P 3307 -e 'SELECT 1'" "psql -h localhost -p 5432 -c 'DELETE FROM users'"
++}
++
++@test "G13: mysqldump of a target needs --single-transaction and no lock option; pg_dump reads" {
++  printf 'protected_targets: prod-db.internal\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "mysqldump -h prod-db.internal app" "mysqldump -h prod-db.internal --single-transaction --lock-tables app" \
++    "mysqldump -h prod-db.internal --single-transaction -x app" "mysqldump -h prod-db.internal --single-transaction --master-data=2 app" \
++    "mysqldump -h prod-db.internal --single-transaction=0 app"
++  g13_all none "mysqldump -h prod-db.internal --single-transaction app > dump.sql" "pg_dump -h prod-db.internal app"
++}
++
++@test "G13: scp or rsync to a target is denied by its last positional word, in any case or URL form" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "scp a.txt v1-host:/data/ 2>&1" "scp a.txt v1-host:/data/ >/dev/null" "scp a.txt V1-HOST:/data/" \
++    "scp a.txt admin@v1-host:/data/" "scp a.txt scp://admin@v1-host:22/data/" "scp -o HostName=v1-host a.txt alias:/data/" \
++    "rsync -av a.txt v1-host:/data/" "rsync -av a.txt v1-host:/data/ --progress" "rsync -av a.txt v1-host:/data/ 2>/dev/null" \
++    "rsync -av a.txt v1-host:/data/ --exclude x" "rsync -av a.txt rsync://v1-host/mod/" "rsync -av a.txt v1-host::mod/" \
++    "rsync -av -e 'ssh -o HostName=v1-host' a.txt alias:/data/"
++}
++
++@test "G13: rsync --remove-source-files, --delete or a remote command touching a target is denied" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "rsync -av --remove-source-files v1-host:/data/x ." "rsync -av --delete empty/ v1-host:/data/ >/dev/null" \
++    "rsync -av --delete-after v1-host:/data/ ./mirror/" "rsync -av --rsync-path='sudo rsync' v1-host:/data/ ." \
++    "rsync -av -M--remove-source-files v1-host:/data/x ."
++}
++
++@test "G13: an scp or rsync behind a path, another case or a wrapper is still read" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "/usr/bin/scp a.txt v1-host:/data/" "SCP a.txt v1-host:/data/" "caffeinate scp a.txt v1-host:/data/" \
++    "sshpass -p x scp a.txt v1-host:/data/" "xargs -I{} scp {} v1-host:/data/ < list.txt" "nice -n 5 rsync a.txt v1-host:/data/" \
++    "ssh bastion 'scp a.txt v1-host:/data/'" "ssh bastion \"ssh v1-host 'rm -f /data/x'\""
++}
++
++@test "G13: copies from a target and to other hosts get no vote" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  g13_all none "scp v1-host:/data/a.txt ./backup-v1-host/" "scp admin@v1-host:/data/a.txt ." \
++    "rsync -av v1-host:/data/ ./v1-host-mirror/" "rsync -av --progress v1-host:/data/ ./mirror/" \
++    "scp a.txt other-host:/data/v1-host/" "rsync -av ./v1-host/ /backup/" "ssh bastion 'scp v1-host:/data/a.txt .'" \
++    "ssh a \"ssh b 'ssh c ls'\""
++}
++
++@test "G13: sftp to a target runs only read verbs, from a batch file, here-doc, here-string or pipe" {
++  printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
++  printf 'put a.txt /data/a.txt\n' >"$R/batch.txt"
++  printf 'get /data/a.txt .\nls /data\n-cd /data\nbye\n' >"$R/get.txt"
++  g13_all deny "sftp -b batch.txt v1-host" "echo 'put a.txt /data/' | sftp v1-host" "sftp v1-host <<< 'put a.txt /data/'" \
++    "sftp v1-host <<< 'reput a.txt /data/a.txt'" "sftp v1-host <<< 'ln /data/a /data/b'" "sftp v1-host <<< 'chown 0 /data/a'" \
++    "sftp -b - v1-host <<< '!rm x'" "printf 'get a\nrm b\n' | sftp v1-host" "cat batch.txt | sftp v1-host" "sftp v1-host" \
++    "sftp -b missing.txt v1-host" "sftp admin@v1-host:/data/ <<< 'put a'" "sftp -b batch.txt sftp://v1-host" \
++    "ls | sftp v1-host" "printf 'get a\n' \"\$(echo 'put b')\" | sftp v1-host"
++  g13_all deny "sftp v1-host <<'EOF'
++put a.txt /data/
++EOF" "cat <<'A' >b.txt
++get x
++A
++sftp v1-host <<'B'
++put y
++B"
++  g13_all none "sftp -b get.txt v1-host" "sftp v1-host <<< 'get /data/a.txt'" "echo 'get /data/a.txt' | sftp v1-host" \
++    "printf '%s\n' 'get /data/a' 'bye' | sftp v1-host" "sftp -b batch.txt other-host"
++  g13_all none "sftp v1-host <<'EOF'
++get /data/a.txt
++ls
++EOF"
++}
++
++@test "G13: sqlite3 votes only when its file is a target" {
++  printf 'protected_targets: /srv/prod.db\n' >"$R/.claude/kern.local.yml"
++  g13_all deny "sqlite3 /srv/prod.db 'DELETE FROM t'" "sqlite3 /srv/prod.db '.import x.csv t'"
++  g13_all none "sqlite3 /srv/prod.db 'SELECT count(*) FROM t'" "sqlite3 dev.db 'DELETE FROM t'"
++}
++
+ @test "G14: a tracker write asks, a read does not vote, autopilot denies" {
+   mcp mcp__claude_ai_Linear__save_issue
+   [ "$(decision_of "$output")" = ask ]

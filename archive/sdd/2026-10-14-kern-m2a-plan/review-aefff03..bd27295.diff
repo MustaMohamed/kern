@@ -1,0 +1,571 @@
+# Review package: aefff03..HEAD
+
+## Commits
+bd27295 M2: add the seeded-diff set for review checks
+
+## Files changed
+ evals/seeded-diffs/base/.github/workflows/ci.yml |  5 ++
+ evals/seeded-diffs/base/README.md                |  3 +
+ evals/seeded-diffs/base/jest.config.js           |  6 ++
+ evals/seeded-diffs/base/src/sum.js               |  5 ++
+ evals/seeded-diffs/base/test/old.test.js         |  3 +
+ evals/seeded-diffs/base/test/sum.test.js         |  5 ++
+ evals/seeded-diffs/base/tsconfig.json            |  5 ++
+ evals/seeded-diffs/d01-reformatted-assert.diff   | 11 ++++
+ evals/seeded-diffs/d02-renamed-test.diff         |  4 ++
+ evals/seeded-diffs/d03-doc-todo.diff             |  9 +++
+ evals/seeded-diffs/d04-hex-colour.diff           |  9 +++
+ evals/seeded-diffs/d05-uuid.diff                 |  9 +++
+ evals/seeded-diffs/d06-moved-assert.diff         | 11 ++++
+ evals/seeded-diffs/d07-decrement.diff            | 11 ++++
+ evals/seeded-diffs/d08-threshold-raised.diff     | 12 ++++
+ evals/seeded-diffs/labels.json                   | 22 ++++++++
+ evals/seeded-diffs/s01-skip.diff                 |  9 +++
+ evals/seeded-diffs/s02-assert-removed.diff       | 10 ++++
+ evals/seeded-diffs/s03-test-deleted.diff         |  9 +++
+ evals/seeded-diffs/s04-ts-ignore.diff            | 11 ++++
+ evals/seeded-diffs/s05-as-any.diff               | 11 ++++
+ evals/seeded-diffs/s06-empty-catch.diff          | 11 ++++
+ evals/seeded-diffs/s07-debug.diff                | 11 ++++
+ evals/seeded-diffs/s08-coverage-lowered.diff     | 12 ++++
+ evals/seeded-diffs/s09-strict-off.diff           | 11 ++++
+ evals/seeded-diffs/s10-ci-nonblocking.diff       | 11 ++++
+ evals/seeded-diffs/s11-unknown-sha.diff          | 11 ++++
+ evals/seeded-diffs/s12-absolute-claim.diff       | 11 ++++
+ scripts/seeded-diffs.mjs                         | 72 ++++++++++++++++++++++++
+ tests/seeded-diffs.test.mjs                      | 22 ++++++++
+ 30 files changed, 352 insertions(+)
+
+## Diff
+diff --git a/evals/seeded-diffs/base/.github/workflows/ci.yml b/evals/seeded-diffs/base/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..48840cb
+--- /dev/null
++++ b/evals/seeded-diffs/base/.github/workflows/ci.yml
+@@ -0,0 +1,5 @@
++jobs:
++  test:
++    steps:
++      - run: npm ci
++      - run: npm test
+diff --git a/evals/seeded-diffs/base/README.md b/evals/seeded-diffs/base/README.md
+new file mode 100644
+index 0000000..0baa1ab
+--- /dev/null
++++ b/evals/seeded-diffs/base/README.md
+@@ -0,0 +1,3 @@
++# Sum
++
++Adds two numbers.
+diff --git a/evals/seeded-diffs/base/jest.config.js b/evals/seeded-diffs/base/jest.config.js
+new file mode 100644
+index 0000000..512f6d8
+--- /dev/null
++++ b/evals/seeded-diffs/base/jest.config.js
+@@ -0,0 +1,6 @@
++module.exports = {
++  coverageThreshold: { global: {
++    branches: 80,
++    lines: 90,
++  } },
++};
+diff --git a/evals/seeded-diffs/base/src/sum.js b/evals/seeded-diffs/base/src/sum.js
+new file mode 100644
+index 0000000..d4a3b92
+--- /dev/null
++++ b/evals/seeded-diffs/base/src/sum.js
+@@ -0,0 +1,5 @@
++export function sum(a, b) {
++  let i = 0;
++  --i;
++  return a + b;
++}
+diff --git a/evals/seeded-diffs/base/test/old.test.js b/evals/seeded-diffs/base/test/old.test.js
+new file mode 100644
+index 0000000..9f87d1b
+--- /dev/null
++++ b/evals/seeded-diffs/base/test/old.test.js
+@@ -0,0 +1,3 @@
++test('old', () => {
++  expect(1).toBe(1);
++});
+diff --git a/evals/seeded-diffs/base/test/sum.test.js b/evals/seeded-diffs/base/test/sum.test.js
+new file mode 100644
+index 0000000..d6a016e
+--- /dev/null
++++ b/evals/seeded-diffs/base/test/sum.test.js
+@@ -0,0 +1,5 @@
++import { sum } from '../src/sum.js';
++test('sum', () => {
++  expect(sum(1, 2)).toBe(3);
++  expect(sum(0, 0)).toBe(0);
++});
+diff --git a/evals/seeded-diffs/base/tsconfig.json b/evals/seeded-diffs/base/tsconfig.json
+new file mode 100644
+index 0000000..aee0ec9
+--- /dev/null
++++ b/evals/seeded-diffs/base/tsconfig.json
+@@ -0,0 +1,5 @@
++{
++  "compilerOptions": {
++    "strict": true
++  }
++}
+diff --git a/evals/seeded-diffs/d01-reformatted-assert.diff b/evals/seeded-diffs/d01-reformatted-assert.diff
+new file mode 100644
+index 0000000..344ff22
+--- /dev/null
++++ b/evals/seeded-diffs/d01-reformatted-assert.diff
+@@ -0,0 +1,11 @@
++diff --git a/test/sum.test.js b/test/sum.test.js
++index d6a016e..4ac5d2f 100644
++--- a/test/sum.test.js
+++++ b/test/sum.test.js
++@@ -1,5 +1,5 @@
++ import { sum } from '../src/sum.js';
++ test('sum', () => {
++-  expect(sum(1, 2)).toBe(3);
+++  expect( sum(1, 2) ).toBe( 3 )
++   expect(sum(0, 0)).toBe(0);
++ });
+diff --git a/evals/seeded-diffs/d02-renamed-test.diff b/evals/seeded-diffs/d02-renamed-test.diff
+new file mode 100644
+index 0000000..bb177f8
+--- /dev/null
++++ b/evals/seeded-diffs/d02-renamed-test.diff
+@@ -0,0 +1,4 @@
++diff --git a/test/old.test.js b/test/legacy.test.js
++similarity index 100%
++rename from test/old.test.js
++rename to test/legacy.test.js
+diff --git a/evals/seeded-diffs/d03-doc-todo.diff b/evals/seeded-diffs/d03-doc-todo.diff
+new file mode 100644
+index 0000000..0286de0
+--- /dev/null
++++ b/evals/seeded-diffs/d03-doc-todo.diff
+@@ -0,0 +1,9 @@
++diff --git a/README.md b/README.md
++index 0baa1ab..7ad40b3 100644
++--- a/README.md
+++++ b/README.md
++@@ -1,3 +1,4 @@
++ # Sum
++ 
++ Adds two numbers.
+++TODO: document the overflow case.
+diff --git a/evals/seeded-diffs/d04-hex-colour.diff b/evals/seeded-diffs/d04-hex-colour.diff
+new file mode 100644
+index 0000000..83cbcd8
+--- /dev/null
++++ b/evals/seeded-diffs/d04-hex-colour.diff
+@@ -0,0 +1,9 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..e241969 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -3,3 +3,4 @@ export function sum(a, b) {
++   --i;
++   return a + b;
++ }
+++export const colour = '#a1b2c3d4';
+diff --git a/evals/seeded-diffs/d05-uuid.diff b/evals/seeded-diffs/d05-uuid.diff
+new file mode 100644
+index 0000000..4d83a23
+--- /dev/null
++++ b/evals/seeded-diffs/d05-uuid.diff
+@@ -0,0 +1,9 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..94ddeaf 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -3,3 +3,4 @@ export function sum(a, b) {
++   --i;
++   return a + b;
++ }
+++export const id = '123e4567-e89b-12d3-a456-426614174000';
+diff --git a/evals/seeded-diffs/d06-moved-assert.diff b/evals/seeded-diffs/d06-moved-assert.diff
+new file mode 100644
+index 0000000..eb218e0
+--- /dev/null
++++ b/evals/seeded-diffs/d06-moved-assert.diff
+@@ -0,0 +1,11 @@
++diff --git a/test/sum.test.js b/test/sum.test.js
++index d6a016e..3e74ca5 100644
++--- a/test/sum.test.js
+++++ b/test/sum.test.js
++@@ -1,5 +1,5 @@
++ import { sum } from '../src/sum.js';
++ test('sum', () => {
++-  expect(sum(1, 2)).toBe(3);
++   expect(sum(0, 0)).toBe(0);
+++  expect(sum(1, 2)).toBe(3);
++ });
+diff --git a/evals/seeded-diffs/d07-decrement.diff b/evals/seeded-diffs/d07-decrement.diff
+new file mode 100644
+index 0000000..68bb881
+--- /dev/null
++++ b/evals/seeded-diffs/d07-decrement.diff
+@@ -0,0 +1,11 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..f85fab3 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -1,5 +1,5 @@
++ export function sum(a, b) {
++   let i = 0;
++-  --i;
+++  ++i;
++   return a + b;
++ }
+diff --git a/evals/seeded-diffs/d08-threshold-raised.diff b/evals/seeded-diffs/d08-threshold-raised.diff
+new file mode 100644
+index 0000000..4033678
+--- /dev/null
++++ b/evals/seeded-diffs/d08-threshold-raised.diff
+@@ -0,0 +1,12 @@
++diff --git a/jest.config.js b/jest.config.js
++index 512f6d8..cf1ca66 100644
++--- a/jest.config.js
+++++ b/jest.config.js
++@@ -1,6 +1,6 @@
++ module.exports = {
++   coverageThreshold: { global: {
++     branches: 80,
++-    lines: 90,
+++    lines: 95,
++   } },
++ };
+diff --git a/evals/seeded-diffs/labels.json b/evals/seeded-diffs/labels.json
+new file mode 100644
+index 0000000..faa359e
+--- /dev/null
++++ b/evals/seeded-diffs/labels.json
+@@ -0,0 +1,22 @@
++[
++  { "id": "s01-skip", "expect": ["test-made-easier"] },
++  { "id": "s02-assert-removed", "expect": ["assertion-removed"] },
++  { "id": "s03-test-deleted", "expect": ["test-deleted"] },
++  { "id": "s04-ts-ignore", "expect": ["silenced-checker"] },
++  { "id": "s05-as-any", "expect": ["silenced-checker"] },
++  { "id": "s06-empty-catch", "expect": ["unfinished-work"] },
++  { "id": "s07-debug", "expect": ["debug-print"] },
++  { "id": "s08-coverage-lowered", "expect": ["bar-lowered"] },
++  { "id": "s09-strict-off", "expect": ["bar-lowered"] },
++  { "id": "s10-ci-nonblocking", "expect": ["bar-lowered"] },
++  { "id": "s11-unknown-sha", "expect": ["sha-unknown"] },
++  { "id": "s12-absolute-claim", "expect": ["absolute-claim"] },
++  { "id": "d01-reformatted-assert", "expect": [] },
++  { "id": "d02-renamed-test", "expect": [] },
++  { "id": "d03-doc-todo", "expect": [] },
++  { "id": "d04-hex-colour", "expect": [] },
++  { "id": "d05-uuid", "expect": [] },
++  { "id": "d06-moved-assert", "expect": [] },
++  { "id": "d07-decrement", "expect": [] },
++  { "id": "d08-threshold-raised", "expect": [] }
++]
+diff --git a/evals/seeded-diffs/s01-skip.diff b/evals/seeded-diffs/s01-skip.diff
+new file mode 100644
+index 0000000..937f8e4
+--- /dev/null
++++ b/evals/seeded-diffs/s01-skip.diff
+@@ -0,0 +1,9 @@
++diff --git a/test/sum.test.js b/test/sum.test.js
++index d6a016e..43474fe 100644
++--- a/test/sum.test.js
+++++ b/test/sum.test.js
++@@ -3,3 +3,4 @@ test('sum', () => {
++   expect(sum(1, 2)).toBe(3);
++   expect(sum(0, 0)).toBe(0);
++ });
+++test.skip('later', () => {});
+diff --git a/evals/seeded-diffs/s02-assert-removed.diff b/evals/seeded-diffs/s02-assert-removed.diff
+new file mode 100644
+index 0000000..63496b7
+--- /dev/null
++++ b/evals/seeded-diffs/s02-assert-removed.diff
+@@ -0,0 +1,10 @@
++diff --git a/test/sum.test.js b/test/sum.test.js
++index d6a016e..eec48b1 100644
++--- a/test/sum.test.js
+++++ b/test/sum.test.js
++@@ -1,5 +1,4 @@
++ import { sum } from '../src/sum.js';
++ test('sum', () => {
++   expect(sum(1, 2)).toBe(3);
++-  expect(sum(0, 0)).toBe(0);
++ });
+diff --git a/evals/seeded-diffs/s03-test-deleted.diff b/evals/seeded-diffs/s03-test-deleted.diff
+new file mode 100644
+index 0000000..8f7009e
+--- /dev/null
++++ b/evals/seeded-diffs/s03-test-deleted.diff
+@@ -0,0 +1,9 @@
++diff --git a/test/old.test.js b/test/old.test.js
++deleted file mode 100644
++index 9f87d1b..0000000
++--- a/test/old.test.js
+++++ /dev/null
++@@ -1,3 +0,0 @@
++-test('old', () => {
++-  expect(1).toBe(1);
++-});
+diff --git a/evals/seeded-diffs/s04-ts-ignore.diff b/evals/seeded-diffs/s04-ts-ignore.diff
+new file mode 100644
+index 0000000..aea5a8d
+--- /dev/null
++++ b/evals/seeded-diffs/s04-ts-ignore.diff
+@@ -0,0 +1,11 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..1b08e37 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -1,5 +1,6 @@
++ export function sum(a, b) {
++   let i = 0;
++   --i;
+++  // @ts-ignore
++   return a + b;
++ }
+diff --git a/evals/seeded-diffs/s05-as-any.diff b/evals/seeded-diffs/s05-as-any.diff
+new file mode 100644
+index 0000000..9d9221b
+--- /dev/null
++++ b/evals/seeded-diffs/s05-as-any.diff
+@@ -0,0 +1,11 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..cdd20ce 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -1,5 +1,5 @@
++ export function sum(a, b) {
++   let i = 0;
++   --i;
++-  return a + b;
+++  return (a as any) + b;
++ }
+diff --git a/evals/seeded-diffs/s06-empty-catch.diff b/evals/seeded-diffs/s06-empty-catch.diff
+new file mode 100644
+index 0000000..6f801bc
+--- /dev/null
++++ b/evals/seeded-diffs/s06-empty-catch.diff
+@@ -0,0 +1,11 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..040c903 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -1,5 +1,6 @@
++ export function sum(a, b) {
++   let i = 0;
++   --i;
+++  try { check(a); } catch (e) {}
++   return a + b;
++ }
+diff --git a/evals/seeded-diffs/s07-debug.diff b/evals/seeded-diffs/s07-debug.diff
+new file mode 100644
+index 0000000..40ea703
+--- /dev/null
++++ b/evals/seeded-diffs/s07-debug.diff
+@@ -0,0 +1,11 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..7c1bbbf 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -1,5 +1,6 @@
++ export function sum(a, b) {
++   let i = 0;
++   --i;
+++  console.log(a, b);
++   return a + b;
++ }
+diff --git a/evals/seeded-diffs/s08-coverage-lowered.diff b/evals/seeded-diffs/s08-coverage-lowered.diff
+new file mode 100644
+index 0000000..9445e7d
+--- /dev/null
++++ b/evals/seeded-diffs/s08-coverage-lowered.diff
+@@ -0,0 +1,12 @@
++diff --git a/jest.config.js b/jest.config.js
++index 512f6d8..1d0c667 100644
++--- a/jest.config.js
+++++ b/jest.config.js
++@@ -1,6 +1,6 @@
++ module.exports = {
++   coverageThreshold: { global: {
++-    branches: 80,
+++    branches: 70,
++     lines: 90,
++   } },
++ };
+diff --git a/evals/seeded-diffs/s09-strict-off.diff b/evals/seeded-diffs/s09-strict-off.diff
+new file mode 100644
+index 0000000..2faa005
+--- /dev/null
++++ b/evals/seeded-diffs/s09-strict-off.diff
+@@ -0,0 +1,11 @@
++diff --git a/tsconfig.json b/tsconfig.json
++index aee0ec9..8ad9c98 100644
++--- a/tsconfig.json
+++++ b/tsconfig.json
++@@ -1,5 +1,5 @@
++ {
++   "compilerOptions": {
++-    "strict": true
+++    "strict": false
++   }
++ }
+diff --git a/evals/seeded-diffs/s10-ci-nonblocking.diff b/evals/seeded-diffs/s10-ci-nonblocking.diff
+new file mode 100644
+index 0000000..4bdaec4
+--- /dev/null
++++ b/evals/seeded-diffs/s10-ci-nonblocking.diff
+@@ -0,0 +1,11 @@
++diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
++index 48840cb..bc33981 100644
++--- a/.github/workflows/ci.yml
+++++ b/.github/workflows/ci.yml
++@@ -1,5 +1,6 @@
++ jobs:
++   test:
+++    continue-on-error: true
++     steps:
++       - run: npm ci
++       - run: npm test
+diff --git a/evals/seeded-diffs/s11-unknown-sha.diff b/evals/seeded-diffs/s11-unknown-sha.diff
+new file mode 100644
+index 0000000..0b4d026
+--- /dev/null
++++ b/evals/seeded-diffs/s11-unknown-sha.diff
+@@ -0,0 +1,11 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..15bdb4a 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -1,5 +1,6 @@
++ export function sum(a, b) {
++   let i = 0;
++   --i;
+++  // fixed in deadbee1cafe
++   return a + b;
++ }
+diff --git a/evals/seeded-diffs/s12-absolute-claim.diff b/evals/seeded-diffs/s12-absolute-claim.diff
+new file mode 100644
+index 0000000..d65b68e
+--- /dev/null
++++ b/evals/seeded-diffs/s12-absolute-claim.diff
+@@ -0,0 +1,11 @@
++diff --git a/src/sum.js b/src/sum.js
++index d4a3b92..49c9028 100644
++--- a/src/sum.js
+++++ b/src/sum.js
++@@ -1,5 +1,6 @@
++ export function sum(a, b) {
++   let i = 0;
++   --i;
+++  // sum is never called before init
++   return a + b;
++ }
+diff --git a/scripts/seeded-diffs.mjs b/scripts/seeded-diffs.mjs
+new file mode 100644
+index 0000000..0bd8cb0
+--- /dev/null
++++ b/scripts/seeded-diffs.mjs
+@@ -0,0 +1,72 @@
++#!/usr/bin/env node
++// The review seeded-diff set: run floor-scan and claim-check on each labelled diff in evals/seeded-diffs/
++// and report per-class recall and false alarms. Exit 1 on any miss or false alarm.
++// Usage: node scripts/seeded-diffs.mjs [--compare-addy]
++// --compare-addy also runs addy's floor-guard reference (from .upstream/addy) on each diff and prints its
++// verdict next to kern's; it never changes the exit code.
++import { spawnSync } from 'node:child_process';
++import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++
++const ROOT = fileURLToPath(new URL('..', import.meta.url));
++const DIR = join(ROOT, 'evals', 'seeded-diffs');
++const labels = JSON.parse(readFileSync(join(DIR, 'labels.json'), 'utf8'));
++const tmp = mkdtempSync(join(tmpdir(), 'seeded-'));
++const git = (cwd, ...a) => spawnSync('git', ['-C', cwd, '-c', 'user.email=s@example.com', '-c', 'user.name=s', ...a], { encoding: 'utf8' });
++
++// A repo at the base, so claim-check can ask which commit ids exist and addy's guard can diff.
++function baseRepo(name) {
++  const r = join(tmp, name);
++  cpSync(join(DIR, 'base'), r, { recursive: true });
++  git(r, 'init', '-q');
++  git(r, 'add', '-A');
++  git(r, 'commit', '-q', '-m', 'base');
++  return r;
++}
++
++const classes = (out) => out.split('\n').filter(Boolean).map((l) => l.split('\t')[1]);
++const wt = baseRepo('wt');
++const rows = [];
++const stats = {};
++let misses = 0;
++let alarms = 0;
++for (const { id, expect } of labels) {
++  const diff = join(DIR, `${id}.diff`);
++  const fs = spawnSync('bash', [join(ROOT, 'scripts', 'floor-scan'), diff], { cwd: wt, encoding: 'utf8' });
++  const cc = spawnSync('bash', [join(ROOT, 'scripts', 'claim-check'), wt, diff], { encoding: 'utf8' });
++  if (fs.status === 2 || cc.status === 2) { console.log(`error: ${id}: ${fs.stderr}${cc.stderr}`); misses++; continue; }
++  const got = new Set([...classes(fs.stdout), ...classes(cc.stdout)]);
++  for (const c of expect) {
++    stats[c] ??= { seeded: 0, found: 0 };
++    stats[c].seeded++;
++    if (got.has(c)) stats[c].found++;
++    else { misses++; console.log(`miss: ${id} expected ${c}`); }
++  }
++  for (const c of got) if (!expect.includes(c)) { alarms++; console.log(`false alarm: ${id} reported ${c}`); }
++  rows.push({ id, expect: expect.join(',') || 'decoy', got: [...got].join(',') || 'clean' });
++}
++
++if (process.argv.includes('--compare-addy')) {
++  const ref = join(ROOT, '.upstream', 'addy', 'skills', 'constraint-driven-development', 'references', 'floor-guard.md');
++  if (!existsSync(ref)) console.log('compare-addy: .upstream/addy is missing; run scripts/fetch-upstream');
++  else {
++    const md = readFileSync(ref, 'utf8');
++    const code = md.slice(md.indexOf('```js\n') + 6, md.indexOf('\n```', md.indexOf('```js\n')));
++    const guard = join(tmp, 'floor-guard.mjs');
++    writeFileSync(guard, code);
++    for (const row of rows) {
++      const r = baseRepo(`addy-${row.id}`);
++      git(r, 'apply', join(DIR, `${row.id}.diff`));
++      const a = spawnSync(process.execPath, [guard, '--base', 'HEAD'], { cwd: r, encoding: 'utf8' });
++      row.addy = a.status === 1 ? 'hit' : a.status === 0 ? 'clean' : `error ${a.status}`;
++    }
++  }
++}
++
++for (const r of rows) console.log(`${r.id}\texpect ${r.expect}\tkern ${r.got}${r.addy ? `\taddy ${r.addy}` : ''}`);
++for (const [c, s] of Object.entries(stats)) console.log(`recall ${c}: ${s.found}/${s.seeded}`);
++console.log(`seeded-diffs: ${misses} missed, ${alarms} false alarms on ${labels.length} diffs`);
++rmSync(tmp, { recursive: true, force: true });
++process.exit(misses || alarms ? 1 : 0);
+diff --git a/tests/seeded-diffs.test.mjs b/tests/seeded-diffs.test.mjs
+new file mode 100644
+index 0000000..d140cf1
+--- /dev/null
++++ b/tests/seeded-diffs.test.mjs
+@@ -0,0 +1,22 @@
++// tests/seeded-diffs.test.mjs: the review seeded-diff set runs in CI with no miss and no false alarm.
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { spawnSync } from 'node:child_process';
++import { readdirSync, readFileSync } from 'node:fs';
++import { fileURLToPath } from 'node:url';
++
++const DIR = fileURLToPath(new URL('../evals/seeded-diffs/', import.meta.url));
++
++test('every labelled diff exists, and there are 12 seeded moves and 8 decoys', () => {
++  const labels = JSON.parse(readFileSync(`${DIR}labels.json`, 'utf8'));
++  const diffs = readdirSync(DIR).filter((f) => f.endsWith('.diff')).map((f) => f.replace(/\.diff$/, '')).sort();
++  assert.deepEqual(labels.map((l) => l.id).sort(), diffs);
++  assert.equal(labels.filter((l) => l.expect.length).length, 12);
++  assert.equal(labels.filter((l) => !l.expect.length).length, 8);
++});
++
++test('floor-scan and claim-check find every seeded move and no decoy', () => {
++  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/seeded-diffs.mjs', import.meta.url))], { encoding: 'utf8' });
++  assert.equal(r.status, 0, r.stdout + r.stderr);
++  assert.match(r.stdout, /^seeded-diffs: 0 missed, 0 false alarms on 20 diffs$/m);
++});

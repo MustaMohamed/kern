@@ -1,0 +1,539 @@
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index 76af814..2abba16 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -73,16 +73,21 @@ _g16_names() {
+ 
+ # _g16_kind WORD: sets _G16_K to `state` when the lower-cased WORD names session state, `settings`
+ # when it names a kern settings file, else empty. State: a word holding the sessions dir path (so
+-# of=<dir>/x counts); any word that holds `sessions` and ends in `.state`; the state file name
+-# <sid>.state, bare or after a slash; or an absolute glob that, once a leading ~, $HOME or
+-# $CLAUDE_PLUGIN_DATA is expanded, matches this session's state file. The bare session id is not
+-# enough: Claude Code's scratchpad and task paths contain it. Settings: a word ending in
++# of=<dir>/x counts); a word with no blank that holds `sessions` and ends in `.state` (a sentence
++# in a message is not a path); the state file name <sid>.state, bare or after a slash; or an
++# absolute glob that, once a leading ~, $HOME or $CLAUDE_PLUGIN_DATA is expanded, matches this
++# session's state file and is as deep as it (a path glob's * does not cross a /). The bare session
++# id is not enough: Claude Code's scratchpad and task paths contain it. Settings: a word ending in
+ # .claude/kern.yml or .claude/kern.local.yml, or exactly kern.yml or kern.local.yml.
+ _g16_kind() {
+-  local e
++  local e p a b slash='[!/]'
+   _G16_K=""
++  case "$1" in *"$_G16_SD"*) _G16_K=state; return 0 ;; esac
++  case "$1" in
++    *[[:blank:]]* | *"$_GW_NL"*) ;;
++    *sessions*.state) _G16_K=state; return 0 ;;
++  esac
+   case "$1" in
+-    *"$_G16_SD"* | *sessions*.state) _G16_K=state; return 0 ;;
+     *.claude/kern.yml | *.claude/kern.local.yml | kern.yml | kern.local.yml) _G16_K=settings; return 0 ;;
+   esac
+   if [ -n "$_G16_SID" ]; then
+@@ -102,8 +107,12 @@ _g16_kind() {
+     /*[*?[]*) ;;
+     *) return 0 ;;
+   esac
++  p="$_G16_SD/$_G16_SID.state"
++  a=${e//$slash/}
++  b=${p//$slash/}
++  [ "${#a}" = "${#b}" ] || return 0
+   # shellcheck disable=SC2254 # the word is matched as the glob it is
+-  case "$_G16_SD/$_G16_SID.state" in $e) _G16_K=state ;; esac
++  case "$p" in $e) _G16_K=state ;; esac
+ }
+ 
+ # _g16_redirects STR: the target word of each `>` or `>>` outside quotes, one per line.
+@@ -136,14 +145,16 @@ _g16_redirects() {
+     }'
+ }
+ 
+-# _g16_bash: a command that names session state is denied, and one that names a settings file
+-# asks, unless its head only reads (cat head tail less more grep egrep fgrep rg ls stat wc file
+-# diff cmp jq, and sed or perl without -i). A redirect into either counts whatever the head. Every
+-# simple command is checked, including the bodies of bash -c, eval, $( ) and backticks; here-doc
+-# bodies are data. After a cd into the sessions dir, every later non-reading command and redirect
+-# counts as a write to it, until a cd elsewhere.
++# _g16_bash: a command that names session state is denied unless its head only reads (cat head
++# tail less more grep egrep fgrep rg ls stat wc file diff cmp jq echo printf test [ git, find with
++# no action that writes or runs, and sed or perl without -i). A command that names a settings file
++# asks only for a write shape (tee cp mv ln rm truncate dd install, sed or perl -i). A redirect
++# into either counts whatever the head. Every simple command is checked, including the bodies of
++# bash -c, eval, $( ) and backticks; here-doc bodies are data unless a shell reads them. After a
++# cd into the sessions dir, every later non-reading command and redirect counts as a write to it,
++# until a cd elsewhere.
+ _g16_bash() {
+-  local cmd seg words w t head inplace seg_k is_write state=0 settings=0 in_sd=0
++  local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0
+   cmd=$(ti_get command) || return 0
+   cmd=$(_g16_lower "$cmd")
+   _G16_SD=$(_g16_lower "$(state_dir)")
+@@ -157,7 +168,8 @@ _g16_bash() {
+     words=$(_cmd_words "$seg")
+     head=""
+     inplace=0
+-    seg_k=""
++    seg_s=0
++    seg_c=0
+     while IFS= read -r w; do
+       if [ -z "$head" ]; then
+         head=${w##*/}
+@@ -165,28 +177,22 @@ _g16_bash() {
+       fi
+       case "$w" in --in-place*) inplace=1 ;; --*) ;; -*i*) inplace=1 ;; esac
+       _g16_kind "$w"
+-      case "$_G16_K" in
+-        state) seg_k=state ;;
+-        settings) [ "$seg_k" = state ] || seg_k=settings ;;
+-      esac
++      case "$_G16_K" in state) seg_s=1 ;; settings) seg_c=1 ;; esac
+     done <<WORDS
+ $words
+ WORDS
+-    is_write=1
++    reads=0
++    writes=0
+     case "$head" in
+-      cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | jq) is_write=0 ;;
+-      sed | perl) [ "$inplace" = 1 ] || is_write=0 ;;
+-      cd | pushd)
+-        is_write=0
+-        in_sd=0
+-        [ "$seg_k" = state ] && in_sd=1
+-        ;;
+-      '') is_write=0 ;;
++      cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | jq | \
++        echo | printf | test | '[' | git | '') reads=1 ;;
++      find) word_has "$words" -delete -exec -execdir -ok -okdir -fprint -fprint0 -fprintf || reads=1 ;;
++      sed | perl) if [ "$inplace" = 1 ]; then writes=1; else reads=1; fi ;;
++      tee | cp | mv | ln | rm | truncate | dd | install) writes=1 ;;
++      cd | pushd) reads=1; in_sd=$seg_s ;;
+     esac
+-    if [ "$is_write" = 1 ]; then
+-      [ "$in_sd" = 1 ] && seg_k=state
+-      case "$seg_k" in state) state=1 ;; settings) settings=1 ;; esac
+-    fi
++    if [ "$reads" = 0 ] && { [ "$seg_s" = 1 ] || [ "$in_sd" = 1 ]; }; then state=1; fi
++    [ "$writes" = 1 ] && [ "$seg_c" = 1 ] && settings=1
+     case "$seg" in *">"*) ;; *) continue ;; esac
+     while IFS= read -r t; do
+       case "$t" in '' | /dev/null | /dev/stdout | /dev/stderr | [0-9]) continue ;; esac
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index a4f93e4..7ecd329 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -5,13 +5,68 @@
+ # caller that reads records line by line never takes a quoted line for a command.
+ _GW_NL=$'\037'
+ 
++# _GW_AWK: awk functions shared by _shell_words, _cmd_words and _split_words (run with -v sq="'").
++# sw(STR) splits STR into words, quotes removed, in sw_w[1..sw_n] (see _shell_words). cw_reset()
++# starts a simple command and cw(WORD) feeds it one word; the command name and its arguments
++# collect in cw_w[1..cw_n] (see _cmd_words).
++_GW_AWK='
++  BEGIN {
++    cw_opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
++    cw_opt["env"] = " -C -P -S -u "
++    cw_opt["exec"] = " -a "
++    cw_opt["timeout"] = " -s -k --signal --kill-after "
++    cw_opt["nice"] = " -n "
++  }
++  function sw(buf,   n, q, w, have, i, c) {
++    sw_n = 0; n = length(buf); q = ""; w = ""; have = 0
++    for (i = 1; i <= n; i++) {
++      c = substr(buf, i, 1)
++      if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
++      if (q == "\"") {
++        if (c == "\"") q = ""
++        else if (c == "\\" && index("\"\\$`", substr(buf, i + 1, 1))) { i++; w = w substr(buf, i, 1) }
++        else w = w c
++        continue
++      }
++      if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; continue }
++      if (c == sq || c == "\"") { q = c; have = 1; continue }
++      if (c == " " || c == "\t" || c == "\n" || c == "\037") { if (have) sw_w[++sw_n] = w; w = ""; have = 0; continue }
++      if ((c == "<" || c == ">" || (c == "&" && substr(buf, i + 1, 1) == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
++        sw_w[++sw_n] = w; w = ""
++      }
++      w = w c; have = 1
++    }
++    if (have) sw_w[++sw_n] = w
++  }
++  function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0 }
++  function cw(x,   a, k, m, b) {
++    if (cw_s) { cw_w[++cw_n] = x; return }
++    if (cw_val) {
++      cw_val = 0
++      if (cw_split) { cw_split = 0; m = split(x, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") cw(a[k]) }
++      return
++    }
++    if (x ~ /^[0-9]*(<|>|&>)/) { cw_val = (x ~ /^[0-9]*[<>&|]+$/); return }
++    if (x ~ /^[A-Za-z_][A-Za-z0-9_]*=/) return
++    if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
++    b = x; sub(/.*\//, "", b)
++    if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
++    if (x ~ /^-/) {
++      if (cw_wrap in cw_opt && index(cw_opt[cw_wrap], " " x " ")) { cw_val = 1; cw_split = (cw_wrap == "env" && x == "-S") }
++      return
++    }
++    if (cw_dur) { cw_dur = 0; return }
++    cw_s = 1; cw_w[++cw_n] = x
++  }
++'
++
+ # git_words CMD: one simple command per line. Splits on ; & && || | ( ), the words { and }, and
+ # newlines outside quotes, backticks and $( ); a redirection (2>&1, &>, >|) never splits, and a
+ # backslash-newline is dropped. Here-doc bodies are data: they are left out (see _split_words).
+ # The script of an sh-family shell's -c (any path, flags such as -lc or -cx, after the wrappers and
+ # keywords _cmd_words skips), the arguments of `eval`, and the bodies of $( ) and backticks are
+ # split again and printed after their wrapper, so a command inside a string is still seen. Out of
+-# scope: commands that xargs or find -exec run.
++# scope: commands that xargs or find -exec run, and a here-doc piped into a shell (cat <<EOF | sh).
+ git_words() {
+   local seg inner body first
+   _split_words "$1" | while IFS= read -r seg; do
+@@ -25,10 +80,10 @@ git_words() {
+         ;;
+     esac
+     # The wrapper pass costs two processes, so it runs only when the first word, quotes removed,
+-    # is an assignment, a keyword, a wrapper, eval or a shell.
++    # is a redirection, an assignment, a keyword, a wrapper, eval or a shell.
+     first=${seg%%[[:space:]]*}
+     case "/${first//[\"\'\\]/}" in
+-      *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | */eval | \
++      *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | */eval | \
+         */command | */exec | */time | */nohup | */sudo | */env | */timeout | */nice | */sh | */bash | \
+         */zsh | */dash) ;;
+       *) continue ;;
+@@ -79,18 +134,37 @@ _subst_bodies() {
+ # _split_words STR: the simple commands of STR, one record per line (see git_words). A here-doc
+ # (<<WORD, <<-WORD, <<'WORD', <<"WORD") is read at the newline that ends its command line: the body
+ # up to the closing WORD line is skipped. At the top level the body and closing line are dropped;
+-# inside $( ) the closing line is kept, so the record still parses the same when split again. A
+-# here-doc with no closing line skips nothing, so a misread `<<` never hides the commands after it.
++# inside $( ) the closing line is kept, so the record still parses the same when split again. The
++# body of a here-doc that sh, bash, zsh or dash reads as its script (no -c) is kept as commands.
++# A `<<` is never a here-doc inside $(( )) or (( )), after a word that starts with #, or when its
++# $( ) closes before the newline; and a here-doc with no closing line skips nothing. So a misread
++# `<<` cannot hide the commands after it. A comment at the top level runs to its newline.
+ _split_words() {
+-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
++  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+     function emit(s) { gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s); gsub(/\n/, "\037", s); if (s != "") print s }
+     function sep(ch) { return ch == "" || index(" \t\n;&|()", ch) > 0 }
+     # cut(e): emits the record gathered so far, up to position e - 1.
+     function cut(e) { emit(pre substr(buf, start, e - start)); pre = "" }
+-    # hdop(j): true when the `<` at j opens a here-doc operator (`<<`, not `<<<`).
+-    function hdop(j) { return substr(buf, j + 1, 1) == "<" && substr(buf, j + 2, 1) != "<" && substr(buf, j - 1, 1) != "<" }
+-    # heredoc(j): queues the delimiter word that follows the `<<` ending at j - 1, quotes removed.
+-    # Returns the position after the word.
++    # hdat(j): true when the `<` at j opens a here-doc operator (`<<`, not `<<<`) where one can start.
++    function hdat(j) {
++      return !cm && !ta && !(ar && depth >= ar) && substr(buf, j + 1, 1) == "<" &&
++        substr(buf, j + 2, 1) != "<" && substr(buf, j - 1, 1) != "<"
++    }
++    # shellin(t): true when the simple command t is sh, bash, zsh or dash with no -c, so a here-doc
++    # it reads is its script.
++    function shellin(t,   k, b) {
++      sw(t); cw_reset()
++      for (k = 1; k <= sw_n; k++) cw(sw_w[k])
++      if (!cw_n) return 0
++      b = cw_w[1]; sub(/.*\//, "", b)
++      if (b !~ /^(ba|z|da)?sh$/) return 0
++      for (k = 2; k <= cw_n; k++) if (cw_w[k] ~ /^-[a-z]*c[a-z]*$/) return 0
++      return 1
++    }
++    # heredoc(j): queues the delimiter word that starts at j, after a `<<`, quotes removed. The word
++    # ends at a blank, an operator, a newline or the end of input, even inside a quote; a quote
++    # still open there means the `<<` was quoted text, and nothing is queued. Scanning resumes
++    # after the `<<` either way, so the word itself is read as ordinary text.
+     function heredoc(j,   d, wq, ch, dash) {
+       dash = 0
+       if (substr(buf, j, 1) == "-") { dash = 1; j++ }
+@@ -98,15 +172,17 @@ _split_words() {
+       d = ""; wq = ""
+       for (; j <= n; j++) {
+         ch = substr(buf, j, 1)
++        if (ch == "\n") break
+         if (wq != "") { if (ch == wq) wq = ""; else d = d ch; continue }
+         if (ch == sq || ch == "\"") { wq = ch; continue }
+         if (ch == "\\") { j++; d = d substr(buf, j, 1); continue }
+-        if (index(" \t\n;&|<>()", ch)) break
++        if (index(" \t;&|<>()", ch)) break
+         d = d ch
+       }
+-      if (d != "") { hd[++hn] = d; hx[hn] = dash }
+-      return j
++      if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash; hdd[hn] = depth }
+     }
++    # shut(): a `)` closes a $( ); arithmetic and here-docs opened inside it end with it.
++    function shut() { depth--; if (ar && depth < ar) ar = 0; while (hn && hdd[hn] > depth) hn-- }
+     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
+     # queue. Returns the line number of the last closing line, or 0 when one is missing.
+     function bodies(j,   h, k, t) {
+@@ -129,8 +205,11 @@ _split_words() {
+       return off[k] + length(L[k])
+     }
+     { L[NR] = $0; buf = buf (NR > 1 ? "\n" : "") $0 }
++    # cs: where the current simple command starts. ar: the depth where $(( or (( inside $( ) began.
++    # ta: inside (( )) at the top level. cm: in a comment inside $( ), until the newline.
+     END {
+-      n = length(buf); q = ""; depth = 0; start = 1; i = 1; pre = ""; hn = 0; lp = 1; off[1] = 1
++      n = length(buf); q = ""; depth = 0; start = 1; cs = 1; i = 1; pre = ""; hn = 0; lp = 1; off[1] = 1
++      ar = 0; ta = 0; cm = 0
+       for (k = 2; k <= NR; k++) off[k] = off[k - 1] + length(L[k - 1]) + 1
+       while (i <= n) {
+         c = substr(buf, i, 1)
+@@ -138,32 +217,58 @@ _split_words() {
+         if (c == "\\") { i += 2; continue }
+         if (q == "\"") {
+           if (c == "\"") q = ""
+-          else if (c == "$" && substr(buf, i + 1, 1) == "(") { depth++; i++ }
+-          else if (c == ")" && depth > 0) depth--
+-          else if (depth > 0 && c == "<" && hdop(i)) { i = heredoc(i + 2); continue }
+-          else if (depth > 0 && c == "\n" && hn) { i = nested(i); continue }
++          else if (c == "$" && substr(buf, i + 1, 1) == "(") {
++            if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
++            depth++; cs = i + 2; i++
++          }
++          else if (c == ")" && depth > 0) shut()
++          else if (depth > 0 && c == "<" && hdat(i)) {
++            if (!shellin(substr(buf, cs, i - cs))) heredoc(i + 2)
++            i += 2; continue
++          }
++          else if (depth > 0 && index(";&|\n", c)) {
++            cs = i + 1
++            if (c == "\n") { cm = 0; if (hn) { i = nested(i); continue } }
++          }
+           i++; continue
+         }
+         if (q == "`") { if (c == "`") q = ""; i++; continue }
+         if (c == sq || c == "\"" || c == "`") { q = c; i++; continue }
+-        if (c == "<" && hdop(i)) { i = heredoc(i + 2); continue }
+-        if (c == "$" && substr(buf, i + 1, 1) == "(") { depth++; i += 2; continue }
+-        if (depth > 0) {
+-          if (c == "\n" && hn) { i = nested(i); continue }
+-          if (c == "(") depth++; else if (c == ")") depth--
+-          i++; continue
++        if (c == "<" && hdat(i)) {
++          if (!shellin(substr(buf, cs, i - cs))) heredoc(i + 2)
++          i += 2; continue
++        }
++        if (c == "$" && substr(buf, i + 1, 1) == "(") {
++          if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
++          depth++; cs = i + 2; i += 2; continue
+         }
+         p = substr(buf, i - 1, 1)
+         x = substr(buf, i + 1, 1)
++        if (depth > 0) {
++          if (c == "\n") { cm = 0; cs = i + 1; if (hn) { i = nested(i); continue } }
++          else if (c == "#" && sep(p)) cm = 1
++          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; depth++; cs = i + 1 }
++          else if (c == ")") shut()
++          else if (index(";&|", c)) cs = i + 1
++          i++; continue
++        }
+         if ((c == "&" && (p == ">" || p == "<" || x == ">")) || (c == "|" && p == ">")) { i++; continue }
++        if (c == "#" && (i == 1 || sep(p))) {
++          e = index(substr(buf, i), "\n")
++          i = e ? i + e - 1 : n + 1
++          continue
++        }
++        if (c == "(" && x == "(") ta = 1
++        else if (c == ")" && x == ")") ta = 0
+         if ((c == "{" || c == "}") && (i == 1 || sep(p)) && sep(x)) {
+           cut(i)
+-          start = i + 1
++          start = cs = i + 1
+         } else if (c == ";" || c == "\n" || c == "&" || c == "|" || c == "(" || c == ")") {
+           cut(i)
+           if ((c == "&" || c == "|") && x == c) i++
+-          start = i + 1
+-          if (c == "\n" && hn && (k = bodies(i))) { i = off[k] + length(L[k]); start = i + 1 }
++          start = cs = i + 1
++          if (c == "\n") cm = 0
++          if (c == "\n" && hn && (k = bodies(i))) { i = off[k] + length(L[k]); start = cs = i + 1 }
+         }
+         i++
+       }
+@@ -176,64 +281,20 @@ _split_words() {
+ # starts a new word unless it follows an fd number or another operator: `main>/dev/null` gives
+ # `main` and `>/dev/null`, while `2>&1` stays whole.
+ _shell_words() {
+-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
++  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+     { buf = buf (NR > 1 ? "\037" : "") $0 }
+-    END {
+-      n = length(buf); q = ""; w = ""; have = 0
+-      for (i = 1; i <= n; i++) {
+-        c = substr(buf, i, 1)
+-        if (q == sq) { if (c == sq) q = ""; else w = w c; continue }
+-        if (q == "\"") {
+-          if (c == "\"") q = ""
+-          else if (c == "\\" && index("\"\\$`", substr(buf, i + 1, 1))) { i++; w = w substr(buf, i, 1) }
+-          else w = w c
+-          continue
+-        }
+-        if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; continue }
+-        if (c == sq || c == "\"") { q = c; have = 1; continue }
+-        if (c == " " || c == "\t" || c == "\037") { if (have) print w; w = ""; have = 0; continue }
+-        if ((c == "<" || c == ">" || (c == "&" && substr(buf, i + 1, 1) == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
+-          print w; w = ""
+-        }
+-        w = w c; have = 1
+-      }
+-      if (have) print w
+-    }'
++    END { sw(buf); for (k = 1; k <= sw_n; k++) print sw_w[k] }'
+ }
+ 
+ # _cmd_words CMDLINE: the words of a simple command from its command name on, one per line.
+-# Skips leading VAR=value words, the keywords if then elif else do while until ! {, the wrappers
+-# command, exec, time, nohup, sudo, env, timeout and nice (any path), and their options. The
+-# options in `opt` take a value; timeout's duration follows its options; the value of env -S is
+-# a command line, read as words.
++# Skips leading redirections (and the target of one that stands alone), VAR=value words, the
++# keywords if then elif else do while until ! {, the wrappers command, exec, time, nohup, sudo,
++# env, timeout and nice (any path), and their options. The options in `cw_opt` take a value;
++# timeout's duration follows its options; the value of env -S is a command line, read as words.
+ _cmd_words() {
+-  _shell_words "$1" | LC_ALL=C awk '
+-    BEGIN {
+-      opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
+-      opt["env"] = " -C -P -S -u "
+-      opt["exec"] = " -a "
+-      opt["timeout"] = " -s -k "
+-      opt["nice"] = " -n "
+-    }
+-    function word(x,   a, k, m, b) {
+-      if (s) { print x; return }
+-      if (val) {
+-        val = 0
+-        if (split_s) { split_s = 0; m = split(x, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") word(a[k]) }
+-        return
+-      }
+-      if (x ~ /^[A-Za-z_][A-Za-z0-9_]*=/) return
+-      if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { wrap = ""; return }
+-      b = x; sub(/.*\//, "", b)
+-      if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { wrap = b; dur = (b == "timeout"); return }
+-      if (x ~ /^-/) {
+-        if (wrap in opt && index(opt[wrap], " " x " ")) { val = 1; split_s = (wrap == "env" && x == "-S") }
+-        return
+-      }
+-      if (dur) { dur = 0; return }
+-      s = 1; print x
+-    }
+-    { word($0) }'
++  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
++    { buf = buf (NR > 1 ? "\037" : "") $0 }
++    END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); for (k = 1; k <= cw_n; k++) print cw_w[k] }'
+ }
+ 
+ # git_sub CMDLINE: for a simple git command prints `<dir>\t<subcommand>\t<rest>`. Exit 1 when the
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index a99f88f..d3c87f9 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -40,6 +40,19 @@ expect_bash() {
+   done
+ }
+ 
++# expect_cmd DECISION COMMAND...: expect_bash for commands that hold double quotes or newlines.
++expect_cmd() {
++  local d="$1" c j
++  shift
++  . "$(kern_root)/hooks/lib/json.sh"
++  for c in "$@"; do
++    j=$(printf '%s' "$c" | json_escape)
++    run_guard "$(tool_payload Bash "\"command\":\"$j\"")" g16
++    [ "$status" -eq 0 ] || { echo "$c -> status $status"; return 1; }
++    [ "$(decision_of "$output")" = "$d" ] || { echo "$c -> $output"; return 1; }
++  done
++}
++
+ @test "Write under the sessions dir is denied in both modes" {
+   p=$(payload PreToolUse "\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$CLAUDE_PLUGIN_DATA/sessions/test-session.state\",\"content\":\"autopilot: on\"}")
+   run_guard "$p" g16
+@@ -116,7 +129,29 @@ expect_bash() {
+ @test "a glob that matches the state file once ~ is expanded is denied" {
+   export CLAUDE_PLUGIN_DATA="$HOME/.claude/plugins/data/kern-kern"
+   mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
+-  expect_bash deny "echo autopilot: on > ~/.claude/p*/d*/k*/s*/*.state"
++  expect_bash deny "echo autopilot: on > ~/.claude/p*/d*/k*/s*/*.state" \
++    "echo on > \$HOME/.claude/p*/d*/k*/s*/*.state" "echo on > \${HOME}/.claude/p*/d*/k*/s*/*.state" \
++    "echo on > \${CLAUDE_PLUGIN_DATA}/s*/*.state"
++  expect_cmd deny 'echo on > "$CLAUDE_PLUGIN_DATA"/s*/*.state'
++  expect_bash none "du -sh ~/* ; ls sessions"
++}
++
++@test "plain reads, git commands and messages naming state or settings: no vote" {
++  expect_bash none "git diff .claude/kern.yml" "git check-ignore -q .claude/kern.local.yml" \
++    "git add tests/sessions/foo.state" "test -f $S/x.state && echo yes" "find $S -name '*.state'"
++  expect_cmd none 'echo ".claude/kern.local.yml" >> .gitignore' \
++    'git commit -m "G16: deny writes to sessions/<sid>.state"'
++  expect_bash deny "echo on > $S/x.state" "find $S -name x -delete"
++}
++
++@test "a shell reading a here-doc runs its body as commands" {
++  expect_cmd deny "$(printf '%s\n' "bash <<'EOF'" "echo autopilot: on > $S/test-session.state" 'EOF')"
++}
++
++@test "a misread << hides no state write" {
++  expect_cmd deny "$(printf '%s\n' 'echo $((1<<X))' "echo on > $S/a.state" X)" \
++    "$(printf '%s\n' '# see <<X' "echo on > $S/a.state" X)" \
++    "$(printf '%s\n' 'x=$(cat <<X)' "echo on > $S/a.state" X)"
+ }
+ 
+ @test "a double-quoted state target is denied" {
+diff --git a/tests/hooks/gitctx.bats b/tests/hooks/gitctx.bats
+index 2527d85..dc8ee92 100644
+--- a/tests/hooks/gitctx.bats
++++ b/tests/hooks/gitctx.bats
+@@ -68,12 +68,37 @@ EOT
+   for c in 'exec -a x git push origin main' 'sudo -p x git push' 'sudo -C 3 git push' \
+     'env -P /usr/bin git push' 'env -S "git push origin main"' \
+     'bash -o pipefail -c "git push origin main"' 'bash -cx "git push"' \
+-    'timeout 30 git push' 'timeout -s KILL 30 git push' 'nice -n 5 git push' 'nice -5 git push' \
++    'timeout 30 git push' 'timeout -s KILL 30 git push' 'timeout --signal KILL 30 git push' \
++    'timeout --kill-after 5 30 git push' 'nice -n 5 git push' 'nice -5 git push' \
+     '"/bin/bash" -c "git push"' '/usr/bin/env bash -c "git push"'; do
+     finds "$c" push
+   done
+ }
+ 
++@test "a leading redirection is not the command name" {
++  for c in '2>/dev/null git push --force' '> /dev/null git push' '2>/dev/null bash -c "git push"'; do
++    finds "$c" push
++  done
++}
++
++@test "a << inside quotes in \$( ) hides nothing" {
++  finds 'echo "$(grep -c '"'<<'"' f)"; git push --force' push
++  finds "$(printf '%s\n' 'echo "$(echo '"'<<X'"')"' 'git push --force' 'X')" push
++}
++
++@test "a shell reading a here-doc runs its body: the body stays as records" {
++  finds "$(printf '%s\n' "bash <<'EOF'" 'git push --force origin main' 'EOF')" push
++  finds "$(printf '%s\n' 'x=$(sudo -u me sh -s <<EOF' 'git push --force' 'EOF' ')')" push
++}
++
++@test "a here-string is not a here-doc" {
++  run git_words "$(printf '%s\n' 'cat <<< EOF' 'git push --force' 'EOF')"
++  [ "${lines[0]}" = "cat <<< EOF" ]
++  [ "${lines[1]}" = "git push --force" ]
++  [ "${lines[2]}" = EOF ]
++  [ "${#lines[@]}" -eq 3 ]
++}
++
+ @test "the commit form with a here-doc message gives one git segment, and the message is data" {
+   # printf, not a here-doc inside $( ): bash 3.2 misparses the apostrophe there.
+   cmd=$(printf '%s\n' 'git commit -m "$(cat <<'"'EOF'" 'docs: x (git push --force is blocked)' \
+@@ -108,7 +133,7 @@ EOT
+ $body
+ EOF
+ )\""
+-  t=$( { time git_words "$cmd" >"$BATS_TEST_TMPDIR/out" || true; } 2>&1)
++  t=$( { time git_words "$cmd" >"$BATS_TEST_TMPDIR/out" 2>/dev/null || true; } 2>&1)
+   awk -v t="$t" 'BEGIN { exit !(t < 1) }' || { echo "took $t s"; return 1; }
+   [ "$(wc -l <"$BATS_TEST_TMPDIR/out")" -eq 2 ]
+ }

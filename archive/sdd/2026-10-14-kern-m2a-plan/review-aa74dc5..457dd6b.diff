@@ -1,0 +1,289 @@
+diff --git a/scripts/recall-sessions b/scripts/recall-sessions
+new file mode 100755
+index 0000000..e61e122
+--- /dev/null
++++ b/scripts/recall-sessions
+@@ -0,0 +1,133 @@
++#!/usr/bin/env bash
++# List this project's Claude Code sessions for recall: the main worktree's transcripts and its kern
++# worktrees', newest first, inside a window; with --topic, also this project's prompts that name the
++# topic. Never reads another project's transcripts or prompts. Read-only.
++# Usage: recall-sessions [--days N] [--topic TEXT]
++# Output: session<TAB><iso mtime><TAB><session id><TAB><bytes><TAB><path>, newest first; the newest is
++# usually the session running now. Then, with --topic: prompt<TAB><iso time><TAB><session id><TAB><text>.
++# Exit: 0; 2 on a usage error or outside a git repository; 1 when a folder, a file or a command it
++# needs fails (nothing is printed then, so a failure never reads as "no sessions").
++# A missing ~/.claude/projects, transcript folder or history.jsonl is not an error: no records is the
++# truth there, and the answer is empty.
++# Scope limits, accepted: transcripts come from the main worktree's exact folder and from folders named
++# <main slug>--claude-worktrees-*. A session started in a subdirectory of the main checkout is not
++# listed, because a slug prefix match would also take sibling projects (/x/kern-old). Prompts count only
++# when their project is the main worktree or lies under the worktree dir.
++# history.jsonl is read with awk, not a JSON parser: "display" is unescaped for \" \\ \/ and \n \t \r
++# (the last three become a space); \uXXXX is left as typed, so a topic never matches across one. Text
++# and the 120-character cut are bytes (LC_ALL=C), and the topic matches case-insensitively for ASCII only.
++# Adapted from the user's recall skill, "Where the records are" (MIT, local copy).
++set -euo pipefail
++here=$(cd "$(dirname "$0")" && pwd -P)
++# shellcheck source=/dev/null
++. "$here/../hooks/lib/settings.sh"
++# shellcheck source=/dev/null
++. "$here/lib/wt-common.sh"
++usage() { echo "usage: recall-sessions [--days N] [--topic TEXT]" >&2; exit 2; }
++die() { echo "recall-sessions: $*" >&2; exit 1; }
++days=7 topic=''
++while [ $# -gt 0 ]; do
++  case "$1" in
++    --days) [ $# -ge 2 ] || usage; days=$2; shift 2 ;;
++    --topic) [ $# -ge 2 ] && [ -n "$2" ] || usage; topic=$2; shift 2 ;;
++    *) usage ;;
++  esac
++done
++case "$days" in '' | *[!0-9]*) usage ;; esac
++[ "${#days}" -le 6 ] || usage
++MAIN=$(kern_main_root "$PWD") || { echo "recall-sessions: not a git repository" >&2; exit 2; }
++export KERN_MAIN="$MAIN"
++projects="$HOME/.claude/projects"
++# Claude Code names a project's transcript folder after its path, every character outside A-Z, a-z and
++# 0-9 turned into -.
++slug() { printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9' '-'; }
++main_slug=$(slug "$MAIN")
++wt_root=$(wt_dir) || die "cannot resolve the worktree dir"
++wt_slug=$(slug "$wt_root/")
++
++# iso_at SECONDS: local time of an epoch second. GNU date takes -d @S and rejects -r S; BSD date takes
++# -r S and rejects -d @S. Pick once, so a real failure is not mistaken for the other system's syntax.
++if date -d @0 +%s > /dev/null 2>&1; then
++  iso_at() { date -d "@$1" +%Y-%m-%dT%H:%M; }
++else
++  iso_at() { date -r "$1" +%Y-%m-%dT%H:%M; }
++fi
++
++TAB=$'\t'
++recs=''
++for d in "$projects/$main_slug" "$projects/$wt_slug"*; do
++  [ -d "$d" ] || continue
++  # Top-level transcripts only: subagents/, tool-results/ and workflows/ hold a session's children.
++  found=$(find "$d" -maxdepth 1 -type f -name '*.jsonl' -mtime "-$days") || die "cannot read $d"
++  [ -n "$found" ] || continue
++  while IFS= read -r f; do
++    # `date -r FILE` is the file's mtime on both BSD and GNU date.
++    epoch=$(date -r "$f" +%s) || die "cannot read the mtime of $f"
++    iso=$(date -r "$f" +%Y-%m-%dT%H:%M) || die "cannot read the mtime of $f"
++    bytes=$(wc -c < "$f") || die "cannot read $f"
++    bytes=${bytes//[[:space:]]/}
++    case "$epoch$bytes" in '' | *[!0-9]*) die "unreadable mtime or size for $f" ;; esac
++    [ -n "$iso" ] || die "empty mtime for $f"
++    recs="$recs$epoch$TAB$iso$TAB$(basename "$f" .jsonl)$TAB$bytes$TAB$f"$'\n'
++  done <<EOT
++$found
++EOT
++done
++
++out=''
++if [ -n "$recs" ]; then
++  sorted=$(printf '%s' "$recs" | LC_ALL=C sort -t "$TAB" -k1,1nr -k3,3) || die "sort failed"
++  while IFS="$TAB" read -r _ iso id bytes f; do
++    out="${out}session$TAB$iso$TAB$id$TAB$bytes$TAB$f"$'\n'
++  done <<EOT
++$sorted
++EOT
++fi
++
++hist="$HOME/.claude/history.jsonl"
++if [ -n "$topic" ] && [ -e "$hist" ]; then
++  [ -r "$hist" ] || die "cannot read $hist"
++  now=$(date +%s) || die "date failed"
++  case "$now" in '' | *[!0-9]*) die "date gave no epoch" ;; esac
++  since=$(( (now - days * 86400) * 1000 ))
++  prompts=$(MAIN=$MAIN WT="$wt_root/" TOPIC=$topic SINCE=$since LC_ALL=C awk '
++    # The value of string key k, up to its first unescaped quote. A quote inside a string is always
++    # written \", so "k":" never matches inside a value.
++    function field(k,   pat, i, rest, j, c, o, e) {
++      pat = "\"" k "\":\""
++      i = index($0, pat)
++      if (i == 0) return ""
++      rest = substr($0, i + length(pat)); o = ""
++      while ((j = match(rest, /["\\]/)) > 0) {
++        o = o substr(rest, 1, j - 1)
++        if (substr(rest, j, 1) == "\"") return o
++        e = substr(rest, j + 1, 1)
++        if (e == "n" || e == "t" || e == "r") o = o " "
++        else if (e == "\"" || e == "\\" || e == "/") o = o e
++        else o = o "\\" e
++        rest = substr(rest, j + 2)
++      }
++      return o
++    }
++    { sub(/\r$/, "") }
++    {
++      p = field("project")
++      if (p != ENVIRON["MAIN"] && index(p, ENVIRON["WT"]) != 1) next
++      if (!match($0, /"timestamp":[0-9]+/)) next
++      ts = substr($0, RSTART + 12, RLENGTH - 12) + 0
++      if (ts < ENVIRON["SINCE"] + 0) next
++      d = field("display")
++      if (index(tolower(d), tolower(ENVIRON["TOPIC"])) == 0) next
++      printf "%.0f\t%s\t%s\n", ts / 1000, field("sessionId"), substr(d, 1, 120)
++    }' "$hist") || die "cannot read $hist"
++  if [ -n "$prompts" ]; then
++    while IFS="$TAB" read -r ts sid text; do
++      iso=$(iso_at "$ts") || die "cannot format the time of a prompt ($ts)"
++      [ -n "$iso" ] || die "empty time for a prompt ($ts)"
++      out="${out}prompt$TAB$iso$TAB$sid$TAB$text"$'\n'
++    done <<EOT
++$prompts
++EOT
++  fi
++fi
++printf '%s' "$out"
+diff --git a/tests/scripts/recall-sessions.bats b/tests/scripts/recall-sessions.bats
+new file mode 100644
+index 0000000..51bd623
+--- /dev/null
++++ b/tests/scripts/recall-sessions.bats
+@@ -0,0 +1,144 @@
++#!/usr/bin/env bats
++# tests/scripts/recall-sessions.bats
++
++bats_require_minimum_version 1.5.0
++load ../helpers/wt
++
++setup() {
++  wt_test_env
++  REPO="$TMP/repo"
++  make_fixture "$REPO"
++  cd "$REPO"
++  slug=$(printf '%s' "$REPO" | LC_ALL=C tr -c 'A-Za-z0-9' '-')
++  P="$HOME/.claude/projects"
++  mkdir -p "$P/$slug/subagents" "$P/$slug--claude-worktrees-feat-a" "$P/-other-project" "$P/$slug-old"
++  printf 'x\n' > "$P/$slug/old.jsonl"; touch -t 202001010000 "$P/$slug/old.jsonl"
++  printf 'xx\n' > "$P/$slug/a.jsonl"; touch -t "$(date -v-2d +%Y%m%d%H%M 2> /dev/null || date -d '2 days ago' +%Y%m%d%H%M)" "$P/$slug/a.jsonl"
++  printf 'xxx\n' > "$P/$slug/b.jsonl"
++  printf 'w\n' > "$P/$slug--claude-worktrees-feat-a/w.jsonl"; touch -t "$(date -v-1d +%Y%m%d%H%M 2> /dev/null || date -d '1 day ago' +%Y%m%d%H%M)" "$P/$slug--claude-worktrees-feat-a/w.jsonl"
++  printf 's\n' > "$P/$slug/subagents/child.jsonl"
++  printf 'o\n' > "$P/-other-project/o.jsonl"
++  printf 'sib\n' > "$P/$slug-old/sibling.jsonl"
++  now=$(( $(date +%s) * 1000 ))
++  {
++    printf '{"display":"floci swap: where are we","pastedContents":{},"timestamp":%s,"project":"%s","sessionId":"b"}\n' "$now" "$REPO"
++    printf '{"display":"floci in the other repo","pastedContents":{},"timestamp":%s,"project":"/elsewhere","sessionId":"o"}\n' "$now"
++    printf '{"display":"unrelated","pastedContents":{},"timestamp":%s,"project":"%s","sessionId":"a"}\n' "$now" "$REPO"
++  } > "$HOME/.claude/history.jsonl"
++}
++
++@test "this project's sessions, newest first, worktree sessions included, children and old ones skipped" {
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
++  [ "$status" -eq 0 ]
++  [ "${#lines[@]}" -eq 3 ]
++  [[ "${lines[0]}" == session$'\t'*$'\t'b$'\t'4$'\t'*"/b.jsonl" ]] || false
++  [[ "${lines[1]}" == session$'\t'*$'\t'w$'\t'* ]] || false
++  [[ "${lines[2]}" == session$'\t'*$'\t'a$'\t'* ]] || false
++  [[ "$output" != *other-project* ]] || false
++}
++
++@test "a sibling project whose slug starts with the main slug is never listed" {
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --days 3650
++  [ "$status" -eq 0 ]
++  [[ "$output" != *sibling* ]] || false
++  [[ "$output" != *"$slug-old"* ]] || false
++}
++
++@test "--days widens the window" {
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --days 3650
++  [ "${#lines[@]}" -eq 4 ]
++}
++
++@test "--topic adds this project's matching prompts only" {
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic FLOCI
++  [ "$(printf '%s\n' "$output" | grep -c '^prompt')" -eq 1 ]
++  [[ "$output" == *$'prompt\t'*$'\tb\tfloci swap: where are we'* ]] || false
++}
++
++@test "--topic skips a prompt from a sibling project whose path starts with the main path" {
++  printf '{"display":"floci from the old checkout","pastedContents":{},"timestamp":%s,"project":"%s-old","sessionId":"old"}\n' "$now" "$REPO" >> "$HOME/.claude/history.jsonl"
++  printf '{"display":"floci in a subdir","pastedContents":{},"timestamp":%s,"project":"%s/sub","sessionId":"sub"}\n' "$now" "$REPO" >> "$HOME/.claude/history.jsonl"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
++  [ "$status" -eq 0 ]
++  [ "$(printf '%s\n' "$output" | grep -c '^prompt')" -eq 1 ]
++  [[ "$output" != *"old checkout"* ]] || false
++  [[ "$output" != *"in a subdir"* ]] || false
++}
++
++@test "--topic takes a worktree prompt" {
++  printf '{"display":"floci in a worktree","pastedContents":{},"timestamp":%s,"project":"%s/.claude/worktrees/feat-a","sessionId":"w"}\n' "$now" "$REPO" >> "$HOME/.claude/history.jsonl"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
++  [ "$(printf '%s\n' "$output" | grep -c '^prompt')" -eq 2 ]
++  [[ "$output" == *$'\tw\tfloci in a worktree'* ]] || false
++}
++
++@test "--topic finds a word after an escaped quote and still reads the fields behind it" {
++  printf '{"display":"say \\"hi\\" then floci later","pastedContents":{},"timestamp":%s,"project":"%s","sessionId":"q"}\n' "$now" "$REPO" >> "$HOME/.claude/history.jsonl"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
++  [ "$status" -eq 0 ]
++  [[ "$output" == *$'prompt\t'*$'\tq\tsay "hi" then floci later' ]] || false
++}
++
++@test "--topic reads past a display that ends in an escaped backslash" {
++  printf '{"display":"floci C:\\\\tmp\\\\","pastedContents":{},"timestamp":%s,"project":"%s","sessionId":"bs"}\n' "$now" "$REPO" >> "$HOME/.claude/history.jsonl"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic 'c:\tmp'
++  [ "$status" -eq 0 ]
++  [[ "$output" == *$'\tbs\tfloci C:\\tmp\\' ]] || false
++}
++
++@test "--topic reads a history line that ends in a carriage return" {
++  printf '{"display":"floci with crlf","pastedContents":{},"timestamp":%s,"project":"%s","sessionId":"cr"}\r\n' "$now" "$REPO" >> "$HOME/.claude/history.jsonl"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic 'with crlf'
++  [ "$status" -eq 0 ]
++  [[ "$output" == *$'\tcr\tfloci with crlf' ]] || false
++}
++
++@test "--topic skips prompts older than the window" {
++  printf '{"display":"floci ancient","pastedContents":{},"timestamp":1000000,"project":"%s","sessionId":"anc"}\n' "$REPO" >> "$HOME/.claude/history.jsonl"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic ancient
++  [ "$status" -eq 0 ]
++  [ "$(printf '%s\n' "$output" | grep -c '^prompt')" -eq 0 ]
++}
++
++@test "no ~/.claude/projects and no history is an empty answer, not an error" {
++  rm -rf "$HOME/.claude"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
++  [ "$status" -eq 0 ]
++  [ -z "$output" ]
++}
++
++@test "an unreadable transcript folder is an error, not an empty list" {
++  [ "$(id -u)" -ne 0 ] || skip "root reads every folder"
++  chmod 000 "$P/$slug"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
++  chmod 755 "$P/$slug"
++  [ "$status" -ne 0 ]
++  [[ "$stderr" == *recall-sessions:* ]] || false
++  [ -z "$output" ]
++}
++
++@test "an unreadable history file is an error" {
++  [ "$(id -u)" -ne 0 ] || skip "root reads every file"
++  chmod 000 "$HOME/.claude/history.jsonl"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
++  chmod 644 "$HOME/.claude/history.jsonl"
++  [ "$status" -ne 0 ]
++  [[ "$stderr" == *recall-sessions:* ]] || false
++}
++
++@test "a bad option exits 2" {
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --days soon
++  [ "$status" -eq 2 ]
++}
++
++@test "an empty --topic exits 2" {
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic ''
++  [ "$status" -eq 2 ]
++}
++
++@test "outside a git repository exits 2" {
++  cd "$TMP"
++  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
++  [ "$status" -eq 2 ]
++  [[ "$stderr" == *"not a git repository"* ]] || false
++}

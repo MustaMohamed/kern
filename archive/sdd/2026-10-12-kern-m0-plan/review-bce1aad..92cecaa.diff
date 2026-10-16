@@ -1,0 +1,413 @@
+# Review package: bce1aad..92cecaa
+
+## Commits
+92cecaa M0: restrict the CI token to contents: read
+5410865 M0: test rule 8 names file and restore env in a finally
+cc94953 M0: ci-local refuses Node below 22 and fixes its header
+4196a33 M0: pin upstream sources to full 40-character commits
+5f8fd00 M0: fetch-upstream keeps the old tree until its replacement succeeds
+c8a2ffe M0: require a new Unreleased bullet relative to the PR base
+
+## Files changed
+ .github/workflows/ci.yml          |  3 +++
+ UPSTREAM.md                       |  8 +++---
+ scripts/check-version.mjs         | 25 +++++++++++++++----
+ scripts/ci-local                  |  3 ++-
+ scripts/fetch-upstream            | 33 ++++++++++++++++---------
+ tests/lint-rules.test.mjs         | 17 ++++++++++---
+ tests/scripts/fetch-upstream.bats | 23 ++++++++++++++++++
+ tests/versions.test.mjs           | 51 +++++++++++++++++++++++++++++++++------
+ 8 files changed, 131 insertions(+), 32 deletions(-)
+
+## Diff
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 206ecc7..2a89e3a 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -1,16 +1,19 @@
+ name: ci
+ on:
+   push:
+   pull_request:
+   workflow_dispatch:
+ 
++permissions:
++  contents: read
++
+ jobs:
+   checks:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+         with:
+           fetch-depth: 0
+       - uses: actions/setup-node@v4
+         with:
+           node-version: '22'
+diff --git a/UPSTREAM.md b/UPSTREAM.md
+index ef70d1f..86ef9fa 100644
+--- a/UPSTREAM.md
++++ b/UPSTREAM.md
+@@ -1,13 +1,13 @@
+ # Upstream sources
+ 
+-kern ports text and ideas from these sources. `scripts/fetch-upstream` clones each at its pin into `.upstream/<key>/`. Review upstream changes quarterly: `git -C .upstream/<key> fetch && git -C .upstream/<key> log --oneline <commit>..origin/HEAD`.
++kern ports text and ideas from these sources. `scripts/fetch-upstream` clones each git source at its pin into `.upstream/<key>/`; caveman is copied from the installed plugin cache rather than cloned. Review upstream changes quarterly: `git -C .upstream/<key> fetch && git -C .upstream/<key> log --oneline <commit>..origin/HEAD`.
+ 
+ | Key | Source | Version | Licence | Copyright | Commit | URL |
+ |---|---|---|---|---|---|---|
+ | superpowers | obra/superpowers | 6.4.1 | MIT | Copyright (c) 2025 Jesse Vincent | 5bf4e78011075bcfc0dc295f0724994cd123ee71 | https://github.com/obra/superpowers |
+-| pstack | cursor/plugins, pstack/ | 0.15.17 | MIT | Copyright (c) 2026 Lauren Tan | 11713c6 | https://github.com/cursor/plugins |
+-| pocock | mattpocock/skills | 1.3.1 | MIT | Copyright (c) 2026 Matt Pocock | 49dd158 | https://github.com/mattpocock/skills |
+-| addy | addyosmani/agent-skills | 0.6.12 | MIT | Copyright (c) 2025 Addy Osmani | 1be8e34 | https://github.com/addyosmani/agent-skills |
++| pstack | cursor/plugins, pstack/ | 0.15.17 | MIT | Copyright (c) 2026 Lauren Tan | 11713c683fe4add4fd403ea880580abbc9e0875f | https://github.com/cursor/plugins |
++| pocock | mattpocock/skills | 1.3.1 | MIT | Copyright (c) 2026 Matt Pocock | 49dd158d1076134a641b33efb035946536778336 | https://github.com/mattpocock/skills |
++| addy | addyosmani/agent-skills | 0.6.12 | MIT | Copyright (c) 2025 Addy Osmani | 1be8e34187e34647bb83adc3a1323b26ae6f6abe | https://github.com/addyosmani/agent-skills |
+ | caveman | caveman | 3.2.0 | Apache-2.0 | Copyright 2026 Julius Brussee | installed plugin cache 3.2.0 | https://github.com/JuliusBrussee/caveman |
+ 
+ The `local` key in `fetch-upstream` copies the owner's adapted `recall`, `unslop`, `no-comments` and `comment-sicko` files; they are the owner's own work and need no entry here.
+diff --git a/scripts/check-version.mjs b/scripts/check-version.mjs
+index 70d0bb6..d5c76ef 100644
+--- a/scripts/check-version.mjs
++++ b/scripts/check-version.mjs
+@@ -20,29 +20,44 @@ export function checkVersions(root) {
+   const plugin = json(root, '.claude-plugin/plugin.json').version;
+   const market = json(root, '.claude-plugin/marketplace.json').plugins?.[0]?.version;
+   const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
+   const release = changelog.match(/^## \[(\d+\.\d+\.\d+)\]/m)?.[1];
+   if (plugin !== market) problems.push(`plugin.json ${plugin} != marketplace.json ${market}`);
+   if (!release) problems.push(`CHANGELOG.md has no release heading; expected ## [${plugin}] - <date>`);
+   else if (release !== plugin) problems.push(`newest CHANGELOG release ${release} != plugin.json ${plugin}`);
+   return problems;
+ }
+ 
+-export function checkUnreleased(root, changedFiles) {
++export function checkUnreleased(root, changedFiles, baseChangelog) {
+   if (!changedFiles.some((f) => SHIPPED.test(f))) return [];
+   const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
+-  return unreleasedBullets(changelog).length ? [] : ['shipped files changed but ## [Unreleased] has no bullet'];
++  const old = new Set(baseChangelog === undefined ? [] : unreleasedBullets(baseChangelog));
++  const added = unreleasedBullets(changelog).filter((b) => !old.has(b));
++  return added.length ? [] : ['shipped files changed but ## [Unreleased] has no new bullet compared with the base'];
++}
++
++function baseChangelogAt(root, base) {
++  try {
++    return execFileSync('git', ['-C', root, 'show', `${base}:CHANGELOG.md`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
++  } catch (e) {
++    if (/exists on disk, but not in|does not exist in|path .* does not exist/.test(String(e.stderr))) return '';
++    throw e;
++  }
+ }
+ 
+ if (isMain(import.meta.url)) {
+   const root = fileURLToPath(new URL('..', import.meta.url));
+-  const problems = checkVersions(root);
+   const i = process.argv.indexOf('--pr');
++  const base = i > 0 ? process.argv[i + 1] : undefined;
++  if (i > 0 && !base) {
++    console.error('usage: check-version.mjs [--pr <base-ref>]');
++    process.exit(2);
++  }
++  const problems = checkVersions(root);
+   if (i > 0) {
+-    const base = process.argv[i + 1];
+     const changed = execFileSync('git', ['-C', root, 'diff', '--name-only', `${base}...HEAD`], { encoding: 'utf8' }).split('\n').filter(Boolean);
+-    problems.push(...checkUnreleased(root, changed));
++    problems.push(...checkUnreleased(root, changed, baseChangelogAt(root, base)));
+   }
+   for (const p of problems) console.log(`error: ${p}`);
+   console.log(problems.length ? 'versions: FAILED' : 'versions: agree');
+   process.exit(problems.length ? 1 : 0);
+ }
+diff --git a/scripts/ci-local b/scripts/ci-local
+index 3be1503..eba6279 100755
+--- a/scripts/ci-local
++++ b/scripts/ci-local
+@@ -1,13 +1,14 @@
+ #!/usr/bin/env bash
+-# Runs the CI job's steps locally, in the same order, before a push.
++# Runs CI's steps locally, in the same order, except the PR-only Unreleased check.
+ set -euo pipefail
+ cd "$(dirname "$0")/.."
++node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)' || { echo "ci-local: Node 22 or later is required (found $(node --version)); put \$HOME/.volta/bin first on PATH" >&2; exit 2; }
+ node --test 'tests/**/*.test.mjs'
+ node scripts/lint-skills.mjs
+ node scripts/check-version.mjs
+ node scripts/route-eval.mjs
+ claude plugin validate . --strict
+ claude plugin validate .claude-plugin/plugin.json --strict
+ bats tests/scripts
+ shellcheck scripts/fetch-upstream scripts/ci-local
+ echo "ci-local: all steps passed"
+diff --git a/scripts/fetch-upstream b/scripts/fetch-upstream
+index 8a6872b..06bcb93 100755
+--- a/scripts/fetch-upstream
++++ b/scripts/fetch-upstream
+@@ -2,71 +2,80 @@
+ # Fills .upstream/ with the pinned source trees that kern files are ported from. Dev-only; hooks never run it.
+ set -euo pipefail
+ 
+ root=$(cd "$(dirname "$0")/.." && pwd)
+ dest="${KERN_UPSTREAM_DIR:-$root/.upstream}"
+ mkdir -p "$dest"
+ 
+ pin() { # key -> "url sha" for git sources
+   case "$1" in
+     superpowers) echo "https://github.com/obra/superpowers.git 5bf4e78011075bcfc0dc295f0724994cd123ee71" ;;
+-    pstack) echo "https://github.com/cursor/plugins.git 11713c6" ;;
+-    pocock) echo "https://github.com/mattpocock/skills.git 49dd158" ;;
+-    addy) echo "https://github.com/addyosmani/agent-skills.git 1be8e34" ;;
++    pstack) echo "https://github.com/cursor/plugins.git 11713c683fe4add4fd403ea880580abbc9e0875f" ;;
++    pocock) echo "https://github.com/mattpocock/skills.git 49dd158d1076134a641b33efb035946536778336" ;;
++    addy) echo "https://github.com/addyosmani/agent-skills.git 1be8e34187e34647bb83adc3a1323b26ae6f6abe" ;;
+     *) return 1 ;;
+   esac
+ }
+ 
+ override() { # key suffix default
+   local var
+   var="KERN_UPSTREAM_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')_$2"
+   printf '%s' "${!var:-$3}"
+ }
+ 
+ clone_at() { # key url sha
+   local key=$1 url=$2 sha=$3 dir="$dest/$1"
+   if [ -d "$dir/.git" ]; then
+     local want
+     want=$(git -C "$dir" rev-parse --verify --quiet "$sha^{commit}" || true)
+     if [ -n "$want" ] && [ "$(git -C "$dir" rev-parse HEAD)" = "$want" ]; then
+       echo "$key: already at $sha"
+       return 0
+     fi
+   fi
+-  rm -rf "$dir"
+-  if ! git clone --quiet "$url" "$dir"; then
+-    rm -rf "$dir"
++  rm -rf "$dir.new"
++  if ! git clone --quiet "$url" "$dir.new"; then
++    rm -rf "$dir.new"
+     echo "$key: clone failed: $url" >&2
+     return 3
+   fi
+-  if ! git -C "$dir" checkout --quiet --detach "$sha" 2>/dev/null; then
+-    rm -rf "$dir"
++  if ! git -C "$dir.new" checkout --quiet --detach "$sha" 2>/dev/null; then
++    rm -rf "$dir.new"
+     echo "$key: commit $sha not found in $url" >&2
+     return 3
+   fi
++  rm -rf "$dir" && mv "$dir.new" "$dir"
+   echo "$key: $url @ $sha"
+ }
+ 
+ copy_from() { # key src...
+   local key=$1 dir="$dest/$1"
+   shift
+-  rm -rf "$dir"
+-  mkdir -p "$dir"
++  rm -rf "$dir.new"
++  if ! mkdir -p "$dir.new"; then
++    echo "$key: cannot create $dir.new" >&2
++    return 3
++  fi
+   local src
+   for src in "$@"; do
+     if [ ! -e "$src" ]; then
+-      rm -rf "$dir"
++      rm -rf "$dir.new"
+       echo "$key: source missing: $src" >&2
+       return 3
+     fi
+-    cp -R "$src" "$dir"/
++    if ! cp -R "$src" "$dir.new"/; then
++      rm -rf "$dir.new"
++      echo "$key: copy failed: $src" >&2
++      return 3
++    fi
+   done
++  rm -rf "$dir" && mv "$dir.new" "$dir"
+   echo "$key: copied"
+ }
+ 
+ fetch() {
+   local key=$1 url sha
+   case "$key" in
+     superpowers|pstack|pocock|addy)
+       read -r url sha <<<"$(pin "$key")"
+       url=$(override "$key" URL "$url")
+       sha=$(override "$key" SHA "$sha")
+diff --git a/tests/lint-rules.test.mjs b/tests/lint-rules.test.mjs
+index 685ccca..f5af122 100644
+--- a/tests/lint-rules.test.mjs
++++ b/tests/lint-rules.test.mjs
+@@ -79,23 +79,34 @@ test('rule 3: auto limit and trigger, manual limit, agent limit, totals', () =>
+ 
+ test('rule 4: referenced files must exist', () => {
+   const body = '\n## Steps\n\n1. Read `references/missing.md` and `${CLAUDE_PLUGIN_ROOT}/kernel/none.md`.\n';
+   const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) });
+   assert.deepEqual(rules(f), [4, 4]);
+ });
+ 
+ test('rule 8: machine paths and listed names in shipped files', () => {
+   process.env.KERN_LINT_NAMES = 'Zebediah';
+   const body = '\n## Steps\n\n1. Open /Users/someone/x and ask Zebediah.\n';
+-  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) });
+-  delete process.env.KERN_LINT_NAMES;
+-  assert.deepEqual(rules(f), [8, 8]);
++  try {
++    const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) });
++    assert.deepEqual(rules(f), [8, 8]);
++  } finally {
++    delete process.env.KERN_LINT_NAMES;
++  }
++});
++
++test('rule 8: names come from scripts/lint-names.txt, comments ignored', () => {
++  const body = '\n## Steps\n\n1. Ask Zebediah.\n';
++  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body), 'scripts/lint-names.txt': '# personal names\nZebediah\n' });
++  assert.deepEqual(rules(f), [8]);
++  const g = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body), 'scripts/lint-names.txt': '# Zebediah\n' });
++  assert.deepEqual(rules(g), []);
+ });
+ 
+ test('rule 10: exemption needs a reason, and suppresses its finding', () => {
+   const bad = { 'skills/a/SKILL.md': skill('a', 'description: Does things.'), 'scripts/lint-exemptions.json': '[{"rule":3,"path":"skills/a/SKILL.md","reason":""}]' };
+   assert.deepEqual(rules(lint(bad)), [3, 10], 'an exemption without a reason suppresses nothing');
+   const ok = { ...bad, 'scripts/lint-exemptions.json': '[{"rule":3,"path":"skills/a/SKILL.md","reason":"fixture"}]' };
+   assert.deepEqual(rules(lint(ok)), []);
+ });
+ 
+ test('rule 11: long dashes and curly quotes', () => {
+diff --git a/tests/scripts/fetch-upstream.bats b/tests/scripts/fetch-upstream.bats
+index aaf05ed..1e48c03 100644
+--- a/tests/scripts/fetch-upstream.bats
++++ b/tests/scripts/fetch-upstream.bats
+@@ -45,14 +45,37 @@ setup() {
+   run bash "$ROOT/scripts/fetch-upstream" caveman
+   [ "$status" -eq 3 ]
+ }
+ 
+ @test "a failing git source is not swallowed" {
+   export KERN_UPSTREAM_ADDY_URL="$BATS_TEST_TMPDIR/no-such-remote"
+   run bash "$ROOT/scripts/fetch-upstream" addy
+   [ "$status" -eq 3 ]
+ }
+ 
++@test "a failing re-run keeps the previous good clone" {
++  bash "$ROOT/scripts/fetch-upstream" addy
++  export KERN_UPSTREAM_ADDY_URL="$BATS_TEST_TMPDIR/no-such-remote"
++  export KERN_UPSTREAM_ADDY_SHA=0000000000000000000000000000000000000000
++  run bash "$ROOT/scripts/fetch-upstream" addy
++  [ "$status" -eq 3 ]
++  [ "$(git -C "$KERN_UPSTREAM_DIR/addy" rev-parse HEAD)" = "$SHA1" ]
++  [ ! -e "$KERN_UPSTREAM_DIR/addy.new" ]
++}
++
++@test "a failing copy keeps the previous copy" {
++  mkdir -p "$BATS_TEST_TMPDIR/cave"; echo hi > "$BATS_TEST_TMPDIR/cave/NOTICE"
++  export KERN_UPSTREAM_CAVEMAN_SRC="$BATS_TEST_TMPDIR/cave"
++  bash "$ROOT/scripts/fetch-upstream" caveman
++  mkdir -p "$BATS_TEST_TMPDIR/bad"; echo no > "$BATS_TEST_TMPDIR/bad/NOTICE"; chmod 000 "$BATS_TEST_TMPDIR/bad/NOTICE"
++  export KERN_UPSTREAM_CAVEMAN_SRC="$BATS_TEST_TMPDIR/bad"
++  run bash "$ROOT/scripts/fetch-upstream" caveman
++  chmod 644 "$BATS_TEST_TMPDIR/bad/NOTICE"
++  [ "$status" -eq 3 ]
++  [ "$(cat "$KERN_UPSTREAM_DIR/caveman/NOTICE")" = hi ]
++  [ ! -e "$KERN_UPSTREAM_DIR/caveman.new" ]
++}
++
+ @test "unknown key exits 2" {
+   run bash "$ROOT/scripts/fetch-upstream" nonsense
+   [ "$status" -eq 2 ]
+ }
+diff --git a/tests/versions.test.mjs b/tests/versions.test.mjs
+index 22d63a8..4cff9df 100644
+--- a/tests/versions.test.mjs
++++ b/tests/versions.test.mjs
+@@ -1,14 +1,14 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
+-import { execFileSync } from 'node:child_process';
++import { execFileSync, spawnSync } from 'node:child_process';
+ import { fileURLToPath } from 'node:url';
+ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+ import { checkVersions, checkUnreleased } from '../scripts/check-version.mjs';
+ import { bump, release } from '../scripts/release.mjs';
+ 
+ function repo({ plugin = '0.1.0', market = '0.1.0', changelog }) {
+   const root = mkdtempSync(join(tmpdir(), 'kern-ver-'));
+   mkdirSync(join(root, '.claude-plugin'));
+   writeFileSync(join(root, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'kern', version: plugin }, null, 2) + '\n');
+@@ -23,26 +23,63 @@ test('agreeing versions pass', () => {
+ 
+ test('manifest mismatch fails', () => {
+   assert.equal(checkVersions(repo({ market: '0.2.0' })).length, 1);
+ });
+ 
+ test('no release heading is a clear failure', () => {
+   const problems = checkVersions(repo({ changelog: '# Changelog\n\n## [Unreleased]\n' }));
+   assert.match(problems[0], /no release heading/);
+ });
+ 
+-test('shipped change needs an Unreleased bullet', () => {
+-  const root = repo({});
+-  assert.equal(checkUnreleased(root, ['skills/a/SKILL.md']).length, 1);
+-  assert.deepEqual(checkUnreleased(root, ['README.md']), []);
+-  writeFileSync(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n- Add a.\n\n## [0.1.0] - 2026-10-12\n\n- First.\n');
+-  assert.deepEqual(checkUnreleased(root, ['skills/a/SKILL.md']), []);
++const LOG = (bullets) => `# Changelog\n\n## [Unreleased]\n\n${bullets.map((b) => `- ${b}\n`).join('')}\n## [0.1.0] - 2026-10-12\n\n- First.\n`;
++
++test('a stale Unreleased bullet already in the base fails', () => {
++  const root = repo({ changelog: LOG(['Old.']) });
++  assert.equal(checkUnreleased(root, ['skills/a/SKILL.md'], LOG(['Old.'])).length, 1);
++});
++
++test('a newly added Unreleased bullet passes', () => {
++  const root = repo({ changelog: LOG(['Old.', 'New.']) });
++  assert.deepEqual(checkUnreleased(root, ['skills/a/SKILL.md'], LOG(['Old.'])), []);
++});
++
++test('an empty Unreleased section fails even with no base', () => {
++  assert.equal(checkUnreleased(repo({}), ['skills/a/SKILL.md'], '').length, 1);
++});
++
++test('a non-shipped change passes without a bullet', () => {
++  const root = repo({ changelog: LOG(['Old.']) });
++  assert.deepEqual(checkUnreleased(root, ['README.md'], LOG(['Old.'])), []);
++});
++
++test('--pr compares HEAD changelog against the base ref', () => {
++  const root = repo({ changelog: LOG(['Old.']) });
++  mkdirSync(join(root, 'scripts/lib'), { recursive: true });
++  const src = fileURLToPath(new URL('..', import.meta.url));
++  for (const f of ['scripts/check-version.mjs', 'scripts/lib/is-main.mjs']) writeFileSync(join(root, f), readFileSync(join(src, f)));
++  mkdirSync(join(root, 'skills/a'), { recursive: true });
++  writeFileSync(join(root, 'skills/a/SKILL.md'), 'one\n');
++  const git = (...a) => execFileSync('git', ['-C', root, '-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { encoding: 'utf8' });
++  git('init', '-q', '-b', 'main');
++  git('add', '.');
++  git('commit', '-q', '-m', 'base');
++  git('branch', 'base');
++  writeFileSync(join(root, 'skills/a/SKILL.md'), 'two\n');
++  git('commit', '-q', '-am', 'change');
++  const run = (...args) => spawnSync(process.execPath, [join(root, 'scripts/check-version.mjs'), ...args], { encoding: 'utf8' });
++  assert.equal(run('--pr', 'base').status, 1);
++  writeFileSync(join(root, 'CHANGELOG.md'), LOG(['Old.', 'New.']));
++  git('commit', '-q', '-am', 'log');
++  assert.equal(run('--pr', 'base').status, 0);
++  const bare = run('--pr');
++  assert.equal(bare.status, 2);
++  assert.match(bare.stderr, /usage: check-version\.mjs \[--pr <base-ref>\]/);
+ });
+ 
+ test('bump follows semver', () => {
+   assert.equal(bump('0.1.9', 'patch'), '0.1.10');
+   assert.equal(bump('0.1.9', 'minor'), '0.2.0');
+   assert.equal(bump('0.1.9', 'major'), '1.0.0');
+ });
+ 
+ test('release moves Unreleased bullets under the new version', () => {
+   const root = repo({});

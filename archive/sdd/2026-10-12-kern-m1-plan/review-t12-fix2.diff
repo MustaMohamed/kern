@@ -1,0 +1,963 @@
+diff --git a/hooks/guards/g01-git.sh b/hooks/guards/g01-git.sh
+index c89ddf2..e25ab90 100644
+--- a/hooks/guards/g01-git.sh
++++ b/hooks/guards/g01-git.sh
+@@ -94,7 +94,7 @@ _g01_merge() {
+ # The directory is empty (unknown) when MOVED is 1 or with --git-dir or --work-tree. PLAIN is 1
+ # when the record is `git`, then only -C options, then the subcommand.
+ _g01_git_rec() {
+-  local rec="$1" dir="${CWD:-$PWD}" plain=1
++  local rec="$1" dir="${CWD:-$PWD}" plain=1 cfg=""
+   [ "$2" = 1 ] && dir=""
+   shift 3
+   case "$rec" in "git "*) ;; *) plain=0 ;; esac
+@@ -112,7 +112,13 @@ _g01_git_rec() {
+         dir=""; plain=0; shift 2
+         ;;
+       --git-dir=* | --work-tree=*) dir=""; plain=0; shift ;;
+-      -c | --config-env | --namespace | --super-prefix | --attr-source)
++      -c)
++        [ $# -ge 2 ] || return 0
++        cfg="$cfg$2
++"
++        plain=0; shift 2
++        ;;
++      --config-env | --namespace | --super-prefix | --attr-source)
+         [ $# -ge 2 ] || return 0
+         plain=0; shift 2
+         ;;
+@@ -125,9 +131,72 @@ _g01_git_rec() {
+     esac
+   done
+   [ $# -gt 0 ] || return 0
++  _g01_alias_check G1 "${dir:-${CWD:-$PWD}}" "$1" "$cfg" "$rec" && return 0
+   _g01_git "$dir" "$plain" "$@"
+ }
+ 
++# Subcommands a guard reviews (G1, G5, G6), so an alias that runs one asks. Git runs a builtin even
++# when an alias has its name, so these and the builtins in _G01_ALIAS_SKIP are never looked up.
++_G01_ALIAS_GUARDED=" push commit merge rebase reset checkout switch stash clean branch add pull worktree "
++_G01_ALIAS_SKIP=" status log diff show fetch rev-parse config remote ls-files ls-remote grep blame \
++describe tag init clone help version cat-file for-each-ref symbolic-ref show-ref merge-base rev-list \
++shortlog reflog notes check-ignore name-rev var gc fsck mv rm restore cherry-pick revert am apply \
++format-patch submodule bisect stage "
++
++# _g01_alias_exp DIR NAME CFG: the expansion of alias NAME: the last `alias.NAME=` among the
++# record's -c values CFG (one per line; the key in any case), else `git config alias.NAME` in DIR.
++# Exit 1 when NAME is no alias.
++_g01_alias_exp() {
++  local line key want v="" hit=1
++  if [ -n "$3" ]; then
++    want=$(printf 'alias.%s' "$2" | tr '[:upper:]' '[:lower:]')
++    while IFS= read -r line; do
++      [ -n "$line" ] || continue
++      key=$(printf '%s' "${line%%=*}" | tr '[:upper:]' '[:lower:]')
++      [ "$key" = "$want" ] || continue
++      case "$line" in *=*) v=${line#*=} ;; *) v=true ;; esac
++      hit=0
++    done <<EOT
++$3
++EOT
++    if [ "$hit" = 0 ]; then
++      printf '%s\n' "$v"
++      return 0
++    fi
++  fi
++  git -C "$1" -c core.fsmonitor=false config --get "alias.$2" 2>/dev/null
++}
++
++# _g01_alias_check GUARD DIR SUB CFG RECORD: when SUB is a git alias whose expansion runs a guarded
++# subcommand or a shell (`!`), votes ask (deny under autopilot) as GUARD and exits 0. An alias of an
++# alias is followed five deep, skipping leading options in each expansion. A RECORD that sets
++# GIT_CONFIG_* or --config-env may define an alias the hook cannot read, which counts as a shell.
++_g01_alias_check() {
++  local g="$1" dir="$2" sub="$3" cfg="$4" exp head w n=0 ws=()
++  case "$sub" in "" | -*) return 1 ;; esac
++  case "$_G01_ALIAS_GUARDED$_G01_ALIAS_SKIP" in *" $sub "*) return 1 ;; esac
++  case "$5" in
++    *GIT_CONFIG_* | *--config-env*) exp='!' ;;
++    *) exp=$(_g01_alias_exp "$dir" "$sub" "$cfg") || return 1 ;;
++  esac
++  while :; do
++    case "$exp" in '!'*) break ;; esac
++    read -r -a ws <<<"$exp"
++    head=""
++    for w in "${ws[@]}"; do
++      case "$w" in -*) ;; *) head=$w; break ;; esac
++    done
++    case "$_G01_ALIAS_GUARDED" in *" $head "*) break ;; esac
++    n=$((n + 1))
++    [ -n "$head" ] && [ "$n" -lt 5 ] || return 1
++    case "$_G01_ALIAS_SKIP" in *" $head "*) return 1 ;; esac
++    exp=$(_g01_alias_exp "$dir" "$head" "$cfg") || return 1
++  done
++  vote ask "$g" "git $sub is an alias for '$exp'; run the git command itself so kern can check it"
++  [ "$AUTOPILOT" = 1 ] && vote deny "$g" "git alias $sub under autopilot"
++  return 0
++}
++
+ # _g01_opts TABLE WORDS...: git's option parsing of WORDS, one token per line: `--long` or
+ # `--long=value` for an option (a short option prints its long name, or `-X` when it has none),
+ # `@word` for an argument, `>redir` for a redirection and its target, `?word` for an option git
+diff --git a/hooks/guards/g02-pr.sh b/hooks/guards/g02-pr.sh
+index 50e9bd6..0931a79 100644
+--- a/hooks/guards/g02-pr.sh
++++ b/hooks/guards/g02-pr.sh
+@@ -214,7 +214,7 @@ _gh_file_ok() {
+     *) return 1 ;;
+   esac
+   # check-ignore exits 1 for a path git does not ignore; 0 is ignored, 128 an error.
+-  git -C "$d" check-ignore -q -- "${f##*/}" 2>/dev/null
++  git -C "$d" -c core.fsmonitor=false check-ignore -q -- "${f##*/}" 2>/dev/null
+   [ $? = 1 ]
+ }
+ 
+diff --git a/hooks/guards/g05-commit.sh b/hooks/guards/g05-commit.sh
+index 49cdf70..f2326ac 100644
+--- a/hooks/guards/g05-commit.sh
++++ b/hooks/guards/g05-commit.sh
+@@ -32,8 +32,13 @@ EOT
+   while [ "$i" -lt "${#_G05_RECS[@]}" ]; do
+     if _g05_split "${_G05_RECS[$i]}"; then
+       [ "$moved" = 1 ] && _G05_MOVED=1
++      if declare -F _g01_alias_check >/dev/null &&
++        _g01_alias_check G5 "$_G05_DIR" "$_G05_SUB" "$_G05_CFG" "${_G05_RECS[$i]}"; then
++        i=$((i + 1))
++        continue
++      fi
+       case "$_G05_SUB" in
+-        add | stage) _g05_add ;;
++        add | stage) _g05_add "${_G05_RECS[$i]}" ;;
+         commit) _g05_commit "$i" ;;
+       esac
+     else
+@@ -52,8 +57,9 @@ _g05_ready() {
+ # _g05_split RECORD: reads a git record (any case, any path) into _G05_DIR (where git runs: CWD, then
+ # each -C), _G05_SUB, _G05_ARGS (the words after the subcommand), _G05_PLAIN (1 when only -C pairs
+ # come before the subcommand), _G05_CROSS (1 when a -C leaves this session's repository) and
+-# _G05_MOVED (1 with --git-dir, --work-tree, GIT_DIR= or GIT_WORK_TREE=). _G05_HEAD is the first
+-# word. Exit 1 when the record is not git with a subcommand.
++# _G05_MOVED (1 with --git-dir, --work-tree, GIT_DIR= or GIT_WORK_TREE=). _G05_CFG holds the -c
++# values, one per line. _G05_HEAD is the first word. Exit 1 when the record is not git with a
++# subcommand.
+ _g05_split() {
+   local w=() t i=1 n d
+   while IFS= read -r t; do w+=("$t"); done <<EOT
+@@ -63,6 +69,7 @@ EOT
+   _G05_DIR=${CWD:-$PWD}
+   _G05_SUB=""
+   _G05_ARGS=()
++  _G05_CFG=""
+   _G05_PLAIN=1
+   _G05_CROSS=0
+   _G05_MOVED=0
+@@ -79,7 +86,13 @@ EOT
+         ;;
+       --git-dir | --work-tree) _G05_MOVED=1; _G05_PLAIN=0; i=$((i + 2)) ;;
+       --git-dir=* | --work-tree=*) _G05_MOVED=1; _G05_PLAIN=0; i=$((i + 1)) ;;
+-      -c | --config-env | --namespace | --super-prefix | --attr-source) _G05_PLAIN=0; i=$((i + 2)) ;;
++      -c)
++        _G05_CFG="$_G05_CFG${w[$((i + 1))]-}
++"
++        _G05_PLAIN=0
++        i=$((i + 2))
++        ;;
++      --config-env | --namespace | --super-prefix | --attr-source) _G05_PLAIN=0; i=$((i + 2)) ;;
+       -*) _G05_PLAIN=0; i=$((i + 1)) ;;
+       *) break ;;
+     esac
+@@ -98,15 +111,17 @@ _g05_broad() {
+   [ "$AUTOPILOT" = 1 ] && vote deny G5 "$1 under autopilot"
+ }
+ 
+-# _g05_add: git add or git stage that may stage every change: -A, -u, --renormalize or
+-# --no-ignore-removal in any spelling, --pathspec-from-file, an option kern cannot read, or a
+-# pathspec _g05_wide calls wide.
++# _g05_add RECORD: git add or git stage that may stage every change: -A, -u, --renormalize or
++# --no-ignore-removal in any spelling, --pathspec-from-file, an option kern cannot read, a word of
++# RECORD that expands (_gh_literal: $, backticks, globs, ~, braces), or a pathspec _g05_wide calls
++# wide.
+ _g05_add() {
+   local toks t why=""
+   if ! _g05_ready; then
+     _g05_broad "git $_G05_SUB (kern could not load its option parser)"
+     return 0
+   fi
++  _gh_literal "$1" || why="with a word that expands"
+   toks=$(_g01_opts "$_G05_ADD_OPTS" "${_G05_ARGS[@]}")
+   while IFS= read -r t; do
+     case "$t" in
+@@ -122,10 +137,11 @@ EOT
+ }
+ 
+ # _g05_wide PATHSPEC: exit 0 when PATHSPEC may stage the whole tree: `.` or `..` in any spelling,
+-# pathspec magic (`:/`, `:!x`), a $, glob or ~ that could expand to it, a directory that holds the
+-# worktree root, or any path after cd, --git-dir or --work-tree.
++# pathspec magic (`:/`, `:!x`), a $, glob or ~ that could expand to it, the worktree root by any
++# spelling (git rev-parse --show-prefix is empty there, whatever the case of the path), or any path
++# after cd, --git-dir or --work-tree.
+ _g05_wide() {
+-  local s="$1" p top
++  local s="$1" p
+   [ "$_G05_MOVED" = 1 ] && return 0
+   case "$s" in "" | :* | *'$'* | *'*'* | *'?'* | *'['* | '~'*) return 0 ;; esac
+   p=$s
+@@ -140,17 +156,14 @@ _g05_wide() {
+   case "$p" in . | .. | ../*) return 0 ;; esac
+   case "$s" in /*) ;; *) s="$_G05_DIR/$s" ;; esac
+   [ -d "$s" ] || return 1
+-  p=$(cd "$s" 2>/dev/null && pwd -P) || return 1
+-  top=$(git -C "$_G05_DIR" rev-parse --show-toplevel 2>/dev/null) || return 1
+-  top=$(cd "$top" 2>/dev/null && pwd -P) || return 1
+-  case "$top/" in "${p%/}/"*) return 0 ;; esac
+-  return 1
++  p=$(git -C "$s" -c core.fsmonitor=false rev-parse --show-prefix 2>/dev/null) || return 1
++  [ -z "$p" ]
+ }
+ 
+ # _g05_log DIR REF: REF's commit message. --end-of-options keeps a REF such as --output=<file> from
+ # being read as a git log option.
+ _g05_log() {
+-  git -C "$1" log -1 --no-show-signature --no-color --format=%B --end-of-options "$2" -- 2>/dev/null
++  git -C "$1" -c core.fsmonitor=false log -1 --no-show-signature --no-color --format=%B --end-of-options "$2" -- 2>/dev/null
+ }
+ 
+ # _g05_message DIR TOKS [raw]: prints the commit message from _g01_opts tokens: the -F file, else
+@@ -210,7 +223,7 @@ _g05_problems() {
+   local dir="$1" msg="$2" subject conv idre branch id
+   subject=$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')
+   if [ "$(settings_get commit.attribution none)" = none ] &&
+-    printf '%s\n' "$msg" | grep -Eiq 'co-authored-by:.*(claude|anthropic)|generated (with|by) .*claude|claude-session:|claude\.ai/code'; then
++    printf '%s\n' "$msg" | grep -Eiq 'co-authored-by:.*(claude|anthropic)|generated (with|by) .*claude|claude-session:|claude\.ai/code|(co-authored-by|assisted-by|generated-by)[[:space:]]*[:=].*(claude|anthropic)'; then
+     echo "attribution trailer present (commit.attribution: none)"
+   fi
+   conv=$(settings_get commit.convention '')
+@@ -221,7 +234,11 @@ _g05_problems() {
+   branch=$(current_branch "$dir")
+   id=$(printf '%s\n' "$branch" | grep -Eo -- "$idre" | head -n 1)
+   if [ -n "$id" ]; then
+-    case "$subject" in *"$id"*) ;; *) echo "subject lacks the ticket id $id from branch $branch" ;; esac
++    # The id counts only when a non-alphanumeric character or the end follows it: CDS-24650 is not
++    # CDS-2465.
++    printf '%s\n' "$subject" | LC_ALL=C awk -v id="$id" '
++      { s = $0; while ((i = index(s, id)) > 0) { if (substr(s, i + length(id), 1) !~ /[A-Za-z0-9]/) { f = 1; exit } s = substr(s, i + 1) } }
++      END { exit !f }' || echo "subject lacks the ticket id $id from branch $branch"
+   fi
+ }
+ 
+diff --git a/hooks/guards/g06-secrets.sh b/hooks/guards/g06-secrets.sh
+index c359730..dce978f 100644
+--- a/hooks/guards/g06-secrets.sh
++++ b/hooks/guards/g06-secrets.sh
+@@ -1,26 +1,64 @@
+ # shellcheck shell=bash
+ # G6 secrets: scan what a commit or push would publish, commit messages included; refuse never_commit
+-# paths. Git is read with color, external diff and textconv off, so repo config can neither hide an
+-# added line nor run a program here. Records are read with G5's _g05_split and _g05_message and
+-# options with G1's _g01_opts: the dispatcher sources every guard before it calls any.
++# paths. G6 reads only what git stores (the index for a commit, commits for a push), never the
++# worktree, with color, external diff, textconv, fsmonitor, signatures, replace refs and
++# diff.relative off and every file read as text, so repo config can neither hide an added line nor
++# run a program here. Each walk runs under with_timeout and streams into the scan. Records are read
++# with G5's _g05_split and _g05_message and options with G1's _g01_opts: the dispatcher sources every
++# guard before it calls any.
+ 
+-# Diff options for every patch G6 reads.
+-_G06_DIFF=(--no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/)
++# Seconds a walk may run. Under bats, KERN_SCAN_SECS shortens it.
++_G06_SECS=8
++[ -n "${BATS_TEST_FILENAME-}" ] && _G06_SECS=${KERN_SCAN_SECS:-8}
++
++# Diff options for every patch G6 reads. A staged diff also takes --diff-filter=d; a push walk does
++# not, because in git log it drops whole commits, messages included, and _g06_parse skips the names
++# of deleted files itself.
++_G06_DIFF=(--text --no-relative --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/)
++
++# Line markers in a walk's output: \035 starts a never_commit name, \034 the walk's exit code. In a
++# push walk git prints \036 before each commit's hash and message and \037 after the message.
++_G06_NAME=$'\035'
++_G06_RC=$'\034'
++
++# The secret rules, `name|ERE` per line. Each is matched against the text field of a scan line,
++# which starts with a space, so `[^A-Za-z0-9_]` also matches at the start of the text.
++_G06_RULES='private-key|-----BEGIN [A-Z ]*PRIVATE KEY-----
++pgp-private-key|-----BEGIN PGP PRIVATE KEY BLOCK-----
++aws-access-key|(AKIA|ASIA)[0-9A-Z]{16}
++github-token|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{22,}
++slack-token|xox[baprs]-[A-Za-z0-9-]{10,}
++api-key|[^A-Za-z0-9_]sk-[A-Za-z0-9_-]{20,}
++stripe-key|[rs]k_live_[A-Za-z0-9]{20,}
++google-api-key|AIza[0-9A-Za-z_-]{35}'
+ 
+ guard_g06() {
+   [ "$TOOL" = Bash ] || return 0
+-  local cmd rec
++  local cmd rec moved=0
+   cmd=$(ti_get command) || return 0
+   while IFS= read -r rec; do
+     [ -n "$rec" ] || continue
+-    if ! declare -F _g05_split _g05_message _g01_opts >/dev/null || [ -z "${_G05_COMMIT_OPTS-}" ] ||
+-      [ -z "${_G01_PUSH_OPTS-}" ]; then
++    case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=* | *GIT_INDEX_FILE=*) moved=1 ;; esac
++    if ! _g06_ready; then
+       case "$(git_sub "$rec" | cut -f2)" in
+         commit | push) vote ask G6 "the secret scan could not load its parsers" ;;
+       esac
+       continue
+     fi
+-    _g05_split "$rec" || continue
++    if ! _g05_split "$rec"; then
++      # After a cd, later git commands run where G6 cannot tell.
++      case "${_G05_HEAD##*/}" in cd | pushd | popd | builtin) moved=1 ;; esac
++      continue
++    fi
++    if declare -F _g01_alias_check >/dev/null &&
++      _g01_alias_check G6 "$_G05_DIR" "$_G05_SUB" "$_G05_CFG" "$rec"; then
++      continue
++    fi
++    case "$_G05_SUB" in commit | push) ;; *) continue ;; esac
++    if [ "$moved" = 1 ] || [ "$_G05_MOVED" = 1 ]; then
++      _g06_unscanned "could not scan: git $_G05_SUB after cd, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= reads a repository or index kern does not see"
++      continue
++    fi
+     case "$_G05_SUB" in
+       commit) _g06_commit ;;
+       push) _g06_push ;;
+@@ -30,54 +68,101 @@ $(git_words "$cmd")
+ EOT
+ }
+ 
+-# _g06_git DIR ARGS...: git in DIR with color off whatever the config says.
++# _g06_ready: G5's and G1's parsers and with_timeout are loaded.
++_g06_ready() {
++  declare -F _g05_split _g05_message _g01_opts with_timeout >/dev/null &&
++    [ -n "${_G05_COMMIT_OPTS-}" ] && [ -n "${_G01_PUSH_OPTS-}" ]
++}
++
++# _g06_unscanned REASON: asks, and denies under autopilot.
++_g06_unscanned() {
++  vote ask G6 "$1"
++  [ "$AUTOPILOT" = 1 ] && vote deny G6 "$1 (autopilot)"
++  return 0
++}
++
++# _g06_git DIR ARGS...: git in DIR with replace refs, color and fsmonitor off and paths unquoted.
+ _g06_git() {
+   local d="$1"
+   shift
+-  git -C "$d" -c color.ui=never "$@" 2>/dev/null
++  git -C "$d" --no-replace-objects -c color.ui=never -c core.fsmonitor=false -c core.quotePath=false \
++    -c log.showRoot=true "$@" 2>/dev/null
+ }
+ 
+-# _g06_added: reads a unified diff, prints `path:line:text` for every added line. A `+++ ` line is a
+-# file header only between a `diff` line and the first `@@`; inside a hunk it is an added line whose
+-# text starts with `++ `, so no text is ever taken for a path.
+-_g06_added() {
+-  LC_ALL=C awk '
+-    /^diff / { h = 1; next }
++# _g06_parse: reads a patch, or a push walk with its \036 message records, and prints a scan line
++# `<label>\t <text>` for each added line (label `path:line`) and message line (label
++# `commit <hash> message:<n>`), and \035<path> for each file it adds or changes (not one it
++# deletes). A `+++ ` line is a header only between a `diff` line and the first `@@`, so no text is
++# taken for a path. A merge comes as a combined diff (--cc): a line counts when it is added against
++# every parent.
++_g06_parse() {
++  LC_ALL=C awk -v nm="$_G06_NAME" -v rs=$'\036' -v us=$'\037' '
++    # name(): prints the pending file name of the header just read, unless the file was deleted.
++    function name() { if (pn != "") print nm pn; pn = "" }
++    index($0, rs) == 1 { name(); c = substr($0, 2); m = 1; n = 0; h = 0; nc = 0; next }
++    m {
++      e = index($0, us)
++      if (!e) { print "commit " c " message:" ++n "\t " $0; next }
++      if (e > 1) print "commit " c " message:" ++n "\t " substr($0, 1, e - 1)
++      m = 0; next
++    }
++    /^diff --git / {
++      name(); h = 1; s = substr($0, 12); k = (length(s) - 5) / 2
++      if (k > 0 && k == int(k) && substr(s, 1, 2) == "a/" && substr(s, k + 3, 3) == " b/" &&
++        substr(s, 3, k) == substr(s, k + 6)) pn = substr(s, 3, k)
++      next
++    }
++    /^diff --cc / { name(); h = 1; pn = substr($0, 11); next }
++    /^diff --combined / { name(); h = 1; pn = substr($0, 17); next }
++    /^diff / { name(); h = 1; next }
++    h && /^deleted file mode/ { pn = ""; next }
+     h && /^\+\+\+ / { p = substr($0, 5); sub(/^b\//, "", p); next }
+-    /^@@ / { h = 0; split($3, a, ","); ln = substr(a[1], 2) + 0; next }
+-    h { next }
+-    /^\+/ { print p ":" ln ":" substr($0, 2); ln++; next }
+-    /^ / { ln++ }'
++    h && /^(rename|copy) to / { pn = $0; sub(/^(rename|copy) to /, "", pn); next }
++    /^@@/ { name(); h = 0; match($0, /^@+/); nc = RLENGTH - 1; split($(nc + 2), a, ","); ln = substr(a[1], 2) + 0; next }
++    h || nc < 1 { next }
++    /^\\/ { next }
++    {
++      pre = substr($0, 1, nc)
++      if (index(pre, "-")) next
++      if (pre ~ /^\++$/) print p ":" ln "\t " substr($0, nc + 1)
++      ln++
++    }
++    END { name() }'
++}
++
++# _g06_any: every rule as one ERE.
++_g06_any() {
++  local any="" rule re
++  while IFS='|' read -r rule re; do any="${any:+$any|}($re)"; done <<EOT
++$_G06_RULES
++EOT
++  printf '%s\n' "$any"
++}
++
++# _g06_keep: keeps the \035 name lines and the scan lines whose text field hits a rule.
++_g06_keep() {
++  LC_ALL=C grep -a -E -- "^$_G06_NAME|^[^	]*	.*($(_g06_any))"
++}
++
++# _g06_walk DIR ARGS...: `git ARGS` in DIR under with_timeout, streamed through _g06_parse and
++# _g06_keep, so the patch is never held in a variable. Prints the kept lines, then \034 and the
++# walk's exit code.
++_g06_walk() {
++  with_timeout "$_G06_SECS" _g06_git "$@" | _g06_parse | _g06_keep
++  printf '%s%s\n' "$_G06_RC" "${PIPESTATUS[0]}"
+ }
+ 
+-# _g06_msg LABEL TEXT: TEXT as `LABEL:line:text` lines for _g06_scan.
++# _g06_msg LABEL TEXT: TEXT as scan lines `LABEL:<n>\t <text>`.
+ _g06_msg() {
+   [ -n "$2" ] || return 0
+-  printf '%s\n' "$2" | awk -v l="$1" '{ print l ":" NR ":" $0 }'
++  printf '%s\n' "$2" | LC_ALL=C awk -v l="$1" '{ print l ":" NR "\t " $0 }'
+ }
+ 
+-# The secret rules, `name|ERE` per line.
+-_G06_RULES='private-key|-----BEGIN [A-Z ]*PRIVATE KEY-----
+-pgp-private-key|-----BEGIN PGP PRIVATE KEY BLOCK-----
+-aws-access-key|(AKIA|ASIA)[0-9A-Z]{16}
+-github-token|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{22,}
+-slack-token|xox[baprs]-[A-Za-z0-9-]{10,}
+-api-key|sk-[A-Za-z0-9_-]{20,}
+-stripe-key|[rs]k_live_[A-Za-z0-9]{20,}
+-google-api-key|AIza[0-9A-Za-z_-]{35}'
+-
+-# _g06_scan: reads `path:line:text` lines, prints `path:line <rule>` per hit. Never prints the text.
+-# One grep of every rule at once reads the stream; each rule then sorts only the lines that hit, so a
+-# large diff is read once and never held in a shell variable.
+-_g06_scan() {
+-  local any="" hits rule re
+-  while IFS='|' read -r rule re; do any="${any:+$any|}($re)"; done <<EOT
+-$_G06_RULES
+-EOT
+-  hits=$(grep -E -- "$any")
+-  [ -n "$hits" ] || return 0
++# _g06_rules HITS: `<label> <rule>` for each rule each kept scan line hits. Never prints the text.
++_g06_rules() {
++  local rule re
+   while IFS='|' read -r rule re; do
+-    printf '%s\n' "$hits" | grep -E -- "$re" | cut -d: -f1,2 | sed "s/\$/ $rule/"
++    printf '%s\n' "$1" | LC_ALL=C grep -a -E -- "^[^	]*	.*($re)" | LC_ALL=C cut -f1 | LC_ALL=C sed "s/\$/ $rule/"
+   done <<EOT
+ $_G06_RULES
+ EOT
+@@ -113,46 +198,49 @@ EOT
+   return 0
+ }
+ 
+-_g06_report() {
+-  local hits="$1" diff="$2"
++# _g06_finish OUT DIR ARGS...: votes on a walk's output OUT (plus any message scan lines): the
++# never_commit names, the rule hits, and a walk that did not finish. With no hit, gitleaks (when
++# installed) reads `git ARGS` again.
++_g06_finish() {
++  local out="$1" rc names hits
++  shift
++  rc=$(printf '%s\n' "$out" | LC_ALL=C sed -n "s/^$_G06_RC//p" | tail -n 1)
++  names=$(printf '%s\n' "$out" | LC_ALL=C sed -n "s/^$_G06_NAME//p" | LC_ALL=C awk '!s[$0]++')
++  hits=$(printf '%s\n' "$out" | LC_ALL=C grep -a -v -E "^($_G06_NAME|$_G06_RC)")
++  _g06_paths "$names"
+   if [ -n "$hits" ]; then
+-    vote deny G6 "possible secret, not committed or pushed: $(printf '%s\n' "$hits" | awk '!s[$0]++' | head -n 5 | paste -sd ';' - | sed 's/;/; /g')"
+-  elif command -v gitleaks >/dev/null 2>&1; then
+-    printf '%s\n' "$diff" | gitleaks stdin --no-banner --redact >/dev/null 2>&1
+-    [ $? -eq 1 ] && vote deny G6 "gitleaks reports a secret in this change; run gitleaks yourself to see where"
++    vote deny G6 "possible secret, not committed or pushed: $(_g06_rules "$hits" | LC_ALL=C awk '!s[$0]++' | head -n 5 | paste -sd ';' - | LC_ALL=C sed 's/;/; /g')"
+   fi
++  if [ "$rc" != 0 ]; then
++    vote ask G6 "secret scan did not finish in ${_G06_SECS} s (exit ${rc:-unknown}); check the change for secrets yourself"
++  elif [ -z "$hits" ] && command -v gitleaks >/dev/null 2>&1; then
++    with_timeout "$_G06_SECS" _g06_git "$@" | gitleaks stdin --no-banner --redact >/dev/null 2>&1
++    [ "${PIPESTATUS[1]}" = 1 ] && vote deny G6 "gitleaks reports a secret in this change; run gitleaks yourself to see where"
++  fi
++  return 0
+ }
+ 
+-# _g06_commit: the commit _g05_split just read. Scans the staged diff and the message; with -a or
+-# --pathspec-from-file also the unstaged diff, and with pathspecs (bare, -i or -o) the unstaged diff
+-# of those paths, because git commits their worktree content.
++# _g06_commit: the commit _g05_split just read. Scans the staged diff and the message. -a, -i, -o,
++# -p, --interactive, --pathspec-from-file and pathspecs commit worktree content, which G6 never
++# reads: they ask, and are denied under autopilot.
+ _g06_commit() {
+-  local dir="$_G05_DIR" toks t diff names msg wide=0 paths=()
++  local dir="$_G05_DIR" toks t why="" out msg args
+   toks=$(_g01_opts "$_G05_COMMIT_OPTS" "${_G05_ARGS[@]}")
+   while IFS= read -r t; do
+     case "$t" in
+-      --all | --pathspec-from-file=*) wide=1 ;;
+-      @*) paths+=("${t#@}") ;;
++      --all | --include | --only | --interactive | --patch | --pathspec-from-file=*) why=${t%%=*} ;;
++      @*) why="with a pathspec" ;;
+     esac
+   done <<EOT
+ $toks
+ EOT
+-  diff=$(_g06_git "$dir" diff --cached "${_G06_DIFF[@]}")
+-  names=$(_g06_git "$dir" diff --cached --name-only)
+-  if [ "$wide" = 1 ]; then
+-    diff="$diff
+-$(_g06_git "$dir" diff "${_G06_DIFF[@]}")"
+-    names="$names
+-$(_g06_git "$dir" diff --name-only)"
+-  elif [ ${#paths[@]} -gt 0 ]; then
+-    diff="$diff
+-$(_g06_git "$dir" diff "${_G06_DIFF[@]}" -- "${paths[@]}")"
+-    names="$names
+-$(_g06_git "$dir" diff --name-only -- "${paths[@]}")"
+-  fi
++  [ -n "$why" ] && _g06_unscanned "kern scans only staged content; git commit $why commits worktree content it does not read"
++  args=(diff --cached "${_G06_DIFF[@]}" --diff-filter=d)
+   msg=$(_g05_message "$dir" "$toks" raw)
+-  _g06_paths "$names"
+-  _g06_report "$( { printf '%s\n' "$diff" | _g06_added; _g06_msg "commit message" "$msg"; } | _g06_scan)" "$diff"
++  out=$(_g06_walk "$dir" "${args[@]}")
++  out="$out
++$(_g06_msg "commit message" "$msg" | _g06_keep)"
++  _g06_finish "$out" "$dir" "${args[@]}"
+ }
+ 
+ # _g06_remote DIR: the remote a push with no repository argument goes to: branch.<b>.pushRemote,
+@@ -160,25 +248,26 @@ $(_g06_git "$dir" diff --name-only -- "${paths[@]}")"
+ _g06_remote() {
+   local b r
+   b=$(current_branch "$1") || b=""
+-  if [ -n "$b" ] && r=$(git -C "$1" config "branch.$b.pushRemote" 2>/dev/null); then
++  if [ -n "$b" ] && r=$(_g06_git "$1" config "branch.$b.pushRemote"); then
+     printf '%s\n' "$r"
+-  elif r=$(git -C "$1" config remote.pushDefault 2>/dev/null); then
++  elif r=$(_g06_git "$1" config remote.pushDefault); then
+     printf '%s\n' "$r"
+-  elif [ -n "$b" ] && r=$(git -C "$1" config "branch.$b.remote" 2>/dev/null); then
++  elif [ -n "$b" ] && r=$(_g06_git "$1" config "branch.$b.remote"); then
+     printf '%s\n' "$r"
+   else
+     printf 'origin\n'
+   fi
+ }
+ 
+-# _g06_push: the push _g05_split just read. Scans every commit it sends that the target remote's
+-# tracking refs do not hold (`<srcs> --not --remotes=<remote>`), merges diffed against each parent
+-# (-m) so content added in a merge is seen, and their messages. Sources: each refspec's source, all
+-# branches for --all, --branches, --mirror or a pattern, tags for --tags or --mirror, else HEAD; a
+-# source that does not resolve asks. The target is the repository argument, else the remote git
+-# would pick; one that `git remote` does not list, such as a URL, excludes nothing.
++# _g06_push: the push _g05_split just read. Scans, in one bounded walk, every commit it sends that
++# the target remote's tracking refs do not hold, merges as combined diffs, and their messages.
++# Sources: each refspec's source; all branches for --all, --branches, --mirror, a pattern, `:`, or
++# no refspec under push.default=matching or remote.<r>.push; tags for --tags or --mirror; else HEAD.
++# A source that does not resolve asks. The target is the repository argument, else the remote git
++# would pick. When it has no tracking refs (a new remote, a URL) the walk skips commits on every
++# remote, and asks: that history was not rescanned for this target.
+ _g06_push() {
+-  local dir="$_G05_DIR" toks t r src sha remote="" have=0 revs=() refs=() ex=() diff names msgs
++  local dir="$_G05_DIR" toks t r src sha remote="" have=0 other=0 revs=() refs=() ex=() args out
+   toks=$(_g01_opts "$_G01_PUSH_OPTS" "${_G05_ARGS[@]}")
+   while IFS= read -r t; do
+     case "$t" in
+@@ -191,14 +280,17 @@ _g06_push() {
+   done <<EOT
+ $toks
+ EOT
++  [ -n "$remote" ] || remote=$(_g06_remote "$dir")
+   for r in "${refs[@]}"; do
+     r=${r#+}
++    case "$r" in :) revs+=(--branches); continue ;; esac
+     src=${r%%:*}
+     case "$src" in
+       "") continue ;;
+       *'*'*) revs+=(--branches); continue ;;
++      -*) sha="" ;;
++      *) sha=$(_g06_git "$dir" rev-parse --verify -q "$src^{commit}") ;;
+     esac
+-    case "$src" in -*) sha="" ;; *) sha=$(git -C "$dir" rev-parse --verify -q "$src^{commit}" 2>/dev/null) ;; esac
+     if [ -n "$sha" ]; then
+       revs+=("$sha")
+     else
+@@ -206,17 +298,24 @@ EOT
+     fi
+   done
+   if [ ${#refs[@]} -eq 0 ] && [ ${#revs[@]} -eq 0 ]; then
+-    sha=$(git -C "$dir" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null) && revs+=("$sha")
++    if [ "$(_g06_git "$dir" config push.default)" = matching ] ||
++      [ -n "$(_g06_git "$dir" config --get-all "remote.$remote.push")" ]; then
++      revs+=(--branches)
++    elif sha=$(_g06_git "$dir" rev-parse --verify -q 'HEAD^{commit}'); then
++      revs+=("$sha")
++    fi
+   fi
+   [ ${#revs[@]} -gt 0 ] || return 0
+-  [ -n "$remote" ] || remote=$(_g06_remote "$dir")
+-  if word_has "$(git -C "$dir" remote 2>/dev/null)" "$remote"; then
+-    case "$remote" in *'*'* | *'?'* | *'['*) ;; *) ex=(--not "--remotes=$remote") ;; esac
++  if word_has "$(_g06_git "$dir" remote)" "$remote" && case "$remote" in *'*'* | *'?'* | *'['*) false ;; esac &&
++    [ -n "$(_g06_git "$dir" for-each-ref --count=1 --format=x "refs/remotes/$remote/")" ]; then
++    ex=(--not "--remotes=$remote")
++  else
++    ex=(--not --remotes)
++    [ -n "$(_g06_git "$dir" for-each-ref --count=1 --format=x refs/remotes/)" ] && other=1
+   fi
+-  diff=$(_g06_git "$dir" log -p -m "${_G06_DIFF[@]}" --format= "${revs[@]}" "${ex[@]}")
+-  names=$(_g06_git "$dir" log -m --name-only --format= "${revs[@]}" "${ex[@]}" | sort -u)
+-  msgs=$(_g06_git "$dir" log --no-show-signature --format='kern-msg %h%n%B' "${revs[@]}" "${ex[@]}" |
+-    awk '/^kern-msg / { c = $2; n = 0; next } { n++; print "commit " c " message:" n ":" $0 }')
+-  _g06_paths "$names"
+-  _g06_report "$( { printf '%s\n' "$diff" | _g06_added; printf '%s\n' "$msgs"; } | _g06_scan)" "$diff"
++  args=(log --no-show-signature -p --cc "${_G06_DIFF[@]}" '--format=%x1e%h%n%B%x1f' "${revs[@]}" "${ex[@]}")
++  out=$(_g06_walk "$dir" "${args[@]}")
++  _g06_finish "$out" "$dir" "${args[@]}"
++  [ "$other" = 1 ] && _g06_unscanned "history already on another remote was not rescanned for $remote"
++  return 0
+ }
+diff --git a/tests/hooks/g05-g06-commit.bats b/tests/hooks/g05-g06-commit.bats
+index 003ea73..a1e8d54 100644
+--- a/tests/hooks/g05-g06-commit.bats
++++ b/tests/hooks/g05-g06-commit.bats
+@@ -41,23 +41,24 @@ policy() {
+   printf 'commit.convention: "^CDS-[0-9]+: "\n%b' "${1-}" >"$R/.claude/kern.local.yml"
+ }
+ 
+-# never_allowed CMD...: G5 denies each CMD under autopilot and does not allow it under
+-# commit.policy auto. EXTRA (printf %b) is added to the settings.
++# never_allowed CMD...: G5 denies each CMD under autopilot, and does not allow the first two under
++# commit.policy auto: both modes reach the same _g05_proven, so the second pass is representative.
++# EXTRA (printf %b) is added to the settings.
+ never_allowed() {
+   local c
+   policy "commit.policy: auto\n${EXTRA-}"
+   set_autopilot off
+-  for c in "$@"; do expect '!allow' g05 "$c" || return 1; done
++  for c in "${@:1:2}"; do expect '!allow' g05 "$c" || return 1; done
+   set_autopilot on
+   for c in "$@"; do expect deny g05 "$c" || return 1; done
+ }
+ 
+-# allowed CMD...: G5 allows each CMD under autopilot and under commit.policy auto.
++# allowed CMD...: G5 allows each CMD under autopilot, and the first two under commit.policy auto.
+ allowed() {
+   local c
+   policy 'commit.policy: auto\n'
+   set_autopilot off
+-  for c in "$@"; do expect allow g05 "$c" || return 1; done
++  for c in "${@:1:2}"; do expect allow g05 "$c" || return 1; done
+   policy
+   set_autopilot on
+   for c in "$@"; do expect allow g05 "$c" || return 1; done
+@@ -351,18 +352,23 @@ CDS-2465 in the body'"
+   expect deny g05,g06 "git add -- id_rsa && git commit -m 'CDS-2465: key'"
+ }
+ 
+-@test "G6: a commit of paths, -i, -o or -a in a cluster scans their unstaged content" {
++@test "G6: a commit of paths, -i, -o, -p or -a in any spelling asks: kern scans only staged content" {
+   printf 'ok\n' >"$R/k.txt"
+   git -C "$R" add k.txt
+   git -C "$R" commit -q -m 'CDS-2465: k'
+   printf '%s\n' "$KEY" >>"$R/k.txt"
+-  local c
+-  for c in "git commit -m 'CDS-2465: k' -- k.txt" "git commit -m 'CDS-2465: k' k.txt" \
+-    "git commit -i k.txt -m 'CDS-2465: k'" "git commit -o k.txt -m 'CDS-2465: k'" \
+-    "git commit -qa -m 'CDS-2465: k'" "git commit -sam 'CDS-2465: k'"; do
+-    expect deny g06 "$c" || return 1
+-    [[ "$output" == *"k.txt:2 private-key"* ]] || false
++  local c cmds=(
++    "git commit -m 'CDS-2465: k' -- k.txt" "git commit -m 'CDS-2465: k' k.txt"
++    "git commit -i k.txt -m 'CDS-2465: k'" "git commit -o k.txt -m 'CDS-2465: k'"
++    "git commit -qa -m 'CDS-2465: k'" "git commit -sam 'CDS-2465: k'" "git commit -p -m 'CDS-2465: k'"
++    "git commit --pathspec-from-file=list.txt -m 'CDS-2465: k'"
++  )
++  for c in "${cmds[@]}"; do
++    expect ask g06 "$c" || return 1
++    [[ "$output" == *"kern scans only staged content"* ]] || false
+   done
++  set_autopilot on
++  for c in "${cmds[@]}"; do expect deny g06 "$c" || return 1; done
+ }
+ 
+ @test "G6: a commit in another repository is denied under autopilot" {
+@@ -425,10 +431,30 @@ CDS-2465 in the body'"
+   git -C "$R" remote add public "$R.public"
+   expect none g06 "git push origin CDS-2465/replace-minio"
+   expect none g06 "git push"
++  expect ask g06 "git push public CDS-2465/replace-minio"
++  [[ "$output" == *"history already on another remote was not rescanned for public"* ]] || false
++  set_autopilot on
++  expect deny g06 "git push public CDS-2465/replace-minio"
++  set_autopilot off
++  git -C "$R" push -q public main
+   expect deny g06 "git push public CDS-2465/replace-minio"
+   [[ "$output" == *"s1.txt:1 private-key"* ]] || false
+ }
+ 
++@test "G6: with no tracking refs anywhere the whole history is scanned and nothing asks" {
++  git -C "$R" remote set-head origin -d
++  git -C "$R" update-ref -d refs/remotes/origin/main
++  printf 'clean\n' >"$R/c.txt"
++  git -C "$R" add c.txt
++  git -C "$R" commit -q -m 'CDS-2465: c'
++  expect none g06 "git push -u origin CDS-2465/replace-minio"
++  printf '%s\n' "$KEY" >"$R/k.txt"
++  git -C "$R" add k.txt
++  git -C "$R" commit -q -m 'CDS-2465: k'
++  expect deny g06 "git push -u origin CDS-2465/replace-minio"
++  [[ "$output" == *"k.txt:1 private-key"* ]] || false
++}
++
+ @test "G6: a push of another branch scans that branch" {
+   git -C "$R" switch -q -c CDS-2465/side main
+   printf '%s\n' "$KEY" >"$R/s2.txt"
+@@ -510,3 +536,236 @@ EOT
+   [[ "$output" == *"not scanned"* ]] || false
+   expect ask g06 "git push origin no-such-branch"
+ }
++
++@test "G6: attributes, diff.relative and invalid UTF-8 cannot hide an added line" {
++  printf '%s\n' "$KEY" >"$R/id_rsa"
++  git -C "$R" add id_rsa
++  printf 'id_rsa -diff\n' >"$R/.gitattributes"
++  expect deny g06 "git commit -m 'CDS-2465: key'"
++  [[ "$output" == *"id_rsa:1 private-key"* ]] || false
++  rm "$R/.gitattributes"
++  printf '* -diff\n' >"$R/.git/info/attributes"
++  expect deny g06 "git commit -m 'CDS-2465: key'"
++  printf '* binary\n' >"$R/.git/info/attributes"
++  expect deny g06 "git commit -m 'CDS-2465: key'"
++  rm "$R/.git/info/attributes"
++  mkdir -p "$R/sub"
++  git -C "$R" config diff.relative true
++  CWD="$R/sub" expect deny g06 "git commit -m 'CDS-2465: key'"
++  [[ "$output" == *"id_rsa:1 private-key"* ]] || false
++  git -C "$R" config --unset diff.relative
++  git -C "$R" reset -q
++  printf 'x\377y = AKIAABCDEFGHIJKLMNOP\n' >"$R/k.txt"
++  git -C "$R" add k.txt
++  expect deny g06 "git commit -m 'CDS-2465: key'"
++  [[ "$output" == *"k.txt:1 aws-access-key"* ]] || false
++}
++
++@test "G6: repo-configured programs never run in a scan" {
++  printf '#!/bin/sh\necho "$0 $*" >>"%s/ran"\ncat >/dev/null 2>&1\nexit 1\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/evil"
++  chmod +x "$BATS_TEST_TMPDIR/evil"
++  printf 'ok\n' >"$R/k.txt"
++  git -C "$R" add k.txt
++  local tree parent sha
++  tree=$(git -C "$R" write-tree)
++  parent=$(git -C "$R" rev-parse HEAD)
++  sha=$(printf 'tree %s\nparent %s\nauthor T <t@example.com> 1700000000 +0000\ncommitter T <t@example.com> 1700000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n -----END PGP SIGNATURE-----\n\nCDS-2465: signed\n' "$tree" "$parent" |
++    git -C "$R" hash-object -t commit -w --stdin)
++  git -C "$R" update-ref refs/heads/CDS-2465/replace-minio "$sha"
++  printf 'more\n' >>"$R/k.txt"
++  git -C "$R" config log.showSignature true
++  git -C "$R" config gpg.program "$BATS_TEST_TMPDIR/evil"
++  git -C "$R" config core.fsmonitor "$BATS_TEST_TMPDIR/evil"
++  printf 'CDS-2465: m\n' >"$R/msg.txt"
++  expect '!allow' g06 "git push -u origin CDS-2465/replace-minio"
++  expect '!allow' g06 "git commit -m 'CDS-2465: k' -- k.txt"
++  expect '!allow' g06 "git commit -qa -m 'CDS-2465: k'"
++  set_autopilot on
++  expect allow g05 "git commit -F msg.txt"
++  [ ! -e "$BATS_TEST_TMPDIR/ran" ]
++}
++
++@test "G6: a push walk that does not finish asks" {
++  local real
++  real=$(command -v git)
++  mkdir -p "$BATS_TEST_TMPDIR/slow"
++  printf '#!/bin/bash\ncase " $* " in *" log "*" -p "*) exec sleep 5 ;; esac\nexec "%s" "$@"\n' "$real" >"$BATS_TEST_TMPDIR/slow/git"
++  chmod +x "$BATS_TEST_TMPDIR/slow/git"
++  printf 'ok\n' >"$R/s.txt"
++  git -C "$R" add s.txt
++  git -C "$R" commit -q -m 'CDS-2465: s'
++  export KERN_SCAN_SECS=1
++  PATH="$BATS_TEST_TMPDIR/slow:$PATH"
++  expect ask g06 "git push -u origin CDS-2465/replace-minio"
++  [[ "$output" == *"secret scan did not finish"* ]] || false
++  set_autopilot on
++  expect deny g06 "git push -u origin CDS-2465/replace-minio"
++}
++
++@test "G6: a clean merge of main brings in nothing new: no vote" {
++  git -C "$R" switch -q main
++  printf '%s\n' "$KEY" >"$R/old.txt"
++  printf 'x\n' >"$R/old.db"
++  git -C "$R" add old.txt old.db
++  git -C "$R" commit -q -m 'CDS-2465: already public'
++  git -C "$R" push -q origin main
++  git -C "$R" switch -q CDS-2465/replace-minio
++  printf 'mine\n' >"$R/mine.txt"
++  git -C "$R" add mine.txt
++  git -C "$R" commit -q -m 'CDS-2465: mine'
++  git -C "$R" merge -q --no-ff --no-edit main
++  policy 'never_commit: *.db\n'
++  expect none g06 "git push -u origin CDS-2465/replace-minio"
++}
++
++@test "G6: never_commit reads staged names: a removal passes, a non-ASCII name is caught" {
++  printf 'X=1\n' >"$R/.env"
++  git -C "$R" add -f .env
++  git -C "$R" commit -q -m 'CDS-2465: env'
++  policy 'never_commit: .env*, *.db\n'
++  git -C "$R" rm -q --cached .env
++  expect none g06 "git commit -m 'CDS-2465: untrack env'"
++  git -C "$R" push -q -u origin CDS-2465/replace-minio
++  git -C "$R" commit -q -m 'CDS-2465: untrack env'
++  expect none g06 "git push"
++  git -C "$R" reset -q
++  printf 'x\n' >"$R/d$(printf '\303\244')t.db"
++  git -C "$R" add -- "d$(printf '\303\244')t.db"
++  expect deny g06 "git commit -m 'CDS-2465: db'"
++  [[ "$output" == *"never_commit paths staged: d"*"t.db"* ]] || false
++}
++
++@test "G6: sk- needs a non-word character before it, and file names are not scanned" {
++  printf 'task-abcdefghijklmnopqrstuvwxyz0123\n' >"$R/a.txt"
++  printf 'clean\n' >"$R/sk-abcdefghijklmnopqrstuvwxyz0123.txt"
++  git -C "$R" add a.txt sk-abcdefghijklmnopqrstuvwxyz0123.txt
++  expect none g06 "git commit -m 'CDS-2465: a'"
++  printf 'sk-abcdefghijklmnopqrstuvwxyz0123\nkey=sk-abcdefghijklmnopqrstuvwxyz0123\n' >"$R/b.txt"
++  git -C "$R" add b.txt
++  expect deny g06 "git commit -m 'CDS-2465: b'"
++  [[ "$output" == *"b.txt:1 api-key; b.txt:2 api-key"* ]] || false
++}
++
++@test "G6: after cd, --git-dir, --work-tree, GIT_DIR= or GIT_INDEX_FILE= it could not scan" {
++  mkdir -p "$R/sub"
++  local c cmds=(
++    "cd sub && git commit -m 'CDS-2465: x'" "git --git-dir=.git commit -m 'CDS-2465: x'"
++    "git --work-tree=. commit -m 'CDS-2465: x'" "GIT_DIR=.git git commit -m 'CDS-2465: x'"
++    "GIT_INDEX_FILE=.git/index git commit -m 'CDS-2465: x'" "export GIT_DIR=.git; git push origin HEAD"
++    "pushd sub && git push"
++  )
++  for c in "${cmds[@]}"; do
++    expect ask g06 "$c" || return 1
++    [[ "$output" == *"could not scan"* ]] || false
++  done
++}
++
++@test "G6: push : and a matching push scan every branch" {
++  git -C "$R" switch -q -c CDS-2465/side main
++  printf '%s\n' "$KEY" >"$R/s2.txt"
++  git -C "$R" add s2.txt
++  git -C "$R" commit -q -m 'CDS-2465: s2'
++  git -C "$R" switch -q CDS-2465/replace-minio
++  expect deny g06 "git push origin :"
++  [[ "$output" == *"s2.txt:1 private-key"* ]] || false
++  git -C "$R" config push.default matching
++  expect deny g06 "git push"
++  expect deny g06 "git push origin"
++  git -C "$R" config --unset push.default
++  git -C "$R" config remote.origin.push 'refs/heads/*:refs/heads/*'
++  expect deny g06 "git push"
++}
++
++@test "G6: a message line that looks like a diff is still read as the message" {
++  git -C "$R" commit -q --allow-empty -m "CDS-2465: x
++
++diff --git a/f b/f
+++++ b/f
++key AKIAABCDEFGHIJKLMNOP"
++  expect deny g06 "git push -u origin CDS-2465/replace-minio"
++  [[ "$output" == *" message:5 aws-access-key"* ]] || false
++}
++
++@test "G6: replace refs and log.showRoot cannot hide pushed content" {
++  printf '%s\n' "$KEY" >"$R/k.txt"
++  git -C "$R" add k.txt
++  git -C "$R" commit -q -m 'CDS-2465: key'
++  local bad clean
++  bad=$(git -C "$R" rev-parse HEAD)
++  clean=$(git -C "$R" commit-tree "$(git -C "$R" rev-parse HEAD~1^{tree})" -p HEAD~1 -m 'CDS-2465: key')
++  git -C "$R" replace "$bad" "$clean"
++  expect deny g06 "git push -u origin CDS-2465/replace-minio"
++  [[ "$output" == *"k.txt:1 private-key"* ]] || false
++  N="$BATS_TEST_TMPDIR/fresh"
++  git init -q -b main "$N"
++  git -C "$N" config user.email t@example.com
++  git -C "$N" config user.name T
++  printf '%s\n' "$KEY" >"$N/root.txt"
++  git -C "$N" add root.txt
++  git -C "$N" commit -q -m 'CDS-1: root'
++  git init -q --bare "$N.origin"
++  git -C "$N" remote add origin "$N.origin"
++  git -C "$N" config log.showRoot false
++  CWD="$N" expect deny g06 "git push -u origin main"
++  [[ "$output" == *"root.txt:1 private-key"* ]] || false
++}
++
++@test "G5: attribution variants and a --trailer are denied, interactive and default policy" {
++  local c
++  for c in "git commit -m 'CDS-2465: x' -m 'Assisted-by: Claude'" \
++    "git commit -m 'CDS-2465: x' -m 'Generated-by = Anthropic model'" \
++    "git commit -m 'CDS-2465: x' -m 'co-authored-by :claude'" \
++    "git commit -m 'CDS-2465: x' -m 'CO-AUTHORED-BY=Claude'" \
++    "git commit -m 'CDS-2465: x' --trailer 'Co-authored-by: Claude <noreply@anthropic.com>'" \
++    "git commit -m 'CDS-2465: x' --trailer 'Assisted-by=Claude'"; do
++    expect deny g05 "$c" || return 1
++    [[ "$output" == *"attribution"* ]] || false
++  done
++}
++
++@test "G5: the ticket id must be followed by a non-alphanumeric character or the end" {
++  set_autopilot on
++  expect deny g05 "git commit -m 'CDS-24650: x'"
++  [[ "$output" == *"subject lacks the ticket id CDS-2465"* ]] || false
++  policy 'commit.convention: ".*"\n'
++  expect deny g05 "git commit -m 'fix CDS-2465a'"
++  expect allow g05 "git commit -m '[CDS-2465] x'"
++  expect allow g05 "git commit -m 'fix for CDS-2465'"
++}
++
++@test "G5: git add of a word that expands is wide" {
++  mkdir -p "$R/src"
++  local c broad=("git add {.,src}" "git add .{,}" "git add \`pwd\`" "git add src/{a,b}.ts")
++  for c in "${broad[@]}"; do expect ask g05 "$c" || return 1; done
++  set_autopilot on
++  for c in "${broad[@]}"; do expect deny g05 "$c" || return 1; done
++}
++
++@test "G5: git add of the worktree root spelled in another case is wide" {
++  local up
++  up=$(printf '%s' "$R" | tr '[:lower:]' '[:upper:]')
++  [ -d "$up" ] || skip "case-sensitive file system"
++  expect ask g05 "git add $up"
++}
++
++@test "git aliases: one for a guarded command or a shell asks in G1, G5 and G6; others pass" {
++  git -C "$R" config alias.ci commit
++  git -C "$R" config alias.st status
++  git -C "$R" config alias.x '!sh -c "echo hi"'
++  git -C "$R" config alias.pu 'push origin HEAD'
++  git -C "$R" config alias.c2 ci
++  local g c cmds=(
++    "git -c alias.zz=commit zz -m 'CDS-2465: x'" "git ci -m 'CDS-2465: x'" "git x" "git pu" "git c2 -m x"
++    "git -c alias.zz=push zz" "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.yy GIT_CONFIG_VALUE_0=push git yy"
++  )
++  for g in g01 g05 g06; do
++    for c in "${cmds[@]}"; do
++      expect ask "$g" "$c" || return 1
++      [[ "$output" == *"alias"* ]] || false
++    done
++    expect none "$g" "git st" || return 1
++  done
++  set_autopilot on
++  expect deny g01,g05,g06 "git ci -m 'CDS-2465: x'"
++  expect deny g05 "git -c alias.ci=commit commit -m 'CDS-2465: x'"
++}

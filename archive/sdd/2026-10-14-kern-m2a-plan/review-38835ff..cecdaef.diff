@@ -1,0 +1,497 @@
+diff --git a/evals/cases/row-self-review.json b/evals/cases/row-self-review.json
+index 86a3316..bd0f4e5 100644
+--- a/evals/cases/row-self-review.json
++++ b/evals/cases/row-self-review.json
+@@ -33,7 +33,7 @@
+       "expectations": [
+         "Reads skills/self-review/SKILL.md",
+         "Runs floor-scan and claim-check on the package",
+-        "Ends with one verdict: ready, fix first, rebase first or split"
++        "Ends with one verdict: split, fix first, rebase first or ready"
+       ]
+     }
+   ]
+diff --git a/scripts/lib/kernel-rows.mjs b/scripts/lib/kernel-rows.mjs
+index 5b25194..060361b 100644
+--- a/scripts/lib/kernel-rows.mjs
++++ b/scripts/lib/kernel-rows.mjs
+@@ -1,15 +1,27 @@
+ // Kernel routing rows: "| <when> | Read {KERN}/<skill>/SKILL.md |" or "| <when> | Read {ROOT}/kernel/<name>.md |".
+-// The rows live in kernel/kernel.md and in kernel/routes.md, the routed file the kernel points to.
+-export function kernelRows(text) {
+-  const rows = [];
+-  for (const line of (text || '').split(/\r?\n/)) {
+-    const m = line.match(/^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/);
+-    if (!m) continue;
+-    const target = m[2].match(/\{KERN\}\/([a-z0-9-]+)\/SKILL\.md/) || m[2].match(/kernel\/([a-z0-9-]+)\.md/);
+-    if (target) rows.push({ when: m[1], route: target[1] });
+-  }
+-  return rows;
++// The rows live in kernel/kernel.md and in kernel/routes.md, the routed file the kernel points to. Lint rule 6, rule 12,
++// the path tier and route-eval all read rows through parseRow, so they agree on which lines are rows.
++const ROW = /^\|([^|\n]*)\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/;
++
++// parseRow(line): null for a line that is not a route row, { error } for a row in another form, else
++// { when, base, path, route }. route is the skill or kernel file name, or null for a target with no route name.
++export function parseRow(line) {
++  if (!line.trimStart().startsWith('|') || !/\{(KERN|ROOT)\}\//.test(line)) return null;
++  const m = line.match(ROW);
++  if (!m) return { error: `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}` };
++  const [, when, base, path] = m;
++  if (base === 'ROOT' && path === 'kernel/routes.md') return { error: 'kernel/routes.md is named in the Routing rule, not routed by a row' };
++  const name = base === 'KERN' ? path.match(/^([a-z0-9-]+)\/SKILL\.md$/) : path.match(/^kernel\/([a-z0-9-]+)\.md$/);
++  return { when: when.trim(), base, path, route: name ? name[1] : null };
+ }
+ 
++// A row in another form ({ error }) has no route, so it never counts as a row.
++const routeRows = (text) => (text || '').split(/\r?\n/).map(parseRow).filter((r) => r && r.route);
++
++export const kernelRows = (text) => routeRows(text).map((r) => ({ when: r.when, route: r.route }));
++
++// routedSkills(text): the skills a row routes to by {KERN}; a Read in prose routes nothing.
++export const routedSkills = (text) => new Set(routeRows(text).filter((r) => r.base === 'KERN').map((r) => r.route));
++
+ // routeText(model): the kernel and its routed file, joined; every check that reads rows reads this.
+ export const routeText = (model) => `${model.kernelText}\n${model.routesText || ''}`;
+diff --git a/scripts/lib/lint-rules.mjs b/scripts/lib/lint-rules.mjs
+index 79f3569..097ab4a 100644
+--- a/scripts/lib/lint-rules.mjs
++++ b/scripts/lib/lint-rules.mjs
+@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
+ import { tmpdir } from 'node:os';
+ import { spawnSync } from 'node:child_process';
+ import { parseFrontmatter } from './frontmatter.mjs';
+-import { kernelRows } from './kernel-rows.mjs';
++import { kernelRows, parseRow, routedSkills } from './kernel-rows.mjs';
+ 
+ export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
+ export const AGENT_KEYS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'color', 'maxTurns', 'skills', 'memory', 'background', 'isolation']);
+@@ -67,7 +67,7 @@ export function loadModel(root) {
+   const kernelText = existsSync(kernelPath) ? readFileSync(kernelPath, 'utf8') : '';
+   const routesPath = join(root, 'kernel', 'routes.md');
+   const routesText = existsSync(routesPath) ? readFileSync(routesPath, 'utf8') : '';
+-  const routed = new Set([...`${kernelText}\n${routesText}`.matchAll(/Read \{KERN\}\/([a-z0-9-]+)\/SKILL\.md/g)].map((m) => m[1]));
++  const routed = routedSkills(`${kernelText}\n${routesText}`);
+   for (const s of skills) s.tier = s.data['disable-model-invocation'] !== 'true' ? 'auto' : routed.has(s.name) ? 'path' : 'slash';
+   const cases = {};
+   const casesDir = join(root, 'evals', 'cases');
+@@ -196,11 +196,10 @@ export const RULES = [
+       out.push(err(6, 'kernel/kernel.md', 'kernel/routes.md holds route rows, but the kernel never names {ROOT}/kernel/routes.md, so no route there is reached'));
+     }
+     for (const [src, text] of sources) for (const line of text.split('\n')) {
+-      if (!line.trimStart().startsWith('|') || !/\{(KERN|ROOT)\}\//.test(line)) continue;
+-      const m = line.match(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/);
+-      if (!m) { out.push(err(6, src, `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}`)); continue; }
+-      const target = m[1] === 'KERN' ? join('skills', m[2]) : m[2];
+-      if (target === 'kernel/routes.md') { out.push(err(6, src, 'kernel/routes.md is named in the Routing rule, not routed by a row')); continue; }
++      const row = parseRow(line);
++      if (!row) continue;
++      if (row.error) { out.push(err(6, src, row.error)); continue; }
++      const target = row.base === 'KERN' ? join('skills', row.path) : row.path;
+       const file = join(model.root, target);
+       if (!existsSync(file)) { out.push(err(6, src, `route ${target} does not exist`)); continue; }
+       const body = parseFrontmatter(readFileSync(file, 'utf8')).body.replace(/\r\n/g, '\n');
+@@ -222,21 +221,27 @@ export const RULES = [
+     const out = [];
+     if (model.routesText.length > 1500) out.push(err(7, 'kernel/routes.md', `routed file ${model.routesText.length} chars, limit 1,500; every routed task reads it`));
+     if (!existsSync(join(model.root, 'hooks', 'session-start'))) return out;
++    const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
++    const settings = ['kern.local.yml', 'kern.yml'].filter((f) => existsSync(join(fixture, f)));
++    if (!settings.length) out.push(err(7, 'tests/fixtures/projects/long-settings', 'no kern.local.yml or kern.yml, so the longest-settings render would be measured with defaults'));
+     const tmp = mkdtempSync(join(tmpdir(), 'kern-rule7-'));
+     try {
+       const repo = join(tmp, 'repo');
+       mkdirSync(join(repo, '.claude'), { recursive: true });
+       const init = spawnSync('git', ['init', '-q', repo]);
+       if (init.status !== 0) out.push(err(7, 'hooks/session-start', `git init exited ${init.status}, so the kernel was not measured in a repository`));
+-      const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
+-      for (const f of ['kern.local.yml', 'kern.yml']) if (existsSync(join(fixture, f))) copyFileSync(join(fixture, f), join(repo, '.claude', f));
++      for (const f of settings) copyFileSync(join(fixture, f), join(repo, '.claude', f));
+       const env = { ...process.env, HOME: join(tmp, 'home'), CLAUDE_PLUGIN_DATA: join(tmp, 'data') };
+       const run = (name, payload) => spawnSync('bash', [join(model.root, 'hooks', name)], { input: JSON.stringify(payload), env, encoding: 'utf8' });
+       const hook = (name, payload) => run(name, payload).stdout || '';
+       const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
+-      const ran = (r) => r.status === 0 && (r.stdout || '').trim() !== '';
++      // A render is the kernel only when it exits 0 and carries the header line that defines {ROOT}. "kern did not
++      // load", or any other output, is not a kernel, and its length is not a measurement.
++      const header = `kern at ${model.root}. `;
++      const rendered = (r) => r.status === 0 && (r.stdout || '').split('\n').some((l) => l.startsWith(header));
++      const failed = (r) => `exited ${r.status} with ${(r.stdout || '').length} chars of output${r.status === 0 ? ' and no "kern at <root>." header line' : ''}`;
+       const start = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
+-      if (!ran(start)) out.push(err(7, 'hooks/session-start', `exited ${start.status} with ${(start.stdout || '').length} chars of output, so the kernel was not measured`));
++      if (!rendered(start)) out.push(err(7, 'hooks/session-start', `${failed(start)}, so the kernel was not measured`));
+       const kernel = norm(start.stdout || '');
+       const terse = existsSync(join(model.root, 'modes', 'terse.md')) ? readFileSync(join(model.root, 'modes', 'terse.md'), 'utf8').length : 0;
+       if (kernel.length > 4000) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 4,000`));
+@@ -245,7 +250,7 @@ export const RULES = [
+       // description, the text every session carries.
+       for (const f of ['kern.local.yml', 'kern.yml']) rmSync(join(repo, '.claude', f), { force: true });
+       const again = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
+-      if (ran(start) && !ran(again)) out.push(err(7, 'hooks/session-start', `exited ${again.status} with no project settings, so the standing cost was not measured`));
++      if (rendered(start) && !rendered(again)) out.push(err(7, 'hooks/session-start', `${failed(again)} with no project settings, so the standing cost was not measured`));
+       const bare = norm(again.stdout || '');
+       const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
+       if (bare.length + desc > 4800) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 4,800`));
+@@ -419,6 +424,8 @@ export const RULES = [
+       // A negative marked "grader": "model" is checked by M2b's model-graded runner, not here; it does not count.
+       const nc = c.trigger?.negative?.filter((n) => n.grader !== 'model').length ?? 0;
+       const ec = c.evals?.length ?? 0;
++      const flagged = (c.trigger?.positive || []).filter((x) => x.grader !== undefined).length;
++      if (flagged) out.push(err(12, path, `evals/cases/${key}.json has ${flagged} positive prompt(s) with "grader"; only a negative can be model-graded`));
+       if (pc < 3 || nc < 2 || ec < 1) out.push(err(12, path, `evals/cases/${key}.json has ${pc} positive, ${nc} negative, ${ec} behavioural; needs 3, 2, 1`));
+     };
+     for (const s of model.skills.filter((x) => !x.error && x.tier === 'auto')) need(s.name, rel(model, s.file));
+diff --git a/scripts/route-eval.mjs b/scripts/route-eval.mjs
+index bf08eb0..298e4e2 100644
+--- a/scripts/route-eval.mjs
++++ b/scripts/route-eval.mjs
+@@ -24,9 +24,6 @@ export function targets(root) {
+   return [...skills, ...rows, ...distractors];
+ }
+ 
+-// A kernel row and the skill it routes to are one owner: either ranking first is a hit.
+-const ownerOf = (name) => name.replace(/^row-/, '');
+-
+ // A negative marked "grader": "model" is one the lexical ranker cannot judge, such as a question about the words a
+ // row uses. It is listed on every run, left out of the checks and minimums here, and checked by M2b's model-graded runner.
+ const modelGraded = (n) => n.grader === 'model';
+@@ -34,14 +31,35 @@ const modelGraded = (n) => n.grader === 'model';
+ function loadCases(root) {
+   const dir = join(root, 'evals', 'cases');
+   if (!existsSync(dir)) return [];
+-  return readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => {
++  return readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => {
+     try { return { file: f, data: JSON.parse(readFileSync(join(dir, f), 'utf8')) }; }
+     catch (e) { return { file: f, parseError: e.message }; }
+   });
+ }
+ 
++// evals/heldout.json: a non-empty array of { owner, prompt }. Missing is an error only when a floor is set; malformed
++// always is. Returns null when there is nothing to rank.
++function loadHeldout(root, required, errors) {
++  const path = join(root, 'evals', 'heldout.json');
++  if (!existsSync(path)) {
++    if (required) errors.push('evals/heldout.json is missing, so the held-out floor cannot be checked');
++    return null;
++  }
++  let held;
++  try { held = JSON.parse(readFileSync(path, 'utf8')); }
++  catch (e) { errors.push(`evals/heldout.json: invalid JSON: ${e.message}`); return null; }
++  if (!Array.isArray(held) || !held.length) { errors.push('evals/heldout.json must be a non-empty array of { owner, prompt }'); return null; }
++  const bad = held.findIndex((h) => typeof h?.owner !== 'string' || typeof h?.prompt !== 'string');
++  if (bad >= 0) { errors.push(`evals/heldout.json entry ${bad} is not { owner, prompt }`); return null; }
++  return held;
++}
++
+ export function evaluate(root, { minRank1, minHeldout = null }) {
+   const all = targets(root);
++  // A kernel row and the skill it routes to are one owner: either ranking first is a hit. Only a row folds, by its
++  // kind, so a skill or distractor that happens to be named row-<x> stays its own owner.
++  const kinds = new Map(all.map((t) => [t.name, t.kind]));
++  const ownerOf = (name) => (kinds.get(name) === 'row' ? name.replace(/^row-/, '') : name);
+   const owners = all.filter((t) => t.kind !== 'distractor');
+   const corpus = buildCorpus(all);
+   const names = new Set(all.map((t) => t.name));
+@@ -113,19 +131,19 @@ export function evaluate(root, { minRank1, minHeldout = null }) {
+ 
+   const rank1Rate = positives ? Math.floor((rank1 / positives) * 100) : null;
+   if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the floor ${minRank1}%`);
++  if (minRank1 !== null && !positives) errors.push('no case positives to rank, so the rank-1 floor cannot be checked');
+ 
+   // Held-out organic prompts (evals/heldout.json), frozen by a test: never reworded to pass.
+   let heldoutRate = null;
+-  const hPath = join(root, 'evals', 'heldout.json');
+-  if (existsSync(hPath)) {
+-    const held = JSON.parse(readFileSync(hPath, 'utf8'));
++  const held = loadHeldout(root, minHeldout != null, errors);
++  if (held) {
+     let hits = 0;
+     for (const h of held) {
+       if (!owners.some((t) => ownerOf(t.name) === h.owner)) { errors.push(`heldout: no owner "${h.owner}" for "${h.prompt}"`); continue; }
+       const r = rank(h.prompt, corpus);
+       if (ownerOf(r[0].name) === h.owner && r[0].score > 0) hits++;
+     }
+-    heldoutRate = held.length ? Math.floor((hits / held.length) * 100) : null;
++    heldoutRate = Math.floor((hits / held.length) * 100);
+     if (minHeldout != null && heldoutRate !== null && heldoutRate < minHeldout) errors.push(`held-out rank-1 rate ${heldoutRate}% is below the floor ${minHeldout}%`);
+   }
+   return { errors, warnings, rank1Rate, heldoutRate, modelGraded: graded };
+@@ -134,10 +152,27 @@ export function evaluate(root, { minRank1, minHeldout = null }) {
+ if (isMain(import.meta.url)) {
+   const root = resolve(process.argv.slice(2).find((a) => !a.startsWith('--')) || fileURLToPath(new URL('..', import.meta.url)));
+   const basePath = join(root, 'evals', 'baseline.json');
+-  const baseline = JSON.parse(readFileSync(basePath, 'utf8'));
++  // The gate's own inputs. A missing or malformed file stops the run with a message; it never falls back to a floor
++  // of 0, and a null or NaN floor never reaches a comparison, where it would pass everything.
++  const setup = [];
++  const gateFile = (name, keys) => {
++    const path = join(root, 'evals', name);
++    if (!existsSync(path)) { setup.push(`evals/${name} is missing`); return null; }
++    let data;
++    try { data = JSON.parse(readFileSync(path, 'utf8')); }
++    catch (e) { setup.push(`evals/${name}: invalid JSON: ${e.message}`); return null; }
++    const bad = keys.filter((k) => !Number.isFinite(data?.[k]));
++    if (bad.length) { setup.push(`evals/${name} needs a finite number for ${bad.join(' and ')}`); return null; }
++    return data;
++  };
++  const baseline = gateFile('baseline.json', ['min_rank1']);
+   // evals/floors.json holds fixed floors a test pins; the baseline only rises above them.
+-  const fPath = join(root, 'evals', 'floors.json');
+-  const floors = existsSync(fPath) ? JSON.parse(readFileSync(fPath, 'utf8')) : { rank1: 0, heldout_rank1: null };
++  const floors = gateFile('floors.json', ['rank1', 'heldout_rank1']);
++  if (setup.length) {
++    for (const e of setup) console.log(`error: ${e}`);
++    console.log('route-eval: FAILED');
++    process.exit(1);
++  }
+   const minRank1 = Math.max(baseline.min_rank1, floors.rank1);
+   const r = evaluate(root, { minRank1, minHeldout: floors.heldout_rank1 });
+   for (const w of r.warnings) console.log(`warn: ${w}`);
+diff --git a/tests/lint-rules.test.mjs b/tests/lint-rules.test.mjs
+index 7ae2ee9..ef567cb 100644
+--- a/tests/lint-rules.test.mjs
++++ b/tests/lint-rules.test.mjs
+@@ -1,7 +1,8 @@
+ // tests/lint-rules.test.mjs
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
++import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
++import { spawnSync } from 'node:child_process';
+ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+ import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
+@@ -133,6 +134,9 @@ test('rule 4: existing references pass, repo-root fallback, anchors and ./', ()
+ 
+ // M1 rules: 6 (routes and help map), 7 (kernel size), 13 (settings keys), 15 (hook-shape fixtures).
+ const kernel = (rows) => `# kern {VERSION}\n\n## Routing\n| When | Route |\n|---|---|\n${rows.join('\n')}\n`;
++// A stand-in session-start prints the header line rule 7 requires (builtins only); LONG is the fixture rule 7 copies in.
++const HEADER = 'printf "kern at %s. \\n" "${0%/hooks/*}"\n';
++const LONG = { 'tests/fixtures/projects/long-settings/kern.local.yml': 'mode.voice: normal\n' };
+ 
+ test('rule 6: a route must exist and open with ## Steps', () => {
+   const ok = lint({
+@@ -216,7 +220,7 @@ test('rule 13: _settings_lookup of a literal key is a read; the generic "$1" for
+ test('rule 7: a session-start that fails or prints nothing is an error', () => {
+   const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
+   for (const start of ['#!/usr/bin/env bash\necho kernel\nexit 1\n', '#!/usr/bin/env bash\nexit 0\n']) {
+-    const f = lint({ 'hooks/session-start': start, 'hooks/subagent-start': sub }).filter((x) => x.rule === 7 && x.level === 'error');
++    const f = lint({ 'hooks/session-start': start, 'hooks/subagent-start': sub, ...LONG }).filter((x) => x.rule === 7 && x.level === 'error');
+     assert.deepEqual(f.map((x) => x.path), ['hooks/session-start']);
+   }
+ });
+@@ -438,11 +442,11 @@ test('rule 6: rows in kernel/routes.md resolve, and the kernel must name the rou
+ test('rule 7: the routed file has its own cap, and the standing cost has a combined budget', () => {
+   assert.deepEqual(rules(lint({ 'kernel/routes.md': `| x | Read {KERN}/a/SKILL.md |\n${'y'.repeat(1500)}` })).filter((r) => r === 7), [7]);
+   const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
+-  const start = (n) => `#!/usr/bin/env bash\nhead -c ${n} /dev/zero | tr "\\0" x\n`;
++  const start = (n) => `#!/usr/bin/env bash\n${HEADER}head -c ${n} /dev/zero | tr "\\0" x\n`;
+   const desc = `description: Use when ${'w'.repeat(280)}.`;
+-  const files = (n) => ({ 'hooks/session-start': start(n), 'hooks/subagent-start': sub, 'skills/a/SKILL.md': skill('a', desc) });
++  const files = (n) => ({ 'hooks/session-start': start(n), 'hooks/subagent-start': sub, 'skills/a/SKILL.md': skill('a', desc), ...LONG });
+   assert.deepEqual(rules(lint(files(4400))).filter((r) => r === 7), []);
+-  const big = lint(files(4600)).filter((f) => f.rule === 7 && f.level === 'error');
++  const big = lint(files(4500)).filter((f) => f.rule === 7 && f.level === 'error');
+   assert.equal(big.length, 1);
+   assert.match(big[0].message, /^standing cost 48\d\d chars/);
+ });
+@@ -467,14 +471,16 @@ test('rule 12: auto skills and the rows of both kernel files need eval cases onc
+ 
+ test('rule 7: a session-start that fails without project settings is an error, not a low standing cost', () => {
+   const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
+-  const once = '#!/usr/bin/env bash\nmkdir -p "$CLAUDE_PLUGIN_DATA"\n[ -e "$CLAUDE_PLUGIN_DATA/ran" ] && exit 1\ntouch "$CLAUDE_PLUGIN_DATA/ran"\necho kernel\n';
+-  const f = lint({ 'hooks/session-start': once, 'hooks/subagent-start': sub }).filter((x) => x.rule === 7 && x.level === 'error');
++  const once = `#!/usr/bin/env bash\nmkdir -p "$CLAUDE_PLUGIN_DATA"\n[ -e "$CLAUDE_PLUGIN_DATA/ran" ] && exit 1\ntouch "$CLAUDE_PLUGIN_DATA/ran"\n${HEADER}`;
++  const f = lint({ 'hooks/session-start': once, 'hooks/subagent-start': sub, ...LONG }).filter((x) => x.rule === 7 && x.level === 'error');
+   assert.equal(f.length, 1);
+   assert.match(f[0].message, /standing cost was not measured/);
+ });
+ 
+ test('rule 12: a case file that is not valid JSON is an error', () => {
+-  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.'), 'evals/cases/a.json': '{' })), [12]);
++  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.'), 'evals/cases/a.json': '{' });
++  assert.deepEqual(rules(f), [12]);
++  assert.match(f[0].message, /^evals\/cases\/a\.json is not valid JSON: /);
+ });
+ 
+ test('rule 12: a model-graded negative does not count toward the minimum of 2', () => {
+@@ -483,3 +489,58 @@ test('rule 12: a model-graded negative does not count toward the minimum of 2',
+   assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': withNegatives([{ prompt: 'n0' }, { prompt: 'n1', grader: 'model' }]) })), [12]);
+   assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': withNegatives([{ prompt: 'n0' }, { prompt: 'n1' }, { prompt: 'n2', grader: 'model' }]) })), []);
+ });
++
++// Fix round 1: rule 7 reads only a real render, and rules 6 and 12 close the gaps the review found.
++const SUB = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
++
++test('rule 7: a render without the kernel header line is an error, not a low standing cost', () => {
++  const broken = '#!/usr/bin/env bash\necho "kern did not load: hooks/lib/render.sh is missing or broken; reinstall kern"\n';
++  const f = lint({ 'hooks/session-start': broken, 'hooks/subagent-start': SUB, ...LONG }).filter((x) => x.rule === 7 && x.level === 'error');
++  assert.deepEqual(f.map((x) => x.path), ['hooks/session-start']);
++  assert.match(f[0].message, /no "kern at <root>\." header line, so the kernel was not measured$/);
++  assert.deepEqual(lint({ 'hooks/session-start': `#!/usr/bin/env bash\n${HEADER}`, 'hooks/subagent-start': SUB, ...LONG }).filter((x) => x.rule === 7), []);
++  const exit3 = lint({ 'hooks/session-start': `#!/usr/bin/env bash\n${HEADER}exit 3\n`, 'hooks/subagent-start': SUB, ...LONG }).filter((x) => x.rule === 7 && x.level === 'error');
++  assert.equal(exit3.length, 1, 'a header with a non-zero exit is not a render');
++  assert.match(exit3[0].message, /^exited 3 with \d+ chars of output, so the kernel was not measured$/);
++});
++
++test('rule 7: a missing long-settings fixture is an error', () => {
++  const f = lint({ 'hooks/session-start': `#!/usr/bin/env bash\n${HEADER}`, 'hooks/subagent-start': SUB }).filter((x) => x.rule === 7 && x.level === 'error');
++  assert.deepEqual(f.map((x) => x.path), ['tests/fixtures/projects/long-settings']);
++});
++
++test('rule 7: a git init that fails is an error', () => {
++  const bin = mkdtempSync(join(tmpdir(), 'kern-lint-bin-'));
++  symlinkSync(spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' }).stdout.trim(), join(bin, 'bash'));
++  const saved = process.env.PATH;
++  process.env.PATH = bin;
++  try {
++    const f = lint({ 'hooks/session-start': `#!/usr/bin/env bash\n${HEADER}`, 'hooks/subagent-start': SUB, ...LONG }).filter((x) => x.rule === 7 && x.level === 'error');
++    assert.ok(f.some((x) => /^git init exited /.test(x.message)), JSON.stringify(f));
++  } finally {
++    process.env.PATH = saved;
++  }
++});
++
++test('rule 6: a row that routes to kernel/routes.md is an error', () => {
++  const f = lint({ 'kernel/kernel.md': kernel(['| More | Read {ROOT}/kernel/routes.md |']), 'kernel/routes.md': '# routes\n' });
++  assert.deepEqual(rules(f), [6]);
++  assert.equal(f[0].message, 'kernel/routes.md is named in the Routing rule, not routed by a row');
++});
++
++test('rule 12: a positive that carries the grader flag is an error', () => {
++  const base = { 'skills/a/SKILL.md': skill('a', 'description: Use when x.') };
++  const flagged = JSON.stringify({ ...JSON.parse(caseJson('a')), trigger: { positive: [{ prompt: 'p0' }, { prompt: 'p1' }, { prompt: 'p2', grader: 'model' }], negative: [{ prompt: 'n0' }, { prompt: 'n1' }] } });
++  const f = lint({ ...base, 'evals/cases/a.json': flagged });
++  assert.deepEqual(rules(f), [12]);
++  assert.match(f[0].message, /positive.*"grader"/);
++});
++
++test('tiers: a Read in prose, not in a row, does not make a path skill', () => {
++  const root = repo({ 'kernel/kernel.md': 'Then Read {ROOT}/kernel/routes.md.\n', 'kernel/routes.md': 'Then Read {KERN}/d/SKILL.md first.\n', 'skills/d/SKILL.md': skill('d', manual()) });
++  assert.equal(loadModel(root).skills.find((s) => s.name === 'd').tier, 'slash');
++});
++
++test('rule 5: kernel/routes.md is scanned for Skill tool references', () => {
++  assert.deepEqual(rules(lint({ 'kernel/routes.md': 'Use the Skill tool with `nope`.\n' })), [5]);
++});
+diff --git a/tests/route-eval-rows.test.mjs b/tests/route-eval-rows.test.mjs
+index 8b14a3f..34ddd0f 100644
+--- a/tests/route-eval-rows.test.mjs
++++ b/tests/route-eval-rows.test.mjs
+@@ -103,6 +103,8 @@ const withGrader = (negative, positive = ['where did I leave off yesterday', 'ca
+     evals: [{ id: 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] }],
+   }),
+   'evals/baseline.json': JSON.stringify({ min_rank1: 0 }),
++  'evals/floors.json': JSON.stringify({ rank1: 0, heldout_rank1: 0 }),
++  'evals/heldout.json': JSON.stringify([{ owner: 'recall', prompt: 'where did I leave off after the gap' }]),
+ });
+ const LEXICAL = [{ prompt: 'fix this crash' }, { prompt: 'rename a variable' }];
+ 
+@@ -132,3 +134,107 @@ test('a negative with a grader other than model is an error', () => {
+   const r = evaluate(withGrader([...LEXICAL, { prompt: 'add a CSV export', grader: 'modle' }]), { minRank1: null });
+   assert.ok(r.errors.some((e) => e.startsWith('recall: unknown grader "modle"')), JSON.stringify(r.errors));
+ });
++
++// Fix round 1: one row parser, owners folded by kind, and gates that never skip (D6).
++test('kernelRows takes only the rows rule 6 accepts', () => {
++  assert.deepEqual(kernelRows([
++    '| Bug \\| crash | Read {KERN}/diagnose/SKILL.md |',
++    '| a | b | Read {KERN}/diagnose/SKILL.md |',
++    '| More | Read {ROOT}/kernel/routes.md |',
++    '| Prose | Read `{KERN}/technical-writing/SKILL.md` |',
++    'Then Read {KERN}/recall/SKILL.md first.',
++    '| Gap | Read {KERN}/recall/SKILL.md |',
++  ].join('\n')), [{ when: 'Gap', route: 'recall' }]);
++});
++
++test('only a kernel row folds into the skill it routes to; a distractor named row-<x> does not', () => {
++  const root = repo({
++    'skills/a/SKILL.md': autoSkill('a', 'Use when greeting kern hello'),
++    'evals/cases/a.json': cases('a', ['hello kern', 'greeting kern', 'kern hello there'], ['deploy the release to production', 'weather today']),
++    'evals/distractors.json': JSON.stringify([{ name: 'row-a', description: 'deploy the release to production servers' }]),
++  });
++  assert.deepEqual(evaluate(root, { minRank1: null }).errors, []);
++});
++
++test('held-out entries name a known owner', () => {
++  const held = JSON.stringify([{ owner: 'recall', prompt: 'where did I leave off after the gap' }, { owner: 'ghost', prompt: 'boo' }]);
++  const r = evaluate(fixture({ 'evals/heldout.json': held }), { minRank1: null });
++  assert.ok(r.errors.includes('heldout: no owner "ghost" for "boo"'), JSON.stringify(r.errors));
++});
++
++test('a missing, empty or malformed held-out set is an error once a floor is set', () => {
++  const run = (extra) => evaluate(fixture(extra), { minRank1: null, minHeldout: 0 }).errors;
++  assert.ok(run({}).includes('evals/heldout.json is missing, so the held-out floor cannot be checked'), JSON.stringify(run({})));
++  for (const bad of ['[]', '{}', 'null', JSON.stringify([{ owner: 'recall' }])]) {
++    const errors = run({ 'evals/heldout.json': bad });
++    assert.ok(errors.some((e) => /^evals\/heldout\.json (must be a non-empty array|entry 0 is not)/.test(e)), `${bad}: ${JSON.stringify(errors)}`);
++  }
++  assert.ok(run({ 'evals/heldout.json': '[' }).some((e) => e.startsWith('evals/heldout.json: invalid JSON')));
++});
++
++test('no case positives under a rank-1 floor is an error', () => {
++  const r = evaluate(repo({ 'skills/x/SKILL.md': pathSkill('x') }), { minRank1: 85 });
++  assert.ok(r.errors.includes('no case positives to rank, so the rank-1 floor cannot be checked'), JSON.stringify(r.errors));
++});
++
++test('the model-graded negatives are pinned: flagging one more means editing this list', () => {
++  assert.deepEqual(evaluate(ROOT, { minRank1: null }).modelGraded, [
++    { owner: 'prove-it', prompt: 'Explain what fixed and passing mean in this commit message' },
++    { owner: 'prove-it', prompt: 'What does a passing PR mean for subagent work' },
++  ]);
++});
++
++// The CLI against a fixture root: the floors, the baseline and the held-out floor are each enforced, and a missing
++// or malformed gate file stops the run with a message.
++const HELD = JSON.stringify([{ owner: 'recall', prompt: 'where did I leave off after the gap' }, { owner: 'diagnose', prompt: 'catch me up' }]);
++function cli(gates) {
++  // One recall positive ranks diagnose first, so the rank-1 rate is 92% (12 of 13).
++  // A null entry leaves that file out.
++  const files = {
++    'evals/cases/recall.json': cases('recall', ['where did I leave off yesterday', 'catch me up on the work', 'resuming after a long gap', 'the failing test with an error after a gap'], ['fix this crash', 'rename a variable']),
++    'evals/heldout.json': HELD,
++    ...gates,
++  };
++  const root = fixture(Object.fromEntries(Object.entries(files).filter(([, v]) => v !== null)));
++  const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'route-eval.mjs'), root], { encoding: 'utf8' });
++  return { status: r.status, out: r.stdout, err: r.stderr };
++}
++const gate = (baseline, floors) => ({ 'evals/baseline.json': JSON.stringify({ min_rank1: baseline }), 'evals/floors.json': JSON.stringify(floors) });
++
++test('the CLI enforces the baseline, the fixed rank-1 floor and the held-out floor', () => {
++  const ok = cli(gate(0, { rank1: 0, heldout_rank1: 0 }));
++  assert.equal(ok.status, 0, ok.out + ok.err);
++  assert.match(ok.out, /^rank-1 rate: 92% /m);
++  const floor = cli(gate(0, { rank1: 95, heldout_rank1: 0 }));
++  assert.equal(floor.status, 1);
++  assert.match(floor.out, /^error: rank-1 rate 92% is below the floor 95%$/m);
++  const baseline = cli(gate(95, { rank1: 0, heldout_rank1: 0 }));
++  assert.equal(baseline.status, 1);
++  assert.match(baseline.out, /^error: rank-1 rate 92% is below the floor 95%$/m);
++  const held = cli(gate(0, { rank1: 0, heldout_rank1: 60 }));
++  assert.equal(held.status, 1);
++  assert.match(held.out, /^error: held-out rank-1 rate 50% is below the floor 60%$/m);
++});
++
++test('the CLI fails with a message, never a default, when a gate file is missing or malformed', () => {
++  const good = gate(0, { rank1: 0, heldout_rank1: 0 });
++  const cases = [
++    [{ ...good, 'evals/floors.json': null }, 'evals/floors.json is missing'],
++    [{ ...good, 'evals/baseline.json': null }, 'evals/baseline.json is missing'],
++    [{ ...good, 'evals/floors.json': '{}' }, 'evals/floors.json needs a finite number for rank1 and heldout_rank1'],
++    [{ ...good, 'evals/floors.json': 'null' }, 'evals/floors.json needs a finite number for rank1 and heldout_rank1'],
++    [{ ...good, 'evals/floors.json': '{ "rank1": null, "heldout_rank1": 32 }' }, 'evals/floors.json needs a finite number for rank1'],
++    [{ ...good, 'evals/floors.json': '{ "rank1": "85", "heldout_rank1": 32 }' }, 'evals/floors.json needs a finite number for rank1'],
++    [{ ...good, 'evals/baseline.json': '{}' }, 'evals/baseline.json needs a finite number for min_rank1'],
++    [{ ...good, 'evals/floors.json': '{' }, 'evals/floors.json: invalid JSON'],
++    [{ ...good, 'evals/heldout.json': null }, 'evals/heldout.json is missing, so the held-out floor cannot be checked'],
++    [{ ...good, 'evals/heldout.json': '{}' }, 'evals/heldout.json must be a non-empty array of { owner, prompt }'],
++  ];
++  for (const [files, message] of cases) {
++    const r = cli(files);
++    assert.equal(r.status, 1, `${message}: ${r.out}${r.err}`);
++    assert.ok(r.out.split('\n').some((l) => l.startsWith(`error: ${message}`)), `${message}: ${r.out}`);
++    assert.equal(r.err, '', `no stack trace: ${r.err}`);
++    assert.match(r.out, /route-eval: FAILED\n$/);
++  }
++});

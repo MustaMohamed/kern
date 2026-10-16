@@ -1,0 +1,1422 @@
+# M0 whole-branch package: c8a78b1..1c5eaff (docs/ excluded: copies of spec, plans, research)
+1c5eaff M0: record acceptance
+dacc7fe M0: record plan corrections made during execution
+3bd64cd M0: run lint, tests, routing evals and plugin validation in CI
+b7c36bd M0: test route-eval collisions and negative owners
+1581167 M0: add tier 1 routing evals with distractors and a rank-1 floor
+367a526 M0: compare real paths in CLI entry guards
+ee65653 M0: check manifest and changelog versions, and script releases
+25515fd M0: widen lint rule 11 scope and fix rule 4 path resolution
+04b5606 M0: add skill lint rules 1, 2, 3, 4, 8, 10 and 11
+0d601ce M0: add plugin and marketplace manifests with a placeholder skill
+a870879 M0: add MIT licence, upstream licences, NOTICE and pins
+9591a90 M0: fetch pinned upstream sources into .upstream for port tasks
+
+ .claude-plugin/marketplace.json   |  15 +++
+ .claude-plugin/plugin.json        |   9 ++
+ .github/workflows/ci.yml          |  39 ++++++++
+ CHANGELOG.md                      |  11 +++
+ LICENSE                           |  21 ++++
+ NOTICE                            |  81 +++++++++++++++
+ UPSTREAM.md                       |  13 +++
+ evals/baseline.json               |   1 +
+ evals/cases/hello.json            |  23 +++++
+ evals/distractors.json            |   6 ++
+ evals/fixtures/hello/README.md    |   1 +
+ licenses/addy.LICENSE             |  21 ++++
+ licenses/caveman.LICENSE          | 202 ++++++++++++++++++++++++++++++++++++++
+ licenses/caveman.NOTICE           |  49 +++++++++
+ licenses/pocock.LICENSE           |  21 ++++
+ licenses/pstack.LICENSE           |  21 ++++
+ licenses/superpowers.LICENSE      |  21 ++++
+ scripts/check-version.mjs         |  48 +++++++++
+ scripts/ci-local                  |  13 +++
+ scripts/fetch-upstream            | 109 ++++++++++++++++++++
+ scripts/lib/frontmatter.mjs       |  19 ++++
+ scripts/lib/is-main.mjs           |  12 +++
+ scripts/lib/lint-rules.mjs        | 173 ++++++++++++++++++++++++++++++++
+ scripts/lib/rank.mjs              |  88 +++++++++++++++++
+ scripts/lint-exemptions.json      |   1 +
+ scripts/lint-names.txt            |   6 ++
+ scripts/lint-skills.mjs           |  12 +++
+ scripts/release.mjs               |  39 ++++++++
+ scripts/route-eval.mjs            | 118 ++++++++++++++++++++++
+ skills/hello/SKILL.md             |  11 +++
+ tests/licensing.test.mjs          |  39 ++++++++
+ tests/lint-rules.test.mjs         | 121 +++++++++++++++++++++++
+ tests/route-eval.test.mjs         | 125 +++++++++++++++++++++++
+ tests/scripts/fetch-upstream.bats |  58 +++++++++++
+ tests/versions.test.mjs           |  72 ++++++++++++++
+ 35 files changed, 1619 insertions(+)
+
+diff --git a/.claude-plugin/marketplace.json b/.claude-plugin/marketplace.json
+new file mode 100644
+index 0000000..9cc78f4
+--- /dev/null
++++ b/.claude-plugin/marketplace.json
+@@ -0,0 +1,15 @@
++{
++  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
++  "name": "kern",
++  "description": "The kern plugin, served from its own repo.",
++  "owner": { "name": "Mustafa Mohamed" },
++  "plugins": [
++    {
++      "name": "kern",
++      "version": "0.1.0",
++      "source": "./",
++      "description": "Personal workflow kernel for Claude Code: routing, guarded autonomy, proof before done, and project settings that defer to each repo's own rules.",
++      "license": "MIT"
++    }
++  ]
++}
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+new file mode 100644
+index 0000000..5e5b135
+--- /dev/null
++++ b/.claude-plugin/plugin.json
+@@ -0,0 +1,9 @@
++{
++  "name": "kern",
++  "version": "0.1.0",
++  "description": "Personal workflow kernel for Claude Code: routing, guarded autonomy, proof before done, and project settings that defer to each repo's own rules.",
++  "author": { "name": "Mustafa Mohamed" },
++  "repository": "https://github.com/MustaMohamed/kern",
++  "license": "MIT",
++  "skills": "./skills"
++}
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..206ecc7
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,39 @@
++name: ci
++on:
++  push:
++  pull_request:
++  workflow_dispatch:
++
++jobs:
++  checks:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          fetch-depth: 0
++      - uses: actions/setup-node@v4
++        with:
++          node-version: '22'
++      - name: Unit tests
++        run: node --test 'tests/**/*.test.mjs'
++      - name: Lint skills
++        run: node scripts/lint-skills.mjs
++      - name: Versions agree
++        run: node scripts/check-version.mjs
++      - name: Unreleased line for shipped changes
++        if: github.event_name == 'pull_request'
++        run: node scripts/check-version.mjs --pr origin/${{ github.base_ref }}
++      - name: Routing evals
++        run: node scripts/route-eval.mjs
++      - name: Install Claude Code
++        run: npm install -g @anthropic-ai/claude-code@2.1.296
++      - name: Validate marketplace and plugin manifests
++        run: |
++          claude plugin validate . --strict
++          claude plugin validate .claude-plugin/plugin.json --strict
++      - name: Install bats and shellcheck
++        run: sudo apt-get update && sudo apt-get install -y bats shellcheck
++      - name: Script tests
++        run: bats tests/scripts
++      - name: Shellcheck
++        run: shellcheck scripts/fetch-upstream scripts/ci-local
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+new file mode 100644
+index 0000000..f118720
+--- /dev/null
++++ b/CHANGELOG.md
+@@ -0,0 +1,11 @@
++# Changelog
++
++All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as defined in docs/specs/2026-10-12-kern-design.md section 12.
++
++## [Unreleased]
++
++- M0 accepted: plugin validates, CI green, marketplace install works.
++
++## [0.1.0] - 2026-10-12
++
++- Repo, manifests, licences, lint, routing evals and CI with a placeholder skill.
+diff --git a/LICENSE b/LICENSE
+new file mode 100644
+index 0000000..d28ad71
+--- /dev/null
++++ b/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2026 Mustafa Mohamed
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/UPSTREAM.md b/UPSTREAM.md
+new file mode 100644
+index 0000000..ef70d1f
+--- /dev/null
++++ b/UPSTREAM.md
+@@ -0,0 +1,13 @@
++# Upstream sources
++
++kern ports text and ideas from these sources. `scripts/fetch-upstream` clones each at its pin into `.upstream/<key>/`. Review upstream changes quarterly: `git -C .upstream/<key> fetch && git -C .upstream/<key> log --oneline <commit>..origin/HEAD`.
++
++| Key | Source | Version | Licence | Copyright | Commit | URL |
++|---|---|---|---|---|---|---|
++| superpowers | obra/superpowers | 6.4.1 | MIT | Copyright (c) 2025 Jesse Vincent | 5bf4e78011075bcfc0dc295f0724994cd123ee71 | https://github.com/obra/superpowers |
++| pstack | cursor/plugins, pstack/ | 0.15.17 | MIT | Copyright (c) 2026 Lauren Tan | 11713c6 | https://github.com/cursor/plugins |
++| pocock | mattpocock/skills | 1.3.1 | MIT | Copyright (c) 2026 Matt Pocock | 49dd158 | https://github.com/mattpocock/skills |
++| addy | addyosmani/agent-skills | 0.6.12 | MIT | Copyright (c) 2025 Addy Osmani | 1be8e34 | https://github.com/addyosmani/agent-skills |
++| caveman | caveman | 3.2.0 | Apache-2.0 | Copyright 2026 Julius Brussee | installed plugin cache 3.2.0 | https://github.com/JuliusBrussee/caveman |
++
++The `local` key in `fetch-upstream` copies the owner's adapted `recall`, `unslop`, `no-comments` and `comment-sicko` files; they are the owner's own work and need no entry here.
+diff --git a/evals/baseline.json b/evals/baseline.json
+new file mode 100644
+index 0000000..b46fa05
+--- /dev/null
++++ b/evals/baseline.json
+@@ -0,0 +1 @@
++{ "min_rank1": 0 }
+diff --git a/evals/cases/hello.json b/evals/cases/hello.json
+new file mode 100644
+index 0000000..3be5db5
+--- /dev/null
++++ b/evals/cases/hello.json
+@@ -0,0 +1,23 @@
++{
++  "skill_name": "hello",
++  "trigger": {
++    "positive": [
++      { "prompt": "hello kern", "top_k": 3 },
++      { "prompt": "is kern installed?", "top_k": 3 },
++      { "prompt": "say hello and tell me the kern version", "top_k": 3 }
++    ],
++    "negative": [
++      { "prompt": "write an implementation plan for the export feature", "owner": "writing-plans" },
++      { "prompt": "this test fails with a null pointer, find the cause", "owner": "systematic-debugging" }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "hello kern",
++      "expected_output": "One line naming the installed kern version",
++      "expectations": ["Reply names the version from plugin.json", "Reply is one line"]
++    }
++  ]
++}
+diff --git a/evals/distractors.json b/evals/distractors.json
+new file mode 100644
+index 0000000..a559712
+--- /dev/null
++++ b/evals/distractors.json
+@@ -0,0 +1,6 @@
++[
++  { "name": "writing-plans", "description": "Use when you have a spec or requirements for a multi-step task, before touching code" },
++  { "name": "systematic-debugging", "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes" },
++  { "name": "brainstorming", "description": "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior" },
++  { "name": "verification-before-completion", "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs" }
++]
+diff --git a/evals/fixtures/hello/README.md b/evals/fixtures/hello/README.md
+new file mode 100644
+index 0000000..1c56f48
+--- /dev/null
++++ b/evals/fixtures/hello/README.md
+@@ -0,0 +1 @@
++Fixture directory for execution evals. Dialogue evals need no files.
+diff --git a/scripts/check-version.mjs b/scripts/check-version.mjs
+new file mode 100644
+index 0000000..70d0bb6
+--- /dev/null
++++ b/scripts/check-version.mjs
+@@ -0,0 +1,48 @@
++#!/usr/bin/env node
++// Lint rule 14: manifests and the newest CHANGELOG release agree; shipped changes add an Unreleased line.
++// Idea from addyosmani/agent-skills scripts/validate-versions.js (MIT); the code is written for kern.
++import { readFileSync } from 'node:fs';
++import { join } from 'node:path';
++import { execFileSync } from 'node:child_process';
++import { fileURLToPath } from 'node:url';
++import { isMain } from './lib/is-main.mjs';
++
++const SHIPPED = /^(skills|agents|kernel|modes|hooks)\//;
++const json = (root, p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
++
++export function unreleasedBullets(changelog) {
++  const m = changelog.match(/^## \[Unreleased\]\n([\s\S]*?)(?=^## \[|(?![\s\S]))/m);
++  return m ? m[1].split('\n').filter((l) => /^- /.test(l)) : [];
++}
++
++export function checkVersions(root) {
++  const problems = [];
++  const plugin = json(root, '.claude-plugin/plugin.json').version;
++  const market = json(root, '.claude-plugin/marketplace.json').plugins?.[0]?.version;
++  const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
++  const release = changelog.match(/^## \[(\d+\.\d+\.\d+)\]/m)?.[1];
++  if (plugin !== market) problems.push(`plugin.json ${plugin} != marketplace.json ${market}`);
++  if (!release) problems.push(`CHANGELOG.md has no release heading; expected ## [${plugin}] - <date>`);
++  else if (release !== plugin) problems.push(`newest CHANGELOG release ${release} != plugin.json ${plugin}`);
++  return problems;
++}
++
++export function checkUnreleased(root, changedFiles) {
++  if (!changedFiles.some((f) => SHIPPED.test(f))) return [];
++  const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
++  return unreleasedBullets(changelog).length ? [] : ['shipped files changed but ## [Unreleased] has no bullet'];
++}
++
++if (isMain(import.meta.url)) {
++  const root = fileURLToPath(new URL('..', import.meta.url));
++  const problems = checkVersions(root);
++  const i = process.argv.indexOf('--pr');
++  if (i > 0) {
++    const base = process.argv[i + 1];
++    const changed = execFileSync('git', ['-C', root, 'diff', '--name-only', `${base}...HEAD`], { encoding: 'utf8' }).split('\n').filter(Boolean);
++    problems.push(...checkUnreleased(root, changed));
++  }
++  for (const p of problems) console.log(`error: ${p}`);
++  console.log(problems.length ? 'versions: FAILED' : 'versions: agree');
++  process.exit(problems.length ? 1 : 0);
++}
+diff --git a/scripts/ci-local b/scripts/ci-local
+new file mode 100755
+index 0000000..3be1503
+--- /dev/null
++++ b/scripts/ci-local
+@@ -0,0 +1,13 @@
++#!/usr/bin/env bash
++# Runs the CI job's steps locally, in the same order, before a push.
++set -euo pipefail
++cd "$(dirname "$0")/.."
++node --test 'tests/**/*.test.mjs'
++node scripts/lint-skills.mjs
++node scripts/check-version.mjs
++node scripts/route-eval.mjs
++claude plugin validate . --strict
++claude plugin validate .claude-plugin/plugin.json --strict
++bats tests/scripts
++shellcheck scripts/fetch-upstream scripts/ci-local
++echo "ci-local: all steps passed"
+diff --git a/scripts/fetch-upstream b/scripts/fetch-upstream
+new file mode 100755
+index 0000000..8a6872b
+--- /dev/null
++++ b/scripts/fetch-upstream
+@@ -0,0 +1,109 @@
++#!/usr/bin/env bash
++# Fills .upstream/ with the pinned source trees that kern files are ported from. Dev-only; hooks never run it.
++set -euo pipefail
++
++root=$(cd "$(dirname "$0")/.." && pwd)
++dest="${KERN_UPSTREAM_DIR:-$root/.upstream}"
++mkdir -p "$dest"
++
++pin() { # key -> "url sha" for git sources
++  case "$1" in
++    superpowers) echo "https://github.com/obra/superpowers.git 5bf4e78011075bcfc0dc295f0724994cd123ee71" ;;
++    pstack) echo "https://github.com/cursor/plugins.git 11713c6" ;;
++    pocock) echo "https://github.com/mattpocock/skills.git 49dd158" ;;
++    addy) echo "https://github.com/addyosmani/agent-skills.git 1be8e34" ;;
++    *) return 1 ;;
++  esac
++}
++
++override() { # key suffix default
++  local var
++  var="KERN_UPSTREAM_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')_$2"
++  printf '%s' "${!var:-$3}"
++}
++
++clone_at() { # key url sha
++  local key=$1 url=$2 sha=$3 dir="$dest/$1"
++  if [ -d "$dir/.git" ]; then
++    local want
++    want=$(git -C "$dir" rev-parse --verify --quiet "$sha^{commit}" || true)
++    if [ -n "$want" ] && [ "$(git -C "$dir" rev-parse HEAD)" = "$want" ]; then
++      echo "$key: already at $sha"
++      return 0
++    fi
++  fi
++  rm -rf "$dir"
++  if ! git clone --quiet "$url" "$dir"; then
++    rm -rf "$dir"
++    echo "$key: clone failed: $url" >&2
++    return 3
++  fi
++  if ! git -C "$dir" checkout --quiet --detach "$sha" 2>/dev/null; then
++    rm -rf "$dir"
++    echo "$key: commit $sha not found in $url" >&2
++    return 3
++  fi
++  echo "$key: $url @ $sha"
++}
++
++copy_from() { # key src...
++  local key=$1 dir="$dest/$1"
++  shift
++  rm -rf "$dir"
++  mkdir -p "$dir"
++  local src
++  for src in "$@"; do
++    if [ ! -e "$src" ]; then
++      rm -rf "$dir"
++      echo "$key: source missing: $src" >&2
++      return 3
++    fi
++    cp -R "$src" "$dir"/
++  done
++  echo "$key: copied"
++}
++
++fetch() {
++  local key=$1 url sha
++  case "$key" in
++    superpowers|pstack|pocock|addy)
++      read -r url sha <<<"$(pin "$key")"
++      url=$(override "$key" URL "$url")
++      sha=$(override "$key" SHA "$sha")
++      local rc=0
++      clone_at "$key" "$url" "$sha" || rc=$?
++      if [ "$rc" -ne 0 ] && [ "$key" = superpowers ] && [ -z "${KERN_UPSTREAM_SUPERPOWERS_URL:-}" ]; then
++        echo "superpowers: falling back to the installed cache" >&2
++        copy_from superpowers "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1/."
++        return
++      fi
++      return "$rc"
++      ;;
++    caveman)
++      local src
++      src=$(override caveman SRC "$HOME/.claude/plugins/cache/caveman/caveman/3.2.0")
++      copy_from caveman "$src/."
++      ;;
++    local)
++      local src
++      src=$(override local SRC "")
++      if [ -n "$src" ]; then
++        copy_from local "$src/."
++      else
++        copy_from local "$HOME/.claude/skills/recall" "$HOME/.claude/skills/unslop" "$HOME/.claude/skills/no-comments" "$HOME/.claude/agents/comment-sicko.md"
++      fi
++      ;;
++    *)
++      echo "unknown source: $key (use superpowers pstack pocock addy caveman local)" >&2
++      exit 2
++      ;;
++  esac
++}
++
++keys=("$@")
++[ ${#keys[@]} -gt 0 ] || keys=(superpowers pstack pocock addy caveman local)
++status=0
++for k in "${keys[@]}"; do
++  fetch "$k" || status=$?
++done
++exit "$status"
+diff --git a/scripts/lib/frontmatter.mjs b/scripts/lib/frontmatter.mjs
+new file mode 100644
+index 0000000..1c1293b
+--- /dev/null
++++ b/scripts/lib/frontmatter.mjs
+@@ -0,0 +1,19 @@
++// Minimal frontmatter reader for kern files: single-line `key: value` pairs only.
++export function parseFrontmatter(src) {
++  const text = src.replace(/\r\n/g, '\n');
++  const m = text.match(/^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
++  if (!m) return { data: {}, body: text, error: 'no frontmatter block' };
++  const data = {};
++  for (const line of m[1].split('\n')) {
++    if (!line.trim() || line.trimStart().startsWith('#')) continue;
++    const kv = line.match(/^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$/);
++    if (!kv) return { data, body: text.slice(m[0].length), error: `unparsed frontmatter line (use single-line values): ${line}` };
++    let value = kv[2].trim();
++    if (value === '>' || value === '|' || value === '>-' || value === '|-') {
++      return { data, body: text.slice(m[0].length), error: `key ${kv[1]} uses a block scalar; use single-line values` };
++    }
++    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
++    data[kv[1]] = value;
++  }
++  return { data, body: text.slice(m[0].length), error: null };
++}
+diff --git a/scripts/lib/is-main.mjs b/scripts/lib/is-main.mjs
+new file mode 100644
+index 0000000..17cc8d3
+--- /dev/null
++++ b/scripts/lib/is-main.mjs
+@@ -0,0 +1,12 @@
++// True when the importing module is the script Node was started with, comparing real paths so a symlinked path still counts.
++import { realpathSync } from 'node:fs';
++import { fileURLToPath } from 'node:url';
++
++export function isMain(importMetaUrl) {
++  if (!process.argv[1]) return false;
++  try {
++    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(importMetaUrl));
++  } catch {
++    return false;
++  }
++}
+diff --git a/scripts/lib/lint-rules.mjs b/scripts/lib/lint-rules.mjs
+new file mode 100644
+index 0000000..fcb54bf
+--- /dev/null
++++ b/scripts/lib/lint-rules.mjs
+@@ -0,0 +1,173 @@
++// kern lint rules (design spec 11.2). Pure checks over a loaded model; the CLI is scripts/lint-skills.mjs.
++// Rule set informed by addyosmani/agent-skills scripts/lib/skill-lint.js (MIT); the code is written for kern.
++import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
++import { join, relative } from 'node:path';
++import { parseFrontmatter } from './frontmatter.mjs';
++
++export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
++export const AGENT_KEYS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'color', 'maxTurns', 'skills', 'memory', 'background', 'isolation']);
++export const AGENT_KEYS_IGNORED_IN_PLUGINS = new Set(['permissionMode', 'hooks', 'mcpServers', 'initialPrompt']);
++export const SHIPPED_DIRS = ['skills', 'agents', 'kernel', 'modes', 'hooks'];
++export const LIMITS = { auto: 300, manual: 120, agent: 150, autoTotal: 1500, autoPlusAgents: 2500 };
++const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
++const TRIGGER = /\buse (this )?when\b|\buse (before|after|during)\b/i;
++const MACHINE_PATH = /(\/Users\/[A-Za-z]|\/home\/[a-z]|[A-Z]:\\Users\\|~\/Code\/)/;
++const BINARY_EXT = /\.(png|jpe?g|gif|ico|webp|woff2?|ttf|otf|pdf|zip|gz)$/i;
++const LONG_DASH = /[–—]/g;
++const CURLY = /[‘’“”]/g;
++
++export const rel = (model, p) => relative(model.root, p);
++
++function walk(dir) {
++  if (!existsSync(dir)) return [];
++  const out = [];
++  for (const name of readdirSync(dir)) {
++    const p = join(dir, name);
++    if (statSync(p).isDirectory()) out.push(...walk(p));
++    else out.push(p);
++  }
++  return out;
++}
++
++export function loadModel(root) {
++  const skills = [];
++  const skillsDir = join(root, 'skills');
++  if (existsSync(skillsDir)) {
++    for (const dir of readdirSync(skillsDir)) {
++      const file = join(skillsDir, dir, 'SKILL.md');
++      if (!existsSync(file)) continue;
++      const fm = parseFrontmatter(readFileSync(file, 'utf8'));
++      skills.push({ name: fm.data.name, dir, file, data: fm.data, body: fm.body, error: fm.error });
++    }
++  }
++  const kernelPath = join(root, 'kernel', 'kernel.md');
++  const kernelText = existsSync(kernelPath) ? readFileSync(kernelPath, 'utf8') : '';
++  const routed = new Set([...kernelText.matchAll(/Read \{KERN\}\/([a-z0-9-]+)\/SKILL\.md/g)].map((m) => m[1]));
++  for (const s of skills) s.tier = s.data['disable-model-invocation'] !== 'true' ? 'auto' : routed.has(s.name) ? 'path' : 'slash';
++  const cases = {};
++  const casesDir = join(root, 'evals', 'cases');
++  if (existsSync(casesDir)) {
++    for (const f of readdirSync(casesDir).filter((n) => n.endsWith('.json'))) {
++      try { cases[f.replace(/\.json$/, '')] = JSON.parse(readFileSync(join(casesDir, f), 'utf8')); }
++      catch (e) { cases[f.replace(/\.json$/, '')] = { parseError: e.message }; }
++    }
++  }
++  const agents = [];
++  const agentsDir = join(root, 'agents');
++  if (existsSync(agentsDir)) {
++    for (const f of readdirSync(agentsDir).filter((n) => n.endsWith('.md'))) {
++      const file = join(agentsDir, f);
++      const fm = parseFrontmatter(readFileSync(file, 'utf8'));
++      agents.push({ name: fm.data.name, base: f.replace(/\.md$/, ''), file, data: fm.data, body: fm.body, error: fm.error });
++    }
++  }
++  const exFile = join(root, 'scripts', 'lint-exemptions.json');
++  const exemptions = existsSync(exFile) ? JSON.parse(readFileSync(exFile, 'utf8')) : [];
++  const shipped = SHIPPED_DIRS.flatMap((d) => walk(join(root, d)));
++  return { root, skills, agents, exemptions, shipped, kernelText, cases };
++}
++
++export const err = (rule, path, message) => ({ rule, path, level: 'error', message });
++export const warn = (rule, path, message) => ({ rule, path, level: 'warn', message });
++
++export const RULES = [
++  { id: 1, check(model) {
++    const out = [];
++    for (const s of model.skills) {
++      const p = rel(model, s.file);
++      if (s.error) { out.push(err(1, p, s.error)); continue; }
++      if (!KEBAB.test(s.dir)) out.push(err(1, p, `directory ${s.dir} is not kebab case`));
++      else if (s.name !== s.dir) out.push(err(1, p, `name ${s.name} does not equal directory ${s.dir}`));
++    }
++    for (const a of model.agents) {
++      const p = rel(model, a.file);
++      if (a.error) { out.push(err(1, p, a.error)); continue; }
++      if (a.name !== a.base) out.push(err(1, p, `name ${a.name} does not equal file name ${a.base}`));
++    }
++    return out;
++  } },
++  { id: 2, check(model) {
++    const out = [];
++    for (const s of model.skills) {
++      for (const k of Object.keys(s.data)) if (!SKILL_KEYS.has(k)) out.push(err(2, rel(model, s.file), `unknown frontmatter key ${k}`));
++    }
++    for (const a of model.agents) {
++      for (const k of Object.keys(a.data)) {
++        if (AGENT_KEYS_IGNORED_IN_PLUGINS.has(k)) out.push(err(2, rel(model, a.file), `${k} is ignored for plugin agents; use tools, disallowedTools and kern guards`));
++        else if (!AGENT_KEYS.has(k)) out.push(err(2, rel(model, a.file), `unknown agent key ${k}`));
++      }
++    }
++    return out;
++  } },
++  { id: 3, check(model) {
++    const out = [];
++    let autoTotal = 0;
++    let agentTotal = 0;
++    for (const s of model.skills) {
++      if (s.error) continue;
++      const d = s.data.description || '';
++      const p = rel(model, s.file);
++      if (!d) { out.push(err(3, p, 'description missing')); continue; }
++      if (s.tier === 'auto') {
++        autoTotal += d.length;
++        if (d.length > LIMITS.auto) out.push(err(3, p, `auto description ${d.length} chars, limit ${LIMITS.auto}`));
++        if (!TRIGGER.test(d)) out.push(err(3, p, 'auto description needs a trigger such as "Use when" or "Use before"'));
++      } else if (d.length > LIMITS.manual) out.push(err(3, p, `description ${d.length} chars, limit ${LIMITS.manual}`));
++    }
++    for (const a of model.agents) {
++      const d = a.data.description || '';
++      agentTotal += d.length;
++      if (d.length > LIMITS.agent) out.push(err(3, rel(model, a.file), `agent description ${d.length} chars, limit ${LIMITS.agent}`));
++    }
++    if (autoTotal > LIMITS.autoTotal) out.push(err(3, 'skills', `auto descriptions total ${autoTotal} chars, limit ${LIMITS.autoTotal}`));
++    if (autoTotal + agentTotal > LIMITS.autoPlusAgents) out.push(err(3, 'skills', `auto plus agent descriptions total ${autoTotal + agentTotal} chars, limit ${LIMITS.autoPlusAgents}`));
++    return out;
++  } },
++  { id: 4, check(model) {
++    const out = [];
++    for (const s of model.skills) {
++      const p = rel(model, s.file);
++      const local = [...s.body.matchAll(/`(?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#[^`\s]*)?`|\]\((?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#[^)\s]*)?\)/g)].map((m) => m[1] || m[2]);
++      for (const r of local) if (!existsSync(join(model.root, 'skills', s.dir, r)) && !existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: ${r}`));
++      const rooted = [...s.body.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)].map((m) => m[1].replace(/[.,;:]+$/, ''));
++      for (const r of rooted) if (!existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: \${CLAUDE_PLUGIN_ROOT}/${r}`));
++    }
++    return out;
++  } },
++  { id: 8, check(model) {
++    const out = [];
++    const names = (process.env.KERN_LINT_NAMES || '').split(',').map((n) => n.trim()).filter(Boolean);
++    for (const f of ['.lint-names', 'scripts/lint-names.txt']) {
++      const namesFile = join(model.root, f);
++      if (existsSync(namesFile)) names.push(...readFileSync(namesFile, 'utf8').split('\n').map((n) => n.trim()).filter((n) => n && !n.startsWith('#')));
++    }
++    const nameRes = names.map((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'));
++    for (const f of model.shipped) {
++      const text = readFileSync(f, 'utf8');
++      const p = rel(model, f);
++      if (MACHINE_PATH.test(text)) out.push(err(8, p, 'machine-specific path'));
++      for (const re of nameRes) if (re.test(text)) out.push(err(8, p, `personal name matches ${re.source}`));
++    }
++    return out;
++  } },
++  { id: 10, check(model) {
++    return model.exemptions.filter((e) => !e.reason || !String(e.reason).trim()).map((e) => err(10, 'scripts/lint-exemptions.json', `exemption for rule ${e.rule} on ${e.path} has no reason`));
++  } },
++  { id: 11, check(model) {
++    const out = [];
++    const files = [...model.shipped.filter((f) => !BINARY_EXT.test(f)), ...['README.md', 'CHANGELOG.md'].map((n) => join(model.root, n)).filter((f) => existsSync(f))];
++    for (const f of files) {
++      const text = readFileSync(f, 'utf8');
++      const p = rel(model, f);
++      if ((text.match(LONG_DASH) || []).length) out.push(err(11, p, 'long dash; use a period or a comma'));
++      if ((text.match(CURLY) || []).length) out.push(err(11, p, 'curly quotes; use straight quotes'));
++    }
++    return out;
++  } },
++];
++
++export function runLint(model) {
++  const findings = RULES.flatMap((r) => r.check(model));
++  const valid = model.exemptions.filter((e) => e.reason && String(e.reason).trim());
++  return findings.filter((f) => f.rule === 10 || !valid.some((e) => e.rule === f.rule && e.path === f.path));
++}
+diff --git a/scripts/lib/rank.mjs b/scripts/lib/rank.mjs
+new file mode 100644
+index 0000000..aae7bdb
+--- /dev/null
++++ b/scripts/lib/rank.mjs
+@@ -0,0 +1,88 @@
++// Adapted from addyosmani/agent-skills scripts/run-evals.js (MIT): the tier 2 text pipeline.
++
++const STOP = new Set([
++  'a', 'an', 'and', 'any', 'are', 'as', 'at', 'be', 'before', 'by', 'for',
++  'from', 'in', 'into', 'is', 'it', 'its', 'my', 'need', 'needs', 'of', 'on',
++  'or', 'our', 'so', 'that', 'the', 'them', 'this', 'to', 'use', 'want',
++  'we', 'when', 'with', 'you', 'your', 'help', 'me', 'i',
++]);
++
++function stem(t) {
++  // Light suffix stripping so "conflicts"/"conflict", "branching"/"branch",
++  // "architectural"/"architecture" cluster together. Not a real stemmer.
++  for (const suf of ['ally', 'ing', 'ed', 'es', 'al']) {
++    if (t.length > suf.length + 3 && t.endsWith(suf)) {
++      t = t.slice(0, -suf.length);
++      break;
++    }
++  }
++  if (t.length > 3 && t.endsWith('s') && !t.endsWith('ss')) t = t.slice(0, -1);
++  if (t.length > 4 && t.endsWith('e')) t = t.slice(0, -1);
++  // Collapse doubled trailing consonant left by -ing/-ed ("committ" -> "commit").
++  if (t.length > 4 && t[t.length - 1] === t[t.length - 2] && !'aeiou'.includes(t[t.length - 1])) {
++    t = t.slice(0, -1);
++  }
++  // Normalize trailing y so "simplify" and "simplifies"/"simplified" cluster.
++  if (t.length > 3 && t.endsWith('y')) t = t.slice(0, -1) + 'i';
++  return t;
++}
++
++export function tokenize(text) {
++  return text
++    .toLowerCase()
++    .replace(/[^a-z0-9\s-]/g, ' ')
++    .split(/[\s-]+/)
++    .filter((t) => t.length > 2 && !STOP.has(t))
++    .map(stem);
++}
++
++export function termFreq(tokens) {
++  const tf = new Map();
++  for (const t of tokens) tf.set(t, (tf.get(t) || 0) + 1);
++  return tf;
++}
++
++export function vec(tf, idf) {
++  const v = new Map();
++  for (const [term, f] of tf) v.set(term, f * idf(term));
++  return v;
++}
++
++export function cosine(a, b) {
++  let dot = 0;
++  let na = 0;
++  let nb = 0;
++  for (const [t, w] of a) {
++    na += w * w;
++    const bw = b.get(t);
++    if (bw) dot += w * bw;
++  }
++  for (const w of b.values()) nb += w * w;
++  if (!na || !nb) return 0;
++  return dot / (Math.sqrt(na) * Math.sqrt(nb));
++}
++
++export function buildCorpus(docs) {
++  const map = new Map();
++  for (const d of docs) {
++    const nameTokens = tokenize(d.name.replace(/-/g, ' '));
++    map.set(d.name, termFreq([...nameTokens, ...nameTokens, ...tokenize(d.text)]));
++  }
++  const df = new Map();
++  for (const tf of map.values()) for (const term of tf.keys()) df.set(term, (df.get(term) || 0) + 1);
++  const n = map.size;
++  const idf = (term) => Math.log(1 + n / (1 + (df.get(term) || 0)));
++  return { docs: map, idf };
++}
++
++export function rank(prompt, corpus) {
++  const pv = vec(termFreq(tokenize(prompt)), corpus.idf);
++  const scores = [];
++  for (const [name, tf] of corpus.docs) scores.push({ name, score: cosine(pv, vec(tf, corpus.idf)) });
++  scores.sort((a, b) => b.score - a.score);
++  return scores;
++}
++
++export function similarity(a, b, corpus) {
++  return cosine(vec(corpus.docs.get(a), corpus.idf), vec(corpus.docs.get(b), corpus.idf));
++}
+diff --git a/scripts/lint-exemptions.json b/scripts/lint-exemptions.json
+new file mode 100644
+index 0000000..fe51488
+--- /dev/null
++++ b/scripts/lint-exemptions.json
+@@ -0,0 +1 @@
++[]
+diff --git a/scripts/lint-names.txt b/scripts/lint-names.txt
+new file mode 100644
+index 0000000..1372d4b
+--- /dev/null
++++ b/scripts/lint-names.txt
+@@ -0,0 +1,6 @@
++# Personal names and handles that must not appear in shipped files (lint rule 8).
++Mustafa
++Mohamed
++MustaMohamed
++musta
++heyinfinito
+diff --git a/scripts/lint-skills.mjs b/scripts/lint-skills.mjs
+new file mode 100644
+index 0000000..bf04106
+--- /dev/null
++++ b/scripts/lint-skills.mjs
+@@ -0,0 +1,12 @@
++#!/usr/bin/env node
++// CLI over scripts/lib/lint-rules.mjs. Exit 1 when any error remains.
++import { resolve } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { loadModel, runLint } from './lib/lint-rules.mjs';
++
++const root = resolve(process.argv[2] || fileURLToPath(new URL('..', import.meta.url)));
++const findings = runLint(loadModel(root));
++for (const f of findings) console.log(`${f.level} ${f.path}: rule ${f.rule}: ${f.message}`);
++const errors = findings.filter((f) => f.level === 'error').length;
++console.log(errors ? `lint: ${errors} error(s)` : 'lint: clean');
++process.exit(errors ? 1 : 0);
+diff --git a/scripts/release.mjs b/scripts/release.mjs
+new file mode 100644
+index 0000000..806aa15
+--- /dev/null
++++ b/scripts/release.mjs
+@@ -0,0 +1,39 @@
++#!/usr/bin/env node
++// Bumps both manifests and the CHANGELOG. Prints the tag command; never commits, tags or pushes.
++import { readFileSync, writeFileSync } from 'node:fs';
++import { join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { isMain } from './lib/is-main.mjs';
++
++export function bump(version, part) {
++  const [ma, mi, pa] = version.split('.').map(Number);
++  if (part === 'major') return `${ma + 1}.0.0`;
++  if (part === 'minor') return `${ma}.${mi + 1}.0`;
++  if (part === 'patch') return `${ma}.${mi}.${pa + 1}`;
++  throw new Error(`unknown part ${part}; use major, minor or patch`);
++}
++
++export function release(root, part, date) {
++  const pluginPath = join(root, '.claude-plugin/plugin.json');
++  const marketPath = join(root, '.claude-plugin/marketplace.json');
++  const logPath = join(root, 'CHANGELOG.md');
++  const plugin = JSON.parse(readFileSync(pluginPath, 'utf8'));
++  const market = JSON.parse(readFileSync(marketPath, 'utf8'));
++  const log = readFileSync(logPath, 'utf8');
++  const block = (log.match(/^## \[Unreleased\]\n([\s\S]*?)(?=^## \[)/m)?.[1] || '').trim();
++  if (!block) throw new Error('Unreleased is empty; add a line before releasing');
++  const next = bump(plugin.version, part);
++  plugin.version = next;
++  market.plugins[0].version = next;
++  const updated = log.replace(/^## \[Unreleased\]\n[\s\S]*?(?=^## \[)/m, () => `## [Unreleased]\n\n## [${next}] - ${date}\n\n${block}\n\n`);
++  writeFileSync(pluginPath, JSON.stringify(plugin, null, 2) + '\n');
++  writeFileSync(marketPath, JSON.stringify(market, null, 2) + '\n');
++  writeFileSync(logPath, updated);
++  return next;
++}
++
++if (isMain(import.meta.url)) {
++  const root = fileURLToPath(new URL('..', import.meta.url));
++  const next = release(root, process.argv[2], new Date().toISOString().slice(0, 10));
++  console.log(`released ${next}; review the diff, commit, then run: git tag v${next}`);
++}
+diff --git a/scripts/route-eval.mjs b/scripts/route-eval.mjs
+new file mode 100644
+index 0000000..f505941
+--- /dev/null
++++ b/scripts/route-eval.mjs
+@@ -0,0 +1,118 @@
++#!/usr/bin/env node
++// Tier 1 routing evals (design spec 11.1). Adapted from addyosmani/agent-skills scripts/run-evals.js (MIT), deterministic tier only.
++import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
++import { join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { isMain } from './lib/is-main.mjs';
++import { loadModel } from './lib/lint-rules.mjs';
++import { buildCorpus, rank, similarity } from './lib/rank.mjs';
++
++const MIN_POSITIVE = 3;
++const MIN_NEGATIVE = 2;
++const MIN_EVALS = 1;
++const COLLISION_WARN = 0.5;
++const COLLISION_ERROR = 0.75;
++
++export function targets(root) {
++  const skills = loadModel(root).skills.filter((s) => s.tier === 'auto' && s.data.description)
++    .map((s) => ({ name: s.name, text: s.data.description, kind: 'skill' }));
++  const dPath = join(root, 'evals', 'distractors.json');
++  const distractors = existsSync(dPath) ? JSON.parse(readFileSync(dPath, 'utf8')).map((d) => ({ name: d.name, text: d.description, kind: 'distractor' })) : [];
++  return [...skills, ...distractors];
++}
++
++function loadCases(root) {
++  const dir = join(root, 'evals', 'cases');
++  if (!existsSync(dir)) return [];
++  return readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => {
++    try { return { file: f, data: JSON.parse(readFileSync(join(dir, f), 'utf8')) }; }
++    catch (e) { return { file: f, parseError: e.message }; }
++  });
++}
++
++export function evaluate(root, { minRank1 }) {
++  const all = targets(root);
++  const owners = all.filter((t) => t.kind !== 'distractor');
++  const corpus = buildCorpus(all);
++  const names = new Set(all.map((t) => t.name));
++  const cases = loadCases(root);
++  const errors = [];
++  const warnings = [];
++  let positives = 0;
++  let rank1 = 0;
++
++  for (const t of owners) if (!cases.some((c) => c.file === `${t.name}.json`)) errors.push(`${t.name}: no eval case file (evals/cases/${t.name}.json)`);
++
++  for (const c of cases) {
++    if (c.parseError) { errors.push(`${c.file}: invalid JSON: ${c.parseError}`); continue; }
++    const d = c.data;
++    const expected = c.file.replace(/\.json$/, '');
++    if (d.skill_name !== expected) errors.push(`${c.file}: skill_name "${d.skill_name}" does not match the file name`);
++    if (!owners.some((t) => t.name === expected)) { errors.push(`${c.file}: no such auto skill or kernel row`); continue; }
++    for (const ev of d.evals || []) {
++      const ok = Number.isInteger(ev.id) && typeof ev.prompt === 'string' && typeof ev.expected_output === 'string' && Array.isArray(ev.expectations) && ev.expectations.length > 0;
++      if (!ok) errors.push(`${c.file}: eval id=${ev.id} does not match the evals schema`);
++      const kind = ev.kind || 'execution';
++      if (!['execution', 'dialogue'].includes(kind)) errors.push(`${c.file}: eval id=${ev.id} has unknown kind "${kind}"`);
++      if (kind === 'execution' && !(Array.isArray(ev.files) && ev.files.length)) errors.push(`${c.file}: eval id=${ev.id} needs files[]`);
++      for (const f of ev.files || []) if (!existsSync(join(root, 'evals', 'fixtures', f))) errors.push(`${c.file}: eval id=${ev.id} fixture not found: evals/fixtures/${f}`);
++    }
++    for (const p of d.trigger?.positive || []) {
++      positives++;
++      const topK = p.top_k || 3;
++      const r = rank(p.prompt, corpus);
++      const idx = r.findIndex((x) => x.name === expected);
++      const hit = r[idx];
++      if (idx === 0 && hit.score > 0) rank1++;
++      if (!hit || hit.score === 0) errors.push(`${expected}: description shares no vocabulary with "${p.prompt}"`);
++      else if (idx >= topK) errors.push(`${expected}: positive prompt ranked #${idx + 1} (need top ${topK}): "${p.prompt}"; top: ${r.slice(0, 3).map((x) => `${x.name} ${x.score.toFixed(2)}`).join(', ')}`);
++    }
++    for (const n of d.trigger?.negative || []) {
++      const r = rank(n.prompt, corpus);
++      if (r[0].name === expected && r[0].score > 0) errors.push(`${expected}: ranked #1 for negative prompt "${n.prompt}"`);
++      if (n.owner) {
++        if (!names.has(n.owner)) errors.push(`${c.file}: negative names unknown owner "${n.owner}"`);
++        else {
++          const oi = r.findIndex((x) => x.name === n.owner);
++          const si = r.findIndex((x) => x.name === expected);
++          if (r[oi].score === 0 || oi > si) errors.push(`${expected}: owner ${n.owner} does not outrank it for "${n.prompt}"`);
++        }
++      }
++    }
++    const pc = (d.trigger?.positive || []).length;
++    const nc = (d.trigger?.negative || []).length;
++    const ec = (d.evals || []).length;
++    if (pc < MIN_POSITIVE || nc < MIN_NEGATIVE || ec < MIN_EVALS) errors.push(`${expected}: below required minimums (${pc}/${nc}/${ec}; need ${MIN_POSITIVE}/${MIN_NEGATIVE}/${MIN_EVALS})`);
++  }
++
++  // targets() puts owners first and distractors last, so all[i] === owners[i] for i < owners.length.
++  for (let i = 0; i < owners.length; i++) {
++    for (let j = i + 1; j < all.length; j++) {
++      const a = owners[i].name;
++      const b = all[j].name;
++      const sim = similarity(a, b, corpus);
++      if (sim >= COLLISION_ERROR) errors.push(`collision: ${a} and ${b} are ${(sim * 100).toFixed(0)}% similar`);
++      else if (sim >= COLLISION_WARN) warnings.push(`overlap: ${a} and ${b} are ${(sim * 100).toFixed(0)}% similar`);
++    }
++  }
++
++  const rank1Rate = positives ? Math.floor((rank1 / positives) * 100) : null;
++  if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the baseline ${minRank1}%`);
++  return { errors, warnings, rank1Rate };
++}
++
++if (isMain(import.meta.url)) {
++  const root = fileURLToPath(new URL('..', import.meta.url));
++  const basePath = join(root, 'evals', 'baseline.json');
++  const baseline = JSON.parse(readFileSync(basePath, 'utf8'));
++  const r = evaluate(root, { minRank1: baseline.min_rank1 });
++  for (const w of r.warnings) console.log(`warn: ${w}`);
++  for (const e of r.errors) console.log(`error: ${e}`);
++  console.log(`rank-1 rate: ${r.rank1Rate ?? 'n/a'}% (baseline ${baseline.min_rank1}%)`);
++  if (process.argv.includes('--update-baseline') && !r.errors.length && r.rank1Rate !== null && r.rank1Rate > baseline.min_rank1) {
++    writeFileSync(basePath, JSON.stringify({ min_rank1: r.rank1Rate }, null, 2) + '\n');
++    console.log(`baseline raised to ${r.rank1Rate}%`);
++  }
++  console.log(r.errors.length ? 'route-eval: FAILED' : 'route-eval: passed');
++  process.exit(r.errors.length ? 1 : 0);
++}
+diff --git a/skills/hello/SKILL.md b/skills/hello/SKILL.md
+new file mode 100644
+index 0000000..1f8c062
+--- /dev/null
++++ b/skills/hello/SKILL.md
+@@ -0,0 +1,11 @@
++---
++name: hello
++description: Use when the user says hello to kern or asks whether kern is installed. Replies with the kern version from plugin.json. Placeholder until M2 adds real auto skills.
++---
++
++# hello
++
++## Steps
++
++1. Read `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`.
++2. Reply in one line: `kern <version> is installed.`
+diff --git a/tests/licensing.test.mjs b/tests/licensing.test.mjs
+new file mode 100644
+index 0000000..295de80
+--- /dev/null
++++ b/tests/licensing.test.mjs
+@@ -0,0 +1,39 @@
++// tests/licensing.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { readFileSync, existsSync } from 'node:fs';
++
++const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
++
++function upstreamRows() {
++  return read('UPSTREAM.md').split('\n')
++    .filter((l) => /^\| [a-z]+ \|/.test(l))
++    .map((l) => l.split('|').slice(1, -1).map((c) => c.trim()));
++}
++
++test('kern itself is MIT', () => {
++  assert.match(read('LICENSE'), /^MIT License\n\nCopyright \(c\) 2026 Mustafa Mohamed/);
++});
++
++test('every upstream source has a licence file and a NOTICE entry', () => {
++  const rows = upstreamRows();
++  assert.deepEqual(rows.map((r) => r[0]).sort(), ['addy', 'caveman', 'pocock', 'pstack', 'superpowers']);
++  const notice = read('NOTICE');
++  for (const [key, , , , copyright, , url] of rows) {
++    assert.ok(existsSync(new URL(`../licenses/${key}.LICENSE`, import.meta.url)), `licenses/${key}.LICENSE`);
++    assert.ok(notice.includes(url), `NOTICE names ${url}`);
++    assert.ok(notice.includes(copyright), `NOTICE carries "${copyright}"`);
++  }
++});
++
++test('NOTICE reproduces caveman NOTICE verbatim', () => {
++  assert.ok(read('NOTICE').includes(read('licenses/caveman.NOTICE').trim()));
++});
++
++test('caveman licence is Apache-2.0', () => {
++  assert.match(read('licenses/caveman.LICENSE'), /Apache License\s+Version 2\.0, January 2004/);
++});
++
++test('NOTICE has a file map section', () => {
++  assert.match(read('NOTICE'), /^## File map$/m);
++});
+diff --git a/tests/lint-rules.test.mjs b/tests/lint-rules.test.mjs
+new file mode 100644
+index 0000000..685ccca
+--- /dev/null
++++ b/tests/lint-rules.test.mjs
+@@ -0,0 +1,121 @@
++// tests/lint-rules.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
++import { loadModel, runLint } from '../scripts/lib/lint-rules.mjs';
++
++function repo(files) {
++  const root = mkdtempSync(join(tmpdir(), 'kern-lint-'));
++  for (const [p, content] of Object.entries(files)) {
++    mkdirSync(join(root, p, '..'), { recursive: true });
++    writeFileSync(join(root, p), content);
++  }
++  return root;
++}
++const skill = (name, fm, body = '\n# x\n\n## Steps\n\n1. a\n') => `---\nname: ${name}\n${fm}\n---\n${body}`;
++const lint = (files) => runLint(loadModel(repo(files)));
++const rules = (findings) => findings.filter((f) => f.level === 'error').map((f) => f.rule);
++
++test('parses CRLF frontmatter', () => {
++  const r = parseFrontmatter('---\r\nname: a\r\ndescription: Use when x.\r\n---\r\nbody');
++  assert.equal(r.error, null);
++  assert.equal(r.data.name, 'a');
++  assert.equal(r.body.trim(), 'body');
++});
++
++test('strips quotes and keeps colons in values', () => {
++  const r = parseFrontmatter('---\nname: a\ndescription: "Use when: x happens"\n---\n');
++  assert.equal(r.data.description, 'Use when: x happens');
++});
++
++test('block scalars are an error', () => {
++  const r = parseFrontmatter('---\nname: a\ndescription: >\n  folded\n---\n');
++  assert.match(r.error, /single-line/);
++});
++
++test('tiers: auto, path when a kernel row routes to it, else slash', () => {
++  const manual = 'description: d\ndisable-model-invocation: true';
++  const root = repo({
++    'skills/a/SKILL.md': skill('a', 'description: Use when x.'),
++    'skills/p/SKILL.md': skill('p', manual),
++    'skills/s/SKILL.md': skill('s', manual),
++    'kernel/kernel.md': '| New behaviour | Read {KERN}/p/SKILL.md |\n',
++  });
++  const tiers = Object.fromEntries(loadModel(root).skills.map((x) => [x.name, x.tier]));
++  assert.deepEqual(tiers, { a: 'auto', p: 'path', s: 'slash' });
++});
++
++test('a clean auto skill passes', () => {
++  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x happens.') }), []);
++});
++
++test('rule 1: missing frontmatter, name mismatch, non-kebab dir', () => {
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': '# no frontmatter' })), [1]);
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('b', 'description: Use when x.') })), [1]);
++  assert.deepEqual(rules(lint({ 'skills/Bad_Dir/SKILL.md': skill('Bad_Dir', 'description: Use when x.') })), [1]);
++});
++
++test('rule 2: unknown skill key and ignored plugin-agent keys', () => {
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.\ncolour: red') })), [2]);
++  const agent = '---\nname: r\ndescription: d\npermissionMode: plan\n---\nbody\n';
++  assert.deepEqual(rules(lint({ 'agents/r.md': agent })), [2]);
++});
++
++test('rule 3: auto limit and trigger, manual limit, agent limit, totals', () => {
++  const long = 'Use when ' + 'x'.repeat(300);
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', `description: ${long}`) })), [3]);
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Does things.') })), [3]);
++  const manual = `description: ${'y'.repeat(121)}\ndisable-model-invocation: true`;
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', manual) })), [3]);
++  const agent = `---\nname: r\ndescription: ${'z'.repeat(151)}\n---\nbody\n`;
++  assert.deepEqual(rules(lint({ 'agents/r.md': agent })), [3]);
++  const files = {};
++  for (let i = 0; i < 6; i++) files[`skills/s${i}/SKILL.md`] = skill(`s${i}`, `description: Use when ${'w'.repeat(280)}`);
++  assert.ok(rules(lint(files)).includes(3), 'auto total over 1,500');
++});
++
++test('rule 4: referenced files must exist', () => {
++  const body = '\n## Steps\n\n1. Read `references/missing.md` and `${CLAUDE_PLUGIN_ROOT}/kernel/none.md`.\n';
++  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) });
++  assert.deepEqual(rules(f), [4, 4]);
++});
++
++test('rule 8: machine paths and listed names in shipped files', () => {
++  process.env.KERN_LINT_NAMES = 'Zebediah';
++  const body = '\n## Steps\n\n1. Open /Users/someone/x and ask Zebediah.\n';
++  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) });
++  delete process.env.KERN_LINT_NAMES;
++  assert.deepEqual(rules(f), [8, 8]);
++});
++
++test('rule 10: exemption needs a reason, and suppresses its finding', () => {
++  const bad = { 'skills/a/SKILL.md': skill('a', 'description: Does things.'), 'scripts/lint-exemptions.json': '[{"rule":3,"path":"skills/a/SKILL.md","reason":""}]' };
++  assert.deepEqual(rules(lint(bad)), [3, 10], 'an exemption without a reason suppresses nothing');
++  const ok = { ...bad, 'scripts/lint-exemptions.json': '[{"rule":3,"path":"skills/a/SKILL.md","reason":"fixture"}]' };
++  assert.deepEqual(rules(lint(ok)), []);
++});
++
++test('rule 11: long dashes and curly quotes', () => {
++  const body = '\n## Steps\n\n1. Do this — then “that”.\n';
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) })), [11, 11]);
++});
++
++test('rule 11: scans any non-binary shipped file, skips binaries', () => {
++  assert.deepEqual(rules(lint({ 'hooks/lib/x.mjs': '// a — b\n' })), [11]);
++  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.'), 'skills/a/logo.png': 'a — b' });
++  assert.deepEqual(rules(f), []);
++});
++
++test('rule 4: existing references pass, repo-root fallback, anchors and ./', () => {
++  const ok = '\n## Steps\n\n1. Read `references/ok.md` and `${CLAUDE_PLUGIN_ROOT}/kernel/k.md`.\n';
++  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', ok), 'skills/a/references/ok.md': 'x', 'kernel/k.md': 'x' }), []);
++  const root = '\n## Steps\n\n1. Run `scripts/tool`.\n';
++  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', root), 'scripts/tool': 'x' }), []);
++  const anchors = '\n## Steps\n\n1. See `references/ok.md#part`, `./references/ok.md` and [x](references/ok.md#x).\n';
++  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', anchors), 'skills/a/references/ok.md': 'x' }), []);
++  const bad = '\n## Steps\n\n1. See `references/missing.md#part`.\n';
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', bad) })), [4]);
++});
+diff --git a/tests/route-eval.test.mjs b/tests/route-eval.test.mjs
+new file mode 100644
+index 0000000..b6924a2
+--- /dev/null
++++ b/tests/route-eval.test.mjs
+@@ -0,0 +1,125 @@
++// tests/route-eval.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { buildCorpus, rank } from '../scripts/lib/rank.mjs';
++import { evaluate } from '../scripts/route-eval.mjs';
++
++const skill = (name, desc) => `---\nname: ${name}\ndescription: ${desc}\n---\n\n## Steps\n\n1. a\n`;
++function repo(files) {
++  const root = mkdtempSync(join(tmpdir(), 'kern-eval-'));
++  for (const [p, c] of Object.entries(files)) {
++    mkdirSync(join(root, p, '..'), { recursive: true });
++    writeFileSync(join(root, p), typeof c === 'string' ? c : JSON.stringify(c));
++  }
++  return root;
++}
++const caseFile = (name, positive, negative) => ({
++  skill_name: name,
++  trigger: { positive: positive.map((prompt) => ({ prompt, top_k: 3 })), negative: negative.map((prompt) => ({ prompt })) },
++  evals: [{ id: 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] }],
++});
++
++test('rank orders by shared vocabulary', () => {
++  const c = buildCorpus([{ name: 'tests', text: 'run failing tests suite' }, { name: 'deploy', text: 'deploy release production' }]);
++  assert.equal(rank('my tests are failing', c)[0].name, 'tests');
++});
++
++test('zero-score prompt is an error, not a crash', () => {
++  const root = repo({
++    'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello'),
++    'evals/cases/a.json': caseFile('a', ['hello kern', 'greeting kern', 'qqq zzz'], ['deploy prod', 'weather today']),
++    'evals/distractors.json': [],
++    'evals/baseline.json': { min_rank1: 0 },
++  });
++  const r = evaluate(root, { minRank1: 0 });
++  assert.equal(r.errors.length, 1);
++  assert.match(r.errors[0], /shares no vocabulary/);
++});
++
++test('auto skill without a case file is an error', () => {
++  const root = repo({ 'skills/a/SKILL.md': skill('a', 'Use when greeting kern'), 'evals/distractors.json': [], 'evals/baseline.json': { min_rank1: 0 } });
++  assert.match(evaluate(root, { minRank1: 0 }).errors[0], /no eval case file/);
++});
++
++test('below minimums is an error', () => {
++  const root = repo({
++    'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello'),
++    'evals/cases/a.json': caseFile('a', ['hello kern'], ['deploy prod']),
++    'evals/distractors.json': [],
++    'evals/baseline.json': { min_rank1: 0 },
++  });
++  assert.ok(evaluate(root, { minRank1: 0 }).errors.some((e) => /below required minimums/.test(e)));
++});
++
++test('a distractor that outranks the skill fails the positive', () => {
++  const root = repo({
++    'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello or showing a plan'),
++    'evals/cases/a.json': { ...caseFile('a', [], []), trigger: { positive: [{ prompt: 'write a plan for tasks', top_k: 1 }, { prompt: 'hello kern', top_k: 3 }, { prompt: 'greeting kern', top_k: 3 }], negative: [{ prompt: 'deploy prod' }, { prompt: 'weather today' }] } },
++    'evals/distractors.json': [{ name: 'writing-plans', description: 'Use when writing a plan for multi-step tasks' }],
++    'evals/baseline.json': { min_rank1: 0 },
++  });
++  const errors = evaluate(root, { minRank1: 0 }).errors;
++  assert.ok(errors.some((e) => /positive prompt ranked #2/.test(e)), errors.join('\n'));
++});
++
++test('rank-1 rate below the baseline fails', () => {
++  const root = repo({
++    'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello'),
++    'evals/cases/a.json': caseFile('a', ['hello kern', 'greeting kern', 'kern hello there'], ['deploy prod', 'weather today']),
++    'evals/distractors.json': [],
++    'evals/baseline.json': { min_rank1: 100 },
++  });
++  assert.deepEqual(evaluate(root, { minRank1: 100 }).errors, []);
++  assert.equal(evaluate(root, { minRank1: 101 }).errors.length, 1);
++});
++
++const POS = ['hello kern', 'greeting kern', 'kern hello there'];
++const NEG = ['deploy prod', 'weather today'];
++const two = (da, db, extra = {}) => repo({
++  'skills/a/SKILL.md': skill('a', da),
++  'skills/b/SKILL.md': skill('b', db),
++  'evals/cases/a.json': caseFile('a', POS, NEG),
++  'evals/cases/b.json': caseFile('b', POS, NEG),
++  'evals/distractors.json': [],
++  'evals/baseline.json': { min_rank1: 0 },
++  ...extra,
++});
++
++test('collision between two auto skills is an error', () => {
++  const r = evaluate(two('Use when greeting kern hello', 'Use when greeting kern hello'), { minRank1: 0 });
++  assert.ok(r.errors.some((e) => /collision: /.test(e)), r.errors.join('\n'));
++});
++
++test('overlap between descriptions is a warning', () => {
++  // similarity 0.62: between COLLISION_WARN 0.5 and COLLISION_ERROR 0.75
++  const r = evaluate(two('Use when greeting kern hello version', 'Use when greeting kern hello installed'), { minRank1: 0 });
++  assert.ok(r.warnings.some((w) => /overlap: /.test(w)), r.warnings.join('\n'));
++  assert.ok(!r.errors.some((e) => /collision: /.test(e)), r.errors.join('\n'));
++});
++
++const withNegatives = (negative) => repo({
++  'skills/a/SKILL.md': skill('a', 'Use when greeting kern hello'),
++  'evals/cases/a.json': { ...caseFile('a', POS, []), trigger: { positive: POS.map((prompt) => ({ prompt, top_k: 3 })), negative } },
++  'evals/distractors.json': [{ name: 'writing-plans', description: 'Use when writing a plan for multi-step tasks' }],
++  'evals/baseline.json': { min_rank1: 0 },
++});
++
++test('skill ranked #1 for a negative prompt is an error', () => {
++  const r = evaluate(withNegatives([{ prompt: 'greeting kern hello' }, { prompt: 'weather today' }]), { minRank1: 0 });
++  assert.ok(r.errors.some((e) => /ranked #1 for negative prompt/.test(e)), r.errors.join('\n'));
++});
++
++test('declared owner must outrank the skill', () => {
++  const ok = evaluate(withNegatives([{ prompt: 'write a plan for tasks', owner: 'writing-plans' }, { prompt: 'weather today' }]), { minRank1: 0 });
++  assert.ok(!ok.errors.some((e) => /owner /.test(e)), ok.errors.join('\n'));
++  const bad = evaluate(withNegatives([{ prompt: 'greeting kern hello', owner: 'writing-plans' }, { prompt: 'weather today' }]), { minRank1: 0 });
++  assert.ok(bad.errors.some((e) => /owner .* does not outrank it/.test(e)), bad.errors.join('\n'));
++});
++
++test('unknown owner is an error', () => {
++  const r = evaluate(withNegatives([{ prompt: 'weather today', owner: 'nope' }, { prompt: 'deploy prod' }]), { minRank1: 0 });
++  assert.ok(r.errors.some((e) => /unknown owner "nope"/.test(e)), r.errors.join('\n'));
++});
+diff --git a/tests/scripts/fetch-upstream.bats b/tests/scripts/fetch-upstream.bats
+new file mode 100644
+index 0000000..aaf05ed
+--- /dev/null
++++ b/tests/scripts/fetch-upstream.bats
+@@ -0,0 +1,58 @@
++#!/usr/bin/env bats
++# tests/scripts/fetch-upstream.bats
++
++setup() {
++  ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
++  export KERN_UPSTREAM_DIR="$BATS_TEST_TMPDIR/up"
++  REMOTE="$BATS_TEST_TMPDIR/remote"
++  git init -q -b main "$REMOTE"
++  git -C "$REMOTE" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one
++  SHA1=$(git -C "$REMOTE" rev-parse HEAD)
++  git -C "$REMOTE" -c user.email=t@t -c user.name=t commit -q --allow-empty -m two
++  export KERN_UPSTREAM_ADDY_URL="$REMOTE" KERN_UPSTREAM_ADDY_SHA="$SHA1"
++}
++
++@test "clones at the pinned commit" {
++  run bash "$ROOT/scripts/fetch-upstream" addy
++  [ "$status" -eq 0 ]
++  [ "$(git -C "$KERN_UPSTREAM_DIR/addy" rev-parse HEAD)" = "$SHA1" ]
++}
++
++@test "second run is a no-op" {
++  bash "$ROOT/scripts/fetch-upstream" addy
++  run bash "$ROOT/scripts/fetch-upstream" addy
++  [ "$status" -eq 0 ]
++  [[ "$output" == *"addy: already at"* ]] || false
++}
++
++@test "missing commit exits 3 and removes the partial clone" {
++  export KERN_UPSTREAM_ADDY_SHA=0000000000000000000000000000000000000000
++  run bash "$ROOT/scripts/fetch-upstream" addy
++  [ "$status" -eq 3 ]
++  [ ! -e "$KERN_UPSTREAM_DIR/addy" ]
++}
++
++@test "copy source is copied" {
++  mkdir -p "$BATS_TEST_TMPDIR/cave"; echo hi > "$BATS_TEST_TMPDIR/cave/NOTICE"
++  export KERN_UPSTREAM_CAVEMAN_SRC="$BATS_TEST_TMPDIR/cave"
++  run bash "$ROOT/scripts/fetch-upstream" caveman
++  [ "$status" -eq 0 ]
++  [ "$(cat "$KERN_UPSTREAM_DIR/caveman/NOTICE")" = hi ]
++}
++
++@test "missing copy source exits 3" {
++  export KERN_UPSTREAM_CAVEMAN_SRC="$BATS_TEST_TMPDIR/nope"
++  run bash "$ROOT/scripts/fetch-upstream" caveman
++  [ "$status" -eq 3 ]
++}
++
++@test "a failing git source is not swallowed" {
++  export KERN_UPSTREAM_ADDY_URL="$BATS_TEST_TMPDIR/no-such-remote"
++  run bash "$ROOT/scripts/fetch-upstream" addy
++  [ "$status" -eq 3 ]
++}
++
++@test "unknown key exits 2" {
++  run bash "$ROOT/scripts/fetch-upstream" nonsense
++  [ "$status" -eq 2 ]
++}
+diff --git a/tests/versions.test.mjs b/tests/versions.test.mjs
+new file mode 100644
+index 0000000..22d63a8
+--- /dev/null
++++ b/tests/versions.test.mjs
+@@ -0,0 +1,72 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
++import { execFileSync } from 'node:child_process';
++import { fileURLToPath } from 'node:url';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { checkVersions, checkUnreleased } from '../scripts/check-version.mjs';
++import { bump, release } from '../scripts/release.mjs';
++
++function repo({ plugin = '0.1.0', market = '0.1.0', changelog }) {
++  const root = mkdtempSync(join(tmpdir(), 'kern-ver-'));
++  mkdirSync(join(root, '.claude-plugin'));
++  writeFileSync(join(root, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'kern', version: plugin }, null, 2) + '\n');
++  writeFileSync(join(root, '.claude-plugin/marketplace.json'), JSON.stringify({ name: 'kern', plugins: [{ name: 'kern', version: market, source: './' }] }, null, 2) + '\n');
++  writeFileSync(join(root, 'CHANGELOG.md'), changelog ?? '# Changelog\n\n## [Unreleased]\n\n## [0.1.0] - 2026-10-12\n\n- First.\n');
++  return root;
++}
++
++test('agreeing versions pass', () => {
++  assert.deepEqual(checkVersions(repo({})), []);
++});
++
++test('manifest mismatch fails', () => {
++  assert.equal(checkVersions(repo({ market: '0.2.0' })).length, 1);
++});
++
++test('no release heading is a clear failure', () => {
++  const problems = checkVersions(repo({ changelog: '# Changelog\n\n## [Unreleased]\n' }));
++  assert.match(problems[0], /no release heading/);
++});
++
++test('shipped change needs an Unreleased bullet', () => {
++  const root = repo({});
++  assert.equal(checkUnreleased(root, ['skills/a/SKILL.md']).length, 1);
++  assert.deepEqual(checkUnreleased(root, ['README.md']), []);
++  writeFileSync(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n- Add a.\n\n## [0.1.0] - 2026-10-12\n\n- First.\n');
++  assert.deepEqual(checkUnreleased(root, ['skills/a/SKILL.md']), []);
++});
++
++test('bump follows semver', () => {
++  assert.equal(bump('0.1.9', 'patch'), '0.1.10');
++  assert.equal(bump('0.1.9', 'minor'), '0.2.0');
++  assert.equal(bump('0.1.9', 'major'), '1.0.0');
++});
++
++test('release moves Unreleased bullets under the new version', () => {
++  const root = repo({});
++  writeFileSync(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n- Add a.\n\n## [0.1.0] - 2026-10-12\n\n- First.\n');
++  assert.equal(release(root, 'minor', '2026-11-01'), '0.2.0');
++  const log = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
++  assert.match(log, /## \[Unreleased\]\n\n## \[0\.2\.0\] - 2026-11-01\n\n- Add a\.\n/);
++  assert.deepEqual(checkVersions(root), []);
++});
++
++test('release keeps sub-headings and wrapped lines', () => {
++  const root = repo({});
++  writeFileSync(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Add a,\n  wrapped.\n\n## [0.1.0] - 2026-10-12\n\n- First.\n');
++  release(root, 'patch', '2026-11-02');
++  assert.match(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'), /## \[0\.1\.1\] - 2026-11-02\n\n### Added\n\n- Add a,\n  wrapped\.\n\n## \[0\.1\.0\]/);
++});
++
++test('release refuses an empty Unreleased section', () => {
++  assert.throws(() => release(repo({}), 'patch', '2026-11-01'), /Unreleased is empty/);
++});
++
++test('CLI runs when reached through a symlink', () => {
++  const tmp = mkdtempSync(join(tmpdir(), 'kern-link-'));
++  symlinkSync(fileURLToPath(new URL('..', import.meta.url)), join(tmp, 'link'));
++  const out = execFileSync(process.execPath, [join(tmp, 'link', 'scripts', 'check-version.mjs')], { encoding: 'utf8' });
++  assert.match(out, /versions: agree/);
++});

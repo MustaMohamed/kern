@@ -1,0 +1,352 @@
+# Review package: 9888da4..HEAD
+
+## Commits
+5d6d51a M2: G18 denies rg --hostname-bin and file -z
+139caac M2: add guard G18 for the read-only investigator
+
+## Files changed
+ CHANGELOG.md                       |   1 +
+ docs/spikes/m1-payloads.md         |   1 +
+ hooks/guards/g18-readonly-agent.sh | 136 +++++++++++++++++++++++++++++++++++++
+ hooks/pre-tool-use                 |   2 +-
+ tests/hooks/g18.bats               | 123 +++++++++++++++++++++++++++++++++
+ 5 files changed, 262 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 13bc5c7..dd1a3d9 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,17 +1,18 @@
+ # Changelog
+ 
+ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as defined in docs/specs/2026-10-12-kern-design.md section 12.
+ 
+ ## [Unreleased]
+ 
+ - floor-scan: the G7 check as a script, with a lowered-bar class and ratchet.<metric> settings keys.
++- Guard G18: kern's read-only investigator may run only allowlisted read commands.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+ - PreToolUse asks, or denies under `bypassPermissions`, when a hook library cannot load or lacks a function it defines. In 0.2.0 a missing `settings.sh` or `decide.sh` gave no decision at all. session-start says when kern did not load.
+ - pre-tool-use and session-start leave POSIX mode first, so `POSIXLY_CORRECT` cannot skip that check.
+ - A natural-language voice switch fires only when the phrase stands alone on the first line, such as `go terse`, `turn off terse mode` or `back to normal`, with a leading `please` or `ok` and a trailing `please`, `now`, `.` or `!` allowed. More phrases switch, and prompts such as `use terse variable names` no longer do. A 200-case corpus tests the hook.
+ - No mode line or terse reminder on scheduled-task prompts.
+ - session-start removes session state files untouched for 30 days.
+ 
+ ## [0.2.0] - 2026-10-13
+diff --git a/docs/spikes/m1-payloads.md b/docs/spikes/m1-payloads.md
+index ee4995f..62520ec 100644
+--- a/docs/spikes/m1-payloads.md
++++ b/docs/spikes/m1-payloads.md
+@@ -26,10 +26,11 @@ Decision: starts with `sdk`; the reminder skip in Task 8 works as written.
+ ask under bypassPermissions: prompted
+ Decision: no `decide.sh` change. The user rejected the prompt for `git stash`; a hook replay gives `kern G1: git stash in the main checkout changes shared state (D3)`.
+ mode survives /compact: yes
+ Decision: none. After `/compact` the kernel was rendered again with `voice=terse`, and `/kern:mode status` said terse.
+ Claude asked to write its own session state: declined, and told the user to type `/kern:autopilot on`. A hook replay of the write gives `kern G16: kern session state is written only by kern hooks`.
+ gh pr merge under autopilot: Claude did not run it and told the user to run it with `!`. A hook replay gives `kern G1: gh pr merge under autopilot: merge stays human`.
+ Smoke checklist (Task 18 Step 5): 6 of 6 pass.
+ Live-check findings, fixed in be26d2f: `/kern:autopilot off` created `.kern/ledgers` without asking; help setup named its template path ambiguously; a terse reply ran long with detail nobody asked for.
+ 
+ Other observations: payloads carry `permission_mode` (seen `auto`) and `prompt_id`. The headless run logged 3 lines under `sdk-cli`, 12 lines under `cli` overall in this log.
++G18 path: A (M2a Task 12): agent_type is kern:investigator, so the investigator keeps Bash behind G18.
+diff --git a/hooks/guards/g18-readonly-agent.sh b/hooks/guards/g18-readonly-agent.sh
+new file mode 100644
+index 0000000..44fefb4
+--- /dev/null
++++ b/hooks/guards/g18-readonly-agent.sh
+@@ -0,0 +1,136 @@
++# shellcheck shell=bash
++# shellcheck disable=SC2154  # TOOL and AGENT are set by hooks/pre-tool-use
++# G18: kern's read-only agents may run only allowlisted read commands in Bash.
++# Sourced by hooks/pre-tool-use, which sets TOOL, AGENT and TOOL_INPUT and provides ti_get, git_words,
++# git_sub, _shell_words and vote. G18_AGENTS holds the agent_type the M1 spike recorded for the
++# investigator.
++G18_AGENTS="kern:investigator"
++
++# g18_allowed SIMPLE_COMMAND: exit 0 when the command only reads. Options are judged on the words the
++# shell passes, quotes and backslashes removed, so '-o' and -dele''te are seen as -o and -delete.
++g18_allowed() {
++  local c words w1 sub w n=0
++  # 2>&1, >&2 and a redirect to /dev/null are dropped only when they end their word: >&1x writes to a
++  # file named 1x, and >/dev/nullx to /dev/nullx.
++  c=$(printf '%s' "$1" | sed -E -e 's/[0-9]*>&[0-9]+([[:space:]]|$)/\1/g' \
++    -e 's#(&|[0-9]*)>[[:space:]]*/dev/null([[:space:]]|$)#\2#g' -e 's/^[[:space:]]*//')
++  case "$c" in *'>'* | *'<('* | *\$\(* | *'`'*) return 1 ;; esac
++  _g18_expands "$c" && return 1
++  words=$(_shell_words "$c")
++  w1=${words%%$'\n'*}
++  case "$w1" in
++    git)
++      sub=$(git_sub "$c" | cut -f2) || return 1
++      case "$sub" in
++        log | show | blame | diff | grep | ls-files | ls-tree | rev-parse | rev-list | cat-file | merge-base | describe | shortlog | name-rev) ;;
++        *) return 1 ;;
++      esac
++      # A config value, an external diff, a pager or an output file can run a program or write one.
++      # git grep reads --op as --open-files-in-pager, and -O inside a cluster such as -nO.
++      while IFS= read -r w; do
++        case "$w" in -c | -c* | --config-env* | -O* | --op* | --output* | --ext-diff* | --textconv*) return 1 ;; esac
++        case "$sub:$w" in grep:-[!-]*O*) return 1 ;; esac
++      done <<EOF
++$words
++EOF
++      ;;
++    rg)
++      # --pre and --hostname-bin run a program; -z runs decompression programs, alone or in a cluster
++      # such as -nz.
++      while IFS= read -r w; do
++        case "$w" in --pre* | --search-zip* | --hostname-bin*) return 1 ;; --*) ;; -*z*) return 1 ;; esac
++      done <<EOF
++$words
++EOF
++      ;;
++    grep | ls | cat | head | tail | wc | cut | tr | nl | stat | du | pwd | echo | printf | basename | dirname | realpath | cd | true | test | jq | column | cmp | diff | comm) ;;
++    file)
++      # -C writes a .mgc file, also inside a cluster such as -bC; file reads --co as --compile. -z and -Z
++      # run decompression programs; --u is a prefix only of --uncompress and --uncompress-noreport.
++      while IFS= read -r w; do
++        case "$w" in --co* | --u*) return 1 ;; --*) ;; -*C* | -*z* | -*Z*) return 1 ;; esac
++      done <<EOF
++$words
++EOF
++      ;;
++    sort)
++      # -o writes a file, also inside a cluster such as -uo; --compress-program runs a program. sort
++      # reads --o as --output and --co as --compress-program.
++      while IFS= read -r w; do
++        case "$w" in --o* | --co*) return 1 ;; --*) ;; -*o*) return 1 ;; esac
++      done <<EOF
++$words
++EOF
++      ;;
++    find)
++      while IFS= read -r w; do
++        case "$w" in -delete | -exec* | -ok* | -fprint* | -fls) return 1 ;; esac
++      done <<EOF
++$words
++EOF
++      ;;
++    sed)
++      # Only sed -n with a script of line numbers and p, such as 1,20p or $p, then file names: a later
++      # word that starts with - (-i, --in-place, -e 'w file') could write, so it is not allowed.
++      while IFS= read -r w; do
++        n=$((n + 1))
++        case "$n" in
++          1) ;;
++          2) [ "$w" = -n ] || return 1 ;;
++          3)
++            case "$w" in *p) ;; *) return 1 ;; esac
++            case "${w%p}" in *[!0-9,\$]*) return 1 ;; esac
++            ;;
++          *) case "$w" in -*) return 1 ;; esac ;;
++        esac
++      done <<EOF
++$words
++EOF
++      [ "$n" -ge 3 ] || return 1
++      ;;
++    *) return 1 ;;
++  esac
++  return 0
++}
++
++# _g18_expands TEXT: exit 0 when the shell may turn TEXT into words it does not show: a $ or a
++# backtick outside single quotes ($_, ${x:--o}, $'-o'), or a brace expansion ({-o,out.txt}). A brace
++# pair after @ with no comma or .. inside, such as git's HEAD@{1} or @{u}, does not expand.
++_g18_expands() {
++  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
++    { buf = buf (NR > 1 ? "\n" : "") $0 }
++    END {
++      n = split(buf, C, ""); q = ""; s = ""
++      for (i = 1; i <= n; i++) {
++        c = C[i]
++        if (q == sq) { if (c == sq) q = ""; continue }
++        if (c == "\\") { i++; continue }
++        if (c == "$" || c == "`") exit 0
++        if (q == "\"") { if (c == "\"") q = ""; continue }
++        if (c == sq || c == "\"") { q = c; continue }
++        s = s c
++      }
++      gsub(/@[{][^,.{}]*[}]/, "", s)
++      exit index(s, "{") ? 0 : 1
++    }'
++}
++
++guard_g18() {
++  [ "$TOOL" = "Bash" ] || return 0
++  [ -n "${AGENT:-}" ] || return 0
++  case " $G18_AGENTS " in *" $AGENT "*) ;; *) return 0 ;; esac
++  local cmd line
++  if ! cmd=$(ti_get command); then
++    vote deny G18 "read-only agent: the Bash input has no command"
++    return 0
++  fi
++  while IFS= read -r line; do
++    [ -n "$line" ] || continue
++    if ! g18_allowed "$line"; then
++      vote deny G18 "$AGENT is read-only; '${line%%[[:space:]]*}' with these arguments is not on its allowlist (git log, show, blame, diff, grep, ls-files; rg, grep, ls, cat, head, tail, wc; find without -exec or -delete; sed -n with line numbers). Ask the controller to run it."
++      return 0
++    fi
++  done <<EOF
++$(git_words "$cmd")
++EOF
++}
+diff --git a/hooks/pre-tool-use b/hooks/pre-tool-use
+index 4089311..1173036 100755
+--- a/hooks/pre-tool-use
++++ b/hooks/pre-tool-use
+@@ -77,21 +77,21 @@ fi
+ # shellcheck disable=SC2034 # read by ti_get and the guard files
+ TOOL_INPUT=$(json_get_raw tool_input) || case $? in 1) TOOL_INPUT="{}" ;; *) unparseable tool_input ;; esac
+ # shellcheck disable=SC2034 # read by guard files
+ AGENT=$(json_get agent_type) || case $? in 1) AGENT="" ;; *) unparseable agent_type ;; esac
+ # Monitor runs a shell command from the same `command` key, so every guard reads it as Bash.
+ [ "$TOOL" = Monitor ] && TOOL=Bash
+ kern_enabled || exit 0
+ 
+ # The guards kern ships, so a missing guard file fails closed. A guard file that does not source to
+ # the end fails closed too, and its guard does not run.
+-KERN_GUARD_IDS="g00 g01 g02 g03 g04 g05 g06 g13 g14 g15 g16"
++KERN_GUARD_IDS="g00 g01 g02 g03 g04 g05 g06 g13 g14 g15 g16 g18"
+ ids=" $KERN_GUARD_IDS "
+ bad=" "
+ for f in "$KERN_ROOT"/hooks/guards/g*.sh; do
+   id=$(basename "$f" .sh)
+   id=${id%%-*}
+   case "$ids" in *" $id "*) ;; *) ids="$ids$id " ;; esac
+   # shellcheck source=/dev/null
+   . "$f" || bad="$bad$id "
+ done
+ for id in $ids; do
+diff --git a/tests/hooks/g18.bats b/tests/hooks/g18.bats
+new file mode 100644
+index 0000000..cf52b3e
+--- /dev/null
++++ b/tests/hooks/g18.bats
+@@ -0,0 +1,123 @@
++#!/usr/bin/env bats
++# tests/hooks/g18.bats
++
++load ../helpers/wt
++
++setup() {
++  wt_test_env
++  REPO="$TMP/repo"
++  make_fixture "$REPO"
++  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
++  export KERN_GUARDS=g18
++}
++
++# payload AGENT_TYPE COMMAND: a PreToolUse Bash payload; AGENT_TYPE may be empty. COMMAND has no double quotes.
++payload() {
++  local extra=''
++  [ -n "$1" ] && extra=",\"agent_id\":\"a1\",\"agent_type\":\"$1\""
++  printf '{"session_id":"s1","cwd":"%s","hook_event_name":"PreToolUse","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"%s"}%s}' "$REPO" "$2" "$extra"
++}
++
++hook() { run bash "$KERN_ROOT/hooks/pre-tool-use" <<< "$(payload "$1" "$2")"; }
++autopilot() { printf 'voice: normal\nsurface: auto\nautopilot: on\n' > "$CLAUDE_PLUGIN_DATA/sessions/s1.state"; }
++denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output" == *"kern G18: "* ]]; }
++
++@test "read commands get no G18 vote" {
++  for cmd in 'git log --oneline -5' 'git -C src blame a.txt' 'rg -n foo src' 'ls -la' 'wc -l a.txt' 'find . -name a.txt' 'sed -n 1,5p a.txt' "sed -n '\$p' a.txt" 'sort -rn a.txt' 'file a.txt'; do
++    hook kern:investigator "$cmd"
++    [ "$status" -eq 0 ]
++    [ -z "$output" ] || { echo "unexpected vote for: $cmd"; false; }
++  done
++}
++
++@test "pipes and stderr to /dev/null stay allowed" {
++  hook kern:investigator 'git log --oneline 2>/dev/null | head -n 5'
++  [ -z "$output" ]
++  hook kern:investigator 'cat a.txt 2>&1 | wc -l'
++  [ -z "$output" ]
++}
++
++@test "writes and unknown commands are denied" {
++  for cmd in 'git commit -m wip' 'git checkout main' 'rm -rf build' 'sed -i s/a/b/ a.txt' 'find . -name x -delete' 'npm test' 'git diff --output=x.patch' 'sort -o out.txt a.txt' \
++    'sort -uo out.txt a.txt' 'sort --compress-program=sh a.txt' 'file -C -m magic' 'uniq a.txt out.txt' 'sed -n 1w/tmp/out.txt a.txt' \
++    'git -c core.pager=sh log' 'git -c diff.external=sh diff' 'git --config-env=core.pager=X log' 'git grep -Ocat foo' 'git grep --open-files-in-pager=cat foo' 'rg --pre cat foo' \
++    'sed -n 1p -i a.txt' 'sed -n 1p a.txt -i' 'sed -n 1p --in-place=.bak a.txt' "sed -n 1p -e 'w /tmp/x' a.txt" 'rg -nz foo'; do
++    hook kern:investigator "$cmd"
++    denied || { echo "not denied: $cmd"; false; }
++  done
++}
++
++# In these lists \" is a double quote and \\ a backslash once the JSON payload is decoded.
++@test "an option word built by quotes, escapes or expansion is still denied" {
++  for cmd in 'sort \"-o\" out.txt a.txt' \
++    "sort '-o' out.txt a.txt" "find . '-delete'" "find . -dele''te" "sed -n 1p '-i' a.txt" 'sed -n 1p \\-i a.txt' \
++    "git '-c' core.pager=sh log" "rg '-z' foo" "file '-C' -m magic" 'sort {-o,out.txt} a.txt' 'sed -n 1p {-i,a.txt}' \
++    'sort ${x:--o} out.txt a.txt' 'echo -o; sort $_ out.txt a.txt' "sort \$'-o' out.txt a.txt" 'sed -n \"$p\" a.txt'; do
++    hook kern:investigator "$cmd"
++    denied || { echo "not denied: $cmd"; false; }
++  done
++}
++
++@test "abbreviated long options and short-option clusters are still denied" {
++  for cmd in 'git grep --op=cat foo' 'git grep -nOcat foo' 'sort --out=out.txt a.txt' 'sort --co=sh a.txt' \
++    'file --comp -m magic' 'file -bC -m magic'; do
++    hook kern:investigator "$cmd"
++    denied || { echo "not denied: $cmd"; false; }
++  done
++}
++
++@test "an option that runs a program is denied: rg --hostname-bin, file -z and -Z" {
++  for cmd in 'rg --hostname-bin=./h.sh foo' 'rg --hostname-bin ./h.sh foo' "rg -n '--hostname-bin=hostname' foo" \
++    'file -z a.gz' 'file -Z a.gz' 'file -bz a.gz' 'file -bZ a.gz' 'file --uncompress a.gz' 'file --uncompress-noreport a.gz' \
++    'file --uncompress-n a.gz'; do
++    hook kern:investigator "$cmd"
++    denied || { echo "not denied: $cmd"; false; }
++  done
++}
++
++@test "a redirect that only looks like 2>&1 or /dev/null is denied" {
++  for cmd in 'cat a.txt >&1x' 'cat a.txt 2>&1y' 'cat a.txt >/dev/nullx' 'cat a.txt &>/dev/null.txt'; do
++    hook kern:investigator "$cmd"
++    denied || { echo "not denied: $cmd"; false; }
++  done
++}
++
++@test "quoted arguments, git's @{ } and stream redirects stay allowed" {
++  for cmd in "rg -n 'ERROR|WARN' a.txt" 'sed -n \"1,5p\" a.txt' 'sed -n 1,20p' 'git log @{u}..HEAD' 'git log -1 HEAD@{1}' \
++    \"git\"' log -1' 'cat a.txt >/dev/null' 'cat a.txt &>/dev/null' 'echo hi >&2' "jq '{a: .b}' x.json" 'git log -SOpen'; do
++    hook kern:investigator "$cmd"
++    [ "$status" -eq 0 ]
++    [ -z "$output" ] || { echo "unexpected vote for: $cmd"; false; }
++  done
++}
++
++@test "a file redirect is denied" {
++  hook kern:investigator 'git log > out.txt'
++  denied
++  hook kern:investigator 'echo hi >> notes.txt'
++  denied
++}
++
++@test "a denied command anywhere in a chain denies the call" {
++  hook kern:investigator 'git log -1 && git push origin main'
++  denied
++}
++
++@test "other agents and the main session get no G18 vote" {
++  hook '' 'rm -rf build'
++  [ -z "$output" ]
++  hook kern:implementer 'rm -rf build'
++  [ -z "$output" ]
++}
++
++@test "autopilot changes nothing for G18" {
++  autopilot
++  hook kern:investigator 'git log --oneline -5'
++  [ -z "$output" ]
++  hook kern:investigator 'git commit -m wip'
++  denied
++}
++
++@test "the dispatcher lists g18 among the guards it expects" {
++  grep -q '^KERN_GUARD_IDS=".* g18[ "]' "$KERN_ROOT/hooks/pre-tool-use"
++}

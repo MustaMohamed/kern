@@ -1,0 +1,188 @@
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index 96dfdb3..88208f0 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -4,7 +4,8 @@
+ # command that names kern's hook code or a state function, which could forge the user's prompt.
+ # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
+ # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
+-# to disk and then run by name.
++# to disk and then run by name; and any other spelling of a hook path than the ones _g16_hooks reads
++# (any case, line continuations, the APFS folds of s and k, quotes, backslashes, globs and braces).
+ 
+ _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
+ _G16_STATE_CMD="commands may not write kern session state"
+@@ -14,16 +15,20 @@ _G16_TAB=$'\t'
+ _G16_INTO="a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write"
+ _G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool"
+ _G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
+-# _G16_HOOK_AWK: reads the command text, lower-cased. Prints `hit` when a line names a hook after a
+-# slash, a .sh file under hooks/lib/, or a state function as a word; a hook counts only when the
+-# character after it cannot go on a file name, so pre-tool-use.bats does not. Otherwise prints `ctx`
+-# when a line names a hooks directory (else `-`), then each word, split at blanks, CR, ; | & < > ) and =.
++# U+017F (long s) and U+212A (Kelvin sign), in UTF-8: APFS folds them to s and k in a file name.
++_G16_LONG_S=$'\305\277'
++_G16_KELVIN=$'\342\204\252'
++# _G16_HOOK_AWK: reads the command text, lower-cased. Prints `hit` when a line names a hook after
++# hooks/ (or hooks// or hooks/./), a .sh file under hooks/lib/, or a state function as a word; a hook
++# counts only when the character after it cannot go on a file name, so pre-tool-use.bats does not.
++# Otherwise prints `ctx` when a line names a hooks directory (else `-`), then each word, split at
++# blanks, CR, ; | & < > ) and =.
+ # shellcheck disable=SC2016 # awk text
+ _G16_HOOK_AWK='
+ BEGIN {
+   a = "abcdefghijklmnopqrstuvwxyz0123456789"
+   e = "([^" a "._-]|$)"
+-  hit = "/(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
++  hit = "hooks/(/|[.]/)*(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
+   hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset)([^" a "_]|$)"
+   dir = "(^|[^" a "._-])hooks" e
+ }
+@@ -45,6 +50,13 @@ guard_g16() {
+   esac
+ }
+ 
++# _g16_fold STR: sets _G16_F to STR with the long s and the Kelvin sign read as s and k, as APFS folds
++# them in a file name, so .claude/<long s>ettings.json is read as Claude Code's settings.
++_g16_fold() {
++  _G16_F=${1//$_G16_LONG_S/s}
++  _G16_F=${_G16_F//$_G16_KELVIN/k}
++}
++
+ # _g16_lower STR: STR in lower case (bash 3.2 has no ${var,,}).
+ _g16_lower() {
+   printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]'
+@@ -71,6 +83,8 @@ _g16_norm() {
+ _g16_file() {
+   local p norm real="" sd rsd="" c
+   p=$(ti_get file_path) || p=$(ti_get notebook_path) || return 0
++  _g16_fold "$p"
++  p=$_G16_F
+   case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
+   norm=$(_g16_norm "$p")
+   real=$(cd "$(dirname "$norm")" 2>/dev/null && pwd -P) && real="$real/${norm##*/}"
+@@ -329,6 +343,8 @@ _g16_bash() {
+   local cmd t seg words w head inplace seg_s seg_k last dd skip anydir reads creads msg m
+   local state=0 settings=0 cc=0 into=0 in_sd=0
+   cmd=$(ti_get command) || return 0
++  _g16_fold "$cmd"
++  cmd=$_G16_F
+   # Only a command whose text could name state, a settings file or a .claude directory, in any case,
+   # is lower-cased and parsed. Quotes and backslashes are taken out first, in one tr pass and only
+   # when the text holds one, so ke''rn.yml is still seen. The sessions dir ends in sessions, so its
+@@ -490,25 +506,34 @@ _g16_glob() {
+ # autopilot. Running prompt-submit with a made-up prompt rewrites the user's last message and can turn
+ # autopilot on, and state_set writes any key; a command that reads can run code too (git -c
+ # core.fsmonitor=..., rg --pre, xargs sh -c), so no command is let through on the name it starts with.
+-# The match is on the command text, in any case, with quotes and backslashes taken out, so wrappers,
+-# -c strings, git config values and xargs are all covered. It counts:
+-# - in the text (_G16_HOOK_AWK): a hook after a slash, a .sh file under hooks/lib/, or state_set,
+-#   _state_put or state_reset;
++# The match is on the command text, in any case, with line continuations joined, the APFS folds of s
++# and k read as s and k, and quotes and backslashes taken out, so wrappers, -c strings, git config
++# values and xargs are all covered. It counts:
++# - in the text (_G16_HOOK_AWK): a hook after hooks/, a .sh file under hooks/lib/, or state_set,
++#   _state_put or state_reset; a hook name elsewhere (a branch m2/session-start, a URL) is not hook code;
+ # - in a word inside a hooks directory: a last part that names a hook or a hooks/lib file, holds a
+ #   glob that could match one (_g16_glob), or holds a $, a backtick or a { (a variable, command
+ #   output, or the {} of find -exec and xargs). Every word is inside one when the text names a hooks
+ #   directory (cd hooks, git log hooks/) or the session's directory is one; a single word is when a
+-#   part of its own directory holds a glob that could match hooks ($K/h*/lib/state.sh).
++#   part of its own directory holds a glob that could match hooks ($K/h*/lib/state.sh);
++# - a word with a brace group that holds a / and a , or .. (hoo{ks/prompt-sub,x}mit), which can join
++#   the parts on both sides of a slash. The command is never expanded to decide.
+ # Reading a hook file stays possible with the Read and Grep tools. Not seen (accepted limits): a hooks
+ # directory reached without naming it (find $K -name prompt-submit, a glob for the directory in one
+ # word and the hook in another), a name built at run time ($'\x..' escapes, xargs with no {}),
+-# interpreter code that builds a hook path, and a script written to disk and then run by name.
++# interpreter code that builds a hook path, a script written to disk and then run by name, and any
++# other spelling-level evasion beyond the forms above.
+ _g16_hooks() {
+   local cmd t r w d c last names f ctx=0 inside hit=0
+   cmd=$(ti_get command) || return 0
+-  # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one tr pass
+-  # and only when the text holds one.
+-  t=${cmd//\$\'/}
++  # A backslash before a newline, or before CR LF, joins the lines; the long s and the Kelvin sign
++  # read as s and k, for the prefilter and the awk alike; $'...' and $"..." read as plain quotes; then
++  # quotes and backslashes are taken out, in one tr pass and only when the text holds one.
++  t=${cmd//\\$'\r\n'/}
++  t=${t//\\$'\n'/}
++  _g16_fold "$t"
++  t=$_G16_F
++  t=${t//\$\'/}
+   t=${t//\$\"/}
+   case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+   case "$CWD" in */[Hh][Oo][Oo][Kk][Ss] | */[Hh][Oo][Oo][Kk][Ss]/*) ctx=1 ;; esac
+@@ -516,9 +541,7 @@ _g16_hooks() {
+   if [ "$ctx" = 0 ]; then
+     case "$t" in
+       *[Hh][Oo][Oo][Kk][Ss]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | \
+-        *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[Pp][Rr][Oo][Mm][Pp][Tt]-[Ss][Uu][Bb][Mm][Ii][Tt]* | \
+-        *[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ss][Tt][Aa][Rr][Tt]* | *[Ss][Uu][Bb][Aa][Gg][Ee][Nn][Tt]-[Ss][Tt][Aa][Rr][Tt]* | \
+-        *[Pp][Rr][Ee]-[Tt][Oo][Oo][Ll]-[Uu][Ss][Ee]* | *[\*\?\[\{\(^#]*/*) ;;
++        *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[\*\?\[\{\(^#]*/*) ;;
+       *) return 0 ;;
+     esac
+   fi
+@@ -536,6 +559,11 @@ _g16_hooks() {
+     esac
+     while [ "$hit" = 0 ] && IFS= read -r w; do
+       w=${w#"${w%%[!(]*}"}
++      case "$w" in
++        *'{'*/*'}'*)
++          case "$w" in *'{'*,*'}'* | *'{'*..*'}'*) hit=1; continue ;; esac
++          ;;
++      esac
+       inside=$ctx
+       case "$inside:$w" in
+         0:*/*)
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index fae586f..292913e 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -470,7 +470,8 @@ bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:
+   expect_cmd none 'tests/run-bats tests/hooks/prompt-submit.bats' 'git log hooks/' 'tests/run-bats tests/hooks/g20*.bats' \
+     'ls tests/hooks/*.bats' 'git commit -m "fix the prompt-submit test"' 'shellcheck scripts/ledger-open' \
+     'cat hooks/prompt-submit.md' 'bash hooks/prompt-submit.bak' 'cat hooks/pre-tool-use_old' 'cat docs/hooks.md' \
+-    'ls *.md' 'ls *' 'cat */*.md' 'echo ${HOME}/x' 'echo $(pwd)/x'
++    'ls *.md' 'ls *' 'cat */*.md' 'echo ${HOME}/x' 'echo $(pwd)/x' 'git checkout -b m2/session-start' \
++    'git push origin fix/pre-tool-use' 'curl https://x/api/session-start' 'git log -- skills/session-start/'
+ }
+ 
+ @test "inside a hooks directory a bare hook name, or a glob that could match one, asks" {
+@@ -493,3 +494,34 @@ bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:
+   [ "$(decision_of "$output")" = ask ]
+   [[ "$output" == *"G16 could not read the command for kern's hook code"* ]] || false
+ }
++
++@test "a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied" {
++  local nl=$'\n' cr=$'\r'
++  K=$(kern_root)
++  expect_hook "bash $K/hooks/prompt-\\${nl}submit" ". $K/hooks/lib/sta\\${nl}te.sh" "bash \"$K/hooks/prompt-\\${nl}submit\"" \
++    "cd hooks && bash prompt-\\${nl}submit" "bash $K/hooks/session-\\${cr}${nl}start"
++}
++
++@test "the APFS case folds of s and k inside a hook path are read as s and k; asks, and under autopilot is denied" {
++  # U+017F (long s) folds to s and U+212A (Kelvin sign) to k, written as their UTF-8 bytes.
++  local s=$'\305\277' k=$'\342\204\252'
++  K=$(kern_root)
++  expect_hook "bash $K/hooks/prompt-${s}ubmit" "bash hooks/${s}ession-start" "bash hooks/pre-tool-u${s}e" \
++    ". $K/hoo${k}s/lib/state.sh" "cd $K/hook${s} && bash prompt-submit"
++}
++
++@test "a brace group that spans a slash asks, and under autopilot is denied" {
++  K=$(kern_root)
++  expect_hook "bash $K/hoo{ks/prompt-sub,x}mit < j.json" 'bash ho{oks/session-st,}art' 'cp src/{a/b,c} /tmp/' \
++    'ls x{a/b..c}'
++}
++
++@test "the APFS case folds of s and k in a settings or state path get the vote of the ASCII spelling" {
++  # U+017F (long s) folds to s and U+212A (Kelvin sign) to k, written as their UTF-8 bytes.
++  local s=$'\305\277' k=$'\342\204\252'
++  expect_bash ask "echo x > .claude/${s}ettings.json" "echo x > .claude/${k}ern.yml" "echo x > .claude/${s}ettings.local.json"
++  expect_bash deny "echo on > $CLAUDE_PLUGIN_DATA/${s}essions/a.state"
++  expect_file_tools "$R/.claude/${s}ettings.json" ask
++  expect_file_tools "$R/.claude/${k}ern.local.yml" ask
++  expect_file_tools "$CLAUDE_PLUGIN_DATA/${s}essions/a.state" deny
++}

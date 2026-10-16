@@ -1,0 +1,159 @@
+# Review package: 50bab44..HEAD
+
+## Commits
+1b9c4b5 M2: brief-check handles CRLF, anchors VERIFY and catches kept placeholders
+
+## Files changed
+ scripts/brief-check            | 14 +++++++--
+ tests/scripts/brief-check.bats | 65 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 76 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/scripts/brief-check b/scripts/brief-check
+index 484216a..548ba95 100755
+--- a/scripts/brief-check
++++ b/scripts/brief-check
+@@ -1,52 +1,60 @@
+ #!/usr/bin/env bash
+ # Refuse a worker brief that is missing a field, so parallel-work spawns only complete briefs.
+ # Usage: brief-check FILE    Prints "brief-check: ok" (exit 0) or one line per problem (exit 1); usage exit 2.
+ # A field is a line that starts with its label (GOAL, SCOPE, CONTEXT, ACCEPTANCE, VERIFY, TIMEBOX,
+ # FORBIDDEN, REPORT, STANDING) and holds text after it, or whose next indented lines do. VERIFY's first
+-# command is the wt-check entry check. A field whose text is still the placeholder from
++# command is the wt-check entry check (optionally after bash) with a worktree and a base ref. A field whose text starts with the placeholder from
+ # skills/parallel-work/references/brief-template.md is not filled in (FORBIDDEN's text is meant to be
+ # kept, so it is not checked).
+ # Field list adapted from pstack poteto-mode playbooks/orchestrate.md (MIT).
+ set -euo pipefail
+ [ $# -eq 1 ] || { echo "usage: brief-check FILE" >&2; exit 2; }
+ [ -r "$1" ] || { echo "brief-check: cannot read $1" >&2; exit 2; }
+ awk '
+   BEGIN {
+     n = split("GOAL SCOPE CONTEXT ACCEPTANCE VERIFY TIMEBOX FORBIDDEN REPORT STANDING", L, " ")
+     ph["GOAL"] = "one sentence; the outcome, runnable by someone with no chat access"
+     ph["SCOPE"] = "paths this worker may write; paths it may not; its worktree path and base ref"
+     ph["CONTEXT"] = "file pointers; upstream reports pasted in full when this unit depends on them"
+     ph["ACCEPTANCE"] = "checkable criteria, one per line"
+     ph["VERIFY"] = "exact commands, starting with wt-check <wt> <base-ref>, then the focused baseline"
+     ph["TIMEBOX"] = "rough cap; on expiry return partial findings and stop"
+     ph["REPORT"] = "status line, files, commands run with results, deviations, report file path"
+     ph["STANDING"] = "the standing orders below, pasted verbatim"
+   }
++  { sub(/\r$/, "") }
+   /^[ \t]*```/ { next }
+   {
+     for (i = 1; i <= n; i++) {
+       if (index($0, L[i]) == 1 && (length($0) == length(L[i]) || substr($0, length(L[i]) + 1, 1) ~ /[ \t:]/)) {
+         cur = L[i]; seen[cur] = 1
+         rest = substr($0, length(L[i]) + 1); sub(/^[ \t:]+/, "", rest)
+         if (rest != "") { text[cur] = rest; first[cur] = rest }
+         next
+       }
+     }
+     if (cur != "" && $0 ~ /^[ \t]+[^ \t]/) {
+       line = $0; sub(/^[ \t]+/, "", line)
+       if (first[cur] == "") first[cur] = line
+       text[cur] = text[cur] " " line
+       next
+     }
+     cur = ""
+   }
++  function verify_ok(s,   w, k, c) {
++    k = split(s, w, /[ \t]+/)
++    c = 1
++    if (w[c] == "bash") c++
++    if (w[c] !~ /(^|\/)wt-check$/) return 0
++    return k - c >= 2
++  }
+   END {
+     for (i = 1; i <= n; i++) {
+       if (!seen[L[i]]) { print "missing: " L[i]; bad = 1 }
+       else if (text[L[i]] == "") { print "empty: " L[i]; bad = 1 }
+-      else if ((L[i] in ph) && text[L[i]] == ph[L[i]]) { print "placeholder: " L[i]; bad = 1 }
++      else if ((L[i] in ph) && index(text[L[i]], ph[L[i]]) == 1) { print "placeholder: " L[i]; bad = 1 }
+     }
+-    if (seen["VERIFY"] && text["VERIFY"] != "" && first["VERIFY"] !~ /wt-check/) { print "VERIFY must start with the wt-check entry check"; bad = 1 }
++    if (seen["VERIFY"] && text["VERIFY"] != "" && !verify_ok(first["VERIFY"])) { print "VERIFY must start with the wt-check entry check"; bad = 1 }
+     if (!bad) print "brief-check: ok"
+     exit bad
+   }' "$1"
+diff --git a/tests/scripts/brief-check.bats b/tests/scripts/brief-check.bats
+index c92e14f..fb7eca5 100644
+--- a/tests/scripts/brief-check.bats
++++ b/tests/scripts/brief-check.bats
+@@ -57,10 +57,75 @@ setup() {
+   run --separate-stderr bash "$KERN_ROOT/scripts/brief-check" "$BATS_TEST_TMPDIR/none.md"
+   [ "$status" -eq 2 ]
+ }
+ 
+ @test "a field still holding the template placeholder is not filled in" {
+   sed 's/^GOAL .*/GOAL        one sentence; the outcome, runnable by someone with no chat access/' "$B" > "$BATS_TEST_TMPDIR/ph.md"
+   run --separate-stderr bash "$KERN_ROOT/scripts/brief-check" "$BATS_TEST_TMPDIR/ph.md"
+   [ "$status" -eq 1 ]
+   [ "$output" = "placeholder: GOAL" ]
+ }
++
++crlf() { awk '{ printf "%s\r\n", $0 }' "$1" > "$2"; }
++
++@test "a complete CRLF brief still passes" {
++  crlf "$B" "$BATS_TEST_TMPDIR/crlf.md"
++  run --separate-stderr bash "$KERN_ROOT/scripts/brief-check" "$BATS_TEST_TMPDIR/crlf.md"
++  [ "$status" -eq 0 ]
++  [ "$output" = "brief-check: ok" ]
++}
++
++@test "a CRLF brief with an empty field reports it" {
++  sed 's/^GOAL .*/GOAL   /' "$B" > "$BATS_TEST_TMPDIR/e.md"
++  crlf "$BATS_TEST_TMPDIR/e.md" "$BATS_TEST_TMPDIR/crlf.md"
++  run --separate-stderr bash "$KERN_ROOT/scripts/brief-check" "$BATS_TEST_TMPDIR/crlf.md"
++  [ "$status" -eq 1 ]
++  [ "$output" = "empty: GOAL" ]
++}
++
++@test "a CRLF brief with a placeholder field reports it" {
++  sed 's/^GOAL .*/GOAL        one sentence; the outcome, runnable by someone with no chat access/' "$B" > "$BATS_TEST_TMPDIR/p.md"
++  crlf "$BATS_TEST_TMPDIR/p.md" "$BATS_TEST_TMPDIR/crlf.md"
++  run --separate-stderr bash "$KERN_ROOT/scripts/brief-check" "$BATS_TEST_TMPDIR/crlf.md"
++  [ "$status" -eq 1 ]
++  [ "$output" = "placeholder: GOAL" ]
++}
++
++@test "VERIFY: a lookalike, a later mention or a bare wt-check is refused" {
++  for v in 'wt-checkout /w/a origin/main' 'npm test; echo wt-check' 'wt-check' 'wt-check /w/a'; do
++    sed "s#^VERIFY .*#VERIFY      $v#" "$B" > "$BATS_TEST_TMPDIR/v.md"
++    run --separate-stderr bash "$KERN_ROOT/scripts/brief-check" "$BATS_TEST_TMPDIR/v.md"
++    [ "$status" -eq 1 ]
++    [ "$output" = "VERIFY must start with the wt-check entry check" ]
++  done
++}
++
++@test "VERIFY: the plugin-root and bare forms with worktree and base pass" {
++  for v in 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-check /w/a origin/main' '/k/scripts/wt-check /w/a origin/main' 'wt-check /w/a origin/main'; do
++    sed "s#^VERIFY .*#VERIFY      $v#" "$B" > "$BATS_TEST_TMPDIR/v.md"
++    run --separate-stderr bash "$KERN_ROOT/scripts/brief-check" "$BATS_TEST_TMPDIR/v.md"
++    [ "$status" -eq 0 ]
++  done
++}
++
++@test "every placeholder is caught, bare or with words appended" {
++  declare -a PH=(
++    "GOAL|one sentence; the outcome, runnable by someone with no chat access"
++    "SCOPE|paths this worker may write; paths it may not; its worktree path and base ref"
++    "CONTEXT|file pointers; upstream reports pasted in full when this unit depends on them"
++    "ACCEPTANCE|checkable criteria, one per line"
++    "VERIFY|exact commands, starting with wt-check <wt> <base-ref>, then the focused baseline"
++    "TIMEBOX|rough cap; on expiry return partial findings and stop"
++    "REPORT|status line, files, commands run with results, deviations, report file path"
++    "STANDING|the standing orders below, pasted verbatim"
++  )
++  local p f t suffix
++  for p in "${PH[@]}"; do
++    f=${p%%|*}; t=${p#*|}
++    for suffix in "" " TODO"; do
++      sed "s|^$f .*|$f        $t$suffix|" "$B" > "$BATS_TEST_TMPDIR/ph.md"
++      run --separate-stderr bash "$KERN_ROOT/scripts/brief-check" "$BATS_TEST_TMPDIR/ph.md"
++      [ "$status" -eq 1 ]
++      [ "${lines[0]}" = "placeholder: $f" ]
++    done
++  done
++}

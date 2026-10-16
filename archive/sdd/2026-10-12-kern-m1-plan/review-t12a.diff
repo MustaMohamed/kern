@@ -1,0 +1,485 @@
+diff --git a/hooks/guards/g01-git.sh b/hooks/guards/g01-git.sh
+index 2fc9727..0595bef 100644
+--- a/hooks/guards/g01-git.sh
++++ b/hooks/guards/g01-git.sh
+@@ -52,7 +52,7 @@ $(_cmd_words "$rec")
+ EOT
+     # After a cd, or a GIT_DIR or GIT_WORK_TREE assignment, later git commands run where G1
+     # cannot tell.
+-    case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=*) moved=1 ;; esac
++    case "$rec" in *GIT_DIR=* | *GIT_WORK_TREE=* | *GIT_DIR+=* | *GIT_WORK_TREE+=*) moved=1 ;; esac
+     case "${w[0]}" in
+       cd | pushd | popd) moved=1 ;;
+       builtin) case "${w[1]-}" in cd | pushd | popd) moved=1 ;; esac ;;
+@@ -60,6 +60,58 @@ EOT
+       [Gg][Hh] | */[Gg][Hh]) _g01_gh "$rec" "${w[@]}" ;;
+       [Gg][Ii][Tt] | */[Gg][Ii][Tt]) _g01_git_rec "$rec" "$moved" "${w[@]}" ;;
+     esac
++    case "${w[0]}" in "" | [Gg][Hh] | */[Gg][Hh] | [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) _g01_hidden "${w[@]}" ;; esac
++  done
++}
++
++# Git's own commands that only read, which a git behind another command may run (_g01_hidden).
++_G01_READ_ONLY=" status log diff show rev-parse ls-files ls-remote blame describe grep help version cat-file \
++shortlog for-each-ref merge-base name-rev count-objects var "
++
++# _g01_hidden HEAD WORDS...: a simple command whose head is neither git nor gh may still run git: an
++# unknown wrapper (caffeinate, stdbuf), xargs, find -exec, or a wrapper option _cmd_words does not
++# read (env --ch, env -iC). Each later word whose basename is git (any case) is read past git's
++# global options; when the next word is one of git's own commands outside _G01_READ_ONLY, G1 asks,
++# deny under autopilot. Any other word after it (curl in `apt-get install git curl`, an option git
++# rejects) gets no vote. Quoted text is one word, so `grep -rn "git push" docs` holds no word git,
++# while `echo git push` asks. A -c or --config-env that sets alias.* (any case) asks whatever word
++# follows, since the alias may stand for any command; an alias set in git config is not seen.
++_g01_hidden() {
++  local head="$1" al
++  shift
++  while [ $# -gt 0 ]; do
++    case "${1##*/}" in
++      [Gg][Ii][Tt]) shift ;;
++      *) shift; continue ;;
++    esac
++    al=0
++    while [ $# -gt 0 ]; do
++      case "$1" in
++        -c | --config-env)
++          shift
++          case "${1-}" in [Aa][Ll][Ii][Aa][Ss].*) al=1 ;; esac
++          [ $# -gt 0 ] && shift
++          ;;
++        --config-env=[Aa][Ll][Ii][Aa][Ss].*) al=1; shift ;;
++        -C | --git-dir | --work-tree | --namespace | --super-prefix | --attr-source | --shallow-file)
++          shift
++          [ $# -gt 0 ] && shift
++          ;;
++        --git-dir=* | --work-tree=* | --namespace=* | --config-env=* | --super-prefix=* | --attr-source=* | \
++          --exec-path=* | -p | -P | --paginate | --no-pager | --bare | --no-replace-objects | --no-lazy-fetch | \
++          --no-optional-locks | --no-advice | --literal-pathspecs | --no-literal-pathspecs | --glob-pathspecs | \
++          --noglob-pathspecs | --icase-pathspecs) shift ;;
++        *) break ;;
++      esac
++    done
++    if [ "$al" = 0 ]; then
++      [ $# -gt 0 ] || return 0
++      case "$_G01_GIT_CMDS" in *" $1 "*) ;; *) continue ;; esac
++      case "$_G01_READ_ONLY" in *" $1 "*) continue ;; esac
++    fi
++    vote ask G1 "git inside $head cannot be checked; run git directly"
++    [ "$AUTOPILOT" = 1 ] && vote deny G1 "git inside $head under autopilot: it cannot be checked; run git directly"
++    return 0
+   done
+ }
+ 
+diff --git a/hooks/guards/g02-pr.sh b/hooks/guards/g02-pr.sh
+index 0931a79..362494f 100644
+--- a/hooks/guards/g02-pr.sh
++++ b/hooks/guards/g02-pr.sh
+@@ -15,6 +15,12 @@ help/h/b"
+ # the body from elsewhere, open an editor or a browser, or name another repo.
+ _GH_CREATE_SAFE="title body-file base head draft fill fill-first fill-verbose dry-run no-maintainer-edit"
+ _GH_READY_OPTS="undo/-/b repo/R/v help/h/b"
++# gh 2.100.0's command groups (`gh help`) that ask when gh runs behind another command
++# (_g02_hidden): all but browse, search and status, which only read or open a browser. help and
++# version are not listed there either.
++_G02_GROUPS=" auth codespace discussion gist issue org pr project release repo skill cache run workflow \
++agent-task alias api attestation completion config copilot extension gpg-key label licenses preview \
++ruleset secret ssh-key variable "
+ 
+ guard_g02() {
+   [ "$TOOL" = Bash ] || return 0
+@@ -25,11 +31,45 @@ guard_g02() {
+     case "$(gh_sub "${_GH_RECS[$i]}")" in
+       "pr create") _g02_create "$i" ;;
+       "pr ready") _g02_ready "$i" ;;
++      "") _g02_hidden "${_GH_RECS[$i]}" ;;
+     esac
+     i=$((i + 1))
+   done
+ }
+ 
++# _g02_hidden RECORD: a simple command whose head is neither git nor gh may still run gh (an unknown
++# wrapper, xargs, find -exec). Each later word whose basename is gh (any case) is read past -R or
++# --repo and its value; when the next word is one of _G02_GROUPS, G2 asks, deny under autopilot.
++# Only a record whose text holds gh, or g and h apart by quotes or a backslash (g''h), and that does
++# not start with the word git or gh, is read: no other record costs a process.
++_g02_hidden() {
++  local w=() t i=1 n
++  case "$1" in *[Gg][Hh]* | *[Gg][\"\'\\]*[Hh]*) ;; *) return 0 ;; esac
++  case "${1%%[[:space:]]*}" in [Gg][Ii][Tt] | */[Gg][Ii][Tt] | [Gg][Hh] | */[Gg][Hh]) return 0 ;; esac
++  while IFS= read -r t; do w+=("$t"); done <<EOT
++$(_cmd_words "$1")
++EOT
++  n=${#w[@]}
++  case "${w[0]}" in "" | [Gg][Hh] | */[Gg][Hh] | [Gg][Ii][Tt] | */[Gg][Ii][Tt]) return 0 ;; esac
++  while [ "$i" -lt "$n" ]; do
++    t=${w[$i]}
++    i=$((i + 1))
++    case "${t##*/}" in [Gg][Hh]) ;; *) continue ;; esac
++    while [ "$i" -lt "$n" ]; do
++      case "${w[$i]}" in
++        -R | --repo) i=$((i + 2)) ;;
++        -R?* | --repo=*) i=$((i + 1)) ;;
++        *) break ;;
++      esac
++    done
++    [ "$i" -lt "$n" ] || return 0
++    case "$_G02_GROUPS" in *" ${w[$i]} "*) ;; *) continue ;; esac
++    vote ask G2 "gh inside ${w[0]} cannot be checked; run gh directly"
++    [ "$AUTOPILOT" = 1 ] && vote deny G2 "gh inside ${w[0]} under autopilot: it cannot be checked; run gh directly"
++    return 0
++  done
++}
++
+ # _gh_load CMD: the simple commands of CMD in _GH_RECS, and CMD in _GH_CMD.
+ _gh_load() {
+   local rec
+diff --git a/hooks/guards/g05-commit.sh b/hooks/guards/g05-commit.sh
+index b435bcb..152a7bc 100644
+--- a/hooks/guards/g05-commit.sh
++++ b/hooks/guards/g05-commit.sh
+@@ -77,7 +77,7 @@ EOT
+   _G05_CONFIG=0
+   _G05_MOVED=0
+   _G05_ENV=""
+-  case "$1" in *=* | *env* | *sudo* | *declare* | *typeset*) _G05_ENV=$(_g05_env "$1") ;; esac
++  case "$1" in *=* | *[Ee][Nn][Vv]* | *[Ss][Uu][Dd][Oo]* | *declare* | *typeset*) _G05_ENV=$(_g05_env "$1") ;; esac
+   _g05_env_has now GIT_DIR GIT_WORK_TREE && _G05_MOVED=1
+   case "$_G05_HEAD" in [Gg][Ii][Tt] | */[Gg][Ii][Tt]) ;; *) return 1 ;; esac
+   n=${#w[@]}
+@@ -108,35 +108,32 @@ EOT
+ }
+ 
+ # _g05_env RECORD: what RECORD changes in the environment of the command it runs, one line each:
+-# NAME for a VAR=value word before the command word (after the wrappers env, sudo, command, builtin,
+-# exec, nice, nohup, time and timeout and their options); +NAME when the assignment outlives the
+-# record (an export or declare -x command, behind wrappers or not, or a record that is only
+-# assignments); @cwd when env -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory.
+-# Never a substring of an argument.
++# NAME for a VAR=value or VAR+=value word before the command word (after the wrappers env, sudo,
++# command, builtin, exec, nice, nohup, time and timeout, in any case, and their options: the value
++# options are _cmd_words' `cw_opt`); +NAME when the assignment outlives the record (an export or
++# declare -x command, behind wrappers or not, or a record that is only assignments); @cwd when env
++# -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory. Never a substring of an argument.
+ _g05_env() {
+-  _shell_words "$1" | LC_ALL=C awk '
++  _shell_words "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+     BEGIN {
+       n = split("env sudo command builtin exec nice nohup time timeout", a, " ")
+       for (k = 1; k <= n; k++) wrap[a[k]] = 1
+-      val["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
+-      val["env"] = " -C -P -S -u --chdir --split-string --unset --argv0 "
+-      val["exec"] = " -a "; val["timeout"] = " -s -k --signal --kill-after "; val["nice"] = " -n "
+     }
+-    function asg(s) { sub(/=.*/, "", s); names[++m] = s }
++    function asg(s) { sub(/\+?=.*/, "", s); names[++m] = s }
+     dx && /^-/ { if ($0 ~ /x/) ex = 1; next }
+     dx { dx = 0; if (!ex) done = 1 }
+-    ex { if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) asg($0); next }
++    ex { if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) asg($0); next }
+     done { next }
+     skip { skip = 0; next }
+     /^[0-9]*(<|>|&>)/ { if ($0 ~ /^[0-9]*[<>&|]+$/) skip = 1; next }
+     /^(if|then|elif|else|do|while|until|!|\{)$/ { w = ""; next }
+-    /^[A-Za-z_][A-Za-z0-9_]*=/ { asg($0); next }
+-    { b = $0; sub(/.*\//, "", b) }
+-    b in wrap { w = b; dur = (b == "timeout"); next }
++    /^[A-Za-z_][A-Za-z0-9_]*\+?=/ { asg($0); next }
++    { b = $0; sub(/.*\//, "", b); lb = tolower(b) }
++    lb in wrap { w = lb; dur = (lb == "timeout"); next }
+     /^-/ && w != "" {
+       if (w == "env" && ($0 ~ /^--c/ || $0 ~ /^-[^-]*C/)) print "@cwd"
+       if (w == "sudo" && ($0 ~ /^--c[hr]/ || $0 ~ /^-[^-]*[DR]/)) print "@cwd"
+-      if (index(val[w], " " $0 " ")) skip = 1
++      if (index(cw_opt[w], " " $0 " ")) skip = 1
+       next
+     }
+     dur { dur = 0; next }
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index 89839b3..f9da271 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -11,11 +11,12 @@ _GW_NL=$'\037'
+ # collect in cw_w[1..cw_n] (see _cmd_words).
+ _GW_AWK='
+   BEGIN {
+-    cw_opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
+-    cw_opt["env"] = " -C -P -S -u "
++    cw_opt["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u --user --group --host --prompt --chdir --chroot "
++    cw_opt["sudo"] = cw_opt["sudo"] "--role --type --close-from --other-user --command-timeout "
++    cw_opt["env"] = " -C -P -S -u --chdir --unset --split-string --argv0 "
+     cw_opt["exec"] = " -a "
+     cw_opt["timeout"] = " -s -k --signal --kill-after "
+-    cw_opt["nice"] = " -n "
++    cw_opt["nice"] = " -n --adjustment "
+   }
+   function sw(buf,   n, q, w, have, i, c) {
+     sw_n = 0; n = length(buf); q = ""; w = ""; have = 0
+@@ -41,20 +42,29 @@ _GW_AWK='
+     if (have) sw_w[++sw_n] = w
+   }
+   function cw_reset() { cw_n = 0; cw_s = 0; cw_val = 0; cw_split = 0; cw_wrap = ""; cw_dur = 0 }
+-  function cw(x,   a, k, m, b) {
++  # cw_line(s): feeds cw the words of the command line s (the value of env -S).
++  function cw_line(s,   a, k, m) { m = split(s, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") cw(a[k]) }
++  function cw(x,   b, v) {
+     if (cw_s) { cw_w[++cw_n] = x; return }
+     if (cw_val) {
+       cw_val = 0
+-      if (cw_split) { cw_split = 0; m = split(x, a, /[ \t\037]+/); for (k = 1; k <= m; k++) if (a[k] != "") cw(a[k]) }
++      if (cw_split) { cw_split = 0; cw_line(x) }
+       return
+     }
+     if (x ~ /^[0-9]*(<|>|&>)/) { cw_val = (x ~ /^[0-9]*[<>&|]+$/); return }
+-    if (x ~ /^[A-Za-z_][A-Za-z0-9_]*=/) return
++    if (x ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/) return
+     if (x ~ /^(if|then|elif|else|do|while|until|!|[{])$/) { cw_wrap = ""; return }
+-    b = x; sub(/.*\//, "", b)
++    # Any case: on a case-insensitive file system ENV and Sudo run env and sudo.
++    b = x; sub(/.*\//, "", b); b = tolower(b)
+     if (b ~ /^(command|exec|time|nohup|sudo|env|timeout|nice)$/) { cw_wrap = b; cw_dur = (b == "timeout"); return }
+     if (x ~ /^-/) {
+-      if (cw_wrap in cw_opt && index(cw_opt[cw_wrap], " " x " ")) { cw_val = 1; cw_split = (cw_wrap == "env" && x == "-S") }
++      # env -S, after any of the flags -0 -i -v in its cluster: the line is attached or the next word.
++      if (cw_wrap == "env" && x ~ /^(-[0iv]*S|--split-string=)/) {
++        v = x; sub(/^(-[0iv]*S|--split-string=)/, "", v)
++        if (v != "") cw_line(v); else if (x !~ /^--/) { cw_val = 1; cw_split = 1 }
++        return
++      }
++      if (cw_wrap in cw_opt && index(cw_opt[cw_wrap], " " x " ")) { cw_val = 1; cw_split = (cw_wrap == "env" && (x == "-S" || x == "--split-string")) }
+       return
+     }
+     if (cw_dur) { cw_dur = 0; return }
+@@ -68,7 +78,8 @@ _GW_AWK='
+ # The script of an sh-family shell's -c (any path, flags such as -lc or -cx, after the wrappers and
+ # keywords _cmd_words skips), the arguments of `eval`, and the bodies of $( ) and backticks are
+ # split again and printed after their wrapper, so a command inside a string is still seen. Out of
+-# scope: commands that xargs or find -exec run, and a here-doc piped into a shell (cat <<EOF | sh).
++# scope here: commands that xargs or find -exec run (G1 and G2 ask for a git or gh among their
++# words), and a here-doc piped into a shell (cat <<EOF | sh).
+ git_words() {
+   local seg inner body first
+   _split_words "$1" | while IFS= read -r seg; do
+@@ -82,16 +93,18 @@ git_words() {
+         ;;
+     esac
+     # The wrapper pass costs two processes, so it runs only when the first word, quotes removed,
+-    # is a redirection, an assignment, a keyword, a wrapper, eval or a shell.
++    # is a redirection, an assignment, a keyword, a wrapper, eval or a shell. A wrapper or shell name
++    # matches in any case, as _cmd_words reads it.
+     first=${seg%%[[:space:]]*}
+     case "/${first//[\"\'\\]/}" in
+-      *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | */eval | \
+-        */command | */exec | */time | */nohup | */sudo | */env | */timeout | */nice | */sh | */bash | \
+-        */zsh | */dash) ;;
++      *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
++        */[Ee][Vv][Aa][Ll] | */[Cc][Oo][Mm][Mm][Aa][Nn][Dd] | */[Ee][Xx][Ee][Cc] | */[Tt][Ii][Mm][Ee] | \
++        */[Nn][Oo][Hh][Uu][Pp] | */[Ss][Uu][Dd][Oo] | */[Ee][Nn][Vv] | */[Tt][Ii][Mm][Ee][Oo][Uu][Tt] | \
++        */[Nn][Ii][Cc][Ee] | */[Ss][Hh] | */[Bb][Aa][Ss][Hh] | */[Zz][Ss][Hh] | */[Dd][Aa][Ss][Hh]) ;;
+       *) continue ;;
+     esac
+     inner=$(_cmd_words "$seg" | LC_ALL=C awk '
+-      NR == 1 { b = $0; sub(/.*\//, "", b); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
++      NR == 1 { b = $0; sub(/.*\//, "", b); b = tolower(b); if (b == "eval") e = 1; else if (b !~ /^(ba|z|da)?sh$/) exit; next }
+       e { out = out (o++ ? " " : "") $0; next }
+       c { print; exit }
+       v { v = 0; next }
+@@ -159,7 +172,7 @@ _split_words() {
+       for (k = 1; k <= sw_n; k++) cw(sw_w[k])
+       if (!cw_n) return 0
+       b = cw_w[1]; sub(/.*\//, "", b)
+-      if (b !~ /^(ba|z|da)?sh$/) return 0
++      if (tolower(b) !~ /^(ba|z|da)?sh$/) return 0
+       for (k = 2; k <= cw_n; k++) if (cw_w[k] ~ /^-[a-z]*c[a-z]*$/) return 0
+       return 1
+     }
+@@ -292,10 +305,14 @@ _shell_words() {
+ }
+ 
+ # _cmd_words CMDLINE: the words of a simple command from its command name on, one per line.
+-# Skips leading redirections (and the target of one that stands alone), VAR=value words, the
+-# keywords if then elif else do while until ! {, the wrappers command, exec, time, nohup, sudo,
+-# env, timeout and nice (any path), and their options. The options in `cw_opt` take a value;
+-# timeout's duration follows its options; the value of env -S is a command line, read as words.
++# Skips leading redirections (and the target of one that stands alone), VAR=value and VAR+=value
++# words, the keywords if then elif else do while until ! {, the wrappers command, exec, time, nohup,
++# sudo, env, timeout and nice (any path, any case), and their options. The options in `cw_opt` take a
++# value as the next word (`--opt=value` is one word); timeout's duration follows its options; the
++# value of env -S or --split-string, attached or not and after the flags -0 -i -v in a cluster, is a
++# command line, read as words. Any other option `cw_opt` does not list (a cluster such as -iC, a
++# prefix such as --ch) takes no value, so the word after it is read as the command name; G1 and G2
++# still ask for a later git or gh.
+ _cmd_words() {
+   printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+     { buf = buf (NR > 1 ? "\037" : "") $0 }
+diff --git a/tests/hooks/g01-git.bats b/tests/hooks/g01-git.bats
+index 1a3570c..03963a4 100644
+--- a/tests/hooks/g01-git.bats
++++ b/tests/hooks/g01-git.bats
+@@ -501,3 +501,83 @@ settings() {
+   set_autopilot on
+   expect deny "$@"
+ }
++
++# g1q CMD: g1 for a command that may hold double quotes or backslashes.
++g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
++
++@test "git behind a command kern cannot read asks, and is denied under autopilot" {
++  local c
++  for c in "env --ch sub git push --force origin main" "env -iC sub git push --force origin main"; do
++    g1q "$c"
++    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
++    [[ "$output" == *"git inside sub cannot be checked; run git directly"* ]] || false
++  done
++  set_autopilot on
++  for c in "env --ch sub git push --force origin main" "env -iC sub git push --force origin main" \
++    "caffeinate -i git push --force origin main" "stdbuf -oL git commit -m x" \
++    "echo main | xargs git push --force origin" 'find . -maxdepth 0 -exec git push --force origin main \;' \
++    "caffeinate g''it push --force origin main" "caffeinate git -C x -c a=b --no-pager push origin feat" \
++    "builtin command git push --force origin main"; do
++    g1q "$c"
++    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
++    [[ "$output" == *"git inside "*" under autopilot"* ]] || { echo "$c -> $output"; return 1; }
++  done
++}
++
++@test "a word git that runs no git command, or a read-only one, gets no vote" {
++  local c mode
++  for mode in off on; do
++    set_autopilot "$mode"
++    for c in "brew install git" "which git" "apt-get install git curl" "man git" 'grep -rn "git push" docs' \
++      'echo "git push"' "xargs git status" "git status" "caffeinate git --no-pager log -1" "brew install git gh"; do
++      g1q "$c"
++      [ "$(decision_of "$output")" = none ] || { echo "$mode: $c -> $output"; return 1; }
++    done
++  done
++}
++
++@test "echo git push asks: a word git before one of git's commands that writes is not read further" {
++  g1 "echo git push"
++  [ "$(decision_of "$output")" = ask ]
++  [[ "$output" == *"git inside echo cannot be checked"* ]] || false
++  set_autopilot on
++  g1 "echo git push"
++  [ "$(decision_of "$output")" = deny ]
++}
++
++@test "an append assignment or a wrapper in another case does not hide git from G1's own checks" {
++  local c mode
++  for mode in off on; do
++    set_autopilot "$mode"
++    for c in "X+=1 git push --force origin main" "ENV git push --force origin main" \
++      "Env --chdir=sub git push --force origin main" 'BASH -c "git push --force origin main"' \
++      'ENV bash -c "git push --force origin main"' "env -iS 'git push --force origin main'"; do
++      g1q "$c"
++      [ "$(decision_of "$output")" = deny ] || { echo "$mode: $c -> $output"; return 1; }
++      [[ "$output" == *"plain force push"* ]] || { echo "$mode: $c -> $output"; return 1; }
++      [[ "$output" != *"cannot be checked"* ]] || { echo "$mode: $c -> $output"; return 1; }
++    done
++  done
++  set_autopilot off
++  expect ask "GIT_DIR+=$R/.git git reset --hard"
++  [[ "$output" == *"after cd, --git-dir or --work-tree"* ]] || false
++}
++
++@test "git behind a command that sets an alias with -c or --config-env asks, whatever word follows" {
++  local c
++  g1 "caffeinate git -c alias.p=push p --force origin main"
++  [ "$(decision_of "$output")" = ask ]
++  [[ "$output" == *"git inside caffeinate cannot be checked; run git directly"* ]] || false
++  set_autopilot on
++  for c in "caffeinate git -c alias.p=push p --force origin main" "caffeinate git -c ALIAS.p=push p" \
++    "caffeinate git --config-env=alias.p=V p" "caffeinate git --no-pager --config-env Alias.p=V p" \
++    "xargs git -c alias.s=status s"; do
++    g1q "$c"
++    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
++  done
++  for c in "caffeinate git -c color.ui=never log -1" "caffeinate git -c core.x=alias.y status" \
++    "caffeinate git --config-env=core.x=V status"; do
++    g1q "$c"
++    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
++  done
++}
+diff --git a/tests/hooks/g02-g04-gh.bats b/tests/hooks/g02-g04-gh.bats
+index 1c2d6ef..6e2e771 100644
+--- a/tests/hooks/g02-g04-gh.bats
++++ b/tests/hooks/g02-g04-gh.bats
+@@ -442,3 +442,27 @@ gh_log() {
+   set_autopilot on
+   expect deny 'gh pr review 12 --approve'
+ }
++
++@test "G2: gh behind a command kern cannot read asks, and is denied under autopilot" {
++  local c
++  for c in "caffeinate gh pr merge 1" "caffeinate gh -R o/r pr merge 1" "caffeinate g''h pr merge 1" \
++    "echo 1 | xargs GH pr merge"; do
++    g "$c" g02
++    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
++    [[ "$output" == *"gh inside "*" cannot be checked; run gh directly"* ]] || false
++  done
++  set_autopilot on
++  for c in "caffeinate gh pr merge 1" "caffeinate gh -R o/r pr merge 1" "caffeinate g''h pr merge 1" \
++    "echo 1 | xargs GH pr merge"; do
++    g "$c" g02
++    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
++  done
++}
++
++@test "G2: a word gh before no gh command group, or before a read-only one, gets no vote" {
++  set_autopilot on
++  for c in "brew upgrade gh" "which gh" 'echo "use gh pr create"' "gh pr list" "caffeinate gh status" \
++    "caffeinate gh --repo o/r search prs x" "caffeinate gh help pr" "echo gh is here" "brew install gh git"; do
++    expect none "$c" || return 1
++  done
++}
+diff --git a/tests/hooks/g05-g06-commit.bats b/tests/hooks/g05-g06-commit.bats
+index 2462675..55fa577 100644
+--- a/tests/hooks/g05-g06-commit.bats
++++ b/tests/hooks/g05-g06-commit.bats
+@@ -957,3 +957,20 @@ key AKIAABCDEFGHIJKLMNOP"
+   expect deny g01 "git --foo ci"
+   expect deny g01 "git --shallow-file x commit -m 'CDS-2465: x'"
+ }
++
++@test "G6: an append assignment, a wrapper in another case or a sudo long option still leaves git unscanned" {
++  local c cmds=(
++    "GIT_DIR+=/x/.git git commit -m 'CDS-2465: x'" "export GIT_DIR+=/x/.git; git commit -m 'CDS-2465: x'"
++    "ENV GIT_DIR=/x/.git git commit -m 'CDS-2465: x'" "sudo --user root GIT_DIR=/x/.git git commit -m 'CDS-2465: x'"
++    "ENV -C sub git commit -m 'CDS-2465: x'" "Sudo -D /tmp git push"
++  )
++  for c in "${cmds[@]}"; do
++    expect ask g06 "$c" || return 1
++    [[ "$output" == *"could not scan"* ]] || false
++  done
++  set_autopilot on
++  for c in "${cmds[@]}"; do
++    expect deny g06 "$c" || return 1
++    [[ "$output" == *"could not scan"* ]] || false
++  done
++}
+diff --git a/tests/hooks/gitctx.bats b/tests/hooks/gitctx.bats
+index de730d3..289046b 100644
+--- a/tests/hooks/gitctx.bats
++++ b/tests/hooks/gitctx.bats
+@@ -315,3 +315,22 @@ words_are() {
+   [ "$out" = partial ]
+   [ $(($(date +%s) - start)) -lt 3 ]
+ }
++
++@test "git is seen behind wrapper long options that take a value" {
++  for c in 'env --chdir sub git push origin main' 'env --unset X git push' \
++    'env --split-string "git push origin main"' 'sudo --user root git push' \
++    'sudo --chdir /tmp git push' 'nice --adjustment 5 git push'; do
++    finds "$c" push
++  done
++}
++
++@test "git is seen after an append assignment, an attached env -S line, and a wrapper or shell in another case" {
++  for c in 'X+=1 git push' 'GIT_DIR+=/x/.git git push' 'env --split-string="git push origin main"' \
++    "env -S'git push origin main'" 'ENV git push' 'Env --chdir=sub git push' 'SUDO -u me git push' \
++    '/usr/bin/NoHup git push' 'TIMEOUT 5 git push' 'sudo --chroot /x git push' \
++    'BASH -c "git push"' 'ENV bash -c "git push"' 'Sh -c "git push"' 'env -iS "git push origin main"' \
++    "env -0vS'git push origin main'" 'env -uS git push'; do
++    finds "$c" push
++  done
++  finds "$(printf '%s\n' "BASH <<'EOF'" 'git push --force origin main' 'EOF')" push
++}

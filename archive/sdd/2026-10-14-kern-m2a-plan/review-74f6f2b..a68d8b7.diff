@@ -1,0 +1,161 @@
+# Review package: 74f6f2b..HEAD
+
+## Commits
+a68d8b7 M2: wt-audit reports unknown when a git call fails
+
+## Files changed
+ scripts/wt-audit            | 39 ++++++++++++++++++++++++++++++---------
+ tests/scripts/wt-audit.bats | 25 +++++++++++++++++++++++--
+ 2 files changed, 53 insertions(+), 11 deletions(-)
+
+## Diff
+diff --git a/scripts/wt-audit b/scripts/wt-audit
+index f3629f2..09efaf1 100755
+--- a/scripts/wt-audit
++++ b/scripts/wt-audit
+@@ -1,15 +1,16 @@
+ #!/usr/bin/env bash
+ # Read-only list of the kern worktrees under worktree.dir, each in one bucket, so recall and teardown
+ # proposals start from evidence. Never removes anything.
+ # Usage: wt-audit [--days N]    Output: bucket<TAB>path<TAB>branch<TAB>evidence, one line per worktree.
+-# Buckets: merged, open-pr, closed-pr, uncommitted, committed, empty. A worktree idle for N days or more
++# Buckets: merged, open-pr, closed-pr, uncommitted, committed, empty, unknown. unknown means a git call
++# failed or the base ref did not resolve; the evidence names which. A worktree idle for N days or more
+ # (default 14) gets "idle <d>d" in its evidence.
+ # Bucket idea adapted from pstack poteto-mode playbooks/worktree-cleanup.md (MIT).
+ set -euo pipefail
+ here=$(cd "$(dirname "$0")" && pwd -P)
+ # shellcheck source=/dev/null
+ . "$here/../hooks/lib/settings.sh"
+ # shellcheck source=/dev/null
+ . "$here/lib/wt-common.sh"
+ 
+ days=14
+@@ -43,33 +44,53 @@ git -C "$MAIN" worktree list --porcelain | awk '/^worktree / { print substr($0,
+     states=$(cd "$wt" && gh pr list --head "$branch" --state all --json state --jq '.[].state' 2> /dev/null) || states='?'
+     case "$states" in
+       '?') ev="gh could not answer" ;;
+       *OPEN*) bucket=open-pr; ev="PR open" ;;
+       *MERGED*) bucket=merged; ev="PR merged" ;;
+       *CLOSED*) bucket=closed-pr; ev="PR closed" ;;
+     esac
+   elif [ -n "$branch" ]; then
+     ev="gh unavailable"
+   fi
+-  dirty=$(g -C "$wt" status --porcelain 2> /dev/null | wc -l | tr -d ' ')
+-  ahead=0
+-  if [ -n "$base" ] && g -C "$wt" rev-parse --verify --quiet "refs/remotes/origin/$base" > /dev/null; then
+-    ahead=$(g -C "$wt" rev-list --count "refs/remotes/origin/$base..HEAD" 2> /dev/null || echo 0)
++  why=''
++  if status_out=$(g -C "$wt" status --porcelain 2> /dev/null); then
++    dirty=0
++    [ -z "$status_out" ] || dirty=$(printf '%s\n' "$status_out" | wc -l | tr -d ' ')
++  else
++    dirty='?'
++    why="git status failed"
++  fi
++  ahead='?'
++  if [ -z "$base" ] || ! g -C "$wt" rev-parse --verify --quiet "refs/remotes/origin/$base" > /dev/null; then
++    why="${why:+$why, }no base ref"
++  elif ahead=$(g -C "$wt" rev-list --count "refs/remotes/origin/$base..HEAD" 2> /dev/null); then
++    :
++  else
++    ahead='?'
++    why="${why:+$why, }rev-list failed"
+   fi
+   if [ -z "$bucket" ]; then
+-    if [ "$dirty" -gt 0 ]; then bucket=uncommitted
++    if [ -n "$why" ]; then bucket=unknown
++    elif [ "$dirty" -gt 0 ]; then bucket=uncommitted
+     elif [ "$ahead" -gt 0 ]; then bucket=committed
+     else bucket=empty
+     fi
+   fi
+-  ev="${ev:+$ev, }$dirty uncommitted paths, $ahead commits ahead of origin/${base:-?}"
++  ev="${ev:+$ev, }$dirty uncommitted paths, $ahead commits ahead of origin/${base:-?}${why:+, $why}"
+   # Idle: no commit and no file change in the last N days. -print -quit stops at the first file, so a
+   # large worktree cannot end the pipeline early (head under pipefail exited 141). --days 0 needs no
+   # file check: GNU find counts a file written today as -mtime -0, BSD find does not.
+-  last=$(g -C "$wt" log -1 --format=%ct 2> /dev/null || echo "$now")
++  # A failed log is reported and never counted as idle.
++  if last=$(g -C "$wt" log -1 --format=%ct 2> /dev/null) && [ -n "$last" ]; then
++    last_known=1
++  else
++    last=$now
++    last_known=0
++    ev="$ev, last commit unknown"
++  fi
+   recent=''
+   if [ "$days" -gt 0 ]; then
+     recent=$(find "$wt" \( -name .git -o -name node_modules \) -prune -o -type f -mtime "-$days" -print -quit 2> /dev/null) || true
+   fi
+-  if [ -z "$recent" ] && [ $(( (now - last) / 86400 )) -ge "$days" ]; then ev="$ev, idle ${days}d or more"; fi
++  if [ "$last_known" = 1 ] && [ -z "$recent" ] && [ $(( (now - last) / 86400 )) -ge "$days" ]; then ev="$ev, idle ${days}d or more"; fi
+   printf '%s\t%s\t%s\t%s\n' "$bucket" "$real" "${branch:-(detached)}" "$ev"
+ done
+diff --git a/tests/scripts/wt-audit.bats b/tests/scripts/wt-audit.bats
+index 40e67d6..935111d 100644
+--- a/tests/scripts/wt-audit.bats
++++ b/tests/scripts/wt-audit.bats
+@@ -42,27 +42,32 @@ line_for() { printf '%s\n' "$output" | grep -F "/.claude/worktrees/$1	"; }
+   [[ "$(line_for done-one)" == committed$'\t'*"1 commits ahead of origin/main"* ]] || false
+   [[ "$(line_for merged-one)" == merged$'\t'*"PR merged"* ]] || false
+   [[ "$(line_for open-one)" == open-pr$'\t'*"PR open"* ]] || false
+ }
+ 
+ @test "a fork is listed as detached; the main checkout is never listed" {
+   src=$(bash "$KERN_ROOT/scripts/wt-new" src-one 2> /dev/null)
+   bash "$KERN_ROOT/scripts/wt-fork" "$src" fork-one > /dev/null 2>&1
+   run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
+   [[ "$(line_for fork-one)" == empty$'\t'*$'\t(detached)\t'* ]] || false
+-  [ "$(printf '%s\n' "$output" | grep -c "^[a-z-]*	$REPO	")" -eq 0 ]
++  [ "$(printf '%s\n' "$output" | grep -c "^[a-z-]*	$(cd "$REPO" && pwd -P)	")" -eq 0 ]
+ }
+ 
+ @test "without gh the buckets come from local state and say so" {
+   rm "$TMP/bin/gh"
+   bash "$KERN_ROOT/scripts/wt-new" local-one > /dev/null 2>&1
+-  PATH="$TMP/bin:/usr/bin:/bin" run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
++  # Only the tools the script needs, so no gh is reachable even where /usr/bin has one.
++  mkdir -p "$TMP/nogh"
++  for t in bash git find awk sed wc tr cut date grep cat dirname basename head tail sort uname mktemp env mkdir; do
++    p=$(command -v "$t") && ln -sf "$p" "$TMP/nogh/$t"
++  done
++  PATH="$TMP/nogh" run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
+   [[ "$(line_for local-one)" == empty$'\t'*"gh unavailable"* ]] || false
+ }
+ 
+ @test "--days 0 marks every worktree idle" {
+   bash "$KERN_ROOT/scripts/wt-new" idle-one > /dev/null 2>&1
+   run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit" --days 0
+   [[ "$(line_for idle-one)" == *"idle 0d or more" ]] || false
+ }
+ 
+ @test "wt-audit changes nothing: status, index and worktree list are the same after it runs" {
+@@ -87,10 +92,26 @@ line_for() { printf '%s\n' "$output" | grep -F "/.claude/worktrees/$1	"; }
+   run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
+   [ "$status" -eq 0 ]
+   [[ "$(line_for big-one)" == uncommitted$'\t'* ]] || false
+   [[ "$(line_for big-one)" != *idle* ]] || false
+ }
+ 
+ @test "a bad --days value exits 2" {
+   run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit" --days soon
+   [ "$status" -eq 2 ]
+ }
++
++@test "a worktree whose git status fails is unknown, not empty" {
++  w=$(bash "$KERN_ROOT/scripts/wt-new" broken-one 2> /dev/null)
++  idx=$(git -C "$w" rev-parse --path-format=absolute --git-path index)
++  printf 'garbage\n' > "$idx"
++  run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
++  [ "$status" -eq 0 ]
++  [[ "$(line_for broken-one)" == unknown$'\t'*"git status failed"* ]] || false
++}
++
++@test "a clean worktree with no resolvable base ref is unknown, not empty" {
++  bash "$KERN_ROOT/scripts/wt-new" nobase-one > /dev/null 2>&1
++  git -C "$REPO" update-ref -d refs/remotes/origin/main
++  run --separate-stderr bash "$KERN_ROOT/scripts/wt-audit"
++  [[ "$(line_for nobase-one)" == unknown$'\t'*"no base ref"* ]] || false
++}

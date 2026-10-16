@@ -1,0 +1,71 @@
+c8a78b1 M0: start the kern repo with its spec, plans and research notes
+The spec and plans lived in a temporary scratchpad; the repo is now their durable home.
+
+
+ .gitignore                                 |    5 +
+ README.md                                  |   19 +
+ docs/plans/2026-10-12-kern-m0-plan.md      | 1621 +++++++++
+ docs/plans/2026-10-12-kern-m1-plan.md      | 5349 ++++++++++++++++++++++++++++
+ docs/plans/2026-10-12-kern-m2-plan.md      | 4973 ++++++++++++++++++++++++++
+ docs/plans/contract.md                     |  178 +
+ docs/research/audit-addy.md                |  363 ++
+ docs/research/audit-pocock.md              |  280 ++
+ docs/research/audit-pstack.md              |  447 +++
+ docs/research/audit-superpowers.md         |  250 ++
+ docs/research/kernel-draft.md              |   44 +
+ docs/research/kernel-subagent-draft.md     |    6 +
+ docs/research/merge-build.md               |  662 ++++
+ docs/research/merge-define.md              |  561 +++
+ docs/research/merge-meta.md                |  826 +++++
+ docs/research/merge-ship.md                |  715 ++++
+ docs/research/modes-research.md            |  267 ++
+ docs/research/replacement-map.md           |  346 ++
+ docs/specs/2026-10-12-kern-design.md       |  606 ++++
+ docs/specs/2026-10-12-kern-m1-m2-skills.md |  878 +++++
+ 20 files changed, 18396 insertions(+)
+
+--- non-copy files (doc copies verified byte-identical to their sources by cmp)
+commit c8a78b1f3e353b361e5fc3756b870b66f31cf1f8
+Author: Mustafa Mohamed <mustafa.mohamed.wd@gmail.com>
+Date:   Mon Oct 12 11:26:47 2026 +0300
+
+    M0: start the kern repo with its spec, plans and research notes
+    
+    The spec and plans lived in a temporary scratchpad; the repo is now their durable home.
+
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..b5777a4
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,5 @@
++.upstream/
++node_modules/
++evals/results/
++.lint-names
++.DS_Store
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..d10ebe0
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,19 @@
++# kern
++
++A personal Claude Code plugin that routes work through a small always-on kernel, enforces safety with guard hooks, and defers to each project's own rules and skills.
++
++## Install
++
++1. `gh auth login`
++2. In Claude Code: `/plugin marketplace add <owner>/kern`, then `/plugin install kern@kern` at user scope.
++3. Optional: restore `~/.claude/kern.yml`. Per project, run `/kern:help setup` when the defaults are not enough.
++
++## Develop
++
++Clone to the path named by `kern_repo` in `~/.claude/kern.yml` and run `claude --plugin-dir <path>`. Run `scripts/ci-local` before pushing.
++
++## Documents
++
++- Design: `docs/specs/2026-10-12-kern-design.md`
++- Skill specs for M1 and M2: `docs/specs/2026-10-12-kern-m1-m2-skills.md`
++- Plans: `docs/plans/`

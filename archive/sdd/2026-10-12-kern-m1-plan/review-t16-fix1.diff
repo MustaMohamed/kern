@@ -1,0 +1,133 @@
+diff --git a/scripts/lib/lint-rules.mjs b/scripts/lib/lint-rules.mjs
+index 0d972f7..baec413 100644
+--- a/scripts/lib/lint-rules.mjs
++++ b/scripts/lib/lint-rules.mjs
+@@ -166,8 +166,10 @@ export const RULES = [
+   } },
+   { id: 6, check(model) {
+     const out = [];
+-    const rows = [...model.kernelText.matchAll(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/gm)];
+-    for (const m of rows) {
++    for (const line of model.kernelText.split('\n')) {
++      if (!line.trimStart().startsWith('|') || !/\{(KERN|ROOT)\}\//.test(line)) continue;
++      const m = line.match(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/);
++      if (!m) { out.push(err(6, 'kernel/kernel.md', `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}`)); continue; }
+       const target = m[1] === 'KERN' ? join('skills', m[2]) : m[2];
+       const file = join(model.root, target);
+       if (!existsSync(file)) { out.push(err(6, 'kernel/kernel.md', `route ${target} does not exist`)); continue; }
+diff --git a/skills/help/SKILL.md b/skills/help/SKILL.md
+index 432758a..e120941 100644
+--- a/skills/help/SKILL.md
++++ b/skills/help/SKILL.md
+@@ -3,7 +3,7 @@ name: help
+ description: "Map of kern: which skill fits, fixes for a run that went wrong, and help setup to write this project's settings."
+ disable-model-invocation: true
+ argument-hint: "[setup|check|<question>]"
+-allowed-tools: Read, Bash(git remote *), Bash(git symbolic-ref *), Bash(git log *), Bash(git for-each-ref *), Bash(git worktree list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
++allowed-tools: Read, Bash(git remote *), Bash(git symbolic-ref *), Bash(git log *), Bash(git for-each-ref *), Bash(git worktree list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(git rev-parse *), Bash(git check-ignore *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)
+ ---
+ 
+ # Help
+@@ -23,11 +23,16 @@ The human-facing map of kern and the project setup. A message that asks for work
+ 3. Ask one key group at a time, recommended answer first, skipping groups detection settled: tracker; conventions; check commands; review; risk (`autopilot`, `protected_targets`, `deploy.envs`, `never_commit`, `scope_threshold`, `shared_services`); `worktree.setup`.
+ 4. Map project skills to kern jobs and show the map, for example `overrides.commit: commit`. Say that kern's guards still apply to project skills.
+ 5. Show the full commented draft of `.claude/kern.local.yml`, built from `templates/kern.local.yml`. Let the user edit it. Write it only after an explicit yes, as one file at the main worktree root; a re-run updates it in place.
+-6. On the same yes, append to `$(git rev-parse --git-common-dir)/info/exclude` the lines `/.claude/kern.local.yml`, `/.kern/`, and `worktree.dir` when it is inside the repo and `git check-ignore -q` fails for it. Never edit `.gitignore` or any tracked file.
++6. On the same yes, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir notes`: it reads `work_dir`, creates that directory and adds its exclude line. Then append to `$(git rev-parse --git-common-dir)/info/exclude` the line `/.claude/kern.local.yml`, and `worktree.dir` when it is inside the repo and `git check-ignore -q` fails for it. Never edit `.gitignore` or any tracked file.
+ 7. Offer `.claude/kern.yml` (shared, committed) only if the user wants team settings; committing it follows the normal commit rules. Offer user defaults (`mode.voice`, `mode.surface`, `kern_repo`) for `~/.claude/kern.yml` as a separate yes.
+ 8. Print the status-line snippet from `references/fix-a-run.md`. Never write `settings.json`.
+ 
+ Under autopilot, setup refuses: nobody can confirm the draft. Setup makes no tracker writes.
+ 
+ ## Check
+-Validate without writing anything: unknown keys and floor-action keys (the kernel's Project settings block lists both); `overrides.<job>` values that name a missing project skill; settings files that exist in a linked worktree but not at the main worktree root (`git worktree list`); missing exclude lines for `.claude/kern.local.yml` and `.kern/`. The key table is `${CLAUDE_PLUGIN_ROOT}/kernel/settings.md`.
++Validate without writing anything. Read each settings file that exists: `.claude/kern.local.yml` and `.claude/kern.yml` at the main worktree root, and `~/.claude/kern.yml`. Compare its keys with the key column of `${CLAUDE_PLUGIN_ROOT}/kernel/settings.md`, where a key with `<...>` stands for a family. Do not rely on the kernel's Project settings block: it is capped and may be cut. Report:
++- floor-action keys, which are ignored. `kernel/settings.md` names the floor actions (merge, production deploy, data deletion, force-push to a shared branch, messaging people); the hooks ignore these keys for them: `merge.policy`, `deploy.policy`, `production.policy`, `force_push.policy`, `delete.policy`, `message.policy`, `messaging.policy`;
++- any other key that is not in the table, as unknown;
++- `overrides.<job>` values that name a missing project skill;
++- settings files that exist in a linked worktree but not at the main worktree root (`git worktree list`);
++- missing exclude lines for `.claude/kern.local.yml` and the `work_dir` directory (default `.kern`).
+diff --git a/skills/help/references/map.md b/skills/help/references/map.md
+index 3563b54..7d62228 100644
+--- a/skills/help/references/map.md
++++ b/skills/help/references/map.md
+@@ -1,6 +1,6 @@
+ # kern map
+ 
+-Installed skills only. Tier: `auto` skills load by description; `path` skills load through a kernel route or a slash command; `slash` skills load only when typed.
++Installed skills only. Tier: `auto` skills load by description; `path` skills load through a kernel Routing row or when typed; `slash` skills never load by description: they load when typed, or when a kernel rule or another skill names their file.
+ 
+ | Skill | Tier | Reached by | Job |
+ |---|---|---|---|
+diff --git a/skills/help/templates/kern.local.yml b/skills/help/templates/kern.local.yml
+index 696d8c1..bf54dfc 100644
+--- a/skills/help/templates/kern.local.yml
++++ b/skills/help/templates/kern.local.yml
+@@ -3,7 +3,7 @@
+ # Every key is documented in kern's kernel/settings.md. Delete lines you do not need.
+ 
+ # Repo
+-base_branch: main
++# base_branch: main
+ # branch.pattern: {id}/{slug}
+ # branch.protected: main, production
+ # worktree.dir: .claude/worktrees
+diff --git a/tests/lint-rules.test.mjs b/tests/lint-rules.test.mjs
+index e8fc9f1..775b8f6 100644
+--- a/tests/lint-rules.test.mjs
++++ b/tests/lint-rules.test.mjs
+@@ -166,3 +166,19 @@ test('rule 6: every user-reachable skill is in the help map', () => {
+   files['skills/help/references/map.md'] = map + '| `mode` | slash | /kern:mode | voice |\n';
+   assert.deepEqual(rules(lint(files)), []);
+ });
++
++test('rule 6: a route row in another form, or ## Steps without a numbered list, is an error', () => {
++  const tw = { 'skills/tw/SKILL.md': skill('tw', 'description: d\ndisable-model-invocation: true') };
++  const ticks = lint({ ...tw, 'kernel/kernel.md': kernel(['| Prose | Read `{KERN}/tw/SKILL.md` |']) });
++  assert.deepEqual(rules(ticks), [6]);
++  assert.match(ticks[0].message, /bare/);
++  const trailing = lint({ 'kernel/kernel.md': kernel(['| Prose | Read {KERN}/nope/SKILL.md, then x |']) });
++  assert.deepEqual(rules(trailing), [6]);
++  assert.match(trailing[0].message, /bare/);
++  const bullets = lint({
++    'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']),
++    'skills/tw/SKILL.md': skill('tw', 'description: d\ndisable-model-invocation: true', '\n# tw\n\n## Steps\n\n- a\n'),
++  });
++  assert.deepEqual(rules(bullets), [6]);
++  assert.match(bullets[0].message, /numbered list/);
++});
+diff --git a/tests/skills-help.test.mjs b/tests/skills-help.test.mjs
+index fbe5e1d..ba6185d 100644
+--- a/tests/skills-help.test.mjs
++++ b/tests/skills-help.test.mjs
+@@ -34,3 +34,30 @@ test('the template parses as kern settings and every key in it is documented', (
+     assert.ok(table.includes(`| \`${family}\` |`), `${k} is in kernel/settings.md`);
+   }
+ });
++
++test('check compares keys with kernel/settings.md and names the floor keys the hooks ignore', () => {
++  const check = body.split('## Check')[1];
++  assert.match(check, /kernel\/settings\.md/);
++  assert.match(check, /Do not rely on the kernel's Project settings block/);
++  const table = readFileSync(join(dir, '..', '..', 'kernel', 'settings.md'), 'utf8');
++  const actions = table.match(/Floor actions have no key and never loosen: ([^.]+)\./)[1];
++  assert.ok(check.includes(actions), 'Check names the floor actions as kernel/settings.md lists them');
++  const render = readFileSync(join(dir, '..', '..', 'hooks', 'lib', 'render.sh'), 'utf8');
++  const floor = render.match(/^KERN_FLOOR_KEYS="([^"]+)"/m)[1].split(' ').sort();
++  const named = [...check.matchAll(/`([a-z_]+\.policy)`/g)].map((m) => m[1]).sort();
++  assert.deepEqual(named, floor);
++});
++
++test('setup defers the work dir to kern-dir; allowed-tools covers its read-only calls', () => {
++  const setup = body.split('## Setup')[1].split('\n## ')[0];
++  assert.match(setup, /bash \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/kern-dir [a-z]/);
++  assert.doesNotMatch(body, /\/\.kern\//);
++  const tools = data['allowed-tools'].split(', ');
++  for (const t of ['Bash(git rev-parse *)', 'Bash(git check-ignore *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)']) assert.ok(tools.includes(t), t);
++  assert.ok(!tools.some((t) => t.includes('kern-dir')), 'kern-dir writes, so setup step 6 keeps its permission prompt');
++});
++
++test('the template sets no key: every line is a comment or blank', () => {
++  const tpl = readFileSync(join(dir, 'templates', 'kern.local.yml'), 'utf8');
++  assert.doesNotMatch(tpl, /^[^#\n]/m);
++});

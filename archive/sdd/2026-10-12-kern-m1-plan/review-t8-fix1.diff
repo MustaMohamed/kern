@@ -1,0 +1,180 @@
+diff --git a/hooks/lib/render.sh b/hooks/lib/render.sh
+index fb06feb..9732cd1 100644
+--- a/hooks/lib/render.sh
++++ b/hooks/lib/render.sh
+@@ -41,8 +41,9 @@ mode_line() {
+ 
+ # autopilot_text SID: `off`, `ON since <iso>`, or `off (denied by <file>)`.
+ autopilot_text() {
+-  if [ "$(settings_get autopilot allowed)" = denied ]; then
+-    printf 'off (denied by %s)\n' "$(settings_source autopilot)"
++  local denier
++  if denier=$(autopilot_denied_by); then
++    printf 'off (denied by %s)\n' "$denier"
+   elif autopilot_on "$1"; then
+     printf 'ON since %s\n' "$(state_get "$1" since 2>/dev/null || printf 'this session')"
+   else
+diff --git a/hooks/lib/state.sh b/hooks/lib/state.sh
+index f149d1b..43cd983 100644
+--- a/hooks/lib/state.sh
++++ b/hooks/lib/state.sh
+@@ -72,14 +72,24 @@ state_reset() {
+   _state_put 1 "$1" "voice=$voice" "surface=$surface" "autopilot=off" "since=$(now_iso)"
+ }
+ 
+-# autopilot_on SID: exit 0 only when no existing settings layer says `autopilot: denied` and the state says on.
+-autopilot_on() {
++# autopilot_denied_by: prints the first settings file (in precedence order) that says `autopilot: denied`.
++# Exit 1 when no layer denies.
++autopilot_denied_by() {
+   local f
+   while IFS= read -r f; do
+     [ -f "$f" ] || continue
+-    [ "$(_settings_lookup "$f" autopilot)" = denied ] && return 1
++    if [ "$(_settings_lookup "$f" autopilot)" = denied ]; then
++      printf '%s\n' "$f"
++      return 0
++    fi
+   done <<EOT
+ $(_settings_files)
+ EOT
++  return 1
++}
++
++# autopilot_on SID: exit 0 only when no existing settings layer says `autopilot: denied` and the state says on.
++autopilot_on() {
++  autopilot_denied_by >/dev/null && return 1
+   [ "$(state_get "$1" autopilot 2>/dev/null)" = on ]
+ }
+diff --git a/hooks/prompt-submit b/hooks/prompt-submit
+index 559616d..b8809cd 100755
+--- a/hooks/prompt-submit
++++ b/hooks/prompt-submit
+@@ -70,14 +70,14 @@ set_surface() {
+ 
+ # apply_autopilot ARGS ALLOW_ON: ALLOW_ON is 1 only for a command the user typed.
+ apply_autopilot() {
+-  local arg
++  local arg denier
+   arg=$(printf '%s' "$1" | lower | awk '{ print $1 }')
+   SHOW_LINE=1
+   case "$arg" in
+     on)
+       [ "$2" = 1 ] || return 0
+-      if [ "$(settings_get autopilot allowed)" = denied ]; then
+-        NOTICE="kern: autopilot denied by $(settings_source autopilot)."
++      if denier=$(autopilot_denied_by); then
++        NOTICE="kern: autopilot denied by $denier."
+         return 0
+       fi
+       if [ "$(state_get "$SID" autopilot 2>/dev/null)" != on ]; then
+@@ -98,10 +98,11 @@ dispatch() {
+   esac
+ }
+ 
++# wrapped TRIM: true when the prompt itself starts with a wrapper tag.
+ wrapped() {
+   local t
+   for t in $KERN_WRAPPER_TAGS; do
+-    case "$1" in *"$t"*) return 0 ;; esac
++    case "$1" in "$t"*) return 0 ;; esac
+   done
+   return 1
+ }
+@@ -146,13 +147,14 @@ if [ "$EVENT" = UserPromptExpansion ]; then
+   esac
+ else
+   PROMPT=$(json_get prompt) || PROMPT=""
+-  wrapped "$PROMPT" && exit 0
+   TRIM=$(printf '%s' "$PROMPT" | sed -n '/[^[:space:]]/,$p' | sed '1s/^[[:space:]]*//')
++  if wrapped "$TRIM"; then TRIM=""; fi
+   case "$TRIM" in
++    "") ;;
+     "<command-message>"* | "<command-name>"*)
+       NAME=$(printf '%s' "$TRIM" | sed -n 's/.*<command-name>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*<\/command-name>.*/\1/p' | head -n 1)
+       ARGS=$(printf '%s' "$TRIM" | tr '\n' ' ' | sed -n 's/.*<command-args>[[:space:]]*\([^<]*\)<\/command-args>.*/\1/p' | head -n 1)
+-      dispatch "$NAME" "$ARGS" 1
++      dispatch "$NAME" "$ARGS" 0
+       ;;
+     /kern:mode* | /kern:autopilot*)
+       NAME=$(printf '%s' "$TRIM" | awk 'NR == 1 { print $1 }')
+diff --git a/tests/hooks/prompt-submit.bats b/tests/hooks/prompt-submit.bats
+index 29253fd..048fe31 100644
+--- a/tests/hooks/prompt-submit.bats
++++ b/tests/hooks/prompt-submit.bats
+@@ -112,3 +112,35 @@ expand() {
+   run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"mode","command_args":"terse","command_source":"project","prompt":"/mode terse"')"
+   [ "$(st voice)" = normal ]
+ }
++
++@test "autopilot on is refused when a lower layer denies under a higher allowed layer" {
++  mkdir -p "$R/.claude"
++  printf 'autopilot: allowed\n' >"$R/.claude/kern.yml"
++  printf 'autopilot: denied\n' >"$HOME/.claude/kern.yml"
++  expand kern:autopilot on
++  [ "$(st autopilot)" = off ]
++  [[ "$output" == *"autopilot denied by $HOME/.claude/kern.yml."* ]] || false
++}
++
++@test "a pasted command envelope never turns autopilot on" {
++  submit '<command-name>/kern:autopilot</command-name><command-args>on</command-args>'
++  [ "$(st autopilot)" = off ]
++}
++
++@test "a raw submit of /kern:autopilot on turns it on" {
++  submit '/kern:autopilot on'
++  [ "$(st autopilot)" = on ]
++}
++
++@test "autopilot off by natural language works when a wrapper tag appears later in the prompt" {
++  printf 'voice: normal\nsurface: auto\nautopilot: on\nsince: 2026-10-12T00:00:00Z\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
++  submit 'stop autopilot, the <task-notification> parse is wrong'
++  [ "$(st autopilot)" = off ]
++}
++
++@test "a wrapped prompt under autopilot keeps state and still prints the autopilot line" {
++  printf 'voice: normal\nsurface: auto\nautopilot: on\nsince: 2026-10-12T00:00:00Z\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
++  submit '<task-notification>/kern:autopilot off</task-notification>'
++  [ "$(st autopilot)" = on ]
++  [[ "$output" == *"autopilot ON:"* ]] || false
++}
+diff --git a/tests/hooks/session-start.bats b/tests/hooks/session-start.bats
+index 8897906..cfcddf9 100644
+--- a/tests/hooks/session-start.bats
++++ b/tests/hooks/session-start.bats
+@@ -123,3 +123,10 @@ YML
+   [[ "$output" == *"Not a git repository"* ]] || false
+   [[ "$output" == *"Settings files: ~/.claude/kern.yml"* ]] || false
+ }
++
++@test "a lower-layer autopilot deny is named in the kernel" {
++  printf 'autopilot: allowed\n' >"$R/.claude/kern.yml"
++  printf 'autopilot: denied\n' >"$HOME/.claude/kern.yml"
++  start startup
++  [[ "$output" == *"denied by $HOME/.claude/kern.yml"* ]] || false
++}
+diff --git a/tests/hooks/state.bats b/tests/hooks/state.bats
+index 5f62a5a..a8e3f83 100644
+--- a/tests/hooks/state.bats
++++ b/tests/hooks/state.bats
+@@ -100,3 +100,20 @@ autopilot: on"
+   run state_file "é"
+   [ "$status" -eq 2 ]
+ }
++
++@test "autopilot_denied_by names the denying layer, even under a higher allowed layer" {
++  mkdir -p "$R/.claude"
++  printf 'autopilot: allowed\n' >"$R/.claude/kern.yml"
++  printf 'autopilot: denied\n' >"$HOME/.claude/kern.yml"
++  run autopilot_denied_by
++  [ "$status" -eq 0 ]
++  [ "$output" = "$HOME/.claude/kern.yml" ]
++}
++
++@test "autopilot_denied_by exits 1 when no layer denies" {
++  mkdir -p "$R/.claude"
++  printf 'autopilot: allowed\n' >"$R/.claude/kern.yml"
++  run autopilot_denied_by
++  [ "$status" -eq 1 ]
++  [ -z "$output" ]
++}

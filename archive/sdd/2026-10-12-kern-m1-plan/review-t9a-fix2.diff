@@ -1,0 +1,199 @@
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index 2abba16..8ebc0b9 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -76,9 +76,10 @@ _g16_names() {
+ # of=<dir>/x counts); a word with no blank that holds `sessions` and ends in `.state` (a sentence
+ # in a message is not a path); the state file name <sid>.state, bare or after a slash; or an
+ # absolute glob that, once a leading ~, $HOME or $CLAUDE_PLUGIN_DATA is expanded, matches this
+-# session's state file and is as deep as it (a path glob's * does not cross a /). The bare session
+-# id is not enough: Claude Code's scratchpad and task paths contain it. Settings: a word ending in
+-# .claude/kern.yml or .claude/kern.local.yml, or exactly kern.yml or kern.local.yml.
++# session's state file and, unless it holds **, is as deep as it (a path glob's * does not cross
++# a /). The bare session id is not enough: Claude Code's scratchpad and task paths contain it.
++# Settings: a word ending in .claude/kern.yml or .claude/kern.local.yml, or exactly kern.yml or
++# kern.local.yml.
+ _g16_kind() {
+   local e p a b slash='[!/]'
+   _G16_K=""
+@@ -110,7 +111,7 @@ _g16_kind() {
+   p="$_G16_SD/$_G16_SID.state"
+   a=${e//$slash/}
+   b=${p//$slash/}
+-  [ "${#a}" = "${#b}" ] || return 0
++  case "$e" in *'**'*) ;; *) [ "${#a}" = "${#b}" ] || return 0 ;; esac
+   # shellcheck disable=SC2254 # the word is matched as the glob it is
+   case "$p" in $e) _G16_K=state ;; esac
+ }
+@@ -154,8 +155,11 @@ _g16_redirects() {
+ # cd into the sessions dir, every later non-reading command and redirect counts as a write to it,
+ # until a cd elsewhere.
+ _g16_bash() {
+-  local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0
++  local cmd seg words w t head inplace seg_s seg_c reads writes state=0 settings=0 in_sd=0 ui=$'\002'
+   cmd=$(ti_get command) || return 0
++  # A word-initial -I is perl's include dir but BSD sed's in-place flag; mark it, since lower-casing
++  # turns it into -i.
++  cmd=${cmd// -I/ -$ui}
+   cmd=$(_g16_lower "$cmd")
+   _G16_SD=$(_g16_lower "$(state_dir)")
+   _G16_SID=$(_g16_lower "${SID-}")
+@@ -175,7 +179,12 @@ _g16_bash() {
+         head=${w##*/}
+         continue
+       fi
+-      case "$w" in --in-place*) inplace=1 ;; --*) ;; -*i*) inplace=1 ;; esac
++      case "$w" in
++        -"$ui"*) [ "$head" = sed ] && inplace=1 ;;
++        --in-place*) inplace=1 ;;
++        --* | -m*) ;;
++        -*i*) inplace=1 ;;
++      esac
+       _g16_kind "$w"
+       case "$_G16_K" in state) seg_s=1 ;; settings) seg_c=1 ;; esac
+     done <<WORDS
+@@ -186,7 +195,7 @@ WORDS
+     case "$head" in
+       cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | jq | \
+         echo | printf | test | '[' | git | '') reads=1 ;;
+-      find) word_has "$words" -delete -exec -execdir -ok -okdir -fprint -fprint0 -fprintf || reads=1 ;;
++      find) word_has "$words" -delete -exec -execdir -ok -okdir -fls -fprint -fprint0 -fprintf || reads=1 ;;
+       sed | perl) if [ "$inplace" = 1 ]; then writes=1; else reads=1; fi ;;
+       tee | cp | mv | ln | rm | truncate | dd | install) writes=1 ;;
+       cd | pushd) reads=1; in_sd=$seg_s ;;
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index 7ecd329..3751d8e 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -181,8 +181,9 @@ _split_words() {
+       }
+       if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash; hdd[hn] = depth }
+     }
+-    # shut(): a `)` closes a $( ); arithmetic and here-docs opened inside it end with it.
+-    function shut() { depth--; if (ar && depth < ar) ar = 0; while (hn && hdd[hn] > depth) hn-- }
++    # shut(): a `)` closes a $( ); arithmetic and here-docs opened inside it end with it, and the
++    # command that held it resumes.
++    function shut() { depth--; cs = csv[depth]; if (ar && depth < ar) ar = 0; while (hn && hdd[hn] > depth) hn-- }
+     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
+     # queue. Returns the line number of the last closing line, or 0 when one is missing.
+     function bodies(j,   h, k, t) {
+@@ -206,20 +207,21 @@ _split_words() {
+     }
+     { L[NR] = $0; buf = buf (NR > 1 ? "\n" : "") $0 }
+     # cs: where the current simple command starts. ar: the depth where $(( or (( inside $( ) began.
+-    # ta: inside (( )) at the top level. cm: in a comment inside $( ), until the newline.
++    # ta: inside (( )) at the top level. cm: in a comment inside $( ), until the newline. csv[d]:
++    # cs of the command holding the $( ) opened at depth d. es: the last backslash-escaped position.
+     END {
+       n = length(buf); q = ""; depth = 0; start = 1; cs = 1; i = 1; pre = ""; hn = 0; lp = 1; off[1] = 1
+-      ar = 0; ta = 0; cm = 0
++      ar = 0; ta = 0; cm = 0; es = 0
+       for (k = 2; k <= NR; k++) off[k] = off[k - 1] + length(L[k - 1]) + 1
+       while (i <= n) {
+         c = substr(buf, i, 1)
+         if (q == sq) { if (c == sq) q = ""; i++; continue }
+-        if (c == "\\") { i += 2; continue }
++        if (c == "\\") { es = i + 1; i += 2; continue }
+         if (q == "\"") {
+           if (c == "\"") q = ""
+           else if (c == "$" && substr(buf, i + 1, 1) == "(") {
+             if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
+-            depth++; cs = i + 2; i++
++            csv[depth] = cs; depth++; cs = i + 2; i++
+           }
+           else if (c == ")" && depth > 0) shut()
+           else if (depth > 0 && c == "<" && hdat(i)) {
+@@ -240,20 +242,21 @@ _split_words() {
+         }
+         if (c == "$" && substr(buf, i + 1, 1) == "(") {
+           if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
+-          depth++; cs = i + 2; i += 2; continue
++          csv[depth] = cs; depth++; cs = i + 2; i += 2; continue
+         }
+         p = substr(buf, i - 1, 1)
+         x = substr(buf, i + 1, 1)
+         if (depth > 0) {
+           if (c == "\n") { cm = 0; cs = i + 1; if (hn) { i = nested(i); continue } }
+           else if (c == "#" && sep(p)) cm = 1
+-          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; depth++; cs = i + 1 }
++          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; csv[depth] = cs; depth++; cs = i + 1 }
+           else if (c == ")") shut()
+           else if (index(";&|", c)) cs = i + 1
+           i++; continue
+         }
+         if ((c == "&" && (p == ">" || p == "<" || x == ">")) || (c == "|" && p == ">")) { i++; continue }
+-        if (c == "#" && (i == 1 || sep(p))) {
++        # Not after an escaped blank or operator, nor after the ) that closes $( ), $(( )) or <( ).
++        if (c == "#" && (i == 1 || (sep(p) && p != ")" && i - 1 != es))) {
+           e = index(substr(buf, i), "\n")
+           i = e ? i + e - 1 : n + 1
+           continue
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index d3c87f9..6016285 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -133,19 +133,30 @@ expect_cmd() {
+     "echo on > \$HOME/.claude/p*/d*/k*/s*/*.state" "echo on > \${HOME}/.claude/p*/d*/k*/s*/*.state" \
+     "echo on > \${CLAUDE_PLUGIN_DATA}/s*/*.state"
+   expect_cmd deny 'echo on > "$CLAUDE_PLUGIN_DATA"/s*/*.state'
++  expect_bash deny "echo on > ~/.claude/**/*.state"
+   expect_bash none "du -sh ~/* ; ls sessions"
+ }
+ 
+ @test "plain reads, git commands and messages naming state or settings: no vote" {
+   expect_bash none "git diff .claude/kern.yml" "git check-ignore -q .claude/kern.local.yml" \
+-    "git add tests/sessions/foo.state" "test -f $S/x.state && echo yes" "find $S -name '*.state'"
++    "git add tests/sessions/foo.state" "test -f $S/x.state && echo yes" "find $S -name '*.state'" \
++    "[ -f $S/x.state ]" "perl -Mstrict -ne 'print' $S/a.state" "perl -Ilib -ne 'print' $S/a.state"
+   expect_cmd none 'echo ".claude/kern.local.yml" >> .gitignore' \
+-    'git commit -m "G16: deny writes to sessions/<sid>.state"'
+-  expect_bash deny "echo on > $S/x.state" "find $S -name x -delete"
++    'git commit -m "G16: deny writes to sessions/<sid>.state"' \
++    'gh pr create --title t --body "G16 now guards sessions/x.state"' \
++    "$(printf '%s\n' 'gh pr create --title t --body "fix: x' '' 'G16 now guards sessions/x.state"')" \
++    "printf '%s\n' $S/x.state"
++  expect_bash deny "echo on > $S/x.state" "find $S -name x -delete" "find /tmp -name x -fls $S/x.state" \
++    "perl -i -pe s/a/b/ $S/a.state" "sed -I '' s/a/b/ $S/a.state"
+ }
+ 
+ @test "a shell reading a here-doc runs its body as commands" {
+-  expect_cmd deny "$(printf '%s\n' "bash <<'EOF'" "echo autopilot: on > $S/test-session.state" 'EOF')"
++  expect_cmd deny "$(printf '%s\n' "bash <<'EOF'" "echo autopilot: on > $S/test-session.state" 'EOF')" \
++    "$(printf '%s\n' "x=\$(date) bash <<'EOF'" "touch $S/test-session.state" 'EOF')"
++}
++
++@test "a # that bash does not read as a comment hides no state write" {
++  expect_cmd deny "echo a\\ #b; touch $S/test-session.state" "echo \$(date)#t; touch $S/test-session.state"
+ }
+ 
+ @test "a misread << hides no state write" {
+diff --git a/tests/hooks/gitctx.bats b/tests/hooks/gitctx.bats
+index dc8ee92..2977884 100644
+--- a/tests/hooks/gitctx.bats
++++ b/tests/hooks/gitctx.bats
+@@ -91,6 +91,25 @@ EOT
+   finds "$(printf '%s\n' 'x=$(sudo -u me sh -s <<EOF' 'git push --force' 'EOF' ')')" push
+ }
+ 
++@test "a shell here-doc after a closed \$( ) keeps its body" {
++  finds "$(printf '%s\n' "x=\$(date) bash <<'EOF'" 'git push --force' 'EOF')" push
++  finds "$(printf '%s\n' "x=\"\$(date)\" bash <<'EOF'" 'git push --force' 'EOF')" push
++}
++
++@test "a << inside a top-level (( )) is not a here-doc" {
++  finds "$(printf '%s\n' 'y=1; (( y = 1 << X ))' 'git push --force' 'X')" push
++}
++
++@test "a # after an escaped separator or a closing ) is not a comment" {
++  for c in 'echo a\ #b; git push --force' 'echo a\;#b; git push --force' 'echo a\|#b; git push --force' \
++    'echo a\&#b; git push --force' 'echo a\(#b; git push --force' "$(printf 'echo a\\\t#b; git push --force')" \
++    'x=$(date +%s)#tag; git push --force' 'echo $((1+1))#; git push --force' 'cat <(date)#x; git push --force'; do
++    finds "$c" push
++  done
++  run git_words 'echo a\\ #b; git push --force'
++  [ "$output" = 'echo a\\ #b; git push --force' ]
++}
++
+ @test "a here-string is not a here-doc" {
+   run git_words "$(printf '%s\n' 'cat <<< EOF' 'git push --force' 'EOF')"
+   [ "${lines[0]}" = "cat <<< EOF" ]

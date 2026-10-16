@@ -1,0 +1,239 @@
+# Review package: 11ddef7..HEAD
+
+## Commits
+9888da4 M2: plan-check sees directory overlaps and parses acceptance lists
+421990a M2: the task template states the acceptance list format
+
+## Files changed
+ docs/plans/2026-10-14-kern-m2a-plan.md |  2 +-
+ scripts/plan-check                     | 25 ++++++++++---
+ tests/scripts/plan-check.bats          | 65 ++++++++++++++++++++++++++++++++++
+ 3 files changed, 87 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/docs/plans/2026-10-14-kern-m2a-plan.md b/docs/plans/2026-10-14-kern-m2a-plan.md
+index c93429f..5023b74 100644
+--- a/docs/plans/2026-10-14-kern-m2a-plan.md
++++ b/docs/plans/2026-10-14-kern-m2a-plan.md
+@@ -5727,21 +5727,21 @@ Every task is the smallest unit with its own test cycle that a reviewer could re
+ - Create: `exact/path`
+ - Modify: `exact/path:start-end`
+ - Test: `exact/test/path`
+ 
+ **Interfaces:**
+ - Consumes: names and signatures this task uses from earlier tasks.
+ - Produces: names, parameters and return types later tasks rely on.
+ 
+ **Blocked by:** Task numbers, or none.
+ 
+-**Acceptance:** the spec's acceptance lines this task satisfies, by number.
++**Acceptance:** the spec's acceptance lines this task satisfies, as a leading list of numbers or ranges such as `1, 3-4` (plan-check parses only that list).
+ 
+ - [ ] Step 1: Write the failing test (the real test code).
+ - [ ] Step 2: Run it to verify it fails. Run: `<command>`. Expected: `<the failure and why>`.
+ - [ ] Step 3: Write the minimal implementation (the real code).
+ - [ ] Step 4: Run it to verify it passes. Run: `<command>`. Expected: `<pass line>`.
+ - [ ] Step 5: Run the checklist lines: one line per `checklists` item, each with its check.
+ 
+ No placeholders: no "TBD", no "add error handling", no "similar to Task N", no step that says what to do without showing it. `plan-check` fails a task without Files, Consumes and Produces, Blocked by, Acceptance, or a `Run:` and `Expected:` pair.
+ ````
+ 
+diff --git a/scripts/plan-check b/scripts/plan-check
+index 64710eb..65e2cd5 100755
+--- a/scripts/plan-check
++++ b/scripts/plan-check
+@@ -58,36 +58,42 @@ esac
+ DASH=$(printf '\342\200\223|\342\200\224') CURLY=$(printf '\342\200\230|\342\200\231|\342\200\234|\342\200\235') \
+   MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec LC_ALL=C awk -v sq="'" '
+ function problem(ln, msg) { printf "%s:%d: %s\n", FILENAME, ln, msg; bad = 1 }
+ function spans(s, out,   k, t) {
+   k = 0
+   while (match(s, /`[^`]+`/)) { out[++k] = substr(s, RSTART + 1, RLENGTH - 2); s = substr(s, RSTART + RLENGTH) }
+   return k
+ }
+ function first(s) { sub(/^[ \t]+/, "", s); sub(/[ \t(].*/, "", s); return s }
+ function has(list, x) { return index(" " list " ", " " x " ") > 0 }
++function covers(p, q) {
++  if (p == q) return 1
++  if (substr(p, length(p)) == "/" && index(q, p) == 1) return 1
++  if (substr(q, length(q)) == "/" && index(p, q) == 1) return 1
++  return 0
++}
+ function mentions(txt, w,   pos, before, after, rest, off) {
+   off = 0; rest = txt
+   while ((pos = index(rest, w)) > 0) {
+     before = (off + pos > 1) ? substr(txt, off + pos - 1, 1) : " "
+     after = substr(txt, off + pos + length(w), 1)
+-    if (before !~ /[A-Za-z0-9_-]/ && after !~ /[A-Za-z0-9_-]/) return 1
++    if (before !~ /[A-Za-z0-9_]/ && after !~ /[A-Za-z0-9_]/) return 1
+     off += pos; rest = substr(txt, off + 1)
+   }
+   return 0
+ }
+ { sub(/\r$/, "") }
+ BEGIN { shared_n = split(tolower(ENVIRON["SHARED"]), shared, /[ \t]*,[ \t]*/) }
+ NR == 1 && $0 == "---" { infm = 1; fmstart = 1; next }
+ infm && $0 == "---" { infm = 0; fmclosed = 1; next }
+ infm { k = $0; sub(/:.*/, "", k); v = $0; sub(/^[^:]*:[ \t]*/, "", v); fm[k] = v; fmline[k] = NR; next }
+-/^[ \t]*(```|~~~)/ { fence = !fence; if (cur) text[cur] = text[cur] " " tolower($0); next }
++/^[ \t]*(```|~~~)/ { fence = !fence; if (fence) fenceline = NR; if (cur) text[cur] = text[cur] " " tolower($0); next }
+ fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
+ {
+   prose = $0; gsub(/`[^`]*`/, "", prose)
+   if (prose ~ ENVIRON["DASH"]) problem(NR, "long dash")
+   if (prose ~ ENVIRON["CURLY"]) problem(NR, "curly quote")
+   if (prose ~ /(^|[^A-Za-z])(TBD|TODO)([^A-Za-z]|$)/ || tolower(prose) ~ /similar to task|add appropriate|fill in|implement later/) problem(NR, "placeholder: " $0)
+ }
+ /^## / { h2[$0] = 1; field = ""; if (cur) { cur = "" } }
+ /^### Task [0-9]+:/ {
+   t = $3; sub(/:$/, "", t); t += 0
+@@ -99,34 +105,45 @@ fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
+ /^\*\*Files:\*\*/ { field = "files"; nfiles[cur] += 0; next }
+ /^\*\*Interfaces:\*\*/ { field = "ifaces"; next }
+ /^\*\*Blocked by:\*\*/ {
+   field = ""; seenb[cur] = 1; s = $0; sub(/^\*\*Blocked by:\*\*[ \t]*/, "", s)
+   while (match(s, /Task[ \t]+[0-9]+/)) { b = substr(s, RSTART, RLENGTH); sub(/Task[ \t]+/, "", b); blk[cur] = blk[cur] " " (b + 0); s = substr(s, RSTART + RLENGTH) }
+   if (blk[cur] == "" && tolower(s) !~ /none/) problem(NR, "Task " cur ": Blocked by names no task and is not none")
+   next
+ }
+ /^\*\*Acceptance:\*\*/ {
+   field = ""; seena[cur] = 1; s = $0; sub(/^\*\*Acceptance:\*\*[ \t]*/, "", s)
+-  while (match(s, /[0-9]+/)) { acc[cur] = acc[cur] " " substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH) }
++  sub(/^[ \t]+/, "", s); got = 0
++  while (match(s, /^[0-9]+(-[0-9]+)?/)) {
++    tok = substr(s, RSTART, RLENGTH); s = substr(s, RLENGTH + 1); got = 1
++    lo = tok; hi = tok; if (index(tok, "-")) { lo = tok; sub(/-.*/, "", lo); hi = tok; sub(/^[0-9]+-/, "", hi) }
++    lo += 0; hi += 0
++    if (lo > hi) problem(NR, "Task " cur ": Acceptance range " tok " runs backwards")
++    for (q = lo; q <= hi; q++) acc[cur] = acc[cur] " " q
++    if (!match(s, /^[ \t]*,[ \t]*/)) break
++    s = substr(s, RLENGTH + 1)
++  }
++  if (!got) problem(NR, "Task " cur ": Acceptance names no criterion number")
+   next
+ }
+ /Run:/ { run[cur] = 1 }
+ /Expected:/ { expect[cur] = 1 }
+ field == "files" && /^- (Create|Modify|Test|Delete):/ {
+   k = spans($0, sp)
+   for (i = 1; i <= k; i++) { p = sp[i]; sub(/:[0-9]+(-[0-9]+)?$/, "", p); sub(/\/\*\*?$/, "/", p); nfiles[cur]++; files[cur, nfiles[cur]] = p }
+   next
+ }
+ field == "ifaces" && /^- Consumes:/ { k = spans($0, sp); for (i = 1; i <= k; i++) if (first(sp[i]) != "none") cons[cur] = cons[cur] " " first(sp[i]); seenc[cur] = 1; next }
+ field == "ifaces" && /^- Produces:/ { k = spans($0, sp); for (i = 1; i <= k; i++) { w = first(sp[i]); if (w == "none") continue; prod[cur] = prod[cur] " " w; if (!(w in producer)) producer[w] = cur }; seenp[cur] = 1; next }
+ END {
+   if (fmstart && !fmclosed) problem(1, "frontmatter is not closed")
++  if (fence) { problem(fenceline, "fence not closed"); exit 1 }
+   if (tasks == 0 && ENVIRON["MODE"] != "lint") { print "plan-check: " FILENAME " is not a plan (no ### Task headings)" > "/dev/stderr"; exit 2 }
+   if (ENVIRON["MODE"] == "files") {
+     t = ENVIRON["N"] + 0
+     if (!(t in tline)) { print "plan-check: no Task " t > "/dev/stderr"; exit 2 }
+     for (i = 1; i <= nfiles[t]; i++) print files[t, i]
+     exit 0
+   }
+   if (tasks == 0) {
+     # A spec.
+     st = fm["status"]
+@@ -161,21 +178,21 @@ END {
+     if (!run[t] || !expect[t]) problem(tline[t], "Task " t ": no Run: and Expected: pair")
+     m = split(blk[t], bs, " ")
+     for (j = 1; j <= m; j++) {
+       if (bs[j] >= t || !(bs[j] in tline)) problem(tline[t], "Task " t " is blocked by Task " bs[j] ", which is not an earlier task")
+       else { anc[t] = anc[t] " " bs[j] " " anc[bs[j]] }
+     }
+   }
+   # Overlap: a shared file or a shared service must be ordered by Blocked by.
+   for (i = 1; i <= tasks; i++) for (j = i + 1; j <= tasks; j++) {
+     a = order[i]; b = order[j]; what = ""
+-    for (x = 1; x <= nfiles[a]; x++) for (y = 1; y <= nfiles[b]; y++) if (files[a, x] == files[b, y]) { what = files[a, x]; break }
++    for (x = 1; x <= nfiles[a]; x++) for (y = 1; y <= nfiles[b]; y++) if (covers(files[a, x], files[b, y])) { what = (length(files[a, x]) < length(files[b, y])) ? files[a, x] : files[b, y]; break }
+     if (what == "") for (s = 1; s <= shared_n; s++) if (shared[s] != "" && mentions(text[a], shared[s]) && mentions(text[b], shared[s])) { what = shared[s]; break }
+     if (what == "") {
+       ma = 0; mb = 0
+       for (x = 1; x <= nfiles[a]; x++) if (files[a, x] ~ /migration/) ma = 1
+       for (y = 1; y <= nfiles[b]; y++) if (files[b, y] ~ /migration/) mb = 1
+       if (ma && mb) what = "migrations"
+     }
+     if (what == "") continue
+     ov[++novl] = a "\t" b "\t" what
+     if (!has(anc[b], a)) problem(tline[b], "Task " a " and Task " b " share " what ", but Task " b " is not blocked by Task " a)
+diff --git a/tests/scripts/plan-check.bats b/tests/scripts/plan-check.bats
+index cd1b23e..d4b63a0 100644
+--- a/tests/scripts/plan-check.bats
++++ b/tests/scripts/plan-check.bats
+@@ -167,10 +167,75 @@ says() { printf '%s\n' "$output" | grep -qF -- "$1" || { echo "missing: $1"; ech
+   [ "$status" -eq 1 ]
+   says "frontmatter is not closed"
+ }
+ 
+ @test "--graph and --files refuse a spec, and --files refuses a missing task" {
+   pc --graph spec.md
+   [ "$status" -eq 2 ]
+   pc --files plan.md 9
+   [ "$status" -eq 2 ]
+ }
++
++@test "a directory path overlaps a path inside it, and a longer name does not" {
++  sed -i.bak 's#^- Create: `src/parse.js:1-20`#- Create: `docs/**`#' plan.md
++  pc plan.md
++  [ "$status" -eq 1 ]
++  says "Task 1 and Task 4 share docs/, but Task 4 is not blocked by Task 1"
++  sed -i.bak 's#^- Create: `docs/parse.md`#- Create: `doc.md`#' plan.md
++  pc plan.md
++  [ "$status" -eq 0 ]
++}
++
++@test "--graph keeps a directory and a file inside it out of one wave" {
++  sed -i.bak 's#^- Create: `src/parse.js:1-20`#- Create: `docs/**`#' plan.md
++  sed -i.bak '/^### Task 4:/,$ s/^\*\*Blocked by:\*\* none$/**Blocked by:** Task 1/' plan.md
++  pc --graph plan.md
++  [ "$status" -eq 0 ]
++  [ "${lines[0]}" = $'overlap\t1\t4\tdocs/' ]
++  [ "${lines[2]}" = $'wave\t1\t1' ]
++  [ "${lines[3]}" = $'wave\t2\t2 4' ]
++}
++
++@test "an Acceptance line with no leading number list is an error" {
++  sed -i.bak '/^### Task 4:/,$ s/^\*\*Acceptance:\*\* 3$/**Acceptance:** responds within 2 seconds, covers 1/' plan.md
++  pc plan.md
++  [ "$status" -eq 1 ]
++  says "Task 4: Acceptance names no criterion number"
++}
++
++@test "an Acceptance range covers every number in it" {
++  sed -i.bak 's/^\*\*Acceptance:\*\* 2$/**Acceptance:** 1/; s/^\*\*Acceptance:\*\* 3$/**Acceptance:** 1-3/' plan.md
++  pc plan.md
++  [ "$status" -eq 0 ]
++  [ -z "$output" ]
++}
++
++@test "only the leading Acceptance list counts, not numbers in the prose after it" {
++  sed -i.bak 's/^\*\*Acceptance:\*\* 2$/**Acceptance:** 1/; s/^\*\*Acceptance:\*\* 3$/**Acceptance:** 1, 3 - prose with 2 in it/' plan.md
++  pc plan.md
++  [ "$status" -eq 1 ]
++  says "acceptance criterion 2 of the spec is covered by no task"
++}
++
++@test "an unclosed code fence is an error at its opening line" {
++  n=$(wc -l < plan.md)
++  printf '%s\n' '```' 'text' >> plan.md
++  pc plan.md
++  [ "$status" -eq 1 ]
++  says "plan.md:$((n + 1)): fence not closed"
++}
++
++@test "redis-cli counts as using the redis service" {
++  mkdir -p .claude
++  printf 'shared_services: redis\n' > .claude/kern.local.yml
++  sed -i.bak 's#^- Create: `docs/parse.md`#- Create: `docs/parse.md` (run redis-cli flush)#; s#^- Create: `src/parse.js:1-20`#- Create: `src/parse.js:1-20` (redis cache)#' plan.md
++  pc plan.md
++  [ "$status" -eq 1 ]
++  says "Task 1 and Task 4 share redis, but Task 4 is not blocked by Task 1"
++}
++
++@test "a backticked none is not an interface name" {
++  sed -i.bak '0,/^- Consumes: none$/ s//- Consumes: `none`/; s/^- Produces: `table-b`$/- Produces: `none`/' plan.md
++  pc plan.md
++  [ "$status" -eq 0 ]
++  [ -z "$output" ]
++}

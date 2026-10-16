@@ -1,0 +1,117 @@
+# Review package: 04b5606..25515fd
+
+## Commits
+25515fd M0: widen lint rule 11 scope and fix rule 4 path resolution
+
+## Files changed
+ scripts/lib/lint-rules.mjs |  7 ++++---
+ tests/lint-rules.test.mjs  | 17 +++++++++++++++++
+ 2 files changed, 21 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/scripts/lib/lint-rules.mjs b/scripts/lib/lint-rules.mjs
+index a3b72d7..fcb54bf 100644
+--- a/scripts/lib/lint-rules.mjs
++++ b/scripts/lib/lint-rules.mjs
+@@ -5,20 +5,21 @@ import { join, relative } from 'node:path';
+ import { parseFrontmatter } from './frontmatter.mjs';
+ 
+ export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
+ export const AGENT_KEYS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'color', 'maxTurns', 'skills', 'memory', 'background', 'isolation']);
+ export const AGENT_KEYS_IGNORED_IN_PLUGINS = new Set(['permissionMode', 'hooks', 'mcpServers', 'initialPrompt']);
+ export const SHIPPED_DIRS = ['skills', 'agents', 'kernel', 'modes', 'hooks'];
+ export const LIMITS = { auto: 300, manual: 120, agent: 150, autoTotal: 1500, autoPlusAgents: 2500 };
+ const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+ const TRIGGER = /\buse (this )?when\b|\buse (before|after|during)\b/i;
+ const MACHINE_PATH = /(\/Users\/[A-Za-z]|\/home\/[a-z]|[A-Z]:\\Users\\|~\/Code\/)/;
++const BINARY_EXT = /\.(png|jpe?g|gif|ico|webp|woff2?|ttf|otf|pdf|zip|gz)$/i;
+ const LONG_DASH = /[–—]/g;
+ const CURLY = /[‘’“”]/g;
+ 
+ export const rel = (model, p) => relative(model.root, p);
+ 
+ function walk(dir) {
+   if (!existsSync(dir)) return [];
+   const out = [];
+   for (const name of readdirSync(dir)) {
+     const p = join(dir, name);
+@@ -119,22 +120,22 @@ export const RULES = [
+       if (d.length > LIMITS.agent) out.push(err(3, rel(model, a.file), `agent description ${d.length} chars, limit ${LIMITS.agent}`));
+     }
+     if (autoTotal > LIMITS.autoTotal) out.push(err(3, 'skills', `auto descriptions total ${autoTotal} chars, limit ${LIMITS.autoTotal}`));
+     if (autoTotal + agentTotal > LIMITS.autoPlusAgents) out.push(err(3, 'skills', `auto plus agent descriptions total ${autoTotal + agentTotal} chars, limit ${LIMITS.autoPlusAgents}`));
+     return out;
+   } },
+   { id: 4, check(model) {
+     const out = [];
+     for (const s of model.skills) {
+       const p = rel(model, s.file);
+-      const local = [...s.body.matchAll(/`((?:references|templates|scripts|prompts)\/[\w./-]+)`|\]\(((?:references|templates|scripts|prompts)\/[\w./-]+)\)/g)].map((m) => m[1] || m[2]);
+-      for (const r of local) if (!existsSync(join(model.root, 'skills', s.dir, r))) out.push(err(4, p, `referenced file missing: ${r}`));
++      const local = [...s.body.matchAll(/`(?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#[^`\s]*)?`|\]\((?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#[^)\s]*)?\)/g)].map((m) => m[1] || m[2]);
++      for (const r of local) if (!existsSync(join(model.root, 'skills', s.dir, r)) && !existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: ${r}`));
+       const rooted = [...s.body.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)].map((m) => m[1].replace(/[.,;:]+$/, ''));
+       for (const r of rooted) if (!existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: \${CLAUDE_PLUGIN_ROOT}/${r}`));
+     }
+     return out;
+   } },
+   { id: 8, check(model) {
+     const out = [];
+     const names = (process.env.KERN_LINT_NAMES || '').split(',').map((n) => n.trim()).filter(Boolean);
+     for (const f of ['.lint-names', 'scripts/lint-names.txt']) {
+       const namesFile = join(model.root, f);
+@@ -147,21 +148,21 @@ export const RULES = [
+       if (MACHINE_PATH.test(text)) out.push(err(8, p, 'machine-specific path'));
+       for (const re of nameRes) if (re.test(text)) out.push(err(8, p, `personal name matches ${re.source}`));
+     }
+     return out;
+   } },
+   { id: 10, check(model) {
+     return model.exemptions.filter((e) => !e.reason || !String(e.reason).trim()).map((e) => err(10, 'scripts/lint-exemptions.json', `exemption for rule ${e.rule} on ${e.path} has no reason`));
+   } },
+   { id: 11, check(model) {
+     const out = [];
+-    const files = [...model.shipped, join(model.root, 'README.md'), join(model.root, 'CHANGELOG.md')].filter((f) => existsSync(f) && /\.(md|sh|json|yml)$|\/hooks\/[a-z-]+$/.test(f));
++    const files = [...model.shipped.filter((f) => !BINARY_EXT.test(f)), ...['README.md', 'CHANGELOG.md'].map((n) => join(model.root, n)).filter((f) => existsSync(f))];
+     for (const f of files) {
+       const text = readFileSync(f, 'utf8');
+       const p = rel(model, f);
+       if ((text.match(LONG_DASH) || []).length) out.push(err(11, p, 'long dash; use a period or a comma'));
+       if ((text.match(CURLY) || []).length) out.push(err(11, p, 'curly quotes; use straight quotes'));
+     }
+     return out;
+   } },
+ ];
+ 
+diff --git a/tests/lint-rules.test.mjs b/tests/lint-rules.test.mjs
+index 75af529..685ccca 100644
+--- a/tests/lint-rules.test.mjs
++++ b/tests/lint-rules.test.mjs
+@@ -95,10 +95,27 @@ test('rule 10: exemption needs a reason, and suppresses its finding', () => {
+   const bad = { 'skills/a/SKILL.md': skill('a', 'description: Does things.'), 'scripts/lint-exemptions.json': '[{"rule":3,"path":"skills/a/SKILL.md","reason":""}]' };
+   assert.deepEqual(rules(lint(bad)), [3, 10], 'an exemption without a reason suppresses nothing');
+   const ok = { ...bad, 'scripts/lint-exemptions.json': '[{"rule":3,"path":"skills/a/SKILL.md","reason":"fixture"}]' };
+   assert.deepEqual(rules(lint(ok)), []);
+ });
+ 
+ test('rule 11: long dashes and curly quotes', () => {
+   const body = '\n## Steps\n\n1. Do this — then “that”.\n';
+   assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body) })), [11, 11]);
+ });
++
++test('rule 11: scans any non-binary shipped file, skips binaries', () => {
++  assert.deepEqual(rules(lint({ 'hooks/lib/x.mjs': '// a — b\n' })), [11]);
++  const f = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.'), 'skills/a/logo.png': 'a — b' });
++  assert.deepEqual(rules(f), []);
++});
++
++test('rule 4: existing references pass, repo-root fallback, anchors and ./', () => {
++  const ok = '\n## Steps\n\n1. Read `references/ok.md` and `${CLAUDE_PLUGIN_ROOT}/kernel/k.md`.\n';
++  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', ok), 'skills/a/references/ok.md': 'x', 'kernel/k.md': 'x' }), []);
++  const root = '\n## Steps\n\n1. Run `scripts/tool`.\n';
++  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', root), 'scripts/tool': 'x' }), []);
++  const anchors = '\n## Steps\n\n1. See `references/ok.md#part`, `./references/ok.md` and [x](references/ok.md#x).\n';
++  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', anchors), 'skills/a/references/ok.md': 'x' }), []);
++  const bad = '\n## Steps\n\n1. See `references/missing.md#part`.\n';
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', bad) })), [4]);
++});

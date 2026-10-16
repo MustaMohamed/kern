@@ -1,0 +1,308 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 81310a2..43ca80e 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -22,6 +22,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ - finish-branch: verify, self-review and size gate before the commit, push or draft PR menu; the PR has a title, a body under .kern/tmp and a dedup on the head commit. prove-it hands commits and PRs to these skills.
+ - recall: rebuild state from kern working files, this project's transcripts and live state; replaces the user-level recall skill.
+ - Kernel: M2's routes live in kernel/routes.md, which the Routing rule points to, for define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall; routing evals with fixed floors and a frozen held-out set; lint rule 12 and a standing-cost budget.
++- Hooks run git with no fsmonitor program and no repo hooks (git 2.31 or later). With an older git, or one whose version cannot be read, session-start says so in one line.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+diff --git a/README.md b/README.md
+index d10ebe0..a6d027f 100644
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,8 @@ A personal Claude Code plugin that routes work through a small always-on kernel,
+ 
+ ## Install
+ 
++Needs git 2.31 or later.
++
+ 1. `gh auth login`
+ 2. In Claude Code: `/plugin marketplace add <owner>/kern`, then `/plugin install kern@kern` at user scope.
+ 3. Optional: restore `~/.claude/kern.yml`. Per project, run `/kern:help setup` when the defaults are not enough.
+diff --git a/hooks/pre-tool-use b/hooks/pre-tool-use
+index 5c33324..c514aec 100755
+--- a/hooks/pre-tool-use
++++ b/hooks/pre-tool-use
+@@ -3,6 +3,14 @@
+ # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
+ KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ export KERN_ROOT
++# Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
++# hooks, so a repository's own config cannot run code through a kern hook (git 2.31+ reads
++# GIT_CONFIG_COUNT). The two pairs go after the pairs the environment already holds, which still apply
++# (a container's safe.directory, for one). KERN_GC is their number; a count that is not a number
++# counts as none.
++case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
++export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
++  "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"
+ # POSIXLY_CORRECT in the environment starts bash in POSIX mode, where a "." that fails exits the
+ # shell before "|| no_lib" runs.
+ set +o posix
+diff --git a/hooks/prompt-submit b/hooks/prompt-submit
+index ce1ddab..4303d00 100755
+--- a/hooks/prompt-submit
++++ b/hooks/prompt-submit
+@@ -4,6 +4,14 @@
+ # Plain stdout is added to Claude's context.
+ KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ export KERN_ROOT
++# Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
++# hooks, so a repository's own config cannot run code through a kern hook (git 2.31+ reads
++# GIT_CONFIG_COUNT). The two pairs go after the pairs the environment already holds, which still apply
++# (a container's safe.directory, for one). KERN_GC is their number; a count that is not a number
++# counts as none.
++case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
++export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
++  "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"
+ for lib in json settings state render; do
+   # shellcheck source=/dev/null
+   . "$KERN_ROOT/hooks/lib/$lib.sh"
+diff --git a/hooks/session-start b/hooks/session-start
+index 9a23d6e..a3c6243 100755
+--- a/hooks/session-start
++++ b/hooks/session-start
+@@ -4,6 +4,14 @@
+ # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
+ KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ export KERN_ROOT
++# Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
++# hooks, so a repository's own config cannot run code through a kern hook (git 2.31+ reads
++# GIT_CONFIG_COUNT). The two pairs go after the pairs the environment already holds, which still apply
++# (a container's safe.directory, for one). KERN_GC is their number; a count that is not a number
++# counts as none.
++case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
++export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
++  "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"
+ # POSIXLY_CORRECT in the environment starts bash in POSIX mode, where a "." that fails exits the
+ # shell before "|| no_lib" runs.
+ set +o posix
+@@ -43,6 +51,31 @@ need state.sh state_dir state_file state_get state_set _state_put now_iso state_
+ need state.sh prompt_hashes
+ need render.sh render_template kern_version mode_line autopilot_text settings_summary
+ 
++# git_note: one line when git is older than 2.31, the first git that reads the GIT_CONFIG_* pairs
++# exported above, or when `git version` fails or prints no version; nothing for git 2.31 or later.
++git_note() {
++  local out major minor
++  out=$(git version 2>/dev/null) || out=""
++  out=${out%%$'\n'*}
++  case "$out" in
++    "git version "[0-9]*.[0-9]*)
++      major=${out#git version }
++      minor=${major#*.}
++      major=${major%%.*}
++      minor=${minor%%[!0-9]*}
++      ;;
++    *) major="" minor="" ;;
++  esac
++  case "$major" in "" | *[!0-9]* | ?????*) major="" ;; esac
++  case "$minor" in "" | *[!0-9]* | ?????*) major="" ;; esac
++  if [ -z "$major" ]; then
++    printf '%s\n' "kern: git version failed or printed no version, so git may ignore kern's GIT_CONFIG_* hardening and a repository's fsmonitor program may run on kern's index reads; install git 2.31 or later."
++  elif [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 31 ]; }; then
++    printf '%s\n' "kern: git $major.$minor is older than 2.31, so git ignores kern's GIT_CONFIG_* hardening and a repository's fsmonitor program can run on kern's index reads; install git 2.31 or later."
++  fi
++  return 0
++}
++
+ # shellcheck disable=SC2034 # read by the json.sh functions
+ KERN_INPUT=$(cat)
+ SID=$(json_get session_id) || SID=""
+@@ -80,6 +113,7 @@ fi
+ K_SETTINGS=$(settings_summary)
+ export K_VERSION K_ROOT K_KERN K_MODE K_AUTOPILOT K_SETTINGS
+ render_template "$KERN_ROOT/kernel/kernel.md"
++git_note
+ case "$K_MODE" in
+   *voice=terse*) printf '\n' && cat "$KERN_ROOT/modes/terse.md" ;;
+ esac
+diff --git a/hooks/subagent-start b/hooks/subagent-start
+index b234e9f..2b82f00 100755
+--- a/hooks/subagent-start
++++ b/hooks/subagent-start
+@@ -2,6 +2,14 @@
+ # kern SubagentStart: injects the subagent kernel and, when terse is active, the terse voice line.
+ KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ export KERN_ROOT
++# Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
++# hooks, so a repository's own config cannot run code through a kern hook (git 2.31+ reads
++# GIT_CONFIG_COUNT). The two pairs go after the pairs the environment already holds, which still apply
++# (a container's safe.directory, for one). KERN_GC is their number; a count that is not a number
++# counts as none.
++case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
++export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
++  "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"
+ for lib in json settings state render; do
+   # shellcheck source=/dev/null
+   . "$KERN_ROOT/hooks/lib/$lib.sh"
+diff --git a/tests/hooks/git-hardening.bats b/tests/hooks/git-hardening.bats
+new file mode 100644
+index 0000000..a5224d9
+--- /dev/null
++++ b/tests/hooks/git-hardening.bats
+@@ -0,0 +1,70 @@
++#!/usr/bin/env bats
++# Hooks run git with no fsmonitor program and no repo hooks (coverage gap 18).
++
++load ../helpers/common
++
++# The lines each hook runs right after `export KERN_ROOT`, comments aside.
++HARDEN='case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
++export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
++  "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"'
++
++setup() {
++  R="$BATS_TEST_TMPDIR/repo"
++  make_repo "$R"
++  kern_env "$R"
++  K="$(kern_root)"
++  M="$BATS_TEST_TMPDIR/fsmonitor-ran"
++  printf '#!/bin/sh\ntouch "%s"\nexit 1\n' "$M" > "$BATS_TEST_TMPDIR/fsm.sh"
++  chmod +x "$BATS_TEST_TMPDIR/fsm.sh"
++  git -C "$R" config core.fsmonitor "$BATS_TEST_TMPDIR/fsm.sh"
++  git -C "$R" update-index --fsmonitor 2>/dev/null || true
++  mkdir -p "$R/.claude"
++  # A loosening value makes the settings code list the index (git ls-files -s), which reads fsmonitor.
++  printf 'push.policy: auto\n' > "$R/.claude/kern.local.yml"
++  rm -f "$M"
++}
++
++@test "the fixture's fsmonitor program runs for a plain git call" {
++  git -C "$R" ls-files -s >/dev/null
++  [ -f "$M" ]
++}
++
++@test "session-start runs git without the repo's fsmonitor program" {
++  run bash "$K/hooks/session-start" <<<"$(payload SessionStart '"source":"startup"')"
++  [ "$status" -eq 0 ]
++  [[ "$output" == *"push.policy=auto"* ]] || false
++  [ ! -f "$M" ]
++}
++
++@test "every hook exports the hardened git config right after KERN_ROOT, before it runs git" {
++  local h got
++  for h in session-start subagent-start prompt-submit pre-tool-use; do
++    got=$(awk '/^export KERN_ROOT$/ { on = 1; next } on && /^#/ { next } on && n < 3 { print; n++ }' "$K/hooks/$h")
++    [ "$got" = "$HARDEN" ] || { echo "$h does not harden git right after KERN_ROOT"; return 1; }
++  done
++}
++
++@test "every git a hook runs, its children's too, gets both pairs after the environment's own" {
++  local L="$BATS_TEST_TMPDIR/git-calls" want
++  git -C "$R" switch -q -c feat
++  printf 'more\n' >>"$R/README.md"
++  git -C "$R" -c core.fsmonitor=false add README.md
++  # A git first on PATH that records the GIT_CONFIG_ variables of each call, then runs the real git.
++  mkdir -p "$BATS_TEST_TMPDIR/bin"
++  printf '#!/bin/sh\nprintf "%%s :: %%s\\n" "$(env | grep "^GIT_CONFIG_" | LC_ALL=C sort | paste -sd " " -)" "$*" >>"%s"\nexec "%s" "$@"\n' \
++    "$L" "$(command -v git)" >"$BATS_TEST_TMPDIR/bin/git"
++  chmod +x "$BATS_TEST_TMPDIR/bin/git"
++  export PATH="$BATS_TEST_TMPDIR/bin:$PATH" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_VALUE_0=kept
++  bash "$K/hooks/session-start" <<<"$(payload SessionStart '"source":"startup"')" >/dev/null
++  bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')" >/dev/null
++  bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptSubmit '"prompt":"hello"')" >/dev/null
++  bash "$K/hooks/pre-tool-use" <<<"$(bash_payload "git commit -m 'add more'")" >/dev/null
++  want="GIT_CONFIG_COUNT=3 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_KEY_2=core.hooksPath"
++  want="$want GIT_CONFIG_VALUE_0=kept GIT_CONFIG_VALUE_1=false GIT_CONFIG_VALUE_2=/dev/null :: "
++  # The calls cover the settings index read, G6's staged diff and kern-detect, a child of G5.
++  grep -q ':: -C .* ls-files -s' "$L"
++  grep -q ':: -C .* diff --cached' "$L"
++  grep -q ':: -C .* log --no-show-signature --format=%s -30' "$L"
++  run grep -v -F -e "$want" "$L"
++  [ "$status" -eq 1 ] || { printf '%s\n' "$output"; return 1; }
++}
+diff --git a/tests/hooks/session-start.bats b/tests/hooks/session-start.bats
+index 70767e5..957aa73 100644
+--- a/tests/hooks/session-start.bats
++++ b/tests/hooks/session-start.bats
+@@ -254,3 +254,47 @@ start_without() {
+   [[ "$output" == *"No is an acceptable answer: say when a scope, proposal or plan is weak, and why."* ]] || false
+   [[ "$output" == *"in either voice skip the main AI tells"* ]] || false
+ }
++
++# fake_git_version OUTPUT RC: puts a git first on PATH that answers `git version` with OUTPUT and exit
++# code RC and hands every other call to the real git.
++fake_git_version() {
++  mkdir -p "$BATS_TEST_TMPDIR/gitbin"
++  printf '#!/bin/sh\nif [ "$1" = version ]; then printf "%%s" "%s"; exit %s; fi\nexec "%s" "$@"\n' \
++    "$1" "$2" "$(command -v git)" >"$BATS_TEST_TMPDIR/gitbin/git"
++  chmod +x "$BATS_TEST_TMPDIR/gitbin/git"
++  export PATH="$BATS_TEST_TMPDIR/gitbin:$PATH"
++}
++
++@test "git older than 2.31, or a git version that cannot be read, gets one line saying the hardening may not apply" {
++  local v rc n norm
++  for v in "git version 2.30.9|0|is older than 2.31" "|1|failed or printed no version" \
++    "git version 2.54.0|3|failed or printed no version" "not a version|0|failed or printed no version" \
++    "git version x.31|0|failed or printed no version"; do
++    fake_git_version "${v%%|*}" "$(printf '%s' "$v" | cut -d'|' -f2)"
++    start startup
++    [ "$status" -eq 0 ]
++    n=$(printf '%s\n' "$output" | grep -c "GIT_CONFIG_\* hardening" || true)
++    [ "$n" -eq 1 ] || { echo "$v: $n hardening lines"; return 1; }
++    [[ "$output" == *"${v##*|}"*"a repository's fsmonitor program"*"on kern's index reads"* ]] || { echo "$v: $output"; return 1; }
++    [[ "${lines[0]}" == "# kern "* ]] || false
++    [[ "$output" == *"## Project settings"* ]] || false
++    norm=${output//"$K"/\/Users\/someone\/.claude\/plugins\/cache\/kern\/kern\/0.1.0}
++    [ "${#norm}" -le 4000 ] || { echo "$v: ${#norm} characters"; return 1; }
++    PATH=${PATH#"$BATS_TEST_TMPDIR/gitbin:"}
++  done
++  fake_git_version "git version 2.30.9" 0
++  start startup
++  [[ "$output" == *"kern: git 2.30 is older than 2.31, so git ignores kern's GIT_CONFIG_* hardening"* ]] || false
++}
++
++@test "git 2.31 or later gets no git line" {
++  local v
++  for v in "git version 2.31.0" "git version 2.54" "git version 2.54.0 (Apple Git-157)" "git version 3.0.1"; do
++    fake_git_version "$v" 0
++    start startup
++    [ "$status" -eq 0 ]
++    [[ "$output" == *"## Project settings"* ]] || false
++    [[ "$output" != *"GIT_CONFIG_"* ]] || { echo "$v warned"; return 1; }
++    PATH=${PATH#"$BATS_TEST_TMPDIR/gitbin:"}
++  done
++}
+diff --git a/tests/hooks/subagent-start.bats b/tests/hooks/subagent-start.bats
+index 5698801..f689042 100644
+--- a/tests/hooks/subagent-start.bats
++++ b/tests/hooks/subagent-start.bats
+@@ -46,3 +46,34 @@ context_of() {
+   [[ "$ctx" == *"with no preamble, praise or closing offer"* ]] || false
+   [[ "$ctx" != *"Put bulk in a file"* ]] || false
+ }
++
++@test "normal voice adds no terse line" {
++  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions" "$R/.claude"
++  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
++  # The session's voice wins over the settings voice.
++  printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
++  run bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"kern:implementer"')"
++  ctx=$(context_of "$output")
++  [[ "$ctx" == "# kern "*"(subagent)"* ]] || false
++  [[ "$ctx" != *"Voice: terse"* ]] || false
++}
++
++@test "kern: off prints nothing" {
++  mkdir -p "$R/.claude"
++  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
++  run bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')"
++  [ "$status" -eq 0 ]
++  [ -z "$output" ]
++}
++
++@test "a bad session id falls back to the settings voice" {
++  mkdir -p "$R/.claude" "$CLAUDE_PLUGIN_DATA/sessions"
++  printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
++  # The state file "../x" would name if the id were not rejected.
++  printf 'voice: normal\n' >"$CLAUDE_PLUGIN_DATA/x.state"
++  run bash "$K/hooks/subagent-start" <<<"{\"session_id\":\"../x\",\"cwd\":\"$R\",\"hook_event_name\":\"SubagentStart\",\"agent_id\":\"a1\",\"agent_type\":\"Explore\"}"
++  [ "$status" -eq 0 ]
++  ctx=$(context_of "$output")
++  [[ "$ctx" == *"Voice: terse"* ]] || false
++  [ "$(cat "$CLAUDE_PLUGIN_DATA/x.state")" = "voice: normal" ]
++}

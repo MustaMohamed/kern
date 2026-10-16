@@ -1,0 +1,211 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index e0e42a8..14e731d 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -10,6 +10,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ - Guard G18: kern's read-only investigator may run only allowlisted read commands.
+ - Guard G16 asks, and under autopilot denies, any command whose text names kern's hook code or its state functions, reads included; hook files stay readable through the Read and Grep tools. Running prompt-submit with a made-up prompt could forge the user's message or turn autopilot on.
+ - Guard G20: a Markdown spec or plan becomes approved, or changes its approved: line, only with a quote of the user's last message, judged on the file as the edit leaves it; never under autopilot.
++- implement: thin slices, failing test first, mutation and fail-then-pass probes, full suite.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+diff --git a/skills/help/references/map.md b/skills/help/references/map.md
+index ccbb97f..bb073cf 100644
+--- a/skills/help/references/map.md
++++ b/skills/help/references/map.md
+@@ -10,6 +10,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
+ | `technical-writing` | path | Kernel row "Prose others read", or `/kern:technical-writing` | Docs, PR bodies, issues and commit messages |
+ | `unslop` | slash | The kernel's Reply rule, technical-writing step 5, or `/kern:unslop` | Rules for prose others read |
+ | `prove-it` | auto | Its description; routed row "About to say done, fixed or passing, commit, or open a PR" | Evidence before any done, fixed or passing |
++| `implement` | path | Routed row "One bounded change with an agreed design"; /kern:implement | Thin slices, test first, full suite |
+ 
+ ## Close calls
+ - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
+diff --git a/skills/implement/SKILL.md b/skills/implement/SKILL.md
+new file mode 100644
+index 0000000..4ae4f25
+--- /dev/null
++++ b/skills/implement/SKILL.md
+@@ -0,0 +1,54 @@
++---
++name: implement
++description: "Change production code in thin slices: failing test first, minimal green, full suite, out-of-scope listed."
++disable-model-invocation: true
++---
++
++# implement
++
++Write production code in slices, each proven by a test seen failing for the right reason. Reached from the kernel row for one bounded change, from execute-plan inline mode, from diagnose step 7, and by the `kern:implementer` agent, whose brief gives this file's absolute path.
++
++## Steps
++
++0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
++1. Pick where to edit. In a kern worktree, edit there. In the main session, edit the current checkout only when its branch is a non-protected feature branch; otherwise propose `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, adding `--branch <name>` when `branch.pattern` holds `{id}`, and wait for one answer. Never switch the main checkout's branch. Under autopilot, always use a worktree.
++2. Resolve `test.focused`, `test.full`, `typecheck` and `lint` with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`, else `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect <key>`. Print each command with its source. When both exit 3, ask the user for that command; never guess a command.
++3. Slice the work and list the seams; use the plan's seams when it has them (`references/slicing.md`).
++4. For each slice, name the break in one sentence, write the test, run it, and see RED for the expected reason: an assertion failure, not an import or syntax error. A test that already passes is a finding, not a RED.
++5. Before the first production edit, record the tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Write the minimum code that turns the test GREEN.
++6. Run the focused test and `typecheck`. Refactor only code you touched, and stay green.
++7. A file outside the approved list pauses the work: name it and ask. Findings outside scope go to a NOTICED BUT NOT TOUCHING list.
++8. Check test quality with `references/test-design.md`. For one new condition, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate <file>:<line> <wt> -- <test command>` and expect `probe: mutation caught`; a survivor means a stronger test, and exit 3 is reported as inconclusive, never as a pass. Add adversarial inputs (empty, zero, false, cleared, several elements). For each new guard, make the patch with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>`, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <change.patch> -- <test command>` and expect `probe: fail-then-pass ok`.
++9. No correct seam for a test: say so, and give the closest executable check with its output.
++10. Regenerate `generated_artifacts` for touched trigger paths, run `test.full`, and name every red test, marking the ones that were red before your change.
++11. Report the failing-before and passing-after output, the commands, the files changed and the NOTICED list. Do not commit.
++
++## Inputs
++
++| Key | Default | Use |
++|---|---|---|
++| `test.focused`, `test.full`, `typecheck`, `lint` | detected, source printed | RED, GREEN and the full suite |
++| `generated_artifacts` | none declared | files to regenerate after a change |
++| `scope_threshold` | 4 files | size of the approved list |
++| `branch.protected`, `branch.pattern` | `base_branch` plus `deploy.envs` branches; detected | where editing in place is allowed; the worktree branch |
++
++Project test obligations come from the project rules already in context.
++
++## Outputs
++
++Code and tests in the chosen tree; a chat report. `wt-diff` writes a review package and its `.patch` under `WORK/reviews/`. No commit.
++
++## Stops and autopilot
++
++Stops at steps 1, 2 and 7. Under autopilot the steps are the same, RED is never skipped, and a file outside the approved list parks the slice with a `parked:` line.
++
++## Red flags
++
++| Thought | Reality |
++|---|---|
++| "Too simple to test" | Simple code breaks, and the test takes a minute. |
++| "I'll test after" | A test written after passes at once and proves nothing. Watch it fail first. |
++| "I checked it by hand" | A hand check leaves no record and is not re-run on the next change. |
++| "It passed before my change, close enough" | A test that passes first is a finding, not a RED. |
++| "That file is just outside the list" | A file outside the approved list pauses the work. |
++| "Hard to test, so skip it" | Hard to test means hard to use. Name the closest seam and its check. |
+diff --git a/skills/implement/references/slicing.md b/skills/implement/references/slicing.md
+new file mode 100644
+index 0000000..569b00c
+--- /dev/null
++++ b/skills/implement/references/slicing.md
+@@ -0,0 +1,20 @@
++# Slicing
++
++## Vertical slices
++
++A slice is one behaviour end to end, small enough for one test cycle: test, minimal code, green, next. Build one path through the stack (storage, API, UI) per slice, so each slice leaves something that works. Writing all tests first and all code after tests imagined behaviour.
++
++Order: riskiest slice first, so a dead end shows before the rest is built. When two sides develop apart, fix the contract (types, schema) as slice 0.
++
++## Seams
++
++A seam is the public boundary a test calls: a public function, an HTTP handler, a CLI entry, a component. List the seams before writing tests, prefer ones that already have tests, and give each a line on what it catches and what it misses. Do not test a private function or an internal collaborator.
++
++## Scope discipline
++
++Touch only what the task needs. Do not tidy adjacent code, change imports in files you are not editing, or add features that seem useful. A file outside the approved list pauses the work (D9). Record anything else you notice:
++
++```
++NOTICED BUT NOT TOUCHING:
++- <path>: <what, one line>
++```
+diff --git a/skills/implement/references/test-design.md b/skills/implement/references/test-design.md
+new file mode 100644
+index 0000000..2c42586
+--- /dev/null
++++ b/skills/implement/references/test-design.md
+@@ -0,0 +1,43 @@
++# Test design
++
++A test exists to catch a specific break. Each section gives a rule and the question that checks it.
++
++## Name the break
++
++Before the test body, name the production change that should make it fail, and say whether that change is a bug or a decision. A test that only a decision can fail (a constant's value, exact message wording, private structure) fires on redesign and sleeps through bugs. Test the behaviour that depends on the decision: not `expect(MAX_RETRIES).toBe(5)` but "a failing call is retried 5 times and the 6th attempt never happens."
++Gate: can you name a bug that fails this test? If not, redesign it around an observable behaviour.
++
++## Test the real thing
++
++Run the artifact and assert its output, side effects or exit code. Asserting that a script or config contains a line proves only that the source is the source. Test your boundary: the route you register, the query you emit, the payload you produce. Upstream mechanics are their maintainers' tests. Trivial getters, constants and forwarding earn a test only when they validate, default, derive or cause a side effect.
++Gate: if only the framework remained, would this test still matter?
++
++## Mocks need a reason
++
++A mock assertion passes when the mock is present and fails when it is absent, so it says nothing about the component. Mock only the slow or external call, and learn the real method's side effects first so the ones the test depends on stay real. A double that accepts any argument verifies nothing: assert arguments and call counts when they are part of the contract, and give each branch (success, error, malformed) its own fixture. Mirror the real structure, every documented field. Cleanup that only tests call lives in test utilities, not on the production class. When mock setup outgrows the test, use real components.
++Gate: are you asserting on the mock itself? Unmock it or delete the assertion.
++
++## Mutation check
++
++Before you finish, mutate the code and see a test fail. Run `probe --mutate <file>:<line>` on a new condition: it inverts that condition in a throwaway fork, never in the worktree, and `probe: mutation caught` means a test notices. `probe: mutation survived` means the behaviour is unprotected or the test is tautological. Also ask what a wrong constant, a wrong branch, a missing side effect or an empty return would do.
++Gate: does at least one test fail for each realistic mutation?
++
++## Tautological tests
++
++An expected value comes from an independent source: a known-good literal, a worked example or the spec. It is never recomputed the way the code computes it, as in `expect(add(a, b)).toBe(a + b)`, nor taken from the same builder or helper, nor a constant asserted equal to itself.
++
++```ts
++expect(buildSearchQuery({ tag: 'urgent' })).toBe('tag:"urgent"'); // hand-derived literal
++```
++
++Gate: could this assertion ever disagree with the code? If not, replace the expected value with a literal.
++
++## Adversarial inputs
++
++The happy value proves little. Cover empty, zero, false, cleared, several elements, and the value a real caller sends. A control over a list reads and writes the whole list, so test it with more than one element.
++Gate: does a test use each of these where the code takes the input?
++
++## Behaviour, not implementation
++
++Call the code as its users do and assert the exact result they see. Rewrite or delete any test that would pass if every import returned undefined. These shapes fail that check: no assertion or a loose one (`toBeDefined`, `toBeTruthy`, `not.toThrow`), only a call or an absence (`toHaveBeenCalled`, `toEqual([])`), a restated constant or default, and assertions on data the test built without calling the subject. Fix: call the subject with one concrete input and assert the literal output or effect. For an absence, also assert the presence on another input. The tell for implementation coupling is a test that breaks on a refactor that changes no behaviour.
++Gate: if you refactor with behaviour unchanged, does the test stay green?
+diff --git a/tests/skills/implement.acceptance.md b/tests/skills/implement.acceptance.md
+new file mode 100644
+index 0000000..c909768
+--- /dev/null
++++ b/tests/skills/implement.acceptance.md
+@@ -0,0 +1,9 @@
++# implement: acceptance checks (run during the M2b pilot)
++
++Run each in a throwaway project with kern loaded (`claude --plugin-dir <kern repo>`), superpowers disabled for that project.
++
++- [ ] An approved bounded change: the transcript shows a red test run before the first production edit, then green, then the full suite.
++- [ ] A new test passes before any code change: it is reported as a finding and not used as RED.
++- [ ] The change needs a file outside the approved list: the work pauses and names the file.
++- [ ] No test runner is detectable: it asks for the command and does not guess `npm test`.
++- [ ] A new condition gets a `probe --mutate` run, and a surviving mutation leads to a stronger test.
+diff --git a/tests/skills/implement.test.mjs b/tests/skills/implement.test.mjs
+new file mode 100644
+index 0000000..3905009
+--- /dev/null
++++ b/tests/skills/implement.test.mjs
+@@ -0,0 +1,31 @@
++// tests/skills/implement.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
++
++const SKILL = 'skills/implement/SKILL.md';
++
++test('implement frontmatter', () => {
++  assertFrontmatter(SKILL, {
++    name: 'implement',
++    description: 'Change production code in thin slices: failing test first, minimal green, full suite, out-of-scope listed.',
++    'disable-model-invocation': 'true',
++  });
++});
++
++test('implement sections, steps and red flags', () => {
++  const { body } = readDoc(SKILL);
++  assert.deepEqual(h2s(body), ['## Steps', '## Inputs', '## Outputs', '## Stops and autopilot', '## Red flags']);
++  const s = steps(body);
++  assert.equal(s.length, 12);
++  assert.equal(s[0], DEFER);
++  assertContains(SKILL, ['RED for the expected reason', 'NOTICED BUT NOT TOUCHING', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-new', 'adding `--branch <name>` when `branch.pattern` holds `{id}`', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'never guess a command', 'Do not commit.']);
++  assertMaxBytes(SKILL, 5500);
++});
++
++test('implement references', () => {
++  assertHeadings('skills/implement/references/test-design.md', ['# Test design', '## Name the break', '## Test the real thing', '## Mocks need a reason', '## Mutation check', '## Tautological tests', '## Adversarial inputs', '## Behaviour, not implementation']);
++  assertMaxBytes('skills/implement/references/test-design.md', 5000);
++  assertHeadings('skills/implement/references/slicing.md', ['# Slicing', '## Vertical slices', '## Seams', '## Scope discipline']);
++  assertMaxBytes('skills/implement/references/slicing.md', 1800);
++});

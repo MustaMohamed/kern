@@ -1,0 +1,77 @@
+diff --git a/skills/implement/SKILL.md b/skills/implement/SKILL.md
+index 4ae4f25..5088d9c 100644
+--- a/skills/implement/SKILL.md
++++ b/skills/implement/SKILL.md
+@@ -11,14 +11,14 @@ Write production code in slices, each proven by a test seen failing for the righ
+ ## Steps
+ 
+ 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+-1. Pick where to edit. In a kern worktree, edit there. In the main session, edit the current checkout only when its branch is a non-protected feature branch; otherwise propose `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, adding `--branch <name>` when `branch.pattern` holds `{id}`, and wait for one answer. Never switch the main checkout's branch. Under autopilot, always use a worktree.
++1. Pick where to edit. In a kern worktree, edit there. In the main session, edit the current checkout only when its branch is a non-protected feature branch; otherwise propose `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, adding `--branch <name>` when `branch.pattern` holds `{id}`, and wait for one answer. Never switch the main checkout's branch. Under autopilot, always use a worktree. `<wt>` below is that path: the one `wt-new` printed, or the checkout root when editing in place.
+ 2. Resolve `test.focused`, `test.full`, `typecheck` and `lint` with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`, else `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect <key>`. Print each command with its source. When both exit 3, ask the user for that command; never guess a command.
+ 3. Slice the work and list the seams; use the plan's seams when it has them (`references/slicing.md`).
+ 4. For each slice, name the break in one sentence, write the test, run it, and see RED for the expected reason: an assertion failure, not an import or syntax error. A test that already passes is a finding, not a RED.
+-5. Before the first production edit, record the tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Write the minimum code that turns the test GREEN.
+-6. Run the focused test and `typecheck`. Refactor only code you touched, and stay green.
++5. Once, before the first production edit of the whole change (not per slice), record the tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Write the minimum code that turns the test GREEN.
++6. Run the focused test, `typecheck` and `lint`; a command that step 2 could not resolve was asked for there. Refactor only code you touched, and stay green.
+ 7. A file outside the approved list pauses the work: name it and ask. Findings outside scope go to a NOTICED BUT NOT TOUCHING list.
+-8. Check test quality with `references/test-design.md`. For one new condition, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate <file>:<line> <wt> -- <test command>` and expect `probe: mutation caught`; a survivor means a stronger test, and exit 3 is reported as inconclusive, never as a pass. Add adversarial inputs (empty, zero, false, cleared, several elements). For each new guard, make the patch with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>`, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <change.patch> -- <test command>` and expect `probe: fail-then-pass ok`.
++8. Check test quality with `references/test-design.md`. For one new condition, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate <file>:<line> <wt> -- <test command>` (`<file>` is relative to `<wt>`; it inverts the first operator on that line) and expect `probe: mutation caught`; a survivor means a stronger test, and exit 3 is reported as inconclusive, never as a pass. Add adversarial inputs (empty, zero, false, cleared, several elements). For each new guard, make the patch with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>`, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <change.patch> -- <test command>` and expect `probe: fail-then-pass ok`. `wt-diff` exit 3 is an empty diff: no production change, so nothing to probe; report it, never count it as a pass.
+ 9. No correct seam for a test: say so, and give the closest executable check with its output.
+ 10. Regenerate `generated_artifacts` for touched trigger paths, run `test.full`, and name every red test, marking the ones that were red before your change.
+ 11. Report the failing-before and passing-after output, the commands, the files changed and the NOTICED list. Do not commit.
+@@ -49,6 +49,6 @@ Stops at steps 1, 2 and 7. Under autopilot the steps are the same, RED is never
+ | "Too simple to test" | Simple code breaks, and the test takes a minute. |
+ | "I'll test after" | A test written after passes at once and proves nothing. Watch it fail first. |
+ | "I checked it by hand" | A hand check leaves no record and is not re-run on the next change. |
+-| "It passed before my change, close enough" | A test that passes first is a finding, not a RED. |
+-| "That file is just outside the list" | A file outside the approved list pauses the work. |
++| "The mutation survived, but the test looks fine" | A surviving mutation is an unprotected behaviour. Strengthen the test. |
++| "That file is just outside the list" | Pause, name the file and ask. Do not edit it first. |
+ | "Hard to test, so skip it" | Hard to test means hard to use. Name the closest seam and its check. |
+diff --git a/skills/implement/references/slicing.md b/skills/implement/references/slicing.md
+index 569b00c..bdd27da 100644
+--- a/skills/implement/references/slicing.md
++++ b/skills/implement/references/slicing.md
+@@ -12,7 +12,7 @@ A seam is the public boundary a test calls: a public function, an HTTP handler,
+ 
+ ## Scope discipline
+ 
+-Touch only what the task needs. Do not tidy adjacent code, change imports in files you are not editing, or add features that seem useful. A file outside the approved list pauses the work (D9). Record anything else you notice:
++Touch only what the task needs. Do not tidy adjacent code, change imports in files you are not editing, remove comments you do not understand, modernize syntax in files you only read, or add features that seem useful. A file outside the approved list pauses the work (D9). Record anything else you notice:
+ 
+ ```
+ NOTICED BUT NOT TOUCHING:
+diff --git a/skills/implement/references/test-design.md b/skills/implement/references/test-design.md
+index 2c42586..ec79a6d 100644
+--- a/skills/implement/references/test-design.md
++++ b/skills/implement/references/test-design.md
+@@ -19,7 +19,7 @@ Gate: are you asserting on the mock itself? Unmock it or delete the assertion.
+ 
+ ## Mutation check
+ 
+-Before you finish, mutate the code and see a test fail. Run `probe --mutate <file>:<line>` on a new condition: it inverts that condition in a throwaway fork, never in the worktree, and `probe: mutation caught` means a test notices. `probe: mutation survived` means the behaviour is unprotected or the test is tautological. Also ask what a wrong constant, a wrong branch, a missing side effect or an empty return would do.
++Before you finish, mutate the code and see a test fail. Run `probe --mutate <file>:<line>` on a new condition: it inverts the first operator on that line in a throwaway fork, never in the worktree, and `probe: mutation caught` means a test notices. `probe: mutation survived` means the behaviour is unprotected or the test is tautological. Also ask what a wrong constant, a wrong branch, a missing side effect or an empty return would do.
+ Gate: does at least one test fail for each realistic mutation?
+ 
+ ## Tautological tests
+diff --git a/tests/skills/implement.test.mjs b/tests/skills/implement.test.mjs
+index 3905009..13a5f63 100644
+--- a/tests/skills/implement.test.mjs
++++ b/tests/skills/implement.test.mjs
+@@ -19,12 +19,13 @@ test('implement sections, steps and red flags', () => {
+   const s = steps(body);
+   assert.equal(s.length, 12);
+   assert.equal(s[0], DEFER);
+-  assertContains(SKILL, ['RED for the expected reason', 'NOTICED BUT NOT TOUCHING', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-new', 'adding `--branch <name>` when `branch.pattern` holds `{id}`', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'never guess a command', 'Do not commit.']);
++  assertContains(SKILL, ['RED for the expected reason', 'NOTICED BUT NOT TOUCHING', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-new', 'adding `--branch <name>` when `branch.pattern` holds `{id}`', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'never guess a command', 'Do not commit.', 'wt-snap', 'wt-diff', 'kern-get', 'kern-detect', 'probe: mutation caught']);
+   assertMaxBytes(SKILL, 5500);
+ });
+ 
+ test('implement references', () => {
+   assertHeadings('skills/implement/references/test-design.md', ['# Test design', '## Name the break', '## Test the real thing', '## Mocks need a reason', '## Mutation check', '## Tautological tests', '## Adversarial inputs', '## Behaviour, not implementation']);
++  assertContains('skills/implement/references/test-design.md', ['probe --mutate']);
+   assertMaxBytes('skills/implement/references/test-design.md', 5000);
+   assertHeadings('skills/implement/references/slicing.md', ['# Slicing', '## Vertical slices', '## Seams', '## Scope discipline']);
+   assertMaxBytes('skills/implement/references/slicing.md', 1800);

@@ -1,0 +1,390 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index ec8b44f..93e949d 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,7 +4,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ 
+ ## [Unreleased]
+ 
+-- Guards judge a Bash command whose head word is a shell alias from the Claude Code shell snapshot, such as `gpf! origin main`, as the git or gh command it expands to, and as itself: an alias gets every vote its expansion gets, but never an allow, which kern gives only to a command that starts with git or gh. The head word is found after assignments, redirections and zsh's reserved words (`if`, `!`, `time` and the like), in each simple command, `$( )` and `eval`. An alias whose value ends in a blank, such as `_='sudo '`, also expands the word after it, as zsh's trailing-space rule does, so `_ gpf! origin main` is judged as `sudo git push --force origin main`. G2, G3, G4, G13, G14 and G15, which skip a command whose text names no gh, push, deploy tool or network client, read the expansion's text too, so `prc` for `gh pr create`, `gp origin production` as a push to a deploy branch, and an alias that runs psql against a protected target are judged. kern reads the snapshot as text and never runs it; a missing, unreadable or unparseable snapshot changes nothing. This removes the 0.2.0 known limit on shell aliases. Known limits, left for M3: the newest snapshot stands in for the session's, which the hook input does not name; an alias defined and used in one Bash call through `eval`, `$( )` or a backtick is not judged interactively (G00 denies the definition under autopilot); nor is an alias after an assignment word that holds a quote or `$`, an alias past another alias's head word, a global alias, a `$'...'` or double-quoted alias value, or a chain of aliases or of trailing-space aliases deeper than 8; a snapshot with thousands of aliases slows every Bash call, by about 0.6 s for 10,000; G16 and G20 match only the command's own text, not an alias's expansion; and the shell-snapshots folder is writable, so kern reads a newer snapshot written there, though that can only add asks and denies, never remove one or add an allow.
++- Guards judge a Bash command whose head word is a shell alias from the Claude Code shell snapshot, such as `gpf! origin main`, as the git or gh command it expands to, as well as itself. With aliases loaded, the guards read the command's own simple commands exactly as without aliases, in the same order and context, then every expansion after all of them, so an alias can only add votes: it never removes a deny or an ask, and never gets an allow, which kern gives only to a command that starts with git or gh. The head word is found after assignments (quoted ones included), redirections and zsh's reserved words (`if`, `!`, `time` and the like), in each simple command, `$( )` and `eval`. An alias whose value ends in a space, such as `_='sudo '`, also expands the word after it, as zsh's trailing-space rule does, so `_ gpf! origin main` is judged as `sudo git push --force origin main`; past 8 such words, a word that is still an alias is denied under autopilot. G2, G3, G4, G13, G14 and G15, which skip a command whose text names no gh, push, deploy tool or network client, read the expansion's text too, so `prc` for `gh pr create`, `gp origin production` as a push to a deploy branch, and an alias that runs psql against a protected target are judged. kern reads the snapshot as text and never runs it; a missing, unreadable or unparseable snapshot changes nothing. This removes the 0.2.0 known limit on shell aliases. Known limits, left for M3: the newest snapshot stands in for the session's, which the hook input does not name; an alias defined and used in one Bash call through `eval`, `$( )` or a backtick is not judged interactively (G00 denies the definition under autopilot); nor is an alias past another alias's head word, a global alias, a `$'...'` or double-quoted alias value, a chain of aliases deeper than 8, or interactively an alias past 8 trailing-space words; an expansion no longer sets context for the command's later records, so `gaa && git commit -m x` loses G6's stale-index reason (its decision stays); a snapshot with thousands of aliases slows every Bash call, by about 0.6 s for 10,000; G16 and G20 match only the command's own text, not an alias's expansion; and the shell-snapshots folder is writable, so kern reads a newer snapshot written there, though that can only add votes, never remove a deny or an ask or add an allow.
+ - help: allows only the exact git commands it prescribes (`git remote -v`, `git rev-parse --git-common-dir`, `git check-ignore -q *`, `git worktree list`); `git remote *`, `git symbolic-ref *` and `git log *` could write config, move HEAD or run a program with no prompt.
+ - Mode switches: "terse voice" and "terse mode on" switch; extra spaces are folded; a first line over 200 characters never switches.
+ - Kernel: no is an acceptable answer, and chat in either voice skips the main AI tells; terse keeps existing comments and shows only changed code.
+diff --git a/docs/plans/contract.md b/docs/plans/contract.md
+index eee0bfb..ce968ea 100644
+--- a/docs/plans/contract.md
++++ b/docs/plans/contract.md
+@@ -95,16 +95,16 @@ SessionStart uses an empty matcher and branches on `source` inside the script, b
+ - `in_main_checkout DIR` exit 0 when `git -C DIR rev-parse --show-toplevel` equals `kern_main_root DIR`.
+ - `branch_protected BRANCH` exit 0 when BRANCH is the settings `base_branch`, the origin/HEAD branch, listed in `branch.protected`, or listed in `deploy.envs`; when origin/HEAD is unknown, `main`, `master`, `trunk` and `develop` are protected too. A `base_branch` setting only adds a protected branch.
+ - `current_branch DIR` prints the branch `git -C DIR symbolic-ref -q HEAD` names, without `refs/heads/` (not `rev-parse --abbrev-ref`, which prints `heads/<name>` when a tag shares the name). Exit 1 and no output on a detached HEAD.
+-- `git_words` (M2a Task 33): a record whose head word is an alias `aliases.sh` loaded is printed, then its expansion is split again and printed after it; the expansion's own words are not expanded again. The record stays so that no vote the command got without aliases is lost, and so that a guard that allows only a command whose first record starts with git or gh never allows an alias. A quoted or escaped head word is never an alias. Without `aliases.sh` loaded, nothing changes.
++- `git_words` (M2a Task 33): with aliases loaded (`KERN_ALIASES` set), the outermost call prints the command's own records exactly as without aliases (content, order and context), then every expansion record after all of them. An inner call splits a record's alias expansion again (`_GW_NOALIAS` set, so its own words are not expanded again) and marks each of its records with a leading tab, which no record of the command starts with; the outermost call moves the marked records to the end and strips the mark. So an expansion never changes the context of a record of the command (a `cd` in it cannot clear G1's or G6's `moved` or G16's `in_sd`), and expansions can only add votes. The alias record itself stays first, so a guard that allows only a command whose first record starts with git or gh never allows an alias. A quoted or escaped head word is never an alias. `_GW_IN` and `_GW_NOALIAS` are unset when `gitctx.sh` is sourced. Without `aliases.sh` loaded, nothing changes.
+ 
+ `aliases.sh` (M2a Task 33; loaded by `hooks/pre-tool-use` before `gitctx.sh`, and `aliases_load` runs for the Bash tool only):
+ - `alias_snapshot`: prints the shell snapshot to read, or exits 1. `KERN_SHELL_SNAPSHOT` names one (tests); otherwise the newest `snapshot-*.sh` under `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/shell-snapshots`.
+-- `aliases_load`: sets `_KA_<hex of the name>` (two hex digits per byte) to the expansion of each alias whose expansion holds a word that is git or gh (last path part, any case, quotes removed), and of each alias whose expansion ends in a blank (stored with one space at its end), and `KERN_ALIASES=1` when there is one; it first unsets any `_KA_` variable already set. Nothing from the snapshot is evaluated: awk reads at most its first 4 MB as text. A missing, unreadable or unparseable snapshot sets nothing, and no failure stops the hook.
++- `aliases_load`: sets `_KA_<hex of the name>` (two hex digits per byte) to the expansion of each alias whose expansion holds a word that is git or gh (last path part, any case, quotes removed), and of each alias whose expansion ends in a space (a tab does not count, as in zsh; stored with one space at its end), and `KERN_ALIASES=1` when there is one; it first unsets any `_KA_` variable already set. Nothing from the snapshot is evaluated: awk reads at most its first 4 MB as text. A missing, unreadable or unparseable snapshot sets nothing, and no failure stops the hook.
+ - `alias_text CMD`: prints the expansion of each record of `git_words CMD` whose head word is such an alias, one per line. `hooks/pre-tool-use` sets `KERN_ALIAS_TEXT` to it for the Bash tool when `KERN_ALIASES` is set, and G2, G3, G4, G13, G14 and G15 match their text prefilter (gh, push, deploy tool and client names) against the command and `KERN_ALIAS_TEXT`.
+-- `alias_expand SEG`: sets `ALIAS_EXP` to SEG with its head word replaced; exit 1 when that word is not such an alias. The head word is the first word after unquoted `NAME=value` words, redirections (with a separate target word) and zsh's reserved words `if then elif else do while until ! { time nocorrect coproc` and `repeat` with its count, as zsh finds it; not after `command`, `builtin`, `exec`, `noglob` or `-`, where zsh does not expand. When the expansion ends in a blank, the word right after the alias is replaced too when it is such an alias, as zsh's trailing-space rule does, at most 8 times.
++- `alias_expand SEG`: sets `ALIAS_EXP` to SEG with its head word replaced; exit 1 when that word is not such an alias. The head word is the first word after `NAME=value` words, redirections (with a separate target word) and zsh's reserved words `if then elif else do while until ! { time nocorrect coproc` and `repeat` with its count, as zsh finds it; not after `command`, `builtin`, `exec`, `noglob` or `-`, where zsh does not expand. An assignment word holding a quote, `$` or a backslash hands the search to `_ALIAS_HEAD_AWK`, which splits words at blanks outside quotes, `$( )`, `${ }` and backticks. When the expansion ends in a space, the word right after the alias is replaced too when it is such an alias, as zsh's trailing-space rule does, 8 times; a 9th word that is still such an alias becomes the command name `$KERN_ALIAS_PAST_8`, which G00 reads as built at run time (deny under autopilot; no vote interactively, as without aliases).
+ - `_alias_var WORD VAR`: sets VAR to the name of WORD's `_KA_` variable; exit 1 when WORD is no such alias or holds a byte outside the name characters.
+ - Parsing: `alias [--] name=value` lines, a CRLF read as LF; value bare, single-quoted with `'\''`, or backslash-escaped. Skipped: `$'...'` and double-quoted values, unclosed quotes, a control byte in the value, names holding a quote, `/`, `$`, a backtick, a backslash or a byte outside printable ASCII, names over 256 bytes, lines over 4096 bytes, and alias lines after the first 1 MB of them. The head-word chain is followed as zsh does: each name at most once, at most 8 times, while the expansion is at most 4096 bytes.
+-- Accepted limits: the hook input and environment do not name the session's snapshot (measured 2026-10-14: one snapshot per Claude Code process; the Bash tool runs `zsh -c 'source <snapshot> && eval ...'`), so the newest stands in for it. Not followed: aliases inside an expansion other than its head-word chain, a run of trailing-space aliases past 8, global aliases, an alias after an assignment word holding a quote or `$`, and an alias defined in the same Bash call and run through `eval` or `$( )` (G00 denies an alias definition under autopilot).
++- Accepted limits: the hook input and environment do not name the session's snapshot (measured 2026-10-14: one snapshot per Claude Code process; the Bash tool runs `zsh -c 'source <snapshot> && eval ...'`), so the newest stands in for it. Not followed: aliases inside an expansion other than its head-word chain, global aliases, and an alias defined in the same Bash call and run through `eval`, `$( )` or a backtick (G00 denies an alias definition under autopilot). Over-expansion, harmless because expansions only add votes: G16 runs `git_words` on the lowercased command, so its lookup can find an alias zsh would not run (`gbD` is looked up as `gbd`); and an alias is expanded inside `bash -c`, `sh -c` and ssh remote command text too, where the snapshot's aliases are not defined. An expansion sets no context for the command's own later records: `gaa && git commit -m x` loses G6's stale-index reason, though the decision is unchanged.
+ 
+ ## Guard dispatcher (hooks/pre-tool-use)
+ 
+diff --git a/hooks/lib/aliases.sh b/hooks/lib/aliases.sh
+index b2e4142..3422a48 100644
+--- a/hooks/lib/aliases.sh
++++ b/hooks/lib/aliases.sh
+@@ -8,7 +8,7 @@
+ 
+ # _ALIASES_AWK: reads a snapshot and prints `<hex of name><TAB>expansion` for each alias whose
+ # expansion holds a word that is git or gh (by its last path part, any case, quotes removed), and for
+-# each alias whose expansion ends in a blank, which zsh's trailing-space rule lets expand the word after
++# each alias whose expansion ends in a space, which zsh's trailing-space rule lets expand the word after
+ # it; such an expansion is printed with one space at its end and no other expansion ends in one. Lines are
+ # `alias [--] name=value`, with a CRLF read as LF; value is a bare word, single-quoted text with '\''
+ # for a quote, or backslash escapes. A value in $'...' or double quotes, an unclosed quote, a control
+@@ -81,15 +81,16 @@ function gitword(v,    w, n, k, b, P) {
+ }
+ END {
+   for (i = 1; i <= cnt; i++) {
+-    # ts: the expansion ends in a blank, its own or that of an alias whose value ends it.
+-    nm = order[i]; v = val[nm]; split("", seen); seen[nm] = 1; ts = v ~ /[ \t]$/
++    # ts: the expansion ends in a space (a tab does not count in zsh), its own or that of an alias
++    # whose value ends it.
++    nm = order[i]; v = val[nm]; split("", seen); seen[nm] = 1; ts = v ~ / $/
+     for (d = 0; d < 8; d++) {
+       hd = head(v)
+       if (hd == "" || !(hd in val) || (hd in seen) || length(v) > 4096) break
+       seen[hd] = 1
+       n = split(v, w, /[ \t]+/); pre = ""; rest = ""
+       for (k = 1; k <= n; k++) if (w[k] != "") { if (k < hk) pre = pre w[k] " "; else if (k > hk) rest = rest " " w[k] }
+-      if (rest == "" && val[hd] ~ /[ \t]$/) ts = 1
++      if (rest == "" && val[hd] ~ / $/) ts = 1
+       v = pre val[hd] rest
+     }
+     sub(/[ \t]+$/, "", v)
+@@ -98,6 +99,45 @@ END {
+   }
+ }'
+ 
++# _ALIAS_HEAD_AWK: for a simple command whose leading words include an assignment that holds a quote, a
++# $ or a backslash (X='a b' gpf!), prints three lines: the text before the head word, the head word and
++# the text after it, all as written. Words are split at blanks outside quotes, $( ), ${ } and backticks;
++# the words skipped are those alias_expand skips. Prints nothing when there is no head word. A word it
++# splits wrongly can only add or miss an expansion record, which git_words prints after the command's
++# own records.
++# shellcheck disable=SC2016 # awk text
++_ALIAS_HEAD_AWK='
++{ buf = buf (NR > 1 ? "\n" : "") $0 }
++END {
++  split("if then elif else do while until ! { time nocorrect coproc", A, " "); for (k in A) RW[A[k]] = 1
++  n = split(buf, C, ""); i = 1; skip = 0
++  for (;;) {
++    while (i <= n && (C[i] == " " || C[i] == "\t")) i++
++    if (i > n) exit
++    s = i; q = ""; d = 0
++    for (; i <= n; i++) {
++      c = C[i]
++      if (q == sq) { if (c == sq) q = ""; continue }
++      if (c == "\\") { i++; continue }
++      if (q == "`") { if (c == "`") q = ""; continue }
++      if (c == "$" && (C[i + 1] == "(" || C[i + 1] == "{")) { d++; i++; continue }
++      if (d && (c == "(" || c == "{")) { d++; continue }
++      if (d && (c == ")" || c == "}")) { d--; continue }
++      if (q == "\"") { if (c == "\"" && !d) q = ""; continue }
++      if (c == sq || c == "\"" || c == "`") { q = c; continue }
++      if (!d && (c == " " || c == "\t")) break
++    }
++    w = substr(buf, s, i - s)
++    if (skip) { skip = 0; continue }
++    if (w in RW) continue
++    if (w == "repeat") { skip = 1; continue }
++    t = w; sub(/^[0-9]+/, "", t)
++    if (t ~ /^(<|>|&>)/) { if (t !~ /[^<>&|]/) skip = 1; continue }
++    if (w ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) continue
++    print substr(buf, 1, s - 1); print w; print substr(buf, i); exit
++  }
++}'
++
+ # _ALIAS_CHARS: the characters an alias name may hold, as _ALIASES_AWK reads it, listed so that no
+ # locale range decides it.
+ _ALIAS_CHARS='!#%&()*+,-.0123456789:;<>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_abcdefghijklmnopqrstuvwxyz{|}~'
+@@ -175,20 +215,37 @@ _alias_var() {
+ 
+ # alias_expand SEG: when the head word of the simple command SEG is an alias aliases_load set, sets
+ # ALIAS_EXP to SEG with that word replaced by its expansion. Exit 1 otherwise. When the expansion ends
+-# in a blank, the word after the alias is replaced too when it is such an alias, as zsh's trailing-space
+-# rule does, and so on, at most 8 times. As zsh does, the head
+-# word is the first word after unquoted NAME=value words, redirections (with a target in the next word
+-# when none is attached) and the reserved words if then elif else do while until ! { time nocorrect
+-# coproc and repeat with its count; zsh does not expand an alias after command, builtin, exec, noglob
+-# or -, and neither does this. A word with a quote, a backslash, a $ or a backtick is never an alias, as
+-# in zsh, and ends the search.
++# in a space, the word after the alias is replaced too when it is such an alias, as zsh's trailing-space
++# rule does, and so on, at most 8 times; a 9th word that is still such an alias becomes the command name
++# $KERN_ALIAS_PAST_8, which G00 reads as built at run time, so autopilot denies it. As zsh does, the
++# head word is the first word after NAME=value words, redirections (with a target in the next word when
++# none is attached) and the reserved words if then elif else do while until ! { time nocorrect coproc
++# and repeat with its count; zsh does not expand an alias after command, builtin, exec, noglob or -, and
++# neither does this. An assignment word with a quote, a $ or a backslash hands the search to
++# _ALIAS_HEAD_AWK. Any other word with one, or with a backtick, is never an alias, as in zsh, and ends
++# the search.
+ alias_expand() {
+   local rest="$1" pre="" w t v skip=0 n=0
+   [ -n "${KERN_ALIASES-}" ] || return 1
+   while :; do
+     rest=${rest#"${rest%%[!"$_ALIAS_BLANK"]*}"}
+     w=${rest%%["$_ALIAS_BLANK"]*}
+-    case "$w" in '' | *[\"\'\\\$\`]*) return 1 ;; esac
++    case "$w" in
++      '') return 1 ;;
++      *[\"\'\\\$\`]*)
++        [ "$skip" = 0 ] || return 1
++        case "$w" in *=*) ;; *) return 1 ;; esac
++        t=${w%%=*}
++        t=${t%+}
++        case "$t" in '' | [0123456789]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;; esac
++        { IFS= read -r pre || :; IFS= read -r w || :; IFS= read -r rest || :; } <<EOF
++$(printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_ALIAS_HEAD_AWK")
++EOF
++        [ -n "$w" ] || return 1
++        rest="$w$rest"
++        break
++        ;;
++    esac
+     if [ "$skip" = 1 ]; then
+       skip=0
+     else
+@@ -217,12 +274,17 @@ alias_expand() {
+   _alias_var "$w" v || return 1
+   pre="$pre${!v}"
+   rest=${rest#"$w"}
+-  while [ "$n" -lt 8 ]; do
++  while :; do
+     case "$pre" in *' ') ;; *) break ;; esac
+     t=${rest#"${rest%%[!"$_ALIAS_BLANK"]*}"}
+     w=${t%%["$_ALIAS_BLANK"]*}
+     case "$w" in '' | *[\"\'\\\$\`]*) break ;; esac
+     _alias_var "$w" v || break
++    if [ "$n" -ge 8 ]; then
++      # shellcheck disable=SC2016 # a literal $, for G00
++      pre="$pre"'$KERN_ALIAS_PAST_8 '
++      break
++    fi
+     pre="$pre${!v}"
+     rest=${t#"$w"}
+     n=$((n + 1))
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index 346b647..4e548f1 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -5,6 +5,9 @@
+ # A newline inside one record (quoted text, or the inside of $( )) is printed as this byte, so a
+ # caller that reads records line by line never takes a quoted line for a command.
+ _GW_NL=$'\037'
++# git_words' own state, never taken from the environment: _GW_IN marks a call inside the outermost
++# one, _GW_NOALIAS a call that splits an alias's expansion.
++unset _GW_IN _GW_NOALIAS
+ 
+ # _GW_AWK: awk functions shared by _shell_words, _cmd_words and _split_words (run with -v sq="'").
+ # sw(STR) splits STR into words, quotes removed, in sw_w[1..sw_n] (see _shell_words). cw_reset()
+@@ -156,16 +159,25 @@ _GW_AWK='
+ # ask for a git or gh among their words), and a here-doc piped into a shell (cat <<EOF | sh).
+ git_words() {
+   local seg inner body first
++  # With aliases loaded (aliases.sh), the outermost call prints the command's own records exactly as
++  # without aliases, in their order, then every expansion record after all of them. Inner calls mark an
++  # expansion record with a leading tab, which no record of the command starts with (_split_words trims
++  # blanks). So an expansion never changes the context a record of the command is read in, such as a
++  # cd before it: it can only add votes.
++  if [ -z "${_GW_IN-}" ] && [ -n "${KERN_ALIASES-}" ]; then
++    _GW_IN=1 git_words "$1" | LC_ALL=C awk '/^\t/ { a[++n] = substr($0, 2); next } { print } END { for (i = 1; i <= n; i++) print a[i] }'
++    return
++  fi
+   _split_words "$1" | while IFS= read -r seg; do
+     printf '%s\n' "$seg"
+     # A record whose head word is an alias that runs git or gh (aliases.sh) is judged as its expansion
+-    # too, split again after it. The record itself stays, so no vote the command got without aliases is
+-    # lost, and a guard that allows only a command starting with git or gh never allows an alias. The
+-    # expansion's own words are not expanded again: zsh does not re-expand the alias it is expanding,
+-    # and the table already followed the head-word chain.
++    # too, split again and marked for the outermost call to print last. A guard that allows only a
++    # command whose first record starts with git or gh never allows an alias. The expansion's own words
++    # are not expanded again: zsh does not re-expand the alias it is expanding, and the table already
++    # followed the head-word chain.
+     if [ -z "${_GW_NOALIAS-}" ] && declare -F alias_expand >/dev/null && alias_expand "$seg"; then
+       _GW_NOALIAS=1
+-      git_words "$ALIAS_EXP"
++      git_words "$ALIAS_EXP" | LC_ALL=C sed $'s/^/\t/'
+       _GW_NOALIAS=
+     fi
+     # shellcheck disable=SC2016 # a literal $( in the text
+diff --git a/tests/hooks/aliases.bats b/tests/hooks/aliases.bats
+index 1171535..7ec2aa5 100644
+--- a/tests/hooks/aliases.bats
++++ b/tests/hooks/aliases.bats
+@@ -264,6 +264,8 @@ noalias_hook() {
+       alias_expand "ls -l" || true
+       alias_expand "" || true
+       alias_expand "gpf! origin" || true
++      alias_expand "X='"'"''"'"' gpf! origin" || true
++      alias_expand "X='"'"'a" || true
+       after=$(set | sed -n "s/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p" | sort)
+       comm -13 <(printf "%s\n" "$before") <(printf "%s\n" "$after") | grep -v -e "^_KA_" -e "^KERN_ALIASES$" -e "^ALIAS_EXP$" -e "^before$" || true
+       echo finished' _ "$(kern_root)"
+@@ -315,10 +317,10 @@ noalias_hook() {
+   expect none "prc --title t --body b" "rel v1" "isc --title t --body-file b.md" "prv 1 --approve" "pdb"
+ }
+ 
+-@test "an alias whose value ends in a blank expands the word after it, as zsh does, at most 8 times" {
++@test "an alias whose value ends in a space expands the word after it, as zsh does, 8 times, then fails closed" {
+   local h c w8 w9 mode want
+   h=$(noalias_hook)
+-  snap "alias -- _='sudo '" "alias -- gpf!='git push --force'" "alias -- n='nice '"
++  snap "alias -- _='sudo '" "alias -- gpf!='git push --force'" "alias -- n='nice '" "alias -- t='nice"$'\t'"'"
+   for mode in off on; do
+     set_autopilot "$mode"
+     all "_ gpf! origin main"
+@@ -326,15 +328,134 @@ noalias_hook() {
+     [[ "$output" == *"kern G1"* ]] || false
+     same "_ gpf! origin main" "sudo git push --force origin main"
+     # Without a git or gh alias after it, `_` is judged as before.
+-    for c in "_ git status" "_ ls -la" "_ 'gpf!' origin main" "_ X=1 gpf! origin main"; do
++    # A trailing tab is not zsh's trailing space: t's value ends in one.
++    for c in "_ git status" "_ ls -la" "_ 'gpf!' origin main" "_ X=1 gpf! origin main" "t gpf! origin main"; do
+       want=$(env KERN_GUARDS= bash "$h" <<<"$(bash_payload "$c")")
+       all "$c"
+       [ "$output" = "$want" ] || { printf '%s, %s:\n%s\n%s\n' "$mode" "$c" "$output" "$want"; return 1; }
+     done
+   done
+-  # n is `nice `: gpf! is the 8th word after the head n in w8, which expands; the 9th in w9 does not.
++  # n is `nice `: gpf! is the 8th word after the head n in w8, which expands. In w9 it is the 9th: it
++  # stays an alias kern did not expand, which G00 denies under autopilot, as base gives no vote.
+   w8="n n n n n n n n gpf! origin main"
+   w9="n n n n n n n n n gpf! origin main"
++  set_autopilot off
+   expect deny "$w8"
+   expect none "$w9"
++  set_autopilot on
++  expect deny "$w8" "$w9"
++  [[ "$output" == *'kern G00: '*'$KERN_ALIAS_PAST_8'* ]] || { echo "$output"; return 1; }
++}
++
++@test "an assignment with a quote or \$ before the alias does not hide it" {
++  for mode in off on; do
++    set_autopilot "$mode"
++    expect deny "X='' gpf! origin main" "X='a b' gpf! origin main" "X=\$(true) Y=1 gpf! origin main"
++    same "X='' gpf! origin main" "X='' git push --force origin main"
++    expect none "X='' 'gpf!' origin main" "X='a b' echo gpf! origin main"
++  done
++}
++
++@test "git_words prints the command's own records as without aliases, then each expansion after all of them" {
++  run bash -c '
++    . "$1/hooks/lib/settings.sh"; . "$1/hooks/lib/aliases.sh"; . "$1/hooks/lib/gitctx.sh"
++    c="cd /x && gst && echo y \$(gp; cd /z) && X=1 gpf! origin main"
++    want=$(git_words "$c")
++    aliases_load
++    [ -n "$KERN_ALIASES" ] || exit 3
++    got=$(git_words "$c")
++    printf "%s\n--\n%s\n" "$want" "$got"' _ "$(kern_root)"
++  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
++  want=${output%%$'\n--\n'*}
++  got=${output#*$'\n--\n'}
++  # The command's own records come first, unchanged and in order.
++  [ "${got:0:${#want}}" = "$want" ] || { printf '%s\n--\n%s\n' "$want" "$got"; return 1; }
++  [ "${got:${#want}}" = $'\ngit status\ngit push\nX=1 git push --force origin main' ] || { printf '[%s]\n' "${got:${#want}}"; return 1; }
++  case "$got" in *$'\n\t'* | $'\t'*) echo "marker left in: $got"; return 1 ;; esac
++}
++
++@test "with aliases loaded, no command gets a weaker decision than without them, in both modes" {
++  local h c mode want got s rank_want rank_got W SD
++  h=$(noalias_hook)
++  W="$BATS_TEST_TMPDIR/wt"
++  SD="$CLAUDE_PLUGIN_DATA/sessions"
++  mkdir -p "$SD" "$R/.claude"
++  printf 'push.policy: auto\ndeploy.envs: production\n' >"$R/.claude/kern.local.yml"
++  # feat holds another author's commit, so a lease push of it is denied; a key is staged in the worktree.
++  git -C "$W" -c user.email=other@example.com -c user.name=Other commit -q --allow-empty -m "other: work"
++  git -C "$W" push -q origin feat >/dev/null 2>&1
++  printf 'key = AKIA%s\n' ABCDEFGHIJKLMNOP >"$W/creds.txt"
++  git -C "$W" add creds.txt
++  printf '{}\n' >"$HOME/.claude/settings.json"
++  kern_env "$W"
++  # Aliases as oh-my-zsh defines them, and a hostile table that shadows common commands with a cd.
++  cat >"$BATS_TEST_TMPDIR/omz.sh" <<'SNAP'
++alias -- _='sudo '
++alias -- sudo='nocorrect sudo'
++alias -- g=git
++alias -- gaa='git add --all'
++alias -- gcmsg='git commit --message'
++alias -- gp='git push'
++alias -- gpf!='git push --force'
++alias -- gst='git status'
++alias -- grhh='git reset --hard'
++alias -- grt='cd "$(git rev-parse --show-toplevel || echo .)"'
++SNAP
++  cat >"$BATS_TEST_TMPDIR/hostile.sh" <<'SNAP'
++alias -- git='git status'
++alias -- gh='gh pr list'
++alias -- cd='git status; cd'
++alias -- ls='cd / && git log'
++alias -- cat='cd /tmp; git status'
++alias -- echo='GIT_DIR=/x git status; echo'
++alias -- env='git status; env'
++alias -- sudo='git status; sudo'
++alias -- true='cd -; git status'
++alias -- if='git push --force'
++alias -- time='git status'
++alias -- sed='cd /; git status; sed'
++alias -- cp='git status; cd /; cp'
++alias -- x2='git status &&'
++alias -- _='sudo '
++alias -- gpf!='git push --force'
++alias -- gp='git push'
++alias -- gst='git status'
++alias -- grt='cd "$(git rev-parse --show-toplevel || echo .)"'
++SNAP
++  rank() { case "$(decision_of "$1")" in deny) echo 3 ;; ask) echo 2 ;; none) echo 1 ;; allow) echo 0 ;; *) echo 9 ;; esac; }
++  for mode in off on; do
++    set_autopilot "$mode"
++    while IFS= read -r c; do
++      want=$(env KERN_GUARDS= bash "$h" <<<"$(bash_payload "$c")")
++      rank_want=$(rank "$want")
++      for s in omz hostile; do
++        got=$(env KERN_GUARDS= KERN_SHELL_SNAPSHOT="$BATS_TEST_TMPDIR/$s.sh" bash "$(kern_root)/hooks/pre-tool-use" <<<"$(bash_payload "$c")")
++        rank_got=$(rank "$got")
++        [ "$rank_got" != 9 ] && [ "$rank_got" -ge "$rank_want" ] ||
++          { printf '%s, %s, %s:\nwithout: %s\nwith:    %s\n' "$mode" "$s" "$c" "$want" "$got"; return 1; }
++      done
++    done <<CORPUS
++cd $HOME/.claude && grt && sed -i '' s/a/b/ settings.json
++cd $HOME/.claude && ls && echo x > settings.json
++cd $HOME/.claude && true && cp /tmp/x settings.local.json
++cd $SD && ls && echo x > foo
++cd $SD && grt && echo x > foo
++grt && echo x > $SD/test-session.state
++git commit -m 'feat: add creds'
++grt && git commit -m 'feat: add creds'
++gaa && git commit -m x
++git push --force-with-lease origin feat
++grt && git push --force-with-lease origin feat
++ls && git push --force-with-lease origin feat
++true; git push --force-with-lease origin feat
++git push -u origin feat
++gp -u origin feat
++gp origin production
++gpf! origin main
++_ gpf! origin main
++_ _ _ _ _ _ _ _ _ gpf! origin main
++X='' gpf! origin main
++x2 git push --force origin main
++CORPUS
++  done
+ }

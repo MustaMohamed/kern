@@ -1,0 +1,490 @@
+diff --git a/hooks/guards/g13-protected.sh b/hooks/guards/g13-protected.sh
+index d305084..aa5e111 100644
+--- a/hooks/guards/g13-protected.sh
++++ b/hooks/guards/g13-protected.sh
+@@ -14,13 +14,13 @@
+ 
+ guard_g13() {
+   [ "$TOOL" = Bash ] || return 0
+-  local cmd flat list
++  local cmd list
+   cmd=$(ti_get command) || return 0
+   case "$cmd" in *'\u'*) cmd=$(_g13_unescape "$cmd") ;; esac
+   case "$cmd" in *\\$'\n'*) cmd=$(_g13_join "$cmd") ;; esac
+   # Cheap prefilter before settings_get: some client or transfer name, quotes and backslashes removed.
+-  flat=${cmd//[\"\'\\]/}
+-  _g13_names "$flat" || return 0
++  _g13_flat "$cmd"
++  _g13_names "$_G13_FLAT" || return 0
+   list=$(settings_get protected_targets '')
+   [ -n "$list" ] || return 0
+   _g13_scan "$cmd" "$list" 0
+@@ -30,7 +30,7 @@ guard_g13() {
+ _g13_scan() {
+   local rec prev="" fed up
+   while IFS= read -r rec; do
+-    if _g13_names "${rec//[\"\'\\]/}"; then
++    if _g13_flat "$rec" && _g13_names "$_G13_FLAT"; then
+       fed=0
+       up=""
+       if _g13_fed "$1" "$rec"; then
+@@ -45,6 +45,15 @@ $(git_words "$1")
+ EOT
+ }
+ 
++# _g13_flat TEXT: sets _G13_FLAT to TEXT less quotes and backslashes, in one linear pass: bash 3.2's
++# ${x//[...]/} is cubic on long text in a UTF-8 locale. Text with none of them is kept as is.
++_g13_flat() {
++  case "$1" in
++    *[\"\'\\]*) _G13_FLAT=$(printf '%s' "$1" | LC_ALL=C tr -d '\\"\047') ;;
++    *) _G13_FLAT=$1 ;;
++  esac
++}
++
+ # _g13_names TEXT: exit 0 when TEXT holds a client or transfer name G13 reads, in any case (nc only as
+ # a whole word: as a substring it is in too many commands).
+ _g13_names() {
+@@ -149,7 +158,7 @@ _g13_judge() {
+         why=${why//$_GW_NL/$'\n'}
+         if [ "$6" -lt 2 ]; then
+           _g13_scan "$why" "$2" $(($6 + 1))
+-        elif _g13_names "${why//[\"\'\\]/}"; then
++        elif _g13_flat "$why" && _g13_names "$_G13_FLAT"; then
+           vote deny G13 "a command run on another host nests too deep to check against protected targets"
+         fi
+         ;;
+diff --git a/hooks/guards/g15-deploy.sh b/hooks/guards/g15-deploy.sh
+index ebc1ac3..4832cbf 100644
+--- a/hooks/guards/g15-deploy.sh
++++ b/hooks/guards/g15-deploy.sh
+@@ -8,9 +8,12 @@
+ # the words of a verb path must then appear after it in order, each a whole word, so global options
+ # before the verb cannot hide it either, and no option table is needed. The costs: an option value
+ # spelled as a verb (`terraform plan -out apply`), and a tool and its verb as plain words (`echo
+-# terraform apply`, `man kubectl apply`), ask. Quoted text stays one word. After a runner (npx,
+-# bunx, uvx, pnpx; npm exec or x, pnpm and yarn dlx or exec, bun x, uv run or uv tool run,
+-# python -m), each later word is also split at blanks (`npm exec -c 'vercel deploy'`).
++# terraform apply`, `man kubectl apply`), ask. A tool's words end at `--`; a --dry-run among them,
++# or one of its read verbs before the deploy verb, ends its vote.
++# Quoted text stays one word, except after a runner (npx, bunx, uvx, pnpx; npm exec or x, pnpm and
++# yarn dlx or exec, bun x, uv run or uv tool run, python -m), ssh, watch, or the -c (attached too)
++# or --command of sh, bash, zsh, dash, su or script: there each later word is split at blanks and
++# its quotes dropped, since it may be a command line (`ssh prod 'kubectl apply -f x.yml'`).
+ # Out of scope (accepted limits): package scripts (npm run deploy, make deploy), a bare `vercel`
+ # with an option value or a path (`vercel --scope team`), and names built at run time.
+ 
+@@ -19,6 +22,11 @@
+ # shellcheck disable=SC2016 # awk text
+ _G15_AWK='
+   function g15_tool(names, paths,   a, k, n) { n = split(names, a, ","); for (k = 1; k <= n; k++) G15T[a[k]] = paths }
++  # g15_reads(names, verbs): the read verbs of a tool; one before the deploy verb ends the vote.
++  function g15_reads(names, verbs,   a, b, k, i, n, nb) {
++    n = split(names, a, ","); nb = split(verbs, b, " ")
++    for (k = 1; k <= n; k++) for (i = 1; i <= nb; i++) G15RD[a[k], b[i]] = 1
++  }
+   # g15_name(w): the tool w runs: its basename in lower case, less a :tag (hashicorp/terraform:1.9)
+   # and an @version (vercel@latest); python3.12 and the like read as python.
+   function g15_name(w) {
+@@ -28,68 +36,137 @@ _G15_AWK='
+     if (w ~ /^[^@]+@/) sub(/@.*/, "", w)
+     return w
+   }
+-  # g15_has(p, path): true when the words of path appear in L after position p, in order, each a
+-  # whole word; a path word ending in * matches any word it starts. The path ~ is a bare run: the
+-  # word at p runs (the head, or after a runner) and every later word is an option other than help
+-  # or version.
+-  function g15_has(p, path,   a, n, k, j, e, x) {
++  # g15_runs(p): true when the word at p runs: the head, or after r.
++  function g15_runs(p) { return p == 1 || (r && p > r) }
++  # g15_has(t, p, e, path): true when the words of path appear in L between p and e, in order, each
++  # a whole word, with no read verb of t before the first (unless that first word is an option).
++  # A path word ending in * matches any word it starts; >X matches when a positional word after the
++  # verb, other than the first (the source), starts with X. The path . is a run of the tool at p;
++  # ~ is a bare run, every later word an option other than help or version.
++  function g15_has(t, p, e, path,   a, n, k, j, w, x, f) {
++    if (path == ".") return g15_runs(p)
+     if (path == "~") {
+-      if (p > 1 && !(r && p > r)) return 0
+-      for (j = p + 1; j <= m; j++) if (L[j] !~ /^-/ || L[j] ~ /^(-h|--help|-v|--version)$/) return 0
++      if (!g15_runs(p)) return 0
++      for (j = p + 1; j < e; j++) if (L[j] !~ /^-/ || L[j] ~ /^(-h|--help|-v|--version)$/) return 0
+       return 1
+     }
+     n = split(path, a, " "); j = p
+     for (k = 1; k <= n; k++) {
+-      e = a[k]; x = (e ~ /\*$/)
+-      if (x) e = substr(e, 1, length(e) - 1)
+-      for (j++; j <= m; j++) if (x ? substr(L[j], 1, length(e)) == e : L[j] == e) break
+-      if (j > m) return 0
++      w = a[k]
++      if (w ~ /^>/) {
++        w = substr(w, 2); f = 0
++        for (j++; j < e; j++) if (L[j] !~ /^-./ && f++ && substr(L[j], 1, length(w)) == w) break
++        if (j >= e) return 0
++        continue
++      }
++      x = (w ~ /\*$/)
++      if (x) w = substr(w, 1, length(w) - 1)
++      for (j++; j < e; j++) {
++        if (x ? substr(L[j], 1, length(w)) == w : L[j] == w) break
++        if (k == 1 && w !~ /^-/ && ((t, L[j]) in G15RD)) return 0
++      }
++      if (j >= e) return 0
+     }
+     return 1
+   }
+   BEGIN {
+     g15_tool("gh", "workflow run|release create|release new|release upload|release edit|release delete|release delete-asset|run rerun")
+-    g15_tool("npm,pnpm,yarn,bun,cargo,poetry,uv,lerna,changeset", "publish")
++    g15_tool("npm", "publish|unpublish|deprecate|dist-tag add")
++    g15_tool("pnpm,yarn,bun,poetry,uv,changeset,deno,jsr,vsce,ovsx,sbt", "publish")
++    g15_tool("cargo", "publish|release|yank")
++    g15_tool("lerna", "publish|version")
+     g15_tool("twine", "upload")
+     g15_tool("gem", "push")
+-    g15_tool("docker", "push|--push|stack deploy|stack up")
+-    g15_tool("docker-compose", "push")
+-    g15_tool("terraform,tofu", "apply|destroy|import")
++    g15_tool("docker", "push|--push|stack deploy|stack up|imagetools create")
++    g15_tool("docker-compose,podman", "push")
++    g15_tool("terraform,tofu,terragrunt", "apply|destroy|import")
+     g15_tool("pulumi", "up|destroy")
+     g15_tool("cdk,aws-cdk", "deploy|destroy")
+-    g15_tool("kubectl", "apply|create|delete|replace|patch|rollout|scale|set|edit|annotate|label")
+-    g15_tool("helm", "install|upgrade|uninstall|rollback|delete|del|un")
++    g15_tool("kubectl,oc", "apply|create|delete|replace|patch|rollout restart|rollout undo|rollout pause|rollout resume|scale|set|edit|annotate|label|run|expose|drain|cordon|taint|cp")
++    g15_tool("helm", "install|upgrade|uninstall|rollback|delete|del|un|push")
++    g15_tool("helmfile", "apply|sync|destroy")
++    g15_tool("argocd", "app sync|app create|app delete|app rollback")
++    g15_tool("skaffold", "run|deploy|delete")
+     g15_tool("serverless,sls", "deploy|remove")
+-    g15_tool("vercel", "deploy|--prod|~")
+-    g15_tool("fly,flyctl", "deploy|apps destroy")
+-    g15_tool("firebase,firebase-tools", "deploy")
++    g15_tool("sam", "deploy|delete")
++    g15_tool("sst", "deploy|remove")
++    g15_tool("vercel", "deploy|--prod|promote|rollback|redeploy|remove|alias set|~")
++    g15_tool("fly,flyctl", "deploy|apps destroy|secrets set|secrets unset|scale")
++    g15_tool("firebase,firebase-tools", "deploy|hosting:channel:deploy|functions:delete")
+     g15_tool("eb", "deploy")
+-    g15_tool("gcloud", "run deploy|app deploy|functions deploy")
++    g15_tool("gcloud", "run deploy|app deploy|functions deploy|builds submit|deploy releases create|run services update|run services update-traffic|run services delete|storage cp >gs://|storage mv gs://*|storage rm gs://*")
++    g15_tool("gsutil", "rsync >gs://|cp >gs://|mv gs://*|rm gs://*")
+     g15_tool("wrangler", "deploy|publish")
+     g15_tool("netlify,netlify-cli", "deploy")
+-    g15_tool("aws", "ecs update-service|lambda update-function-code|cloudformation deploy|cloudformation create-stack|cloudformation update-stack|cloudformation delete-stack|s3 sync s3://*|s3 cp s3://*|s3 rm s3://*|s3 mv s3://*|s3 rb s3://*")
+-    # Runners: a head that runs the command in its later words, alone (" ") or after a listed word.
+-    G15R["npx"] = G15R["bunx"] = G15R["uvx"] = G15R["pnpx"] = " "
++    g15_tool("mvn,mvnw", "deploy")
++    g15_tool("gradle,gradlew", "publish")
++    g15_tool("dotnet", "nuget push")
++    g15_tool("semantic-release,release-it,gh-pages,surge", ".")
++    g15_tool("eas", "update|submit|build --auto-submit*|build -s")
++    g15_tool("supabase", "functions deploy|db push")
++    g15_tool("railway", "up|deploy")
++    g15_tool("kamal", "deploy|rollback")
++    g15_tool("az", "create|delete|update|deploy|upload|swap|restart|start|stop|publish|push")
++    g15_tool("azd", "up|deploy|provision|down")
++    g15_tool("glab", "release create|release upload|release delete|ci run")
++    g15_tool("flux", "reconcile")
++    g15_tool("func", "publish")
++    g15_tool("prisma", "migrate deploy")
++    g15_tool("convex", "deploy")
++    g15_tool("nx", "release publish")
++    g15_tool("heroku", "container:release|releases:rollback")
++    g15_tool("mix", "hex.publish")
++    g15_tool("pod", "trunk push")
++    g15_tool("dart,flutter", "pub publish")
++    g15_tool("skopeo", "copy")
++    g15_tool("cdktf", "deploy|destroy")
++    g15_tool("aws", "ecs update-service|lambda update-function-code|lambda publish-version|lambda create-function|lambda delete-function|lambda update-function-configuration|cloudformation deploy|cloudformation create-stack|cloudformation update-stack|cloudformation delete-stack|s3 sync >s3://|s3 cp >s3://|s3 mv s3://*|s3 rm s3://*|s3 rb s3://*|s3api put-object|s3api delete-object|s3api delete-bucket|s3api put-bucket-policy|cloudfront create-invalidation|deploy create-deployment|elasticbeanstalk update-environment")
++    g15_reads("kubectl,oc", "get describe logs explain top config auth diff wait version api-resources cluster-info events")
++    g15_reads("helm", "diff template lint show status history get list search repo")
++    g15_reads("docker", "run exec build inspect logs ps images")
++    # Where a command line starts: after the word itself (" "), after a listed word that follows it,
++    # or after a -c cluster or --command that follows it ("-c"), whose attached value is one too.
++    G15R["npx"] = G15R["bunx"] = G15R["uvx"] = G15R["pnpx"] = G15R["ssh"] = G15R["watch"] = " "
+     G15R["npm"] = " exec x "; G15R["pnpm"] = " dlx exec "; G15R["yarn"] = " dlx exec "; G15R["bun"] = " x "
+     G15R["uv"] = " run "; G15R["python"] = " -m "
++    G15R["sh"] = G15R["bash"] = G15R["zsh"] = G15R["dash"] = G15R["su"] = G15R["script"] = "-c"
++    qre = "[\"" sq "]"
+   }
+   {
+     sw($0); cw_reset()
+     for (k = 1; k <= sw_n; k++) cw(sw_w[k])
+     if (!cw_n) next
+-    # L[1..m]: the words; r: where a runner ends, after which words are split at blanks.
+-    h = g15_name(cw_w[1]); m = 1; L[1] = cw_w[1]
+-    r = (h in G15R && G15R[h] == " ")
+-    for (k = 2; k <= cw_n; k++) {
+-      if (r) { n = split(cw_w[k], a, /[ \t\037]+/); for (i = 1; i <= n; i++) if (a[i] != "") L[++m] = a[i]; continue }
++    # L[1..m]: the words. r: where a command line starts (a runner, ssh, watch, a -c); each word
++    # after it is split at blanks, its quotes dropped. host: the last word that may start one later.
++    m = 0; r = 0; host = ""
++    for (k = 1; k <= cw_n; k++) {
++      if (r) {
++        n = split(cw_w[k], a, /[ \t\037]+/)
++        for (i = 1; i <= n; i++) { gsub(qre, "", a[i]); if (a[i] != "") L[++m] = a[i] }
++        continue
++      }
+       L[++m] = cw_w[k]
+-      if (h in G15R && index(G15R[h], " " cw_w[k] " ")) r = m
++      if (host != "" && G15R[host] == "-c" && (cw_w[k] ~ /^-[a-z]*c/ || cw_w[k] ~ /^--command(=|$)/)) {
++        r = m
++        x = ""
++        if (cw_w[k] ~ /^--command=/) x = substr(cw_w[k], 11)
++        else if (cw_w[k] ~ /^-[a-z]*c/) x = substr(cw_w[k], index(cw_w[k], "c") + 1)
++        n = split(x, a, /[ \t\037]+/)
++        for (i = 1; i <= n; i++) { gsub(qre, "", a[i]); if (a[i] != "") L[++m] = a[i] }
++        continue
++      }
++      if (host != "" && G15R[host] != "-c" && index(G15R[host], " " cw_w[k] " ")) { r = m; continue }
++      h = g15_name(cw_w[k])
++      if (h in G15R) { if (G15R[h] == " ") r = m; else host = h }
+     }
+     for (p = 1; p <= m; p++) {
+       t = g15_name(L[p])
+       if (!(t in G15T)) continue
++      # e: the end of the tool words, at the first -- after it. A --dry-run among them ends the vote.
++      for (e = p + 1; e <= m && L[e] != "--"; e++) if (L[e] ~ /^--dry-run(=client|=server)?$/) break
++      if (e <= m && L[e] != "--") continue
+       n = split(G15T[t], v, "|")
+-      for (i = 1; i <= n; i++) if (g15_has(p, v[i])) break
++      for (i = 1; i <= n; i++) if (g15_has(t, p, e, v[i])) break
+       if (i > n) continue
+       out = L[1]
+       for (k = 2; k <= m; k++) out = out " " L[k]
+@@ -104,10 +181,12 @@ _G15_AWK='
+ 
+ guard_g15() {
+   [ "$TOOL" = Bash ] || return 0
+-  local cmd line seen=0 got=0 envs="" parsed dir rest sub t
++  local cmd out line seen=0 got=0 envs="" parsed dir rest sub t
+   cmd=$(ti_get command) || return 0
+   _g15_named "$cmd" || return 0
++  # A failed parse or judge leaves no `.`, so G15 asks.
+   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
++  out=$(set -o pipefail; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK") || out=""
+   while IFS= read -r line; do
+     case "$line" in
+       .) seen=1; continue ;;
+@@ -139,7 +218,7 @@ guard_g15() {
+ $(push_targets "$dir" "$rest")
+ EOT
+   done <<EOT
+-$(git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK")
++$out
+ EOT
+   [ "$seen" = 1 ] || _g15_vote "kern could not read the command"
+ }
+@@ -147,18 +226,34 @@ EOT
+ # _g15_named CMD: exit 0 when CMD, with quotes, backslashes and newlines removed, holds a tool name
+ # from _G15_AWK's table or push, in any case. It runs before any parse or settings_get, and is a
+ # superset of what the judge can match: a name the shell joins from quotes or a continued line
+-# still passes.
++# still passes. The strip is one linear tr pass: bash 3.2's ${x//[...]/} is cubic on long text in
++# a UTF-8 locale.
+ _g15_named() {
+-  local flat=${1//[\"\'\\]/}
+-  flat=${flat//$'\n'/}
++  local flat=$1
++  case "$1" in *[\"\'\\]* | *$'\n'*) flat=$(printf '%s' "$1" | LC_ALL=C tr -d '"\047\\\n') ;; esac
+   case "$flat" in
+     *[Gg][Hh]* | *[Nn][Pp][Mm]* | *[Yy][Aa][Rr][Nn]* | *[Bb][Uu][Nn]* | *[Cc][Aa][Rr][Gg][Oo]* | \
+-      *[Pp][Oo][Ee][Tt][Rr][Yy]* | *[Uu][Vv]* | *[Ll][Ee][Rr][Nn][Aa]* | *[Cc][Hh][Aa][Nn][Gg][Ee][Ss][Ee][Tt]* | \
+-      *[Tt][Ww][Ii][Nn][Ee]* | *[Gg][Ee][Mm]* | *[Dd][Oo][Cc][Kk][Ee][Rr]* | *[Tt][Ee][Rr][Rr][Aa][Ff][Oo][Rr][Mm]* | \
+-      *[Tt][Oo][Ff][Uu]* | *[Pp][Uu][Ll][Uu][Mm][Ii]* | *[Cc][Dd][Kk]* | *[Kk][Uu][Bb][Ee][Cc][Tt][Ll]* | *[Hh][Ee][Ll][Mm]* | \
+-      *[Ss][Ee][Rr][Vv][Ee][Rr][Ll][Ee][Ss][Ss]* | *[Ss][Ll][Ss]* | *[Vv][Ee][Rr][Cc][Ee][Ll]* | *[Ff][Ll][Yy]* | \
+-      *[Ff][Ii][Rr][Ee][Bb][Aa][Ss][Ee]* | *[Ee][Bb]* | *[Gg][Cc][Ll][Oo][Uu][Dd]* | *[Ww][Rr][Aa][Nn][Gg][Ll][Ee][Rr]* | \
+-      *[Nn][Ee][Tt][Ll][Ii][Ff][Yy]* | *[Aa][Ww][Ss]* | *[Pp][Uu][Ss][Hh]*) return 0 ;;
++      *[Pp][Oo][Ee][Tt][Rr][Yy]* | *[Uu][Vv]* | *[Ll][Ee][Rr][Nn][Aa]* | \
++      *[Cc][Hh][Aa][Nn][Gg][Ee][Ss][Ee][Tt]* | *[Tt][Ww][Ii][Nn][Ee]* | *[Gg][Ee][Mm]* | \
++      *[Dd][Oo][Cc][Kk][Ee][Rr]* | *[Pp][Oo][Dd][Mm][Aa][Nn]* | \
++      *[Tt][Ee][Rr][Rr][Aa][Ff][Oo][Rr][Mm]* | *[Tt][Oo][Ff][Uu]* | \
++      *[Tt][Ee][Rr][Rr][Aa][Gg][Rr][Uu][Nn][Tt]* | *[Pp][Uu][Ll][Uu][Mm][Ii]* | *[Cc][Dd][Kk]* | \
++      *[Kk][Uu][Bb][Ee][Cc][Tt][Ll]* | *[Oo][Cc]* | *[Hh][Ee][Ll][Mm]* | \
++      *[Aa][Rr][Gg][Oo][Cc][Dd]* | *[Ss][Kk][Aa][Ff][Ff][Oo][Ll][Dd]* | \
++      *[Ss][Ee][Rr][Vv][Ee][Rr][Ll][Ee][Ss][Ss]* | *[Ss][Ll][Ss]* | *[Ss][Aa][Mm]* | \
++      *[Ss][Ss][Tt]* | *[Vv][Ee][Rr][Cc][Ee][Ll]* | *[Ff][Ll][Yy]* | \
++      *[Ff][Ii][Rr][Ee][Bb][Aa][Ss][Ee]* | *[Ee][Bb]* | *[Gg][Cc][Ll][Oo][Uu][Dd]* | \
++      *[Gg][Ss][Uu][Tt][Ii][Ll]* | *[Ww][Rr][Aa][Nn][Gg][Ll][Ee][Rr]* | \
++      *[Nn][Ee][Tt][Ll][Ii][Ff][Yy]* | *[Mm][Vv][Nn]* | *[Gg][Rr][Aa][Dd][Ll][Ee]* | \
++      *[Dd][Oo][Tt][Nn][Ee][Tt]* | *[Ss][Ee][Mm][Aa][Nn][Tt][Ii][Cc]* | *[Vv][Ss][Cc][Ee]* | \
++      *[Oo][Vv][Ss][Xx]* | *[Ee][Aa][Ss]* | *[Ss][Uu][Pp][Aa][Bb][Aa][Ss][Ee]* | \
++      *[Rr][Aa][Ii][Ll][Ww][Aa][Yy]* | *[Kk][Aa][Mm][Aa][Ll]* | *[Aa][Zz]* | *[Gg][Ll][Aa][Bb]* | \
++      *[Aa][Ww][Ss]* | *[Ff][Ll][Uu][Xx]* | *[Ff][Uu][Nn][Cc]* | *[Pp][Rr][Ii][Ss][Mm][Aa]* | \
++      *[Cc][Oo][Nn][Vv][Ee][Xx]* | *[Rr][Ee][Ll][Ee][Aa][Ss][Ee]-[Ii][Tt]* | \
++      *[Ss][Uu][Rr][Gg][Ee]* | *[Nn][Xx]* | *[Dd][Ee][Nn][Oo]* | *[Jj][Ss][Rr]* | \
++      *[Hh][Ee][Rr][Oo][Kk][Uu]* | *[Mm][Ii][Xx]* | *[Pp][Oo][Dd]* | *[Dd][Aa][Rr][Tt]* | \
++      *[Ff][Ll][Uu][Tt][Tt][Ee][Rr]* | *[Ss][Bb][Tt]* | *[Ss][Kk][Oo][Pp][Ee][Oo]* | \
++      *[Pp][Uu][Ss][Hh]*) return 0 ;;
+   esac
+   return 1
+ }
+diff --git a/tests/hooks/g13-g15.bats b/tests/hooks/g13-g15.bats
+index e0dd5ab..fdc1a89 100644
+--- a/tests/hooks/g13-g15.bats
++++ b/tests/hooks/g13-g15.bats
+@@ -14,11 +14,12 @@ g() { run_guard "$(bash_payload "$1")" "$2"; }
+ mcp() { run_guard "$(payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{}")" g14; }
+ # mcpi TOOL FIELDS: G14 on an MCP call whose tool_input holds FIELDS (passed without braces).
+ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
+-# gx CMD [GUARDS]: G13 (or GUARDS) on CMD, which may hold double quotes, backslashes and newlines.
++# gx CMD [GUARDS]: G13 (or GUARDS; "" runs them all) on CMD, which may hold double quotes, backslashes
++# and newlines.
+ gx() {
+   local esc
+   esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
+-  run_guard "$(bash_payload "$esc")" "${2:-g13}"
++  run_guard "$(bash_payload "$esc")" "${2-g13}"
+ }
+ # g13_all DECISION CMD...: G13 decides DECISION on every CMD.
+ g13_all() {
+@@ -536,8 +537,124 @@ ssh v1-host 'del C:\x'"
+   g15_all deny "vercel"
+ }
+ 
++@test "G15: a command inside one quoted word is split: ssh, a shell's -c, su -c, script -c and watch" {
++  g15_all ask "ssh prod 'kubectl apply -f /tmp/x.yml'" "ssh deploy@web1 \"cd /srv/app && npm publish\"" \
++    "ssh -i ~/.ssh/k prod 'terraform apply -auto-approve'" "docker exec api sh -c 'npm publish'" \
++    "docker run --rm -v \"\$PWD\":/w -w /w hashicorp/terraform:1.9 sh -c 'terraform init && terraform apply -auto-approve'" \
++    "caffeinate -i sh -c 'terraform apply'" "su deploy -c 'npm publish'" "watch -n 5 'kubectl rollout restart deploy/api'" \
++    "script -q /dev/null -c 'npm publish'" "ssh prod 'bash -c \"npm publish\"'"
++  g15_all none "ssh prod 'kubectl get pods'" "ssh prod uptime" "watch -n 5 'kubectl get pods'" \
++    "docker exec api sh -c 'npm test'" "su deploy -c 'npm ci'"
++  set_autopilot on
++  g15_all deny "ssh prod 'kubectl apply -f /tmp/x.yml'" "su deploy -c 'npm publish'"
++}
++
++@test "G15: the round-1 table rows ask" {
++  g15_all ask "helmfile apply" "helmfile sync" "helmfile destroy" "argocd app sync api" "argocd app create api" \
++    "argocd app delete api" "argocd app rollback api 3" "podman push x" "helm push chart.tgz oci://r" "skaffold run" \
++    "skaffold deploy" "skaffold delete" "oc apply -f x.yml" "oc -n prod rollout restart deploy/api" "kubectl run x --image=y" \
++    "kubectl expose deploy api --port 80" "kubectl drain node1" "kubectl cordon node1" "kubectl taint nodes n k=v:NoSchedule" \
++    "terragrunt apply" "terragrunt run-all apply" "terragrunt destroy" "terragrunt import a.b id" "sam deploy" "sam delete" \
++    "sst deploy --stage prod" "sst remove" "mvn deploy" "mvn -B -DskipTests deploy" "gradle publish" "./gradlew publish" \
++    "dotnet nuget push x.nupkg" "npm unpublish x@1" "npm deprecate x@1 old" "npm dist-tag add x@1 latest" \
++    "semantic-release" "npx semantic-release --branches main" "vsce publish" "ovsx publish" "eas update --branch production" \
++    "eas submit" "vercel promote https://x" "vercel rollback" "vercel redeploy https://x" "vercel remove app" \
++    "firebase hosting:channel:deploy pr-1" "supabase functions deploy f" "supabase db push" "railway up" "railway deploy" \
++    "kamal deploy" "kamal rollback v1" "az webapp deploy --src-path x.zip" "az group create -n g -l w" "az vm restart -n x" \
++    "az storage blob upload -f x -c c" "az webapp deployment slot swap -s staging" "azd up" "azd deploy" "azd provision" \
++    "azd down" "gsutil -m rsync -r dist gs://b" "gsutil cp x.txt gs://b/" "gsutil mv x gs://b/x" "gsutil rm gs://b/x" \
++    "gcloud builds submit --tag x" "gcloud deploy releases create r1" "aws s3api put-object --bucket b --key k" \
++    "aws s3api delete-object --bucket b --key k" "aws s3api delete-bucket --bucket b" "aws s3api put-bucket-policy --bucket b" \
++    "aws lambda publish-version --function-name f" "aws lambda create-function --function-name f" \
++    "aws lambda delete-function --function-name f" "aws lambda update-function-configuration --function-name f" \
++    "glab release create v1" "glab release upload v1 x" "glab release delete v1" "glab ci run"
++  g15_all none "gsutil cp gs://b/x ./x" "gsutil ls gs://b" "az account show" "az login" "eas build" "mvn test" \
++    "./gradlew build" "dotnet nuget list source" "glab mr list" "npm i -D semantic-release" "supabase start" "oc get pods" \
++    "helmfile diff" "argocd app list" "sam build" "railway logs" "kamal app logs" "podman build -t x ."
++}
++
++@test "G15: a read verb first, --dry-run, words after --, rollout reads and s3 downloads do not vote" {
++  g15_all none "npm test -- -t publish" "npm publish --dry-run" "cargo publish --dry-run" "docker run --rm alpine echo push" \
++    "kubectl rollout status deployment/api" "kubectl rollout history deployment/api" "kubectl apply --dry-run=client -f x.yml" \
++    "kubectl apply --dry-run=server -f x.yml" "kubectl create deployment api --image=x --dry-run=client -o yaml" \
++    "kubectl create secret generic s --from-literal=a=b --dry-run=client -o yaml" "kubectl describe clusterrole edit" \
++    "kubectl config set current-context prod" "helm diff upgrade api ./chart -f values.yaml" \
++    "helm upgrade --install api ./chart --dry-run --debug" "helm install api ./chart --dry-run" \
++    "aws s3 cp s3://bucket/logs/app.log ./app.log" "aws s3 sync s3://bucket/reports ./reports" \
++    "kubectl auth can-i create pods" "semantic-release --dry-run"
++  g15_all ask "kubectl rollout undo deploy/api" "kubectl apply --dry-run=none -f x.yml" "kubectl exec api -- npm publish" \
++    "docker buildx build --push -t x ." "docker build --push -t x ." "aws s3 cp ./x s3://b/x" \
++    "aws s3 sync dist s3://b --delete --profile prod" "aws s3 cp --recursive ./dist s3://b" "aws s3 cp - s3://b/x" \
++    "aws s3 cp s3://a/x s3://b/x" "aws s3 mv ./x s3://b/x"
++}
++
++@test "G15: a move from a bucket, mvnw, and su --command= or an attached -c ask" {
++  g15_all ask "aws s3 mv s3://bucket/x ./x" "gsutil mv gs://b/x ./x" "mvnw deploy" "./mvnw -B deploy" \
++    "su --command='npm publish'" "su deploy --command 'npm publish'" "su -c'npm publish' deploy" \
++    "script -q -c'npm publish' /dev/null"
++  g15_all none "su --command='npm ci'" "./mvnw test" "aws s3 cp s3://bucket/x ./x"
++}
++
++@test "G15: the final rider's rows ask; their read forms do not" {
++  g15_all ask "flux reconcile kustomization apps --with-source" "eas build --platform all --auto-submit" "eas build -s" \
++    "cargo release patch --execute" "cargo yank --version 1.0.0" "func azure functionapp publish myfunc" \
++    "gcloud storage cp -r dist gs://bucket" "gcloud storage mv gs://b/x ./x" "gcloud storage rm gs://b/x" \
++    "gcloud run services update api --image x" "gcloud run services update-traffic api --to-latest" \
++    "gcloud run services delete api" "vercel alias set app-abc.vercel.app example.com" "firebase functions:delete fn" \
++    "fly secrets set KEY=v" "fly secrets unset KEY" "fly scale count 3" "npx prisma migrate deploy" "npx convex deploy" \
++    "npx release-it --ci" "npx gh-pages -d dist" "npx surge ./dist example.surge.sh" "npx nx release publish" \
++    "deno publish" "npx jsr publish" "aws cloudfront create-invalidation --distribution-id E1 --paths '/*'" \
++    "aws deploy create-deployment --application-name a --deployment-group-name g" \
++    "aws elasticbeanstalk update-environment --environment-name e --version-label v2" "heroku container:release web" \
++    "heroku releases:rollback v12" "kubectl -n prod cp ./x pod:/tmp/x" "mix hex.publish" "pod trunk push X.podspec" \
++    "dart pub publish" "flutter pub publish --force" "sbt publish" \
++    "docker buildx imagetools create -t ghcr.io/o/a:latest ghcr.io/o/a:1.2" "skopeo copy docker://a docker-daemon:b" \
++    "cdktf deploy" "cdktf destroy" "lerna version --yes"
++  g15_all none "fly status" "gcloud run services list" "prisma migrate status" "heroku logs --tail" \
++    "flux get kustomizations" "eas build --platform ios" "gcloud storage ls gs://b" "gcloud storage cp gs://b/x ./x" \
++    "vercel alias ls" "deno test" "mix test" "pod install" "flutter pub get" "dart pub get" "sbt compile" \
++    "skopeo inspect docker://x" "cdktf synth" "lerna run build" "nx build app" "heroku releases" \
++    "flutter pub publish --dry-run" "git checkout gh-pages"
++}
++
++@test "G15: a failed judge or a failed parse asks" {
++  local real
++  real=$(command -v awk)
++  mkdir -p "$BATS_TEST_TMPDIR/bin"
++  printf '#!/bin/bash\ncase "$*" in *"$KERN_TEST_BREAK"*) exit 2 ;; esac\nexec %s "$@"\n' "$real" >"$BATS_TEST_TMPDIR/bin/awk"
++  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
++  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
++  for b in 'g15_tool(' 'function emit('; do
++    KERN_TEST_BREAK=$b
++    export KERN_TEST_BREAK
++    g "npm publish; ls" g15
++    [ "$(decision_of "$output")" = ask ] || { echo "$b -> $output"; return 1; }
++    case "$output" in *"could not read the command"*) ;; *) echo "$b -> $output"; return 1 ;; esac
++  done
++}
++
++@test "G13 and G15: a 10 KB here-doc PR body passes every guard in under 2 s in a UTF-8 locale" {
++  local body="" i=0 line cmd t0 t1
++  printf 'protected_targets: v1-host\ndeploy.envs: production\n' >"$R/.claude/kern.local.yml"
++  line="- Fixed the \`npm publish\` step so it doesn't \"push\" to production's main branch; see docs/release.md (ssh, scp, kubectl apply)."
++  while [ "${#body}" -lt 10240 ]; do
++    i=$((i + 1))
++    body="$body$i. $line
++"
++  done
++  cmd="gh pr create --title 'M1: x' --body \"\$(cat <<'EOF'
++${body}EOF
++)\""
++  export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
++  t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
++  gx "$cmd" ""
++  t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
++  [ "$status" = 0 ]
++  [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
++}
++
+ @test "G15: every tool in the table asks for each of its verbs, in any case, and passes the prefilter" {
+-  local f names paths name path p n=0 cmd="" line want=() names_all=()
++  local f names paths name path p w ws n=0 cmd="" line want=() names_all=()
+   f="$(kern_root)/hooks/guards/g15-deploy.sh"
+   while IFS='	' read -r names paths; do
+     [ -n "$names" ] || continue
+@@ -545,9 +662,18 @@ ssh v1-host 'del C:\x'"
+       names_all+=("$name" "$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')")
+       while IFS= read -r path; do
+         n=$((n + 1))
+-        # A * path word stands for any word it starts; the path ~ is the tool alone.
+-        p=${path//\*/x}
+-        [ "$p" = '~' ] && p=""
++        # A path word ending in * stands for any word it starts, and >X for a source then a word
++        # that starts with X; the paths ~ and . are the tool alone.
++        p=""
++        read -r -a ws <<<"$path"
++        for w in "${ws[@]}"; do
++          case "$w" in
++            '~' | .) ;;
++            '>'*) p="${p:+$p }./src ${w#>}x" ;;
++            *'*') p="${p:+$p }${w%\*}x" ;;
++            *) p="${p:+$p }$w" ;;
++          esac
++        done
+         line="$name${p:+ $p}"
+         [ $((n % 2)) = 0 ] && line="$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')${p:+ $p}"
+         want+=("$line")

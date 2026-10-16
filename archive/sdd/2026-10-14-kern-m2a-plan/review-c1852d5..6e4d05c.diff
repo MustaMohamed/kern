@@ -1,0 +1,318 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index de6e84b..c2426db 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -12,6 +12,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ - Guard G20: a Markdown spec or plan becomes approved, or changes its approved: line, only with a quote of the user's last message, judged on the file as the edit leaves it; never under autopilot.
+ - implement: thin slices, failing test first, mutation and fail-then-pass probes, full suite.
+ - diagnose: red-capable loop before hypotheses, fix with a regression test proven by probe; loop-rate for flaky bugs.
++- define: clarify, classify and get an explicit, quoted approval before code; specs carry a Constraints section.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+diff --git a/skills/define/SKILL.md b/skills/define/SKILL.md
+new file mode 100644
+index 0000000..a228ada
+--- /dev/null
++++ b/skills/define/SKILL.md
+@@ -0,0 +1,58 @@
++---
++name: define
++description: Clarify new behaviour, classify it spike, bounded or architectural, and get explicit approval before any code.
++disable-model-invocation: true
++argument-hint: "[issue id | idea]"
++---
++
++# define
++
++Turn an ask into an approved shared understanding, and for architectural work an approved spec, before any code. Reached by the kernel row for new behaviour with no agreed spec, or typed as `/kern:define`.
++
++## Steps
++
++0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
++1. Ticket. With `tracker.first: true`, find and read the issue: body, comments, parent. Get `tracker` from `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get tracker`, else `kern-detect tracker`; when both exit 3, ask. No issue: offer an issue draft, and never post it.
++2. Explore read-only with `kern:investigator` subagents on `model.investigator` (default `sonnet`): relevant files, recent commits, related PRs, the stored shape of any persisted field, every writer of a property the change gates on, and whether the gap is real on `origin/<base>`. Ask meanwhile what does not wait on them. Never ask the user a fact the repo can answer.
++3. Classify and say it: spike; bounded (an existing flow, within `scope_threshold` files, no change to a public API, a persisted schema or authorization); else architectural. A request with no existing flow to extend is architectural. Take the heavier class when in doubt; upgrade mid-task, never downgrade.
++4. For several independently testable capabilities, draw a capability map with a build order (`references/capability-map.md`). The map is approved before any module spec.
++5. Intent: state a HYPOTHESIS and a CONFIDENCE, naming what is missing below about 70%. Ask intent questions one at a time, each with your guess; probe want versus should-want; skip what the issue already states (`references/interview.md`).
++6. Decisions: ask in numbered frontier rounds in chat, each question with a recommended answer worded so "yes" accepts it. Three or more options: a visual page only when kern's `visual` skill is installed; otherwise chat, saying once "visual pages not installed".
++7. Restate: Outcome, User, Why now, Success, Constraint, Out of scope; then what was said versus what is assumed. Only an explicit yes approves; "sounds good", "whatever you think" and silence do not.
++8. Spike: state the question and the probe in 2 or 3 sentences and wait for a nod. Probe in a `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug> --detach` worktree, or under `WORK/tmp`, never in the main checkout; exit 2 means say why and ask. Return an answer, not code; the code is throwaway.
++9. Bounded: give an in-chat design (approach, files, tests, constraints as always, ask first and never, one line per `checklists` item) and ask for the yes as a typed reply in chat, never through AskUserQuestion. On yes, write the spec only now, as a new file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir specs` prints, in short form (`form: short`) from `references/spec-template.md`, with `status: approved` and `approved: <date>, "<one whole line of the user's yes, verbatim>"` in that one write. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` (exit 1 prints `FILE:LINE: message`; fix each with an edit that leaves both approval lines alone). The kernel then routes to implement.
++10. Architectural: offer 2 or 3 approaches, recommendation first; present the design in sections and get approval per section; write the spec from `references/spec-template.md` (or the project's spec system) with `status: draft`; run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` and fix what it reports; self-review it for contradictions, scope and two-reading ambiguity; send it to one fresh general-purpose subagent on `model.reviewer` with `references/spec-review.md`, round 1 only. Fix what it finds, then stop the turn and ask for the yes as a typed reply in chat, never through AskUserQuestion. Touch the file in no other way after the user's message. On the yes, one Edit sets `status: approved` and `approved: <date>, "<one whole line of the user's yes, verbatim>"` together; the kernel then routes to plan.
++
++Standing gate on every path: no code, scaffold, dependency install, migration or branch before that path's approval. An approval covers only the stage presented. Every approval is a typed reply: an AskUserQuestion answer records no prompt line, so G20 denies the approval. Guard G20 also denies a quote that is not one whole line (under 500 characters) of the user's last message, and a spec edited after that message; quote only the line that holds the yes.
++
++## Inputs
++
++| Key | Default | Use |
++|---|---|---|
++| `tracker`, `tracker.first` | detected, `false` | read the issue first |
++| `scope_threshold` | 4 files | bounded versus architectural |
++| `checklists` | existing data and consumers; authorization scope; persisted-shape change | extra design lines |
++| `base_branch` | detected | where the gap is checked |
++| `work_dir` | `.kern` | where specs go |
++| `model.investigator`, `model.reviewer` | `sonnet` | exploration; the spec review |
++
++The project's own spec system wins when it exists (`docs/specs`, `docs/rfcs`, an ADR directory); else specs go to `WORK/specs`.
++
++## Outputs
++
++`WORK/specs/<slug>.md`.
++
++## Stops and autopilot
++
++Product and preference calls go to the user. After two rounds without rising confidence, step back and say so. Under autopilot define cannot approve itself (G20 denies it): it writes the draft with open questions and recommended answers, marks it `status: draft (parked under autopilot)`, and records each question under Open questions and in the reply as `parked: <question>; default: <choice>; why: <one line>`. Only work that does not depend on it continues.
++
++## Red flags
++
++| Thought | Reality |
++|---|---|
++| "Too simple to need a design" | A bounded change still gets a short design and a yes. |
++| "I'll call it bounded and skip the spec" | Reaching for the lighter class to skip work is the doubt. Take the heavier one. |
++| "The design is obvious, I'll start while they read" | The gate is the approval, not the design's length. Stop until you hear yes. |
++| "It grew, but I'm nearly done" | Hidden scope upgrades the class. Stop and say so. |
++| "They said sounds good" | Only an explicit yes approves, quoted in the spec. |
++| "I'll write the spec and the plan in one turn" | The turn ends after the spec. The plan waits for the yes. |
+diff --git a/skills/define/references/capability-map.md b/skills/define/references/capability-map.md
+new file mode 100644
+index 0000000..f2520d8
+--- /dev/null
++++ b/skills/define/references/capability-map.md
+@@ -0,0 +1,20 @@
++# Capability map
++
++A short table that fixes module boundaries and build order before any spec is written.
++
++## When to split
++
++Draw a map when the ask holds several independently testable capabilities: distinct consumers or data, acceptance criteria that cluster into groups that could ship alone, or one part that could be cut without rewriting the others. A single capability skips the map.
++
++## Map format
++
++| Capability | User-visible outcome | Depends on | Build order |
++|---|---|---|---|
++| identity | sign in and out | none | 1 |
++| billing | pay and get invoices | identity | 2 |
++
++Ids are kebab-case, chosen once, never renamed. Dependencies point one way with no cycles; two modules that need each other are one module. The contract between two modules goes in the provider's spec.
++
++## Approval
++
++The map is approved before any module spec, on an explicit typed yes. Then each module goes through define in build order, one spec per module, named by its capability id. Save the approved map beside the specs.
+diff --git a/skills/define/references/interview.md b/skills/define/references/interview.md
+new file mode 100644
+index 0000000..923a2cb
+--- /dev/null
++++ b/skills/define/references/interview.md
+@@ -0,0 +1,39 @@
++# Interview
++
++Draw out what the user wants before any design. One question at a time, each with your guess. A fact the repo can answer goes to a `kern:investigator` subagent, never to the user.
++
++## Hypothesis and confidence
++
++Before asking, write your best read of the ask in one sentence and an honest confidence from 0 to 100%.
++
++```
++HYPOTHESIS: You want a way to answer "how are we doing?" in standup, and "dashboard" was the first form that came to mind.
++CONFIDENCE: ~30%. Missing: who it is for, what "metrics" means here, what success looks like.
++```
++
++Below about 70%, name what is missing on the same line. The number is honest only if you could predict the user's reaction to your next three questions; if you could not, lower it.
++
++## One question at a time
++
++```
++Q: <one focused question>
++GUESS: <your answer, with the reasoning behind it>
++```
++
++Wait for the reaction before the next question. A batch buries the guesses, invites skimming, and locks in a framing the first answer may overturn. A visible guess is faster to correct than an answer built from nothing. A polite user may agree to be agreeable: sometimes guess in a direction you expect them to reject.
++
++## Want versus should-want
++
++Watch for answers that sound like best practice instead of a want: "scalable", "clean", "the standard way", "I should probably". Ask: "If you did not have to justify this to anyone, what would you actually want?"
++
++## Restate and confirm
++
++At high confidence, write back, in the user's words, in 5 to 8 lines:
++
++- Outcome, User, Why now, Success, Constraint, Out of scope.
++
++Then list what was said and what is assumed. Out of scope is required: half of misalignment is silent disagreement about what is not being built. Only an explicit yes approves, as a typed reply in chat. "Whatever you think" is delegation: re-ask with two concrete options. "Sounds good" and silence are not a yes: ask what they would refine. A recorded approval quotes one whole line of the user's message, verbatim. On a correction, fold it in and restate.
++
++## When to step back
++
++Two rounds without rising confidence: stop and say so. For example: "I have asked six questions and still cannot predict your answers. Something basic is missing. Do you want to step back?" Then wait.
+diff --git a/skills/define/references/spec-review.md b/skills/define/references/spec-review.md
+new file mode 100644
+index 0000000..6f89596
+--- /dev/null
++++ b/skills/define/references/spec-review.md
+@@ -0,0 +1,23 @@
++# Spec reviewer brief
++
++You review one spec as a fresh reader. You receive the spec path and the restated intent, nothing about how the spec was written. You read and report; you never edit. Round 1 only.
++
++## What to check
++
++- Placeholders: TBD, empty sections, text left over from the template.
++- Contradictions between sections or requirements.
++- Scope: one plan's worth, not several independent subsystems.
++- Ambiguity: a requirement with two readings that would build the wrong thing.
++- Constraints: each Always, Ask first and Never line can be checked by a command or a diff.
++- Missing Compatibility (stored shape, every writer, the regression test) or Authorization content.
++- Unrequested features.
++
++## Calibration
++
++Flag only what would lead to a flawed plan. Wording, style and uneven detail are not findings. Approve unless a gap would mislead planning.
++
++## Output
++
++`Verdict: approve | revise`
++
++Then one line per finding: `section: problem. fix.`
+diff --git a/skills/define/references/spec-template.md b/skills/define/references/spec-template.md
+new file mode 100644
+index 0000000..005ec29
+--- /dev/null
++++ b/skills/define/references/spec-template.md
+@@ -0,0 +1,67 @@
++# Spec template
++
++Copy from the first `---` line to the end into `WORK/specs/<slug>.md`. Complete every section, or write `none` and why. Decisions name modules and contracts, not file paths; paths belong in the plan. A bounded change uses the short form: set `form: short` and keep only Problem, Constraints, Acceptance criteria and Test seams. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` checks the sections for either form. To approve, one Edit replaces the lines from `status: draft` through `approved:` with `status: approved` and `approved: <date>, "<one whole line of the user's yes>"`.
++
++---
++status: draft
++form: full
++date: YYYY-MM-DD
++approved: (unset until an explicit yes)
++issue: (tracker id, or none)
++---
++
++## Problem
++
++What is wrong or missing today, for whom, with evidence.
++
++## Intent
++
++Outcome. User. Why now. Success. Constraint. Out of scope.
++
++## Constraints
++
++- Always: what every change in this work does (a check to run, a convention to keep).
++- Ask first: what needs the user's yes before it happens (a schema change, a new dependency).
++- Never: what no task may do (a file not to touch, a system that stays read-only).
++
++plan copies these three lines verbatim into the plan's Global Constraints.
++
++## Assumptions
++
++Each one marked said (the user said it) or assumed (you inferred it).
++
++## Success criteria
++
++How the user will judge it, measurable where possible.
++
++## Acceptance criteria
++
++1. One observable, testable line per criterion.
++
++## Decisions
++
++Modules, interfaces, schema and contracts chosen, each with the alternative rejected.
++
++## Compatibility
++
++Existing data and consumers; every writer of a gated property; the stored shape as it is today; the regression test by name.
++
++## Authorization
++
++Who may call or see what, and the check that scopes it.
++
++## Rollout
++
++Base branch, promotion chain, flags, migration order (expand, migrate, contract).
++
++## Checklists
++
++One line per extra `checklists` item.
++
++## Test seams
++
++Where tests attach: public functions, handlers, CLI entries, components. Prefer the highest seam that already exists and the fewest seams, and confirm the list with the user.
++
++## Not doing
++
++## Open questions
+diff --git a/skills/help/references/map.md b/skills/help/references/map.md
+index dfb9f1e..0990f72 100644
+--- a/skills/help/references/map.md
++++ b/skills/help/references/map.md
+@@ -16,3 +16,4 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
+ ## Close calls
+ - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
+ - Terse chat but a full PR body: terse governs chat only. Persisted text always follows `unslop`.
++| `define` | path | Routed row "New behaviour and no agreed spec"; /kern:define | Clarify, classify and approve before code |
+diff --git a/tests/skills/define.acceptance.md b/tests/skills/define.acceptance.md
+new file mode 100644
+index 0000000..edfc0d2
+--- /dev/null
++++ b/tests/skills/define.acceptance.md
+@@ -0,0 +1,6 @@
++# define: acceptance checks (run during the M2b pilot)
++
++- [ ] "Add a CSV export to the reports page": classified bounded; one intent question with a guess; no Edit or Write outside `WORK` before the yes; the short-form spec quotes the user's yes and passes plan-check.
++- [ ] "Make billing multi-tenant": classified architectural; sections approved one at a time; spec written with `status: draft` and a Constraints section; the turn ends after the spec; no plan written.
++- [ ] The user answers the design with "whatever you think": an explicit yes is requested; the status stays draft (G20 denies an approval quoting it).
++- [ ] A project with `.claude/skills/define/`: kern defers in one line.
+diff --git a/tests/skills/define.test.mjs b/tests/skills/define.test.mjs
+new file mode 100644
+index 0000000..213d90f
+--- /dev/null
++++ b/tests/skills/define.test.mjs
+@@ -0,0 +1,42 @@
++// tests/skills/define.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
++
++const SKILL = 'skills/define/SKILL.md';
++
++test('define frontmatter', () => {
++  assertFrontmatter(SKILL, {
++    name: 'define',
++    description: 'Clarify new behaviour, classify it spike, bounded or architectural, and get explicit approval before any code.',
++    'disable-model-invocation': 'true',
++    'argument-hint': '[issue id | idea]',
++  });
++});
++
++test('define sections, steps, the standing gate and red flags', () => {
++  const { body } = readDoc(SKILL);
++  assert.deepEqual(h2s(body), ['## Steps', '## Inputs', '## Outputs', '## Stops and autopilot', '## Red flags']);
++  const s = steps(body);
++  assert.equal(s.length, 11);
++  assert.equal(s[0], DEFER);
++  assertContains(SKILL, ['Standing gate on every path', '"sounds good", "whatever you think" and silence do not', 'status: approved', 'status: draft (parked under autopilot)',
++    'kern:investigator', 'on `model.investigator`', 'The map is approved before any module spec', '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check',
++    'one whole line of the user\'s yes, verbatim', 'wt-new <slug> --detach', 'Never ask the user a fact the repo can answer',
++    'A request with no existing flow to extend is architectural', 'visual pages not installed', 'Guard G20']);
++  assertMaxBytes(SKILL, 6500);
++});
++
++test('define references', () => {
++  const refs = {
++    'spec-template.md': [['# Spec template', '## Problem', '## Intent', '## Constraints', '## Assumptions', '## Success criteria', '## Acceptance criteria', '## Decisions', '## Compatibility', '## Authorization', '## Rollout', '## Checklists', '## Test seams', '## Not doing', '## Open questions'], 3000],
++    'interview.md': [['# Interview', '## Hypothesis and confidence', '## One question at a time', '## Want versus should-want', '## Restate and confirm', '## When to step back'], 3200],
++    'spec-review.md': [['# Spec reviewer brief', '## What to check', '## Calibration', '## Output'], 1400],
++    'capability-map.md': [['# Capability map', '## When to split', '## Map format', '## Approval'], 1200],
++  };
++  for (const [f, [hs, max]] of Object.entries(refs)) {
++    assertHeadings(`skills/define/references/${f}`, hs);
++    assertMaxBytes(`skills/define/references/${f}`, max);
++  }
++  assertContains('skills/define/references/spec-template.md', ['Copy from the first `---` line to the end', '- Always:', '- Ask first:', '- Never:', 'form: short', 'the highest seam that already exists and the fewest seams']);
++});

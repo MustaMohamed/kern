@@ -1,0 +1,360 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index df4521a..3900ada 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,7 +7,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ - Agents implementer, task-reviewer and investigator.
+ - floor-scan: the G7 check as a script, with a lowered-bar class and ratchet.<metric> settings keys.
+ - Guard G18: kern's read-only investigator may run only allowlisted read commands.
+-- Guard G16 denies, in both modes, a command that runs or sources kern's hook code or calls its state functions. Running prompt-submit with a made-up prompt could forge the user's message or turn autopilot on.
++- Guard G16 asks, and under autopilot denies, any command whose text names kern's hook code or its state functions, reads included; hook files stay readable through the Read and Grep tools. Running prompt-submit with a made-up prompt could forge the user's message or turn autopilot on.
+ - Guard G20: a Markdown spec or plan becomes approved, or changes its approved: line, only with a quote of the user's last message, judged on the file as the edit leaves it; never under autopilot.
+ 
+ ## [0.2.1] - 2026-10-14
+diff --git a/hooks/guards/g16-state.sh b/hooks/guards/g16-state.sh
+index b4f0dc6..96dfdb3 100644
+--- a/hooks/guards/g16-state.sh
++++ b/hooks/guards/g16-state.sh
+@@ -1,6 +1,10 @@
+ # shellcheck shell=bash
+ # G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
+-# and the user confirms every write to a kern settings file or to Claude Code's own settings.
++# and the user confirms every write to a kern settings file or to Claude Code's own settings, and every
++# command that names kern's hook code or a state function, which could forge the user's prompt.
++# Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
++# naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
++# to disk and then run by name.
+ 
+ _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
+ _G16_STATE_CMD="commands may not write kern session state"
+@@ -8,7 +12,26 @@ _G16_SETTINGS="kern settings change guard policy; the user confirms each write"
+ _G16_CC="Claude Code settings set permissions and hooks; the user confirms each write"
+ _G16_TAB=$'\t'
+ _G16_INTO="a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write"
+-_G16_HOOKS="kern's hooks run only from Claude Code; running or sourcing one, or calling its state functions, could forge the user's prompt or the session state"
++_G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool"
++_G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
++# _G16_HOOK_AWK: reads the command text, lower-cased. Prints `hit` when a line names a hook after a
++# slash, a .sh file under hooks/lib/, or a state function as a word; a hook counts only when the
++# character after it cannot go on a file name, so pre-tool-use.bats does not. Otherwise prints `ctx`
++# when a line names a hooks directory (else `-`), then each word, split at blanks, CR, ; | & < > ) and =.
++# shellcheck disable=SC2016 # awk text
++_G16_HOOK_AWK='
++BEGIN {
++  a = "abcdefghijklmnopqrstuvwxyz0123456789"
++  e = "([^" a "._-]|$)"
++  hit = "/(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
++  hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset)([^" a "_]|$)"
++  dir = "(^|[^" a "._-])hooks" e
++}
++{ $0 = tolower($0) }
++$0 ~ hit { print "hit"; found = 1; exit }
++$0 ~ dir { ctx = 1 }
++{ n = split($0, w, /[ \t\r;|&<>)=]+/); for (i = 1; i <= n; i++) if (w[i] != "") words = words w[i] "\n" }
++END { if (!found) printf "%s\n%s", (ctx ? "ctx" : "-"), words }'
+ 
+ guard_g16() {
+   case "$TOOL" in
+@@ -446,77 +469,98 @@ SEGMENTS
+   return 0
+ }
+ 
+-# _g16_hookfile WORD: exit 0 when the lower-cased WORD names, by its tail, a file of kern's hook code:
+-# prompt-submit, session-start, subagent-start or pre-tool-use, bare or after a slash, or a library
+-# under hooks/lib/ (or lib/<name>.sh, after a cd into hooks). Test files such as pre-tool-use.bats do
+-# not count.
+-_g16_hookfile() {
+-  case "$1" in
+-    prompt-submit | session-start | subagent-start | pre-tool-use | */prompt-submit | */session-start | \
+-      */subagent-start | */pre-tool-use | *hooks/lib/* | lib/json.sh | lib/settings.sh | lib/state.sh | \
+-      lib/decide.sh | lib/gitctx.sh | lib/render.sh) return 0 ;;
++# _g16_glob NAMES WORD: exit 0 when WORD, a word or a part of a path, could expand to one of NAMES:
++# a glob (* ? [) that matches one, or a brace expansion, a zsh group (a ( not after $) or a zsh extended
++# glob (^, or # after a character), which are not matched here and always count.
++_g16_glob() {
++  local n
++  case "$2" in
++    '('* | *[!\$]'('* | *'^'* | ?*'#'* | *'{'*,*'}'* | *'{'*..*'}'*) return 0 ;;
++    *[\*\?\[]*) ;;
++    *) return 1 ;;
+   esac
++  for n in $1; do
++    # shellcheck disable=SC2254 # the word is matched as the pattern it is
++    case "$n" in $2) return 0 ;; esac
++  done
+   return 1
+ }
+ 
+-# _g16_hooks: running or sourcing kern's hook code, or calling its state functions, could forge what
+-# the hooks record: prompt-submit run with a made-up prompt rewrites the user's last message and can
+-# turn autopilot on, and state_set writes any key. Denied in both modes. A simple command that only
+-# reads (cat, grep, git, shellcheck, sed without -i, find with no action that runs) may name the hook
+-# files, unless the same command also runs a shell, source, . or eval, which could read them from a
+-# pipe. Every simple command is checked, including the bodies of bash -c, eval and $( ). A path or a
+-# function name built at run time is not seen (accepted limit).
++# _g16_hooks: a command that names kern's hook code or a state function asks, and is denied under
++# autopilot. Running prompt-submit with a made-up prompt rewrites the user's last message and can turn
++# autopilot on, and state_set writes any key; a command that reads can run code too (git -c
++# core.fsmonitor=..., rg --pre, xargs sh -c), so no command is let through on the name it starts with.
++# The match is on the command text, in any case, with quotes and backslashes taken out, so wrappers,
++# -c strings, git config values and xargs are all covered. It counts:
++# - in the text (_G16_HOOK_AWK): a hook after a slash, a .sh file under hooks/lib/, or state_set,
++#   _state_put or state_reset;
++# - in a word inside a hooks directory: a last part that names a hook or a hooks/lib file, holds a
++#   glob that could match one (_g16_glob), or holds a $, a backtick or a { (a variable, command
++#   output, or the {} of find -exec and xargs). Every word is inside one when the text names a hooks
++#   directory (cd hooks, git log hooks/) or the session's directory is one; a single word is when a
++#   part of its own directory holds a glob that could match hooks ($K/h*/lib/state.sh).
++# Reading a hook file stays possible with the Read and Grep tools. Not seen (accepted limits): a hooks
++# directory reached without naming it (find $K -name prompt-submit, a glob for the directory in one
++# word and the hook in another), a name built at run time ($'\x..' escapes, xargs with no {}),
++# interpreter code that builds a hook path, and a script written to disk and then run by name.
+ _g16_hooks() {
+-  local cmd t seg words w head reads named=0 shell=0 run=0
++  local cmd t r w d c last names f ctx=0 inside hit=0
+   cmd=$(ti_get command) || return 0
+-  # Only a command whose text, in any case and with quotes and backslashes taken out, could name hook
+-  # code or a state function is lower-cased and parsed; the parse reads the command as written.
+-  t=$cmd
++  # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one tr pass
++  # and only when the text holds one.
++  t=${cmd//\$\'/}
++  t=${t//\$\"/}
+   case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+-  case "$t" in
+-    *[Pp][Rr][Oo][Mm][Pp][Tt]-[Ss][Uu][Bb][Mm][Ii][Tt]* | *[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ss][Tt][Aa][Rr][Tt]* | \
+-      *[Ss][Uu][Bb][Aa][Gg][Ee][Nn][Tt]-[Ss][Tt][Aa][Rr][Tt]* | *[Pp][Rr][Ee]-[Tt][Oo][Oo][Ll]-[Uu][Ss][Ee]* | \
+-      *[Hh][Oo][Oo][Kk][Ss]/[Ll][Ii][Bb]* | *[Ll][Ii][Bb]/*.[Ss][Hh]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | \
+-      *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]*) ;;
+-    *) return 0 ;;
+-  esac
+-  cmd=$(_g16_lower "$cmd")
+-  while IFS= read -r seg; do
+-    [ -n "$seg" ] || continue
+-    words=$(_cmd_words "$seg")
+-    head=${words%%$'\n'*}
+-    head=${head##*/}
+-    case "$head" in
+-      state_set | _state_put | state_reset) run=1 ;;
+-      sh | bash | zsh | dash | ksh | fish | source | . | eval) shell=1 ;;
++  case "$CWD" in */[Hh][Oo][Oo][Kk][Ss] | */[Hh][Oo][Oo][Kk][Ss]/*) ctx=1 ;; esac
++  # Only text that could count is read; any case still counts.
++  if [ "$ctx" = 0 ]; then
++    case "$t" in
++      *[Hh][Oo][Oo][Kk][Ss]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | \
++        *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[Pp][Rr][Oo][Mm][Pp][Tt]-[Ss][Uu][Bb][Mm][Ii][Tt]* | \
++        *[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ss][Tt][Aa][Rr][Tt]* | *[Ss][Uu][Bb][Aa][Gg][Ee][Nn][Tt]-[Ss][Tt][Aa][Rr][Tt]* | \
++        *[Pp][Rr][Ee]-[Tt][Oo][Oo][Ll]-[Uu][Ss][Ee]* | *[\*\?\[\{\(^#]*/*) ;;
++      *) return 0 ;;
+     esac
+-    reads=0
+-    case "$head" in
+-      cat | head | tail | less | more | grep | egrep | fgrep | rg | ls | stat | wc | file | diff | cmp | echo | printf | \
+-        test | '[' | git | shellcheck | shfmt | bat | nl | od | xxd | hexdump | strings | cksum | md5 | md5sum | shasum | \
+-        sha1sum | sha256sum | basename | dirname | realpath | readlink | cd | pushd) reads=1 ;;
+-      sed)
+-        reads=1
+-        while IFS= read -r w; do
+-          case "$w" in --in-place* | -i* | -[!-]*i*) reads=0 ;; esac
+-        done <<EOT
+-$words
+-EOT
+-        ;;
+-      find) word_has "$words" -exec -execdir -ok -okdir -delete || reads=1 ;;
++  fi
++  r=$(printf '%s\n' "$t" | LC_ALL=C awk "$_G16_HOOK_AWK") ||
++    { fail_closed "G16 could not read the command for kern's hook code"; return 0; }
++  names=$_G16_HOOK_NAMES
++  for f in "$KERN_ROOT"/hooks/lib/*.sh; do
++    [ -e "$f" ] && names="$names ${f##*/}"
++  done
++  {
++    IFS= read -r w
++    case "$w" in
++      hit) hit=1 ;;
++      ctx) ctx=1 ;;
+     esac
+-    while IFS= read -r w; do
+-      _g16_hookfile "$w" || continue
+-      if [ "$reads" = 1 ]; then named=1; else run=1; fi
+-    done <<EOT
+-$words
++    while [ "$hit" = 0 ] && IFS= read -r w; do
++      w=${w#"${w%%[!(]*}"}
++      inside=$ctx
++      case "$inside:$w" in
++        0:*/*)
++          d=${w%/*}/
++          while [ -n "$d" ]; do
++            c=${d%%/*}
++            d=${d#*/}
++            if _g16_glob hooks "$c"; then
++              inside=1
++              break
++            fi
++          done
++          ;;
++      esac
++      [ "$inside" = 1 ] || continue
++      last=${w##*/}
++      case "$last" in *[\{\$\`]*) hit=1 ;; esac
++      case "$w" in *'{'*,*'}'* | *'{'*..*'}'*) hit=1 ;; esac
++      case " $names " in *" $last "*) hit=1 ;; esac
++      _g16_glob "$names" "$last" && hit=1
++    done
++  } <<EOT
++$r
+ EOT
+-  done <<SEGMENTS
+-$(git_words "$cmd")
+-SEGMENTS
+-  if [ "$run" = 1 ] || { [ "$named" = 1 ] && [ "$shell" = 1 ]; }; then
+-    vote deny G16 "$_G16_HOOKS"
+-  fi
++  [ "$hit" = 1 ] && vote ask G16 "$_G16_HOOKS"
+   return 0
+ }
+ 
+diff --git a/tests/hooks/g16-state.bats b/tests/hooks/g16-state.bats
+index c8cd59e..fae586f 100644
+--- a/tests/hooks/g16-state.bats
++++ b/tests/hooks/g16-state.bats
+@@ -407,27 +407,89 @@ expect_cmd() {
+   expect_cmd ask 'rsync -m "my dir/.claude/settings.json" /tmp/'
+ }
+ 
+-@test "running or sourcing kern's hook code, or calling its state functions, is denied in both modes" {
++# expect_hook COMMAND...: each COMMAND asks with G16's hook reason, and under autopilot is denied.
++expect_hook() {
++  local c j mode d
++  . "$(kern_root)/hooks/lib/json.sh"
++  for mode in off on; do
++    set_autopilot "$mode"
++    d=ask
++    [ "$mode" = on ] && d=deny
++    for c in "$@"; do
++      j=$(printf '%s' "$c" | json_escape)
++      run_guard "$(tool_payload Bash "\"command\":\"$j\"")" g16
++      [ "$(decision_of "$output")" = "$d" ] && [[ "$output" == *"kern G16: the command names kern's hook code"* ]] ||
++        { echo "autopilot $mode: $c -> $output"; return 1; }
++    done
++  done
++  [[ "$output" == *"(autopilot: nobody to ask)"* ]] || false
++}
++
++@test "a command that reads but can run code, and names a hook or state_set, asks; under autopilot it is denied" {
++  K=$(kern_root)
++  expect_hook "git -c core.fsmonitor='bash $K/hooks/prompt-submit < j.json; false' status" \
++    "git -c core.fsmonitor='. hooks/lib/state.sh; state_set test-session autopilot=on; false' status" \
++    "echo hooks/prompt-submit | xargs -I{} sh -c 'bash {} < j.json'" "xargs sh -c 'bash hooks/prompt-submit < j.json'" \
++    'rg --pre hooks/prompt-submit x' 'rg --pre ./run.sh x hooks/prompt-submit'
++}
++
++@test "a glob, brace or zsh group after hooks/ that could name a hook asks; under autopilot it is denied" {
++  K=$(kern_root)
++  expect_hook 'bash hooks/prompt-sub*' 'bash hooks/prompt-s[u]bmit' 'bash hooks/{prompt-submit,x}' 'bash hooks/prompt-subm?t' \
++    "bash $K/hooks/*" "bash $K/hooks/lib/s*.sh" 'bash hooks/l?b/state.sh' 'bash hooks/lib/*' 'bash hooks/{prompt-submit,x/y}' \
++    'bash hooks/prompt-subm(i|x)t' 'bash hooks/(prompt-submit|x)' 'bash hooks/^x' 'bash hooks/prompt-submi[[:alpha:]]'
++}
++
++@test "running, sourcing or reading a hook, or calling a state function, asks; under autopilot it is denied" {
+   K=$(kern_root)
+-  # shellcheck disable=SC2016 # literal ${CLAUDE_PLUGIN_ROOT}, as Claude would write it
+-  expect_cmd deny \
+-    "printf '%s' '{\"session_id\":\"test-session\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit" \
++  # shellcheck disable=SC2016 # literal ${CLAUDE_PLUGIN_ROOT}, $'...' and $f, as Claude would write them
++  expect_hook "printf '%s' '{\"session_id\":\"test-session\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit" \
+     "$K/hooks/prompt-submit < /dev/null" 'bash hooks/session-start' 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start' \
+     "sh $K/hooks/pre-tool-use" ". $K/hooks/lib/state.sh" 'source hooks/lib/state.sh && state_set s autopilot=on' \
+     "bash -c '. hooks/lib/state.sh; state_set test-session prompt_hashes=1'" "bash -c 'state_reset test-session'" \
+-    'eval _state_put 0 s autopilot=on' 'cat hooks/prompt-submit | bash' 'bash < hooks/prompt-submit' \
+-    "cp -r $K /tmp/k && bash /tmp/k/hooks/prompt-submit" 'cd hooks && bash prompt-submit' 'cd hooks && . lib/state.sh'
+-  set_autopilot on
+-  expect_cmd deny "bash $K/hooks/prompt-submit"
++    'eval _state_put 0 s autopilot=on' "stat\$'e'_set s autopilot=on" 'cat hooks/prompt-submit | bash' \
++    'bash < hooks/prompt-submit' "cp -r $K /tmp/k && bash /tmp/k/hooks/prompt-submit" "bash $K/HOOKS/PROMPT-SUB''MIT" \
++    "bash $K/hooks/\$'prompt-submit'" 'bash hooks//prompt-submit' 'bash hooks/./prompt-submit' '. hooks/./lib/state.sh' '. hooks/lib/state.sh.bak' \
++    "bash hooks/prompt-submit$(printf '\r')" 'cat hooks/prompt-submit' 'grep -n state_set hooks/lib/state.sh' \
++    'git diff -- hooks/prompt-submit' 'shellcheck hooks/prompt-submit'
+ }
+ 
+-@test "reading kern's hook code, or running its tests, is not denied" {
+-  local c
+-  for c in 'cat hooks/prompt-submit' 'grep -n state_set hooks/lib/state.sh' 'shellcheck -x hooks/prompt-submit hooks/lib/state.sh' \
+-    'git diff -- hooks/prompt-submit' 'git add -- hooks/prompt-submit hooks/lib/state.sh' 'sed -n 1,20p hooks/lib/state.sh' \
+-    'tests/run-bats tests/hooks/pre-tool-use.bats tests/hooks/prompt-submit.bats' 'git commit -m "fix state_set in prompt-submit"'; do
+-    . "$(kern_root)/hooks/lib/json.sh"
+-    run_guard "$(tool_payload Bash "\"command\":\"$(printf '%s' "$c" | json_escape)\"")" g16
+-    [ "$(decision_of "$output")" != deny ] || { echo "$c -> $output"; return 1; }
+-  done
++@test "a hooks directory named elsewhere in the command, or reached by a glob, makes a hook's bare name ask" {
++  K=$(kern_root)
++  # shellcheck disable=SC2016 # literal $PATH and $f
++  expect_hook 'cd hooks && bash prompt-submit' 'cd hooks && . lib/state.sh' 'cd hooks; f=prompt-submit; bash $f' \
++    "cd hooks$(printf '\r')
++bash prompt-submit$(printf '\r')" 'bash -c "cd hooks; bash pr*"' "PATH=$K/hooks:\$PATH prompt-submit < j.json" \
++    'find hooks -type f -exec bash {} \;' "find hooks -name 'prompt-s*' -exec bash {} \;" \
++    'ls hooks | while read f; do bash hooks/$f < j.json; done' "bash $K/h*/prompt-submit" ". $K/h*/lib/state.sh" \
++    "bash $K/*/p*-submit" 'cat */*'
++}
++
++@test "a command that names no kern hook, such as a hook's test file, gets no hook vote" {
++  # shellcheck disable=SC2016 # literal ${HOME} and $(pwd)
++  expect_cmd none 'tests/run-bats tests/hooks/prompt-submit.bats' 'git log hooks/' 'tests/run-bats tests/hooks/g20*.bats' \
++    'ls tests/hooks/*.bats' 'git commit -m "fix the prompt-submit test"' 'shellcheck scripts/ledger-open' \
++    'cat hooks/prompt-submit.md' 'bash hooks/prompt-submit.bak' 'cat hooks/pre-tool-use_old' 'cat docs/hooks.md' \
++    'ls *.md' 'ls *' 'cat */*.md' 'echo ${HOME}/x' 'echo $(pwd)/x'
++}
++
++@test "inside a hooks directory a bare hook name, or a glob that could match one, asks" {
++  CWD="$R/hooks"
++  mkdir -p "$CWD"
++  expect_hook 'bash prompt-submit < j.json' 'bash pr*' '. lib/state.sh' 'bash ./session-start'
++  set_autopilot off
++  expect_cmd none 'ls' 'bash x.sh' 'cat *.md'
++}
++
++@test "when awk cannot read the command for kern's hook code, G16 fails closed" {
++  local real
++  real=$(command -v awk)
++  mkdir -p "$BATS_TEST_TMPDIR/bin"
++  # An awk shim that fails only on G16's hook program, which alone names subagent-start.
++  printf '#!/bin/bash\ncase "$*" in *subagent-start*) exit 2 ;; esac\nexec %s "$@"\n' "$real" >"$BATS_TEST_TMPDIR/bin/awk"
++  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
++  PATH="$BATS_TEST_TMPDIR/bin:$PATH"
++  run_guard "$(bash_payload "git log hooks/")" g16
++  [ "$(decision_of "$output")" = ask ]
++  [[ "$output" == *"G16 could not read the command for kern's hook code"* ]] || false
+ }
+diff --git a/tests/hooks/g20-probes.bats b/tests/hooks/g20-probes.bats
+index 97279d4..52598cf 100644
+--- a/tests/hooks/g20-probes.bats
++++ b/tests/hooks/g20-probes.bats
+@@ -392,16 +392,22 @@ c1_agree() {
+   [[ "$output" == *"staged.md, which holds a status: approved line"* ]] || false
+ }
+ 
+-@test "I3 running kern's prompt-submit to forge the user's message is denied by G16" {
+-  b "printf '%s' '{\"session_id\":\"test-session\",\"cwd\":\"$R\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit" g16
++@test "I3 running kern's prompt-submit to forge the user's message asks G16, and is denied under autopilot" {
++  c="printf '%s' '{\"session_id\":\"test-session\",\"cwd\":\"$R\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"ship it\"}' | bash $K/hooks/prompt-submit"
++  b "$c" g16
++  [ "$(decision_of "$output")" = ask ]
++  [[ "$output" == *"kern G16: the command names kern's hook code"* ]] || false
++  set_autopilot on
++  b "$c" g16
+   deny
+-  [[ "$output" == *"kern G16: "*"kern's hooks"* ]] || false
+ }
+ 
+-@test "I3 sourcing kern's state library to call state_set is denied by G16" {
++@test "I3 sourcing kern's state library to call state_set asks G16, and is denied under autopilot" {
++  b "bash -c '. hooks/lib/state.sh; state_set test-session prompt_hashes=1'" g16
++  [ "$(decision_of "$output")" = ask ]
++  set_autopilot on
+   b "bash -c '. hooks/lib/state.sh; state_set test-session prompt_hashes=1'" g16
+   deny
+-  [[ "$output" == *"kern G16: "*"kern's hooks"* ]] || false
+ }
+ 
+ @test "N1 negations are not a yes" {

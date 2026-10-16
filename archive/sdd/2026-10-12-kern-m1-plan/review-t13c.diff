@@ -1,0 +1,322 @@
+diff --git a/hooks/guards/g15-deploy.sh b/hooks/guards/g15-deploy.sh
+index 64dc7ee..ebc1ac3 100644
+--- a/hooks/guards/g15-deploy.sh
++++ b/hooks/guards/g15-deploy.sh
+@@ -1,21 +1,124 @@
+ # shellcheck shell=bash
+-# G15 deploy and publish: workflow runs, releases, package publishes, infra applies, deploy-branch pushes.
++# G15 deploy and publish: workflow runs, releases, package publishes, infra applies, deploy
++# commands and deploy-branch pushes ask, and are denied under autopilot. No policy key loosens it,
++# and it never votes allow.
++# The words of each simple command come from _cmd_words (wrappers, assignments, any path, any
++# case). Any word may name a tool in _G15_AWK's table (basename, lower case, no :tag or @version),
++# so an unknown wrapper, xargs, find -exec or `docker run <image>/terraform:<tag>` cannot hide it;
++# the words of a verb path must then appear after it in order, each a whole word, so global options
++# before the verb cannot hide it either, and no option table is needed. The costs: an option value
++# spelled as a verb (`terraform plan -out apply`), and a tool and its verb as plain words (`echo
++# terraform apply`, `man kubectl apply`), ask. Quoted text stays one word. After a runner (npx,
++# bunx, uvx, pnpx; npm exec or x, pnpm and yarn dlx or exec, bun x, uv run or uv tool run,
++# python -m), each later word is also split at blanks (`npm exec -c 'vercel deploy'`).
++# Out of scope (accepted limits): package scripts (npm run deploy, make deploy), a bare `vercel`
++# with an option value or a path (`vercel --scope team`), and names built at run time.
+ 
+-KERN_G15_RE='^(gh (workflow run|release (create|upload|edit|delete))|(npm|pnpm|yarn( npm)?|bun) publish|cargo publish|twine upload|gem push|poetry publish|docker (push|buildx build .*--push)|(terraform|tofu) (apply|destroy|import)|pulumi (up|destroy)|cdk (deploy|destroy)|kubectl (apply|create|delete|replace|patch|rollout|scale|set|edit|annotate|label)|helm (install|upgrade|uninstall|rollback)|(serverless|sls) (deploy|remove)|vercel( .*)? (--prod|deploy)|fly (deploy|apps destroy)|firebase deploy|eb deploy|aws (ecs update-service|lambda update-function-code|cloudformation (deploy|create-stack|update-stack|delete-stack)|s3 (sync|cp|rm|mv) .*s3://))'
++# _G15_AWK: the judge, run on git_words records after _GW_AWK. Prints `D<TAB>words` for a deploy or
++# publish, `P<TAB>record` for a git command with a push word, and `.` at the end.
++# shellcheck disable=SC2016 # awk text
++_G15_AWK='
++  function g15_tool(names, paths,   a, k, n) { n = split(names, a, ","); for (k = 1; k <= n; k++) G15T[a[k]] = paths }
++  # g15_name(w): the tool w runs: its basename in lower case, less a :tag (hashicorp/terraform:1.9)
++  # and an @version (vercel@latest); python3.12 and the like read as python.
++  function g15_name(w) {
++    sub(/.*\//, "", w); w = tolower(w)
++    if (w ~ /^python[0-9.]*$/) return "python"
++    if (w ~ /^[^:]+:/) sub(/:.*/, "", w)
++    if (w ~ /^[^@]+@/) sub(/@.*/, "", w)
++    return w
++  }
++  # g15_has(p, path): true when the words of path appear in L after position p, in order, each a
++  # whole word; a path word ending in * matches any word it starts. The path ~ is a bare run: the
++  # word at p runs (the head, or after a runner) and every later word is an option other than help
++  # or version.
++  function g15_has(p, path,   a, n, k, j, e, x) {
++    if (path == "~") {
++      if (p > 1 && !(r && p > r)) return 0
++      for (j = p + 1; j <= m; j++) if (L[j] !~ /^-/ || L[j] ~ /^(-h|--help|-v|--version)$/) return 0
++      return 1
++    }
++    n = split(path, a, " "); j = p
++    for (k = 1; k <= n; k++) {
++      e = a[k]; x = (e ~ /\*$/)
++      if (x) e = substr(e, 1, length(e) - 1)
++      for (j++; j <= m; j++) if (x ? substr(L[j], 1, length(e)) == e : L[j] == e) break
++      if (j > m) return 0
++    }
++    return 1
++  }
++  BEGIN {
++    g15_tool("gh", "workflow run|release create|release new|release upload|release edit|release delete|release delete-asset|run rerun")
++    g15_tool("npm,pnpm,yarn,bun,cargo,poetry,uv,lerna,changeset", "publish")
++    g15_tool("twine", "upload")
++    g15_tool("gem", "push")
++    g15_tool("docker", "push|--push|stack deploy|stack up")
++    g15_tool("docker-compose", "push")
++    g15_tool("terraform,tofu", "apply|destroy|import")
++    g15_tool("pulumi", "up|destroy")
++    g15_tool("cdk,aws-cdk", "deploy|destroy")
++    g15_tool("kubectl", "apply|create|delete|replace|patch|rollout|scale|set|edit|annotate|label")
++    g15_tool("helm", "install|upgrade|uninstall|rollback|delete|del|un")
++    g15_tool("serverless,sls", "deploy|remove")
++    g15_tool("vercel", "deploy|--prod|~")
++    g15_tool("fly,flyctl", "deploy|apps destroy")
++    g15_tool("firebase,firebase-tools", "deploy")
++    g15_tool("eb", "deploy")
++    g15_tool("gcloud", "run deploy|app deploy|functions deploy")
++    g15_tool("wrangler", "deploy|publish")
++    g15_tool("netlify,netlify-cli", "deploy")
++    g15_tool("aws", "ecs update-service|lambda update-function-code|cloudformation deploy|cloudformation create-stack|cloudformation update-stack|cloudformation delete-stack|s3 sync s3://*|s3 cp s3://*|s3 rm s3://*|s3 mv s3://*|s3 rb s3://*")
++    # Runners: a head that runs the command in its later words, alone (" ") or after a listed word.
++    G15R["npx"] = G15R["bunx"] = G15R["uvx"] = G15R["pnpx"] = " "
++    G15R["npm"] = " exec x "; G15R["pnpm"] = " dlx exec "; G15R["yarn"] = " dlx exec "; G15R["bun"] = " x "
++    G15R["uv"] = " run "; G15R["python"] = " -m "
++  }
++  {
++    sw($0); cw_reset()
++    for (k = 1; k <= sw_n; k++) cw(sw_w[k])
++    if (!cw_n) next
++    # L[1..m]: the words; r: where a runner ends, after which words are split at blanks.
++    h = g15_name(cw_w[1]); m = 1; L[1] = cw_w[1]
++    r = (h in G15R && G15R[h] == " ")
++    for (k = 2; k <= cw_n; k++) {
++      if (r) { n = split(cw_w[k], a, /[ \t\037]+/); for (i = 1; i <= n; i++) if (a[i] != "") L[++m] = a[i]; continue }
++      L[++m] = cw_w[k]
++      if (h in G15R && index(G15R[h], " " cw_w[k] " ")) r = m
++    }
++    for (p = 1; p <= m; p++) {
++      t = g15_name(L[p])
++      if (!(t in G15T)) continue
++      n = split(G15T[t], v, "|")
++      for (i = 1; i <= n; i++) if (g15_has(p, v[i])) break
++      if (i > n) continue
++      out = L[1]
++      for (k = 2; k <= m; k++) out = out " " L[k]
++      gsub(/\037/, " ", out)
++      print "D\t" substr(out, 1, 60)
++      next
++    }
++    if (cw_w[1] == "git" || cw_w[1] ~ /\/git$/) for (k = 2; k <= cw_n; k++) if (cw_w[k] == "push") { print "P\t" $0; next }
++  }
++  END { print "." }
++'
+ 
+ guard_g15() {
+   [ "$TOOL" = Bash ] || return 0
+-  local cmd seg words parsed dir rest sub t envs
++  local cmd line seen=0 got=0 envs="" parsed dir rest sub t
+   cmd=$(ti_get command) || return 0
+-  envs=$(settings_get deploy.envs '')
+-  while IFS= read -r seg; do
+-    words=$(_shell_words "$seg" | awk '!s && /^[A-Za-z_][A-Za-z0-9_]*=/ { next } !s && /^(command|exec|time|nohup|sudo|npx)$/ { next } { s = 1; print }' | paste -sd ' ' -)
+-    if printf '%s\n' "$words" | grep -Eq -- "$KERN_G15_RE"; then
+-      _g15_vote "$(printf '%s' "$words" | cut -c1-60)"
+-      continue
+-    fi
++  _g15_named "$cmd" || return 0
++  # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
++  while IFS= read -r line; do
++    case "$line" in
++      .) seen=1; continue ;;
++      D*) _g15_vote "${line#D	}"; continue ;;
++      P*) ;;
++      *) continue ;;
++    esac
++    # deploy.envs is read only for a git push.
++    [ "$got" = 1 ] || { envs=$(settings_get deploy.envs ''); got=1; }
+     [ -n "$envs" ] || continue
+-    parsed=$(git_sub "$seg") || continue
++    parsed=$(git_sub "${line#P	}") || continue
+     dir=${parsed%%	*}
+     rest=${parsed#*	}
+     sub=${rest%%	*}
+@@ -36,8 +139,28 @@ guard_g15() {
+ $(push_targets "$dir" "$rest")
+ EOT
+   done <<EOT
+-$(git_words "$cmd")
++$(git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK")
+ EOT
++  [ "$seen" = 1 ] || _g15_vote "kern could not read the command"
++}
++
++# _g15_named CMD: exit 0 when CMD, with quotes, backslashes and newlines removed, holds a tool name
++# from _G15_AWK's table or push, in any case. It runs before any parse or settings_get, and is a
++# superset of what the judge can match: a name the shell joins from quotes or a continued line
++# still passes.
++_g15_named() {
++  local flat=${1//[\"\'\\]/}
++  flat=${flat//$'\n'/}
++  case "$flat" in
++    *[Gg][Hh]* | *[Nn][Pp][Mm]* | *[Yy][Aa][Rr][Nn]* | *[Bb][Uu][Nn]* | *[Cc][Aa][Rr][Gg][Oo]* | \
++      *[Pp][Oo][Ee][Tt][Rr][Yy]* | *[Uu][Vv]* | *[Ll][Ee][Rr][Nn][Aa]* | *[Cc][Hh][Aa][Nn][Gg][Ee][Ss][Ee][Tt]* | \
++      *[Tt][Ww][Ii][Nn][Ee]* | *[Gg][Ee][Mm]* | *[Dd][Oo][Cc][Kk][Ee][Rr]* | *[Tt][Ee][Rr][Rr][Aa][Ff][Oo][Rr][Mm]* | \
++      *[Tt][Oo][Ff][Uu]* | *[Pp][Uu][Ll][Uu][Mm][Ii]* | *[Cc][Dd][Kk]* | *[Kk][Uu][Bb][Ee][Cc][Tt][Ll]* | *[Hh][Ee][Ll][Mm]* | \
++      *[Ss][Ee][Rr][Vv][Ee][Rr][Ll][Ee][Ss][Ss]* | *[Ss][Ll][Ss]* | *[Vv][Ee][Rr][Cc][Ee][Ll]* | *[Ff][Ll][Yy]* | \
++      *[Ff][Ii][Rr][Ee][Bb][Aa][Ss][Ee]* | *[Ee][Bb]* | *[Gg][Cc][Ll][Oo][Uu][Dd]* | *[Ww][Rr][Aa][Nn][Gg][Ll][Ee][Rr]* | \
++      *[Nn][Ee][Tt][Ll][Ii][Ff][Yy]* | *[Aa][Ww][Ss]* | *[Pp][Uu][Ss][Hh]*) return 0 ;;
++  esac
++  return 1
+ }
+ 
+ _g15_vote() {
+diff --git a/tests/hooks/g13-g15.bats b/tests/hooks/g13-g15.bats
+index 9ec432e..e0dd5ab 100644
+--- a/tests/hooks/g13-g15.bats
++++ b/tests/hooks/g13-g15.bats
+@@ -14,11 +14,11 @@ g() { run_guard "$(bash_payload "$1")" "$2"; }
+ mcp() { run_guard "$(payload PreToolUse "\"tool_name\":\"$1\",\"tool_input\":{}")" g14; }
+ # mcpi TOOL FIELDS: G14 on an MCP call whose tool_input holds FIELDS (passed without braces).
+ mcpi() { run_guard "$(tool_payload "$1" "$2")" g14; }
+-# gx CMD: G13 on CMD, which may hold double quotes, backslashes and newlines.
++# gx CMD [GUARDS]: G13 (or GUARDS) on CMD, which may hold double quotes, backslashes and newlines.
+ gx() {
+   local esc
+   esc=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
+-  run_guard "$(bash_payload "$esc")" g13
++  run_guard "$(bash_payload "$esc")" "${2:-g13}"
+ }
+ # g13_all DECISION CMD...: G13 decides DECISION on every CMD.
+ g13_all() {
+@@ -29,6 +29,15 @@ g13_all() {
+     [ "$(decision_of "$output")" = "$want" ] || { echo "$c -> $output"; return 1; }
+   done
+ }
++# g15_all DECISION CMD...: G15 decides DECISION on every CMD.
++g15_all() {
++  local want="$1" c
++  shift
++  for c in "$@"; do
++    gx "$c" g15
++    [ "$(decision_of "$output")" = "$want" ] || { echo "$c -> $output"; return 1; }
++  done
++}
+ 
+ @test "G13: inactive until protected_targets is set" {
+   g "scp a.txt v1-host:/data/" g13
+@@ -453,6 +462,117 @@ ssh v1-host 'del C:\x'"
+   [ "$(decision_of "$output")" = deny ]
+ }
+ 
++@test "G15: a tool behind a wrapper, an assignment, a path or another case asks, denied under autopilot" {
++  g15_all ask "timeout 600 terraform apply" "env NODE_ENV=production npm publish" "env npm publish" \
++    "sudo -u deploy kubectl apply -f x.yml" "sudo -E npm publish" "nice -n 5 npm publish" "command -p npm publish" \
++    "TERRAFORM apply" "Terraform apply -auto-approve" "Npm publish" "KUBECTL apply -f x.yml" \
++    "/usr/local/bin/npm publish" "./node_modules/.bin/vercel deploy --prod"
++  set_autopilot on
++  g15_all deny "timeout 600 terraform apply" "TERRAFORM apply"
++}
++
++@test "G15: a deploy verb after global options asks; the verb must be a whole word" {
++  g15_all ask "kubectl -n prod apply -f x.yml" "kubectl --context prod delete pod x" "terraform -chdir=infra apply" \
++    "helm -n prod upgrade api ./chart" "firebase --project prod deploy" "fly -a app deploy" \
++    "aws --profile prod ecs update-service --cluster c --service s" \
++    "aws --region us-east-1 lambda update-function-code --function-name f --zip-file fileb://x.zip" \
++    "gh -R o/r workflow run deploy.yml" "gh release -R o/r create v1" "npm --prefix pkg publish" "pnpm -r publish" \
++    "pnpm --filter x publish" "cargo +nightly publish" "docker buildx build --push -t x ." "terraform plan -out apply"
++  g15_all none "terraform plan -out apply.tfplan" "kubectl -n prod get pods" "aws s3 ls s3://bucket" \
++    "gh issue create --title 'release create'" "kubectl get pods -l app=label"
++}
++
++@test "G15: a runner and its options are stripped" {
++  g15_all ask "npx -y vercel deploy" "npx --yes vercel --prod" "npx vercel@latest deploy" "npx -p aws-cdk cdk deploy" \
++    "npx aws-cdk deploy" "npx wrangler deploy" "npx netlify deploy --prod" "pnpm dlx vercel deploy --prod" \
++    "pnpm exec cdk deploy" "pnpm --filter x exec cdk deploy" "yarn dlx vercel deploy --prod" "bunx vercel deploy --prod" \
++    "uvx twine upload dist/x" "uvx --with keyring twine upload dist/x" "npm exec -- vercel deploy --prod" \
++    "npm exec -c 'vercel deploy --prod'" "python -m twine upload dist/x" "python3.12 -m twine upload dist/x" \
++    "npx changeset publish" "bun x vercel deploy" "uv tool run twine upload dist/x" "uv run twine upload dist/x"
++  g15_all none "npx vitest run" "pnpm exec eslint ." "uvx ruff check" "uv run pytest" "npx prettier --write 'npm publish.md'"
++  set_autopilot on
++  g15_all deny "npx -y vercel deploy" "pnpm dlx vercel deploy --prod"
++}
++
++@test "G15: gcloud, helm delete, flyctl, gh run rerun, docker stack, uv, wrangler, netlify, vercel, serverless, firebase and cloudformation ask" {
++  g15_all ask "gcloud run deploy api --image x" "gcloud app deploy" "gcloud functions deploy f" "gcloud beta run deploy api" \
++    "helm delete api" "helm uninstall api" "flyctl deploy" "gh run rerun 123" "gh release new v1" \
++    "docker stack deploy -c x.yml app" "docker stack up -c x.yml app" "docker image push x" "uv publish" \
++    "wrangler deploy" "wrangler publish" "netlify deploy --prod" "vercel deploy" "vercel --prod" "serverless deploy" \
++    "sls deploy" "firebase deploy" "aws cloudformation deploy --template-file t.yml --stack-name s" \
++    "aws cloudformation create-stack --stack-name s" "aws cloudformation update-stack --stack-name s" \
++    "aws cloudformation delete-stack --stack-name s" "aws s3 rb s3://bucket --force" "lerna publish"
++  set_autopilot on
++  g15_all deny "gcloud run deploy api" "gh run rerun 123"
++}
++
++@test "G15: ordinary commands do not vote" {
++  g15_all none "terraform plan" "kubectl get pods" "helm list" "npm test" "npx vitest" "gcloud config list" \
++    "docker build ." "gh run view 123" "echo 'npm publish'" "git commit -m 'npm publish'" "ls -la"
++}
++
++@test "G15: quotes, backslashes and a backslash-newline do not hide a tool" {
++  g15_all ask "ter''raform apply" 'k"ub"ectl apply -f x.yml' 'terra\form apply' $'terra\\\nform apply' \
++    $'npm pub\\\nlish' "bash -c 'n\"p\"m publish'"
++}
++
++@test "G15: a tool name as any later word asks; quoted text stays one word" {
++  g15_all ask "caffeinate terraform apply" "xargs -n1 npm publish" 'find . -name package.json -execdir npm publish \;' \
++    "docker run --rm hashicorp/terraform apply" "nvm exec 20 npm publish" "corepack pnpm publish" \
++    "ssh build-host kubectl apply -f x.yml" "echo terraform apply" "man kubectl apply" \
++    "docker run --rm hashicorp/terraform:1.9 apply" "docker-compose push"
++  g15_all none "git commit -m 'npm publish'" "echo 'terraform apply'" "brew install helm" "npm i -g vercel" \
++    "yarn add -D vercel" "which vercel" "pip install twine" "rg 'kubectl apply' docs" "docker run alpine:3 ls" \
++    "docker-compose up"
++  set_autopilot on
++  g15_all deny "caffeinate terraform apply" "xargs -n1 npm publish"
++}
++
++@test "G15: a bare vercel with only options asks where vercel runs" {
++  g15_all ask "vercel" "vercel --yes" "VERCEL -y" "npx vercel" "pnpm dlx vercel --yes" "./node_modules/.bin/vercel"
++  g15_all none "vercel ls" "vercel env pull" "vercel dev" "vercel --version" "vercel --help" "vercel -h" \
++    "npm i -g vercel" "brew install vercel-cli"
++  set_autopilot on
++  g15_all deny "vercel"
++}
++
++@test "G15: every tool in the table asks for each of its verbs, in any case, and passes the prefilter" {
++  local f names paths name path p n=0 cmd="" line want=() names_all=()
++  f="$(kern_root)/hooks/guards/g15-deploy.sh"
++  while IFS='	' read -r names paths; do
++    [ -n "$names" ] || continue
++    while IFS= read -r name; do
++      names_all+=("$name" "$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')")
++      while IFS= read -r path; do
++        n=$((n + 1))
++        # A * path word stands for any word it starts; the path ~ is the tool alone.
++        p=${path//\*/x}
++        [ "$p" = '~' ] && p=""
++        line="$name${p:+ $p}"
++        [ $((n % 2)) = 0 ] && line="$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')${p:+ $p}"
++        want+=("$line")
++        cmd="${cmd:+$cmd
++}$line"
++      done <<EOT
++$(printf '%s\n' "$paths" | tr '|' '\n')
++EOT
++    done <<EOT
++$(printf '%s\n' "$names" | tr ',' '\n')
++EOT
++  done <<EOT
++$(sed -n 's/^ *g15_tool("\([^"]*\)", "\([^"]*\)").*/\1	\2/p' "$f")
++EOT
++  [ "$n" -ge 60 ] || { echo "only $n table entries"; return 1; }
++  gx "$cmd" g15
++  [ "$(decision_of "$output")" = ask ]
++  for line in "${want[@]}"; do
++    case "$output" in *"deploy or publish: $line\""* | *"deploy or publish: $line;"*) ;; *) echo "no vote: $line"; return 1 ;; esac
++  done
++  run bash -c '. "$1"; shift; for w in "$@"; do _g15_named "x $w y" || echo "prefilter misses $w"; done' _ "$f" "${names_all[@]}"
++  [ "$status" = 0 ]
++  [ -z "$output" ]
++}
++
+ @test "G14: tracker.policy auto allows only a family's listed tools, the family matched as a server token" {
+   printf 'tracker.policy: auto\nmcp.write_servers: youtrack\n' >"$R/.claude/kern.local.yml"
+   for t in mcp__claude_ai_Linear__save_comment mcp__plugin_engineering_linear__save_issue mcp__claude_ai_Notion__notion-create-comment; do

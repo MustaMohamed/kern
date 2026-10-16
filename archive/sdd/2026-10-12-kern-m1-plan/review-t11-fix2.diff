@@ -1,0 +1,291 @@
+diff --git a/hooks/guards/g03-review.sh b/hooks/guards/g03-review.sh
+index 4533800..d382c68 100644
+--- a/hooks/guards/g03-review.sh
++++ b/hooks/guards/g03-review.sh
+@@ -103,7 +103,8 @@ _g03_sel_ok() {
+ 
+ # _g03_self SEL REPO: for an approval of PR SEL (empty: the current branch's) in REPO (empty: this
+ # repo). Votes deny when its author is the gh user, and asks (deny under autopilot) when that cannot
+-# be checked: a URL, or gh missing or failing. Exit 0 only when the author is someone else.
++# be checked: a URL, or gh missing or failing. Exit 0 only when the author is someone else. Each gh
++# call stops at 8 s, so both stay under the 20 s hook timeout.
+ _g03_self() {
+   local me author
+   if ! _g03_sel_ok "$1"; then
+@@ -111,8 +112,8 @@ _g03_self() {
+     return 1
+   fi
+   if command -v gh >/dev/null 2>&1 &&
+-    me=$( (cd "$CWD" && with_timeout 10 gh api user --jq .login) 2>/dev/null) && [ -n "$me" ] &&
+-    author=$( (cd "$CWD" && with_timeout 10 gh pr view ${1:+"$1"} ${2:+-R "$2"} --json author --jq .author.login) 2>/dev/null) &&
++    me=$( (cd "$CWD" && with_timeout 8 gh api user --jq .login) 2>/dev/null) && [ -n "$me" ] &&
++    author=$( (cd "$CWD" && with_timeout 8 gh pr view ${1:+"$1"} ${2:+-R "$2"} --json author --jq .author.login) 2>/dev/null) &&
+     [ -n "$author" ]; then
+     if [ "$me" = "$author" ]; then
+       vote deny G3 "self-approval: use a COMMENT review on your own PR"
+@@ -172,7 +173,7 @@ _g03_comment() {
+ # from a file.
+ _g03_api() {
+   local toks t kv key val method="" fields=0 input="" ep="" npos=0 fread=0 mut=0 approve=0 bodyf=0
+-  local file tax b n repo lab=1 ok=0
++  local file flat="" tax b k n r repo lab=1 keys=1 ok=0
+   toks=$(_gh_args "${_GH_RECS[$1]}" 1 | _gh_opts "$_GH_API_OPTS")
+   [ "$(_gh_last "$toks" help)" = true ] && return 0
+   while IFS= read -r t; do
+@@ -215,28 +216,36 @@ EOT
+     _g03_ask "gh api $method $ep writes to GitHub"
+     return 0
+   fi
+-  # A PR review or review comment. The --input file's bodies must carry a label, and its event
+-  # counts as an approval too.
++  # A PR review or review comment. The --input file is read as one line, because a key and its
++  # value may sit on different lines. Its bodies must carry a label, and its event counts as an
++  # approval too. An "event" or "body" key whose string value the pattern cannot read leaves the
++  # post unproven (keys=0).
+   if [ -n "$input" ]; then
+     file=$(_g03_path "$input")
++    [ -f "$file" ] && flat=$(tr '\n\r' '  ' <"$file")
+     tax=$(settings_get review.taxonomy "$_G03_TAX_DEFAULT" | tr '[:upper:]' '[:lower:]')
+     while IFS= read -r b; do
+       [ -n "$b" ] || continue
+       b=$(printf '%s' "$b" | tr '[:upper:]' '[:lower:]' | sed 's/^[*#> -]*//; s/[^a-z-].*//')
+       list_has "$tax" "$b" || lab=0
+     done <<EOT
+-$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*' "$file" 2>/dev/null | sed 's/^"body"[[:space:]]*:[[:space:]]*"//')
++$(printf '%s' "$flat" | grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*' | sed 's/^"body"[[:space:]]*:[[:space:]]*"//')
+ EOT
+-    grep -iq '"event"[[:space:]]*:[[:space:]]*"approve"' "$file" 2>/dev/null && approve=1
++    printf '%s' "$flat" | grep -iq '"event"[[:space:]]*:[[:space:]]*"approve"' && approve=1
++    for k in event body; do
++      [ "$(_g03_count "$flat" "\"$k\"")" -eq "$(_g03_count "$flat" "\"$k\"[[:space:]]*:[[:space:]]*\"[^\"]*\"")" ] || keys=0
++    done
+   fi
++  # gh fills {owner}/{repo} from the current repo; any other owner/repo is unproven.
++  repo=${ep#/}
++  repo=${repo#repos/}
++  repo=${repo%%/pulls/*}
+   if [ "$approve" = 1 ]; then
+     n=${ep%/*}
+     n=${n##*/}
+-    repo=${ep#/}
+-    repo=${repo#repos/}
+-    repo=${repo%%/pulls/*}
+-    [ "$repo" = "{owner}/{repo}" ] && repo=""
+-    _g03_self "$n" "$repo" || return 0
++    r=$repo
++    [ "$r" = "{owner}/{repo}" ] && r=""
++    _g03_self "$n" "$r" || return 0
+   fi
+   if [ "$lab" = 0 ]; then
+     vote deny G3 "every review comment body must open with a review.taxonomy label"
+@@ -244,10 +253,15 @@ EOT
+   fi
+   # The file is read as text, so a \u escape (a key or an event spelled in escapes) is unproven.
+   if _gh_proven "$1" "$toks" && _gh_only "$toks" "$_GH_API_SAFE" && [ "$npos" = 1 ] &&
+-    [ "$fread" = 0 ] && [ "$bodyf" = 0 ] &&
++    [ "$repo" = "{owner}/{repo}" ] && [ "$fread" = 0 ] && [ "$bodyf" = 0 ] && [ "$keys" = 1 ] &&
+     { [ -z "$input" ] || { _gh_file_ok "$input" && ! grep -q '\\u' "$file"; }; }; then
+     ok=1
+   fi
+   # shellcheck disable=SC2016 # literal backticks
+-  _g03_post "gh api review or comment post" "$ok" '`gh api repos/<o>/<r>/pulls/<n>/reviews|comments --input <file in the repo>` alone'
++  _g03_post "gh api review or comment post" "$ok" '`gh api repos/{owner}/{repo}/pulls/<n>/reviews|comments --input <file in the repo>` alone'
++}
++
++# _g03_count TEXT PATTERN: how many times the basic regex PATTERN matches in TEXT.
++_g03_count() {
++  printf '%s' "$1" | grep -o "$2" | wc -l
+ }
+diff --git a/hooks/guards/g04-untrusted.sh b/hooks/guards/g04-untrusted.sh
+index a196cf8..d8899f7 100644
+--- a/hooks/guards/g04-untrusted.sh
++++ b/hooks/guards/g04-untrusted.sh
+@@ -1,6 +1,6 @@
+ # shellcheck shell=bash
+ # G4 untrusted text: PR, issue, review and release text goes through a file, never inline in the
+-# command. Option tables and _gh_* helpers are in g02-pr.sh and g03-review.sh.
++# command. The gh api option table and the _gh_* helpers are in g03-review.sh and g02-pr.sh.
+ 
+ guard_g04() {
+   [ "$TOOL" = Bash ] || return 0
+@@ -27,35 +27,57 @@ $(git_words "$cmd")
+ EOT
+ }
+ 
+-# _g04_text RECORD SUB: inline text on a pr, issue or release command. pr create, review and comment
+-# are read with their option tables, which catch clusters such as -abTEXT. Every verb is also
+-# scanned word by word for --body, and for -b where it is the body flag (not pr checkout's branch or
+-# issue develop's base) and release's --notes and -n, attached forms included.
++# _g04_text RECORD SUB: inline text on a pr, issue or release command. Each verb that takes text has
++# its text flag (b --body, n --notes, c --comment) and its boolean short flags, from gh 2.100.0
++# `--help`. A word is inline text when it is the long flag (`--x` or `--x=`), or a short cluster
++# that reaches the letter through boolean letters only: -b, -bTEXT, -b=TEXT, -wbTEXT. --body on any
++# pr or issue verb counts too. pr checkout's -b (a branch) and issue develop's -b (a base) are not
++# text.
+ _g04_text() {
+-  local table="" toks w hit=0
++  local spec letter bools long w hit=0
+   case "$2" in
+-    "pr create") table=$_GH_CREATE_OPTS ;;
+-    "pr review") table=$_GH_REVIEW_OPTS ;;
+-    "pr comment") table=$_GH_COMMENT_OPTS ;;
++    "pr create") spec="b defw" ;;
++    "pr merge") spec="b dmrs" ;;
++    "pr review") spec="b acr" ;;
++    "pr comment" | "issue create" | "issue comment") spec="b ew" ;;
++    "pr edit" | "issue edit") spec="b -" ;;
++    "pr close") spec="c d" ;;
++    "pr reopen" | "issue close" | "issue reopen") spec="c -" ;;
++    "release create") spec="n dp" ;;
++    "release edit") spec="n -" ;;
++    *) spec="" ;;
+   esac
+-  if [ -n "$table" ]; then
+-    toks=$(_gh_args "$1" 2 | _gh_opts "$table")
+-    _gh_last "$toks" body >/dev/null && hit=1
+-  fi
++  letter=${spec%% *}
++  bools=${spec#* }
++  case "$letter" in b) long=--body ;; n) long=--notes ;; c) long=--comment ;; *) long="" ;; esac
+   while IFS= read -r w; do
+     case "$w" in --body | --body=*) case "$2" in "pr "* | "issue "*) hit=1 ;; esac ;; esac
+-    case "$2" in
+-      "pr create" | "pr edit" | "pr merge" | "pr review" | "pr comment" | "issue create" | "issue comment" | "issue edit")
+-        case "$w" in -b*) hit=1 ;; esac
+-        ;;
+-      "release create" | "release edit")
+-        case "$w" in --notes | --notes=* | -n*) hit=1 ;; esac
+-        ;;
+-    esac
++    [ -n "$letter" ] || continue
++    case "$w" in "$long" | "$long="*) hit=1 ;; esac
++    _g04_cluster "$w" "$letter" "$bools" && hit=1
+   done <<EOT
+ $(_shell_words "$1")
+ EOT
+-  [ "$hit" = 1 ] && vote deny G4 "pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline"
++  [ "$hit" = 1 ] || return 0
++  if [ "$letter" = c ]; then
++    vote deny G4 "a close or reopen --comment is inline text; post it with gh pr|issue comment --body-file <file>"
++  else
++    vote deny G4 "pass PR, issue, review and release text with --body-file or --notes-file <file>, not inline"
++  fi
++}
++
++# _g04_cluster WORD LETTER BOOLS: WORD is a short-option cluster that reaches LETTER with only
++# letters from BOOLS before it.
++_g04_cluster() {
++  local w c
++  case "$1" in --* | -) return 1 ;; -*) w=${1#-} ;; *) return 1 ;; esac
++  while [ -n "$w" ]; do
++    c=${w%"${w#?}"}
++    [ "$c" = "$2" ] && return 0
++    case "$3" in *"$c"*) ;; *) return 1 ;; esac
++    w=${w#?}
++  done
++  return 1
+ }
+ 
+ # _g04_api RECORD: a -f or -F field named body, or ending in [body], read as gh reads the flags
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index 797c55f..89839b3 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -442,12 +442,13 @@ with_timeout() {
+ }
+ 
+ # gh_sub CMDLINE: for `gh <group> <verb> ...` prints `<group> <verb>`; exit 1 for anything else.
+-# What _cmd_words skips comes first. `-R <repo>`, `-R<repo>`, `--repo <repo>` and `--repo=<repo>`
+-# before the group or the verb are skipped: gh reads them there too.
++# What _cmd_words skips comes first. The command is gh by its basename in any case (a path, or GH
++# on a case-insensitive file system), as G1 reads it. `-R <repo>`, `-R<repo>`, `--repo <repo>` and
++# `--repo=<repo>` before the group or the verb are skipped: gh reads them there too.
+ gh_sub() {
+   local out
+   out=$(_cmd_words "$1" | awk '
+-    NR == 1 { if ($0 != "gh") exit; next }
++    NR == 1 { b = $0; sub(/.*\//, "", b); if (tolower(b) != "gh") exit; next }
+     skip { skip = 0; next }
+     $0 == "-R" || $0 == "--repo" { skip = 1; next }
+     /^-R./ || /^--repo=/ { next }
+diff --git a/tests/hooks/g02-g04-gh.bats b/tests/hooks/g02-g04-gh.bats
+index 3049de0..1c2d6ef 100644
+--- a/tests/hooks/g02-g04-gh.bats
++++ b/tests/hooks/g02-g04-gh.bats
+@@ -355,8 +355,10 @@ gh_log() {
+   printf '{"comments":[{"body":"nit: a"}],"event":"APPROVE"}' >"$R/appr.json"
+   printf '{"bod\\u0079":"Looks fine"}' >"$R/esc.json"
+   export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
+-  expect allow 'gh api repos/o/r/pulls/12/reviews --input ok.json'
++  expect allow 'gh api repos/{owner}/{repo}/pulls/12/reviews --input ok.json'
+   expect allow 'gh api -X POST repos/{owner}/{repo}/pulls/12/comments --input ok.json'
++  expect ask 'gh api repos/o/r/pulls/12/reviews --input ok.json'
++  expect ask 'gh api repos/other/elsewhere/pulls/12/reviews --input ok.json'
+   expect deny 'gh api repos/o/r/pulls/12/reviews -f event=APPROVE'
+   expect deny 'gh api repos/o/r/pulls/12/reviews --input appr.json'
+   expect ask 'gh api -X DELETE repos/o/r/issues/comments/5 -f x=y'
+@@ -379,3 +381,64 @@ gh_log() {
+   expect deny "gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:\"X\"}) { clientMutationId } }'"
+   expect deny 'gh api -X DELETE repos/o/r/issues/comments/5'
+ }
++
++@test "G3: --input is read whole: a key and its value on different lines, CRLF included" {
++  policy 'review.post_policy: auto'
++  export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
++  printf '{\n"event":\n"APPROVE",\n"body": "nit: ok"\n}\n' >"$R/ml-appr.json"
++  printf '{\n"body":\n"Looks fine"\n}\n' >"$R/ml-body.json"
++  printf '{\r\n"event":\r\n"APPROVE"\r\n}\r\n' >"$R/crlf-appr.json"
++  printf '{\n"body":\n"nit: ok"\n}\n' >"$R/ml-ok.json"
++  printf '{"body": null}' >"$R/null.json"
++  printf '{"body": "nit: a", "event": APPROVE}' >"$R/bare.json"
++  expect deny 'gh api repos/o/r/pulls/12/reviews --input ml-appr.json'
++  expect deny 'gh api repos/o/r/pulls/12/reviews --input ml-body.json'
++  expect deny 'gh api repos/{owner}/{repo}/pulls/12/reviews --input crlf-appr.json'
++  expect allow 'gh api repos/{owner}/{repo}/pulls/12/reviews --input ml-ok.json'
++  expect ask 'gh api repos/{owner}/{repo}/pulls/12/reviews --input null.json'
++  expect ask 'gh api repos/{owner}/{repo}/pulls/12/reviews --input bare.json'
++}
++
++@test "G2, G3, G4: gh by path or in another case is still gh" {
++  set_autopilot on
++  expect deny '/path/to/gh pr ready 12'
++  set_autopilot off
++  policy 'review.post_policy: auto'
++  printf 'Thanks\n' >"$R/c.md"
++  export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
++  expect deny 'GH pr review 12 --approve'
++  expect deny '/usr/bin/gh pr comment 12 --body hi'
++  expect ask '/usr/bin/gh pr comment 12 --body-file c.md'
++}
++
++@test "G4: a short cluster reaching the text flag through booleans is inline text; close and reopen comments too" {
++  set_autopilot on
++  expect deny 'gh issue create -wbhi'
++  expect deny 'gh release create v1 -dnhi'
++  expect deny 'gh pr merge -dbX'
++  expect deny 'gh pr close 12 -dcbye'
++  expect deny 'gh pr close 12 --comment hi'
++  expect deny 'gh issue close 1 -c hi'
++  expect deny 'gh issue reopen 1 --comment=hi'
++  expect deny 'gh pr reopen 12 -cX'
++  expect allow 'gh pr create --draft -tbig --body-file b.md'
++  set_autopilot off
++  expect deny 'gh pr close 12 --comment hi'
++  expect none 'gh pr close 12 -d'
++  expect ask 'gh pr merge 12 -ds'
++}
++
++@test "G3: a clustered approval with an attached body file is a self-approval" {
++  policy 'review.post_policy: auto'
++  printf 'nit: rename\n' >"$R/l.md"
++  export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
++  expect deny 'gh pr review 12 -aFl.md'
++}
++
++@test "G3: an approval whose pr view lookup fails asks, denied under autopilot" {
++  policy 'review.post_policy: auto'
++  gh_log '[ "$1 $2" = "pr view" ] && exit 1'
++  expect ask 'gh pr review 12 --approve'
++  set_autopilot on
++  expect deny 'gh pr review 12 --approve'
++}

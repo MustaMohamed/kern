@@ -1,0 +1,67 @@
+# Review package: 21350df..b2ed590
+
+## Commits
+b2ed590 M1: answer policy only for loosenable actions
+
+## Files changed
+ hooks/lib/settings.sh     | 5 +++--
+ tests/hooks/settings.bats | 7 +++++++
+ 2 files changed, 10 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/hooks/lib/settings.sh b/hooks/lib/settings.sh
+index d2a8612..6a2ac2f 100644
+--- a/hooks/lib/settings.sh
++++ b/hooks/lib/settings.sh
+@@ -117,26 +117,27 @@ $known
+ EOT
+       [ "$ok" = 1 ] && printf '%s\t%s\n' "$f" "$k"
+     done <<EOT
+ $(settings_keys "$f")
+ EOT
+   done <<EOT
+ $(_settings_files)
+ EOT
+ }
+ 
+-# policy_for ACTION: ask|auto|deny for commit, push, pr, tracker or review.post.
++# policy_for ACTION: ask|auto|deny for commit, push, pr, tracker or review.post; any other action reads as ask.
+ policy_for() {
+   local key v
+   case "$1" in
+     review.post) key=review.post_policy ;;
+-    *) key="$1.policy" ;;
++    commit|push|pr|tracker) key="$1.policy" ;;
++    *) printf 'ask\n'; return 0 ;;
+   esac
+   v=$(settings_get "$key" ask)
+   case "$v" in
+     auto|deny) printf '%s\n' "$v" ;;
+     *) printf 'ask\n' ;;
+   esac
+ }
+ 
+ # kern_enabled: exit 0 unless the resolved `kern` key is `off`.
+ kern_enabled() {
+diff --git a/tests/hooks/settings.bats b/tests/hooks/settings.bats
+index 92b50f5..87277cf 100644
+--- a/tests/hooks/settings.bats
++++ b/tests/hooks/settings.bats
+@@ -79,10 +79,17 @@ YML
+ }
+ 
+ @test "kern: off disables; list_has trims" {
+   printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+   run kern_enabled
+   [ "$status" -eq 1 ]
+   list_has "a, b ,c" b
+   run list_has "a,b" z
+   [ "$status" -eq 1 ]
+ }
++
++@test "policy_for never loosens floor actions: merge and deploy read as ask" {
++  printf 'merge.policy: auto\ndeploy.policy: auto\npush.policy: auto\n' >"$R/.claude/kern.local.yml"
++  [ "$(policy_for merge)" = ask ]
++  [ "$(policy_for deploy)" = ask ]
++  [ "$(policy_for push)" = auto ]
++}

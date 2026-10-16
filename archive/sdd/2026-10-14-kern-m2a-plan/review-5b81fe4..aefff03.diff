@@ -1,0 +1,140 @@
+# Review package: 5b81fe4..HEAD
+
+## Commits
+aefff03 M2: probe needs the test to pass in the fork before it reverses
+
+## Files changed
+ scripts/probe                  | 11 +++++++++--
+ tests/scripts/claim-probe.bats | 41 +++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 50 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/scripts/probe b/scripts/probe
+index 250265c..ded2593 100755
+--- a/scripts/probe
++++ b/scripts/probe
+@@ -36,21 +36,22 @@ cleanup() {
+   if [ -n "$fork" ] && [ -d "$fork" ]; then git -C "$wt" worktree remove --force "$fork" > /dev/null 2>&1 || true; fi
+   rm -rf "$logs"
+ }
+ trap cleanup EXIT
+ 
+ excludes=()
+ if [ -n "$mutate" ]; then
+   [ -f "$wt/$mfile" ] || { echo "probe: inconclusive (no such file in the worktree: $mfile)"; exit 3; }
+ else
+   # Every path the patch touches (both sides of a rename), then the test paths among them.
+-  git -C "$wt" apply --numstat -z "$patch" 2> /dev/null | tr '\0' '\n' |
++  git -C "$wt" apply --numstat -z "$patch" > "$logs/numstat" 2> /dev/null || { echo "probe: inconclusive (cannot read the patch)"; exit 3; }
++  tr '\0' '\n' < "$logs/numstat" |
+     awk 'n > 0 { print; n--; next } /^[0-9-]+\t[0-9-]+\t$/ { n = 2; next } { sub(/^[0-9-]+\t[0-9-]+\t/, ""); if ($0 != "") print }' > "$logs/paths"
+   awk -v print_tests=1 -f "$here/lib/test-paths.awk" "$logs/paths" > "$logs/tests"
+   if [ -s "$logs/tests" ]; then
+     if [ "$excl" = 0 ]; then
+       echo "probe: inconclusive (the patch changes test files: $(paste -sd ' ' - < "$logs/tests"); pass --exclude-tests so they stay in the fork)"
+       exit 3
+     fi
+     if [ -z "$(awk 'NR == FNR { t[$0] = 1; next } !($0 in t)' "$logs/tests" "$logs/paths")" ]; then
+       echo "probe: inconclusive (the patch changes only test files; there is no change to reverse)"
+       exit 3
+@@ -67,20 +68,26 @@ if ! (cd "$wt" && "$@") > "$logs/with.log" 2>&1; then
+   exit 3
+ fi
+ 
+ slug="probe-$$-$RANDOM"
+ if ! fork=$(cd "$wt" && bash "$here/wt-fork" "$wt" "$slug" 2> "$logs/fork.err"); then
+   fork=''
+   echo "probe: inconclusive (could not fork: $(tail -n 1 "$logs/fork.err"))"
+   exit 3
+ fi
+ 
++if ! (cd "$fork" && "$@") > "$logs/control.log" 2>&1; then
++  echo "probe: inconclusive (the command fails in the fork before any change is reversed; missing ignored files or setup?)"
++  tail -n 5 "$logs/control.log" >&2
++  exit 3
++fi
++
+ if [ -n "$mutate" ]; then
+   # Invert the first operator found on the line, in this order; a word must stand alone.
+   if ! awk -v ln="$mline" '
+     function word(s, w,   i, b, a) {
+       i = index(s, w); if (!i) return 0
+       b = (i == 1) ? "" : substr(s, i - 1, 1); a = substr(s, i + length(w), 1)
+       return (b !~ /[A-Za-z0-9_]/ && a !~ /[A-Za-z0-9_]/) ? i : 0
+     }
+     NR == ln {
+       n = split("===,!==,==,!=,<=,>=,&&,||, < , > ,true,false", op, ",")
+@@ -108,16 +115,16 @@ else
+       echo "probe: inconclusive (the command names $a, which the reversed fork lacks)"
+       exit 3
+     fi
+   done
+ fi
+ 
+ if (cd "$fork" && "$@") > "$logs/without.log" 2>&1; then
+   if [ -n "$mutate" ]; then echo "probe: mutation survived ($(cat "$logs/mutated-line"))"; else echo "probe: test did not fail with the guard removed"; fi
+   exit 1
+ fi
+-blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
++blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|command not found|: not found|Permission denied|ENOENT|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
+ if grep -Eq "$blocked" "$logs/without.log"; then
+   echo "probe: inconclusive (the test did not run without the guard: $(grep -Em1 "$blocked" "$logs/without.log"))"
+   exit 3
+ fi
+ if [ -n "$mutate" ]; then echo "probe: mutation caught ($(cat "$logs/mutated-line"))"; else echo "probe: fail-then-pass ok"; fi
+diff --git a/tests/scripts/claim-probe.bats b/tests/scripts/claim-probe.bats
+index 75a2397..87aa1dd 100644
+--- a/tests/scripts/claim-probe.bats
++++ b/tests/scripts/claim-probe.bats
+@@ -127,10 +127,51 @@ setup() {
+   run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.sh:1 "$WT" -- sh test-always.sh
+   [ "$status" -eq 1 ]
+   [[ "$output" == "probe: mutation survived"* ]] || false
+ }
+ 
+ @test "--mutate on a line with no condition is inconclusive" {
+   run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate a.txt:1 "$WT" -- sh test-always.sh
+   [ "$status" -eq 3 ]
+   [ "$output" = "probe: inconclusive (no condition to invert on a.txt:1)" ]
+ }
++
++@test "a tool only in an ignored directory makes the probe inconclusive, never ok" {
++  mkdir -p "$WT/nm"
++  printf '#!/bin/sh\nexit 0\n' > "$WT/nm/jest"
++  chmod +x "$WT/nm/jest"
++  printf 'nm/\n' >> "$(git -C "$WT" rev-parse --git-path info/exclude)"
++  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c 'PATH=$PWD/nm:$PATH; jest || exit 1; sh check.sh -1 && exit 1; exit 0'
++  [ "$status" -eq 3 ]
++  [ "$output" = "probe: inconclusive (the command fails in the fork before any change is reversed; missing ignored files or setup?)" ]
++}
++
++@test "--mutate: a tool only in an ignored directory is inconclusive" {
++  mkdir -p "$WT/nm"
++  printf '#!/bin/sh\nexit 0\n' > "$WT/nm/jest"
++  chmod +x "$WT/nm/jest"
++  printf 'nm/\n' >> "$(git -C "$WT" rev-parse --git-path info/exclude)"
++  printf '[ "$1" != bad ]\n' > "$WT/gate.sh"
++  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.sh:1 "$WT" -- sh -c 'PATH=$PWD/nm:$PATH; jest || exit 1; bash gate.sh bad && exit 1; exit 0'
++  [ "$status" -eq 3 ]
++  [[ "$output" == "probe: inconclusive (the command fails in the fork before any change is reversed"* ]] || false
++}
++
++@test "a patch git cannot read is inconclusive" {
++  printf 'this is not a patch\n' > "$TMP/garbage.patch"
++  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/garbage.patch" -- sh test-guard.sh
++  [ "$status" -eq 3 ]
++  [ "$output" = "probe: inconclusive (cannot read the patch)" ]
++}
++
++@test "no probe worktree remains after a non-zero exit" {
++  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-always.sh
++  [ "$status" -eq 1 ]
++  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
++  mkdir -p "$WT/nm"
++  printf '#!/bin/sh\nexit 0\n' > "$WT/nm/jest"
++  chmod +x "$WT/nm/jest"
++  printf 'nm/\n' >> "$(git -C "$WT" rev-parse --git-path info/exclude)"
++  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c 'PATH=$PWD/nm:$PATH; jest || exit 1; exit 0'
++  [ "$status" -eq 3 ]
++  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
++}

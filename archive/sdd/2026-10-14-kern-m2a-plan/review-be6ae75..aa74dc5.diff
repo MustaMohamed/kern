@@ -1,0 +1,269 @@
+diff --git a/scripts/exec-eval.mjs b/scripts/exec-eval.mjs
+index c26b741..d882fb9 100644
+--- a/scripts/exec-eval.mjs
++++ b/scripts/exec-eval.mjs
+@@ -2,29 +2,33 @@
+ // Execution evals for commit and finish-branch: real headless runs on a fixture repo with a bare origin
+ // and a gh stub, graded from the tool calls, the stub's call log and git state. Spends tokens: ask the
+ // user before a run. Usage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]
+-// Writes evals/snapshots/exec-<date>.json (committed) with the model, the Claude Code version, the
+-// isolation flags and each case's result. A claude run that exits non-zero, times out or cannot start
+-// is a failed case, never a pass; a missing or non-executable claude stops the run.
++// A full run writes evals/snapshots/exec-<date>.json (committed) with the model, the Claude Code version,
++// the isolation flags and each case's result; a --case run writes none. Exit 0 only when every case that
++// ran passed; 2 for a usage error, before anything runs. A claude run that exits non-zero, times out,
++// ends early or cannot start is an invalid case, never a pass; a missing or non-executable claude stops.
+ import { execFileSync } from 'node:child_process';
+ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+ import { dirname, join } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { ISOLATION, PERMISSIONS, ClaudeRunError, claudeVersion, runClaude, runProblem, toolUses, workspace } from './lib/claude-run.mjs';
+ import { GRADERS, stubMissed } from './lib/exec-grade.mjs';
++import { UsageError, parseArgs, runEval } from './lib/exec-run.mjs';
+ 
+ const ROOT = fileURLToPath(new URL('..', import.meta.url));
+ const MODEL = process.env.KERN_EVAL_MODEL || 'claude-sonnet-5-5';
+-const args = process.argv.slice(2);
+-const only = args.includes('--case') ? args[args.indexOf('--case') + 1] : null;
+-const dryRun = args.includes('--dry-run');
+-const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'exec', 'cases.json'), 'utf8')).filter((c) => !only || c.id === only);
+-if (only && cases.length === 0) throw new Error(`no case named ${only}`);
+-for (const c of cases) if (!GRADERS[c.id]) throw new Error(`no grader for ${c.id}`);
++const all = JSON.parse(readFileSync(join(ROOT, 'evals', 'exec', 'cases.json'), 'utf8'));
++for (const c of all) if (!GRADERS[c.id]) throw new Error(`no grader for ${c.id}`);
+ 
+-const results = [];
+-for (const c of cases) {
++let opts;
++try { opts = parseArgs(process.argv.slice(2), all.map((c) => c.id)); } catch (e) {
++  if (!(e instanceof UsageError)) throw e;
++  console.error(`exec-eval: ${e.message}\nusage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]`);
++  process.exit(2);
++}
++const cases = all.filter((c) => !opts.only || c.id === opts.only);
++
++function runCase(c) {
+   const prompts = [...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn];
+-  if (dryRun) { console.log(`${c.id}: ${prompts.map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`); continue; }
+   const dir = workspace(join(ROOT, 'evals', 'exec', 'fixtures', 'app'), { name: 'invoice-app', origin: true, branch: c.branch, setup: c.setup || [] });
+   try {
+     if (c.settings) { mkdirSync(join(dir, '.claude'), { recursive: true }); writeFileSync(join(dir, '.claude', 'kern.local.yml'), `${c.settings}\n`); }
+@@ -38,9 +42,7 @@ for (const c of cases) {
+       });
+     } catch (e) {
+       if (!(e instanceof ClaudeRunError) || e.fatal) throw e;
+-      results.push({ id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [] });
+-      console.log(`INVALID ${c.id}: ${e.message}`);
+-      continue;
++      return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [] };
+     }
+     const ghLog = readFileSync(log, 'utf8').split('\n').filter(Boolean);
+     const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', timeout: 60 * 1000 }).trim();
+@@ -53,19 +55,22 @@ for (const c of cases) {
+       try { g = GRADERS[c.id]({ events: run.events, ghLog, git, branch: c.branch }); }
+       catch (e) { g = { pass: false, invalid: true, reasons: [`grader error: ${e.message}`] }; }
+     }
+-    results.push({ id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status,
+-      commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command) });
+-    console.log(`${g.pass ? 'PASS' : g.invalid ? 'INVALID' : 'FAIL'} ${c.id}${g.pass ? '' : `: ${g.reasons.join('; ')}`}`);
++    return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status,
++      commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command) };
+   } finally {
+     rmSync(dirname(dir), { recursive: true, force: true });
+     rmSync(`${dir}.origin`, { recursive: true, force: true });
+   }
+ }
+-if (!dryRun && only) console.log('--case run: no snapshot written; a full run writes it');
+-if (!dryRun && !only) {
++
++function writeSnapshot(results) {
+   const out = join(ROOT, 'evals', 'snapshots', `exec-${new Date().toISOString().slice(0, 10)}.json`);
+   mkdirSync(dirname(out), { recursive: true });
+   writeFileSync(out, JSON.stringify({ model: MODEL, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, results }, null, 2) + '\n');
+   console.log(`snapshot: ${out}`);
+-  process.exit(results.length && results.every((r) => r.pass) ? 0 : 1);
+ }
++
++process.exit(runEval({
++  cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, log: console.log,
++  describe: (c) => `${c.id}: ${[...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn].map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
++}));
+diff --git a/scripts/lib/claude-run.mjs b/scripts/lib/claude-run.mjs
+index 93506bb..abcf258 100644
+--- a/scripts/lib/claude-run.mjs
++++ b/scripts/lib/claude-run.mjs
+@@ -13,14 +13,20 @@ export const PERMISSIONS = ['--permission-mode', 'acceptEdits', '--allowedTools'
+ 
+ const SETUP_TIMEOUT_MS = 60 * 1000;
+ 
+-// The only parent variables a run inherits: the shell basics, and the auth and config Claude Code reads.
+-// Every other credential in the caller's shell (GITHUB_TOKEN, AWS_*, ...) stays out.
+-const INHERITED = /^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|LANG|TERM)$|^LC_|^ANTHROPIC_|^CLAUDE_CODE_/;
++// The only parent variables a run inherits, by exact name: the shell basics and the auth and config
++// Claude Code reads. No ANTHROPIC_* or CLAUDE_* prefix: the calling session's own plumbing
++// (CLAUDE_CODE_MESSAGING_TOKEN, SESSION_ID, ...) must not reach a model that has unrestricted Bash. Every
++// other credential in the caller's shell (GITHUB_TOKEN, AWS_*, ...) stays out too.
++export const INHERITED_NAMES = new Set(['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'TERM',
++  'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
++  'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CONFIG_DIR']);
++const INHERITED_PREFIXES = ['LC_', 'KERN_EXEC_'];
++const inherited = (k) => INHERITED_NAMES.has(k) || INHERITED_PREFIXES.some((p) => k.startsWith(p));
+ 
+ // childEnv(parent, extra): the inherited variables of parent, then extra on top.
+ export function childEnv(parent, extra = {}) {
+   const env = {};
+-  for (const [k, v] of Object.entries(parent)) if (INHERITED.test(k) && v !== undefined) env[k] = v;
++  for (const [k, v] of Object.entries(parent)) if (inherited(k) && v !== undefined) env[k] = v;
+   return { ...env, ...extra };
+ }
+ 
+diff --git a/scripts/lib/exec-grade.mjs b/scripts/lib/exec-grade.mjs
+index 61d4e25..4b3b467 100644
+--- a/scripts/lib/exec-grade.mjs
++++ b/scripts/lib/exec-grade.mjs
+@@ -62,8 +62,11 @@ const messageFiles = (cmds) => gitCalls(cmds).filter((g) => g.sub === 'commit')
+ const stagesAll = (cmds) => gitCalls(cmds).some((g) => (g.sub === 'add' && g.args.some((a) => ['-A', '--all', '-u', '--update', '.', '*'].includes(a)))
+   || (g.sub === 'commit' && g.args.some((a) => a === '--all' || /^-[a-zA-Z]*a[a-zA-Z]*$/.test(a))));
+ const PR7 = /\.origin\/pull\/7(\D|$)/;
+-const proposesSplit = (text) => !/\b(not|won't|no need to|without)\s+(\w+\s+)?split/i.test(text)
+-  && /\b(propos|suggest|recommend)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|into (two|three|four|\d+|several|separate) (commits|prs|pull requests|branches)/i.test(text);
++// A heuristic on the reply's wording, not a parse: a split is proposed when the reply says so
++// (propose/suggest/recommend/consider ... split, "split into", "split this") and does not negate it
++// ("did not propose a split", "no split needed", "will not split", "no need to split").
++const proposesSplit = (text) => !/\b(not|never|won't|without|no need to)\b[^.]*\bsplit|\bno\s+split/i.test(text)
++  && /\b(propos|suggest|recommend|consider)\w*[^.]*\bsplit|\bsplit (this|it|the \w+|into)\b|\bsplitting\b|into (two|three|four|\d+|several|separate|smaller) (commits|prs|pull requests|branches)/i.test(text);
+ 
+ // ghCalls(events): for each Bash call whose result was not an error, the arguments of every gh command
+ // in it, joined by one space, as the stub logs them ("$*"). A call a hook denied never ran.
+diff --git a/scripts/lib/exec-run.mjs b/scripts/lib/exec-run.mjs
+new file mode 100644
+index 0000000..9c7516c
+--- /dev/null
++++ b/scripts/lib/exec-run.mjs
+@@ -0,0 +1,43 @@
++// The control flow of scripts/exec-eval.mjs, apart from claude, git and the filesystem so a test can
++// drive it with an injected runner: argument checking, the order of results, the snapshot rule and the
++// one place the exit code is decided.
++
++export class UsageError extends Error {}
++
++// parseArgs(args, ids): { only, dryRun }. A --case with no value or an id no case has is a usage
++// error: an unrecognised argument must never widen into a paid run of every case.
++export function parseArgs(args, ids) {
++  let only = null, dryRun = false;
++  for (let i = 0; i < args.length; i++) {
++    if (args[i] === '--dry-run') dryRun = true;
++    else if (args[i] === '--case') {
++      const v = args[i + 1];
++      if (v === undefined || v.startsWith('--')) throw new UsageError('--case needs a case id');
++      if (!ids.includes(v)) throw new UsageError(`no case named ${v}; cases: ${ids.join(', ')}`);
++      only = v;
++      i += 1;
++    } else throw new UsageError(`unknown argument ${args[i]}`);
++  }
++  return { only, dryRun };
++}
++
++// exitCode(results): 0 only when at least one case ran and every case that ran passed.
++export const exitCode = (results) => (results.length > 0 && results.every((r) => r.pass) ? 0 : 1);
++
++// runEval({ cases, only, dryRun, runCase, describe, writeSnapshot, log }): runs the cases in order, writes
++// the snapshot only for a full run, and returns the exit code for every non-dry run alike.
++export function runEval({ cases, only, dryRun, runCase, describe, writeSnapshot, log }) {
++  if (dryRun) {
++    for (const c of cases) log(describe(c));
++    return 0;
++  }
++  const results = [];
++  for (const c of cases) {
++    const r = runCase(c);
++    results.push(r);
++    log(`${r.pass ? 'PASS' : r.invalid ? 'INVALID' : 'FAIL'} ${c.id}${r.pass ? '' : `: ${r.reasons.join('; ')}`}`);
++  }
++  if (only) log('--case run: no snapshot written; a full run writes it');
++  else writeSnapshot(results);
++  return exitCode(results);
++}
+diff --git a/tests/exec-eval.test.mjs b/tests/exec-eval.test.mjs
+index dcdadf2..fb08363 100644
+--- a/tests/exec-eval.test.mjs
++++ b/tests/exec-eval.test.mjs
+@@ -9,6 +9,7 @@ import { join } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { GRADERS, gitCalls, ghCalls, shellSegments, stubMissed } from '../scripts/lib/exec-grade.mjs';
+ import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem } from '../scripts/lib/claude-run.mjs';
++import { UsageError, exitCode, parseArgs, runEval } from '../scripts/lib/exec-run.mjs';
+ 
+ const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+ const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
+@@ -206,6 +207,17 @@ test('the child environment is an allowlist: auth and config in, other credentia
+     { PATH: '/p', HOME: '/h', USER: 'u', LC_ALL: 'C', ANTHROPIC_API_KEY: 'k', CLAUDE_CODE_OAUTH_TOKEN: 't', GH_TOKEN: 'invalid', GH_HOST: 'example.invalid', KERN_EXEC_LOG: '/l' });
+ });
+ 
++test('the calling session\'s own plumbing and other credentials never reach the child', () => {
++  const session = ['CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_BRIDGE_SESSION_ID',
++    'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'ANTHROPIC_FOO', 'CLAUDE_FOO', 'NPM_TOKEN', 'HTTPS_PROXY'];
++  const wanted = ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'TERM', 'LC_CTYPE', 'KERN_EXEC_LOG', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN',
++    'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CONFIG_DIR'];
++  const parent = Object.fromEntries([...session, ...wanted].map((k) => [k, 'v']));
++  const env = childEnv(parent);
++  for (const k of session) assert.ok(!(k in env), `${k} must be absent`);
++  assert.deepEqual(Object.keys(env).sort(), [...wanted].sort());
++});
++
+ test('runClaude gives the child that allowlist, not the caller environment', () => {
+   const cwd = work();
+   process.env.GITHUB_TOKEN = 'leak-check';
+@@ -228,3 +240,52 @@ test('runProblem: only a clean exit with a success result may be graded', () =>
+   assert.match(runProblem(run('echo \'{"type":"result","subtype":"success"}\'; exit 2')), /exited 2/);
+   assert.equal(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":false,"result":"x"}\'; exit 0')), '');
+ });
++
++const result = (id, pass, invalid = false) => ({ id, pass, invalid, reasons: pass ? [] : ['why'] });
++const drive = ({ only = null, outcomes }) => {
++  const lines = [], snaps = [], ran = [];
++  const cases = [{ id: 'a' }, { id: 'b' }].filter((c) => !only || c.id === only);
++  const code = runEval({ cases, only, dryRun: false, describe: (c) => c.id, log: (l) => lines.push(l),
++    runCase: (c) => { ran.push(c.id); return result(c.id, outcomes[c.id]); }, writeSnapshot: (r) => snaps.push(r) });
++  return { code, lines, snaps, ran };
++};
++
++test('exit code: 0 only when every case that ran passed, for a full run and a --case run alike', () => {
++  assert.equal(drive({ outcomes: { a: true, b: true } }).code, 0);
++  assert.equal(drive({ outcomes: { a: true, b: false } }).code, 1);
++  assert.equal(drive({ only: 'a', outcomes: { a: true, b: false } }).code, 0, 'b did not run');
++  assert.equal(drive({ only: 'b', outcomes: { a: true, b: false } }).code, 1, 'a failing --case run is not a pass');
++  assert.equal(exitCode([]), 1, 'nothing ran is not a pass');
++  assert.equal(exitCode([result('x', false, true)]), 1, 'an invalid case is not a pass');
++});
++
++test('snapshot: a full run writes it with every result; a --case run writes none', () => {
++  const full = drive({ outcomes: { a: true, b: false } });
++  assert.equal(full.snaps.length, 1);
++  assert.deepEqual(full.snaps[0].map((r) => r.id), ['a', 'b']);
++  const one = drive({ only: 'a', outcomes: { a: true } });
++  assert.deepEqual(one.snaps, []);
++  assert.deepEqual(one.ran, ['a']);
++  assert.match(one.lines.join('\n'), /no snapshot written/);
++});
++
++test('arguments: a --case with no value, a flag as its value or an unknown id is a usage error before any run', () => {
++  const ids = ['a', 'b'];
++  assert.deepEqual(parseArgs(['--case', 'b'], ids), { only: 'b', dryRun: false });
++  assert.deepEqual(parseArgs(['--dry-run'], ids), { only: null, dryRun: true });
++  for (const bad of [['--case'], ['--case', '--dry-run'], ['--case', 'zzz'], ['--cas', 'a'], ['a']]) assert.throws(() => parseArgs(bad, ids), UsageError, bad.join(' '));
++  const eval_ = (...a) => spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/exec-eval.mjs', import.meta.url)), ...a], { encoding: 'utf8', env: { PATH: '/nonexistent' } });
++  for (const a of [['--case'], ['--case', 'nope']]) {
++    const r = eval_(...a);
++    assert.equal(r.status, 2, a.join(' '));
++    assert.match(r.stderr, /usage: node scripts\/exec-eval\.mjs/);
++    assert.equal(r.stdout, '', 'nothing ran');
++  }
++});
++
++test('finish-split-nine-files: negated replies fail, real proposals pass', () => {
++  const none = git({ 'rev-list --count main..feat/many': '0' });
++  const verdict = (text) => GRADERS['finish-split-nine-files']({ events: [say(text)], ghLog: [], git: none, branch: 'feat/many' }).pass;
++  for (const no of ['I did not propose a split.', 'No split needed here.', 'There is no need to split this.', 'I will not split this branch.', 'Never split it.']) assert.equal(verdict(no), false, no);
++  for (const yes of ['I propose splitting the branch.', 'Split into two PRs?', 'Consider splitting into smaller PRs.', 'I recommend a split: 5 and 4 files.']) assert.equal(verdict(yes), true, yes);
++});

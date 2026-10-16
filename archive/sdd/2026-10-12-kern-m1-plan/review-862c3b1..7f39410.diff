@@ -1,0 +1,311 @@
+# Review package: 862c3b1..7f39410
+
+## Commits
+7f39410 M1: read hook JSON with POSIX awk
+
+## Files changed
+ hooks/lib/json.sh         | 101 ++++++++++++++++++++++++++++++++++++++++++++++
+ tests/helpers/common.bash |  83 +++++++++++++++++++++++++++++++++++++
+ tests/hooks/json.bats     |  71 ++++++++++++++++++++++++++++++++
+ tests/run-bats            |  19 +++++++++
+ 4 files changed, 274 insertions(+)
+
+## Diff
+diff --git a/hooks/lib/json.sh b/hooks/lib/json.sh
+new file mode 100644
+index 0000000..059afb8
+--- /dev/null
++++ b/hooks/lib/json.sh
+@@ -0,0 +1,101 @@
++# shellcheck shell=bash
++# JSON helpers for kern hooks. POSIX awk only, so behaviour is the same with or without jq.
++# All functions read the JSON document from $KERN_INPUT.
++
++# Scanner shared by json_get and json_get_raw. Prints the value of the first object key equal to
++# `key`. mode=str prints a decoded string value; mode=raw prints the raw JSON text of any value.
++# Exit 0 found, 1 absent (or, in str mode, not a string), 2 malformed input.
++_KERN_JSON_AWK='
++function skip_ws(p) { while (p <= n && index(" \t\r\n", substr(buf, p, 1)) > 0) p++; return p }
++function str_end(p,   d) {
++  # p is the index just after an opening quote; returns the index of the closing quote, or 0.
++  while (p <= n) {
++    d = substr(buf, p, 1)
++    if (d == "\\") { p += 2; continue }
++    if (d == "\"") return p
++    p++
++  }
++  return 0
++}
++function decode(s) {
++  gsub(/\\\\/, "\001", s)
++  gsub(/\\"/, "\"", s); gsub(/\\\//, "/", s)
++  gsub(/\\n/, "\n", s); gsub(/\\t/, "\t", s); gsub(/\\r/, "\r", s)
++  gsub(/\\b/, "\b", s); gsub(/\\f/, "\f", s)
++  gsub(/\001/, "\\", s)
++  return s
++}
++function raw_end(p,   c, depth, e) {
++  c = substr(buf, p, 1)
++  if (c == "\"") { e = str_end(p + 1); return e }
++  if (c == "{" || c == "[") {
++    depth = 0
++    while (p <= n) {
++      c = substr(buf, p, 1)
++      if (c == "\"") { e = str_end(p + 1); if (!e) return 0; p = e + 1; continue }
++      if (c == "{" || c == "[") depth++
++      else if (c == "}" || c == "]") { depth--; if (depth == 0) return p }
++      p++
++    }
++    return 0
++  }
++  while (p <= n && index(",}] \t\r\n", substr(buf, p, 1)) == 0) p++
++  return p - 1
++}
++{ buf = buf (NR > 1 ? "\n" : "") $0 }
++END {
++  n = length(buf); i = 1
++  while (i <= n) {
++    c = substr(buf, i, 1)
++    if (c != "\"") { i++; continue }
++    e = str_end(i + 1)
++    if (!e) exit 2
++    tok = substr(buf, i + 1, e - i - 1)
++    i = e + 1
++    k = skip_ws(i)
++    if (substr(buf, k, 1) != ":" || tok != key) continue
++    k = skip_ws(k + 1)
++    if (mode == "str") {
++      if (substr(buf, k, 1) != "\"") exit 1
++      e = str_end(k + 1)
++      if (!e) exit 2
++      printf "%s", decode(substr(buf, k + 1, e - k - 1))
++      exit 0
++    }
++    e = raw_end(k)
++    if (!e) exit 2
++    printf "%s", substr(buf, k, e - k + 1)
++    exit 0
++  }
++  exit 1
++}'
++
++# json_get KEY: decoded string value of the first "KEY": whose value is a string.
++json_get() {
++  printf '%s' "${KERN_INPUT-}" | LC_ALL=C awk -v key="$1" -v mode=str "$_KERN_JSON_AWK"
++}
++
++# json_get_raw KEY: raw JSON text of the first "KEY": value (object, array, string or literal).
++json_get_raw() {
++  printf '%s' "${KERN_INPUT-}" | LC_ALL=C awk -v key="$1" -v mode=raw "$_KERN_JSON_AWK"
++}
++
++# json_escape: stdin escaped for the body of a JSON string, without the surrounding quotes.
++json_escape() {
++  local tab cr
++  tab=$(printf '\t'); cr=$(printf '\r')
++  LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/${tab}/\\\\t/g" -e "s/${cr}/\\\\r/g" |
++    LC_ALL=C awk 'BEGIN { sep = "" } { printf "%s%s", sep, $0; sep = "\\n" }'
++}
++
++# json_ok: exit 0 when $KERN_INPUT is one object: starts with { and ends with } after trimming.
++json_ok() {
++  local t
++  t=$(printf '%s' "${KERN_INPUT-}" | tr -d ' \t\r\n')
++  case "$t" in '{'*'}') return 0 ;; *) return 1 ;; esac
++}
++
++# ti_get KEY: json_get applied to the hook's tool_input object ($TOOL_INPUT, set by pre-tool-use).
++ti_get() {
++  KERN_INPUT="${TOOL_INPUT-}" json_get "$1"
++}
+diff --git a/tests/helpers/common.bash b/tests/helpers/common.bash
+new file mode 100644
+index 0000000..e2dc275
+--- /dev/null
++++ b/tests/helpers/common.bash
+@@ -0,0 +1,83 @@
++# shellcheck shell=bash
++# Shared bats helpers for kern hook and script tests.
++
++# kern_root: absolute path of the kern repo (two levels above this file).
++kern_root() {
++  cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P
++}
++
++# make_repo DIR: a git repo on main with user config, one commit (README.md), and a bare origin
++# at DIR.origin with main pushed and refs/remotes/origin/HEAD set.
++make_repo() {
++  local dir="$1"
++  git init -q -b main "$dir"
++  git -C "$dir" config user.name "Test User"
++  git -C "$dir" config user.email "test@example.com"
++  git -C "$dir" config commit.gpgsign false
++  printf 'readme\n' >"$dir/README.md"
++  git -C "$dir" add README.md
++  git -C "$dir" commit -q -m "init"
++  git init -q --bare -b main "$dir.origin"
++  git -C "$dir" remote add origin "$dir.origin"
++  git -C "$dir" push -q origin main
++  git -C "$dir" remote set-head origin main >/dev/null
++}
++
++# kern_env DIR: isolates HOME and plugin data under the test tmpdir and points CWD at DIR.
++kern_env() {
++  export HOME="$BATS_TEST_TMPDIR/home"
++  export CLAUDE_PLUGIN_DATA="$BATS_TEST_TMPDIR/data"
++  export CLAUDE_PLUGIN_ROOT
++  CLAUDE_PLUGIN_ROOT="$(kern_root)"
++  mkdir -p "$HOME/.claude" "$CLAUDE_PLUGIN_DATA"
++  unset CLAUDE_CODE_ENTRYPOINT
++  export CWD="$1"
++}
++
++# payload EVENT JSON_FIELDS: a hook input object with session_id test-session and cwd $CWD.
++# JSON_FIELDS is the inside of an object, for example '"tool_name":"Bash","tool_input":{...}'.
++payload() {
++  printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"%s",%s}' "$CWD" "$1" "$2"
++}
++
++# bash_payload COMMAND: a PreToolUse payload for the Bash tool. COMMAND must not hold a double quote
++# or a backslash; tests that need them write the JSON by hand.
++bash_payload() {
++  payload PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"}"
++}
++
++# run_guard PAYLOAD [GUARDS]: runs hooks/pre-tool-use with PAYLOAD on stdin.
++run_guard() {
++  local guards="${2-}"
++  run env KERN_GUARDS="$guards" bash "$(kern_root)/hooks/pre-tool-use" <<<"$1"
++}
++
++# decision_of OUTPUT: allow|ask|deny|none.
++decision_of() {
++  local d
++  d=$(printf '%s' "$1" | sed -n 's/.*"permissionDecision":"\([a-z]*\)".*/\1/p')
++  printf '%s\n' "${d:-none}"
++}
++
++# set_autopilot on|off: writes the session state the hooks read (tests only; G16 guards real sessions).
++set_autopilot() {
++  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
++  printf 'voice: normal\nsurface: auto\nautopilot: %s\nsince: 2026-10-12T00:00:00Z\n' "$1" \
++    >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
++}
++
++# fake_gh: puts a stub `gh` first on PATH. FAKE_GH_STATES (comma list) answers `pr list`,
++# FAKE_GH_RC its exit code, FAKE_GH_ME answers `api user`, FAKE_GH_AUTHOR answers `pr view`.
++fake_gh() {
++  mkdir -p "$BATS_TEST_TMPDIR/bin"
++  cat >"$BATS_TEST_TMPDIR/bin/gh" <<'GH'
++#!/usr/bin/env bash
++case "$*" in
++  "pr list"*) [ -n "${FAKE_GH_STATES-}" ] && printf '%s\n' "$FAKE_GH_STATES" | tr ',' '\n'; exit "${FAKE_GH_RC:-0}" ;;
++  "api user"*) printf '%s\n' "${FAKE_GH_ME:-me}" ;;
++  "pr view"*) printf '%s\n' "${FAKE_GH_AUTHOR:-someone}" ;;
++esac
++GH
++  chmod +x "$BATS_TEST_TMPDIR/bin/gh"
++  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
++}
+diff --git a/tests/hooks/json.bats b/tests/hooks/json.bats
+new file mode 100644
+index 0000000..1be4401
+--- /dev/null
++++ b/tests/hooks/json.bats
+@@ -0,0 +1,71 @@
++#!/usr/bin/env bats
++# hooks/lib/json.sh: string decoding, raw values, escaping, malformed input.
++
++load ../helpers/common
++
++setup() {
++  # shellcheck source=hooks/lib/json.sh
++  . "$(kern_root)/hooks/lib/json.sh"
++}
++
++@test "json_get decodes escapes and ignores a key-like string inside a value" {
++  KERN_INPUT='{"description":"has \"command\": inside","command":"git commit -m \"a b\"\nnext \\ end"}'
++  run json_get command
++  [ "$status" -eq 0 ]
++  [ "$output" = 'git commit -m "a b"
++next \ end' ]
++}
++
++@test "json_get: absent key is 1, a non-string value is 1, unterminated input is 2" {
++  KERN_INPUT='{"n":5}'
++  run json_get missing
++  [ "$status" -eq 1 ]
++  run json_get n
++  [ "$status" -eq 1 ]
++  KERN_INPUT='{"a":"open'
++  run json_get a
++  [ "$status" -eq 2 ]
++}
++
++@test "json_get_raw returns objects, arrays and literals with nested braces in strings" {
++  KERN_INPUT='{"tool_input":{"command":"echo }","x":[1,{"y":"]"}]},"n":12,"b":true}'
++  run json_get_raw tool_input
++  [ "$output" = '{"command":"echo }","x":[1,{"y":"]"}]}' ]
++  run json_get_raw n
++  [ "$output" = 12 ]
++  run json_get_raw b
++  [ "$output" = true ]
++}
++
++@test "json_escape round-trips quotes, backslashes, tabs and newlines" {
++  run bash -c ". '$(kern_root)/hooks/lib/json.sh'; printf 'a \"q\"\tb\\\\c\nd' | json_escape"
++  [ "$output" = 'a \"q\"\tb\\c\nd' ]
++}
++
++@test "json_ok accepts one object with surrounding whitespace and rejects the rest" {
++  KERN_INPUT='  {"a":1}
++'
++  run json_ok
++  [ "$status" -eq 0 ]
++  KERN_INPUT='[1]'
++  run json_ok
++  [ "$status" -eq 1 ]
++  KERN_INPUT=''
++  run json_ok
++  [ "$status" -eq 1 ]
++}
++
++@test "ti_get reads from TOOL_INPUT" {
++  TOOL_INPUT='{"file_path":"/a b/c"}'
++  run ti_get file_path
++  [ "$output" = "/a b/c" ]
++}
++
++@test "a 200 KB value parses in under 5 seconds" {
++  big=$(head -c 200000 /dev/zero | tr '\0' 'x')
++  KERN_INPUT="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/f\",\"content\":\"$big\"}}"
++  start=$(date +%s)
++  run json_get file_path
++  [ "$output" = /f ]
++  [ $(($(date +%s) - start)) -lt 5 ]
++}
+diff --git a/tests/run-bats b/tests/run-bats
+new file mode 100755
+index 0000000..0d8490b
+--- /dev/null
++++ b/tests/run-bats
+@@ -0,0 +1,19 @@
++#!/usr/bin/env bash
++# Runs bats with /bin/bash first on PATH on macOS, so hooks are tested on the bash 3.2 they meet there.
++set -euo pipefail
++# bash 3.2 does not fail a test on a false [[ ]] unless it is the test's last command, so every
++# [[ ]] assertion must end with || false. Refuse to run while a bare one exists.
++root=$(cd "$(dirname "$0")/.." && pwd)
++bare=$(find "$root/tests" -name '*.bats' -exec grep -nHE '^[[:space:]]+\[\[ .* \]\][[:space:]]*$' {} + || true)
++if [ -n "$bare" ]; then
++  echo "end each [[ ]] assertion with || false:" >&2
++  printf '%s\n' "$bare" >&2
++  exit 1
++fi
++if [ "$(uname)" = Darwin ] && [ -x /bin/bash ]; then
++  shim=$(mktemp -d)
++  trap 'rm -rf "$shim"' EXIT
++  ln -s /bin/bash "$shim/bash"
++  PATH="$shim:$PATH"
++fi
++bats "$@"

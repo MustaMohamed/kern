@@ -1,0 +1,373 @@
+### Task 5: Floor scan (G7 as a script) with a lowered-bar class
+
+**Files:**
+- Create: `scripts/lib/test-paths.awk`, `scripts/lib/floor-scan.awk`, `scripts/floor-scan`
+- Modify: `kernel/settings.md` (one row), `CHANGELOG.md`
+- Test: `tests/scripts/floor-scan.bats`
+
+**Interfaces:**
+- Consumes: a unified git diff file, for example a `wt-diff` package or `.patch` (Task 2); `settings_keys`, `settings_get`, `_settings_files` (M1) for `ratchet.<metric>` keys.
+- Produces:
+  - `floor-scan DIFF_FILE` prints one line per hit, `path:line<TAB>class<TAB>text`, with class one of `silenced-checker`, `test-made-easier`, `test-deleted`, `assertion-removed`, `unfinished-work`, `debug-print`, `bar-lowered`; exit 0 clean, 1 hits, 2 when the input is unreadable or has no `diff --git` header. Line numbers are new-file lines, except `assertion-removed` and a removed CI step (old-file lines) and `test-deleted` (0). Doc files (`.md`, `.mdx`, `.txt`, `.rst`, `.adoc`) get no added-line hits. A line removed and added again in the same file, moved or only re-spaced or re-quoted, is not a hit. Hunk line counts decide where a hunk ends, so a content line that starts with `++` or `--` is content.
+  - `bar-lowered` covers: a coverage threshold (`branches`, `lines`, `functions`, `statements`, `fail_under`, `cov-fail-under`, `minimum`, `threshold`, `target`) moved down in a coverage config or CI file; `strict`, `noImplicitAny`, `strictNullChecks`, `noUncheckedIndexedAccess` or `noImplicitReturns` set to false, or `"strict": true` removed, in a tsconfig; a lint rule set to `off` or `0`, rubocop `Enabled: false`, or a ruff or flake8 `ignore`; `continue-on-error: true`, `allow_failure: true` or `|| true` added in CI, or a CI `run:`, `script:` or `uses:` step removed; and any `ratchet.<metric>` value moved the loose way.
+  - Settings key `ratchet.<metric>`: `<path>:<key>`, with `:max` appended when a higher value loosens the bar (a size budget); lower is looser by default.
+  - `scripts/lib/test-paths.awk`: `is_test(path)`, and with `-v print_tests=1` it prints the test paths among its input lines. floor-scan and probe (Task 6) both load it, so they agree on what a test is.
+  - Consumed by `self-review` (Task 23), the seeded-diff set (Task 7) and, in M3, the G7 Stop hook.
+
+- [ ] **Step 1: Write the failing tests**
+
+```bash
+#!/usr/bin/env bats
+# tests/scripts/floor-scan.bats
+
+bats_require_minimum_version 1.5.0
+load ../helpers/wt
+
+setup() {
+  wt_test_env
+  REPO="$TMP/repo"
+  make_fixture "$REPO"
+  cd "$REPO"
+  mkdir -p test src .github/workflows
+  printf "test('sum', () => {\n  expect(sum(1, 2)).toBe(3);\n  expect(sum(0, 0)).toBe(0);\n});\n" > test/sum.test.js
+  printf "test('old', () => {\n  expect(1).toBe(1);\n});\n" > test/old.test.js
+  printf "export function run() {\n  return 1;\n}\n" > src/a.js
+  printf '# Readme\n' > README.md
+  printf "module.exports = {\n  coverageThreshold: { global: {\n    branches: 80,\n    lines: 90,\n  } },\n};\n" > jest.config.js
+  printf '{\n  "compilerOptions": {\n    "strict": true\n  }\n}\n' > tsconfig.json
+  printf '{\n  "rules": {\n    "no-console": "error"\n  }\n}\n' > .eslintrc.json
+  printf 'jobs:\n  test:\n    steps:\n      - run: npm ci\n      - run: npm test\n' > .github/workflows/ci.yml
+  git add . && git commit --quiet -m base && git push --quiet origin main
+}
+
+scan() {
+  git add -A
+  git diff --cached > "$TMP/d.diff"
+  run --separate-stderr bash "$KERN_ROOT/scripts/floor-scan" "$TMP/d.diff"
+}
+
+has() { printf '%s\n' "$output" | grep -qE "$1" || { echo "no match for $1 in:"; echo "$output"; false; }; }
+count() { printf '%s\n' "$output" | grep -cE "$1" || true; }
+
+@test "each floor move is reported with its class" {
+  printf "test('sum', () => {\n  expect(sum(1, 2)).toBe(3);\n});\ntest.skip('later', () => {});\n" > test/sum.test.js
+  rm test/old.test.js
+  printf "export function run() {\n  // eslint-disable-next-line no-console\n  console.log('debug');\n  try { go(); } catch (e) {}\n  // TODO: handle errors\n  return 1;\n}\n" > src/a.js
+  printf '# Readme\nTODO: write docs\n' > README.md
+  scan
+  [ "$status" -eq 1 ]
+  has $'^src/a\\.js:2\tsilenced-checker\t'
+  has $'^src/a\\.js:3\tdebug-print\t'
+  has $'^src/a\\.js:4\tunfinished-work\t'
+  has $'^src/a\\.js:5\tunfinished-work\t'
+  has $'^test/sum\\.test\\.js:4\ttest-made-easier\t'
+  has $'^test/sum\\.test\\.js:3\tassertion-removed\t'
+  has $'^test/old\\.test\\.js:0\ttest-deleted\t'
+  [ "$(count '^README\.md:')" -eq 0 ]
+}
+
+@test "a clean diff exits 0 with no output" {
+  printf "export function run() {\n  return 2;\n}\n" > src/a.js
+  scan
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "focused tests count as test-made-easier" {
+  printf "test.only('sum', () => {\n  expect(sum(1, 2)).toBe(3);\n  expect(sum(0, 0)).toBe(0);\n});\n" > test/sum.test.js
+  scan
+  [ "$status" -eq 1 ]
+  has $'^test/sum\\.test\\.js:1\ttest-made-easier\t'
+}
+
+@test "type escapes and other suppressions are silenced-checker" {
+  printf "export function run(x) {\n  const a = x as any;\n  const b = x as unknown as string;\n  # pragma: no cover\n  # nosec\n  # pyright: ignore\n  // NOLINT\n  return a;\n}\n" > src/a.js
+  scan
+  [ "$(count $'\tsilenced-checker\t')" -eq 6 ]
+}
+
+@test "a Rust #[ignore] is test-made-easier" {
+  printf '#[test]\n#[ignore]\nfn slow() {}\n' > test/slow.rs
+  scan
+  has $'^test/slow\\.rs:2\ttest-made-easier\t'
+}
+
+@test "a lowered coverage threshold is bar-lowered; a raised one is not" {
+  sed -i.bak 's/branches: 80/branches: 70/; s/lines: 90/lines: 95/' jest.config.js && rm jest.config.js.bak
+  scan
+  [ "$status" -eq 1 ]
+  has $'^jest\\.config\\.js:3\tbar-lowered\tthreshold branches moved from 80 to 70$'
+  [ "$(count 'lines moved')" -eq 0 ]
+}
+
+@test "strict typing turned off or removed is bar-lowered" {
+  printf '{\n  "compilerOptions": {\n    "strict": false\n  }\n}\n' > tsconfig.json
+  scan
+  has $'^tsconfig\\.json:3\tbar-lowered\t"strict": false'
+  has $'^tsconfig\\.json:3\tbar-lowered\tstrict removed'
+}
+
+@test "a lint rule turned off is bar-lowered" {
+  printf '{\n  "rules": {\n    "no-console": "off"\n  }\n}\n' > .eslintrc.json
+  scan
+  has $'^\\.eslintrc\\.json:3\tbar-lowered\t'
+}
+
+@test "a CI step removed or made non-blocking is bar-lowered" {
+  printf 'jobs:\n  test:\n    continue-on-error: true\n    steps:\n      - run: npm ci\n' > .github/workflows/ci.yml
+  scan
+  has $'^\\.github/workflows/ci\\.yml:3\tbar-lowered\tcontinue-on-error: true'
+  has $'^\\.github/workflows/ci\\.yml:5\tbar-lowered\tCI step removed: '
+}
+
+@test "a ratchet.<metric> key guards its value in both directions" {
+  mkdir -p .claude
+  printf 'ratchet.bundle: size.json:limit:max\nratchet.score: score.json:floor\n' > .claude/kern.local.yml
+  printf '{ "limit": 100 }\n' > size.json
+  printf '{ "floor": 60 }\n' > score.json
+  git add size.json score.json && git commit --quiet -m sizes
+  printf '{ "limit": 120 }\n' > size.json
+  printf '{ "floor": 50 }\n' > score.json
+  scan
+  has $'^size\\.json:1\tbar-lowered\tratchet\\.bundle moved from 100 to 120$'
+  has $'^score\\.json:1\tbar-lowered\tratchet\\.score moved from 60 to 50$'
+}
+
+@test "a reformatted or moved assertion is not removed" {
+  printf "test('sum', () => {\n  expect(sum(0, 0)).toBe(0);\n  expect( sum(1, 2) ).toBe( 3 )\n});\n" > test/sum.test.js
+  scan
+  [ "$status" -eq 0 ]
+  [ "$(count 'assertion-removed')" -eq 0 ]
+}
+
+@test "a renamed test file is not a deleted test" {
+  git mv test/old.test.js test/older.test.js
+  scan
+  [ "$status" -eq 0 ]
+  [ "$(count 'test-deleted')" -eq 0 ]
+}
+
+@test "content lines that start with ++ or -- are content, not headers" {
+  printf 'let i = 0;\n--i;\n' > src/b.js
+  git add src/b.js && git commit --quiet -m b
+  printf 'let i = 0;\n++i;\nconsole.log(i);\n' > src/b.js
+  scan
+  has $'^src/b\\.js:3\tdebug-print\t'
+  [ "$(count '^src/b\.js:2')" -eq 0 ]
+}
+
+@test "an untracked new file is scanned through its intent-to-add diff" {
+  printf 'debugger;\n' > src/new.js
+  git add -N src/new.js
+  git diff > "$TMP/n.diff"
+  run --separate-stderr bash "$KERN_ROOT/scripts/floor-scan" "$TMP/n.diff"
+  has $'^src/new\\.js:1\tdebug-print\t'
+}
+
+@test "a wt-diff package is read past its header sections" {
+  wt=$(bash "$KERN_ROOT/scripts/wt-new" fs 2> /dev/null)
+  t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$wt")
+  printf "export function run() {\n  debugger;\n}\n" > "$wt/src/a.js"
+  pkg=$(bash "$KERN_ROOT/scripts/wt-diff" "$wt" "$t0" --out "$TMP/p.diff" | head -n 1)
+  run --separate-stderr bash "$KERN_ROOT/scripts/floor-scan" "$pkg"
+  [ "$status" -eq 1 ]
+  has $'^src/a\\.js:2\tdebug-print\t'
+}
+
+@test "input with no diff --git header exits 2; an unreadable input exits 2" {
+  printf 'M\tsrc/a.js\n' > "$TMP/notdiff"
+  run --separate-stderr bash "$KERN_ROOT/scripts/floor-scan" "$TMP/notdiff"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"no diff --git header"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/floor-scan" "$TMP/missing.diff"
+  [ "$status" -eq 2 ]
+}
+
+@test "suppressions in a doc file are not hits" {
+  printf '# Readme\nUse `// eslint-disable` sparingly. console.log is fine in examples.\n' > README.md
+  scan
+  [ "$status" -eq 0 ]
+}
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `tests/run-bats tests/scripts/floor-scan.bats`
+Expected: every test fails; `scripts/floor-scan: No such file or directory`.
+
+- [ ] **Step 3: Write `scripts/lib/test-paths.awk`**
+
+```awk
+# is_test(p): p is a test file path. floor-scan and probe both load this file, so they agree on what a
+# test is. Run with -v print_tests=1 to print the test paths among input lines.
+function is_test(p) {
+  return p ~ /(^|\/)(test|tests|__tests__|spec|specs)\// || p ~ /[._-](test|spec)\.[A-Za-z0-9]+$/ || p ~ /_test\.go$/ || p ~ /(^|\/)test_[^\/]*\.py$/
+}
+print_tests && is_test($0) { print }
+```
+
+- [ ] **Step 4: Write `scripts/lib/floor-scan.awk`**
+
+```awk
+# floor-scan's program. Load after test-paths.awk (is_test). Reads a unified git diff; prints
+# path:line<TAB>class<TAB>text per hit and exits 1 on any hit. ENVIRON["RATCHETS"] holds
+# metric<TAB>path<TAB>key<TAB>min|max lines from ratchet.<metric> settings.
+# Patterns adapted from addyosmani/agent-skills constraint-driven-development/references/floor-guard.md (MIT).
+function is_doc(p) { return p ~ /\.(md|mdx|txt|rst|adoc)$/ }
+function is_ci(p) { return p ~ /(^|\/)\.github\/workflows\/[^\/]+\.ya?ml$|(^|\/)\.gitlab-ci\.ya?ml$|(^|\/)\.circleci\/config\.ya?ml$|(^|\/)azure-pipelines\.ya?ml$|(^|\/)Jenkinsfile$/ }
+function is_lintcfg(p) { return p ~ /(^|\/)(\.eslintrc[^\/]*|eslint\.config\.[a-z]+|biome\.jsonc?|\.rubocop\.ya?ml|ruff\.toml|\.flake8|setup\.cfg|pyproject\.toml|\.golangci\.ya?ml)$/ }
+function is_tscfg(p) { return p ~ /(^|\/)tsconfig[^\/]*\.json$/ }
+function norm(s) { gsub(/[ \t]/, "", s); gsub(/"/, "'", s); sub(/[;,]+$/, "", s); return s }
+function hit(p, ln, cls, txt) {
+  sub(/^[ \t]+/, "", txt)
+  if (length(txt) > 120) txt = substr(txt, 1, 120)
+  printf "%s:%d\t%s\t%s\n", p, ln, cls, txt
+  hits++
+}
+# thr(t): sets K and V to a threshold key and its number found in t; returns 1 when found.
+function thr(t, keys,   s) {
+  if (!match(t, "(" keys ")[\"']?[ \t]*[:=][ \t]*[0-9]+(\\.[0-9]+)?")) return 0
+  s = substr(t, RSTART, RLENGTH)
+  K = s; sub(/["']?[ \t]*[:=].*/, "", K)
+  V = s; sub(/^.*[:=][ \t]*/, "", V)
+  return 1
+}
+function added_line(p, ln, t) {
+  if (is_doc(p)) return
+  if (t ~ /@ts-ignore|@ts-nocheck|@ts-expect-error|eslint-disable|biome-ignore|#[ ]*noqa|#[ ]*type:[ ]*ignore|istanbul ignore|c8 ignore|nosemgrep|gitleaks:allow|Stryker disable|@SuppressWarnings|\/\/[ ]*nolint|NOLINT|pylint:[ ]*disable|rubocop:disable|pyright:[ ]*ignore|pragma:[ ]*no cover|#[ ]*nosec|#\[allow\(|(^|[^A-Za-z_])as[ \t]+any([^A-Za-z0-9_]|$)|as[ \t]+unknown[ \t]+as[ \t]/) hit(p, ln, "silenced-checker", t)
+  if (t ~ /\.(skip|todo)[(.]|(^|[^A-Za-z0-9_.])(xit|xdescribe|xtest|fit|fdescribe)\(|\.only\(|@pytest\.mark\.(skip|xfail)|t\.Skip\(|@Disabled|@Ignore|#\[ignore\]/) hit(p, ln, "test-made-easier", t)
+  if (t ~ /catch[ ]*(\([^)]*\))?[ ]*\{[ ]*\}|except[^:]*:[ ]*pass[ ]*$|(^|[^A-Za-z])(TODO|FIXME)([^A-Za-z]|$)|[Nn]ot implemented|unimplemented!\(|todo!\(/) hit(p, ln, "unfinished-work", t)
+  if (t ~ /console\.(log|debug|trace)\(|(^|[^A-Za-z0-9_.])debugger([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.])print\(|fmt\.Print(ln|f)?\(|binding\.pry|byebug|var_dump\(|dbg!\(|\[kern-dbg\]/) hit(p, ln, "debug-print", t)
+  if (is_ci(p) && t ~ /continue-on-error:[ \t]*true|allow_failure:[ \t]*true|\|\|[ \t]*(true|exit 0|:)[ \t]*$/) hit(p, ln, "bar-lowered", t)
+  if (is_tscfg(p) && t ~ /"(strict|noImplicitAny|strictNullChecks|noUncheckedIndexedAccess|noImplicitReturns)"[ \t]*:[ \t]*false/) hit(p, ln, "bar-lowered", t)
+  if (is_lintcfg(p) && (t ~ /:[ \t]*["']off["'][ \t]*,?[ \t]*$|:[ \t]*0[ \t]*,?[ \t]*$|Enabled:[ \t]*false|(^|[ \t])(extend-)?ignore[ \t]*=|per-file-ignores/)) hit(p, ln, "bar-lowered", t)
+  if (p ~ /(^|\/)package\.json$/ && t ~ /:[ \t]*["']off["'][ \t]*,?[ \t]*$/) hit(p, ln, "bar-lowered", t)
+}
+# flush: the buffered lines of one file, paired so a moved or reformatted line is not a change.
+function flush(   i, t, k, m, d) {
+  if (file == "") return
+  for (i = 1; i <= na; i++) if (!(norm(at[i]) in rset)) added_line(file, al[i], at[i])
+  for (i = 1; i <= nr; i++) {
+    t = rt[i]
+    if (norm(t) in aset) continue
+    if (is_test(file) && !deleted && t ~ /(^|[^A-Za-z_])(expect|assert|should)([^A-Za-z_]|$)/) hit(file, rl[i], "assertion-removed", t)
+    if (is_ci(file) && t ~ /^[ \t]*-?[ \t]*(run|script|uses):/) hit(file, rl[i], "bar-lowered", "CI step removed: " t)
+    if (is_tscfg(file) && t ~ /"strict"[ \t]*:[ \t]*true/) hit(file, rl[i], "bar-lowered", "strict removed: " t)
+  }
+  # Thresholds: the k-th removed and k-th added value of one key in this file, in a coverage or
+  # ratchet location. min: lowering loosens; max: raising loosens.
+  for (k in rk) delete rk[k]
+  for (k in ak) delete ak[k]
+  for (i = 1; i <= nr; i++) if (thr(rt[i], tkeys)) { rk[K]++; rv[K, rk[K]] = V }
+  for (i = 1; i <= na; i++) if (thr(at[i], tkeys)) {
+    ak[K]++; m = ak[K]
+    if (!((K, m) in rv)) continue
+    d = (K in dir) ? dir[K] : "min"
+    if ((d == "min" && V + 0 < rv[K, m] + 0) || (d == "max" && V + 0 > rv[K, m] + 0))
+      hit(file, al[i], "bar-lowered", ((K in metric) ? "ratchet." metric[K] : "threshold " K) " moved from " rv[K, m] " to " V)
+  }
+  for (k in rv) delete rv[k]
+}
+function newfile(   f) {
+  flush()
+  na = 0; nr = 0; deleted = 0; file = ""; old = ""
+  for (f in aset) delete aset[f]
+  for (f in rset) delete rset[f]
+  for (f in dir) delete dir[f]
+  for (f in metric) delete metric[f]
+}
+function setkeys(   i, n, r, q) {
+  tkeys = (file ~ /(jest|vitest|vite|karma|nyc|c8)\.config\.[a-z]+$|(^|\/)(package\.json|\.nycrc(\.json)?|\.c8rc(\.json)?|pyproject\.toml|setup\.cfg|\.coveragerc|tox\.ini|codecov\.ya?ml)$/ || is_ci(file)) ? "branches|lines|functions|statements|fail_under|fail-under|cov-fail-under|minimum|threshold|target" : ""
+  n = split(ENVIRON["RATCHETS"], r, "\n")
+  for (i = 1; i <= n; i++) {
+    if (split(r[i], q, "\t") < 4 || q[2] != file) continue
+    tkeys = (tkeys == "" ? "" : tkeys "|") q[3]; dir[q[3]] = q[4]; metric[q[3]] = q[1]
+  }
+  if (tkeys == "") tkeys = "\001"
+}
+/^diff --git / { newfile(); inhunk = 0; next }
+!inhunk && /^deleted file mode/ { deleted = 1; next }
+!inhunk && /^--- / { old = substr($0, 5); sub(/^a\//, "", old); next }
+!inhunk && /^\+\+\+ / {
+  file = substr($0, 5); sub(/^b\//, "", file)
+  if (file == "/dev/null") { file = old; if (is_test(file)) hit(file, 0, "test-deleted", "file deleted") }
+  setkeys()
+  next
+}
+!inhunk && /^@@ / {
+  inhunk = 1
+  split($0, a, " "); o = a[2]; nw = a[3]
+  sub(/^-/, "", o); sub(/^\+/, "", nw)
+  oc = (o ~ /,/) ? substr(o, index(o, ",") + 1) + 0 : 1; ol = o + 0
+  nc = (nw ~ /,/) ? substr(nw, index(nw, ",") + 1) + 0 : 1; nl = nw + 0
+  if (oc <= 0 && nc <= 0) inhunk = 0
+  next
+}
+!inhunk { next }
+/^\\/ { next }
+/^\+/ { na++; at[na] = substr($0, 2); al[na] = nl; aset[norm(at[na])] = 1; nl++; nc-- }
+/^-/ { nr++; rt[nr] = substr($0, 2); rl[nr] = ol; rset[norm(rt[nr])] = 1; ol++; oc-- }
+/^ / || $0 == "" { ol++; nl++; oc--; nc-- }
+inhunk && oc <= 0 && nc <= 0 { inhunk = 0 }
+END { flush(); exit (hits > 0) ? 1 : 0 }
+```
+
+- [ ] **Step 5: Write `scripts/floor-scan`**
+
+```bash
+#!/usr/bin/env bash
+# G7 as a script: list moves in a git diff that lower the bar: suppressions and type escapes, skipped or
+# deleted tests, removed assertions, stubs and empty catch blocks, debug prints, and a lowered bar
+# (a coverage threshold or ratchet.<metric> value moved the loose way, strict typing off, a lint rule
+# off, a CI step removed or made non-blocking). Advisory: exit 1 on any hit.
+# Usage: floor-scan DIFF_FILE    Output: path:line<TAB>class<TAB>text. Exit 2 when the input is not a git diff.
+# A line removed and added again in the same file (moved, or only re-spaced or re-quoted) is not a hit.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+[ $# -eq 1 ] || { echo "usage: floor-scan DIFF_FILE" >&2; exit 2; }
+[ -r "$1" ] || { echo "floor-scan: cannot read $1" >&2; exit 2; }
+grep -q '^diff --git ' "$1" || { echo "floor-scan: $1 has no diff --git header; pass a git diff or a wt-diff package" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$here/../hooks/lib/settings.sh"
+KERN_MAIN=$(kern_main_root "$PWD" 2> /dev/null) || KERN_MAIN=''
+export KERN_MAIN
+# ratchet.<metric>: <path>:<key>[:min|:max] lines, metric<TAB>path<TAB>key<TAB>direction.
+RATCHETS=''
+for k in $(while IFS= read -r f; do [ -f "$f" ] && settings_keys "$f"; done <<EOT | grep '^ratchet\.' | sort -u
+$(_settings_files)
+EOT
+); do
+  v=$(settings_get "$k") || continue
+  d=min
+  case "$v" in *:max) d=max; v=${v%:max} ;; *:min) v=${v%:min} ;; esac
+  RATCHETS="$RATCHETS${k#ratchet.}	${v%:*}	${v##*:}	$d
+"
+done
+export RATCHETS
+LC_ALL=C awk -f "$here/lib/test-paths.awk" -f "$here/lib/floor-scan.awk" "$1"
+```
+
+- [ ] **Step 6: Document the key**
+
+In `kernel/settings.md`, insert this row right after the `generated_artifacts` row:
+
+```markdown
+| `ratchet.<metric>` | none | `<path>:<key>`, with `:max` appended when a higher value loosens the bar | floor-scan, self-review |
+```
+
+Add under `## [Unreleased]` in `CHANGELOG.md`: `- floor-scan: the G7 check as a script, with a lowered-bar class and ratchet.<metric> settings keys.`
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `chmod +x scripts/floor-scan && tests/run-bats tests/scripts/floor-scan.bats && shellcheck scripts/floor-scan && node scripts/lint-skills.mjs`
+Expected: `17 tests, 0 failures`; shellcheck prints nothing; lint prints no errors (rule 13 finds `ratchet.<metric>` in the table). On Linux the default `awk` is mawk; CI runs these tests there (Task 34), and on macOS they run under BSD awk.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -- scripts/lib/test-paths.awk scripts/lib/floor-scan.awk scripts/floor-scan tests/scripts/floor-scan.bats kernel/settings.md CHANGELOG.md
+git commit -m "M2: add floor-scan, the G7 check as a script" -m "self-review needs a deterministic list of moves that lower the bar, including a loosened threshold or CI step; pairing removed and added lines keeps reformats from reading as removals."
+```
+
+---
+

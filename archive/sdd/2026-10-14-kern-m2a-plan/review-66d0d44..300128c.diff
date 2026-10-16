@@ -1,0 +1,177 @@
+diff --git a/skills/commit/SKILL.md b/skills/commit/SKILL.md
+index f84c011..9dc4319 100644
+--- a/skills/commit/SKILL.md
++++ b/skills/commit/SKILL.md
+@@ -3,20 +3,20 @@ name: commit
+ description: Commit named files with a message that follows the project's convention, after the checks pass.
+ disable-model-invocation: true
+ argument-hint: "[files...]"
+-allowed-tools: Bash(git -C * status *), Bash(git -C * diff *), Bash(git -C * log *), Bash(git -C * rev-parse *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
++allowed-tools: Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
+ ---
+ 
+ # commit
+ 
+-One clean commit of the right files. finish-branch and, under autopilot, execute-plan run steps 3 to 6.
++One clean commit of the right files. finish-branch and, under autopilot, execute-plan run steps 2 to 6.
+ 
+ ## Steps
+ 
+ 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+ 1. Consent: the user typed `/kern:commit` or asked to commit in this session, or autopilot is on. Otherwise stop.
+-2. Where, in order: `<toplevel>` is what `git -C <wt> rev-parse --show-toplevel` prints; `<wt>` is the worktree the caller names (execute-plan: its plan worktree), else `.`. Run every later git command as `git -C <toplevel> ...`. Branch: `git -C <toplevel> rev-parse --abbrev-ref HEAD` (`HEAD`: detached). On a protected branch, stop and ask: commit locally anyway, or the user moves the work. On a detached HEAD, stop: finish-branch offers to create a branch. Never switch branches.
+-3. Files: read `git -C <toplevel> status --porcelain`; propose this task's files or those named; list the rest, unstaged. For a `<ledger dir>` under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` whose `Worktree:` line names `<toplevel>`, offer one commit per complete task, in ledger order. A task's files are the `## Files changed` list of `<ledger dir>/reviews/task-<N>-<tree7>.diff`, `<tree7>` the first 7 characters of the `tree=` of its `Task <N>: complete` line. If that file is missing, run `git -C <toplevel> diff --name-only <start tree> <complete tree>` on the trees of its start and complete lines; failing that, ask. Tasks that share a path cannot be split (`git add` takes whole files): offer one commit naming each, or ask. Never stage a file that holds another task's hunks under one task's name. Autopilot commits each task as it closes, so overlap arises only in a later run. Stage with `git -C <toplevel> add -- <files>` in its own call, never `-A` or `.`; name and leave out any `never_commit` path. Show `git -C <toplevel> diff --staged --stat`.
+-4. Before the first commit, follow `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md` once (`verify.fast` and the focused tests). If tracked changes stay unstaged, say the proof ran on the working tree, not the commit. Record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <toplevel>`.
++2. Where, in order: `<toplevel>` is what `git -C <wt> rev-parse --show-toplevel` prints; `<wt>` is the worktree the caller names (execute-plan: its plan worktree), else `.`. If it fails, stop and report. Run every later git command as `git -C <toplevel> ...`. Branch: `git -C <toplevel> rev-parse --abbrev-ref HEAD` (`HEAD`: detached). On a protected branch, stop and ask: commit locally anyway, or the user moves the work. On a detached HEAD, stop: finish-branch offers to create a branch. Never switch branches.
++3. Files: read `git -C <toplevel> status --porcelain`; propose this task's files or those named; list the rest, unstaged. For a ledger with complete tasks, follow `references/ledger-tasks.md`: one commit per complete task, in ledger order, each staging that task's exact paths. Stage with `git -C <toplevel> add -- <files>` in its own call, never `-A` or `.`; leave out and name any `never_commit` path. Show `git -C <toplevel> diff --staged --stat`.
++4. Before the first commit, follow `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md` once (`verify.fast` and the focused tests). Several commits get this one proof, on the working tree: those before the last are not proven alone, and the report says so. If tracked changes stay unstaged, say the proof ran on the working tree, not the commit. Record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <toplevel>`.
+ 5. Message: use `commit.convention`, or infer it from `git -C <toplevel> log --format=%s -30` and state it; take the ticket id from the branch name by `commit.id_from_branch`; an imperative subject of 72 characters or fewer; a body that says why; one concern per commit (a refactor mixed with a feature: propose two). Prose follows `${CLAUDE_PLUGIN_ROOT}/skills/technical-writing/SKILL.md`. Add attribution only as `commit.attribution` says.
+ 6. Write the message with the Write tool to `<dir>/commit-msg` (Read it first if it exists), `<dir>` being the path `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints. Run `git -C <toplevel> commit -F <dir>/commit-msg` as its own call, with the literal path: no `cd`, no expansion, no other command. G5 reads a message file only inside the main worktree. G5's prompt is the confirmation; under autopilot G5 allows it when the checks pass.
+ 7. Report the short SHA, subject, files and what stayed unstaged. After the last commit, if nothing stayed unstaged, `git -C <toplevel> rev-parse HEAD^{tree}` must equal the tree from step 4; a mismatch means it is not what was proven: say so.
+@@ -37,12 +37,12 @@ Commits; a chat report.
+ 
+ ## Stops and autopilot
+ 
+-Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Stops: steps 1 to 4, and `kern-dir` exits 2, `wt-snap` fails, G5 denies or asks, `git add` or `git commit` fails. Report its output; never `--no-verify`, never another command shape. Under autopilot a failing convention check is a denial, never a retry with a looser message, and each stop parks as `parked: <question>; default: <choice>; why: <one line>` committing nothing on that path (defaults: overlap, one commit naming each task; no files, no commit); a protected branch or a detached HEAD never commits.
++Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Stops: steps 1 to 4, and `kern-dir` exits 2, `wt-snap` fails, G5 denies or asks and the user declines, `git add` or `git commit` fails. No kern guard allows `git add`: under autopilot it runs unprompted only where the user's permission settings allow it, else its prompt is a stop. Report its output; never `--no-verify`, never another command shape. Under autopilot a failing convention check is a denial, never a retry with a looser message, and each stop parks as `parked: <question>; default: <choice>; why: <one line>` committing nothing on that path (defaults: no files, no commit; a failed toplevel, protected branch or detached HEAD, no commit); a protected branch or a detached HEAD never commits. Ledger-task defaults are in the reference.
+ 
+ ## Red flags
+ 
+ | Thought | Reality |
+ |---|---|
+ | "I'll commit when the whole plan is done" | A giant commit cannot be reviewed. |
+-| "The tests passed earlier" | Prove the tree you commit. |
++| "The tests passed earlier" | Prove the tree you commit; several commits get one proof. |
+ | "The check failed, so I'll loosen the message" | A failed check is a stop, never a retry. |
+diff --git a/skills/commit/references/ledger-tasks.md b/skills/commit/references/ledger-tasks.md
+new file mode 100644
+index 0000000..f23fe27
+--- /dev/null
++++ b/skills/commit/references/ledger-tasks.md
+@@ -0,0 +1,23 @@
++# Ledger tasks
++
++Rules for step 3 when execute-plan ledgers hold complete tasks. Every default below is what autopilot parks with.
++
++## Which ledger
++
++`<ledger dir>` is a dir under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` whose `ledger.md` `Worktree:` line names `<toplevel>`. Several do: ask (default: commit nothing from ledgers). None: no ledger tasks.
++
++## A task's files
++
++A complete task has a `Task <N>: complete tree=<id> ...` line; keep ledger order. Its package is `<ledger dir>/reviews/task-<N>-<tree7>.diff`, `<tree7>` the first 7 characters of the `tree=` of its `Task <N>: complete` line. Its `## Files changed` lines are name-status: `M<TAB>path`, `D<TAB>path`, `R100<TAB>old<TAB>new`. Take the path fields; stage both paths of a rename.
++
++If the package is missing, run `git -C <toplevel> diff --name-only <start tree> <complete tree>` on the trees of its start and complete lines; failing that, ask (default: leave the task uncommitted).
++
++## Overlap
++
++Tasks that share a path cannot be split: `git add` takes whole files. Never stage a file that holds another task's hunks under one task's name. For complete tasks, offer one commit naming each, or ask (default: that commit). A task with a `Task <N>: start` line and no complete line contributes the paths in `<ledger dir>/briefs/task-<N>.files` (a `dir/` entry covers what is under it). A complete task sharing one of them is not committed by path: ask (default: leave it uncommitted).
++
++Autopilot commits each task as it closes, so complete tasks overlap only in a later run; the started-task check applies in both.
++
++## Already committed
++
++A complete task whose paths are clean in `git status --porcelain` is reported as already committed, not as a failure.
+diff --git a/skills/execute-plan/SKILL.md b/skills/execute-plan/SKILL.md
+index d21eb1d..c7c58dc 100644
+--- a/skills/execute-plan/SKILL.md
++++ b/skills/execute-plan/SKILL.md
+@@ -26,7 +26,7 @@ Review needs no commits: a task's change is the diff between its worktree's snap
+ 7. Status line (none: BLOCKED). DONE goes to review. DONE_WITH_CONCERNS: read the concerns, then review. NEEDS_CONTEXT: answer from the plan or spec, else ask the user, then resume the implementer. BLOCKED: add context or go one model tier up (a `Decision:` line); a task that must be split: stop with a split proposal. Never re-dispatch unchanged.
+ 8. Review: take `tree-after` with `wt-snap`, then run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`. Its first line is `<package>`, beside `<package>.patch`. Exit 3 (empty): return the task to the implementer. Exit 4 names a file outside the task's Files: pause and ask; on a yes append it to `briefs/task-N.files` with a `Decision:` line, on a no return the task to the implementer. Dispatch `kern:task-reviewer` on `model.reviewer` in mode `task` with `briefs/task-N.md`, the report, the package, the worktree and the `review.rules` paths; do not pre-judge findings in the prompt. Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines. Resolve every "cannot verify" item yourself; a real gap is a spec issue. Record the verdicts with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <r> <compliant|issues> <approved|needs-fixes>`, adding `--minor "<finding>"` for each Minor finding, which waits for step 12.
+ 9. Fix loop for a spec issue or a Critical or Important finding. Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed. Round 2 resumes the implementer with the previous round's `.txt` (SendMessage to its agent id, or `references/resume.md`'s fallback; inline and step: fix it yourself); round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief, the report and that file. Each round packages its fix diff with `wt-diff` from the round's tree to a new `tree-after` (`--out <ledger dir>/reviews/task-N-fix<r>-<tree7>.diff`, same `--allow-file` and exits), gets a `re-review` with that file, and is saved and recorded as step 8 does. Still open after round 3, or a re-review finds a bug in an earlier round's fix: stop and escalate with a split proposal; there is no fourth round.
+-10. Close: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger> <N> <wt> <tree-after> --probe <package>.patch -- <task test command>`, or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe (docs, config). One command, no shell: a compound `Run:` goes in a `kern-dir tmp` script, passed as `-- bash <path>`. After fix rounds, remake `<package>` from `tree-before`. It writes the complete line only when an approved review saw this tree, the command passes, and the test fails with the change reversed (`probe=ok`) or `--no-probe` gave a reason. A refusal writes nothing and says why. `command exited <n>` or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round (after round 3: the split proposal); `command exited 126` or `127`: stop. Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask. Exit 2: a changed or unapproved tree, review it; a probe error, stop. Under autopilot only, then commit the task's files with `/kern:commit` steps 3 to 6 (a wave task: after step 11).
++10. Close: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger> <N> <wt> <tree-after> --probe <package>.patch -- <task test command>`, or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe (docs, config). One command, no shell: a compound `Run:` goes in a `kern-dir tmp` script, passed as `-- bash <path>`. After fix rounds, remake `<package>` from `tree-before`. It writes the complete line only when an approved review saw this tree, the command passes, and the test fails with the change reversed (`probe=ok`) or `--no-probe` gave a reason. A refusal writes nothing and says why. `command exited <n>` or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round (after round 3: the split proposal); `command exited 126` or `127`: stop. Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask. Exit 2: a changed or unapproved tree, review it; a probe error, stop. Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11).
+ 11. After a wave, each wave task has been closed in its fork through steps 6 to 10. Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`, writing `Applied: Task N patch=<path>` after each `applied`. Exit 3 is a conflict with nothing applied: stop. Then `test.full` there; red: stop.
+ 12. Final review: `ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state. Package all with `wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff` (the `Worktree:` line's base tree) and dispatch `kern:task-reviewer` in mode `whole-branch` on `model.final_review` with the package, the plan and that list, to triage which minors block. Re-grade findings by effect. One fix subagent gets the complete findings list (`kern:implementer`, a step 6 brief), each fix red then green; then one `re-review` on `model.final_review` of its diff from `final.diff`'s second line, packaged with an `--allow-file` per task. Residual findings go to the user in step 13.
+ 13. Finish: report decisions with the cost if wrong, parked items, deferred minors and their triage, verification commands with output, worktree and branch. `ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report. No push or PR, no commit beyond step 10's; offer `/kern:commit` and `/kern:finish-branch`.
+diff --git a/tests/skills/commit.acceptance.md b/tests/skills/commit.acceptance.md
+index f99dcb2..1ce5231 100644
+--- a/tests/skills/commit.acceptance.md
++++ b/tests/skills/commit.acceptance.md
+@@ -6,5 +6,8 @@
+ - [ ] After a delegate run with three complete ledger tasks that touch disjoint files: three commits are offered, one per task, in ledger order, each from `git -C <plan worktree>`.
+ - [ ] Two complete tasks that touch the same file: one commit naming both tasks is offered; no file holding the other task's hunks is staged under one task's name.
+ - [ ] A complete task whose `reviews/task-N-<tree7>.diff` was deleted: its files come from `git diff --name-only <start tree> <complete tree>`.
+-- [ ] Run from the main checkout for a plan worktree: the commit lands on the plan worktree's branch and the main checkout's branch and status are unchanged.
++- [ ] Called by execute-plan with the plan worktree: the commit lands on the plan worktree's branch and the main checkout's branch and status are unchanged.
+ - [ ] A project with `.claude/skills/commit/`: kern defers in one line; G5 and G6 still check the commit.
++- [ ] A complete task whose file was renamed (`R100`): both old and new paths are staged.
++- [ ] A started, incomplete task lists a path a complete task also changed: the complete task is not committed by path; it asks, or under autopilot parks and stays uncommitted.
++- [ ] Two ledgers name the same worktree: it asks.
+diff --git a/tests/skills/commit.test.mjs b/tests/skills/commit.test.mjs
+index 25554d5..8696b31 100644
+--- a/tests/skills/commit.test.mjs
++++ b/tests/skills/commit.test.mjs
+@@ -1,9 +1,10 @@
+ // tests/skills/commit.test.mjs
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertMaxBytes, assertContains } from '../helpers/md.mjs';
++import { readDoc, assertFrontmatter, assertHeadings, h2s, steps, DEFER, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+ 
+ const SKILL = 'skills/commit/SKILL.md';
++const REF = 'skills/commit/references/ledger-tasks.md';
+ 
+ test('commit frontmatter', () => {
+   assertFrontmatter(SKILL, {
+@@ -11,7 +12,7 @@ test('commit frontmatter', () => {
+     description: "Commit named files with a message that follows the project's convention, after the checks pass.",
+     'disable-model-invocation': 'true',
+     'argument-hint': '[files...]',
+-    'allowed-tools': 'Bash(git -C * status *), Bash(git -C * diff *), Bash(git -C * log *), Bash(git -C * rev-parse *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)',
++    'allowed-tools': 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)',
+   });
+ });
+ 
+@@ -24,19 +25,27 @@ test('commit sections, steps and red flags', () => {
+   assertContains(SKILL, ['git -C <toplevel> add -- <files>', 'never `-A` or `.`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`', 'git -C <toplevel> commit -F <dir>/commit-msg', 'as its own call, with the literal path',
+     'git -C <toplevel> diff --staged --stat', 'one commit per complete task, in ledger order', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap', 'HEAD^{tree}', 'On a detached HEAD, stop:', 'On a protected branch, stop and ask',
+     '72 characters or fewer', 'never a retry with a looser message', '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md',
+-    // gap 1: the task's file list
+-    'reviews/task-<N>-<tree7>.diff', '`tree=` of its `Task <N>: complete` line', 'git -C <toplevel> diff --name-only <start tree> <complete tree>',
+-    // gap 2: overlap
+-    '`Worktree:` line names `<toplevel>`', 'Autopilot commits each task as it closes', 'share a path', 'Never stage a file that holds another task\'s hunks under one task\'s name',
+-    // gap 3: where the commit runs
+-    'the worktree the caller names', 'git -C <toplevel> rev-parse --abbrev-ref HEAD',
+-    // exits
+-    'kern-dir` exits 2', '`wt-snap` fails', 'G5 denies or asks', '`git add` or `git commit` fails', 'never `--no-verify`',
+-    // autopilot
++    'follow `references/ledger-tasks.md`', 'each staging that task\'s exact paths', 'steps 2 to 6',
++    'the worktree the caller names', 'git -C <toplevel> rev-parse --abbrev-ref HEAD', 'If it fails, stop and report.', 'Never switch branches.',
++    'leave out and name any `never_commit` path', 'a mismatch means it is not what was proven: say so.',
++    'those before the last are not proven alone, and the report says so',
++    'kern-dir` exits 2', '`wt-snap` fails', 'G5 denies or asks and the user declines', '`git add` or `git commit` fails', 'never `--no-verify`',
++    'No kern guard allows `git add`: under autopilot it runs unprompted only where the user\'s permission settings allow it, else its prompt is a stop.',
+     'an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`', "else the kernel's \"Autopilot:\" line",
+     'parked: <question>; default: <choice>; why: <one line>', 'never through AskUserQuestion',
+-    'a protected branch or a detached HEAD never commits']);
++    'no files, no commit; a failed toplevel, protected branch or detached HEAD, no commit', 'a protected branch or a detached HEAD never commits']);
+   assert.ok(!raw.includes('temp file'), 'the message file lives under WORK/tmp, which G5 accepts, not in a temp file');
+   assert.ok(!raw.includes('$('), 'no command substitution in a prescribed command');
+   assertMaxBytes(SKILL, 5200);
+ });
++
++test('commit ledger-tasks reference', () => {
++  assertHeadings(REF, ['# Ledger tasks', '## Which ledger', '## A task\'s files', '## Overlap', '## Already committed']);
++  assertContains(REF, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers`', '`Worktree:` line names `<toplevel>`', 'Several do: ask (default: commit nothing from ledgers).',
++    'reviews/task-<N>-<tree7>.diff', '`tree=` of its `Task <N>: complete` line', '`M<TAB>path`, `D<TAB>path`, `R100<TAB>old<TAB>new`', 'stage both paths of a rename',
++    'git -C <toplevel> diff --name-only <start tree> <complete tree>', 'failing that, ask (default: leave the task uncommitted).',
++    'Tasks that share a path cannot be split', "Never stage a file that holds another task's hunks under one task's name.", 'offer one commit naming each, or ask (default: that commit)',
++    '`Task <N>: start` line and no complete line contributes the paths in `<ledger dir>/briefs/task-<N>.files`', 'is not committed by path: ask (default: leave it uncommitted).',
++    'Autopilot commits each task as it closes', 'the started-task check applies in both', 'reported as already committed, not as a failure']);
++  assertMaxBytes(REF, 2000);
++});
+diff --git a/tests/skills/execute-plan.test.mjs b/tests/skills/execute-plan.test.mjs
+index 14e849c..46b77d5 100644
+--- a/tests/skills/execute-plan.test.mjs
++++ b/tests/skills/execute-plan.test.mjs
+@@ -95,7 +95,7 @@ export const PINS = {
+     'A refusal writes nothing and says why.', '`command exited <n>` or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round',
+     '(after round 3: the split proposal)', '`command exited 126` or `127`: stop.',
+     'Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask.',
+-    'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 3 to 6 (a wave task: after step 11)."],
++    'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11)."],
+   11: ["Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`",
+     'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then `test.full` there; red: stop.'],
+   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',

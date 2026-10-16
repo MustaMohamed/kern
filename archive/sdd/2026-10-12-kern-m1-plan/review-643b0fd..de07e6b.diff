@@ -1,0 +1,105 @@
+# Review package: 643b0fd..de07e6b
+
+## Commits
+de07e6b M1: inject the subagent kernel and voice
+
+## Files changed
+ hooks/subagent-start            | 26 ++++++++++++++++++++++++++
+ kernel/kernel-subagent.md       |  8 ++++++++
+ modes/terse-subagent.md         |  1 +
+ tests/hooks/subagent-start.bats | 33 +++++++++++++++++++++++++++++++++
+ 4 files changed, 68 insertions(+)
+
+## Diff
+diff --git a/hooks/subagent-start b/hooks/subagent-start
+new file mode 100755
+index 0000000..b234e9f
+--- /dev/null
++++ b/hooks/subagent-start
+@@ -0,0 +1,26 @@
++#!/usr/bin/env bash
++# kern SubagentStart: injects the subagent kernel and, when terse is active, the terse voice line.
++KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++export KERN_ROOT
++for lib in json settings state render; do
++  # shellcheck source=/dev/null
++  . "$KERN_ROOT/hooks/lib/$lib.sh"
++done
++
++# shellcheck disable=SC2034 # read by the json.sh functions
++KERN_INPUT=$(cat)
++SID=$(json_get session_id) || SID=""
++CWD=$(json_get cwd) || CWD="$PWD"
++KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
++export CWD KERN_MAIN
++kern_enabled || exit 0
++
++voice=$(state_get "$SID" voice 2>/dev/null) || voice=$(settings_get mode.voice normal)
++K_VOICE=""
++[ "$voice" = terse ] && K_VOICE=$(cat "$KERN_ROOT/modes/terse-subagent.md")
++K_VERSION=$(kern_version)
++K_ROOT="$KERN_ROOT"
++export K_VERSION K_ROOT K_VOICE
++printf '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"%s"}}\n' \
++  "$(render_template "$KERN_ROOT/kernel/kernel-subagent.md" | json_escape)"
++exit 0
+diff --git a/kernel/kernel-subagent.md b/kernel/kernel-subagent.md
+new file mode 100644
+index 0000000..f9156b2
+--- /dev/null
++++ b/kernel/kernel-subagent.md
+@@ -0,0 +1,8 @@
++# kern {VERSION} (subagent)
++Your dispatcher already routed this task. Do the brief; do not re-route it or start work outside it.
++Precedence: the brief, then the project's CLAUDE.md, rules and skills, then kern steps, then your defaults.
++Evidence: "done", "fixed" and "passing" need a command you ran and its output. Findings cite path:line. Label other claims measured, inferred or guess.
++Autonomy: read, search and edit inside your scope. Never commit, push, merge, post or message anyone unless the brief says so.
++Return: verdict first, then deltas and file paths. Put bulk in a file and return its path.
++In kern files read by path, ${CLAUDE_PLUGIN_ROOT} means {ROOT_PATH}.
++{VOICE}
+diff --git a/modes/terse-subagent.md b/modes/terse-subagent.md
+new file mode 100644
+index 0000000..efd7a9e
+--- /dev/null
++++ b/modes/terse-subagent.md
+@@ -0,0 +1 @@
++Voice: terse. Verdict or answer first, short sentences, no ceremony. Keep code, commands, paths and errors exact. Files you write use plain prose.
+diff --git a/tests/hooks/subagent-start.bats b/tests/hooks/subagent-start.bats
+new file mode 100644
+index 0000000..e556859
+--- /dev/null
++++ b/tests/hooks/subagent-start.bats
+@@ -0,0 +1,33 @@
++#!/usr/bin/env bats
++# hooks/subagent-start: JSON shape, size, voice.
++
++load ../helpers/common
++
++setup() {
++  R="$BATS_TEST_TMPDIR/repo"
++  make_repo "$R"
++  kern_env "$R"
++  K="$(kern_root)"
++}
++
++context_of() {
++  printf '%s' "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);if(j.hookSpecificOutput.hookEventName!=="SubagentStart")process.exit(3);process.stdout.write(j.hookSpecificOutput.additionalContext)})'
++}
++
++@test "valid SubagentStart JSON under 1,200 characters" {
++  run bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')"
++  [ "$status" -eq 0 ]
++  ctx=$(context_of "$output")
++  [[ "$ctx" == "# kern "*"(subagent)"* ]] || false
++  [ "${#ctx}" -le 1200 ]
++  [[ "$ctx" != *"Voice: terse"* ]] || false
++}
++
++@test "terse voice reaches the subagent" {
++  mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
++  printf 'voice: terse\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
++  run bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"kern:implementer"')"
++  ctx=$(context_of "$output")
++  [[ "$ctx" == *"Voice: terse"* ]] || false
++  [ "${#ctx}" -le 1200 ]
++}

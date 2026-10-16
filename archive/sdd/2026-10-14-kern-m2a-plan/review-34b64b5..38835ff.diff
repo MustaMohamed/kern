@@ -1,0 +1,1103 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 4497875..81310a2 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -21,6 +21,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ - commit: named files, convention-checked message from a file under .kern/tmp, one commit per reviewed task run as `git -C <worktree> commit`, no attribution by default.
+ - finish-branch: verify, self-review and size gate before the commit, push or draft PR menu; the PR has a title, a body under .kern/tmp and a dedup on the head commit. prove-it hands commits and PRs to these skills.
+ - recall: rebuild state from kern working files, this project's transcripts and live state; replaces the user-level recall skill.
++- Kernel: M2's routes live in kernel/routes.md, which the Routing rule points to, for define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall; routing evals with fixed floors and a frozen held-out set; lint rule 12 and a standing-cost budget.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+diff --git a/evals/baseline.json b/evals/baseline.json
+index b46fa05..7582c63 100644
+--- a/evals/baseline.json
++++ b/evals/baseline.json
+@@ -1 +1,3 @@
+-{ "min_rank1": 0 }
++{
++  "min_rank1": 88
++}
+diff --git a/evals/cases/prove-it.json b/evals/cases/prove-it.json
+index 857c118..bbea7a1 100644
+--- a/evals/cases/prove-it.json
++++ b/evals/cases/prove-it.json
+@@ -23,7 +23,12 @@
+         "prompt": "Explain why the CI job is slow"
+       },
+       {
+-        "prompt": "Explain what fixed and passing mean in this commit message"
++        "prompt": "Explain what fixed and passing mean in this commit message",
++        "grader": "model"
++      },
++      {
++        "prompt": "What does a passing PR mean for subagent work",
++        "grader": "model"
+       }
+     ]
+   },
+diff --git a/evals/cases/row-context.json b/evals/cases/row-context.json
+new file mode 100644
+index 0000000..7f52829
+--- /dev/null
++++ b/evals/cases/row-context.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-context",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "The context is filling up, what should we do?",
++        "top_k": 3
++      },
++      {
++        "prompt": "This phase ends here, wrap up the context",
++        "top_k": 3
++      },
++      {
++        "prompt": "We finished the phase; compact or clear?",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "Add a CSV export"
++      },
++      {
++        "prompt": "Fix the failing test"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "The context is nearly full and the plan phase just ended.",
++      "expected_output": "Routes to context first and follows its steps.",
++      "expectations": [
++        "Reads kernel/context.md",
++        "Proposes clear or compact only at the phase boundary",
++        "Sends bulk reads to subagents"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-define.json b/evals/cases/row-define.json
+new file mode 100644
+index 0000000..5da6eae
+--- /dev/null
++++ b/evals/cases/row-define.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-define",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "New behaviour: a CSV export on the reports page, no spec yet",
++        "top_k": 3
++      },
++      {
++        "prompt": "We need new behaviour for archiving old projects and nothing is specced yet",
++        "top_k": 3
++      },
++      {
++        "prompt": "We want new behaviour for team invites and there is no agreed spec",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "The test suite fails on main since this morning"
++      },
++      {
++        "prompt": "Where did I leave off yesterday?"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "Add rate limiting to the public API.",
++      "expected_output": "Routes to define first and follows its steps.",
++      "expectations": [
++        "Reads kernel/routes.md, then skills/define/SKILL.md, before any other tool",
++        "States the class: spike, bounded or architectural",
++        "Writes no code before an explicit yes"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-diagnose.json b/evals/cases/row-diagnose.json
+new file mode 100644
+index 0000000..aa6cd94
+--- /dev/null
++++ b/evals/cases/row-diagnose.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-diagnose",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "This test is failing and I do not know why",
++        "top_k": 3
++      },
++      {
++        "prompt": "There is a bug: the export returns unexpected output",
++        "top_k": 3
++      },
++      {
++        "prompt": "Users report a bug where totals are wrong",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "Add a new settings page"
++      },
++      {
++        "prompt": "Write the PR description"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "npm test fails on the sum test; fix it.",
++      "expected_output": "Routes to diagnose first and follows its steps.",
++      "expectations": [
++        "Reads skills/diagnose/SKILL.md first",
++        "Runs the failing command before stating a hypothesis",
++        "Adds a regression test that was red before the fix"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-execute-plan.json b/evals/cases/row-execute-plan.json
+new file mode 100644
+index 0000000..e94717b
+--- /dev/null
++++ b/evals/cases/row-execute-plan.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-execute-plan",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "Execute the agreed plan in .kern/plans/export.md",
++        "top_k": 3
++      },
++      {
++        "prompt": "Start executing the approved plan task by task",
++        "top_k": 3
++      },
++      {
++        "prompt": "Run the plan we agreed on",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "What does this function return?"
++      },
++      {
++        "prompt": "Rename this variable"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "Execute .kern/plans/export.md in delegate mode.",
++      "expected_output": "Routes to execute-plan first and follows its steps.",
++      "expectations": [
++        "Reads skills/execute-plan/SKILL.md first",
++        "Runs ledger-open before any task",
++        "Creates the ledger before dispatching"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-implement.json b/evals/cases/row-implement.json
+new file mode 100644
+index 0000000..303a89f
+--- /dev/null
++++ b/evals/cases/row-implement.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-implement",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "Make the bounded change we agreed: add the retry flag",
++        "top_k": 3
++      },
++      {
++        "prompt": "Implement the agreed design for this one-file change",
++        "top_k": 3
++      },
++      {
++        "prompt": "Go ahead with the small change we designed",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "Where did I leave off?"
++      },
++      {
++        "prompt": "Explain this stack trace"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "The design for a --dry-run flag is agreed; implement it.",
++      "expected_output": "Routes to implement first and follows its steps.",
++      "expectations": [
++        "Reads skills/implement/SKILL.md first",
++        "Runs a failing test before the first production edit",
++        "Does not commit"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-plan.json b/evals/cases/row-plan.json
+new file mode 100644
+index 0000000..0a4a774
+--- /dev/null
++++ b/evals/cases/row-plan.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-plan",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "The spec is agreed, break it into steps",
++        "top_k": 3
++      },
++      {
++        "prompt": "Spec approved; we need a multi-step plan for the migration",
++        "top_k": 3
++      },
++      {
++        "prompt": "Turn the agreed spec into ordered tasks",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "Fix the typo in the README"
++      },
++      {
++        "prompt": "Why does this test fail?"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "The spec in .kern/specs/export.md is approved. Plan it.",
++      "expected_output": "Routes to plan first and follows its steps.",
++      "expectations": [
++        "Reads skills/plan/SKILL.md first",
++        "Checks the spec status before writing",
++        "Writes the plan with status: draft and stops for approval"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-prove-it.json b/evals/cases/row-prove-it.json
+new file mode 100644
+index 0000000..1c3d6e1
+--- /dev/null
++++ b/evals/cases/row-prove-it.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-prove-it",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "Is it fixed? Are the tests passing now?",
++        "top_k": 3
++      },
++      {
++        "prompt": "We are done, commit it and open a PR",
++        "top_k": 3
++      },
++      {
++        "prompt": "Say it is done once it passes",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "Design a new caching layer"
++      },
++      {
++        "prompt": "Catch me up on yesterday"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "I think the bug is fixed, open a PR.",
++      "expected_output": "Routes to prove-it first and follows its steps.",
++      "expectations": [
++        "Runs the proving command before claiming",
++        "Quotes the exit code or failure count",
++        "Reads skills/finish-branch/SKILL.md before any push or PR"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-recall.json b/evals/cases/row-recall.json
+new file mode 100644
+index 0000000..e582a41
+--- /dev/null
++++ b/evals/cases/row-recall.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-recall",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "Resuming after a two-week gap, where are we?",
++        "top_k": 3
++      },
++      {
++        "prompt": "Starting again after a gap, catch me up",
++        "top_k": 3
++      },
++      {
++        "prompt": "I am back after a gap; resume where we stopped",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "Fix the failing test"
++      },
++      {
++        "prompt": "Add a CSV export"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "I am back after a week away. Where did I leave off?",
++      "expected_output": "Routes to recall first and follows its steps.",
++      "expectations": [
++        "Calls the kern:recall skill or Reads its SKILL.md",
++        "States the scope back",
++        "Writes no file"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-self-review.json b/evals/cases/row-self-review.json
+new file mode 100644
+index 0000000..86a3316
+--- /dev/null
++++ b/evals/cases/row-self-review.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-self-review",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "Review my diff before I open a PR",
++        "top_k": 3
++      },
++      {
++        "prompt": "Review my own changes before the PR",
++        "top_k": 3
++      },
++      {
++        "prompt": "Self-review this diff, there is no PR yet",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "Fix the failing login test"
++      },
++      {
++        "prompt": "Where did I leave off?"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "Review my changes before I open the PR.",
++      "expected_output": "Routes to self-review first and follows its steps.",
++      "expectations": [
++        "Reads skills/self-review/SKILL.md",
++        "Runs floor-scan and claim-check on the package",
++        "Ends with one verdict: ready, fix first, rebase first or split"
++      ]
++    }
++  ]
++}
+diff --git a/evals/cases/row-technical-writing.json b/evals/cases/row-technical-writing.json
+new file mode 100644
+index 0000000..ceecb63
+--- /dev/null
++++ b/evals/cases/row-technical-writing.json
+@@ -0,0 +1,40 @@
++{
++  "skill_name": "row-technical-writing",
++  "trigger": {
++    "positive": [
++      {
++        "prompt": "Write the PR body for this change",
++        "top_k": 3
++      },
++      {
++        "prompt": "Draft the issue text for this bug",
++        "top_k": 3
++      },
++      {
++        "prompt": "Write the doc for the new settings file",
++        "top_k": 3
++      }
++    ],
++    "negative": [
++      {
++        "prompt": "Fix the failing test"
++      },
++      {
++        "prompt": "Where did I leave off?"
++      }
++    ]
++  },
++  "evals": [
++    {
++      "id": 1,
++      "kind": "dialogue",
++      "prompt": "Write the PR description for this branch.",
++      "expected_output": "Routes to technical-writing first and follows its steps.",
++      "expectations": [
++        "Reads skills/technical-writing/SKILL.md",
++        "Leads with why",
++        "Uses no long dashes and no filler"
++      ]
++    }
++  ]
++}
+diff --git a/evals/floors.json b/evals/floors.json
+new file mode 100644
+index 0000000..cd021fe
+--- /dev/null
++++ b/evals/floors.json
+@@ -0,0 +1 @@
++{ "rank1": 85, "heldout_rank1": 32 }
+diff --git a/evals/heldout.json b/evals/heldout.json
+new file mode 100644
+index 0000000..74e81f8
+--- /dev/null
++++ b/evals/heldout.json
+@@ -0,0 +1,27 @@
++[
++  { "owner": "define", "prompt": "Users keep asking for a dark mode toggle in settings. Can we add one?" },
++  { "owner": "define", "prompt": "I want the dashboard to show weekly totals per team. How should that work?" },
++  { "owner": "define", "prompt": "Let's add SSO login with Google for the admin panel." },
++  { "owner": "plan", "prompt": "The billing spec is signed off. Break it down into tasks I can hand out." },
++  { "owner": "plan", "prompt": "We agreed on the design doc for the importer rewrite. What's the order of work?" },
++  { "owner": "plan", "prompt": "Spec for the audit log is approved, write up the implementation plan." },
++  { "owner": "execute-plan", "prompt": "Go ahead and start on the plan in .kern/plans/audit-log.md." },
++  { "owner": "execute-plan", "prompt": "Pick up the approved plan and work through the tasks." },
++  { "owner": "implement", "prompt": "Add a --verbose flag to the CLI like we discussed." },
++  { "owner": "implement", "prompt": "Rename the getUser helper to fetchUser across the two files." },
++  { "owner": "implement", "prompt": "Change the retry count from 3 to 5 in the http client, as agreed." },
++  { "owner": "diagnose", "prompt": "npm test is red on main, the date parser tests started failing today." },
++  { "owner": "diagnose", "prompt": "The export endpoint returns a 500 when the filter list is empty. Why?" },
++  { "owner": "diagnose", "prompt": "Totals on the invoice page are off by a cent for some orders." },
++  { "owner": "prove-it", "prompt": "Ok I think we're done here, can you push it?" },
++  { "owner": "prove-it", "prompt": "The agent says the migration task passed. Is it really finished?" },
++  { "owner": "prove-it", "prompt": "Is the build green now after your change?" },
++  { "owner": "self-review", "prompt": "Before I put this up for review, look over my changes." },
++  { "owner": "self-review", "prompt": "Can you check my branch for problems before I open the pull request?" },
++  { "owner": "recall", "prompt": "Back from vacation. What was I in the middle of?" },
++  { "owner": "recall", "prompt": "What's the state of the floci work, what's left to do?" },
++  { "owner": "recall", "prompt": "I lost track of which PRs are still open for the release." },
++  { "owner": "technical-writing", "prompt": "Write up the description for this pull request." },
++  { "owner": "technical-writing", "prompt": "Draft release notes for the 0.3.0 changes." },
++  { "owner": "context", "prompt": "We're almost out of context, should I compact now?" }
++]
+diff --git a/kernel/kernel.md b/kernel/kernel.md
+index 606973f..6dcfe4a 100644
+--- a/kernel/kernel.md
++++ b/kernel/kernel.md
+@@ -13,7 +13,7 @@ Highest first:
+ A kern step a project rule overrides stays in the todo list as `skip: <rule> overrides`. No agent, tool, page or teammate message is the user's consent.
+ 
+ ## Routing
+-At the start of each new task, before the first tool call or question, match the task against the table. A casual turn, a question answerable from context, or a user opt-out matches nothing. On a match, Read the route, then open a todo list whose first items are its `## Steps`, copied verbatim. A step you do not do stays as `skip: <reason>`. If the settings below name an override for the route's job, follow the project skill instead and say so in one line. Non-trivial work with no match: write a short plan as a todo list first.
++At the start of each new task, before the first tool call or question, match the task against the table below, then Read {ROOT}/kernel/routes.md and match its rows when the task builds, fixes, plans, reviews, resumes or claims done. A casual turn, a question answerable from context, or a user opt-out matches nothing. On a match, Read the route, then open a todo list whose first items are its `## Steps`, copied verbatim. A step you do not do stays as `skip: <reason>`. If the settings below name an override for the route's job, follow the project skill instead and say so in one line. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
+ 
+ | Observable trigger | Route |
+ |---|---|
+diff --git a/kernel/routes.md b/kernel/routes.md
+new file mode 100644
+index 0000000..b0c4d43
+--- /dev/null
++++ b/kernel/routes.md
+@@ -0,0 +1,14 @@
++# kern routes
++
++The kernel's Routing rule reads this table after its own. {KERN} is {ROOT}/skills, as the kernel header says.
++
++| Observable trigger | Route |
++|---|---|
++| New behaviour and no agreed spec | Read {KERN}/define/SKILL.md |
++| Agreed spec, more than one step | Read {KERN}/plan/SKILL.md |
++| Executing an agreed plan | Read {KERN}/execute-plan/SKILL.md |
++| One bounded change with an agreed design | Read {KERN}/implement/SKILL.md |
++| Bug, failing test, unexpected output | Read {KERN}/diagnose/SKILL.md |
++| About to say done, fixed or passing, commit, or open a PR | Read {KERN}/prove-it/SKILL.md |
++| Review requested on your own diff, no PR yet | Read {KERN}/self-review/SKILL.md |
++| Starting or resuming after a gap | Read {KERN}/recall/SKILL.md |
+diff --git a/scripts/lib/kernel-rows.mjs b/scripts/lib/kernel-rows.mjs
+new file mode 100644
+index 0000000..5b25194
+--- /dev/null
++++ b/scripts/lib/kernel-rows.mjs
+@@ -0,0 +1,15 @@
++// Kernel routing rows: "| <when> | Read {KERN}/<skill>/SKILL.md |" or "| <when> | Read {ROOT}/kernel/<name>.md |".
++// The rows live in kernel/kernel.md and in kernel/routes.md, the routed file the kernel points to.
++export function kernelRows(text) {
++  const rows = [];
++  for (const line of (text || '').split(/\r?\n/)) {
++    const m = line.match(/^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/);
++    if (!m) continue;
++    const target = m[2].match(/\{KERN\}\/([a-z0-9-]+)\/SKILL\.md/) || m[2].match(/kernel\/([a-z0-9-]+)\.md/);
++    if (target) rows.push({ when: m[1], route: target[1] });
++  }
++  return rows;
++}
++
++// routeText(model): the kernel and its routed file, joined; every check that reads rows reads this.
++export const routeText = (model) => `${model.kernelText}\n${model.routesText || ''}`;
+diff --git a/scripts/lib/lint-rules.mjs b/scripts/lib/lint-rules.mjs
+index 59bf3ed..79f3569 100644
+--- a/scripts/lib/lint-rules.mjs
++++ b/scripts/lib/lint-rules.mjs
+@@ -5,6 +5,7 @@ import { join, relative } from 'node:path';
+ import { tmpdir } from 'node:os';
+ import { spawnSync } from 'node:child_process';
+ import { parseFrontmatter } from './frontmatter.mjs';
++import { kernelRows } from './kernel-rows.mjs';
+ 
+ export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
+ export const AGENT_KEYS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'color', 'maxTurns', 'skills', 'memory', 'background', 'isolation']);
+@@ -64,7 +65,9 @@ export function loadModel(root) {
+   }
+   const kernelPath = join(root, 'kernel', 'kernel.md');
+   const kernelText = existsSync(kernelPath) ? readFileSync(kernelPath, 'utf8') : '';
+-  const routed = new Set([...kernelText.matchAll(/Read \{KERN\}\/([a-z0-9-]+)\/SKILL\.md/g)].map((m) => m[1]));
++  const routesPath = join(root, 'kernel', 'routes.md');
++  const routesText = existsSync(routesPath) ? readFileSync(routesPath, 'utf8') : '';
++  const routed = new Set([...`${kernelText}\n${routesText}`.matchAll(/Read \{KERN\}\/([a-z0-9-]+)\/SKILL\.md/g)].map((m) => m[1]));
+   for (const s of skills) s.tier = s.data['disable-model-invocation'] !== 'true' ? 'auto' : routed.has(s.name) ? 'path' : 'slash';
+   const cases = {};
+   const casesDir = join(root, 'evals', 'cases');
+@@ -86,7 +89,7 @@ export function loadModel(root) {
+   const exFile = join(root, 'scripts', 'lint-exemptions.json');
+   const exemptions = existsSync(exFile) ? JSON.parse(readFileSync(exFile, 'utf8')) : [];
+   const shipped = SHIPPED_DIRS.flatMap((d) => walk(join(root, d)));
+-  return { root, skills, agents, exemptions, shipped, kernelText, cases };
++  return { root, skills, agents, exemptions, shipped, kernelText, routesText, cases };
+ }
+ 
+ export const err = (rule, path, message) => ({ rule, path, level: 'error', message });
+@@ -188,13 +191,18 @@ export const RULES = [
+   } },
+   { id: 6, check(model) {
+     const out = [];
+-    for (const line of model.kernelText.split('\n')) {
++    const sources = [['kernel/kernel.md', model.kernelText], ['kernel/routes.md', model.routesText]];
++    if (kernelRows(model.routesText).length && !model.kernelText.includes('{ROOT}/kernel/routes.md')) {
++      out.push(err(6, 'kernel/kernel.md', 'kernel/routes.md holds route rows, but the kernel never names {ROOT}/kernel/routes.md, so no route there is reached'));
++    }
++    for (const [src, text] of sources) for (const line of text.split('\n')) {
+       if (!line.trimStart().startsWith('|') || !/\{(KERN|ROOT)\}\//.test(line)) continue;
+       const m = line.match(/^\|[^|\n]*\|\s*Read \{(KERN|ROOT)\}\/([^\s|]+)\s*\|\s*$/);
+-      if (!m) { out.push(err(6, 'kernel/kernel.md', `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}`)); continue; }
++      if (!m) { out.push(err(6, src, `a route row must end in a bare Read {KERN}/<path> or Read {ROOT}/<path> cell: ${line.trim()}`)); continue; }
+       const target = m[1] === 'KERN' ? join('skills', m[2]) : m[2];
++      if (target === 'kernel/routes.md') { out.push(err(6, src, 'kernel/routes.md is named in the Routing rule, not routed by a row')); continue; }
+       const file = join(model.root, target);
+-      if (!existsSync(file)) { out.push(err(6, 'kernel/kernel.md', `route ${target} does not exist`)); continue; }
++      if (!existsSync(file)) { out.push(err(6, src, `route ${target} does not exist`)); continue; }
+       const body = parseFrontmatter(readFileSync(file, 'utf8')).body.replace(/\r\n/g, '\n');
+       const firstH2 = body.split('\n').find((l) => l.startsWith('## '));
+       if (firstH2 !== '## Steps') out.push(err(6, target, 'a route file must open with ## Steps'));
+@@ -211,25 +219,36 @@ export const RULES = [
+     return out;
+   } },
+   { id: 7, check(model) {
+-    if (!existsSync(join(model.root, 'hooks', 'session-start'))) return [];
+     const out = [];
++    if (model.routesText.length > 1500) out.push(err(7, 'kernel/routes.md', `routed file ${model.routesText.length} chars, limit 1,500; every routed task reads it`));
++    if (!existsSync(join(model.root, 'hooks', 'session-start'))) return out;
+     const tmp = mkdtempSync(join(tmpdir(), 'kern-rule7-'));
+     try {
+       const repo = join(tmp, 'repo');
+       mkdirSync(join(repo, '.claude'), { recursive: true });
+-      spawnSync('git', ['init', '-q', repo]);
++      const init = spawnSync('git', ['init', '-q', repo]);
++      if (init.status !== 0) out.push(err(7, 'hooks/session-start', `git init exited ${init.status}, so the kernel was not measured in a repository`));
+       const fixture = join(model.root, 'tests', 'fixtures', 'projects', 'long-settings');
+       for (const f of ['kern.local.yml', 'kern.yml']) if (existsSync(join(fixture, f))) copyFileSync(join(fixture, f), join(repo, '.claude', f));
+       const env = { ...process.env, HOME: join(tmp, 'home'), CLAUDE_PLUGIN_DATA: join(tmp, 'data') };
+       const run = (name, payload) => spawnSync('bash', [join(model.root, 'hooks', name)], { input: JSON.stringify(payload), env, encoding: 'utf8' });
+       const hook = (name, payload) => run(name, payload).stdout || '';
+       const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
++      const ran = (r) => r.status === 0 && (r.stdout || '').trim() !== '';
+       const start = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
+-      if (start.status !== 0 || !(start.stdout || '').trim()) out.push(err(7, 'hooks/session-start', `exited ${start.status} with ${(start.stdout || '').length} chars of output, so the kernel was not measured`));
++      if (!ran(start)) out.push(err(7, 'hooks/session-start', `exited ${start.status} with ${(start.stdout || '').length} chars of output, so the kernel was not measured`));
+       const kernel = norm(start.stdout || '');
+       const terse = existsSync(join(model.root, 'modes', 'terse.md')) ? readFileSync(join(model.root, 'modes', 'terse.md'), 'utf8').length : 0;
+       if (kernel.length > 4000) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 4,000`));
+       if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
++      // Standing cost (design goal 4): the kernel with no project settings, plus every auto skill and agent
++      // description, the text every session carries.
++      for (const f of ['kern.local.yml', 'kern.yml']) rmSync(join(repo, '.claude', f), { force: true });
++      const again = run('session-start', { session_id: 'lint', source: 'startup', cwd: repo, hook_event_name: 'SessionStart' });
++      if (ran(start) && !ran(again)) out.push(err(7, 'hooks/session-start', `exited ${again.status} with no project settings, so the standing cost was not measured`));
++      const bare = norm(again.stdout || '');
++      const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
++      if (bare.length + desc > 4800) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 4,800`));
+       const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
+       let ctx = '';
+       try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }
+@@ -289,6 +308,7 @@ export const RULES = [
+     const auto = new Set(model.skills.filter((s) => s.tier === 'auto').map((s) => s.name));
+     const docs = [...model.skills, ...model.agents].filter((d) => !d.error).map((d) => ({ file: d.file, body: d.body }));
+     if (model.kernelText) docs.push({ file: join(model.root, 'kernel', 'kernel.md'), body: model.kernelText });
++    if (model.routesText) docs.push({ file: join(model.root, 'kernel', 'routes.md'), body: model.routesText });
+     for (const d of docs) {
+       for (const m of d.body.replace(/\r\n/g, '\n').matchAll(/Skill tool with `([a-z0-9:-]+)`/g)) {
+         const name = m[1].replace(/^kern:/, '');
+@@ -388,6 +408,25 @@ export const RULES = [
+     }
+     return out;
+   } },
++  { id: 12, check(model) {
++    if (!existsSync(join(model.root, 'evals', 'cases'))) return [];
++    const out = [];
++    const need = (key, path) => {
++      const c = model.cases[key];
++      if (!c) { out.push(err(12, path, `no eval cases: evals/cases/${key}.json`)); return; }
++      if (c.parseError) { out.push(err(12, path, `evals/cases/${key}.json is not valid JSON: ${c.parseError}`)); return; }
++      const pc = c.trigger?.positive?.length ?? 0;
++      // A negative marked "grader": "model" is checked by M2b's model-graded runner, not here; it does not count.
++      const nc = c.trigger?.negative?.filter((n) => n.grader !== 'model').length ?? 0;
++      const ec = c.evals?.length ?? 0;
++      if (pc < 3 || nc < 2 || ec < 1) out.push(err(12, path, `evals/cases/${key}.json has ${pc} positive, ${nc} negative, ${ec} behavioural; needs 3, 2, 1`));
++    };
++    for (const s of model.skills.filter((x) => !x.error && x.tier === 'auto')) need(s.name, rel(model, s.file));
++    for (const [src, text] of [['kernel/kernel.md', model.kernelText], ['kernel/routes.md', model.routesText]]) {
++      for (const r of kernelRows(text)) need(`row-${r.route}`, src);
++    }
++    return out;
++  } },
+ ];
+ 
+ export function runLint(model) {
+diff --git a/scripts/route-eval.mjs b/scripts/route-eval.mjs
+index f505941..bf08eb0 100644
+--- a/scripts/route-eval.mjs
++++ b/scripts/route-eval.mjs
+@@ -1,11 +1,12 @@
+ #!/usr/bin/env node
+ // Tier 1 routing evals (design spec 11.1). Adapted from addyosmani/agent-skills scripts/run-evals.js (MIT), deterministic tier only.
+ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+-import { join } from 'node:path';
++import { join, resolve } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { isMain } from './lib/is-main.mjs';
+ import { loadModel } from './lib/lint-rules.mjs';
+ import { buildCorpus, rank, similarity } from './lib/rank.mjs';
++import { kernelRows, routeText } from './lib/kernel-rows.mjs';
+ 
+ const MIN_POSITIVE = 3;
+ const MIN_NEGATIVE = 2;
+@@ -14,13 +15,22 @@ const COLLISION_WARN = 0.5;
+ const COLLISION_ERROR = 0.75;
+ 
+ export function targets(root) {
+-  const skills = loadModel(root).skills.filter((s) => s.tier === 'auto' && s.data.description)
++  const model = loadModel(root);
++  const skills = model.skills.filter((s) => s.tier === 'auto' && s.data.description)
+     .map((s) => ({ name: s.name, text: s.data.description, kind: 'skill' }));
++  const rows = kernelRows(routeText(model)).map((r) => ({ name: `row-${r.route}`, text: r.when, kind: 'row' }));
+   const dPath = join(root, 'evals', 'distractors.json');
+   const distractors = existsSync(dPath) ? JSON.parse(readFileSync(dPath, 'utf8')).map((d) => ({ name: d.name, text: d.description, kind: 'distractor' })) : [];
+-  return [...skills, ...distractors];
++  return [...skills, ...rows, ...distractors];
+ }
+ 
++// A kernel row and the skill it routes to are one owner: either ranking first is a hit.
++const ownerOf = (name) => name.replace(/^row-/, '');
++
++// A negative marked "grader": "model" is one the lexical ranker cannot judge, such as a question about the words a
++// row uses. It is listed on every run, left out of the checks and minimums here, and checked by M2b's model-graded runner.
++const modelGraded = (n) => n.grader === 'model';
++
+ function loadCases(root) {
+   const dir = join(root, 'evals', 'cases');
+   if (!existsSync(dir)) return [];
+@@ -30,7 +40,7 @@ function loadCases(root) {
+   });
+ }
+ 
+-export function evaluate(root, { minRank1 }) {
++export function evaluate(root, { minRank1, minHeldout = null }) {
+   const all = targets(root);
+   const owners = all.filter((t) => t.kind !== 'distractor');
+   const corpus = buildCorpus(all);
+@@ -38,6 +48,7 @@ export function evaluate(root, { minRank1 }) {
+   const cases = loadCases(root);
+   const errors = [];
+   const warnings = [];
++  const graded = [];
+   let positives = 0;
+   let rank1 = 0;
+ 
+@@ -58,29 +69,32 @@ export function evaluate(root, { minRank1 }) {
+       for (const f of ev.files || []) if (!existsSync(join(root, 'evals', 'fixtures', f))) errors.push(`${c.file}: eval id=${ev.id} fixture not found: evals/fixtures/${f}`);
+     }
+     for (const p of d.trigger?.positive || []) {
++      if (p.grader !== undefined) errors.push(`${expected}: a positive prompt cannot carry "grader"; only a negative can be model-graded: "${p.prompt}"`);
+       positives++;
+       const topK = p.top_k || 3;
+       const r = rank(p.prompt, corpus);
+-      const idx = r.findIndex((x) => x.name === expected);
++      const idx = r.findIndex((x) => ownerOf(x.name) === ownerOf(expected));
+       const hit = r[idx];
+       if (idx === 0 && hit.score > 0) rank1++;
+       if (!hit || hit.score === 0) errors.push(`${expected}: description shares no vocabulary with "${p.prompt}"`);
+       else if (idx >= topK) errors.push(`${expected}: positive prompt ranked #${idx + 1} (need top ${topK}): "${p.prompt}"; top: ${r.slice(0, 3).map((x) => `${x.name} ${x.score.toFixed(2)}`).join(', ')}`);
+     }
+     for (const n of d.trigger?.negative || []) {
++      if (n.grader !== undefined && !modelGraded(n)) errors.push(`${expected}: unknown grader "${n.grader}" for negative "${n.prompt}"; the only grader is "model"`);
++      if (modelGraded(n)) { graded.push({ owner: expected, prompt: n.prompt }); continue; }
+       const r = rank(n.prompt, corpus);
+-      if (r[0].name === expected && r[0].score > 0) errors.push(`${expected}: ranked #1 for negative prompt "${n.prompt}"`);
++      if (ownerOf(r[0].name) === ownerOf(expected) && r[0].score > 0) errors.push(`${expected}: ranked #1 for negative prompt "${n.prompt}"`);
+       if (n.owner) {
+         if (!names.has(n.owner)) errors.push(`${c.file}: negative names unknown owner "${n.owner}"`);
+         else {
+           const oi = r.findIndex((x) => x.name === n.owner);
+-          const si = r.findIndex((x) => x.name === expected);
++          const si = r.findIndex((x) => ownerOf(x.name) === ownerOf(expected));
+           if (r[oi].score === 0 || oi > si) errors.push(`${expected}: owner ${n.owner} does not outrank it for "${n.prompt}"`);
+         }
+       }
+     }
+     const pc = (d.trigger?.positive || []).length;
+-    const nc = (d.trigger?.negative || []).length;
++    const nc = (d.trigger?.negative || []).filter((n) => !modelGraded(n)).length;
+     const ec = (d.evals || []).length;
+     if (pc < MIN_POSITIVE || nc < MIN_NEGATIVE || ec < MIN_EVALS) errors.push(`${expected}: below required minimums (${pc}/${nc}/${ec}; need ${MIN_POSITIVE}/${MIN_NEGATIVE}/${MIN_EVALS})`);
+   }
+@@ -90,6 +104,7 @@ export function evaluate(root, { minRank1 }) {
+     for (let j = i + 1; j < all.length; j++) {
+       const a = owners[i].name;
+       const b = all[j].name;
++      if (ownerOf(a) === ownerOf(b)) continue;
+       const sim = similarity(a, b, corpus);
+       if (sim >= COLLISION_ERROR) errors.push(`collision: ${a} and ${b} are ${(sim * 100).toFixed(0)}% similar`);
+       else if (sim >= COLLISION_WARN) warnings.push(`overlap: ${a} and ${b} are ${(sim * 100).toFixed(0)}% similar`);
+@@ -97,18 +112,39 @@ export function evaluate(root, { minRank1 }) {
+   }
+ 
+   const rank1Rate = positives ? Math.floor((rank1 / positives) * 100) : null;
+-  if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the baseline ${minRank1}%`);
+-  return { errors, warnings, rank1Rate };
++  if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the floor ${minRank1}%`);
++
++  // Held-out organic prompts (evals/heldout.json), frozen by a test: never reworded to pass.
++  let heldoutRate = null;
++  const hPath = join(root, 'evals', 'heldout.json');
++  if (existsSync(hPath)) {
++    const held = JSON.parse(readFileSync(hPath, 'utf8'));
++    let hits = 0;
++    for (const h of held) {
++      if (!owners.some((t) => ownerOf(t.name) === h.owner)) { errors.push(`heldout: no owner "${h.owner}" for "${h.prompt}"`); continue; }
++      const r = rank(h.prompt, corpus);
++      if (ownerOf(r[0].name) === h.owner && r[0].score > 0) hits++;
++    }
++    heldoutRate = held.length ? Math.floor((hits / held.length) * 100) : null;
++    if (minHeldout != null && heldoutRate !== null && heldoutRate < minHeldout) errors.push(`held-out rank-1 rate ${heldoutRate}% is below the floor ${minHeldout}%`);
++  }
++  return { errors, warnings, rank1Rate, heldoutRate, modelGraded: graded };
+ }
+ 
+ if (isMain(import.meta.url)) {
+-  const root = fileURLToPath(new URL('..', import.meta.url));
++  const root = resolve(process.argv.slice(2).find((a) => !a.startsWith('--')) || fileURLToPath(new URL('..', import.meta.url)));
+   const basePath = join(root, 'evals', 'baseline.json');
+   const baseline = JSON.parse(readFileSync(basePath, 'utf8'));
+-  const r = evaluate(root, { minRank1: baseline.min_rank1 });
++  // evals/floors.json holds fixed floors a test pins; the baseline only rises above them.
++  const fPath = join(root, 'evals', 'floors.json');
++  const floors = existsSync(fPath) ? JSON.parse(readFileSync(fPath, 'utf8')) : { rank1: 0, heldout_rank1: null };
++  const minRank1 = Math.max(baseline.min_rank1, floors.rank1);
++  const r = evaluate(root, { minRank1, minHeldout: floors.heldout_rank1 });
+   for (const w of r.warnings) console.log(`warn: ${w}`);
+   for (const e of r.errors) console.log(`error: ${e}`);
+-  console.log(`rank-1 rate: ${r.rank1Rate ?? 'n/a'}% (baseline ${baseline.min_rank1}%)`);
++  for (const m of r.modelGraded) console.log(`model-graded, not checked here: ${m.owner}: "${m.prompt}"`);
++  console.log(`rank-1 rate: ${r.rank1Rate ?? 'n/a'}% (baseline ${baseline.min_rank1}%, fixed floor ${floors.rank1}%)`);
++  if (r.heldoutRate !== null) console.log(`held-out rank-1 rate: ${r.heldoutRate}% (fixed floor ${floors.heldout_rank1}%)`);
+   if (process.argv.includes('--update-baseline') && !r.errors.length && r.rank1Rate !== null && r.rank1Rate > baseline.min_rank1) {
+     writeFileSync(basePath, JSON.stringify({ min_rank1: r.rank1Rate }, null, 2) + '\n');
+     console.log(`baseline raised to ${r.rank1Rate}%`);
+diff --git a/skills/help/references/map.md b/skills/help/references/map.md
+index b10e5e1..e252030 100644
+--- a/skills/help/references/map.md
++++ b/skills/help/references/map.md
+@@ -1,6 +1,6 @@
+ # kern map
+ 
+-Installed skills only. The Tier column says how a skill loads. An `auto` skill loads by its description. A `path` skill loads through a kernel Routing row, or when typed. A `slash` skill never loads by its description. It loads when typed, or when a kernel rule or another skill names its file.
++Installed skills only. The Tier column says how a skill loads. An `auto` skill loads by its description. A `path` skill loads through a kernel Routing row, in `kernel/kernel.md` or `kernel/routes.md`, or when typed. A `slash` skill never loads by its description. It loads when typed, or when a kernel rule or another skill names its file.
+ 
+ | Skill | Tier | Reached by | Job |
+ |---|---|---|---|
+diff --git a/tests/lint-rules.test.mjs b/tests/lint-rules.test.mjs
+index 76055c9..7ae2ee9 100644
+--- a/tests/lint-rules.test.mjs
++++ b/tests/lint-rules.test.mjs
+@@ -186,7 +186,7 @@ test('rule 6: a route row in another form, or ## Steps without a numbered list,
+ test('rule 7: an oversized rendered kernel is an error; the real kernel passes', () => {
+   const big = '#!/usr/bin/env bash\nhead -c 9500 /dev/zero | tr "\\0" x\n';
+   const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
+-  assert.deepEqual(rules(lint({ 'hooks/session-start': big, 'hooks/subagent-start': sub })).filter((r) => r === 7), [7]);
++  assert.ok(lint({ 'hooks/session-start': big, 'hooks/subagent-start': sub }).some((f) => f.rule === 7 && f.level === 'error' && /limit 9,000/.test(f.message)));
+   const real = runLint(loadModel(join(import.meta.dirname, '..'))).filter((f) => f.rule === 7 && f.level === 'error');
+   assert.deepEqual(real, []);
+ });
+@@ -420,3 +420,66 @@ test('rule 16: a WORK folder is read whole, in any case', () => {
+   assert.deepEqual(run('Write WORK/Plan.'), ['WORK/Plan']);
+   assert.deepEqual(run('Write WORK/spec/x.md and WORK/plans.'), []);
+ });
++
++// M2a rules 6, 7 and 12 read kernel/routes.md.
++test('rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file', () => {
++  const files = {
++    'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']) + 'Then Read {ROOT}/kernel/routes.md.\n',
++    'kernel/routes.md': '| Bug | Read {KERN}/d/SKILL.md |\n',
++    'skills/tw/SKILL.md': skill('tw', manual()),
++    'skills/d/SKILL.md': skill('d', manual()),
++  };
++  assert.deepEqual(rules(lint(files)), []);
++  assert.equal(loadModel(repo(files)).skills.find((s) => s.name === 'd').tier, 'path', 'a skill routed from routes.md is a path skill');
++  assert.deepEqual(rules(lint({ ...files, 'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']) })), [6]);
++  assert.deepEqual(rules(lint({ ...files, 'kernel/routes.md': '| Bug | Read {KERN}/gone/SKILL.md |\n' })), [6]);
++});
++
++test('rule 7: the routed file has its own cap, and the standing cost has a combined budget', () => {
++  assert.deepEqual(rules(lint({ 'kernel/routes.md': `| x | Read {KERN}/a/SKILL.md |\n${'y'.repeat(1500)}` })).filter((r) => r === 7), [7]);
++  const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
++  const start = (n) => `#!/usr/bin/env bash\nhead -c ${n} /dev/zero | tr "\\0" x\n`;
++  const desc = `description: Use when ${'w'.repeat(280)}.`;
++  const files = (n) => ({ 'hooks/session-start': start(n), 'hooks/subagent-start': sub, 'skills/a/SKILL.md': skill('a', desc) });
++  assert.deepEqual(rules(lint(files(4400))).filter((r) => r === 7), []);
++  const big = lint(files(4600)).filter((f) => f.rule === 7 && f.level === 'error');
++  assert.equal(big.length, 1);
++  assert.match(big[0].message, /^standing cost 48\d\d chars/);
++});
++
++
++const caseJson = (name, p = 3, n = 2, e = 1) => JSON.stringify({
++  skill_name: name,
++  trigger: { positive: Array.from({ length: p }, (_, i) => ({ prompt: `p${i}` })), negative: Array.from({ length: n }, (_, i) => ({ prompt: `n${i}` })) },
++  evals: Array.from({ length: e }, (_, i) => ({ id: i + 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] })),
++});
++
++test('rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists', () => {
++  const base = { 'skills/a/SKILL.md': skill('a', 'description: Use when x.') };
++  assert.deepEqual(rules(lint(base)), [], 'no evals/cases folder: rule 12 is silent');
++  assert.deepEqual(rules(lint({ ...base, 'evals/cases/other.json': caseJson('other') })), [12]);
++  assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': caseJson('a', 2) })), [12]);
++  assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': caseJson('a') })), []);
++  const routed = { ...base, 'evals/cases/a.json': caseJson('a'), 'kernel/kernel.md': 'Then Read {ROOT}/kernel/routes.md.\n', 'kernel/routes.md': '| Bug | Read {KERN}/d/SKILL.md |\n', 'skills/d/SKILL.md': skill('d', 'description: d\ndisable-model-invocation: true') };
++  assert.deepEqual(rules(lint(routed)), [12]);
++  assert.deepEqual(rules(lint({ ...routed, 'evals/cases/row-d.json': caseJson('row-d') })), []);
++});
++
++test('rule 7: a session-start that fails without project settings is an error, not a low standing cost', () => {
++  const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
++  const once = '#!/usr/bin/env bash\nmkdir -p "$CLAUDE_PLUGIN_DATA"\n[ -e "$CLAUDE_PLUGIN_DATA/ran" ] && exit 1\ntouch "$CLAUDE_PLUGIN_DATA/ran"\necho kernel\n';
++  const f = lint({ 'hooks/session-start': once, 'hooks/subagent-start': sub }).filter((x) => x.rule === 7 && x.level === 'error');
++  assert.equal(f.length, 1);
++  assert.match(f[0].message, /standing cost was not measured/);
++});
++
++test('rule 12: a case file that is not valid JSON is an error', () => {
++  assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.'), 'evals/cases/a.json': '{' })), [12]);
++});
++
++test('rule 12: a model-graded negative does not count toward the minimum of 2', () => {
++  const base = { 'skills/a/SKILL.md': skill('a', 'description: Use when x.') };
++  const withNegatives = (negative) => JSON.stringify({ ...JSON.parse(caseJson('a')), trigger: { positive: [{ prompt: 'p0' }, { prompt: 'p1' }, { prompt: 'p2' }], negative } });
++  assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': withNegatives([{ prompt: 'n0' }, { prompt: 'n1', grader: 'model' }]) })), [12]);
++  assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': withNegatives([{ prompt: 'n0' }, { prompt: 'n1' }, { prompt: 'n2', grader: 'model' }]) })), []);
++});
+diff --git a/tests/route-eval-rows.test.mjs b/tests/route-eval-rows.test.mjs
+new file mode 100644
+index 0000000..8b14a3f
+--- /dev/null
++++ b/tests/route-eval-rows.test.mjs
+@@ -0,0 +1,134 @@
++// tests/route-eval-rows.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { createHash } from 'node:crypto';
++import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
++import { spawnSync } from 'node:child_process';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { targets, evaluate } from '../scripts/route-eval.mjs';
++import { kernelRows } from '../scripts/lib/kernel-rows.mjs';
++
++const ROOT = fileURLToPath(new URL('..', import.meta.url));
++
++function repo(files) {
++  const root = mkdtempSync(join(tmpdir(), 'kern-rows-'));
++  for (const [p, content] of Object.entries(files)) {
++    mkdirSync(join(root, p, '..'), { recursive: true });
++    writeFileSync(join(root, p), content);
++  }
++  return root;
++}
++const autoSkill = (name, desc) => `---\nname: ${name}\ndescription: ${desc}\n---\n\n# ${name}\n\n## Steps\n\n1. a\n`;
++const pathSkill = (name) => `---\nname: ${name}\ndescription: d\ndisable-model-invocation: true\n---\n\n# ${name}\n\n## Steps\n\n1. a\n`;
++const cases = (name, pos, neg) => JSON.stringify({
++  skill_name: name,
++  trigger: { positive: pos.map((prompt) => ({ prompt, top_k: 3 })), negative: neg.map((prompt) => ({ prompt })) },
++  evals: [{ id: 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] }],
++});
++const KERNEL = [
++  '| Observable trigger | Route |',
++  '|---|---|',
++  '| Phase ends, or context is filling | Read {ROOT}/kernel/context.md |',
++  '',
++  'Then Read {ROOT}/kernel/routes.md. Several matches: define and diagnose before build.',
++].join('\n');
++const ROUTES = [
++  '| Observable trigger | Route |',
++  '|---|---|',
++  '| Bug, failing test, unexpected output, crash or error | Read {KERN}/diagnose/SKILL.md |',
++  '| Starting or resuming after a gap | Read {KERN}/recall/SKILL.md |',
++].join('\n');
++
++function fixture(extra = {}) {
++  return repo({
++    'kernel/kernel.md': KERNEL,
++    'kernel/routes.md': ROUTES,
++    'skills/diagnose/SKILL.md': pathSkill('diagnose'),
++    'skills/recall/SKILL.md': autoSkill('recall', 'Use when starting or resuming work after a gap and state must be rebuilt: where did I leave off, catch me up.'),
++    'evals/cases/recall.json': cases('recall', ['where did I leave off yesterday', 'catch me up on the work', 'resuming after a long gap'], ['fix this crash', 'rename a variable']),
++    'evals/cases/row-recall.json': cases('row-recall', ['resuming after a gap in the work', 'starting again after a gap', 'where did I leave off after the gap'], ['fix this crash', 'rename a variable']),
++    'evals/cases/row-diagnose.json': cases('row-diagnose', ['the test is failing with an error', 'unexpected output from the bug', 'a crash with an error on startup'], ['catch me up', 'where did I leave off']),
++    'evals/cases/row-context.json': cases('row-context', ['the context is filling up', 'this phase ends now', 'context is filling, what next'], ['fix this crash', 'catch me up']),
++    ...extra,
++  });
++}
++
++test('kernelRows parses skill and kernel-file routes and skips other lines', () => {
++  assert.deepEqual(kernelRows(`${KERNEL}\n${ROUTES}`), [
++    { when: 'Phase ends, or context is filling', route: 'context' },
++    { when: 'Bug, failing test, unexpected output, crash or error', route: 'diagnose' },
++    { when: 'Starting or resuming after a gap', route: 'recall' },
++  ]);
++  assert.deepEqual(kernelRows(''), []);
++});
++
++test('targets add the rows of both files after skills and before distractors', () => {
++  const root = fixture({ 'evals/distractors.json': JSON.stringify([{ name: 'other', description: 'Something else entirely' }]) });
++  assert.deepEqual(targets(root).map((t) => `${t.kind}:${t.name}`), ['skill:recall', 'row:row-context', 'row:row-diagnose', 'row:row-recall', 'distractor:other']);
++});
++
++test('a row and its own skill count as one owner', () => {
++  const r = evaluate(fixture(), { minRank1: null });
++  assert.deepEqual(r.errors, []);
++  assert.equal(r.rank1Rate, 100);
++});
++
++test('a routed row without a case file is an error', () => {
++  const root = fixture();
++  rmSync(join(root, 'evals/cases/row-diagnose.json'));
++  const r = evaluate(root, { minRank1: null });
++  assert.ok(r.errors.some((e) => e.startsWith('row-diagnose: no eval case file')), JSON.stringify(r.errors));
++});
++
++test('held-out prompts give their own rate, held to their own floor', () => {
++  const held = JSON.stringify([{ owner: 'recall', prompt: 'where did I leave off after the gap' }, { owner: 'diagnose', prompt: 'catch me up' }]);
++  const r = evaluate(fixture({ 'evals/heldout.json': held }), { minRank1: null, minHeldout: 60 });
++  assert.equal(r.heldoutRate, 50);
++  assert.ok(r.errors.some((e) => e.startsWith('held-out rank-1 rate 50% is below the floor 60%')), JSON.stringify(r.errors));
++});
++
++test('the fixed floors and the frozen held-out set are pinned', () => {
++  assert.deepEqual(JSON.parse(readFileSync(join(ROOT, 'evals', 'floors.json'), 'utf8')), { rank1: 85, heldout_rank1: 32 });
++  const sha = createHash('sha256').update(readFileSync(join(ROOT, 'evals', 'heldout.json'))).digest('hex');
++  assert.equal(sha, '9b5cb8271f50835c162805b42066d90206bd46ffd7b0af280992b3d5af2a54c0', 'evals/heldout.json is frozen: fix routing, never the prompts');
++});
++
++// A negative the lexical ranker cannot judge carries "grader": "model"; M2b's model-graded runner checks it.
++const withGrader = (negative, positive = ['where did I leave off yesterday', 'catch me up on the work', 'resuming after a long gap']) => fixture({
++  'evals/cases/recall.json': JSON.stringify({
++    skill_name: 'recall',
++    trigger: { positive: positive.map((p) => (typeof p === 'string' ? { prompt: p, top_k: 3 } : p)), negative },
++    evals: [{ id: 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] }],
++  }),
++  'evals/baseline.json': JSON.stringify({ min_rank1: 0 }),
++});
++const LEXICAL = [{ prompt: 'fix this crash' }, { prompt: 'rename a variable' }];
++
++test('a model-graded negative is skipped by the lexical check and listed in the output', () => {
++  const plain = evaluate(withGrader([...LEXICAL, { prompt: 'catch me up' }]), { minRank1: null });
++  assert.ok(plain.errors.some((e) => e === 'recall: ranked #1 for negative prompt "catch me up"'), JSON.stringify(plain.errors));
++  const root = withGrader([...LEXICAL, { prompt: 'catch me up', grader: 'model' }]);
++  const r = evaluate(root, { minRank1: null });
++  assert.deepEqual(r.errors, []);
++  assert.deepEqual(r.modelGraded, [{ owner: 'recall', prompt: 'catch me up' }]);
++  const cli = spawnSync(process.execPath, [join(ROOT, 'scripts', 'route-eval.mjs'), root], { encoding: 'utf8' });
++  assert.equal(cli.status, 0, cli.stdout + cli.stderr);
++  assert.match(cli.stdout, /^model-graded, not checked here: recall: "catch me up"$/m);
++});
++
++test('a positive that carries the grader flag is an error', () => {
++  const r = evaluate(withGrader(LEXICAL, ['where did I leave off yesterday', 'catch me up on the work', { prompt: 'resuming after a long gap', top_k: 3, grader: 'model' }]), { minRank1: null });
++  assert.ok(r.errors.some((e) => e.startsWith('recall: a positive prompt cannot carry "grader"')), JSON.stringify(r.errors));
++});
++
++test('only lexically checked negatives count toward the minimum', () => {
++  const r = evaluate(withGrader([LEXICAL[0], { prompt: 'catch me up', grader: 'model' }]), { minRank1: null });
++  assert.ok(r.errors.some((e) => e.startsWith('recall: below required minimums (3/1/1')), JSON.stringify(r.errors));
++});
++
++test('a negative with a grader other than model is an error', () => {
++  const r = evaluate(withGrader([...LEXICAL, { prompt: 'add a CSV export', grader: 'modle' }]), { minRank1: null });
++  assert.ok(r.errors.some((e) => e.startsWith('recall: unknown grader "modle"')), JSON.stringify(r.errors));
++});

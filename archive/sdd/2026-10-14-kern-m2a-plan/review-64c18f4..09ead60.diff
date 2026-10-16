@@ -1,0 +1,142 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 286107e..fdec563 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -17,6 +17,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
+ - parallel-work: fan out with one worktree per writer, checked briefs and serial integration.
+ - execute-plan: ledger, per-task worktree snapshots and two-verdict review without commits; approval, review and RED checked by scripts.
+ - self-review: deterministic checks, built-in code-review at low effort, a spec lane, blast radius, probes, verdict.
++- commit: named files, convention-checked message from a file under .kern/tmp, one commit per reviewed task run as `git -C <worktree> commit`, no attribution by default.
+ 
+ ## [0.2.1] - 2026-10-14
+ 
+diff --git a/skills/commit/SKILL.md b/skills/commit/SKILL.md
+new file mode 100644
+index 0000000..f84c011
+--- /dev/null
++++ b/skills/commit/SKILL.md
+@@ -0,0 +1,48 @@
++---
++name: commit
++description: Commit named files with a message that follows the project's convention, after the checks pass.
++disable-model-invocation: true
++argument-hint: "[files...]"
++allowed-tools: Bash(git -C * status *), Bash(git -C * diff *), Bash(git -C * log *), Bash(git -C * rev-parse *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
++---
++
++# commit
++
++One clean commit of the right files. finish-branch and, under autopilot, execute-plan run steps 3 to 6.
++
++## Steps
++
++0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
++1. Consent: the user typed `/kern:commit` or asked to commit in this session, or autopilot is on. Otherwise stop.
++2. Where, in order: `<toplevel>` is what `git -C <wt> rev-parse --show-toplevel` prints; `<wt>` is the worktree the caller names (execute-plan: its plan worktree), else `.`. Run every later git command as `git -C <toplevel> ...`. Branch: `git -C <toplevel> rev-parse --abbrev-ref HEAD` (`HEAD`: detached). On a protected branch, stop and ask: commit locally anyway, or the user moves the work. On a detached HEAD, stop: finish-branch offers to create a branch. Never switch branches.
++3. Files: read `git -C <toplevel> status --porcelain`; propose this task's files or those named; list the rest, unstaged. For a `<ledger dir>` under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers` whose `Worktree:` line names `<toplevel>`, offer one commit per complete task, in ledger order. A task's files are the `## Files changed` list of `<ledger dir>/reviews/task-<N>-<tree7>.diff`, `<tree7>` the first 7 characters of the `tree=` of its `Task <N>: complete` line. If that file is missing, run `git -C <toplevel> diff --name-only <start tree> <complete tree>` on the trees of its start and complete lines; failing that, ask. Tasks that share a path cannot be split (`git add` takes whole files): offer one commit naming each, or ask. Never stage a file that holds another task's hunks under one task's name. Autopilot commits each task as it closes, so overlap arises only in a later run. Stage with `git -C <toplevel> add -- <files>` in its own call, never `-A` or `.`; name and leave out any `never_commit` path. Show `git -C <toplevel> diff --staged --stat`.
++4. Before the first commit, follow `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md` once (`verify.fast` and the focused tests). If tracked changes stay unstaged, say the proof ran on the working tree, not the commit. Record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <toplevel>`.
++5. Message: use `commit.convention`, or infer it from `git -C <toplevel> log --format=%s -30` and state it; take the ticket id from the branch name by `commit.id_from_branch`; an imperative subject of 72 characters or fewer; a body that says why; one concern per commit (a refactor mixed with a feature: propose two). Prose follows `${CLAUDE_PLUGIN_ROOT}/skills/technical-writing/SKILL.md`. Add attribution only as `commit.attribution` says.
++6. Write the message with the Write tool to `<dir>/commit-msg` (Read it first if it exists), `<dir>` being the path `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints. Run `git -C <toplevel> commit -F <dir>/commit-msg` as its own call, with the literal path: no `cd`, no expansion, no other command. G5 reads a message file only inside the main worktree. G5's prompt is the confirmation; under autopilot G5 allows it when the checks pass.
++7. Report the short SHA, subject, files and what stayed unstaged. After the last commit, if nothing stayed unstaged, `git -C <toplevel> rev-parse HEAD^{tree}` must equal the tree from step 4; a mismatch means it is not what was proven: say so.
++
++## Inputs
++
++| Key | Default |
++|---|---|
++| `commit.convention` | detected |
++| `commit.id_from_branch` | `[A-Z][A-Z0-9]+-[0-9]+` |
++| `commit.attribution`, `commit.policy` | `none`; `ask` |
++| `branch.protected` | `base_branch`, `deploy.envs` branches |
++| `never_commit` | none (G6 also checks) |
++
++## Outputs
++
++Commits; a chat report.
++
++## Stops and autopilot
++
++Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Stops: steps 1 to 4, and `kern-dir` exits 2, `wt-snap` fails, G5 denies or asks, `git add` or `git commit` fails. Report its output; never `--no-verify`, never another command shape. Under autopilot a failing convention check is a denial, never a retry with a looser message, and each stop parks as `parked: <question>; default: <choice>; why: <one line>` committing nothing on that path (defaults: overlap, one commit naming each task; no files, no commit); a protected branch or a detached HEAD never commits.
++
++## Red flags
++
++| Thought | Reality |
++|---|---|
++| "I'll commit when the whole plan is done" | A giant commit cannot be reviewed. |
++| "The tests passed earlier" | Prove the tree you commit. |
++| "The check failed, so I'll loosen the message" | A failed check is a stop, never a retry. |
+diff --git a/skills/help/references/map.md b/skills/help/references/map.md
+index c078a01..e67944a 100644
+--- a/skills/help/references/map.md
++++ b/skills/help/references/map.md
+@@ -17,6 +17,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
+ | `parallel-work` | path | execute-plan and diagnose; /kern:parallel-work | One worktree per writer, integrate, re-test |
+ | `execute-plan` | path | Routed row "Executing an agreed plan"; /kern:execute-plan | Run a plan with a ledger and two-verdict review |
+ | `self-review` | path | Routed row "Review requested on your own diff, no PR yet"; /kern:self-review | Author's check before a PR |
++| `commit` | slash | /kern:commit | One commit of named files, or one per reviewed task, per the project's convention |
+ 
+ ## Close calls
+ - Writing a PR body: `technical-writing`, which applies `unslop`. Editing a reply's tone only: `unslop`.
+diff --git a/tests/skills/commit.acceptance.md b/tests/skills/commit.acceptance.md
+new file mode 100644
+index 0000000..f99dcb2
+--- /dev/null
++++ b/tests/skills/commit.acceptance.md
+@@ -0,0 +1,10 @@
++# commit: acceptance checks (run during the M2b pilot; Task 26 runs the guard and gh-stub checks)
++
++- [ ] On `CDS-2465/replace-minio` with `commit.convention: "^CDS-[0-9]+: "`: the subject starts `CDS-2465: `; no trailers; only touched files are staged.
++- [ ] An untracked `.env.local` exists: it is not staged, and it is listed.
++- [ ] On `main`: it stops and asks. Under autopilot it parks and commits nothing. On a detached HEAD: same.
++- [ ] After a delegate run with three complete ledger tasks that touch disjoint files: three commits are offered, one per task, in ledger order, each from `git -C <plan worktree>`.
++- [ ] Two complete tasks that touch the same file: one commit naming both tasks is offered; no file holding the other task's hunks is staged under one task's name.
++- [ ] A complete task whose `reviews/task-N-<tree7>.diff` was deleted: its files come from `git diff --name-only <start tree> <complete tree>`.
++- [ ] Run from the main checkout for a plan worktree: the commit lands on the plan worktree's branch and the main checkout's branch and status are unchanged.
++- [ ] A project with `.claude/skills/commit/`: kern defers in one line; G5 and G6 still check the commit.
+diff --git a/tests/skills/commit.test.mjs b/tests/skills/commit.test.mjs
+new file mode 100644
+index 0000000..25554d5
+--- /dev/null
++++ b/tests/skills/commit.test.mjs
+@@ -0,0 +1,42 @@
++// tests/skills/commit.test.mjs
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertMaxBytes, assertContains } from '../helpers/md.mjs';
++
++const SKILL = 'skills/commit/SKILL.md';
++
++test('commit frontmatter', () => {
++  assertFrontmatter(SKILL, {
++    name: 'commit',
++    description: "Commit named files with a message that follows the project's convention, after the checks pass.",
++    'disable-model-invocation': 'true',
++    'argument-hint': '[files...]',
++    'allowed-tools': 'Bash(git -C * status *), Bash(git -C * diff *), Bash(git -C * log *), Bash(git -C * rev-parse *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)',
++  });
++});
++
++test('commit sections, steps and red flags', () => {
++  const { body, raw } = readDoc(SKILL);
++  assert.deepEqual(h2s(body), ['## Steps', '## Inputs', '## Outputs', '## Stops and autopilot', '## Red flags']);
++  const s = steps(body);
++  assert.equal(s.length, 8);
++  assert.equal(s[0], DEFER);
++  assertContains(SKILL, ['git -C <toplevel> add -- <files>', 'never `-A` or `.`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`', 'git -C <toplevel> commit -F <dir>/commit-msg', 'as its own call, with the literal path',
++    'git -C <toplevel> diff --staged --stat', 'one commit per complete task, in ledger order', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap', 'HEAD^{tree}', 'On a detached HEAD, stop:', 'On a protected branch, stop and ask',
++    '72 characters or fewer', 'never a retry with a looser message', '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md',
++    // gap 1: the task's file list
++    'reviews/task-<N>-<tree7>.diff', '`tree=` of its `Task <N>: complete` line', 'git -C <toplevel> diff --name-only <start tree> <complete tree>',
++    // gap 2: overlap
++    '`Worktree:` line names `<toplevel>`', 'Autopilot commits each task as it closes', 'share a path', 'Never stage a file that holds another task\'s hunks under one task\'s name',
++    // gap 3: where the commit runs
++    'the worktree the caller names', 'git -C <toplevel> rev-parse --abbrev-ref HEAD',
++    // exits
++    'kern-dir` exits 2', '`wt-snap` fails', 'G5 denies or asks', '`git add` or `git commit` fails', 'never `--no-verify`',
++    // autopilot
++    'an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`', "else the kernel's \"Autopilot:\" line",
++    'parked: <question>; default: <choice>; why: <one line>', 'never through AskUserQuestion',
++    'a protected branch or a detached HEAD never commits']);
++  assert.ok(!raw.includes('temp file'), 'the message file lives under WORK/tmp, which G5 accepts, not in a temp file');
++  assert.ok(!raw.includes('$('), 'no command substitution in a prescribed command');
++  assertMaxBytes(SKILL, 5200);
++});

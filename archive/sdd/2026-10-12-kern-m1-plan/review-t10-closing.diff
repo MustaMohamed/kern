@@ -1,0 +1,283 @@
+diff --git a/hooks/guards/g01-git.sh b/hooks/guards/g01-git.sh
+index ef21ce3..c89ddf2 100644
+--- a/hooks/guards/g01-git.sh
++++ b/hooks/guards/g01-git.sh
+@@ -281,7 +281,7 @@ _g01_ref() {
+     *) _G01_SRC=$r; _G01_DST=$r ;;
+   esac
+   case "$_G01_DST" in
+-    HEAD | @) _G01_DST=$2 ;;
++    HEAD | @) _G01_DST=${2:-HEAD} ;;
+     refs/heads/*) _G01_DST=${_G01_DST#refs/heads/} ;;
+     heads/*) _G01_DST=${_G01_DST#heads/} ;;
+   esac
+@@ -379,19 +379,19 @@ EOT
+ 
+ # _g01_proven DIR PLAIN ODD CUR REMOTE REFS...: the one push shape G1 may allow. All hold: this
+ # git record is the command's first, every later record is a read-only filter (_g01_filter), and
+-# the command has no $( ) or backticks; the record holds no $, { or }, so no word expands; the
+-# record is `git`, -C options, `push` (PLAIN 1), and every push option is in the safe set or a
+-# quiet redirection (ODD 0); CUR and REMOTE hold only _G01_NAME_CHARS; REMOTE is a name
+-# `git remote` lists, with no push, mirror, receivepack, vcs or pushurl config, and no
+-# url.<base>.pushInsteadOf is set; there is at least one refspec, and each pushes CUR (a branch)
+-# to CUR.
++# the command has no $( ) or backticks; the record holds no $, {, }, *, ?, [ or ~, so no word
++# expands or globs; the record is `git`, -C options, `push` (PLAIN 1), and every push option is in
++# the safe set or a quiet redirection (ODD 0); CUR and REMOTE hold only _G01_NAME_CHARS; REMOTE is
++# a name `git remote` lists, with no push, mirror, receivepack or vcs config, and the URL a push
++# goes to is its own URL: no pushurl, and no insteadOf or pushInsteadOf rewrite applies; there is
++# at least one refspec, and each pushes CUR (a branch) to CUR.
+ _g01_proven() {
+-  local dir="$1" plain="$2" odd="$3" cur="$4" remote="$5" r s d k i=1
++  local dir="$1" plain="$2" odd="$3" cur="$4" remote="$5" r s d k u i=1
+   shift 5
+   [ "$_G01_IDX" = 1 ] && [ "$plain" = 1 ] && [ "$odd" = 0 ] && [ $# -gt 0 ] && [ -n "$remote" ] || return 1
+   # shellcheck disable=SC2016 # a literal $( in the text
+   case "$_G01_CMD" in *'$('* | *'`'*) return 1 ;; esac
+-  case "${_G01_RECS[0]}" in *'$'* | *'{'* | *'}'*) return 1 ;; esac
++  case "${_G01_RECS[0]}" in *'$'* | *'{'* | *'}'* | *'*'* | *'?'* | *'['* | *'~'*) return 1 ;; esac
+   case "$cur" in "" | *[!"$_G01_NAME_CHARS"]*) return 1 ;; esac
+   case "$remote" in *[!"$_G01_NAME_CHARS"]*) return 1 ;; esac
+   while [ "$i" -lt "${#_G01_RECS[@]}" ]; do
+@@ -406,19 +406,21 @@ _g01_proven() {
+   word_has "$(git -C "$dir" remote 2>/dev/null)" "$remote" || return 1
+   while IFS= read -r k; do
+     case "${k%% *}" in
+-      "remote.$remote.push" | "remote.$remote.mirror" | "remote.$remote.receivepack" | \
+-        "remote.$remote.vcs" | "remote.$remote.pushurl" | url.*) return 1 ;;
++      "remote.$remote.push" | "remote.$remote.mirror" | "remote.$remote.receivepack" | "remote.$remote.vcs") return 1 ;;
+     esac
+   done <<EOT
+-$(git -C "$dir" config --get-regexp '^(remote\..*\.(push|mirror|receivepack|vcs|pushurl)|url\..*\.pushinsteadof)$' 2>/dev/null)
++$(git -C "$dir" config --get-regexp '^remote\..*\.(push|mirror|receivepack|vcs)$' 2>/dev/null)
+ EOT
++  # A pushurl, or an insteadOf or pushInsteadOf rewrite that matches this remote, changes the URL.
++  u=$(git -C "$dir" config --get-all "remote.$remote.url" 2>/dev/null) && [ -n "$u" ] || return 1
++  [ "$(git -C "$dir" remote get-url --push --all "$remote" 2>/dev/null)" = "$u" ] || return 1
+   return 0
+ }
+ 
+ # _g01_push DIR PLAIN WORDS...: force first, then push.policy deny, remote delete, an unknown
+ # directory, protected targets and lease pushes; an allow needs _g01_proven.
+ _g01_push() {
+-  local dir="$1" plain="$2" toks t r cur policy fix force=none del=0 odd=0 val=0 all=0 have=0 prot=0
++  local dir="$1" plain="$2" toks t r cur policy fix det="" force=none del=0 odd=0 val=0 all=0 have=0 prot=0
+   local remote="" refs=() tg=()
+   shift 2
+   toks=$(_g01_opts "$_G01_PUSH_OPTS" "$@")
+@@ -468,7 +470,10 @@ EOT
+   fi
+   cur=$(current_branch "$dir")
+   # The retry that reaches the allowed shape: a bare push names its remote and branch.
+-  if [ ${#refs[@]} -gt 0 ]; then
++  if [ -z "$cur" ]; then
++    fix="HEAD is detached; check out a branch first"
++    det="; $fix"
++  elif [ ${#refs[@]} -gt 0 ]; then
+     # shellcheck disable=SC2016 # literal backticks
+     fix='kern allows only `git push [-u] <remote> <current-branch>` unattended'
+     # shellcheck disable=SC2016 # literal backticks
+@@ -479,7 +484,7 @@ EOT
+     fix="name the remote and branch: git push -u origin $cur"
+   fi
+   [ "$all" = 1 ] && tg+=("*")
+-  [ ${#refs[@]} -gt 0 ] || tg+=("$cur")
++  [ ${#refs[@]} -gt 0 ] || tg+=("${cur:-HEAD}")
+   for r in "${refs[@]}"; do
+     _g01_ref "$r" "$cur"
+     tg+=("$_G01_DST")
+@@ -487,21 +492,21 @@ EOT
+   for t in "${tg[@]}"; do
+     branch_protected "$t" || continue
+     prot=1
+-    vote ask G1 "push to protected branch $t"
+-    [ "$AUTOPILOT" = 1 ] && vote deny G1 "push to protected branch $t under autopilot"
++    vote ask G1 "push to protected branch $t$det"
++    [ "$AUTOPILOT" = 1 ] && vote deny G1 "push to protected branch $t under autopilot$det"
+   done
+   [ "$prot" = 0 ] || return 0
+   if [ "$force" = lease ]; then
+     if [ "$AUTOPILOT" = 0 ]; then
+       if _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}"; then
+-        vote ask G1 "force-with-lease push of ${tg[*]}"
++        vote ask G1 "force-with-lease push of ${tg[*]}$det"
+       else
+-        vote deny G1 "${tg[*]} may hold commits by other authors (or that could not be checked); a shared branch is never force-pushed"
++        vote deny G1 "${tg[*]} may hold commits by other authors (or that could not be checked); a shared branch is never force-pushed$det"
+       fi
+     elif [ "$(settings_get rebase.push ask)" != autopilot ]; then
+-      vote deny G1 "lease push under autopilot needs rebase.push: autopilot"
++      vote deny G1 "lease push under autopilot needs rebase.push: autopilot$det"
+     elif [ "$val" = 1 ]; then
+-      vote deny G1 "--force-with-lease=<ref>:<expect> under autopilot; use the bare option"
++      vote deny G1 "--force-with-lease=<ref>:<expect> under autopilot; use the bare option$det"
+     elif ! _g01_proven "$dir" "$plain" "$odd" "$cur" "$remote" "${refs[@]}"; then
+       vote deny G1 "autopilot lease push of an unknown shape; $fix"
+     elif ! _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}"; then
+diff --git a/hooks/lib/gitctx.sh b/hooks/lib/gitctx.sh
+index 5ace14d..6e899d0 100644
+--- a/hooks/lib/gitctx.sh
++++ b/hooks/lib/gitctx.sh
+@@ -31,6 +31,8 @@ _GW_AWK='
+       if (c == "\\") { i++; w = w substr(buf, i, 1); have = 1; continue }
+       if (c == sq || c == "\"") { q = c; have = 1; continue }
+       if (c == " " || c == "\t" || c == "\n" || c == "\037") { if (have) sw_w[++sw_n] = w; w = ""; have = 0; continue }
++      # An unquoted, unescaped # that starts a word is a comment, to the newline, as in bash.
++      if (c == "#" && !have) { while (i < n && index("\n\037", substr(buf, i + 1, 1)) == 0) i++; continue }
+       if ((c == "<" || c == ">" || (c == "&" && substr(buf, i + 1, 1) == ">")) && have && w !~ /^[0-9]+$/ && w !~ /[<>&]$/) {
+         sw_w[++sw_n] = w; w = ""
+       }
+diff --git a/hooks/lib/settings.sh b/hooks/lib/settings.sh
+index 3692e3b..b471a73 100644
+--- a/hooks/lib/settings.sh
++++ b/hooks/lib/settings.sh
+@@ -144,9 +144,14 @@ kern_enabled() {
+   [ "$(settings_get kern on)" != off ]
+ }
+ 
+-# list_has LIST ITEM: exit 0 when the comma-separated LIST contains ITEM (whitespace trimmed).
++# list_has LIST ITEM: exit 0 when the comma-separated LIST contains ITEM (whitespace trimmed). One
++# pair of brackets around the whole LIST is dropped, so a YAML flow list [a, b] reads as a, b.
+ list_has() {
+-  local rest="$1," item
++  local list="$1" rest item
++  list=${list#"${list%%[![:space:]]*}"}
++  list=${list%"${list##*[![:space:]]}"}
++  case "$list" in "["*"]") list=${list#\[}; list=${list%\]} ;; esac
++  rest="$list,"
+   while [ -n "$rest" ]; do
+     item=${rest%%,*}; rest=${rest#*,}
+     # Trimmed in bash: BSD sed reads [ \t] as space, backslash or t, so it cut feat to fea.
+diff --git a/tests/hooks/g01-git.bats b/tests/hooks/g01-git.bats
+index 1566926..1a3570c 100644
+--- a/tests/hooks/g01-git.bats
++++ b/tests/hooks/g01-git.bats
+@@ -385,6 +385,32 @@ settings() {
+   expect deny "git -C $W push origin {x,main}"
+   git -C "$W" switch -q -c '$main'
+   expect deny "git -C $W push origin \$'main'"
++  # Branch g passes the name check, so only the record check refuses the $ in the -C dir.
++  git -C "$R" worktree add -q -b g "$BATS_TEST_TMPDIR/w\$X" >/dev/null 2>&1
++  expect deny "git -C $BATS_TEST_TMPDIR/w\$X push origin g"
++}
++
++@test "a branch or remote name outside the safe characters is never allowed" {
++  W="$BATS_TEST_TMPDIR/wt"
++  set_autopilot on
++  expect allow "git -C $W push origin feat"
++  git -C "$W" switch -q -c 'fe!at'
++  expect deny "git -C $W push origin fe!at"
++  git -C "$W" switch -q feat
++  git -C "$R" remote add 'o!x' "$R.origin"
++  expect deny "git -C $W push o!x feat"
++}
++
++@test "a glob or ~ in a push record is never allowed" {
++  T="$BATS_TEST_TMPDIR"
++  git clone -q "$R.origin" "$T/x1"
++  git -C "$T/x1" switch -q -c feat2
++  git -C "$T/x1" config remote.origin.pushurl "$T/elsewhere.git"
++  git clone -q "$R.origin" "$T/x[1]"
++  git -C "$T/x[1]" switch -q -c feat2
++  git -C "$R" worktree add -q -b t2 "$R/~" >/dev/null 2>&1
++  set_autopilot on
++  expect deny "git -C $T/x[1] push origin feat2" "git -C ~ push origin t2"
+ }
+ 
+ @test "shell expansion or a glob in a filter is never allowed" {
+@@ -442,3 +468,36 @@ settings() {
+   [ "$(decision_of "$output")" = deny ]
+   [[ "$output" == *"--force-with-lease=<ref>:<expect> under autopilot; use the bare option"* ]] || false
+ }
++
++@test "a push URL rewritten for this remote is unproven; an unrelated rewrite is not" {
++  W="$BATS_TEST_TMPDIR/wt"
++  set_autopilot on
++  git config --global url.git@github.com:.pushInsteadOf https://github.com/
++  expect allow "git -C $W push origin feat"
++  git -C "$W" config "url.$BATS_TEST_TMPDIR/else.git.insteadOf" "$R.origin"
++  expect deny "git -C $W push origin feat"
++}
++
++@test "a detached HEAD names itself in the reason" {
++  W="$BATS_TEST_TMPDIR/wt"
++  git -C "$W" switch -q --detach
++  for c in "git -C $W push" "git -C $W push origin HEAD" "git -C $W push --force-with-lease origin HEAD"; do
++    g1 "$c"
++    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
++    [[ "$output" == *"HEAD is detached; check out a branch first"* ]] || { echo "$c -> $output"; return 1; }
++  done
++  settings 'rebase.push: autopilot'
++  set_autopilot on
++  for c in "git -C $W push" "git -C $W push origin HEAD" "git -C $W push --force-with-lease"; do
++    g1 "$c"
++    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
++    [[ "$output" == *"HEAD is detached; check out a branch first"* ]] || { echo "$c -> $output"; return 1; }
++  done
++}
++
++@test "a trailing comment does not hide a command" {
++  set -- "git clean -fd # -n" "git clean -fdx # --dry-run" "git merge main # --abort"
++  expect ask "$@"
++  set_autopilot on
++  expect deny "$@"
++}
+diff --git a/tests/hooks/gitctx.bats b/tests/hooks/gitctx.bats
+index 7970af7..de730d3 100644
+--- a/tests/hooks/gitctx.bats
++++ b/tests/hooks/gitctx.bats
+@@ -235,6 +235,32 @@ sh"
+   [ "$output" = main ]
+ }
+ 
++# words_are STR WORD...: _shell_words prints exactly the WORDs for STR.
++words_are() {
++  local str="$1"
++  shift
++  run _shell_words "$str"
++  [ "$output" = "$(printf '%s\n' "$@")" ] || { echo "$str -> $output"; return 1; }
++}
++
++@test "_shell_words: a word that starts with an unquoted # is a comment to the newline" {
++  words_are 'git status # note' git status
++  words_are 'git clean -fd # -n' git clean -fd
++  words_are "$(printf 'a # b\nc')" a c
++  run _cmd_words 'git status # note'
++  [ "$output" = "$(printf 'git\nstatus')" ]
++}
++
++@test "_shell_words: a # inside a word, quoted or escaped is kept" {
++  words_are 'echo a#b' echo 'a#b'
++  words_are 'echo ${#x}' echo '${#x}'
++  words_are 'echo $#' echo '$#'
++  words_are "echo '#x'" echo '#x'
++  words_are 'echo "#x"' echo '#x'
++  words_are 'echo \#x' echo '#x'
++  words_are 'git log --format=%h#%s' git log '--format=%h#%s'
++}
++
+ @test "_shell_words splits a redirection from the word before it" {
+   [ "$(_shell_words 'a main>/dev/null 2>&1 b&>c d<<EOF e2>f' | paste -sd ' ' -)" = \
+     "a main >/dev/null 2>&1 b &>c d <<EOF e2 >f" ]
+diff --git a/tests/hooks/settings.bats b/tests/hooks/settings.bats
+index c1fbc31..7766aac 100644
+--- a/tests/hooks/settings.bats
++++ b/tests/hooks/settings.bats
+@@ -107,6 +107,17 @@ YML
+   [ "$status" -eq 1 ]
+ }
+ 
++@test "list_has reads a YAML flow list in brackets" {
++  list_has "[feat]" feat
++  list_has "[ feat, test ]" test
++  run list_has "[feat]" "[feat]"
++  [ "$status" -eq 1 ]
++  # shellcheck source=hooks/lib/gitctx.sh
++  . "$KERN_ROOT/hooks/lib/gitctx.sh"
++  printf 'branch.protected: [feat]\n' >"$R/.claude/kern.local.yml"
++  branch_protected feat
++}
++
+ @test "policy_for never loosens floor actions: merge and deploy read as ask" {
+   printf 'merge.policy: auto\ndeploy.policy: auto\npush.policy: auto\n' >"$R/.claude/kern.local.yml"
+   [ "$(policy_for merge)" = ask ]

@@ -1,0 +1,91 @@
+# Review package: 7f39410..3cbd1a0
+
+## Commits
+3cbd1a0 M1: return 2 for malformed hook JSON and test long values
+
+## Files changed
+ hooks/lib/json.sh     |  3 ++-
+ tests/hooks/json.bats | 24 +++++++++++++++++++++++-
+ 2 files changed, 25 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/hooks/lib/json.sh b/hooks/lib/json.sh
+index 059afb8..f745c82 100644
+--- a/hooks/lib/json.sh
++++ b/hooks/lib/json.sh
+@@ -48,29 +48,30 @@ END {
+   while (i <= n) {
+     c = substr(buf, i, 1)
+     if (c != "\"") { i++; continue }
+     e = str_end(i + 1)
+     if (!e) exit 2
+     tok = substr(buf, i + 1, e - i - 1)
+     i = e + 1
+     k = skip_ws(i)
+     if (substr(buf, k, 1) != ":" || tok != key) continue
+     k = skip_ws(k + 1)
++    if (k > n) exit 2
+     if (mode == "str") {
+       if (substr(buf, k, 1) != "\"") exit 1
+       e = str_end(k + 1)
+       if (!e) exit 2
+       printf "%s", decode(substr(buf, k + 1, e - k - 1))
+       exit 0
+     }
+     e = raw_end(k)
+-    if (!e) exit 2
++    if (!e || e < k) exit 2
+     printf "%s", substr(buf, k, e - k + 1)
+     exit 0
+   }
+   exit 1
+ }'
+ 
+ # json_get KEY: decoded string value of the first "KEY": whose value is a string.
+ json_get() {
+   printf '%s' "${KERN_INPUT-}" | LC_ALL=C awk -v key="$1" -v mode=str "$_KERN_JSON_AWK"
+ }
+diff --git a/tests/hooks/json.bats b/tests/hooks/json.bats
+index 1be4401..b2b3cef 100644
+--- a/tests/hooks/json.bats
++++ b/tests/hooks/json.bats
+@@ -56,16 +56,38 @@ next \ end' ]
+ }
+ 
+ @test "ti_get reads from TOOL_INPUT" {
+   TOOL_INPUT='{"file_path":"/a b/c"}'
+   run ti_get file_path
+   [ "$output" = "/a b/c" ]
+ }
+ 
+ @test "a 200 KB value parses in under 5 seconds" {
+   big=$(head -c 200000 /dev/zero | tr '\0' 'x')
+-  KERN_INPUT="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/f\",\"content\":\"$big\"}}"
++  KERN_INPUT="{\"tool_name\":\"Write\",\"tool_input\":{\"content\":\"$big\",\"file_path\":\"/f\"}}"
+   start=$(date +%s)
+   run json_get file_path
+   [ "$output" = /f ]
+   [ $(($(date +%s) - start)) -lt 5 ]
+ }
++
++@test "json_get finds tool_input.command in a realistic PreToolUse payload" {
++  KERN_INPUT=$(cat "$(kern_root)/tests/fixtures/payloads/pretooluse-subagent.json")
++  run json_get command
++  [ "$status" -eq 0 ]
++  [ "$output" = "git -C /tmp/kern-fixture log --oneline -1" ]
++}
++
++@test "a found key with a missing or truncated value is 2 with no output" {
++  KERN_INPUT='{"command":'
++  run json_get command
++  [ "$status" -eq 2 ]
++  [ -z "$output" ]
++  KERN_INPUT='{"a":'
++  run json_get_raw a
++  [ "$status" -eq 2 ]
++  [ -z "$output" ]
++  KERN_INPUT='{"a":}'
++  run json_get_raw a
++  [ "$status" -eq 2 ]
++  [ -z "$output" ]
++}

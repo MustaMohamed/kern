@@ -1,0 +1,377 @@
+diff --git a/docs/plans/contract.md b/docs/plans/contract.md
+index 74249eb..29ba789 100644
+--- a/docs/plans/contract.md
++++ b/docs/plans/contract.md
+@@ -156,7 +156,7 @@ G13, G14 and G15 (Task 13):
+ | `task-brief` | `task-brief PLAN N LEDGER_DIR` | brief path `LEDGER_DIR/briefs/task-N.md` | 0; 2 task not found |
+ | `task-start` | `task-start LEDGER N TREE` | appends `Task N: start tree=<id> at=<iso>` | 0; 2 bad argument |
+ | `task-review` | `task-review LEDGER N TREE ROUND SPEC QUALITY [--minor TEXT]...` | appends `Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>` and one `Task N: minor (deferred): <text>` per `--minor` | 0; 2 bad argument |
+-| `task-done` | `task-done LEDGER N WT TREE (--probe PATCH \| --no-probe REASON) -- CMD...` | runs CMD in WT; on success appends `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok, inconclusive or skipped (reason)> last=<line>` | 0; 2 tree changed, no approved review of it, or neither --probe nor --no-probe with a reason; 1 the probe shows the test passes without the change; else CMD's exit code |
++| `task-done` | `task-done LEDGER N WT TREE (--probe PATCH \| --no-probe REASON) -- CMD...` | runs CMD in WT; on success appends `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>`; an inconclusive probe prints probe's first line and appends nothing | 0; 2 tree changed, no approved review of it, or neither --probe nor --no-probe with a reason; 1 the probe shows the test passes without the change; 3 the probe is inconclusive; else CMD's exit code (stderr `command exited <n>`) |
+ | `brief-check` | `brief-check FILE` | `brief-check: ok`, or `missing: <FIELD>`, `empty: <FIELD>`, `placeholder: <FIELD>` (text still the brief template's, FORBIDDEN not checked), `VERIFY must start with the wt-check entry check` | 0; 1 problems; 2 usage |
+ | `plan-check` | `plan-check FILE`; `plan-check --graph PLAN`; `plan-check --files PLAN N` | `FILE:LINE: message` per problem; `--graph`: `overlap<TAB>A<TAB>B<TAB><shared>` and `wave<TAB><n><TAB><tasks>`; `--files`: one path per line, a trailing `/**` or `/*` printed as the directory with a trailing `/` | 0; 1 problems; 2 usage or no such task |
+ | `recall-sessions` | `recall-sessions [--days N] [--topic TEXT]` | `session<TAB><iso><TAB><id><TAB><bytes><TAB><path>`, newest first; with `--topic`, `prompt<TAB><iso><TAB><id><TAB><text>` lines for this project only | 0; 2 usage |
+@@ -185,7 +185,7 @@ The lines `ledger-open`, `task-start`, `task-review`, `task-done` and execute-pl
+ - `Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>`
+ - `Task N: minor (deferred): <text>`
+ - `Task N: fix round=<r> tree=<id>`
+-- `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok, inconclusive or skipped (reason)> last=<line>`
++- `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>`
+ - `Wave: tasks <list> forks=<paths>`
+ - `Applied: Task N patch=<path>`
+ - `parked: <question>; default: <choice>; why: <one line>`
+diff --git a/scripts/task-done b/scripts/task-done
+index a450ca5..a5cfbb4 100755
+--- a/scripts/task-done
++++ b/scripts/task-done
+@@ -2,11 +2,14 @@
+ # Close a task in an execute-plan ledger. Writes the completion line only when all hold: the worktree
+ # still snapshots to TREE, the task's last review approved exactly that tree, CMD exits 0 in WT, and
+ # the test fails once the change (test files excluded) is reversed on a throwaway fork. A task with no
+-# test to probe (docs, config) names why with --no-probe, and the reason goes into the ledger.
++# test to probe (docs, config) names why with --no-probe, and the reason goes into the ledger. An
++# inconclusive probe proves nothing, so it closes nothing: the caller decides, and a change with nothing
++# to reverse closes with --no-probe naming the probe's reason.
+ # Usage: task-done LEDGER N WT TREE (--probe PATCH | --no-probe REASON) -- CMD...
+-# Appends: Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok|inconclusive|skipped (REASON)> last=<line>
++# Appends: Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok|skipped (REASON)> last=<line>
+ # Exit 2 when a check fails (nothing written); 1 when the probe shows the test passes without the
+-# change; CMD's own code when it fails.
++# change; 3 when the probe is inconclusive (its first line printed, nothing written); CMD's own code
++# when it fails (stderr then says "command exited <n>").
+ # Adapted from superpowers executing-plans/scripts/task-done (MIT).
+ set -euo pipefail
+ here=$(cd "$(dirname "$0")" && pwd -P)
+@@ -75,7 +78,7 @@ if [ -n "$patch" ]; then
+   head -n 1 "$logdir/task-$n.probe.log"
+   case "$prc" in
+     0) probe=ok ;;
+-    3) probe=inconclusive ;;
++    3) echo "task-done: the probe is inconclusive, so it proves nothing about Task $n; not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 3 ;;
+     1) echo "task-done: the test passes with the change reversed, so it does not prove Task $n; not recorded" >&2; exit 1 ;;
+     *) echo "task-done: probe exited $prc; Task $n not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 2 ;;
+   esac
+diff --git a/skills/execute-plan/SKILL.md b/skills/execute-plan/SKILL.md
+index 513fb4b..67d44e3 100644
+--- a/skills/execute-plan/SKILL.md
++++ b/skills/execute-plan/SKILL.md
+@@ -9,47 +9,45 @@ argument-hint: "[plan path] [step|inline|delegate]"
+ 
+ Turn an approved plan into verified, reviewed changes, with a record that survives compaction. Reached by the kernel row for executing an agreed plan, or typed as `/kern:execute-plan`.
+ 
+-Review needs no commits: a task's change is the diff between snapshot trees of its worktree, `tree-before` at dispatch and `tree-after` at return; a verdict holds for that `tree-after` only. Serial tasks share the plan worktree, one writer at a time; wave tasks get forks. A subagent gets absolute paths (`${CLAUDE_PLUGIN_ROOT}` resolved) and a named model (`references/model-selection.md`). A script exit not named here stops the run: report its output.
++Review needs no commits: a task's change is the diff between its worktree's snapshot trees, `tree-before` at dispatch and `tree-after` at return; a verdict holds for that `tree-after` only. Subagents get absolute paths (`${CLAUDE_PLUGIN_ROOT}` resolved) and a named model (`references/model-selection.md`). Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines. An unnamed script exit stops the run: report its output.
+ 
+ ## Steps
+ 
+ 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+-1. Gate and ledger: run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-open <plan>`. It prints the ledger dir (`<ledger>` below is `<ledger dir>/ledger.md`), or exits 2 when the plan has no `status: approved` with the user's quoted words, or when the dir holds another plan's ledger: stop and report it. Never edit the plan's approval. The mode is the typed one, else `execution:`. A ledger with `Task N: start` lines resumes as `references/ledger-format.md` says. After compaction, trust the ledger and the worktree over memory.
+-2. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>`; any exit but 0 is a plan defect: stop before Task 1 and report its output. Then `plan-check --graph <plan>`: each `overlap` row becomes a `Preflight:` line with its ruling; keep the `wave` rows for step 4.
+-3. Read the plan and spec once; one todo per task. A spec or scope conflict the graph does not show: stop and ask before Task 1. A mechanical one gets a `Decision:` line.
+-4. In `delegate` mode a `wave` row's tasks may run together, each in its fork, at most `parallel.max`, unless parallel-work step 1 finds an overlap; spawn them in one message as `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/SKILL.md` step 4 does. Other tasks run serially, in task order. Batch small tasks of one shape (the same one-line edit across files) into one dispatch and one review over their joined Files lists; the ledger scripts still run per task.
+-5. Once, unless a `Worktree:` line exists, make the plan worktree: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --base <plan base>` (`<plan-slug>` is the ledger dir's name), adding `--branch <name>` when `branch.pattern` holds `{id}` (the plan's `issue:`). Exit 2: say why and ask. Write `Worktree: <path> branch=<name> base-tree=<id>`, the id from `wt-snap`. Run the baseline `test.full` there (`kern-get`, else `kern-detect`; both exit 3: ask); a red baseline goes to the user.
++1. Gate and ledger: run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-open <plan>`. It prints the ledger dir (`<ledger>` below is `<ledger dir>/ledger.md`), or exits 2 when the plan has no `status: approved` with the user's quoted words, or when the dir holds another plan's ledger: stop and report it. Never edit the plan's approval. The mode is the typed one, else `execution:`. If the ledger already held lines past `Main:`, or after compaction, read `references/resume.md` and continue where it says.
++2. Once, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>`; any exit but 0 is a plan defect: stop before Task 1 and report its output. Then `plan-check --graph <plan>`: each `overlap` row becomes a `Preflight:` line with its ruling; keep the `wave` rows for step 4.
++3. Read the plan and spec; one todo per task. Once: a spec or scope conflict the graph does not show stops before Task 1 to ask; a mechanical one gets a `Decision:` line.
++4. In `delegate` mode a `wave` row's tasks may run together, each in its fork, at most `parallel.max`, unless parallel-work step 1 finds an overlap; spawn them in one message as `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/SKILL.md` step 4 does. Others run serially, in task order. Batch small tasks of one shape (the same one-line edit across files) into one dispatch and one review over their joined Files lists.
++5. Once, make the plan worktree: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --base <plan base>` (`<plan-slug>`: the ledger dir's name), adding `--branch <name>` when `branch.pattern` holds `{id}` (the plan's `issue:`). Exit 2: say why and ask. Run the baseline `test.full` there (`kern-get`, else `kern-detect`; both exit 3: ask); a red baseline goes to the user. Then write `Worktree: <path> branch=<name> base-tree=<id>`, the id from `wt-snap`.
+ 6. Per task, in the plan worktree or a wave task's fork from `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork <plan-wt> <plan-slug>-task-<N>` (exit 2 or 3: say why and ask), run `plan-check --files <plan> <N> > <ledger dir>/briefs/task-N.files`, `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-brief <plan> <N> <ledger dir>` (`briefs/task-N.md`), `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>` (`tree-before`) and `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-start <ledger> <N> <tree-before>`; exit 2 from any: stop. Write `Wave: tasks <list> forks=<paths>` once a wave's forks exist. Then by mode:
+    - `step`: do this task with `${CLAUDE_PLUGIN_ROOT}/skills/implement/SKILL.md`, reporting to `<ledger dir>/reports/task-N.md`; run steps 8 to 10, report, and stop.
+    - `inline`: the same for each task, in the plan worktree, with absolute paths and `git -C`.
+    - `delegate` (serial or wave): write `<ledger dir>/briefs/task-N.brief.md` from `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/brief-template.md`: SCOPE the `.files` paths, the worktree and `<base-ref>` (the plan branch); CONTEXT `briefs/task-N.md`, the upstream Interfaces and the step 3 rulings; VERIFY `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-check <wt> <base-ref>` first, then the task's `Run:`; REPORT `<ledger dir>/reports/task-N.md`. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/brief-check` on it; dispatch only on `brief-check: ok` (else fix each printed line): `kern:implementer` with its model, the brief, worktree, `<base-ref>`, report path and implement SKILL.md path. Pass no `isolation` parameter; kern made the worktree.
+-7. Status line (none: BLOCKED). DONE goes to review. DONE_WITH_CONCERNS: read the concerns, then review. NEEDS_CONTEXT: answer from the plan or spec, else ask the user, then resume the implementer. BLOCKED: add context or go one model tier up, with a `Decision:` line; a task that must be split: stop with a split proposal. Never re-dispatch unchanged.
+-8. Review: take `tree-after` with `wt-snap`, then run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`. Its first line is `<package>`, beside `<package>.patch`. Exit 3 (empty): return the task to the implementer. Exit 4 names a file outside the task's Files: pause and ask. Dispatch `kern:task-reviewer` on `model.reviewer` in mode `task` with `briefs/task-N.md`, the report, the package, the worktree and the `review.rules` paths; do not pre-judge findings in the prompt. Resolve every "cannot verify" item yourself; a real gap is a spec issue. Record the verdicts with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <round> <compliant|issues> <approved|needs-fixes>`, round 1 here, adding `--minor "<finding>"` for each Minor finding, which waits for step 12.
+-9. Fix loop for a spec issue or a Critical or Important finding. Round r is the r-th review, 1 to 3. Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed. Round 2 resumes the implementer with the findings verbatim (SendMessage to its agent id; inline and step: fix it yourself); round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief, the report and the open findings. Each round packages its fix diff with `wt-diff` from the round's tree to a new `tree-after` (`--out <ledger dir>/reviews/task-N-fix<r>-<tree7>.diff`, same `--allow-file` and exits), gets a `re-review` with the findings, and is recorded with `task-review`. Still open after round 3, or a re-review finds a bug in an earlier round's fix: stop and escalate with a split proposal. There is no fourth round; `task-review` refuses one.
+-10. Close: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger> <N> <wt> <tree-after> --probe <package>.patch -- <task test command>`, one command (task-done runs no shell), or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe (docs, config); after fix rounds, remake `<package>` from `tree-before`. It writes the complete line only when an approved review saw this tree, the command passes, and the test fails with the change reversed (`probe=ok`). `probe=inconclusive` stands only for a change with nothing to reverse, such as a new module's first test: label that proof inferred; any other reason: ask. A refusal writes nothing and says why. `command exited <n>` (`<ledger dir>/logs/task-N.log`), or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round. A changed or unapproved tree: review it. A probe error: stop. Under autopilot only, then commit the task's files with `/kern:commit` steps 3 to 6, a wave task's after step 11.
+-11. After a wave, each wave task has been closed in its fork through steps 6 to 10. Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`, writing `Applied: Task N patch=<path>` after each `applied`. Exit 3 is a conflict with nothing applied: stop. Then run `test.full` there; red: stop.
+-12. Final review: `ledger-open --summary <ledger dir>` lists the Decision, parked, Preflight and deferred-minor lines and the main checkout's state. Package everything with `wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff` (`<base-tree>` from the `Worktree:` line) and dispatch `kern:task-reviewer` in mode `whole-branch` on `model.final_review` with the package, the plan and that list, to triage which minors block. Re-grade findings by effect. One fix subagent gets the complete findings list in a step 6 brief, each fix red then green; then one re-review scoped to that fix diff, packaged with an `--allow-file` per task. Residual findings go to the user in step 13.
+-13. Finish: report decisions with the cost if wrong, parked items, deferred minors and their triage, verification commands with output, the worktree and the branch. `ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report. No push or PR, no commit beyond step 10's; offer `/kern:commit` and `/kern:finish-branch`.
++7. Status line (none: BLOCKED). DONE goes to review. DONE_WITH_CONCERNS: read the concerns, then review. NEEDS_CONTEXT: answer from the plan or spec, else ask the user, then resume the implementer. BLOCKED: add context or go one model tier up (a `Decision:` line); a task that must be split: stop with a split proposal. Never re-dispatch unchanged.
++8. Review: take `tree-after` with `wt-snap`, then run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`. Its first line is `<package>`, beside `<package>.patch`. Exit 3 (empty): return the task to the implementer. Exit 4 names a file outside the task's Files: pause and ask; on a yes append it to `briefs/task-N.files` with a `Decision:` line, on a no return the task to the implementer. Dispatch `kern:task-reviewer` on `model.reviewer` in mode `task` with `briefs/task-N.md`, the report, the package, the worktree and the `review.rules` paths; do not pre-judge findings in the prompt. Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines. Resolve every "cannot verify" item yourself; a real gap is a spec issue. Record the verdicts with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <r> <compliant|issues> <approved|needs-fixes>`, adding `--minor "<finding>"` for each Minor finding, which waits for step 12.
++9. Fix loop for a spec issue or a Critical or Important finding. Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed. Round 2 resumes the implementer with the previous round's `.txt` (SendMessage to its agent id, or `references/resume.md`'s fallback; inline and step: fix it yourself); round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief, the report and that file. Each round packages its fix diff with `wt-diff` from the round's tree to a new `tree-after` (`--out <ledger dir>/reviews/task-N-fix<r>-<tree7>.diff`, same `--allow-file` and exits), gets a `re-review` with that file, and is saved and recorded as step 8 does. Still open after round 3, or a re-review finds a bug in an earlier round's fix: stop and escalate with a split proposal; there is no fourth round.
++10. Close: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger> <N> <wt> <tree-after> --probe <package>.patch -- <task test command>`, or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe (docs, config). One command, no shell: a compound `Run:` goes in a `kern-dir tmp` script, passed as `-- bash <path>`. After fix rounds, remake `<package>` from `tree-before`. It writes the complete line only when an approved review saw this tree, the command passes, and the test fails with the change reversed (`probe=ok`) or `--no-probe` gave a reason. A refusal writes nothing and says why. `command exited <n>` or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round (after round 3: the split proposal); `command exited 126` or `127`: stop. Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask. Exit 2: a changed or unapproved tree, review it; a probe error, stop. Under autopilot only, then commit the task's files with `/kern:commit` steps 3 to 6 (a wave task: after step 11).
++11. After a wave, each wave task has been closed in its fork through steps 6 to 10. Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`, writing `Applied: Task N patch=<path>` after each `applied`. Exit 3 is a conflict with nothing applied: stop. Then `test.full` there; red: stop.
++12. Final review: `ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state. Package all with `wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff` (the `Worktree:` line's base tree) and dispatch `kern:task-reviewer` in mode `whole-branch` on `model.final_review` with the package, the plan and that list, to triage which minors block. Re-grade findings by effect. One fix subagent gets the complete findings list (`kern:implementer`, a step 6 brief), each fix red then green; then one `re-review` on `model.final_review` of its diff from `final.diff`'s second line, packaged with an `--allow-file` per task. Residual findings go to the user in step 13.
++13. Finish: report decisions with the cost if wrong, parked items, deferred minors and their triage, verification commands with output, worktree and branch. `ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report. No push or PR, no commit beyond step 10's; offer `/kern:commit` and `/kern:finish-branch`.
+ 14. Propose teardown, do not run it: each fork with the `git worktree remove` command `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md` allows, the plan worktree once committed; run them only on yes.
+ 
+ ## Inputs
+ 
+ | Key | Default | Use |
+ |---|---|---|
+-| `base_branch`, `branch.pattern` | detected; `kern/{slug}` | plan worktree |
++| `base_branch`, `branch.pattern`, `worktree.dir`, `worktree.setup` | detected; `kern/{slug}`; `.claude/worktrees` under MAIN; none | worktrees |
+ | `test.focused`, `test.full`, `typecheck` | detected, source printed | checks |
+-| `worktree.dir`, `worktree.setup` | `.claude/worktrees` under MAIN; none | worktrees |
+-| `shared_services`, `parallel.max` | none; 3 | waves |
+-| `scope_threshold`, `review.rules`, `generated_artifacts` | 4; project prose; none | review |
++| `shared_services`, `parallel.max`, `scope_threshold`, `review.rules`, `generated_artifacts` | none; 3; 4; project prose; none | waves, review |
+ | `model.implementer`, `model.reviewer`, `model.final_review` | `sonnet`, `sonnet`, `opus` | models |
+ 
+ ## Outputs
+ 
+-`WORK/ledgers/<plan-slug>/` holding `ledger.md`, `briefs/`, `reports/`, `reviews/` and `logs/`. A plan worktree with uncommitted changes. A chat summary.
++`WORK/ledgers/<plan-slug>/` holding `ledger.md`, `briefs/`, `reports/`, `reviews/` and `logs/`. The plan worktree's changes, and a chat summary.
+ 
+ ## Stops and autopilot
+ 
+-Stops at steps 1 to 3 and 5 to 11; ask as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on, steps 1 and 2 and a failed `wt-new` still end the run, as nothing approves a plan (G20). A later stop parks as `parked: <question>; default: <choice>; why: <one line>` in the ledger: a question takes its default (the plan's text; a red baseline goes on, its red tests named as red before), a stopped task stays open with every task blocked by it, and disjoint tasks continue. One commit per closed task when its checks pass, through `/kern:commit`; G5 allows only `git commit -m` or `-F <file>` on an unprotected branch. Without autopilot `commits: ask` holds: no commit. Push and a draft PR only through finish-branch; teardown never runs. Isolation, serialization, expand and contract, read-only production, the round cap, tests and secrets rules do not loosen.
++Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on, steps 1 and 2 and a failed `wt-new` still end the run. A later stop parks as `parked: <question>; default: <choice>; why: <one line>` in the ledger: a question takes its default (the plan's text; a red baseline goes on, naming red-before tests), a stopped task stays open with every task blocked by it, and disjoint tasks continue. One commit per closed task when its checks pass, through `/kern:commit`; G5 allows only `git commit -m` or `-F <file>` on an unprotected branch. Without autopilot `commits: ask` holds: no commit. Push and a draft PR only through finish-branch; teardown never runs. Isolation, serialization, expand and contract, read-only production, the round cap, tests and secrets do not loosen.
+ 
+ ## Red flags
+ 
+@@ -59,5 +57,5 @@ Stops at steps 1 to 3 and 5 to 11; ask as a typed reply in chat, never through A
+ | "I'll fix it myself; dispatching is overhead" | A fix outside the loop skips review. Resume the implementer, then re-review. |
+ | "One more round will converge" | Past round 3 the failure is structural. Stop with a split proposal. |
+ | "The fix was small, skip the re-review" | task-done refuses a tree no review approved. Re-review every fix. |
+-| "This finding is wrong, I'll drop it" | Record a Decision line with the cost if wrong. A silent drop is forbidden. |
++| "This finding is wrong, I'll drop it" | Adjudicate only at the cap, in a Decision line; until then, argue it in the re-review. |
+ | "Ledger bookkeeping is overhead" | The ledger is what survives compaction. Write each line as it happens. |
+diff --git a/skills/execute-plan/references/ledger-format.md b/skills/execute-plan/references/ledger-format.md
+index 656c4dc..40e09d9 100644
+--- a/skills/execute-plan/references/ledger-format.md
++++ b/skills/execute-plan/references/ledger-format.md
+@@ -15,16 +15,16 @@ One ledger per plan at `WORK/ledgers/<plan-slug>/ledger.md`, append only, opened
+ | `Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>` | `task-review` | one per review or re-review |
+ | `Task N: minor (deferred): <text>` | `task-review --minor` | a Minor finding for the final review to triage |
+ | `Task N: fix round=<r> tree=<id>` | step 9 | a fix round began from that reviewed tree |
+-| `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok, inconclusive or skipped (reason)> last=<line>` | `task-done` | done, only on an approved, unchanged, proven tree |
++| `Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>` | `task-done` | done, only on an approved, unchanged, proven tree |
+ | `Wave: tasks <list> forks=<paths>` | step 6 | a parallel wave's forks exist |
+ | `Applied: Task N patch=<path>` | step 11 | a worker's patch integrated |
+ | `parked: <question>; default: <choice>; why: <one line>` | autopilot | a judgment call parked |
+ 
+-Lines no script writes are appended with `printf '%s\n' '<line>' >> <ledger>`; one holding the word approved goes in with the Edit tool, as G20 denies that shell write to a Markdown file.
++Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand. A batch of tasks shares one brief, package and review, and the scripts still write each task's lines. The other lines are appended with `printf '%s\n' '<line>' >> <ledger>`; one holding the word approved goes in with the Edit tool, as G20 denies that shell write to a Markdown file. Limit: no guard yet stops an Edit or Write that forges a script's line; that guard is deferred to M3.
+ 
+ ## Resume rule
+ 
+-A task is done only when its `Task N: complete` line exists. Resume at the first task without one; when every task has one, go to the final review. A started task keeps its `Task N: start` tree as `tree-before` (no second `task-start`), so its review sees every change since dispatch; a snapshot still equal to it means nothing landed: dispatch again. If a task's last line is a `fix round`, resume that fix loop with a fresh snapshot. A wave task resumes in the fork its `Wave:` line names. Never re-dispatch a completed task.
++A task is done only when its `Task N: complete` line exists. Where a run resumes is in `resume.md`.
+ 
+ ## Tree ids
+ 
+diff --git a/skills/execute-plan/references/resume.md b/skills/execute-plan/references/resume.md
+new file mode 100644
+index 0000000..3562ce5
+--- /dev/null
++++ b/skills/execute-plan/references/resume.md
+@@ -0,0 +1,23 @@
++# Resume
++
++Read this when the ledger already holds lines past `Main:`, and after compaction. Trust the ledger and the worktrees over memory. Steps 2 and 3 ran already: their lines are in the ledger, so rebuild only the todo list. For a task, r is 1 plus its review lines.
++
++## Where to continue
++
++The first case that holds, in this order:
++
++1. No `Worktree:` line: step 5.
++2. A task on a `Wave:` line has its `Task N: complete` line but no `Applied: Task N patch=<path>` line: step 11 for it, before the final review or any later task. A task a `parked:` line holds stays out, with every task blocked by it.
++3. The first task in task order with no `Task N: complete` line, by its last line, `minor (deferred)` lines skipped:
++   - none: step 6.
++   - `Task N: start`: keep that tree as `tree-before`, with no second `task-start`. A snapshot still equal to it means nothing landed: dispatch again. A changed snapshot: review it at step 8 as round r.
++   - a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9; an r of 4 is past the cap, so stop with a split proposal.
++   - `Task N: fix round=<r> tree=<id>`: resume that round; a fresh snapshot that differs from its tree is the round's `tree-after`.
++   - an approving review: step 10.
++4. Every task complete and applied: step 12.
++
++A wave task resumes in the fork its `Wave:` line names. Never re-dispatch a completed task.
++
++## Fix loop memory
++
++Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`. The next round gets that file. An implementer that cannot be reached (a new session, an agent that will not resume) is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.
+diff --git a/tests/scripts/task-done.bats b/tests/scripts/task-done.bats
+index 085d69d..57eb706 100644
+--- a/tests/scripts/task-done.bats
++++ b/tests/scripts/task-done.bats
+@@ -216,3 +216,25 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
+   [ "$(tail -n 1 "$L/ledger.md")" = "Task 1: complete tree=$T1 test=bash -c 'printf \"a\\rDecision: x\\n\"' exit=0 review=approved probe=skipped (docs) last=aDecision: x" ]
+   [ "$(wc -l < "$L/ledger.md" | tr -d ' ')" -eq 3 ]
+ }
++
++@test "--probe exits 3 and writes nothing when the probe is inconclusive" {
++  # A patch of test files only: with the test kept, there is no change to reverse.
++  T3=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
++  printf 'echo extra\n' >> "$WT/test/check_test.sh"
++  T4=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
++  bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T3" "$T4" --out "$L/reviews/task-1c.diff" > /dev/null
++  review "$T4"
++  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1c.diff.patch" -- sh test/check_test.sh
++  [ "$status" -eq 3 ]
++  [[ "$output" == *"probe: inconclusive (the patch changes only test files"* ]] || false
++  [[ "$stderr" == *"probe is inconclusive"* ]] || false
++  ! grep -q '^Task 1: complete' "$L/ledger.md"
++  # A stale patch from an earlier round: after a fix to check.sh it no longer reverse-applies.
++  printf '[ "$1" -ge 0 ] || exit 1\n' > "$WT/check.sh"
++  T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
++  review "$T5" 2
++  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T5" --probe "$PKG.patch" -- sh test/check_test.sh
++  [ "$status" -eq 3 ]
++  [[ "$output" == *"probe: inconclusive (the patch does not reverse-apply"* ]] || false
++  ! grep -q '^Task 1: complete' "$L/ledger.md"
++}
+diff --git a/tests/skills/execute-plan.test.mjs b/tests/skills/execute-plan.test.mjs
+index 8ec051a..f06c399 100644
+--- a/tests/skills/execute-plan.test.mjs
++++ b/tests/skills/execute-plan.test.mjs
+@@ -5,6 +5,7 @@ import { readDoc, assertFrontmatter, h2s, steps, section, DEFER, assertHeadings,
+ 
+ const SKILL = 'skills/execute-plan/SKILL.md';
+ const LEDGER = 'skills/execute-plan/references/ledger-format.md';
++const RESUME = 'skills/execute-plan/references/resume.md';
+ 
+ test('execute-plan frontmatter', () => {
+   assertFrontmatter(SKILL, {
+@@ -36,24 +37,30 @@ test('ledger format and model table', () => {
+   assertHeadings(LEDGER, ['# Ledger format', '## Lines', '## Resume rule', '## Tree ids']);
+   assertContains(LEDGER, ['# kern ledger: <plan path>', 'Main: <root> branch=<name> status=<hash>',
+     'Task N: start tree=<id> at=<iso>', 'Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>',
+-    'Task N: minor (deferred): <text>', 'Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok, inconclusive or skipped (reason)> last=<line>',
++    'Task N: minor (deferred): <text>', 'Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>',
+     'parked: <question>; default: <choice>; why: <one line>']);
+   assertMaxBytes(LEDGER, 2600);
+   assertHeadings('skills/execute-plan/references/model-selection.md', ['# Model selection', '## Table', '## Rules']);
+   assertMaxBytes('skills/execute-plan/references/model-selection.md', 1600);
++  assertHeadings(RESUME, ['# Resume', '## Where to continue', '## Fix loop memory']);
++  assertMaxBytes(RESUME, 2500);
+ });
+ 
+ // Load-bearing lines, pinned to the step that carries them. Each pin fails the test when it is removed.
+ export const PINS = {
+-  intro: ['A script exit not named here stops the run: report its output.', 'A subagent gets absolute paths (`${CLAUDE_PLUGIN_ROOT}` resolved) and a named model'],
++  intro: ['An unnamed script exit stops the run: report its output.', 'Subagents get absolute paths (`${CLAUDE_PLUGIN_ROOT}` resolved) and a named model',
++    'Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines.'],
+   1: ['run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-open <plan>`', "exits 2 when the plan has no `status: approved` with the user's quoted words, or when the dir holds another plan's ledger: stop and report it",
+-    "Never edit the plan's approval.", 'The mode is the typed one, else `execution:`.', 'resumes as `references/ledger-format.md` says', 'trust the ledger and the worktree over memory'],
+-  2: ['Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>`', 'any exit but 0 is a plan defect: stop before Task 1 and report its output', 'Then `plan-check --graph <plan>`', 'each `overlap` row becomes a `Preflight:` line with its ruling', 'keep the `wave` rows for step 4'],
+-  3: ['stop and ask before Task 1', 'A mechanical one gets a `Decision:` line.'],
++    "Never edit the plan's approval.", 'The mode is the typed one, else `execution:`.',
++    'If the ledger already held lines past `Main:`, or after compaction, read `references/resume.md` and continue where it says.'],
++  2: ['Once, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>`', 'any exit but 0 is a plan defect: stop before Task 1 and report its output', 'Then `plan-check --graph <plan>`',
++    'each `overlap` row becomes a `Preflight:` line with its ruling', 'keep the `wave` rows for step 4'],
++  3: ['one todo per task', 'Once: a spec or scope conflict the graph does not show stops before Task 1 to ask', 'a mechanical one gets a `Decision:` line.'],
+   4: ['at most `parallel.max`', 'unless parallel-work step 1 finds an overlap', 'spawn them in one message as `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/SKILL.md` step 4 does',
+-    'Other tasks run serially, in task order.', 'over their joined Files lists; the ledger scripts still run per task'],
+-  5: ['Once, unless a `Worktree:` line exists', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --base <plan base>`', '(`<plan-slug>` is the ledger dir\'s name)', 'adding `--branch <name>` when `branch.pattern` holds `{id}`', 'Exit 2: say why and ask.',
+-    'Write `Worktree: <path> branch=<name> base-tree=<id>`, the id from `wt-snap`', 'both exit 3: ask', 'a red baseline goes to the user'],
++    'Others run serially, in task order.', 'into one dispatch and one review over their joined Files lists'],
++  5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --base <plan base>`', "(`<plan-slug>`: the ledger dir's name)",
++    'adding `--branch <name>` when `branch.pattern` holds `{id}`', 'Exit 2: say why and ask.', 'both exit 3: ask', 'a red baseline goes to the user',
++    'Then write `Worktree: <path> branch=<name> base-tree=<id>`, the id from `wt-snap`.'],
+   6: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork <plan-wt> <plan-slug>-task-<N>` (exit 2 or 3: say why and ask)',
+     'run `plan-check --files <plan> <N> > <ledger dir>/briefs/task-N.files`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-brief <plan> <N> <ledger dir>`',
+     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>` (`tree-before`)', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-start <ledger> <N> <tree-before>`', 'exit 2 from any: stop',
+@@ -65,35 +72,55 @@ export const PINS = {
+     'REPORT `<ledger dir>/reports/task-N.md`', 'Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/brief-check` on it', '(else fix each printed line)',
+     '`kern:implementer` with its model, the brief, worktree, `<base-ref>`, report path and implement SKILL.md path', 'kern made the worktree'],
+   7: ['Status line (none: BLOCKED).', 'DONE_WITH_CONCERNS: read the concerns, then review.', 'NEEDS_CONTEXT: answer from the plan or spec, else ask the user, then resume the implementer.',
+-    'go one model tier up, with a `Decision:` line', 'a task that must be split: stop with a split proposal'],
++    'go one model tier up (a `Decision:` line)', 'a task that must be split: stop with a split proposal'],
+   8: ['take `tree-after` with `wt-snap`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`',
+-    'Its first line is `<package>`, beside `<package>.patch`.', 'Exit 3 (empty): return the task to the implementer.', "Exit 4 names a file outside the task's Files: pause and ask.",
+-    '`kern:task-reviewer` on `model.reviewer` in mode `task`', 'do not pre-judge findings in the prompt', 'Resolve every "cannot verify" item yourself; a real gap is a spec issue.',
+-    '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <round> <compliant|issues> <approved|needs-fixes>`, round 1 here',
++    'Its first line is `<package>`, beside `<package>.patch`.', 'Exit 3 (empty): return the task to the implementer.', "Exit 4 names a file outside the task's Files: pause and ask",
++    'on a yes append it to `briefs/task-N.files` with a `Decision:` line, on a no return the task to the implementer',
++    '`kern:task-reviewer` on `model.reviewer` in mode `task`', 'do not pre-judge findings in the prompt',
++    "Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines.", 'Resolve every "cannot verify" item yourself; a real gap is a spec issue.',
++    '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <r> <compliant|issues> <approved|needs-fixes>`',
+     'adding `--minor "<finding>"` for each Minor finding, which waits for step 12'],
+-  9: ['Round r is the r-th review, 1 to 3.', 'Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed.',
+-    'Round 2 resumes the implementer with the findings verbatim', 'round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief',
+-    '`--out <ledger dir>/reviews/task-N-fix<r>-<tree7>.diff`, same `--allow-file` and exits', 'gets a `re-review` with the findings',
+-    "Still open after round 3, or a re-review finds a bug in an earlier round's fix: stop and escalate with a split proposal", 'There is no fourth round; `task-review` refuses one.',
+-    'Each round packages its fix diff with `wt-diff` from the round\'s tree to a new `tree-after`'],
+-  10: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger> <N> <wt> <tree-after> --probe <package>.patch -- <task test command>`', 'one command (task-done runs no shell)',
+-    'or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe', 'after fix rounds, remake `<package>` from `tree-before`',
+-    'only when an approved review saw this tree, the command passes, and the test fails with the change reversed', '`probe=inconclusive`', 'label that proof inferred; any other reason: ask',
+-    '`command exited <n>` (`<ledger dir>/logs/task-N.log`)', 'or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round.', 'A changed or unapproved tree: review it.',
+-    'A probe error: stop.', 'Under autopilot only, then commit the task\'s files with `/kern:commit` steps 3 to 6, a wave task\'s after step 11.'],
+-  11: ['Apply each worker\'s patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`',
+-    'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then run `test.full` there; red: stop.'],
+-  12: ['Final review: `ledger-open --summary <ledger dir>` lists the Decision, parked, Preflight and deferred-minor lines', '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',
+-    'mode `whole-branch` on `model.final_review`', 'to triage which minors block', 'in a step 6 brief, each fix red then green', 'packaged with an `--allow-file` per task'],
++  9: ['Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed.', "Round 2 resumes the implementer with the previous round's `.txt`",
++    "(SendMessage to its agent id, or `references/resume.md`'s fallback; inline and step: fix it yourself)",
++    'round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief, the report and that file',
++    "Each round packages its fix diff with `wt-diff` from the round's tree to a new `tree-after`", '`--out <ledger dir>/reviews/task-N-fix<r>-<tree7>.diff`, same `--allow-file` and exits',
++    'gets a `re-review` with that file, and is saved and recorded as step 8 does',
++    "Still open after round 3, or a re-review finds a bug in an earlier round's fix: stop and escalate with a split proposal", 'there is no fourth round.'],
++  10: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger> <N> <wt> <tree-after> --probe <package>.patch -- <task test command>`',
++    'or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe', 'One command, no shell: a compound `Run:` goes in a `kern-dir tmp` script, passed as `-- bash <path>`.',
++    'After fix rounds, remake `<package>` from `tree-before`.',
++    'only when an approved review saw this tree, the command passes, and the test fails with the change reversed (`probe=ok`) or `--no-probe` gave a reason.',
++    'A refusal writes nothing and says why.', '`command exited <n>` or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round',
++    '(after round 3: the split proposal)', '`command exited 126` or `127`: stop.',
++    'Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask.',
++    'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 3 to 6 (a wave task: after step 11)."],
++  11: ["Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`",
++    'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then `test.full` there; red: stop.'],
++  12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',
++    "(the `Worktree:` line's base tree)", 'mode `whole-branch` on `model.final_review`', 'to triage which minors block', 'Re-grade findings by effect.',
++    'One fix subagent gets the complete findings list (`kern:implementer`, a step 6 brief), each fix red then green',
++    "one `re-review` on `model.final_review` of its diff from `final.diff`'s second line, packaged with an `--allow-file` per task", 'Residual findings go to the user in step 13.'],
+   13: ['`ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report.', "No push or PR, no commit beyond step 10's"],
+   14: ['Propose teardown, do not run it', '`${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md` allows', 'the plan worktree once committed'],
+-  stops: ['Stops at steps 1 to 3 and 5 to 11; ask as a typed reply in chat', 'never through AskUserQuestion', 'on per the latest kern signal', 'a turn with no mode line changes nothing',
+-    'steps 1 and 2 and a failed `wt-new` still end the run, as nothing approves a plan (G20)', 'parked: <question>; default: <choice>; why: <one line>', 'a red baseline goes on, its red tests named as red before',
+-    'a stopped task stays open with every task blocked by it, and disjoint tasks continue', 'G5 allows only `git commit -m` or `-F <file>` on an unprotected branch',
+-    'Without autopilot `commits: ask` holds: no commit.', 'teardown never runs'],
+-  ledger: ["Lines no script writes are appended with `printf '%s\\n' '<line>' >> <ledger>`", 'one holding the word approved goes in with the Edit tool',
+-    'when every task has one, go to the final review', 'A started task keeps its `Task N: start` tree as `tree-before` (no second `task-start`)',
+-    'a snapshot still equal to it means nothing landed: dispatch again', 'A wave task resumes in the fork its `Wave:` line names.', 'Never re-dispatch a completed task.'],
++  stops: ['Ask at each stop as a typed reply in chat, never through AskUserQuestion.', 'on per the latest kern signal', 'a turn with no mode line changes nothing',
++    'When on, steps 1 and 2 and a failed `wt-new` still end the run.', 'parked: <question>; default: <choice>; why: <one line>', 'a red baseline goes on, naming red-before tests',
++    'a stopped task stays open with every task blocked by it, and disjoint tasks continue', 'One commit per closed task when its checks pass, through `/kern:commit`',
++    'G5 allows only `git commit -m` or `-F <file>` on an unprotected branch', 'Without autopilot `commits: ask` holds: no commit.', 'teardown never runs'],
++  ledger: ['Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand.',
++    "A batch of tasks shares one brief, package and review, and the scripts still write each task's lines.",
++    "The other lines are appended with `printf '%s\\n' '<line>' >> <ledger>`", 'one holding the word approved goes in with the Edit tool',
++    "Limit: no guard yet stops an Edit or Write that forges a script's line; that guard is deferred to M3.",
++    'A task is done only when its `Task N: complete` line exists. Where a run resumes is in `resume.md`.'],
++  resume: ['Read this when the ledger already holds lines past `Main:`, and after compaction.', 'Trust the ledger and the worktrees over memory.',
++    'Steps 2 and 3 ran already', 'r is 1 plus its review lines.', 'The first case that holds, in this order:', '1. No `Worktree:` line: step 5.',
++    '2. A task on a `Wave:` line has its `Task N: complete` line but no `Applied: Task N patch=<path>` line: step 11 for it, before the final review or any later task.',
++    'A task a `parked:` line holds stays out, with every task blocked by it.', '3. The first task in task order with no `Task N: complete` line, by its last line, `minor (deferred)` lines skipped:',
++    '- none: step 6.', 'keep that tree as `tree-before`, with no second `task-start`', 'A snapshot still equal to it means nothing landed: dispatch again.',
++    'A changed snapshot: review it at step 8 as round r.', 'a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9',
++    'an r of 4 is past the cap, so stop with a split proposal', '`Task N: fix round=<r> tree=<id>`: resume that round', "a fresh snapshot that differs from its tree is the round's `tree-after`",
++    '- an approving review: step 10.', '4. Every task complete and applied: step 12.', "A wave task resumes in the fork its `Wave:` line names.", 'Never re-dispatch a completed task.',
++    "Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`. The next round gets that file.",
++    'is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.'],
+ };
+ 
+ // The mode bullets of step 6, by their leading backticked name.
+@@ -105,7 +132,8 @@ test('execute-plan pins each step, the modes, the stops and the ledger rules', (
+   const intro = body.slice(0, body.indexOf('## Steps'));
+   const stops = section(body, '## Stops and autopilot') ?? '';
+   const ledger = readDoc(LEDGER).raw;
+-  const where = { intro, step: bullet(body, 'step'), inline: bullet(body, 'inline'), delegate: bullet(body, 'delegate'), stops, ledger };
++  const resume = readDoc(RESUME).raw;
++  const where = { intro, step: bullet(body, 'step'), inline: bullet(body, 'inline'), delegate: bullet(body, 'delegate'), stops, ledger, resume };
+   for (const [k, needles] of Object.entries(PINS)) {
+     const text = where[k] ?? s[Number(k)];
+     for (const n of needles) assert.ok(text.includes(n), `${k}: must contain: ${n}`);
+@@ -128,9 +156,11 @@ test('execute-plan orders each gate after what it needs', () => {
+   // The wrapped brief is written, then checked, then dispatched.
+   order(bullet(body, 'delegate'), ['briefs/task-N.brief.md', 'scripts/brief-check', 'dispatch only on `brief-check: ok`', '`kern:implementer`'], 'delegate');
+   // Step 8: snapshot, package with the allow list, review, then record.
+-  order(s[8], ['`wt-snap`', 'scripts/wt-diff', '--allow-file', 'kern:task-reviewer', 'scripts/task-review'], 'step 8');
++  order(s[8], ['`wt-snap`', 'scripts/wt-diff', '--allow-file', 'kern:task-reviewer', 'reviews/task-N-r<r>.txt', 'scripts/task-review'], 'step 8');
++  // Step 5: the base tree is taken after the baseline run, so test output is not in the final package.
++  order(s[5], ['scripts/wt-new', 'baseline `test.full`', '`Worktree: <path>'], 'step 5');
+   // Step 9: the fix round line is written before the round's dispatch.
+-  order(s[9], ['`Task N: fix round=<r> tree=<id>`', 'Round 2 resumes', 'round 3 dispatches', '`re-review`', '`task-review`'], 'step 9');
++  order(s[9], ['`Task N: fix round=<r> tree=<id>`', 'Round 2 resumes', 'round 3 dispatches', '`re-review`', 'saved and recorded'], 'step 9');
+   // Step 10: task-done, then the autopilot commit; step 11: applied, then the Applied line.
+   order(s[10], ['scripts/task-done', 'Under autopilot only, then commit'], 'step 10');
+   order(s[11], ['scripts/wt-apply', '`Applied: Task N patch=<path>` after each `applied`', '`test.full`'], 'step 11');
+@@ -143,7 +173,7 @@ test('execute-plan red flags tell the reader what to do', () => {
+   const rows = (section(body, '## Red flags') ?? '').split('\n').filter((l) => /^\| "/.test(l));
+   assert.equal(rows.length, 6);
+   for (const n of ['Fix them or reach round 3 and escalate.', 'Resume the implementer, then re-review.', 'Stop with a split proposal.', 'Re-review every fix.',
+-    'Record a Decision line with the cost if wrong.', 'Write each line as it happens.']) {
++    'Adjudicate only at the cap, in a Decision line; until then, argue it in the re-review.', 'Write each line as it happens.']) {
+     assert.ok(rows.some((r) => r.includes(n)), `red flags must contain: ${n}`);
+   }
+ });

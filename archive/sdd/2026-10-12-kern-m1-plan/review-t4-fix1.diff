@@ -1,0 +1,204 @@
+# Task 4 fix round 1: dc776c1..09efc8e excluding docs/
+09efc8e M1: harden kern-dir exclude writes and kern-detect npm scripts
+34ae191 M1: allow {dir} and {name} in test.focused (contract update)
+diff --git a/scripts/kern-detect b/scripts/kern-detect
+index 6947f2d..4afdeb2 100755
+--- a/scripts/kern-detect
++++ b/scripts/kern-detect
+@@ -46,20 +46,39 @@ script() {
+     printf '%s test\n' "$(pm)"
+   else
+     printf '%s run %s\n' "$(pm)" "$1"
+   fi
+ }
+ 
+ make_target() {
+   [ -f "$M/Makefile" ] && grep -Eq "^$1:" "$M/Makefile"
+ }
+ 
++# Script-based keys read package.json; more than one scripts object makes the first match a guess.
++case "$key" in
++  test.full | test.focused | typecheck | lint | build)
++    if [ -f "$M/package.json" ] && [ "$(grep -o '"scripts"' "$M/package.json" | grep -c .)" -gt 1 ]; then
++      none "ambiguous: more than one scripts object in package.json"
++    fi
++    ;;
++esac
++
++# placeholder_test: exit 0 when package.json's test script is npm init's "no test specified" stub.
++placeholder_test() {
++  local scripts t
++  [ -f "$M/package.json" ] || return 1
++  scripts=$(KERN_INPUT=$(cat "$M/package.json") json_get_raw scripts) || return 1
++  t=$(KERN_INPUT="$scripts" json_get test) || return 1
++  case "$t" in *"no test specified"*) return 0 ;; esac
++  return 1
++}
++
+ case "$key" in
+   base_branch)
+     b=$(base) || none "refs/remotes/origin/HEAD is not set (git remote set-head origin --auto)"
+     out "$b" "refs/remotes/origin/HEAD"
+     ;;
+   branch.pattern)
+     names=$(git -C "$M" for-each-ref --sort=-committerdate --count=40 --format='%(refname:short)' refs/remotes/origin |
+       sed 's#^origin/##' | grep -v -x -e HEAD -e origin -e "$(base 2>/dev/null || echo main)" | head -n 30)
+     total=$(printf '%s\n' "$names" | grep -c . || true)
+     n=$(printf '%s\n' "$names" | grep -Ec '^[A-Z][A-Z0-9]+-[0-9]+/' || true)
+@@ -78,29 +97,31 @@ case "$key" in
+     subjects=$(git -C "$M" log --format=%s -30 "$ref" 2>/dev/null)
+     total=$(printf '%s\n' "$subjects" | grep -c . || true)
+     n=$(printf '%s\n' "$subjects" | grep -Ec '^[A-Z][A-Z0-9]+-[0-9]+: ' || true)
+     share "$n" "$total" && out '^[A-Z][A-Z0-9]+-[0-9]+: ' "$n of the last $total subjects start with ID: "
+     re='^(feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert)(\([^)]+\))?!?: '
+     n=$(printf '%s\n' "$subjects" | grep -Ec "$re" || true)
+     share "$n" "$total" && out "$re" "$n of the last $total subjects are Conventional Commits"
+     none "no subject shape covers 60% of the last $total commits"
+     ;;
+   test.full)
++    placeholder_test && none "package.json scripts.test is the npm init placeholder (no test specified)"
+     c=$(script test) && out "$c" "package.json scripts.test"
+     make_target test && out "make test" "Makefile target test"
+     [ -f "$M/pyproject.toml" ] && grep -q 'pytest' "$M/pyproject.toml" && out "pytest" "pyproject.toml mentions pytest"
+     [ -f "$M/go.mod" ] && out "go test ./..." "go.mod"
+     [ -f "$M/Cargo.toml" ] && out "cargo test" "Cargo.toml"
+     none "no package.json scripts.test, Makefile test target, pytest, go.mod or Cargo.toml"
+     ;;
+   test.focused)
+-    c=$(script test) && out "$c -- {file}" "package.json scripts.test with a path argument"
++    placeholder_test && none "package.json scripts.test is the npm init placeholder (no test specified)"
++    c=$(script test) && out "$c -- {file}" "package.json scripts.test (path argument not verified)"
+     [ -f "$M/pyproject.toml" ] && grep -q 'pytest' "$M/pyproject.toml" && out "pytest {file}" "pyproject.toml mentions pytest"
+     [ -f "$M/go.mod" ] && out "go test ./{dir}" "go.mod"
+     [ -f "$M/Cargo.toml" ] && out "cargo test {name}" "Cargo.toml"
+     none "no focused test runner found"
+     ;;
+   typecheck)
+     for s in typecheck type-check tsc check-types; do
+       c=$(script "$s") && out "$c" "package.json scripts.$s"
+     done
+     make_target typecheck && out "make typecheck" "Makefile target typecheck"
+diff --git a/scripts/kern-dir b/scripts/kern-dir
+index d45e987..11e2c46 100755
+--- a/scripts/kern-dir
++++ b/scripts/kern-dir
+@@ -1,33 +1,36 @@
+ #!/usr/bin/env bash
+ # Resolves WORK/<sub> under the main worktree root, creates it, and keeps WORK out of git through
+ # .git/info/exclude. Exit 2 when the work dir holds tracked files.
+ set -euo pipefail
+ KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ export KERN_ROOT
+ # shellcheck source=hooks/lib/settings.sh
+ . "$KERN_ROOT/hooks/lib/settings.sh"
+ sub="${1-}"
+ case "$sub" in
+-  '' | -* | /* | */ | *//* | */-* | *[!a-z0-9/-]*) echo "kern-dir: name must be lowercase segments of letters, digits and dashes, joined by /" >&2; exit 2 ;;
++  '' | -* | :* | /* | */ | *//* | */-* | *[!a-z0-9/-]*) echo "kern-dir: name must be lowercase segments of letters, digits and dashes, joined by /" >&2; exit 2 ;;
+ esac
+ CWD="$PWD"
+ KERN_MAIN=$(kern_main_root "$CWD") || { echo "kern-dir: not a git repository" >&2; exit 2; }
+ export CWD KERN_MAIN
+ wd=$(settings_get work_dir .kern)
+ wd=${wd%/}
+ case "$wd" in
+-  '' | /* | *..*) echo "kern-dir: work_dir must be a relative path inside the repo, not '$wd'" >&2; exit 2 ;;
++  '' | . | :* | .git | .git* | /* | *..*) echo "kern-dir: work_dir must be a relative path inside the repo, not '.', '.git*' or ':*', got '$wd'" >&2; exit 2 ;;
+ esac
+ if [ -n "$(git -C "$KERN_MAIN" ls-files -- "$wd")" ]; then
+   echo "kern-dir: $wd holds tracked files; set work_dir in .claude/kern.local.yml" >&2
+   exit 2
+ fi
+ common=$(git -C "$KERN_MAIN" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) ||
+   common=$(cd "$KERN_MAIN" && cd "$(git rev-parse --git-common-dir)" && pwd)
+ mkdir -p "$common/info"
+ if ! grep -qxF "/$wd/" "$common/info/exclude" 2>/dev/null; then
++  if [ -s "$common/info/exclude" ] && [ -n "$(tail -c1 "$common/info/exclude")" ]; then
++    printf '\n' >>"$common/info/exclude"
++  fi
+   printf '/%s/\n' "$wd" >>"$common/info/exclude"
+   echo "kern: added /$wd/ to .git/info/exclude" >&2
+ fi
+ mkdir -p "$KERN_MAIN/$wd/$sub"
+ printf '%s\n' "$KERN_MAIN/$wd/$sub"
+diff --git a/tests/scripts/kern-detect.bats b/tests/scripts/kern-detect.bats
+index e0cc1f6..1aa495b 100644
+--- a/tests/scripts/kern-detect.bats
++++ b/tests/scripts/kern-detect.bats
+@@ -57,10 +57,36 @@ setup() {
+   [ "${output%%	*}" = '{id}/{slug}' ]
+ }
+ 
+ @test "pr.template and an unknown key" {
+   mkdir -p .github; printf 't\n' >.github/pull_request_template.md
+   run bash "$K/kern-detect" pr.template
+   [ "${output%%	*}" = .github/pull_request_template.md ]
+   run bash "$K/kern-detect" nope
+   [ "$status" -eq 2 ]
+ }
++
++@test "the npm init placeholder test script is not a test runner" {
++  printf '{"scripts":{"test":"echo \\"Error: no test specified\\" && exit 1"}}' >package.json
++  run bash "$K/kern-detect" test.full
++  [ "$status" -eq 3 ]
++  [[ "$output" == *"no test specified"* ]] || false
++  run bash "$K/kern-detect" test.focused
++  [ "$status" -eq 3 ]
++  [[ "$output" == *"no test specified"* ]] || false
++}
++
++@test "more than one scripts object in package.json is ambiguous" {
++  printf '{"scripts":{"test":"jest","lint":"x"},"nested":{"scripts":{"test":"y"}}}' >package.json
++  for k in test.full test.focused typecheck lint build; do
++    run bash "$K/kern-detect" "$k"
++    [ "$status" -eq 3 ] || { echo "$k: $status"; false; }
++    [[ "$output" == *"ambiguous: more than one scripts object in package.json"* ]] || false
++  done
++}
++
++@test "test.focused evidence does not claim a path argument works" {
++  printf '{"scripts":{"test":"jest"}}' >package.json
++  run bash "$K/kern-detect" test.focused
++  [ "$status" -eq 0 ]
++  [[ "$output" == *"(path argument not verified)"* ]] || false
++}
+diff --git a/tests/scripts/kern-dir.bats b/tests/scripts/kern-dir.bats
+index 8ab974c..ddfc8f7 100644
+--- a/tests/scripts/kern-dir.bats
++++ b/tests/scripts/kern-dir.bats
+@@ -46,10 +46,35 @@ setup() {
+ 
+ @test "kern-dir refuses a work dir with tracked files and a bad name" {
+   mkdir -p "$R/.kern"; printf 'x\n' >"$R/.kern/t.md"
+   git -C "$R" add .kern/t.md; git -C "$R" commit -q -m t
+   cd "$R"
+   run bash "$K/kern-dir" specs
+   [ "$status" -eq 2 ]
+   run bash "$K/kern-dir" "../x"
+   [ "$status" -eq 2 ]
+ }
++
++@test "kern-dir adds a newline before its exclude line when the file lacks one" {
++  cd "$R"
++  printf 'foo' >"$R/.git/info/exclude"
++  run bash "$K/kern-dir" specs
++  [ "$status" -eq 0 ]
++  [ "$(cat "$R/.git/info/exclude")" = "$(printf 'foo\n/.kern/')" ]
++  run bash "$K/kern-dir" specs
++  [ "$(wc -l <"$R/.git/info/exclude" | tr -d ' ')" -eq 2 ]
++  [ "$(grep -cxF '/.kern/' "$R/.git/info/exclude")" -eq 1 ]
++}
++
++@test "kern-dir refuses a work_dir of ., .git*, or starting with a colon" {
++  cd "$R"
++  mkdir -p .claude
++  for w in . ./ .git .github ':x'; do
++    printf 'work_dir: %s\n' "$w" >.claude/kern.local.yml
++    run bash "$K/kern-dir" specs
++    [ "$status" -eq 2 ] || { echo "work_dir $w: status $status"; false; }
++    [[ "$output" == *work_dir* ]] || false
++  done
++  rm .claude/kern.local.yml
++  run bash "$K/kern-dir" ":specs"
++  [ "$status" -eq 2 ]
++}

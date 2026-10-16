@@ -1,0 +1,162 @@
+diff --git a/hooks/guards/g01-git.sh b/hooks/guards/g01-git.sh
+index 9db9f5a..5bf6906 100644
+--- a/hooks/guards/g01-git.sh
++++ b/hooks/guards/g01-git.sh
+@@ -155,8 +155,10 @@ worktree write-tree "
+ 
+ # _g01_foreign GUARD SUB: when SUB is not one of git's own commands, votes ask (deny under autopilot)
+ # as GUARD and exits 0. No config is read, so -c, HOME, XDG_CONFIG_HOME, GIT_DIR, cd and include
+-# paths cannot steer it.
++# paths cannot steer it. An option word (git --version, -h, --help) is no subcommand: every global
++# option that leads on to one has already been read.
+ _g01_foreign() {
++  case "$2" in -*) return 1 ;; esac
+   case "$_G01_GIT_CMDS" in *" $2 "*) return 1 ;; esac
+   vote ask "$1" "git $2 is not one of git's own commands (an alias or an extension); run the git command it stands for so kern can check it"
+   [ "$AUTOPILOT" = 1 ] && vote deny "$1" "git $2 under autopilot: not one of git's own commands"
+diff --git a/hooks/guards/g05-commit.sh b/hooks/guards/g05-commit.sh
+index dbfc25f..b435bcb 100644
+--- a/hooks/guards/g05-commit.sh
++++ b/hooks/guards/g05-commit.sh
+@@ -108,26 +108,21 @@ EOT
+ }
+ 
+ # _g05_env RECORD: what RECORD changes in the environment of the command it runs, one line each:
+-# NAME for a VAR=value word before the command word (after the wrappers env, sudo, command, exec,
+-# nice, nohup, time and timeout and their options, as _cmd_words skips them); +NAME when the
+-# assignment outlives the record (an export or declare -x record, or one that is only assignments);
+-# @cwd when env -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory. Never a substring
+-# of an argument.
++# NAME for a VAR=value word before the command word (after the wrappers env, sudo, command, builtin,
++# exec, nice, nohup, time and timeout and their options); +NAME when the assignment outlives the
++# record (an export or declare -x command, behind wrappers or not, or a record that is only
++# assignments); @cwd when env -C/--chdir or sudo -D/-R/--chdir/--chroot changes the directory.
++# Never a substring of an argument.
+ _g05_env() {
+   _shell_words "$1" | LC_ALL=C awk '
+     BEGIN {
+-      n = split("env sudo command exec nice nohup time timeout", a, " ")
++      n = split("env sudo command builtin exec nice nohup time timeout", a, " ")
+       for (k = 1; k <= n; k++) wrap[a[k]] = 1
+       val["sudo"] = " -C -D -g -h -p -R -r -T -t -U -u "
+       val["env"] = " -C -P -S -u --chdir --split-string --unset --argv0 "
+       val["exec"] = " -a "; val["timeout"] = " -s -k --signal --kill-after "; val["nice"] = " -n "
+     }
+     function asg(s) { sub(/=.*/, "", s); names[++m] = s }
+-    NR == 1 {
+-      b = $0; sub(/.*\//, "", b)
+-      if (b == "export") { ex = 1; next }
+-      if (b == "declare" || b == "typeset") { dx = 1; next }
+-    }
+     dx && /^-/ { if ($0 ~ /x/) ex = 1; next }
+     dx { dx = 0; if (!ex) done = 1 }
+     ex { if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) asg($0); next }
+@@ -145,6 +140,9 @@ _g05_env() {
+       next
+     }
+     dur { dur = 0; next }
++    # The command word: export, declare and typeset assign for the records after.
++    b == "export" { ex = 1; next }
++    b == "declare" || b == "typeset" { dx = 1; next }
+     { done = 1 }
+     END { for (k = 1; k <= m; k++) print ((ex || !done) ? "+" : "") names[k] }'
+ }
+diff --git a/hooks/guards/g06-secrets.sh b/hooks/guards/g06-secrets.sh
+index a58d69d..082437b 100644
+--- a/hooks/guards/g06-secrets.sh
++++ b/hooks/guards/g06-secrets.sh
+@@ -228,16 +228,24 @@ EOT
+   return 0
+ }
+ 
+-# _g06_leaks DIR ARGS...: `git ARGS` in DIR read by gitleaks; gitleaks' exit code.
++# The message walk's git arguments for gitleaks; empty for a commit, whose message G6 reads itself.
++_G06_MSGARGS=()
++
++# _g06_leaks DIR ARGS...: `git ARGS` in DIR, then the message walk in _G06_MSGARGS (NULs as
++# newlines), read by gitleaks; gitleaks' exit code.
+ _g06_leaks() {
+   local d="$1"
+   shift
+-  _g06_git "$d" "$@" | gitleaks stdin --no-banner --redact >/dev/null 2>&1
++  {
++    _g06_git "$d" "$@"
++    [ ${#_G06_MSGARGS[@]} -eq 0 ] || _g06_git "$d" "${_G06_MSGARGS[@]}" | LC_ALL=C tr '\000' '\n'
++  } | gitleaks stdin --no-banner --redact >/dev/null 2>&1
+ }
+ 
+ # _g06_finish OUT DIR ARGS...: votes on the walks' output OUT (plus any message scan lines): the
+ # never_commit names, the rule hits, and a walk that did not finish. With no hit, gitleaks (when
+-# installed) reads `git ARGS` again under with_timeout; an overrun asks too.
++# installed) reads `git ARGS` and the message walk again under with_timeout, inside the same
++# budget; an overrun asks too.
+ _g06_finish() {
+   local out="$1" rc names hits secs leak
+   shift
+@@ -287,6 +295,7 @@ EOT
+   out=$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_parse "$dir" "${args[@]}")
+   out="$out
+ $(_g06_msg "commit message" "$msg" | _g06_keep)"
++  _G06_MSGARGS=()
+   _g06_finish "$out" "$dir" "${args[@]}"
+ }
+ 
+@@ -366,9 +375,10 @@ EOT
+     [ -n "$(_g06_git "$dir" for-each-ref --count=1 --format=x refs/remotes/)" ] && other=1
+   fi
+   args=(log --no-show-signature -p --cc "${_G06_DIFF[@]}" --format= "${revs[@]}" "${ex[@]}")
++  _G06_MSGARGS=(log --no-show-signature -z '--format=%h%x00%B' "${revs[@]}" "${ex[@]}")
+   out=$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_parse "$dir" "${args[@]}")
+   out="$out
+-$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_msgs "$dir" log --no-show-signature -z '--format=%h%x00%B' "${revs[@]}" "${ex[@]}")"
++$(_g06_walk "$(_g06_secs "$_G06_SECS")" _g06_msgs "$dir" "${_G06_MSGARGS[@]}")"
+   _g06_finish "$out" "$dir" "${args[@]}"
+   [ "$other" = 1 ] && _g06_unscanned "history already on another remote was not rescanned for $remote"
+   return 0
+diff --git a/tests/hooks/g05-g06-commit.bats b/tests/hooks/g05-g06-commit.bats
+index 71d0b66..fe338a3 100644
+--- a/tests/hooks/g05-g06-commit.bats
++++ b/tests/hooks/g05-g06-commit.bats
+@@ -784,8 +784,12 @@ key AKIAABCDEFGHIJKLMNOP"
+     expect none "$g" "git status" || return 1
+     expect none "$g" "git log --oneline -5" || return 1
+     expect none "$g" "git stage -- a.txt" || return 1
++    expect none "$g" "git --version" || return 1
++    expect none "$g" "git -h" || return 1
++    expect none "$g" "git --help" || return 1
+   done
+   set_autopilot on
++  expect none g01,g05,g06 "git --version"
+   expect allow g01,g05,g06 "git commit -m 'CDS-2465: x'"
+   expect deny g05 "git -c alias.ci=commit commit -m 'CDS-2465: x'"
+ }
+@@ -915,3 +919,29 @@ key AKIAABCDEFGHIJKLMNOP"
+   expect ask g06 "git push -u origin CDS-2465/replace-minio"
+   [[ "$output" == *"secret scan did not finish"* ]] || false
+ }
++
++@test "G6: an export behind a wrapper still leaves the next git command unscanned" {
++  local c cmds=(
++    "command export GIT_DIR=/x/.git; git commit -m 'CDS-2465: x'"
++    "builtin export GIT_INDEX_FILE=/tmp/i; git commit -m 'CDS-2465: x'"
++    "command declare -x GIT_DIR=/x/.git; git commit -m 'CDS-2465: x'"
++    "builtin export HOME=/tmp; git push"
++  )
++  for c in "${cmds[@]}"; do
++    expect ask g06 "$c" || return 1
++    [[ "$output" == *"could not scan"* ]] || false
++  done
++}
++
++@test "G6: gitleaks reads a pushed commit's message as well as its patch" {
++  mkdir -p "$BATS_TEST_TMPDIR/gl"
++  printf '#!/bin/sh\ncat >"%s/gl.in"\nexit 0\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/gl/gitleaks"
++  chmod +x "$BATS_TEST_TMPDIR/gl/gitleaks"
++  printf 'patch-text-17\n' >"$R/p.txt"
++  git -C "$R" add p.txt
++  git -C "$R" commit -q -m "$(printf 'CDS-2465: x\n\nmessage-text-42')"
++  PATH="$BATS_TEST_TMPDIR/gl:$PATH"
++  expect none g06 "git push -u origin CDS-2465/replace-minio"
++  grep -q 'patch-text-17' "$BATS_TEST_TMPDIR/gl.in"
++  grep -q 'message-text-42' "$BATS_TEST_TMPDIR/gl.in"
++}

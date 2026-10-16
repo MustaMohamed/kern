@@ -1,0 +1,132 @@
+# Review package: b8b4770..HEAD
+
+## Commits
+2d79931 M2: ledger-open refuses an unclosed frontmatter and failed state
+
+## Files changed
+ scripts/ledger-open       | 10 ++++++----
+ tests/scripts/ledger.bats | 49 +++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 55 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/scripts/ledger-open b/scripts/ledger-open
+index be84ecd..73b03d4 100755
+--- a/scripts/ledger-open
++++ b/scripts/ledger-open
+@@ -6,46 +6,48 @@
+ # Exit 2: the plan is not approved (status: approved and an approved: line with a date and the user's
+ # quoted words), or DIR holds another plan's ledger. --summary exits 1 when the main checkout changed.
+ # Ledger identity adapted from superpowers subagent-driven-development/scripts/sdd-workspace (MIT).
+ set -euo pipefail
+ here=$(cd "$(dirname "$0")" && pwd -P)
+ # shellcheck source=/dev/null
+ . "$here/../hooks/lib/settings.sh"
+ 
+ # main_state: "<main root> branch=<name> status=<hash of git status --porcelain>".
+ main_state() {
+-  local m b
++  local m b st
+   m=$(kern_main_root "$PWD") || { echo "ledger-open: not a git repository" >&2; exit 2; }
+   b=$(git -C "$m" symbolic-ref -q --short HEAD 2> /dev/null) || b='(detached)'
+-  printf '%s branch=%s status=%s\n' "$m" "$b" \
+-    "$(git --no-optional-locks -C "$m" status --porcelain | git hash-object --stdin)"
++  # Read first: a failing git status inside a pipe or printf argument would be hashed as empty input.
++  st=$(git --no-optional-locks -C "$m" status --porcelain) || { echo "ledger-open: git status failed in $m" >&2; exit 2; }
++  printf '%s branch=%s status=%s\n' "$m" "$b" "$(printf '%s' "$st" | git hash-object --stdin)"
+ }
+ 
+ if [ "${1-}" = --summary ]; then
+   [ $# -eq 2 ] && [ -f "$2/ledger.md" ] || { echo "usage: ledger-open --summary DIR (DIR holds ledger.md)" >&2; exit 2; }
+   grep -E '^(Decision:|parked:|Preflight:|Task [0-9]+: minor \(deferred\):)' "$2/ledger.md" || true
+   rec=$(sed -n 's/^Main: //p' "$2/ledger.md" | head -n 1)
+   now=$(main_state)
+   if [ "$rec" = "$now" ]; then
+     echo "main: unchanged"
+     exit 0
+   fi
+   echo "main: changed; recorded $rec; now $now"
+   exit 1
+ fi
+ 
+ [ $# -ge 1 ] && [ $# -le 2 ] || { echo "usage: ledger-open PLAN [DIR] | ledger-open --summary DIR" >&2; exit 2; }
+ plan=$1
+ [ -f "$plan" ] || { echo "ledger-open: no such plan: $plan" >&2; exit 2; }
+ plan=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
+ # The frontmatter is the block between a first line of --- and the next ---.
+-fm=$(awk 'NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1 { print }' "$plan")
++fm=$(awk 'NR == 1 { if ($0 != "---") exit; opened = 1; next } $0 == "---" { closed = 1; exit } { print } END { if (opened && !closed) exit 3 }' "$plan") ||
++  { echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2; }
+ status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
+ approved=$(printf '%s\n' "$fm" | sed -n 's/^approved:[[:space:]]*//p' | head -n 1)
+ [ "$status" = approved ] || { echo "ledger-open: $plan has status: ${status:-none}; execute-plan runs only an approved plan" >&2; exit 2; }
+ printf '%s' "$approved" | grep -Eq '[0-9]{4}-[0-9]{2}-[0-9]{2}.*"[^"]+"' ||
+   { echo "ledger-open: $plan has no approved: line with a date and the user's quoted words" >&2; exit 2; }
+ 
+ if [ $# -eq 2 ]; then
+   dir=$2
+ else
+   slug=$(basename "$plan" .md | tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//')
+diff --git a/tests/scripts/ledger.bats b/tests/scripts/ledger.bats
+index b695d03..b98a40a 100644
+--- a/tests/scripts/ledger.bats
++++ b/tests/scripts/ledger.bats
+@@ -137,10 +137,59 @@ approved_plan() {
+   [ "$status" -eq 0 ]
+   [ "${lines[0]}" = 'Decision: one; why: x; cost if wrong: y' ]
+   [ "${lines[1]}" = 'Task 1: minor (deferred): rename a helper' ]
+   [ "${lines[2]}" = 'parked: q; default: d; why: w' ]
+   [ "${lines[3]}" = 'main: unchanged' ]
+   printf 'x\n' > "$REPO/stray.txt"
+   run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" --summary "$dir"
+   [ "$status" -eq 1 ]
+   [[ "${lines[3]}" == 'main: changed; '* ]] || false
+ }
++
++@test "ledger-open refuses an unclosed frontmatter and writes nothing" {
++  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
++  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "x"' '' '### Task 1: One' > "$TMP/u.md"
++  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/u.md" "$TMP/fresh"
++  [ "$status" -eq 2 ]
++  [[ "$stderr" == *"$TMP/u.md: frontmatter not closed"* ]] || false
++  [ ! -e "$TMP/fresh" ]
++}
++
++@test "a refusal writes nothing into a fresh DIR" {
++  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
++  approved_plan "$TMP/d.md" draft
++  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/d.md" "$TMP/fresh"
++  [ "$status" -eq 2 ]
++  [ ! -e "$TMP/fresh" ]
++  approved_plan "$TMP/a.md"; approved_plan "$TMP/b.md"
++  mkdir -p "$TMP/other"
++  printf '# kern ledger: %s\n' "$TMP/a.md" > "$TMP/other/ledger.md"
++  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/b.md" "$TMP/other"
++  [ "$status" -eq 2 ]
++  [ "$(ls -A "$TMP/other")" = ledger.md ]
++}
++
++@test "ledger-open outside a git repository exits 2 and writes no ledger" {
++  mkdir "$TMP/nogit"; cd "$TMP/nogit"
++  approved_plan "$TMP/a.md"
++  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/fresh"
++  [ "$status" -eq 2 ]
++  [ ! -e "$TMP/fresh" ]
++}
++
++@test "ledger-open --summary fails when the main checkout state cannot be read" {
++  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
++  approved_plan "$TMP/a.md"
++  dir=$(bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l" 2> /dev/null)
++  mkdir "$TMP/nogit"; cd "$TMP/nogit"
++  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" --summary "$dir"
++  [ "$status" -eq 2 ]
++}
++
++@test "ledger-open refuses when git status fails and does not record an empty-input hash" {
++  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
++  approved_plan "$TMP/a.md"
++  printf 'garbage' > "$REPO/.git/index"
++  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/fresh"
++  [ "$status" -ne 0 ]
++  [ ! -e "$TMP/fresh/ledger.md" ]
++}

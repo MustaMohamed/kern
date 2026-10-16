@@ -1,0 +1,115 @@
+diff --git a/skills/recall/SKILL.md b/skills/recall/SKILL.md
+index 49ad75f..5c84827 100644
+--- a/skills/recall/SKILL.md
++++ b/skills/recall/SKILL.md
+@@ -13,12 +13,12 @@ Rebuild the current state from kern's working files, transcripts and live git, f
+ 1. Route. One named prior session: point to `claude --resume` and stop. A full state capsule already in the prompt: skip the mining. `recall chat`: go to step 9.
+ 2. Lock the scope and say it back: the window (7 days unless stated; never turn "all" into "recent"), the topic, and the workspace (never another project's transcripts unasked). Adjacent work stays out unless it blocks this.
+ 3. Read kern's working files first. Find `WORK` with two separate commands, never `kern-dir`, which creates folders and edits `.git/info/exclude`: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern` prints the folder name, a tab and its source; `git rev-parse --path-format=absolute --git-common-dir` prints a path whose parent is the main checkout, from a linked worktree too. `WORK` is that parent plus the folder name. A missing `WORK` is not an error: say there are no kern working files. Else read `WORK/ledgers/*/ledger.md` (incomplete tasks and `parked:` lines) and the status lines of `WORK/plans/*` and `WORK/specs/*`. List kern worktrees with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit`; a non-zero exit, or a worktree in the `unknown` bucket, goes in Sources skipped with its evidence, never as clean. Memory files are context, never state.
+-4. Find the sessions with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions --days <n>`, adding `--topic <topic>` only when a topic was named (an empty topic is a usage error). `session` lines (time, id, bytes, absolute path) are this project's transcripts, its worktrees' included, newest first; with a topic, `prompt` lines are its prompts that name it (`-` is an unknown session id). The newest session is usually this one; skip it (`references/transcripts.md`). Exit 1 (a record could not be read) or 2 never means there were no sessions: quote its message, name transcripts in Sources skipped, tag nothing from transcripts, and go on with live state.
+-5. Mine in parallel: dispatch `kern:investigator` on model `model.miner`, one per 2 to 4 transcripts, with the absolute paths from the `session` lines, one question (for the topic: goal, decisions, open threads, corrections and artifacts of each session) and a return budget of 15 lines per session. It may run only read commands: `grep -n` the topic first (pipe to `cut -c1-300` to bound the lines), `wc -c` before reading, and `sed -n <first>,<last>p` with line numbers and p only; narrow any record over 500 characters (`sed -n <n>p <file>` piped to `wc -c` measures one). If it reports a command the allowlist blocks, run that command yourself; never widen the guard. Two sessions or fewer: read them directly, measuring the same way.
++4. Find the sessions with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions --days <n>`, adding `--topic <topic>` only when a topic was named (an empty topic is a usage error). `session` lines (time, id, bytes, absolute path) are this project's transcripts, its worktrees' included, newest first; with a topic, `prompt` lines are its prompts that name it (`-` is an unknown session id). The newest session is usually this one; skip it (`references/transcripts.md`). Exit 1 (a record could not be read) or 2 never means there were no sessions: quote its message, name transcripts in Sources skipped, tag nothing from transcripts, and go on with live state (exit 2 outside a git repository: no live state either, say so and stop).
++5. Mine in parallel: dispatch `kern:investigator` on model `model.miner`, one per 2 to 4 transcripts, with the absolute paths from the `session` lines, one question (for the topic: goal, decisions, open threads, corrections and artifacts of each session) and a return budget of 15 lines per session. It may run only read commands: `grep -n` the topic first (pipe to `cut -c1-300` to bound the lines), `wc -c` before reading, and `sed -n <first>,<last>p` with line numbers and p only; narrow any record over 500 characters (`sed -n <n>p <file>` piped to `wc -c` measures one). G18 denies `>` anywhere in a command, even inside quotes: search with `grep -F`, no redirection. If it reports a command the allowlist blocks, run that command yourself; never widen the guard. When the answer hinges on what an agent actually did, read the full transcript region, not a grep line or summary. Two sessions or fewer: read them directly, measuring the same way.
+ 6. When a feature, ticket or bug is named, sweep `tracker` and `workflow_records` in parallel with step 5 (a key unset: `tracker` is detected, `workflow_records` is none; no tracker found is said once). A source that did not run (tracker tools absent or erroring, `gh` missing, `gh auth status` failing) goes in Sources skipped; a null result from a source that ran is a finding.
+-7. Verify every PR, branch, issue and claim the mining inherited against live `git`, `gh` and the tracker before tagging it. For squash merges, trust `gh pr list --head <branch> --state all`, not `git branch --merged`. A source that cannot be reached (no remote, `gh` or the tracker unavailable) leaves the thread with the unverified tag. `[verified, uncommitted]` needs `<wt>`, the path on the ledger's `Worktree:` line, and that work's last `tree=` equals a fresh `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. A differing tree means the work moved: tag by its PR or branch. A `<wt>` that is not in `git worktree list`, or a `wt-snap` that fails, rules the tag out: use `[unverified, worktree unavailable]` and say the worktree is gone.
++7. Verify every PR, branch, issue and claim the mining inherited against live `git`, `gh` and the tracker before tagging it. For squash merges, trust `gh pr list --head <branch> --state all`, not `git branch --merged`. A source that cannot be reached (no remote, `gh` or the tracker unavailable) leaves the thread with the unverified tag. `[verified, uncommitted]` needs `<wt>`, the path on the ledger's `Worktree:` line, and two checks: that work's last `tree=` equals a fresh `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`, and that snapshot differs from `git -C <wt> rev-parse HEAD^{tree}`; equal to `HEAD^{tree}` means committed, so tag by its branch or PR, as for a differing `tree=`. No `Worktree:` line, a `<wt>` not in `git worktree list`, or a failing `wt-snap` rules the tag out: tag from its branch or PR when a branch is known, else `[unverified, worktree unavailable]`; the next move still comes from the incomplete ledger task.
+ 8. Write the brief per the output contract below.
+-9. `recall chat`: gather your own work, subagent reports and others' messages since the user's last message; notifications and subagent results are not the user's messages. Check the live state of each PR, CI run and agent; reply with the action-item count first, then what happened by importance, then per action item: the decision, why now, the options with their cost, a recommendation, and what happens with no answer. An item still waiting from before the user's last message counts; work you can do yourself is not an action item. List what could not be checked.
++9. `recall chat`: follow `references/chat.md`, reply with the action-item count first, and stop.
+ 
+ ## Output contract
+ 
+diff --git a/skills/recall/references/chat.md b/skills/recall/references/chat.md
+new file mode 100644
+index 0000000..97c46c0
+--- /dev/null
++++ b/skills/recall/references/chat.md
+@@ -0,0 +1,21 @@
++# recall chat
++
++Catch the user up on this chat since their last message. Read-only.
++
++## Scope
++
++Assume the user remembers their last message and nothing after it. Notifications and subagent results are not the user's messages. Call each PR, branch or agent by a name they would know, not a label you coined during the work.
++
++## Gather
++
++Collect your own work, subagent reports and others' messages since that message. Check the live state of each PR, CI run and agent: say which are still running and which you could not check.
++
++An action item is a decision or step only the user can take: a product choice, an approval, an irreversible action, access you lack. An item still waiting from before their last message counts. Work you can do yourself is not an action item; name it in one line.
++
++## Reply
++
++Open with one sentence giving the action-item count, or saying there are none. If nothing happened and nothing waits, say so and stop.
++
++Then what happened, most important first: each result and what it means. Skip steps that changed nothing.
++
++Then per action item: the decision, why now, the options with their cost, your recommendation, and what happens with no answer. If you do not know a part, say so instead of guessing. Link the detail when there is one, and write the summary so the user can decide without opening it.
+diff --git a/tests/skills/recall.test.mjs b/tests/skills/recall.test.mjs
+index 45498fe..a7b3464 100644
+--- a/tests/skills/recall.test.mjs
++++ b/tests/skills/recall.test.mjs
+@@ -28,10 +28,9 @@ test('recall sections, steps and the source lines it keeps', () => {
+   assert.equal(s.length, 10);
+   assert.equal(s[0], DEFER);
+   assertOnce(SKILL, ['claude --resume', 'never turn "all" into "recent"', 'WORK/ledgers', 'gh pr list --head <branch> --state all', '[planned, not started]',
+-    'Write nothing to disk', 'action-item count first', '${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit',
++    'Write nothing to disk', 'reply with the action-item count first', '${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit',
+     'equals a fresh `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'which adds git objects', 'Memory files are context, never state',
+-    'Adjacent work stays out unless it blocks this', 'cut detail before threads', 'notifications and subagent results are not the user\'s messages',
+-    'work you can do yourself is not an action item', 'claim the mining inherited']);
++    'Adjacent work stays out unless it blocks this', 'cut detail before threads', 'claim the mining inherited']);
+   assert.ok(!readDoc(SKILL).raw.includes('history.jsonl'), 'recall finds prompts through recall-sessions, which filters by project');
+   assert.ok(!readDoc(SKILL).raw.includes('$('), 'no command substitution in a command the skill prescribes');
+   assertMaxBytes(SKILL, 7200);
+@@ -54,15 +53,46 @@ test('recall gives every script exit an action', () => {
+ 
+ test('recall pins the unverified tag and the verified-uncommitted rules', () => {
+   assertOnce(SKILL, ['`[unverified, <source> unavailable]`', 'a transcript alone never earns a stronger tag',
+-    '`<wt>`, the path on the ledger\'s `Worktree:` line', 'A `<wt>` that is not in `git worktree list`, or a `wt-snap` that fails, rules the tag out',
+-    'use `[unverified, worktree unavailable]` and say the worktree is gone', 'A differing tree means the work moved: tag by its PR or branch',
++    '`<wt>`, the path on the ledger\'s `Worktree:` line', 'and two checks: that work\'s last `tree=` equals',
++    'and that snapshot differs from `git -C <wt> rev-parse HEAD^{tree}`',
++    'equal to `HEAD^{tree}` means committed, so tag by its branch or PR, as for a differing `tree=`',
++    'No `Worktree:` line, a `<wt>` not in `git worktree list`, or a failing `wt-snap` rules the tag out',
++    'tag from its branch or PR when a branch is known, else `[unverified, worktree unavailable]`', 'the next move still comes from the incomplete ledger task',
+     'The one exception is `wt-snap`', '`wt-snap` is the one exception named above']);
+ });
+ 
+ test('recall dispatches a named agent, model and read-only commands', () => {
+   assertOnce(SKILL, ['dispatch `kern:investigator` on model `model.miner`', 'the absolute paths from the `session` lines', 'a return budget of 15 lines per session',
+     'It may run only read commands', '`grep -n` the topic first', '`wc -c` before reading', '`sed -n <first>,<last>p` with line numbers and p only',
+-    'If it reports a command the allowlist blocks, run that command yourself; never widen the guard']);
++    'If it reports a command the allowlist blocks, run that command yourself; never widen the guard',
++    'G18 denies `>` anywhere in a command, even inside quotes: search with `grep -F`, no redirection',
++    'When the answer hinges on what an agent actually did, read the full transcript region, not a grep line or summary']);
++});
++
++test('recall keeps the load-bearing lines a sentence deletion would lose', () => {
++  assertOnce(SKILL, ['An incomplete ledger task is the next move when one exists', 'with "cleanup pending" on the same line', '`recall chat`: go to step 9',
++    'A full state capsule already in the prompt: skip the mining', 'The newest session is usually this one; skip it', 'Two sessions or fewer: read them directly',
++    'leaves the thread with the unverified tag', 'Cite transcript findings by session id and live findings by PR, issue or ticket number', 'Nothing is written.',
++    'No step asks a question', '`recall chat`: follow `references/chat.md`', '(exit 2 outside a git repository: no live state either, say so and stop)',
++    'Read kern\'s working files first', '`WORK` is that parent plus the folder name', 'Write the brief per the output contract below',
++    '(a key unset: `tracker` is detected, `workflow_records` is none; no tracker found is said once)',
++    'with a topic, `prompt` lines are its prompts that name it (`-` is an unknown session id)',
++    'Capsule: at most 5 bullets', 'Threads: one line each with exactly one tag', '| `work_dir` | `.kern` | ledgers, plans, specs |', '| `model.miner` | `haiku` | transcript miners |', 'Read-only, the same under autopilot', 'Problems: at most 5, the recurring ones', 'Next move: one concrete action', 'Sources skipped: one line naming each source that did not run, or omit',
++    'Chat only (a page only when kern\'s `visual` skill is installed and the brief is long; otherwise say once "visual pages not installed")',
++    'Empty output with exit 0 is no sessions. A non-zero exit is a failed source', 'Transcripts are history. Check `gh` or `git` first']);
++});
++
++test('chat reference keeps the ketchup rules', () => {
++  const CHAT = 'skills/recall/references/chat.md';
++  assertHeadings(CHAT, ['# recall chat', '## Scope', '## Gather', '## Reply']);
++  assertOnce(CHAT, ['Assume the user remembers their last message and nothing after it', 'Notifications and subagent results are not the user\'s messages',
++    'not a label you coined during the work', 'say which are still running and which you could not check', 'An item still waiting from before their last message counts',
++    'Work you can do yourself is not an action item; name it in one line', 'Open with one sentence giving the action-item count, or saying there are none',
++    'If nothing happened and nothing waits, say so and stop', 'Skip steps that changed nothing', 'the decision, why now, the options with their cost, your recommendation, and what happens with no answer',
++    'If you do not know a part, say so instead of guessing', 'write the summary so the user can decide without opening it', 'Read-only.',
++    'since their last message.', 'Collect your own work, subagent reports and others\' messages since that message', 'a product choice, an approval, an irreversible action, access you lack',
++    'each result and what it means']);
++  assertMaxBytes(CHAT, 2000);
+ });
+ 
+ test('transcripts reference', () => {
