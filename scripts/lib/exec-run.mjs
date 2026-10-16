@@ -86,18 +86,21 @@ export function autopilotProblem(events, configDir, read = (f) => readFileSync(f
 // gradeCase({ c, run, ghLog, git, configDir, graders, read }): a case's verdict. INVALID when the run
 // may not be graded (runProblem), when the gh stub missed a call, or, for a case that turns autopilot on,
 // when kern's state for the run does not read autopilot: on (the run did not test autopilot, whatever
-// it did); else the case's grader decides, and a grader that throws is INVALID too.
+// it did); else the case's grader decides, and a grader that throws is INVALID too. An autopilot
+// INVALID still runs the grader and keeps its verdict after its own reason, each as `grader: <reason>`
+// (`grader: pass` when it passed), so the run says what it did as well as why it does not count.
 export function gradeCase({ c, run, ghLog, git, configDir, graders = GRADERS, read }) {
   const invalid = (why) => ({ pass: false, invalid: true, reasons: [why] });
   const problem = runProblem(run);
   if (problem) return invalid(problem);
   const missed = stubMissed(run.events, ghLog);
   if (missed.length) return invalid(`the stub never logged \`gh ${missed[0]}\`: the Bash tool did not see evals/exec/bin first on PATH`);
-  if (c.autopilot) {
-    const off = autopilotProblem(run.events, configDir, read);
-    if (off) return invalid(off);
-  }
-  try { return graders[c.id]({ events: run.events, ghLog, git, branch: c.branch }); } catch (e) { return invalid(`grader error: ${e.message}`); }
+  let g;
+  try { g = graders[c.id]({ events: run.events, ghLog, git, branch: c.branch }); } catch (e) { g = invalid(`grader error: ${e.message}`); }
+  const off = c.autopilot ? autopilotProblem(run.events, configDir, read) : '';
+  if (!off) return g;
+  const graded = g.invalid ? g.reasons : g.pass ? ['grader: pass'] : g.reasons.map((r) => `grader: ${r}`);
+  return { pass: false, invalid: true, reasons: [off, ...graded] };
 }
 
 // parseArgs(args, ids): { only, dryRun }. A --case with no value or an id no case has is a usage

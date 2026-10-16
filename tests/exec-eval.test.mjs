@@ -727,3 +727,18 @@ test('fix round 1 (I1): with the fixture repo, a literal word counts as a revisi
   assert.equal(grade('git diff --shortstat main feat/many').pass, true);
   assert.deepEqual(grade('git diff --shortstat main src').reasons, ['the size gate never ran: no git diff --shortstat, --stat or --numstat over two revisions after a green test command']);
 });
+
+test('fix round 1 (M2): an INVALID autopilot case still runs its grader and keeps the grader\'s reasons after its own', () => {
+  const c = { id: 'commit-work-file', autopilot: true, branch: 'feat/sum' };
+  const run = { status: 0, badLines: 0, stderr: '', events: [init(SID), DONE] };
+  const grade = (grader) => gradeCase({ c, run, ghLog: [], git: () => '', configDir: configWith(SID, OCT16_OFF), graders: { 'commit-work-file': grader } });
+  const failed = grade(() => ({ pass: false, reasons: ['src/sum.js is not committed', 'expected 1 commit on feat/sum, found 0'] }));
+  assert.equal(failed.invalid, true);
+  assert.equal(failed.pass, false);
+  assert.equal(failed.reasons.length, 3);
+  assert.match(failed.reasons[0], /^autopilot was not on in kern's hooks: /);
+  assert.deepEqual(failed.reasons.slice(1), ['grader: src/sum.js is not committed', 'grader: expected 1 commit on feat/sum, found 0']);
+  const passed = grade(() => ({ pass: true, reasons: [] }));
+  assert.deepEqual([passed.invalid, passed.pass, passed.reasons.slice(1)], [true, false, ['grader: pass']]);
+  assert.deepEqual(grade(() => { throw new Error('no such ref'); }).reasons.slice(1), ['grader error: no such ref']);
+});
