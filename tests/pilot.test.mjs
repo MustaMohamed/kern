@@ -87,7 +87,7 @@ test('the diff holds committed, staged and new files, and leaves the arm index u
 
 test('hide removes what tells the arms apart and keeps the project name', () => {
   const t = hide('Read /p/arms/kern-0.3.0/skills/plan/SKILL.md; Skill kern:diagnose; Using superpowers:brainstorming; CAVEMAN MODE; ' +
-    'kern G16: hook files; wrote .kern/ledgers/x.md and docs/superpowers/plans/y.md in /p/runs/p1/a; bash scripts/kern-get base_branch', ['/p/runs/p1/a', '/p/arms/kern-0.3.0']);
+    'kern G16: hook files; wrote .kern/ledgers/x.md and docs/superpowers/plans/y.md in /p/runs/p1/a; bash scripts/kern-get base_branch', ['/p/runs/p1/a'], ['/p/arms/kern-0.3.0']);
   assert.doesNotMatch(t, TELLS);
   assert.doesNotMatch(t, /\/p\/runs|\/p\/arms|\.kern\/|superpowers/i);
   assert.match(t, /scripts\/kern-get base_branch/, 'a bare kern is the project, not an arm');
@@ -133,7 +133,10 @@ test('the pilot tasks are three real tasks with a prompt and a 3 to 5 item rubri
 });
 
 function reviewFixture(dir, swap = false) {
-  const git = (r, ...a) => execFileSync('git', ['-C', r, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { encoding: 'utf8' });
+  // Fixed dates give both repos the same base commit, as two clones of one repo have; without them the
+  // two commits differ whenever they fall in different seconds.
+  const env = { ...process.env, GIT_AUTHOR_DATE: '2026-10-20T10:00:00Z', GIT_COMMITTER_DATE: '2026-10-20T10:00:00Z' };
+  const git = (r, ...a) => execFileSync('git', ['-C', r, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { encoding: 'utf8', env });
   const repos = ['k', 'c'].map((n) => { const r = join(dir, n); mkdirSync(r); git(r, 'init', '-q', '-b', 'main'); writeFileSync(join(r, 'a.txt'), 'one\n'); git(r, 'add', '.'); git(r, 'commit', '-qm', 'base'); return r; });
   writeFileSync(join(repos[0], 'a.txt'), 'kern arm\n');
   const withCwd = (list, cwd) => list.map((e, i) => ({ ...e, cwd: i === list.length - 1 ? '/tmp' : cwd }));
@@ -159,12 +162,24 @@ test('review --dry-run builds a blind bundle and calls no model', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('review refuses a session with no prompt the user typed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p-'));
+  try {
+    const a = reviewFixture(dir);
+    const ks = a[a.indexOf('--kern-session') + 1];
+    writeFileSync(ks, JSON.stringify({ ...asst('m1', 3, bash('ls')), cwd: a[a.indexOf('--kern-repo') + 1] }) + '\n');
+    const r = cli([...a, '--dry-run']);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /no prompt the user typed/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('review refuses a paid run outside the eval account, an unknown flag, and swapped sessions', () => {
   const dir = mkdtempSync(join(tmpdir(), 'p-'));
   try {
     const a = reviewFixture(dir);
     const paid = cli(a);
-    assert.equal(paid.status, 2);
+    assert.equal(paid.status, 2, paid.stderr);
     assert.match(paid.stderr, /CLAUDE_CONFIG_DIR/);
     const other = cli(a, { CLAUDE_CONFIG_DIR: join(dir, 'elsewhere') });
     assert.equal(other.status, 2);

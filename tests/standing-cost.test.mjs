@@ -16,6 +16,14 @@ test('median of an odd and an even list', () => {
   assert.equal(median([4, 1, 3, 2]), 3);
 });
 
+test('a run count below 1 is refused before anything runs', () => {
+  for (const runs of ['0', 'x']) {
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/standing-cost.mjs', import.meta.url)), '--runs', runs, '--dry-run'], { encoding: 'utf8' });
+    assert.equal(r.status, 2, runs);
+    assert.match(r.stderr, /--runs needs a whole number of at least 1/);
+  }
+});
+
 test('the dry run calls no model', () => {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/standing-cost.mjs', import.meta.url)), '--dry-run'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);

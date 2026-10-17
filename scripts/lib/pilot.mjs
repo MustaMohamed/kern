@@ -50,7 +50,7 @@ const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) 
 // AskUserQuestion call in the main session, whose answer is also the user's. Wall time is the arm's working
 // time: from each typed prompt to the last call, result or reply before the next one. The wait before the
 // first prompt, the user's time between turns and the entries an idle session writes (an away summary) do
-// not count.
+// not count; a wait inside a turn, for an AskUserQuestion answer or a permission prompt, does.
 export function metrics(entries, { root = null } = {}) {
   const tokens = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0 };
   const seen = new Set();

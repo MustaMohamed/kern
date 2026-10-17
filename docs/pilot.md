@@ -101,6 +101,10 @@ Tick each file's items as their situations come up: `tests/skills/implement.acce
 
 (pass or fail for each part, the date, `node scripts/pilot.mjs decide` output, the cost ratios, and the user's words)
 
+Tool fixes after the first run, none of which changes `RULE`:
+
+- 2026-10-17, during p1, before its review. Wall time counts from each typed prompt to the last call, result or reply before the next typed prompt, summed over the turns (2bcecac). Before that fix it ran from the first entry to the last, so it counted the wait before the first prompt and the entries an idle session writes. A wait inside a turn, for an AskUserQuestion answer or a permission prompt, still counts. The review bundle hides plugin file paths and `kern.local.yml` (5e1969d), and review refuses a session with no typed prompt.
+
 Changes the user asked for after the first run:
 
 - 2026-10-17, after p1. The user's `claude` shell function adds `--mcp-config ~/.claude/mcp-cli.json`, so both p1 arms also had the user's Linear MCP server. The user's answer: "Use command claude". From p2 on, protocol step 4 starts each arm with `command claude` in place of `claude`, so each arm has only its own plugins. p1 stands as run, since the server was there for both arms.

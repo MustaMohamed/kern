@@ -29,11 +29,12 @@ function once(withKern) {
   const argv = ['-p', 'hello', '--output-format', 'json', '--model', MODEL, '--max-turns', '1', '--max-budget-usd', '1', ...ISOLATION, ...(withKern ? ['--plugin-dir', ROOT] : [])];
   const r = spawnSync('claude', argv, { cwd, encoding: 'utf8', timeout: 180000, env: childEnv(process.env) });
   rmSync(cwd, { recursive: true, force: true });
-  if (r.status !== 0) throw new Error(`standing-cost: claude exited ${r.status}: ${r.stderr.trim().split('\n').pop()}`);
+  if (r.status !== 0) throw new Error(`standing-cost: claude exited ${r.status}: ${r.error?.message ?? r.stderr.trim().split('\n').pop()}`);
   return inputTokens(JSON.parse(r.stdout).usage);
 }
 
 if (isMain(import.meta.url)) {
+  if (!Number.isInteger(RUNS) || RUNS < 1) { console.error('standing-cost: --runs needs a whole number of at least 1'); process.exit(2); }
   if (args.includes('--dry-run')) { console.log(`claude -p hello x ${RUNS} with --plugin-dir ${ROOT}, x ${RUNS} without; model ${MODEL}`); process.exit(0); }
   const kern = []; const bare = [];
   for (let i = 0; i < RUNS; i++) { kern.push(once(true)); bare.push(once(false)); }
