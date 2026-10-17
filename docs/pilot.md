@@ -27,7 +27,7 @@ The tasks are in `evals/pilot/tasks.json`, prompts and rubrics written before an
 
 | Task | Plan task | Runs first | Base commit |
 |---|---|---|---|
-| `p1-standing-cost` | 5 | kern | |
+| `p1-standing-cost` | 5 | kern | e150d84 |
 | `p2-adherence-grader` | 6 | current | |
 | `p3-arithmetic` | 7 | kern | |
 
