@@ -50,6 +50,14 @@ test('metrics count usage once per message, subagents included, and read turns, 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('metrics count the guard asks a hook recorded, kern prefix and all', () => {
+  const askOf = (s, reason, decision = 'ask') => ({ type: 'attachment', timestamp: at(s), attachment: { type: 'hook_success', hookEvent: 'PreToolUse',
+    stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision, permissionDecisionReason: reason } }) } });
+  const m = metrics([human(0, 'Go.'), askOf(1, 'kern G16: the command names kern hook code'), askOf(2, 'kern G2: a push to main'),
+    askOf(3, 'some other hook: ask'), askOf(4, 'kern G1: plain force push', 'deny'), { type: 'attachment', timestamp: at(5), attachment: { type: 'hook_success', stdout: 'not json' } }]);
+  assert.deepEqual(m.asks, ['G16', 'G2']);
+});
+
 test('wall time runs from each typed prompt to its last call or reply, not from the session start or idle entries', () => {
   const m = metrics([
     { type: 'attachment', timestamp: at(0), attachment: { type: 'hook_success', hookEvent: 'SessionStart' } },
@@ -154,7 +162,7 @@ test('review --dry-run builds a blind bundle and calls no model', () => {
   try {
     const r = cli([...reviewFixture(dir), '--dry-run']);
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /^arm-A: \d+ chars; \d+ stops, \d+ tokens, \d+ s, \d+ slip candidate\(s\)$/m);
+    assert.match(r.stdout, /^arm-A: \d+ chars; \d+ stops, \d+ tokens, \d+ s, \d+ guard ask\(s\), \d+ slip candidate\(s\)$/m);
     assert.match(r.stdout, /\(no model called\)$/m);
     const bundle = readFileSync(join(dir, 'out', 't1.prompt.txt'), 'utf8');
     assert.doesNotMatch(bundle, TELLS);

@@ -19,7 +19,8 @@
       "tokens": 539127,
       "wallSeconds": 51,
       "guards": [],
-      "slipCandidates": []
+      "slipCandidates": [],
+      "asks": []
     },
     "kern": {
       "score": 8,
@@ -30,7 +31,8 @@
       "guards": [],
       "slipCandidates": [],
       "slips": 0,
-      "needless": 0
+      "needless": 0,
+      "asks": []
     }
   },
   {
@@ -53,7 +55,8 @@
       "tokens": 922855,
       "wallSeconds": 103,
       "guards": [],
-      "slipCandidates": []
+      "slipCandidates": [],
+      "asks": []
     },
     "kern": {
       "score": 8,
@@ -66,7 +69,11 @@
       ],
       "slipCandidates": [],
       "slips": 0,
-      "needless": 1
+      "needless": 1,
+      "asks": [
+        "G16",
+        "G16"
+      ]
     }
   }
 ]

@@ -45,8 +45,9 @@ const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) 
 // metrics(entries, { root }): one arm's process and cost. Usage counts once per message id: a session file
 // repeats a message's usage on each of its content entries. A guard deny surfaces as an error tool result
 // that names it ("kern G1: ..."); kern's own test output names guards too, so only an error result whose
-// first 300 characters do counts, and these are candidates the user confirms. An ask the user approved
-// leaves no trace in the file, so asks are logged by hand. A stop is a typed turn after the first, or an
+// first 300 characters do counts, and these are candidates the user confirms. A guard ask shows as the
+// hook's recorded output (a hook_success attachment whose permissionDecision is "ask"); whether the user
+// approved it does not, so the user's log still says that. A stop is a typed turn after the first, or an
 // AskUserQuestion call in the main session, whose answer is also the user's. Wall time is the arm's working
 // time: from each typed prompt to the last call, result or reply before the next one. The wait before the
 // first prompt, the user's time between turns and the entries an idle session writes (an away summary) do
@@ -66,7 +67,7 @@ export function metrics(entries, { root = null } = {}) {
     tokens.output += u.output_tokens ?? 0;
   }
   const main = entries.filter((e) => e?._source !== 'subagent');
-  const asks = toolUses(main).filter((u) => u.name === 'AskUserQuestion').length;
+  const questions = toolUses(main).filter((u) => u.name === 'AskUserQuestion').length;
   const at = (e) => Date.parse(e?.timestamp);
   const work = entries.filter((e) => (e?.type === 'user' || e?.type === 'assistant') && !Number.isNaN(at(e))).sort((a, b) => at(a) - at(b));
   let wall = 0;
@@ -88,6 +89,15 @@ export function metrics(entries, { root = null } = {}) {
       if (m) guards.push(m[1]);
     }
   }
+  const asks = [];
+  for (const e of entries) {
+    const a = e?.attachment;
+    if (a?.type !== 'hook_success' || typeof a.stdout !== 'string' || !a.stdout.includes('permissionDecision')) continue;
+    let o = null;
+    try { o = JSON.parse(a.stdout)?.hookSpecificOutput; } catch { continue; }
+    const m = o?.permissionDecision === 'ask' && String(o.permissionDecisionReason ?? '').match(/^kern (G\d+[a-z]?):/);
+    if (m) asks.push(m[1]);
+  }
   const uses = toolUses(entries);
   const tmp = resolve(tmpdir());
   const slips = [];
@@ -99,7 +109,7 @@ export function metrics(entries, { root = null } = {}) {
       if (!r.startsWith(resolve(root) + sep) && !r.startsWith(tmp + sep)) slips.push(`${u.name} outside the worktree: ${p}`);
     }
   }
-  return { turns, stops: Math.max(turns - 1, 0) + asks, toolCalls: uses.length, guards, slipCandidates: slips,
+  return { turns, stops: Math.max(turns - 1, 0) + questions, toolCalls: uses.length, guards, asks, slipCandidates: slips,
     tokens: { ...tokens, total: tokens.input + tokens.cacheCreation + tokens.cacheRead + tokens.output },
     wallSeconds: Math.round(wall / 1000) };
 }

@@ -59,7 +59,7 @@ if (cmd === 'metrics') {
   mkdirSync(raw, { recursive: true });
   writeFileSync(join(raw, `${id}.prompt.txt`), prompt);
   if (args.includes('--dry-run')) {
-    for (const o of outputs) console.log(`${o.id}: ${o.text.length} chars; ${o.m.stops} stops, ${o.m.tokens.total} tokens, ${o.m.wallSeconds} s, ${o.m.slipCandidates.length} slip candidate(s)`);
+    for (const o of outputs) console.log(`${o.id}: ${o.text.length} chars; ${o.m.stops} stops, ${o.m.tokens.total} tokens, ${o.m.wallSeconds} s, ${o.m.asks.length} guard ask(s), ${o.m.slipCandidates.length} slip candidate(s)`);
     console.log(`bundle: ${join(raw, `${id}.prompt.txt`)} (no model called)`);
     process.exit(0);
   }
@@ -76,7 +76,7 @@ if (cmd === 'metrics') {
   try { review = parseReview(finalText(run.events), outputs.map((o) => o.id)); } catch (e) { console.error(`pilot: VOID ${id}: ${e.message}`); process.exit(1); }
   writeFileSync(join(raw, `${id}.key.json`), `${JSON.stringify(ids, null, 2)}\n`);
   const byArm = Object.fromEntries(outputs.map((o) => [o.arm, { score: review.grades[o.id].score, why: review.grades[o.id].why ?? '', stops: o.m.stops,
-    tokens: o.m.tokens.total, wallSeconds: o.m.wallSeconds, guards: o.m.guards, slipCandidates: o.m.slipCandidates }]));
+    tokens: o.m.tokens.total, wallSeconds: o.m.wallSeconds, guards: o.m.guards, asks: o.m.asks, slipCandidates: o.m.slipCandidates }]));
   const prefer = review.prefer === 'tie' ? 'tie' : outputs.find((o) => o.id === review.prefer).arm;
   const results = mergeRow(readJson(RESULTS, []), { task: id, base, date, grader: model, claude: claudeVersion(), isolation: ISOLATION, prefer, ...byArm }, args.includes('--replace'));
   mkdirSync(dirname(RESULTS), { recursive: true });

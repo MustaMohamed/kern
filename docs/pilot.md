@@ -109,6 +109,7 @@ Tick each file's items as their situations come up: `tests/skills/implement.acce
 Tool fixes after the first run, none of which changes `RULE`:
 
 - 2026-10-17, during p1, before its review. Wall time counts from each typed prompt to the last call, result or reply before the next typed prompt, summed over the turns (2bcecac). Before that fix it ran from the first entry to the last, so it counted the wait before the first prompt and the entries an idle session writes. A wait inside a turn, for an AskUserQuestion answer or a permission prompt, still counts. The review bundle hides plugin file paths and `kern.local.yml` (5e1969d), and review refuses a session with no typed prompt.
+- 2026-10-17, after p2. Step 6 says an approved guard ask leaves no trace in the session file; it does: the hook's output, with `permissionDecision` `ask` and the guard's reason, is recorded as a `hook_success` attachment. `metrics` now lists those asks as `asks`; whether the user approved each one is still the user's log.
 
 Changes the user asked for after the first run:
 
