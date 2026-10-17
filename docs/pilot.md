@@ -28,7 +28,7 @@ The tasks are in `evals/pilot/tasks.json`, prompts and rubrics written before an
 | Task | Plan task | Runs first | Base commit |
 |---|---|---|---|
 | `p1-standing-cost` | 5 | kern | e150d84 |
-| `p2-adherence-grader` | 6 | current | |
+| `p2-adherence-grader` | 6 | current | a8358c5 |
 | `p3-arithmetic` | 7 | kern | |
 
 ## Side-by-side: protocol
@@ -108,6 +108,7 @@ Tool fixes after the first run, none of which changes `RULE`:
 Changes the user asked for after the first run:
 
 - 2026-10-17, after p1. The user's `claude` shell function adds `--mcp-config ~/.claude/mcp-cli.json`, so both p1 arms also had the user's Linear MCP server. The user's answer: "Use command claude". From p2 on, protocol step 4 starts each arm with `command claude` in place of `claude`, so each arm has only its own plugins. p1 stands as run, since the server was there for both arms.
+- 2026-10-17, before p2. Both p1 arms also loaded the skills the user's claude.ai account syncs (`anthropic-skills:*`, among them copies of superpowers skills), and the current arm a synced plugin (`cowork-plugin-management`); neither arm called a skill. Offered `--settings` with `syncClaudeAiSkills` and `syncClaudeAiPlugins` set to `false`, the user's answer: "Leave as in p1", and for p1: "Keep p1 as run". All three tasks run with the synced skills in both arms.
 
 ## Switch-off (design spec 13.4; run only after the user says so)
 
