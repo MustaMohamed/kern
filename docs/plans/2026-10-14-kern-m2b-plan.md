@@ -1,6 +1,6 @@
 # kern M2b Implementation Plan
 
-**Status: pre-flighted on 2026-10-17 against HEAD 30dc03e (0.3.0 plus the 2026-10-17 source re-audit); results under "Self-review". M2b starts only on the user's explicit yes.**
+**Status: pre-flighted on 2026-10-17 against HEAD 30dc03e (0.3.0 plus the 2026-10-17 source re-audit); results under "Self-review". Approved by the user on 2026-10-17 at aee1aa8: "Approved". Task 4 Step 6 still settles the pilot's open choices with the user before any pilot run.**
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
