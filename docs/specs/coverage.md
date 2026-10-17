@@ -40,10 +40,10 @@ The audit of 2026-10-17 re-measured 274 mechanisms against kern 0.3.0 (eee601d) 
 | 7 | Rationalization and red-flag tables in prove-it, implement and diagnose; lint rule 9 requires them in discipline skills | superpowers, addy | M2a (shipped in 0.3.0) | S |
 | 8 | floor-scan catches a lowered bar (coverage threshold, `strict` off, a lint rule off, a CI step removed or made non-blocking), with `ratchet.<metric>` keys | addy | M2a (shipped in 0.3.0) | M |
 | 9 | Contract-drift lint: every token a skill reads has a producer in `docs/plans/contract.md` | addy | M2a (shipped in 0.3.0) | S |
-| 10 | Adherence grader passes only when the route is read before the first tool call; a multi-turn case | superpowers | M2b | S |
+| 10 | Adherence grader passes only when the route is read before the first tool call; a multi-turn case | superpowers | M2b Task 6 | S |
 | 11 | `references/defense-in-depth.md` for diagnose | superpowers | M2a (shipped in 0.3.0) | S |
 | 12 | CI install smoke test and a macOS job | addy | M2a (shipped in 0.3.0) | S |
-| 13 | On-demand behavioural eval runner and pressure tests for discipline skills | addy, superpowers | M2b | M |
+| 13 | On-demand behavioural eval runner and pressure tests for discipline skills | addy, superpowers | M2b Task 2 | M |
 | 14 | unslop's main AI tells in the normal voice and in subagent returns | local | M2a (shipped in 0.3.0) | S |
 | 15 | Candor line in the kernel: no is an acceptable answer | pstack | M2a (shipped in 0.3.0) | S |
 | 16 | Terse rules: existing comments are payload; code in chat is the changed lines plus context | caveman | M2a (shipped in 0.3.0) | S |
@@ -65,24 +65,24 @@ The audit of 2026-10-17 re-measured 274 mechanisms against kern 0.3.0 (eee601d) 
 | 32 | Redaction before project evidence enters the kern repo; lint rule 8 reads a proprietary-terms list | superpowers | M6 | S |
 | 33 | Voice evals with a no-prompt arm and a concise-prompt control, fidelity checks and token stats | caveman | M6 | M |
 | 34 | Repeated tool sequences across sessions as a retro signal | caveman | M6 | M |
-| 35 | define has no builder check: nothing asks what a builder would still need, sorts the answers into the user's questions and kern's own calls, or lists those calls at handover | superpowers 7.0.0 | M2b, a define fix before its workflow and pressure cases run | S |
-| 36 | define never asks which of platform, language, libraries and medium the user owns, never states its defaults as its own calls, and offers no skip of the interview | superpowers 7.0.0 | M2b, define | S |
-| 37 | define sizes the work before it understands the intent, and names the class in process words | superpowers 7.0.0 | M2b, define | S |
-| 38 | define's interview and spec have no anti-goals and no prior art | superpowers 7.0.0 | M2b, define | S |
-| 39 | plan asks for full code in each step and has no proportion check against the spec | superpowers 6.4.2 | M2b, plan, measured by the planning head-to-head | S |
+| 35 | define has no builder check: nothing asks what a builder would still need, sorts the answers into the user's questions and kern's own calls, or lists those calls at handover | superpowers 7.0.0 | M2b Task 11, before its workflow and pressure cases run in Task 15 | S |
+| 36 | define never asks which of platform, language, libraries and medium the user owns, never states its defaults as its own calls, and offers no skip of the interview | superpowers 7.0.0 | M2b Task 11 | S |
+| 37 | define sizes the work before it understands the intent, and names the class in process words | superpowers 7.0.0 | M2b Task 11 | S |
+| 38 | define's interview and spec have no anti-goals and no prior art | superpowers 7.0.0 | M2b Task 11 | S |
+| 39 | plan asks for full code in each step and has no proportion check against the spec | superpowers 6.4.2 | M2b Task 12, measured by the planning head-to-head in Task 15 | S |
 | 40 | Hooks do not survive an empty or broken PATH, and the misleading "kern did not load" message hides the real cause | superpowers 7.0.0 | M3, with the M1 parser deferrals | S |
-| 41 | The M2b behaviour grader keeps blank evidence instead of treating it as an invalid run | addy 0.6.13 | M2b Task 1 (`parseVerdict`) | S |
-| 42 | No `task-done.bats` case covers a passing command that prints nothing | superpowers 7.0.0 | M2b Task 9 | S |
-| 43 | plan-check reads fences by flipping on any line that starts with three backticks or tildes, so a spec quoting Markdown fails it | pstack 0.15.25 | M2b | S |
+| 41 | The M2b behaviour grader keeps blank evidence instead of treating it as an invalid run | addy 0.6.13 | M2b Task 2 (`parseVerdict`) | S |
+| 42 | No `task-done.bats` case covers a passing command that prints nothing | superpowers 7.0.0 | M2b Task 14 | S |
+| 43 | plan-check reads fences by flipping on any line that starts with three backticks or tildes, so a spec quoting Markdown fails it | pstack 0.15.25 | M2b Task 14 | S |
 | 44 | No step names the expert's method for a task, loosens an overspecified ask, or works outside define (`/sharpen`) | pstack 0.15.25 | M6, beside plain | S |
-| 45 | recall chat holds the 0.15.17 ketchup text, not the 0.15.25 rules (short, checked numbers, no invented action items) | pstack 0.15.25 | M2b | S |
-| 46 | No dispatch passes per-subagent `effort`, and model-selection has no effort column | pstack 0.15.25 | M2b | S |
-| 47 | diagnose step 9 does not propose the cheap always-on signal that would have shown the cause | pstack 0.15.25 | M2b | S |
+| 45 | recall chat holds the 0.15.17 ketchup text, not the 0.15.25 rules (short, checked numbers, no invented action items) | pstack 0.15.25 | M2b Task 13 | S |
+| 46 | No dispatch passes per-subagent `effort`, and model-selection has no effort column | pstack 0.15.25 | M2b Task 13 | S |
+| 47 | diagnose step 9 does not propose the cheap always-on signal that would have shown the cause | pstack 0.15.25 | M2b Task 13 | S |
 | 48 | The M2b head-to-head has no pstack arm, and its pins named the old superpowers, pstack and addy. The pins moved with the 2026-10-17 audit; the arm remains | pstack 0.15.25, superpowers 7.0.0, addy 0.6.13 | M2b Task 3 (`arms.json`) | S |
-| 49 | self-review's Standards axis has no baseline of labelled code smells when a repo documents no standards | pocock | M2b, or gap 27 in M5 | S |
-| 50 | Terse mode lacks four clauses: an explicit reply-language instruction wins, quoted text never switches the language, one term per thing, a pronoun only with an obvious referent | caveman 4.0.1 | M2b, or a 0.3.1 patch | S |
-| 51 | A headless session (`sdk-*` entrypoint) starts in the terse voice when the user default is terse, which reaches exec-eval and M2b runs | caveman 4.0.1 | M2b, before its runners spend tokens | S |
-| 52 | define has no fast path: a task the user calls quick and clear still gets a design and a quoted approval. User decision 2026-10-17: such a task skips design and spec approval; commits, pushes and every other floor stay gated. The skills spec C1 gate and D-4's wording change with it | superpowers 7.0.0 | M2b, define | S |
+| 49 | self-review's Standards axis has no baseline of labelled code smells when a repo documents no standards | pocock | M2b Task 13 | S |
+| 50 | Terse mode lacks four clauses: an explicit reply-language instruction wins, quoted text never switches the language, one term per thing, a pronoun only with an obvious referent | caveman 4.0.1 | M2b Task 1 | S |
+| 51 | A headless session (`sdk-*` entrypoint) starts in the terse voice when the user default is terse, which reaches exec-eval and M2b runs | caveman 4.0.1 | M2b Task 1, before any runner spends tokens | S |
+| 52 | define has no fast path: a task the user calls quick and clear still gets a design and a quoted approval. User decision 2026-10-17: such a task skips design and spec approval; commits, pushes and every other floor stay gated. The skills spec C1 gate and D-4's wording change with it | superpowers 7.0.0 | M2b Task 11 | S |
 | 53 | No skill shapes a non-software idea (a talk, a business, a renovation). User decision 2026-10-17: a separate skill, not part of define, which stays software-only (D-2) | superpowers 7.0.0 | M5, with the other Define-group skills, or earlier if wanted | M |
 
 Gaps 35 to 38 all edit define, whose `SKILL.md` is 6,499 bytes against a 6,500-byte cap. The new text goes into references or replaces step text, so together they are closer to M than four S items. Gap 39 meets the same cap in plan.
@@ -91,16 +91,16 @@ The goal-0 review of the M2 plan (2026-10-14) found further source mechanisms th
 
 ## M2a rows a source still beats (2026-10-17)
 
-Rule 4 closed M2a with none left against the sources it audited. The sources have since moved, and the re-audit found these rows where a source is stronger now. Their homes are M2b, which closes them before it closes.
+Rule 4 closed M2a with none left against the sources it audited. The sources have since moved, and the re-audit found these rows where a source is stronger now. Their homes are M2b, which closes them before it closes; the task numbers are those of `docs/plans/2026-10-14-kern-m2b-plan.md` as pre-flighted on 2026-10-17.
 
-- define: gaps 35, 36, 37 and 38 (superpowers 7.0.0).
-- plan: gap 39 (superpowers 6.4.2).
-- task-done: gap 42, a built behaviour with no test.
-- plan-check: gap 43, fence parsing (pstack 0.15.25).
-- recall chat: gap 45, the ketchup rules (pstack 0.15.25).
-- execute-plan model selection: gap 46, subagent effort (pstack 0.15.25).
-- diagnose: gap 47, the always-on signal (pstack 0.15.25).
-- self-review: gap 49, the smell baseline (pocock code-review). Gap 27 in M5 is the fallback home.
+- define: gaps 35, 36, 37 and 38 (superpowers 7.0.0), and the user's gap 52: Task 11.
+- plan: gap 39 (superpowers 6.4.2): Task 12.
+- task-done: gap 42, a built behaviour with no test: Task 14.
+- plan-check: gap 43, fence parsing (pstack 0.15.25): Task 14.
+- recall chat: gap 45, the ketchup rules (pstack 0.15.25): Task 13.
+- execute-plan model selection: gap 46, subagent effort (pstack 0.15.25): Task 13.
+- diagnose: gap 47, the always-on signal (pstack 0.15.25): Task 13.
+- self-review: gap 49, the smell baseline (pocock code-review): Task 13.
 
 ## Decided by the user (2026-10-17)
 

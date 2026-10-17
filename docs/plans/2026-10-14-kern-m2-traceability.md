@@ -4,7 +4,7 @@ Every decided item for M2, where it lands in `2026-10-14-kern-m2a-plan.md` (a) o
 
 ## Items
 
-M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand until it is pre-flighted.
+M2b was pre-flighted and renumbered on 2026-10-17. The `b T<n>` references below use the new numbers: the draft's Task 1 is now Task 2, 2 is 6, 3 is 3, 4 is 8, 5 is 9, 6 is 10, 7 is 5, 8 is 15, 9 is 16, 10 is 4 (rewritten), 11 is 17 and 12 is 18. The rows under "M2b additions of 2026-10-17" are new.
 
 | Item | Origin | Source mechanism | Plan, Task, Step | Pinned by |
 |---|---|---|---|---|
@@ -12,8 +12,8 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | `0.` Defer step accepted by rule 6 | F2 | M1 rule 6 | not repeated: applied in M1 | `tests/lint-rules.test.mjs` (M1's rule 6 tests) |
 | M2's eight rows move to `kernel/routes.md`; the kernel keeps M1's two rows and a Routing sentence that reads the file | F3, F3 ruling | pre-flight: kernel 4,549 chars with 8 inline rows (measured) | a T30 S3 to S7 | `tests/hooks/session-start.bats` (4,000-char kernel), `tests/route-eval-rows.test.mjs` |
 | `kernelRows` reads both files; rules 6, 7 and 12 read the routed file; rule 7 caps `routes.md` at 1,500 chars and the standing cost at 4,800 | F3 ruling, SE routing | SE: plan:4375, 4423 | a T30 S3 to S5 | `tests/lint-rules.test.mjs` (`rule 6: rows in kernel/routes.md resolve...`, `rule 7: the routed file has its own cap...`, `rule 12: ...rows of both kernel files need eval cases`) |
-| Grader accepts two hops: `routes.md`, then the route, before any other tool | F3 ruling, SE routing | superpowers `tests/explicit-skill-requests/run-test.sh:103-118` | b T2 S3 | `tests/adherence.test.mjs` (`two hops: routes.md first, then the route`) |
-| A/B of the routed and inline-rows shapes | F3 ruling, SE routing | design 11.1 tier 2 | b T2 S3 (`inlineRows`), T8 S2 (decision rule) | `tests/adherence.test.mjs` (`the inline-rows arm puts every routed row in the kernel table...`); `evals/snapshots/adherence-inline-rows-*.json` |
+| Grader accepts two hops: `routes.md`, then the route, before any other tool | F3 ruling, SE routing | superpowers `tests/explicit-skill-requests/run-test.sh:103-118` | b T6 S3 | `tests/adherence.test.mjs` (`two hops: routes.md first, then the route`) |
+| A/B of the routed and inline-rows shapes | F3 ruling, SE routing | design 11.1 tier 2 | b T6 S3 (`inlineRows`), T15 S2 (decision rule) | `tests/adherence.test.mjs` (`the inline-rows arm puts every routed row in the kernel table...`); `evals/snapshots/adherence-inline-rows-*.json` |
 | `2>&1` not split on `&` | F4 | M1 `_split_words` | no change: no longer reproduces (measured); pinned | `tests/hooks/g18.bats` (`pipes and stderr to /dev/null stay allowed`) |
 | G18 shellcheck clean (SC2221/SC2222) | F5 | `hooks/guards/g18-readonly-agent.sh` case patterns | a T12 S3, S5 | `scripts/ci-local` and CI `shellcheck -x -S warning` over `hooks/guards/*.sh` |
 | Recall negatives no longer rank recall first | F6 | route-eval TF-IDF | a T28 S5 | `scripts/route-eval.mjs` over `evals/cases/recall.json` (CI step) |
@@ -31,7 +31,7 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | "a visual page only when kern's `visual` skill is installed" in every page step | F18 | design 3.1 (visual at M4) | a T19, T20, T23, T28 S3 | `tests/skills/define.test.mjs`, `tests/skills/plan.test.mjs`, `tests/skills/self-review.test.mjs` (assert the line) |
 | finish-branch runs commit's steps 3 to 6 only | F19 | M2 plan T19 | a T25 S3 | `tests/skills/finish-branch.test.mjs` (`finish-branch sections, steps and red flags`) |
 | Expected bats lines note the TAP form when piped | F20 | M1 line 51 | a Global Constraints | none: plan text only |
-| Token-spending runs ask first | F21 | kernel Autonomy | a Global Constraints, T26 S8, T34 S6; b Global Constraints, T8 S2 to S5 | none for the asking: plan text; every runner's `--dry-run` is pinned by `tests/exec-eval.test.mjs`, `tests/behave.test.mjs`, `tests/adherence.test.mjs`, `tests/standing-cost.test.mjs` |
+| Token-spending runs ask first | F21 | kernel Autonomy | a Global Constraints, T26 S8, T34 S6; b Global Constraints, T15 S2 to S5 | none for the asking: plan text; every runner's `--dry-run` is pinned by `tests/exec-eval.test.mjs`, `tests/behave.test.mjs`, `tests/adherence.test.mjs`, `tests/standing-cost.test.mjs` |
 | Files blocks and the file map list every staged path | F22 | M2 plan T7, file map | a T12 Files, file map | none: plan text only |
 | Contract's bash 3.2 `[[ ]]` rule: `\|\| false` under `tests/run-bats` | F23 | `docs/plans/contract.md:153` (old) | contract.md (rewritten); a Global Constraints | `tests/run-bats` refuses a `.bats` file with a bare `[[ ]]` |
 | `plan-check`: lint plans and specs | gap 5 | pstack `PM/scripts/check-plan.mjs:1-190` | a T11 S3 | `tests/scripts/plan-check.bats` |
@@ -40,10 +40,10 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | Red-flag tables in discipline skills; lint rule 9 requires them | gap 7, DE define, DE execute-plan, SE commit, SE finish-branch | superpowers brainstorming:98-108; addy spec-driven:225-246; SDD:489-500; addy git-workflow:313-325; SP finishing:216-225 | a T15 S3 (rule 9); T16 to T20, T22, T24, T25, T28 S3 | `tests/lint-rules.test.mjs` (`rule 9: a discipline skill needs a Red flags table of 2 to 6 rows`) |
 | floor-scan catches a lowered bar; `ratchet.<metric>` keys | gap 8 | addy floor-guard | a T5 S3 | `tests/scripts/floor-scan.bats` (`a lowered coverage threshold is bar-lowered...`, `a ratchet.<metric> key guards its value in both directions`) |
 | Contract-drift lint (rule 16) | gap 9 | addy contract checks | a T15 S3 | `tests/lint-rules.test.mjs` (`rule 16: scripts, WORK folders and ledger lines a skill names have a producer in the contract`) |
-| Adherence grader: route before the first tool call; multi-turn case | gap 10 | superpowers `tests/explicit-skill-requests/run-test.sh:103-118` | b T2 | `tests/adherence.test.mjs`; `evals/snapshots/adherence-routed-*.json` |
+| Adherence grader: route before the first tool call; multi-turn case | gap 10 | superpowers `tests/explicit-skill-requests/run-test.sh:103-118` | b T6 | `tests/adherence.test.mjs`; `evals/snapshots/adherence-routed-*.json` |
 | `references/defense-in-depth.md` for diagnose | gap 11 | superpowers systematic-debugging defense-in-depth | a T18 S4 | `tests/skills/diagnose.test.mjs` (`diagnose references`) |
 | CI install smoke test and a macOS job | gap 12 | addy `.github/workflows/test-plugin-install.yml:70-90, 148-170` | a T34 S4 | `.github/workflows/ci.yml` (jobs run on every PR) |
-| Behavioural runner and pressure tests | gap 13 | addy `evals/README.md` tier 3; superpowers `skills/writing-skills/testing-skills-with-subagents.md:51` | b T1 | `tests/behave.test.mjs`; `evals/snapshots/behave-*.json` |
+| Behavioural runner and pressure tests | gap 13 | addy `evals/README.md` tier 3; superpowers `skills/writing-skills/testing-skills-with-subagents.md:51` | b T2 | `tests/behave.test.mjs`; `evals/snapshots/behave-*.json` |
 | unslop's main AI tells in the normal voice and subagent returns | gap 14 | `skills/unslop/SKILL.md` patterns 9, 13, 15, 16, 20, 22, 23 | a T29 S3 | `tests/voice.test.mjs`, `tests/hooks/subagent-start.bats` (`subagent returns skip preamble, praise and closing offers, and no agent is told to write a bulk file`) |
 | Candor line: no is an acceptable answer | gap 15 | pstack `PM/SKILL.md:89` | a T29 S3 | `tests/hooks/session-start.bats` (`the Reply section carries the candor line and the AI-tell line`) |
 | Terse rules 10 and 11: comments are payload; changed lines plus context | gap 16 | caveman `skills/caveman/SKILL.md:58` | a T29 S3 | `tests/voice.test.mjs`, `tests/skills-control.test.mjs` (rule numbers to 11) |
@@ -59,7 +59,7 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | Spec template `## Constraints` (Always, Ask first, Never) that plan copies; `form: short` | DE define | addy spec-driven:138-142 | a T19 S4 (template), T20 S3 (copy), T11 S3 (check) | `tests/skills/define.test.mjs` (`define references`), `tests/scripts/plan-check.bats` (`a spec needs its sections...`) |
 | Test seams: highest existing seam, fewest seams, check with the user | DE define | pocock to-spec:15-17 | a T19 S4 | `tests/skills/define.test.mjs` |
 | No questions the repo can answer; no existing flow means architectural | DE define (review rulings) | pocock grilling:6-30 | a T19 S3 | `tests/skills/define.test.mjs` |
-| Head-to-head for planning | DE plan | pstack `PM/playbooks/eval.md:5-25` | b T3, T4, T8 S4 | `tests/h2h.test.mjs` (plan fixture tests); `evals/snapshots/h2h-*.json` |
+| Head-to-head for planning | DE plan | pstack `PM/playbooks/eval.md:5-25` | b T3, T8, T15 S4 | `tests/h2h.test.mjs` (plan fixture tests); `evals/snapshots/h2h-*.json` |
 | A question reading cannot settle gets a spike in a `wt-new --detach` worktree | DE plan | pstack multi-phase-plan:6 | a T20 S3 | `tests/skills/plan.test.mjs` |
 | Prefactor first; wide refactors expand, migrate, contract | DE plan | pocock to-tickets:23, 40 | a T20 S3 | `tests/skills/plan.test.mjs` |
 | plan Red flags | DE plan (optional) | addy planning-and-task-breakdown:219-236 | a T20 S3 | `tests/skills/plan.test.mjs` (`plan sections and steps`: the `## Red flags` heading) |
@@ -71,12 +71,12 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | Out-of-Files edits in code: `wt-diff --allow`, `--allow-file`, exit 4; entries ending in `/` or `*` | DE execute-plan | none upstream (kern) | a T2 S4; T11 S3 (`--files` turns `/**` into `dir/`); T22 S3 | `tests/scripts/wt-snap-diff.bats` (`an allowed entry ending in * covers every path that starts with it`, `wt-diff --allow exits 4, names each extra path and still writes the package`) |
 | Main-checkout check folded into `ledger-open --summary` | DE execute-plan | superpowers SDD:473-482 | a T8 S3; T22 S3 | `tests/scripts/ledger.bats` (`ledger-open --summary ... checks the main checkout`) |
 | When to batch implementer work | DE execute-plan | superpowers SDD:223-232 | a T22 S3; T13 S5 | `tests/skills/execute-plan.test.mjs` (`ledger format and model table`) |
-| execute-plan head-to-head against superpowers SDD | DE execute-plan | superpowers SDD | not applied as a head-to-head: design 14 row M2b names planning, debugging and review; covered single-arm | b T1 (`workflow-execute-plan-ledger`); `tests/behave.test.mjs` |
+| execute-plan head-to-head against superpowers SDD | DE execute-plan | superpowers SDD | not applied as a head-to-head: design 14 row M2b names planning, debugging and review; covered single-arm | b T2 (`workflow-execute-plan-ledger`); `tests/behave.test.mjs` |
 | parallel-work: drain maps each worker type's status words | DE parallel-work | pstack swarm:34; kern implementer contract | a T21 S3 | `tests/skills/parallel-work.test.mjs` |
 | `brief-check`: refuse an incomplete or unfilled brief, before every dispatch (execute-plan wraps `task-brief` output in a brief-template brief) | DE parallel-work | pstack orchestrate:56 | a T10 S3; T21 S3; T22 S3 | `tests/scripts/brief-check.bats` |
 | TIMEBOX expiry: read-only liveness check, record a gap, never resume | DE parallel-work | superpowers SDD:235-245; pstack orchestrate:95-96 | a T21 S3 | `tests/skills/parallel-work.test.mjs` |
 | Pilot unit first | DE parallel-work (optional) | pstack orchestrate:62 | a T21 S3 | `tests/skills/parallel-work.test.mjs` |
-| parallel-work head-to-head against superpowers dispatching-parallel-agents | DE parallel-work | superpowers dispatching-parallel-agents | not applied as a head-to-head (as above); covered single-arm | b T1 (`workflow-parallel-two-modules`); `tests/behave.test.mjs` |
+| parallel-work head-to-head against superpowers dispatching-parallel-agents | DE parallel-work | superpowers dispatching-parallel-agents | not applied as a head-to-head (as above); covered single-arm | b T2 (`workflow-parallel-two-modules`); `tests/behave.test.mjs` |
 | probe reverses only non-test paths (`--exclude-tests`); a missing-file run is inconclusive | BV prove-it | superpowers verification-before-completion:84 | a T6 S4 | `tests/scripts/claim-probe.bats` (`a patch that also adds the test is inconclusive without --exclude-tests`, `--exclude-tests keeps the new test...`, `a command that names a file the reversed fork lacks is inconclusive, never ok`) |
 | prove-it: zero tests ran is a fail; probe step; Gate hands off to commit and finish-branch by Read | BV prove-it, SE routing | superpowers verification-before-completion | a T16 S3; T25 S3 | `tests/skills/prove-it.test.mjs` (`prove-it sections, steps, gate and red flags`, `the gate hands a commit to commit and a push or PR to finish-branch`) |
 | implement: RED checked by the controller with `task-done --probe`; tautological tests named | BV implement | addy Prove-It; superpowers TDD | a T9 S3; T17 S3, S4 | `tests/scripts/task-done.bats` (`--probe records ok...`, `--probe refuses a task whose test passes without the change`), `tests/skills/implement.test.mjs` |
@@ -85,7 +85,7 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | diagnose: forensics proof rules | BV diagnose | pstack runtime-forensics:7, trace-forensics:10-11 | a T18 S4 | `tests/skills/diagnose.test.mjs` (`## Proof rules`, `not yet a diagnosis`, `strongest hypothesis`) |
 | Every forensics command is on G18's allowlist | BV diagnose | kern G18 | a T18 S1 | `tests/hooks/g18-parity.bats` (requires `forensics.md` and at least one command from it; pre-flight 2 #1) |
 | diagnose: loop-rate script, re-run the original scenario, blind reproduction | BV diagnose | pocock diagnosing-bugs; superpowers systematic-debugging | a T18 S3 | `tests/scripts/loop-rate.bats`, `tests/skills/diagnose.test.mjs` (`then the original scenario`, `blind reproduction`) |
-| Head-to-head for debugging: eight seeded repos with held-out tests | BV measurement | goal-0 review list | b T3, T5, T8 S4 | `tests/h2h.test.mjs` (eight `the heldout tests fail on the repo and pass with reference.patch` tests); `evals/snapshots/h2h-*.json` |
+| Head-to-head for debugging: eight seeded repos with held-out tests | BV measurement | goal-0 review list | b T3, T9, T15 S4 | `tests/h2h.test.mjs` (eight `the heldout tests fail on the repo and pass with reference.patch` tests); `evals/snapshots/h2h-*.json` |
 | self-review spec lane (`kern:task-reviewer` whole-branch) | BV self-review | pocock code-review:68-80 | a T23 S3 | `tests/skills/self-review.test.mjs` (`mode \`whole-branch\``, `skip: no spec`) |
 | Where grep stops | BV self-review | pstack blast-radius:35 | a T23 S4 | `tests/skills/self-review.test.mjs` (`## Where grep stops`) |
 | Doubt theater | BV self-review | addy doubt-driven:215 | a T23 S4 | `tests/skills/self-review.test.mjs` (`## Doubt theater`) |
@@ -94,9 +94,9 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | Seeded review diffs in CI: recall and false alarms | BV measurement | addy floor-guard | a T7 | `tests/seeded-diffs.test.mjs` (`floor-scan and claim-check find every seeded move and no decoy`) |
 | G18: `sort -uo` clusters and `file -C` denied | BV G18 | caveman cavecrew-investigator | a T12 S3 | `tests/hooks/g18.bats` (`writes and unknown commands are denied`) |
 | Investigator writes no file; returns the reduction and names the save command | BV G18 | kern G18 | a T13 S5 | `tests/agents.test.mjs` (`investigator ... no file writes`) |
-| Head-to-head for review: one branch, 6 seeded bugs, 3 decoys | BV measurement | goal-0 review list | b T6, T8 S4 | `tests/h2h.test.mjs` (`review/invoice-branch: the change applies...`); `evals/snapshots/h2h-*.json` |
-| Pilot side-by-side table | BV measurement, SE pilot | design 13.3 | b T10 | `docs/pilot.md` (written before runs); checked at b T12 S1 |
-| Five silent drops get coverage rows | BV missing list 4 | goal-0 review | b T9 S3 | `tests/coverage.test.mjs` (`the five silent drops from the goal-0 review have rows`) |
+| Head-to-head for review: one branch, 6 seeded bugs, 3 decoys | BV measurement | goal-0 review list | b T10, T15 S4 | `tests/h2h.test.mjs` (`review/invoice-branch: the change applies...`); `evals/snapshots/h2h-*.json` |
+| Pilot side-by-side table | BV measurement, SE pilot | design 13.3 | b T4 | `docs/pilot.md` (written before runs); checked at b T18 S1 |
+| Five silent drops get coverage rows | BV missing list 4 | goal-0 review | b T16 S3 | `tests/coverage.test.mjs` (`the five silent drops from the goal-0 review have rows`) |
 | commit: message file under `kern-dir tmp` | SE commit | kern G5 `g05-commit.sh:326-333, 369-373` | a T24 S3 | `tests/skills/commit.test.mjs`; `tests/hooks/ship-commands.bats` (`commit: git commit -F with the message file under WORK/tmp is allowed`); `evals/exec/cases.json` `commit-work-file` |
 | commit: `git diff --staged --stat` first; proof scope said | SE commit | addy git-workflow:211-230 | a T24 S3 | `tests/skills/commit.test.mjs` |
 | commit: one commit per complete ledger task | SE commit | addy git-workflow:48-63; pstack opening-a-pr:7 | a T24 S3; T22 S3 | `tests/skills/commit.test.mjs` |
@@ -108,31 +108,31 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | finish-branch: detached HEAD offers a branch first | SE finish-branch | superpowers finishing:44, 67-76 | a T25 S3 (and T24 S3 for commit) | `tests/skills/finish-branch.test.mjs` |
 | finish-branch: discard lists `status --porcelain -uall` first | SE finish-branch | superpowers finishing:137-146 | a T25 S3 | `tests/skills/finish-branch.test.mjs` |
 | Exec evals for commit and finish-branch with a gh stub | SE CI | none upstream | a T26; T34 S6 runs them on every release tree | `tests/exec-eval.test.mjs` (incl. `a gh call the transcript shows ran but the stub never logged makes the run invalid; hook-only lines do not`), `tests/hooks/ship-commands.bats`; `evals/snapshots/exec-*.json` |
-| recall: the four C11 checks as eval cases and an acceptance file | SE recall | skills spec C11 (lines 739-742) | a T28 S3 to S5 | `tests/skills/recall.test.mjs` (`the C11 acceptance checks are behavioural cases`); `tests/skills/recall.acceptance.md`; b T1 runs them |
+| recall: the four C11 checks as eval cases and an acceptance file | SE recall | skills spec C11 (lines 739-742) | a T28 S3 to S5 | `tests/skills/recall.test.mjs` (`the C11 acceptance checks are behavioural cases`); `tests/skills/recall.acceptance.md`; b T2 runs them |
 | recall: dropped source lines kept | SE recall | local recall:19, 40, 42-47; ketchup:9, 15 | a T28 S3 | `tests/skills/recall.test.mjs` (`recall sections, steps and the source lines it keeps`) |
 | `recall-sessions`: this project's sessions and prompts only | SE recall | local recall session discovery | a T27 | `tests/scripts/recall-sessions.bats` |
 | `[verified, uncommitted]` only when the ledger's last `tree=` equals a fresh `wt-snap`; `wt-snap` writes git objects (carve-out) | SE recall | kern | a T28 S3 | `tests/skills/recall.test.mjs` |
 | Fixed rank-1 floor and frozen held-out organic prompts | SE routing | addy `test-plugin-install.yml:38` | a T30 S8, S9 | `tests/route-eval-rows.test.mjs` (`the fixed floors and the frozen held-out set are pinned`) |
-| Re-reading: a second same-route task in the multi-turn case | SE routing | superpowers using-superpowers:45 | b T2 S4 | `tests/adherence.test.mjs` (`a multi-turn case needs the route read again for the second task`) |
-| Adherence host isolation, flags recorded | SE adherence | caveman `evals/README.md:48-52`, `llm_run.py:136-138` | a T26 S3 (`ISOLATION`); b T2 | `tests/exec-eval.test.mjs` (`the isolation flags keep user settings...`) |
-| Only `kern:<route>` or a Read under the plugin root counts | SE adherence | superpowers run-test.sh | b T2 S3 | `tests/adherence.test.mjs` (`a bare skill name or a skill file outside the plugin root is not the route`) |
-| 3 runs, negatives, one case per row, haiku reported, `--transcript` mode | SE adherence | superpowers `run-haiku-test.sh:55` | b T2, T8 S2 | `tests/adherence.test.mjs` (`every kernel row has a positive case...`, `a positive case takes its prompt from the first routing eval of its row`) |
-| Snapshots committed with model, version and per-case reasons | SE adherence | caveman README:41-44 | b T1, T2, T3, T7 runners; T8 S7 | `evals/snapshots/*.json` (committed); runner `--dry-run` tests |
-| Project-shaped temp names | SE adherence | pstack `eval.md:7, 10` | a T26 S3 (`workspace`); b T1 to T3 | `tests/exec-eval.test.mjs`; `tests/h2h.test.mjs` (`redaction removes every name...`) |
+| Re-reading: a second same-route task in the multi-turn case | SE routing | superpowers using-superpowers:45 | b T6 S4 | `tests/adherence.test.mjs` (`a multi-turn case needs the route read again for the second task`) |
+| Adherence host isolation, flags recorded | SE adherence | caveman `evals/README.md:48-52`, `llm_run.py:136-138` | a T26 S3 (`ISOLATION`); b T6 | `tests/exec-eval.test.mjs` (`the isolation flags keep user settings...`) |
+| Only `kern:<route>` or a Read under the plugin root counts | SE adherence | superpowers run-test.sh | b T6 S3 | `tests/adherence.test.mjs` (`a bare skill name or a skill file outside the plugin root is not the route`) |
+| 3 runs, negatives, one case per row, haiku reported, `--transcript` mode | SE adherence | superpowers `run-haiku-test.sh:55` | b T6, T15 S2 | `tests/adherence.test.mjs` (`every kernel row has a positive case...`, `a positive case takes its prompt from the first routing eval of its row`) |
+| Snapshots committed with model, version and per-case reasons | SE adherence | caveman README:41-44 | b T2, T6, T3, T5 runners; T15 S7 | `evals/snapshots/*.json` (committed); runner `--dry-run` tests |
+| Project-shaped temp names | SE adherence | pstack `eval.md:7, 10` | a T26 S3 (`workspace`); b T2, T3, T6 | `tests/exec-eval.test.mjs`; `tests/h2h.test.mjs` (`redaction removes every name...`) |
 | Shellcheck by glob with `-x -S warning` | SE CI | addy CI | a T34 S3, S4 | `.github/workflows/ci.yml`, `scripts/ci-local` |
 | Standing cost: rule 7 errors above 4,800 chars | SE CI | caveman README:72 | a T30 S5 | `tests/lint-rules.test.mjs` (`rule 7: ... the standing cost has a combined budget`) |
-| Standing cost measured in tokens at release | SE CI, summary 4 | caveman README:72 | b T7, T8 S5 | `tests/standing-cost.test.mjs`; `evals/snapshots/standing-cost-*.json` |
-| Release commit claims only committed evidence | SE CI | M2 plan:4876 | a T34 S8; b T12 S2 | `evals/snapshots/exec-*.json` named in the commit; plan text |
-| Pilot protocol: tasks and rubric before runs, same base, two worktrees, blind A/B, per-arm costs, pass rule in advance, token ratio | SE pilot | pstack `eval.md:7-13`; superpowers `analyze-token-usage.py:12-81` | b T10 S1, S3 | `docs/pilot.md` (agreed before runs; Task 11 fills it); `scripts/lib/h2h.mjs` `redact` pinned by `tests/h2h.test.mjs` |
-| Pilot wording "same tasks", not "same kinds of task" | SE pilot | design 13.3 | b T10 S1 | `docs/pilot.md` |
-| Real-world adherence from pilot transcripts | SE pilot | kern | b T2 S3 (`--transcript`), T11 S2 | `tests/adherence.test.mjs` (the grader the mode uses) |
-| Pilot checklists include recall and prove-it | SE pilot | M2 plan:4926 | a T28 (`recall.acceptance.md`); b T10 S2 | `tests/skills/recall.acceptance.md`, `tests/skills/prove-it.acceptance.md` |
-| Design 11.3 fixtures 1, 4 and 5 as adherence cases | SE pilot | design 11.3 | b T2 S4 | `evals/adherence/cases.json` (`neg-project-skill`, `neg-kern-off`, every positive); `tests/adherence.test.mjs` |
-| Pilot prompts frozen | SE routing | addy | b T11 S3 | `tests/route-eval-rows.test.mjs` (`the pilot prompts are frozen`, `pilot prompts give a reported rate with no floor`) |
-| Coverage re-audit of M2 rows with a pinning column | summary 4 | coverage rule 4 | b T9 | `tests/coverage.test.mjs` |
+| Standing cost measured in tokens at release | SE CI, summary 4 | caveman README:72 | b T5, T15 S5 | `tests/standing-cost.test.mjs`; `evals/snapshots/standing-cost-*.json` |
+| Release commit claims only committed evidence | SE CI | M2 plan:4876 | a T34 S8; b T18 S2 | `evals/snapshots/exec-*.json` named in the commit; plan text |
+| Pilot protocol: tasks and rubric before runs, same base, two worktrees, blind A/B, per-arm costs, pass rule in advance, token ratio | SE pilot | pstack `eval.md:7-13`; superpowers `analyze-token-usage.py:12-81` | b T4 S1, S3 | `docs/pilot.md` (agreed before runs; Task 11 fills it); `scripts/lib/h2h.mjs` `redact` pinned by `tests/h2h.test.mjs` |
+| Pilot wording "same tasks", not "same kinds of task" | SE pilot | design 13.3 | b T4 S1 | `docs/pilot.md` |
+| Real-world adherence from pilot transcripts | SE pilot | kern | b T6 S3 (`--transcript`), T17 S2 | `tests/adherence.test.mjs` (the grader the mode uses) |
+| Pilot checklists include recall and prove-it | SE pilot | M2 plan:4926 | a T28 (`recall.acceptance.md`); b T4 S2 | `tests/skills/recall.acceptance.md`, `tests/skills/prove-it.acceptance.md` |
+| Design 11.3 fixtures 1, 4 and 5 as adherence cases | SE pilot | design 11.3 | b T6 S4 | `evals/adherence/cases.json` (`neg-project-skill`, `neg-kern-off`, every positive); `tests/adherence.test.mjs` |
+| Pilot prompts frozen | SE routing | addy | b T17 S3 | `tests/route-eval-rows.test.mjs` (`the pilot prompts are frozen`, `pilot prompts give a reported rate with no floor`) |
+| Coverage re-audit of M2 rows with a pinning column | summary 4 | coverage rule 4 | b T16 | `tests/coverage.test.mjs` |
 | Terse rule-count test follows rules 10 and 11 | sandbox | M1 `tests/skills-control.test.mjs:56-61` expected 9 rules | a T29 S3 | `tests/skills-control.test.mjs` (`terse mode tells the voice to answer only what was asked, in numbered order`) |
 | Headless runs pre-approve the tools a task needs (`PERMISSIONS`) | sandbox | addy `evals/README.md` tier 3 (`--permission-mode acceptEdits` plus a tool list) | a T26 S3; b runners | `tests/exec-eval.test.mjs` (`a headless run pre-approves the tools a task needs...`) |
-| The recall execution case has a project layer under its ledger | sandbox | `workspace` commits nothing for a ledger-only fixture | b T1 S4 | `tests/behave.test.mjs` (`every case loads with ... fixture layers that exist, the first one a project`) |
+| The recall execution case has a project layer under its ledger | sandbox | `workspace` commits nothing for a ledger-only fixture | b T2 S4 | `tests/behave.test.mjs` (`every case loads with ... fixture layers that exist, the first one a project`) |
 | G18 `sed -n` allows only file names after its script (no later `-i`, `--in-place`, `-e 'w ...'`); `rg` denies `z` in any option cluster | pre-flight 1 #1 (High) | GNU sed 4.9 wrote through `sed -n 1p -i a.txt` and `-e 'w /tmp/x'` (measured) | a T12 S3 | `tests/hooks/g18.bats` (`writes and unknown commands are denied`: the four sed forms and `rg -nz foo`; `read commands get no G18 vote`: `sed -n '$p' a.txt`) |
 | G20 reads the post-edit file (Edit: `old_string`, `new_string`, `replace_all`) and checks a changed `approved:` line | pre-flight 1 #2 (High) | G20 read `new_string` only | a T14 S3 | `tests/hooks/g20.bats` (tests 13 to 16) |
 | wt-audit stops at the first recent file (`find -print -quit`) | pre-flight 1 #3 (High) | `head -n 1` under pipefail: exit 141 at 3,000 files (measured) | a T4 S3 | `tests/scripts/wt-audit.bats` (`a worktree with thousands of recent files is still listed`) |
@@ -165,6 +165,41 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | Shell-snapshot aliases judged as the git or gh command they expand to (`gpf! origin main` denied like `git push --force`; `gp` to a protected branch asks; an alias to another command, a missing snapshot and a malformed line change nothing); removes the 0.2.0 known limit on shell aliases, and the 0.3.0 CHANGELOG line says so | user decision 2026-10-13, "Catch them in M2" | Claude Code shell snapshot `~/.claude/shell-snapshots/snapshot-zsh-<ms>-<id>.sh`, `alias -- name=value` lines (measured: 248 aliases, 201 run git or gh); `CHANGELOG.md` 0.2.0 "Known limits" | a T33 S1 to S7 | `tests/hooks/aliases.bats` (9 tests); `tests/hooks/pre-tool-use.bats` (need lists) |
 | M2a's acceptance is complete without M2b | lead ruling 2026-10-14 (M2b deferred to the next round) | design 14 row M2a | a T34 S7 | `tests/scripts/no-commit-review.bats`, `tests/scripts/task-done.bats`, `tests/scripts/floor-scan.bats`, `tests/seeded-diffs.test.mjs`, `tests/hooks/aliases.bats`, `evals/snapshots/exec-*.json` |
 
+## M2b additions of 2026-10-17
+
+The 2026-10-17 source re-audit (`docs/research/coverage-2026-10-17/`), the user's pilot protocol of the same day, and the pre-flight of the renumbered plan (its report is under "Self-review" in the M2b plan; "pre-flight 2026-10-17 #n" names its findings).
+
+| Item | Origin | Source mechanism | Plan, Task, Step | Pinned by |
+|---|---|---|---|---|
+| A headless session starts in the normal voice; `mode.voice.headless` opts in | gap 51 | caveman 4.0.1 `src/hooks/caveman-activate.js:256-265`, `tests/hooks/headless-entrypoint.test.mjs` | b T1 S3 | `tests/hooks/state.bats` (`default_voice: ...`), `tests/hooks/session-start.bats` (`a headless session starts in the normal voice...`), `tests/hooks/subagent-start.bats` (`a headless session's subagent...`) |
+| Terse: an explicit language instruction wins, quoted text never switches it, one term per thing, a pronoun only with an obvious referent | gap 50 | caveman 4.0.1 `skills/caveman/SKILL.md:54, 66` | b T1 S4 | `tests/voice.test.mjs` (`terse keeps the reply language and its terms fixed`) |
+| A behaviour verdict with blank evidence, a misnumbered result or a non-boolean pass is an invalid run | gap 41 | addy 0.6.13 `scripts/run-evals.js:476-480` | b T2 S3 | `tests/behave.test.mjs` (`a verdict with blank evidence is an invalid run...`) |
+| A cut-off, failed or timed-out run is invalid in every runner, never graded | pre-flight 2026-10-17 #10 | M2a `runProblem` | b T2 S3 (`tryRun`), T3 S3, T6 S3 | `tests/behave.test.mjs` (`a run cut off, failed or not run is invalid...`) |
+| define workflow case seeds an approved design, one turn | pre-flight 2026-10-17 (the draft case could not pass on its own terms) | define steps 9 and 10 | b T2 S4 | `tests/behave.test.mjs` (`define, execute-plan and parallel-work each have a seeded workflow case`) |
+| pstack is a head-to-head arm, through its Claude Code tree | gap 48 | pstack 0.15.25 `harness/pstack/claude-code` | b T3 S3 | `tests/h2h.test.mjs` (`the arms are kern, the three upstream plugins and a no-plugin control`) |
+| Redaction replaces the longest plugin path first and names `mattpocock-skills`, pstack and poteto | pre-flight 2026-10-17 #9 | Review Focus 3 | b T3 S3 | `tests/h2h.test.mjs` (`redaction removes every name, path and namespaced skill...`) |
+| `--arms` filters before the upstream check | pre-flight 2026-10-17 #13 | | b T3 S3 | none: measured in the pre-flight with no `.upstream` |
+| standing-cost uses the runners' child environment, a budget cap and `isMain` | pre-flight 2026-10-17 #11, #12 | M2a `childEnv` | b T5 S3 | `tests/standing-cost.test.mjs` (the dry run) |
+| Side-by-side pilot: kern 0.3.0 against superpowers 7.0.0 plus caveman, same base commit, the personal eval account, a blind Opus review, process and cost from the session files, the rule fixed before the first run | user request 2026-10-17 | pstack `eval.md:5-13` | b T4, T5 to T7 S0, T17 S3 | `tests/pilot.test.mjs`; `docs/pilot.md` |
+| Pilot tokens counted once per message, subagent files included | pre-flight 2026-10-17 (measured on session files) | | b T4 S3 | `tests/pilot.test.mjs` (`metrics count usage once per message...`) |
+| Pilot bundle hides the arms but keeps the project's name; review refuses a bundle with a tell | user request 2026-10-17 | | b T4 S3 | `tests/pilot.test.mjs` (`hide removes what tells the arms apart...`, `review --dry-run builds a blind bundle...`) |
+| Pilot decision rule and tasks frozen before the first run | user request 2026-10-17 | | b T4 S3, S4, S6 | `tests/pilot.test.mjs` (`the rule is the one agreed...`, `the pilot tasks are three real tasks...`) |
+| `$((` read as arithmetic | M1 deferral (`2026-10-12-kern-m1-plan.md:5612`), user's pilot candidate | | b T7 | `tests/hooks/g00-arithmetic.bats` |
+| define fast path: a task the user calls quick and clear skips design and spec approval; commits and pushes stay gated | gap 52, user decision 2026-10-17 | superpowers 7.0.0 `skills/brainstorming/SKILL.md:17-24, 136, 186-189` | b T11 S3 to S5 | `tests/skills/define.test.mjs`; `evals/behave/workflows.json` (`workflow-define-fast-path`, `workflow-define-fast-path-stored-data`) |
+| define offers to skip the questions, asks which build choices the user owns, states defaults as its calls | gap 36 | brainstorming `:28-39, 57-65, 200` | b T11 S3 | `tests/skills/define.test.mjs` (interview pins); `pressure-define-skip-approval` |
+| define sizes after the restate, in plain words | gap 37 | brainstorming `:129-143` | b T11 S3 | `tests/skills/define.test.mjs` (`step 6 sizes, after the restate`) |
+| Anti-goals and prior art in the restate and the spec | gap 38 | brainstorming `:67-76` | b T11 S3 | `tests/skills/define.test.mjs` (interview and spec-template pins) |
+| Builder check: the reviewer reads the spec as its builder; define sorts the questions and lists its calls | gap 35 | brainstorming `:160-177`, `builder-check-prompt.md` | b T11 S3 | `tests/skills/define.test.mjs` (spec-review and handover pins); `workflow-define-spec` |
+| plan steps record decisions; proportion check | gap 39 | superpowers 6.4.2 `skills/writing-plans/SKILL.md:10, 121-175` | b T12 S3 | `tests/skills/plan.test.mjs`; `evals/h2h/plan/rename-small` |
+| self-review smell baseline | gap 49 | pocock `skills/engineering/code-review/SKILL.md:36-56` | b T13 S3 | `tests/skills/self-review.test.mjs` (`self-review references`) |
+| diagnose proposes the always-on signal | gap 47 | pstack `principle-fix-root-causes/SKILL.md:21` | b T13 S4 | `tests/skills/diagnose.test.mjs` |
+| recall chat takes the 0.15.25 ketchup rules; an autopilot execute-plan run ends with them | gap 45 | pstack `ketchup/SKILL.md:9-29` | b T13 S5 | `tests/skills/recall.test.mjs` (`chat reference keeps the ketchup rules`), `tests/skills/execute-plan.test.mjs` |
+| Every Agent call passes its role's effort | gap 46 | pstack `poteto-mode/SKILL.md:97`, `docs/harness/claude-code.md:34` | b T13 S6 | `tests/skills/execute-plan.test.mjs` (`every dispatch passes a model and an effort`) |
+| plan-check reads fences as CommonMark does | gap 43 | pstack `check-plan.mjs:47-74` | b T14 S3 | `tests/scripts/plan-check.bats` (three fence tests) |
+| task-done records a passing command that prints nothing | gap 42 | superpowers 7.0.0 `tests/claude-code/test-executing-plans-scripts.sh:136-150` | b T14 S1 | `tests/scripts/task-done.bats` (`a passing command that prints nothing...`) |
+| The pilot-rate change keeps `loadHeldout` and `modelGraded` | pre-flight 2026-10-17 #1 to #4 | M2a route-eval | b T17 S4 | `tests/route-eval-rows.test.mjs` |
+| The coverage test accepts "shipped in 0.3.0", and every M2b gap has a re-audit row | pre-flight 2026-10-17 #5, #6 | coverage rule 4 | b T16 S1 | `tests/coverage.test.mjs` |
+
 ## Old M2 task to new task
 
 | Old M2 task | New task |
@@ -190,8 +225,8 @@ M2b is a draft for the next round (deferred on 2026-10-14); its rows below stand
 | 19 finish-branch | a T25 (exec evals split out as a T26) |
 | 20 recall | a T28 (`recall-sessions` split out as a T27) |
 | 21 Kernel rows and lint rule 12 | a T30 (routed file, floors, held-out set) |
-| 22 Kernel-adherence grader | b T2 |
-| 23 CI and acceptance | a T34 (CI, M2a acceptance, release 0.3.0); b T8, T9, T12 (evidence, re-audit, release 0.4.0) |
-| 24 Pilot | b T10, T11 |
+| 22 Kernel-adherence grader | b T6 |
+| 23 CI and acceptance | a T34 (CI, M2a acceptance, release 0.3.0); b T15, T16, T18 (evidence, re-audit, release 0.4.0) |
+| 24 Pilot | b T4, T17 (the side-by-side runs inside b T5 to T7) |
 
-New with no old task: a T4 (`wt-audit`), a T7 (seeded diffs), a T14 (G20), a T26 (exec evals), a T27 (`recall-sessions`), a T29 (voice gaps), a T31 (git hardening, SubagentStart tests), a T32 (0.2.1 minors), a T33 (shell-snapshot aliases); b T1 (behaviour runner), b T3 to T6 (head-to-head harness and fixtures), b T7 (standing cost).
+New with no old task: a T4 (`wt-audit`), a T7 (seeded diffs), a T14 (G20), a T26 (exec evals), a T27 (`recall-sessions`), a T29 (voice gaps), a T31 (git hardening, SubagentStart tests), a T32 (0.2.1 minors), a T33 (shell-snapshot aliases); b T2 (behaviour runner), b T3 and T8 to T10 (head-to-head harness and fixtures), b T5 (standing cost); and from the 2026-10-17 pre-flight, b T1 (headless voice, terse clauses), b T4 (pilot protocol and tools), b T7 (`$((` as arithmetic), b T11 to T14 (re-audit fixes).
