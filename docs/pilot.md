@@ -62,7 +62,7 @@ Two projects, one of them cds-app-rewrite, at least five real tasks each, coveri
 | cds-app-rewrite | | | `.claude/kern.local.yml` | yes / no | |
 | (second project) | | | | | |
 
-1. For each kern transcript, grade the route: `node scripts/kernel-adherence.mjs --transcript <session.jsonl> --route <route>`.
+1. For each kern transcript, grade the route: `node scripts/kernel-adherence.mjs --transcript <session.jsonl> --route <route> --root <the plugin root the session loaded>`.
 2. Stop the pilot and report at once on any guard false negative, any write outside a worktree, or any outward action the user did not approve.
 3. Pass: no guard false negative; the behavioural fixtures below pass; the skill checklists are ticked or each open item has a reason.
 
@@ -109,7 +109,7 @@ Tick each file's items as their situations come up: `tests/skills/implement.acce
 Tool fixes after the first run, none of which changes `RULE`:
 
 - 2026-10-17, during p1, before its review. Wall time counts from each typed prompt to the last call, result or reply before the next typed prompt, summed over the turns (2bcecac). Before that fix it ran from the first entry to the last, so it counted the wait before the first prompt and the entries an idle session writes. A wait inside a turn, for an AskUserQuestion answer or a permission prompt, still counts. The review bundle hides plugin file paths and `kern.local.yml` (5e1969d), and review refuses a session with no typed prompt.
-- 2026-10-17, after p2. Step 6 says an approved guard ask leaves no trace in the session file; it does: the hook's output, with `permissionDecision` `ask` and the guard's reason, is recorded as a `hook_success` attachment. `metrics` now lists those asks as `asks`; whether the user approved each one is still the user's log.
+- 2026-10-17, after p2. Step 6 says an approved guard ask leaves no trace in the session file; it does: the hook's output, with `permissionDecision` `ask` and the guard's reason, is recorded as a `hook_success` attachment. `metrics` now lists those asks as `asks`; whether the user approved each one is still the user's log. The solo pilot's grade command (Solo pilot, step 1) gained `--root <the plugin root the session loaded>`: it defaults to this repo, but a session loads kern from the marketplace cache or an arm directory, and a grade against the wrong root fails every run with "never read ... under the plugin root".
 
 Changes the user asked for after the first run:
 

@@ -54,8 +54,8 @@ test('metrics count the guard asks a hook recorded, kern prefix and all', () => 
   const askOf = (s, reason, decision = 'ask') => ({ type: 'attachment', timestamp: at(s), attachment: { type: 'hook_success', hookEvent: 'PreToolUse',
     stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision, permissionDecisionReason: reason } }) } });
   const m = metrics([human(0, 'Go.'), askOf(1, 'kern G16: the command names kern hook code'), askOf(2, 'kern G2: a push to main'),
-    askOf(3, 'some other hook: ask'), askOf(4, 'kern G1: plain force push', 'deny'), { type: 'attachment', timestamp: at(5), attachment: { type: 'hook_success', stdout: 'not json' } }]);
-  assert.deepEqual(m.asks, ['G16', 'G2']);
+    askOf(3, 'some other hook: ask'), askOf(3, 'kern G16: hook files are not writable; G2: a push to main; G20b: a temp extract'), askOf(4, 'kern G1: plain force push', 'deny'), { type: 'attachment', timestamp: at(5), attachment: { type: 'hook_success', stdout: 'not json' } }]);
+  assert.deepEqual(m.asks, ['G16', 'G2', 'G16+G2+G20b']);
 });
 
 test('wall time runs from each typed prompt to its last call or reply, not from the session start or idle entries', () => {

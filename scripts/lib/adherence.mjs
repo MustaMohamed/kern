@@ -4,30 +4,43 @@
 // is a Read of <plugin root>/kernel/routes.md; and the first todo list holds the route's steps in order.
 // A bare skill name, or a skill file outside the plugin root, is not kern's route.
 // Pass rule adapted from superpowers tests/explicit-skill-requests/run-test.sh:103-118 (MIT).
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { toolUses } from './claude-run.mjs';
+import { readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { runProblem, toolUses } from './claude-run.mjs';
+import { pluginCopy } from './behave.mjs';
 
 // rowPrompt(root, route): a positive case's prompt is its row's first routing eval, so the two cannot drift.
 export const rowPrompt = (root, route) => JSON.parse(readFileSync(join(root, 'evals', 'cases', `row-${route}.json`), 'utf8')).evals[0].prompt;
 
+// runFailure(run): why a run counts as not having happened, or '' when it may be graded. A run capped by
+// --max-turns is still graded (routing shows in the first calls), so its problem is not a failure; any other
+// problem (a non-zero exit, no events, an error result) is. runProblem reports the cap as an error_max_turns
+// result, but a non-zero exit comes first in its message, so the cap is read from the result event itself.
+export function runFailure(run) {
+  const problem = runProblem(run);
+  const results = run.events.filter((e) => e?.type === 'result');
+  const capped = run.badLines === 0 && results.length > 0 && results[results.length - 1].subtype === 'error_max_turns';
+  return capped ? '' : problem;
+}
+
 // inlineRows(root): a copy of the plugin whose kernel table holds the routed rows itself and whose Routing
-// rule no longer reads kernel/routes.md: the other arm of the F3 A/B. Returns the copy's root, under a temp
-// directory the caller removes.
+// rule no longer reads kernel/routes.md: the other arm of the F3 A/B. The copy is pluginCopy(root), so it has
+// no eval files either. Returns the copy's root (through realpath: tmpdir() is a symlink on macOS and readOf
+// compares plain paths), under a temp directory the caller removes with rmSync(dirname(dir)).
 export function inlineRows(root) {
-  const dir = join(mkdtempSync(join(tmpdir(), 'k-')), 'kern');
-  cpSync(root, dir, { recursive: true, filter: (p) => !/\/(\.git|\.upstream|node_modules|evals)(\/|$)/.test(p.slice(root.length)) });
-  const rows = readFileSync(join(dir, 'kernel', 'routes.md'), 'utf8').split('\n').filter((l) => /^\| .* \| Read \{KERN\}\//.test(l));
-  const kernel = join(dir, 'kernel', 'kernel.md');
-  const before = readFileSync(kernel, 'utf8');
-  const after = before
-    .replace(', then Read {ROOT}/kernel/routes.md and match its rows when the task builds, fixes, plans, reviews, resumes or claims done', '')
-    .replace(/(\|---\|---\|\n)/, `$1${rows.join('\n')}\n`);
-  if (after === before || after.includes('routes.md') || !rows.length) throw new Error('inlineRows: the kernel no longer has the Routing sentence or the table this variant edits');
-  writeFileSync(kernel, after);
-  rmSync(join(dir, 'kernel', 'routes.md'));
-  return dir;
+  const dir = realpathSync(pluginCopy(root));
+  try {
+    const rows = readFileSync(join(dir, 'kernel', 'routes.md'), 'utf8').split('\n').filter((l) => /^\| .* \| Read \{KERN\}\//.test(l));
+    const kernel = join(dir, 'kernel', 'kernel.md');
+    const before = readFileSync(kernel, 'utf8');
+    const after = before
+      .replace(', then Read {ROOT}/kernel/routes.md and match its rows when the task builds, fixes, plans, reviews, resumes or claims done', '')
+      .replace(/(\|---\|---\|\n)/, `$1${rows.join('\n')}\n`);
+    if (after === before || after.includes('routes.md') || !rows.length) throw new Error('inlineRows: the kernel no longer has the Routing sentence or the table this variant edits');
+    writeFileSync(kernel, after);
+    rmSync(join(dir, 'kernel', 'routes.md'));
+    return dir;
+  } catch (e) { rmSync(dirname(dir), { recursive: true, force: true }); throw e; }
 }
 
 export const TODO_TOOLS = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet']);
@@ -59,7 +72,7 @@ const readOf = (u, path) => u.name === 'Read' && typeof u.input.file_path === 's
 export const routeCall = (u, route, root, routeFile = `skills/${route}/SKILL.md`) => readOf(u, `${root}/${routeFile}`) || (u.name === 'Skill' && u.input.skill === `kern:${route}`);
 export const routesCall = (u, root) => readOf(u, `${root}/kernel/routes.md`);
 const anyKernRoute = (u, root) => (u.name === 'Read' && typeof u.input.file_path === 'string' && resolve(u.input.file_path).startsWith(resolve(root, 'skills') + '/') && u.input.file_path.endsWith('/SKILL.md')) ||
-  routesCall(u, root) || (u.name === 'Skill' && /^kern:/.test(String(u.input.skill || '')));
+  routesCall(u, root) || readOf(u, `${root}/kernel/context.md`) || (u.name === 'Skill' && /^kern:/.test(String(u.input.skill || '')));
 
 function todoItems(uses) {
   const firstEdit = uses.findIndex((u) => EDITS.has(u.name));
@@ -100,6 +113,13 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
   });
   if (!items.length) reasons.push('no todo list');
   else if (missing.length) reasons.push(`todo list does not hold the steps in order: ${missing.join('; ')}`);
-  if (kind === 'multi-turn' && work.filter(hit).length < 2) reasons.push('the second task did not read the route again');
+  // The second task starts after the first result event: runClaude sends each prompt as one user turn on
+  // stdin and stream-json writes one result per turn (evals/results/exec-2026-10-16/finish-pr-at-head.events.jsonl:
+  // two prompts, a result at line 6 and at line 114).
+  if (kind === 'multi-turn') {
+    const turn = events.findIndex((e) => e?.type === 'result');
+    const second = turn < 0 ? [] : toolUses(events.slice(turn + 1)).filter((u) => !TODO_TOOLS.has(u.name));
+    if (!second.some(hit)) reasons.push('the second task did not read the route again');
+  }
   return { pass: reasons.length === 0, reasons, items, hops };
 }

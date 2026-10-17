@@ -95,8 +95,9 @@ export function metrics(entries, { root = null } = {}) {
     if (a?.type !== 'hook_success' || typeof a.stdout !== 'string' || !a.stdout.includes('permissionDecision')) continue;
     let o = null;
     try { o = JSON.parse(a.stdout)?.hookSpecificOutput; } catch { continue; }
-    const m = o?.permissionDecision === 'ask' && String(o.permissionDecisionReason ?? '').match(/^kern (G\d+[a-z]?):/);
-    if (m) asks.push(m[1]);
+    // One entry per ask event: decide.sh joins several guards into one reason ("kern G16: ...; G2: ..."), kept as G16+G2.
+    const named = o?.permissionDecision === 'ask' && String(o.permissionDecisionReason ?? '').startsWith('kern ') ? [...String(o.permissionDecisionReason).matchAll(/(?:^kern |; )(G\d+[a-z]?):/g)].map((m) => m[1]) : [];
+    if (named.length) asks.push(named.join('+'));
   }
   const uses = toolUses(entries);
   const tmp = resolve(tmpdir());

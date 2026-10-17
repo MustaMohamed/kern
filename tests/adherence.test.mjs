@@ -2,11 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readSteps, grade, inlineRows, rowPrompt } from '../scripts/lib/adherence.mjs';
-import { kernelRows, routeText } from '../scripts/lib/kernel-rows.mjs';
+import { readSteps, grade, inlineRows, rowPrompt, runFailure } from '../scripts/lib/adherence.mjs';
+import { kernelRows, parseRow, routeText } from '../scripts/lib/kernel-rows.mjs';
 import { loadModel } from '../scripts/lib/lint-rules.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -66,7 +67,7 @@ test('negative cases pass only when no kern route is read; a project skill must 
 test('a multi-turn case needs the route read again for the second task', () => {
   const once = ev(['Read', { file_path: route }], todos(...steps), ['Bash', { command: 'npm test' }]);
   assert.equal(grade(once, { route: 'diagnose', steps, root: K, kind: 'multi-turn' }).pass, false);
-  assert.equal(grade([...once, ...ev(['Read', { file_path: route }])], { route: 'diagnose', steps, root: K, kind: 'multi-turn' }).pass, true);
+  assert.equal(grade([...once, { type: 'result', subtype: 'success' }, ...ev(['Read', { file_path: route }])], { route: 'diagnose', steps, root: K, kind: 'multi-turn' }).pass, true);
 });
 
 test('every kernel row has a positive case, and every listed case names a known fixture', () => {
@@ -107,4 +108,76 @@ test('the inline-rows arm puts every routed row in the kernel table and drops ro
     assert.doesNotMatch(k, /routes\.md/);
     for (const row of readFileSync(join(ROOT, 'kernel', 'routes.md'), 'utf8').split('\n').filter((l) => /\| Read \{KERN\}\//.test(l))) assert.ok(k.includes(row), row);
   } finally { rmSync(dirname(dir), { recursive: true, force: true }); }
+});
+
+test('a negative case fails on a Read of any kernel-file route, derived from the kernel rows', () => {
+  const text = routeText(loadModel(ROOT));
+  const files = text.split(/\r?\n/).map(parseRow).filter((r) => r && r.base === 'ROOT' && r.route).map((r) => r.path);
+  assert.ok(files.includes('kernel/context.md'));
+  for (const f of files) {
+    const g = grade(ev(['Read', { file_path: `${K}/${f}` }]), { route: null, root: K, kind: 'negative' });
+    assert.equal(g.pass, false, `a Read of ${f} passed a negative case`);
+  }
+});
+
+test('a positive case with a routeFile reads that file, not skills/<route>/SKILL.md', () => {
+  const file = `${K}/kernel/context.md`;
+  const g = grade(ev(['Read', { file_path: file }], todos('Save the state.')), { route: 'context', routeFile: 'kernel/context.md', steps: ['Save the state.'], root: K });
+  assert.equal(g.pass, true, g.reasons.join('; '));
+  assert.equal(g.hops, 1);
+  assert.equal(grade(ev(['Read', { file_path: `${K}/skills/context/SKILL.md` }], todos('Save the state.')), { route: 'context', routeFile: 'kernel/context.md', steps: ['Save the state.'], root: K }).pass, false);
+});
+
+test('a run that errored is a failed run, a run capped by --max-turns is still graded', () => {
+  const ok = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success' }] };
+  assert.equal(runFailure(ok), '');
+  assert.equal(runFailure({ ...ok, events: [{ type: 'result', subtype: 'error_max_turns' }] }), '');
+  assert.equal(runFailure({ ...ok, status: 1, events: [{ type: 'result', subtype: 'error_max_turns' }] }), '');
+  assert.match(runFailure({ ...ok, status: 1, stderr: 'API error\n', events: [] }), /claude exited 1: API error/);
+  assert.match(runFailure({ ...ok, events: [{ type: 'result', subtype: 'error_during_execution', is_error: true }] }), /error_during_execution/);
+  assert.match(runFailure({ ...ok, events: [] }), /no events/);
+});
+
+test('a multi-turn case needs the route read in the second task, not twice in the first', () => {
+  const opts = { route: 'diagnose', steps, root: K, kind: 'multi-turn' };
+  const done = [{ type: 'result', subtype: 'success' }];
+  const first = ev(['Read', { file_path: route }], todos(...steps), ['Read', { file_path: route }]);
+  const twice = grade([...first, ...done, ...ev(['Bash', { command: 'npm test' }])], opts);
+  assert.equal(twice.pass, false);
+  assert.match(twice.reasons.join(' '), /second task did not read the route/);
+  assert.equal(grade([...first, ...done, ...ev(['Read', { file_path: route }])], opts).pass, true);
+});
+
+test('both arms run on a plugin copy without the eval files, and a failed build leaves no copy', () => {
+  const dir = inlineRows(ROOT);
+  try {
+    assert.equal(dir, realpathSync(dir));
+    for (const f of ['scripts/kernel-adherence.mjs', 'scripts/lib/adherence.mjs', 'scripts/lib/claude-run.mjs', 'tests', 'docs', 'evals', '.superpowers']) assert.ok(!existsSync(join(dir, f)), `${f} is in the plugin copy`);
+    assert.ok(existsSync(join(dir, 'skills', 'diagnose', 'SKILL.md')));
+  } finally { rmSync(dirname(dir), { recursive: true, force: true }); }
+  const home = mkdtempSync(join(tmpdir(), 'k-'));
+  const fake = join(home, 'src');
+  mkdirSync(join(fake, 'kernel'), { recursive: true });
+  writeFileSync(join(fake, 'kernel', 'kernel.md'), 'no routing sentence\n');
+  writeFileSync(join(fake, 'kernel', 'routes.md'), '| a | Read {KERN}/x/SKILL.md |\n');
+  const was = process.env.TMPDIR;
+  const scratch = mkdtempSync(join(tmpdir(), 'k-'));
+  process.env.TMPDIR = scratch;
+  try {
+    assert.throws(() => inlineRows(fake), /no longer has the Routing sentence/);
+    assert.deepEqual(readdirSync(scratch), []);
+  } finally {
+    if (was === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = was;
+    rmSync(home, { recursive: true, force: true }); rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('the runner exits 2 on a bad --case, --runs or --transcript usage, before anything runs', () => {
+  const run = (...a) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'kernel-adherence.mjs'), ...a], { encoding: 'utf8' });
+  for (const a of [['--dry-run', '--case', 'bogus'], ['--dry-run', '--runs', '0'], ['--runs', 'x', '--dry-run'], ['--transcript', '/dev/null'], ['--transcript', '/dev/null', '--route', 'nope']]) {
+    const r = run(...a);
+    assert.equal(r.status, 2, `${a.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /^kernel-adherence: /m);
+  }
+  assert.equal(run('--dry-run', '--case', 'row-diagnose').status, 0);
 });
