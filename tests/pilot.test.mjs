@@ -45,9 +45,25 @@ test('metrics count usage once per message, subagents included, and read turns, 
     assert.equal(m.turns, 2);
     assert.equal(m.stops, 1);
     assert.deepEqual(m.guards, ['G1']);
-    assert.equal(m.wallSeconds, 9);
+    assert.equal(m.wallSeconds, 7);
     assert.deepEqual(m.slipCandidates, ['Bash: git push --force origin main', 'Write outside the worktree: /etc/hosts']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('wall time runs from each typed prompt to its last call or reply, not from the session start or idle entries', () => {
+  const m = metrics([
+    { type: 'attachment', timestamp: at(0), attachment: { type: 'hook_success', hookEvent: 'SessionStart' } },
+    { type: 'system', subtype: 'informational', timestamp: at(1) },
+    human(20, 'Implement Task 5.'),
+    asst('m1', 22, bash('node --test')),
+    result(25, 'ok'),
+    asst('m2', 30, { type: 'text', text: 'Done.' }),
+    { type: 'system', subtype: 'turn_duration', timestamp: at(30) },
+    { type: 'system', subtype: 'away_summary', timestamp: at(50) },
+    human(52, 'and the lint?'),
+    asst('m3', 55, { type: 'text', text: 'Clean.' }),
+  ]);
+  assert.equal(m.wallSeconds, 13);
 });
 
 test('the diff holds committed, staged and new files, and leaves the arm index untouched', () => {

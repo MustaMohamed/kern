@@ -47,7 +47,10 @@ const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) 
 // that names it ("kern G1: ..."); kern's own test output names guards too, so only an error result whose
 // first 300 characters do counts, and these are candidates the user confirms. An ask the user approved
 // leaves no trace in the file, so asks are logged by hand. A stop is a typed turn after the first, or an
-// AskUserQuestion call in the main session, whose answer is also the user's.
+// AskUserQuestion call in the main session, whose answer is also the user's. Wall time is the arm's working
+// time: from each typed prompt to the last call, result or reply before the next one. The wait before the
+// first prompt, the user's time between turns and the entries an idle session writes (an away summary) do
+// not count.
 export function metrics(entries, { root = null } = {}) {
   const tokens = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0 };
   const seen = new Set();
@@ -64,7 +67,18 @@ export function metrics(entries, { root = null } = {}) {
   }
   const main = entries.filter((e) => e?._source !== 'subagent');
   const asks = toolUses(main).filter((u) => u.name === 'AskUserQuestion').length;
-  const times = entries.map((e) => Date.parse(e?.timestamp)).filter((t) => !Number.isNaN(t));
+  const at = (e) => Date.parse(e?.timestamp);
+  const work = entries.filter((e) => (e?.type === 'user' || e?.type === 'assistant') && !Number.isNaN(at(e))).sort((a, b) => at(a) - at(b));
+  let wall = 0;
+  let start = null;
+  let last = null;
+  for (const e of work) {
+    if (typed(e)) {
+      if (start !== null) wall += last - start;
+      start = last = at(e);
+    } else if (start !== null) last = at(e);
+  }
+  if (start !== null) wall += last - start;
   const turns = entries.filter(typed).length;
   const guards = [];
   for (const e of entries) {
@@ -87,7 +101,7 @@ export function metrics(entries, { root = null } = {}) {
   }
   return { turns, stops: Math.max(turns - 1, 0) + asks, toolCalls: uses.length, guards, slipCandidates: slips,
     tokens: { ...tokens, total: tokens.input + tokens.cacheCreation + tokens.cacheRead + tokens.output },
-    wallSeconds: times.length ? Math.round((Math.max(...times) - Math.min(...times)) / 1000) : 0 };
+    wallSeconds: Math.round(wall / 1000) };
 }
 
 // diffAgainst(repo, base): the arm's whole change against base, committed or not, new files included.
