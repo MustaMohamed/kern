@@ -77,3 +77,14 @@ context_of() {
   [[ "$ctx" == *"Voice: terse"* ]] || false
   [ "$(cat "$CLAUDE_PLUGIN_DATA/x.state")" = "voice: normal" ]
 }
+
+@test "a headless session's subagent with no session state gets the headless voice" {
+  mkdir -p "$R/.claude"
+  printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
+  run env CLAUDE_CODE_ENTRYPOINT=sdk-cli bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')"
+  ctx=$(context_of "$output")
+  [[ "$ctx" != *"Voice: terse"* ]] || false
+  run env CLAUDE_CODE_ENTRYPOINT=cli bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')"
+  ctx=$(context_of "$output")
+  [[ "$ctx" == *"Voice: terse"* ]] || false
+}

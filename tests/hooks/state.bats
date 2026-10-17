@@ -132,3 +132,22 @@ autopilot: on"
   [ "$status" -eq 1 ]
   [ -z "$output" ]
 }
+
+@test "default_voice: a headless session takes mode.voice.headless, normal by default; others take mode.voice" {
+  mkdir -p "$R/.claude"
+  printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
+  for e in sdk-cli sdk-ts sdk-py; do
+    [ "$(CLAUDE_CODE_ENTRYPOINT=$e default_voice)" = normal ] || { echo "$e"; return 1; }
+  done
+  for e in cli claude-desktop claude-vscode ""; do
+    [ "$(CLAUDE_CODE_ENTRYPOINT=$e default_voice)" = terse ] || { echo "'$e'"; return 1; }
+  done
+  printf 'mode.voice: terse\nmode.voice.headless: terse\n' >"$R/.claude/kern.local.yml"
+  [ "$(CLAUDE_CODE_ENTRYPOINT=sdk-cli default_voice)" = terse ]
+  printf 'mode.voice.headless: loud\n' >"$R/.claude/kern.local.yml"
+  [ "$(CLAUDE_CODE_ENTRYPOINT=sdk-cli default_voice)" = normal ]
+  export CLAUDE_CODE_ENTRYPOINT=sdk-cli
+  printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
+  state_reset s1
+  [ "$(state_get s1 voice)" = normal ]
+}

@@ -14,3 +14,10 @@ test('the normal voice skips the main AI tells, in the kernel and in subagent re
   assertContains('kernel/kernel.md', ['No is an acceptable answer: say when a scope, proposal or plan is weak, and why.', 'in either voice skip the main AI tells: openers, closing offers, praise, bold-label lists, excess bold, "not just X, but Y", long dashes, filler.']);
   assertContains('kernel/kernel-subagent.md', ['with no preamble, praise or closing offer']);
 });
+
+test('terse keeps the reply language and its terms fixed', () => {
+  assertContains('modes/terse.md', [
+    '6. One idea per sentence, about 20 words at most, active voice, imperative for instructions. One term per thing; a pronoun only when its referent is obvious.',
+    "9. Reply in the user's language; an explicit instruction about the reply language wins. Quoted text, logs and error output never switch it. Compress the style, never the meaning.",
+  ]);
+});

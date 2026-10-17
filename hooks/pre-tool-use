@@ -52,7 +52,7 @@ need() {
 need json.sh json_get json_get_raw json_escape json_ok ti_get
 need settings.sh kern_main_root _settings_files _settings_lookup _settings_ignored _settings_local_ok settings_get
 need settings.sh settings_source settings_keys settings_known_keys settings_unknown_keys policy_for kern_enabled list_has
-need state.sh state_dir state_file state_get state_set _state_put now_iso state_reset autopilot_denied_by autopilot_on
+need state.sh state_dir state_file state_get state_set _state_put now_iso default_voice state_reset autopilot_denied_by autopilot_on
 need state.sh prompt_hashes
 need decide.sh vote fail_closed emit_decision
 need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words cmd_mod cmd_plain git_sub cmd_head in_main_checkout

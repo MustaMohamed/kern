@@ -90,4 +90,5 @@ extension/fonts/GEIST_LICENSE.txt.
 - skills/help/references/fix-a-run.md: pstack pstack/skills/poteto-help/SKILL.md "Fix a run that went wrong" (the symptom and fix table; rows written for kern)
 - modes/terse.md: caveman skills/caveman/SKILL.md (idea only; text written for kern)
 - hooks/prompt-submit: caveman src/hooks/caveman-parse.js and caveman-mode-tracker.js (ideas only: envelope parsing; code written for kern)
+- hooks/lib/state.sh default_voice: caveman 4.0.1 src/hooks/caveman-activate.js startMode (idea only: a headless session starts without the voice; code written for kern)
 - tests/fixtures/mode-activation/cases.json: caveman tests/fixtures/mode-activation/cases.json (idea only: a prompt corpus with expected switches and a known_failing flag; prompts written for kern)

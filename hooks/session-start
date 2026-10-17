@@ -47,7 +47,7 @@ need() {
 need json.sh json_get json_get_raw json_escape json_ok ti_get
 need settings.sh kern_main_root _settings_files _settings_lookup _settings_ignored _settings_local_ok settings_get
 need settings.sh settings_source settings_keys settings_known_keys settings_unknown_keys policy_for kern_enabled list_has
-need state.sh state_dir state_file state_get state_set _state_put now_iso state_reset autopilot_denied_by autopilot_on
+need state.sh state_dir state_file state_get state_set _state_put now_iso default_voice state_reset autopilot_denied_by autopilot_on
 need state.sh prompt_hashes
 need render.sh render_template kern_version mode_line autopilot_text settings_summary
 
@@ -107,7 +107,7 @@ if [ -n "$SID" ]; then
   K_MODE=$(mode_line "$SID")
   K_AUTOPILOT=$(autopilot_text "$SID")
 else
-  K_MODE="kern mode: voice=$(settings_get mode.voice normal) surface=$(settings_get mode.surface auto) autopilot=off"
+  K_MODE="kern mode: voice=$(default_voice) surface=$(settings_get mode.surface auto) autopilot=off"
   K_AUTOPILOT=off
 fi
 K_SETTINGS=$(settings_summary)

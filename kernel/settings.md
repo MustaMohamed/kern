@@ -19,6 +19,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `kern_repo` | none | path to the kern clone, in the user file only | help |
 | `work_dir` | `.kern` | relative directory at the main worktree root | kern-dir, pre-tool-use G2, G3, G5 and G14, all skills |
 | `mode.voice` | `normal` | `normal`, `terse` | session-start, prompt-submit, subagent-start |
+| `mode.voice.headless` | `normal` | `normal`, `terse`. The voice a headless session (`claude -p`, the Agent SDK) starts in, in place of `mode.voice` | session-start, prompt-submit, subagent-start |
 | `mode.surface` | `auto` | `chat`, `auto`, `html` | session-start, prompt-submit |
 | `autopilot` | `allowed` | `allowed`, `denied` | session-start, prompt-submit, pre-tool-use for every guard |
 | `base_branch` | detected from `refs/remotes/origin/HEAD` | branch name | pre-tool-use G1 and G5, kern-detect, plan, finish-branch |

@@ -4,6 +4,8 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- A headless session (`claude -p`, the Agent SDK) starts in the normal voice even when `mode.voice` is `terse`; `mode.voice.headless: terse` opts back in, and `/kern:mode terse` still switches. The kernel, the per-prompt reminder and subagents agree. Terse keeps the reply language fixed: an explicit language instruction wins, and quoted text, logs and errors never switch it; one term per thing, and a pronoun only with an obvious referent.
+
 ## [0.3.0] - 2026-10-16
 
 - Standing cost at 0.3.0, measured in chars: kernel 3,519 with no settings (3,990 with the longest fixture), auto descriptions 522, agent descriptions 423, total 4,464; kernel/routes.md 759 per routed task. M2b measures it in tokens.

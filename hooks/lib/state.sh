@@ -65,10 +65,23 @@ now_iso() {
   date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
+# default_voice: the voice a session starts in, normal or terse. A headless session (Claude Code sets
+# CLAUDE_CODE_ENTRYPOINT to sdk-cli for claude -p, and sdk-ts or sdk-py for the Agent SDK) is often a
+# probe or an eval that parses the reply, so it takes mode.voice.headless, normal by default; any other
+# session takes mode.voice. Idea from caveman 4.0.1 src/hooks/caveman-activate.js:256-265 (Apache-2.0).
+default_voice() {
+  local v
+  case "${CLAUDE_CODE_ENTRYPOINT-}" in
+    sdk-*) v=$(settings_get mode.voice.headless normal) ;;
+    *) v=$(settings_get mode.voice normal) ;;
+  esac
+  case "$v" in terse) printf 'terse\n' ;; *) printf 'normal\n' ;; esac
+}
+
 # state_reset SID: defaults from settings, autopilot off.
 state_reset() {
   local voice surface
-  voice=$(settings_get mode.voice normal)
+  voice=$(default_voice)
   surface=$(settings_get mode.surface auto)
   case "$voice" in normal | terse) ;; *) voice=normal ;; esac
   case "$surface" in chat | auto | html) ;; *) surface=auto ;; esac

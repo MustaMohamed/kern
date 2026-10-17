@@ -58,7 +58,7 @@ apply_mode() {
     esac
   done
   if [ "$reset" = 1 ]; then
-    [ -n "$voice" ] || voice=$(settings_get mode.voice normal)
+    [ -n "$voice" ] || voice=$(default_voice)
     [ -n "$surface" ] || surface=$(settings_get mode.surface auto)
   fi
   set_voice "$voice"

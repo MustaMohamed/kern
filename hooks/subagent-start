@@ -23,7 +23,7 @@ KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
 export CWD KERN_MAIN
 kern_enabled || exit 0
 
-voice=$(state_get "$SID" voice 2>/dev/null) || voice=$(settings_get mode.voice normal)
+voice=$(state_get "$SID" voice 2>/dev/null) || voice=$(default_voice)
 K_VOICE=""
 [ "$voice" = terse ] && K_VOICE=$(cat "$KERN_ROOT/modes/terse-subagent.md")
 K_VERSION=$(kern_version)

@@ -314,3 +314,26 @@ fake_git_version() {
     PATH=${PATH#"$BATS_TEST_TMPDIR/gitbin:"}
   done
 }
+
+@test "a headless session starts in the normal voice, and the user can still switch to terse" {
+  printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
+  export CLAUDE_CODE_ENTRYPOINT=sdk-cli
+  start startup
+  [[ "$output" == *"kern mode: voice=normal surface=auto autopilot=off"* ]] || false
+  [[ "$output" != *"# kern terse voice"* ]] || false
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"kern:mode","command_args":"terse","command_source":"plugin","prompt":"/kern:mode terse"')"
+  [[ "$output" == *"voice=terse"* ]] || false
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"kern:mode","command_args":"default","command_source":"plugin","prompt":"/kern:mode default"')"
+  [[ "$output" == *"voice=normal"* ]] || false
+}
+
+@test "mode.voice.headless: terse makes a headless session terse; an interactive one keeps mode.voice" {
+  printf 'mode.voice: normal\nmode.voice.headless: terse\n' >"$R/.claude/kern.local.yml"
+  export CLAUDE_CODE_ENTRYPOINT=sdk-cli
+  start startup
+  [[ "$output" == *"# kern terse voice"* ]] || false
+  printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
+  export CLAUDE_CODE_ENTRYPOINT=cli
+  start startup
+  [[ "$output" == *"kern mode: voice=terse"* ]] || false
+}
