@@ -29,7 +29,7 @@ The tasks are in `evals/pilot/tasks.json`, prompts and rubrics written before an
 |---|---|---|---|
 | `p1-standing-cost` | 5 | kern | e150d84 |
 | `p2-adherence-grader` | 6 | current | a8358c5 |
-| `p3-arithmetic` | 7 | kern | |
+| `p3-arithmetic` | 7 | kern | e22dbc1 |
 
 ## Side-by-side: protocol
 
