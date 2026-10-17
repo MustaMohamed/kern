@@ -120,7 +120,7 @@ function reviewFixture(dir, swap = false) {
   const git = (r, ...a) => execFileSync('git', ['-C', r, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { encoding: 'utf8' });
   const repos = ['k', 'c'].map((n) => { const r = join(dir, n); mkdirSync(r); git(r, 'init', '-q', '-b', 'main'); writeFileSync(join(r, 'a.txt'), 'one\n'); git(r, 'add', '.'); git(r, 'commit', '-qm', 'base'); return r; });
   writeFileSync(join(repos[0], 'a.txt'), 'kern arm\n');
-  const withCwd = (list, cwd) => list.map((e) => ({ ...e, cwd }));
+  const withCwd = (list, cwd) => list.map((e, i) => ({ ...e, cwd: i === list.length - 1 ? '/tmp' : cwd }));
   const ks = session(mkdtempSync(join(dir, 's-')), withCwd([human(0, 'Do it.'), asst('m1', 3, bash('bash /x/kern-0.3.0/scripts/ledger-open plan.md'))], repos[0]));
   const cs = session(mkdtempSync(join(dir, 's-')), withCwd([human(0, 'Do it.'), asst('m1', 2, { type: 'text', text: 'Using superpowers:executing-plans' })], repos[1]));
   const base = git(repos[0], 'rev-parse', 'HEAD').trim();
