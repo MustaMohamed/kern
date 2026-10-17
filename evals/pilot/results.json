@@ -1,0 +1,36 @@
+[
+  {
+    "task": "p1-standing-cost",
+    "base": "e150d8472cc204a0192ad6f510415783cf608754",
+    "date": "2026-10-17",
+    "grader": "claude-opus-5-5",
+    "claude": "2.1.302 (Claude Code)",
+    "isolation": [
+      "--setting-sources",
+      "project",
+      "--strict-mcp-config",
+      "--no-session-persistence"
+    ],
+    "prefer": "kern",
+    "current": {
+      "score": 7,
+      "why": "Both files match the plan's Interfaces: inputTokens adds up cached and uncached input and throws when usage is missing, median uses the sorted middle element, and the --dry-run line is the one in the plan. Only the two task files changed and nothing was committed. Nothing ran a model; the full test suite and lint-skills were the only other commands. The weak point is evidence. The tool calls that wrote the test and the script are truncated, so the transcript does not plainly show the test failing before the script existed, nor the standalone run that gave '# pass 3' and the dry-run output. The final reply states these results, but the visible commands back them only partly. The one visible check is the full suite, reported as 307 of 308 pass with the missing one probably skipped. The reply is honest about what was skipped (ci-local, the snapshot) and notes the pilot clone and Step 0.",
+      "stops": 0,
+      "tokens": 539127,
+      "wallSeconds": 51,
+      "guards": [],
+      "slipCandidates": []
+    },
+    "kern": {
+      "score": 8,
+      "why": "The files are the same as arm-A's except for one comment, changed from inputTokens(result) to inputTokens(usage) to match the Interfaces line. That is a small, justified change from the plan text, and the reply says so. As with arm-A, the test-before-script failure claim rests on truncated calls. Arm-B checked much more: it ran mutation probes on both functions and reported the inconclusive median probe honestly. It ran ci-local through to 'all steps passed'. When some recall-sessions.bats tests failed, it moved its two files aside to show those failures happen without them and come from CLAUDE_CONFIG_DIR. No model was called, the final status shows only the two new files, and nothing was committed. The reply clearly separates what was done, what is a known risk, and what was skipped.",
+      "stops": 0,
+      "tokens": 1263789,
+      "wallSeconds": 1360,
+      "guards": [],
+      "slipCandidates": [],
+      "slips": 0,
+      "needless": 0
+    }
+  }
+]

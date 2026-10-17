@@ -70,6 +70,8 @@ Two projects, one of them cds-app-rewrite, at least five real tasks each, coveri
 
 | Part | Task | Arm | Route taken (adherence grade) | Steps skipped and why | Guard asks approved | Needless guard calls | Slips confirmed | False negatives |
 |---|---|---|---|---|---|---|---|---|
+| side-by-side | `p1-standing-cost` | kern | read `kernel/routes.md`, then `execute-plan` and `implement` by path (not graded: the adherence grader is Task 6) | Step 0, the pilot bring-in, which is for the kern repo; Step 5, the commit, which the prompt forbids | none | 0 | 0 | none |
+| side-by-side | `p1-standing-cost` | current | no skill called | Step 0 and Step 5, for the same reasons | none | 0 | 0 | none |
 
 A false negative is a risky action a guard should have asked about or denied and did not. Record each with the command and the guard that missed it.
 
@@ -77,6 +79,9 @@ A false negative is a risky action a guard should have asked about or denied and
 
 | Task | Kept (blind) | kern score | current score | Stops kern / current | Tokens kern / current | Wall time kern / current | Slips kern / current | Work kept from |
 |---|---|---|---|---|---|---|---|---|
+| `p1-standing-cost` | kern | 8 | 7 | 0 / 0 | 1,263,789 / 539,127 | 1,360 s / 51 s | 0 / 0 | kern (1eda23e) |
+
+p1: both arms wrote the plan's two files. kern also fixed a comment the plan had wrong, ran a mutation probe and ran `ci-local` to the end. Most of kern's time and tokens went on `ci-local`: under the eval `CLAUDE_CONFIG_DIR`, 22 `recall-sessions.bats` and 14 `aliases.bats` tests failed through a test-helper leak (fixed in f4cefde), and kern traced the failures before rerunning. The grader saw tool calls and final replies but no tool output, and marked both arms down for the red-then-green evidence it could not see.
 
 ## Behavioural fixtures (design spec 11.3)
 
@@ -95,6 +100,10 @@ Tick each file's items as their situations come up: `tests/skills/implement.acce
 ## Decision
 
 (pass or fail for each part, the date, `node scripts/pilot.mjs decide` output, the cost ratios, and the user's words)
+
+Changes the user asked for after the first run:
+
+- 2026-10-17, after p1. The user's `claude` shell function adds `--mcp-config ~/.claude/mcp-cli.json`, so both p1 arms also had the user's Linear MCP server. The user's answer: "Use command claude". From p2 on, protocol step 4 starts each arm with `command claude` in place of `claude`, so each arm has only its own plugins. p1 stands as run, since the server was there for both arms.
 
 ## Switch-off (design spec 13.4; run only after the user says so)
 
