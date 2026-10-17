@@ -43,6 +43,19 @@ test('out-of-area files, false alarms and the per-category gate', () => {
   assert.equal(gate([r('kern', 0.6, 0), r('control', 0.7, 0)])[0].pass, false, 'the control arm counts');
 });
 
+test('a category with no graded run fails the gate when it was expected', () => {
+  assert.deepEqual(gate([], ['diagnose']), [{ category: 'diagnose', pass: false, reason: 'no graded run' }]);
+  const r = [{ category: 'diagnose', arm: 'kern', score: 0.8, falseAlarms: 0 }, { category: 'diagnose', arm: 'control', score: 0.4, falseAlarms: 0 }];
+  assert.deepEqual(gate(r, ['diagnose']), gate(r));
+  assert.equal(gate(r, ['diagnose', 'review']).length, 2);
+});
+
+test('redaction turns .kern/ into .work/ and hides a /private temp prefix', () => {
+  assert.equal(redact('wrote .kern/ledgers/x.md', arms), 'wrote .work/ledgers/x.md');
+  const a = [{ id: 'kern', dir: '/var/folders/x/p-1/kern' }];
+  assert.equal(redact('Read /private/var/folders/x/p-1/kern/skills/a/SKILL.md', a), 'Read <plugin>/<plugin-file>');
+});
+
 test('the grader prompt carries no arm name, and a malformed grade voids the run', () => {
   const t = { category: 'review', prompts: ['review it'], rubric: ['finds bugs'], labels: [{ id: 'b1' }] };
   const p = graderPrompt(t, [{ id: 'arm-A', text: 'x' }, { id: 'arm-B', text: 'y' }]);

@@ -69,7 +69,10 @@ export function digest(events, max = 24000) {
 export function pluginCopy(root) {
   const dir = join(mkdtempSync(join(tmpdir(), 'p-')), 'kern');
   const skip = new Set(['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers']);
-  cpSync(root, dir, { recursive: true, filter: (src) => src === root || !skip.has(relative(root, src).split(sep)[0]) });
+  // The eval runners go too: their names tell a model it is being evaluated.
+  const runners = new Set(['h2h.mjs', 'behave.mjs', 'kernel-adherence.mjs', 'standing-cost.mjs', 'pilot.mjs', 'exec-eval.mjs'].map((f) => join('scripts', f))
+    .concat(['h2h.mjs', 'behave.mjs', 'adherence.mjs', 'pilot.mjs', 'exec-grade.mjs', 'exec-run.mjs', 'claude-run.mjs'].map((f) => join('scripts', 'lib', f))));
+  cpSync(root, dir, { recursive: true, filter: (src) => src === root || (!skip.has(relative(root, src).split(sep)[0]) && !runners.has(relative(root, src))) });
   return dir;
 }
 

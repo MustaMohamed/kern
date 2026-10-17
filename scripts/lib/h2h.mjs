@@ -46,12 +46,11 @@ const hash = (s) => createHash('sha256').update(s).digest('hex');
 // redact(text, arms): remove what names an arm: plugin and skill names, plugin paths, namespaced skill
 // calls, and kern's own script and ledger vocabulary. The grader must not tell the arms apart by name.
 export function redact(text, arms) {
-  let t = String(text);
-  for (const a of arms.filter((x) => x.dir).sort((x, y) => y.dir.length - x.dir.length)) t = t.split(a.dir).join('<plugin>');
+  let t = String(text).replace(/\.kern\//g, '.work/');
+  for (const a of arms.filter((x) => x.dir).sort((x, y) => y.dir.length - x.dir.length)) t = t.split(`/private${a.dir}`).join('<plugin>').split(a.dir).join('<plugin>');
   t = t.replace(/\b(?:kern|superpowers|mattpocock-skills|mattpocock|pocock|pstack|poteto|caveman)\b(?::[\w-]+)?/gi, '<plugin>');
   t = t.replace(/(?:CLAUDE_PLUGIN_ROOT|KERN_[A-Z_]+)/g, '<plugin-var>');
   t = t.replace(/\/(?:skills|agents|kernel)\/[\w-]+(?:\/[\w./-]+)?/g, '/<plugin-file>');
-  t = t.replace(/\.kern\//g, '.work/');
   return t;
 }
 
@@ -72,10 +71,11 @@ export function falseAlarms(category, e) {
 
 // gate(results): per category, kern passes when its mean score is at least the strongest other arm's,
 // and its mean false alarms are at most that arm's. The control arm counts as an arm.
-export function gate(results) {
+export function gate(results, expected = []) {
   const by = {};
   for (const r of results) ((by[r.category] ??= {})[r.arm] ??= []).push(r);
   const mean = (xs, k) => xs.reduce((s, x) => s + x[k], 0) / xs.length;
+  const missing = expected.filter((c) => !by[c]).map((category) => ({ category, pass: false, reason: 'no graded run' }));
   return Object.entries(by).map(([category, arms]) => {
     if (!arms.kern) return { category, pass: false, reason: 'no kern runs' };
     const others = Object.entries(arms).filter(([a]) => a !== 'kern').map(([arm, xs]) => ({ arm, score: mean(xs, 'score'), fa: mean(xs, 'falseAlarms') }));
@@ -84,7 +84,7 @@ export function gate(results) {
     if (!best) return { category, pass: false, reason: 'no other arm ran', kern };
     const pass = kern.score >= best.score && kern.fa <= best.fa;
     return { category, pass, kern, best, reason: pass ? '' : `kern ${kern.score.toFixed(2)} score, ${kern.fa.toFixed(2)} false alarms; ${best.arm} ${best.score.toFixed(2)}, ${best.fa.toFixed(2)}` };
-  });
+  }).concat(missing);
 }
 
 export function graderPrompt(task, outputs) {

@@ -90,7 +90,7 @@ for (const t of tasks) {
   if (copy) rmSync(dirname(copy), { recursive: true, force: true });
 }
 writeFileSync(join(raw, 'key.json'), JSON.stringify(key, null, 2) + '\n');
-const verdict = gate(results);
+const verdict = gate(results, [...new Set(tasks.map((t) => t.category))]);
 for (const v of verdict) console.log(`${v.pass ? 'PASS' : 'FAIL'} ${v.category}${v.reason ? `: ${v.reason}` : ''}`);
 const out = join(ROOT, 'evals', 'snapshots', `h2h-${MODEL.replace(/^claude-/, '')}-${date}.json`);
 writeFileSync(out, JSON.stringify({ model: MODEL, grader: GRADER, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS,
