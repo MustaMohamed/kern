@@ -34,7 +34,7 @@ kern_version() {
 # mode_line SID: `kern mode: voice=<v> surface=<s> autopilot=<on|off>`.
 mode_line() {
   local v s a
-  v=$(state_get "$1" voice 2>/dev/null) || v=$(settings_get mode.voice normal)
+  v=$(state_get "$1" voice 2>/dev/null) || v=$(default_voice)
   s=$(state_get "$1" surface 2>/dev/null) || s=$(settings_get mode.surface auto)
   if autopilot_on "$1"; then a=on; else a=off; fi
   printf 'kern mode: voice=%s surface=%s autopilot=%s\n' "$v" "$s" "$a"

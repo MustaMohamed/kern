@@ -337,3 +337,11 @@ fake_git_version() {
   start startup
   [[ "$output" == *"kern mode: voice=terse"* ]] || false
 }
+
+@test "a headless session whose state cannot be read still starts in the normal voice" {
+  printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
+  export CLAUDE_CODE_ENTRYPOINT=sdk-cli
+  run bash "$K/hooks/session-start" <<<"$(payload SessionStart '"source":"startup"' | sed 's/"session_id": *"[^"]*"/"session_id":"..\/x"/')"
+  [[ "$output" == *"voice=normal"* ]] || false
+  [[ "$output" != *"# kern terse voice"* ]] || false
+}
