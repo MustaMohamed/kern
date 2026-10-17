@@ -42,12 +42,13 @@ if (cmd === 'metrics') {
   if (!base || arms.some((a) => !a.repo || !a.session)) { console.error('pilot: review needs --base, --kern-repo, --kern-session, --current-repo and --current-session'); process.exit(2); }
   const date = new Date().toISOString().slice(0, 10);
   const ids = blindIds(arms.map((a) => a.id), `${date}:pilot:${id}`);
-  const dirs = [...arms.map((a) => a.repo), ...all('--plugin')];
+  const dirs = arms.map((a) => a.repo);
+  const plugins = all('--plugin');
   const outputs = arms.map((a) => {
     const entries = readSession(a.session);
     const stray = [entries.find((e) => typeof e?.cwd === 'string')].find((e) => e && !inside(a.repo, e.cwd));
     if (stray) { console.error(`pilot: ${a.id} session ${a.session} started in ${stray.cwd}, outside its repo ${a.repo}; sessions and repos are swapped or mixed`); process.exit(2); }
-    return { arm: a.id, id: ids[a.id], m: metrics(entries, { root: a.repo }), text: hide(attempt(entries, diffAgainst(a.repo, base)), dirs) };
+    return { arm: a.id, id: ids[a.id], m: metrics(entries, { root: a.repo }), text: hide(attempt(entries, diffAgainst(a.repo, base)), dirs, plugins) };
   }).sort((x, y) => x.id.localeCompare(y.id));
   const prompt = reviewPrompt(task, outputs);
   const left = prompt.match(TELLS);

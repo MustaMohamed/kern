@@ -117,12 +117,18 @@ export function diffAgainst(repo, base) {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 }
 
-// hide(text, dirs): remove what tells the two arms apart: their repo and plugin directories, namespaced
-// skill names, plugin names, kern guard prefixes and the plugins' working directories. Both arms work in
-// the kern repository, so a bare "kern" is the project's name and stays.
-export function hide(text, dirs) {
+// hide(text, dirs, plugins): remove what tells the two arms apart: their repo directories, each plugin
+// directory with the path of any file under it (a plugin's own layout names it), namespaced skill names,
+// plugin names, kern guard prefixes, kern's settings file name and the plugins' working directories. Both
+// arms work in the kern repository, so a bare "kern" is the project's name and stays.
+export function hide(text, dirs, plugins = []) {
   let t = String(text);
-  for (const d of [...dirs].filter(Boolean).sort((a, b) => b.length - a.length)) t = t.split(d).join('<dir>');
+  const esc = (d) => d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const all = [...dirs.filter(Boolean).map((d) => ({ d })), ...plugins.filter(Boolean).map((d) => ({ d, plugin: true }))];
+  for (const { d, plugin } of all.sort((a, b) => b.d.length - a.d.length)) {
+    t = plugin ? t.replace(new RegExp(`${esc(d)}(?:/[^\\s"'\`;|&<>()]*)?`, 'g'), () => '<plugin file>') : t.split(d).join('<dir>');
+  }
+  t = t.replace(/\bkern\.local\.yml\b/g, '<settings>.yml');
   t = t.replace(/\b(?:kern|superpowers|caveman|cavecrew|pstack|pocock):[\w-]+/gi, '<skill>');
   t = t.replace(/\b(?:superpowers|caveman|cavecrew|pstack|poteto|pocock)\b/gi, '<plugin>');
   t = t.replace(/\bkern G(\d+[a-z]?)/g, 'guard G$1');

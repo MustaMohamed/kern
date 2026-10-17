@@ -228,6 +228,12 @@ test('an AskUserQuestion call is a stop', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('hide keeps a repo file path but no plugin file path, and hides the kern settings file name', () => {
+  const t = hide('cat /p/arms/kern-0.3.0/kernel/routes.md /p/arms/sp/skills/x/SKILL.md; cd /p/runs/p1/a && cat .claude/kern.local.yml scripts/probe; bash /p/arms/kern-0.3.0/scripts/probe --mutate /p/runs/p1/a/scripts/s.mjs:22',
+    ['/p/runs/p1/a'], ['/p/arms/kern-0.3.0', '/p/arms/sp']);
+  assert.equal(t, 'cat <plugin file> <plugin file>; cd <dir> && cat .claude/<settings>.yml scripts/probe; bash <plugin file> --mutate <dir>/scripts/s.mjs:22');
+});
+
 test('hide rewrites a kern guard name with or without its colon', () => {
   const t = hide("grep 'kern G0' hooks and \"kern G1\" and kern G16a: x", []);
   assert.doesNotMatch(t, TELLS);
