@@ -36,8 +36,9 @@
 5. **A fixture whose bug is caught by its own visible tests.** A diagnose or review fixture is useless if `npm test` already fails on it (unless the task says the visible test fails). Pinned in Tasks 3, 9 and 10.
 6. **Pilot tasks or prompts reworded after the fact.** `evals/pilot/tasks.json` and `evals/heldout-pilot.json` are pinned by their sha256. Pinned in Tasks 4 and 17.
 7. **Pilot tokens counted twice.** A session file repeats a message's usage on each content entry. Pinned in Task 4 (`metrics count usage once per message, subagents included`).
-8. **The fast path taken for a change that is not quick.** A user who calls a stored-data change quick and clear gets a one-line warning and a question, not an edit. Pinned in Task 11 (`workflow-define-fast-path-stored-data`) and graded in Task 15.
-9. **A spec or plan that quotes Markdown.** plan-check must read a tilde fence holding backticks, or a longer fence holding a shorter one, as one fence. Pinned in Task 14.
+8. **An attribution line the user's setting forbids.** autopilot's commit text and the PR body follow `commit.attribution`, as the commit skill does. Pinned in Task 15 (`autopilot commits and draft PRs follow commit.attribution`, `the PR body follows commit.attribution`) and graded by `finish-autopilot-draft` in the Task 16 exec-eval re-run.
+9. **The fast path taken for a change that is not quick.** A user who calls a stored-data change quick and clear gets a one-line warning and a question, not an edit. Pinned in Task 11 (`workflow-define-fast-path-stored-data`) and graded in Task 16.
+10. **A spec or plan that quotes Markdown.** plan-check must read a tilde fence holding backticks, or a longer fence holding a shorter one, as one fence. Pinned in Task 14.
 
 ---
 
@@ -61,10 +62,11 @@ Tasks run in this order. The numbers changed from the 2026-10-14 draft; the righ
 | 12 | plan records decisions, not code, and checks its proportion | 39 | new |
 | 13 | Re-audit fixes in self-review, diagnose, recall and dispatch | 49, 47, 45, 46 | new |
 | 14 | plan-check reads fences as CommonMark does; task-done's silent pass gets a test | 43, 42 | new |
-| 15 | The evidence runs (ask before each) | | 8 |
-| 16 | Coverage re-audit of M2 | all M2 rows | 9 |
-| 17 | Solo pilot, the pilot decision, and the real prompts frozen | pilot | 11 |
-| 18 | Release 0.4.0 and the switch-off decision | | 12 |
+| 15 | Commit attribution in autopilot and the PR body | 54 | new |
+| 16 | The evidence runs (ask before each) | | 8 |
+| 17 | Coverage re-audit of M2 | all M2 rows | 9 |
+| 18 | Solo pilot, the pilot decision, and the real prompts frozen | pilot | 11 |
+| 19 | Release 0.4.0 and the switch-off decision | | 12 |
 
 Gap 40 (hooks under an empty PATH) stays in M3, gap 44 (`/sharpen`) in M6, and gap 53 (a skill for non-software ideas) in M5.
 
@@ -84,14 +86,15 @@ Gap 40 (hooks under an empty PATH) stays in M3, gap 44 (`/sharpen`) in M6, and g
 | `skills/plan/**`, `tests/skills/plan.test.mjs` | 12 | plan records decisions |
 | `skills/self-review/**`, `skills/diagnose/SKILL.md`, `skills/recall/references/chat.md`, `skills/execute-plan/**`, `kernel/kernel.md`, `kernel/settings.md`, `NOTICE` | 13 | Smells, always-on signal, ketchup rules, subagent effort |
 | `scripts/plan-check`, `tests/scripts/plan-check.bats`, `tests/scripts/task-done.bats` | 14 | Fences, silent pass |
-| `evals/snapshots/*.json`, `CHANGELOG.md` | 15 | The evidence runs |
-| `docs/specs/coverage.md`, `tests/coverage.test.mjs` | 16 | Coverage re-audit of M2 |
-| `docs/pilot.md`, `evals/pilot/results.json`, `scripts/route-eval.mjs`, `evals/heldout-pilot.json`, `tests/route-eval-rows.test.mjs` | 17 | Solo pilot, decision, real prompts frozen |
-| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `docs/pilot.md` | 18 | Release 0.4.0 and the switch-off decision |
+| `skills/autopilot/SKILL.md`, `skills/finish-branch/references/pr-body.md`, `kernel/settings.md`, `evals/exec/bin/gh`, `scripts/lib/exec-grade.mjs`, `tests/skills-control.test.mjs`, `tests/skills/finish-branch.test.mjs`, `tests/exec-eval.test.mjs` | 15 | Commit attribution outside the commit skill |
+| `evals/snapshots/*.json`, `CHANGELOG.md` | 16 | The evidence runs |
+| `docs/specs/coverage.md`, `tests/coverage.test.mjs` | 17 | Coverage re-audit of M2 |
+| `docs/pilot.md`, `evals/pilot/results.json`, `scripts/route-eval.mjs`, `evals/heldout-pilot.json`, `tests/route-eval-rows.test.mjs` | 18 | Solo pilot, decision, real prompts frozen |
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `docs/pilot.md` | 19 | Release 0.4.0 and the switch-off decision |
 
-Checkpoints: after Tasks 3, 7, 10 and 14, run `scripts/ci-local` and stop if anything is red. Tasks 1, 7, 11, 12 and 13 change shipped files (`skills/`, `kernel/`, `modes/`, `hooks/`) and add an `Unreleased` CHANGELOG line each, as lint rule 14 asks; Task 14 adds one for plan-check's new behaviour; Tasks 2 to 6, 8 to 10 and 16 change none; Task 15's fixes do.
+Checkpoints: after Tasks 3, 7, 10 and 15, run `scripts/ci-local` and stop if anything is red. Tasks 1, 7, 11, 12, 13 and 15 change shipped files (`skills/`, `kernel/`, `modes/`, `hooks/`) and add an `Unreleased` CHANGELOG line each, as lint rule 14 asks; Task 14 adds one for plan-check's new behaviour; Tasks 2 to 6, 8 to 10 and 16 change none; Task 16's fixes do.
 
-Hours of agent time: Task 1 1, Task 2 1.5, Task 3 2, Task 4 2, Task 5 0.5, Task 6 1.5, Task 7 1, Task 8 1.5, Task 9 2.5, Task 10 1, Task 11 1.5, Task 12 0.5, Task 13 1.5, Task 14 0.5, Task 15 2 plus fixes, Task 16 2, Task 17 2, Task 18 0.5: about 25 hours, against the draft's 18 and the design's "about 18". Gaps 35 to 52 and the rewritten pilot are the overrun. The user's own pilot hours (two arms for each of three tasks, then the solo pilot) are not counted.
+Hours of agent time: Task 1 1, Task 2 1.5, Task 3 2, Task 4 2, Task 5 0.5, Task 6 1.5, Task 7 1, Task 8 1.5, Task 9 2.5, Task 10 1, Task 11 1.5, Task 12 0.5, Task 13 1.5, Task 14 0.5, Task 15 0.5, Task 16 2 plus fixes, Task 17 2, Task 18 2, Task 19 0.5: about 25.5 hours, against the draft's 18 and the design's "about 18". Gaps 35 to 52 and the rewritten pilot are the overrun. The user's own pilot hours (two arms for each of three tasks, then the solo pilot) are not counted.
 
 ---
 
@@ -401,7 +404,7 @@ git commit -m "M2: headless sessions start in the normal voice" -m "Coverage gap
 - Create: `scripts/lib/behave.mjs`, `scripts/behave.mjs`, `evals/behave/pressure.json`, `evals/behave/workflows.json`, `evals/fixtures/node-bug/{package.json,README.md,bin/cli.js,src/sum.js,test/sum.test.js}`, `evals/fixtures/approved-spec/_kern/specs/export.md`, `evals/fixtures/approved-plan/_kern/plans/export.md`, `evals/fixtures/two-modules/{src/tax.js,test/tax.test.js}`
 - Modify: `evals/cases/recall.json` (eval 2 gets a project layer)
 - Test: `tests/behave.test.mjs`
-- Create on a run: `evals/snapshots/behave-<model>-<date>.json` (Task 15)
+- Create on a run: `evals/snapshots/behave-<model>-<date>.json` (Task 16)
 
 **Interfaces:**
 - Consumes: M2a's `scripts/lib/claude-run.mjs` (`ISOLATION`, `PERMISSIONS`, `workspace`, `runClaude`, `toolUses`, `finalText`, `claudeVersion`); the `evals[]` arrays of `evals/cases/*.json` (M0 format: `id`, `kind`, `prompt`, `expected_output`, `expectations`, optional `files` naming layers under `evals/fixtures/`); M2a's `evals/fixtures/recall-ledger`.
@@ -926,7 +929,7 @@ git commit -m "M2: add the behavioural eval runner and pressure cases" -m "Cover
 **Files:**
 - Create: `scripts/lib/h2h.mjs`, `scripts/h2h.mjs`, `evals/h2h/arms.json`, `evals/h2h/diagnose/three-calls/{task.json,reference.patch,repo/package.json,repo/src/pricing.js,repo/src/cart.js,repo/test/cart.test.js,heldout/test/cart.heldout.test.js}`
 - Test: `tests/h2h.test.mjs`
-- Create on a run: `evals/results/h2h-<date>/` (raw runs and `key.json`, gitignored), `evals/snapshots/h2h-<model>-<date>.json` (Task 15)
+- Create on a run: `evals/results/h2h-<date>/` (raw runs and `key.json`, gitignored), `evals/snapshots/h2h-<model>-<date>.json` (Task 16)
 
 **Interfaces:**
 - Consumes: `claude-run.mjs` (M2a); `digest` and `tryRun` (Task 2); `scripts/floor-scan` (M2a Task 5); the upstream trees `.upstream/superpowers`, `.upstream/pstack/harness/pstack/claude-code` and `.upstream/pocock`, each with `.claude-plugin/plugin.json`. Measured: superpowers and pocock loaded with `--plugin-dir` in the 2026-10-14 planning sandbox; pstack 0.15.25's Claude Code tree passes `claude plugin validate` (2026-10-17), and `pstack/` itself has no `.claude-plugin/` (it is the Cursor tree), so the arm points at the harness tree. That it loads with `--plugin-dir` is inferred; the first h2h run checks it. pstack is the strongest source for planning, debugging and review in several rows (coverage gap 48), so goal 0 needs its arm.
@@ -1942,7 +1945,7 @@ The numbers are `RULE` in `scripts/lib/pilot.mjs`, pinned by `tests/pilot.test.m
 
 ## Solo pilot
 
-Two projects, one of them cds-app-rewrite, at least five real tasks each, covering define, plan, execute-plan, diagnose and finish-branch (design spec 13.2), with kern loaded by `claude --plugin-dir <kern repo>` at the commit Task 15 leaves. superpowers stays enabled at user level; each pilot project disables it locally, so only one router runs (design spec 13.1).
+Two projects, one of them cds-app-rewrite, at least five real tasks each, covering define, plan, execute-plan, diagnose and finish-branch (design spec 13.2), with kern loaded by `claude --plugin-dir <kern repo>` at the commit Task 16 leaves. superpowers stays enabled at user level; each pilot project disables it locally, so only one router runs (design spec 13.1).
 
 | Project | Path | Base commit | Settings | superpowers off locally | Started |
 |---|---|---|---|---|---|
@@ -2049,11 +2052,11 @@ git commit -m "M2: write the pilot protocol and its tools before any pilot run" 
 **Files:**
 - Create: `scripts/standing-cost.mjs`
 - Test: `tests/standing-cost.test.mjs`
-- Create on a run: `evals/snapshots/standing-cost-<date>.json` (Task 15)
+- Create on a run: `evals/snapshots/standing-cost-<date>.json` (Task 16)
 
 **Interfaces:**
 - Consumes: `ISOLATION`, `childEnv` and `claudeVersion` (M2a), `isMain` (`scripts/lib/is-main.mjs`); `claude -p --output-format json`, whose result carries `usage` with `input_tokens`, `cache_creation_input_tokens` and `cache_read_input_tokens` (inferred from the documented result shape; the script throws if `usage.input_tokens` is missing, so a changed shape fails loudly).
-- Produces: `inputTokens(usage)` (all input tokens the turn paid for, cached or not), `median(xs)`; `node scripts/standing-cost.mjs [--runs 3] [--model <m>] [--dry-run]`: one-word `claude -p hello` sessions in an empty temp dir, with and without `--plugin-dir <kern>`, alternating, each with the child environment M2a's runners use (`childEnv`) and a budget cap; prints `standing cost: <delta> input tokens (median of <n>; with kern <a>, without <b>)` and writes `evals/snapshots/standing-cost-<date>.json`. Design goal 4 puts M2's standing cost near 1.2k tokens; the gate (Task 15) is a delta of at most 1,300.
+- Produces: `inputTokens(usage)` (all input tokens the turn paid for, cached or not), `median(xs)`; `node scripts/standing-cost.mjs [--runs 3] [--model <m>] [--dry-run]`: one-word `claude -p hello` sessions in an empty temp dir, with and without `--plugin-dir <kern>`, alternating, each with the child environment M2a's runners use (`childEnv`) and a budget cap; prints `standing cost: <delta> input tokens (median of <n>; with kern <a>, without <b>)` and writes `evals/snapshots/standing-cost-<date>.json`. Design goal 4 puts M2's standing cost near 1.2k tokens; the gate (Task 16) is a delta of at most 1,300.
 
 This task is built in the pilot (Task 4): Step 0 runs it side by side from the main HEAD, and the kept arm's work replaces Steps 1 to 3, which say what both arms were asked to build. When the user skips the pilot for this task, skip Step 0 and run every step as written.
 
@@ -2168,7 +2171,7 @@ git commit -m "M2: measure the standing cost in tokens" -m "M2a measured charact
 **Files:**
 - Create: `scripts/lib/adherence.mjs`, `scripts/kernel-adherence.mjs`, `evals/adherence/cases.json`, `evals/fixtures/project-skill/_claude/skills/diagnose/SKILL.md`
 - Test: `tests/adherence.test.mjs`
-- Create on a run: `evals/snapshots/adherence-<variant>-<model>-<date>.json` (Task 15)
+- Create on a run: `evals/snapshots/adherence-<variant>-<model>-<date>.json` (Task 16)
 
 **Interfaces:**
 - Consumes: `claude-run.mjs` (M2a); `stage` (Task 2); `kernelRows`, `routeText` (`scripts/lib/kernel-rows.mjs`, M2a Task 30) and `loadModel` (`scripts/lib/lint-rules.mjs`); `evals/cases/row-<route>.json` (each row's first eval prompt); `kernel/routes.md` and the kernel's Routing sentence, verbatim as M2a Task 30 leaves them.
@@ -2176,7 +2179,7 @@ git commit -m "M2: measure the standing cost in tokens" -m "M2a measured charact
   - `scripts/lib/adherence.mjs`: `rowPrompt(root, route)`; `inlineRows(root) -> dir` (a plugin copy whose kernel table holds the routed rows and whose Routing rule no longer reads `kernel/routes.md`; throws if the kernel no longer has the sentence or table it edits); `TODO_TOOLS`; `readSteps(skillText)`; `normalize(s)`; `routeCall(u, route, root, routeFile)`; `routesCall(u, root)`; `grade(events, { route, routeFile, steps, root, kind, projectSkill }) -> { pass, reasons, items, hops }`.
   - Pass rule (stricter than the source, which only warns on a tool before the skill): the first tool call other than a todo tool reads the route (one hop), or reads `kernel/routes.md` and then the route (two hops); a read means a `Read` of `<plugin root>/<route file>` or a `Skill` call to `kern:<route>`, never a bare skill name or a file outside the plugin root; the first todo list (`TodoWrite`, or the `TaskCreate` subjects before the first edit) holds the route's `## Steps` in order, each item starting with the step's first 24 normalized chars or marked `skip:`. Negative: no kern route is read at all; with `projectSkill`, that project skill is used and kern's route for the job is not. Multi-turn: positive, and the route is read again for the second task.
   - `node scripts/kernel-adherence.mjs [--case <id>] [--runs 3] [--model <m>] [--variant routed|inline-rows] [--dry-run]`: a case passes on two of three runs; writes `evals/snapshots/adherence-<variant>-<model>-<date>.json` with `gating: true` only for the routed variant on a non-haiku model; exit 1 unless every case passes.
-  - `node scripts/kernel-adherence.mjs --transcript <session.jsonl> --route <route> [--root <plugin root>]`: grades one recorded session (the pilot's real prompts, Task 17); prints `PASS <route> (<n> hops)` or `FAIL <route> (...): <reasons>`.
+  - `node scripts/kernel-adherence.mjs --transcript <session.jsonl> --route <route> [--root <plugin root>]`: grades one recorded session (the pilot's real prompts, Task 18); prints `PASS <route> (<n> hops)` or `FAIL <route> (...): <reasons>`.
   - `evals/adherence/cases.json`: one positive case per kernel row, its prompt taken from `evals/cases/row-<route>.json` `evals[0]` so the two cannot drift; four negatives (a casual question, a user opt-out, `kern: off`, a project skill for the same job: design spec 11.3 fixtures 1 and 4); one multi-turn diagnose case.
 
 This task is built in the pilot (Task 4): Step 0 runs it side by side from the main HEAD, and the kept arm's work replaces Steps 1 to 4, which say what both arms were asked to build. When the user skips the pilot for this task, skip Step 0 and run every step as written.
@@ -3997,7 +4000,7 @@ git commit -m "M2: add the review fixture and pin the fixture set" -m "Six seede
 
 ### Task 11: define: fast path, build choices, size after the intent, anti-goals and prior art, builder check (coverage gaps 52, 36, 37, 38, 35)
 
-define's `SKILL.md` is 6,499 bytes against its 6,500-byte cap, so the new text goes into references and the steps are rewritten, not appended: the skip offer, the build choices, anti-goals and prior art go into `references/interview.md`; the builder questions go into the reviewer's brief (`references/spec-review.md`) and their sorting into a new `references/handover.md`; sizing moves after the restate. The new `SKILL.md` measures 6,488 bytes. Gap 52 is the user's decision of 2026-10-17: a task the user calls quick and clear skips the design and the spec approval; commits, pushes and every other ask stay gated. define names the reasons it would not take the fast path (a public API, persisted schema or authorization change; a missing fact that changes the build) and asks, so the user keeps the call. This task runs before Task 15, so the define pressure and workflow cases grade the new text.
+define's `SKILL.md` is 6,499 bytes against its 6,500-byte cap, so the new text goes into references and the steps are rewritten, not appended: the skip offer, the build choices, anti-goals and prior art go into `references/interview.md`; the builder questions go into the reviewer's brief (`references/spec-review.md`) and their sorting into a new `references/handover.md`; sizing moves after the restate. The new `SKILL.md` measures 6,488 bytes. Gap 52 is the user's decision of 2026-10-17: a task the user calls quick and clear skips the design and the spec approval; commits, pushes and every other ask stay gated. define names the reasons it would not take the fast path (a public API, persisted schema or authorization change; a missing fact that changes the build) and asks, so the user keeps the call. This task runs before Task 16, so the define pressure and workflow cases grade the new text.
 
 **Files:**
 - Modify: `skills/define/SKILL.md` (whole file), `skills/define/references/interview.md` (whole file), `skills/define/references/spec-review.md` (whole file), `skills/define/references/spec-template.md`, `skills/help/references/map.md`, `tests/skills/define.acceptance.md`, `evals/behave/pressure.json`, `evals/behave/workflows.json`, `docs/specs/2026-10-12-kern-m1-m2-skills.md` (C1), `docs/specs/2026-10-12-kern-design.md` (D-4), `CHANGELOG.md`
@@ -5197,14 +5200,228 @@ git commit -m "M2: plan-check reads code fences as CommonMark does" -m "Coverage
 
 ---
 
-### Task 15: The evidence runs (ask before each)
+### Task 15: Commit attribution in autopilot and the PR body (coverage gap 54)
+
+0.3.0's commit skill says `commit.attribution` governs trailers over Claude Code's attribution reminder (commit step 5, 2b8d82f), and G5 denies a trailer under `commit.attribution: none` and says to remove it. Two paths the commit skill does not cover still write that attribution, as the eval-fix implementer reported: autopilot's own text on how to commit (`skills/autopilot/SKILL.md:21-22`), which a model follows when it commits under autopilot without the commit skill, so its first commit carries the trailer and G5 denies it; and the PR body finish-branch writes (`skills/finish-branch/references/pr-body.md`), where Claude Code's reminder adds a "Generated with Claude Code" footer that no guard sees. The fix gives both the commit skill's rule, and the exec-eval stand-in for gh logs the body a PR would carry, so the `finish-autopilot-draft` case fails on such a footer. This task lands before Task 16, whose exec-eval re-run (required, since it changes finish-branch) grades it.
+
+**Files:**
+- Modify: `skills/autopilot/SKILL.md` ("What autopilot allows": the commit and draft-PR bullets), `skills/finish-branch/references/pr-body.md`, `kernel/settings.md` (row `commit.attribution`), `evals/exec/bin/gh` (`pr create` logs the body), `scripts/lib/exec-grade.mjs` (`ATTRIBUTION`; the `finish-autopilot-draft` grader), `CHANGELOG.md`
+- Test: `tests/skills-control.test.mjs`, `tests/skills/finish-branch.test.mjs`, `tests/exec-eval.test.mjs`
+
+**Interfaces:**
+- Consumes: `commit.attribution` (`none`, `allowed`; default `none`), G5's trailer check, the exec-eval gh stand-in's log (`KERN_EXEC_LOG`, one line per call) and `GRADERS`.
+- Produces: `ATTRIBUTION` in `scripts/lib/exec-grade.mjs` (`/Generated with \[?Claude Code|Co-Authored-By:/i`); a `body-file: <body, newlines as \n>` log line after each `pr create --body-file <file>` the stand-in sees; the `finish-autopilot-draft` reason `the PR body carries an attribution line under commit.attribution: none`. Settings row: `commit.attribution` governs commit trailers and a PR body's attribution footer, read by G5, commit, finish-branch and autopilot.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `tests/skills-control.test.mjs`:
+
+```js
+
+test('autopilot commits and draft PRs follow commit.attribution (coverage gap 54)', () => {
+  const { body } = read('autopilot');
+  for (const s of ["With `commit.attribution: none`, the default, write no Co-Authored-By or other attribution trailer, even when Claude Code's attribution reminder asks for one: G5 denies it.",
+    'With `commit.attribution: none`, the body has no attribution footer such as "Generated with Claude Code".']) assert.ok(body.includes(s), s);
+});
+```
+
+Append to `tests/skills/finish-branch.test.mjs`:
+
+```js
+
+test('the PR body follows commit.attribution (coverage gap 54)', () => {
+  assertContains(BODY, ["With `commit.attribution: none`, the default, the body carries no attribution footer such as \"Generated with Claude Code\" and no Co-Authored-By line, even when Claude Code's attribution reminder asks for one."]);
+  assertContains('kernel/settings.md', ["Governs commit trailers and a PR body's attribution footer | pre-tool-use G5, commit, finish-branch, autopilot |"]);
+});
+```
+
+Append to `tests/exec-eval.test.mjs`:
+
+```js
+
+test('a PR body with an attribution line fails its case under commit.attribution: none (coverage gap 54)', () => {
+  const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '1' });
+  const create = 'pr create --draft --title fix: sum --base main --body-file /w/.kern/tmp/pr-body.md';
+  assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: [create, 'body-file: ## Why\\nsum subtracted.'], git: g, branch: 'feat/sum' }).pass, true);
+  const r = GRADERS['finish-autopilot-draft']({ ghLog: [create, 'body-file: ## Why\\nsum subtracted.\\n\\nGenerated with [Claude Code](https://claude.com/claude-code)'], git: g, branch: 'feat/sum' });
+  assert.deepEqual(r.reasons, ['the PR body carries an attribution line under commit.attribution: none']);
+  assert.match('Co-Authored-By: Claude <noreply@anthropic.com>', ATTRIBUTION);
+});
+
+test('the gh stand-in logs the body of a PR it creates, on one line', () => {
+  const d = mkdtempSync(join(tmpdir(), 'gh-'));
+  spawnSync('git', ['init', '-q', d]);
+  spawnSync('git', ['-C', d, 'remote', 'add', 'origin', '/srv/origin.git']);
+  writeFileSync(join(d, 'body.md'), '## Why\nsum subtracted.\n');
+  const log = join(d, 'gh.log');
+  const r = spawnSync('bash', [fileURLToPath(new URL('../evals/exec/bin/gh', import.meta.url)), 'pr', 'create', '--draft', '--title', 't', '--body-file', 'body.md'],
+    { cwd: d, env: { ...process.env, KERN_EXEC_LOG: log }, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(readFileSync(log, 'utf8').split('\n').filter(Boolean), ['pr create --draft --title t --body-file body.md', 'body-file: ## Why\\nsum subtracted.']);
+});
+```
+
+In `tests/exec-eval.test.mjs`, replace:
+
+```js
+import { GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
+```
+
+with:
+
+```js
+import { ATTRIBUTION, GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `node --test tests/skills-control.test.mjs tests/skills/finish-branch.test.mjs tests/exec-eval.test.mjs`
+Expected: `tests/exec-eval.test.mjs` fails to load (`does not provide an export named 'ATTRIBUTION'`); the two new skill tests fail on their first missing clause; every other test passes.
+
+- [ ] **Step 3: Give autopilot and the PR body the attribution rule**
+
+In `skills/autopilot/SKILL.md`, replace:
+
+```markdown
+when the message passes the convention and attribution checks. kern denies `--amend`, `-a`, `--no-verify`, a pathspec and `git add -A`.
+```
+
+with:
+
+```markdown
+when the message passes the convention and attribution checks. kern denies `--amend`, `-a`, `--no-verify`, a pathspec and `git add -A`. With `commit.attribution: none`, the default, write no Co-Authored-By or other attribution trailer, even when Claude Code's attribution reminder asks for one: G5 denies it.
+```
+
+In `skills/autopilot/SKILL.md`, replace:
+
+```markdown
+kern denies it when the head already has an open, merged or closed PR.
+```
+
+with:
+
+```markdown
+kern denies it when the head already has an open, merged or closed PR. With `commit.attribution: none`, the body has no attribution footer such as "Generated with Claude Code".
+```
+
+In `skills/finish-branch/references/pr-body.md`, replace:
+
+```markdown
+Keep the whole body under about 40 lines; detail goes in a linked file, not the body.
+```
+
+with:
+
+```markdown
+Keep the whole body under about 40 lines; detail goes in a linked file, not the body. With `commit.attribution: none`, the default, the body carries no attribution footer such as "Generated with Claude Code" and no Co-Authored-By line, even when Claude Code's attribution reminder asks for one.
+```
+
+In `kernel/settings.md`, replace:
+
+```markdown
+| `commit.attribution` | `none` | `none`, `allowed` | pre-tool-use G5, commit |
+```
+
+with:
+
+```markdown
+| `commit.attribution` | `none` | `none`, `allowed`. Governs commit trailers and a PR body's attribution footer | pre-tool-use G5, commit, finish-branch, autopilot |
+```
+
+- [ ] **Step 4: Log the PR body in the gh stand-in, and grade it**
+
+In `evals/exec/bin/gh`, replace:
+
+```bash
+  "pr create") pr_url 8 || exit 1; echo ;;
+```
+
+with:
+
+```bash
+  "pr create")
+    # The body the PR would carry, one line, so a grader can check it (commit.attribution, gap 54).
+    prev=""
+    for a in "$@"; do
+      if [ "$prev" = --body-file ] && [ -f "$a" ]; then
+        body=$(cat "$a")
+        printf 'body-file: %s\n' "${body//$'\n'/\\n}" >>"$KERN_EXEC_LOG"
+      fi
+      prev=$a
+    done
+    pr_url 8 || exit 1
+    echo
+    ;;
+```
+
+In `scripts/lib/exec-grade.mjs`, replace:
+
+```js
+// ctx: { events, ghLog: string[], git: (...args) => string, branch }
+```
+
+with:
+
+```js
+// An attribution line the default commit.attribution: none forbids, in a commit or a PR body: Claude Code's
+// "Generated with Claude Code" footer or a Co-Authored-By trailer.
+export const ATTRIBUTION = /Generated with \[?Claude Code|Co-Authored-By:/i;
+
+// ctx: { events, ghLog: string[], git: (...args) => string, branch }
+```
+
+In `scripts/lib/exec-grade.mjs`, replace:
+
+```js
+      [!ghLog.some((l) => l.startsWith('pr ready')), 'gh pr ready ran'],
+      ...pushedTip(git, branch, 1),
+```
+
+with:
+
+```js
+      [!ghLog.some((l) => l.startsWith('pr ready')), 'gh pr ready ran'],
+      [!ghLog.some((l) => l.startsWith('body-file: ') && ATTRIBUTION.test(l)), 'the PR body carries an attribution line under commit.attribution: none'],
+      ...pushedTip(git, branch, 1),
+```
+
+- [ ] **Step 5: Run the tests, lint and shellcheck**
+
+In `CHANGELOG.md`, replace:
+
+```markdown
+## [Unreleased]
+
+```
+
+with:
+
+```markdown
+## [Unreleased]
+
+- autopilot and finish-branch follow `commit.attribution` as the commit skill does: with `none`, the default, autopilot writes no Co-Authored-By or other attribution trailer, which G5 would deny, and a PR body carries no "Generated with Claude Code" footer, even when Claude Code's attribution reminder asks for one.
+```
+
+Run: `node --test tests/skills-control.test.mjs tests/skills/finish-branch.test.mjs tests/exec-eval.test.mjs && node scripts/lint-skills.mjs && shellcheck evals/exec/bin/gh`
+Expected: `# fail 0` (87 tests in the three files); `lint: clean`; shellcheck prints nothing. The stand-in's test also passes on Ubuntu (bash 5.2, measured in `kern-ci:task17`).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -- skills/autopilot/SKILL.md skills/finish-branch/references/pr-body.md kernel/settings.md evals/exec/bin/gh scripts/lib/exec-grade.mjs CHANGELOG.md tests/skills-control.test.mjs tests/skills/finish-branch.test.mjs tests/exec-eval.test.mjs
+git commit -m "M2: autopilot and the PR body follow commit.attribution" -m "Coverage gap 54: autopilot's commit text and finish-branch's PR body now apply the commit skill's rule, so neither adds the trailer G5 denies or the Claude Code footer the default forbids; the exec-eval gh stand-in logs the PR body, and finish-autopilot-draft fails on an attribution line."
+```
+
+---
+
+### Task 16: The evidence runs (ask before each)
 
 **Files:**
 - Create: `evals/snapshots/adherence-routed-<model>-<date>.json`, `evals/snapshots/adherence-inline-rows-<model>-<date>.json`, `evals/snapshots/adherence-routed-haiku-<version>-<date>.json`, `evals/snapshots/behave-<model>-<date>.json`, `evals/snapshots/h2h-<model>-<date>.json`, `evals/snapshots/standing-cost-<date>.json`, and `evals/snapshots/exec-<date>.json` when M2a's is stale
 - Modify: `CHANGELOG.md`; any skill, kernel or hook file a failed gate shows is wrong, each through a task added under "Tasks added during execution"
 
 **Interfaces:**
-- Consumes: Tasks 1 to 14, so the cases grade define, plan, self-review, diagnose, recall and dispatch as the 2026-10-17 re-audit fixed them; `scripts/fetch-upstream` (M0, with the 2026-10-17 pins); `scripts/exec-eval.mjs` (M2a Task 26).
+- Consumes: Tasks 1 to 15, so the cases grade define, plan, self-review, diagnose, recall and dispatch as the 2026-10-17 re-audit fixed them; `scripts/fetch-upstream` (M0, with the 2026-10-17 pins); `scripts/exec-eval.mjs` (M2a Task 26).
 - Produces: committed snapshots for every gate, a CHANGELOG line with the numbers, and either a pass on every gate or a fix task per failure.
 
 Gates, fixed before any run (design spec 14 row M2b, and the review rulings):
@@ -5269,7 +5486,7 @@ git commit -m "M2: record the M2b evidence runs" -m "<the gate results, the F3 A
 
 ---
 
-### Task 16: Coverage re-audit of M2
+### Task 17: Coverage re-audit of M2
 
 **Files:**
 - Modify: `docs/specs/coverage.md` (a `## M2 re-audit` section, the gaps table's homes, the counts table)
@@ -5377,7 +5594,7 @@ git commit -m "M2: re-audit coverage for M2 with a pinning test per row" -m "Cov
 
 ---
 
-### Task 17: Solo pilot, the pilot decision, and the real prompts frozen
+### Task 18: Solo pilot, the pilot decision, and the real prompts frozen
 
 The side-by-side ran inside Tasks 5 to 7, each task's scores and metrics in `evals/pilot/results.json`. This task runs the solo pilot (design spec 13.2), decides both parts by the rules Task 4 fixed, and freezes the pilot's real first prompts beside the synthetic routing prompts.
 
@@ -5549,13 +5766,13 @@ git commit -m "M2: record the pilot and freeze its prompts" -m "<the decision li
 
 ---
 
-### Task 18: Release 0.4.0 and the switch-off decision
+### Task 19: Release 0.4.0 and the switch-off decision
 
 **Files:**
 - Modify: `CHANGELOG.md`, `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (through `scripts/release.mjs`), `docs/pilot.md` (switch-off record)
 
 **Interfaces:**
-- Consumes: every gate of Task 15 passed (or a fix task closed it), Task 16's test green, Task 17's decision.
+- Consumes: every gate of Task 16 passed (or a fix task closed it), Task 17's test green, Task 18's decision.
 - Produces: release 0.4.0; the switch-off steps of design spec 13.4, run only on the user's yes.
 
 - [ ] **Step 1: Check the acceptance of design spec 14, row M2b**
@@ -5583,14 +5800,14 @@ Show the user `docs/pilot.md` "Switch-off" and ask whether to run it now. Run ea
 
 ## Self-review
 
-Pre-flight of 2026-10-17. A scratch clone of `main` at 30dc03e, with this commit's doc changes applied, built every task from this file's text: a script applied each `` `path`: `` block, each `Append to` block and each `In <path>, replace:` pair verbatim, then every `Run:` ran and its output was compared with its `Expected:`. macOS `/bin/bash` 3.2.57 and BSD awk ran everything; `kern-ci:task17` (Ubuntu, bash 5.2, mawk 1.3.4, git 2.43, node 22.23.3) ran the changed bats suites and the new node test files again. `scripts/ci-local` passed at the checkpoints after Tasks 3, 10 and 14. In the image, with Tasks 1 to 14 applied, the node suite passed 320 tests (1 skipped: the h2h dry run, since the container cannot follow the `.upstream` symlink), and of 257 script and 650 hook bats tests the same 5 failed as on 0.3.0 in that image: 4 permission tests that root cannot fail (the image runs as uid 0) and the 10 KB timing test, which misses its 2 s bound under emulation; CI's Ubuntu job runs them as a normal user. No step that calls a model ran: every runner ran with `--dry-run` only, and no `claude -p` was started.
+Pre-flight of 2026-10-17. A scratch clone of `main` at 30dc03e, with this commit's doc changes applied, built every task from this file's text: a script applied each `` `path`: `` block, each `Append to` block and each `In <path>, replace:` pair verbatim, then every `Run:` ran and its output was compared with its `Expected:`. macOS `/bin/bash` 3.2.57 and BSD awk ran everything; `kern-ci:task17` (Ubuntu, bash 5.2, mawk 1.3.4, git 2.43, node 22.23.3) ran the changed bats suites and the new node test files again. `scripts/ci-local` passed at the checkpoints after Tasks 3, 10, 14 and 15. In the image, with Tasks 1 to 15 applied, the node suite passed 320 tests (1 skipped: the h2h dry run, since the container cannot follow the `.upstream` symlink), and of 257 script and 650 hook bats tests the same 5 failed as on 0.3.0 in that image: 4 permission tests that root cannot fail (the image runs as uid 0) and the 10 KB timing test, which misses its 2 s bound under emulation; CI's Ubuntu job runs them as a normal user. No step that calls a model ran: every runner ran with `--dry-run` only, and no `claude -p` was started.
 
-- Gaps homed in M2b map to tasks and tests: 51 and 50 to Task 1; 13 and 41 to Task 2; 48 to Task 3; 10 to Task 6; 52, 36, 37, 38 and 35 to Task 11; 39 to Task 12; 49, 47, 45 and 46 to Task 13; 43 and 42 to Task 14; each row of `docs/plans/2026-10-14-kern-m2-traceability.md`, "M2b additions of 2026-10-17", names the test. Task 16's test fails until every M2b gap has a re-audit row and a shipped home.
+- Gaps homed in M2b map to tasks and tests: 51 and 50 to Task 1; 13 and 41 to Task 2; 48 to Task 3; 10 to Task 6; 52, 36, 37, 38 and 35 to Task 11; 39 to Task 12; 49, 47, 45 and 46 to Task 13; 43 and 42 to Task 14; 54, the commit-attribution leftovers the 0.3.0 eval fix reported, to Task 15; each row of `docs/plans/2026-10-14-kern-m2-traceability.md`, "M2b additions of 2026-10-17", names the test. Task 17's test fails until every M2b gap has a re-audit row and a shipped home.
 - Red before green, measured: each new test file failed to load before its module existed, or failed on the named assertion (Tasks 1, 11, 12, 13 and 14 list the failures in their Step 2). Tests that pin built behaviour were shown able to fail: Task 14's task-done case with ` || true` removed, Task 3's fixture with `pricing.js` edited, Task 3's redaction test with the draft's `redact`.
 - Byte caps hold without raising one, except `spec-review.md` (1,400 to 1,600, Task 11): define 6,488 of 6,500, plan 6,497 of 6,500, self-review 7,000 of 7,000, diagnose 6,492 of 6,500, execute-plan 12,339 of 12,400. lint stays clean and prints no rule 7 warning after Task 13 (the kernel's Paths line pays for the effort sentence).
 - Measured while planning: headless runs persisted on this Mac record `"entrypoint":"sdk-cli"` (82 entries), interactive ones `cli` or `claude-desktop`; pstack 0.15.25's `harness/pstack/claude-code` passes `claude plugin validate`; the eval config directory holds no `settings.json` and no plugin; the installed current flow is superpowers 7.0.0 (bb92a77) and caveman 3.2.0 (2e08b91); a session file repeats a message's usage on each content entry and keeps subagents under `<id>/subagents/`; under autopilot 0.3.0's G00 denies `echo $(( $(date +%s) - 5 ))`, `x=$(( (3 + 4) * 2 ))` and `n=$(( $(wc -l < README.md) + 1 ))`, and G1 denies `echo $( (git push --force origin main) )`.
 - Draft findings fixed in this text (the draft pre-flight's report is in the session notes): the route-eval change kept M2a's `loadHeldout` and `modelGraded` (it was a syntax error, then a crash); blank evidence is an invalid run; every runner treats a cut-off run as invalid; the pstack arm points at pstack's Claude Code tree; redaction replaces the longest plugin path first and names `mattpocock-skills`; `--arms` filters before the upstream check; standing-cost uses the runners' child environment, a budget cap and `isMain`; the coverage test accepts "shipped in 0.3.0" and the re-audit uses the 2026-10-17 audit; the draft's define-then-plan workflow case, which could not pass on its own terms, is now a one-turn spec case; whole-file blocks that hold a code fence use a longer fence.
-- Not run, and why: Task 4 Step 6 and Tasks 5 to 7 Step 0 (the user agrees the protocol and drives the pilot arms); Task 7 Steps 2 and 3 (they apply an arm's fix; the acceptance test was seen failing on 0.3.0 for the misread); Task 15 Steps 2 to 7 and every runner without `--dry-run` (model calls); `scripts/fetch-upstream` (network, and in the scratch clone it would rewrite the repo's own `.upstream`); Task 16 Steps 3 to 5 (the re-audit itself; Steps 1 and 2 ran); Task 17 Steps 1 to 3, 6 and 7 (the pilot; Steps 4 and 5 ran with a two-entry sample file); Task 18 (the release). Inferred, not measured: that Claude Code passes `CLAUDE_CODE_ENTRYPOINT=sdk-cli` to a `claude -p` session's hooks, that pstack's tree loads with `--plugin-dir`, and the shape of a guard deny in a session file; the first paid runs and the pilot check each.
+- Not run, and why: Task 4 Step 6 and Tasks 5 to 7 Step 0 (the user agrees the protocol and drives the pilot arms); Task 7 Steps 2 and 3 (they apply an arm's fix; the acceptance test was seen failing on 0.3.0 for the misread); Task 16 Steps 2 to 7 and every runner without `--dry-run` (model calls); `scripts/fetch-upstream` (network, and in the scratch clone it would rewrite the repo's own `.upstream`); Task 17 Steps 3 to 5 (the re-audit itself; Steps 1 and 2 ran); Task 18 Steps 1 to 3, 6 and 7 (the pilot; Steps 4 and 5 ran with a two-entry sample file); Task 19 (the release). Inferred, not measured: that Claude Code passes `CLAUDE_CODE_ENTRYPOINT=sdk-cli` to a `claude -p` session's hooks, that pstack's tree loads with `--plugin-dir`, and the shape of a guard deny in a session file; the first paid runs and the pilot check each.
 
 ## Tasks added during execution
 

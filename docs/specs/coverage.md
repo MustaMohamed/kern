@@ -65,11 +65,11 @@ The audit of 2026-10-17 re-measured 274 mechanisms against kern 0.3.0 (eee601d) 
 | 32 | Redaction before project evidence enters the kern repo; lint rule 8 reads a proprietary-terms list | superpowers | M6 | S |
 | 33 | Voice evals with a no-prompt arm and a concise-prompt control, fidelity checks and token stats | caveman | M6 | M |
 | 34 | Repeated tool sequences across sessions as a retro signal | caveman | M6 | M |
-| 35 | define has no builder check: nothing asks what a builder would still need, sorts the answers into the user's questions and kern's own calls, or lists those calls at handover | superpowers 7.0.0 | M2b Task 11, before its workflow and pressure cases run in Task 15 | S |
+| 35 | define has no builder check: nothing asks what a builder would still need, sorts the answers into the user's questions and kern's own calls, or lists those calls at handover | superpowers 7.0.0 | M2b Task 11, before its workflow and pressure cases run in Task 16 | S |
 | 36 | define never asks which of platform, language, libraries and medium the user owns, never states its defaults as its own calls, and offers no skip of the interview | superpowers 7.0.0 | M2b Task 11 | S |
 | 37 | define sizes the work before it understands the intent, and names the class in process words | superpowers 7.0.0 | M2b Task 11 | S |
 | 38 | define's interview and spec have no anti-goals and no prior art | superpowers 7.0.0 | M2b Task 11 | S |
-| 39 | plan asks for full code in each step and has no proportion check against the spec | superpowers 6.4.2 | M2b Task 12, measured by the planning head-to-head in Task 15 | S |
+| 39 | plan asks for full code in each step and has no proportion check against the spec | superpowers 6.4.2 | M2b Task 12, measured by the planning head-to-head in Task 16 | S |
 | 40 | Hooks do not survive an empty or broken PATH, and the misleading "kern did not load" message hides the real cause | superpowers 7.0.0 | M3, with the M1 parser deferrals | S |
 | 41 | The M2b behaviour grader keeps blank evidence instead of treating it as an invalid run | addy 0.6.13 | M2b Task 2 (`parseVerdict`) | S |
 | 42 | No `task-done.bats` case covers a passing command that prints nothing | superpowers 7.0.0 | M2b Task 14 | S |
@@ -84,6 +84,9 @@ The audit of 2026-10-17 re-measured 274 mechanisms against kern 0.3.0 (eee601d) 
 | 51 | A headless session (`sdk-*` entrypoint) starts in the terse voice when the user default is terse, which reaches exec-eval and M2b runs | caveman 4.0.1 | M2b Task 1, before any runner spends tokens | S |
 | 52 | define has no fast path: a task the user calls quick and clear still gets a design and a quoted approval. User decision 2026-10-17: such a task skips design and spec approval; commits, pushes and every other floor stay gated. The skills spec C1 gate and D-4's wording change with it | superpowers 7.0.0 | M2b Task 11 | S |
 | 53 | No skill shapes a non-software idea (a talk, a business, a renovation). User decision 2026-10-17: a separate skill, not part of define, which stays software-only (D-2) | superpowers 7.0.0 | M5, with the other Define-group skills, or earlier if wanted | M |
+| 54 | autopilot's own commit text and the PR body finish-branch writes do not apply `commit.attribution`, so an autopilot commit can carry the trailer G5 then denies, and a PR body can carry the Claude Code footer the default `none` forbids. Reported by the 0.3.0 eval-fix implementer; the commit skill's step 5 covers only its own path | kern | M2b Task 15 | S |
+
+Gap 54 comes from kern's own 0.3.0 eval fixes, not from a source audit, so the counts table above does not count it.
 
 Gaps 35 to 38 all edit define, whose `SKILL.md` is 6,499 bytes against a 6,500-byte cap. The new text goes into references or replaces step text, so together they are closer to M than four S items. Gap 39 meets the same cap in plan.
 
