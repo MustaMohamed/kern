@@ -1,0 +1,17 @@
+[
+  {"id": "row-define", "kind": "positive", "route": "define", "files": ["node-bug"]},
+  {"id": "row-plan", "kind": "positive", "route": "plan", "files": ["node-bug", "approved-spec"]},
+  {"id": "row-execute-plan", "kind": "positive", "route": "execute-plan", "files": ["node-bug", "approved-spec", "approved-plan"]},
+  {"id": "row-implement", "kind": "positive", "route": "implement", "files": ["node-bug"]},
+  {"id": "row-diagnose", "kind": "positive", "route": "diagnose", "files": ["node-bug"]},
+  {"id": "row-prove-it", "kind": "positive", "route": "prove-it", "files": ["node-bug"], "origin": true, "branch": "fix-sum", "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"]},
+  {"id": "row-self-review", "kind": "positive", "route": "self-review", "files": ["node-bug"], "origin": true, "branch": "fix-sum", "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"]},
+  {"id": "row-recall", "kind": "positive", "route": "recall", "files": ["node-bug", "recall-ledger"]},
+  {"id": "row-technical-writing", "kind": "positive", "route": "technical-writing", "files": ["node-bug"], "origin": true, "branch": "fix-sum", "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"]},
+  {"id": "row-context", "kind": "positive", "route": "context", "route_file": "kernel/context.md", "files": ["node-bug"]},
+  {"id": "neg-casual", "kind": "negative", "route": null, "files": ["node-bug"], "prompts": ["What does git rebase --onto do, in one sentence?"]},
+  {"id": "neg-opt-out", "kind": "negative", "route": null, "files": ["node-bug"], "prompts": ["Without any workflow or skill, just tell me what sum(2, 3) returns in src/sum.js."]},
+  {"id": "neg-kern-off", "kind": "negative", "route": null, "files": ["node-bug"], "settings": "kern: off", "prompts": ["npm test fails on the sum test. Find out why and fix it."]},
+  {"id": "neg-project-skill", "kind": "negative", "route": null, "files": ["node-bug", "project-skill"], "project_skill": "diagnose", "prompts": ["npm test fails on the sum test. Find out why and fix it."]},
+  {"id": "multi-diagnose", "kind": "multi-turn", "route": "diagnose", "files": ["node-bug"], "prompts": ["npm test fails on the sum test. Find out why and fix it.", "The README example also prints the wrong total. Find out why."]}
+]
