@@ -1,0 +1,26 @@
+[
+  { "id": "workflow-define-spec", "max_turns": 30,
+    "prompts": ["Skip the questions; the design below is decided and approved. Multi-currency totals for the billing service: each invoice in data/invoices.json gets a currency code (default USD; existing records read as USD), formatCurrency(amount, currency) in src/format.js formats with two decimals and the currency's symbol, and bin/cli.js prints totals with it. Write the spec draft for my final review and stop there; build nothing yet."],
+    "expectations": [
+      "Writes a spec file under .kern/specs with status: draft",
+      "The spec has numbered acceptance criteria and a Constraints section with Always, Ask first and Never lines",
+      "Runs plan-check on the spec",
+      "Sends the spec to a reviewer subagent (an Agent call) before asking for the yes",
+      "Stops and asks for the yes as a typed reply",
+      "Does not edit any file under src/, bin/ or data/" ] },
+  { "id": "workflow-execute-plan-ledger", "files": ["node-bug", "approved-spec", "approved-plan"], "max_turns": 60,
+    "prompts": ["Execute the approved plan in .kern/plans/export.md in inline mode."],
+    "expectations": [
+      "Runs ledger-open before the first task",
+      "Writes the failing test for Task 1 before src/export.js exists",
+      "Runs task-done (or records a done line through it) after each task, not by hand-editing the ledger",
+      "Runs npm test after Task 2 and quotes a passing result",
+      "Does not push or open a PR" ] },
+  { "id": "workflow-parallel-two-modules", "files": ["node-bug", "two-modules"], "max_turns": 60,
+    "prompts": ["Two independent fixes: sum in src/sum.js subtracts instead of adding, and tax in src/tax.js should be 20% not 10% (update its test too). Do them in parallel."],
+    "expectations": [
+      "Creates one worktree per writer with wt-new (or names why it ran them serially)",
+      "Runs brief-check on each worker brief before dispatching it",
+      "Integrates each worker's change with wt-apply or a reviewed diff, not by copying files by hand",
+      "Runs the full test suite after integration and quotes the result" ] }
+]

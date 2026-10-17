@@ -27,7 +27,7 @@
     {
       "id": 2,
       "kind": "execution",
-      "files": ["recall-ledger"],
+      "files": ["node-bug", "recall-ledger"],
       "prompt": "Where did I leave off on the export plan?",
       "expected_output": "Reads the ledger, sees Tasks 1 and 2 complete and Task 3 started but not complete, and names Task 3 as the next move.",
       "expectations": [
