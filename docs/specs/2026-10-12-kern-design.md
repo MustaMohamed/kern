@@ -573,7 +573,7 @@ Signal, then cited evidence, then kind (one-off, missed trigger, wrong shape, me
 
 1. Through M2, superpowers stays enabled. kern is tested with `--plugin-dir` in sessions where superpowers is disabled for that project (`"superpowers@claude-plugins-official": false` in `.claude/settings.local.json`), so only one router runs.
 2. Pilot, in M2b, on two projects (one of them cds-app-rewrite) for at least five real tasks each, covering define, plan, execute, diagnose and finish-branch.
-3. Pass criteria: the behavioural fixtures pass; no guard false negative in the pilot; the user judges output quality at least equal to superpowers, including side-by-side runs of the same tasks with each.
+3. Pass criteria: the behavioural fixtures pass; no guard false negative in the pilot; and the side-by-side passes the rule `docs/pilot.md` fixes before its first run. The side-by-side runs the same real tasks twice from one base commit, once with kern 0.3.0 and once with superpowers 7.0.0 plus caveman, both on the personal eval account with only their own plugins. A blind Opus review that never sees plugin names or paths judges the result; the session files give the process (stops for the user, guard asks and denies, safety slips) and the cost (tokens, wall time).
 4. Then disable superpowers at user level and uninstall caveman. Move the user's own `~/.claude/skills/recall`, `unslop` and `no-comments` and `~/.claude/agents/comment-sicko.md` aside once kern ships their replacements (recall and unslop at M2, no-comments and comment-sicko at M3), so two descriptions do not compete.
 5. Rollback: re-enable superpowers in `~/.claude/settings.json`; disable kern with `kern: off` or by uninstalling.
 
