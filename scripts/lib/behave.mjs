@@ -6,7 +6,7 @@
 // Grader shape adapted from superpowers tests/claude-code (MIT; ideas only).
 import { cpSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { finalText, runClaude, runProblem, toolUses } from './claude-run.mjs';
 
 // stage(root, files): one directory holding the fixture layers in order. A single layer is used in place;
@@ -44,15 +44,33 @@ export function loadCases(root) {
   return out;
 }
 
-// digest(events): what the grader sees. Tool calls one per line, then the final reply. No system prompt,
-// no skill text, so the grader judges behaviour, not the instructions.
+// digest(events): what the grader sees. Tool calls one per line (a Write's content or an Edit's new_string
+// indented under its line, cut at 800 characters), then the final reply. No system prompt, no skill text,
+// so the grader judges behaviour, not the instructions. Over max, only the tool-call section is cut.
 export function digest(events, max = 24000) {
   const calls = toolUses(events).map((u, i) => {
     const arg = u.input.file_path || u.input.command || u.input.skill || u.input.subject || u.input.description || JSON.stringify(u.input).slice(0, 200);
-    return `${i + 1}. ${u.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 300)}`;
+    let line = `${i + 1}. ${u.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 300)}`;
+    const body = u.name === 'Write' ? u.input.content : u.name === 'Edit' ? u.input.new_string : '';
+    if (typeof body === 'string' && body) {
+      const cut = body.length > 800 ? `${body.slice(0, 800)}[cut]` : body;
+      line += `\n${cut.split('\n').map((l) => `    ${l}`).join('\n')}`;
+    }
+    return line;
   });
-  const text = `Tool calls:\n${calls.join('\n') || '(none)'}\n\nFinal reply:\n${finalText(events)}`;
-  return text.length > max ? `${text.slice(0, max)}\n[digest truncated]` : text;
+  const head = `Tool calls:\n${calls.join('\n') || '(none)'}`;
+  const tail = `Final reply:\n${finalText(events)}`;
+  const body = head.length > max ? `${head.slice(0, max)}\n[digest truncated]` : head;
+  return `${body}\n\n${tail}`;
+}
+
+// pluginCopy(root): a copy of the plugin in <tmp>/<random>/kern without the answer keys (evals, tests, docs)
+// or repo internals, so a run cannot read them. The caller removes it with rmSync(dirname(dir), { recursive: true, force: true }).
+export function pluginCopy(root) {
+  const dir = join(mkdtempSync(join(tmpdir(), 'p-')), 'kern');
+  const skip = new Set(['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers']);
+  cpSync(root, dir, { recursive: true, filter: (src) => src === root || !skip.has(relative(root, src).split(sep)[0]) });
+  return dir;
 }
 
 export function graderPrompt(expectations, dig) {

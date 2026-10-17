@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { caseResult, digest, graderPrompt, loadCases, parseVerdict, stage, tryRun } from '../scripts/lib/behave.mjs';
+import { caseResult, digest, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError } from '../scripts/lib/claude-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -84,4 +85,29 @@ test('the runner lists its cases in dry-run mode without calling claude', () => 
   const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^pressure-prove-it-deadline: 1 turn\(s\) on node-bug, 3 expectation\(s\), pressure: time\+authority$/m);
+});
+
+const call = (name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } });
+
+test('the digest shows what a Write or Edit wrote, cut at 800 characters', () => {
+  const d = digest([call('Write', { file_path: '.kern/specs/x.md', content: 'status: draft' }), call('Edit', { file_path: 'a.js', new_string: 'x'.repeat(2000) })]);
+  assert.match(d, /1\. Write: \.kern\/specs\/x\.md\n {4}status: draft\n2\. Edit: a\.js\n {4}x{800}\[cut\]\n/);
+  assert.ok(!d.includes('x'.repeat(801)));
+});
+
+test('a long digest cuts the tool calls, never the final reply', () => {
+  const ev = Array.from({ length: 400 }, (_, i) => call('Bash', { command: `echo ${i} ${'y'.repeat(250)}` }));
+  ev.push({ type: 'result', result: 'the end: all done' });
+  const d = digest(ev, 24000);
+  assert.ok(d.length <= 24000 + 'Final reply:\nthe end: all done'.length + 40);
+  assert.ok(d.endsWith('Final reply:\nthe end: all done'));
+  assert.match(d, /\[digest truncated\]/);
+});
+
+test('the plugin copy keeps the plugin and leaves out answer keys', () => {
+  const d = pluginCopy(ROOT);
+  try {
+    for (const p of ['skills', 'kernel', 'hooks', 'scripts', '.claude-plugin/plugin.json']) assert.ok(existsSync(join(d, p)), p);
+    for (const p of ['evals', 'tests', 'docs', '.git']) assert.ok(!existsSync(join(d, p)), p);
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); }
 });
