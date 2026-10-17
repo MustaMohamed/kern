@@ -23,9 +23,11 @@ make_repo() {
   git -C "$dir" remote set-head origin main >/dev/null
 }
 
-# kern_env DIR: isolates HOME and plugin data under the test tmpdir and points CWD at DIR.
+# kern_env DIR: isolates HOME and plugin data under the test tmpdir and points CWD at DIR. A
+# CLAUDE_CONFIG_DIR from the caller would point kern at a real config folder, so it goes.
 kern_env() {
   export HOME="$BATS_TEST_TMPDIR/home"
+  unset CLAUDE_CONFIG_DIR
   export CLAUDE_PLUGIN_DATA="$BATS_TEST_TMPDIR/data"
   export CLAUDE_PLUGIN_ROOT
   CLAUDE_PLUGIN_ROOT="$(kern_root)"

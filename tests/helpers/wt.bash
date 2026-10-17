@@ -1,11 +1,12 @@
 # tests/helpers/wt.bash
-# Fixture repos for the worktree and check-script tests. Each test gets its own HOME,
-# so no user setting or global git config leaks in.
+# Fixture repos for the worktree and check-script tests. Each test gets its own HOME and no
+# CLAUDE_CONFIG_DIR, so no user setting, Claude Code record or global git config leaks in.
 KERN_ROOT=$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)
 
 wt_test_env() {
   TMP=$(cd "$BATS_TEST_TMPDIR" && pwd -P)
   export HOME="$TMP/home"
+  unset CLAUDE_CONFIG_DIR
   mkdir -p "$HOME"
   export GIT_CONFIG_NOSYSTEM=1
   export CLAUDE_PLUGIN_DATA="$TMP/plugin-data"

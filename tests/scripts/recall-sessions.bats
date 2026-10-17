@@ -320,3 +320,9 @@ shim() {
   chmod 755 "$TMP/cc/projects"
   [ "$status" -eq 1 ]
 }
+
+@test "the test env drops a CLAUDE_CONFIG_DIR the caller set" {
+  export CLAUDE_CONFIG_DIR="$TMP/elsewhere"
+  wt_test_env
+  [ -z "${CLAUDE_CONFIG_DIR+x}" ]
+}

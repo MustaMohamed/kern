@@ -733,3 +733,9 @@ SNAP
   set_autopilot on
   expect deny "ggf feat"
 }
+
+@test "the test env drops a CLAUDE_CONFIG_DIR the caller set" {
+  export CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/elsewhere"
+  kern_env "$R"
+  [ -z "${CLAUDE_CONFIG_DIR+x}" ]
+}
