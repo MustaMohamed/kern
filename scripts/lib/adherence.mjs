@@ -5,7 +5,8 @@
 // A bare skill name, or a skill file outside the plugin root, is not kern's route.
 // Pass rule adapted from superpowers tests/explicit-skill-requests/run-test.sh:103-118 (MIT).
 import { readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve, sep } from 'node:path';
 import { runProblem, toolUses } from './claude-run.mjs';
 import { pluginCopy } from './behave.mjs';
 
@@ -19,8 +20,19 @@ export const rowPrompt = (root, route) => JSON.parse(readFileSync(join(root, 'ev
 export function runFailure(run) {
   const problem = runProblem(run);
   const results = run.events.filter((e) => e?.type === 'result');
-  const capped = run.badLines === 0 && results.length > 0 && results[results.length - 1].subtype === 'error_max_turns';
-  return capped ? '' : problem;
+  // Every result must be a cap or a clean success (a two-prompt run has two), and at least one a cap.
+  const cap = (e) => e.subtype === 'error_max_turns';
+  const capped = run.badLines === 0 && results.length > 0 && results.some(cap) && results.every((e) => cap(e) || (e.subtype === 'success' && e.is_error !== true));
+  if (capped) return '';
+  const bad = results.find((e) => !cap(e) && (e.subtype !== 'success' || e.is_error === true));
+  return problem && bad && run.status === 0 && run.badLines === 0 ? `the run ended with ${bad.subtype ?? 'a result with no subtype'}${bad.is_error === true ? ' (is_error)' : ''}` : problem;
+}
+
+// removeTemp(dir): rmSync that refuses a path outside the OS temp dir, so a wrong root can never delete a repo or its parent.
+export function removeTemp(dir) {
+  const base = realpathSync(tmpdir());
+  if (!realpathSync(dir).startsWith(base + sep)) throw new Error(`refusing to remove ${dir}: not under ${base}`);
+  rmSync(dir, { recursive: true, force: true });
 }
 
 // inlineRows(root): a copy of the plugin whose kernel table holds the routed rows itself and whose Routing

@@ -8,8 +8,8 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, PERMISSIONS, claudeVersion, runClaude, workspace } from './lib/claude-run.mjs';
-import { grade, inlineRows, readSteps, rowPrompt, runFailure } from './lib/adherence.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, runClaude, runProblem, workspace } from './lib/claude-run.mjs';
+import { grade, inlineRows, readSteps, removeTemp, rowPrompt, runFailure } from './lib/adherence.mjs';
 import { pluginCopy, stage } from './lib/behave.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -57,10 +57,10 @@ try {
         if (c.settings) { mkdirSync(join(cwd, '.claude'), { recursive: true }); writeFileSync(join(cwd, '.claude', 'kern.local.yml'), `${c.settings}\n`); }
         // A turn cap is expected here: routing is graded from the first calls, so a capped run is still graded and
         // its problem recorded. Any other run that did not happen (a timeout, a signal, a non-zero exit) fails the run, with the reason.
-        let run = null; let problem = '';
-        try { run = runClaude({ cwd, prompts: c.prompts, pluginDirs: [root], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 }); problem = runFailure(run); }
-        catch (e) { if (e.fatal) throw e; problem = e.message; }
-        const g = run && !problem ? grade(run.events, { route: c.route, routeFile: c.route_file, steps, root, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, reasons: [problem] };
+        let run = null; let problem = ''; let failure = '';
+        try { run = runClaude({ cwd, prompts: c.prompts, pluginDirs: [root], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 }); problem = runProblem(run); failure = runFailure(run); }
+        catch (e) { if (e.fatal) throw e; problem = failure = e.message; }
+        const g = run && !failure ? grade(run.events, { route: c.route, routeFile: c.route_file, steps, root, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, reasons: [failure] };
         runs.push({ pass: g.pass, hops: g.hops, reasons: g.reasons, problem, exit: run ? run.status : null });
       } finally {
         if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
@@ -71,7 +71,7 @@ try {
     results.push({ id: c.id, kind: c.kind, route: c.route, passed, runs: runs.length, pass: passed * 3 >= runs.length * 2, detail: runs });
     console.log(`${passed * 3 >= runs.length * 2 ? 'PASS' : 'FAIL'} ${c.id}: ${passed}/${runs.length}${passed === runs.length ? '' : `: ${runs.filter((r) => !r.pass).map((r) => r.reasons.join(', ')).join(' | ')}`}`);
   }
-} finally { rmSync(dirname(root), { recursive: true, force: true }); }
+} finally { removeTemp(dirname(root)); }
 const date = new Date().toISOString().slice(0, 10);
 const out = join(ROOT, 'evals', 'snapshots', `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${date}.json`);
 mkdirSync(dirname(out), { recursive: true });

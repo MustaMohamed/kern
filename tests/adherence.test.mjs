@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readSteps, grade, inlineRows, rowPrompt, runFailure } from '../scripts/lib/adherence.mjs';
+import { readSteps, grade, inlineRows, rowPrompt, removeTemp, runFailure } from '../scripts/lib/adherence.mjs';
 import { kernelRows, parseRow, routeText } from '../scripts/lib/kernel-rows.mjs';
 import { loadModel } from '../scripts/lib/lint-rules.mjs';
 
@@ -180,4 +180,21 @@ test('the runner exits 2 on a bad --case, --runs or --transcript usage, before a
     assert.match(r.stderr, /^kernel-adherence: /m);
   }
   assert.equal(run('--dry-run', '--case', 'row-diagnose').status, 0);
+});
+
+test('a two-prompt run is graded when its results are caps and successes, and fails on any other result', () => {
+  const ok = { status: 0, badLines: 0, stderr: '', events: [] };
+  const res = (subtype, extra = {}) => ({ type: 'result', subtype, ...extra });
+  assert.equal(runFailure({ ...ok, events: [res('error_max_turns'), res('success')] }), '');
+  assert.match(runFailure({ ...ok, events: [res('error_during_execution', { is_error: true }), res('error_max_turns')] }), /error_during_execution/);
+  assert.match(runFailure({ ...ok, events: [res('error_max_turns'), res('success', { is_error: true })] }), /is_error/);
+});
+
+test('removeTemp removes a directory under the OS temp dir and refuses anything else', () => {
+  const d = mkdtempSync(join(tmpdir(), 'k-'));
+  removeTemp(d);
+  assert.ok(!existsSync(d));
+  assert.throws(() => removeTemp(ROOT), /refusing to remove/);
+  assert.throws(() => removeTemp(tmpdir()), /refusing to remove/);
+  assert.ok(existsSync(join(ROOT, 'package.json')) || existsSync(join(ROOT, 'scripts')));
 });
