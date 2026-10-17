@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RULE, TELLS, decide, diffAgainst, hide, metrics, parseReview, readSession, reviewPrompt } from '../scripts/lib/pilot.mjs';
+import { RULE, TELLS, attempt, decide, diffAgainst, hide, mergeRow, metrics, parseReview, readSession, reviewPrompt } from '../scripts/lib/pilot.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const at = (s) => `2026-10-20T10:00:${String(s).padStart(2, '0')}.000Z`;
@@ -116,19 +116,24 @@ test('the pilot tasks are three real tasks with a prompt and a 3 to 5 item rubri
   assert.equal(sha, '0ace7dfeb3da660e65107adfbf79f40d54cea93afb93d2f5b66b074352fd1561', 'evals/pilot/tasks.json is frozen once the user agrees it: change it only on their word, before any run');
 });
 
+function reviewFixture(dir, swap = false) {
+  const git = (r, ...a) => execFileSync('git', ['-C', r, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { encoding: 'utf8' });
+  const repos = ['k', 'c'].map((n) => { const r = join(dir, n); mkdirSync(r); git(r, 'init', '-q', '-b', 'main'); writeFileSync(join(r, 'a.txt'), 'one\n'); git(r, 'add', '.'); git(r, 'commit', '-qm', 'base'); return r; });
+  writeFileSync(join(repos[0], 'a.txt'), 'kern arm\n');
+  const withCwd = (list, cwd) => list.map((e) => ({ ...e, cwd }));
+  const ks = session(mkdtempSync(join(dir, 's-')), withCwd([human(0, 'Do it.'), asst('m1', 3, bash('bash /x/kern-0.3.0/scripts/ledger-open plan.md'))], repos[0]));
+  const cs = session(mkdtempSync(join(dir, 's-')), withCwd([human(0, 'Do it.'), asst('m1', 2, { type: 'text', text: 'Using superpowers:executing-plans' })], repos[1]));
+  const base = git(repos[0], 'rev-parse', 'HEAD').trim();
+  writeFileSync(join(dir, 'tasks.json'), JSON.stringify([{ id: 't1', prompt: 'Do it.', rubric: ['works'] }]));
+  return ['review', '--task', 't1', '--base', base, '--kern-repo', repos[0], '--kern-session', swap ? cs : ks,
+    '--current-repo', repos[1], '--current-session', swap ? ks : cs, '--plugin', '/x/kern-0.3.0', '--tasks', join(dir, 'tasks.json'), '--results', join(dir, 'results.json'), '--out', join(dir, 'out')];
+}
+const cli = (args, env = {}) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'pilot.mjs'), ...args], { encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: '', ...env } });
+
 test('review --dry-run builds a blind bundle and calls no model', () => {
   const dir = mkdtempSync(join(tmpdir(), 'p-'));
   try {
-    const git = (r, ...a) => execFileSync('git', ['-C', r, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { encoding: 'utf8' });
-    const repos = ['k', 'c'].map((n) => { const r = join(dir, n); mkdirSync(r); git(r, 'init', '-q', '-b', 'main'); writeFileSync(join(r, 'a.txt'), 'one\n'); git(r, 'add', '.'); git(r, 'commit', '-qm', 'base'); return r; });
-    writeFileSync(join(repos[0], 'a.txt'), 'kern arm\n');
-    const s = [human(0, 'Do it.'), asst('m1', 3, bash('bash /x/kern-0.3.0/scripts/ledger-open plan.md'))];
-    const ks = session(mkdtempSync(join(dir, 's-')), s);
-    const cs = session(mkdtempSync(join(dir, 's-')), [human(0, 'Do it.'), asst('m1', 2, { type: 'text', text: 'Using superpowers:executing-plans' })]);
-    const base = git(repos[0], 'rev-parse', 'HEAD').trim();
-    writeFileSync(join(dir, 'tasks.json'), JSON.stringify([{ id: 't1', prompt: 'Do it.', rubric: ['works'] }]));
-    const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'pilot.mjs'), 'review', '--task', 't1', '--base', base, '--kern-repo', repos[0], '--kern-session', ks,
-      '--current-repo', repos[1], '--current-session', cs, '--plugin', '/x/kern-0.3.0', '--tasks', join(dir, 'tasks.json'), '--results', join(dir, 'results.json'), '--out', join(dir, 'out'), '--dry-run'], { encoding: 'utf8' });
+    const r = cli([...reviewFixture(dir), '--dry-run']);
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /^arm-A: \d+ chars; \d+ stops, \d+ tokens, \d+ s, \d+ slip candidate\(s\)$/m);
     assert.match(r.stdout, /\(no model called\)$/m);
@@ -136,6 +141,85 @@ test('review --dry-run builds a blind bundle and calls no model', () => {
     assert.doesNotMatch(bundle, TELLS);
     assert.doesNotMatch(bundle, /\/x\/kern-0\.3\.0/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('review refuses a paid run outside the eval account, an unknown flag, and swapped sessions', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p-'));
+  try {
+    const a = reviewFixture(dir);
+    const paid = cli(a);
+    assert.equal(paid.status, 2);
+    assert.match(paid.stderr, /CLAUDE_CONFIG_DIR/);
+    const other = cli(a, { CLAUDE_CONFIG_DIR: join(dir, 'elsewhere') });
+    assert.equal(other.status, 2);
+    const typo = cli([...a, '--dryrun']);
+    assert.equal(typo.status, 2);
+    assert.match(typo.stderr, /unknown flag --dryrun/);
+    rmSync(join(dir, 'out'), { recursive: true, force: true });
+    const swapped = cli([...reviewFixture(mkdtempSync(join(dir, 'w-')), true), '--dry-run']);
+    assert.equal(swapped.status, 2);
+    assert.match(swapped.stderr, /outside its repo/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the bundle shows the main final reply, with subagent calls in time order', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p-'));
+  try {
+    const f = session(dir, [
+      human(0, 'Go.'),
+      asst('m1', 1, bash('echo one')),
+      asst('m2', 5, bash('echo three')),
+      asst('m3', 6, { type: 'text', text: 'MAIN FINAL REPLY' }),
+    ], [
+      { type: 'assistant', isSidechain: true, timestamp: at(3), message: { id: 's1', content: [bash('echo two')], usage: {} } },
+      { type: 'assistant', isSidechain: true, timestamp: at(8), message: { id: 's2', content: [{ type: 'text', text: 'SUBAGENT REPORT' }], usage: {} } },
+    ]);
+    const text = attempt(readSession(f), '');
+    assert.match(text, /Final reply:\nMAIN FINAL REPLY/);
+    assert.doesNotMatch(text, /SUBAGENT REPORT/);
+    assert.ok(text.indexOf('echo one') < text.indexOf('echo two') && text.indexOf('echo two') < text.indexOf('echo three'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('slip candidates see git and gh global options, rm clusters and notebook paths', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p-'));
+  try {
+    const cands = (cmds, extra = []) => metrics(readSession(session(dir, [human(0, 'x'), ...cmds.map((c, i) => asst(`m${i}`, i + 1, bash(c))), ...extra])), { root: join(dir, 'repo') }).slipCandidates;
+    const hit = ['git -C /tmp/x commit -m a', 'git -c user.name=a commit -m a', 'git -C . push', 'gh -R o/r pr create', 'rm -R build'];
+    assert.equal(cands(hit).length, 5);
+    assert.deepEqual(cands(['git status', 'git -C x log', 'rm notes.txt']), []);
+    const nb = cands([], [asst('n1', 9, { type: 'tool_use', name: 'NotebookEdit', input: { notebook_path: '/etc/x.ipynb' } })]);
+    assert.deepEqual(nb, ['NotebookEdit outside the worktree: /etc/x.ipynb']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('an AskUserQuestion call is a stop', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p-'));
+  try {
+    const f = session(dir, [human(0, 'a'), asst('m1', 1, { type: 'tool_use', name: 'AskUserQuestion', input: {} }), human(2, 'b')]);
+    assert.equal(metrics(readSession(f)).stops, 2);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('hide rewrites a kern guard name with or without its colon', () => {
+  const t = hide("grep 'kern G0' hooks and \"kern G1\" and kern G16a: x", []);
+  assert.doesNotMatch(t, TELLS);
+  assert.match(t, /guard G0/);
+});
+
+test('decide needs one row per task and holds needless calls per task', () => {
+  const row = (task, needless = 0) => ({ task, kern: { score: 7, slips: 0, needless, stops: 2, tokens: 1000, wallSeconds: 100 }, current: { score: 7, stops: 2, tokens: 1000, wallSeconds: 100 } });
+  assert.throws(() => decide([row('a'), row('b')], RULE, ['a', 'b', 'c']), /missing c/);
+  assert.throws(() => decide([row('a'), row('b'), row('z')], RULE, ['a', 'b']), /extra or repeated z/);
+  assert.equal(decide([row('a', 3), row('b'), row('c')]).pass, false);
+  assert.equal(decide([row('a', 1), row('b', 1), row('c', 1)]).pass, true);
+});
+
+test('mergeRow refuses to replace a scored row unless told to', () => {
+  const rows = [{ task: 'a', kern: { score: 5 } }];
+  assert.throws(() => mergeRow(rows, { task: 'a', kern: { score: 6 } }), /--replace/);
+  assert.equal(mergeRow(rows, { task: 'a', kern: { score: 6 } }, true)[0].kern.score, 6);
+  assert.equal(mergeRow(rows, { task: 'b' }).length, 2);
 });
 
 test('the CLI prints its usage for an unknown command', () => {
