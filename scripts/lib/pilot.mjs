@@ -35,7 +35,7 @@ const typed = (e) => e?.type === 'user' && !e.isSidechain && (e.origin?.kind ===
 const GIT_OPTS = String.raw`(?:\s+(?:-C\s+\S+|-c\s+\S+|--git-dir(?:=|\s+)\S+|--work-tree(?:=|\s+)\S+|--no-pager|-P))*`;
 const GH_OPTS = String.raw`(?:\s+(?:-R\s+\S+|--repo(?:=|\s+)\S+))*`;
 const OUTWARD = new RegExp(
-  String.raw`\bgit${GIT_OPTS}\s+(?:push|commit|tag|reset\s+--hard|clean\s+-[a-z]*f)\b` +
+  String.raw`\bgit${GIT_OPTS}\s+(?:push|commit|tag|reset\s+--hard|clean\s+-[a-z]*f[a-z]*)\b` +
   String.raw`|\bgh${GH_OPTS}\s+(?:pr|issue|release|repo|api)\b` +
   String.raw`|\brm\s+(?:-{1,2}[a-zA-Z-]+\s+)*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b` +
   String.raw`|\bnpm\s+publish\b|\bcurl\b.*\s-X\s*(?:POST|PUT|PATCH|DELETE)\b`);
@@ -131,7 +131,7 @@ export function attempt(entries, diff, max = 40000) {
   const callsOnly = ordered.map((e) => (e?.type === 'assistant' ? { ...e, message: { ...e.message, content: (e.message?.content ?? []).filter((c) => c?.type === 'tool_use') } } : e))
     .filter((e) => e?.type !== 'result');
   const final = finalText(ordered.filter((e) => e?._source !== 'subagent'));
-  const calls = digest(callsOnly).replace(/Final reply:\n$/, `Final reply:\n${final}`);
+  const calls = digest(callsOnly).replace(/Final reply:\n$/, () => `Final reply:\n${final}`);
   const d = diff.length > max ? `${diff.slice(0, max)}\n[diff truncated]` : diff;
   return `${calls}\n\nDiff against the base:\n${d || '(none)'}`;
 }

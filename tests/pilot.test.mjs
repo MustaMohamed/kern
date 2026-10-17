@@ -193,6 +193,17 @@ test('slip candidates see git and gh global options, rm clusters and notebook pa
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a final reply with dollar patterns stays verbatim, and git clean with f in any place is a candidate', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p-'));
+  try {
+    const reply = 'Use the `$` prompt; pid $$ here $& $`';
+    const f = session(dir, [human(0, 'Go.'), asst('m1', 1, bash('echo one')), asst('m2', 2, { type: 'text', text: reply })]);
+    assert.ok(attempt(readSession(f), '').includes(`Final reply:\n${reply}`));
+    const g = session(mkdtempSync(join(dir, 'c-')), [human(0, 'x'), ...['git clean -fd', 'git clean -xdf', 'git clean -n'].map((c, i) => asst(`m${i}`, i + 1, bash(c)))]);
+    assert.deepEqual(metrics(readSession(g)).slipCandidates, ['Bash: git clean -fd', 'Bash: git clean -xdf']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('an AskUserQuestion call is a stop', () => {
   const dir = mkdtempSync(join(tmpdir(), 'p-'));
   try {
