@@ -1,0 +1,16 @@
+diff --git a/src/pricing.js b/src/pricing.js
+index ec4117f..bea48c5 100644
+--- a/src/pricing.js
++++ b/src/pricing.js
+@@ -1,8 +1,9 @@
+ const cache = new Map();
+ 
+ export function lineTotal(sku, qty, unitPrice) {
+-  if (cache.has(sku)) return cache.get(sku);
++  const key = `${sku}:${qty}:${unitPrice}`;
++  if (cache.has(key)) return cache.get(key);
+   const total = Math.round(qty * unitPrice * 100) / 100;
+-  cache.set(sku, total);
++  cache.set(key, total);
+   return total;
+ }

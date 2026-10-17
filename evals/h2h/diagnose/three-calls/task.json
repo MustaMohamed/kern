@@ -1,0 +1,15 @@
+{
+  "category": "diagnose",
+  "project": "shop-cart",
+  "prompts": ["Customers report that the third line in a cart sometimes shows the wrong total. Find out why and fix it."],
+  "test": "node --test",
+  "visible": "pass",
+  "area": ["src/pricing.js", "src/cart.js", "test/**"],
+  "rubric": [
+    "Reproduces the wrong total with a failing test or command before changing code",
+    "Names the cause: the line-total cache is keyed by sku alone, so a repeated sku returns the first quantity's total",
+    "Fixes the cause in src/pricing.js rather than special-casing the third line",
+    "Shows a fresh passing run after the fix",
+    "Makes no claim it does not show evidence for"
+  ]
+}

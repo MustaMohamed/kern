@@ -1,0 +1,7 @@
+[
+  { "id": "kern", "plugin": "." },
+  { "id": "superpowers", "plugin": ".upstream/superpowers" },
+  { "id": "pstack", "plugin": ".upstream/pstack/harness/pstack/claude-code" },
+  { "id": "pocock", "plugin": ".upstream/pocock" },
+  { "id": "control", "plugin": null }
+]
