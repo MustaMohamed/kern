@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Kernel adherence (design spec 11.1 tier 2, coverage gap 10): does a routed prompt make Claude read the
-// route first and copy its steps into the todo list, and does a prompt that should not route stay quiet?
+// route with at most one other call before it, and does a prompt that should not route stay quiet? Each
+// run also reports whether it opened a todo list holding the route's steps; that does not gate.
 // Spends tokens; never runs in CI; ask the user before a run.
 // Usage: node scripts/kernel-adherence.mjs [--case <id>] [--runs N] [--model <m>] [--variant routed|inline-rows] [--dry-run]
 //        node scripts/kernel-adherence.mjs --transcript <session.jsonl> --route <route> [--root <plugin root>]
@@ -35,7 +36,7 @@ if (args.includes('--transcript')) {
   const file = routeFileOf(allCases.find((c) => c.route === route) || { route });
   if (!existsSync(join(root, file))) usage(`no route file ${file} under ${root}`);
   const g = grade(events, { route, routeFile: file, steps: readSteps(readFileSync(join(root, file), 'utf8')), root });
-  console.log(`${g.pass ? 'PASS' : 'FAIL'} ${route} (${g.hops} hops)${g.pass ? '' : `: ${g.reasons.join('; ')}`}`);
+  console.log(`${g.pass ? 'PASS' : 'FAIL'} ${route} (${g.hops} hops, ${g.before} before, todo: ${g.todo}${g.todo ? `, steps: ${g.todoSteps}` : ''})${g.pass ? '' : `: ${g.reasons.join('; ')}`}`);
   process.exit(g.pass ? 0 : 1);
 }
 
@@ -70,8 +71,8 @@ try {
         try { run = runClaude({ cwd, prompts: c.prompts, pluginDirs: [root], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 }); problem = runProblem(run); failure = runFailure(run); }
         catch (e) { if (e.fatal) throw e; problem = failure = e.message; }
         if (run) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n') + '\n');
-        const g = run && !failure ? grade(run.events, { route: c.route, routeFile: c.route_file, steps, root, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, reasons: [failure] };
-        runs.push({ pass: g.pass, hops: g.hops, reasons: g.reasons, problem, exit: run ? run.status : null });
+        const g = run && !failure ? grade(run.events, { route: c.route, routeFile: c.route_file, steps, root, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
+        runs.push({ pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: run ? run.status : null });
       } finally {
         if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
         if (cwd) rmSync(dirname(cwd), { recursive: true, force: true });
@@ -79,7 +80,7 @@ try {
     }
     const passed = runs.filter((r) => r.pass).length;
     results.push({ id: c.id, kind: c.kind, route: c.route, passed, runs: runs.length, pass: passed * 3 >= runs.length * 2, detail: runs });
-    console.log(`${passed * 3 >= runs.length * 2 ? 'PASS' : 'FAIL'} ${c.id}: ${passed}/${runs.length}${passed === runs.length ? '' : `: ${runs.filter((r) => !r.pass).map((r) => r.reasons.join(', ')).join(' | ')}`}`);
+    console.log(`${passed * 3 >= runs.length * 2 ? 'PASS' : 'FAIL'} ${c.id}: ${passed}/${runs.length}, todo ${runs.filter((r) => r.todo).length}/${runs.length}${passed === runs.length ? '' : `: ${runs.filter((r) => !r.pass).map((r) => r.reasons.join(', ')).join(' | ')}`}`);
   }
 } finally { removeTemp(dirname(root)); }
 const date = new Date().toISOString().slice(0, 10);

@@ -34,10 +34,20 @@ test('two hops: routes.md first, then the route', () => {
   assert.equal(g.hops, 2);
 });
 
-test('any other tool before the route fails, edits or not', () => {
-  const g = grade(ev(['Bash', { command: 'npm test' }], ['Read', { file_path: route }], todos(...steps)), { route: 'diagnose', steps, root: K });
-  assert.equal(g.pass, false);
-  assert.match(g.reasons[0], /not the first tool call: first was Bash npm test/);
+test('one project call may come before the route, a second fails the run, and reads of routes.md do not count', () => {
+  const one = grade(ev(['Read', { file_path: `${K}/kernel/routes.md` }], ['Bash', { command: 'npm test' }], ['Read', { file_path: route }], todos(...steps)), { route: 'diagnose', steps, root: K });
+  assert.equal(one.pass, true, one.reasons.join('; '));
+  assert.equal(one.hops, 2);
+  assert.equal(one.before, 1);
+  const edit = grade(ev(['Edit', { file_path: '/p/a.js' }], ['Read', { file_path: route }]), { route: 'diagnose', steps, root: K });
+  assert.equal(edit.pass, true, edit.reasons.join('; '));
+  assert.equal(edit.hops, 1);
+  const twice = grade(ev(['Read', { file_path: `${K}/kernel/routes.md` }], ['Read', { file_path: `${K}/kernel/routes.md` }], ['Glob', { pattern: '**/*' }], ['Read', { file_path: route }]), { route: 'diagnose', steps, root: K });
+  assert.equal(twice.pass, true, twice.reasons.join('; '));
+  assert.equal(twice.before, 1);
+  const two = grade(ev(['Read', { file_path: `${K}/kernel/routes.md` }], ['Bash', { command: 'npm test' }], ['Bash', { command: 'ls' }], ['Read', { file_path: route }], todos(...steps)), { route: 'diagnose', steps, root: K });
+  assert.equal(two.pass, false);
+  assert.deepEqual(two.reasons, ['two tool calls came before the route: Bash npm test, then Bash ls']);
 });
 
 test('a bare skill name or a skill file outside the plugin root is not the route', () => {
@@ -49,10 +59,35 @@ test('a bare skill name or a skill file outside the plugin root is not the route
   assert.equal(grade(ev(['Skill', { skill: 'kern:recall' }], todos(...steps)), { route: 'recall', steps, root: K }).pass, true);
 });
 
-test('a missing step fails, and TaskCreate subjects count as todos', () => {
-  assert.match(grade(ev(['Read', { file_path: route }], todos(steps[0], steps[2])), { route: 'diagnose', steps, root: K }).reasons.join(' '), /step 1/);
+test('the todo list is reported, not graded: no list passes with todo false, a missing step is noted, and TaskCreate subjects count', () => {
+  const none = grade(ev(['Read', { file_path: route }]), { route: 'diagnose', steps, root: K });
+  assert.equal(none.pass, true, none.reasons.join('; '));
+  assert.equal(none.todo, false);
+  assert.equal(none.todoSteps, false);
+  assert.deepEqual(none.notes, ['no todo list']);
+  const gap = grade(ev(['Read', { file_path: route }], todos(steps[0], steps[2])), { route: 'diagnose', steps, root: K });
+  assert.equal(gap.pass, true, gap.reasons.join('; '));
+  assert.equal(gap.todo, true);
+  assert.equal(gap.todoSteps, false);
+  assert.match(gap.notes.join(' '), /step 1/);
   const g = grade(ev(['Read', { file_path: route }], ...steps.map((s) => ['TaskCreate', { subject: s }])), { route: 'diagnose', steps, root: K });
   assert.equal(g.pass, true, g.reasons.join('; '));
+  assert.equal(g.todo, true);
+  assert.equal(g.todoSteps, true);
+  assert.deepEqual(g.notes, []);
+});
+
+test('the runner reports the todo list per run, in the snapshot detail and for a transcript', () => {
+  const src = readFileSync(join(ROOT, 'scripts', 'kernel-adherence.mjs'), 'utf8');
+  assert.match(src, /runs\.push\(\{ pass: g\.pass, hops: g\.hops, before: g\.before, todo: g\.todo, todoSteps: g\.todoSteps, notes: g\.notes,/);
+  const dir = mkdtempSync(join(tmpdir(), 'k-'));
+  try {
+    const file = join(dir, 'run.jsonl');
+    writeFileSync(file, ev(['Read', { file_path: join(ROOT, 'skills', 'diagnose', 'SKILL.md') }]).map((e) => JSON.stringify(e)).join('\n') + '\n');
+    const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'kernel-adherence.mjs'), '--transcript', file, '--route', 'diagnose'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /^PASS diagnose \(1 hops, 0 before, todo: false\)$/m);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('negative cases pass only when no kern route is read; a project skill must be the one used', () => {

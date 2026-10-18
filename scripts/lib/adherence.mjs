@@ -1,7 +1,8 @@
 // Grade a headless Claude Code run for kernel adherence (design spec 11.1 tier 2, coverage gap 10).
-// A routed task passes only when its first tool call, todo tools aside, reads the route: a Read of
-// <plugin root>/skills/<route>/SKILL.md or a Skill call to kern:<route>, or that second when the first
-// is a Read of <plugin root>/kernel/routes.md; and the first todo list holds the route's steps in order.
+// A routed task passes when it reads the route (a Read of <plugin root>/skills/<route>/SKILL.md or a
+// Skill call to kern:<route>) with at most one other tool call before it, todo tools and reads of
+// <plugin root>/kernel/routes.md aside: the user relaxed the rule on 2026-10-18 from "the route is the
+// first call". The first todo list, and whether it holds the route's steps in order, is reported, not graded.
 // A bare skill name, or a skill file outside the plugin root, is not kern's route.
 // Pass rule adapted from superpowers tests/explicit-skill-requests/run-test.sh:103-118 (MIT).
 import { readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -108,14 +109,20 @@ function todoItems(uses) {
   return uses.filter((u, i) => u.name === 'TaskCreate' && (firstEdit === -1 || i < firstEdit)).map((u) => u.input.subject ?? '');
 }
 
-// grade(events, { route, routeFile, steps, root, kind, projectSkill }): { pass, reasons, items, hops }.
-// kind: positive (default), negative (no kern route at all; with projectSkill, that project skill is
-// used instead, and only the job's own kern route counts as a hit) or multi-turn (positive, and the route
-// is read again for the second task).
+const callText = (u) => `${u.name} ${u.input.file_path || u.input.command || u.input.skill || u.input.pattern || ''}`.trim();
+
+// grade(events, { route, routeFile, steps, root, kind, projectSkill }):
+// { pass, reasons, items, hops, before, todo, todoSteps, notes }. hops is 1, or 2 when routes.md was read
+// before the route; before counts the other calls before it (0 or 1 in a pass). todo says whether a todo
+// list was opened, todoSteps whether it holds the route's steps in order, and notes say what it lacks;
+// none of the three gates. kind: positive (default), negative (no kern route at all; with projectSkill,
+// that project skill is used instead, and only the job's own kern route counts as a hit) or multi-turn
+// (positive, and the route is read again for the second task).
 export function grade(events, { route, routeFile, steps = [], root, kind = 'positive', projectSkill = null }) {
   const uses = toolUses(events);
   const work = uses.filter((u) => !TODO_TOOLS.has(u.name));
   const reasons = [];
+  const items = todoItems(uses);
   if (kind === 'negative') {
     const hit = work.find((u) => (projectSkill ? routeCall(u, projectSkill, root) : anyKernRoute(u, root)));
     if (hit) reasons.push(`a kern route was read: ${hit.name} ${hit.input.file_path || hit.input.skill || hit.input.command}`);
@@ -123,23 +130,25 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
       readsOf(u).some((f) => f.endsWith(`/.claude/skills/${projectSkill}/SKILL.md`)))) {
       reasons.push(`the project skill ${projectSkill} was not used`);
     }
-    return { pass: reasons.length === 0, reasons, items: [], hops: 0 };
+    return { pass: reasons.length === 0, reasons, items, hops: 0, before: 0, todo: items.length > 0, todoSteps: null, notes: [] };
   }
   let hops = 0;
+  let before = 0;
   const hit = (u) => routeCall(u, route, root, routeFile);
-  if (work[0] && hit(work[0])) hops = 1;
-  else if (work[0] && routesCall(work[0], root) && work[1] && hit(work[1])) hops = 2;
-  else if (!work.some(hit)) reasons.push(`never read ${routeFile || `skills/${route}/SKILL.md`} under the plugin root, nor called kern:${route}`);
-  else reasons.push(`the route was not the first tool call: first was ${work[0]?.name} ${work[0]?.input.file_path || work[0]?.input.command || work[0]?.input.skill || ''}`.trim());
-  const items = todoItems(uses);
+  const at = work.findIndex(hit);
+  const early = at < 0 ? [] : work.slice(0, at).filter((u) => !routesCall(u, root));
+  if (at < 0) reasons.push(`never read ${routeFile || `skills/${route}/SKILL.md`} under the plugin root, nor called kern:${route}`);
+  else if (early.length > 1) reasons.push(`two tool calls came before the route: ${callText(early[0])}, then ${callText(early[1])}`);
+  else { hops = early.length < at ? 2 : 1; before = early.length; }
   const missing = [];
   steps.forEach((step, i) => {
     const item = items[i];
     const key = normalize(step).slice(0, 24);
     if (!(item !== undefined && (/^\s*skip:/i.test(item) || normalize(item).startsWith(key)))) missing.push(`step ${i}: "${step.slice(0, 60)}"`);
   });
-  if (!items.length) reasons.push('no todo list');
-  else if (missing.length) reasons.push(`todo list does not hold the steps in order: ${missing.join('; ')}`);
+  const notes = [];
+  if (!items.length) notes.push('no todo list');
+  else if (missing.length) notes.push(`todo list does not hold the steps in order: ${missing.join('; ')}`);
   // The second task starts after the first result event: runClaude sends each prompt as one user turn on
   // stdin and stream-json writes one result per turn (evals/results/exec-2026-10-16/finish-pr-at-head.events.jsonl:
   // two prompts, a result at line 6 and at line 114).
@@ -148,5 +157,5 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
     const second = turn < 0 ? [] : toolUses(events.slice(turn + 1)).filter((u) => !TODO_TOOLS.has(u.name));
     if (!second.some(hit)) reasons.push('the second task did not read the route again');
   }
-  return { pass: reasons.length === 0, reasons, items, hops };
+  return { pass: reasons.length === 0, reasons, items, hops, before, todo: items.length > 0, todoSteps: items.length > 0 && missing.length === 0, notes };
 }
