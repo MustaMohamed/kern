@@ -133,6 +133,245 @@ EOT
   done
 }
 
+# has_push OUTPUT: some record of OUTPUT is the command git push --force origin main.
+has_push() { printf '%s\n' "$1" | grep -qE '^git push --force origin main( |$)'; }
+
+@test "git_words reads the quotes inside each \$( ) as its own, so a quoted paren or quote there hides no command" {
+  local c
+  # Every $( ) and backtick starts its own quoting, and a ( or ) inside its quotes opens or closes
+  # nothing. bash 3.2, bash 5.3 and zsh 5.9 run the force push in each (re-review Critical 1, the
+  # regression, and Critical 2, from 0.3.0), with a quoted ) or ( and a lone " or ' inside $( ).
+  for c in "echo \"\$(echo \")\")\" '\"' \$(git push --force origin main)" \
+    "echo \$(echo '(' \$(git push --force origin main))" \
+    "echo \$(echo \")\") '\"' \$(git push --force origin main)" \
+    "echo \$(echo ')' ; git push --force origin main)" \
+    "echo \"\$(echo '\"')\" ; git push --force origin main" \
+    "echo \"\`git push --force origin main \")\"\`\""; do
+    run git_words "$c"
+    has_push "$output" || { echo "$c -> $output"; return 1; }
+  done
+}
+
+# corpus: the shapes of the Task 7 differential sweeps, rounds 1 to 4, one per line as TAG SHAPE. In
+# SHAPE, @ and @2 stand for the command and <NL> for a newline. TAG run: bash 3.2, bash 5.3 or zsh 5.9
+# runs the command (measured with a harmless marker), so git_words must print it as a record. not: no
+# shell runs it. gap: a recorded M3 parser deferral, whose reading the next test pins. A line that starts
+# with # is a note.
+corpus() {
+  cat <<'EOF'
+# Rounds 1 to 3.
+not echo $(( @ ))
+not echo $(( '@' ))
+not echo "$(( '@' ))"
+not echo $(( "@" ))
+not echo "$(( "@" ))"
+not echo $(( 'x'@ ))
+run echo $(( `@` ))
+run echo $(( '`@`' ))
+run echo "$(( '`@`' ))"
+run echo $(( "`@`" ))
+run echo $( @ )
+run echo $( ( @ ) )
+run echo $(( @ ) )
+run echo $(( @ );( @2 ))
+run echo $(( '$(@)' ))
+run x=$(( '$(@)' ))
+run x=$(( '`@`' ))
+not echo $(( $(( @ )) ))
+run echo $(( $(( '$(@)' )) ))
+run echo $(( 1 + $(@) ))
+run echo $(( a[$(@)] ))
+run echo $(( a[`@`] ))
+run echo $(( a['$(@)'] ))
+run echo $(( ${x:-$(@)} ))
+run echo ${x:-$(@)}
+run echo $(( ${x:-`@`} ))
+# An M3 deferral until the round 4 scanner, which reads an unsure $(( both ways.
+run echo $(( $'$(@)' ))
+run echo $(( $'x'+$(@) ))
+not (( @ ))
+run (( $(@) ))
+run (( '$(@)' ))
+run echo $[ $(@) ]
+run echo $[ '$(@)' ]
+not echo $(( $(@ #) ))
+not echo $(( 1 )) # $(@)
+run cat <<< $(( $(@) ))
+run case x in x) @ ;; esac
+gap echo $(( $(case x in x) @ ;; esac) ))
+run echo $(( \( $(@) \) ))
+run echo $(( $(@) \( ))
+run echo $((<NL>$(@)<NL>))
+run echo $(( ((1)) + $(@) ))
+run echo $(( ( $(@) ) ))
+run x=$(( $(@) ))
+run n=$(( `@` / 60 ))
+run echo $(( $(@) + 1 ))
+run echo "$(( $(@) ))"
+run echo $[ '$(@)' ]
+run echo $[ '`@`' ]
+run echo $[ $(@) + 1 ]
+run echo $[ `@` + 1 ]
+run echo "$[ '$(@)' ]"
+run x=$[ '$(@)' ]
+run echo $[ a[$(@)] ]
+run echo $[ a['$(@)'] ]
+run echo $[ $[ '$(@)' ] ]
+run echo $[ $(( '$(@)' )) ]
+run echo $(( $[ '$(@)' ] ))
+run echo $[ ']' + $(@) ]
+run echo $[ "]" + $(@) ]
+run echo $[ \] + $(@) ]
+not echo $[ 1 + $(@)
+run echo $[ $(@) ] '$(@2)'
+# An M3 deferral until the round 4 scanner, which reads $[ ] whole, past a newline.
+run echo $[<NL>'$(@)'<NL>]
+run (( '`@`' ))
+run (( x = '$(@)' ))
+run if (( '$(@)' )); then :; fi
+run while (( '$(@)' )); do break; done
+run (( '$(@)' )) && :
+run : ; (( '$(@)' ))
+run ( (( '$(@)' )) )
+run x=$( (( '$(@)' )) )
+run ! (( '$(@)' ))
+run for (( i='$(@)'; i<1; i++ )); do :; done
+run (( "$(@)" ))
+run ((@) )
+run ((@);(@2))
+run (( @ ) )
+run (( ')' ; @ ))
+not (( 1 )) '$(@2)'
+run echo "'$(@)'"
+run echo "(( '$(@)' ))"
+run echo "'`@`'"
+run x="'$(@)'"
+run echo "it's $(@)"
+run echo "'"$(@)"'"
+not echo "'"'$(@2)'"'"
+run echo "a\"b'$(@)'"
+not echo "a\\"'$(@2)'
+not echo "\$(@2)"
+run echo $"'$(@)'"
+run cat <<< "'$(@)'"
+run echo $(( "'$(@)'" ))
+run echo $[ "'$(@)'" ]
+run echo "${x:-'$(@)'}"
+run echo ${x:-"'$(@)'"}
+run echo "$(echo "'$(@)'")"
+run echo "`echo "'$(@)'"`"
+run echo "a" 'b' "'$(@)'"
+run echo "\\'$(@)'"
+not printf %s "it's" '$(@2)'
+run echo "'$(@)" "'"
+run echo "'" $(@)
+run echo "$x's" $(@)
+run cat <<< '"'$(@)'"'
+run echo "'${x}'$(@)"
+run (( "'$(@)'" ))
+run echo "a\`b'$(@)'"
+run echo "'$(( '$(@)' ))'"
+# Round 4: quotes across $( ) boundaries, backticks, ANSI-C quotes, comments and subscripts.
+run echo "$(echo ")")" '"' $(@)
+run echo $(echo '(' $(@))
+run echo $(echo ")") '"' $(@)
+run echo "`echo ")"`" '"' $(@)
+run echo $(echo ')' ; @)
+run echo $(echo "(" ; @)
+run echo "$(echo "(" ; @)"
+run echo $(echo $(echo ')') ; @)
+run echo $(echo "$(echo ')')" ; @)
+run echo "$(echo '"')" ; @
+run x="$(echo "'")" ; @
+run echo $(echo "'" ; @)
+run echo $(echo "a)b" '(' $(@) ')')
+run echo "$(echo ")" '"')" ; @
+run echo "$(echo "$(echo '"')")" ; @
+run echo $(echo "$(echo "$(echo ")")")" ; @)
+run echo "${x:-$(echo ")")}" ; @
+run echo $(echo ${x:-")"} ; @)
+run echo $(echo $'\')' ; @)
+run echo $'it\'s' ; @
+run echo $(echo $'(' ; @)
+run echo "$(echo `echo ")"`; @)"
+run echo "`@ ")"`"
+run echo "$(echo `echo '"'`)" ; @
+run echo "`echo '"'`" ; @
+run echo $(echo `echo '('` ; @)
+run echo $(echo `echo "("` ; @)
+run echo `echo \`@\``
+run echo "`echo \"$(@)\"`"
+run echo $(echo `echo \`@\``)
+run echo $(echo "it's" ; @)
+run echo "$(echo "it's")" ; @
+run echo $(echo # it's<NL>@)
+run echo $(true # )<NL>@)
+run echo $(echo $(( 1 )) '(' ; @)
+run echo $(( "(" + $(@) ))
+run echo $(echo ${x:-)} ; @)
+run x=$(cat <<EOF<NL>it's (<NL>EOF<NL>) ; @
+not echo $(echo ")") '$(@2)'
+not echo "$(echo ")")" '$(@2)'
+not echo $(echo '(' '$(@2)')
+not echo "$(echo '"')" '$(@2)'
+not echo `echo '`'` ; @2
+run a['$(@)']=1
+run echo ${a['$(@)']}
+run echo "${a['`@`']}"
+run a[']']=1; @
+run echo x[a'b' ; @ ; echo ]
+gap echo "$(case x in x) @ ;; esac)"
+run echo $(echo "`echo ')'`" ; @)
+run echo "$(echo "`echo '"'`")" ; @
+run x=$(echo $'\'' ; @)
+run echo $(echo $"(" ; @)
+run echo "$(echo $'"')" ; @
+run echo "${x:-"$(echo ")")"}" ; @
+run echo `echo "\`@\`"`
+run echo "$(echo "$(echo "'")")" ; @
+run echo $(echo '"' "'" ; @)
+run (( '$(@)' ')' ))
+run echo $(( '$(@)' ')' ))
+run echo $[ '$(@)' ']' ]
+run (( ')' + '$(@)' ))
+run echo $(( (1) '(' '$(@)' ))
+EOF
+}
+
+@test "git_words prints the command of every sweep shape that bash or zsh runs" {
+  local line shape c n=0 bad=""
+  while IFS= read -r line; do
+    [ "${line%% *}" = run ] || continue
+    shape=${line#* }
+    c=${shape//<NL>/$'\n'}
+    c=${c//@2/git push --force origin main}
+    c=${c//@/git push --force origin main}
+    n=$((n + 1))
+    run git_words "$c"
+    has_push "$output" || bad="$bad$shape -> $output"$'\n'
+  done <<EOT
+$(corpus)
+EOT
+  [ -z "$bad" ] || { printf 'not read:\n%s' "$bad"; return 1; }
+  [ "$n" -eq 149 ]
+  [ "$(corpus | grep -c '^not ')" -eq 21 ]
+}
+
+@test "the recorded M3 parser deferral, a case inside \$( ), keeps the reading the corpus pins" {
+  # The case pattern's ) closes the $( ), as bash 3.2 reads it, so the force push is a word of a record,
+  # not a command. Inside $(( )) G1 asks, and G00 denies under autopilot; inside "..." no guard votes.
+  # bash 5.3 and zsh run it in both. The last ) of the first closes no $( ), so it ends the record.
+  run git_words 'echo $(( $(case x in x) git push --force origin main ;; esac) ))'
+  [ "$output" = 'echo $(( $(case x in x) git push --force origin main ;; esac) )
+$(case x in x) git push --force origin main
+case x in x
+esac' ]
+  run git_words 'echo "$(case x in x) git push --force origin main ;; esac)"'
+  [ "$output" = 'echo "$(case x in x) git push --force origin main ;; esac)"
+case x in x' ]
+  [ "$(corpus | grep -c '^gap ')" -eq 2 ]
+}
+
 @test "git and gh are seen behind shells, wrappers, groups and keywords" {
   for c in 'bash -lc "git stash"' 'sh -ec "git stash"' '/bin/bash -c "git stash"' \
     'nohup bash -c "git stash"' 'command git stash' 'exec git stash' 'time git stash' \

@@ -232,6 +232,23 @@ g00_all() {
   done
 }
 
+@test "a force push after a quoted paren or quote inside \$( ) reaches G1 and is denied in both modes" {
+  # Each $( ) starts its own quoting, so a quoted ) or ( and a lone " or ' inside one close or open
+  # nothing; all three shells run the force push. G1 must see it and deny it with every guard running,
+  # autopilot on or off (re-review Critical 1, the regression, and Critical 2, from 0.3.0).
+  local c m
+  for c in "echo \"\$(echo \")\")\" '\"' \$(git push --force origin main)" \
+    "echo \$(echo '(' \$(git push --force origin main))" \
+    "echo \$(echo \")\") '\"' \$(git push --force origin main)"; do
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      [ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }
+      [[ "$output" == *"kern G1: plain force push"* ]] || { echo "$m: $c -> $output"; return 1; }
+    done
+  done
+}
+
 @test "G00 votes nothing outside autopilot or for other tools" {
   set_autopilot off
   g00_all none 'g=git; $g push' "python3 -c x" 'echo x | sh' "xargs sh -c x"

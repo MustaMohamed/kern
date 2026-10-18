@@ -175,6 +175,232 @@ _GW_AWK='
   }
 '
 
+# _GW_SCAN: the quote-aware scanner that _split_words and _subst_bodies share (run with -v sq="'"). It
+# reads a command with a stack of contexts, as bash and zsh do: each $( ), backtick, $(( )), $[ ], ${ },
+# subscript and double quote starts a context of its own, so the quotes and parens inside one are its
+# own, and only its own unquoted closer ends it. sc_init(STR) puts the characters of STR in SC[1..SN].
+# sc_end(I, K, DQ) reads SC from position I inside a context of kind K (DQ: inside double quotes) and
+# returns the position of the last character of the closer that ends it, or 0 when the text ends first.
+# The kinds:
+#   t  a whole record (_subst_bodies), which never closes.
+#   c  the body of a $( ): closes at the ) that balances it. A # that starts a word is a comment to the
+#      newline. The program defines sc_lt(I, CS) and sc_nl(I), called at a << and at a newline here
+#      outside arithmetic (CS: where the simple command starts); each returns the last position it
+#      read. _split_words reads here-docs with them.
+#   b  the body of a backtick pair: closes at the next backtick that no backslash escapes, quoted or
+#      not, as bash 3.2, bash 5.3 and zsh 5.9 all read it.
+#   d  a double-quoted string: closes at the next " that no backslash escapes. A single quote is literal.
+#   e  the body of ${ }: closes at the next }, as bash reads it (all three shells give ${x:-{}a} the
+#      value {a}, and bash runs the line after ${x:-{<<X}). Inside "..." a single quote is literal, which
+#      is what bash and zsh run for "${x:-'...'}", and the reading that shows the guards more where they
+#      differ.
+#   a  the body of $(( )) or a bare (( )): arithmetic, where a single quote is literal, but the parens
+#      inside one do not count, as bash finds the end (zsh counts them). Closes at the )) that ends it
+#      when the ) that closes its inner ( is followed by ); returns -1 when it is not, since bash and zsh
+#      then read a $( ) or ( ) around a subshell: `$((git push) )` runs git push.
+#   k  the body of $[ ] or of a subscript, arithmetic too: closes at the ] that balances it. A single
+#      quote is literal, and the brackets inside one do not count, as in a.
+# A subscript, NAME[ ] or the [ ] in ${NAME[ ]}, is read as k only while printing (sc_sub): bash 5.3 and
+# zsh run a['$(cmd)']=1. Outside an assignment NAME[ is a glob, so its brackets end nothing, and the
+# context reads the subscript as its own text too.
+# In a and k, sc_un is set at what bash or zsh reads in a way this scan cannot be sure of: a $ before a
+# quote or {, a <<, a comment or a case, a double quote or backtick that holds a paren (in a) or a
+# bracket (in k), a double quote that holds a backtick, $( ), $[ ] or ${ }, and a paren or bracket in a
+# single quote. When bash finds the closing )) it skips the parens in quotes and backticks, while zsh
+# counts them. Such an unsure one is read both ways (sc_dpar, sc_brk, sc_bare), so the guards never
+# read less than a shell runs.
+# With sc_pr set, the scan prints the body of each $( ) and backtick pair it meets outside another one,
+# once per position: a backtick body with its escapes removed, as the shell runs it, and for a $( ) or
+# backtick that never closes, the rest of the text. A single quote that never closes is then literal.
+# Past 16 nested contexts the scan goes on flat (sc_flat), since mawk's eval stack holds about 35 nested
+# $( ) here; while printing, it prints the text of such a context whole, as a body.
+# shellcheck disable=SC2016 # awk text
+_GW_SCAN='
+  function sc_init(s) { SS = s; SN = split(s, SC, ""); sc_dep = 0; sc_pr = 0; sc_un = 0; sc_chk = ""; sc_ar = 0 }
+  # sc_in(set, ch): true when the character ch is one of set (BWK awk finds an empty string anywhere).
+  function sc_in(set, ch) { return ch != "" && index(set, ch) > 0 }
+  # sc_ws(i): true when position i starts a word.
+  function sc_ws(i) { return i == 1 || sc_in(" \t\n\037;&|(", SC[i - 1]) }
+  # sc_case(i): true when the word at i is case.
+  function sc_case(i) {
+    return SC[i] == "c" && SC[i + 1] == "a" && SC[i + 2] == "s" && SC[i + 3] == "e" && sc_in(" \t\n\037", SC[i + 4])
+  }
+  # sc_named(i): true when the [ at i follows a NAME that starts a word, as in an array assignment.
+  function sc_named(i,   j) {
+    for (j = i - 1; j >= 1 && SC[j] ~ /[A-Za-z0-9_]/; j--) ;
+    return j < i - 1 && SC[j + 1] ~ /[A-Za-z_]/ && (j == 0 || sc_in(" \t\n\037;&|()", SC[j]))
+  }
+  # sc_put(a, b, bt, dq): prints SC[a..b] as a body, once per position; bt marks a backtick body.
+  function sc_put(a, b, bt, dq,   t) {
+    if ((a, b) in sc_seen) return
+    sc_seen[a, b] = 1
+    t = substr(SS, a, b - a + 1)
+    if (bt && index(t, "\\")) t = sc_unbt(t, dq)
+    print t
+  }
+  # sc_unbt(t, dq): the backtick body t as the shell runs it: the backslash before a \, ` or $, or
+  # before a " when the backtick is inside double quotes, is removed.
+  function sc_unbt(t, dq,   n, P, i, o) {
+    n = split(t, P, ""); o = ""
+    for (i = 1; i <= n; i++) {
+      if (P[i] == "\\" && i < n && (index("\\`$", P[i + 1]) || (dq && P[i + 1] == "\""))) i++
+      o = o P[i]
+    }
+    return o
+  }
+  # sc_quote(i, ansi): for the single quote at i, the position of the one that closes it; in an ANSI-C
+  # quote (ansi, a $ before the quote) a backslash escapes. When none does: i while printing, so the
+  # quote is read as literal, else 0.
+  function sc_quote(i, ansi,   j) {
+    for (j = i + 1; j <= SN; j++) {
+      if (ansi && SC[j] == "\\") j++
+      else if (SC[j] == sq) return j
+    }
+    return sc_pr ? i : 0
+  }
+  # sc_cmd(i, a): for the $( at i, whose body starts at a, the position of the ) that closes it, or 0.
+  # Prints the body.
+  function sc_cmd(i, a,   pr, un, ck, e) {
+    pr = sc_pr; un = sc_un; ck = sc_chk; sc_pr = 0; sc_chk = ""
+    e = sc_end(a, "c", 0)
+    sc_pr = pr; sc_un = un; sc_chk = ck
+    if (pr) sc_put(a, e ? e - 1 : SN, 0, 0)
+    return e
+  }
+  # sc_tick(i, dq): for the backtick at i, the position of the one that closes it, or 0. Prints the body.
+  function sc_tick(i, dq,   pr, e) {
+    pr = sc_pr; sc_pr = 0
+    e = sc_end(i + 1, "b", dq)
+    sc_pr = pr
+    if (pr) sc_put(i + 1, e ? e - 1 : SN, 1, dq)
+    return e
+  }
+  # sc_arith(a, k, dq): the end of the arithmetic body of kind a or k that starts at a; sc_au says
+  # whether the scan was unsure. The first scan is kept per position, so nested arithmetic is not read
+  # again and again. With sc_pr set the body is read a second time, to print the bodies inside it.
+  function sc_arith(a, k, dq,   pr, un) {
+    pr = sc_pr; un = sc_un
+    if (!((k, a) in sc_m)) { sc_pr = 0; sc_un = 0; sc_m[k, a] = sc_end(a, k, dq); sc_u[k, a] = sc_un }
+    if (pr && sc_m[k, a] > 0) { sc_pr = 1; sc_end(a, k, dq) }
+    sc_au = sc_u[k, a]; sc_pr = pr; sc_un = un || sc_au
+    return sc_m[k, a]
+  }
+  # sc_dpar(i, dq): for the $(( at i, the position of its last ): arithmetic when its inner ( closes
+  # right before the ) that closes it, else a $( ) around a subshell. Unsure, it is read both ways, and
+  # the later end counts.
+  function sc_dpar(i, dq,   a, e) {
+    a = sc_arith(i + 3, "a", dq)
+    if (a > 0 && !sc_au) return a
+    e = sc_cmd(i, i + 2)
+    return a > e ? a : e
+  }
+  # sc_brk(i, dq): for the $[ at i, the position of the ] that closes it. Unclosed, or unsure while
+  # printing, i: the context around it then reads the $[ ] as its own text too, after the bodies inside
+  # are printed.
+  function sc_brk(i, dq,   a) {
+    a = sc_arith(i + 2, "k", dq)
+    return a > 0 && !(sc_au && sc_pr) ? a : i
+  }
+  # sc_bare(i): for the bare (( at i, the position of the ) that closes it when it is arithmetic. Not,
+  # or unsure, i: the context then reads it as two parens. sc_ba keeps the end of the arithmetic reading.
+  function sc_bare(i,   a) {
+    a = sc_arith(i + 2, "a", 0); sc_ba = a
+    return a > 0 && !sc_au ? a : i
+  }
+  # sc_sub(i, dq): while printing, reads the subscript whose [ is at i as arithmetic (see k).
+  function sc_sub(i, dq,   un) { if (sc_pr) { un = sc_un; sc_end(i + 1, "k", dq); sc_un = un } }
+  # sc_open(i, k, dq): reads the opener at i, as a context of kind k reads it: $( ), $(( )), $[ ], ${ },
+  # a backtick, a quote, an ANSI-C quote or $"...". Returns the position of its last character, i when
+  # nothing opens there, or 0 when the text ends inside it.
+  function sc_open(i, k, dq,   c, x, e, ck) {
+    c = SC[i]; x = SC[i + 1]
+    if (c == "$" && x == "(") return SC[i + 2] == "(" ? sc_dpar(i, dq) : sc_cmd(i, i + 2)
+    if (c == "$" && x == "[") return sc_brk(i, dq)
+    if (c == "$" && x == "{") return sc_end(i + 2, "e", dq)
+    if (k == "a" || k == "k") {
+      if (c != "`" && c != "\"") return i
+      ck = sc_chk; sc_chk = k == "a" ? "()" : "[]"
+      e = c == "`" ? sc_tick(i, dq) : sc_end(i + 1, "d", 1)
+      sc_chk = ck
+      return e
+    }
+    if (c == "`") return sc_tick(i, dq)
+    if (k == "d") return i
+    if (c == "\"") return sc_end(i + 1, "d", 1)
+    if (k == "e" && dq) return i
+    if (c == sq) return sc_quote(i, 0)
+    if (c == "$" && x == sq) return sc_quote(i + 1, 1)
+    if (c == "$" && x == "\"") return sc_end(i + 2, "d", 1)
+    return i
+  }
+  # sc_flat(i, k): the end of the context of kind k from i, read flat: its own brackets are counted,
+  # and a quote or backtick is skipped to its pair, with nothing nested.
+  function sc_flat(i, k,   o, z, p, c, q) {
+    o = k == "e" ? "{" : k == "k" ? "[" : "("; z = k == "e" ? "}" : k == "k" ? "]" : ")"
+    p = k == "a" ? 2 : 1; q = ""
+    for (; i <= SN; i++) {
+      c = SC[i]
+      if (c == "\\") { i++; continue }
+      if (q != "") { if (c == q) q = ""; continue }
+      if (k == "b" || k == "d") { if (c == (k == "b" ? "`" : "\"")) return i; continue }
+      if (c == sq || c == "\"" || c == "`") { q = c; continue }
+      if (k == "t") continue
+      if (c == o) p++
+      else if (c == z && --p == (k == "a")) return k == "a" ? (SC[i + 1] == ")" ? i + 1 : -1) : i
+    }
+    return 0
+  }
+  function sc_end(i, k, dq,   p, c, x, e, cs, h0, r, sk, sb) {
+    if (sc_dep >= 16) {
+      r = sc_flat(i, k)
+      if (sc_pr) sc_put(i, r > 0 ? r - 1 : SN, 0, 0)
+      return r
+    }
+    sc_dep++
+    r = 0; p = k == "a" ? 2 : 1; cs = i; h0 = hn; sk = 0; sb = 0
+    if (k == "a") sc_ar++
+    for (; i <= SN; i++) {
+      c = SC[i]; x = SC[i + 1]
+      if (c == "\\") { i++; continue }
+      if (k == "b" || k == "d") {
+        if (c == (k == "b" ? "`" : "\"")) { r = i; break }
+        if (sc_chk != "" && (index(sc_chk, c) || (k == "d" && (c == "`" || (c == "$" && sc_in("{([", x)))))) sc_un = 1
+        if (k == "b" || (c != "$" && c != "`")) continue
+      } else if (k == "a" || k == "k") {
+        if (c == sq) { sk = !sk; continue }
+        if ((c == "$" && sc_in("{\"" sq, x)) || (c == "<" && x == "<") || (sc_ws(i) && (c == "#" || sc_case(i)))) sc_un = 1
+        if (sk && sc_in("()[]", c)) sc_un = 1
+        # In a single quote a double quote is text: bash skips the quote whole to find the end.
+        if (sk && c == "\"") continue
+        if (!sk && c == (k == "a" ? "(" : "[")) { p++; continue }
+        if (!sk && c == (k == "a" ? ")" : "]") && --p == (k == "a")) { r = k == "k" ? i : x == ")" ? i + 1 : -1; break }
+      } else {
+        # A subscript: sb counts the ones open here, where a << is no here-doc.
+        if (c == "[" && (k == "e" || sc_named(i))) { sb++; sc_sub(i, dq); continue }
+        if (c == "]" && sb) sb--
+        if (k == "e" && c == "}") { r = i; break }
+        if (k != "e" && c == "(" && x == "(" && sc_ws(i) && (e = sc_bare(i)) > i) { i = e; continue }
+        if (k == "c") {
+          if (c == "#" && sc_ws(i)) { while (i < SN && SC[i + 1] != "\n" && SC[i + 1] != "\037") i++; continue }
+          if (c == "<" && x == "<" && !sc_ar && !sb) { i = sc_lt(i, cs); continue }
+          if (c == "\n") { cs = i + 1; if (!sc_ar) i = sc_nl(i); continue }
+          if (sc_in(";&|", c)) { cs = i + 1; continue }
+          if (c == "(") { p++; cs = i + 1; continue }
+          if (c == ")" && --p == 0) { r = i; break }
+        }
+      }
+      if (c == "$" || c == "`" || c == "\"" || c == sq) {
+        if (!(e = sc_open(i, k, dq))) break
+        i = e
+      }
+    }
+    if (k == "a") sc_ar--
+    if (hn > h0) hn = h0
+    sc_dep--
+    return r
+  }
+'
+
 # git_words CMD: one simple command per line. Splits on ; & && || | ( ), the words { and }, and
 # newlines outside quotes, backticks and $( ); a redirection (2>&1, &>, >|) never splits, and a
 # backslash-newline is dropped. Here-doc bodies are data: they are left out (see _split_words).
@@ -248,145 +474,64 @@ git_words() {
   done
 }
 
-# _subst_bodies STR: the body of each outermost $( ) and backtick pair, one per line. A $(( )), a
-# $[ ] and a bare (( )) arithmetic command are arithmetic, not commands: in their place come the
-# bodies of the $( ) and backtick pairs inside them, found the same way, with a single quote read as
-# literal text (see bodies). Any other $(( is a $( ) around a subshell (see arith).
+# _subst_bodies STR: the body of each outermost $( ) and backtick pair, one per line, as the scanner
+# (_GW_SCAN) finds them, at any depth of quotes, ${ } and arithmetic. A $(( )), a $[ ], a subscript and
+# a bare (( )) arithmetic command are arithmetic, not commands: in their place come the bodies of the
+# $( ) and backtick pairs inside them, with a single quote read as literal text. Any other $(( is a $( )
+# around a subshell; one the scanner is unsure of gives both readings.
 _subst_bodies() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
-    # wordat(s, i): true when position i of s starts a word.
-    function wordat(s, i) { return i == 1 || index(" \t\n;&|(", substr(s, i - 1, 1)) > 0 }
-    # arith(s, i): for the $(( at i, the position of the ) that closes it when it is arithmetic, else 0.
-    # bash and zsh read $(( as arithmetic when the ) that closes its inner ( is followed by the ) that
-    # closes the outer one; else as $( ) around a subshell, so `$((git push) )` runs git push. Both
-    # skip an escaped paren. When finding the closing )) bash skips the parens in double quotes and
-    # backticks while zsh counts them, so this returns 0 at a paren there; but a single quote is
-    # literal when the arithmetic expands, so its parens are counted as arithmetic and the quote is
-    # ordinary text (so a $( ) or backtick inside it reaches a guard, review Critical 1 and Important
-    # 1). It also returns 0 at what bash or zsh scans past and a paren count cannot: a double quote
-    # that holds ${ } or a backtick, a $ before a quote (so $'...', ${ } and $"..."), a here-doc, and a
-    # comment or a case inside a $( ). An unsure $(( is so read as $( ), whose body is printed whole.
-    # k is the length of the opening token: 3 for $(( , 2 for a bare (( (the arithmetic command, see
-    # arcmd in _split_words). Both open two parens, so d starts at 2.
-    function arith(s, i, k,   n, d, c, j) {
-      n = length(s); d = 2
-      for (i += (k ? k : 3); i <= n; i++) {
-        c = substr(s, i, 1)
-        if (c == "\\") { i++; continue }
-        if (c == "$" && index("{" sq "\"", substr(s, i + 1, 1))) return 0
-        if (c == "<" && substr(s, i + 1, 1) == "<") return 0
-        if (wordat(s, i) && (c == "#" || (substr(s, i, 4) == "case" && index(" \t\n", substr(s, i + 4, 1))))) return 0
-        if (c == "\"" || c == "`") {
-          for (j = i + 1; j <= n && substr(s, j, 1) != c; j++) {
-            if (index("()", substr(s, j, 1)) || (c == "\"" && (substr(s, j, 1) == "`" || substr(s, j, 2) == "${"))) return 0
-            if (substr(s, j, 1) == "\\") j++
-          }
-          if (j > n) return 0
-          i = j; continue
-        }
-        if (c == "(") d++
-        else if (c == ")" && --d == 1) return substr(s, i + 1, 1) == ")" ? i + 1 : 0
-      }
-      return 0
-    }
-    # arithbr(s, i): for the $[ at i (old-style arithmetic, $[ expr ]), the position of the ] that
-    # closes it, else 0. Nested [ ] (a subscript) balance. When finding the ] both shells skip the
-    # brackets in a single quote (it is literal), so a single-quoted span is skipped here; its $( ) is
-    # still printed because bodies reads the body in arithmetic mode. A double quote or backtick is
-    # skipped and a bracket in one returns 0. $[ has no subshell alter-ego the way $(( does, so unlike
-    # arith a single quote never counts as arithmetic text here.
-    function arithbr(s, i,   n, d, c, j) {
-      n = length(s); d = 1
-      for (i += 2; i <= n; i++) {
-        c = substr(s, i, 1)
-        if (c == "\\") { i++; continue }
-        if (c == "$" && index("{" sq "\"", substr(s, i + 1, 1))) return 0
-        if (c == "<" && substr(s, i + 1, 1) == "<") return 0
-        if (wordat(s, i) && (c == "#" || (substr(s, i, 4) == "case" && index(" \t\n", substr(s, i + 4, 1))))) return 0
-        if (c == sq) {
-          for (j = i + 1; j <= n && substr(s, j, 1) != sq; j++) ;
-          if (j > n) return 0
-          i = j; continue
-        }
-        if (c == "\"" || c == "`") {
-          for (j = i + 1; j <= n && substr(s, j, 1) != c; j++) {
-            if (index("[]", substr(s, j, 1)) || (c == "\"" && (substr(s, j, 1) == "`" || substr(s, j, 2) == "${"))) return 0
-            if (substr(s, j, 1) == "\\") j++
-          }
-          if (j > n) return 0
-          i = j; continue
-        }
-        if (c == "[") d++
-        else if (c == "]" && --d == 0) return i
-      }
-      return 0
-    }
-    # bodies(buf, ar): prints the bodies in buf. ar=1 reads buf as arithmetic text, where a single
-    # quote is literal, not a quote, so a $( ) or backtick inside one is still printed (review
-    # Critical 1). $(( )), $[ ] and a bare (( )) arithmetic command all read their body with ar=1;
-    # nested arithmetic stays arithmetic. Inside "..." a single quote is also literal (so a $( ),
-    # backtick, $(( )) or $[ ] inside the double quotes is still read); a backslash there escapes the
-    # next character, as the shells do, and a bare (( )) is ordinary text, not a command. A single
-    # quote inside ${ } inside "..." is read as literal too, which is what bash and zsh run; that is
-    # the reading that shows the guards more where the shells could differ.
-    function bodies(buf, ar,   n, q, depth, i, c, e, s) {
-      n = length(buf); q = ""; depth = 0
-      for (i = 1; i <= n; i++) {
-        c = substr(buf, i, 1)
-        if (q == sq) { if (c == sq) q = ""; continue }
-        if (c == "\\") { i++; continue }
-        if (depth == 0 && c == "`") {
-          e = index(substr(buf, i + 1), "`")
-          if (e) { print substr(buf, i + 1, e - 1); i += e }
-          continue
-        }
-        if (depth == 0 && substr(buf, i, 3) == "$((" && (e = arith(buf, i))) {
-          bodies(substr(buf, i + 3, e - i - 4), 1); i = e; continue
-        }
-        if (depth == 0 && substr(buf, i, 2) == "$[" && (e = arithbr(buf, i))) {
-          bodies(substr(buf, i + 2, e - i - 2), 1); i = e; continue
-        }
-        if (depth == 0 && q == "" && wordat(buf, i) && substr(buf, i, 2) == "((" && (e = arith(buf, i, 2))) {
-          bodies(substr(buf, i + 2, e - i - 3), 1); i = e; continue
-        }
-        if (c == "$" && substr(buf, i + 1, 1) == "(") {
-          if (depth == 0) s = i + 2
-          depth++; i++; continue
-        }
-        if (depth > 0) {
-          if (c == "(") depth++
-          else if (c == ")") { depth--; if (depth == 0) print substr(buf, s, i - s) }
-          continue
-        }
-        if (q == "\"") { if (c == "\"") q = ""; continue }
-        if (c == "\"") { q = "\""; continue }
-        if (!ar && c == sq) q = sq
-      }
-    }
+  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_SCAN"'
+    function sc_lt(i, cs) { return i }
+    function sc_nl(i) { return i }
     { buf = buf (NR > 1 ? " " : "") $0 }
-    END { bodies(buf) }'
+    END { sc_init(buf); sc_pr = 1; sc_end(1, "t", 0) }'
 }
 
-# _split_words STR: the simple commands of STR, one record per line (see git_words). A here-doc
-# (<<WORD, <<-WORD, <<'WORD', <<"WORD") is read at the newline that ends its command line: the body
-# up to the closing WORD line is skipped. At the top level the body and closing line are dropped;
-# inside $( ) the closing line is kept, so the record still parses the same when split again. The
-# body of a here-doc that sh, bash, zsh or dash reads as its script (no -c) is kept as commands.
-# A `<<` is never a here-doc inside $(( )) or (( )), inside ${ }, $[ ] or a NAME[ ] subscript (an
-# array assignment), after a word that starts with #, or when its $( ) closes before the newline; and
-# a here-doc with no closing line skips nothing. So a misread `<<` cannot hide the commands after it.
-# A comment at the top level runs to its newline.
+# _split_words STR: the simple commands of STR, one record per line (see git_words). The scanner
+# (_GW_SCAN) reads each quote, backtick, $( ), $(( )), $[ ], ${ }, ANSI-C quote, $"..." and subscript
+# whole, so only a separator outside all of them ends a record. A here-doc (<<WORD, <<-WORD, <<'WORD',
+# <<"WORD") is read at the newline that ends its command line: the body up to the closing WORD line is
+# skipped. At the top level the body and closing line are dropped; inside $( ) the closing line is kept,
+# so the record still parses the same when split again. The body of a here-doc that sh, bash, zsh or
+# dash reads as its script (no -c) is kept as commands. A `<<` is never a here-doc inside $(( )) or
+# (( )), inside ${ }, $[ ] or a NAME[ ] subscript (an array assignment), in a comment, or when its $( )
+# closes before the newline; and a here-doc with no closing line skips nothing. So a misread `<<` cannot
+# hide the commands after it. A comment at the top level runs to its newline. A quote or context that
+# never closes keeps the rest of the text in its record; that text is then read flat too, split at each
+# separator, quoted or not, so a quote the scanner misreads cannot hide the commands after it.
 _split_words() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
-    function emit(s) { gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s); gsub(/\n/, "\037", s); if (s != "") print s }
-    function sep(ch) { return ch == "" || index(" \t\n;&|()", ch) > 0 }
-    # cut(e): emits the record gathered so far, up to position e - 1.
-    function cut(e) { emit(pre substr(buf, start, e - start)); pre = "" }
-    # hdat(j): true when the `<` at j opens a here-doc operator (`<<`, not `<<<`) where one can start.
-    function hdat(j) {
-      return !cm && !ta && bn <= bb && !(ar && depth >= ar) && substr(buf, j + 1, 1) == "<" &&
-        substr(buf, j + 2, 1) != "<" && substr(buf, j - 1, 1) != "<"
+  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_GW_SCAN"'
+    # emit(s): prints the record s. In the flat reading (fl) a record printed already is left out.
+    function emit(s) {
+      gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s)
+      if (fl && (s in seen)) return
+      seen[s] = 1; gsub(/\n/, "\037", s)
+      if (s != "") print s
     }
+    function sep(ch) { return ch == "" || index(" \t\n;&|()", ch) > 0 }
+    # rec(a, b): the text from position a to b - 1, without the here-doc bodies dropped in it.
+    function rec(a, b,   s, j) {
+      s = ""
+      for (j = 1; j <= dn; j++) {
+        if (db[j] < a || da[j] >= b) continue
+        s = s substr(buf, a, da[j] - a); a = db[j] + 1
+      }
+      return s substr(buf, a, b - a)
+    }
+    # cut(e): emits the record gathered so far, up to position e - 1.
+    function cut(e) { emit(rec(start, e)) }
+    # flat(j): from j on, emits the records split at every ; & | ( ) and newline that no backslash
+    # escapes, quoted or not, but those emitted already.
+    function flat(j,   a) {
+      fl = 1
+      for (a = j; j <= n + 1; j++) {
+        if (SC[j] == "\\") { j++; continue }
+        if (j <= n && !index(";&|()\n", SC[j])) continue
+        emit(substr(buf, a, j - a)); a = j + 1
+      }
+    }
+    # hdat(j): true when the `<` at j opens a here-doc operator (`<<`, not `<<<`) where one can start.
+    function hdat(j) { return !ta && !sb && SC[j + 1] == "<" && SC[j + 2] != "<" && SC[j - 1] != "<" }
     # shellin(t): true when the simple command t is sh, bash, zsh or dash and no reading of shc finds
     # a -c script it runs, so a here-doc it reads is its script.
     function shellin(t,   k, b, P) {
@@ -415,52 +560,12 @@ _split_words() {
         if (index(" \t;&|<>()", ch)) break
         d = d ch
       }
-      if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash; hdd[hn] = depth }
-    }
-    # named(j): true when the `[` at j follows a NAME that starts a word, as in an array assignment.
-    function named(j,   k) {
-      for (k = j - 1; k >= 1 && substr(buf, k, 1) ~ /[A-Za-z0-9_]/; k--) ;
-      return k < j - 1 && substr(buf, k + 1, 1) ~ /[A-Za-z_]/ && (k == 0 || sep(substr(buf, k, 1)))
-    }
-    # arcmd(j): for the bare (( at j, the position of the ) that closes it when it is an arithmetic
-    # command, else 0 (a subshell ((cmd) ), which the splitter reads). This is _subst_bodies arith()
-    # for a two-char (( (a separate awk program, so the logic is repeated): a single quote is literal,
-    # a double quote or backtick is skipped and a paren in one returns 0, and (( is arithmetic when the
-    # ) that closes its inner ( is followed by ). _subst_bodies then reads the body in arithmetic mode.
-    function arcmd(j,   d, c, m, w) {
-      d = 2
-      for (j += 2; j <= n; j++) {
-        c = substr(buf, j, 1)
-        if (c == "\\") { j++; continue }
-        if (c == "$" && index("{" sq "\"", substr(buf, j + 1, 1))) return 0
-        if (c == "<" && substr(buf, j + 1, 1) == "<") return 0
-        w = (j == 1 || index(" \t\n;&|(", substr(buf, j - 1, 1)) > 0)
-        if (w && (c == "#" || (substr(buf, j, 4) == "case" && index(" \t\n", substr(buf, j + 4, 1))))) return 0
-        if (c == "\"" || c == "`") {
-          for (m = j + 1; m <= n && substr(buf, m, 1) != c; m++) {
-            if (index("()", substr(buf, m, 1)) || (c == "\"" && (substr(buf, m, 1) == "`" || substr(buf, m, 2) == "${"))) return 0
-            if (substr(buf, m, 1) == "\\") m++
-          }
-          if (m > n) return 0
-          j = m; continue
-        }
-        if (c == "(") d++
-        else if (c == ")" && --d == 1) return substr(buf, j + 1, 1) == ")" ? j + 1 : 0
-      }
-      return 0
-    }
-    # open(): a $( or ( inside one opens a depth, with its own stack of ${ } and the like.
-    function open() { csv[depth] = cs; bbv[depth] = bb; bb = bn; depth++ }
-    # shut(): a `)` closes a $( ); arithmetic, here-docs and ${ } opened inside it end with it, and
-    # the command that held it resumes.
-    function shut() {
-      depth--; cs = csv[depth]; bn = bb; bb = bbv[depth]
-      if (ar && depth < ar) ar = 0
-      while (hn && hdd[hn] > depth) hn--
+      if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash }
     }
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
     function bodies(j,   h, k, t) {
+      while (lp > 1 && off[lp] > j) lp--
       while (lp < NR && off[lp + 1] <= j) lp++
       k = lp; nh = hn; hn = 0
       for (h = 1; h <= nh; h++) {
@@ -470,75 +575,44 @@ _split_words() {
       }
       return k
     }
-    # nested(j): at the newline j inside $( ), drops the here-doc bodies and keeps their closing
-    # lines. Returns where scanning resumes.
-    function nested(j,   k, h) {
-      if (!(k = bodies(j))) return j + 1
-      pre = pre substr(buf, start, j - start + 1)
-      for (h = 1; h < nh; h++) pre = pre L[last[h]] "\n"
-      start = off[k]
-      return off[k] + length(L[k])
+    # sc_lt(j, cs): the scanner hook at a << at j inside $( ), where cs starts the simple command. A
+    # here-doc operator (not <<<) queues its delimiter, unless the command is a shell that reads the
+    # here-doc as its script. Returns the last position it read.
+    function sc_lt(j, cs) {
+      if (SC[j + 2] == "<" || SC[j - 1] == "<") return j
+      if (!shellin(substr(buf, cs, j - cs))) heredoc(j + 2)
+      return j + 1
+    }
+    # sc_nl(j): the scanner hook at the newline j inside $( ): drops the bodies of the here-docs queued
+    # before it (da[], db[]) and keeps their closing lines. Returns the last position it read.
+    function sc_nl(j,   k, h, a) {
+      if (!hn || !(k = bodies(j))) return j
+      a = j + 1
+      for (h = 1; h <= nh; h++) { da[++dn] = a; db[dn] = off[last[h]] - 1; a = off[last[h]] + length(L[last[h]]) + 1 }
+      return off[k] + length(L[k]) - 1
     }
     { L[NR] = $0; buf = buf (NR > 1 ? "\n" : "") $0 }
-    # cs: where the current simple command starts. ar: the depth where $(( or (( inside $( ) began.
-    # ta: inside (( )) at the top level. cm: in a comment inside $( ), until the newline. csv[d]:
-    # cs of the command holding the $( ) opened at depth d. es: the last backslash-escaped position.
-    # bk[bb + 1..bn]: the closing } or ] of each ${ }, $[ ] or NAME[ ] open at this depth, innermost
-    # last; a { or [ inside one nests (as zsh reads ${x:-{}a}). bbv[d]: bb at depth d.
+    # cs: where the current simple command starts. ta: inside (( )) at the top level. sb: the NAME[ ]
+    # subscripts open at the top level. es: the last backslash-escaped position. da[1..dn], db[]: the
+    # here-doc bodies dropped inside $( ) (sc_nl).
     END {
-      n = length(buf); q = ""; depth = 0; start = 1; cs = 1; i = 1; pre = ""; hn = 0; lp = 1; off[1] = 1
-      ar = 0; ta = 0; cm = 0; es = 0; bn = 0; bb = 0
+      n = length(buf); sc_init(buf); start = 1; cs = 1; i = 1; hn = 0; lp = 1; off[1] = 1
+      ta = 0; sb = 0; es = 0; dn = 0
       for (k = 2; k <= NR; k++) off[k] = off[k - 1] + length(L[k - 1]) + 1
       while (i <= n) {
-        c = substr(buf, i, 1)
-        if (q == sq) { if (c == sq) q = ""; i++; continue }
-        if (c == "\\") { if (substr(buf, i + 1, 1) != "\n") es = i + 1; i += 2; continue }
-        if (q == "\"") {
-          if (c == "$" && index("{[", x = substr(buf, i + 1, 1))) { bk[++bn] = x == "{" ? "}" : "]"; i += 2; continue }
-          if (bn > bb && index("{}[]", c)) {
-            if (c == bk[bn]) bn--
-            else if (c == "{" || c == "[") bk[++bn] = c == "{" ? "}" : "]"
-          }
-          if (c == "\"") q = ""
-          else if (c == "$" && x == "(") {
-            if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
-            open(); cs = i + 2; i++
-          }
-          else if (c == ")" && depth > 0) shut()
-          else if (depth > 0 && c == "<" && hdat(i)) {
-            if (!shellin(substr(buf, cs, i - cs))) heredoc(i + 2)
-            i += 2; continue
-          }
-          else if (depth > 0 && index(";&|\n", c)) {
-            cs = i + 1
-            if (c == "\n") { cm = 0; if (hn) { i = nested(i); continue } }
-          }
+        c = SC[i]; p = SC[i - 1]; x = SC[i + 1]
+        if (c == "\\") { if (x != "\n") es = i + 1; i += 2; continue }
+        if (c == sq || c == "\"" || c == "`" || c == "$") {
+          e = sc_open(i, "c", 0)
+          if (e > i) { i = e + 1; continue }
+          if (!e) break
           i++; continue
         }
-        if (q == "`") { if (c == "`") q = ""; i++; continue }
-        if (c == sq || c == "\"" || c == "`") { q = c; i++; continue }
+        if (c == "[" && sc_named(i)) sb++
+        else if (c == "]" && sb) sb--
         if (c == "<" && hdat(i)) {
           if (!shellin(substr(buf, cs, i - cs))) heredoc(i + 2)
           i += 2; continue
-        }
-        if (c == "$" && substr(buf, i + 1, 1) == "(") {
-          if (substr(buf, i + 2, 1) == "(" && !ar) ar = depth + 1
-          open(); cs = i + 2; i += 2; continue
-        }
-        p = substr(buf, i - 1, 1)
-        x = substr(buf, i + 1, 1)
-        if (index("${}[]", c)) {
-          if (c == "$") { if (x == "{" || x == "[") { bk[++bn] = x == "{" ? "}" : "]"; i += 2; continue } }
-          else if (bn > bb) { if (c == bk[bn]) bn--; else if (c == "{" || c == "[") bk[++bn] = c == "{" ? "}" : "]" }
-          else if (c == "[" && named(i)) bk[++bn] = "]"
-        }
-        if (depth > 0) {
-          if (c == "\n") { cm = 0; cs = i + 1; if (hn) { i = nested(i); continue } }
-          else if (c == "#" && sep(p)) cm = 1
-          else if (c == "(") { if (x == "(" && !ar) ar = depth + 1; open(); cs = i + 1 }
-          else if (c == ")") shut()
-          else if (index(";&|", c)) cs = i + 1
-          i++; continue
         }
         if ((c == "&" && (p == ">" || p == "<" || x == ">")) || (c == "|" && p == ">")) { i++; continue }
         # Not after an escaped blank or operator.
@@ -548,8 +622,12 @@ _split_words() {
           continue
         }
         # A bare (( )) arithmetic command stays in its record whole, so _subst_bodies reads its body in
-        # arithmetic mode (a single quote there is literal). A subshell ((cmd) ) gets arcmd 0 and splits.
-        if (c == "(" && x == "(" && (e = arcmd(i))) { i = e + 1; continue }
+        # arithmetic mode (a single quote there is literal). A subshell ((cmd) ) splits; one the scanner
+        # is unsure of splits, and its arithmetic reading is a record of its own too.
+        if (c == "(" && x == "(") {
+          if ((e = sc_bare(i)) > i) { i = e + 1; continue }
+          if (sc_ba > 0) emit(substr(buf, i, sc_ba - i + 1))
+        }
         if (c == "(" && x == "(") ta = 1
         else if (c == ")" && x == ")") ta = 0
         if ((c == "{" || c == "}") && (i == 1 || sep(p)) && sep(x)) {
@@ -559,12 +637,14 @@ _split_words() {
           cut(i)
           if ((c == "&" || c == "|") && x == c) i++
           start = cs = i + 1
-          if (c == "\n") cm = 0
           if (c == "\n" && hn && (k = bodies(i))) { i = off[k] + length(L[k]); start = cs = i + 1 }
         }
         i++
       }
       cut(n + 1)
+      # A quote or context that never closes (at i) holds the rest of the text, in the record just cut.
+      # That text is then read again flat, so a quote the scanner misreads hides nothing after it.
+      if (i <= n) flat(start)
     }'
 }
 
