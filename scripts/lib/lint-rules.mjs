@@ -1,6 +1,6 @@
 // kern lint rules (design spec 11.2). Pure checks over a loaded model; the CLI is scripts/lint-skills.mjs.
 // Rule set informed by addyosmani/agent-skills scripts/lib/skill-lint.js (MIT); the code is written for kern.
-import { readFileSync, readdirSync, existsSync, statSync, mkdtempSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, mkdtempSync, mkdirSync, copyFileSync, rmSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -51,6 +51,15 @@ function scanMarkdown(text) {
   return { lines: kept, text: kept.join('\n'), unclosed: open !== null };
 }
 const h2Lines = (scan) => scan.lines.filter((l) => /^## /.test(l)).map((l) => l.trimEnd());
+
+// Rule 7 renders the kernel in a repo whose real path has one fixed length: the settings block names the
+// main worktree and keeps to 600 chars, so a longer path drops a Set: entry, and the measurement would
+// move with the machine's temp dir.
+export const RULE7_REPO_LEN = 120;
+export function fixedLengthRepo(tmp) {
+  const real = realpathSync(tmp);
+  return join(real, 'r'.repeat(Math.max(1, RULE7_REPO_LEN - real.length - 1)));
+}
 
 export function loadModel(root) {
   const skills = [];
@@ -226,7 +235,7 @@ export const RULES = [
     if (!settings.length) out.push(err(7, 'tests/fixtures/projects/long-settings', 'no kern.local.yml or kern.yml, so the longest-settings render would be measured with defaults'));
     const tmp = mkdtempSync(join(tmpdir(), 'kern-rule7-'));
     try {
-      const repo = join(tmp, 'repo');
+      const repo = fixedLengthRepo(tmp);
       mkdirSync(join(repo, '.claude'), { recursive: true });
       const init = spawnSync('git', ['init', '-q', repo]);
       if (init.status !== 0) out.push(err(7, 'hooks/session-start', `git init exited ${init.status}, so the kernel was not measured in a repository`));

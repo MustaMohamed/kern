@@ -1,12 +1,13 @@
 // tests/lint-rules.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
-import { loadModel, runLint } from '../scripts/lib/lint-rules.mjs';
+import { fileURLToPath } from 'node:url';
+import { RULE7_REPO_LEN, fixedLengthRepo, loadModel, runLint } from '../scripts/lib/lint-rules.mjs';
 
 function repo(files) {
   const root = mkdtempSync(join(tmpdir(), 'kern-lint-'));
@@ -551,4 +552,16 @@ test('tiers: a Read in prose, not in a row, does not make a path skill', () => {
 
 test('rule 5: kernel/routes.md is scanned for Skill tool references', () => {
   assert.deepEqual(rules(lint({ 'kernel/routes.md': 'Use the Skill tool with `nope`.\n' })), [5]);
+});
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
+
+test('rule 7 renders from a repo path of one fixed length, so the temp dir does not move the measurement', () => {
+  const short = mkdtempSync('/tmp/k-');
+  const long = mkdtempSync(join(tmpdir(), 'kern-rule7-longer-temp-dir-name-'));
+  try {
+    for (const t of [short, long]) assert.equal(fixedLengthRepo(t).length, RULE7_REPO_LEN, t);
+    const lint = (dir) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'lint-skills.mjs')], { encoding: 'utf8', env: { ...process.env, TMPDIR: dir } }).stdout;
+    assert.equal(lint(short), lint(long));
+  } finally { rmSync(short, { recursive: true, force: true }); rmSync(long, { recursive: true, force: true }); }
 });
