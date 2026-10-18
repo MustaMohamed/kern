@@ -30,6 +30,9 @@ const save = () => {
   writeFileSync(out, JSON.stringify({ model: MODEL, grader: GRADER, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS, results }, null, 2) + '\n');
 };
 const plugin = pluginCopy(ROOT);
+// Each run's events go to evals/results (gitignored), so a missed expectation can be read in the transcript.
+const raw = join(ROOT, 'evals', 'results', `behave-${MODEL.replace(/^claude-/, '')}-${new Date().toISOString().slice(0, 10)}`);
+mkdirSync(raw, { recursive: true });
 try {
   for (const c of cases) {
     const runs = [];
@@ -38,6 +41,7 @@ try {
       const cwd = workspace(src, { name: 'billing-service', origin: !!c.origin, branch: c.branch || '', setup: c.setup || [] });
       if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
       const { run, problem } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20 });
+      if (run) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n') + '\n');
       const gdir = mkdtempSync(join(tmpdir(), 'g-'));
       let verdict = null; let invalid = !!problem; let reason = problem;
       if (!invalid) {

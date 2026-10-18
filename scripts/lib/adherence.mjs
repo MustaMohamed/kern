@@ -78,12 +78,23 @@ export const normalize = (s) => s.toLowerCase()
   .replace(/\s+/g, ' ')
   .trim();
 
-const readOf = (u, path) => u.name === 'Read' && typeof u.input.file_path === 'string' && resolve(u.input.file_path) === resolve(path);
+// macOS gives the temp dir as /var/... and its realpath as /private/var/...; both name one file.
+const canon = (p) => resolve(p).replace(/^\/private(?=\/var\/)/, '');
+// A Bash segment that prints a file: since Claude Code 2.1.302 a model often reads a skill with cat or sed.
+const READERS = /^(?:cat|head|tail|sed|less|more|awk|nl|bat)$/;
+const bashReads = (u) => (u.name === 'Bash' && typeof u.input.command === 'string'
+  ? u.input.command.split(/&&|\|\||;|\||\n/).flatMap((seg) => {
+    const words = seg.trim().split(/\s+/);
+    return READERS.test(words[0] || '') ? words.slice(1).map((w) => w.replace(/^['"]|['"]$/g, '')).filter((w) => w.startsWith('/')) : [];
+  })
+  : []);
+const readsOf = (u) => (u.name === 'Read' && typeof u.input.file_path === 'string' ? [u.input.file_path] : bashReads(u)).map(canon);
+const readOf = (u, path) => readsOf(u).includes(canon(path));
 // routeCall: u reads the route's file (skills/<route>/SKILL.md, or routeFile for a kernel-file route such
 // as kernel/context.md) under the plugin root, or calls the Skill tool with kern:<route>.
 export const routeCall = (u, route, root, routeFile = `skills/${route}/SKILL.md`) => readOf(u, `${root}/${routeFile}`) || (u.name === 'Skill' && u.input.skill === `kern:${route}`);
 export const routesCall = (u, root) => readOf(u, `${root}/kernel/routes.md`);
-const anyKernRoute = (u, root) => (u.name === 'Read' && typeof u.input.file_path === 'string' && resolve(u.input.file_path).startsWith(resolve(root, 'skills') + '/') && u.input.file_path.endsWith('/SKILL.md')) ||
+const anyKernRoute = (u, root) => readsOf(u).some((f) => f.startsWith(`${canon(join(root, 'skills'))}/`) && f.endsWith('/SKILL.md')) ||
   routesCall(u, root) || readOf(u, `${root}/kernel/context.md`) || (u.name === 'Skill' && /^kern:/.test(String(u.input.skill || '')));
 
 function todoItems(uses) {
@@ -105,7 +116,7 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
     const hit = work.find((u) => (projectSkill ? routeCall(u, projectSkill, root) : anyKernRoute(u, root)));
     if (hit) reasons.push(`a kern route was read: ${hit.name} ${hit.input.file_path || hit.input.skill}`);
     if (projectSkill && !work.some((u) => (u.name === 'Skill' && u.input.skill === projectSkill) ||
-      (u.name === 'Read' && String(u.input.file_path || '').endsWith(`/.claude/skills/${projectSkill}/SKILL.md`)))) {
+      readsOf(u).some((f) => f.endsWith(`/.claude/skills/${projectSkill}/SKILL.md`)))) {
       reasons.push(`the project skill ${projectSkill} was not used`);
     }
     return { pass: reasons.length === 0, reasons, items: [], hops: 0 };

@@ -45,6 +45,9 @@ if (args.includes('--dry-run')) {
 }
 const root = VARIANT === 'inline-rows' ? inlineRows(ROOT) : realpathSync(pluginCopy(ROOT));
 const results = [];
+// Each run's events go to evals/results (gitignored), so a failed case can be read, not only its grade.
+const raw = join(ROOT, 'evals', 'results', `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${new Date().toISOString().slice(0, 10)}`);
+mkdirSync(raw, { recursive: true });
 try {
   for (const c of cases) {
     const steps = c.route ? readSteps(readFileSync(join(root, routeFileOf(c)), 'utf8')) : [];
@@ -60,6 +63,7 @@ try {
         let run = null; let problem = ''; let failure = '';
         try { run = runClaude({ cwd, prompts: c.prompts, pluginDirs: [root], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 }); problem = runProblem(run); failure = runFailure(run); }
         catch (e) { if (e.fatal) throw e; problem = failure = e.message; }
+        if (run) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n') + '\n');
         const g = run && !failure ? grade(run.events, { route: c.route, routeFile: c.route_file, steps, root, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, reasons: [failure] };
         runs.push({ pass: g.pass, hops: g.hops, reasons: g.reasons, problem, exit: run ? run.status : null });
       } finally {

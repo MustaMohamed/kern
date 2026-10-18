@@ -198,3 +198,18 @@ test('removeTemp removes a directory under the OS temp dir and refuses anything 
   assert.throws(() => removeTemp(tmpdir()), /refusing to remove/);
   assert.ok(existsSync(join(ROOT, 'package.json')) || existsSync(join(ROOT, 'scripts')));
 });
+
+test('a Bash read of the route counts as reading it, as a Read call does, and /var and /private/var are one path', () => {
+  const g1 = grade(ev(['Bash', { command: `cat ${route}` }], todos(...steps)), { route: 'diagnose', steps, root: K });
+  assert.equal(g1.pass, true, g1.reasons.join('; '));
+  assert.equal(g1.hops, 1);
+  const g2 = grade(ev(['Bash', { command: `sed -n '1,80p' ${K}/kernel/routes.md` }], ['Bash', { command: `git status; head -60 ${route}` }], todos(...steps)), { route: 'diagnose', steps, root: K });
+  assert.equal(g2.pass, true, g2.reasons.join('; '));
+  assert.equal(g2.hops, 2);
+  const tmp = '/private/var/folders/x/T/p-1/kern';
+  const g3 = grade(ev(['Read', { file_path: '/var/folders/x/T/p-1/kern/skills/diagnose/SKILL.md' }], todos(...steps)), { route: 'diagnose', steps, root: tmp });
+  assert.equal(g3.pass, true, g3.reasons.join('; '));
+  assert.equal(grade(ev(['Bash', { command: `echo ${route}` }], todos(...steps)), { route: 'diagnose', steps, root: K }).pass, false);
+  assert.equal(grade(ev(['Bash', { command: `cat ${K}/skills/define/SKILL.md` }]), { route: null, root: K, kind: 'negative' }).pass, false);
+  assert.equal(grade(ev(['Bash', { command: `cat ${K}/kernel/routes.md` }]), { route: null, root: K, kind: 'negative' }).pass, false);
+});
