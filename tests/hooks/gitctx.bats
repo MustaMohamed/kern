@@ -157,9 +157,10 @@ has_push() { printf '%s\n' "$1" | grep -qE '^git push --force origin main( |$)';
 # runs the command (measured with a harmless marker), so git_words must print it as a record. not: no
 # shell runs it. gap: a shell runs it but git_words cannot surface it as a record, while G00 denies it
 # under autopilot (Task 7a: a builtin that evaluates a single-quoted substitution as arithmetic, local -i
-# included; and a single-quoted array subscript opening with [$( or [`, stored and read later by
-# arithmetic). The exception is the zsh glob qualifier, which no guard sees, an M3 limit. A line that
-# starts with # is a note.
+# included; and an array subscript opening with [$( or [`, written in single quotes or in a quoted
+# here-doc body, stored and read later by arithmetic). The exceptions, which no guard sees and the M3 row
+# records, are a subscript built at run time and the zsh glob qualifier. A line that starts with # is a
+# note.
 corpus() {
   cat <<'EOF'
 # Rounds 1 to 3.
@@ -383,8 +384,15 @@ gap f(){ local -i n='a[$(@)]'; }; f
 gap x='a[$(@)]'; echo $((x))
 gap declare -i n; n='a[$(@)]'
 gap a='b[ $(@) ]'; (( a ))
-# A zsh glob qualifier e:'...': runs code that no guard sees; it is zsh-only, needs a matching glob, and
-# is recorded in the design spec's M3 row.
+# Task 7a fix round 3: a quoted here-doc body stores the subscript literally, and arithmetic evaluates it;
+# git_words prints no record for a quoted body, and G00 scans the body for the subscript itself.
+gap x=$(cat <<'H'<NL>a[$(@)]<NL>H<NL>); echo $((x))
+gap x=$(cat <<"H"<NL>a[$(@)]<NL>H<NL>); echo $((x))
+gap x=$(cat <<\H<NL>a[$(@)]<NL>H<NL>); echo $((x))
+# No guard sees these, M3 limits recorded in the design spec. A subscript built at run time (here by
+# concatenation) and then evaluated waits for one parse per command. A zsh glob qualifier e:'...': runs
+# code; it is zsh-only and needs a matching glob.
+gap x='a['; x+='$(@)'; x+=']'; echo $((x))
 gap echo *(e:'@':)
 gap echo *(e:'$(@)':)
 EOF
@@ -407,7 +415,7 @@ EOT
   [ -z "$bad" ] || { printf 'not read:\n%s' "$bad"; return 1; }
   [ "$n" -eq 172 ]
   [ "$(corpus | grep -c '^not ')" -eq 26 ]
-  [ "$(corpus | grep -c '^gap ')" -eq 12 ]
+  [ "$(corpus | grep -c '^gap ')" -eq 16 ]
 }
 
 @test "the recorded gaps keep the reading the corpus pins: git_words surfaces no force push" {
@@ -526,6 +534,22 @@ EOT
   [ "$output" = "$(printf '%s\n' 'cat <<EOF' 'date')" ] || { echo "$output"; return 1; }
   run git_words "$(printf '%s\n' 'cat <<EOF >notes.txt' 'Built $(date) on `hostname`' 'build log' 'EOF')"
   [ "$output" = "$(printf '%s\n' 'cat <<EOF >notes.txt' 'date' 'hostname')" ] || { echo "$output"; return 1; }
+}
+
+@test "a quoted here-doc body is no record; on G00's call it comes as one marked record to scan" {
+  # A quoted body is data, so git_words prints no record for it. G00 sets _GW_QB, and then a quoted body
+  # that may hold a subscript ([ and a $( or backtick) comes as one record after a \035 byte, which only
+  # G00 reads, for the subscript pattern (Task 7a re-review Critical 1).
+  local c
+  c="$(printf '%s\n' "x=\$(cat <<'H'" 'a[$(git push --force origin main)]' 'H' '); echo $((x))')"
+  run git_words "$c"
+  [[ "$output" != *$'\035'* ]] || { echo "marked without _GW_QB: $output"; return 1; }
+  ! has_push "$output" || { echo "quoted body read: $output"; return 1; }
+  _GW_QB=1
+  run git_words "$c"
+  unset _GW_QB
+  [[ "$output" == *$'\035''a[$(git push --force origin main)]'* ]] || { echo "no marked body: $output"; return 1; }
+  ! has_push "$output" || { echo "quoted body read: $output"; return 1; }
 }
 
 @test "git_words reads a trap handler as a command, so a force push there is seen" {

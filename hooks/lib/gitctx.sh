@@ -6,8 +6,9 @@
 # caller that reads records line by line never takes a quoted line for a command.
 _GW_NL=$'\037'
 # git_words' own state, never taken from the environment: _GW_IN marks a call inside the outermost
-# one, _GW_NOALIAS a call that splits an alias's expansion.
-unset _GW_IN _GW_NOALIAS
+# one, _GW_NOALIAS a call that splits an alias's expansion. _GW_QB, set by G00 alone for its call, asks
+# for each quoted here-doc body that may hold an array subscript as one record after a \035 byte.
+unset _GW_IN _GW_NOALIAS _GW_QB
 
 # _GW_AWK: awk functions shared by _shell_words, _cmd_words and _split_words (run with -v sq="'").
 # sw(STR) splits STR into words, quotes removed, in sw_w[1..sw_n] (see _shell_words). cw_reset()
@@ -458,10 +459,11 @@ _GW_SCAN='
 # G00 is the backstop there. Out of scope here: commands that xargs or find -exec run (G1 and G2 ask for
 # a git or gh among their words), and a here-doc piped into a shell (cat <<EOF | sh).
 git_words() {
-  local seg inner body first hm=$'\036' forged=0
-  # hm starts a here-doc body record from _split_words. A command that holds that byte itself could
-  # forge one, so its marked records are then also read as ordinary records.
-  case "$1" in *"$hm"*) forged=1 ;; esac
+  local seg inner body first hm=$'\036' qm=$'\035' forged=0
+  # hm starts an unquoted here-doc body record from _split_words, and qm a quoted body on G00s call
+  # (_GW_QB). A command that holds either byte itself could forge one, so its marked records are then
+  # also read as ordinary records.
+  case "$1" in *"$hm"* | *"$qm"*) forged=1 ;; esac
   # With aliases loaded (aliases.sh), the outermost call prints the command's own records exactly as
   # without aliases, in their order, then every expansion record after all of them. Inner calls mark an
   # expansion record with a leading tab, which no record of the command starts with (_split_words trims
@@ -481,6 +483,9 @@ git_words() {
         done
         [ "$forged" = 1 ] || continue
         ;;
+      # A quoted here-doc body, emitted only on G00s call: printed as it is for G00 to scan for an array
+      # subscript, and never read for commands, since the shell expands nothing in it.
+      "$qm"*) if [ "$forged" = 0 ]; then printf '%s\n' "$seg"; continue; fi ;;
     esac
     printf '%s\n' "$seg"
     # A record whose head word is an alias that runs git or gh (aliases.sh) is judged as its expansion
@@ -578,7 +583,7 @@ _subst_bodies() {
 # never closes keeps the rest of the text in its record; that text is then read flat too, split at each
 # separator, quoted or not, so a quote the scanner misreads cannot hide the commands after it.
 _split_words() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_GW_SCAN"'
+  printf '%s' "$1" | LC_ALL=C awk -v sq="'" -v qb="${_GW_QB-}" "$_GW_AWK$_GW_SCAN"'
     # emit(s): prints the record s. In the flat reading (fl) a record printed already is left out.
     function emit(s) {
       gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s)
@@ -644,11 +649,15 @@ _split_words() {
     }
     # hbody(a): after bodies() set last[1..nh], emits the body of each unquoted here-doc that holds a
     # $( ) or backtick, after a \036 byte, so git_words reads the command substitutions the shell expands
-    # in it and never the body itself as a command (a quoted delimiter is skipped). a is the position just
+    # in it and never the body itself as a command. A quoted body is data and is skipped, except that on
+    # G00s call (qb, from _GW_QB) one that holds a [ and a $( or backtick is emitted after a \035 byte,
+    # for G00 to scan for an array subscript the body may store for arithmetic. a is the position just
     # after the operator line, where the first body starts.
     function hbody(a,   h, s) {
       for (h = 1; h <= nh; h++) {
-        if (!hq[h]) { s = substr(buf, a, off[last[h]] - a); if (index(s, "$(") || index(s, "`")) emit("\036" s) }
+        s = substr(buf, a, off[last[h]] - a)
+        if (!hq[h]) { if (index(s, "$(") || index(s, "`")) emit("\036" s) }
+        else if (qb && index(s, "[") && (index(s, "$(") || index(s, "`"))) emit("\035" s)
         a = off[last[h]] + length(L[last[h]]) + 1
       }
     }

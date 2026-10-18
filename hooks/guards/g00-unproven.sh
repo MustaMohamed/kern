@@ -164,25 +164,29 @@ _G00_AWK='
     }
     return 0
   }
-  # g0_sqarr(s): true when a single-quoted span of s holds an array subscript that opens with a
-  # substitution: [ then optional blanks then $( or a backtick. x='"'"'a[$(cmd)]'"'"' stored and later
-  # evaluated as arithmetic (echo $((x)), (( )), an integer assignment) runs cmd in bash; the single
-  # quote is literal where it is written, so git_words cannot surface it. A single-quoted $( ) or
-  # backtick that is not a subscript (no [ before it) is not flagged: a shell never evaluates it.
-  function g0_sqarr(s,   nn, C, i, c, q, br) {
-    nn = split(s, C, ""); q = ""; br = 0
+  # g0_sqarr(s, lit): true when a single-quoted span of s holds an array subscript that opens with a
+  # substitution: a name character, [, optional blanks, then $( or a backtick. x='"'"'a[$(cmd)]'"'"'
+  # stored and later evaluated as arithmetic (echo $((x)), (( )), an integer assignment) runs cmd in
+  # bash; the single quote is literal where it is written, so git_words cannot surface it. With lit, all
+  # of s is literal text, as a quoted here-doc body is. A single-quoted $( ) or backtick that is not a
+  # subscript is not flagged, and neither is a [ with no name before it, as in the regex class [$(]:
+  # [$(cmd)] with no name runs nothing in any shell (measured).
+  function g0_sqarr(s, lit,   nn, C, i, c, q, br, p) {
+    nn = split(s, C, ""); q = lit ? sq : ""; br = 0; p = ""
     for (i = 1; i <= nn; i++) {
       c = C[i]
       if (q == sq) {
-        if (c == sq) { q = ""; br = 0; continue }
-        if (c == "[") { br = 1; continue }
+        if (c == sq && !lit) { q = ""; br = 0; p = c; continue }
+        if (c == "[") { br = p ~ /[A-Za-z0-9_]/; p = c; continue }
         if (br) {
           if (c == " " || c == "\t") continue
           if (c == "`" || (c == "$" && C[i + 1] == "(")) return 1
           br = 0
         }
+        p = c
         continue
       }
+      p = c
       if (q == "\"") {
         if (c == "\\" && index("\"\\$`", C[i + 1])) i++
         else if (c == "\"") q = ""
@@ -224,8 +228,16 @@ _G00_AWK='
     # command, is read before anything else: its value is stored and evaluated as arithmetic later,
     # running the inner command, which git_words cannot surface (Task 7a review concern 1). It is checked
     # on the raw record so a record that is only an assignment (x='"'"'a[$(cmd)]'"'"', skipped below as it
-    # names no command) is still caught.
-    if (g0_sqarr($0)) { g0_out("a single-quoted array subscript holds a $( ) or backtick kern cannot read"); next }
+    # names no command) is still caught. A record that starts with a \035 byte is a quoted here-doc body,
+    # which git_words gives only to G00 (_GW_QB): it is data, scanned whole as literal text for the same
+    # subscript (re-review Critical 1), and read no further. A command that holds the byte itself makes
+    # git_words print such a record as an ordinary one too; its command name would start with the byte,
+    # which no shell finds, so reading it no further here hides nothing.
+    if (substr($0, 1, 1) == "\035") {
+      if (g0_sqarr(substr($0, 2), 1)) g0_out("a quoted here-doc body holds an array subscript with a $( ) or backtick kern cannot read")
+      next
+    }
+    if (g0_sqarr($0, 0)) { g0_out("a single-quoted array subscript holds a $( ) or backtick kern cannot read"); next }
     sw(g0_flat($0)); cw_reset()
     for (k = 1; k <= sw_n; k++) cw(sw_w[k])
     # The redirections after the command name, and their targets, are not arguments.
@@ -289,8 +301,10 @@ guard_g00() {
   [ "$TOOL" = Bash ] && [ "${AUTOPILOT:-0}" = 1 ] || return 0
   local cmd out line seen=0 what=""
   cmd=$(ti_get command) || return 0
+  # _GW_QB asks git_words for each quoted here-doc body that may hold an array subscript, as a \035
+  # record only this judge reads. It is set in the substitution subshell, so no other guard gets one.
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
-  out=$(set -o pipefail; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G00_AWK") || out=""
+  out=$(set -o pipefail; _GW_QB=1; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G00_AWK") || out=""
   while IFS= read -r line; do
     case "$line" in
       .) seen=1 ;;

@@ -343,12 +343,41 @@ g00_all() {
   done
 }
 
+@test "a quoted here-doc body that stores an array subscript is denied under autopilot" {
+  # x=$(cat <<'H' / a[$(cmd)] / H / ); echo $((x)) stores the body literally, then arithmetic evaluates
+  # the subscript and runs cmd in bash 3.2 and 5.3, with <<'H', <<"H" and <<\H. git_words prints no
+  # record for a quoted body, so G00 scans it for the subscript itself (Task 7a re-review Critical 1).
+  local c d m
+  for d in "<<'H'" '<<"H"' '<<\H'; do
+    c="$(printf '%s\n' "x=\$(cat $d" 'a[$(git push --force origin main)]' 'H' '); echo $((x))')"
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      if [ "$m" = on ]; then
+        [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
+        [[ "$output" == *"G00: under autopilot kern denies what it cannot read"* ]] || { echo "on: $c -> $output"; return 1; }
+      else
+        [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
+      fi
+    done
+  done
+  set_autopilot on
+  gx "$(printf '%s\n' "x=\$(cat <<'H'" 'a[ `git push --force origin main` ]' 'H' '); (( x ))')" ""
+  [ "$(decision_of "$output")" = deny ] || { echo "spaced backtick -> $output"; return 1; }
+}
+
 @test "a single-quoted substitution that is not a subscript is not denied under autopilot" {
   # Only [$( / [` in single quotes is the stored-then-evaluated subscript shape. A single-quoted $( ) or
   # backtick that is not a subscript is literal text a shell never evaluates, so it gets no deny: echo,
   # printf, grep for a literal $(, and a sed script (Task 7a review concern 1).
   g00_all none "echo '\$(foo)'" "printf '%s\n' '\$(cmd)'" "grep '\$(' file" "grep -n '\\\$(' README.md" \
     "sed 's/\$(x)/y/' f" "awk '/\$(/' f" "x='\$(git push --force origin main)'; echo \$((x))"
+  # A subscript needs a name right before its [, so a regex bracket class is not one (re-review Minor 1;
+  # [$(cmd)] with no name runs nothing in any shell). A quoted here-doc body is data: a commit message
+  # holding $(date), or a [$( with no name before it, is not denied.
+  g00_all none "grep '[\$(]' file" "grep -E '[\`~]' file" "sed 's/[\$(]/x/g' file" "echo '[\$(x)]'" \
+    "$(printf '%s\n' 'git commit -m "$(cat <<'"'EOF'" 'fix: build' 'Built $(date) on a[1]' 'EOF' ')"')" \
+    "$(printf '%s\n' "x=\$(cat <<'H'" '[$(git push --force origin main)]' 'H' '); echo $((x))')"
 }
 
 @test "a plain arithmetic builtin or a surfaced substitution is not denied by the builtin rule" {
