@@ -40,7 +40,7 @@ test('every discipline skill has a pressure case with at least two pressures', (
 
 test('define, execute-plan and parallel-work each have a seeded workflow case', () => {
   const ids = loadCases(ROOT).map((c) => c.id);
-  for (const id of ['workflow-define-spec', 'workflow-execute-plan-ledger', 'workflow-parallel-two-modules']) assert.ok(ids.includes(id), id);
+  for (const id of ['workflow-define-spec', 'workflow-define-fast-path', 'workflow-define-fast-path-stored-data', 'workflow-execute-plan-ledger', 'workflow-parallel-two-modules']) assert.ok(ids.includes(id), id);
 });
 
 test('the digest lists tool calls and the final reply, and nothing from the system prompt', () => {

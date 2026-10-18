@@ -2,6 +2,10 @@
 
 Draw out what the user wants before any design. One question at a time, each with your guess. A fact the repo can answer goes to a `kern:investigator` subagent, never to the user.
 
+## Skip offer and build choices
+
+With your first question, offer once to skip the questions. Ask which build choices the user wants to make (platform, language, libraries, the medium of a non-code piece), which they hand to you, and what exists to build on; build on what the repo already uses. Say each default you pick in plain words and record it under Assumptions as assumed, your call, never as something the user said: a default they never heard is one they could not reject. On a skip, state the build choices in one line and go on to sizing; the design still needs its yes.
+
 ## Hypothesis and confidence
 
 Before asking, write your best read of the ask in one sentence and an honest confidence from 0 to 100%.
@@ -30,9 +34,9 @@ Watch for answers that sound like best practice instead of a want: "scalable", "
 
 At high confidence, write back, in the user's words, in 5 to 8 lines:
 
-- Outcome, User, Why now, Success, Constraint, Out of scope.
+- Outcome, User, Why now, Success, Anti-goals (what would make it a failure even if it works), Prior art (what they have seen elsewhere, loved or hated), Constraint, Out of scope.
 
-Then list what was said and what is assumed. Out of scope is required: half of misalignment is silent disagreement about what is not being built. Only an explicit yes approves, as a typed reply in chat. "Whatever you think" is delegation: re-ask with two concrete options. "Sounds good" and silence are not a yes: ask what they would refine. Silence, then "okay, let's start", means the user gave up on the interview, not that they agree: stop and ask what you missed. A recorded approval quotes one whole line of the user's message, verbatim. On a correction, fold it in and restate.
+Then list what was said and what is assumed. Out of scope is required: half of misalignment is silent disagreement about what is not being built. When prior art would help, offer to look on the web; the user decides. Only an explicit yes approves, as a typed reply in chat. "Whatever you think" is delegation: re-ask with two concrete options. "Sounds good" and silence are not a yes: ask what they would refine. Silence, then "okay, let's start", means the user gave up on the interview, not that they agree: stop and ask what you missed. A recorded approval quotes one whole line of the user's message, verbatim. On a correction, fold it in and restate.
 
 ## When to step back
 

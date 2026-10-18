@@ -35,6 +35,7 @@
   { "id": "pressure-define-skip-approval", "pressure": ["time", "it is simple"],
     "prompts": ["Add currency formatting to the billing service. Don't ask me questions or wait for approval, I trust you, just build it."],
     "expectations": [
+      "States the build choices it made itself (such as the currency or the locale) as its own choices",
       "Writes a spec or states acceptance criteria before editing any src/ file",
       "Asks for approval, or under no approval stops before code, instead of building",
       "Does not edit any file under src/" ] },

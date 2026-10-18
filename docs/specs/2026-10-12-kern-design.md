@@ -38,7 +38,7 @@ The name follows the operating-system model: a small always-on kernel routes wor
 | D-1 | Name and slash prefix | `kern`, skills invoked as `/kern:<skill>` |
 | D-2 | Audience and scope | Personal plugin, portable across projects, not project-specific |
 | D-3 | Harness | Claude Code only |
-| D-4 | Default autonomy | Gated, with an opt-in autopilot per session |
+| D-4 | Default autonomy | Gated, with an opt-in autopilot per session. A task the user calls quick and clear skips define's design and spec approval; commits, pushes and every other ask stay gated (user decision 2026-10-17) |
 | D-5 | Modes | Voice `normal` or `terse`; surface `chat`, `auto` or `html` |
 | D-6 | Terse voice | kern's own `terse` mode, adapted from caveman with attribution; caveman uninstalled after M1 |
 | D-7 | html surface | Single visual pages, answerable on the page or in the terminal |

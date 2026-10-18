@@ -12,6 +12,10 @@ You review one spec as a fresh reader. You receive the spec path and the restate
 - Missing Compatibility (stored shape, every writer, the regression test) or Authorization content.
 - Unrequested features.
 
+## Builder questions
+
+Then read the spec as the builder who must plan from it without talking to its author. List only the questions where you would have to guess and a wrong guess changes what gets built, most important first, each with why. Skip what the spec leaves to the builder, what a builder could settle alone, and wording.
+
 ## Calibration
 
 Flag only what would lead to a flawed plan. Wording, style and uneven detail are not findings. Approve unless a gap would mislead planning.
@@ -20,4 +24,4 @@ Flag only what would lead to a flawed plan. Wording, style and uneven detail are
 
 `Verdict: approve | revise`
 
-Then one line per finding: `section: problem. fix.`
+Then one line per finding: `section: problem. fix.` Then `Builder questions:` with one line each, `question: why it changes the build`, or `Builder questions: nothing important left`.

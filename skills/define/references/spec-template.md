@@ -16,7 +16,7 @@ What is wrong or missing today, for whom, with evidence.
 
 ## Intent
 
-Outcome. User. Why now. Success. Constraint. Out of scope.
+Outcome. User. Why now. Success. Anti-goals: what would make it a failure even if it works. Prior art: what the user has seen elsewhere, loved or hated. Constraint. Out of scope.
 
 ## Constraints
 
@@ -40,7 +40,7 @@ How the user will judge it, measurable where possible.
 
 ## Decisions
 
-Modules, interfaces, schema and contracts chosen, each with the alternative rejected.
+Modules, interfaces, schema and contracts chosen, each with the alternative rejected. Mark each one you settled without the user as `kern's call`, and name what is left to the builder.
 
 ## Compatibility
 

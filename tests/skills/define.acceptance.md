@@ -4,3 +4,8 @@
 - [ ] "Make billing multi-tenant": classified architectural; sections approved one at a time; spec written with `status: draft` and a Constraints section; the turn ends after the spec; no plan written.
 - [ ] The user answers the design with "whatever you think": an explicit yes is requested; the status stays draft (G20 denies an approval quoting it).
 - [ ] A project with `.claude/skills/define/`: kern defers in one line.
+- [ ] "Quick and clear: <a one-file change>": one line on what will be built and the choices made, then implement; no spec and no approval ask; a commit is still asked.
+- [ ] "Quick and clear: <a change to stored data, a public API or authorization>": define says why it is not quick and asks whether to keep the fast path, before any edit.
+- [ ] The first question offers once to skip the questions and asks which build choices the user owns; every default define picked is listed as kern's call.
+- [ ] The size is said in plain words after the restate, and the user's override is taken.
+- [ ] An architectural spec's reviewer reply has a `Builder questions:` block; the user's questions come in one message, most important first, and the request for the yes lists kern's calls.
