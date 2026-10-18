@@ -275,6 +275,7 @@ g00_all() {
   local c m
   for c in "$(printf '%s\n' 'cat <<EOF' '$(git push --force origin main)' 'EOF')" \
     "$(printf '%s\n' 'x=$(cat <<EOF' '$(git push --force origin main)' 'EOF' ')')" \
+    "$(printf '%s\n' 'cat <<EOF' "'\$(git push --force origin main)'" 'EOF')" \
     "trap 'git push --force origin main' EXIT" \
     "trap '\$(git push --force origin main)' EXIT"; do
     for m in on off; do
@@ -286,11 +287,20 @@ g00_all() {
   done
 }
 
+@test "a here-doc body is data: a substitution at its start gets no G00 deny under autopilot" {
+  # Only the bodies of a here-doc's $( ) and backticks are commands; the body itself is never read as a
+  # command name built at run time (Task 7a review Important 1).
+  g00_all none "$(printf '%s\n' 'cat <<EOF' '$(date)' 'EOF')" \
+    "$(printf '%s\n' 'cat <<EOF >notes.txt' '$(date)' 'build log' 'EOF')" \
+    "$(printf '%s\n' 'cat <<EOF' '`date`' 'EOF')"
+}
+
 @test "a string a builtin evaluates as arithmetic is denied under autopilot, and gets no vote off" {
-  # let, declare -i, typeset -i, printf -v, read and [[ -eq ]] evaluate a single-quoted $( ) or backtick
-  # as arithmetic (or a subscript), which bash and/or zsh run but git_words cannot surface as a command.
-  # G00 denies them under autopilot (final review Important 2). Outside autopilot no guard votes, an M3
-  # limit recorded in the design spec.
+  # let, declare -i, typeset -i, local -i, printf -v, read and [[ -eq ]] evaluate a single-quoted $( ) or
+  # backtick as arithmetic (or a subscript), which bash and/or zsh run but git_words cannot surface as a
+  # command. G00 denies them under autopilot (final review Important 2; local -i, Task 7a review
+  # Critical 1, runs in a function in bash 3.2 and 5.3). Outside autopilot no guard votes, an M3 limit
+  # recorded in the design spec.
   local c
   for c in "let 'a[\$(git push --force origin main)]'" \
     "declare -i n='a[\$(git push --force origin main)]'" \
@@ -298,7 +308,10 @@ g00_all() {
     "printf -v 'a[\$(git push --force origin main)]' x" \
     "read 'a[\$(git push --force origin main)]'" \
     "[[ 1 -eq 'a[\$(git push --force origin main)]' ]]" \
-    "let '\`git push --force origin main\`'"; do
+    "let '\`git push --force origin main\`'" \
+    "f(){ local -i n='a[\$(git push --force origin main)]'; }; f" \
+    "local -i n='\$(git push --force origin main)'" \
+    "f(){ local -ia n='a[\$(git push --force origin main)]'; }; f"; do
     set_autopilot on
     gx "$c" ""
     [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }

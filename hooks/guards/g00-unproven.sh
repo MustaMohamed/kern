@@ -18,9 +18,9 @@
 #   command name is built at run time), or sources stdin, a file descriptor or a process
 #   substitution;
 # - it is a builtin that evaluates a string as arithmetic or a subscript (let, declare -i, typeset -i,
-#   printf -v, read, or [[/test/[ with -eq/-ne/-lt/-le/-gt/-ge) and holds a $( ) or backtick inside
-#   single quotes, which the arithmetic re-runs though git_words read it as literal text. Reading the
-#   inner command exactly is not practical, so autopilot denies; interactively no guard votes (M3).
+#   local -i, printf -v, read, or [[/test/[ with -eq/-ne/-lt/-le/-gt/-ge) and holds a $( ) or backtick
+#   inside single quotes, which the arithmetic re-runs though git_words read it as literal text. Reading
+#   the inner command exactly is not practical, so autopilot denies; interactively no guard votes (M3).
 # Accepted limits, as a script file run by an interpreter is: the inline code, here-doc or pipe of an
 # interpreter other than a shell (python -c, node -e or -p, perl -e or -E, ruby -e, php -r, deno
 # eval, osascript -e, lua -e, R -e, julia -e, pwsh -c, `python3 - <<EOF`); a program or script
@@ -220,11 +220,13 @@ _G00_AWK='
     }
     # A builtin that evaluates a string as arithmetic or a subscript runs a $( ) or backtick hidden in
     # single quotes, which git_words read as literal text and cannot surface: let, declare -i, typeset
-    # -i, printf -v, read, and [[/test/[ with an arithmetic comparison. bash runs let, declare -i,
-    # typeset -i and [[ -eq ]]; bash and zsh run printf -v and read. Under autopilot it fails closed; the
-    # inner command is not visible as a record, so interactively no guard votes (an M3 limit).
+    # -i, local -i, printf -v, read, and [[/test/[ with an arithmetic comparison. bash runs let, declare
+    # -i, typeset -i, local -i (in a function) and [[ -eq ]]; bash and zsh run printf -v and read. The
+    # integer and float of zsh, and export -i or readonly -i, ran nothing in any of the three shells.
+    # Under autopilot it fails closed; the inner command is not visible as a record, so interactively no
+    # guard votes (an M3 limit).
     ab = hb == "let" || hb == "read" ||
-      ((hb == "declare" || hb == "typeset") && g0_hasarg("^-[a-zA-Z]*i")) ||
+      ((hb == "declare" || hb == "typeset" || hb == "local") && g0_hasarg("^-[a-zA-Z]*i")) ||
       (hb == "printf" && g0_hasarg("^-v$")) ||
       ((hb == "[[" || hb == "test" || hb == "[") && g0_hasarg("^-(eq|ne|lt|le|gt|ge)$"))
     if (ab && g0_sqsub($0)) {

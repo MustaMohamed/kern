@@ -156,8 +156,9 @@ has_push() { printf '%s\n' "$1" | grep -qE '^git push --force origin main( |$)';
 # SHAPE, @ and @2 stand for the command and <NL> for a newline. TAG run: bash 3.2, bash 5.3 or zsh 5.9
 # runs the command (measured with a harmless marker), so git_words must print it as a record. not: no
 # shell runs it. gap: a shell runs it but git_words cannot surface it as a record (Task 7a: a builtin
-# that evaluates a single-quoted substitution as arithmetic, where G00 denies under autopilot; a zsh
-# glob qualifier, an M3 limit). A line that starts with # is a note.
+# that evaluates a single-quoted substitution as arithmetic, local -i included, where G00 denies under
+# autopilot; a zsh glob qualifier and a single-quoted subscript read later through a variable, M3
+# limits). A line that starts with # is a note.
 corpus() {
   cat <<'EOF'
 # Rounds 1 to 3.
@@ -361,6 +362,11 @@ run trap "@" EXIT
 not cat <<'EOF'<NL>$(@)<NL>EOF
 not cat <<"EOF"<NL>$(@)<NL>EOF
 not cat <<\EOF<NL>$(@)<NL>EOF
+# Task 7a fix round 1: a quote in a here-doc body is literal text, so a $( ) inside one runs.
+run cat <<EOF<NL>'$(@)'<NL>EOF
+run cat <<EOF<NL>${x:-'$(@)'}<NL>EOF
+not cat <<EOF<NL>\$(@)<NL>EOF
+not local -i n='$(@)'
 # Task 7a gaps: a builtin that evaluates a single-quoted $( ) as arithmetic (let, declare -i, typeset
 # -i, printf -v, read, [[ -eq ]]) runs it, but git_words cannot surface it as a record; G00 denies it
 # under autopilot (g00-unproven.bats). A zsh glob qualifier e:'...': runs code that no guard sees; it is
@@ -371,8 +377,13 @@ gap typeset -i n='a[$(@)]'
 gap printf -v 'a[$(@)]' x
 gap read 'a[$(@)]'
 gap [[ 1 -eq 'a[$(@)]' ]]
+gap f(){ local -i n='a[$(@)]'; }; f
 gap echo *(e:'@':)
 gap echo *(e:'$(@)':)
+# A single-quoted subscript held in a variable and read later by arithmetic (an integer variable, or a
+# name in $(( )), (( )) or [[ -eq ]]) runs in bash; no guard sees it in either mode, an M3 limit.
+gap x='a[$(@)]'; echo $((x))
+gap declare -i n; n='a[$(@)]'
 EOF
 }
 
@@ -391,9 +402,9 @@ EOF
 $(corpus)
 EOT
   [ -z "$bad" ] || { printf 'not read:\n%s' "$bad"; return 1; }
-  [ "$n" -eq 170 ]
-  [ "$(corpus | grep -c '^not ')" -eq 24 ]
-  [ "$(corpus | grep -c '^gap ')" -eq 8 ]
+  [ "$n" -eq 172 ]
+  [ "$(corpus | grep -c '^not ')" -eq 26 ]
+  [ "$(corpus | grep -c '^gap ')" -eq 11 ]
 }
 
 @test "the recorded gaps keep the reading the corpus pins: git_words surfaces no force push" {
@@ -489,6 +500,29 @@ cat <<'EOF'<NL>$(@)<NL>EOF
 cat <<"EOF"<NL>$(@)<NL>EOF
 cat <<\EOF<NL>$(@)<NL>EOF
 EOT
+}
+
+@test "git_words reads a here-doc body as here-doc text: its quotes are literal, and the body is no record" {
+  # In an unquoted here-doc body a quote is literal text, also inside ${ }, while a $( ) inside it keeps
+  # quotes of its own; bash 3.2, bash 5.3 and zsh 5.9 run the command in each shape below (Task 7a
+  # fix round 1). The body itself is data, so it is never printed as a command record: only the bodies
+  # of its $( ) and backticks are (review Important 1).
+  local c
+  while IFS= read -r c; do
+    c=${c//<NL>/$'\n'}
+    c=${c//@/git push --force origin main}
+    run git_words "$c"
+    has_push "$output" || { echo "unread: $c -> $output"; return 1; }
+  done <<'EOT'
+cat <<EOF<NL>'$(@)'<NL>EOF
+cat <<EOF<NL>${x:-'$(@)'}<NL>EOF
+cat <<EOF<NL>a ' b<NL>$(@)<NL>EOF
+cat <<EOF<NL>$(echo ')' ; @)<NL>EOF
+EOT
+  run git_words "$(printf '%s\n' 'cat <<EOF' '$(date)' 'EOF')"
+  [ "$output" = "$(printf '%s\n' 'cat <<EOF' 'date')" ] || { echo "$output"; return 1; }
+  run git_words "$(printf '%s\n' 'cat <<EOF >notes.txt' 'Built $(date) on `hostname`' 'build log' 'EOF')"
+  [ "$output" = "$(printf '%s\n' 'cat <<EOF >notes.txt' 'date' 'hostname')" ] || { echo "$output"; return 1; }
 }
 
 @test "git_words reads a trap handler as a command, so a force push there is seen" {
