@@ -249,6 +249,40 @@ g00_all() {
   done
 }
 
+@test "a force push in a case inside \$( ) reaches G1 and is denied in both modes" {
+  # case WORD in ... esac: the ) that ends a pattern closes no $( ), so a force push in a clause body is
+  # read as a command. bash 5.3 and zsh run it; G1 must deny it with every guard running, in both modes
+  # (re-review concern 2). Unquoted, double-quoted, backtick, (pattern)/several patterns, and in $(( )).
+  local c m
+  for c in "echo \$(case x in x) git push --force origin main ;; esac)" \
+    "echo \"\$(case x in x) git push --force origin main ;; esac)\"" \
+    "echo \`case x in x) git push --force origin main ;; esac\`" \
+    "echo \$(case x in (a|x) git push --force origin main ;; (y) : ;; esac)" \
+    "echo \$(( \$(case x in x) git push --force origin main ;; esac) ))"; do
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      [ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }
+      [[ "$output" == *"G1: plain force push"* ]] || { echo "$m: $c -> $output"; return 1; }
+    done
+  done
+}
+
+@test "a command nested past the scanner's depth limit is voted on in both modes" {
+  # 20 nested \$(echo ...) with a push at the bottom: the push surfaces, and past the depth limit the
+  # reader also emits a \$KERN_UNREAD record that G00 denies under autopilot, so a guard votes in both
+  # modes (re-review concern 5).
+  local o="" c i m
+  for ((i = 0; i < 20; i++)); do o="$o\$(echo "; done
+  c="echo ${o}git push --force origin main"
+  for ((i = 0; i < 20; i++)); do c="$c)"; done
+  for m in on off; do
+    set_autopilot "$m"
+    gx "$c" ""
+    case "$(decision_of "$output")" in deny | ask) ;; *) echo "$m: $c -> $output"; return 1 ;; esac
+  done
+}
+
 @test "G00 votes nothing outside autopilot or for other tools" {
   set_autopilot off
   g00_all none 'g=git; $g push' "python3 -c x" 'echo x | sh' "xargs sh -c x"

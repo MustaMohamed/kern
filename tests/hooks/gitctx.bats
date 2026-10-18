@@ -155,8 +155,8 @@ has_push() { printf '%s\n' "$1" | grep -qE '^git push --force origin main( |$)';
 # corpus: the shapes of the Task 7 differential sweeps, rounds 1 to 4, one per line as TAG SHAPE. In
 # SHAPE, @ and @2 stand for the command and <NL> for a newline. TAG run: bash 3.2, bash 5.3 or zsh 5.9
 # runs the command (measured with a harmless marker), so git_words must print it as a record. not: no
-# shell runs it. gap: a recorded M3 parser deferral, whose reading the next test pins. A line that starts
-# with # is a note.
+# shell runs it. A line that starts with # is a note. (Round 4 and 5 closed the M3 case, $'...' and
+# $[ ] newline gaps, so no shape is a known gap now.)
 corpus() {
   cat <<'EOF'
 # Rounds 1 to 3.
@@ -186,7 +186,7 @@ run echo $(( a['$(@)'] ))
 run echo $(( ${x:-$(@)} ))
 run echo ${x:-$(@)}
 run echo $(( ${x:-`@`} ))
-# An M3 deferral until the round 4 scanner, which reads an unsure $(( both ways.
+# Round 4 reads this (an unsure $(( is read both ways), though round 3 recorded it as an M3 gap.
 run echo $(( $'$(@)' ))
 run echo $(( $'x'+$(@) ))
 not (( @ ))
@@ -198,7 +198,7 @@ not echo $(( $(@ #) ))
 not echo $(( 1 )) # $(@)
 run cat <<< $(( $(@) ))
 run case x in x) @ ;; esac
-gap echo $(( $(case x in x) @ ;; esac) ))
+run echo $(( $(case x in x) @ ;; esac) ))
 run echo $(( \( $(@) \) ))
 run echo $(( $(@) \( ))
 run echo $((<NL>$(@)<NL>))
@@ -224,7 +224,7 @@ run echo $[ "]" + $(@) ]
 run echo $[ \] + $(@) ]
 not echo $[ 1 + $(@)
 run echo $[ $(@) ] '$(@2)'
-# An M3 deferral until the round 4 scanner, which reads $[ ] whole, past a newline.
+# Round 4 reads this ($[ ] is read whole, past a newline), though round 3 recorded it as an M3 gap.
 run echo $[<NL>'$(@)'<NL>]
 run (( '`@`' ))
 run (( x = '$(@)' ))
@@ -320,7 +320,7 @@ run echo ${a['$(@)']}
 run echo "${a['`@`']}"
 run a[']']=1; @
 run echo x[a'b' ; @ ; echo ]
-gap echo "$(case x in x) @ ;; esac)"
+run echo "$(case x in x) @ ;; esac)"
 run echo $(echo "`echo ')'`" ; @)
 run echo "$(echo "`echo '"'`")" ; @
 run x=$(echo $'\'' ; @)
@@ -335,6 +335,18 @@ run echo $(( '$(@)' ')' ))
 run echo $[ '$(@)' ']' ]
 run (( ')' + '$(@)' ))
 run echo $(( (1) '(' '$(@)' ))
+# Round 5: case inside $( ) (concern 2); a ) inside ${ } or $[ ] that bash 3.2 closes on (concern 3).
+run echo $(case x in x) @ ;; esac)
+run echo "$(case x in x) @ ;; esac)"
+run echo `case x in x) @ ;; esac`
+run echo $(case x in (a|x) @ ;; (y) : ;; esac)
+run echo $(case x in a) : ;; x) @ ;; esac)
+run echo $(case x in x) case y in y) @ ;; esac ;; esac)
+run x=$(case x in x) @ ;; esac)
+run echo "$(echo $[)] `@`)"
+run echo "$(echo $[ (1) ) ] `@`)"
+run echo $(echo ${x:-)} `@`)
+run "$("$[')''"']""'""'"""$[)')']`@`''"""")"$((''))
 EOF
 }
 
@@ -353,23 +365,55 @@ EOF
 $(corpus)
 EOT
   [ -z "$bad" ] || { printf 'not read:\n%s' "$bad"; return 1; }
-  [ "$n" -eq 149 ]
+  [ "$n" -eq 162 ]
   [ "$(corpus | grep -c '^not ')" -eq 21 ]
+  [ "$(corpus | grep -c '^gap ')" -eq 0 ]
 }
 
-@test "the recorded M3 parser deferral, a case inside \$( ), keeps the reading the corpus pins" {
-  # The case pattern's ) closes the $( ), as bash 3.2 reads it, so the force push is a word of a record,
-  # not a command. Inside $(( )) G1 asks, and G00 denies under autopilot; inside "..." no guard votes.
-  # bash 5.3 and zsh run it in both. The last ) of the first closes no $( ), so it ends the record.
-  run git_words 'echo $(( $(case x in x) git push --force origin main ;; esac) ))'
-  [ "$output" = 'echo $(( $(case x in x) git push --force origin main ;; esac) )
-$(case x in x) git push --force origin main
-case x in x
-esac' ]
-  run git_words 'echo "$(case x in x) git push --force origin main ;; esac)"'
-  [ "$output" = 'echo "$(case x in x) git push --force origin main ;; esac)"
-case x in x' ]
-  [ "$(corpus | grep -c '^gap ')" -eq 2 ]
+@test "git_words reads a case inside \$( ) so the commands between pattern) and ;; are seen" {
+  local c
+  # case WORD in ... esac: the ) that ends a pattern closes no $( ), a ( before a pattern is optional,
+  # and the clause commands are read. bash 5.3 and zsh run the force push in each; bash 3.2 misparses a
+  # case in $( ), so nothing runs there, and reading the push shows the guards more (re-review concern 2).
+  for c in "echo \$(case x in x) git push --force origin main ;; esac)" \
+    "echo \"\$(case x in x) git push --force origin main ;; esac)\"" \
+    "echo \`case x in x) git push --force origin main ;; esac\`" \
+    "echo \$(case x in (a|x) git push --force origin main ;; (y) : ;; esac)" \
+    "echo \$(case x in a) : ;; x) git push --force origin main ;; esac)" \
+    "echo \$(case x in x) case y in y) git push --force origin main ;; esac ;; esac)" \
+    "echo \$(( \$(case x in x) git push --force origin main ;; esac) ))"; do
+    run git_words "$c"
+    has_push "$output" || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "a \$( ) body that bash 3.2 ends early at a ) inside \${ } or \$[ ] is read both ways" {
+  local c
+  # bash 3.2 ends a $( ) at the first ) inside a ${ } or $[ ]; bash 5.3 and zsh read the ${ }/$[ ] whole.
+  # git_words prints both readings, so the command bash 3.2 runs after the early ) is still seen
+  # (re-review concern 3). The first shape (reduced from the one fuzz case round 4 missed) runs the
+  # force push in bash 3.2 only; the others in at least one shell. @ stands for the force push, read
+  # from a literal here-doc so the quotes, backticks and $ reach git_words unchanged.
+  while IFS= read -r c; do
+    c=${c//@/git push --force origin main}
+    run git_words "$c"
+    has_push "$output" || { echo "$c -> $output"; return 1; }
+  done <<'EOT'
+"$("$[')''"']""'""'"""$[)')']`@`''"""")"$((''))
+echo "$(echo $[)] `@`)"
+echo $(echo ${x:-)} `@`)
+EOT
+}
+
+@test "a command nested past the scanner's depth limit fails closed" {
+  # Past 16 nested contexts the scan goes flat and may miss a command, so it prints a $KERN_UNREAD
+  # record that G00 denies under autopilot, on top of every body it did find (re-review concern 5).
+  local o="" c i
+  for ((i = 0; i < 20; i++)); do o="$o\$(echo "; done
+  c="echo ${o}git push --force origin main"
+  for ((i = 0; i < 20; i++)); do c="$c)"; done
+  run git_words "$c"
+  [[ "$output" == *'$KERN_UNREAD'* ]] || { echo "$output"; return 1; }
 }
 
 @test "git and gh are seen behind shells, wrappers, groups and keywords" {

@@ -184,9 +184,12 @@ _GW_AWK='
 # The kinds:
 #   t  a whole record (_subst_bodies), which never closes.
 #   c  the body of a $( ): closes at the ) that balances it. A # that starts a word is a comment to the
-#      newline. The program defines sc_lt(I, CS) and sc_nl(I), called at a << and at a newline here
-#      outside arithmetic (CS: where the simple command starts); each returns the last position it
-#      read. _split_words reads here-docs with them.
+#      newline. case WORD in ... esac is read: the ) that ends a pattern closes no $( ), a ( before a
+#      pattern is optional, and the clause commands are read (re-review concern 2). When a ${ } or $[ ]
+#      in the body holds a ), bash 3.2 ends the $( ) there while bash 5.3 and zsh read on, so sc_cmd
+#      prints both readings (re-review concern 3). The program defines sc_lt(I, CS) and sc_nl(I), called
+#      at a << and at a newline here outside arithmetic (CS: where the simple command starts); each
+#      returns the last position it read. _split_words reads here-docs with them.
 #   b  the body of a backtick pair: closes at the next backtick that no backslash escapes, quoted or
 #      not, as bash 3.2, bash 5.3 and zsh 5.9 all read it.
 #   d  a double-quoted string: closes at the next " that no backslash escapes. A single quote is literal.
@@ -213,10 +216,14 @@ _GW_AWK='
 # once per position: a backtick body with its escapes removed, as the shell runs it, and for a $( ) or
 # backtick that never closes, the rest of the text. A single quote that never closes is then literal.
 # Past 16 nested contexts the scan goes on flat (sc_flat), since mawk's eval stack holds about 35 nested
-# $( ) here; while printing, it prints the text of such a context whole, as a body.
+# $( ) here; while printing, it prints the text of such a context whole, as a body, and sets sc_cap, so
+# _subst_bodies also prints a $KERN_UNREAD record that G00 denies under autopilot (re-review concern 5).
 # shellcheck disable=SC2016 # awk text
 _GW_SCAN='
-  function sc_init(s) { SS = s; SN = split(s, SC, ""); sc_dep = 0; sc_pr = 0; sc_un = 0; sc_chk = ""; sc_ar = 0 }
+  function sc_init(s) {
+    SS = s; SN = split(s, SC, ""); sc_dep = 0; sc_pr = 0; sc_un = 0; sc_chk = ""; sc_ar = 0
+    sc_q3 = 0; sc_kpar = 0; sc_cap = 0
+  }
   # sc_in(set, ch): true when the character ch is one of set (BWK awk finds an empty string anywhere).
   function sc_in(set, ch) { return ch != "" && index(set, ch) > 0 }
   # sc_ws(i): true when position i starts a word.
@@ -259,12 +266,16 @@ _GW_SCAN='
     return sc_pr ? i : 0
   }
   # sc_cmd(i, a): for the $( at i, whose body starts at a, the position of the ) that closes it, or 0.
-  # Prints the body.
-  function sc_cmd(i, a,   pr, un, ck, e) {
+  # Prints the body. When the body holds a ) inside a ${ } or $[ ] (sc_q3), bash 3.2 ends the $( ) there
+  # while bash 5.3 and zsh read on; both readings are printed, so whatever any of the three runs is read.
+  function sc_cmd(i, a,   pr, un, ck, e, q3) {
     pr = sc_pr; un = sc_un; ck = sc_chk; sc_pr = 0; sc_chk = ""
-    e = sc_end(a, "c", 0)
+    e = sc_end(a, "c", 0); q3 = sc_q3
     sc_pr = pr; sc_un = un; sc_chk = ck
-    if (pr) sc_put(a, e ? e - 1 : SN, 0, 0)
+    if (pr) {
+      sc_put(a, e ? e - 1 : SN, 0, 0)
+      if (q3 && e > 0) { sc_put(a, q3 - 1, 0, 0); sc_put(q3 + 1, e - 1, 0, 0) }
+    }
     return e
   }
   # sc_tick(i, dq): for the backtick at i, the position of the one that closes it, or 0. Prints the body.
@@ -350,14 +361,15 @@ _GW_SCAN='
     }
     return 0
   }
-  function sc_end(i, k, dq,   p, c, x, e, cs, h0, r, sk, sb) {
+  function sc_end(i, k, dq,   p, c, x, e, cs, h0, r, sk, sb, cn, q3, cst) {
     if (sc_dep >= 16) {
+      sc_cap = 1
       r = sc_flat(i, k)
       if (sc_pr) sc_put(i, r > 0 ? r - 1 : SN, 0, 0)
       return r
     }
     sc_dep++
-    r = 0; p = k == "a" ? 2 : 1; cs = i; h0 = hn; sk = 0; sb = 0
+    r = 0; p = k == "a" ? 2 : 1; cs = i; h0 = hn; sk = 0; sb = 0; cn = 0; q3 = 0
     if (k == "a") sc_ar++
     for (; i <= SN; i++) {
       c = SC[i]; x = SC[i + 1]
@@ -372,21 +384,46 @@ _GW_SCAN='
         if (sk && sc_in("()[]", c)) sc_un = 1
         # In a single quote a double quote is text: bash skips the quote whole to find the end.
         if (sk && c == "\"") continue
+        # A ) inside $[ ] (not in a single quote) is where bash 3.2 ends an enclosing $( ) (sc_kpar).
+        if (k == "k" && c == ")" && !sk && !sc_kpar) sc_kpar = i
         if (!sk && c == (k == "a" ? "(" : "[")) { p++; continue }
         if (!sk && c == (k == "a" ? ")" : "]") && --p == (k == "a")) { r = k == "k" ? i : x == ")" ? i + 1 : -1; break }
       } else {
         # A subscript: sb counts the ones open here, where a << is no here-doc.
         if (c == "[" && (k == "e" || sc_named(i))) { sb++; sc_sub(i, dq); continue }
         if (c == "]" && sb) sb--
+        # A ) inside ${ } is where bash 3.2 ends an enclosing $( ) (sc_kpar).
+        if (k == "e" && c == ")" && !sc_kpar) sc_kpar = i
         if (k == "e" && c == "}") { r = i; break }
         if (k != "e" && c == "(" && x == "(" && sc_ws(i) && (e = sc_bare(i)) > i) { i = e; continue }
         if (k == "c") {
+          # case WORD in ... esac: a ) that ends a pattern (state 2) closes no $( ), a ( before one is
+          # optional, and the commands between pattern) and ;; are read (re-review concern 2). cst[cn]:
+          # 1 after case (awaiting in), 2 in a pattern, 3 in a clause body; esac ends the case.
+          if (sc_ws(i) && sc_case(i)) { cst[++cn] = 1; i += 3; continue }
+          if (cn && cst[cn] == 1) {
+            if (sc_ws(i) && c == "i" && x == "n" && sc_in(" \t\n\037;&|(", SC[i + 2])) { cst[cn] = 2; i++; continue }
+          } else if (cn) {
+            if (sc_ws(i) && c == "e" && SC[i + 1] == "s" && SC[i + 2] == "a" && SC[i + 3] == "c" && sc_in(" \t\n\037;&|)", SC[i + 4])) { cn--; i += 3; continue }
+            if (cst[cn] == 2) {
+              if (c == "(") continue
+              if (c == ")") { cst[cn] = 3; continue }
+            } else if (c == ";" && (x == ";" || x == "&")) cst[cn] = 2
+          }
           if (c == "#" && sc_ws(i)) { while (i < SN && SC[i + 1] != "\n" && SC[i + 1] != "\037") i++; continue }
           if (c == "<" && x == "<" && !sc_ar && !sb) { i = sc_lt(i, cs); continue }
           if (c == "\n") { cs = i + 1; if (!sc_ar) i = sc_nl(i); continue }
           if (sc_in(";&|", c)) { cs = i + 1; continue }
           if (c == "(") { p++; cs = i + 1; continue }
           if (c == ")" && --p == 0) { r = i; break }
+        }
+        # A ${ } or $[ ] whose body holds a ) (sc_kpar): bash 3.2 ends this $( ) at that ), the others
+        # read on. q3 keeps the first such ), so sc_cmd prints both readings.
+        if (k == "c" && c == "$" && (x == "{" || x == "[")) {
+          sc_kpar = 0
+          if (!(e = sc_open(i, k, dq))) break
+          if (sc_kpar && !q3) q3 = sc_kpar
+          i = e; continue
         }
       }
       if (c == "$" || c == "`" || c == "\"" || c == sq) {
@@ -397,6 +434,7 @@ _GW_SCAN='
     if (k == "a") sc_ar--
     if (hn > h0) hn = h0
     sc_dep--
+    sc_q3 = k == "c" ? q3 : sc_q3
     return r
   }
 '
@@ -484,7 +522,9 @@ _subst_bodies() {
     function sc_lt(i, cs) { return i }
     function sc_nl(i) { return i }
     { buf = buf (NR > 1 ? " " : "") $0 }
-    END { sc_init(buf); sc_pr = 1; sc_end(1, "t", 0) }'
+    # Past the nesting limit the scan goes flat and may miss a command, so it fails closed: it prints a
+    # $KERN_UNREAD record, which G00 denies under autopilot, on top of every body it did find (concern 5).
+    END { sc_init(buf); sc_pr = 1; sc_end(1, "t", 0); if (sc_cap) print "$KERN_UNREAD" }'
 }
 
 # _split_words STR: the simple commands of STR, one record per line (see git_words). The scanner
