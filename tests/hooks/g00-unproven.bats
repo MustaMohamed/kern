@@ -214,6 +214,24 @@ g00_all() {
   done
 }
 
+@test "a force push in a single quote inside \"...\" reaches G1 and is denied in both modes" {
+  # Inside double quotes a single quote is literal, so the $( ) or backtick inside one runs and must
+  # reach G1 with every guard running, autopilot on or off. 0.3.0 missed echo "'$(cmd)'".
+  local c m
+  for c in "echo \"'\$(git push --force origin main)'\"" \
+    "echo \"(( '\$(git push --force origin main)' ))\"" \
+    "echo \"'\`git push --force origin main\`'\"" \
+    "x=\"'\$(git push --force origin main)'\"" \
+    "echo \"it's \$(git push --force origin main)\""; do
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      [ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }
+      [[ "$output" == *"kern G1: plain force push"* ]] || { echo "$m: $c -> $output"; return 1; }
+    done
+  done
+}
+
 @test "G00 votes nothing outside autopilot or for other tools" {
   set_autopilot off
   g00_all none 'g=git; $g push' "python3 -c x" 'echo x | sh' "xargs sh -c x"

@@ -122,6 +122,17 @@ EOT
   [[ "$output" == *$'\n'"git stash"$'\n'"git push -f"* ]] || false
 }
 
+@test "git_words reads a single quote inside \"...\" as literal, so a \$( ) or backtick there is a command" {
+  local c
+  # Inside double quotes a single quote is literal; all three shells run the $( ) or backtick inside
+  # one. 0.3.0 missed echo "'\$(cmd)'". Single quotes, ((-text, backtick, assignment, and an apostrophe.
+  for c in "echo \"'\$(git push -f)'\"" "echo \"(( '\$(git push -f)' ))\"" "echo \"'\`git push -f\`'\"" \
+    "x=\"'\$(git push -f)'\"" "echo \"it's \$(git push -f)\"" "echo \"\${x:-'\$(git push -f)'}\""; do
+    run git_words "$c"
+    [[ "$output" == *$'\n'"git push -f"* ]] || { echo "$c -> $output"; return 1; }
+  done
+}
+
 @test "git and gh are seen behind shells, wrappers, groups and keywords" {
   for c in 'bash -lc "git stash"' 'sh -ec "git stash"' '/bin/bash -c "git stash"' \
     'nohup bash -c "git stash"' 'command git stash' 'exec git stash' 'time git stash' \

@@ -324,7 +324,11 @@ _subst_bodies() {
     # bodies(buf, ar): prints the bodies in buf. ar=1 reads buf as arithmetic text, where a single
     # quote is literal, not a quote, so a $( ) or backtick inside one is still printed (review
     # Critical 1). $(( )), $[ ] and a bare (( )) arithmetic command all read their body with ar=1;
-    # nested arithmetic stays arithmetic.
+    # nested arithmetic stays arithmetic. Inside "..." a single quote is also literal (so a $( ),
+    # backtick, $(( )) or $[ ] inside the double quotes is still read); a backslash there escapes the
+    # next character, as the shells do, and a bare (( )) is ordinary text, not a command. A single
+    # quote inside ${ } inside "..." is read as literal too, which is what bash and zsh run; that is
+    # the reading that shows the guards more where the shells could differ.
     function bodies(buf, ar,   n, q, depth, i, c, e, s) {
       n = length(buf); q = ""; depth = 0
       for (i = 1; i <= n; i++) {
@@ -342,7 +346,7 @@ _subst_bodies() {
         if (depth == 0 && substr(buf, i, 2) == "$[" && (e = arithbr(buf, i))) {
           bodies(substr(buf, i + 2, e - i - 2), 1); i = e; continue
         }
-        if (depth == 0 && wordat(buf, i) && substr(buf, i, 2) == "((" && (e = arith(buf, i, 2))) {
+        if (depth == 0 && q == "" && wordat(buf, i) && substr(buf, i, 2) == "((" && (e = arith(buf, i, 2))) {
           bodies(substr(buf, i + 2, e - i - 3), 1); i = e; continue
         }
         if (c == "$" && substr(buf, i + 1, 1) == "(") {
@@ -354,6 +358,8 @@ _subst_bodies() {
           else if (c == ")") { depth--; if (depth == 0) print substr(buf, s, i - s) }
           continue
         }
+        if (q == "\"") { if (c == "\"") q = ""; continue }
+        if (c == "\"") { q = "\""; continue }
         if (!ar && c == sq) q = sq
       }
     }
