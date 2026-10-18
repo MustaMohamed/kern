@@ -248,9 +248,10 @@ git_words() {
   done
 }
 
-# _subst_bodies STR: the body of each outermost $( ) and backtick pair, one per line. A $(( )) is
-# arithmetic, not a command: in its place come the bodies of the $( ) and backtick pairs inside it,
-# found the same way. Any other $(( is a $( ) around a subshell (see arith).
+# _subst_bodies STR: the body of each outermost $( ) and backtick pair, one per line. A $(( )), a
+# $[ ] and a bare (( )) arithmetic command are arithmetic, not commands: in their place come the
+# bodies of the $( ) and backtick pairs inside them, found the same way, with a single quote read as
+# literal text (see bodies). Any other $(( is a $( ) around a subshell (see arith).
 _subst_bodies() {
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
     # wordat(s, i): true when position i of s starts a word.
@@ -265,9 +266,11 @@ _subst_bodies() {
     # 1). It also returns 0 at what bash or zsh scans past and a paren count cannot: a double quote
     # that holds ${ } or a backtick, a $ before a quote (so $'...', ${ } and $"..."), a here-doc, and a
     # comment or a case inside a $( ). An unsure $(( is so read as $( ), whose body is printed whole.
-    function arith(s, i,   n, d, c, j) {
+    # k is the length of the opening token: 3 for $(( , 2 for a bare (( (the arithmetic command, see
+    # arcmd in _split_words). Both open two parens, so d starts at 2.
+    function arith(s, i, k,   n, d, c, j) {
       n = length(s); d = 2
-      for (i += 3; i <= n; i++) {
+      for (i += (k ? k : 3); i <= n; i++) {
         c = substr(s, i, 1)
         if (c == "\\") { i++; continue }
         if (c == "$" && index("{" sq "\"", substr(s, i + 1, 1))) return 0
@@ -286,9 +289,42 @@ _subst_bodies() {
       }
       return 0
     }
+    # arithbr(s, i): for the $[ at i (old-style arithmetic, $[ expr ]), the position of the ] that
+    # closes it, else 0. Nested [ ] (a subscript) balance. When finding the ] both shells skip the
+    # brackets in a single quote (it is literal), so a single-quoted span is skipped here; its $( ) is
+    # still printed because bodies reads the body in arithmetic mode. A double quote or backtick is
+    # skipped and a bracket in one returns 0. $[ has no subshell alter-ego the way $(( does, so unlike
+    # arith a single quote never counts as arithmetic text here.
+    function arithbr(s, i,   n, d, c, j) {
+      n = length(s); d = 1
+      for (i += 2; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") { i++; continue }
+        if (c == "$" && index("{" sq "\"", substr(s, i + 1, 1))) return 0
+        if (c == "<" && substr(s, i + 1, 1) == "<") return 0
+        if (wordat(s, i) && (c == "#" || (substr(s, i, 4) == "case" && index(" \t\n", substr(s, i + 4, 1))))) return 0
+        if (c == sq) {
+          for (j = i + 1; j <= n && substr(s, j, 1) != sq; j++) ;
+          if (j > n) return 0
+          i = j; continue
+        }
+        if (c == "\"" || c == "`") {
+          for (j = i + 1; j <= n && substr(s, j, 1) != c; j++) {
+            if (index("[]", substr(s, j, 1)) || (c == "\"" && (substr(s, j, 1) == "`" || substr(s, j, 2) == "${"))) return 0
+            if (substr(s, j, 1) == "\\") j++
+          }
+          if (j > n) return 0
+          i = j; continue
+        }
+        if (c == "[") d++
+        else if (c == "]" && --d == 0) return i
+      }
+      return 0
+    }
     # bodies(buf, ar): prints the bodies in buf. ar=1 reads buf as arithmetic text, where a single
     # quote is literal, not a quote, so a $( ) or backtick inside one is still printed (review
-    # Critical 1). The recursion into $(( )) passes ar=1; nested $(( )) stays arithmetic.
+    # Critical 1). $(( )), $[ ] and a bare (( )) arithmetic command all read their body with ar=1;
+    # nested arithmetic stays arithmetic.
     function bodies(buf, ar,   n, q, depth, i, c, e, s) {
       n = length(buf); q = ""; depth = 0
       for (i = 1; i <= n; i++) {
@@ -302,6 +338,12 @@ _subst_bodies() {
         }
         if (depth == 0 && substr(buf, i, 3) == "$((" && (e = arith(buf, i))) {
           bodies(substr(buf, i + 3, e - i - 4), 1); i = e; continue
+        }
+        if (depth == 0 && substr(buf, i, 2) == "$[" && (e = arithbr(buf, i))) {
+          bodies(substr(buf, i + 2, e - i - 2), 1); i = e; continue
+        }
+        if (depth == 0 && wordat(buf, i) && substr(buf, i, 2) == "((" && (e = arith(buf, i, 2))) {
+          bodies(substr(buf, i + 2, e - i - 3), 1); i = e; continue
         }
         if (c == "$" && substr(buf, i + 1, 1) == "(") {
           if (depth == 0) s = i + 2
@@ -373,6 +415,33 @@ _split_words() {
     function named(j,   k) {
       for (k = j - 1; k >= 1 && substr(buf, k, 1) ~ /[A-Za-z0-9_]/; k--) ;
       return k < j - 1 && substr(buf, k + 1, 1) ~ /[A-Za-z_]/ && (k == 0 || sep(substr(buf, k, 1)))
+    }
+    # arcmd(j): for the bare (( at j, the position of the ) that closes it when it is an arithmetic
+    # command, else 0 (a subshell ((cmd) ), which the splitter reads). This is _subst_bodies arith()
+    # for a two-char (( (a separate awk program, so the logic is repeated): a single quote is literal,
+    # a double quote or backtick is skipped and a paren in one returns 0, and (( is arithmetic when the
+    # ) that closes its inner ( is followed by ). _subst_bodies then reads the body in arithmetic mode.
+    function arcmd(j,   d, c, m, w) {
+      d = 2
+      for (j += 2; j <= n; j++) {
+        c = substr(buf, j, 1)
+        if (c == "\\") { j++; continue }
+        if (c == "$" && index("{" sq "\"", substr(buf, j + 1, 1))) return 0
+        if (c == "<" && substr(buf, j + 1, 1) == "<") return 0
+        w = (j == 1 || index(" \t\n;&|(", substr(buf, j - 1, 1)) > 0)
+        if (w && (c == "#" || (substr(buf, j, 4) == "case" && index(" \t\n", substr(buf, j + 4, 1))))) return 0
+        if (c == "\"" || c == "`") {
+          for (m = j + 1; m <= n && substr(buf, m, 1) != c; m++) {
+            if (index("()", substr(buf, m, 1)) || (c == "\"" && (substr(buf, m, 1) == "`" || substr(buf, m, 2) == "${"))) return 0
+            if (substr(buf, m, 1) == "\\") m++
+          }
+          if (m > n) return 0
+          j = m; continue
+        }
+        if (c == "(") d++
+        else if (c == ")" && --d == 1) return substr(buf, j + 1, 1) == ")" ? j + 1 : 0
+      }
+      return 0
     }
     # open(): a $( or ( inside one opens a depth, with its own stack of ${ } and the like.
     function open() { csv[depth] = cs; bbv[depth] = bb; bb = bn; depth++ }
@@ -472,6 +541,9 @@ _split_words() {
           i = e ? i + e - 1 : n + 1
           continue
         }
+        # A bare (( )) arithmetic command stays in its record whole, so _subst_bodies reads its body in
+        # arithmetic mode (a single quote there is literal). A subshell ((cmd) ) gets arcmd 0 and splits.
+        if (c == "(" && x == "(" && (e = arcmd(i))) { i = e + 1; continue }
         if (c == "(" && x == "(") ta = 1
         else if (c == ")" && x == ")") ta = 0
         if ((c == "{" || c == "}") && (i == 1 || sep(p)) && sep(x)) {

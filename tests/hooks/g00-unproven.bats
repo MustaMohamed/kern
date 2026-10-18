@@ -182,6 +182,38 @@ g00_all() {
   done
 }
 
+@test "a force push in \$[ ] old-style arithmetic reaches G1 and is denied in both modes" {
+  # $[ expr ] is arithmetic like $(( )): a single quote is literal, so the $( ) or backtick inside one
+  # runs and must reach G1, with every guard running, autopilot on or off.
+  local c m
+  for c in "echo \$[ '\$(git push --force origin main)' ]" \
+    "echo \$[ '\`git push --force origin main\`' ]" \
+    "echo \$[ \$(git push --force origin main) + 1 ]"; do
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      [ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }
+      [[ "$output" == *"kern G1: plain force push"* ]] || { echo "$m: $c -> $output"; return 1; }
+    done
+  done
+}
+
+@test "a force push in a single quote inside a bare (( )) reaches G1 and is denied in both modes" {
+  # The bare (( )) arithmetic command reads its body in arithmetic mode, so a single-quoted $( ) or
+  # backtick inside it reaches G1 with every guard running, autopilot on or off.
+  local c m
+  for c in "(( '\$(git push --force origin main)' ))" \
+    "(( '\`git push --force origin main\`' ))" \
+    "if (( '\$(git push --force origin main)' )); then :; fi"; do
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      [ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }
+      [[ "$output" == *"kern G1: plain force push"* ]] || { echo "$m: $c -> $output"; return 1; }
+    done
+  done
+}
+
 @test "G00 votes nothing outside autopilot or for other tools" {
   set_autopilot off
   g00_all none 'g=git; $g push' "python3 -c x" 'echo x | sh' "xargs sh -c x"

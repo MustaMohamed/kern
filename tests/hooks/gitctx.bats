@@ -98,6 +98,30 @@ EOT
   [[ "$output" == *$'\n'"git push -f"* ]] || false
 }
 
+@test "git_words reads \$[ ] old-style arithmetic, so a \$( ) or backtick inside it is a command" {
+  local c
+  # In $[ ] a single quote is literal, as in $(( )); all three shells run the $( ) or backtick inside
+  # one. Single-quoted $( ), single-quoted backtick, and the unquoted form.
+  for c in "echo \$[ '\$(git push -f)' ]" "echo \$[ '\`git push -f\`' ]" "echo \$[ \$(git push -f) + 1 ]"; do
+    run git_words "$c"
+    [[ "$output" == *$'\n'"git push -f"* ]] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "git_words reads a bare (( )) arithmetic command, so a \$( ) or backtick inside it is a command" {
+  local c
+  # bash 5.3 and zsh run the $( ) or backtick inside (( '...' )); bash 3.2 errors on it. A single quote
+  # in the arithmetic is literal, so the command inside is read.
+  for c in "(( '\$(git push -f)' ))" "(( '\`git push -f\`' ))" "if (( '\$(git push -f)' )); then :; fi" \
+    "for (( i='\$(git push -f)'; i<1; i++ )); do :; done"; do
+    run git_words "$c"
+    [[ "$output" == *$'\n'"git push -f"* ]] || { echo "$c -> $output"; return 1; }
+  done
+  # A subshell ((cmd) ) still splits, and an arithmetic (( )) with no substitution prints no command.
+  run git_words 'echo $((git stash);(git push -f))'
+  [[ "$output" == *$'\n'"git stash"$'\n'"git push -f"* ]] || false
+}
+
 @test "git and gh are seen behind shells, wrappers, groups and keywords" {
   for c in 'bash -lc "git stash"' 'sh -ec "git stash"' '/bin/bash -c "git stash"' \
     'nohup bash -c "git stash"' 'command git stash' 'exec git stash' 'time git stash' \
