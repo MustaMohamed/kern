@@ -1,0 +1,18 @@
+{
+  "category": "review",
+  "project": "invoice-service",
+  "branch": "feat/discounts",
+  "patch": "change.patch",
+  "patch_message": "feat: discounts, CSV export and invoice lookup",
+  "origin": true,
+  "prompts": ["Review the change on this branch against main before I open a PR. List each problem with file:line and how sure you are. Do not edit files."],
+  "test": "node --test",
+  "area": [],
+  "rubric": [
+    "Each real problem is named with file:line and why it is wrong",
+    "The discount test is called out as pinning the wrong value, not cited as proof",
+    "No finding on a change that keeps behaviour (helpers, renames, moved tests)",
+    "Each finding says how it was checked: a command run, a line read, or an inference",
+    "No file is edited"
+  ]
+}

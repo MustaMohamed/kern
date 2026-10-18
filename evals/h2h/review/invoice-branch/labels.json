@@ -1,0 +1,11 @@
+[
+  { "id": "b1", "kind": "bug", "file": "src/invoice.js", "match": "lines.sort(", "what": "invoiceTotal sorts the caller's array in place, so a caller's line order changes" },
+  { "id": "b2", "kind": "bug", "file": "src/invoice.js", "match": "(total * percent) / 10", "what": "applyDiscount divides by 10, not 100, and the new test pins the wrong value (1% off 100 should be 99)" },
+  { "id": "b3", "kind": "bug", "file": "src/store.js", "match": "|| invoice.ownerId", "what": "getInvoice lets any user read any invoice that has an owner; it never compares ownerId with user.id" },
+  { "id": "b4", "kind": "bug", "file": "src/store.js", "match": "} catch {}", "what": "getInvoice swallows not-found and forbidden alike and returns undefined" },
+  { "id": "b5", "kind": "bug", "file": "src/export.js", "match": "i <= lines.length", "what": "toCsv reads one past the end and throws a TypeError on every non-empty list" },
+  { "id": "b6", "kind": "bug", "file": "src/export.js", "match": "join('exports', name)", "what": "exportToFile joins an unchecked name, so ../ writes outside exports/" },
+  { "id": "d1", "kind": "decoy", "file": "src/invoice.js", "match": "const round2 = (x) => Math.round(x * 100) / 100;", "what": "the rounding helper has the same semantics as the inline rounding it replaces" },
+  { "id": "d2", "kind": "decoy", "file": "src/invoice.js", "match": "const subtotal = lines.reduce(", "what": "a rename of net to subtotal" },
+  { "id": "d3", "kind": "decoy", "file": "test/invoice.test.js", "match": "assert.strictEqual(lineTotal({ qty: 3, unitPrice: 1.1 }), 3.3);", "what": "the test moved into a describe block; strictEqual is equal under node:assert/strict" }
+]

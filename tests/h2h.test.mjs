@@ -124,3 +124,8 @@ test('the runner lists task-arm pairs in dry-run mode when the upstream trees ar
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^diagnose\/three-calls: kern, superpowers, pstack, pocock, control x 1 runs; 1 turn\(s\)$/m);
 });
+
+test('the fixture set is complete: 4 planning, 8 debugging and 1 review task', () => {
+  const n = (c) => loadTasks(ROOT).filter((t) => t.category === c).length;
+  assert.deepEqual([n('plan'), n('diagnose'), n('review')], [4, 8, 1]);
+});
