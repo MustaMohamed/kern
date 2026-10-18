@@ -16,7 +16,11 @@
 #   sh, bash, zsh and dash as records). A `< file` redirect is a script file;
 # - it defines an alias, runs `builtin eval` (eval of run-time text is a record of its own, and its
 #   command name is built at run time), or sources stdin, a file descriptor or a process
-#   substitution.
+#   substitution;
+# - it is a builtin that evaluates a string as arithmetic or a subscript (let, declare -i, typeset -i,
+#   printf -v, read, or [[/test/[ with -eq/-ne/-lt/-le/-gt/-ge) and holds a $( ) or backtick inside
+#   single quotes, which the arithmetic re-runs though git_words read it as literal text. Reading the
+#   inner command exactly is not practical, so autopilot denies; interactively no guard votes (M3).
 # Accepted limits, as a script file run by an interpreter is: the inline code, here-doc or pipe of an
 # interpreter other than a shell (python -c, node -e or -p, perl -e or -E, ruby -e, php -r, deno
 # eval, osascript -e, lua -e, R -e, julia -e, pwsh -c, `python3 - <<EOF`); a program or script
@@ -132,6 +136,32 @@ _G00_AWK='
     for (j = k + 1; j <= cw_n; j++) if (tolower(cw_w[j]) ~ re) return cw_w[j]
     return ""
   }
+  # g0_hasarg(re): true when some word after the command name matches re.
+  function g0_hasarg(re,   j) { for (j = 2; j <= cw_n; j++) if (cw_w[j] ~ re) return 1; return 0 }
+  # g0_sqsub(s): true when s holds a $( ) or a backtick inside a single-quoted span (an ANSI-C $'"'"'...'"'"'
+  # counts, since arithmetic re-expands its literal text). That is the one a builtin that evaluates a
+  # string as arithmetic runs though git_words read the quote as literal; a $( ) or backtick unquoted or
+  # in double quotes is already a record of its own, so it is not flagged here.
+  function g0_sqsub(s,   nn, C, i, c, q) {
+    nn = split(s, C, ""); q = ""
+    for (i = 1; i <= nn; i++) {
+      c = C[i]
+      if (q == sq) {
+        if (c == sq) { q = ""; continue }
+        if (c == "`" || (c == "$" && C[i + 1] == "(")) return 1
+        continue
+      }
+      if (q == "\"") {
+        if (c == "\\" && index("\"\\$`", C[i + 1])) i++
+        else if (c == "\"") q = ""
+        continue
+      }
+      if (c == "\\") { i++; continue }
+      if (c == sq) q = sq
+      else if (c == "\"") q = "\""
+    }
+    return 0
+  }
   # g0_judge(f, k, b): judges the shell b, of family f, at cw_w[k].
   function g0_judge(f, k, b,   s0, s1, src, w) {
     # su and runuser run a -c through a shell; fish also takes -C and --command. Any word may hold it.
@@ -186,6 +216,19 @@ _G00_AWK='
     }
     if ((hb == "source" || hb == ".") && gw_dyn(cw_w[k + 1]) && !gw_path(cw_w[k + 1])) {
       g0_out("the script name " cw_w[k + 1] " that " hb " reads is built at run time")
+      next
+    }
+    # A builtin that evaluates a string as arithmetic or a subscript runs a $( ) or backtick hidden in
+    # single quotes, which git_words read as literal text and cannot surface: let, declare -i, typeset
+    # -i, printf -v, read, and [[/test/[ with an arithmetic comparison. bash runs let, declare -i,
+    # typeset -i and [[ -eq ]]; bash and zsh run printf -v and read. Under autopilot it fails closed; the
+    # inner command is not visible as a record, so interactively no guard votes (an M3 limit).
+    ab = hb == "let" || hb == "read" ||
+      ((hb == "declare" || hb == "typeset") && g0_hasarg("^-[a-zA-Z]*i")) ||
+      (hb == "printf" && g0_hasarg("^-v$")) ||
+      ((hb == "[[" || hb == "test" || hb == "[") && g0_hasarg("^-(eq|ne|lt|le|gt|ge)$"))
+    if (ab && g0_sqsub($0)) {
+      g0_out("a string " hb " evaluates as arithmetic holds a $( ) or backtick kern cannot read")
       next
     }
     # Each shell judged; and the command that xargs runs, or find runs after -exec, -execdir, -ok or

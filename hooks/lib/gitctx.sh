@@ -441,12 +441,16 @@ _GW_SCAN='
 
 # git_words CMD: one simple command per line. Splits on ; & && || | ( ), the words { and }, and
 # newlines outside quotes, backticks and $( ); a redirection (2>&1, &>, >|) never splits, and a
-# backslash-newline is dropped. Here-doc bodies are data: they are left out (see _split_words).
-# The script of an sh-family shell's -c (any path, any option form, as shc reads it by the rules of
-# bash and of zsh, after the wrappers and keywords _cmd_words skips), the arguments of `eval`, and
-# the bodies of $( ) and backticks are split again and printed after their wrapper, so a command
-# inside a string is still seen. Out of scope here: commands that xargs or find -exec run (G1 and G2
-# ask for a git or gh among their words), and a here-doc piped into a shell (cat <<EOF | sh).
+# backslash-newline is dropped. Here-doc bodies are data: they are left out, but an unquoted body's
+# command substitutions are read (see _split_words). The script of an sh-family shell's -c (any path,
+# any option form, as shc reads it by the rules of bash and of zsh, after the wrappers and keywords
+# _cmd_words skips), the arguments of `eval`, a `trap` handler, and the bodies of $( ) and backticks
+# are split again and printed after their wrapper, so a command inside a string is still seen. When any
+# awk pass errors, git_words emits a $KERN_UNREAD record (which G00 denies), keeps the records it has,
+# and returns non-zero, so a guard that reads it under `set -o pipefail` (G00, G13, G15) fails closed
+# rather than reading less than the shell runs. Out of scope here: commands that xargs or find
+# -exec run (G1 and G2 ask for a git or gh among their words), and a here-doc piped into a shell
+# (cat <<EOF | sh).
 git_words() {
   local seg inner body first
   # With aliases loaded (aliases.sh), the outermost call prints the command's own records exactly as
@@ -490,23 +494,29 @@ git_words() {
         */noglob | */nocorrect | */coproc | */repeat | \
         */[Ee][Vv][Aa][Ll] | */[Cc][Oo][Mm][Mm][Aa][Nn][Dd] | */[Ee][Xx][Ee][Cc] | */[Tt][Ii][Mm][Ee] | \
         */[Nn][Oo][Hh][Uu][Pp] | */[Ss][Uu][Dd][Oo] | */[Ee][Nn][Vv] | */[Tt][Ii][Mm][Ee][Oo][Uu][Tt] | \
-        */[Nn][Ii][Cc][Ee] | */[Ss][Hh] | */[Bb][Aa][Ss][Hh] | */[Zz][Ss][Hh] | */[Dd][Aa][Ss][Hh]) ;;
+        */[Nn][Ii][Cc][Ee] | */[Ss][Hh] | */[Bb][Aa][Ss][Hh] | */[Zz][Ss][Hh] | */[Dd][Aa][Ss][Hh] | \
+        */[Tt][Rr][Aa][Pp]) ;;
       *) continue ;;
     esac
-    # One line per inner command line: the words after eval, or each script shc finds, read by the
-    # rules of bash and of zsh. Each is split on its own, so one cannot quote the other away.
-    printf '%s' "$seg" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+    # One line per inner command line: the words after eval, a trap handler, or each script shc finds,
+    # read by the rules of bash and of zsh. Each is split on its own, so one cannot quote the other away.
+    # The awk pass fails closed ($KERN_UNREAD, which G00 denies) if it ever errors.
+    { printf '%s' "$seg" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
       { buf = buf (NR > 1 ? "\037" : "") $0 }
       END {
         sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k])
         if (!cw_n) exit
         b = tolower(P[split(cw_w[1], P, "/")])
         if (b == "eval") { for (k = 2; k <= cw_n; k++) out = out (k > 2 ? " " : "") cw_w[k]; print out; exit }
+        # trap HANDLER SIGSPEC... runs the handler as code at the trap; its first non-option word is the
+        # handler, quotes removed. bash, zsh, bash 3.2 all run it (measured).
+        if (b == "trap") { for (k = 2; k <= cw_n; k++) if (cw_w[k] !~ /^-/) { print cw_w[k]; break }; exit }
         if (b !~ /^(ba|z|da)?sh$/) exit
         s = shc(1, 0); t = shc(1, 1)
         if (s > 0) print cw_w[s]
         if (t > 0 && t != s) print cw_w[t]
-      }' | while IFS= read -r inner; do
+      }' || { printf '%s\n' '$KERN_UNREAD'; false; }
+    } | while IFS= read -r inner; do
       if [ -n "$inner" ]; then git_words "${inner//$_GW_NL/$'\n'}"; fi
     done
   done
@@ -524,7 +534,8 @@ _subst_bodies() {
     { buf = buf (NR > 1 ? " " : "") $0 }
     # Past the nesting limit the scan goes flat and may miss a command, so it fails closed: it prints a
     # $KERN_UNREAD record, which G00 denies under autopilot, on top of every body it did find (concern 5).
-    END { sc_init(buf); sc_pr = 1; sc_end(1, "t", 0); if (sc_cap) print "$KERN_UNREAD" }'
+    END { sc_init(buf); sc_pr = 1; sc_end(1, "t", 0); if (sc_cap) print "$KERN_UNREAD" }' ||
+    { printf '%s\n' '$KERN_UNREAD'; false; }
 }
 
 # _split_words STR: the simple commands of STR, one record per line (see git_words). The scanner
@@ -532,7 +543,10 @@ _subst_bodies() {
 # whole, so only a separator outside all of them ends a record. A here-doc (<<WORD, <<-WORD, <<'WORD',
 # <<"WORD") is read at the newline that ends its command line: the body up to the closing WORD line is
 # skipped. At the top level the body and closing line are dropped; inside $( ) the closing line is kept,
-# so the record still parses the same when split again. The body of a here-doc that sh, bash, zsh or
+# so the record still parses the same when split again. An unquoted delimiter (<<WORD, <<-WORD) leaves
+# its body subject to command substitution, so hbody emits a body that holds a $( ) or backtick as its
+# own record, which _subst_bodies then reads; a quoted delimiter (<<'WORD', <<"WORD", <<\WORD) keeps the
+# body literal and unread. The body of a here-doc that sh, bash, zsh or
 # dash reads as its script (no -c) is kept as commands. A `<<` is never a here-doc inside $(( )) or
 # (( )), inside ${ }, $[ ] or a NAME[ ] subscript (an array assignment), in a comment, or when its $( )
 # closes before the newline; and a here-doc with no closing line skips nothing. So a misread `<<` cannot
@@ -586,8 +600,8 @@ _split_words() {
     # ends at a blank, an operator, a newline or the end of input, even inside a quote; a quote
     # still open there means the `<<` was quoted text, and nothing is queued. Scanning resumes
     # after the `<<` either way, so the word itself is read as ordinary text.
-    function heredoc(j,   d, wq, ch, dash) {
-      dash = 0
+    function heredoc(j,   d, wq, ch, dash, qd) {
+      dash = 0; qd = 0
       if (substr(buf, j, 1) == "-") { dash = 1; j++ }
       while (j <= n && index(" \t", substr(buf, j, 1))) j++
       d = ""; wq = ""
@@ -595,12 +609,23 @@ _split_words() {
         ch = substr(buf, j, 1)
         if (ch == "\n") break
         if (wq != "") { if (ch == wq) wq = ""; else d = d ch; continue }
-        if (ch == sq || ch == "\"") { wq = ch; continue }
-        if (ch == "\\") { j++; d = d substr(buf, j, 1); continue }
+        if (ch == sq || ch == "\"") { wq = ch; qd = 1; continue }
+        if (ch == "\\") { j++; d = d substr(buf, j, 1); qd = 1; continue }
         if (index(" \t;&|<>()", ch)) break
         d = d ch
       }
-      if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash }
+      # qd marks a quoted or backslashed delimiter (<<'"'"'EOF'"'"', <<"EOF", <<\EOF): its body stays
+      # literal, so nothing in it is expanded and hbody leaves it unread.
+      if (wq == "" && d != "") { hd[++hn] = d; hx[hn] = dash; hq[hn] = qd }
+    }
+    # hbody(a): after bodies() set last[1..nh], emits the body of each unquoted here-doc that holds a
+    # $( ) or backtick, so git_words reads the command substitutions the shell expands in it (a quoted
+    # delimiter is skipped). a is the position just after the operator line, where the first body starts.
+    function hbody(a,   h, s) {
+      for (h = 1; h <= nh; h++) {
+        if (!hq[h]) { s = substr(buf, a, off[last[h]] - a); if (index(s, "$(") || index(s, "`")) emit(s) }
+        a = off[last[h]] + length(L[last[h]]) + 1
+      }
     }
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
@@ -627,6 +652,7 @@ _split_words() {
     # before it (da[], db[]) and keeps their closing lines. Returns the last position it read.
     function sc_nl(j,   k, h, a) {
       if (!hn || !(k = bodies(j))) return j
+      hbody(j + 1)
       a = j + 1
       for (h = 1; h <= nh; h++) { da[++dn] = a; db[dn] = off[last[h]] - 1; a = off[last[h]] + length(L[last[h]]) + 1 }
       return off[k] + length(L[k]) - 1
@@ -677,7 +703,7 @@ _split_words() {
           cut(i)
           if ((c == "&" || c == "|") && x == c) i++
           start = cs = i + 1
-          if (c == "\n" && hn && (k = bodies(i))) { i = off[k] + length(L[k]); start = cs = i + 1 }
+          if (c == "\n" && hn && (k = bodies(i))) { hbody(i + 1); i = off[k] + length(L[k]); start = cs = i + 1 }
         }
         i++
       }
@@ -685,7 +711,7 @@ _split_words() {
       # A quote or context that never closes (at i) holds the rest of the text, in the record just cut.
       # That text is then read again flat, so a quote the scanner misreads hides nothing after it.
       if (i <= n) flat(start)
-    }'
+    }' || { printf '%s\n' '$KERN_UNREAD'; false; }
 }
 
 # _shell_words STR: the words of one simple command, quotes removed, one per line. A newline

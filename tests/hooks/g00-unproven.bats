@@ -268,6 +268,56 @@ g00_all() {
   done
 }
 
+@test "a force push in an unquoted here-doc body or a trap handler reaches G1 and is denied in both modes" {
+  # An unquoted here-doc body undergoes command substitution, and a trap handler runs as code; bash and
+  # zsh run the force push in each, so git_words surfaces it and G1 denies with every guard running,
+  # autopilot on or off (final review Critical 1 and Important 2). A quoted delimiter stays data.
+  local c m
+  for c in "$(printf '%s\n' 'cat <<EOF' '$(git push --force origin main)' 'EOF')" \
+    "$(printf '%s\n' 'x=$(cat <<EOF' '$(git push --force origin main)' 'EOF' ')')" \
+    "trap 'git push --force origin main' EXIT" \
+    "trap '\$(git push --force origin main)' EXIT"; do
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      [ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }
+      [[ "$output" == *"G1: plain force push"* ]] || { echo "$m: $c -> $output"; return 1; }
+    done
+  done
+}
+
+@test "a string a builtin evaluates as arithmetic is denied under autopilot, and gets no vote off" {
+  # let, declare -i, typeset -i, printf -v, read and [[ -eq ]] evaluate a single-quoted $( ) or backtick
+  # as arithmetic (or a subscript), which bash and/or zsh run but git_words cannot surface as a command.
+  # G00 denies them under autopilot (final review Important 2). Outside autopilot no guard votes, an M3
+  # limit recorded in the design spec.
+  local c
+  for c in "let 'a[\$(git push --force origin main)]'" \
+    "declare -i n='a[\$(git push --force origin main)]'" \
+    "typeset -i n='a[\$(git push --force origin main)]'" \
+    "printf -v 'a[\$(git push --force origin main)]' x" \
+    "read 'a[\$(git push --force origin main)]'" \
+    "[[ 1 -eq 'a[\$(git push --force origin main)]' ]]" \
+    "let '\`git push --force origin main\`'"; do
+    set_autopilot on
+    gx "$c" ""
+    [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
+    [[ "$output" == *"G00: under autopilot kern denies what it cannot read"* ]] || { echo "on: $c -> $output"; return 1; }
+    set_autopilot off
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
+  done
+}
+
+@test "a plain arithmetic builtin or a surfaced substitution is not denied by the builtin rule" {
+  # The builtin-eval rule fires only on a hidden ($( ) or backtick in single quotes) construct, so a
+  # plain let, read or [[ -eq ]], and a substitution git_words already surfaces (unquoted or in double
+  # quotes), get no vote from it.
+  g00_all none "let 'a = 1 + 2'" 'read -r line' 'read x y' "declare -i n=5" \
+    '[[ "$x" -eq 3 ]]' '[ "$(wc -l < f)" -eq 0 ]' 'printf -v out "%s" "$x"' \
+    'echo $(( $(date +%s) - 5 ))'
+}
+
 @test "a command nested past the scanner's depth limit is voted on in both modes" {
   # 20 nested \$(echo ...) with a push at the bottom: the push surfaces, and past the depth limit the
   # reader also emits a \$KERN_UNREAD record that G00 denies under autopilot, so a guard votes in both

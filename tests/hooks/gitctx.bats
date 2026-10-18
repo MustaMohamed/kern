@@ -155,8 +155,9 @@ has_push() { printf '%s\n' "$1" | grep -qE '^git push --force origin main( |$)';
 # corpus: the shapes of the Task 7 differential sweeps, rounds 1 to 4, one per line as TAG SHAPE. In
 # SHAPE, @ and @2 stand for the command and <NL> for a newline. TAG run: bash 3.2, bash 5.3 or zsh 5.9
 # runs the command (measured with a harmless marker), so git_words must print it as a record. not: no
-# shell runs it. A line that starts with # is a note. (Round 4 and 5 closed the M3 case, $'...' and
-# $[ ] newline gaps, so no shape is a known gap now.)
+# shell runs it. gap: a shell runs it but git_words cannot surface it as a record (Task 7a: a builtin
+# that evaluates a single-quoted substitution as arithmetic, where G00 denies under autopilot; a zsh
+# glob qualifier, an M3 limit). A line that starts with # is a note.
 corpus() {
   cat <<'EOF'
 # Rounds 1 to 3.
@@ -347,6 +348,31 @@ run echo "$(echo $[)] `@`)"
 run echo "$(echo $[ (1) ) ] `@`)"
 run echo $(echo ${x:-)} `@`)
 run "$("$[')''"']""'""'"""$[)')']`@`''"""")"$((''))
+# Task 7a: an unquoted here-doc body undergoes command substitution, so git_words reads its $( ) and
+# backticks; a quoted delimiter keeps the body literal (not). A trap handler runs as code, so it is read.
+run cat <<EOF<NL>$(@)<NL>EOF
+run x=$(cat <<EOF<NL>$(@)<NL>EOF<NL>)
+run cat <<-EOF<NL>$(@)<NL>EOF
+run cat <<EOF<NL>`@`<NL>EOF
+run echo $(cat <<EOF<NL>$(@)<NL>EOF<NL>)
+run trap '@' EXIT
+run trap '$(@)' EXIT
+run trap "@" EXIT
+not cat <<'EOF'<NL>$(@)<NL>EOF
+not cat <<"EOF"<NL>$(@)<NL>EOF
+not cat <<\EOF<NL>$(@)<NL>EOF
+# Task 7a gaps: a builtin that evaluates a single-quoted $( ) as arithmetic (let, declare -i, typeset
+# -i, printf -v, read, [[ -eq ]]) runs it, but git_words cannot surface it as a record; G00 denies it
+# under autopilot (g00-unproven.bats). A zsh glob qualifier e:'...': runs code that no guard sees; it is
+# zsh-only and needs a matching glob, and is recorded in the design spec's M3 row.
+gap let 'a[$(@)]'
+gap declare -i n='a[$(@)]'
+gap typeset -i n='a[$(@)]'
+gap printf -v 'a[$(@)]' x
+gap read 'a[$(@)]'
+gap [[ 1 -eq 'a[$(@)]' ]]
+gap echo *(e:'@':)
+gap echo *(e:'$(@)':)
 EOF
 }
 
@@ -365,9 +391,28 @@ EOF
 $(corpus)
 EOT
   [ -z "$bad" ] || { printf 'not read:\n%s' "$bad"; return 1; }
-  [ "$n" -eq 162 ]
-  [ "$(corpus | grep -c '^not ')" -eq 21 ]
-  [ "$(corpus | grep -c '^gap ')" -eq 0 ]
+  [ "$n" -eq 170 ]
+  [ "$(corpus | grep -c '^not ')" -eq 24 ]
+  [ "$(corpus | grep -c '^gap ')" -eq 8 ]
+}
+
+@test "the recorded gaps keep the reading the corpus pins: git_words surfaces no force push" {
+  # The gap shapes (a builtin that evaluates a single-quoted substitution as arithmetic, and a zsh glob
+  # qualifier) run a command git_words cannot surface as a record. G00 denies the builtin shapes under
+  # autopilot (g00-unproven.bats); the glob qualifier is an M3 limit. This pins that git_words prints no
+  # standalone force push for them, so a change that starts to read one is seen.
+  local line shape c
+  while IFS= read -r line; do
+    [ "${line%% *}" = gap ] || continue
+    shape=${line#* }
+    c=${shape//<NL>/$'\n'}
+    c=${c//@2/git push --force origin main}
+    c=${c//@/git push --force origin main}
+    run git_words "$c"
+    ! has_push "$output" || { echo "surfaced (no longer a gap): $shape -> $output"; return 1; }
+  done <<EOT
+$(corpus)
+EOT
 }
 
 @test "git_words reads a case inside \$( ) so the commands between pattern) and ;; are seen" {
@@ -414,6 +459,65 @@ EOT
   for ((i = 0; i < 20; i++)); do c="$c)"; done
   run git_words "$c"
   [[ "$output" == *'$KERN_UNREAD'* ]] || { echo "$output"; return 1; }
+}
+
+@test "git_words reads an unquoted here-doc body for \$( ) and backticks; a quoted delimiter stays unread" {
+  # An unquoted here-doc body undergoes command substitution in bash 3.2, bash 5.3 and zsh 5.9, so a
+  # $( ) or backtick in it runs and git_words must print it (final review Critical 1). The body is
+  # read from a literal here-doc so the quotes, backticks and $ reach git_words unchanged.
+  local c
+  while IFS= read -r c; do
+    c=${c//<NL>/$'\n'}
+    c=${c//@/git push --force origin main}
+    run git_words "$c"
+    has_push "$output" || { echo "unread: $c -> $output"; return 1; }
+  done <<'EOT'
+cat <<EOF<NL>$(@)<NL>EOF
+x=$(cat <<EOF<NL>$(@)<NL>EOF<NL>)
+cat <<-EOF<NL>$(@)<NL>EOF
+cat <<EOF<NL>`@`<NL>EOF
+echo $(cat <<EOF<NL>$(@)<NL>EOF<NL>)
+EOT
+  # A quoted delimiter (<<'EOF', <<"EOF", <<\EOF) keeps the body literal: nothing runs, no push record.
+  while IFS= read -r c; do
+    c=${c//<NL>/$'\n'}
+    c=${c//@/git push --force origin main}
+    run git_words "$c"
+    ! has_push "$output" || { echo "leaked: $c -> $output"; return 1; }
+  done <<'EOT'
+cat <<'EOF'<NL>$(@)<NL>EOF
+cat <<"EOF"<NL>$(@)<NL>EOF
+cat <<\EOF<NL>$(@)<NL>EOF
+EOT
+}
+
+@test "git_words reads a trap handler as a command, so a force push there is seen" {
+  # trap HANDLER SIGSPEC runs HANDLER as code at the trap in bash 3.2, bash 5.3 and zsh 5.9; git_words
+  # reads the handler, quotes removed, so a force push in it is seen (final review Important 2).
+  local c
+  for c in "trap 'git push --force origin main' EXIT" \
+    "trap '\$(git push --force origin main)' EXIT" \
+    "trap -- 'git push --force origin main' INT TERM" \
+    "trap \"git push --force origin main\" EXIT"; do
+    run git_words "$c"
+    has_push "$output" || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "git_words fails closed when an awk program fails, and is unchanged when they succeed" {
+  # A stub awk that always fails stands in for a crash: git_words then emits the $KERN_UNREAD record
+  # that G00 denies, instead of silently reading nothing (final review Minor 1). When awk succeeds the
+  # output is unchanged.
+  run git_words 'git status'
+  [ "$output" = "git status" ]
+  local bin="$BATS_TEST_TMPDIR/awkbin" old="$PATH"
+  mkdir -p "$bin"
+  printf '%s\n' '#!/bin/sh' 'exit 1' >"$bin/awk"
+  chmod +x "$bin/awk"
+  PATH="$bin:$PATH"
+  run git_words 'git status'
+  PATH="$old"
+  [[ "$output" == *'$KERN_UNREAD'* ]] || { echo "no fail-closed: $output"; return 1; }
 }
 
 @test "git and gh are seen behind shells, wrappers, groups and keywords" {
