@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileS
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
+import { ATTRIBUTION, GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, userSettingsProblem, writeEvents, writeReply } from '../scripts/lib/exec-run.mjs';
 
@@ -741,4 +741,25 @@ test('fix round 1 (M2): an INVALID autopilot case still runs its grader and keep
   const passed = grade(() => ({ pass: true, reasons: [] }));
   assert.deepEqual([passed.invalid, passed.pass, passed.reasons.slice(1)], [true, false, ['grader: pass']]);
   assert.deepEqual(grade(() => { throw new Error('no such ref'); }).reasons.slice(1), ['grader error: no such ref']);
+});
+
+test('a PR body with an attribution line fails its case under commit.attribution: none (coverage gap 54)', () => {
+  const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '1' });
+  const create = 'pr create --draft --title fix: sum --base main --body-file /w/.kern/tmp/pr-body.md';
+  assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: [create, 'body-file: ## Why\\nsum subtracted.'], git: g, branch: 'feat/sum' }).pass, true);
+  const r = GRADERS['finish-autopilot-draft']({ ghLog: [create, 'body-file: ## Why\\nsum subtracted.\\n\\nGenerated with [Claude Code](https://claude.com/claude-code)'], git: g, branch: 'feat/sum' });
+  assert.deepEqual(r.reasons, ['the PR body carries an attribution line under commit.attribution: none']);
+  assert.match('Co-Authored-By: Claude <noreply@anthropic.com>', ATTRIBUTION);
+});
+
+test('the gh stand-in logs the body of a PR it creates, on one line', () => {
+  const d = mkdtempSync(join(tmpdir(), 'gh-'));
+  spawnSync('git', ['init', '-q', d]);
+  spawnSync('git', ['-C', d, 'remote', 'add', 'origin', '/srv/origin.git']);
+  writeFileSync(join(d, 'body.md'), '## Why\nsum subtracted.\n');
+  const log = join(d, 'gh.log');
+  const r = spawnSync('bash', [fileURLToPath(new URL('../evals/exec/bin/gh', import.meta.url)), 'pr', 'create', '--draft', '--title', 't', '--body-file', 'body.md'],
+    { cwd: d, env: { ...process.env, KERN_EXEC_LOG: log }, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(readFileSync(log, 'utf8').split('\n').filter(Boolean), ['pr create --draft --title t --body-file body.md', 'body-file: ## Why\\nsum subtracted.']);
 });

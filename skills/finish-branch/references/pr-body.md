@@ -1,6 +1,6 @@
 # PR body
 
-A one-minute briefing for a reviewer who has the diff. Write it with the Write tool to a file under `WORK/tmp` and pass `--body-file`. Use these sections in this order and drop a section with nothing to say. Keep the whole body under about 40 lines; detail goes in a linked file, not the body.
+A one-minute briefing for a reviewer who has the diff. Write it with the Write tool to a file under `WORK/tmp` and pass `--body-file`. Use these sections in this order and drop a section with nothing to say. Keep the whole body under about 40 lines; detail goes in a linked file, not the body. With `commit.attribution: none`, the default, the body carries no attribution footer such as "Generated with Claude Code" and no Co-Authored-By line, even when Claude Code's attribution reminder asks for one.
 
 ## Why
 

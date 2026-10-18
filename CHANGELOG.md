@@ -4,6 +4,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- autopilot and finish-branch follow `commit.attribution` as the commit skill does: with `none`, the default, autopilot writes no Co-Authored-By or other attribution trailer, which G5 would deny, and a PR body carries no "Generated with Claude Code" footer, even when Claude Code's attribution reminder asks for one.
 - plan-check reads code fences as CommonMark does: a tilde fence may hold a backtick line, a longer fence may hold a shorter one, and a closer needs the same character, at least as many of them, and nothing after them. A spec or plan that quotes Markdown no longer fails it.
 - self-review: when a repo documents few standards, the Standards axis walks twelve labelled code smells (should-fix at most; a repo rule or a lint rule wins). diagnose: after a deep dig, propose the cheap always-on signal that would have shown the cause. recall chat: under 150 words, numbers checked, no invented action items, options side by side; an autopilot execute-plan run ends with it. Every Agent call passes its role's effort (`model.<role>.effort`, defaults in execute-plan's model table).
 - plan: a step records decisions, not code. A test step gives its name and assertions with the spec's values; a code step gives the signature, the file and the spec's values, and a body only for an algorithm they do not determine. Self-review and the plan reviewer check the plan's length against the spec.

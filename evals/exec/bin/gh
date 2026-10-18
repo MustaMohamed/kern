@@ -18,7 +18,19 @@ case "$1 $2" in
       *) case "$*" in *--jq*) ;; *) echo '[]' ;; esac ;;
     esac
     ;;
-  "pr create") pr_url 8 || exit 1; echo ;;
+  "pr create")
+    # The body the PR would carry, one line, so a grader can check it (commit.attribution, gap 54).
+    prev=""
+    for a in "$@"; do
+      if [ "$prev" = --body-file ] && [ -f "$a" ]; then
+        body=$(cat "$a")
+        printf 'body-file: %s\n' "${body//$'\n'/\\n}" >>"$KERN_EXEC_LOG"
+      fi
+      prev=$a
+    done
+    pr_url 8 || exit 1
+    echo
+    ;;
   "pr view") url=$(pr_url 7) || exit 1; printf '{"number":7,"state":"OPEN","url":"%s"}\n' "$url" ;;
   "api user") echo dev ;;
   "auth status") echo "Logged in to example.invalid account dev" ;;

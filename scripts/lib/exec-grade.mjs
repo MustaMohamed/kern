@@ -246,6 +246,10 @@ export function stoppedOnRedProof(events) {
   return events.some((e) => (e?.message?.content ?? []).some((c) => c?.type === 'tool_result' && c.is_error === true && test.test(commands.get(c.tool_use_id) ?? '')));
 }
 
+// An attribution line the default commit.attribution: none forbids, in a commit or a PR body: Claude Code's
+// "Generated with Claude Code" footer or a Co-Authored-By trailer.
+export const ATTRIBUTION = /Generated with \[?Claude Code|Co-Authored-By:/i;
+
 // ctx: { events, ghLog: string[], git: (...args) => string, branch }
 export const GRADERS = {
   'commit-work-file': ({ events, git, branch }) => {
@@ -276,6 +280,7 @@ export const GRADERS = {
     return check([
       [creates.length > 0 && creates.every((c) => /--draft/.test(c) && /--title/.test(c)), 'gh pr create did not carry --draft and --title'],
       [!ghLog.some((l) => l.startsWith('pr ready')), 'gh pr ready ran'],
+      [!ghLog.some((l) => l.startsWith('body-file: ') && ATTRIBUTION.test(l)), 'the PR body carries an attribution line under commit.attribution: none'],
       ...pushedTip(git, branch, 1),
     ]);
   },

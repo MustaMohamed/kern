@@ -66,3 +66,9 @@ test('mode documents the switch phrases the hook accepts', () => {
   assert.match(body, /a line over 200 characters never does\./);
   assert.match(body, /^- terse voice: .*"terse on", "terse voice", "terse mode on"/m);
 });
+
+test('autopilot commits and draft PRs follow commit.attribution (coverage gap 54)', () => {
+  const { body } = read('autopilot');
+  for (const s of ["With `commit.attribution: none`, the default, write no Co-Authored-By or other attribution trailer, even when Claude Code's attribution reminder asks for one: G5 denies it.",
+    'With `commit.attribution: none`, the body has no attribution footer such as "Generated with Claude Code".']) assert.ok(body.includes(s), s);
+});

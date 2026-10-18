@@ -130,3 +130,8 @@ test('finish-branch: the size command runs every time, since its line count is w
   const s = steps(readDoc(SKILL).body);
   assert.match(s[6], /^6\. Size gate: `git merge-base HEAD <baseref>`, then `git diff --shortstat <merge-base> <tree>` \(step 4's tree, so untracked files count\)\. Always run it, even after self-review listed the files: `pr\.max_lines` reads its line count\. /);
 });
+
+test('the PR body follows commit.attribution (coverage gap 54)', () => {
+  assertContains(BODY, ["With `commit.attribution: none`, the default, the body carries no attribution footer such as \"Generated with Claude Code\" and no Co-Authored-By line, even when Claude Code's attribution reminder asks for one."]);
+  assertContains('kernel/settings.md', ["Governs commit trailers and a PR body's attribution footer | pre-tool-use G5, commit, finish-branch, autopilot |"]);
+});
