@@ -115,6 +115,7 @@ Changes the user asked for after the first run:
 
 - 2026-10-17, after p1. The user's `claude` shell function adds `--mcp-config ~/.claude/mcp-cli.json`, so both p1 arms also had the user's Linear MCP server. The user's answer: "Use command claude". From p2 on, protocol step 4 starts each arm with `command claude` in place of `claude`, so each arm has only its own plugins. p1 stands as run, since the server was there for both arms.
 - 2026-10-17, before p2. Both p1 arms also loaded the skills the user's claude.ai account syncs (`anthropic-skills:*`, among them copies of superpowers skills), and the current arm a synced plugin (`cowork-plugin-management`); neither arm called a skill. Offered `--settings` with `syncClaudeAiSkills` and `syncClaudeAiPlugins` set to `false`, the user's answer: "Leave as in p1", and for p1: "Keep p1 as run". All three tasks run with the synced skills in both arms.
+- 2026-10-18, before p3. The user was away from the computer and asked: "Do that yourself I'm on mobile". Told that a headless run denies every guard ask, since no one can answer it, and that kern's G16 asks on the hook tests would be denied, the user's answer: "Run both headless now". p3's arms run as `claude -p` with the task prompt, `--permission-mode auto` and `--output-format stream-json`, kern first, then the current flow, one after the other, each in a clean environment with only `CLAUDE_CONFIG_DIR` set. No one answers an arm's questions, so a run ends at its first final reply.
 
 ## Switch-off (design spec 13.4; run only after the user says so)
 
