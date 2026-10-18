@@ -1,0 +1,19 @@
+{
+  "category": "plan",
+  "project": "invoice-service",
+  "prompts": ["The spec in docs/spec-reminders.md is approved. Write the implementation plan; do not change code yet."],
+  "spec": "docs/spec-reminders.md",
+  "area": [],
+  "traps": [
+    { "id": "t1", "file": "src/reminders.js", "what": "no seam: the job reads Date.now() and calls fetch directly, so AC 1 to 3 cannot be tested without a clock and a mailer passed in; a behaviour-preserving prefactor comes first" },
+    { "id": "t2", "file": "src/reminders.js", "what": "AC 3 needs a record of what was sent; nothing stores that today, so the plan must say where it lives or ask" },
+    { "id": "t3", "file": "test/invoices.test.js", "what": "the existing overdue path has no test; AC 4 needs one written before the change, against today's behaviour" }
+  ],
+  "rubric": [
+    "A prefactor task adds a clock and a mailer seam before any feature task",
+    "AC 3's sent-record is planned or raised as a question, not assumed",
+    "A test of today's overdue behaviour comes before the change (AC 4)",
+    "No test sends real email",
+    "Invents no requirement the spec does not state"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "category": "plan",
+  "project": "invoice-service",
+  "prompts": ["The spec in docs/spec-archive.md is approved. Write the implementation plan; do not change code yet."],
+  "spec": "docs/spec-archive.md",
+  "area": [],
+  "traps": [
+    { "id": "t1", "file": "jobs/sync-payments.js", "what": "a second writer of paid_at: a late payment sync can re-pay an archived invoice, so archived_at must be cleared or the sync must skip archived rows" },
+    { "id": "t2", "file": "jobs/cleanup.js", "what": "contradiction: cleanup deletes paid invoices after two years, and the spec says archived invoices are never deleted; the plan must ask, not pick" },
+    { "id": "t3", "file": "migrations/001_invoices.sql", "what": "the new archived_at migration needs a down that drops the column, per the Constraints" },
+    { "id": "t4", "file": "src/invoices.js", "what": "listInvoices has no options argument today; the includeArchived path and its default need tests" }
+  ],
+  "rubric": [
+    "Names the payment sync as a second writer and plans for it",
+    "Flags the cleanup job against acceptance criterion 4 as a question for the user, without choosing",
+    "The migration task includes a down step and a test of it",
+    "Each task names its files and a failing test first",
+    "Invents no requirement the spec does not state"
+  ]
+}

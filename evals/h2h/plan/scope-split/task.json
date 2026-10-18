@@ -1,0 +1,19 @@
+{
+  "category": "plan",
+  "project": "invoice-service",
+  "prompts": ["The spec in docs/spec-q4.md is approved. Write the implementation plan; do not change code yet."],
+  "spec": "docs/spec-q4.md",
+  "area": [],
+  "traps": [
+    { "id": "t1", "file": "src/roles/admin.js", "what": "the rename touches seven role files plus stored data, and the export is unrelated: two changes, so two PRs within a 4-file scope gate, or an explicit scope confirmation" },
+    { "id": "t2", "file": "src/roles/users.js", "what": "AC 2 changes a stored value: expand and contract (accept both, migrate, then drop clerk), not a flag-day rename" },
+    { "id": "t3", "file": "src/export/rows.js", "what": "an xlsx writer is a new dependency, which the Constraints say to ask about first" }
+  ],
+  "rubric": [
+    "Splits the role rename and the export into separate PRs, or asks for scope confirmation",
+    "The stored-role change accepts both values before migrating and only then drops clerk",
+    "Raises the xlsx dependency as a question before choosing one",
+    "Each task names its files and a failing test first",
+    "Invents no requirement the spec does not state"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "category": "plan",
+  "project": "invoice-service",
+  "prompts": ["The spec in docs/spec-rename.md is approved. Write the implementation plan; do not change code yet."],
+  "spec": "docs/spec-rename.md",
+  "area": [],
+  "traps": [
+    { "id": "t1", "file": "src/total.js", "what": "two files, one obvious approach: a multi-task plan is overhead; the proportionate answer is one task or no plan at all" }
+  ],
+  "rubric": [
+    "Proportion: says a plan is not needed, or writes one task, for a two-file rename",
+    "Names both files (src/total.js, test/total.test.js) and the verify command (npm test)",
+    "Adds no deprecation alias, migration or follow-up the spec does not ask for",
+    "Invents no requirement the spec does not state"
+  ]
+}
