@@ -84,8 +84,12 @@ const canon = (p) => resolve(p).replace(/^\/private(?=\/var\/)/, '');
 const READERS = /^(?:cat|head|tail|sed|less|more|awk|nl|bat)$/;
 const bashReads = (u) => (u.name === 'Bash' && typeof u.input.command === 'string'
   ? u.input.command.split(/&&|\|\||;|\||\n/).flatMap((seg) => {
-    const words = seg.trim().split(/\s+/);
-    return READERS.test(words[0] || '') ? words.slice(1).map((w) => w.replace(/^['"]|['"]$/g, '')).filter((w) => w.startsWith('/')) : [];
+    // A segment that writes the file, follows it or runs it as a program is not a read the model sees: an
+    // output redirect (stderr ones aside), sed -i, tail -f, awk -f.
+    const s = seg.replace(/\d?>&\d|2>\s*\/dev\/null/g, '');
+    const words = s.trim().split(/\s+/);
+    if (!READERS.test(words[0] || '') || s.includes('>') || words.some((w) => /^-(?:i|f|F)|^--(?:in-place|follow)/.test(w))) return [];
+    return words.slice(1).map((w) => w.replace(/^['"]|['"]$/g, '')).filter((w) => w.startsWith('/'));
   })
   : []);
 const readsOf = (u) => (u.name === 'Read' && typeof u.input.file_path === 'string' ? [u.input.file_path] : bashReads(u)).map(canon);
@@ -114,7 +118,7 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
   const reasons = [];
   if (kind === 'negative') {
     const hit = work.find((u) => (projectSkill ? routeCall(u, projectSkill, root) : anyKernRoute(u, root)));
-    if (hit) reasons.push(`a kern route was read: ${hit.name} ${hit.input.file_path || hit.input.skill}`);
+    if (hit) reasons.push(`a kern route was read: ${hit.name} ${hit.input.file_path || hit.input.skill || hit.input.command}`);
     if (projectSkill && !work.some((u) => (u.name === 'Skill' && u.input.skill === projectSkill) ||
       readsOf(u).some((f) => f.endsWith(`/.claude/skills/${projectSkill}/SKILL.md`)))) {
       reasons.push(`the project skill ${projectSkill} was not used`);

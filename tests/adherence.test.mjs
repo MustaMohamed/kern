@@ -210,6 +210,20 @@ test('a Bash read of the route counts as reading it, as a Read call does, and /v
   const g3 = grade(ev(['Read', { file_path: '/var/folders/x/T/p-1/kern/skills/diagnose/SKILL.md' }], todos(...steps)), { route: 'diagnose', steps, root: tmp });
   assert.equal(g3.pass, true, g3.reasons.join('; '));
   assert.equal(grade(ev(['Bash', { command: `echo ${route}` }], todos(...steps)), { route: 'diagnose', steps, root: K }).pass, false);
+  for (const command of [`cat > ${route}`, `cat <<EOF > ${route}`, `sed -i 's/a/b/' ${route}`, `tail -f ${route}`, `awk -f ${route} x`, `cat ${route} > /tmp/x`]) {
+    assert.equal(grade(ev(['Bash', { command }], todos(...steps)), { route: 'diagnose', steps, root: K }).pass, false, command);
+  }
+  assert.equal(grade(ev(['Bash', { command: `cat ${route} 2>&1 | head -40` }], todos(...steps)), { route: 'diagnose', steps, root: K }).pass, true);
+  assert.deepEqual(grade(ev(['Bash', { command: `cat ${K}/skills/define/SKILL.md` }]), { route: null, root: K, kind: 'negative' }).reasons, [`a kern route was read: Bash cat ${K}/skills/define/SKILL.md`]);
   assert.equal(grade(ev(['Bash', { command: `cat ${K}/skills/define/SKILL.md` }]), { route: null, root: K, kind: 'negative' }).pass, false);
   assert.equal(grade(ev(['Bash', { command: `cat ${K}/kernel/routes.md` }]), { route: null, root: K, kind: 'negative' }).pass, false);
+});
+
+test('--plugin names another kern tree in the dry run, and a one-case or other-plugin run is diagnostic', () => {
+  const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'kernel-adherence.mjs'), '--dry-run', '--case', 'row-diagnose', '--plugin', '/opt/kern-old'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^row-diagnose: positive diagnose on node-bug: /m);
+  assert.match(r.stdout, /^plugin: \/opt\/kern-old$/m);
+  const src = readFileSync(join(ROOT, 'scripts', 'kernel-adherence.mjs'), 'utf8');
+  assert.match(src, /const out = partial \? join\(raw, 'snapshot\.json'\)/);
 });

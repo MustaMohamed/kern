@@ -6,7 +6,7 @@
 //        node scripts/kernel-adherence.mjs --transcript <session.jsonl> --route <route> [--root <plugin root>]
 // Writes evals/snapshots/adherence-<variant>-<model>-<date>.json (committed).
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, runClaude, runProblem, workspace } from './lib/claude-run.mjs';
 import { grade, inlineRows, readSteps, removeTemp, rowPrompt, runFailure } from './lib/adherence.mjs';
@@ -19,6 +19,10 @@ const MODEL = opt('--model', process.env.KERN_EVAL_MODEL || 'claude-sonnet-5-5')
 const RUNS = Number(opt('--runs', '3'));
 const VARIANT = opt('--variant', 'routed');
 const only = opt('--case', null);
+// --plugin grades another kern tree (an older tag's worktree, for one); the cases still come from this repo.
+const PLUGIN = opt('--plugin', ROOT);
+// A run of one case or of another plugin is diagnostic: its snapshot stays beside its transcripts, not in evals/snapshots.
+const partial = !!only || PLUGIN !== ROOT;
 const routeFileOf = (c) => c.route_file || `skills/${c.route}/SKILL.md`;
 const usage = (msg) => { console.error(`kernel-adherence: ${msg}`); process.exit(2); };
 const allCases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
@@ -41,12 +45,14 @@ const cases = allCases.filter((c) => !only || c.id === only)
   .map((c) => ({ ...c, prompts: c.prompts ?? [rowPrompt(ROOT, c.route)] }));
 if (args.includes('--dry-run')) {
   for (const c of cases) console.log(`${c.id}: ${c.kind} ${c.route || '-'} on ${c.files.join('+')}: ${c.prompts.map((p) => JSON.stringify(p)).join(' then ')}`);
+  if (PLUGIN !== ROOT) console.log(`plugin: ${PLUGIN}`);
   process.exit(0);
 }
-const root = VARIANT === 'inline-rows' ? inlineRows(ROOT) : realpathSync(pluginCopy(ROOT));
+if (PLUGIN !== ROOT && !existsSync(join(PLUGIN, 'kernel', 'kernel.md'))) usage(`--plugin ${PLUGIN} holds no kernel/kernel.md`);
+const root = VARIANT === 'inline-rows' ? inlineRows(PLUGIN) : realpathSync(pluginCopy(PLUGIN));
 const results = [];
 // Each run's events go to evals/results (gitignored), so a failed case can be read, not only its grade.
-const raw = join(ROOT, 'evals', 'results', `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${new Date().toISOString().slice(0, 10)}`);
+const raw = join(ROOT, 'evals', 'results', `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${new Date().toISOString().slice(0, 10)}${partial ? `-${only || 'all'}-${basename(PLUGIN)}` : ''}`);
 mkdirSync(raw, { recursive: true });
 try {
   for (const c of cases) {
@@ -77,9 +83,9 @@ try {
   }
 } finally { removeTemp(dirname(root)); }
 const date = new Date().toISOString().slice(0, 10);
-const out = join(ROOT, 'evals', 'snapshots', `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${date}.json`);
+const out = partial ? join(raw, 'snapshot.json') : join(ROOT, 'evals', 'snapshots', `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${date}.json`);
 mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, JSON.stringify({ model: MODEL, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, variant: VARIANT, runs: RUNS,
+writeFileSync(out, JSON.stringify({ model: MODEL, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, variant: VARIANT, runs: RUNS, plugin: PLUGIN,
   gating: VARIANT === 'routed' && !/haiku/.test(MODEL), results }, null, 2) + '\n');
 console.log(`snapshot: ${out}`);
 process.exit(results.every((r) => r.pass) ? 0 : 1);
