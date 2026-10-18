@@ -4,6 +4,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- Guards read `$(( ... ))` as arithmetic, so under autopilot `echo $(( $(date +%s) - 5 ))` is no longer denied as a command built at run time; a `$( )` inside it is still read as a command, so a force push there is still denied.
 - A headless session (`claude -p`, the Agent SDK) starts in the normal voice even when `mode.voice` is `terse`; `mode.voice.headless: terse` opts back in, and `/kern:mode terse` still switches. The kernel, the per-prompt reminder and subagents agree. Terse keeps the reply language fixed: an explicit language instruction wins, and quoted text, logs and errors never switch it; one term per thing, and a pronoun only with an obvious referent.
 
 ## [0.3.0] - 2026-10-16

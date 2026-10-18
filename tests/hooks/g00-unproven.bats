@@ -140,6 +140,27 @@ g00_all() {
     'f=$(ls -t ~/.cache/* | head -1)' 'v=${x:-a b} make' 'echo "$(date) $(git rev-parse HEAD)"'
 }
 
+@test "\$(( )) is arithmetic, not a command, while each \$( ) and backtick inside it is a command" {
+  g00_all none 'echo $(( $(date +%s) - 5 ))' 'echo $(( (1 + 2) * 3 ))' 'n=$(( `date +%s` / 60 ))' \
+    'x=$(echo $(( $(date +%s) - 5 )))' 'echo $(( $(( $(date +%s) - 5 )) * 2 ))' \
+    'echo "$(( $(wc -l < f) + 1 ))"' 'echo $(( a[$(date +%s)] ))' 'echo $(( $# + 16#ff ))' \
+    'echo $(( $(git rev-list --count "$b") + 1 ))'
+  local c
+  for c in 'echo $(( $(git push --force origin main) + 1 ))' 'echo $(( `git push --force origin main` ))' \
+    'echo $(( a[$(git push --force origin main)] ))' 'echo $(( $(( $(git push --force origin main) )) ))' \
+    'x=$(echo $(( $(git push --force origin main) + 1 )))' 'echo "$(( $(git push --force origin main) ))"'; do
+    gx "$c" ""
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
+  # A command name built at run time inside the arithmetic is still read as one.
+  g00_all deny 'echo $(( $($g push) + 1 ))' 'echo $(( $(`echo git` push) ))'
+  # $(( whose inner ( closes before a ) that does not close the outer one is $( ) around a subshell,
+  # as bash and zsh read it: `$((git push) )` runs git push.
+  g00_all deny 'echo $(($g push) )' 'echo $(($g push);(ls))'
+  gx 'echo $((git push --force origin main) )' ""
+  [ "$(decision_of "$output")" = deny ]
+}
+
 @test "G00 votes nothing outside autopilot or for other tools" {
   set_autopilot off
   g00_all none 'g=git; $g push' "python3 -c x" 'echo x | sh' "xargs sh -c x"

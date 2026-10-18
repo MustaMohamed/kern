@@ -248,11 +248,44 @@ git_words() {
   done
 }
 
-# _subst_bodies STR: the body of each outermost $( ) and backtick pair, one per line.
+# _subst_bodies STR: the body of each outermost $( ) and backtick pair, one per line. A $(( )) is
+# arithmetic, not a command: in its place come the bodies of the $( ) and backtick pairs inside it,
+# found the same way. Any other $(( is a $( ) around a subshell (see arith).
 _subst_bodies() {
   printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
-    { buf = buf (NR > 1 ? " " : "") $0 }
-    END {
+    # wordat(s, i): true when position i of s starts a word.
+    function wordat(s, i) { return i == 1 || index(" \t\n;&|(", substr(s, i - 1, 1)) > 0 }
+    # arith(s, i): for the $(( at i, the position of the ) that closes it when it is arithmetic, else 0.
+    # bash and zsh read $(( as arithmetic when the ) that closes its inner ( is followed by the ) that
+    # closes the outer one; else as $( ) around a subshell, so `$((git push) )` runs git push. Both
+    # skip an escaped paren, but bash skips the parens in quotes and backticks and zsh counts them. So
+    # this count returns 0 at a paren in a quote or backtick, and at what bash or zsh scans past and a
+    # paren count cannot: a double quote that holds ${ } or a backtick, a $ before a quote, ${ }, a
+    # here-doc, and a comment or a case inside a $( ). An unsure $(( is so read as $( ), whose body is
+    # printed whole.
+    function arith(s, i,   n, d, c, j) {
+      n = length(s); d = 2
+      for (i += 3; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") { i++; continue }
+        if (c == "$" && index("{" sq "\"", substr(s, i + 1, 1))) return 0
+        if (c == "<" && substr(s, i + 1, 1) == "<") return 0
+        if (wordat(s, i) && (c == "#" || (substr(s, i, 4) == "case" && index(" \t\n", substr(s, i + 4, 1))))) return 0
+        if (c == sq || c == "\"" || c == "`") {
+          for (j = i + 1; j <= n && substr(s, j, 1) != c; j++) {
+            if (index("()", substr(s, j, 1)) || (c == "\"" && (substr(s, j, 1) == "`" || substr(s, j, 2) == "${"))) return 0
+            if (c != sq && substr(s, j, 1) == "\\") j++
+          }
+          if (j > n) return 0
+          i = j; continue
+        }
+        if (c == "(") d++
+        else if (c == ")" && --d == 1) return substr(s, i + 1, 1) == ")" ? i + 1 : 0
+      }
+      return 0
+    }
+    # bodies(buf): prints the bodies in buf.
+    function bodies(buf,   n, q, depth, i, c, e, s) {
       n = length(buf); q = ""; depth = 0
       for (i = 1; i <= n; i++) {
         c = substr(buf, i, 1)
@@ -262,6 +295,9 @@ _subst_bodies() {
           e = index(substr(buf, i + 1), "`")
           if (e) { print substr(buf, i + 1, e - 1); i += e }
           continue
+        }
+        if (depth == 0 && substr(buf, i, 3) == "$((" && (e = arith(buf, i))) {
+          bodies(substr(buf, i + 3, e - i - 4)); i = e; continue
         }
         if (c == "$" && substr(buf, i + 1, 1) == "(") {
           if (depth == 0) s = i + 2
@@ -274,7 +310,9 @@ _subst_bodies() {
         }
         if (c == sq) q = sq
       }
-    }'
+    }
+    { buf = buf (NR > 1 ? " " : "") $0 }
+    END { bodies(buf) }'
 }
 
 # _split_words STR: the simple commands of STR, one record per line (see git_words). A here-doc

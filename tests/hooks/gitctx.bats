@@ -53,6 +53,30 @@ EOT
   [[ "$output" == *$'\n'"git reset --hard"* ]] || false
 }
 
+@test "git_words reads \$(( )) as arithmetic and prints each \$( ) and backtick inside it" {
+  run git_words 'echo $(( $(date +%s) - `id -u` + a[$(git push -f)] ))'
+  [ "$output" = "$(printf '%s\n' 'echo $(( $(date +%s) - `id -u` + a[$(git push -f)] ))' 'date +%s' 'id -u' 'git push -f')" ]
+  run git_words 'echo $(( $(( $(git push -f) )) * 2 ))'
+  [ "$output" = "$(printf '%s\n' 'echo $(( $(( $(git push -f) )) * 2 ))' 'git push -f')" ]
+  # The inner ( closes before a ) that does not close the outer one: $( ) around a subshell.
+  run git_words 'echo $((git push -f) )'
+  [[ "$output" == *$'\n'"git push -f"* ]] || false
+  run git_words 'echo $((git stash);(git push -f))'
+  [[ "$output" == *$'\n'"git stash"$'\n'"git push -f"* ]] || false
+}
+
+@test "git_words reads \$(( as \$( ) when bash or zsh may, so a paren it cannot count hides no command" {
+  local c
+  # bash 5.3, bash 3.2 or zsh 5.9 runs the command in each, and says so on a harmless echo.
+  for c in 'echo $((git push -f "))") )' 'echo $((git push -f ")" ))' "echo \$((git push -f ')' ))" \
+    'echo $((git push -f `echo ")"` ))' 'echo $((git push -f `echo "))"`) )' 'echo $((git push -f ${x:-))}) )' \
+    "echo \$((git push -f \$'))') )" "$(printf '%s\n' 'echo $(( $(git push -f # ))' ') + 1 ))')" \
+    "$(printf '%s\n' 'echo $(( $(true # )))' 'git push -f) ))')"; do
+    run git_words "$c"
+    [[ "$output" == *$'\n'"git push -f"* ]] || { echo "$c -> $output"; return 1; }
+  done
+}
+
 @test "git and gh are seen behind shells, wrappers, groups and keywords" {
   for c in 'bash -lc "git stash"' 'sh -ec "git stash"' '/bin/bash -c "git stash"' \
     'nohup bash -c "git stash"' 'command git stash' 'exec git stash' 'time git stash' \
