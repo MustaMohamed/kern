@@ -155,10 +155,11 @@ has_push() { printf '%s\n' "$1" | grep -qE '^git push --force origin main( |$)';
 # corpus: the shapes of the Task 7 differential sweeps, rounds 1 to 4, one per line as TAG SHAPE. In
 # SHAPE, @ and @2 stand for the command and <NL> for a newline. TAG run: bash 3.2, bash 5.3 or zsh 5.9
 # runs the command (measured with a harmless marker), so git_words must print it as a record. not: no
-# shell runs it. gap: a shell runs it but git_words cannot surface it as a record (Task 7a: a builtin
-# that evaluates a single-quoted substitution as arithmetic, local -i included, where G00 denies under
-# autopilot; a zsh glob qualifier and a single-quoted subscript read later through a variable, M3
-# limits). A line that starts with # is a note.
+# shell runs it. gap: a shell runs it but git_words cannot surface it as a record, while G00 denies it
+# under autopilot (Task 7a: a builtin that evaluates a single-quoted substitution as arithmetic, local -i
+# included; and a single-quoted array subscript opening with [$( or [`, stored and read later by
+# arithmetic). The exception is the zsh glob qualifier, which no guard sees, an M3 limit. A line that
+# starts with # is a note.
 corpus() {
   cat <<'EOF'
 # Rounds 1 to 3.
@@ -367,10 +368,11 @@ run cat <<EOF<NL>'$(@)'<NL>EOF
 run cat <<EOF<NL>${x:-'$(@)'}<NL>EOF
 not cat <<EOF<NL>\$(@)<NL>EOF
 not local -i n='$(@)'
-# Task 7a gaps: a builtin that evaluates a single-quoted $( ) as arithmetic (let, declare -i, typeset
-# -i, printf -v, read, [[ -eq ]]) runs it, but git_words cannot surface it as a record; G00 denies it
-# under autopilot (g00-unproven.bats). A zsh glob qualifier e:'...': runs code that no guard sees; it is
-# zsh-only and needs a matching glob, and is recorded in the design spec's M3 row.
+# Task 7a gaps: a shape a shell runs but git_words cannot surface as a record, yet G00 denies under
+# autopilot (g00-unproven.bats). A builtin that evaluates a single-quoted $( ) as arithmetic (let,
+# declare -i, typeset -i, local -i, printf -v, read, [[ -eq ]]); and a single-quoted array subscript that
+# opens with [$( or [` (optional spaces), stored and read later by arithmetic (echo $((x)), (( )), an
+# integer assignment), which fix round 2 made G00 deny by its text.
 gap let 'a[$(@)]'
 gap declare -i n='a[$(@)]'
 gap typeset -i n='a[$(@)]'
@@ -378,12 +380,13 @@ gap printf -v 'a[$(@)]' x
 gap read 'a[$(@)]'
 gap [[ 1 -eq 'a[$(@)]' ]]
 gap f(){ local -i n='a[$(@)]'; }; f
-gap echo *(e:'@':)
-gap echo *(e:'$(@)':)
-# A single-quoted subscript held in a variable and read later by arithmetic (an integer variable, or a
-# name in $(( )), (( )) or [[ -eq ]]) runs in bash; no guard sees it in either mode, an M3 limit.
 gap x='a[$(@)]'; echo $((x))
 gap declare -i n; n='a[$(@)]'
+gap a='b[ $(@) ]'; (( a ))
+# A zsh glob qualifier e:'...': runs code that no guard sees; it is zsh-only, needs a matching glob, and
+# is recorded in the design spec's M3 row.
+gap echo *(e:'@':)
+gap echo *(e:'$(@)':)
 EOF
 }
 
@@ -404,7 +407,7 @@ EOT
   [ -z "$bad" ] || { printf 'not read:\n%s' "$bad"; return 1; }
   [ "$n" -eq 172 ]
   [ "$(corpus | grep -c '^not ')" -eq 26 ]
-  [ "$(corpus | grep -c '^gap ')" -eq 11 ]
+  [ "$(corpus | grep -c '^gap ')" -eq 12 ]
 }
 
 @test "the recorded gaps keep the reading the corpus pins: git_words surfaces no force push" {

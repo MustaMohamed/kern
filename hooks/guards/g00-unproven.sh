@@ -19,8 +19,10 @@
 #   substitution;
 # - it is a builtin that evaluates a string as arithmetic or a subscript (let, declare -i, typeset -i,
 #   local -i, printf -v, read, or [[/test/[ with -eq/-ne/-lt/-le/-gt/-ge) and holds a $( ) or backtick
-#   inside single quotes, which the arithmetic re-runs though git_words read it as literal text. Reading
-#   the inner command exactly is not practical, so autopilot denies; interactively no guard votes (M3).
+#   inside single quotes, which the arithmetic re-runs though git_words read it as literal text; or it
+#   holds, in any single-quoted string, an array subscript that opens with a substitution ([$( or [`,
+#   optional spaces after [), whose value is stored and evaluated as arithmetic later. Reading the inner
+#   command exactly is not practical, so autopilot denies; interactively no guard votes (M3).
 # Accepted limits, as a script file run by an interpreter is: the inline code, here-doc or pipe of an
 # interpreter other than a shell (python -c, node -e or -p, perl -e or -E, ruby -e, php -r, deno
 # eval, osascript -e, lua -e, R -e, julia -e, pwsh -c, `python3 - <<EOF`); a program or script
@@ -162,6 +164,36 @@ _G00_AWK='
     }
     return 0
   }
+  # g0_sqarr(s): true when a single-quoted span of s holds an array subscript that opens with a
+  # substitution: [ then optional blanks then $( or a backtick. x='"'"'a[$(cmd)]'"'"' stored and later
+  # evaluated as arithmetic (echo $((x)), (( )), an integer assignment) runs cmd in bash; the single
+  # quote is literal where it is written, so git_words cannot surface it. A single-quoted $( ) or
+  # backtick that is not a subscript (no [ before it) is not flagged: a shell never evaluates it.
+  function g0_sqarr(s,   nn, C, i, c, q, br) {
+    nn = split(s, C, ""); q = ""; br = 0
+    for (i = 1; i <= nn; i++) {
+      c = C[i]
+      if (q == sq) {
+        if (c == sq) { q = ""; br = 0; continue }
+        if (c == "[") { br = 1; continue }
+        if (br) {
+          if (c == " " || c == "\t") continue
+          if (c == "`" || (c == "$" && C[i + 1] == "(")) return 1
+          br = 0
+        }
+        continue
+      }
+      if (q == "\"") {
+        if (c == "\\" && index("\"\\$`", C[i + 1])) i++
+        else if (c == "\"") q = ""
+        continue
+      }
+      if (c == "\\") { i++; continue }
+      if (c == sq) q = sq
+      else if (c == "\"") q = "\""
+    }
+    return 0
+  }
   # g0_judge(f, k, b): judges the shell b, of family f, at cw_w[k].
   function g0_judge(f, k, b,   s0, s1, src, w) {
     # su and runuser run a -c through a shell; fish also takes -C and --command. Any word may hold it.
@@ -188,6 +220,12 @@ _G00_AWK='
     g0_out(b " reads its program from " g0_from(src))
   }
   {
+    # A single-quoted array subscript that opens with a substitution ([$( or [`), anywhere in the
+    # command, is read before anything else: its value is stored and evaluated as arithmetic later,
+    # running the inner command, which git_words cannot surface (Task 7a review concern 1). It is checked
+    # on the raw record so a record that is only an assignment (x='"'"'a[$(cmd)]'"'"', skipped below as it
+    # names no command) is still caught.
+    if (g0_sqarr($0)) { g0_out("a single-quoted array subscript holds a $( ) or backtick kern cannot read"); next }
     sw(g0_flat($0)); cw_reset()
     for (k = 1; k <= sw_n; k++) cw(sw_w[k])
     # The redirections after the command name, and their targets, are not arguments.

@@ -276,6 +276,7 @@ g00_all() {
   for c in "$(printf '%s\n' 'cat <<EOF' '$(git push --force origin main)' 'EOF')" \
     "$(printf '%s\n' 'x=$(cat <<EOF' '$(git push --force origin main)' 'EOF' ')')" \
     "$(printf '%s\n' 'cat <<EOF' "'\$(git push --force origin main)'" 'EOF')" \
+    "$(printf '%s\n' 'cat <<EOF' "x='a[\$(git push --force origin main)]'" 'EOF')" \
     "trap 'git push --force origin main' EXIT" \
     "trap '\$(git push --force origin main)' EXIT"; do
     for m in on off; do
@@ -320,6 +321,34 @@ g00_all() {
     gx "$c" ""
     [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
   done
+}
+
+@test "a single-quoted array subscript that opens with a substitution is denied under autopilot" {
+  # x='a[$(cmd)]' stored and later evaluated as arithmetic (echo $((x)), (( )), an integer assignment)
+  # runs cmd in bash 3.2 and 5.3; git_words cannot surface it. G00 denies a command holding a single-
+  # quoted subscript that opens with [$( or [` (optional spaces after [), in both the direct and here-doc
+  # forms (Task 7a review concern 1). Outside autopilot no guard votes, an M3 limit.
+  local c
+  for c in 'x='\''a[$(git push --force origin main)]'\''; echo $((x))' \
+    'declare -i n; n='\''a[$(git push --force origin main)]'\''' \
+    'a='\''b[ $(git push --force origin main) ]'\''; (( a ))' \
+    'x='\''a[`git push --force origin main`]'\''; echo $((x))'; do
+    set_autopilot on
+    gx "$c" ""
+    [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
+    [[ "$output" == *"G00: under autopilot kern denies what it cannot read"* ]] || { echo "on: $c -> $output"; return 1; }
+    set_autopilot off
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
+  done
+}
+
+@test "a single-quoted substitution that is not a subscript is not denied under autopilot" {
+  # Only [$( / [` in single quotes is the stored-then-evaluated subscript shape. A single-quoted $( ) or
+  # backtick that is not a subscript is literal text a shell never evaluates, so it gets no deny: echo,
+  # printf, grep for a literal $(, and a sed script (Task 7a review concern 1).
+  g00_all none "echo '\$(foo)'" "printf '%s\n' '\$(cmd)'" "grep '\$(' file" "grep -n '\\\$(' README.md" \
+    "sed 's/\$(x)/y/' f" "awk '/\$(/' f" "x='\$(git push --force origin main)'; echo \$((x))"
 }
 
 @test "a plain arithmetic builtin or a surfaced substitution is not denied by the builtin rule" {
