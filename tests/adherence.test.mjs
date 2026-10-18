@@ -48,6 +48,34 @@ test('one project call may come before the route, a second fails the run, and re
   const two = grade(ev(['Read', { file_path: `${K}/kernel/routes.md` }], ['Bash', { command: 'npm test' }], ['Bash', { command: 'ls' }], ['Read', { file_path: route }], todos(...steps)), { route: 'diagnose', steps, root: K });
   assert.equal(two.pass, false);
   assert.deepEqual(two.reasons, ['two tool calls came before the route: Bash npm test, then Bash ls']);
+  assert.equal(two.hops, 2);
+  assert.equal(two.before, 2);
+});
+
+test('a Bash call is free before the route only when every part of it reads routes.md', () => {
+  const opts = { route: 'diagnose', steps, root: K };
+  const bundled = grade(ev(['Bash', { command: `cat ${K}/kernel/routes.md && ls src` }], ['Bash', { command: 'npm test' }], ['Read', { file_path: route }]), opts);
+  assert.equal(bundled.pass, false);
+  assert.match(bundled.reasons.join(' '), /two tool calls came before the route/);
+  const alone = grade(ev(['Bash', { command: `cat ${K}/kernel/routes.md && ls src` }], ['Read', { file_path: route }]), opts);
+  assert.equal(alone.pass, true, alone.reasons.join('; '));
+  assert.equal(alone.before, 1);
+  const piped = grade(ev(['Bash', { command: `sed -n '1,80p' ${K}/kernel/routes.md 2>&1 | head -40` }], ['Bash', { command: 'npm test' }], ['Read', { file_path: route }]), opts);
+  assert.equal(piped.pass, true, piped.reasons.join('; '));
+  assert.equal(piped.before, 1);
+  const other = grade(ev(['Bash', { command: `cat ${K}/kernel/routes.md README.md` }], ['Bash', { command: 'npm test' }], ['Read', { file_path: route }]), opts);
+  assert.equal(other.pass, false);
+});
+
+test('a multi-turn case finds the route and its early calls in the first task only', () => {
+  const opts = { route: 'diagnose', steps, root: K, kind: 'multi-turn' };
+  const done = [{ type: 'result', subtype: 'success' }];
+  const late = grade([...ev(['Read', { file_path: `${K}/kernel/routes.md` }], ['Bash', { command: 'npm test' }]), ...done, ...ev(['Read', { file_path: route }])], opts);
+  assert.equal(late.pass, false);
+  assert.match(late.reasons[0], /^never read skills\/diagnose\/SKILL\.md under the plugin root, nor called kern:diagnose, in the first task$/);
+  const ok = grade([...ev(['Read', { file_path: `${K}/kernel/routes.md` }], ['Bash', { command: 'npm test' }], ['Read', { file_path: route }]), ...done, ...ev(['Read', { file_path: route }])], opts);
+  assert.equal(ok.pass, true, ok.reasons.join('; '));
+  assert.equal(ok.before, 1);
 });
 
 test('a bare skill name or a skill file outside the plugin root is not the route', () => {
@@ -97,6 +125,10 @@ test('negative cases pass only when no kern route is read; a project skill must 
   const proj = { route: null, root: K, kind: 'negative', projectSkill: 'diagnose' };
   assert.equal(grade(ev(['Skill', { skill: 'diagnose' }]), proj).pass, true);
   assert.equal(grade(ev(['Read', { file_path: route }]), proj).pass, false);
+  const listed = grade(ev(['TaskCreate', { subject: 'Look at the log' }], ['Bash', { command: 'git log -1' }]), { route: null, root: K, kind: 'negative' });
+  assert.equal(listed.pass, true, listed.reasons.join('; '));
+  assert.equal(listed.todo, true);
+  assert.equal(listed.todoSteps, null);
 });
 
 test('a multi-turn case needs the route read again for the second task', () => {

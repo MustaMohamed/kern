@@ -160,7 +160,7 @@ Rendering fills `{VERSION}` from `plugin.json`, `{KERN}` with `${CLAUDE_PLUGIN_R
 
 ### 4.3 Routing table
 
-The rule: at the start of each new task, before the first tool call or question, match the task against the table. A casual turn, a question answerable from context, or a user opt-out matches nothing. On a match, Read the route, then open a todo list whose first items are its `## Steps`, copied verbatim. A step not done stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
+The rule: before a new task's first tool call or question, match the task against the table, then Read `kernel/routes.md` and match its rows when the task builds, fixes, plans, reviews, resumes or claims done. A casual turn, a question answerable from context, or a user opt-out matches nothing. On a match, Read the route, or the project skill an override names for its job, before any other tool call, then open a todo list whose first items are its `## Steps`, copied verbatim (one `TaskCreate` per step, or `TodoWrite`). A step not done stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
 
 | Observable trigger | Route |
 |---|---|

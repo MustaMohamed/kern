@@ -40,7 +40,7 @@ The audit of 2026-10-17 re-measured 274 mechanisms against kern 0.3.0 (eee601d) 
 | 7 | Rationalization and red-flag tables in prove-it, implement and diagnose; lint rule 9 requires them in discipline skills | superpowers, addy | M2a (shipped in 0.3.0) | S |
 | 8 | floor-scan catches a lowered bar (coverage threshold, `strict` off, a lint rule off, a CI step removed or made non-blocking), with `ratchet.<metric>` keys | addy | M2a (shipped in 0.3.0) | M |
 | 9 | Contract-drift lint: every token a skill reads has a producer in `docs/plans/contract.md` | addy | M2a (shipped in 0.3.0) | S |
-| 10 | Adherence grader passes only when the route is read before the first tool call; a multi-turn case | superpowers | M2b Task 6 | S |
+| 10 | Adherence grader passes only when the route is read with at most one other tool call before it (the user's rule of 2026-10-18, M2b Task 16a); a multi-turn case | superpowers | M2b Task 6 | S |
 | 11 | `references/defense-in-depth.md` for diagnose | superpowers | M2a (shipped in 0.3.0) | S |
 | 12 | CI install smoke test and a macOS job | addy | M2a (shipped in 0.3.0) | S |
 | 13 | On-demand behavioural eval runner and pressure tests for discipline skills | addy, superpowers | M2b Task 2 | M |
