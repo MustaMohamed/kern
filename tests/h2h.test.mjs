@@ -2,12 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspace } from '../scripts/lib/claude-run.mjs';
-import { blindIds, falseAlarms, gate, graderPrompt, loadTasks, outOfArea, parseGrades, redact } from '../scripts/lib/h2h.mjs';
+import { armCopy, blindIds, falseAlarms, gate, graderPrompt, loadTasks, outOfArea, parseGrades, redact } from '../scripts/lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const arms = [{ id: 'kern', dir: '/w/kern' }, { id: 'superpowers', dir: '/w/kern/.upstream/superpowers' }, { id: 'pstack', dir: '/w/kern/.upstream/pstack/harness/pstack/claude-code' }, { id: 'control', dir: null }];
@@ -75,8 +75,14 @@ for (const t of loadTasks(ROOT).filter((x) => x.category === 'diagnose')) {
     const d = workspace(join(t.dir, 'repo'), { name: t.project || 'app', branch: t.branch || '', setup: t.setup || [] });
     try {
       assert.equal(sh(d, t.test).status === 0, t.visible === 'pass', `visible tests should ${t.visible}`);
+      // The held-out tests alone, without the visible ones, so a visible failure cannot make this check pass.
+      const d2 = workspace(join(t.dir, 'repo'), { name: t.project || 'app', branch: t.branch || '', setup: t.setup || [] });
+      try {
+        rmSync(join(d2, 'test'), { recursive: true, force: true });
+        cpSync(join(t.dir, 'heldout'), d2, { recursive: true });
+        assert.notEqual(sh(d2, t.test).status, 0, 'heldout tests pass before the fix');
+      } finally { rmSync(dirname(d2), { recursive: true, force: true }); }
       cpSync(join(t.dir, 'heldout'), d, { recursive: true });
-      assert.notEqual(sh(d, t.test).status, 0, 'heldout tests pass before the fix');
       const ap = sh(d, `git apply ${JSON.stringify(join(t.dir, 'reference.patch'))}`);
       assert.equal(ap.status, 0, ap.stderr);
       const r = sh(d, t.test);
@@ -128,4 +134,25 @@ test('the runner lists task-arm pairs in dry-run mode when the upstream trees ar
 test('the fixture set is complete: 4 planning, 8 debugging and 1 review task', () => {
   const n = (c) => loadTasks(ROOT).filter((t) => t.category === c).length;
   assert.deepEqual([n('plan'), n('diagnose'), n('review')], [4, 8, 1]);
+});
+
+const upstream = existsSync(join(ROOT, '.upstream', 'superpowers', '.claude-plugin', 'plugin.json'));
+test('an upstream arm runs from a copy outside the repo with no symlink back into it', { skip: !upstream && 'run scripts/fetch-upstream' }, () => {
+  const root = realpathSync(ROOT);
+  for (const a of JSON.parse(readFileSync(join(ROOT, 'evals', 'h2h', 'arms.json'), 'utf8')).filter((x) => x.plugin && x.id !== 'kern')) {
+    const copy = armCopy(join(ROOT, a.plugin), a.id);
+    try {
+      assert.ok(!realpathSync(copy).startsWith(`${root}/`), `${a.id}: the copy is under the repo`);
+      assert.equal(copy.split('/').pop(), a.id);
+      assert.ok(existsSync(join(copy, '.claude-plugin', 'plugin.json')));
+      assert.ok(!existsSync(join(copy, '.git')));
+      const walk = (dir) => { for (const n of readdirSync(dir)) {
+        const f = join(dir, n);
+        const st = lstatSync(f);
+        assert.ok(!st.isSymbolicLink(), `${a.id}: ${f} is a symlink`);
+        if (st.isDirectory()) walk(f);
+      } };
+      walk(copy);
+    } finally { rmSync(dirname(copy), { recursive: true, force: true }); }
+  }
 });

@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses, workspace } from './lib/claude-run.mjs';
 import { digest, pluginCopy, tryRun } from './lib/behave.mjs';
-import { blindIds, falseAlarms, gate, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact } from './lib/h2h.mjs';
+import { armCopy, blindIds, falseAlarms, gate, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact } from './lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -38,6 +38,10 @@ mkdirSync(raw, { recursive: true });
 const kernArm = arms.find((a) => a.id === 'kern');
 const copy = kernArm ? pluginCopy(ROOT) : null;
 if (kernArm) { kernArm.srcDir = kernArm.dir; kernArm.dir = copy; }
+// Every other plugin arm runs from a copy too: outside the repo, symlinks resolved, no .git, so a model
+// cannot walk up into the repo's evals/ or answer keys.
+const armCopies = [];
+for (const a of arms) if (a.plugin && a.id !== 'kern') { a.srcDir = a.dir; a.dir = armCopy(a.dir, a.id); armCopies.push(a.dir); }
 const key = {}; const results = [];
 try {
 for (const t of tasks) {
@@ -66,7 +70,7 @@ for (const t of tasks) {
       writeFileSync(join(raw, `${t.id.replace('/', '--')}-${r}-${ids[a.id]}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n'));
       // A plan lands in an ignored work directory, so the grader reads what each run wrote, not the diff.
       const wrote = t.category === 'plan' ? toolUses(run.events).filter((u) => u.name === 'Write').map((u) => `--- ${u.input.file_path}\n${u.input.content}`).join('\n\n') : '';
-      attempts.push({ arm: a.id, id: ids[a.id], e, heldout, text: redact(`${digest(run.events)}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) });
+      attempts.push({ arm: a.id, id: ids[a.id], e, heldout, text: redact(`${digest(run.events, 24000, { results: true })}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) });
       rmSync(dirname(cwd), { recursive: true, force: true });
     }
     if (voided) { console.log(`VOID ${t.id} run ${r}: ${voided}`); continue; }
@@ -88,6 +92,7 @@ for (const t of tasks) {
 }
 } finally {
   if (copy) rmSync(dirname(copy), { recursive: true, force: true });
+  for (const c of armCopies) rmSync(dirname(c), { recursive: true, force: true });
 }
 writeFileSync(join(raw, 'key.json'), JSON.stringify(key, null, 2) + '\n');
 const verdict = gate(results, [...new Set(tasks.map((t) => t.category))]);

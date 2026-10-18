@@ -47,7 +47,24 @@ export function loadCases(root) {
 // digest(events): what the grader sees. Tool calls one per line (a Write's content or an Edit's new_string
 // indented under its line, cut at 800 characters), then the final reply. No system prompt, no skill text,
 // so the grader judges behaviour, not the instructions. Over max, only the tool-call section is cut.
-export function digest(events, max = 24000) {
+// With { results: true } each call is followed by its result: the last 600 characters of a Bash result
+// (marked "(error)" when the tool reported one), the first 300 of any other tool's.
+export function digest(events, max = 24000, { results = false } = {}) {
+  const out = new Map();
+  if (results) {
+    const names = new Map();
+    for (const e of events) {
+      for (const c of e?.message?.content ?? []) {
+        if (c?.type === 'tool_use') names.set(c.id, c.name);
+        if (c?.type === 'tool_result') {
+          const text = typeof c.content === 'string' ? c.content : (c.content ?? []).map((x) => x?.text ?? '').join('');
+          const t = text.trim();
+          out.set(c.tool_use_id, names.get(c.tool_use_id) === 'Bash' ? `${c.is_error ? '(error) ' : ''}${t.length > 600 ? t.slice(-600) : t}` : t.slice(0, 300));
+        }
+      }
+    }
+  }
+  const ids = events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => c.id));
   const calls = toolUses(events).map((u, i) => {
     const arg = u.input.file_path || u.input.command || u.input.skill || u.input.subject || u.input.description || JSON.stringify(u.input).slice(0, 200);
     let line = `${i + 1}. ${u.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 300)}`;
@@ -56,6 +73,7 @@ export function digest(events, max = 24000) {
       const cut = body.length > 800 ? `${body.slice(0, 800)}[cut]` : body;
       line += `\n${cut.split('\n').map((l) => `    ${l}`).join('\n')}`;
     }
+    if (out.get(ids[i])) line += `\n${out.get(ids[i]).split('\n').map((l) => `    ${l}`).join('\n')}`;
     return line;
   });
   const head = `Tool calls:\n${calls.join('\n') || '(none)'}`;

@@ -104,6 +104,22 @@ test('a long digest cuts the tool calls, never the final reply', () => {
   assert.match(d, /\[digest truncated\]/);
 });
 
+test('the digest shows tool results only when asked: a Bash tail with the error flag, the head of any other', () => {
+  const ev = [
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'npm test' } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: `${'o'.repeat(900)}FAILTAIL` }] } },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'b', name: 'Read', input: { file_path: 'x.js' } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'b', content: [{ type: 'text', text: `HEADTEXT${'r'.repeat(900)}` }] }] } },
+    { type: 'result', result: 'done' }];
+  const off = digest(ev);
+  assert.equal(off, 'Tool calls:\n1. Bash: npm test\n2. Read: x.js\n\nFinal reply:\ndone');
+  assert.equal(digest(ev, 24000, {}), off);
+  const on = digest(ev, 24000, { results: true });
+  assert.match(on, /1\. Bash: npm test\n {4}\(error\) o+FAILTAIL\n2\. Read: x\.js\n {4}HEADTEXTr+\n/);
+  assert.ok(on.includes(`${'o'.repeat(592)}FAILTAIL`) && !on.includes('o'.repeat(593)));
+  assert.ok(on.includes(`HEADTEXT${'r'.repeat(292)}`) && !on.includes('r'.repeat(293)));
+});
+
 test('the plugin copy keeps the plugin and leaves out answer keys', () => {
   const d = pluginCopy(ROOT);
   try {

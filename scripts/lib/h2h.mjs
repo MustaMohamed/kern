@@ -7,10 +7,19 @@
 // an eval; the judge sees sanitized labels and scores all arms in one pass); the no-plugin control from
 // caveman evals/README.md:17 (Apache-2.0; ideas only).
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export const CATEGORIES = ['plan', 'diagnose', 'review'];
+
+// armCopy(dir, id): the plugin tree at dir copied to <tmp>/<random>/<id>, without .git and with symlinks
+// resolved, so a run cannot reach back into the repo. The caller removes dirname(copy).
+export function armCopy(dir, id) {
+  const copy = join(mkdtempSync(join(tmpdir(), 'a-')), id);
+  cpSync(dir, copy, { recursive: true, dereference: true, filter: (src) => src.split('/').pop() !== '.git' });
+  return copy;
+}
 
 export function loadArms(root, only = null) {
   return JSON.parse(readFileSync(join(root, 'evals', 'h2h', 'arms.json'), 'utf8')).filter((a) => !only || only.includes(a.id)).map((a) => {
