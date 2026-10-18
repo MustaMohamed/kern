@@ -45,7 +45,7 @@ test('finish-branch sections, steps and red flags', () => {
     'behind above 0 is stale: offer a rebase per `references/branch-ops.md`.',
     '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'Red, or `wt-snap` failing: stop.',
     '${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md', 'skip: no-comments ships in M3', '`fix first`, `split` or no verdict: stop', '`rebase first`: handle it as step 3\'s stale base', '`ready`: go on.',
-    'git diff --shortstat <merge-base> <tree>', 'untracked files count', 'insertions plus deletions above `pr.max_lines`', 'propose a split; stop on yes, go on on no.',
+    'git diff --shortstat <merge-base> <tree>', 'untracked files count', 'insertions plus deletions above `pr.max_lines`', 'propose a split alone, no menu before it is answered; stop on yes, go on on no.',
     '1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is', 'Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`',
     'typed word `discard`, per `references/discard.md`',
     'nothing to commit', 'steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'its stops stop this skill', 'its proof is its own, apart from step 4\'s',

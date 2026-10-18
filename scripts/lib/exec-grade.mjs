@@ -113,16 +113,65 @@ const showsMenu = (text) => {
 const offersSplitToUser = (text) => !forecastsSplit(text) && !showsMenu(text) && !sentences(text).some(argues)
   && (offersSplit(text) || sentences(text).some((s) => /\bsplit/i.test(s) && s.includes('?') && !negatesSplit(s)));
 
-// bashRuns(events): every Bash call in order, as { command, ok }; ok is true only when its tool result
-// came back and was not an error.
+// resultText(c): a tool result's text, whether its content is a string or a list of text blocks.
+const resultText = (c) => typeof c?.content === 'string' ? c.content : (Array.isArray(c?.content) ? c.content.map((x) => x?.text ?? '').join('\n') : '');
+// chainParts(command): the parts of a chained Bash command, split on newlines, `;` and `&&` outside quotes
+// and parentheses (a `|`, `||` or `$( )` stays inside its part).
+const chainParts = (command) => {
+  const parts = [];
+  let cur = '', q = '', depth = 0;
+  const end = () => { if (cur.trim()) parts.push(cur.trim()); cur = ''; };
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (q) { cur += c; if (c === q) q = ''; else if (c === '\\' && q === '"') cur += command[++i] ?? ''; continue; }
+    if (c === "'" || c === '"') { q = c; cur += c; continue; }
+    if (c === '\\') { cur += c + (command[++i] ?? ''); continue; }
+    if (c === '(' || c === '{') depth++;
+    else if (c === ')' || c === '}') depth = Math.max(0, depth - 1);
+    if (depth === 0 && (c === ';' || c === '\n')) { end(); continue; }
+    if (depth === 0 && c === '&' && command[i + 1] === '&') { end(); i++; continue; }
+    cur += c;
+  }
+  end();
+  return parts;
+};
+// marker(part): the label an `echo ... $?` part prints, the text before `$?` ("rc=", "snap rc=", "exit="), or null.
+const marker = (part) => {
+  const m = /^echo\s+(?:-\w+\s+)*(["']?)([^"'$]*)\$\{?\?\}?\1\s*$/.exec(part);
+  return m && /=\s*$/.test(m[2]) ? m[2].trimEnd() : null;
+};
+// partResults(command, output, errored): each part of a chained command as { command, ok }. A part that an
+// `echo <label>=$?` follows is ok when the output shows its own `<label>=0` (the nth echo of a label reads the nth
+// print of it). A part with no marker is ok when the call did not error. A marker the output lacks reads like
+// no marker.
+const partResults = (command, output, errored) => {
+  const parts = chainParts(command);
+  const seen = new Map();
+  return parts.map((part, i) => {
+    const label = i + 1 < parts.length ? marker(parts[i + 1]) : null;
+    if (label === null || marker(part) !== null) return { command: part, ok: !errored };
+    const n = seen.get(label) ?? 0;
+    seen.set(label, n + 1);
+    const re = new RegExp(`(?:^|[^\\w])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}\\s*(-?\\d+)`, 'g');
+    const found = [...output.matchAll(re)][n];
+    return { command: part, ok: found ? found[1] === '0' : !errored };
+  });
+};
+
+// bashRuns(events): every Bash call in order, as { command, ok, parts }; ok is true only when its tool result
+// came back and was not an error. parts reads each part of a chained command by its own printed exit code
+// (partResults), so a later part that failed does not hide an earlier one that printed `rc=0`.
 export function bashRuns(events) {
-  const errored = new Map();
-  for (const e of events) for (const c of e?.message?.content ?? []) if (c?.type === 'tool_result') errored.set(c.tool_use_id, c.is_error === true);
+  const errored = new Map(), text = new Map();
+  for (const e of events) for (const c of e?.message?.content ?? []) if (c?.type === 'tool_result') { errored.set(c.tool_use_id, c.is_error === true); text.set(c.tool_use_id, resultText(c)); }
   const out = [];
   for (const e of events) {
     if (e?.type !== 'assistant') continue;
     for (const c of e.message?.content ?? []) {
-      if (c?.type === 'tool_use' && c.name === 'Bash') out.push({ command: String(c.input?.command || ''), ok: errored.has(c.id) && !errored.get(c.id) });
+      if (c?.type !== 'tool_use' || c.name !== 'Bash') continue;
+      const command = String(c.input?.command || '');
+      const ok = errored.has(c.id) && !errored.get(c.id);
+      out.push({ command, ok, parts: errored.has(c.id) ? partResults(command, text.get(c.id) ?? '', errored.get(c.id)) : [] });
     }
   }
   return out;
@@ -187,7 +236,8 @@ export function sizeGateRan(events, git) {
 // with --out), both succeeding.
 export function reviewRan(events) {
   const runs = bashRuns(events);
-  return runs.some((r) => r.ok && /\bwt-snap\b/.test(r.command)) && runs.some((r) => r.ok && /\bwt-diff\b[^;&|]*\s--out\b/.test(r.command));
+  const partRan = (re) => runs.some((r) => r.parts.some((p) => p.ok && re.test(p.command)));
+  return partRan(/\bwt-snap\b/) && partRan(/\bwt-diff\b[^;&|]*\s--out\b/);
 }
 // The menu: its four options, numbered, in order.
 const MENU = /\b1\b[^]*?\bcommit\b[^]*?\b2\b[^]*?\bpush\b[^]*?\b3\b[^]*?\bdraft (pr|pull request)\b[^]*?\b4\b[^]*?\bkeep\b/i;

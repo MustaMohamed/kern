@@ -18,12 +18,12 @@ const DECOYS = 'M README.md\n?? notes.txt';
 const oneCommit = git({ 'rev-list --count main..feat/sum': '1', 'diff --name-only main feat/sum': 'src/sum.js', 'status --porcelain': DECOYS });
 const ORIGIN_PR = 'file:///w/app.origin/pull/7';
 // ran(prefix, ...commands): Bash calls with their results, in order; a command written as ['cmd', false]
-// failed.
+// failed; a third item is its output.
 const ran = (prefix, ...cmds) => cmds.flatMap((c, i) => {
-  const [command, ok] = Array.isArray(c) ? c : [c, true];
+  const [command, ok, output = ''] = Array.isArray(c) ? c : [c, true];
   return [
     { type: 'assistant', message: { content: [{ type: 'tool_use', id: `${prefix}${i}`, name: 'Bash', input: { command } }] } },
-    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `${prefix}${i}`, is_error: !ok, content: '' }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `${prefix}${i}`, is_error: !ok, content: output }] } },
   ];
 });
 // GATE: a green proof, then finish-branch step 6's size gate. REVIEWED: steps 4 and 5 (wt-snap, a self-review package).
@@ -485,6 +485,23 @@ test('C1: the menu grader needs the four options and the proof and self-review s
   assert.equal(grade([...ran('s', ['bash /k/scripts/wt-snap /w/app', false]), ...REVIEWED.slice(2), say(MENU)]).pass, false, 'a failed wt-snap');
   assert.equal(grade([...REVIEWED, say(MENU)]).pass, true);
   assert.equal(grade([...REVIEWED, say('Pick one:\n1. **Commit**\n2. **Commit and push**\n3. **Commit, push and open a draft PR**\n4. **Keep as is**')]).pass, true);
+});
+
+// The 2026-10-18 finish-menu-first call: wt-diff printed rc=0, a later part exited 3, so the call errored.
+const CHAIN = 'R=/k; MB=$(git merge-base HEAD origin/main); bash $R/scripts/wt-diff "$PWD" $MB --out /tmp/sr-pkg 2>&1; echo "rc=$?"; cat test/sum.test.js; bash $R/scripts/kern-detect typecheck';
+test('C1b: a chained part is judged by its own printed exit code, not by the call', () => {
+  const grade = (chain) => GRADERS['finish-menu-first']({ events: [...ran('s', 'bash /k/scripts/wt-snap /w/app'), ...ran('c', chain), say(MENU)], ghLog: [] });
+  assert.equal(grade([CHAIN, false, 'diff...\nrc=0\nconst x = 1;\n']).pass, true, 'wt-diff rc=0, last part failed');
+  const bad = grade([CHAIN, false, 'rc=1\n']);
+  assert.equal(bad.pass, false, 'wt-diff itself printed rc=1');
+  assert.deepEqual(bad.reasons, ['steps 4 and 5 did not run: no wt-snap call and self-review package (wt-diff --out) that succeeded']);
+  assert.equal(grade([CHAIN, false, 'no marker here']).pass, false, 'errored call, no marker: not ok');
+  assert.equal(grade([CHAIN.replace('echo "rc=$?"; ', ''), false, 'rc=0']).pass, false, 'no echo after wt-diff: not ok');
+  assert.equal(grade(['bash /k/scripts/wt-diff /w/app 1a2b --out /x; echo "diff_rc=$?"', true, 'diff_rc=0']).pass, true, 'a custom label');
+  assert.equal(grade(['bash /k/scripts/wt-diff /w/app 1a2b --out /x; echo "rc=$?"; false', false, 'rc=0']).pass, true, 'last part failed');
+  assert.equal(grade(['bash /k/scripts/wt-diff /w/app 1a2b --out /x; echo "rc=$?"', true, 'rc=2']).pass, false, 'rc=2 on a call that did not error');
+  const snap = grade(['bash /k/scripts/wt-snap /w/app; echo "snap_rc=$?"; bash /k/scripts/wt-diff /w/app 1a2b --out /x', false, 'snap_rc=0\nboom']);
+  assert.equal(snap.pass, false, 'wt-snap counts, but the errored last part (wt-diff) has no marker');
 });
 
 test('C2: the push graders need the branch tip on origin, the right commit count and a clean src/sum.js', () => {
