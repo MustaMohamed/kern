@@ -24,7 +24,8 @@ test('diagnose sections, steps and red flags', () => {
     '${CLAUDE_PLUGIN_ROOT}/skills/implement/SKILL.md', '--detach --base', 'scripts/hitl-loop.template.sh',
     '${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/loop-rate.sh', 'on `model.investigator`', '"stop guessing"', 'then the original scenario',
     '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'blind reproduction', 'references/defense-in-depth.md',
-    'find-polluter.sh', 'wt-new bisect-<n> --detach', '`! bash <path>`', 'itself the finding']);
+    'find-polluter.sh', 'wt-new bisect-<n> --detach', '`! bash <path>`', 'itself the finding',
+    'propose the cheap always-on signal (a log line, a metric, an assertion message) that would have shown it at first look, as a separate item']);
   assertContains('skills/diagnose/references/flaky-and-async.md', ['find-polluter.sh', 'loop-rate.sh', 'pin time']);
   assertMaxBytes(SKILL, 6500);
 });

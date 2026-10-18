@@ -23,7 +23,7 @@ test('self-review sections and steps', () => {
   assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/floor-scan', '${CLAUDE_PLUGIN_ROOT}/scripts/claim-check', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests',
     '${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate', 'never the worktree', 'Skill tool with `code-review`', 'Never pass `--comment`', 'skip: built-in code-review not available',
     'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'look where grep stops',
-    'visual pages not installed']);
+    'visual pages not installed', 'then the smell baseline (`references/smells.md`)']);
   assert.ok(!readDoc(SKILL).raw.includes('$(git'), 'no command substitution in a command the skill prescribes');
   assertMaxBytes(SKILL, 7000);
 });
@@ -68,7 +68,11 @@ test('self-review references', () => {
     'doubt-cycle.md': [['# Doubt cycle', '## When a decision is non-trivial', '## The fresh reviewer', '## Reconcile', '## Doubt theater', '## Stop after three'], 2400],
     'rounds.md': [['# Rounds and packages', '## Package names', '## Previous package', '## Since package'], 1400],
     'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1700],
+    'smells.md': [['# Smell baseline', '## Rules', '## Smells'], 2200],
   };
+  assertContains(`${REF}/smells.md`, ['in the `should-fix` class at most, never a blocker', 'A `review.rules` file that endorses what a smell would flag wins',
+    'Skip what lint, the formatter or the type checker already enforces', ...['Mysterious Name', 'Duplicated Code', 'Feature Envy', 'Data Clumps', 'Primitive Obsession',
+      'Repeated Switches', 'Shotgun Surgery', 'Divergent Change', 'Speculative Generality', 'Message Chains', 'Middle Man', 'Refused Bequest'].map((s) => `- ${s}: `)]);
   for (const [f, [hs, max]] of Object.entries(refs)) {
     assertHeadings(`${REF}/${f}`, hs);
     assertMaxBytes(`${REF}/${f}`, max);

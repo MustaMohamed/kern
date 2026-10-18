@@ -80,6 +80,11 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `model.final_review` | `opus` | model alias | execute-plan |
 | `model.investigator` | `sonnet` | model alias | define, plan, diagnose |
 | `model.miner` | `haiku` | model alias | recall |
+| `model.implementer.effort` | `low` batched, `medium` normal, `high` cross-module or round 3 | `low`, `medium`, `high`, `xhigh`, `max` | execute-plan, parallel-work |
+| `model.reviewer.effort` | `medium` | as above | define, plan, execute-plan, self-review |
+| `model.final_review.effort` | `high` | as above | execute-plan |
+| `model.investigator.effort` | `low` | as above | define, plan, diagnose, self-review |
+| `model.miner.effort` | `low` | as above | recall |
 | `workflow_records` | none | comma list of paths or tools with run records | recall |
 | `stack` | detected | text | architect, build-ui, implement |
 | `overrides.<job>` | none. session-start also finds a project skill with the job's name | project skill name, or `off` | session-start, every skill |

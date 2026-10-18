@@ -192,3 +192,11 @@ test('execute-plan red flags tell the reader what to do', () => {
     assert.ok(rows.some((r) => r.includes(n)), `red flags must contain: ${n}`);
   }
 });
+
+test('every dispatch passes a model and an effort', () => {
+  const MS = 'skills/execute-plan/references/model-selection.md';
+  assertContains(MS, ['| Role | Setting | Default | Effort | Up a tier when |', 'Name the model and pass `effort` in every Agent call', 'keep lookups and transcript mining at `low`', '`model.<role>.effort`']);
+  assertContains('kernel/kernel.md', ["Agent calls pass their role's model and effort: {KERN}/execute-plan/references/model-selection.md."]);
+  for (const role of ['implementer', 'reviewer', 'final_review', 'investigator', 'miner']) assertContains('kernel/settings.md', [`| \`model.${role}.effort\` |`]);
+  assertContains('skills/execute-plan/SKILL.md', ['Under autopilot, end the report with a catch-up per `${CLAUDE_PLUGIN_ROOT}/skills/recall/references/chat.md`.']);
+});

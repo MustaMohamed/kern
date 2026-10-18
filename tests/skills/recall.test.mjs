@@ -89,8 +89,11 @@ test('chat reference keeps the ketchup rules', () => {
   assertOnce(CHAT, ['Assume the user remembers their last message and nothing after it', 'Notifications and subagent results are not the user\'s messages',
     'not a label you coined during the work', 'say which are still running and which you could not check', 'An item still waiting from before their last message counts',
     'Work you can do yourself is not an action item; name it in one line', 'Open with one sentence giving the action-item count, or saying there are none',
-    'If nothing happened and nothing waits, say so and stop', 'Skip steps that changed nothing', 'the decision, why now, the options with their cost, your recommendation, and what happens with no answer',
+    'If nothing happened and nothing waits, say so and stop', 'Skip steps that changed nothing',
     'If you do not know a part, say so instead of guessing', 'write the summary so the user can decide without opening it', 'Read-only.',
+    'Keep the reply under 150 words', 'Say what changed for the user, not how you did it', 'Check each number you will show against the output it comes from',
+    'Never invent an action item to fill the reply', 'Never mark done what still waits on the user', 'An irreversible step the user did not ask for gets one line',
+    'the options side by side with what each gains and costs',
     'since their last message.', 'Collect your own work, subagent reports and others\' messages since that message', 'a product choice, an approval, an irreversible action, access you lack',
     'each result and what it means']);
   assertMaxBytes(CHAT, 2000);
