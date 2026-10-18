@@ -59,7 +59,7 @@ test('parallel-work pins the drain mapping, entry check, package location, teard
   assert.ok(at(8).includes('`--force` only when all five preconditions there hold'));
   assert.ok(at(8).includes("only on the user's yes"));
   // Minor rules from the review round.
-  assert.ok(at(2).includes('a model named in every dispatch'));
+  assert.ok(at(2).includes('a model and effort named in every dispatch'));
   assert.ok(at(2).includes('A script exit this skill does not name stops that unit'));
   assert.ok(at(3).includes('resolve `${CLAUDE_PLUGIN_ROOT}` to the absolute root'));
   assert.ok(at(4).includes('the absolute path of `${CLAUDE_PLUGIN_ROOT}/skills/implement/SKILL.md`'));

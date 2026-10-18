@@ -48,7 +48,7 @@ test('ledger format and model table', () => {
 
 // Load-bearing lines, pinned to the step that carries them. Each pin fails the test when it is removed.
 export const PINS = {
-  intro: ['An unnamed script exit stops the run: report its output.', 'Subagents get absolute paths (`${CLAUDE_PLUGIN_ROOT}` resolved) and a named model',
+  intro: ['An unnamed script exit stops the run: report its output.', 'Subagents get absolute paths (`${CLAUDE_PLUGIN_ROOT}` resolved) and a named model and effort',
     'Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines.'],
   1: ['run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ledger-open <plan>`', "exits 2 when the plan has no `status: approved` with the user's quoted words, or when the dir holds another plan's ledger: stop and report it",
     "Never edit the plan's approval.", 'The mode is the typed one, else `execution:`.',
@@ -72,7 +72,7 @@ export const PINS = {
   delegate: ['`${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/brief-template.md`', 'SCOPE the `.files` paths, the worktree and `<base-ref>` (the plan branch)',
     'CONTEXT `briefs/task-N.md`, the upstream Interfaces and the step 3 rulings', 'VERIFY `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-check <wt> <base-ref>` first',
     'REPORT `<ledger dir>/reports/task-N.md`, each round opening with its `Status:` line', 'Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/brief-check` on it', '(else fix each printed line)',
-    '`kern:implementer` with its model, the brief, worktree, `<base-ref>`, report path and implement SKILL.md path', 'kern made the worktree'],
+    '`kern:implementer` with its model and effort, the brief, worktree, `<base-ref>`, report path and implement SKILL.md path', 'kern made the worktree'],
   7: ['Status line (none: BLOCKED).', 'DONE_WITH_CONCERNS: read the concerns, then review.', 'NEEDS_CONTEXT: answer from the plan or spec, else ask the user, then resume the implementer.',
     'go one model tier up (a `Decision:` line)', 'a task that must be split: stop with a split proposal'],
   8: ['take `tree-after` with `wt-snap`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`',
