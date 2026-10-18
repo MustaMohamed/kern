@@ -5835,6 +5835,43 @@ Task 7's five fix rounds replaced how `hooks/lib/gitctx.sh` finds where each `$(
 - [ ] **Step 4: Record it.** One CHANGELOG line naming what 0.3.0 missed. List anything left open in the design spec's M3 row with its guard outcome in each mode.
 - [ ] **Step 5: Commit** `M2: guards read here-doc bodies and strings builtins evaluate`.
 
+Run Tasks 16a, 16b and 16c after Task 16's first evidence runs (2026-10-18), then run Task 16 again from Step 2, asking before each run. The user answered four questions on 2026-10-18, quoted in each task.
+
+### Task 16a: Routing a headless model follows, and the adherence rule the user relaxed
+
+Measured on 2026-10-18 (Claude Code 2.1.302, `claude-sonnet-5-5`): adherence was 4 of 15, routed and inline-rows alike, and all ten positive cases scored 0 of 3. Diagnostic runs with transcripts at HEAD and at v0.3.0 behaved the same:
+- 11 of 12 runs read `kernel/routes.md` first.
+- Then nearly every run made one Bash call into the project before it read the route's skill, or never read it (`row-diagnose`: 2 of 4).
+- No run opened a todo list. This Claude Code has `TaskCreate` and `TaskUpdate`, not `TodoWrite`, and the kernel says only "open a todo list".
+
+The user's answer to "fix kern, keep the rule / relax the rule / both" was "Both".
+
+**Files:** `kernel/kernel.md` (the Routing paragraph), `scripts/lib/adherence.mjs` (`grade`), `tests/adherence.test.mjs`, `tests/kernel.test.mjs`, `docs/specs/2026-10-12-kern-design.md` (11.1 tier 2, if it states the pass rule), `CHANGELOG.md`
+
+- Kernel: on a match, the route's Read comes before any other tool call, the project's included. The todo list is named by its tool: `TaskCreate`, one task per step, or `TodoWrite` where that is the tool. The text has to fit Task 16b's budget, so it replaces wording and adds as little as it can.
+- Rule, relaxed on the user's word: one tool call into the project may come before the route's Read. Reads of `kernel/routes.md` or the route's skill don't count as that one call. A second such call before the route still fails. The todo list is reported per run (`todo: true | false`, and whether its items hold the route's steps) but no longer gates the case. Negative and multi-turn rules stay as they are.
+- Tests: a run with one project call before the route passes; a run with two fails; a run with no todo list passes and reports `todo: false`; `TaskCreate` subjects still count as the list.
+
+### Task 16b: Standing cost within the 1,300-token gate
+
+Measured on 2026-10-18: 1,700 input tokens (with kern 18,704, without 17,004, median of 3). The gate is at most 1,300. The user's answer to "trim to fit / accept the number / decide later" was "Trim to fit 1,300".
+
+**Files:** `kernel/kernel.md`, the skills' `description` lines that Claude Code lists to the model, the agents' descriptions, the per-prompt reminder in `hooks/prompt-submit` if it renders on a one-word prompt, `scripts/lib/lint-rules.mjs` rule 7 (only if a limit moves), `CHANGELOG.md`
+
+- First measure, without a model, what kern adds to a one-word session: the rendered kernel, the mode line, the per-prompt reminder, and each skill and agent entry Claude Code lists. Find out which skills Claude Code lists with a description and which by name only, from the 2026-10-18 transcripts' `init` and the first prompt. Write the breakdown in the commit body.
+- Cut at least 450 tokens (about 1,800 characters) from those parts. Allow for Task 16a's kernel text. Every cut keeps the meaning that a test or a route depends on. Prefer shortening descriptions of skills only the user or a route opens, and dropping text a skill states again once it is read. Lint stays clean, with no rule 7 warning.
+- The measured number comes from `node scripts/standing-cost.mjs`, a paid run, asked for first.
+
+### Task 16c: Exec graders read each part of a chained command, and the split question stands alone
+
+The user's answers: "Yes, fix the grader" (judge each chained part by its own printed exit code) and "Keep the rule" (the split question must stand alone).
+
+**Files:** `scripts/lib/exec-grade.mjs` (`bashRuns` and the checks built on it), `tests/exec-eval.test.mjs`, `skills/finish-branch/SKILL.md` (the size-gate step), `tests/skills/finish-branch.test.mjs`, `CHANGELOG.md`
+
+- A part of a chained Bash command (`;`, `&&`, a newline) counts as run and succeeded when the output shows its own success, for example the `rc=0` or `snap_rc=0` the model printed after it. It also counts when the part is the last in the chain and the call did not error. A later part that fails no longer hides an earlier one. This applies to `wt-snap`, `wt-diff --out` and every other step that `bashRuns` reports.
+- finish-branch's size gate: the split question stands alone. The reply doesn't list the commit, push and PR menu until the user has answered the split. Byte cap as lint sets it.
+- Tests: the 2026-10-18 `finish-menu-first` shape (wt-diff `rc=0` inside a chain whose last part exited 3) passes the steps 4 and 5 check. A chain where wt-diff itself failed still fails. The finish-branch wording is pinned.
+
 Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
