@@ -117,7 +117,7 @@ const offersSplitToUser = (text) => !forecastsSplit(text) && !showsMenu(text) &&
 const resultText = (c) => typeof c?.content === 'string' ? c.content : (Array.isArray(c?.content) ? c.content.map((x) => x?.text ?? '').join('\n') : '');
 // chainParts(command): the parts of a chained Bash command, split on newlines, `;` and `&&` outside quotes
 // and parentheses (a `|`, `||` or `$( )` stays inside its part).
-const chainParts = (command) => {
+export const chainParts = (command) => {
   const parts = [];
   let cur = '', q = '', depth = 0;
   const end = () => { if (cur.trim()) parts.push(cur.trim()); cur = ''; };
@@ -135,26 +135,55 @@ const chainParts = (command) => {
   end();
   return parts;
 };
-// marker(part): the label an `echo ... $?` part prints, the text before `$?` ("rc=", "snap rc=", "exit="), or null.
-const marker = (part) => {
-  const m = /^echo\s+(?:-\w+\s+)*(["']?)([^"'$]*)\$\{?\?\}?\1\s*$/.exec(part);
-  return m && /=\s*$/.test(m[2]) ? m[2].trimEnd() : null;
+// echoLabel(part): an `echo <label>=<value>` part as { label, live }: label is the text up to and with `=`
+// ("rc=", "snap rc="), live is true when the value is `$?` (or `${?}`), false for a literal number; null for any other part.
+const echoLabel = (part) => {
+  const m = /^echo\s+(?:-\w+\s+)*(["']?)([^"'$]*=)\s*(\$\{?\?\}?|-?\d+)\1\s*$/.exec(part);
+  return m ? { label: m[2].trimEnd(), live: m[3][0] === '$' } : null;
 };
-// partResults(command, output, errored): each part of a chained command as { command, ok }. A part that an
-// `echo <label>=$?` follows is ok when the output shows its own `<label>=0` (the nth echo of a label reads the nth
-// print of it). A part with no marker is ok when the call did not error. A marker the output lacks reads like
-// no marker.
+// hasPipe(part): an unquoted `|` that is not half of `||`; the part's `$?` is then its last command's.
+const hasPipe = (part) => {
+  let q = '';
+  for (let i = 0; i < part.length; i++) {
+    const c = part[i];
+    if (q) { if (c === q) q = ''; else if (c === '\\' && q === '"') i++; continue; }
+    if (c === "'" || c === '"') q = c;
+    else if (c === '\\') i++;
+    else if (c === '|') { if (part[i + 1] === '|') i++; else return true; }
+  }
+  return false;
+};
+// partResults(command, output, errored): each part of a chained command as { command, ok }. Each echo that
+// prints `<label>=` consumes the next printed `<label>=N` in the output, in order; a part followed by an echo of `$?`
+// is ok when that printed N is 0, so a literal echo or an earlier line cannot stand in for it. When a label's echoes
+// and printed lines differ in number, or the part is a pipeline with no earlier `set ... pipefail`, or no echo of
+// `$?` follows, the part keeps the old reading: ok when the call did not error.
 const partResults = (command, output, errored) => {
   const parts = chainParts(command);
-  const seen = new Map();
+  const echoes = parts.map(echoLabel);
+  const printed = new Map(), used = new Map();
+  const lines = (label) => {
+    if (!printed.has(label)) {
+      const re = new RegExp(`(?:^|[^\\w])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}\\s*(-?\\d+)`, 'g');
+      printed.set(label, [...output.matchAll(re)].map((m) => m[1]));
+    }
+    return printed.get(label);
+  };
+  const echoCount = (label) => echoes.filter((e) => e?.label === label).length;
+  const pipefail = (i) => parts.slice(0, i).some((p) => /^set\s+(-\w+\s+)+pipefail\b/.test(p));
+  const nth = new Map();
+  const at = parts.map((_, i) => {
+    const e = echoes[i];
+    if (!e) return null;
+    const n = nth.get(e.label) ?? 0;
+    nth.set(e.label, n + 1);
+    return lines(e.label).length === echoCount(e.label) ? lines(e.label)[n] : null;
+  });
   return parts.map((part, i) => {
-    const label = i + 1 < parts.length ? marker(parts[i + 1]) : null;
-    if (label === null || marker(part) !== null) return { command: part, ok: !errored };
-    const n = seen.get(label) ?? 0;
-    seen.set(label, n + 1);
-    const re = new RegExp(`(?:^|[^\\w])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}\\s*(-?\\d+)`, 'g');
-    const found = [...output.matchAll(re)][n];
-    return { command: part, ok: found ? found[1] === '0' : !errored };
+    const next = echoes[i + 1];
+    const value = next?.live && !echoes[i] ? at[i + 1] : null;
+    if (value === null || value === undefined || (hasPipe(part) && !pipefail(i))) return { command: part, ok: !errored };
+    return { command: part, ok: value === '0' };
   });
 };
 

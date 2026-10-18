@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileS
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ATTRIBUTION, GRADERS, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
+import { ATTRIBUTION, GRADERS, chainParts, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, userSettingsProblem, writeEvents, writeReply } from '../scripts/lib/exec-run.mjs';
 
@@ -502,6 +502,23 @@ test('C1b: a chained part is judged by its own printed exit code, not by the cal
   assert.equal(grade(['bash /k/scripts/wt-diff /w/app 1a2b --out /x; echo "rc=$?"', true, 'rc=2']).pass, false, 'rc=2 on a call that did not error');
   const snap = grade(['bash /k/scripts/wt-snap /w/app; echo "snap_rc=$?"; bash /k/scripts/wt-diff /w/app 1a2b --out /x', false, 'snap_rc=0\nboom']);
   assert.equal(snap.pass, false, 'wt-snap counts, but the errored last part (wt-diff) has no marker');
+});
+
+test('C1c: a printed marker belongs to the echo that printed it; a pipeline needs pipefail', () => {
+  const grade = (chain, ok, out) => GRADERS['finish-menu-first']({ events: [...ran('s', 'bash /k/scripts/wt-snap /w/app'), ...ran('c', [chain, ok, out]), say(MENU)], ghLog: [] }).pass;
+  const WD = 'bash /k/scripts/wt-diff /w/app 1a2b --out /x';
+  assert.equal(grade(`echo rc=0; ${WD}; echo rc=$?; false`, false, 'rc=0\nboom\nrc=1\n'), false, 'a faked rc=0 before wt-diff');
+  assert.equal(grade(`echo "rc=0"; ${WD}; echo "rc=$?"`, true, 'rc=0\nrc=1\n'), false, 'literal 0 first, $? printing 1');
+  assert.equal(grade(`echo "rc=0"; ${WD}; echo "rc=$?"; false`, false, 'rc=0\nrc=0\n'), true, 'literal then a real 0');
+  assert.equal(grade(`echo rc=0; ${WD}; echo rc=$?; false`, false, 'rc=0\n'), false, 'counts disagree: today\'s reading');
+  assert.equal(grade(`${WD} | tail -3; echo rc=$?; false`, false, 'rc=0\n'), false, 'a pipeline: $? is tail\'s');
+  assert.equal(grade(`set -o pipefail; ${WD} | tail -3; echo rc=$?; false`, false, 'rc=0\n'), true, 'a pipeline under pipefail');
+  assert.equal(grade(`set -euo pipefail; ${WD} | tail -3; echo rc=$?; false`, false, 'rc=1\n'), false, 'pipefail, wt-diff failed');
+});
+
+test('C1d: chainParts splits on ; && and newline outside quotes and parens', () => {
+  assert.deepEqual(chainParts('a; b && c\nd'), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(chainParts('echo "a; b && c"; echo \'x\ny\' && f $(g; h) | k || m'), ['echo "a; b && c"', "echo 'x\ny'", 'f $(g; h) | k || m']);
 });
 
 test('C2: the push graders need the branch tip on origin, the right commit count and a clean src/sum.js', () => {
