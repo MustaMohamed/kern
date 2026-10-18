@@ -5861,6 +5861,7 @@ Measured on 2026-10-18: 1,700 input tokens (with kern 18,704, without 17,004, me
 - First measure, without a model, what kern adds to a one-word session: the rendered kernel, the mode line, the per-prompt reminder, and each skill and agent entry Claude Code lists. Find out which skills Claude Code lists with a description and which by name only, from the 2026-10-18 transcripts' `init` and the first prompt. Write the breakdown in the commit body.
 - Cut at least 450 tokens (about 1,800 characters) from those parts. Allow for Task 16a's kernel text. Every cut keeps the meaning that a test or a route depends on. Prefer shortening descriptions of skills only the user or a route opens, and dropping text a skill states again once it is read. Lint stays clean, with no rule 7 warning.
 - The measured number comes from `node scripts/standing-cost.mjs`, a paid run, asked for first.
+- Outcome, 2026-10-19: the trim cut 119 characters (fafcda3). Claude Code 2.1.302 lists none of the 14 skills that set `disable-model-invocation`, so their descriptions cost nothing. The entries it does list are pinned by tests. Offered the cuts that remain (each changes what kern does), the user answered "Accept the measured number". The standing-cost gate is the number the next `standing-cost.mjs` run measures, recorded with these words. No further trim.
 
 ### Task 16c: Exec graders read each part of a chained command, and the split question stands alone
 
