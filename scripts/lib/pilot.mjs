@@ -26,9 +26,10 @@ export function readSession(path) {
   return entries;
 }
 
-// A prompt the user typed: origin.kind or turnOrigin says human. Task notifications, peer messages and
-// tool results are not the user's turns.
-const typed = (e) => e?.type === 'user' && !e.isSidechain && (e.origin?.kind === 'human' || e.turnOrigin === 'human');
+// A prompt the user typed: origin.kind or turnOrigin says human, or, in a headless (-p) session, turnOrigin
+// says sdk, which the session file gives only the prompt. Task notifications, peer messages and tool
+// results are not the user's turns.
+const typed = (e) => e?.type === 'user' && !e.isSidechain && (e.origin?.kind === 'human' || e.turnOrigin === 'human' || e.turnOrigin === 'sdk');
 
 // Calls that leave the machine or cannot be undone: each is a slip unless the user said yes to it in that
 // session, which only the user can confirm, so these are candidates.

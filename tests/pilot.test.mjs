@@ -50,6 +50,14 @@ test('metrics count usage once per message, subagents included, and read turns, 
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a headless session prompt counts as the typed turn, and a task notification does not', () => {
+  const m = metrics([{ type: 'user', timestamp: at(0), turnOrigin: 'sdk', message: { role: 'user', content: 'Implement it.' } }, asst('m1', 4, bash('ls')),
+    { type: 'user', timestamp: at(6), origin: { kind: 'task-notification' }, turnOrigin: 'task_notification', message: { role: 'user', content: 'a job finished' } }, asst('m2', 9, { type: 'text', text: 'Done.' })]);
+  assert.equal(m.turns, 1);
+  assert.equal(m.stops, 0);
+  assert.equal(m.wallSeconds, 9);
+});
+
 test('metrics count the guard asks a hook recorded, kern prefix and all', () => {
   const askOf = (s, reason, decision = 'ask') => ({ type: 'attachment', timestamp: at(s), attachment: { type: 'hook_success', hookEvent: 'PreToolUse',
     stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision, permissionDecisionReason: reason } }) } });
