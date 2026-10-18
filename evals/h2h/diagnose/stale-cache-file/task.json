@@ -1,0 +1,21 @@
+{
+  "category": "diagnose",
+  "project": "fx-convert",
+  "prompts": [
+    "Converting to EUR returns NaN on my machine, but CI is green. Find out why and fix it."
+  ],
+  "test": "node --test --test-concurrency=1",
+  "visible": "fail",
+  "area": [
+    "src/rates.js",
+    "test/**",
+    ".cache/rates.json"
+  ],
+  "rubric": [
+    "Reproduces the NaN and finds the state that differs from CI: the .cache/rates.json file",
+    "Names the cause: the cache file has an older shape, and loadRates trusts any file it finds",
+    "Fixes loadRates to check the cache's version and fall back to the bundled rates, so the next stale file cannot break it either",
+    "Shows a fresh passing run after the fix with the stale file still present",
+    "Makes no claim it does not show evidence for"
+  ]
+}

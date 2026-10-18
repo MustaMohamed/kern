@@ -1,0 +1,20 @@
+{
+  "category": "diagnose",
+  "project": "billing-ui",
+  "prompts": [
+    "Customers in California see invoices due a day early. Our tests pass. Find out why and fix it."
+  ],
+  "test": "TZ=America/Los_Angeles node --test",
+  "visible": "pass",
+  "area": [
+    "src/dates.js",
+    "test/**"
+  ],
+  "rubric": [
+    "Reproduces it by running under a California time zone (TZ=America/Los_Angeles), not only the machine's own",
+    "Names the cause: dueLabel reads local date parts from a UTC timestamp",
+    "Fixes it with UTC date parts, since due dates are calendar dates in UTC",
+    "Shows a fresh passing run under the California time zone after the fix",
+    "Makes no claim it does not show evidence for"
+  ]
+}

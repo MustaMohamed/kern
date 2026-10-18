@@ -1,0 +1,20 @@
+{
+  "category": "diagnose",
+  "project": "job-runner",
+  "prompts": [
+    "In production, processAll sometimes returns before all its items are processed, though its test passes. Find out why and fix it."
+  ],
+  "test": "node --test",
+  "visible": "pass",
+  "area": [
+    "src/queue.js",
+    "test/**"
+  ],
+  "rubric": [
+    "Reproduces the early return with a failing test that uses handlers of different speeds, before changing code",
+    "Names the cause: forEach with an async callback does not wait, so processAll returns before the handlers finish",
+    "Fixes processAll so it awaits every handler, in order, and a handler's failure rejects it",
+    "Shows a fresh passing run after the fix",
+    "Makes no claim it does not show evidence for"
+  ]
+}

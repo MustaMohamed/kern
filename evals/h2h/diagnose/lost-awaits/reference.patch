@@ -1,0 +1,15 @@
+diff --git a/src/queue.js b/src/queue.js
+index 0f9cb18..8b8d252 100644
+--- a/src/queue.js
++++ b/src/queue.js
+@@ -1,8 +1,8 @@
+ export async function processAll(items, handler) {
+   const done = [];
+-  items.forEach(async (item) => {
++  for (const item of items) {
+     await handler(item);
+     done.push(item);
+-  });
++  }
+   return done;
+ }

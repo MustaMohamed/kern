@@ -1,0 +1,13 @@
+diff --git a/src/merge.js b/src/merge.js
+index efba858..a85e5af 100644
+--- a/src/merge.js
++++ b/src/merge.js
+@@ -3,7 +3,7 @@ import { push } from './metrics.js';
+ export async function mergeCustomers(a, b) {
+   const byId = new Map();
+   for (const c of [...a, ...b]) {
+-    if (!c.id) continue;
++    if (c.id === undefined || c.id === null) continue;
+     byId.set(c.id, { ...byId.get(c.id), ...c });
+     await push('customer.merged');
+   }

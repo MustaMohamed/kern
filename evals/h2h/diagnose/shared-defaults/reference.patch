@@ -1,0 +1,12 @@
+diff --git a/src/format.js b/src/format.js
+index c1a0264..eff7d64 100644
+--- a/src/format.js
++++ b/src/format.js
+@@ -1,6 +1,6 @@
+ export const DEFAULTS = { currency: 'USD', symbol: '$' };
+ 
+ export function formatPrice(amount, opts = {}) {
+-  const o = Object.assign(DEFAULTS, opts);
++  const o = { ...DEFAULTS, ...opts };
+   return `${o.symbol}${amount.toFixed(2)}`;
+ }

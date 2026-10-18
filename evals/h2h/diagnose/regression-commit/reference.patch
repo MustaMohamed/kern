@@ -1,0 +1,9 @@
+diff --git a/src/discount.js b/src/discount.js
+index 63953bb..469e93c 100644
+--- a/src/discount.js
++++ b/src/discount.js
+@@ -1,3 +1,3 @@
+ export function applyDiscount(total, percent) {
+-  return Math.floor(total * (100 - percent)) / 100;
++  return Math.round(total * (1 - percent / 100) * 100) / 100;
+ }

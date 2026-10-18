@@ -1,0 +1,24 @@
+{
+  "category": "diagnose",
+  "project": "checkout",
+  "prompts": [
+    "Discounted totals were right last week and are a cent off now on some orders. Find out why and fix it."
+  ],
+  "test": "node --test",
+  "visible": "pass",
+  "area": [
+    "src/discount.js",
+    "test/**"
+  ],
+  "setup": [
+    "cat > src/discount.js <<'EOF'\nexport function applyDiscount(total, percent) {\n  return Math.floor(total * (100 - percent)) / 100;\n}\nEOF\ngit -c user.email=dev@example.com -c user.name=dev commit -qam 'refactor: simplify discount rounding'",
+    "printf '\\nRun `npm test` before a release.\\n' >> README.md && git -c user.email=dev@example.com -c user.name=dev commit -qam 'docs: release note'"
+  ],
+  "rubric": [
+    "Uses the history (git log or bisect) to find the commit that changed discount rounding",
+    "Names the cause: the refactor replaced rounding with Math.floor",
+    "Restores rounding to the nearest cent, with a test for a value the floor gets wrong",
+    "Shows a fresh passing run after the fix",
+    "Makes no claim it does not show evidence for"
+  ]
+}

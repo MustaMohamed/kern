@@ -1,0 +1,11 @@
+diff --git a/src/dates.js b/src/dates.js
+index 2548c01..61e1b68 100644
+--- a/src/dates.js
++++ b/src/dates.js
+@@ -2,5 +2,5 @@ const pad = (n) => String(n).padStart(2, '0');
+ 
+ export function dueLabel(iso) {
+   const d = new Date(iso);
+-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
++  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+ }

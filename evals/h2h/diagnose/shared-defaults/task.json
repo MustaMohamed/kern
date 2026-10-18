@@ -1,0 +1,20 @@
+{
+  "category": "diagnose",
+  "project": "storefront",
+  "prompts": [
+    "The 'formats in dollars' test fails when I run the whole test file, but passes when I run it on its own. Find out why and fix it."
+  ],
+  "test": "node --test",
+  "visible": "fail",
+  "area": [
+    "src/format.js",
+    "test/**"
+  ],
+  "rubric": [
+    "Reproduces both ways: the whole file fails and the single test passes",
+    "Names the cause: formatPrice merges options into the shared DEFAULTS object, so one call's currency leaks into every later call",
+    "Fixes the production code, not the test order or a reset in the test",
+    "Shows a fresh passing run of the whole file after the fix",
+    "Makes no claim it does not show evidence for"
+  ]
+}

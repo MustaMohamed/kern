@@ -1,0 +1,20 @@
+{
+  "category": "diagnose",
+  "project": "auth-service",
+  "prompts": [
+    "Every token is rejected as expired, even ones issued a minute ago. Find out why and fix it. The test must not depend on the real clock."
+  ],
+  "test": "node --test",
+  "visible": "fail",
+  "area": [
+    "src/tokens.js",
+    "test/**"
+  ],
+  "rubric": [
+    "Reproduces the rejection with a failing test before changing code",
+    "Names the cause: expiresAt is in seconds and is compared with Date.now() in milliseconds",
+    "Adds a seam (a now parameter defaulting to Date.now()) so the test controls time, and fixes the unit",
+    "Shows a fresh passing run after the fix",
+    "Makes no claim it does not show evidence for"
+  ]
+}

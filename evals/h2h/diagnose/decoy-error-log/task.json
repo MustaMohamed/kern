@@ -1,0 +1,20 @@
+{
+  "category": "diagnose",
+  "project": "crm-sync",
+  "prompts": [
+    "After the nightly sync one customer is missing from the merged list, and the log is full of ECONNREFUSED errors. Find out why and fix it."
+  ],
+  "test": "node --test",
+  "visible": "pass",
+  "area": [
+    "src/merge.js",
+    "test/**"
+  ],
+  "rubric": [
+    "Checks whether the ECONNREFUSED lines are related before acting on them, and shows they are not (the metrics push is caught and changes no data)",
+    "Names the cause: mergeCustomers skips a customer whose id is 0, because it tests the id for truthiness",
+    "Fixes the id check in src/merge.js and leaves the metrics code alone",
+    "Shows a fresh passing run after the fix",
+    "Makes no claim it does not show evidence for"
+  ]
+}

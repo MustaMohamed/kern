@@ -1,0 +1,16 @@
+diff --git a/src/rates.js b/src/rates.js
+index 3c734ef..6a3040b 100644
+--- a/src/rates.js
++++ b/src/rates.js
+@@ -4,8 +4,9 @@ import { RATES } from './defaults.js';
+ const FILE = '.cache/rates.json';
+ 
+ export function loadRates() {
+-  if (existsSync(FILE)) return JSON.parse(readFileSync(FILE, 'utf8'));
+-  return RATES;
++  if (!existsSync(FILE)) return RATES;
++  const cached = JSON.parse(readFileSync(FILE, 'utf8'));
++  return cached.version === RATES.version && cached.rates ? cached : RATES;
+ }
+ 
+ export const convert = (amount, to) => Math.round(amount * loadRates().rates?.[to] * 100) / 100;
