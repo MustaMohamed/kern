@@ -77,6 +77,27 @@ EOT
   done
 }
 
+@test "git_words reads a single quote inside \$(( )) as literal, so a \$( ) or backtick there is a command" {
+  local c
+  # In $(( )) a single quote is literal when the arithmetic expands, so bash 3.2, bash 5.3 and zsh 5.9
+  # all run the backtick or $( ) inside one; git_words must print it. Backtick and $( ), bare, quoted,
+  # assigned, nested and as an array subscript.
+  for c in "echo \$(( '\`git push -f\`' ))" "echo \"\$(( '\`git push -f\`' ))\"" "x=\$(( '\`git push -f\`' ))" \
+    "echo \$(( '\$(git push -f)' ))" "x=\$(( '\$(git push -f)' ))" "echo \$(( \$(( '\$(git push -f)' )) ))" \
+    "echo \$(( a['\$(git push -f)'] ))"; do
+    run git_words "$c"
+    [[ "$output" == *$'\n'"git push -f"* ]] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "git_words falls back to \$( ) at a case inside \$(( )), so a command there is not hidden" {
+  # A case keyword means the $(( is not arithmetic: its ) pattern terminators cannot be paren-counted,
+  # so arith() returns 0 and the body is read as a $( ) subshell. Dropping the case rule reads it as
+  # arithmetic and hides the bare command, turning this red.
+  run git_words 'echo $(( (case x in (x) git push -f ;; esac) ))'
+  [[ "$output" == *$'\n'"git push -f"* ]] || false
+}
+
 @test "git and gh are seen behind shells, wrappers, groups and keywords" {
   for c in 'bash -lc "git stash"' 'sh -ec "git stash"' '/bin/bash -c "git stash"' \
     'nohup bash -c "git stash"' 'command git stash' 'exec git stash' 'time git stash' \

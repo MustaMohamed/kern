@@ -58,6 +58,20 @@ test('a headless session prompt counts as the typed turn, and a task notificatio
   assert.equal(m.wallSeconds, 9);
 });
 
+test('in a headless session a tool-result user entry and a task notification are not typed turns', () => {
+  // Next to a turnOrigin: 'sdk' prompt, the only typed turn is that prompt: a tool result (type user,
+  // but a tool_result with no human or sdk origin) and a task notification add no stop.
+  const m = metrics([
+    { type: 'user', timestamp: at(0), turnOrigin: 'sdk', message: { role: 'user', content: 'Implement it.' } },
+    asst('m1', 2, bash('ls')),
+    result(3, 'README.md'),
+    { type: 'user', timestamp: at(5), origin: { kind: 'task-notification' }, turnOrigin: 'task_notification', message: { role: 'user', content: 'a job finished' } },
+    asst('m2', 6, { type: 'text', text: 'Done.' }),
+  ]);
+  assert.equal(m.turns, 1);
+  assert.equal(m.stops, 0);
+});
+
 test('metrics count the guard asks a hook recorded, kern prefix and all', () => {
   const askOf = (s, reason, decision = 'ask') => ({ type: 'attachment', timestamp: at(s), attachment: { type: 'hook_success', hookEvent: 'PreToolUse',
     stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision, permissionDecisionReason: reason } }) } });

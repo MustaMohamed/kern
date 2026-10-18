@@ -258,11 +258,13 @@ _subst_bodies() {
     # arith(s, i): for the $(( at i, the position of the ) that closes it when it is arithmetic, else 0.
     # bash and zsh read $(( as arithmetic when the ) that closes its inner ( is followed by the ) that
     # closes the outer one; else as $( ) around a subshell, so `$((git push) )` runs git push. Both
-    # skip an escaped paren, but bash skips the parens in quotes and backticks and zsh counts them. So
-    # this count returns 0 at a paren in a quote or backtick, and at what bash or zsh scans past and a
-    # paren count cannot: a double quote that holds ${ } or a backtick, a $ before a quote, ${ }, a
-    # here-doc, and a comment or a case inside a $( ). An unsure $(( is so read as $( ), whose body is
-    # printed whole.
+    # skip an escaped paren. When finding the closing )) bash skips the parens in double quotes and
+    # backticks while zsh counts them, so this returns 0 at a paren there; but a single quote is
+    # literal when the arithmetic expands, so its parens are counted as arithmetic and the quote is
+    # ordinary text (so a $( ) or backtick inside it reaches a guard, review Critical 1 and Important
+    # 1). It also returns 0 at what bash or zsh scans past and a paren count cannot: a double quote
+    # that holds ${ } or a backtick, a $ before a quote (so $'...', ${ } and $"..."), a here-doc, and a
+    # comment or a case inside a $( ). An unsure $(( is so read as $( ), whose body is printed whole.
     function arith(s, i,   n, d, c, j) {
       n = length(s); d = 2
       for (i += 3; i <= n; i++) {
@@ -271,10 +273,10 @@ _subst_bodies() {
         if (c == "$" && index("{" sq "\"", substr(s, i + 1, 1))) return 0
         if (c == "<" && substr(s, i + 1, 1) == "<") return 0
         if (wordat(s, i) && (c == "#" || (substr(s, i, 4) == "case" && index(" \t\n", substr(s, i + 4, 1))))) return 0
-        if (c == sq || c == "\"" || c == "`") {
+        if (c == "\"" || c == "`") {
           for (j = i + 1; j <= n && substr(s, j, 1) != c; j++) {
             if (index("()", substr(s, j, 1)) || (c == "\"" && (substr(s, j, 1) == "`" || substr(s, j, 2) == "${"))) return 0
-            if (c != sq && substr(s, j, 1) == "\\") j++
+            if (substr(s, j, 1) == "\\") j++
           }
           if (j > n) return 0
           i = j; continue
@@ -284,8 +286,10 @@ _subst_bodies() {
       }
       return 0
     }
-    # bodies(buf): prints the bodies in buf.
-    function bodies(buf,   n, q, depth, i, c, e, s) {
+    # bodies(buf, ar): prints the bodies in buf. ar=1 reads buf as arithmetic text, where a single
+    # quote is literal, not a quote, so a $( ) or backtick inside one is still printed (review
+    # Critical 1). The recursion into $(( )) passes ar=1; nested $(( )) stays arithmetic.
+    function bodies(buf, ar,   n, q, depth, i, c, e, s) {
       n = length(buf); q = ""; depth = 0
       for (i = 1; i <= n; i++) {
         c = substr(buf, i, 1)
@@ -297,7 +301,7 @@ _subst_bodies() {
           continue
         }
         if (depth == 0 && substr(buf, i, 3) == "$((" && (e = arith(buf, i))) {
-          bodies(substr(buf, i + 3, e - i - 4)); i = e; continue
+          bodies(substr(buf, i + 3, e - i - 4), 1); i = e; continue
         }
         if (c == "$" && substr(buf, i + 1, 1) == "(") {
           if (depth == 0) s = i + 2
@@ -308,7 +312,7 @@ _subst_bodies() {
           else if (c == ")") { depth--; if (depth == 0) print substr(buf, s, i - s) }
           continue
         }
-        if (c == sq) q = sq
+        if (!ar && c == sq) q = sq
       }
     }
     { buf = buf (NR > 1 ? " " : "") $0 }

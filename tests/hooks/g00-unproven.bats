@@ -161,6 +161,27 @@ g00_all() {
   [ "$(decision_of "$output")" = deny ]
 }
 
+@test "a force push in a single quote inside \$(( )) reaches G1 and is denied in both modes" {
+  # In $(( )) a single quote is literal; all three shells run the backtick or $( ) inside one. G1 must
+  # see the force push and deny it with every guard running, autopilot on or off (review Critical 1,
+  # Important 1). Backtick and $( ), bare, double-quoted, assigned, nested and as an array subscript.
+  local c m
+  for c in "echo \$(( '\`git push --force origin main\`' ))" \
+    "echo \"\$(( '\`git push --force origin main\`' ))\"" \
+    "x=\$(( '\`git push --force origin main\`' ))" \
+    "echo \$(( '\$(git push --force origin main)' ))" \
+    "x=\$(( '\$(git push --force origin main)' ))" \
+    "echo \$(( \$(( '\$(git push --force origin main)' )) ))" \
+    "echo \$(( a['\$(git push --force origin main)'] ))"; do
+    for m in on off; do
+      set_autopilot "$m"
+      gx "$c" ""
+      [ "$(decision_of "$output")" = deny ] || { echo "$m: $c -> $output"; return 1; }
+      [[ "$output" == *"kern G1: plain force push"* ]] || { echo "$m: $c -> $output"; return 1; }
+    done
+  done
+}
+
 @test "G00 votes nothing outside autopilot or for other tools" {
   set_autopilot off
   g00_all none 'g=git; $g push' "python3 -c x" 'echo x | sh' "xargs sh -c x"
