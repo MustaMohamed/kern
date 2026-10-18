@@ -239,3 +239,23 @@ says() { printf '%s\n' "$output" | grep -qF -- "$1" || { echo "missing: $1"; ech
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "a tilde fence holding a backtick line closes on its tildes, as CommonMark reads it" {
+  printf '%s\n' '~~~markdown' '```' 'quoted text' '~~~' '' >> plan.md
+  pc plan.md
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+}
+
+@test "a four-backtick fence holding a three-backtick block is one fence, so its TBD is not prose" {
+  printf '%s\n' '````markdown' '```' 'TBD' '```' '````' '' >> plan.md
+  pc plan.md
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+}
+
+@test "a closer with an info string, or of the other character, does not close a fence" {
+  n=$(wc -l < plan.md)
+  printf '%s\n' '```' 'text' '```js' '~~~' 'more' >> plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "plan.md:$((n + 1)): fence not closed"
+}

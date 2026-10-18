@@ -265,3 +265,10 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   [[ "$stderr" == *"the probe changed $WT"* ]] || false
   [ "$(grep -c '^Task 1: complete' "$L/ledger.md")" -eq 0 ]
 }
+
+@test "a passing command that prints nothing is recorded, with an empty last field" {
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- true
+  [ "$status" -eq 0 ]
+  [ "$(tail -n 1 "$L/ledger.md")" = "Task 1: complete tree=$T1 test=true exit=0 review=approved probe=skipped (test only) last=" ]
+}
