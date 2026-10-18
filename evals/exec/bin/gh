@@ -19,13 +19,23 @@ case "$1 $2" in
     esac
     ;;
   "pr create")
-    # The body the PR would carry, one line, so a grader can check it (commit.attribution, gap 54).
+    # The body the PR would carry, one line, so a grader can check it (commit.attribution, gap 54). Every
+    # form gh takes: --body, --body=, -b, --body-file, --body-file=, -F, and - for standard input.
     prev=""
     for a in "$@"; do
-      if [ "$prev" = --body-file ] && [ -f "$a" ]; then
-        body=$(cat "$a")
-        printf 'body-file: %s\n' "${body//$'\n'/\\n}" >>"$KERN_EXEC_LOG"
-      fi
+      body="" got=""
+      case "$prev" in
+        --body | -b) body=$a got=1 ;;
+        --body-file | -F) if [ "$a" = - ]; then body=$(cat) got=1; elif [ -f "$a" ]; then body=$(cat "$a") got=1; fi ;;
+        *)
+          case "$a" in
+            --body=*) body=${a#--body=} got=1 ;;
+            --body-file=-) body=$(cat) got=1 ;;
+            --body-file=*) [ -f "${a#--body-file=}" ] && body=$(cat "${a#--body-file=}") got=1 ;;
+          esac
+          ;;
+      esac
+      [ -n "$got" ] && printf 'body: %s\n' "${body//$'\n'/\\n}" >>"$KERN_EXEC_LOG"
       prev=$a
     done
     pr_url 8 || exit 1

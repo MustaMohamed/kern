@@ -88,7 +88,7 @@ test('shellSegments drops redirections, so 2>&1 and >/dev/null are not arguments
 
 test('finish-branch: every gh pr create must carry --draft and --title; the split needs an offer', () => {
   const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '1' });
-  const r = GRADERS['finish-autopilot-draft']({ ghLog: ['pr create --draft --title t --base main', 'pr create --title t --base main'], git: g, branch: 'feat/sum' });
+  const r = GRADERS['finish-autopilot-draft']({ ghLog: ['pr create --draft --title t --base main --body-file b.md', 'body: x', 'pr create --title t --base main --body-file b.md', 'body: x'], git: g, branch: 'feat/sum' });
   assert.deepEqual(r.reasons, ['gh pr create did not carry --draft and --title']);
   assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: [], git: g, branch: 'feat/sum' }).pass, false, 'no create at all');
   const none = git({ 'rev-list --count main..feat/many': '0' });
@@ -121,8 +121,8 @@ test('finish-branch: nine files stop at a split proposal, with a -C push counted
 
 test('finish-branch under autopilot: the draft PR carries --draft and --title, and ready never runs', () => {
   const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '1' });
-  assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: ['pr list --head feat/sum --state all --json number,state,headRefOid,url', 'pr create --draft --title fix: sum --base main --body-file /w/.kern/tmp/pr-body.md'], git: g, branch: 'feat/sum' }).pass, true);
-  const r = GRADERS['finish-autopilot-draft']({ ghLog: ['pr create --draft --base main --body-file b.md', 'pr ready 8'], git: g, branch: 'feat/sum' });
+  assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: ['pr list --head feat/sum --state all --json number,state,headRefOid,url', 'pr create --draft --title fix: sum --base main --body-file /w/.kern/tmp/pr-body.md', 'body: x'], git: g, branch: 'feat/sum' }).pass, true);
+  const r = GRADERS['finish-autopilot-draft']({ ghLog: ['pr create --draft --base main --body-file b.md', 'body: x', 'pr ready 8'], git: g, branch: 'feat/sum' });
   assert.deepEqual(r.reasons, ['gh pr create did not carry --draft and --title', 'gh pr ready ran']);
 });
 
@@ -491,7 +491,7 @@ test('C2: the push graders need the branch tip on origin, the right commit count
   const tip = 'a'.repeat(40), stale = 'b'.repeat(40);
   const state = (remote, count, status = '') => git({ 'ls-remote origin refs/heads/feat/sum': `${remote}\trefs/heads/feat/sum`,
     'rev-parse feat/sum': tip, 'rev-list --count main..feat/sum': count, 'status --porcelain': status });
-  const draft = (g) => GRADERS['finish-autopilot-draft']({ events: [], ghLog: ['pr create --draft --title fix: sum --base main --body-file b.md'], git: g, branch: 'feat/sum' });
+  const draft = (g) => GRADERS['finish-autopilot-draft']({ events: [], ghLog: ['pr create --draft --title fix: sum --base main --body-file b.md', 'body: x'], git: g, branch: 'feat/sum' });
   assert.equal(draft(state(tip, '1')).pass, true);
   const empty = draft(state(stale, '0', 'M src/sum.js'));
   assert.equal(empty.pass, false, 'a branch equal to main pushed with nothing committed');
@@ -746,10 +746,29 @@ test('fix round 1 (M2): an INVALID autopilot case still runs its grader and keep
 test('a PR body with an attribution line fails its case under commit.attribution: none (coverage gap 54)', () => {
   const g = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '1' });
   const create = 'pr create --draft --title fix: sum --base main --body-file /w/.kern/tmp/pr-body.md';
-  assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: [create, 'body-file: ## Why\\nsum subtracted.'], git: g, branch: 'feat/sum' }).pass, true);
-  const r = GRADERS['finish-autopilot-draft']({ ghLog: [create, 'body-file: ## Why\\nsum subtracted.\\n\\nGenerated with [Claude Code](https://claude.com/claude-code)'], git: g, branch: 'feat/sum' });
+  assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: [create, 'body: ## Why\\nsum subtracted.'], git: g, branch: 'feat/sum' }).pass, true);
+  const r = GRADERS['finish-autopilot-draft']({ ghLog: [create, 'body: ## Why\\nsum subtracted.\\n\\nGenerated with [Claude Code](https://claude.com/claude-code)'], git: g, branch: 'feat/sum' });
   assert.deepEqual(r.reasons, ['the PR body carries an attribution line under commit.attribution: none']);
+  assert.deepEqual(GRADERS['finish-autopilot-draft']({ ghLog: [create], git: g, branch: 'feat/sum' }).reasons, ['the PR body was not logged, so its attribution cannot be checked']);
+  assert.equal(GRADERS['finish-autopilot-draft']({ ghLog: ['pr create --draft --title fix: sum --base main --fill'], git: g, branch: 'feat/sum' }).pass, true);
   assert.match('Co-Authored-By: Claude <noreply@anthropic.com>', ATTRIBUTION);
+});
+
+test('the gh stand-in logs the body in every form gh pr create takes', () => {
+  const d = mkdtempSync(join(tmpdir(), 'gh-'));
+  spawnSync('git', ['init', '-q', d]);
+  spawnSync('git', ['-C', d, 'remote', 'add', 'origin', '/srv/origin.git']);
+  writeFileSync(join(d, 'body.md'), 'from a file\n');
+  const gh = fileURLToPath(new URL('../evals/exec/bin/gh', import.meta.url));
+  const body = (args, input) => {
+    const log = join(d, `gh-${Math.random()}.log`);
+    const r = spawnSync('bash', [gh, 'pr', 'create', '--title', 't', ...args], { cwd: d, env: { ...process.env, KERN_EXEC_LOG: log }, encoding: 'utf8', input });
+    assert.equal(r.status, 0, r.stderr);
+    return readFileSync(log, 'utf8').split('\n').filter((l) => l.startsWith('body: '));
+  };
+  for (const args of [['--body-file', 'body.md'], ['--body-file=body.md'], ['-F', 'body.md']]) assert.deepEqual(body(args), ['body: from a file'], args.join(' '));
+  assert.deepEqual(body(['--body-file', '-'], 'from stdin\n'), ['body: from stdin']);
+  for (const args of [['--body', 'inline it\'s'], ['--body=inline it\'s'], ['-b', 'inline it\'s']]) assert.deepEqual(body(args), ["body: inline it's"], args.join(' '));
 });
 
 test('the gh stand-in logs the body of a PR it creates, on one line', () => {
@@ -761,5 +780,5 @@ test('the gh stand-in logs the body of a PR it creates, on one line', () => {
   const r = spawnSync('bash', [fileURLToPath(new URL('../evals/exec/bin/gh', import.meta.url)), 'pr', 'create', '--draft', '--title', 't', '--body-file', 'body.md'],
     { cwd: d, env: { ...process.env, KERN_EXEC_LOG: log }, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  assert.deepEqual(readFileSync(log, 'utf8').split('\n').filter(Boolean), ['pr create --draft --title t --body-file body.md', 'body-file: ## Why\\nsum subtracted.']);
+  assert.deepEqual(readFileSync(log, 'utf8').split('\n').filter(Boolean), ['pr create --draft --title t --body-file body.md', 'body: ## Why\\nsum subtracted.']);
 });

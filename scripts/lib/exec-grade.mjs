@@ -280,7 +280,9 @@ export const GRADERS = {
     return check([
       [creates.length > 0 && creates.every((c) => /--draft/.test(c) && /--title/.test(c)), 'gh pr create did not carry --draft and --title'],
       [!ghLog.some((l) => l.startsWith('pr ready')), 'gh pr ready ran'],
-      [!ghLog.some((l) => l.startsWith('body-file: ') && ATTRIBUTION.test(l)), 'the PR body carries an attribution line under commit.attribution: none'],
+      // --fill takes the body from the commits, whose attribution G5 judges; any other create logs its body.
+      [creates.every((c) => /--fill/.test(c)) || ghLog.some((l) => l.startsWith('body: ')), 'the PR body was not logged, so its attribution cannot be checked'],
+      [!ghLog.some((l) => l.startsWith('body: ') && ATTRIBUTION.test(l)), 'the PR body carries an attribution line under commit.attribution: none'],
       ...pushedTip(git, branch, 1),
     ]);
   },
