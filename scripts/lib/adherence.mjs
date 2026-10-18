@@ -105,13 +105,16 @@ export const routeCall = (u, route, root, routeFile = `skills/${route}/SKILL.md`
 export const routesCall = (u, root) => readOf(u, `${root}/kernel/routes.md`);
 // routesOnly: u reads routes.md and nothing else, so it is free before the route: a Read of it, or a Bash
 // call each of whose parts prints a file and names no file but routes.md (a filter after a pipe, such as
-// head -40, names none). A word with a comma, a quote or a brace, or only digits, is a script or a count.
+// head -40, names none). A flag, a count (40, 1,80p) or a script with a comma or brace and no slash is not
+// a file; any other word is, a glob, a brace list, a $ word or a relative name included.
+const fileWord = (w) => w !== '' && !w.startsWith('-') && !/^\d+(?:,\d+)?[a-z]?$/.test(w) && !(/[,{}]/.test(w) && !w.includes('/'));
 const routesOnly = (u, root) => routesCall(u, root) && (u.name !== 'Bash' || u.input.command.split(SEGMENTS).every((seg) => {
   if (!seg.trim()) return true;
   const words = readerWords(seg);
-  return words !== null && words.filter((w) => !w.startsWith('-') && /^[\w./~@+-]+$/.test(w) && !/^\d+$/.test(w))
-    .every((w) => w.startsWith('/') && canon(w) === canon(`${root}/kernel/routes.md`));
+  return words !== null && words.filter(fileWord).every((w) => w.startsWith('/') && canon(w) === canon(`${root}/kernel/routes.md`));
 }));
+// bashWords(u): every word a reading Bash segment names, relative ones included.
+const bashWords = (u) => (u.name === 'Bash' && typeof u.input.command === 'string' ? u.input.command.split(SEGMENTS).flatMap((seg) => readerWords(seg) ?? []) : []);
 const anyKernRoute = (u, root) => readsOf(u).some((f) => f.startsWith(`${canon(join(root, 'skills'))}/`) && f.endsWith('/SKILL.md')) ||
   routesCall(u, root) || readOf(u, `${root}/kernel/context.md`) || (u.name === 'Skill' && /^kern:/.test(String(u.input.skill || '')));
 
@@ -140,7 +143,7 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
     const hit = work.find((u) => (projectSkill ? routeCall(u, projectSkill, root) : anyKernRoute(u, root)));
     if (hit) reasons.push(`a kern route was read: ${hit.name} ${hit.input.file_path || hit.input.skill || hit.input.command}`);
     if (projectSkill && !work.some((u) => (u.name === 'Skill' && u.input.skill === projectSkill) ||
-      readsOf(u).some((f) => f.endsWith(`/.claude/skills/${projectSkill}/SKILL.md`)))) {
+      [...readsOf(u), ...bashWords(u)].some((f) => f === `.claude/skills/${projectSkill}/SKILL.md` || f.endsWith(`/.claude/skills/${projectSkill}/SKILL.md`)))) {
       reasons.push(`the project skill ${projectSkill} was not used`);
     }
     return { pass: reasons.length === 0, reasons, items, hops: 0, before: 0, todo: items.length > 0, todoSteps: null, notes: [] };

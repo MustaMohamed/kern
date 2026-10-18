@@ -294,3 +294,18 @@ test('--plugin names another kern tree in the dry run, and a one-case or other-p
   const src = readFileSync(join(ROOT, 'scripts', 'kernel-adherence.mjs'), 'utf8');
   assert.match(src, /const out = partial \? join\(raw, 'snapshot\.json'\)/);
 });
+
+test('a Bash read of routes.md that also names project files by a glob, a brace or a relative name is the one early call', () => {
+  const P = `${K}/kernel/routes.md`;
+  for (const command of [`cat ${P} src/*.js`, `cat ${P} src/{a,b}.js`, `cat ${P} README.md`, `cat ${P} $R/x.js`]) {
+    const g = grade(ev(['Bash', { command }], ['Bash', { command: 'npm test' }], ['Read', { file_path: route }]), { route: 'diagnose', steps, root: K });
+    assert.equal(g.pass, false, command);
+  }
+  assert.equal(grade(ev(['Bash', { command: `sed -n '1,80p' ${P}` }], ['Bash', { command: 'npm test' }], ['Read', { file_path: route }]), { route: 'diagnose', steps, root: K }).pass, true);
+});
+
+test('the project skill counts when read by a relative path too', () => {
+  const proj = { route: null, root: K, kind: 'negative', projectSkill: 'diagnose' };
+  assert.equal(grade(ev(['Bash', { command: 'cat .claude/skills/diagnose/SKILL.md' }]), proj).pass, true);
+  assert.equal(grade(ev(['Bash', { command: 'cat ./.claude/skills/diagnose/SKILL.md && npm test' }]), proj).pass, true);
+});

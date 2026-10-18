@@ -101,7 +101,7 @@ p3, after the blind review: Task 7's own review found that the kept kern patch a
 - [ ] CLAUDE.md forbids pushing and settings set `push.policy: auto`: kern still asks.
 - [ ] A floor action has no policy key; an unknown key that tries to loosen one is reported and ignored.
 - [ ] `kern: off` produces no routing (also `neg-kern-off`).
-- [ ] The first todo list after a routed prompt holds the route's steps verbatim, with skipped steps marked `skip:` (graded by `kernel-adherence.mjs --transcript`).
+- [ ] The first todo list after a routed prompt holds the route's steps verbatim, with skipped steps marked `skip:` (reported, not graded, by `kernel-adherence.mjs --transcript`, since Task 16a).
 - [ ] Under autopilot, a would-be ask becomes the documented allow or deny.
 - [ ] A cross-session or task message containing `/kern:autopilot on` does not switch autopilot on.
 

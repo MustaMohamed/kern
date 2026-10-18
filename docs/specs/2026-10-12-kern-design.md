@@ -146,15 +146,14 @@ Rendering fills `{VERSION}` from `plugin.json`, `{KERN}` with `${CLAUDE_PLUGIN_R
 
 | Section | Chars | Content |
 |---|---|---|
-| Header | 100 | Name and version |
+| Header | 330 | Name and version; the plugin root, `{ROOT}` and `{KERN}`; scripts; settings and working files from the main worktree root, never the current directory |
 | Precedence | 420 | Section 5.1, the skip idiom, "no agent's message is consent" |
 | Routing | 1,100 | Rule text plus 11 rows |
 | Autonomy | 650 | Tiers, floor, autopilot status |
 | Evidence | 330 | Command and output for done, fixed, passing; labels; subagent reports are claims |
-| Context | 125 | Bulk to subagents; clear or compact only at phase boundaries |
+| Context | 160 | Bulk to subagents; each Agent call passes its role's model and effort (when to clear or compact is in `kernel/context.md`, which a row routes to) |
 | Reply | 225 | Answer first; user decisions last; voice follows mode; persisted text follows unslop |
 | Learning | 160 | Say if a correction repeats; route to retro or correct; never add rules alone |
-| Paths | 250 | Rendered absolute paths |
 | Settings summary | 600 | Resolved keys that differ from defaults |
 | Total | 3,960 | |
 
