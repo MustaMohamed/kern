@@ -5811,7 +5811,32 @@ Pre-flight of 2026-10-17. A scratch clone of `main` at 30dc03e, with this commit
 
 ## Tasks added during execution
 
-No new task so far. Fixes made inside a task, with their reason:
+Run Task 7a after Task 7 and before Task 8. Its brief is kept here so the plan stays the record.
+
+### Task 7a: The guards' reader: here-doc bodies, strings builtins evaluate, and the alias reader (added by the Task 7 final review)
+
+Task 7's five fix rounds replaced how `hooks/lib/gitctx.sh` finds where each `$( )` and backtick ends. They took the bypasses in a 2,500-shape generated corpus from 734 at 0.3.0 to 0 (commits e522639 to 307d830). Its final review then found three bypasses outside that scanner, all present in 0.3.0 and recorded nowhere. A bypass is a command a shell runs that no guard sees. This task closes them before any evidence run or release. It has no code in the plan: design the change, test first, and measure each shape in /bin/bash 3.2, bash 5 and zsh with harmless markers only.
+
+**Files:**
+- Modify: `hooks/lib/gitctx.sh`, `hooks/lib/aliases.sh` if the audit finds a gap, `hooks/guards/g00-unproven.sh` where a shape is to fail closed, `CHANGELOG.md`, `docs/specs/2026-10-12-kern-design.md` (row M3) for anything left open
+- Test: `tests/hooks/gitctx.bats` (the corpus table), `tests/hooks/g00-unproven.bats`, `tests/hooks/aliases.bats`
+
+**Interfaces:**
+- Consumes: the context-stack scanner `_GW_SCAN` and the corpus table from Task 7.
+- Produces:
+  1. An unquoted here-doc body is read for `$( )`, backticks, `$(( ))` and `$[ ]`, as the shells expand it. A quoted delimiter (`<<'EOF'`, `<<"EOF"`, `<<\EOF`) stays unread. `<<-` strips leading tabs.
+  2. A string that a builtin evaluates as code or arithmetic is read as a command, or fails G00 closed under autopilot. This covers `trap`, `let`, `declare -i`, `typeset -i`, `[[ ... -eq ... ]]`, `printf -v`, `read`, and zsh glob qualifiers such as `*(e:'...':)`.
+  3. `git_words` fails closed when one of its awk programs fails: it emits the `$KERN_UNREAD` record and keeps the records it has.
+  4. `hooks/lib/aliases.sh` gets its own `$( )` reader audited against the new scanner. Where it differs, the round-5 report lists the gaps: no `case`, no arithmetic single-quote rule, no `$[ ]` balance, no ANSI-C backslash rule, no bash 3.2 double reading and no depth limit. Make it share `_GW_SCAN`, or show that each difference only adds records.
+
+- [ ] **Step 1: Add the failing shapes to the corpus.** Each shape found by the final review (`task-7-final-review.md` in the plan workspace) goes into the `gitctx.bats` corpus table with `git push --force origin main` as the inner command, plus a G1 or G00 test in both modes in `g00-unproven.bats`. Run them and see them fail.
+- [ ] **Step 2: Fix them, then rerun the differential sweep and the generated corpus,** adding at least 40 here-doc and builtin shapes. Report the counts before and after.
+- [ ] **Step 3: Run** `tests/run-bats tests/hooks`, `bash tests/hook-shape.sh`, shellcheck as in Task 7 Step 3, and the Ubuntu image run. The only failures allowed are the image's known three: the unreadable-file tests 7 and 30 under root, and the 10 KB timing test.
+- [ ] **Step 4: Record it.** One CHANGELOG line naming what 0.3.0 missed. List anything left open in the design spec's M3 row with its guard outcome in each mode.
+- [ ] **Step 5: Commit** `M2: guards read here-doc bodies and strings builtins evaluate`.
+
+Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
+- Task 7, after its review (five fix rounds, e522639 to 307d830): the kept pilot patch hid a backtick inside single quotes inside `$(( ))`, a regression the blind grader did not see. The rounds that followed found and closed older holes from 0.3.0, among them `echo "'$(cmd)'"`, `echo $(echo '(' $(cmd))`, `$[ '$(cmd)' ]` and a `case` inside `$( )`. Round 4 replaced the paren-counting end-finder with a quote-aware scanner that keeps a context stack, and turned the sweep into a fixed corpus table in `tests/hooks/gitctx.bats`.
 - Task 6, after pilot p2: `metrics()` also returns `asks`, the kern guard asks a hook recorded (a `hook_success` attachment whose `permissionDecision` is `ask`). `docs/pilot.md` said an approved ask leaves no trace; p2's kern session holds both of its G16 asks.

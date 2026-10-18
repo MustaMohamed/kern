@@ -93,6 +93,8 @@ p2: both arms wrote the plan's five files and both found that a negative case pa
 
 p3, headless at the user's request: both arms fixed `_subst_bodies` in `hooks/lib/gitctx.sh` and added tests to `g00-unproven.bats` and `gitctx.bats`, and both pass the plan's acceptance test (`tests/hooks/g00-arithmetic.bats`), which fails on the base. kern also falls back to the stricter reading where bash and zsh count parens differently; the grader named the current arm's open case, `echo $((git push -f ")" ))`, which zsh runs. Every kern G16 ask was denied, since no one could answer it: five on reads of hook files, four on bats and probe runs, one on sourcing `gitctx.sh` to call `git_words`, and one, with G1, on a `git stash` around a bats run. kern worked around them with the Read tool and background runs. Both arms' full suites showed 12 failures that the current arm also found on the base: the runner gave each arm a clean environment without `VOLTA_HOME`, so node-based hook tests failed there (the plan's Global Constraints name the cause).
 
+p3, after the blind review: Task 7's own review found that the kept kern patch also hid a command. A backtick inside single quotes inside `$(( ))` reached no guard, where 0.3.0's G00 had denied it under autopilot. So both arms' fixes had a bypass, and the grader saw only the current arm's. The score stands as graded, since the protocol scores what the grader can see. Five fix rounds followed, and the guards' reader was rewritten (Task 7 in the plan, under "Tasks added during execution").
+
 ## Behavioural fixtures (design spec 11.3)
 
 - [ ] A project skill for the same job is used instead of kern's route (also `neg-project-skill` in `evals/adherence/cases.json`).
