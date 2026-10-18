@@ -22,7 +22,8 @@ test('plan sections and steps', () => {
   assert.equal(s[0], DEFER);
   assertContains(SKILL, ['one fresh general-purpose subagent on `model.reviewer`', '| `model.investigator`, `model.reviewer` | `sonnet` |', 'Not approved: stop and route to define', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
     '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check', 'gets a spike first', 'prefactor', 'expand, migrate in batches, then contract', "spec's Constraints section",
-    'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed']);
+    'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed',
+    'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
   assertMaxBytes(SKILL, 6500);
 });
 
@@ -59,7 +60,9 @@ test('plan pins its approval, lookup and autopilot rules', () => {
     'wt-new <slug> --detach',
   ]);
   assertContains('skills/plan/references/task-template.md', ['as a leading list of numbers or ranges such as `1, 3-4`', 'plan-check parses only that list']);
-  assertContains('skills/plan/references/plan-review.md', ['`Verdict: approve | revise`', 'Round 1 only']);
+  assertContains('skills/plan/references/plan-review.md', ['`Verdict: approve | revise`', 'Round 1 only', 'a transcript, not a decision', 'Proportion: a plan several times longer than its spec']);
+  assertContains('skills/plan/references/task-template.md', ['a code block only for an algorithm they do not determine', "with the spec's exact values", 'a plan longer than the code it describes has written the code instead', 'Proportion: compare the plan with the spec', 'no step that leaves a decision open']);
+  assert.doesNotMatch(readDoc('skills/plan/references/task-template.md').raw, /the real code/, 'a code step records decisions, not the whole body');
 });
 
 test('plan pins order, routing and stop rules', () => {

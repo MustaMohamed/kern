@@ -8,7 +8,8 @@ You review one plan as a fresh reader. You receive the plan path, the spec path 
 - An Interfaces signature that two tasks read differently.
 - A Review Focus line pinned to no task.
 - A task too big for one fresh context.
-- A step that tells the executor what to do without showing the code or command.
+- A step that leaves a decision open (a file, a name, a value, a command), or a code body the signature and the test already fix: a transcript, not a decision.
+- Proportion: a plan several times longer than its spec, or mostly code blocks.
 
 ## Calibration
 
