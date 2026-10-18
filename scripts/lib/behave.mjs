@@ -78,7 +78,12 @@ export function digest(events, max = 24000, { results = false } = {}) {
   });
   const head = `Tool calls:\n${calls.join('\n') || '(none)'}`;
   const tail = `Final reply:\n${finalText(events)}`;
-  const body = head.length > max ? `${head.slice(0, max)}\n[digest truncated]` : head;
+  // With results on (the head-to-head grader), a long run keeps its first and last calls, since the last
+  // ones hold the evidence a rubric asks for (a fresh passing run); without them it keeps the head, as before.
+  const keep = Math.floor(max * 0.4);
+  const body = head.length <= max ? head
+    : results ? `${head.slice(0, keep)}\n[digest: middle calls cut]\n${head.slice(head.length - (max - keep))}`
+      : `${head.slice(0, max)}\n[digest truncated]`;
   return `${body}\n\n${tail}`;
 }
 

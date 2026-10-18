@@ -104,6 +104,17 @@ test('a long digest cuts the tool calls, never the final reply', () => {
   assert.match(d, /\[digest truncated\]/);
 });
 
+test('with results on, a long digest keeps its first and last calls and cuts the middle', () => {
+  const ev = Array.from({ length: 400 }, (_, i) => call('Bash', { command: `echo ${i} ${'y'.repeat(250)}` }));
+  ev.push({ type: 'result', result: 'the end: all done' });
+  const d = digest(ev, 24000, { results: true });
+  assert.ok(d.length <= 24000 + 'Final reply:\nthe end: all done'.length + 60);
+  assert.match(d, /\n1\. Bash: echo 0 /);
+  assert.match(d, /\n400\. Bash: echo 399 /);
+  assert.match(d, /\[digest: middle calls cut\]/);
+  assert.ok(d.endsWith('Final reply:\nthe end: all done'));
+});
+
 test('the digest shows tool results only when asked: a Bash tail with the error flag, the head of any other', () => {
   const ev = [
     { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'npm test' } }] } },

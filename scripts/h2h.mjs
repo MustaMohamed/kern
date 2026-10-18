@@ -41,9 +41,9 @@ if (kernArm) { kernArm.srcDir = kernArm.dir; kernArm.dir = copy; }
 // Every other plugin arm runs from a copy too: outside the repo, symlinks resolved, no .git, so a model
 // cannot walk up into the repo's evals/ or answer keys.
 const armCopies = [];
-for (const a of arms) if (a.plugin && a.id !== 'kern') { a.srcDir = a.dir; a.dir = armCopy(a.dir, a.id); armCopies.push(a.dir); }
 const key = {}; const results = [];
 try {
+for (const a of arms) if (a.plugin && a.id !== 'kern') { a.srcDir = a.dir; a.dir = armCopy(a.dir, a.id); armCopies.push(a.dir); }
 for (const t of tasks) {
   for (let r = 0; r < RUNS; r++) {
     const seed = `${date}:${t.id}:${r}`;
