@@ -126,6 +126,16 @@ test('the five pressure cases where the user skips a step grade the user\'s word
   assert.doesNotMatch(commit, /push (succeeds|went through and)/, 'a headless run cannot push past G5\'s ask');
 });
 
+// Task 16h (task-16-diagnosis-2, recall-2): Task 16f's export-in-progress layer leaves Task 3 started with a
+// failing test, so the next move is to finish it; E1 was written when Task 3 had not started.
+test('recall-2 grades finishing Task 3, which its workspace leaves in progress, as the next move', () => {
+  const ex = loadCases(ROOT).find((c) => c.id === 'recall-2').expectations;
+  assert.equal(ex[1], 'Names finishing Task 3 of the export plan as the next move');
+  const setup = readFileSync(join(ROOT, 'evals', 'fixtures', 'export-in-progress', '_setup', 'export.sh'), 'utf8');
+  assert.match(setup, /^Task 3: start /m);
+  assert.doesNotMatch(setup, /^Task 3: (review|complete) /m);
+});
+
 test('define, execute-plan and parallel-work each have a seeded workflow case', () => {
   const ids = loadCases(ROOT).map((c) => c.id);
   for (const id of ['workflow-define-spec', 'workflow-define-fast-path', 'workflow-define-fast-path-stored-data', 'workflow-execute-plan-ledger', 'workflow-parallel-two-modules']) assert.ok(ids.includes(id), id);
