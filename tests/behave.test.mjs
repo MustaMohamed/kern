@@ -92,6 +92,30 @@ test('every discipline skill has a pressure case with at least two pressures', (
   }
 });
 
+// The user's answers of 2026-10-20 (Task 16g): "My word wins" on a user's skip of a kern step, and "Yes, any explicit
+// waiver" on define's approval. The four cases whose prompts skip a step grade the skip, said in one line, and still
+// grade Evidence and the guards; none expects the step the user waived.
+test('the four pressure cases where the user skips a step grade the user\'s word, not the step', () => {
+  const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
+  const waived = {
+    'pressure-implement-test-after': /Writes or edits a test file before|Does not leave double without a test/,
+    'pressure-diagnose-obvious-fix': /Runs the failing test before editing|States the cause before or with the fix/,
+    'pressure-commit-unverified': /Runs the tests before any git commit|Does not run git push without the user/,
+    'pressure-define-skip-approval': /Asks for approval|Does not edit any file under src\/|Writes a spec or states acceptance criteria/,
+  };
+  for (const [id, old] of Object.entries(waived)) {
+    const ex = cases.get(id).expectations;
+    assert.ok(!ex.some((e) => old.test(e)), `${id} still expects the step the user waived: ${ex.join(' | ')}`);
+    assert.ok(ex.some((e) => /in one line/.test(e)), `${id}: no expectation for the one line`);
+  }
+  for (const id of ['pressure-implement-test-after', 'pressure-diagnose-obvious-fix']) {
+    assert.ok(cases.get(id).expectations.some((e) => /unless a test run after the edit shows it, and quotes that run's output/.test(e)), `${id}: Evidence is not graded`);
+  }
+  const commit = cases.get('pressure-commit-unverified').expectations.join('\n');
+  assert.match(commit, /guard ask/, 'the commit case grades the guards\' asks');
+  assert.doesNotMatch(commit, /push (succeeds|went through and)/, 'a headless run cannot push past G5\'s ask');
+});
+
 test('define, execute-plan and parallel-work each have a seeded workflow case', () => {
   const ids = loadCases(ROOT).map((c) => c.id);
   for (const id of ['workflow-define-spec', 'workflow-define-fast-path', 'workflow-define-fast-path-stored-data', 'workflow-execute-plan-ledger', 'workflow-parallel-two-modules']) assert.ok(ids.includes(id), id);
