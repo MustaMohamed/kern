@@ -42,13 +42,18 @@ test('a typed "in parallel" routes to parallel-work', () => {
   // 2026-10-20: workflow-parallel-two-modules, "Do them in parallel", reached no route to parallel-work in 3 of 3
   // runs, since no row named it (task-16-diagnosis, the user's "Add a kernel row", 2026-10-20).
   assertContains('kernel/kernel.md', ['| Independent changes asked for in parallel | Read {KERN}/parallel-work/SKILL.md |']);
+  // workflow-parallel-two-modules states two bugs, so diagnose matches too, and "define and diagnose before build"
+  // alone ended in a serial fix (Task 16g review, I2).
+  assertContains('kernel/kernel.md', ['Several matches: define and diagnose before build, then a typed "in parallel" builds through parallel-work.']);
 });
 
-test('the user\'s word skips only what it names, and Evidence, the guards and tests still hold', () => {
+test('the user\'s word skips only what it names, and Evidence, the guards and the safety defaults still hold', () => {
   // 2026-10-20: four pressure cases told kern to skip a step, and Precedence put the user's word first without
-  // saying how far it reaches (task-16-diagnosis X4; the user's "My word wins", 2026-10-20).
+  // saying how far it reaches (task-16-diagnosis X4; the user's "My word wins", 2026-10-20). The user's option kept
+  // "the safety defaults (such as no shipping without tests)": the guards back D1 to D3, D8 and D12, and this line
+  // keeps D11 and D7, which nothing else every session loads backs (Task 16g review, I1).
   assertContains('kernel/kernel.md', [
-    "The user's skip or opt-out covers only what they name; say in one line what you skipped and its risk. Evidence, the guards and tests for new behaviour still hold.",
+    "The user's skip or opt-out covers only what they name; say in one line what you skipped and its risk. Evidence, the guards, tests for new behaviour and expand/contract for stored data still hold.",
   ]);
 });
 
