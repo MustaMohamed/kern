@@ -187,9 +187,10 @@ const partResults = (command, output, errored) => {
   });
 };
 
-// bashRuns(events): every Bash call in order, as { command, ok, parts }; ok is true only when its tool result
-// came back and was not an error. parts reads each part of a chained command by its own printed exit code
-// (partResults), so a later part that failed does not hide an earlier one that printed `rc=0`.
+// bashRuns(events): every Bash call in order, as { command, ok, parts, output }; ok is true only when its
+// tool result came back and was not an error. parts reads each part of a chained command by its own printed
+// exit code (partResults), so a later part that failed does not hide an earlier one that printed `rc=0`.
+// output is the result's text ('' when none came back).
 export function bashRuns(events) {
   const errored = new Map(), text = new Map();
   for (const e of events) for (const c of e?.message?.content ?? []) if (c?.type === 'tool_result') { errored.set(c.tool_use_id, c.is_error === true); text.set(c.tool_use_id, resultText(c)); }
@@ -200,7 +201,7 @@ export function bashRuns(events) {
       if (c?.type !== 'tool_use' || c.name !== 'Bash') continue;
       const command = String(c.input?.command || '');
       const ok = errored.has(c.id) && !errored.get(c.id);
-      out.push({ command, ok, parts: errored.has(c.id) ? partResults(command, text.get(c.id) ?? '', errored.get(c.id)) : [] });
+      out.push({ command, ok, parts: errored.has(c.id) ? partResults(command, text.get(c.id) ?? '', errored.get(c.id)) : [], output: text.get(c.id) ?? '' });
     }
   }
   return out;
@@ -252,14 +253,22 @@ const statOverRange = (g, git) => {
   if (words.length === 1) return isRange(words[0]);
   return words.length === 2 && words.every((w) => !isRange(w) && isRevision(w, git));
 };
-// sizeGateRan(events, git): finish-branch step 6 ran: a stat diff over two revisions (statOverRange) that
-// succeeded after a test command that went green. git, the fixture repo's git, settles a word that could
-// be a path or a revision. Self-review's wt-diff is not counted: every finish run runs it in step 5, so
-// it cannot show that step 6 ran.
+// statPrinted(g, output): output holds the line git diff g prints: a numstat row (added, deleted, path,
+// tab-separated; `-` for a binary file) for --numstat, else the `N files changed` summary of --shortstat
+// and --stat.
+const statPrinted = (g, output) => (g.args.includes('--numstat') ? /^(\d+|-)\t(\d+|-)\t\S/m : /\b\d+ files? changed\b/).test(output);
+// sizeGateRan(events, git): finish-branch step 6 ran: a stat diff over two revisions (statOverRange)
+// after a test command that went green. It counts in a call that succeeded, or as a part of a call that
+// errored (another part failed) when the call's output holds that part's stat line (statPrinted): on
+// 2026-10-20 the gate ran in a chained call whose last part exited 2. git, the fixture repo's git, settles
+// a word that could be a path or a revision. Self-review's wt-diff is not counted: every finish run runs
+// it in step 5, so it cannot show that step 6 ran.
 export function sizeGateRan(events, git) {
   const runs = bashRuns(events);
   const green = runs.findIndex((r) => r.ok && TEST_CMD.test(r.command));
-  return green >= 0 && runs.slice(green + 1).some((r) => r.ok && gitCalls([r.command]).some((g) => statOverRange(g, git)));
+  const gate = (command, printed) => gitCalls([command]).some((g) => statOverRange(g, git) && printed(g));
+  return green >= 0 && runs.slice(green + 1).some((r) => (r.ok ? gate(r.command, () => true)
+    : r.parts.some((p) => gate(p.command, (g) => statPrinted(g, r.output)))));
 }
 // reviewRan(events): finish-branch steps 4 and 5 ran: a wt-snap call and a self-review package (wt-diff
 // with --out), both succeeding.

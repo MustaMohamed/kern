@@ -759,6 +759,30 @@ test('E3: the size gate is a stat diff over two revisions or a range, after the 
   assert.equal(sizeGateRan(ran('p', ...OCT16_SPLIT, 'git diff --shortstat c010ab6 1efaabe')), true, 'the same run with the prescribed command');
 });
 
+// Task 16e item 4: finish-split-nine-files on 2026-10-20 (exec-2026-10-20/finish-split-nine-files.events.jsonl:20-21,27-28),
+// cut to what the grader reads: a green proof, then step 6's diff in a chained call whose last part
+// (kern-detect verify.fast, a key it does not know) made the whole call exit 2. Paths shortened to /k.
+const OCT20_PROOF = ['npm test 2>&1; echo "exit $?"', true, '# tests 1\n# pass 1\n# fail 0\nexit 0'];
+const OCT20_GATE = 'MB=$(git merge-base HEAD origin/main); echo $MB; bash /k/scripts/wt-diff "$PWD" $MB --out /tmp/fb-pkg 2>&1; echo "exit $?"; '
+  + 'git diff --shortstat $MB 1efaabe1ce316b075fae25ce28f97c365f107222; git diff $MB 1efaabe1ce316b075fae25ce28f97c365f107222 --stat | tail -15; cat src/sum.js; '
+  + 'for k in verify.fast typecheck lint test.focused review.builtin; do echo "== $k"; bash /k/scripts/kern-get $k || bash /k/scripts/kern-detect $k; done';
+const OCT20_OUT = ['Exit code 2', '30ad7eff15e892b25fed45e53e2216c9487e9e8d', '/tmp/fb-pkg', '1efaabe1ce316b075fae25ce28f97c365f107222', 'src/sum.js', 'src/v1.js', 'exit 0',
+  ' 10 files changed, 10 insertions(+), 1 deletion(-)', ' src/sum.js | 2 +-', ' src/v1.js  | 1 +', ' 10 files changed, 10 insertions(+), 1 deletion(-)',
+  'export const sum = (a, b) => a + b;', '== verify.fast', 'usage: kern-detect base_branch|branch.pattern|commit.convention|test.focused|test.full|typecheck|lint|build|tracker|pr.template'].join('\n');
+
+test('Task 16e: a stat diff in a chained call that errored counts when the output holds its stat line (finish-split-nine-files, 2026-10-20)', () => {
+  assert.equal(sizeGateRan(ran('o', OCT20_PROOF, [OCT20_GATE, false, OCT20_OUT])), true, 'the 2026-10-20 run ran the gate');
+  assert.equal(sizeGateRan(ran('o', OCT20_PROOF, [OCT20_GATE, false, OCT20_OUT.replace(/ 10 files changed.*\n/g, '')])), false, 'no stat line, no gate');
+  assert.equal(sizeGateRan(ran('o', [OCT20_GATE, false, OCT20_OUT], OCT20_PROOF)), false, 'before the green test');
+  const numstat = 'git diff --numstat $MB 1efaabe; false';
+  assert.equal(sizeGateRan(ran('n', OCT20_PROOF, [numstat, false, '1\t1\tsrc/sum.js\n1\t0\tsrc/v1.js\nExit code 1'])), true, 'a numstat row');
+  assert.equal(sizeGateRan(ran('n', OCT20_PROOF, [numstat, false, ' 2 files changed\nExit code 1'])), false, 'a --numstat part needs a numstat row');
+  assert.equal(sizeGateRan(ran('w', OCT20_PROOF, ['git diff --shortstat; false', false, ' 2 files changed, 2 insertions(+)'])), false, 'a working-tree diff is still not the gate');
+  assert.equal(sizeGateRan(ran('d', OCT20_PROOF, ['git diff --shortstat $MB 1efaabe', false, 'kern G1: denied'])), false, 'a denied call ran nothing');
+  const grade = (events) => GRADERS['finish-split-nine-files']({ events: [...events, say(OFFER)], ghLog: [], git: (...a) => (a[0] === 'rev-list' ? '0' : ''), branch: 'feat/many' });
+  assert.deepEqual(grade(ran('o', OCT20_PROOF, [OCT20_GATE, false, OCT20_OUT])).reasons, [], 'the case passes on that run');
+});
+
 // E4: kern's own state decides whether an autopilot case tested autopilot. No model call: the run is built here.
 const init = (sid) => ({ type: 'system', subtype: 'init', session_id: sid });
 const DONE = { type: 'result', subtype: 'success', is_error: false, result: 'done' };
