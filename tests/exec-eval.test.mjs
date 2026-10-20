@@ -167,11 +167,12 @@ test('a gh call the transcript shows ran but the stub never logged makes the run
 });
 
 // A stand-in claude on PATH: never the real one, so these tests spend nothing.
-// By default it drains stdin first: a child that exits before reading it races spawnSync's stdin write
-// (EPIPE on Linux). drain: false makes that race the test.
+// By default it reads the one prompt first: a child that exits before reading it races the driver's stdin
+// write (EPIPE). drain: false makes that race the test. It reads one line, not to the end: stdin closes
+// only after the last prompt's result, so a child that waits for the end before answering never answers.
 function fakeClaude(body, { drain = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'fc-'));
-  writeFileSync(join(dir, 'claude'), `#!/bin/sh\n${drain ? 'cat > /dev/null\n' : ''}${body}\n`);
+  writeFileSync(join(dir, 'claude'), `#!/bin/sh\n${drain ? 'read -r _\n' : ''}${body}\n`);
   chmodSync(join(dir, 'claude'), 0o755);
   return { PATH: `${dir}:/usr/bin:/bin` };
 }
@@ -186,10 +187,21 @@ test('runClaude: a missing binary, exit 126 or 127, a timeout and a signal all t
   assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], env: {} }), /needs a model/);
 });
 
+test('runClaude: a timeout stops claude itself, not only the driver that runs it', () => {
+  const cwd = work();
+  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, env: fakeClaude('trap \'echo term > stopped.txt; exit 143\' TERM; sleep 30 & wait $!') }), /timed out/);
+  const wait = new Int32Array(new SharedArrayBuffer(4));
+  for (let i = 0; i < 40 && !existsSync(join(cwd, 'stopped.txt')); i++) Atomics.wait(wait, 0, 0, 50);
+  assert.equal(readFileSync(join(cwd, 'stopped.txt'), 'utf8'), 'term\n', 'claude got SIGTERM');
+});
+
 test('runClaude: a non-zero exit is returned for the caller to fail on, with stdin as stream-json turns and the budget cap', () => {
-  const r = attempt(fakeClaude('cat > "$0.in"; echo "$@" > "$0.argv"; echo \'{"type":"result","result":"x"}\'; exit 3'))();
+  const cwd = work();
+  const r = runClaude({ cwd, prompts: ['hi'], model: 'm', env: fakeClaude('IFS= read -r line; printf "%s\\n" "$line" > in.txt; echo "$@" > argv.txt; echo \'{"type":"result","result":"x"}\'; exit 3', { drain: false }) });
   assert.equal(r.status, 3);
   assert.deepEqual(r.events, [{ type: 'result', result: 'x' }]);
+  assert.deepEqual(JSON.parse(readFileSync(join(cwd, 'in.txt'), 'utf8')), { type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'hi' }] } });
+  assert.equal(readFileSync(join(cwd, 'argv.txt'), 'utf8').trim(), r.argv.join(' '), 'claude gets runClaude argv, not the driver path');
   assert.deepEqual(r.argv.slice(r.argv.indexOf('--max-turns'), r.argv.indexOf('--max-turns') + 4), ['--max-turns', '12', '--max-budget-usd', '3']);
   assert.ok(attempt(fakeClaude('exit 0'), { maxTurns: 30, maxBudgetUsd: 5 })().argv.join(' ').includes('--max-turns 30 --max-budget-usd 5'));
 });
@@ -202,6 +214,64 @@ test('runClaude: a usage-limit reply from Claude Code stops the runner; it is ne
   const real = synth("You've hit your weekly limit, the user said", 'claude-sonnet-5-5');
   const ok = attempt(fakeClaude(`echo '${real.replace(/'/g, "'\\''")}'; echo '{"type":"result","subtype":"success","result":"x"}'`))();
   assert.equal(ok.events.length, 2, 'a model that writes the words is not a limit');
+});
+
+// A stand-in claude that runs one turn per stdin line, as stream-json input does. It holds each turn
+// open for 0.3 s, and logs `early <k+1>` when prompt k+1 has reached it before it printed result k. It
+// logs `eof` when stdin closes. `stop` is JavaScript run when a turn opens, to make the child die or
+// exit early; n is the turn number.
+function turnClaude(stop = '') {
+  const dir = mkdtempSync(join(tmpdir(), 'tc-'));
+  writeFileSync(join(dir, 'claude'), `#!${process.execPath}
+const fs = require('fs');
+const log = (s) => fs.appendFileSync(__filename + '.log', s + '\\n');
+const out = (o) => fs.writeSync(1, JSON.stringify(o) + '\\n');
+let buf = '', n = 0, open = false;
+const queue = [];
+const next = () => {
+  if (open || !queue.length) return;
+  open = true; n += 1; queue.shift(); log('read ' + n);
+  ${stop}
+  setTimeout(() => {
+    if (queue.length) log('early ' + (n + 1));
+    out({ type: 'assistant', message: { content: [{ type: 'text', text: 'turn ' + n }] } });
+    out({ type: 'result', subtype: 'success', is_error: false, result: 'turn ' + n });
+    open = false; next();
+  }, 300);
+};
+process.stdin.on('data', (d) => {
+  buf += d;
+  for (let i; (i = buf.indexOf('\\n')) >= 0; buf = buf.slice(i + 1)) queue.push(buf.slice(0, i));
+  next();
+});
+process.stdin.on('end', () => log('eof'));
+`);
+  chmodSync(join(dir, 'claude'), 0o755);
+  return { env: { PATH: `${dir}:/usr/bin:/bin` }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
+}
+
+test('runClaude sends prompt k+1 only after result k, in one ordered stream, then closes stdin', () => {
+  const stub = turnClaude();
+  const r = runClaude({ cwd: work(), prompts: ['one', 'two', 'three'], model: 'm', env: stub.env, timeoutMs: 20000 });
+  assert.deepEqual(stub.log(), ['read 1', 'read 2', 'read 3', 'eof'], 'a prompt was written before the result of the turn before it');
+  assert.deepEqual(r.events.map((e) => `${e.type} ${e.message?.content?.[0]?.text ?? e.result}`),
+    ['assistant turn 1', 'result turn 1', 'assistant turn 2', 'result turn 2', 'assistant turn 3', 'result turn 3']);
+  assert.equal(r.status, 0);
+  assert.equal(runProblem(r, 3), '');
+});
+
+test('a child that stops before its last result ends the run with what it printed; the count check makes it invalid', () => {
+  const died = turnClaude("if (n === 2) process.kill(process.pid, 'SIGKILL');");
+  assert.throws(() => runClaude({ cwd: work(), prompts: ['one', 'two'], model: 'm', env: died.env, timeoutMs: 20000 }), /killed by SIGKILL/);
+  const quit = turnClaude('if (n === 2) process.exit(0);');
+  const r = runClaude({ cwd: work(), prompts: ['one', 'two'], model: 'm', env: quit.env, timeoutMs: 20000 });
+  assert.equal(r.status, 0);
+  assert.deepEqual(r.events.filter((e) => e.type === 'result').map((e) => e.result), ['turn 1']);
+  assert.match(runProblem(r, 2), /2 prompts but 1 result event/);
+  const mute = turnClaude('process.exit(0);');
+  const none = runClaude({ cwd: work(), prompts: ['one', 'two'], model: 'm', env: mute.env, timeoutMs: 20000 });
+  assert.deepEqual(none.events, []);
+  assert.match(runProblem(none, 2), /printed no events/);
 });
 
 test('the gh stub logs every call, answers pr list from the case, and fails on a call it does not know', () => {
@@ -231,7 +301,7 @@ test('a child that exits without reading stdin is its own result: invalid, not a
   for (const [code, want] of [[0, /printed no events/], [3, /exited 3/]]) {
     const r = runClaude({ cwd: work(), prompts: [big], model: 'm', env: fakeClaude(`exit ${code}`, { drain: false }) });
     assert.equal(r.status, code);
-    assert.match(runProblem(r), want);
+    assert.match(runProblem(r, 1), want);
   }
   assert.throws(() => runClaude({ cwd: work(), prompts: [big], model: 'm', env: fakeClaude('exit 127', { drain: false }) }), (e) => e.fatal && /exited 127/.test(e.message));
 });
@@ -277,13 +347,19 @@ test('runClaude gives the child that allowlist, not the caller environment', () 
 
 test('runProblem: only a clean exit with a success result may be graded', () => {
   const run = (body) => attempt(fakeClaude(body))();
-  assert.match(runProblem(run('exit 0')), /printed no events/);
-  assert.match(runProblem(run('echo "not json"; exit 0')), /not JSON/);
-  assert.match(runProblem(run('echo \'{"type":"assistant","message":{"content":[]}}\'; exit 0')), /no result event/);
-  assert.match(runProblem(run('echo \'{"type":"result","subtype":"error_max_turns","is_error":false}\'; exit 0')), /error_max_turns/);
-  assert.match(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":true,"result":"x"}\'; exit 0')), /is_error/);
-  assert.match(runProblem(run('echo \'{"type":"result","subtype":"success"}\'; exit 2')), /exited 2/);
-  assert.equal(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":false,"result":"x"}\'; exit 0')), '');
+  assert.match(runProblem(run('exit 0'), 1), /printed no events/);
+  assert.match(runProblem(run('echo "not json"; exit 0'), 1), /not JSON/);
+  assert.match(runProblem(run('echo \'{"type":"assistant","message":{"content":[]}}\'; exit 0'), 1), /no result event/);
+  assert.match(runProblem(run('echo \'{"type":"result","subtype":"error_max_turns","is_error":false}\'; exit 0'), 1), /error_max_turns/);
+  assert.match(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":true,"result":"x"}\'; exit 0'), 1), /is_error/);
+  assert.match(runProblem(run('echo \'{"type":"result","subtype":"success"}\'; exit 2'), 1), /exited 2/);
+  assert.equal(runProblem(run('echo \'{"type":"result","subtype":"success","is_error":false,"result":"x"}\'; exit 0'), 1), '');
+  const two = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success' }, { type: 'result', subtype: 'success' }] };
+  assert.match(runProblem(two, 1), /^1 prompt but 2 result events: each prompt must run as its own turn$/, 'more turns than prompts is not gradable either');
+  assert.equal(runProblem(two, 2), '');
+  assert.match(runProblem({ ...two, events: [two.events[0]] }, 2), /^2 prompts but 1 result event:/);
+  assert.match(runProblem({ ...two, status: 1, stderr: 'boom\n' }, 3), /claude exited 1: boom/, 'an exit says more than the count');
+  assert.throws(() => runProblem(two), /needs the number of prompts sent/, 'a runner cannot skip the count');
 });
 
 const result = (id, pass, invalid = false) => ({ id, pass, invalid, reasons: pass ? [] : ['why'] });
@@ -686,6 +762,8 @@ test('E3: the size gate is a stat diff over two revisions or a range, after the 
 // E4: kern's own state decides whether an autopilot case tested autopilot. No model call: the run is built here.
 const init = (sid) => ({ type: 'system', subtype: 'init', session_id: sid });
 const DONE = { type: 'result', subtype: 'success', is_error: false, result: 'done' };
+// The result event of the local `/kern:autopilot on` command, an autopilot case's first turn.
+const ON = { type: 'result', subtype: 'success', is_error: false, result: '' };
 const SID = 'a7349ad5-0f2e-4c3b-9d1a-000000000001';
 // configWith(sid, text): a temp config dir whose kern-inline state file for sid holds text (none when null).
 const configWith = (sid, text) => {
@@ -711,7 +789,7 @@ test('E4: the session id comes from the stream\'s system/init event; the state f
 
 test('E4: an autopilot case whose kern state does not read autopilot: on is INVALID, not FAIL, whatever the grader says', () => {
   const c = { id: 'commit-work-file', autopilot: true, branch: 'feat/sum' };
-  const run = { status: 0, badLines: 0, stderr: '', events: [init(SID), DONE] };
+  const run = { status: 0, badLines: 0, stderr: '', events: [init(SID), ON, DONE] };
   const graded = (verdict) => ({ 'commit-work-file': () => verdict });
   const FAILED = { pass: false, reasons: ['src/sum.js is not committed'] };
   const grade = (cfg, { cc = c, verdict = FAILED, events = run.events } = {}) => gradeCase({ c: cc, run: { ...run, events }, ghLog: [], git: () => '', configDir: cfg, graders: graded(verdict) });
@@ -725,9 +803,11 @@ test('E4: an autopilot case whose kern state does not read autopilot: on is INVA
   const missing = grade(configWith(SID, null));
   assert.equal(missing.invalid, true);
   assert.match(missing.reasons[0], /^autopilot was not on in kern's hooks: cannot read .*\.state \(ENOENT\)$/);
-  assert.match(grade(configWith(SID, OCT16_OFF), { events: [DONE] }).reasons[0], /no single session id/);
-  assert.match(grade(configWith(SID, OCT16_OFF), { events: [init('../../x'), DONE] }).reasons[0], /not a session id kern uses/);
-  assert.deepEqual(grade(configWith(SID, OCT16_OFF), { cc: { ...c, autopilot: false } }), FAILED, 'a case without autopilot never reads the state');
+  assert.match(grade(configWith(SID, OCT16_OFF), { events: [ON, DONE] }).reasons[0], /no single session id/);
+  assert.match(grade(configWith(SID, OCT16_OFF), { events: [init('../../x'), ON, DONE] }).reasons[0], /not a session id kern uses/);
+  assert.deepEqual(grade(configWith(SID, OCT16_OFF), { cc: { ...c, autopilot: false }, events: [init(SID), DONE] }), FAILED, 'a case without autopilot never reads the state');
+  const one = grade(configWith(SID, 'autopilot: on\n'), { events: [init(SID), DONE] });
+  assert.deepEqual([one.invalid, one.reasons], [true, ['2 prompts but 1 result event: each prompt must run as its own turn']], 'two prompts run as one turn are not graded');
   assert.match(gradeCase({ c, run: { ...run, status: 1, stderr: 'boom' }, ghLog: [], git: () => '', configDir: '/nonexistent', graders: graded(FAILED) }).reasons[0], /claude exited 1/, 'an invalid run stays invalid for its own reason');
   assert.equal(autopilotProblem([init(SID), DONE], configWith(SID, 'autopilot: on\n')), '');
 });
@@ -774,7 +854,7 @@ test('fix round 1 (I1): with the fixture repo, a literal word counts as a revisi
 
 test('fix round 1 (M2): an INVALID autopilot case still runs its grader and keeps the grader\'s reasons after its own', () => {
   const c = { id: 'commit-work-file', autopilot: true, branch: 'feat/sum' };
-  const run = { status: 0, badLines: 0, stderr: '', events: [init(SID), DONE] };
+  const run = { status: 0, badLines: 0, stderr: '', events: [init(SID), ON, DONE] };
   const grade = (grader) => gradeCase({ c, run, ghLog: [], git: () => '', configDir: configWith(SID, OCT16_OFF), graders: { 'commit-work-file': grader } });
   const failed = grade(() => ({ pass: false, reasons: ['src/sum.js is not committed', 'expected 1 commit on feat/sum, found 0'] }));
   assert.equal(failed.invalid, true);

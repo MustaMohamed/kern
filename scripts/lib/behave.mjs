@@ -94,7 +94,7 @@ export function pluginCopy(root) {
   const skip = new Set(['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers']);
   // The eval runners go too: their names tell a model it is being evaluated.
   const runners = new Set(['h2h.mjs', 'behave.mjs', 'kernel-adherence.mjs', 'standing-cost.mjs', 'pilot.mjs', 'exec-eval.mjs'].map((f) => join('scripts', f))
-    .concat(['h2h.mjs', 'behave.mjs', 'adherence.mjs', 'pilot.mjs', 'exec-grade.mjs', 'exec-run.mjs', 'claude-run.mjs'].map((f) => join('scripts', 'lib', f))));
+    .concat(['h2h.mjs', 'behave.mjs', 'adherence.mjs', 'pilot.mjs', 'exec-grade.mjs', 'exec-run.mjs', 'claude-run.mjs', 'claude-drive.mjs'].map((f) => join('scripts', 'lib', f))));
   cpSync(root, dir, { recursive: true, filter: (src) => src === root || (!skip.has(relative(root, src).split(sep)[0]) && !runners.has(relative(root, src))) });
   return dir;
 }
@@ -127,16 +127,18 @@ export function parseVerdict(text, n) {
 }
 
 // tryRun(opts, run): one headless run and why it may not be graded ('' when it may). A run cut off by its
-// turn or budget cap, a non-zero exit, or a timeout is an invalid run (M2a's runProblem), never a graded
-// one; a fatal error (no claude at all) still stops the runner. run is runClaude, or a stub in tests.
+// turn or budget cap, a non-zero exit, a timeout, or a result count that differs from opts.prompts.length
+// is an invalid run (M2a's runProblem), never a graded one; a fatal error (no claude at all) still stops
+// the runner. run is runClaude, or a stub in tests.
 export function tryRun(opts, run = runClaude) {
+  let r;
   try {
-    const r = run(opts);
-    return { run: r, problem: runProblem(r) };
+    r = run(opts);
   } catch (e) {
     if (e.fatal) throw e;
     return { run: null, problem: e.message };
   }
+  return { run: r, problem: runProblem(r, opts.prompts?.length) };
 }
 
 // caseResult(runs): a case passes when at least two thirds of its valid runs pass every expectation, and

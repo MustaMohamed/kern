@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ClaudeRunError, claudeVersion, finalText, runClaude, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { GRADERS } from './lib/exec-grade.mjs';
-import { UsageError, caseEnv, claudeConfigDir, dateStamp, gradeCase, parseArgs, runEval, snapshotBody, userSettingsProblem, writeEvents, writeReply } from './lib/exec-run.mjs';
+import { UsageError, caseEnv, casePrompts, claudeConfigDir, dateStamp, gradeCase, parseArgs, runEval, snapshotBody, userSettingsProblem, writeEvents, writeReply } from './lib/exec-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const MODEL = process.env.KERN_EVAL_MODEL || 'claude-sonnet-5-5';
@@ -46,7 +46,7 @@ const DATE = dateStamp();
 const REPLIES = join(ROOT, 'evals', 'results', `exec-${DATE}`);
 
 function runCase(c, save) {
-  const prompts = [...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn];
+  const prompts = casePrompts(c);
   const dir = workspace(join(ROOT, 'evals', 'exec', 'fixtures', 'app'), { name: 'invoice-app', origin: true, branch: c.branch, setup: c.setup || [] });
   try {
     if (c.settings) { mkdirSync(join(dir, '.claude'), { recursive: true }); writeFileSync(join(dir, '.claude', 'kern.local.yml'), `${c.settings}\n`); }
@@ -88,5 +88,5 @@ function writeSnapshot(results, claude) {
 process.exit(runEval({
   cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion: claudeVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason),
   saveEvents: (id, events) => writeEvents(REPLIES, id, events), log: console.log,
-  describe: (c) => `${c.id}: ${[...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn].map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
+  describe: (c) => `${c.id}: ${casePrompts(c).map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
 }));

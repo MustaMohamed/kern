@@ -68,10 +68,20 @@ test('a verdict with blank evidence is an invalid run, said apart from bad JSON 
 test('a run cut off, failed or not run is invalid; only a fatal error stops the runner', () => {
   const ok = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success', result: 'done' }] };
   const capped = { ...ok, events: [{ type: 'result', subtype: 'error_max_turns' }] };
-  assert.deepEqual(tryRun({}, () => ok), { run: ok, problem: '' });
-  assert.match(tryRun({}, () => capped).problem, /error_max_turns/);
-  assert.match(tryRun({}, () => { throw new ClaudeRunError('claude timed out after 10 ms'); }).problem, /timed out/);
-  assert.throws(() => tryRun({}, () => { throw new ClaudeRunError('claude is not on PATH', true); }), /not on PATH/);
+  const one = { prompts: ['fix it'] };
+  assert.deepEqual(tryRun(one, () => ok), { run: ok, problem: '' });
+  assert.match(tryRun(one, () => capped).problem, /error_max_turns/);
+  assert.match(tryRun(one, () => { throw new ClaudeRunError('claude timed out after 10 ms'); }).problem, /timed out/);
+  assert.throws(() => tryRun(one, () => { throw new ClaudeRunError('claude is not on PATH', true); }), /not on PATH/);
+});
+
+test('a run whose result count differs from its prompt count is invalid, with the reason (Task 16e)', () => {
+  const ok = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success', result: 'done' }] };
+  // Two prompts run as one turn, as on Claude Code 2.1.304 before runClaude waited for each result.
+  assert.deepEqual(tryRun({ prompts: ['first task', 'second task'] }, () => ok), { run: ok, problem: '2 prompts but 1 result event: each prompt must run as its own turn' });
+  const twice = { ...ok, events: [...ok.events, ...ok.events] };
+  assert.equal(tryRun({ prompts: ['first task', 'second task'] }, () => twice).problem, '');
+  assert.throws(() => tryRun({}, () => ok), /needs the number of prompts sent/, 'a stub run still states its prompts');
 });
 
 test('a case passes on two of three runs; two invalid runs fail it', () => {
@@ -142,7 +152,7 @@ test('the plugin copy keeps the plugin and leaves out answer keys', () => {
 test('the plugin copy leaves out the eval runners and keeps the plugin scripts', () => {
   const d = pluginCopy(ROOT);
   try {
-    for (const p of ['scripts/h2h.mjs', 'scripts/behave.mjs', 'scripts/lib/behave.mjs', 'scripts/lib/claude-run.mjs', 'scripts/kernel-adherence.mjs', 'scripts/lib/adherence.mjs', '.superpowers']) assert.ok(!existsSync(join(d, p)), p);
+    for (const p of ['scripts/h2h.mjs', 'scripts/behave.mjs', 'scripts/lib/behave.mjs', 'scripts/lib/claude-run.mjs', 'scripts/lib/claude-drive.mjs', 'scripts/kernel-adherence.mjs', 'scripts/lib/adherence.mjs', '.superpowers']) assert.ok(!existsSync(join(d, p)), p);
     for (const p of ['scripts/plan-check', 'scripts/kern-get']) assert.ok(existsSync(join(d, p)), p);
   } finally { rmSync(dirname(d), { recursive: true, force: true }); }
 });

@@ -108,6 +108,9 @@ test('the todo list is reported, not graded: no list passes with todo false, a m
 test('the runner reports the todo list per run, in the snapshot detail and for a transcript', () => {
   const src = readFileSync(join(ROOT, 'scripts', 'kernel-adherence.mjs'), 'utf8');
   assert.match(src, /runs\.push\(\{ pass: g\.pass, hops: g\.hops, before: g\.before, todo: g\.todo, todoSteps: g\.todoSteps, notes: g\.notes,/);
+  // A run that did not happen, a result count off its prompt count among them, is marked invalid, not graded.
+  assert.match(src, /runFailure\(run, c\.prompts\.length\)/);
+  assert.match(src, /exit: run \? run\.status : null, invalid: !!failure \}\);/);
   const dir = mkdtempSync(join(tmpdir(), 'k-'));
   try {
     const file = join(dir, 'run.jsonl');
@@ -195,12 +198,24 @@ test('a positive case with a routeFile reads that file, not skills/<route>/SKILL
 
 test('a run that errored is a failed run, a run capped by --max-turns is still graded', () => {
   const ok = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success' }] };
-  assert.equal(runFailure(ok), '');
-  assert.equal(runFailure({ ...ok, events: [{ type: 'result', subtype: 'error_max_turns' }] }), '');
-  assert.equal(runFailure({ ...ok, status: 1, events: [{ type: 'result', subtype: 'error_max_turns' }] }), '');
-  assert.match(runFailure({ ...ok, status: 1, stderr: 'API error\n', events: [] }), /claude exited 1: API error/);
-  assert.match(runFailure({ ...ok, events: [{ type: 'result', subtype: 'error_during_execution', is_error: true }] }), /error_during_execution/);
-  assert.match(runFailure({ ...ok, events: [] }), /no events/);
+  assert.equal(runFailure(ok, 1), '');
+  assert.equal(runFailure({ ...ok, events: [{ type: 'result', subtype: 'error_max_turns' }] }, 1), '');
+  assert.equal(runFailure({ ...ok, status: 1, events: [{ type: 'result', subtype: 'error_max_turns' }] }, 1), '');
+  assert.match(runFailure({ ...ok, status: 1, stderr: 'API error\n', events: [] }, 1), /claude exited 1: API error/);
+  assert.match(runFailure({ ...ok, events: [{ type: 'result', subtype: 'error_during_execution', is_error: true }] }, 1), /error_during_execution/);
+  assert.match(runFailure({ ...ok, events: [] }, 1), /no events/);
+});
+
+test('a run whose result count differs from its prompt count fails with that reason, capped or not (Task 16e)', () => {
+  const ok = { status: 0, badLines: 0, stderr: '', events: [] };
+  const res = (subtype) => ({ type: 'result', subtype });
+  // multi-diagnose on 2026-10-20: two prompts, one result event, so the second task never ran as a turn.
+  const why = '2 prompts but 1 result event: each prompt must run as its own turn';
+  assert.equal(runFailure({ ...ok, events: [res('success')] }, 2), why);
+  assert.equal(runFailure({ ...ok, events: [res('error_max_turns')] }, 2), why, 'a cap does not excuse a missing turn');
+  assert.equal(runFailure({ ...ok, status: 1, events: [res('error_max_turns')] }, 2), why);
+  assert.match(runFailure({ ...ok, events: [res('success'), res('success')] }, 1), /^1 prompt but 2 result events/);
+  assert.throws(() => runFailure({ ...ok, events: [res('success')] }), /needs the number of prompts sent/);
 });
 
 test('a multi-turn case needs the route read in the second task, not twice in the first', () => {
@@ -226,9 +241,9 @@ test('the runner exits 2 on a bad --case, --runs or --transcript usage, before a
 test('a two-prompt run is graded when its results are caps and successes, and fails on any other result', () => {
   const ok = { status: 0, badLines: 0, stderr: '', events: [] };
   const res = (subtype, extra = {}) => ({ type: 'result', subtype, ...extra });
-  assert.equal(runFailure({ ...ok, events: [res('error_max_turns'), res('success')] }), '');
-  assert.match(runFailure({ ...ok, events: [res('error_during_execution', { is_error: true }), res('error_max_turns')] }), /error_during_execution/);
-  assert.match(runFailure({ ...ok, events: [res('error_max_turns'), res('success', { is_error: true })] }), /is_error/);
+  assert.equal(runFailure({ ...ok, events: [res('error_max_turns'), res('success')] }, 2), '');
+  assert.match(runFailure({ ...ok, events: [res('error_during_execution', { is_error: true }), res('error_max_turns')] }, 2), /error_during_execution/);
+  assert.match(runFailure({ ...ok, events: [res('error_max_turns'), res('success', { is_error: true })] }, 2), /is_error/);
 });
 
 test('removeTemp removes a directory under the OS temp dir and refuses anything else', () => {

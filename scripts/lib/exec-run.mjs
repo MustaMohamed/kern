@@ -83,15 +83,20 @@ export function autopilotProblem(events, configDir, read = (f) => readFileSync(f
   return v === 'on' ? '' : `${why}: ${f} says autopilot: ${v ?? '(unset)'}`;
 }
 
+// casePrompts(c): the prompts a case sends, each its own turn: `/kern:autopilot on` first when the case
+// turns autopilot on (a local command, which prints its own result event), then the case's turn.
+export const casePrompts = (c) => [...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn];
+
 // gradeCase({ c, run, ghLog, git, configDir, graders, read }): a case's verdict. INVALID when the run
-// may not be graded (runProblem), when the gh stub missed a call, or, for a case that turns autopilot on,
-// when kern's state for the run does not read autopilot: on (the run did not test autopilot, whatever
-// it did); else the case's grader decides, and a grader that throws is INVALID too. An autopilot
-// INVALID still runs the grader and keeps its verdict after its own reason, each as `grader: <reason>`
-// (`grader: pass` when it passed), so the run says what it did as well as why it does not count.
+// may not be graded (runProblem, which also wants one result event per prompt of casePrompts), when the
+// gh stub missed a call, or, for a case that turns autopilot on, when kern's state for the run does not
+// read autopilot: on (the run did not test autopilot, whatever it did); else the case's grader decides,
+// and a grader that throws is INVALID too. An autopilot INVALID still runs the grader and keeps its
+// verdict after its own reason, each as `grader: <reason>` (`grader: pass` when it passed), so the run
+// says what it did as well as why it does not count.
 export function gradeCase({ c, run, ghLog, git, configDir, graders = GRADERS, read }) {
   const invalid = (why) => ({ pass: false, invalid: true, reasons: [why] });
-  const problem = runProblem(run);
+  const problem = runProblem(run, casePrompts(c).length);
   if (problem) return invalid(problem);
   const missed = stubMissed(run.events, ghLog);
   if (missed.length) return invalid(`the stub never logged \`gh ${missed[0]}\`: the Bash tool did not see evals/exec/bin first on PATH`);

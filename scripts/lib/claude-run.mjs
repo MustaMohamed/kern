@@ -4,6 +4,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const ISOLATION = ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'];
 // A headless run cannot answer a permission prompt, and the isolation flags drop the user's allow rules, so
@@ -67,12 +68,16 @@ export function workspace(fixtureDir, { name = 'app', origin = false, branch = '
   return dir;
 }
 
-// runClaude: one headless run; each prompt is one user turn, sent as stream-json on stdin. Throws
-// ClaudeRunError when cwd is not under the OS temp dir (the run has unrestricted Bash), claude is
-// missing, not executable (126, 127), killed by the timeout or a signal. The child sees childEnv(), not
-// the caller's whole environment. A non-zero exit is returned in status; use runProblem() to decide
-// whether the run may be graded. Capped by turns (--max-turns, which `claude --help` does not list but
-// the CLI reference documents) and by dollars (--max-budget-usd).
+// The driver that runs claude for runClaude, one turn per prompt (claude-drive.mjs).
+const DRIVER = fileURLToPath(new URL('./claude-drive.mjs', import.meta.url));
+
+// runClaude: one headless run; each prompt is one user turn, sent as stream-json on stdin, prompt k+1 only
+// after the run's k-th result event (claude-drive.mjs, run synchronously here). Throws ClaudeRunError when
+// cwd is not under the OS temp dir (the run has unrestricted Bash), claude is missing, not executable
+// (126, 127), killed by the timeout or a signal. The child sees childEnv(), not the caller's whole
+// environment. A non-zero exit is returned in status; use runProblem() to decide whether the run may be
+// graded. Capped by turns (--max-turns, which `claude --help` does not list but the CLI reference
+// documents) and by dollars (--max-budget-usd).
 export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000 }) {
   if (!model) throw new ClaudeRunError('runClaude needs a model', true);
   const root = realpathSync(tmpdir());
@@ -81,16 +86,19 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   if (!real.startsWith(root + sep)) throw new ClaudeRunError(`refusing to run in ${real}: not under ${root}`, true);
   const argv = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
     '--model', model, '--max-turns', String(maxTurns), '--max-budget-usd', String(maxBudgetUsd), ...PERMISSIONS, ...ISOLATION, ...pluginDirs.flatMap((d) => ['--plugin-dir', d])];
-  const input = prompts.map((text) => JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } })).join('\n') + '\n';
-  const run = spawnSync('claude', argv, { cwd, input, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: childEnv(process.env, env) });
-  if (run.error?.code === 'ENOENT') throw new ClaudeRunError('claude is not on PATH', true);
+  // fd 3 carries the driver's one-line report of how claude ended.
+  const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify(prompts), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: childEnv(process.env, env) });
   if (run.error?.code === 'ETIMEDOUT') throw new ClaudeRunError(`claude timed out after ${timeoutMs} ms`);
-  // EPIPE: the child exited before it read all of stdin. That is the child's own result (its status or
-  // signal, handled below), not a failure to run it; a missing status as well means it never ran.
-  const earlyExit = run.error?.code === 'EPIPE' && (run.status !== null || run.signal);
-  if (run.error && !earlyExit) throw new ClaudeRunError(`claude could not run: ${run.error.message}`, true);
-  if (run.status === 126 || run.status === 127) throw new ClaudeRunError(`claude exited ${run.status}: ${(run.stderr || '').trim()}`, true);
-  if (run.status === null) throw new ClaudeRunError(`claude was killed by ${run.signal}`);
+  let end = null;
+  try { end = JSON.parse(run.output?.[3] || 'null'); } catch { end = null; }
+  if (end?.error?.code === 'ENOENT') throw new ClaudeRunError('claude is not on PATH', true);
+  if (end?.error) throw new ClaudeRunError(`claude could not run: ${end.error.message}`, true);
+  // No report: the driver itself failed, so every later run would too. An EPIPE from claude exiting
+  // before it read a prompt is not this: the driver takes it and reports claude's own status or signal.
+  if (!end) throw new ClaudeRunError(`the claude driver failed: ${run.error?.message || `exit ${run.status ?? run.signal}`}: ${(run.stderr || '').trim().split('\n').pop() || 'no stderr'}`, true);
+  if (end.status === 126 || end.status === 127) throw new ClaudeRunError(`claude exited ${end.status}: ${(run.stderr || '').trim()}`, true);
+  if (end.status === null) throw new ClaudeRunError(`claude was killed by ${end.signal}`);
   const events = [];
   let badLines = 0;
   for (const l of (run.stdout || '').split('\n').filter(Boolean)) {
@@ -101,18 +109,29 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   const limit = events.find((e) => e?.type === 'assistant' && e.message?.model === '<synthetic>' &&
     /\blimit\b/i.test((e.message.content ?? []).map((c) => c?.text ?? '').join(' ')));
   if (limit) throw new ClaudeRunError(`claude stopped at a usage limit: ${limit.message.content.map((c) => c?.text ?? '').join(' ').trim()}`, true);
-  return { argv, events, badLines, status: run.status, stderr: run.stderr || '' };
+  return { argv, events, badLines, status: end.status, stderr: run.stderr || '' };
 }
 
-// runProblem(run): why a run may not be graded, or '' when it may: a non-zero exit, a line that is not
-// JSON, no events, or no result event, or a result that is not a success (a turn or budget stop, an
-// error). A run that ended early reads as an invalid run, never as a failed or passed case.
-export function runProblem(run) {
+// countProblem(run, prompts): why the run's turns do not match the prompts sent, or '' when they do: each
+// prompt is one turn, and stream-json prints one result event per turn.
+export function countProblem(run, prompts) {
+  if (!Number.isInteger(prompts) || prompts < 1) throw new TypeError(`countProblem needs the number of prompts sent, got ${prompts}`);
+  const n = run.events.filter((e) => e?.type === 'result').length;
+  return n === prompts ? '' : `${prompts} prompt${prompts === 1 ? '' : 's'} but ${n} result event${n === 1 ? '' : 's'}: each prompt must run as its own turn`;
+}
+
+// runProblem(run, prompts): why a run may not be graded, or '' when it may: a non-zero exit, a line that
+// is not JSON, no events, no result event, a result count that differs from the number of prompts sent
+// (countProblem), or a result that is not a success (a turn or budget stop, an error). A run that ended
+// early reads as an invalid run, never as a failed or passed case.
+export function runProblem(run, prompts) {
+  const count = countProblem(run, prompts);
   if (run.status !== 0) return `claude exited ${run.status}: ${run.stderr.trim().split('\n').pop() || 'no stderr'}`;
   if (run.badLines > 0) return `${run.badLines} line(s) of stdout were not JSON`;
   if (run.events.length === 0) return 'claude printed no events';
   const results = run.events.filter((e) => e?.type === 'result');
   if (results.length === 0) return 'no result event: the run was cut off';
+  if (count) return count;
   const bad = results.find((e) => e.subtype !== 'success' || e.is_error === true);
   return bad ? `the run ended with ${bad.subtype ?? 'a result with no subtype'}${bad.is_error === true ? ' (is_error)' : ''}` : '';
 }

@@ -9,24 +9,27 @@
 import { readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
-import { runProblem, toolUses } from './claude-run.mjs';
+import { countProblem, runProblem, toolUses } from './claude-run.mjs';
 
 // rowPrompt(root, route): a positive case's prompt is its row's first routing eval, so the two cannot drift.
 export const rowPrompt = (root, route) => JSON.parse(readFileSync(join(root, 'evals', 'cases', `row-${route}.json`), 'utf8')).evals[0].prompt;
 
-// runFailure(run): why a run counts as not having happened, or '' when it may be graded. A run capped by
-// --max-turns is still graded (routing shows in the first calls), so its problem is not a failure; any other
-// problem (a non-zero exit, no events, an error result) is. runProblem reports the cap as an error_max_turns
-// result, but a non-zero exit comes first in its message, so the cap is read from the result event itself.
-export function runFailure(run) {
-  const problem = runProblem(run);
+// runFailure(run, prompts): why a run counts as not having happened, or '' when it may be graded. prompts is
+// the number of prompts sent. A run capped by --max-turns is still graded (routing shows in the first
+// calls), so its problem is not a failure; any other problem (a non-zero exit, no events, an error result)
+// is, and so is a result count that differs from prompts, capped or not: a task that never ran as its own
+// turn cannot be graded. runProblem reports the cap as an error_max_turns result, but a non-zero exit comes
+// first in its message, so the cap is read from the result event itself.
+export function runFailure(run, prompts) {
+  const problem = runProblem(run, prompts);
+  const count = countProblem(run, prompts);
   const results = run.events.filter((e) => e?.type === 'result');
   // Every result must be a cap or a clean success (a two-prompt run has two), and at least one a cap.
   const cap = (e) => e.subtype === 'error_max_turns';
   const capped = run.badLines === 0 && results.length > 0 && results.some(cap) && results.every((e) => cap(e) || (e.subtype === 'success' && e.is_error !== true));
-  if (capped) return '';
+  if (capped) return count;
   const bad = results.find((e) => !cap(e) && (e.subtype !== 'success' || e.is_error === true));
-  return problem && bad && run.status === 0 && run.badLines === 0 ? `the run ended with ${bad.subtype ?? 'a result with no subtype'}${bad.is_error === true ? ' (is_error)' : ''}` : problem;
+  return problem && !count && bad && run.status === 0 && run.badLines === 0 ? `the run ended with ${bad.subtype ?? 'a result with no subtype'}${bad.is_error === true ? ' (is_error)' : ''}` : problem;
 }
 
 // removeTemp(dir): rmSync that refuses a path outside the OS temp dir, so a wrong root can never delete a repo or its parent.
@@ -131,8 +134,10 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
   let before = 0;
   const hit = (u) => routeCall(u, route, root, routeFile);
   // The second task starts after the first result event: runClaude sends each prompt as one user turn on
-  // stdin and stream-json writes one result per turn (evals/results/exec-2026-10-16/finish-pr-at-head.events.jsonl:
-  // two prompts, a result at line 6 and at line 114). A multi-turn case finds the route in the first task.
+  // stdin, the second only after the first turn's result, and stream-json writes one result per turn
+  // (evals/results/exec-2026-10-16/finish-pr-at-head.events.jsonl: two prompts, a result at line 6 and at
+  // line 114). runFailure does not let a run with fewer results than prompts reach this grade. A multi-turn
+  // case finds the route in the first task.
   const turn = events.findIndex((e) => e?.type === 'result');
   const first = kind === 'multi-turn' && turn >= 0 ? toolUses(events.slice(0, turn)).filter((u) => !TODO_TOOLS.has(u.name)) : work;
   const at = first.findIndex(hit);
