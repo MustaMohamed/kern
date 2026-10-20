@@ -3,14 +3,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ATTRIBUTION, GRADERS, chainParts, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, userSettingsProblem, writeEvents, writeReply } from '../scripts/lib/exec-run.mjs';
-import { pluginCopy } from '../scripts/lib/behave.mjs';
+import { COPY_OMITS, pluginCopy } from '../scripts/lib/behave.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
@@ -1166,8 +1166,8 @@ test('Task 16h: exec runs kern from a plugin copy, and the gh stand-in from besi
 test('Task 16h: the plugin copy holds every file the exec cases run from kern, executable as in the repo, and no .git or evals', () => {
   const d = pluginCopy(REPO);
   try {
-    const runners = new Set(['scripts/h2h.mjs', 'scripts/behave.mjs', 'scripts/kernel-adherence.mjs', 'scripts/standing-cost.mjs', 'scripts/pilot.mjs', 'scripts/exec-eval.mjs',
-      ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive'].map((f) => `scripts/lib/${f}.mjs`)]);
+    const runners = new Set(COPY_OMITS.paths);
+    assert.ok(runners.has('scripts/exec-eval.mjs') && runners.has('scripts/lib/claude-drive.mjs'));
     const tracked = spawnSync('git', ['-C', REPO, 'ls-files', '.claude-plugin', 'agents', 'hooks', 'kernel', 'modes', 'scripts', 'skills'], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
     assert.ok(tracked.length > 50, 'git listed the plugin files');
     for (const f of tracked.filter((x) => !runners.has(x))) {
@@ -1183,5 +1183,16 @@ test('Task 16h: the plugin copy holds every file the exec cases run from kern, e
       for (const a of h.args) assert.ok(existsSync(a.replace('${CLAUDE_PLUGIN_ROOT}', d)), a);
     }
     for (const p of ['.git', '.upstream', 'evals', 'tests', 'docs', '.superpowers']) assert.ok(!existsSync(join(d, p)), `${p} stays out`);
+    // Task 16h fix round 1, M3: no copied file describes the graders or the cases. CHANGELOG.md's
+    // Unreleased lines name what each grader checks, .github's CI steps and .gitignore name the evals, and
+    // route-eval, seeded-diffs, lint-skills and their libs read evals/ and state what a case needs; no hook,
+    // skill or kernel line runs them. NOTICE stays: its attribution lines name two adapted eval files and
+    // say nothing about how a run is graded.
+    for (const p of ['CHANGELOG.md', '.github', '.gitignore', 'scripts/route-eval.mjs', 'scripts/seeded-diffs.mjs', 'scripts/lint-skills.mjs', 'scripts/ci-local',
+      'scripts/lib/lint-rules.mjs', 'scripts/lib/kernel-rows.mjs', 'scripts/lib/rank.mjs']) assert.ok(!existsSync(join(d, p)), `${p} stays out`);
+    const words = /\bgrader|evals\/|route-eval|seeded-diffs|kernel-adherence|exec-eval|\bh2h\b|behave\.mjs|adherence\.mjs|\bexpectations?\b/i;
+    const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
+    const telling = walk(d).filter((f) => words.test(readFileSync(f, 'latin1'))).map((f) => f.slice(d.length + 1));
+    assert.deepEqual(telling, ['NOTICE'], 'a copied file describes the evals');
   } finally { rmSync(dirname(d), { recursive: true, force: true }); }
 });

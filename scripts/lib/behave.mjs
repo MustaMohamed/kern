@@ -199,15 +199,26 @@ export function behaveDigest(events, max = RECORD.max) {
   return `${LEGEND}\n${body || '(none)'}\n\nFinal reply:\n${reply.length > RECORD.reply ? `${first(reply, RECORD.reply)}[cut]` : reply}`;
 }
 
-// pluginCopy(root): a copy of the plugin in <tmp>/<random>/kern without the answer keys (evals, tests, docs)
-// or repo internals, so a run cannot read them. The caller removes it with rmSync(dirname(dir), { recursive: true, force: true }).
+// COPY_OMITS: what pluginCopy leaves out, so a run can read none of it.
+// - top: top-level names. The answer keys (evals, tests, docs) and repo internals, and the files that
+//   describe the graders or the cases: CHANGELOG.md, whose Unreleased lines name what each grader checks,
+//   .github's CI steps and .gitignore, which name the evals (Task 16h review, M3).
+// - paths: the eval runners, whose names tell a model it is being evaluated, and the repo's own eval and
+//   lint tooling (route-eval, seeded-diffs, lint-skills, ci-local and the libs only they use), which reads
+//   evals/ and states what a case needs. No hook, skill or kernel line runs any of it.
+export const COPY_OMITS = {
+  top: ['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers', 'CHANGELOG.md', '.github', '.gitignore'],
+  paths: [...['h2h', 'behave', 'kernel-adherence', 'standing-cost', 'pilot', 'exec-eval', 'route-eval', 'seeded-diffs', 'lint-skills'].map((f) => `scripts/${f}.mjs`), 'scripts/ci-local',
+    ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive', 'lint-rules', 'kernel-rows', 'rank'].map((f) => `scripts/lib/${f}.mjs`)],
+};
+
+// pluginCopy(root): a copy of the plugin in <tmp>/<random>/kern without COPY_OMITS. The caller removes it
+// with rmSync(dirname(dir), { recursive: true, force: true }).
 export function pluginCopy(root) {
   const dir = join(mkdtempSync(join(tmpdir(), 'p-')), 'kern');
-  const skip = new Set(['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers']);
-  // The eval runners go too: their names tell a model it is being evaluated.
-  const runners = new Set(['h2h.mjs', 'behave.mjs', 'kernel-adherence.mjs', 'standing-cost.mjs', 'pilot.mjs', 'exec-eval.mjs'].map((f) => join('scripts', f))
-    .concat(['h2h.mjs', 'behave.mjs', 'adherence.mjs', 'pilot.mjs', 'exec-grade.mjs', 'exec-run.mjs', 'claude-run.mjs', 'claude-drive.mjs'].map((f) => join('scripts', 'lib', f))));
-  cpSync(root, dir, { recursive: true, filter: (src) => src === root || (!skip.has(relative(root, src).split(sep)[0]) && !runners.has(relative(root, src))) });
+  const top = new Set(COPY_OMITS.top);
+  const paths = new Set(COPY_OMITS.paths.map((p) => p.split('/').join(sep)));
+  cpSync(root, dir, { recursive: true, filter: (src) => src === root || (!top.has(relative(root, src).split(sep)[0]) && !paths.has(relative(root, src))) });
   return dir;
 }
 
