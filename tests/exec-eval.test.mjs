@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1195,4 +1195,63 @@ test('Task 16h: the plugin copy holds every file the exec cases run from kern, e
     const telling = walk(d).filter((f) => words.test(readFileSync(f, 'latin1'))).map((f) => f.slice(d.length + 1));
     assert.deepEqual(telling, ['NOTICE'], 'a copied file describes the evals');
   } finally { rmSync(dirname(d), { recursive: true, force: true }); }
+});
+
+// Task 16h fix round 1, M5 and M2: exec-eval itself, run from a sandbox copy of the repo (so its replies go
+// there, not into this repo's evals/results) under a stand-in claude that records what it was given.
+// sandbox(): the copy, made once: everything exec-eval and pluginCopy read, and no .git or results.
+let SANDBOX = null;
+const sandbox = () => {
+  if (SANDBOX) return SANDBOX;
+  SANDBOX = join(mkdtempSync(join(tmpdir(), 'sb-')), 'kern');
+  const out = new Set(['.git', '.upstream', 'node_modules', 'tests', 'docs', '.superpowers']);
+  cpSync(REPO, SANDBOX, { recursive: true, filter: (src) => {
+    const rel = src.slice(REPO.length + 1);
+    return !out.has(rel.split('/')[0]) && !/^evals\/(?!exec(\/|$))./.test(rel);
+  } });
+  process.on('exit', () => rmSync(dirname(SANDBOX), { recursive: true, force: true }));
+  return SANDBOX;
+};
+// recordingClaude(answer): a stand-in claude that writes seen.json (its argv, cwd and pid, the gh it
+// finds, and what the plugin dir holds), then answers each prompt with a result (answer) or never answers.
+function recordingClaude(answer) {
+  const dir = mkdtempSync(join(tmpdir(), 'xc-'));
+  writeFileSync(join(dir, 'claude'), `#!${process.execPath}
+const fs = require('fs');
+const { execFileSync } = require('child_process');
+if (process.argv[2] === '--version') { console.log('9.9.9 (stand-in)'); process.exit(0); }
+const argv = process.argv.slice(2);
+const plugin = argv[argv.indexOf('--plugin-dir') + 1];
+const has = (p) => fs.existsSync(plugin + '/' + p);
+fs.writeFileSync(${JSON.stringify(join(dir, 'seen.json'))}, JSON.stringify({ argv, plugin, cwd: process.cwd(), pid: process.pid,
+  gh: execFileSync('/bin/sh', ['-c', 'command -v gh'], { encoding: 'utf8' }).trim(),
+  git: has('.git'), evals: has('evals'), changelog: has('CHANGELOG.md'), skill: has('skills/finish-branch/SKILL.md') }));
+${answer ? `let buf = '';
+process.stdin.on('data', (d) => { buf += d; for (let i; (i = buf.indexOf('\\n')) >= 0; buf = buf.slice(i + 1)) {
+  console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 's1' }));
+  console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'stand-in' })); } });
+process.stdin.on('end', () => process.exit(0));` : 'setInterval(() => {}, 1000);'}
+`);
+  chmodSync(join(dir, 'claude'), 0o755);
+  const env = { PATH: `${dir}:/usr/bin:/bin`, HOME: mkdtempSync(join(tmpdir(), 'xh-')), CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'xg-')), TMPDIR: tmpdir() };
+  const found = spawnSync('/bin/sh', ['-c', 'command -v claude'], { env, encoding: 'utf8' }).stdout.trim();
+  assert.equal(found, join(dir, 'claude'), 'the stand-in, never the real claude, is first on PATH');
+  return { env, seen: () => (existsSync(join(dir, 'seen.json')) ? JSON.parse(readFileSync(join(dir, 'seen.json'), 'utf8')) : null) };
+}
+const EXEC = () => join(sandbox(), 'scripts', 'exec-eval.mjs');
+// macOS gives the temp dir as /var/... and its realpath as /private/var/...; both name one folder.
+const canon = (p) => p.replace(/^\/private(?=\/var\/)/, '');
+
+test('Task 16h fix M5: exec-eval runs claude with --plugin-dir at a temp copy with no .git or evals, and the gh stand-in first on PATH', () => {
+  const stub = recordingClaude(true);
+  const r = spawnSync(process.execPath, [EXEC(), '--case', 'finish-menu-first'], { env: stub.env, encoding: 'utf8', timeout: 120000 });
+  assert.match(r.stdout, /^FAIL finish-menu-first: /m, `${r.stdout}${r.stderr}`);
+  const seen = stub.seen();
+  assert.ok(seen, 'claude ran');
+  assert.match(seen.plugin, /\/p-[^/]+\/kern$/);
+  assert.ok(seen.plugin.startsWith(realpathSync(tmpdir())), `${seen.plugin} is under the temp dir`);
+  assert.ok(!seen.plugin.startsWith(sandbox()), 'not the repo the runner runs from');
+  assert.deepEqual([seen.git, seen.evals, seen.changelog, seen.skill], [false, false, false, true]);
+  assert.equal(canon(seen.gh), canon(join(dirname(seen.cwd), 'bin', 'gh')), 'the gh stand-in beside the workspace');
+  assert.ok(!existsSync(dirname(seen.plugin)) && !existsSync(dirname(seen.cwd)), 'the copy and the workspace are removed after the run');
 });
