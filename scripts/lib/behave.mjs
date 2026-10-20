@@ -252,14 +252,15 @@ export function parseVerdict(text, n) {
 // tryRun(opts, run): one headless run and why it may not be graded ('' when it may). A run cut off by its
 // turn or budget cap, a non-zero exit, a timeout, or a result count that differs from opts.prompts.length
 // is an invalid run (M2a's runProblem), never a graded one; a fatal error (no claude at all) still stops
-// the runner. run is runClaude, or a stub in tests.
+// the runner. A run that threw comes back as { run: null, problem, events }, events being what it printed
+// before a timeout ([] otherwise), for the runner to save. run is runClaude, or a stub in tests.
 export function tryRun(opts, run = runClaude) {
   let r;
   try {
     r = run(opts);
   } catch (e) {
     if (e.fatal) throw e;
-    return { run: null, problem: e.message };
+    return { run: null, problem: e.message, events: e.events ?? [] };
   }
   return { run: r, problem: runProblem(r, opts.prompts?.length) };
 }

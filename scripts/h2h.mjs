@@ -54,8 +54,13 @@ for (const t of tasks) {
       const cwd = workspace(join(t.dir, 'repo'), { name: t.project || 'app', origin: !!t.origin, branch: t.branch || '', setup: t.setup || [] });
       const git = (...g) => execFileSync('git', ['-C', cwd, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...g], { encoding: 'utf8' });
       if (t.patch) { git('apply', join(t.dir, t.patch)); git('add', '-A'); git('commit', '-qm', t.patch_message || 'feat: the change under review'); }
-      const { run, problem } = tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model: MODEL, maxTurns: t.max_turns || 40 });
-      if (problem) { voided = `${a.id}: ${problem}`; rmSync(dirname(cwd), { recursive: true, force: true }); break; }
+      const { run, problem, events } = tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model: MODEL, maxTurns: t.max_turns || 40 });
+      // A run cut off by the timeout keeps the events it printed.
+      const kept = run ? run.events : events;
+      if (problem) {
+        if (kept.length) writeFileSync(join(raw, `${t.id.replace('/', '--')}-${r}-${ids[a.id]}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n'));
+        voided = `${a.id}: ${problem}`; rmSync(dirname(cwd), { recursive: true, force: true }); break;
+      }
       git('add', '-A', '-N');
       const diff = git('diff', 'HEAD');
       const files = git('diff', '--name-only', 'HEAD').split('\n').filter(Boolean);

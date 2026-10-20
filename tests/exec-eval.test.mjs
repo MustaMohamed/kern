@@ -219,6 +219,21 @@ test('runClaude: a claude that ignores SIGTERM after the timeout is killed after
   } finally { reap(left); }
 });
 
+// Task 16h fix round 1, M6: a single-prompt run now waits for its background agents, so the timeout matters
+// more. A run it cuts off is still no result, but the events read so far go with the error, for the
+// runner to save and the reader to see.
+test('Task 16h fix M6: a run the timeout cuts off keeps the events it printed, and is still no result', () => {
+  const stub = `echo '{"type":"system","subtype":"init","session_id":"s1"}'; echo '{"type":"assistant","message":{"content":[{"type":"text","text":"working"}]}}'; exec sleep 30`;
+  let err = null;
+  assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', timeoutMs: 1500, killGraceMs: 300, env: fakeClaude(stub) }), (e) => { err = e; return e instanceof ClaudeRunError && !e.fatal; });
+  assert.equal(err.message, 'claude timed out after 1500 ms; the 2 events it printed are kept');
+  assert.deepEqual(err.events.map((e) => e.type), ['system', 'assistant']);
+  for (const [runner, saved] of [['behave.mjs', /const kept = run \? run\.events : events;/], ['h2h.mjs', /const kept = run \? run\.events : events;/],
+    ['kernel-adherence.mjs', /problem = failure = e\.message; events = e\.events \?\? \[\];/], ['exec-eval.mjs', /save\(\{ reason: e\.message, events: e\.events \}\)/]]) {
+    assert.match(readFileSync(join(REPO, 'scripts', runner), 'utf8'), saved, `${runner} saves a cut-off run's events`);
+  }
+});
+
 test('runClaude: output over the buffer limit is a run cut off, said as such, not a driver failure', () => {
   const stub = `head -c 4096 /dev/zero | tr '\\0' x; echo; echo '{"type":"result","subtype":"success","result":"x"}'`;
   assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', maxBuffer: 1024, env: fakeClaude(stub) }),

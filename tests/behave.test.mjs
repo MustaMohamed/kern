@@ -171,6 +171,10 @@ test('a run cut off, failed or not run is invalid; only a fatal error stops the 
   assert.match(tryRun(one, () => capped).problem, /error_max_turns/);
   assert.match(tryRun(one, () => { throw new ClaudeRunError('claude timed out after 10 ms'); }).problem, /timed out/);
   assert.throws(() => tryRun(one, () => { throw new ClaudeRunError('claude is not on PATH', true); }), /not on PATH/);
+  // Task 16h fix round 1, M6: a cut-off run's events come back with its problem, for the runner to save.
+  const cut = Object.assign(new ClaudeRunError('claude timed out after 10 ms; the 1 events it printed are kept'), { events: [{ type: 'system', subtype: 'init' }] });
+  assert.deepEqual(tryRun(one, () => { throw cut; }), { run: null, problem: cut.message, events: cut.events });
+  assert.deepEqual(tryRun(one, () => { throw new ClaudeRunError('claude was killed by SIGKILL'); }).events, []);
 });
 
 test('a run whose result count differs from its prompt count is invalid, with the reason (Task 16e)', () => {

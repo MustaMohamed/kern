@@ -71,10 +71,11 @@ try {
         // A turn cap is expected here: routing is graded from the first calls, so a capped run is still graded and
         // its problem recorded. Any other run that did not happen (a timeout, a signal, a non-zero exit, a result
         // count that differs from the prompt count) fails the run, with the reason.
-        let run = null; let problem = ''; let failure = '';
-        try { run = runClaude({ cwd, prompts: c.prompts, pluginDirs: [root], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 }); problem = runProblem(run, c.prompts.length); failure = runFailure(run, c.prompts.length); }
-        catch (e) { if (e.fatal) throw e; problem = failure = e.message; }
-        if (run) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n') + '\n');
+        let run = null; let problem = ''; let failure = ''; let events = [];
+        try { run = runClaude({ cwd, prompts: c.prompts, pluginDirs: [root], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 }); problem = runProblem(run, c.prompts.length); failure = runFailure(run, c.prompts.length); events = run.events; }
+        catch (e) { if (e.fatal) throw e; problem = failure = e.message; events = e.events ?? []; }
+        // A run cut off by the timeout keeps the events it printed.
+        if (events.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), events.map((x) => JSON.stringify(x)).join('\n') + '\n');
         const g = run && !failure ? grade(run.events, { route: c.route, routeFile: c.route_file, steps, root, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
         runs.push({ pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: run ? run.status : null, invalid: !!failure });
       } finally {

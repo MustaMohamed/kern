@@ -87,7 +87,8 @@ function runCase(c, save) {
       });
     } catch (e) {
       if (!(e instanceof ClaudeRunError) || e.fatal) throw e;
-      save({ reason: e.message });
+      // A run cut off by the timeout keeps the events it printed.
+      save({ reason: e.message, events: e.events });
       return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [] };
     }
     const ghLog = readFileSync(log, 'utf8').split('\n').filter(Boolean);

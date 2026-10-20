@@ -40,8 +40,10 @@ try {
     const runs = [];
     for (let i = 0; i < RUNS; i++) {
       const cwd = caseWorkspace(ROOT, c);
-      const { run, problem } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20 });
-      if (run) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n') + '\n');
+      const { run, problem, events } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20 });
+      // A run cut off by the timeout keeps the events it printed.
+      const kept = run ? run.events : events;
+      if (kept.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
       const gdir = mkdtempSync(join(tmpdir(), 'g-'));
       let verdict = null; let invalid = !!problem; let reason = problem;
       if (!invalid) {

@@ -71,6 +71,16 @@ export function workspace(fixtureDir, { name = 'app', origin = false, branch = '
   return dir;
 }
 
+// parseEvents(stdout): the stream-json events of a run's stdout, and how many lines were not JSON.
+const parseEvents = (stdout) => {
+  const events = [];
+  let badLines = 0;
+  for (const l of (stdout || '').split('\n').filter(Boolean)) {
+    try { events.push(JSON.parse(l)); } catch { badLines += 1; }
+  }
+  return { events, badLines };
+};
+
 // The driver that runs claude for runClaude, one turn per prompt (claude-drive.mjs).
 const DRIVER = fileURLToPath(new URL('./claude-drive.mjs', import.meta.url));
 
@@ -111,7 +121,12 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   // fd 3 carries the driver's one-line report of how claude ended.
   const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify({ prompts, graceMs: killGraceMs }), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
     encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnv(process.env, { ...env, ...(prompts.length > 1 ? NO_BACKGROUND : {}) }) });
-  if (run.error?.code === 'ETIMEDOUT') throw new ClaudeRunError(`claude timed out after ${timeoutMs} ms`);
+  // A run the timeout cut off is no result, but the events it printed go with the error, so a runner can save
+  // them and a reader see how far it got (Task 16h review, M6).
+  if (run.error?.code === 'ETIMEDOUT') {
+    const { events } = parseEvents(run.stdout);
+    throw Object.assign(new ClaudeRunError(`claude timed out after ${timeoutMs} ms; the ${events.length} events it printed are kept`), { events });
+  }
   // ENOBUFS: spawnSync stopped the driver, which stopped claude, before either could report. Only this run
   // printed that much, so it is not fatal.
   if (run.error?.code === 'ENOBUFS') throw new ClaudeRunError(`claude printed more than ${maxBuffer} bytes to stdout or stderr, so the run was cut off`);
@@ -124,11 +139,7 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   if (!end) throw new ClaudeRunError(`the claude driver failed: ${run.error?.message || `exit ${run.status ?? run.signal}`}: ${(run.stderr || '').trim().split('\n').pop() || 'no stderr'}`, true);
   if (end.status === 126 || end.status === 127) throw new ClaudeRunError(`claude exited ${end.status}: ${(run.stderr || '').trim()}`, true);
   if (end.status === null) throw new ClaudeRunError(`claude was killed by ${end.signal}`);
-  const events = [];
-  let badLines = 0;
-  for (const l of (run.stdout || '').split('\n').filter(Boolean)) {
-    try { events.push(JSON.parse(l)); } catch { badLines += 1; }
-  }
+  const { events, badLines } = parseEvents(run.stdout);
   // A usage or rate limit: Claude Code answers by itself (model "<synthetic>") and no model ran. Every
   // later run would get the same reply, so the caller stops instead of grading it as a failed case.
   const limit = events.find((e) => e?.type === 'assistant' && e.message?.model === '<synthetic>' &&
