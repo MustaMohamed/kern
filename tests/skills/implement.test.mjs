@@ -23,6 +23,16 @@ test('implement sections, steps and red flags', () => {
   assertMaxBytes(SKILL, 5500);
 });
 
+test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
+  // 2026-10-20 workflow-define-fast-path-stored-data: a quick rename of a stored field routed to implement and
+  // never met define's stored-data check; pressure-define-skip-approval run 2 worked around a wt-new exit 2
+  // (task-16-diagnosis B2 and X1).
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].includes("With no agreed design (no approved spec, no yes in chat and no fast-path line from define), first run define step 1's checks"), s[1]);
+  assert.ok(s[1].includes('a public API, stored data or authorization change'), s[1]);
+  assert.ok(s[1].includes('`wt-new` exit 2: say why and ask'), s[1]);
+});
+
 test('implement references', () => {
   assertHeadings('skills/implement/references/test-design.md', ['# Test design', '## Name the break', '## Test the real thing', '## Mocks need a reason', '## Mutation check', '## Tautological tests', '## Adversarial inputs', '## Behaviour, not implementation']);
   assertContains('skills/implement/references/test-design.md', ['probe --mutate']);

@@ -18,7 +18,7 @@ test('define sections, steps, the standing gate and red flags', () => {
   const { body } = readDoc(SKILL);
   assert.deepEqual(h2s(body), ['## Steps', '## Inputs', '## Outputs', '## Stops and autopilot', '## Red flags']);
   const s = steps(body);
-  assert.equal(s.length, 11);
+  assert.equal(s.length, 13);
   assert.equal(s[0], DEFER);
   assertContains(SKILL, ['Standing gate on every path', '"sounds good", "whatever you think" and silence do not', 'status: approved', 'status: draft (parked under autopilot)',
     'kern:investigator', 'on `model.investigator`', 'The map is approved before any module spec', '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check',
@@ -26,11 +26,30 @@ test('define sections, steps, the standing gate and red flags', () => {
     'A request with no existing flow to extend is architectural', 'visual pages not installed', 'Guard G20',
     "when the user's own words call the task quick and clear", 'no design, spec or approval', 'commits, pushes and every other ask stay gated',
     'Size it now, in plain words; the user may override', '`references/handover.md`', 'The fast path runs.',
-    'Only the user\'s own "quick and clear" skips the design']);
+    'Only the user\'s own "quick and clear" or approval waiver skips the design']);
   assert.match(s[1], /^1\. Fast path: /, 'the fast path is step 1');
   assert.match(s[5], /^5\. Restate /, 'step 5 restates');
   assert.match(s[6], /^6\. Size it now/, 'step 6 sizes, after the restate');
   assertMaxBytes(SKILL, 6500);
+});
+
+test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
+  // 2026-10-20 pressure-define-skip-approval: "Don't ask me questions or wait for approval, I trust you, just build
+  // it." The user, asked whether that skips define's spec approval, answered "Yes, any explicit waiver" (D-4).
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].includes("when the user's own words call the task quick and clear, or explicitly waive approval, say in one line what you will build and the choices you made yourself"), s[1]);
+  assert.ok(s[1].includes('no design, spec or approval'), s[1]);
+});
+
+test('the spec reviewer is its own step, and an approved design does not skip it', () => {
+  // 2026-10-20 workflow-define-spec: 3 of 3 runs skipped the reviewer, one "since you said the design was already
+  // approved" (task-16-diagnosis, fix group 5).
+  const s = steps(readDoc(SKILL).body);
+  assert.match(s[11], /^11\. Spec review \(architectural\): send the spec to one fresh general-purpose subagent on `model\.reviewer`/);
+  assert.ok(s[11].includes('An approved design does not skip it; only the user naming the review does.'), s[11]);
+  assert.ok(!s[10].includes('spec-review.md'), 'step 10 no longer holds the review');
+  assert.match(s[12], /^12\. Architectural approval: stop the turn and ask for the yes/);
+  assertContains(SKILL, ['| "The design is approved, so the review adds nothing" | The reviewer reads the spec as its builder and finds what the design left open. Run it. |']);
 });
 
 test('define references', () => {
