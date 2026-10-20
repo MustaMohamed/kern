@@ -44,11 +44,14 @@ export class ClaudeRunError extends Error {
 // workspace(fixtureDir, { name, origin, branch, setup }): copies the fixture into <tmp>/<random>/<name>
 // (a project-shaped path, so the model sees no eval name), turns _kern into .kern and _claude into
 // .claude, makes a git repo with one commit on main, optionally a bare origin with main pushed and a
-// feature branch, then runs each setup command there. Returns the project path. A failing git or setup
-// command throws.
+// feature branch, then runs each setup command there. The fixture's _setup folder holds files only the
+// setup commands read (a script, the file versions of later history): it is not copied into the
+// project, and each setup command gets its path as $SETUP_FILES. Returns the project path. A failing git
+// or setup command throws.
 export function workspace(fixtureDir, { name = 'app', origin = false, branch = '', setup = [] } = {}) {
   const dir = join(mkdtempSync(join(tmpdir(), 'w-')), name);
-  cpSync(fixtureDir, dir, { recursive: true });
+  const setupFiles = join(fixtureDir, '_setup');
+  cpSync(fixtureDir, dir, { recursive: true, filter: (src) => src !== setupFiles });
   for (const [from, to] of [['_kern', '.kern'], ['_claude', '.claude']]) if (existsSync(join(dir, from))) renameSync(join(dir, from), join(dir, to));
   const run = (cmd, argv, opts = {}) => execFileSync(cmd, argv, { stdio: 'ignore', timeout: SETUP_TIMEOUT_MS, ...opts });
   const git = (...a) => run('git', ['-C', dir, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a]);
@@ -64,7 +67,7 @@ export function workspace(fixtureDir, { name = 'app', origin = false, branch = '
     git('remote', 'set-head', 'origin', 'main');
   }
   if (branch) git('checkout', '--quiet', '-b', branch);
-  for (const cmd of setup) run('bash', ['-c', cmd], { cwd: dir });
+  for (const cmd of setup) run('bash', ['-c', cmd], { cwd: dir, env: { ...process.env, SETUP_FILES: setupFiles } });
   return dir;
 }
 

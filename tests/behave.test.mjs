@@ -2,12 +2,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RECORD, behaveDigest, caseResult, digest, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, tryRun } from '../scripts/lib/behave.mjs';
-import { ClaudeRunError } from '../scripts/lib/claude-run.mjs';
+import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const ok = (n) => ({ invalid: false, verdict: Array.from({ length: n }, () => ({ pass: true })) });
@@ -20,6 +21,59 @@ test('every case loads with expectations and fixture layers that exist, the firs
   for (const c of cases) {
     assert.ok(existsSync(join(ROOT, 'evals', 'fixtures', c.files[0], 'package.json')), `${c.id}: ${c.files[0]} has no package.json`);
     for (const f of c.files) assert.ok(existsSync(join(ROOT, 'evals', 'fixtures', f)), `${c.id}: no fixture ${f}`);
+  }
+});
+
+// caseRoot(evals, behave): a repo root holding one evals/cases file with these entries, evals/behave cases,
+// and a node-bug layer. The caller removes it.
+const caseRoot = (evals, behave = []) => {
+  const r = mkdtempSync(join(tmpdir(), 'cases-'));
+  for (const d of ['evals/cases', 'evals/behave', 'evals/fixtures/node-bug']) mkdirSync(join(r, d), { recursive: true });
+  writeFileSync(join(r, 'evals', 'cases', 'demo.json'), JSON.stringify({ skill_name: 'demo', evals }));
+  writeFileSync(join(r, 'evals', 'behave', 'pressure.json'), JSON.stringify(behave));
+  writeFileSync(join(r, 'evals', 'behave', 'workflows.json'), '[]');
+  return r;
+};
+
+test('a case that names a fixture layer that does not exist fails to load, from either case source (Task 16f)', () => {
+  const r1 = caseRoot([{ id: 1, prompt: 'p', expectations: ['e'], files: ['node-bug', 'no-such-layer'] }]);
+  const r2 = caseRoot([], [{ id: 'pressure-x', files: ['node-bug', 'gone'], prompts: ['p'], expectations: ['e'] }]);
+  const r3 = caseRoot([{ id: 1, prompt: 'p', expectations: ['e'], files: ['node-bug'] }]);
+  try {
+    assert.throws(() => loadCases(r1), /^Error: behave: demo-1 names fixture layer no-such-layer, which does not exist \(evals\/fixtures\/no-such-layer; evals\/cases\/demo\.json\)$/);
+    assert.throws(() => loadCases(r2), /behave: pressure-x names fixture layer gone, which does not exist/);
+    assert.equal(loadCases(r3).length, 1, 'layers that exist load');
+  } finally { for (const r of [r1, r2, r3]) rmSync(r, { recursive: true, force: true }); }
+});
+
+test('an evals/cases entry passes its turns, origin, branch, setup and turn cap to the runner, as an evals/behave case does (Task 16f)', () => {
+  const r = caseRoot([
+    { id: 1, kind: 'dialogue', prompts: ['first task', 'recall chat'], prompt: 'recall chat', expectations: ['e'], files: ['node-bug'], origin: true, branch: 'feat', setup: ['true'], max_turns: 30 },
+    { id: 2, kind: 'dialogue', prompt: 'p', expectations: ['e'] }]);
+  const bad = caseRoot([{ id: 1, prompts: ['x', 'y'], prompt: 'x', expectations: ['e'] }]);
+  try {
+    assert.deepEqual(loadCases(r), [
+      { id: 'demo-1', source: 'evals/cases/demo.json', files: ['node-bug'], prompts: ['first task', 'recall chat'], expectations: ['e'], pressure: [], origin: true, branch: 'feat', setup: ['true'], max_turns: 30 },
+      { id: 'demo-2', source: 'evals/cases/demo.json', files: ['node-bug'], prompts: ['p'], expectations: ['e'], pressure: [] }]);
+    assert.throws(() => loadCases(bad), /behave: demo-1: prompt must be the last of prompts/, 'route-eval reads prompt, the runner prompts: they cannot drift');
+  } finally { for (const d of [r, bad]) rmSync(d, { recursive: true, force: true }); }
+});
+
+test('workspace leaves a fixture\'s _setup folder out of the project and names it to each setup command as $SETUP_FILES (Task 16f)', () => {
+  const f = mkdtempSync(join(tmpdir(), 'fx-'));
+  mkdirSync(join(f, '_setup'));
+  writeFileSync(join(f, 'a.txt'), 'a\n');
+  writeFileSync(join(f, '_setup', 'later.txt'), 'later\n');
+  const d = workspace(f, { setup: ['cp "$SETUP_FILES/later.txt" b.txt', 'git add b.txt && git -c user.email=dev@example.com -c user.name=dev commit -qm later'] });
+  try {
+    assert.ok(!existsSync(join(d, '_setup')), 'the _setup folder is not in the project');
+    assert.equal(readFileSync(join(d, 'b.txt'), 'utf8'), 'later\n');
+    const tree = (rev) => spawnSync('git', ['-C', d, 'ls-tree', '-r', '--name-only', rev], { encoding: 'utf8' }).stdout.trim().split('\n');
+    assert.deepEqual(tree('HEAD~1'), ['a.txt'], 'the initial import holds no _setup file');
+    assert.deepEqual(tree('HEAD'), ['a.txt', 'b.txt']);
+  } finally {
+    rmSync(dirname(d), { recursive: true, force: true });
+    rmSync(f, { recursive: true, force: true });
   }
 });
 
@@ -94,7 +148,8 @@ test('a case passes on two of three runs; two invalid runs fail it', () => {
 test('the runner lists its cases in dry-run mode without calling claude', () => {
   const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /^pressure-prove-it-deadline: 1 turn\(s\) on node-bug, 3 expectation\(s\), pressure: time\+authority$/m);
+  assert.match(r.stdout, /^pressure-prove-it-deadline: 1 turn\(s\) on node-bug \(1 setup command\(s\)\), 3 expectation\(s\), pressure: time\+authority$/m);
+  assert.match(r.stdout, /^pressure-commit-unverified: 1 turn\(s\) on node-bug \(origin, branch fix-sum, 1 setup command\(s\)\), /m);
 });
 
 const call = (name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } });

@@ -7,8 +7,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, PERMISSIONS, claudeVersion, finalText, workspace } from './lib/claude-run.mjs';
-import { behaveDigest, caseResult, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, tryRun } from './lib/behave.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, finalText } from './lib/claude-run.mjs';
+import { behaveDigest, caseResult, caseWorkspace, graderPrompt, loadCases, parseVerdict, pluginCopy, tryRun } from './lib/behave.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -19,8 +19,10 @@ const RUNS = Number(opt('--runs', '3'));
 const only = opt('--case', null);
 const cases = loadCases(ROOT).filter((c) => !only || c.id === only);
 if (only && !cases.length) { console.error(`behave: no case ${only}`); process.exit(2); }
+// shape(c): the workspace fields a case sets beyond its layers, for the dry run.
+const shape = (c) => [c.origin && 'origin', c.branch && `branch ${c.branch}`, c.setup?.length && `${c.setup.length} setup command(s)`].filter(Boolean).join(', ');
 if (args.includes('--dry-run')) {
-  for (const c of cases) console.log(`${c.id}: ${c.prompts.length} turn(s) on ${c.files.join('+')}, ${c.expectations.length} expectation(s)${c.pressure.length ? `, pressure: ${c.pressure.join('+')}` : ''}`);
+  for (const c of cases) console.log(`${c.id}: ${c.prompts.length} turn(s) on ${c.files.join('+')}${shape(c) ? ` (${shape(c)})` : ''}, ${c.expectations.length} expectation(s)${c.pressure.length ? `, pressure: ${c.pressure.join('+')}` : ''}`);
   process.exit(0);
 }
 const results = [];
@@ -37,9 +39,7 @@ try {
   for (const c of cases) {
     const runs = [];
     for (let i = 0; i < RUNS; i++) {
-      const src = stage(ROOT, c.files);
-      const cwd = workspace(src, { name: 'billing-service', origin: !!c.origin, branch: c.branch || '', setup: c.setup || [] });
-      if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
+      const cwd = caseWorkspace(ROOT, c);
       const { run, problem } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20 });
       if (run) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n') + '\n');
       const gdir = mkdtempSync(join(tmpdir(), 'g-'));

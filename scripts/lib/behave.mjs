@@ -4,10 +4,10 @@
 // grader owns those), and evals/behave/{pressure,workflows}.json. A case's `files` names fixture layers under
 // evals/fixtures/, copied in order (the M0 eval format); the default is node-bug.
 // Grader shape adapted from superpowers tests/claude-code (MIT; ideas only).
-import { cpSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
-import { finalText, runClaude, runProblem, toolUses } from './claude-run.mjs';
+import { finalText, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
 
 // stage(root, files): one directory holding the fixture layers in order. A single layer is used in place;
 // several are copied into a new temp directory, which the caller removes.
@@ -19,15 +19,35 @@ export function stage(root, files) {
   return dir;
 }
 
-// loadCases(root): [{ id, source, files, prompts, expectations, pressure }], ids unique.
+// WORKSPACE_KEYS: the case fields that shape its workspace and run, passed to workspace() and runClaude.
+const WORKSPACE_KEYS = ['origin', 'branch', 'setup', 'max_turns'];
+
+// caseWorkspace(root, c): the workspace a run of case c gets: its layers staged, then workspace() with its
+// origin, branch and setup. Returns the project path; the caller removes its parent folder.
+export function caseWorkspace(root, c) {
+  const src = stage(root, c.files);
+  try {
+    return workspace(src, { name: 'billing-service', origin: !!c.origin, branch: c.branch || '', setup: c.setup || [] });
+  } finally {
+    if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
+  }
+}
+
+// loadCases(root): [{ id, source, files, prompts, expectations, pressure, origin?, branch?, setup?,
+// max_turns? }], ids unique. An evals/cases entry may give prompts (several turns) beside its prompt, the
+// turn route-eval checks; then prompt is the last of them. Throws when a case names a fixture layer that
+// does not exist.
 export function loadCases(root) {
   const out = [];
   const dir = join(root, 'evals', 'cases');
   for (const f of readdirSync(dir).filter((n) => n.endsWith('.json') && !n.startsWith('row-')).sort()) {
     const j = JSON.parse(readFileSync(join(dir, f), 'utf8'));
     for (const e of j.evals ?? []) {
-      out.push({ id: `${j.skill_name}-${e.id}`, source: `evals/cases/${f}`, files: e.files || ['node-bug'],
-        prompts: e.prompts || [e.prompt], expectations: e.expectations, pressure: [] });
+      const id = `${j.skill_name}-${e.id}`;
+      if (e.prompts && e.prompts[e.prompts.length - 1] !== e.prompt) throw new Error(`behave: ${id}: prompt must be the last of prompts (evals/cases/${f})`);
+      const shape = Object.fromEntries(WORKSPACE_KEYS.filter((k) => e[k] !== undefined).map((k) => [k, e[k]]));
+      out.push({ id, source: `evals/cases/${f}`, files: e.files || ['node-bug'],
+        prompts: e.prompts || [e.prompt], expectations: e.expectations, pressure: [], ...shape });
     }
   }
   for (const f of ['pressure.json', 'workflows.json']) {
@@ -40,6 +60,7 @@ export function loadCases(root) {
     if (seen.has(c.id)) throw new Error(`behave: duplicate case id ${c.id} (${c.source})`);
     seen.add(c.id);
     if (!Array.isArray(c.expectations) || !c.expectations.length) throw new Error(`behave: ${c.id} has no expectations`);
+    for (const f of c.files) if (!existsSync(join(root, 'evals', 'fixtures', f))) throw new Error(`behave: ${c.id} names fixture layer ${f}, which does not exist (evals/fixtures/${f}; ${c.source})`);
   }
   return out;
 }
