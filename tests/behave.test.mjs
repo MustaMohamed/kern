@@ -142,7 +142,7 @@ test('the plugin copy keeps the plugin and leaves out answer keys', () => {
 test('the plugin copy leaves out the eval runners and keeps the plugin scripts', () => {
   const d = pluginCopy(ROOT);
   try {
-    for (const p of ['scripts/h2h.mjs', 'scripts/behave.mjs', 'scripts/lib/behave.mjs', 'scripts/lib/claude-run.mjs']) assert.ok(!existsSync(join(d, p)), p);
+    for (const p of ['scripts/h2h.mjs', 'scripts/behave.mjs', 'scripts/lib/behave.mjs', 'scripts/lib/claude-run.mjs', 'scripts/kernel-adherence.mjs', 'scripts/lib/adherence.mjs', '.superpowers']) assert.ok(!existsSync(join(d, p)), p);
     for (const p of ['scripts/plan-check', 'scripts/kern-get']) assert.ok(existsSync(join(d, p)), p);
   } finally { rmSync(dirname(d), { recursive: true, force: true }); }
 });

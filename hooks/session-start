@@ -78,18 +78,21 @@ git_note() {
 
 # env_export: appends `export CLAUDE_PLUGIN_ROOT='<root>'` to $CLAUDE_ENV_FILE, the file whose lines
 # Claude Code runs ahead of each Bash tool command, so a skill's `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>`
-# runs as written. Claude Code makes the file's folder, not the file: a path that does not exist yet is
-# written when its folder is writable, an existing one only when it is a writable regular file. The value
-# is single-quoted, each ' written as '\''. Nothing else goes to that file.
+# runs as written. Claude Code names an absolute path in its session-env folder and makes the folder, not
+# the file: a path that does not exist yet is written when its folder is writable, an existing one only
+# when it is a writable regular file. A relative path or a symlink is never Claude Code's, so it is left
+# alone. The value is single-quoted, each ' written as '\''. Nothing else goes to that file, and a failed
+# open prints nothing.
 env_export() {
   local f="${CLAUDE_ENV_FILE-}" q="'"
-  [ -n "$f" ] || return 0
-  if [ -e "$f" ] || [ -L "$f" ]; then
+  case "$f" in /*) ;; *) return 0 ;; esac
+  [ -L "$f" ] && return 0
+  if [ -e "$f" ]; then
     if [ ! -f "$f" ] || [ ! -w "$f" ]; then return 0; fi
   elif [ ! -d "$(dirname "$f")" ] || [ ! -w "$(dirname "$f")" ]; then
     return 0
   fi
-  printf 'export CLAUDE_PLUGIN_ROOT=%s\n' "$q${KERN_ROOT//$q/$q\\$q$q}$q" >>"$f" 2>/dev/null
+  printf 'export CLAUDE_PLUGIN_ROOT=%s\n' "$q${KERN_ROOT//$q/$q\\$q$q}$q" 2>/dev/null >>"$f"
   return 0
 }
 

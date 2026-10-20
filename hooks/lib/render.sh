@@ -3,31 +3,35 @@
 # values may hold any character: {VERSION}, {MODE} and {AUTOPILOT} take K_VERSION, K_MODE and
 # K_AUTOPILOT; {ROOT_PATH} and {ROOT} take K_ROOT, the plugin root, and {KERN} takes K_KERN, its skills
 # folder, so a rendered line names kern files by absolute path; a line that is exactly {SETTINGS} or
-# {VOICE} is replaced by K_SETTINGS or K_VOICE. The paths go in last, so no path is read for {VERSION},
-# {MODE} or {AUTOPILOT}.
+# {VOICE} is replaced by K_SETTINGS or K_VOICE. One pass, left to right: a value put in is never read
+# again for a placeholder, so a root that holds the text {ROOT} renders exactly.
 
 # render_template FILE
 render_template() {
   K_VERSION="${K_VERSION-}" K_ROOT="${K_ROOT-}" K_KERN="${K_KERN-}" K_MODE="${K_MODE-}" \
     K_AUTOPILOT="${K_AUTOPILOT-}" K_VOICE="${K_VOICE-}" K_SETTINGS="${K_SETTINGS-}" \
     LC_ALL=C awk '
-    function rep(s, ph, val,   out, p) {
+    BEGIN {
+      n = split("VERSION MODE AUTOPILOT ROOT_PATH KERN ROOT", name, " ")
+      for (i = 1; i <= n; i++) ph[i] = "{" name[i] "}"
+      val[1] = ENVIRON["K_VERSION"]; val[2] = ENVIRON["K_MODE"]; val[3] = ENVIRON["K_AUTOPILOT"]
+      val[4] = ENVIRON["K_ROOT"]; val[5] = ENVIRON["K_KERN"]; val[6] = ENVIRON["K_ROOT"]
+    }
+    # fill(s): s with each placeholder replaced by its value, the earliest first. Two placeholders cannot
+    # start at one place, since each ends at its first "}".
+    function fill(s,   out, i, p, at, k) {
       out = ""
-      while ((p = index(s, ph)) > 0) { out = out substr(s, 1, p - 1) val; s = substr(s, p + length(ph)) }
-      return out s
+      while (1) {
+        at = 0
+        for (i = 1; i <= n; i++) if ((p = index(s, ph[i])) > 0 && (at == 0 || p < at)) { at = p; k = i }
+        if (at == 0) return out s
+        out = out substr(s, 1, at - 1) val[k]
+        s = substr(s, at + length(ph[k]))
+      }
     }
     $0 == "{SETTINGS}" { if (ENVIRON["K_SETTINGS"] != "") print ENVIRON["K_SETTINGS"]; next }
     $0 == "{VOICE}" { if (ENVIRON["K_VOICE"] != "") print ENVIRON["K_VOICE"]; next }
-    {
-      s = $0
-      s = rep(s, "{VERSION}", ENVIRON["K_VERSION"])
-      s = rep(s, "{MODE}", ENVIRON["K_MODE"])
-      s = rep(s, "{AUTOPILOT}", ENVIRON["K_AUTOPILOT"])
-      s = rep(s, "{ROOT_PATH}", ENVIRON["K_ROOT"])
-      s = rep(s, "{KERN}", ENVIRON["K_KERN"])
-      s = rep(s, "{ROOT}", ENVIRON["K_ROOT"])
-      print s
-    }' "$1"
+    { print fill($0) }' "$1"
 }
 
 # kern_version: the version in .claude-plugin/plugin.json.

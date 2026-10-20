@@ -140,7 +140,7 @@ kern/
 | SessionStart | `startup\|clear\|compact` | Rendered kernel, active mode rules, settings summary | Target 5,278 chars (measured after Task 16d); lint error at 9,000; Claude Code's cap is 10,000 |
 | SubagentStart | all | Subagent kernel and the active voice, injected once at launch | 1,200 chars (Claude Code's cap is 10,000) |
 
-Rendering fills `{VERSION}` from `plugin.json`, `{ROOT}` with the absolute plugin root, `{KERN}` with `{ROOT}/skills`, and `{SETTINGS}` with the settings summary, so no rendered row or line holds a placeholder: on 2026-10-20 6 of 57 behaviour runs read a path with `{KERN}` or `${CLAUDE_PLUGIN_ROOT}` left in it and gave up on kern. When Claude Code names `$CLAUDE_ENV_FILE`, SessionStart appends `export CLAUDE_PLUGIN_ROOT='<root>'` to it and nothing else, so a skill's `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>` runs as written in the Bash tool. The hook needs only POSIX shell and `sed`: no `jq`, no git, no network. Output uses `hookSpecificOutput.additionalContext`.
+Rendering fills `{VERSION}` from `plugin.json`, `{ROOT}` with the absolute plugin root, `{KERN}` with `{ROOT}/skills`, and `{SETTINGS}` with the settings summary, so no rendered row or line holds a placeholder: on 2026-10-20 6 of 57 behaviour runs read a path with `{KERN}` or `${CLAUDE_PLUGIN_ROOT}` left in it and gave up on kern. When Claude Code names `$CLAUDE_ENV_FILE`, SessionStart appends `export CLAUDE_PLUGIN_ROOT='<root>'` to it and nothing else, so a skill's `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>` runs as written in the Bash tool. Known limit: `CLAUDE_PLUGIN_ROOT` is a shared name, so once kern exports it, a `${CLAUDE_PLUGIN_ROOT}` in another plugin's path-read skill resolves into kern. The hook needs only POSIX shell and `sed`: no `jq`, no git, no network. Output uses `hookSpecificOutput.additionalContext`.
 
 ### 4.2 Sections and budgets
 
@@ -161,7 +161,7 @@ The chars above are the design split. Since Task 16d put every row in the kernel
 
 ### 4.3 Routing table
 
-The rule: before a new task's first tool call or question, match the task against the table. A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a question or casual turn with no change, or a user opt-out, matches nothing. On a match, Read the route, or the project skill an override names for its job, before any other tool call, then open a todo list whose first items are its `## Steps`, copied verbatim (one `TaskCreate` per step, or `TodoWrite`). Each new task reads its route, even one read earlier. A step not done stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
+The rule: before a new task's first tool call or question, match the task against the table. A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn, a question context answers, or a user opt-out matches nothing. On a match, Read the route, or the project skill an override names for its job, before any other tool call, then open a todo list whose first items are its `## Steps`, copied verbatim (one `TaskCreate` per step, or `TodoWrite`). Each new task reads its route, even one read earlier. A step not done stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
 
 | Observable trigger | Route |
 |---|---|

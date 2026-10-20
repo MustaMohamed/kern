@@ -412,3 +412,51 @@ env_line() { printf "export CLAUDE_PLUGIN_ROOT='%s'\n" "$1"; }
   start startup
   [ ! -s "$BATS_TEST_TMPDIR/off.sh" ]
 }
+
+# Claude Code always names an absolute path in its own session-env folder, never a symlink (Task 16d review).
+@test "a relative CLAUDE_ENV_FILE is left alone" {
+  mkdir -p "$BATS_TEST_TMPDIR/rel"
+  cd "$BATS_TEST_TMPDIR/rel"
+  export CLAUDE_ENV_FILE=env.sh
+  start startup
+  [ "$status" -eq 0 ]
+  [ ! -e "$BATS_TEST_TMPDIR/rel/env.sh" ]
+}
+
+@test "a CLAUDE_ENV_FILE that is a symlink is left alone, even to a writable file" {
+  : >"$BATS_TEST_TMPDIR/target.sh"
+  ln -s "$BATS_TEST_TMPDIR/target.sh" "$BATS_TEST_TMPDIR/link.sh"
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/link.sh"
+  start startup
+  [ "$status" -eq 0 ]
+  [ ! -s "$BATS_TEST_TMPDIR/target.sh" ]
+}
+
+@test "a CLAUDE_ENV_FILE that cannot be opened prints nothing" {
+  start startup
+  plain=$output
+  mkdir -p "$BATS_TEST_TMPDIR/s"
+  # The folder is writable and the path does not exist, but a trailing slash makes the open fail.
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/s/env.sh/"
+  start startup
+  [ "$status" -eq 0 ]
+  [ "$output" = "$plain" ] || { echo "output changed: $output" | head -3; return 1; }
+}
+
+@test "a plugin root that holds placeholder text or shell characters renders exactly" {
+  # The render is one pass: a value it puts in is never read for a placeholder.
+  F="$BATS_TEST_TMPDIR/k{ROOT}x{KERN}y{VERSION}&a\\b|c \$(d)
+e"
+  mkdir -p "$F"
+  cp -R "$K/.claude-plugin" "$K/hooks" "$K/kernel" "$K/modes" "$K/skills" "$F/"
+  run bash "$F/hooks/session-start" <<<"$(payload SessionStart '"source":"startup"')"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"In kern files read by path, \${CLAUDE_PLUGIN_ROOT} means $F."$'\n'* ]] || false
+  [[ "$output" == *$'\n'"| New behaviour and no agreed spec | Read $F/skills/define/SKILL.md |"$'\n'* ]] || false
+  [[ "$output" == *$'\n'"| Phase ends, or context is filling | Read $F/kernel/context.md |"$'\n'* ]] || false
+  [[ "$output" == *$'\n'"Scripts: bash $F/scripts/<name>. "* ]] || false
+  run bash "$F/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a","agent_type":"Explore"')"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s' "$output" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).hookSpecificOutput.additionalContext)' | grep -c '^In kern files read by path')" -eq 1 ]
+  [[ "$(printf '%s' "$output" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).hookSpecificOutput.additionalContext)')" == *"\${CLAUDE_PLUGIN_ROOT} means $F."* ]] || false
+}
