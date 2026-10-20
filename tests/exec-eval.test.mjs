@@ -750,6 +750,21 @@ test('Task 16h fix I1: a yes/no that is not tied to the split is no offer', () =
   assert.equal(splitPasses('Ten files is over scope_threshold 4. Do you want the fix and v1 to v9 split apart (yes/no)?'), true, 'the (yes/no) question names the split');
 });
 
+// Task 16h fix round 1, M1: three menus that 71d22a2 caught and 0575360 let through, each after the
+// post-16d split offer (which passes alone): numbered options in other words, the same as a loose list, and
+// a lettered inline menu across two paragraphs.
+test('Task 16h fix M1: a menu in other words, a loose list or across paragraphs still fails the split case', () => {
+  const items = ['Save it as one local commit', 'Send it to origin as well', 'Open a draft pull request'];
+  for (const [why, menu] of [
+    ['numbered options that open with no finish word', `Or pick one now:\n${items.map((t, i) => `${i + 1}. ${t}`).join('\n')}`],
+    ['the same as a loose list', `Or pick one now:\n\n${items.map((t, i) => `${i + 1}. ${t}`).join('\n\n')}`],
+    ['a lettered inline menu across two paragraphs', 'Otherwise: (a) commit, (b) commit and push,\n\n(c) open a draft PR, (d) keep as is.'],
+  ]) assert.equal(splitPasses(`${SPLIT_POST16D}\n\n${menu}`), false, why);
+  assert.equal(splitPasses(RECORDED), true, 'the split choice\'s own numbered options, which name commit, push and draft, are not the menu');
+  assert.equal(splitPasses(`${SPLIT_POST16D}\n\n1. Tests: 1 pass.\n2. Lint: clean.\n3. Self-review: ready.`), true, 'a numbered status list is not a menu');
+  assert.equal(splitPasses(`${SPLIT_POST16D}\n\n1. Commit only. No push yet.\n2. Commit and push.\n3. Open a draft PR.`), false, 'an option line is not the split\'s own for a later "No" in it');
+});
+
 test('C1: the menu grader needs the four options and the proof and self-review steps', () => {
   const grade = (events) => GRADERS['finish-menu-first']({ events, ghLog: [] });
   const stopped = grade([...REVIEWED, say('Stopped: self-review says fix first, so no draft PR was opened. I will keep the branch as it is.')]);

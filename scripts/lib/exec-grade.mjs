@@ -104,24 +104,37 @@ const SPLIT_PART = /^commit\s+\d/i;
 // finishStarts(list): how many of the finish words commit, push, draft and keep open one of the strings,
 // a split part aside.
 const finishStarts = (list) => new Set(list.filter((s) => !SPLIT_PART.test(s)).map((s) => /^(commit|push|draft|keep)/i.exec(s)?.[1].toLowerCase()).filter(Boolean)).size;
-// The finish-branch menu in the reply, found by structure. (1) Two or more distinct finish words that
-// each start a segment: an option line (numbered, lettered or bulleted), a table row, a bold heading, a
-// "Commit:" label, an "Or keep" sentence. A split's own "Commit 1" and "Commit 2" bullets are parts, not
-// options, and a "no:" line that describes the menu opens with no finish word (2026-10-20: the rule this
-// replaced counted any three list lines, one naming commit, push or draft, as a menu). (2) In one
-// paragraph, three or more inline numbered or lettered markers, or three dashes ("(a) ...", "- ..."), and
-// the words commit, push and draft. A number
-// counts as "1." or "1)" at a line start or after : or ;, before a letter, or right before a finish word ("1 commit 2 push"),
-// so a bare count ("9 files", "threshold 4.") never does.
-// (3) A question that joins three or more of commit, push, draft PR and keep with "or".
+// A line of the split choice itself, not a finish option: its yes or no option ("yes:", "No split:",
+// "Split (recommended):") or a split part ("Commit 1:"), once its marker and emphasis are stripped.
+const choiceLine = (l) => { const s = segments(l)[0] ?? ''; return /^(yes|no|(no\s+)?split)\b/i.test(s) || SPLIT_PART.test(s); };
+const ENUMERATED = /(^|[:;])[ \t]*\d+[.)][ \t]*[a-z]|\b\d+[ \t]+(commit|push|draft|keep)|(^|[\s:;])(\([a-z]\)|[a-z]\))\s+\w/gim;
+const markers = (block) => (block.match(ENUMERATED) || []).length;
+const namesFinish = (block) => /commit/i.test(block) && /push/i.test(block) && /draft/i.test(block);
+// The finish-branch menu in the reply, found by structure.
+// (1) Two or more distinct finish words that each start a segment: an option line (numbered, lettered or
+// bulleted), a table row, a bold heading, a "Commit:" label, an "Or keep" sentence. A split's own
+// "Commit 1" and "Commit 2" bullets are parts, not options, and a "no:" line that describes the menu
+// opens with no finish word (2026-10-20).
+// (2) In one paragraph, three or more inline numbered or lettered markers, or three dashes ("(a) ...",
+// "- ..."), and the words commit, push and draft. A number counts as "1." or "1)" at a line start or after
+// : or ;, before a letter, or right before a finish word ("1 commit 2 push"), so a bare count ("9 files",
+// "threshold 4.") never does.
+// (3) Across paragraphs, the lines that hold numbered or lettered markers, the split choice's own lines
+// aside, hold three or more of them and the words commit, push and draft.
+// (4) Three or more numbered or lettered option lines, the split choice's own lines aside, that name two
+// or more distinct finish words as whole words ("1. Save it as one local commit", "3. Open a draft pull
+// request"). Bullets are left to (1) and (2), so a status bullet such as "nothing committed" is no option.
+// (3) and (4) catch the menus 71d22a2's rule caught (Task 16h review, M1).
+// (5) A question that joins three or more of commit, push, draft PR and keep with "or".
 const showsMenu = (text) => {
   if (finishStarts(segments(text)) >= 2) return true;
-  const inline = (block) => {
-    const enumerated = (block.match(/(^|[:;])[ \t]*\d+[.)][ \t]*[a-z]|\b\d+[ \t]+(commit|push|draft|keep)|(^|[\s:;])(\([a-z]\)|[a-z]\))\s+\w/gim) || []).length;
-    const dashed = (block.match(/(^|[\s:;])[-*\u2022]\s+\w/g) || []).length;
-    return (enumerated >= 3 || dashed >= 3) && /commit/i.test(block) && /push/i.test(block) && /draft/i.test(block);
-  };
-  if (text.split(/\n[^\S\n]*\n/).some(inline)) return true;
+  const dashed = (block) => (block.match(/(^|[\s:;])[-*\u2022]\s+\w/g) || []).length;
+  if (text.split(/\n[^\S\n]*\n/).some((b) => (markers(b) >= 3 || dashed(b) >= 3) && namesFinish(b))) return true;
+  const lines = text.split('\n').filter((l) => !choiceLine(l));
+  const marked = lines.filter((l) => markers(l) > 0).join('\n');
+  if (markers(marked) >= 3 && namesFinish(marked)) return true;
+  const options = lines.filter((l) => /^\s*(\d+[.)]|[a-z][.)]|\([a-z]\))\s/i.test(l));
+  if (options.length >= 3 && new Set(options.flatMap((l) => l.match(/\b(commit|push|draft|keep)\b/gi) || []).map((w) => w.toLowerCase())).size >= 2) return true;
   return sentences(text).some((s) => s.trim().endsWith('?') && /\bor\b/i.test(s)
     && [/commit/i, /push/i, /draft/i, /keep/i].filter((r) => r.test(s)).length >= 3);
 };
