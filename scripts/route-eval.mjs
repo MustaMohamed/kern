@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { isMain } from './lib/is-main.mjs';
 import { loadModel } from './lib/lint-rules.mjs';
 import { buildCorpus, rank, similarity } from './lib/rank.mjs';
-import { kernelRows, routeText } from './lib/kernel-rows.mjs';
+import { kernelRows } from './lib/kernel-rows.mjs';
 
 const MIN_POSITIVE = 3;
 const MIN_NEGATIVE = 2;
@@ -18,7 +18,7 @@ export function targets(root) {
   const model = loadModel(root);
   const skills = model.skills.filter((s) => s.tier === 'auto' && s.data.description)
     .map((s) => ({ name: s.name, text: s.data.description, kind: 'skill' }));
-  const rows = kernelRows(routeText(model)).map((r) => ({ name: `row-${r.route}`, text: r.when, kind: 'row' }));
+  const rows = kernelRows(model.kernelText).map((r) => ({ name: `row-${r.route}`, text: r.when, kind: 'row' }));
   const dPath = join(root, 'evals', 'distractors.json');
   const distractors = existsSync(dPath) ? JSON.parse(readFileSync(dPath, 'utf8')).map((d) => ({ name: d.name, text: d.description, kind: 'distractor' })) : [];
   return [...skills, ...rows, ...distractors];

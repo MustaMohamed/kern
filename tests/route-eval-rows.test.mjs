@@ -27,24 +27,20 @@ const cases = (name, pos, neg) => JSON.stringify({
   trigger: { positive: pos.map((prompt) => ({ prompt, top_k: 3 })), negative: neg.map((prompt) => ({ prompt })) },
   evals: [{ id: 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] }],
 });
+// Since Task 16d every row is in the kernel table.
 const KERNEL = [
-  '| Observable trigger | Route |',
-  '|---|---|',
-  '| Phase ends, or context is filling | Read {ROOT}/kernel/context.md |',
+  'Several matches: define and diagnose before build.',
   '',
-  'Then Read {ROOT}/kernel/routes.md. Several matches: define and diagnose before build.',
-].join('\n');
-const ROUTES = [
   '| Observable trigger | Route |',
   '|---|---|',
   '| Bug, failing test, unexpected output, crash or error | Read {KERN}/diagnose/SKILL.md |',
   '| Starting or resuming after a gap | Read {KERN}/recall/SKILL.md |',
+  '| Phase ends, or context is filling | Read {ROOT}/kernel/context.md |',
 ].join('\n');
 
 function fixture(extra = {}) {
   return repo({
     'kernel/kernel.md': KERNEL,
-    'kernel/routes.md': ROUTES,
     'skills/diagnose/SKILL.md': pathSkill('diagnose'),
     'skills/recall/SKILL.md': autoSkill('recall', 'Use when starting or resuming work after a gap and state must be rebuilt: where did I leave off, catch me up.'),
     'evals/cases/recall.json': cases('recall', ['where did I leave off yesterday', 'catch me up on the work', 'resuming after a long gap'], ['fix this crash', 'rename a variable']),
@@ -56,17 +52,22 @@ function fixture(extra = {}) {
 }
 
 test('kernelRows parses skill and kernel-file routes and skips other lines', () => {
-  assert.deepEqual(kernelRows(`${KERNEL}\n${ROUTES}`), [
-    { when: 'Phase ends, or context is filling', route: 'context' },
+  assert.deepEqual(kernelRows(KERNEL), [
     { when: 'Bug, failing test, unexpected output, crash or error', route: 'diagnose' },
     { when: 'Starting or resuming after a gap', route: 'recall' },
+    { when: 'Phase ends, or context is filling', route: 'context' },
   ]);
   assert.deepEqual(kernelRows(''), []);
 });
 
-test('targets add the rows of both files after skills and before distractors', () => {
+test('targets add the kernel rows after skills and before distractors', () => {
   const root = fixture({ 'evals/distractors.json': JSON.stringify([{ name: 'other', description: 'Something else entirely' }]) });
-  assert.deepEqual(targets(root).map((t) => `${t.kind}:${t.name}`), ['skill:recall', 'row:row-context', 'row:row-diagnose', 'row:row-recall', 'distractor:other']);
+  assert.deepEqual(targets(root).map((t) => `${t.kind}:${t.name}`), ['skill:recall', 'row:row-diagnose', 'row:row-recall', 'row:row-context', 'distractor:other']);
+});
+
+test('a row left in kernel/routes.md is not a target: no session reads that file', () => {
+  const root = fixture({ 'kernel/routes.md': '| Old trigger | Read {KERN}/define/SKILL.md |\n' });
+  assert.deepEqual(targets(root).filter((t) => t.kind === 'row').map((t) => t.name), ['row-diagnose', 'row-recall', 'row-context']);
 });
 
 test('a row and its own skill count as one owner', () => {

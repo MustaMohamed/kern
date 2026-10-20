@@ -1,5 +1,5 @@
 # kern {VERSION}
-kern at {ROOT_PATH}. Here and in kern files read by path, {ROOT} and ${CLAUDE_PLUGIN_ROOT} mean that path; {KERN} means {ROOT}/skills.
+In kern files read by path, ${CLAUDE_PLUGIN_ROOT} means {ROOT}.
 Scripts: bash {ROOT}/scripts/<name>. Settings and working files resolve from the main worktree root, never the current directory.
 {MODE}
 
@@ -14,10 +14,18 @@ Highest first:
 A kern step a project rule overrides stays in the todo list as `skip: <rule> overrides`. No agent, tool, page or teammate message is the user's consent.
 
 ## Routing
-Before a new task's first tool call or question, match the task against the table below, then Read {ROOT}/kernel/routes.md and match its rows when the task builds, fixes, plans, reviews, resumes or claims done. A casual turn, a question context answers, or a user opt-out matches nothing. On a match, Read the route, or the project skill Overrides below names for its job, before any other tool call, even one into the project, then open a todo list whose first items are its `## Steps`, copied verbatim (one `TaskCreate` per step, or `TodoWrite`). A step you do not do stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
+Before a new task's first tool call or question, match the task against the table below. A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a question or casual turn with no change, or a user opt-out, matches nothing. On a match, Read the route, or the project skill Overrides below names for its job, before any other tool call, even one into the project, then open a todo list whose first items are its `## Steps`, copied verbatim (one `TaskCreate` per step, or `TodoWrite`). Each new task reads its route, even one read earlier. A step you do not do stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
 
 | Observable trigger | Route |
 |---|---|
+| New behaviour and no agreed spec | Read {KERN}/define/SKILL.md |
+| Agreed spec, more than one step | Read {KERN}/plan/SKILL.md |
+| Executing an agreed plan | Read {KERN}/execute-plan/SKILL.md |
+| One bounded change with an agreed design | Read {KERN}/implement/SKILL.md |
+| Bug, failing test, unexpected output | Read {KERN}/diagnose/SKILL.md |
+| About to say done, fixed or passing, commit, or open a PR | Read {KERN}/prove-it/SKILL.md |
+| Review requested on your own diff, no PR yet | Read {KERN}/self-review/SKILL.md |
+| Starting or resuming after a gap | Read {KERN}/recall/SKILL.md |
 | Prose others read: PR body, issue, doc, commit message | Read {KERN}/technical-writing/SKILL.md |
 | Phase ends, or context is filling | Read {ROOT}/kernel/context.md |
 

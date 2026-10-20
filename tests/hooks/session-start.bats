@@ -18,19 +18,25 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
   [ "$status" -eq 0 ]
   [[ "${lines[0]}" == "# kern "* ]] || false
   [[ "$output" == *"kern mode: voice=normal surface=auto autopilot=off"* ]] || false
-  [[ "${lines[1]}" == "kern at $K. Here and in kern files read by path, {ROOT} and \${CLAUDE_PLUGIN_ROOT} mean that path; {KERN} means {ROOT}/skills." ]] || false
-  [[ "$output" == *"Read {KERN}/technical-writing/SKILL.md"* ]] || false
-  [ "$(printf '%s' "$output" | grep -o "$K" | wc -l | tr -d ' ')" -eq 1 ]
-  for ph in VERSION ROOT_PATH MODE AUTOPILOT SETTINGS; do
+  [[ "${lines[1]}" == "In kern files read by path, \${CLAUDE_PLUGIN_ROOT} means $K." ]] || false
+  # Every row names its route by absolute path: a model read {KERN}/... literally and gave up on kern.
+  [[ "$output" == *"| Read $K/skills/technical-writing/SKILL.md |"* ]] || false
+  [[ "$output" == *"| Read $K/skills/diagnose/SKILL.md |"* ]] || false
+  [[ "$output" == *"| Read $K/kernel/context.md |"* ]] || false
+  [[ "$output" == *"Scripts: bash $K/scripts/<name>."* ]] || false
+  for ph in VERSION ROOT_PATH ROOT KERN MODE AUTOPILOT SETTINGS; do
     [[ "$output" != *"{$ph}"* ]] || { echo "unfilled {$ph}"; return 1; }
   done
 }
 
-@test "the rendered kernel stays under 4,000 characters with no settings" {
+# The rule 7 target for the rendered kernel, measured after Task 16d put every route row in the kernel.
+TARGET=5278
+
+@test "the rendered kernel stays within the rule 7 target with no settings" {
   start startup
-  # Measure with a typical installed root (50 characters) so the checkout path does not matter.
+  # Measure with a typical installed root (52 characters) so the checkout path does not matter.
   norm=${output//"$K"/\/Users\/someone\/.claude\/plugins\/cache\/kern\/kern\/0.1.0}
-  [ "${#norm}" -le 4000 ]
+  [ "${#norm}" -le "$TARGET" ] || { echo "${#norm} characters"; return 1; }
 }
 
 @test "startup and clear reset the mode; compact and resume keep it" {
@@ -118,9 +124,11 @@ YML
   summary=$(printf '%s\n' "$output" | sed '1,/^## Project settings$/d')
   [[ "$summary" == *"commit -> project skill commit"* ]] || false
   [[ "$summary" == *"self-review -> project skill self-review"* ]] || false
-  [[ "$summary" == *"(more: bash {ROOT}/scripts/kern-get <key>)"* ]] || false
+  [[ "$summary" == *"(more: bash $F/scripts/kern-get <key>)"* ]] || false
   before_set=${summary%%"Set: "*}
   [[ "$before_set" == *"Overrides (follow the project skill, say so in one line): "* ]] || false
+  # The 600 counts the plugin root as {ROOT}, so the entries kept do not depend on the install path.
+  summary=${summary//"$F"/\{ROOT\}}
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
   printf '%s' "$output" | iconv -f UTF-8 -t UTF-8 >/dev/null
 }
@@ -295,7 +303,7 @@ fake_git_version() {
     [[ "${lines[0]}" == "# kern "* ]] || false
     [[ "$output" == *"## Project settings"* ]] || false
     norm=${output//"$K"/\/Users\/someone\/.claude\/plugins\/cache\/kern\/kern\/0.1.0}
-    [ "${#norm}" -le 4000 ] || { echo "$v: ${#norm} characters"; return 1; }
+    [ "${#norm}" -le "$TARGET" ] || { echo "$v: ${#norm} characters"; return 1; }
     PATH=${PATH#"$BATS_TEST_TMPDIR/gitbin:"}
   done
   fake_git_version "git version 2.30.9" 0
@@ -344,4 +352,63 @@ fake_git_version() {
   run bash "$K/hooks/session-start" <<<"$(payload SessionStart '"source":"startup"' | sed 's/"session_id": *"[^"]*"/"session_id":"..\/x"/')"
   [[ "$output" == *"voice=normal"* ]] || false
   [[ "$output" != *"# kern terse voice"* ]] || false
+}
+
+# CLAUDE_ENV_FILE: Claude Code 2.1.302 names a file in its session-env folder for a SessionStart hook and
+# runs what the hook appends there ahead of each Bash tool command. It makes the folder, not the file.
+env_line() { printf "export CLAUDE_PLUGIN_ROOT='%s'\n" "$1"; }
+
+@test "CLAUDE_ENV_FILE gets one line exporting the plugin root, and nothing else" {
+  start startup
+  plain=$output
+  mkdir -p "$BATS_TEST_TMPDIR/session-env/s1"
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/session-env/s1/sessionstart-hook-0.sh"
+  start startup
+  [ "$status" -eq 0 ]
+  env_line "$K" | cmp - "$CLAUDE_ENV_FILE"
+  [ "$output" = "$plain" ] || { echo "the kernel output changed"; return 1; }
+  printf 'export A=1\n' >"$CLAUDE_ENV_FILE"
+  start startup
+  { printf 'export A=1\n'; env_line "$K"; } | cmp - "$CLAUDE_ENV_FILE"
+}
+
+@test "the CLAUDE_ENV_FILE line is quoted for the shell, so a root with a quote, a space or a dollar sign survives" {
+  F="$BATS_TEST_TMPDIR/it's a \$kern \`x\`"
+  mkdir -p "$F"
+  cp -R "$K/.claude-plugin" "$K/hooks" "$K/kernel" "$K/modes" "$K/skills" "$F/"
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/env.sh"
+  : >"$CLAUDE_ENV_FILE"
+  run bash "$F/hooks/session-start" <<<"$(payload SessionStart '"source":"startup"')"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$CLAUDE_ENV_FILE")" = "export CLAUDE_PLUGIN_ROOT='$BATS_TEST_TMPDIR/it'\\''s a \$kern \`x\`'" ] || { cat "$CLAUDE_ENV_FILE"; return 1; }
+  [ "$(env -i bash -c '. "$1"; printf %s "$CLAUDE_PLUGIN_ROOT"' _ "$CLAUDE_ENV_FILE")" = "$F" ]
+}
+
+@test "CLAUDE_ENV_FILE is left alone when it is not a writable file, or kern is off" {
+  mkdir -p "$BATS_TEST_TMPDIR/dir"
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/dir"
+  start startup
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == "# kern "* ]] || false
+  [ -z "$(ls -A "$BATS_TEST_TMPDIR/dir")" ]
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/missing/env.sh"
+  start startup
+  [ "$status" -eq 0 ]
+  [ ! -e "$BATS_TEST_TMPDIR/missing" ]
+  printf 'export A=1\n' >"$BATS_TEST_TMPDIR/ro.sh"
+  chmod 444 "$BATS_TEST_TMPDIR/ro.sh"
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/ro.sh"
+  start startup
+  [ "$status" -eq 0 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/ro.sh")" = "export A=1" ]
+  ln -s "$BATS_TEST_TMPDIR/nowhere.sh" "$BATS_TEST_TMPDIR/link.sh"
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/link.sh"
+  start startup
+  [ "$status" -eq 0 ]
+  [ ! -e "$BATS_TEST_TMPDIR/nowhere.sh" ]
+  : >"$BATS_TEST_TMPDIR/off.sh"
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  export CLAUDE_ENV_FILE="$BATS_TEST_TMPDIR/off.sh"
+  start startup
+  [ ! -s "$BATS_TEST_TMPDIR/off.sh" ]
 }

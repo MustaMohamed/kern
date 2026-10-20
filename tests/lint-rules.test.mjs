@@ -1,7 +1,7 @@
 // tests/lint-rules.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -136,7 +136,7 @@ test('rule 4: existing references pass, repo-root fallback, anchors and ./', () 
 // M1 rules: 6 (routes and help map), 7 (kernel size), 13 (settings keys), 15 (hook-shape fixtures).
 const kernel = (rows) => `# kern {VERSION}\n\n## Routing\n| When | Route |\n|---|---|\n${rows.join('\n')}\n`;
 // A stand-in session-start prints the header line rule 7 requires (builtins only); LONG is the fixture rule 7 copies in.
-const HEADER = 'printf "kern at %s. \\n" "${0%/hooks/*}"\n';
+const HEADER = 'printf "In kern files read by path, \\${CLAUDE_PLUGIN_ROOT} means %s.\\n" "${0%/hooks/*}"\n';
 const LONG = { 'tests/fixtures/projects/long-settings/kern.local.yml': 'mode.voice: normal\n' };
 
 test('rule 6: a route must exist and open with ## Steps', () => {
@@ -434,30 +434,41 @@ test('rule 16: a WORK folder is read whole, in any case', () => {
   assert.deepEqual(run('Write WORK/spec/x.md and WORK/plans.'), []);
 });
 
-// M2a rules 6, 7 and 12 read kernel/routes.md.
-test('rule 6: rows in kernel/routes.md resolve, and the kernel must name the routed file', () => {
+// Since Task 16d every route row is in the kernel table; M2a's kernel/routes.md is gone.
+test('rule 6: the kernel table\'s rows resolve, and rows left in kernel/routes.md are an error', () => {
   const files = {
-    'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']) + 'Then Read {ROOT}/kernel/routes.md.\n',
-    'kernel/routes.md': '| Bug | Read {KERN}/d/SKILL.md |\n',
+    'kernel/kernel.md': kernel(['| Bug | Read {KERN}/d/SKILL.md |', '| Prose | Read {KERN}/tw/SKILL.md |']),
     'skills/tw/SKILL.md': skill('tw', manual()),
     'skills/d/SKILL.md': skill('d', manual()),
   };
   assert.deepEqual(rules(lint(files)), []);
-  assert.equal(loadModel(repo(files)).skills.find((s) => s.name === 'd').tier, 'path', 'a skill routed from routes.md is a path skill');
-  assert.deepEqual(rules(lint({ ...files, 'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']) })), [6]);
-  assert.deepEqual(rules(lint({ ...files, 'kernel/routes.md': '| Bug | Read {KERN}/gone/SKILL.md |\n' })), [6]);
+  assert.equal(loadModel(repo(files)).skills.find((s) => s.name === 'd').tier, 'path', 'a skill a kernel row routes to is a path skill');
+  assert.deepEqual(rules(lint({ ...files, 'kernel/kernel.md': kernel(['| Bug | Read {KERN}/gone/SKILL.md |']) })), [6]);
+  const left = { ...files, 'kernel/kernel.md': kernel(['| Prose | Read {KERN}/tw/SKILL.md |']), 'kernel/routes.md': '| Bug | Read {KERN}/d/SKILL.md |\n' };
+  const f = lint(left);
+  assert.deepEqual(rules(f), [6]);
+  assert.equal(f[0].message, 'kernel/routes.md holds route rows, which no session reads; move them into the kernel table');
+  assert.equal(loadModel(repo(left)).skills.find((s) => s.name === 'd').tier, 'slash', 'a row left in routes.md routes nothing');
 });
 
-test('rule 7: the routed file has its own cap, and the standing cost has a combined budget', () => {
-  assert.deepEqual(rules(lint({ 'kernel/routes.md': `| x | Read {KERN}/a/SKILL.md |\n${'y'.repeat(1500)}` })).filter((r) => r === 7), [7]);
+test('rule 7: the route rows count in the standing cost, which has a combined budget', () => {
+  // The real hooks render the kernel, rows and all: every session reads them, so a long table fails the budget.
+  const head = 'In kern files read by path, ${CLAUDE_PLUGIN_ROOT} means {ROOT}.\n';
+  const fixture = (n) => {
+    const root = repo({ 'kernel/kernel.md': head + kernel(Array.from({ length: n }, (_, i) => `| Row ${i} ${'w'.repeat(100)} | Read {KERN}/tw/SKILL.md |`)), 'skills/tw/SKILL.md': skill('tw', manual()), ...LONG });
+    for (const d of ['hooks', 'modes', '.claude-plugin', 'kernel/kernel-subagent.md']) cpSync(join(import.meta.dirname, '..', d), join(root, d), { recursive: true });
+    return runLint(loadModel(root)).filter((x) => x.rule === 7 && x.level === 'error');
+  };
+  assert.deepEqual(fixture(2), []);
+  assert.ok(fixture(50).some((x) => /^standing cost \d+ chars \(kernel with no settings \d+, /.test(x.message)), JSON.stringify(fixture(50)));
   const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
   const start = (n) => `#!/usr/bin/env bash\n${HEADER}head -c ${n} /dev/zero | tr "\\0" x\n`;
   const desc = `description: Use when ${'w'.repeat(280)}.`;
   const files = (n) => ({ 'hooks/session-start': start(n), 'hooks/subagent-start': sub, 'skills/a/SKILL.md': skill('a', desc), ...LONG });
-  assert.deepEqual(rules(lint(files(4400))).filter((r) => r === 7), []);
-  const big = lint(files(4500)).filter((f) => f.rule === 7 && f.level === 'error');
+  assert.deepEqual(rules(lint(files(5380))).filter((r) => r === 7), []);
+  const big = lint(files(5400)).filter((f) => f.rule === 7 && f.level === 'error');
   assert.equal(big.length, 1);
-  assert.match(big[0].message, /^standing cost 48\d\d chars/);
+  assert.match(big[0].message, /^standing cost 5800 chars/);
 });
 
 
@@ -467,13 +478,13 @@ const caseJson = (name, p = 3, n = 2, e = 1) => JSON.stringify({
   evals: Array.from({ length: e }, (_, i) => ({ id: i + 1, kind: 'dialogue', prompt: 'x', expected_output: 'y', expectations: ['z'] })),
 });
 
-test('rule 12: auto skills and the rows of both kernel files need eval cases once evals/cases exists', () => {
+test('rule 12: auto skills and kernel rows need eval cases once evals/cases exists', () => {
   const base = { 'skills/a/SKILL.md': skill('a', 'description: Use when x.') };
   assert.deepEqual(rules(lint(base)), [], 'no evals/cases folder: rule 12 is silent');
   assert.deepEqual(rules(lint({ ...base, 'evals/cases/other.json': caseJson('other') })), [12]);
   assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': caseJson('a', 2) })), [12]);
   assert.deepEqual(rules(lint({ ...base, 'evals/cases/a.json': caseJson('a') })), []);
-  const routed = { ...base, 'evals/cases/a.json': caseJson('a'), 'kernel/kernel.md': 'Then Read {ROOT}/kernel/routes.md.\n', 'kernel/routes.md': '| Bug | Read {KERN}/d/SKILL.md |\n', 'skills/d/SKILL.md': skill('d', 'description: d\ndisable-model-invocation: true') };
+  const routed = { ...base, 'evals/cases/a.json': caseJson('a'), 'kernel/kernel.md': '| Bug | Read {KERN}/d/SKILL.md |\n', 'skills/d/SKILL.md': skill('d', 'description: d\ndisable-model-invocation: true') };
   assert.deepEqual(rules(lint(routed)), [12]);
   assert.deepEqual(rules(lint({ ...routed, 'evals/cases/row-d.json': caseJson('row-d') })), []);
 });
@@ -506,7 +517,7 @@ test('rule 7: a render without the kernel header line is an error, not a low sta
   const broken = '#!/usr/bin/env bash\necho "kern did not load: hooks/lib/render.sh is missing or broken; reinstall kern"\n';
   const f = lint({ 'hooks/session-start': broken, 'hooks/subagent-start': SUB, ...LONG }).filter((x) => x.rule === 7 && x.level === 'error');
   assert.deepEqual(f.map((x) => x.path), ['hooks/session-start']);
-  assert.match(f[0].message, /no "kern at <root>\." header line, so the kernel was not measured$/);
+  assert.match(f[0].message, /no "\$\{CLAUDE_PLUGIN_ROOT\} means <root>\." header line, so the kernel was not measured$/);
   assert.deepEqual(lint({ 'hooks/session-start': `#!/usr/bin/env bash\n${HEADER}`, 'hooks/subagent-start': SUB, ...LONG }).filter((x) => x.rule === 7), []);
   const exit3 = lint({ 'hooks/session-start': `#!/usr/bin/env bash\n${HEADER}exit 3\n`, 'hooks/subagent-start': SUB, ...LONG }).filter((x) => x.rule === 7 && x.level === 'error');
   assert.equal(exit3.length, 1, 'a header with a non-zero exit is not a render');
@@ -534,7 +545,7 @@ test('rule 7: a git init that fails is an error', () => {
 test('rule 6: a row that routes to kernel/routes.md is an error', () => {
   const f = lint({ 'kernel/kernel.md': kernel(['| More | Read {ROOT}/kernel/routes.md |']), 'kernel/routes.md': '# routes\n' });
   assert.deepEqual(rules(f), [6]);
-  assert.equal(f[0].message, 'kernel/routes.md is named in the Routing rule, not routed by a row');
+  assert.equal(f[0].message, 'kernel/routes.md is not a route: route rows live in the kernel table');
 });
 
 test('rule 12: a positive that carries the grader flag is an error', () => {
@@ -546,12 +557,12 @@ test('rule 12: a positive that carries the grader flag is an error', () => {
 });
 
 test('tiers: a Read in prose, not in a row, does not make a path skill', () => {
-  const root = repo({ 'kernel/kernel.md': 'Then Read {ROOT}/kernel/routes.md.\n', 'kernel/routes.md': 'Then Read {KERN}/d/SKILL.md first.\n', 'skills/d/SKILL.md': skill('d', manual()) });
+  const root = repo({ 'kernel/kernel.md': 'Then Read {KERN}/d/SKILL.md first.\n', 'skills/d/SKILL.md': skill('d', manual()) });
   assert.equal(loadModel(root).skills.find((s) => s.name === 'd').tier, 'slash');
 });
 
-test('rule 5: kernel/routes.md is scanned for Skill tool references', () => {
-  assert.deepEqual(rules(lint({ 'kernel/routes.md': 'Use the Skill tool with `nope`.\n' })), [5]);
+test('rule 5: the kernel is scanned for Skill tool references', () => {
+  assert.deepEqual(rules(lint({ 'kernel/kernel.md': 'Use the Skill tool with `nope`.\n' })), [5]);
 });
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');

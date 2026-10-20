@@ -24,10 +24,11 @@ make_repo() {
 }
 
 # kern_env DIR: isolates HOME and plugin data under the test tmpdir and points CWD at DIR. A
-# CLAUDE_CONFIG_DIR from the caller would point kern at a real config folder, so it goes.
+# CLAUDE_CONFIG_DIR from the caller would point kern at a real config folder, and a CLAUDE_ENV_FILE at a
+# real session's env file, so both go.
 kern_env() {
   export HOME="$BATS_TEST_TMPDIR/home"
-  unset CLAUDE_CONFIG_DIR
+  unset CLAUDE_CONFIG_DIR CLAUDE_ENV_FILE
   export CLAUDE_PLUGIN_DATA="$BATS_TEST_TMPDIR/data"
   export CLAUDE_PLUGIN_ROOT
   CLAUDE_PLUGIN_ROOT="$(kern_root)"

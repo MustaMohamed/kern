@@ -2,12 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readSteps, grade, inlineRows, rowPrompt, removeTemp, runFailure } from '../scripts/lib/adherence.mjs';
-import { kernelRows, parseRow, routeText } from '../scripts/lib/kernel-rows.mjs';
+import { readSteps, grade, rowPrompt, removeTemp, runFailure } from '../scripts/lib/adherence.mjs';
+import { kernelRows, parseRow } from '../scripts/lib/kernel-rows.mjs';
 import { loadModel } from '../scripts/lib/lint-rules.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -139,7 +139,7 @@ test('a multi-turn case needs the route read again for the second task', () => {
 
 test('every kernel row has a positive case, and every listed case names a known fixture', () => {
   const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
-  const rows = kernelRows(routeText(loadModel(ROOT))).map((r) => r.route);
+  const rows = kernelRows(loadModel(ROOT).kernelText).map((r) => r.route);
   for (const r of rows) assert.ok(cases.some((c) => c.kind === 'positive' && c.route === r), `no positive adherence case for row ${r}`);
   assert.ok(cases.filter((c) => c.kind === 'negative').length >= 4);
   assert.ok(cases.some((c) => c.kind === 'multi-turn'));
@@ -167,18 +167,16 @@ test('a positive case takes its prompt from the first routing eval of its row', 
   assert.equal(rowPrompt(ROOT, 'diagnose'), JSON.parse(readFileSync(join(ROOT, 'evals', 'cases', 'row-diagnose.json'), 'utf8')).evals[0].prompt);
 });
 
-test('the inline-rows arm puts every routed row in the kernel table and drops routes.md', () => {
-  const dir = inlineRows(ROOT);
-  try {
-    const k = readFileSync(join(dir, 'kernel', 'kernel.md'), 'utf8');
-    assert.ok(!existsSync(join(dir, 'kernel', 'routes.md')));
-    assert.doesNotMatch(k, /routes\.md/);
-    for (const row of readFileSync(join(ROOT, 'kernel', 'routes.md'), 'utf8').split('\n').filter((l) => /\| Read \{KERN\}\//.test(l))) assert.ok(k.includes(row), row);
-  } finally { rmSync(dirname(dir), { recursive: true, force: true }); }
+test('the inline-rows variant is gone: since Task 16d the routed kernel holds every row itself', () => {
+  // tests/kernel.test.mjs pins the rows in the kernel table, the check this variant's test made on its copy.
+  const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'kernel-adherence.mjs'), '--dry-run', '--variant', 'inline-rows'], { encoding: 'utf8' });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /^kernel-adherence: --variant inline-rows is gone: the kernel table holds every route row since Task 16d, so the routed run is that arm$/m);
+  assert.equal(spawnSync(process.execPath, [join(ROOT, 'scripts', 'kernel-adherence.mjs'), '--dry-run', '--variant', 'routed'], { encoding: 'utf8' }).status, 0);
 });
 
 test('a negative case fails on a Read of any kernel-file route, derived from the kernel rows', () => {
-  const text = routeText(loadModel(ROOT));
+  const text = loadModel(ROOT).kernelText;
   const files = text.split(/\r?\n/).map(parseRow).filter((r) => r && r.base === 'ROOT' && r.route).map((r) => r.path);
   assert.ok(files.includes('kernel/context.md'));
   for (const f of files) {
@@ -213,30 +211,6 @@ test('a multi-turn case needs the route read in the second task, not twice in th
   assert.equal(twice.pass, false);
   assert.match(twice.reasons.join(' '), /second task did not read the route/);
   assert.equal(grade([...first, ...done, ...ev(['Read', { file_path: route }])], opts).pass, true);
-});
-
-test('both arms run on a plugin copy without the eval files, and a failed build leaves no copy', () => {
-  const dir = inlineRows(ROOT);
-  try {
-    assert.equal(dir, realpathSync(dir));
-    for (const f of ['scripts/kernel-adherence.mjs', 'scripts/lib/adherence.mjs', 'scripts/lib/claude-run.mjs', 'tests', 'docs', 'evals', '.superpowers']) assert.ok(!existsSync(join(dir, f)), `${f} is in the plugin copy`);
-    assert.ok(existsSync(join(dir, 'skills', 'diagnose', 'SKILL.md')));
-  } finally { rmSync(dirname(dir), { recursive: true, force: true }); }
-  const home = mkdtempSync(join(tmpdir(), 'k-'));
-  const fake = join(home, 'src');
-  mkdirSync(join(fake, 'kernel'), { recursive: true });
-  writeFileSync(join(fake, 'kernel', 'kernel.md'), 'no routing sentence\n');
-  writeFileSync(join(fake, 'kernel', 'routes.md'), '| a | Read {KERN}/x/SKILL.md |\n');
-  const was = process.env.TMPDIR;
-  const scratch = mkdtempSync(join(tmpdir(), 'k-'));
-  process.env.TMPDIR = scratch;
-  try {
-    assert.throws(() => inlineRows(fake), /no longer has the Routing sentence/);
-    assert.deepEqual(readdirSync(scratch), []);
-  } finally {
-    if (was === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = was;
-    rmSync(home, { recursive: true, force: true }); rmSync(scratch, { recursive: true, force: true });
-  }
 });
 
 test('the runner exits 2 on a bad --case, --runs or --transcript usage, before anything runs', () => {

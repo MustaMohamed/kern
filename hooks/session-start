@@ -76,6 +76,23 @@ git_note() {
   return 0
 }
 
+# env_export: appends `export CLAUDE_PLUGIN_ROOT='<root>'` to $CLAUDE_ENV_FILE, the file whose lines
+# Claude Code runs ahead of each Bash tool command, so a skill's `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>`
+# runs as written. Claude Code makes the file's folder, not the file: a path that does not exist yet is
+# written when its folder is writable, an existing one only when it is a writable regular file. The value
+# is single-quoted, each ' written as '\''. Nothing else goes to that file.
+env_export() {
+  local f="${CLAUDE_ENV_FILE-}" q="'"
+  [ -n "$f" ] || return 0
+  if [ -e "$f" ] || [ -L "$f" ]; then
+    if [ ! -f "$f" ] || [ ! -w "$f" ]; then return 0; fi
+  elif [ ! -d "$(dirname "$f")" ] || [ ! -w "$(dirname "$f")" ]; then
+    return 0
+  fi
+  printf 'export CLAUDE_PLUGIN_ROOT=%s\n' "$q${KERN_ROOT//$q/$q\\$q$q}$q" >>"$f" 2>/dev/null
+  return 0
+}
+
 # shellcheck disable=SC2034 # read by the json.sh functions
 KERN_INPUT=$(cat)
 SID=$(json_get session_id) || SID=""
@@ -112,6 +129,7 @@ else
 fi
 K_SETTINGS=$(settings_summary)
 export K_VERSION K_ROOT K_KERN K_MODE K_AUTOPILOT K_SETTINGS
+env_export
 render_template "$KERN_ROOT/kernel/kernel.md"
 git_note
 case "$K_MODE" in

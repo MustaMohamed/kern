@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Runs every hook over the fixture projects in tests/fixtures/projects (lint rule 15).
-# Per case: SessionStart output holds each line of expect.txt (or is empty for <empty>);
+# Per case: SessionStart output holds each line of expect.txt, {ROOT} read as the plugin root (or is
+# empty for <empty>);
 # SubagentStart prints valid JSON within 1,400 characters; UserPromptSubmit exits 0 (its plain
 # stdout is context); PreToolUse exits 0 and prints nothing or valid JSON.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# A CLAUDE_ENV_FILE from the caller would get session-start's export line.
+unset CLAUDE_ENV_FILE
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 fail=0
@@ -28,6 +31,7 @@ for dir in "$ROOT"/tests/fixtures/projects/*/; do
   out=$(printf '{%s,"hook_event_name":"SessionStart","source":"startup"}' "$base" | bash "$ROOT/hooks/session-start")
   while IFS= read -r want; do
     [ -n "$want" ] || continue
+    case "$want" in *"{ROOT}"*) want="${want%%"{ROOT}"*}$ROOT${want#*"{ROOT}"}" ;; esac
     if [ "$want" = "<empty>" ]; then
       [ -z "$out" ] || { echo "FAIL $name: expected no output"; fail=1; }
     elif [[ "$out" != *"$want"* ]]; then

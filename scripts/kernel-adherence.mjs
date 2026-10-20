@@ -3,14 +3,14 @@
 // route with at most one other call before it, and does a prompt that should not route stay quiet? Each
 // run also reports whether it opened a todo list holding the route's steps; that does not gate.
 // Spends tokens; never runs in CI; ask the user before a run.
-// Usage: node scripts/kernel-adherence.mjs [--case <id>] [--runs N] [--model <m>] [--variant routed|inline-rows] [--dry-run]
+// Usage: node scripts/kernel-adherence.mjs [--case <id>] [--runs N] [--model <m>] [--variant routed] [--dry-run]
 //        node scripts/kernel-adherence.mjs --transcript <session.jsonl> --route <route> [--root <plugin root>]
 // Writes evals/snapshots/adherence-<variant>-<model>-<date>.json (committed).
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, runClaude, runProblem, workspace } from './lib/claude-run.mjs';
-import { grade, inlineRows, readSteps, removeTemp, rowPrompt, runFailure } from './lib/adherence.mjs';
+import { grade, readSteps, removeTemp, rowPrompt, runFailure } from './lib/adherence.mjs';
 import { pluginCopy, stage } from './lib/behave.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -27,6 +27,9 @@ const partial = !!only || PLUGIN !== ROOT;
 const routeFileOf = (c) => c.route_file || `skills/${c.route}/SKILL.md`;
 const usage = (msg) => { console.error(`kernel-adherence: ${msg}`); process.exit(2); };
 const allCases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
+// The F3 A/B's inline-rows arm is now the kernel itself (Task 16d, the user's "Inline rows").
+if (VARIANT === 'inline-rows') usage('--variant inline-rows is gone: the kernel table holds every route row since Task 16d, so the routed run is that arm');
+if (VARIANT !== 'routed') usage(`--variant ${VARIANT}: the only variant is routed`);
 
 if (args.includes('--transcript')) {
   const root = opt('--root', ROOT);
@@ -50,7 +53,7 @@ if (args.includes('--dry-run')) {
   process.exit(0);
 }
 if (PLUGIN !== ROOT && !existsSync(join(PLUGIN, 'kernel', 'kernel.md'))) usage(`--plugin ${PLUGIN} holds no kernel/kernel.md`);
-const root = VARIANT === 'inline-rows' ? inlineRows(PLUGIN) : realpathSync(pluginCopy(PLUGIN));
+const root = realpathSync(pluginCopy(PLUGIN));
 const results = [];
 // Each run's events go to evals/results (gitignored), so a failed case can be read, not only its grade.
 const raw = join(ROOT, 'evals', 'results', `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${new Date().toISOString().slice(0, 10)}${partial ? `-${only || 'all'}-${basename(PLUGIN)}` : ''}`);

@@ -1,8 +1,10 @@
 # shellcheck shell=bash
 # Template rendering for the kernel and the subagent kernel. Literal replacement (no regex), so
-# values may hold any character: {VERSION}, {ROOT_PATH}, {MODE} and {AUTOPILOT} take K_VERSION,
-# K_ROOT, K_MODE and K_AUTOPILOT, and a line that is exactly {SETTINGS} or {VOICE} is replaced by
-# K_SETTINGS or K_VOICE.
+# values may hold any character: {VERSION}, {MODE} and {AUTOPILOT} take K_VERSION, K_MODE and
+# K_AUTOPILOT; {ROOT_PATH} and {ROOT} take K_ROOT, the plugin root, and {KERN} takes K_KERN, its skills
+# folder, so a rendered line names kern files by absolute path; a line that is exactly {SETTINGS} or
+# {VOICE} is replaced by K_SETTINGS or K_VOICE. The paths go in last, so no path is read for {VERSION},
+# {MODE} or {AUTOPILOT}.
 
 # render_template FILE
 render_template() {
@@ -19,9 +21,11 @@ render_template() {
     {
       s = $0
       s = rep(s, "{VERSION}", ENVIRON["K_VERSION"])
-      s = rep(s, "{ROOT_PATH}", ENVIRON["K_ROOT"])
       s = rep(s, "{MODE}", ENVIRON["K_MODE"])
       s = rep(s, "{AUTOPILOT}", ENVIRON["K_AUTOPILOT"])
+      s = rep(s, "{ROOT_PATH}", ENVIRON["K_ROOT"])
+      s = rep(s, "{KERN}", ENVIRON["K_KERN"])
+      s = rep(s, "{ROOT}", ENVIRON["K_ROOT"])
       print s
     }' "$1"
 }
@@ -56,7 +60,8 @@ KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy 
 
 # settings_summary: the Project settings block, at most 600 chars. Overrides and ignored floor keys come
 # before Set:, and only Set: is shortened to fit, a whole `key=value` entry at a time, so no other line
-# is cut and no character is split.
+# is cut and no character is split. The 600 counts the plugin root in the "more" note as {ROOT}, so the
+# entries kept do not depend on where kern is installed; the note prints the absolute path.
 settings_summary() {
   local out="" f files="" k v job name dir seen="" line sets="" unknown floor tail="" room sep e
   local more=" ... (more: bash {ROOT}/scripts/kern-get <key>)"
@@ -146,7 +151,7 @@ Set:"
       done <<EOT
 $sets
 EOT
-      line="$line$more"
+      line="$line${more%%"{ROOT}"*}$KERN_ROOT${more#*"{ROOT}"}"
     fi
     out="$out$line"
   fi

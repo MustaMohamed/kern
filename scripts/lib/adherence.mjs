@@ -1,16 +1,15 @@
 // Grade a headless Claude Code run for kernel adherence (design spec 11.1 tier 2, coverage gap 10).
 // A routed task passes when it reads the route (a Read of <plugin root>/skills/<route>/SKILL.md or a
 // Skill call to kern:<route>) with at most one other tool call before it, todo tools and calls that only
-// read <plugin root>/kernel/routes.md aside (in a multi-turn case, within the first task): the user relaxed
-// the rule on 2026-10-18 from "the route is the first call". The first todo list, and whether it holds
-// the route's steps in order, is reported, not graded.
+// read <plugin root>/kernel/routes.md aside (a kern tree before Task 16d has that file; in a multi-turn
+// case, within the first task): the user relaxed the rule on 2026-10-18 from "the route is the first call".
+// The first todo list, and whether it holds the route's steps in order, is reported, not graded.
 // A bare skill name, or a skill file outside the plugin root, is not kern's route.
 // Pass rule adapted from superpowers tests/explicit-skill-requests/run-test.sh:103-118 (MIT).
-import { readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { runProblem, toolUses } from './claude-run.mjs';
-import { pluginCopy } from './behave.mjs';
 
 // rowPrompt(root, route): a positive case's prompt is its row's first routing eval, so the two cannot drift.
 export const rowPrompt = (root, route) => JSON.parse(readFileSync(join(root, 'evals', 'cases', `row-${route}.json`), 'utf8')).evals[0].prompt;
@@ -35,26 +34,6 @@ export function removeTemp(dir) {
   const base = realpathSync(tmpdir());
   if (!realpathSync(dir).startsWith(base + sep)) throw new Error(`refusing to remove ${dir}: not under ${base}`);
   rmSync(dir, { recursive: true, force: true });
-}
-
-// inlineRows(root): a copy of the plugin whose kernel table holds the routed rows itself and whose Routing
-// rule no longer reads kernel/routes.md: the other arm of the F3 A/B. The copy is pluginCopy(root), so it has
-// no eval files either. Returns the copy's root (through realpath: tmpdir() is a symlink on macOS and readOf
-// compares plain paths), under a temp directory the caller removes with rmSync(dirname(dir)).
-export function inlineRows(root) {
-  const dir = realpathSync(pluginCopy(root));
-  try {
-    const rows = readFileSync(join(dir, 'kernel', 'routes.md'), 'utf8').split('\n').filter((l) => /^\| .* \| Read \{KERN\}\//.test(l));
-    const kernel = join(dir, 'kernel', 'kernel.md');
-    const before = readFileSync(kernel, 'utf8');
-    const after = before
-      .replace(', then Read {ROOT}/kernel/routes.md and match its rows when the task builds, fixes, plans, reviews, resumes or claims done', '')
-      .replace(/(\|---\|---\|\n)/, `$1${rows.join('\n')}\n`);
-    if (after === before || after.includes('routes.md') || !rows.length) throw new Error('inlineRows: the kernel no longer has the Routing sentence or the table this variant edits');
-    writeFileSync(kernel, after);
-    rmSync(join(dir, 'kernel', 'routes.md'));
-    return dir;
-  } catch (e) { rmSync(dirname(dir), { recursive: true, force: true }); throw e; }
 }
 
 export const TODO_TOOLS = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet']);
