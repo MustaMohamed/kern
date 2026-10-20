@@ -15,6 +15,10 @@
     {
       "id": 1,
       "kind": "dialogue",
+      "files": ["node-bug", "sum-fixed", "approved-spec", "export-in-progress"],
+      "origin": true,
+      "setup": ["bash \"$SETUP_FILES/export.sh\""],
+      "max_turns": 30,
       "prompt": "Where did I leave off on the export feature?",
       "expected_output": "States the scope back, checks kern ledgers and live PR state, and returns a brief with one tag per thread and one next move, writing no files.",
       "expectations": [
@@ -27,7 +31,10 @@
     {
       "id": 2,
       "kind": "execution",
-      "files": ["node-bug", "recall-ledger"],
+      "files": ["node-bug", "sum-fixed", "approved-spec", "export-in-progress"],
+      "origin": true,
+      "setup": ["bash \"$SETUP_FILES/export.sh\""],
+      "max_turns": 30,
       "prompt": "Where did I leave off on the export plan?",
       "expected_output": "Reads the ledger, sees Tasks 1 and 2 complete and Task 3 started but not complete, and names Task 3 as the next move.",
       "expectations": [

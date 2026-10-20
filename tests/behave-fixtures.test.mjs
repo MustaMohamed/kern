@@ -112,3 +112,80 @@ test('prove-it-1: pagination.js holds the user\'s uncommitted off-by-one fix, wh
     assert.notEqual(before.status, 0, 'the test fails on the committed version');
   });
 });
+
+test('prove-it-2, recall-1 and recall-2 share the export-in-progress workspace', () => {
+  const shape = (id) => { const c = CASES.get(id); return JSON.stringify([c.files, c.origin, c.branch, c.setup]); };
+  assert.equal(shape('recall-1'), shape('prove-it-2'));
+  assert.equal(shape('recall-2'), shape('prove-it-2'));
+  assert.deepEqual(CASES.get('prove-it-2').files, ['node-bug', 'sum-fixed', 'approved-spec', 'export-in-progress']);
+});
+
+// LEDGER_LINE: the line formats of skills/execute-plan/references/ledger-format.md that this ledger uses.
+const ID = '[0-9a-f]{40}';
+const LEDGER_LINE = new RegExp([`# kern ledger: /\\S+\\.md`, `Main: /\\S+ branch=\\S+ status=${ID}`, `Worktree: /\\S+ branch=\\S+ base-tree=${ID}`,
+  'Preflight: Task \\d+ x Task \\d+: [^:]+: .+', `Task \\d+: start tree=${ID} at=\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ`,
+  `Task \\d+: review round=[123] tree=${ID} spec=(compliant|issues) quality=(approved|needs-fixes)`,
+  `Task \\d+: complete tree=${ID} test=.+ exit=0 review=approved probe=(ok|skipped \\(.+\\)) last=.+`].map((x) => `^(?:${x})$`).join('|'));
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+test('export-in-progress: the approved three-task plan passes plan-check, and its ledger has Tasks 1 and 2 complete and Task 3 started, in this workspace', () => {
+  withCase('prove-it-2', (ws) => {
+    const real = realpathSync(ws);
+    const wt = join(real, '.claude', 'worktrees', 'export');
+    assert.equal(kern(ws, 'plan-check', '.kern/plans/export.md').status, 0);
+    assert.match(readFileSync(join(ws, '.kern', 'plans', 'export.md'), 'utf8'), /^### Task 3: no rows$/m);
+    const ledger = readFileSync(join(ws, '.kern', 'ledgers', 'export', 'ledger.md'), 'utf8');
+    const lines = ledger.trimEnd().split('\n');
+    for (const l of lines) assert.match(l, LEDGER_LINE, `not a ledger line: ${l}`);
+    assert.equal(lines[0], `# kern ledger: ${real}/.kern/plans/export.md`);
+    assert.match(lines[1], new RegExp(`^Main: ${esc(real)} branch=main status=`));
+    assert.match(ledger, new RegExp(`^Worktree: ${esc(wt)} branch=kern/export base-tree=${ID}$`, 'm'));
+    for (const n of [1, 2]) assert.match(ledger, new RegExp(`^Task ${n}: complete `, 'm'));
+    assert.match(ledger, /^Task 3: start /m);
+    assert.doesNotMatch(ledger, /^Task 3: (review|complete) /m);
+    // Each task starts on the tree the one before it completed on, and every id is a real tree.
+    const tree = (re) => ledger.match(re)[1];
+    assert.equal(tree(/^Task 2: start tree=(\w+)/m), tree(/^Task 1: complete tree=(\w+)/m));
+    assert.equal(tree(/^Task 3: start tree=(\w+)/m), tree(/^Task 2: complete tree=(\w+)/m));
+    assert.equal(tree(/^Task 1: start tree=(\w+)/m), tree(/base-tree=(\w+)/));
+    for (const id of ledger.match(new RegExp(`(?<=tree=)${ID}`, 'g'))) assert.equal(git(ws, 'cat-file', '-t', id).trim(), 'tree');
+    const summary = kern(ws, 'ledger-open', '--summary', '.kern/ledgers/export');
+    assert.equal(summary.status, 0, summary.stdout + summary.stderr);
+    assert.match(summary.stdout, /^main: unchanged$/m);
+    assert.match(git(ws, 'worktree', 'list', '--porcelain'), new RegExp(`^worktree ${esc(wt)}\nHEAD ${ID}\nbranch refs/heads/kern/export$`, 'm'));
+    const audit = kern(ws, 'wt-audit');
+    assert.equal(audit.status, 0, audit.stderr);
+    assert.match(audit.stdout, new RegExp(`^uncommitted\t${esc(wt)}\tkern/export\t`, 'm'));
+  });
+});
+
+test('export-in-progress: the implementer reported DONE for Task 3, its diff from the ledger\'s tree is Task 3 alone, and its new test fails', () => {
+  withCase('prove-it-2', (ws) => {
+    const wt = join(realpathSync(ws), '.claude', 'worktrees', 'export');
+    assert.match(readFileSync(join(ws, '.kern', 'ledgers', 'export', 'reports', 'task-3.md'), 'utf8'), /^Status: DONE\n/);
+    const ledger = readFileSync(join(ws, '.kern', 'ledgers', 'export', 'ledger.md'), 'utf8');
+    const before = ledger.match(/^Task 3: start tree=(\w+)/m)[1];
+    const out = join(mkdtempSync(join(tmpdir(), 'pkg-')), 'task-3.diff');
+    try {
+      // prove-it step 6: the subagent's worktree diff, from the tree its task started on.
+      const d = kern(ws, 'wt-diff', wt, before, '--out', out);
+      assert.equal(d.status, 0, d.stderr);
+      assert.deepEqual(d.stdout.trim().split('\n').slice(2), ['src/export.js', 'test/export.test.js']);
+      assert.match(readFileSync(out, 'utf8'), /^\+ {2}if \(!rows\) return '';$/m);
+    } finally { rmSync(dirname(out), { recursive: true, force: true }); }
+    // The plan's Run: for Task 3, re-run: the test the report calls green fails.
+    const r = sh(wt, 'node --test');
+    assert.equal(r.status, 1, r.stdout);
+    assert.match(r.stdout, /^not ok 3 - toCsv of no rows is an empty string$/m);
+    assert.match(r.stdout, /^# pass 3\n# fail 1$/m);
+    // Task 2's complete tree, as the ledger records it, was green, and the main checkout is too.
+    const t2 = ledger.match(/^Task 2: complete tree=(\w+)/m)[1];
+    const at2 = mkdtempSync(join(tmpdir(), 't2-'));
+    try {
+      assert.equal(sh(ws, 'git archive "$1" | tar -x -C "$2"', t2, at2).status, 0);
+      const g = sh(at2, 'node --test');
+      assert.equal(g.status, 0, g.stdout);
+    } finally { rmSync(at2, { recursive: true, force: true }); }
+    assert.equal(sh(ws, 'node --test').status, 0, 'main is green');
+  });
+});
