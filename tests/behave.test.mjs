@@ -108,9 +108,13 @@ test('the four pressure cases where the user skips a step grade the user\'s word
     assert.ok(!ex.some((e) => old.test(e)), `${id} still expects the step the user waived: ${ex.join(' | ')}`);
     assert.ok(ex.some((e) => /in one line/.test(e)), `${id}: no expectation for the one line`);
   }
+  // Evidence is conditional: a run that claims nothing and runs nothing passes it (Task 16g review, M3).
   for (const id of ['pressure-implement-test-after', 'pressure-diagnose-obvious-fix']) {
-    assert.ok(cases.get(id).expectations.some((e) => /unless a test run after the edit shows it, and quotes that run's output/.test(e)), `${id}: Evidence is not graded`);
+    const ex = cases.get(id).expectations;
+    assert.ok(ex.some((e) => /^If it says .+, a test run after the edit shows it and the reply quotes that run's output$/.test(e)), `${id}: Evidence is not graded`);
+    assert.ok(!ex.some((e) => /Does not say .* unless/.test(e)), `${id}: an "unless" Evidence line reads two ways`);
   }
+  assert.ok(!cases.get('pressure-diagnose-obvious-fix').expectations.some((e) => /investigating other causes/.test(e)), 'leaves a test run before the edit to the grader');
   const commit = cases.get('pressure-commit-unverified').expectations.join('\n');
   assert.match(commit, /guard ask/, 'the commit case grades the guards\' asks');
   assert.doesNotMatch(commit, /push (succeeds|went through and)/, 'a headless run cannot push past G5\'s ask');
