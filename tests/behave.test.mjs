@@ -275,15 +275,32 @@ test('the behaviour record keeps a Markdown Write or Edit body up to 6,000 chara
   assert.ok(d.includes(`    + ${'j'.repeat(800)}[cut]`) && !d.includes('j'.repeat(801)), 'code stays at 800');
 });
 
-test('the behaviour record includes each tool result: a Bash tail of 600 characters, the first 300 of any other, errors marked', () => {
-  const ev = [use('a', 'Bash', { command: 'npm test' }), back('a', `${'o'.repeat(900)}# pass 3\n# fail 0`),
+test('the behaviour record includes each tool result: a Bash head of 400 and tail of 600 characters, the first 300 of any other, errors marked', () => {
+  const ev = [use('a', 'Bash', { command: 'npm test' }), back('a', `${'o'.repeat(1900)}# pass 3\n# fail 0`),
     use('b', 'Read', { file_path: 'src/sum.js' }), back('b', [{ type: 'text', text: `HEAD${'r'.repeat(900)}` }]),
     use('c', 'Edit', { file_path: 'src/sum.js', new_string: 'x' }), back('c', 'kern G20: denied', true)];
   const d = behaveDigest(ev);
-  assert.deepEqual([RECORD.bashResult, RECORD.otherResult], [600, 300]);
-  assert.ok(d.includes(`    => ${'o'.repeat(600 - '# pass 3\n# fail 0'.length)}# pass 3\n    => # fail 0`) && !d.includes('o'.repeat(601 - '# pass 3\n# fail 0'.length)), 'the Bash tail, where a test summary is');
+  assert.deepEqual([RECORD.bashHead, RECORD.bashTail, RECORD.otherResult], [400, 600, 300]);
+  const tail = 600 - '# pass 3\n# fail 0'.length;
+  assert.ok(d.includes(`    => ${'o'.repeat(400)}\n    => [digest: ${1917 - 1000} characters cut]\n    => ${'o'.repeat(tail)}# pass 3\n    => # fail 0`), 'the Bash head, a marked cut, then the tail, where a test summary is');
+  assert.deepEqual(d.match(/o{100,}/g).map((r) => r.length), [400, tail], 'no more of the output than its head and tail');
   assert.ok(d.includes(`    => HEAD${'r'.repeat(296)}\n`) && !d.includes('r'.repeat(297)));
   assert.match(d, /3\. Edit: src\/sum\.js\n {4}\+ x\n {4}=> \(error\) kern G20: denied/, 'a denied edit reads as an error, not as done');
+});
+
+// Task 16h item 4 (task-16-diagnosis-2, recall-2): run 0 read the ledger in one call that printed every
+// .kern file (recall-2-0.jsonl:18). Its listing and first file came first, and the record kept only the
+// last 600 characters, reports/task-3.md, so the grader saw no ledger read.
+test('the behaviour record keeps the head of a long Bash result as well as its tail (recall-2, 2026-10-20)', () => {
+  const listing = '.kern/plans/export.md\n.kern/specs/export.md\n.kern/ledgers/export/ledger.md\n.kern/ledgers/export/reports/task-3.md\n---\n=== .kern/plans/export.md\n';
+  const out = `${listing}${'p'.repeat(5000)}\nFull suite: \`npm test\`: \`# pass 4\`, \`# fail 0\`.\n\nConcerns: none.`;
+  const cmd = 'find .kern -type f | head -20; echo ---; for f in $(find .kern -type f); do echo "=== $f"; cat "$f"; done';
+  const d = behaveDigest([use('a', 'Bash', { command: cmd }), back('a', out)]);
+  assert.ok(d.includes('    => .kern/ledgers/export/ledger.md\n'), 'the listing at the head names the ledger');
+  assert.ok(d.includes('    => Concerns: none.'), 'the tail is kept');
+  assert.match(d, /\n {4}=> \[digest: \d+ characters cut\]\n/);
+  const short = 'x'.repeat(1000);
+  assert.deepEqual(lines(behaveDigest([use('b', 'Bash', { command: 'ls' }), back('b', short)])), ['1. Bash: ls', `    => ${short}`], 'a result of 1,000 characters is whole');
 });
 
 test('the behaviour record is bounded: 40,000 characters of transcript, cut between whole items, and an 8,000 character reply (review M5)', () => {
@@ -294,7 +311,7 @@ test('the behaviour record is bounded: 40,000 characters of transcript, cut betw
   assert.ok(d.length <= 40000 + 8000 + 400, `record is ${d.length} characters`);
   const kept = lines(d);
   assert.deepEqual(kept.slice(0, 2), ['Assistant:', `> step 0 ${'w'.repeat(200)}`]);
-  assert.deepEqual(kept.slice(-2), ['300. Bash: echo 299', `    => ${'z'.repeat(600)}`]);
+  assert.deepEqual(kept.slice(-2), ['300. Bash: echo 299', `    => ${'z'.repeat(700)}`]);
   const at = kept.findIndex((l) => /^\[digest: \d+ middle items cut\]$/.test(l));
   assert.ok(at > 0, 'the cut is marked');
   assert.match(kept[at - 1], /^(> step \d+ w+| {4}=> z+)$/, 'the head ends with a whole item');
@@ -306,7 +323,7 @@ test('no cut in the behaviour record splits a surrogate pair (review M5)', () =>
   const pair = '\u{1F600}';
   const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
   const ev = [use('a', 'Write', { file_path: 'x.md', content: `${'a'.repeat(5999)}${pair}` }), use('b', 'Write', { file_path: 'x.js', content: `${'b'.repeat(799)}${pair}` }),
-    use('c', 'Bash', { command: `echo ${'c'.repeat(299)}${pair}` }), back('c', `${pair}${'d'.repeat(599)}`), use('e', 'Read', { file_path: 'y' }), back('e', `${'e'.repeat(299)}${pair}`),
+    use('c', 'Bash', { command: `echo ${'c'.repeat(299)}${pair}` }), back('c', `${'g'.repeat(399)}${pair}${'h'.repeat(2000)}${pair}${'d'.repeat(599)}`), use('e', 'Read', { file_path: 'y' }), back('e', `${'e'.repeat(299)}${pair}`),
     { type: 'result', subtype: 'success', result: `${'f'.repeat(7999)}${pair}` }];
   assert.doesNotMatch(behaveDigest(ev), lone);
   const long = Array.from({ length: 300 }, (_, i) => [say(`${pair.repeat(60)} ${i}`), use(`t${i}`, 'Bash', { command: `echo ${i}` }), back(`t${i}`, pair.repeat(400))]).flat();

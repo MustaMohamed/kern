@@ -67,10 +67,12 @@ export function loadCases(root) {
 
 // RECORD: the behaviour grader's record (Task 16e; task-16-diagnosis X2), in characters. The transcript is
 // cut to max, between whole items (its first 40% and last 60% kept), each Markdown Write or Edit body to
-// markdownBody, any other body to body, a Bash result to its last bashResult, any other tool's result to
-// its first otherResult, and the final reply to its first reply. So a record is at most about 48,400
-// characters (some 12,000 tokens). No cut splits a surrogate pair.
-export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashResult: 600, otherResult: 300, reply: 8000 };
+// markdownBody, any other body to body, a Bash result longer than bashHead + bashTail to its first bashHead
+// and last bashTail with the cut marked (Task 16h: a listing or the first file a call printed comes first,
+// a test summary last; task-16-diagnosis-2, recall-2), any other tool's result to its first otherResult,
+// and the final reply to its first reply. So a record is at most about 48,400 characters (some 12,000
+// tokens). No cut splits a surrogate pair.
+export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashHead: 400, bashTail: 600, otherResult: 300, reply: 8000 };
 
 // digest(events, max, { results }): what the head-to-head grader sees, and the older record. No system
 // prompt, no skill text, so the grader judges behaviour, not the instructions. Tool calls one per line (a
@@ -123,6 +125,12 @@ const first = (s, n) => (s.length <= n ? s : s.slice(0, /[\uD800-\uDBFF]/.test(s
 const last = (s, n) => (s.length <= n ? s : s.slice(/[\uDC00-\uDFFF]/.test(s[s.length - n]) ? s.length - n + 1 : s.length - n));
 // prefixed(text, p): each line of text after p.
 const prefixed = (text, p) => text.split('\n').map((l) => `${p}${l}`).join('\n');
+// ends(s): a Bash result, its head and tail around a marked cut when it is longer than both.
+const ends = (s) => {
+  if (s.length <= RECORD.bashHead + RECORD.bashTail) return s;
+  const head = first(s, RECORD.bashHead), tail = last(s, RECORD.bashTail);
+  return `${head}\n[digest: ${s.length - head.length - tail.length} characters cut]\n${tail}`;
+};
 
 const LEGEND = 'Transcript (in order: "Assistant:" or "Subagent:" heads text, each line of it after "> "; "N. Tool:" is a tool call, '
   + '"+ " lines what a Write or Edit wrote, "=> " lines its result, "(error)" when the tool failed; a subagent\'s lines sit indented under the call that started it):';
@@ -140,7 +148,7 @@ export function behaveDigest(events, max = RECORD.max) {
       if (c?.type === 'tool_use') names.set(c.id, c.name);
       if (c?.type !== 'tool_result') continue;
       const t = resultText(c);
-      const cut = names.get(c.tool_use_id) === 'Bash' ? last(t, RECORD.bashResult) : first(t, RECORD.otherResult);
+      const cut = names.get(c.tool_use_id) === 'Bash' ? ends(t) : first(t, RECORD.otherResult);
       results.set(c.tool_use_id, `${c.is_error ? '(error) ' : ''}${cut}`);
     }
     if (e?.type !== 'assistant') continue;
