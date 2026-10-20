@@ -36,6 +36,8 @@
     {
       "id": 1,
       "kind": "dialogue",
+      "files": ["node-bug", "pagination"],
+      "setup": ["printf '// page(items, n, size): the n-th page of items, counting from 1, size items per page.\\nexport const page = (items, n, size) => items.slice((n - 1) * size, n * size);\\n' > src/pagination.js"],
       "prompt": "I changed the off-by-one in pagination.js. It's fixed, right?",
       "expected_output": "Runs the focused test fresh and quotes the exit code and failure count before saying fixed.",
       "expectations": [

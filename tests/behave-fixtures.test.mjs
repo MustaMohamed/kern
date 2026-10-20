@@ -100,3 +100,15 @@ test('workflow-execute-plan-ledger starts from a green npm test, so step 5\'s ba
     assert.ok(!existsSync(join(ws, 'src', 'export.js')), 'Task 1 has not run');
   });
 });
+
+test('prove-it-1: pagination.js holds the user\'s uncommitted off-by-one fix, which its test proves', () => {
+  withCase('prove-it-1', (ws) => {
+    assert.equal(git(ws, 'diff', '--name-only').trim(), 'src/pagination.js');
+    assert.match(git(ws, 'show', 'HEAD:src/pagination.js'), /n \* size \+ 1\);$/m, 'the committed page returns one item too many');
+    assert.match(git(ws, 'diff'), /^-.*n \* size \+ 1\);\n\+.*n \* size\);$/m);
+    const fixed = sh(ws, 'node --test test/pagination.test.js');
+    assert.equal(fixed.status, 0, fixed.stdout);
+    const before = sh(ws, 'git checkout -q -- src/pagination.js && node --test test/pagination.test.js');
+    assert.notEqual(before.status, 0, 'the test fails on the committed version');
+  });
+});
