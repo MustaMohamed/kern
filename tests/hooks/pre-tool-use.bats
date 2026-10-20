@@ -33,11 +33,11 @@ feed() {
     [ "$(decision_of "$output")" = ask ] || { echo "$n -> $output"; return 1; }
   done
   feed 4
-  [[ "$output" == *'"kern G0: tool_input not parseable"'* ]] || false
+  [[ "$output" == *'"needs user approval: kern G0: tool_input not parseable"'* ]] || false
   feed 5
-  [[ "$output" == *'"kern G0: cwd not parseable"'* ]] || false
+  [[ "$output" == *'"needs user approval: kern G0: cwd not parseable"'* ]] || false
   feed 6
-  [[ "$output" == *'"kern G0: agent_type not parseable"'* ]] || false
+  [[ "$output" == *'"needs user approval: kern G0: agent_type not parseable"'* ]] || false
 }
 
 @test "under autopilot, unreadable input that names its session gives deny" {
@@ -47,6 +47,7 @@ feed() {
     [ "$status" -eq 0 ] || { echo "$n -> status $status"; return 1; }
     [ "$(decision_of "$output")" = deny ] || { echo "$n -> $output"; return 1; }
     [[ "$output" == *'(autopilot: nobody to ask)"}}' ]] || { echo "$n -> $output"; return 1; }
+    [[ "$output" == *'"permissionDecisionReason":"kern G0: '* ]] || { echo "$n -> $output"; return 1; }
   done
 }
 
@@ -57,6 +58,20 @@ feed() {
     [ "$status" -eq 0 ] || { echo "$n -> status $status"; return 1; }
     [ "$(decision_of "$output")" = ask ] || { echo "$n -> $output"; return 1; }
   done
+}
+
+# In a headless run (-p, the SDK) Claude Code turns an ask into a denial, and the model reads only the reason
+# (task-16-diagnosis X5): "kern G5: commit (message checks pass)" read as a block with no cause.
+@test "an ask reason opens with the phrase that the user's approval is needed; a deny reason does not" {
+  mkdir -p "$R/.claude" "$CLAUDE_PLUGIN_DATA/sessions"
+  run_guard "$(bash_payload "echo push.policy: auto >> $R/.claude/kern.local.yml")"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *'"permissionDecisionReason":"needs user approval: kern G16: kern settings change guard policy; the user confirms each write"'* ]] || false
+  [ "$(printf '%s' "$output" | grep -o 'needs user approval: ' | wc -l | tr -d ' ')" = 1 ]
+  run_guard "$(bash_payload "echo autopilot: on >> $CLAUDE_PLUGIN_DATA/sessions/test-session.state")"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'"permissionDecisionReason":"kern G16: commands may not write kern session state"'* ]] || false
+  [[ "$output" != *'needs user approval'* ]] || false
 }
 
 @test "a deny and an ask in one call: deny wins and only deny reasons print" {
@@ -118,7 +133,7 @@ feed() {
   run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload ls)"
   [ "$status" -eq 0 ]
   [ "$(decision_of "$output")" = ask ]
-  [[ "$output" == *'"kern G0: guard g99 did not load"'* ]] || false
+  [[ "$output" == *'"needs user approval: kern G0: guard g99 did not load"'* ]] || false
 }
 
 @test "a guard file that stops loading partway, or a missing guard file, fails closed" {
@@ -127,12 +142,12 @@ feed() {
   printf 'guard_g01() { _g01_missing; }\nif then\n' >"$BATS_TEST_TMPDIR/k/hooks/guards/g01-git.sh"
   run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload ls)"
   [ "$(decision_of "$output")" = ask ]
-  [[ "$output" == *'"kern G0: guard g01 did not load"'* ]] || false
+  [[ "$output" == *'"needs user approval: kern G0: guard g01 did not load"'* ]] || false
   cp "$K/hooks/guards/g01-git.sh" "$BATS_TEST_TMPDIR/k/hooks/guards/"
   rm "$BATS_TEST_TMPDIR/k/hooks/guards/g13-protected.sh"
   run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload ls)"
   [ "$(decision_of "$output")" = ask ]
-  [[ "$output" == *'"kern G0: guard g13 did not load"'* ]] || false
+  [[ "$output" == *'"needs user approval: kern G0: guard g13 did not load"'* ]] || false
 }
 
 # without_lib LIB: a copy of kern's hooks in $BATS_TEST_TMPDIR/k with hooks/lib/LIB removed.
@@ -144,16 +159,16 @@ without_lib() {
 }
 
 @test "a hook library that does not load gives ask, or deny under bypassPermissions" {
-  local lib mode want p out
+  local lib mode want ask p out
   for lib in json.sh settings.sh state.sh decide.sh gitctx.sh; do
     without_lib "$lib"
     for mode in default bypassPermissions; do
-      want=ask
-      [ "$mode" = default ] || want=deny
+      want=ask ask='needs user approval: '
+      [ "$mode" = default ] || want=deny ask=
       p=$(payload PreToolUse "\"permission_mode\":\"$mode\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push --force origin main\"}")
       out=$(bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$p") || { echo "$lib $mode -> status $?"; return 1; }
       [ "$(parsed_decision "$out")" = "$want" ] || { echo "$lib $mode -> $out"; return 1; }
-      [[ "$out" == *"\"kern G0: hook library $lib did not load; reinstall kern\""* ]] || { echo "$lib $mode -> $out"; return 1; }
+      [[ "$out" == *"\"${ask}kern G0: hook library $lib did not load; reinstall kern\""* ]] || { echo "$lib $mode -> $out"; return 1; }
     done
   done
   # A space after the colon still reads as bypassPermissions.
@@ -168,7 +183,7 @@ without_lib() {
   out=$(POSIXLY_CORRECT=1 bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$(bash_payload "git push --force origin main")") ||
     { echo "status $?"; return 1; }
   [ "$(parsed_decision "$out")" = ask ] || { echo "$out"; return 1; }
-  [[ "$out" == *'"kern G0: hook library settings.sh did not load; reinstall kern"'* ]] || false
+  [[ "$out" == *'"needs user approval: kern G0: hook library settings.sh did not load; reinstall kern"'* ]] || false
 }
 
 @test "a hook library that sources but lacks a function the dispatcher calls gives ask" {
@@ -176,7 +191,7 @@ without_lib() {
   { cat "$K/hooks/lib/settings.sh"; printf 'unset -f kern_enabled\n'; } >"$BATS_TEST_TMPDIR/k/hooks/lib/settings.sh"
   out=$(bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$(bash_payload "git push --force origin main")")
   [ "$(parsed_decision "$out")" = ask ]
-  [[ "$out" == *'"kern G0: hook library settings.sh did not load; reinstall kern"'* ]] || false
+  [[ "$out" == *'"needs user approval: kern G0: hook library settings.sh did not load; reinstall kern"'* ]] || false
 }
 
 @test "pre-tool-use checks every function each library it loads defines" {
@@ -188,7 +203,7 @@ without_lib() {
   { cat "$K/hooks/lib/gitctx.sh"; printf 'unset -f git_words\n'; } >"$BATS_TEST_TMPDIR/k/hooks/lib/gitctx.sh"
   out=$(bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" 2>/dev/null <<<"$(bash_payload "git push --force origin main")")
   [ "$(parsed_decision "$out")" = ask ] || { echo "$out"; return 1; }
-  [[ "$out" == *'"kern G0: hook library gitctx.sh did not load; reinstall kern"'* ]] || { echo "$out"; return 1; }
+  [[ "$out" == *'"needs user approval: kern G0: hook library gitctx.sh did not load; reinstall kern"'* ]] || { echo "$out"; return 1; }
 }
 
 @test "the dispatcher's list of guard ids names every guard file" {

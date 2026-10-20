@@ -17,12 +17,12 @@ set +o posix
 
 # no_lib NAME: library NAME did not load, so no guard can run. Prints the decision without any
 # library: ask, or deny under bypassPermissions, where an ask might not stop the call. Reads the hook
-# input, which nothing has read yet.
+# input, which nothing has read yet. An ask reason opens as decide.sh's KERN_ASK_PREFIX does.
 no_lib() {
-  local d=ask
-  grep -Eq '"permission_mode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && d=deny
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"kern G0: hook library %s did not load; reinstall kern"}}\n' \
-    "$d" "$1"
+  local d=ask p='needs user approval: '
+  grep -Eq '"permission_mode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && d=deny p=''
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%skern G0: hook library %s did not load; reinstall kern"}}\n' \
+    "$d" "$p" "$1"
   exit 0
 }
 

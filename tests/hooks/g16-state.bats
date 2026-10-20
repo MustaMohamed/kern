@@ -265,7 +265,7 @@ expect_cmd() {
   expect_file_tools "$R/.claude/kern.yml" ask
   expect_file_tools "$HOME/.claude/kern.yml" ask
   expect_file_tools "$R/.CLAUDE/KERN.LOCAL.YML" ask
-  [[ "$output" == *'"kern G16: kern settings change guard policy; the user confirms each write"'* ]] || false
+  [[ "$output" == *'"needs user approval: kern G16: kern settings change guard policy; the user confirms each write"'* ]] || false
   expect_bash ask "echo kern: off >> .claude/kern.local.yml" "sed -i '' s/ask/auto/ $R/.claude/kern.yml" \
     "cd .claude && sed -i '' s/ask/auto/ kern.yml"
   set_autopilot on

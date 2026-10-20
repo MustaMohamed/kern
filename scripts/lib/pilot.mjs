@@ -97,7 +97,9 @@ export function metrics(entries, { root = null } = {}) {
     let o = null;
     try { o = JSON.parse(a.stdout)?.hookSpecificOutput; } catch { continue; }
     // One entry per ask event: decide.sh joins several guards into one reason ("kern G16: ...; G2: ..."), kept as G16+G2.
-    const named = o?.permissionDecision === 'ask' && String(o.permissionDecisionReason ?? '').startsWith('kern ') ? [...String(o.permissionDecisionReason).matchAll(/(?:^kern |; )(G\d+[a-z]?):/g)].map((m) => m[1]) : [];
+    // Since Task 16g an ask reason opens with "needs user approval: "; a session recorded before has none.
+    const reason = String(o?.permissionDecisionReason ?? '').replace(/^needs user approval: /, '');
+    const named = o?.permissionDecision === 'ask' && reason.startsWith('kern ') ? [...reason.matchAll(/(?:^kern |; )(G\d+[a-z]?):/g)].map((m) => m[1]) : [];
     if (named.length) asks.push(named.join('+'));
   }
   const uses = toolUses(entries);
