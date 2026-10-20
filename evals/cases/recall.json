@@ -46,6 +46,7 @@
     {
       "id": 3,
       "kind": "dialogue",
+      "prompts": ["Have a subagent run the test suite and tell me what fails. Don't change any file.", "recall chat"],
       "prompt": "recall chat",
       "expected_output": "Opens with the action-item count, then what happened by importance, then each action item with the decision, options, a recommendation and what happens with no answer.",
       "expectations": [

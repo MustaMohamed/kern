@@ -189,3 +189,10 @@ test('export-in-progress: the implementer reported DONE for Task 3, its diff fro
     assert.equal(sh(ws, 'node --test').status, 0, 'main is green');
   });
 });
+
+test('recall-3 runs a subagent in its first turn, so "recall chat" has a subagent report to treat as one', () => {
+  const c = CASES.get('recall-3');
+  assert.equal(c.prompts.length, 2);
+  assert.match(c.prompts[0], /subagent/);
+  assert.equal(c.prompts[1], 'recall chat');
+});
