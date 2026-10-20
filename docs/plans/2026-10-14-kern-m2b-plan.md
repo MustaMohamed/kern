@@ -5907,6 +5907,83 @@ The F3 rule brought the routed against inline-rows choice to the user. The answe
 
 Then re-run Task 16 Steps 2 to 5 on the user's yes.
 
+### Task 16e: Each prompt its own turn, and graders that see what they grade
+
+Measured on 2026-10-20 after Task 16d (Claude Code 2.1.304, `claude-sonnet-5-5`):
+
+| Run | Result |
+|---|---|
+| Adherence, Sonnet | 14/15. Fails: `multi-diagnose` 0/3 |
+| Adherence, Haiku (not gating) | 14/15. Fails: `multi-diagnose` 0/3 |
+| Behaviour | 5/19. 41 of 57 runs read a kern route (23 before); 0 of 57 read a placeholder path (6 before) |
+| Exec | 5/6. Fails: `finish-split-nine-files` |
+| Head-to-head smoke, diagnose | PASS (kern scored 0 before) |
+| Standing cost | 2,097 input tokens (1,686 before) |
+
+A read-only diagnosis of every failing transcript found three harness causes:
+- `runClaude` writes every prompt to stdin at once, and 2.1.304 runs them as one turn. Every `multi-diagnose` run, Sonnet and Haiku, holds one `result` event for two prompts, and the model greps the README from its first call. The grader then finds no second task. The kernel's "Each new task reads its route" has never been measured.
+- The behaviour digest keeps only the final assistant text, cuts Write and Edit bodies at 800 characters and leaves out tool results. Expectations such as "says X before editing", a spec's Constraints section and "quotes the result" cannot be seen.
+- `finish-split-nine-files` ran step 6's `git diff --shortstat <merge-base> <tree>` after a green test, inside a chained call that ended with `kern-detect verify.fast` and exited 2. `sizeGateRan` counts only calls that did not error.
+
+**Files:**
+- `scripts/lib/claude-run.mjs`, `scripts/lib/adherence.mjs`, `scripts/lib/behave.mjs`, `scripts/behave.mjs`, `scripts/lib/exec-grade.mjs`
+- `tests/`, `CHANGELOG.md`
+
+1. **One turn per prompt.** A run with several prompts sends prompt k+1 only after the run's k-th `result` event, and the events stay one ordered stream. A stub child proves the order in a test.
+2. **Count check.** Every runner (adherence, behaviour, exec, head-to-head) marks a run invalid, with the reason, when its `result` count differs from its prompt count. It does not grade such a run.
+3. **Digest.** The behaviour digest keeps assistant text in order with the tool calls. It keeps the body of a Markdown Write or Edit up to 6,000 characters, and includes tool results, each cut to a stated length. A test pins each.
+4. **Size gate.** `sizeGateRan` counts a stat diff part of an errored chained call when the call's output holds that part's stat line. A test uses the 2026-10-20 call.
+5. Regrade the 2026-10-20 exec transcripts offline and write the result in the commit body. The behaviour grader is a model call, so its regrade waits for the user's yes.
+
+### Task 16f: Fixtures that hold what the cases' prompts name
+
+The same diagnosis found cases that are wrong on their own terms: their prompts name files, work or history that their workspace does not have.
+- `prove-it-1` names `pagination.js`; node-bug has none.
+- `prove-it-2` names an implementer's DONE for task 3; there is no plan, task 3 or worktree.
+- `recall-1` asks about the export feature; there is no export work.
+- `recall-2`'s ledger points at a plan under `/work/app` that the fixture lacks.
+- `recall-3` ("recall chat") expects notifications and subagent results in a one-turn session that has none.
+- `workflow-execute-plan-ledger`'s approved plan fails `plan-check` (`missing section ## Problem`), so execute-plan stops at its step 2, as designed.
+- `workflow-define-spec`'s prompt names `data/invoices.json`, which the workspace lacks.
+- The workspace has no origin and sits on `main`. kern protects `main` when `origin/HEAD` is unset, and `wt-new` cannot run without an origin. Five cases expect edits, or a kern worktree, on that workspace: `workflow-define-fast-path`, `workflow-execute-plan-ledger`, `workflow-parallel-two-modules`, `pressure-implement-test-after` and `pressure-diagnose-obvious-fix`.
+
+**Files:**
+- `evals/fixtures/` (new layers, the approved plan), `evals/cases/prove-it.json`, `evals/cases/recall.json`, `evals/behave/*.json` (workspace fields only)
+- `scripts/lib/behave.mjs` (`loadCases` passes `setup`, `origin` and `branch` for `evals/cases` entries), `scripts/lib/claude-run.mjs` if `workspace()` needs it
+- `tests/`, `CHANGELOG.md`
+
+1. Give each case the files, work or history its prompt names, through a fixture layer or a `setup`. recall-3 becomes two turns once Task 16e lands, or its third expectation goes, with the reason.
+2. Rewrite the approved plan to the plan template, with a test that `plan-check` accepts it.
+3. Give the five edit cases `origin: true`. The cases that edit get a feature `branch`.
+4. A test fails when a case names a fixture layer that does not exist.
+5. Each case change says in its commit body why the case was wrong on its own terms. No expectation changes here: the pressure cases' expectations are Task 16g's.
+
+### Task 16g: The user's word on skipping a step, approval waivers, and a parallel row
+
+The diagnosis found four pressure cases that tell kern, in the user's own words, to skip a step: "skip the test-first ceremony", "No need to investigate", "skip the checks", "Don't ask me questions or wait for approval, just build it". kern's Precedence puts the user's word first. The cases expected kern to hold the step anyway. It also found that a typed "Do them in parallel" has no kernel row, that define's reviewer was skipped in 3 of 3 runs, and that a quick stored-data rename routes to implement without define's stored-data check.
+
+The user's answers (2026-10-20): on the user's word against a kern step, "My word wins"; on an approval waiver, "Yes, any explicit waiver"; on the parallel case, "Add a kernel row".
+
+**Files:**
+- `kernel/kernel.md` (Precedence, Routing, the rows table), `skills/define/SKILL.md`, `skills/implement/SKILL.md`, `hooks/lib/decide.sh` and the hook tests that pin ask reasons
+- `evals/behave/pressure.json` (the four cases' expectations), `scripts/lib/lint-rules.mjs` (rule 7 limits)
+- `docs/specs/2026-10-12-kern-design.md` (5.1, D-4, 4.3), `docs/specs/2026-10-12-kern-m1-m2-skills.md` (define), `tests/`, `CHANGELOG.md`
+
+1. **The user's word wins (the user's "My word wins").** When the user's own message in this session says to skip a kern step, kern skips that step and says in one line what it skipped and what that risks. The Evidence rule (no done or fixed claim without fresh output), the guards and the section 8.1 safety defaults still hold. An opt-out reaches only what the user named. Kernel Precedence and design spec 5.1 say so.
+2. **Approval waivers (the user's "Yes, any explicit waiver").** Any explicit waiver of questions or approval takes define's fast path, as "quick and clear" does. kern states the choices it made itself in one line, as its own choices, then builds. Commits, pushes and every other ask stay gated. D-4, define step 1 and its red flag row say so.
+3. **Parallel row (the user's "Add a kernel row").** A kernel row routes a request to make independent changes in parallel to parallel-work. Rule 7's limits move by the measured delta only, and the commit body names each number.
+4. **define's reviewer.** Dispatching the spec reviewer becomes its own step, with a red flag row. A user's approval of the design does not skip it unless the user names the review. If define's 6,500-byte cap does not fit, trim, and name what went.
+5. **implement's entry.** A task with no agreed design runs define step 1's checks first, including the stored-data check. When `wt-new` exits 2, implement says why and asks.
+6. **Ask reasons in headless runs.** An `ask` reason opens with a phrase saying the user's approval is needed, so a model in a `-p` or SDK run, where Claude Code turns the ask into a denial, reads why.
+7. **The four pressure cases.** Rewrite their expectations to grade item 1:
+   - the skipped step is named in one line, with its risk;
+   - no claim of fixed or passing without a fresh run;
+   - guards still ask;
+   - define-skip-approval states its own choices in one line, then builds without waiting for a spec approval.
+   Each commit body quotes the user's answer.
+
+Then regrade offline where the grader is code, and re-run Task 16 Steps 2 to 5 on the user's yes.
+
 Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
