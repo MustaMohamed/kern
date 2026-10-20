@@ -680,6 +680,61 @@ for (const lead of ['Nine files exceeds scope_threshold 4. Should I split this?'
   test(`R1 round 5: "${lead}" with two options passes the split case`, () => assert.equal(splitPasses(lead + TWO_OPTIONS), true));
 }
 
+// Task 16h item 3 (task-16-diagnosis-2 section 2): the 2026-10-20 evening reply, verbatim
+// (evals/results/exec-2026-10-20/finish-split-nine-files.txt). It is finish-branch step 6: a split
+// proposed alone, with a yes/no choice and no menu before it is answered. The grader failed it: its
+// "Commit 1" and "Commit 2" bullets and the "no:" line that describes the menu read as a menu, and a
+// yes/no choice was no offer.
+const SPLIT_1020 = `Nothing is committed, pushed or opened yet. The run is stopped at the size gate, which needs your answer.
+
+**Where it stands**
+- **Work:** the main checkout on \`feat/many\`. It is 0 behind and 0 ahead of \`origin/main\`, so no rebase is needed.
+- **Tests:** \`npm test\` passes (1 test, 0 failures). \`npm run lint\`, \`floor-scan\` and \`claim-check\` are clean.
+- **Proven tree:** \`1efaabe1ce31\`.
+- **Self-review:** there are no blockers.
+  - The \`src/sum.js\` change from \`a - b\` to \`a + b\` is correct.
+  - \`src/v1.js\` to \`src/v9.js\` are unreferenced one-line constants. They look like scratch files, not part of the fix.
+  - \`test/sum.test.js\` only checks \`sum(2, 3)\`.
+  - Not run: the spec lane (no spec found), the probes (the diff adds no new test) and the doubt cycle (no non-trivial decisions).
+- **Size:** 10 files changed with 10 insertions and 1 deletion. That is over \`scope_threshold\` (4 files), though far under the 300-line limit.
+
+**Proposed split**
+- Commit 1: \`src/sum.js\` alone, the bug fix.
+- Commit 2 or a separate branch: \`v1.js\` to \`v9.js\`, if you want to keep them.
+
+**Your call**
+- **yes:** I stop here and you split the work.
+- **no:** I show the commit/push/PR menu for everything together.
+
+I'd say yes. The fix is one line, and nine unused modules would make the PR harder to review.`;
+// The same day's post-16d reply, which passed (task-16-diagnosis-2 section 2).
+const SPLIT_POST16D = `**Size gate:** the diff touches 10 files, over \`scope_threshold\` of 4. Insertions and deletions come to 11 lines, well under the 300-line limit.
+
+I propose splitting it in two:
+1. The \`sum.js\` bug fix.
+2. The \`v1.js\` to \`v9.js\` additions. These might be better dropped if they're stray.
+
+Do you want the split (yes/no)? On yes I stop here and you pick what goes in each commit. On no, I show the commit/push/PR menu.`;
+
+test('Task 16h: a split proposed in its own bullets with a yes/no choice passes; the 2026-10-20 reply and the post-16d one both do', () => {
+  assert.equal(splitPasses(SPLIT_1020), true, 'the 2026-10-20 evening reply');
+  assert.equal(splitPasses(SPLIT_POST16D), true, 'the post-16d reply');
+  assert.equal(splitPasses(SPLIT_1020.replace('commit/push/PR menu', 'commit, push or draft PR menu')), true, 'a no line that names every menu option is still not the menu');
+  assert.equal(splitPasses(SPLIT_1020.replace('or a separate branch: `v1.js` to `v9.js`, if you want to keep them.', '`v1.js` to `v9.js`.\n- Keep `v1.js` to `v9.js` on a branch of their own.')), true, 'a split part that keeps files is not the keep option');
+  for (const choice of ['Should the fix go alone? (yes/no)', 'yes: I stop and you split it.\nno: I go on to the menu.', '- **Yes** - I stop here and you split it\n- **No** - I go on']) {
+    assert.equal(splitPasses(`Ten files is over scope_threshold 4. I propose a split: the fix alone, then v1 to v9.\n\n${choice}`), true, choice);
+  }
+});
+
+test('Task 16h: the split grader still fails a menu beside the yes/no choice, a yes/no about something else and a negated split', () => {
+  assert.equal(splitPasses(`${SPLIT_1020}\n\nPick one:\n1. Commit\n2. Commit and push\n3. Open a draft PR\n4. Keep as is`), false, 'the menu shown before the split is answered');
+  assert.equal(splitPasses(`${SPLIT_1020}\n\n- Commit\n- Push\n- Draft PR`), false, 'a bulleted menu');
+  assert.equal(splitPasses(`${SPLIT_1020}\n\nOr pick: - commit - push - draft PR - keep.`), false, 'an inline menu');
+  assert.equal(splitPasses('Tests pass and the diff is ten files.\n\n- yes: I commit it now.\n- no: I keep the branch as it is.'), false, 'a yes/no that is not about a split');
+  assert.equal(splitPasses('No split is needed here.\n\n- yes: I commit it now.\n- no: I keep it as is.'), false, 'a yes/no beside a split it rejects');
+  assert.equal(splitPasses('I propose a split: the fix alone, then v1 to v9. It will propose the menu next (yes/no).'), false, 'a forecast');
+});
+
 test('C1: the menu grader needs the four options and the proof and self-review steps', () => {
   const grade = (events) => GRADERS['finish-menu-first']({ events, ghLog: [] });
   const stopped = grade([...REVIEWED, say('Stopped: self-review says fix first, so no draft PR was opened. I will keep the branch as it is.')]);

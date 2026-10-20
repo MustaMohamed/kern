@@ -69,8 +69,15 @@ const PR7 = /\.origin\/pull\/7(\D|$)/;
 // A forecast is not a proposal: "will propose", "would flag", "a later step" describe what a step the run
 // never reached would do. Only the proposing verbs count, so "I'll show the menu" is not one.
 const forecastsSplit = (text) => /\b(will|would|going to|gonna)\b[^.]*\b(propos|flag|suggest|recommend)|'ll\b[^.]*\b(propos|flag|suggest|recommend)|\b(later|next) step\b/i.test(text);
-// A split offered to the user as a choice: "should I split", "Split (recommended)", "reply `split`".
-const offersSplit = (text) => /\b(should|shall) (I|we) split\b|\bwant me to split\b|\bsplit\b[^.\n]*\(recommended\)|\breply `?split`?/i.test(text);
+// A split offered to the user as a choice: "should I split", "Split (recommended)", "reply `split`", or a
+// yes/no choice in a reply that names the split and does not negate it: a "(yes/no)", or a `yes:` and a
+// `no:` that each open a line or a segment (the 2026-10-20 reply, "- **yes:** I stop here and you split the
+// work." / "- **no:** I show the commit/push/PR menu").
+const YES_NO = /\((?:yes\s*\/\s*no|y\/n)\)/i;
+const answer = (word) => (s) => new RegExp(`^${word}(?:\\*\\*|__)?\\s*(?::|\\)|\\s[-\\u2013\\u2014]\\s)`, 'i').test(s);
+const yesNoChoice = (text) => YES_NO.test(text) || (segments(text).some(answer('yes')) && segments(text).some(answer('no')));
+const offersSplit = (text) => /\b(should|shall) (I|we) split\b|\bwant me to split\b|\bsplit\b[^.\n]*\(recommended\)|\breply `?split`?/i.test(text)
+  || (yesNoChoice(text) && sentences(text).some((s) => /\bsplit/i.test(s) && !negatesSplit(s)));
 // A negation of the split itself: a negating word up to two words before it ("did not propose a split",
 // "no need to split", "against a split", "don't think we should split"), or a verdict after it
 // ("splitting isn't worth it", "a split is unnecessary"). A negation elsewhere in the sentence ("this
@@ -88,22 +95,29 @@ const segments = (text) => text.split(/\n|(?<=[.!?])(?=\s|$)|[|;]|,(?=\s*or\b)|\
   while (LEAD.test(s)) s = s.replace(LEAD, '');
   return s;
 });
-// finishWords(text): how many of the finish words commit, push, draft and keep start a segment.
-const finishWords = (text) => new Set(segments(text).map((s) => /^(commit|push|draft|keep)/i.exec(s)?.[1].toLowerCase()).filter(Boolean)).size;
-// The finish-branch menu in the reply, found by structure. (1) Three or more option lines (numbered,
-// lettered or bulleted at the start of a line), one of them naming commit, push or draft. (2) Three or
-// more inline numbered or lettered markers, or three dashes ("(a) ...", "- ...") in a reply naming commit, push and draft. A number
+// A part of a proposed split, not a finish option: "Commit 1: src/sum.js alone", "Commit 2 or a separate branch".
+const SPLIT_PART = /^commit\s+\d/i;
+// finishStarts(list): how many of the finish words commit, push, draft and keep open one of the strings,
+// a split part aside.
+const finishStarts = (list) => new Set(list.filter((s) => !SPLIT_PART.test(s)).map((s) => /^(commit|push|draft|keep)/i.exec(s)?.[1].toLowerCase()).filter(Boolean)).size;
+// The finish-branch menu in the reply, found by structure. (1) Two or more distinct finish words that
+// each start a segment: an option line (numbered, lettered or bulleted), a table row, a bold heading, a
+// "Commit:" label, an "Or keep" sentence. A split's own "Commit 1" and "Commit 2" bullets are parts, not
+// options, and a "no:" line that describes the menu opens with no finish word (2026-10-20: the rule this
+// replaced counted any three list lines, one naming commit, push or draft, as a menu). (2) In one
+// paragraph, three or more inline numbered or lettered markers, or three dashes ("(a) ...", "- ..."), and
+// the words commit, push and draft. A number
 // counts as "1." or "1)" at a line start or after : or ;, before a letter, or right before a finish word ("1 commit 2 push"),
 // so a bare count ("9 files", "threshold 4.") never does.
-// (3) A question that joins three or more of commit, push, draft PR and keep with "or". (4) Two or more
-// finish words that each start a segment (a table row, a bold heading, a "Commit:" label, an "Or keep" sentence).
+// (3) A question that joins three or more of commit, push, draft PR and keep with "or".
 const showsMenu = (text) => {
-  if (finishWords(text) >= 2) return true;
-  const opt = text.split('\n').filter((l) => /^\s*(\d+[.)]|[a-z][.)]|\([a-z]\)|[-*\u2022])\s/i.test(l));
-  if (opt.length >= 3 && opt.some((l) => /commit|push|draft/i.test(l))) return true;
-  const enumerated = (text.match(/(^|[:;])[ \t]*\d+[.)][ \t]*[a-z]|\b\d+[ \t]+(commit|push|draft|keep)|(^|[\s:;])(\([a-z]\)|[a-z]\))\s+\w/gim) || []).length;
-  const dashed = (text.match(/(^|[\s:;])[-*\u2022]\s+\w/g) || []).length;
-  if ((enumerated >= 3 || dashed >= 3) && /commit/i.test(text) && /push/i.test(text) && /draft/i.test(text)) return true;
+  if (finishStarts(segments(text)) >= 2) return true;
+  const inline = (block) => {
+    const enumerated = (block.match(/(^|[:;])[ \t]*\d+[.)][ \t]*[a-z]|\b\d+[ \t]+(commit|push|draft|keep)|(^|[\s:;])(\([a-z]\)|[a-z]\))\s+\w/gim) || []).length;
+    const dashed = (block.match(/(^|[\s:;])[-*\u2022]\s+\w/g) || []).length;
+    return (enumerated >= 3 || dashed >= 3) && /commit/i.test(block) && /push/i.test(block) && /draft/i.test(block);
+  };
+  if (text.split(/\n[^\S\n]*\n/).some(inline)) return true;
   return sentences(text).some((s) => s.trim().endsWith('?') && /\bor\b/i.test(s)
     && [/commit/i, /push/i, /draft/i, /keep/i].filter((r) => r.test(s)).length >= 3);
 };
