@@ -78,6 +78,17 @@ test('a multi-turn case finds the route and its early calls in the first task on
   assert.equal(ok.before, 1);
 });
 
+test('a multi-turn case splits its tasks at the first result a prompt started, not at a background task\'s (Task 16h)', () => {
+  const opts = { route: 'diagnose', steps, root: K, kind: 'multi-turn' };
+  const note = { type: 'result', subtype: 'success', origin: { kind: 'task-notification', producer: 'session-task', runId: 'r1' } };
+  const done = { type: 'result', subtype: 'success' };
+  const g = grade([...ev(['Bash', { command: 'npm test' }]), note, ...ev(['Read', { file_path: route }]), done, ...ev(['Read', { file_path: route }])], opts);
+  assert.equal(g.pass, true, g.reasons.join('; '));
+  assert.equal(g.before, 1);
+  const again = grade([...ev(['Read', { file_path: route }]), note, ...ev(['Read', { file_path: route }]), done, ...ev(['Bash', { command: 'cat README.md' }])], opts);
+  assert.deepEqual(again.reasons, ['the second task did not read the route again'], 'a read in a background turn of the first task is not the second task\'s');
+});
+
 test('a bare skill name or a skill file outside the plugin root is not the route', () => {
   const bare = grade(ev(['Skill', { skill: 'recall' }], todos(...steps)), { route: 'recall', steps, root: K });
   assert.equal(bare.pass, false);

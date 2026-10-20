@@ -1,7 +1,8 @@
 // The child side of runClaude (claude-run.mjs), which runs it under spawnSync: one headless claude run, one
 // turn per prompt. Each prompt goes to claude's stdin as one stream-json user turn, prompt k+1 only after
-// claude has printed the run's k-th result event, and stdin closes after the last prompt's result, so
-// claude exits. Writing every prompt at once let Claude Code 2.1.304 read them all and run them as one turn
+// claude has printed the run's k-th prompt result (promptResult: a background task's turn does not count,
+// task-16-diagnosis-2 section 3), and stdin closes after the last prompt's result, so claude exits once its
+// background work is done. Writing every prompt at once let Claude Code 2.1.304 read them all and run them as one turn
 // (task-16-diagnosis X3). claude's stdout and stderr pass through unchanged. How claude ended goes to fd 3
 // as one JSON line: { status, signal } once it exits, or { error: { code, message } } when it could not
 // start. A claude that exits before its last result ends the drive with what it printed; one that never
@@ -13,6 +14,7 @@
 import { spawn } from 'node:child_process';
 import { readFileSync, writeSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
+import { promptResult } from './claude-run.mjs';
 
 const { prompts, graceMs } = JSON.parse(readFileSync(0, 'utf8'));
 const turn = (text) => `${JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } })}\n`;
@@ -71,7 +73,7 @@ child.stdout.on('data', (chunk) => {
     buf = buf.slice(i + 1);
     let event;
     try { event = JSON.parse(line); } catch { continue; }
-    if (event?.type === 'result' && ++results >= sent) next();
+    if (promptResult(event) && ++results >= sent) next();
   }
 });
 child.stderr.on('data', (chunk) => process.stderr.write(chunk));

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ATTRIBUTION, GRADERS, chainParts, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
-import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
+import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, userSettingsProblem, writeEvents, writeReply } from '../scripts/lib/exec-run.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
@@ -302,6 +302,95 @@ test('a child that stops before its last result ends the run with what it printe
   const none = runClaude({ cwd: work(), prompts: ['one', 'two'], model: 'm', env: mute.env, timeoutMs: 20000 });
   assert.deepEqual(none.events, []);
   assert.match(runProblem(none, 2), /printed no events/);
+});
+
+// Task 16h item 1 (task-16-diagnosis-2 Y1, section 3): a background subagent's notification starts a turn
+// no prompt asked for, whose result carries origin.kind task-notification. replayClaude(stream) is a
+// stand-in claude that prints a recorded stream (tests/fixtures/streams, trimmed line for line from the
+// 2026-10-20 runs) one event at a time, as Claude Code 2.1.304 printed it: it reads a prompt before the
+// first event and after each result a prompt started while one is still to come, and waits for stdin to
+// close after the last one. It pauses after each result, so the driver's next write lands at a known
+// point, and logs when each prompt and the end of input reached it, and the background setting it got.
+const STREAMS = fileURLToPath(new URL('./fixtures/streams/', import.meta.url));
+function replayClaude(stream) {
+  const dir = mkdtempSync(join(tmpdir(), 'rc-'));
+  writeFileSync(join(dir, 'claude'), `#!${process.execPath}
+const fs = require('fs');
+const log = (s) => fs.appendFileSync(__filename + '.log', s + '\\n');
+const events = fs.readFileSync(${JSON.stringify(join(STREAMS, stream))}, 'utf8').split('\\n').filter(Boolean);
+const prompted = (e) => e.type === 'result' && e.origin?.kind !== 'task-notification';
+let left = events.filter((l) => prompted(JSON.parse(l))).length;
+log('background off: ' + (process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS ?? 'unset'));
+let printed = 0, buf = '', lines = 0, used = 0, eof = false;
+process.stdin.on('data', (d) => {
+  buf += d;
+  for (let i; (i = buf.indexOf('\\n')) >= 0; buf = buf.slice(i + 1)) { lines += 1; log('prompt ' + lines + ' after event ' + printed); }
+});
+process.stdin.on('end', () => { eof = true; log('eof after event ' + printed); });
+const until = (ok) => new Promise((done) => { const check = () => (ok() ? done() : setTimeout(check, 10)); check(); });
+const prompt = async () => { await until(() => lines > used || eof); if (lines <= used) process.exit(0); used += 1; };
+(async () => {
+  await prompt();
+  for (const line of events) {
+    fs.writeSync(1, line + '\\n');
+    printed += 1;
+    const e = JSON.parse(line);
+    if (e.type !== 'result') continue;
+    await new Promise((done) => setTimeout(done, 200));
+    if (!prompted(e)) continue;
+    left -= 1;
+    if (left > 0) await prompt(); else await until(() => eof);
+  }
+  process.exit(0);
+})();
+`);
+  chmodSync(join(dir, 'claude'), 0o755);
+  return { env: { PATH: `${dir}:/usr/bin:/bin` }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
+}
+const replay = (stream, prompts) => {
+  const stub = replayClaude(stream);
+  const r = runClaude({ cwd: work(), prompts, model: 'm', env: stub.env, timeoutMs: 30000 });
+  return { r, log: stub.log() };
+};
+
+test('Task 16h: one prompt whose subagents ran in the background (workflow-execute-plan-ledger-0) is one prompt turn, gradable, with background tasks on', () => {
+  const { r, log } = replay('execute-plan-ledger-0.jsonl', ['Execute the approved plan in .kern/plans/export.md in inline mode.']);
+  assert.deepEqual(log, ['background off: unset', 'prompt 1 after event 0', 'eof after event 37'], 'a single-prompt run keeps background agents, and stdin closes after the prompt\'s own result');
+  assert.equal(r.events.length, 154);
+  assert.equal(r.events.filter((e) => e.type === 'result').length, 5, 'the four notification turns print their results at the end');
+  assert.equal(countProblem(r, 1), '');
+  assert.equal(runProblem(r, 1), '', 'four task-notification results are not prompt turns');
+});
+
+test('Task 16h: a run of more than one prompt turns background tasks off, and one that still started (recall-3-2) is invalid, not miscounted', () => {
+  const { r, log } = replay('recall-3-2.jsonl', ["Have a subagent run the test suite and tell me what fails. Don't change any file.", 'recall chat']);
+  assert.deepEqual(log, ['background off: 1', 'prompt 1 after event 0', 'prompt 2 after event 16', 'eof after event 31']);
+  assert.equal(r.events.length, 48);
+  assert.match(runProblem(r, 2), /^a background task started in a run of 2 prompts, so its turns can cross a prompt boundary/);
+  assert.equal(countProblem(r, 2), runProblem(r, 2));
+});
+
+test('Task 16h: the driver sends the next prompt on a prompt\'s result, never on a background task\'s', () => {
+  const { r, log } = replay('background-between-prompts.jsonl', ['one', 'two', 'three']);
+  assert.deepEqual(log, ['background off: 1', 'prompt 1 after event 0', 'prompt 2 after event 5', 'prompt 3 after event 12', 'eof after event 15'],
+    'prompt 3 went out on the notification result at event 9, or stdin closed before turn 3');
+  assert.match(runProblem(r, 3), /^a background task started in a run of 3 prompts/);
+});
+
+test('Task 16h: the count check counts prompt turns; a background turn that failed still voids the run', () => {
+  const ok = { type: 'result', subtype: 'success', is_error: false };
+  const note = (extra = {}) => ({ ...ok, origin: { kind: 'task-notification', producer: 'session-task', runId: 'r1' }, ...extra });
+  const run = (...events) => ({ status: 0, badLines: 0, stderr: '', events });
+  assert.equal(countProblem(run(ok, note(), note()), 1), '');
+  assert.match(countProblem(run(note(), note()), 1), /^1 prompt but 0 result events from a prompt/);
+  assert.match(countProblem(run(ok, note()), 2), /^2 prompts but 1 result event from a prompt/);
+  assert.match(runProblem(run(ok, note({ is_error: true })), 1), /^a background task's turn ended with success \(is_error\)$/);
+  assert.match(runProblem(run(ok, note({ subtype: 'error_during_execution', is_error: true })), 1), /error_during_execution/);
+  assert.equal(runProblem(run(ok, { ...ok, origin: { kind: 'human' } }), 1).length > 0, true, 'only a task notification is not a prompt turn');
+  const started = (bg) => ({ type: 'system', subtype: 'task_started', task_id: 't', is_backgrounded: bg });
+  assert.equal(countProblem(run(started(true), ok), 1), '', 'one prompt keeps background agents');
+  assert.equal(countProblem(run(started(false), ok, ok), 2), '', 'a foreground subagent stays inside its turn');
+  assert.match(countProblem(run(started(true), ok, ok), 2), /^a background task started in a run of 2 prompts/);
 });
 
 test('the gh stub logs every call, answers pr list from the case, and fails on a call it does not know', () => {

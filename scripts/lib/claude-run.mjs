@@ -74,8 +74,25 @@ export function workspace(fixtureDir, { name = 'app', origin = false, branch = '
 // The driver that runs claude for runClaude, one turn per prompt (claude-drive.mjs).
 const DRIVER = fileURLToPath(new URL('./claude-drive.mjs', import.meta.url));
 
+// promptResult(e): e is the result event of a turn a prompt started. Since Claude Code 2.1.304 an Agent
+// call that omits run_in_background runs in the background, and its notification starts a turn of its own
+// whose result carries origin { kind: 'task-notification', producer: 'session-task', runId }, the run_id
+// of a system/task_notification event (task-16-diagnosis-2 Y1: 174 results with no origin over 174
+// prompts on 2026-10-20, and 14 with that origin). Such a turn is not a prompt's.
+export const promptResult = (e) => e?.type === 'result' && e.origin?.kind !== 'task-notification';
+
+// NO_BACKGROUND: what runClaude adds to the environment of a run of more than one prompt, so a subagent
+// runs in the foreground and each prompt stays one turn. Claude Code 2.1.304 reads it as a boolean
+// ("1", "true", "yes" or "on"); with it set, the Agent tool offers no run_in_background and launches
+// nothing in the background, and background shells are off too (read from the binary, Task 16h). A
+// run of one prompt keeps background agents, as a user's session has them: stdin closes after the
+// prompt's result, and Claude Code waits for a running subagent, holding its turns' results until it is
+// done (workflow-execute-plan-ledger-0, 2026-10-20: four notification turns after stdin closed).
+export const NO_BACKGROUND = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
+
 // runClaude: one headless run; each prompt is one user turn, sent as stream-json on stdin, prompt k+1 only
-// after the run's k-th result event (claude-drive.mjs, run synchronously here). Throws ClaudeRunError when
+// after the run's k-th prompt result (promptResult; claude-drive.mjs, run synchronously here). A run of more
+// than one prompt gets NO_BACKGROUND on top of env. Throws ClaudeRunError when
 // cwd is not under the OS temp dir (the run has unrestricted Bash), claude is missing, not executable
 // (126, 127), killed by the timeout or a signal. The child sees childEnv(), not the caller's whole
 // environment. A non-zero exit is returned in status; use runProblem() to decide whether the run may be
@@ -93,7 +110,7 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
     '--model', model, '--max-turns', String(maxTurns), '--max-budget-usd', String(maxBudgetUsd), ...PERMISSIONS, ...ISOLATION, ...pluginDirs.flatMap((d) => ['--plugin-dir', d])];
   // fd 3 carries the driver's one-line report of how claude ended.
   const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify({ prompts, graceMs: killGraceMs }), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
-    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnv(process.env, env) });
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnv(process.env, { ...env, ...(prompts.length > 1 ? NO_BACKGROUND : {}) }) });
   if (run.error?.code === 'ETIMEDOUT') throw new ClaudeRunError(`claude timed out after ${timeoutMs} ms`);
   // ENOBUFS: spawnSync stopped the driver, which stopped claude, before either could report. Only this run
   // printed that much, so it is not fatal.
@@ -121,17 +138,28 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
 }
 
 // countProblem(run, prompts): why the run's turns do not match the prompts sent, or '' when they do: each
-// prompt is one turn, and stream-json prints one result event per turn.
+// prompt is one turn, and stream-json prints one result event per turn. Only a prompt's result counts
+// (promptResult); a background task's turns are not prompts. In a run of more than one prompt, a task
+// started in the background is a problem too: its turns can come between two prompts' turns, or join a
+// queued prompt (task-16-diagnosis-2 section 3, recall-3-2), and NO_BACKGROUND should have kept it in the
+// foreground.
 export function countProblem(run, prompts) {
   if (!Number.isInteger(prompts) || prompts < 1) throw new TypeError(`countProblem needs the number of prompts sent, got ${prompts}`);
-  const n = run.events.filter((e) => e?.type === 'result').length;
-  return n === prompts ? '' : `${prompts} prompt${prompts === 1 ? '' : 's'} but ${n} result event${n === 1 ? '' : 's'}: each prompt must run as its own turn`;
+  const n = run.events.filter(promptResult).length;
+  const notes = run.events.filter((e) => e?.type === 'result').length - n;
+  if (n !== prompts) {
+    return `${prompts} prompt${prompts === 1 ? '' : 's'} but ${n} result event${n === 1 ? '' : 's'}${notes ? ` from a prompt (and ${notes} from a background task)` : ''}: each prompt must run as its own turn`;
+  }
+  if (prompts > 1 && run.events.some((e) => e?.type === 'system' && e.subtype === 'task_started' && e.is_backgrounded === true)) {
+    return `a background task started in a run of ${prompts} prompts, so its turns can cross a prompt boundary (${Object.keys(NO_BACKGROUND)[0]} did not hold)`;
+  }
+  return '';
 }
 
 // runProblem(run, prompts): why a run may not be graded, or '' when it may: a non-zero exit, a line that
-// is not JSON, no events, no result event, a result count that differs from the number of prompts sent
-// (countProblem), or a result that is not a success (a turn or budget stop, an error). A run that ended
-// early reads as an invalid run, never as a failed or passed case.
+// is not JSON, no events, no result event, a turn count that differs from the prompts sent (countProblem),
+// or a result that is not a success (a turn or budget stop, an error), a background task's turn included.
+// A run that ended early reads as an invalid run, never as a failed or passed case.
 export function runProblem(run, prompts) {
   const count = countProblem(run, prompts);
   if (run.status !== 0) return `claude exited ${run.status}: ${run.stderr.trim().split('\n').pop() || 'no stderr'}`;
@@ -141,7 +169,7 @@ export function runProblem(run, prompts) {
   if (results.length === 0) return 'no result event: the run was cut off';
   if (count) return count;
   const bad = results.find((e) => e.subtype !== 'success' || e.is_error === true);
-  return bad ? `the run ended with ${bad.subtype ?? 'a result with no subtype'}${bad.is_error === true ? ' (is_error)' : ''}` : '';
+  return bad ? `${promptResult(bad) ? 'the run' : "a background task's turn"} ended with ${bad.subtype ?? 'a result with no subtype'}${bad.is_error === true ? ' (is_error)' : ''}` : '';
 }
 
 // toolUses(events): every tool call in order, { name, input }.

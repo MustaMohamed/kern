@@ -9,7 +9,7 @@
 import { readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
-import { countProblem, runProblem, toolUses } from './claude-run.mjs';
+import { countProblem, promptResult, runProblem, toolUses } from './claude-run.mjs';
 
 // rowPrompt(root, route): a positive case's prompt is its row's first routing eval, so the two cannot drift.
 export const rowPrompt = (root, route) => JSON.parse(readFileSync(join(root, 'evals', 'cases', `row-${route}.json`), 'utf8')).evals[0].prompt;
@@ -133,12 +133,13 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
   let hops = 0;
   let before = 0;
   const hit = (u) => routeCall(u, route, root, routeFile);
-  // The second task starts after the first result event: runClaude sends each prompt as one user turn on
+  // The second task starts after the first prompt's result: runClaude sends each prompt as one user turn on
   // stdin, the second only after the first turn's result, and stream-json writes one result per turn
   // (evals/results/exec-2026-10-16/finish-pr-at-head.events.jsonl: two prompts, a result at line 6 and at
-  // line 114). runFailure does not let a run with fewer results than prompts reach this grade. A multi-turn
+  // line 114). A background task's turn also ends in a result, which is not a prompt's (promptResult).
+  // runFailure does not let a run with fewer prompt results than prompts reach this grade. A multi-turn
   // case finds the route in the first task.
-  const turn = events.findIndex((e) => e?.type === 'result');
+  const turn = events.findIndex(promptResult);
   const first = kind === 'multi-turn' && turn >= 0 ? toolUses(events.slice(0, turn)).filter((u) => !TODO_TOOLS.has(u.name)) : work;
   const at = first.findIndex(hit);
   const early = at < 0 ? [] : first.slice(0, at).filter((u) => !routesOnly(u, root));
