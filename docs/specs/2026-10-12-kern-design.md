@@ -157,7 +157,7 @@ Rendering fills `{VERSION}` from `plugin.json`, `{ROOT}` with the absolute plugi
 | Settings summary | 600 | Resolved keys that differ from defaults |
 | Total | 3,960 | |
 
-The chars above are the design split. Since Task 16d put every row in the kernel and renders kern paths absolute, lint rule 7's measurement is the gate: 5,226 chars with no settings and 5,667 with the longest fixture settings, the plugin root counted as a 52-character installed path. Task 16g added 390 chars to both: the Precedence line on how far the user's skip reaches and which safety defaults it leaves standing (section 5.1), the parallel-work row, and the several-matches clause that sends a typed "in parallel" through parallel-work after define and diagnose.
+The chars above are the design split. Since Task 16d put every row in the kernel and renders kern paths absolute, lint rule 7's measurement is the gate: 5,226 chars with no settings and 5,667 with the longest fixture settings, the plugin root counted as a 52-character installed path. Task 16g added 389 chars to both: the Precedence line on how far the user's skip reaches and which safety defaults it leaves standing (section 5.1), the parallel-work row, and the several-matches clause that sends a typed "in parallel" through parallel-work after define and diagnose.
 
 ### 4.3 Routing table
 
