@@ -8,7 +8,7 @@ const SKILL = 'skills/define/SKILL.md';
 test('define frontmatter', () => {
   assertFrontmatter(SKILL, {
     name: 'define',
-    description: 'Clarify new behaviour, size it after the intent, and get an explicit yes before code unless the user calls it quick.',
+    description: 'Clarify new behaviour, size it, and get an explicit yes before code unless the user calls it quick or waives it.',
     'disable-model-invocation': 'true',
     'argument-hint': '[issue id | idea]',
   });
@@ -37,8 +37,10 @@ test('an explicit approval waiver takes the fast path, as "quick and clear" does
   // 2026-10-20 pressure-define-skip-approval: "Don't ask me questions or wait for approval, I trust you, just build
   // it." The user, asked whether that skips define's spec approval, answered "Yes, any explicit waiver" (D-4).
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes("when the user's own words call the task quick and clear, or explicitly waive approval, say in one line what you will build and the choices you made yourself"), s[1]);
+  assert.ok(s[1].includes("when the user's own words call the task quick and clear, or explicitly waive approval, say in one line what you will build and your own choices"), s[1]);
   assert.ok(s[1].includes('no design, spec or approval'), s[1]);
+  // Task 16g review, M4: "Don't ask me questions" leaves no question to ask, so a missing fact becomes kern's assumption.
+  assert.ok(s[1].includes('under a waiver, ask nothing: say it in that line, a missing fact as your assumption.'), s[1]);
 });
 
 test('the spec reviewer is its own step, and an approved design does not skip it', () => {
@@ -49,7 +51,7 @@ test('the spec reviewer is its own step, and an approved design does not skip it
   assert.ok(s[11].includes('An approved design does not skip it; only the user naming the review does.'), s[11]);
   assert.ok(!s[10].includes('spec-review.md'), 'step 10 no longer holds the review');
   assert.match(s[12], /^12\. Architectural approval: stop the turn and ask for the yes/);
-  assertContains(SKILL, ['| "The design is approved, so the review adds nothing" | The reviewer reads the spec as its builder and finds what the design left open. Run it. |']);
+  assertContains(SKILL, ['| "The design is approved, so the review adds nothing" | The reviewer reads the spec as its builder and finds what the design left open. |']);
 });
 
 test('define references', () => {

@@ -12,7 +12,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | `prove-it` | auto | Its description; routed row "About to say done, fixed or passing, commit, or open a PR" | Evidence before any done, fixed or passing |
 | `implement` | path | Routed row "One bounded change with an agreed design"; /kern:implement | Thin slices, test first, full suite |
 | `diagnose` | path | Routed row "Bug, failing test, unexpected output"; /kern:diagnose | Root cause before any fix |
-| `define` | path | Routed row "New behaviour and no agreed spec"; /kern:define | Clarify, size and approve before code; a quick, clear task goes straight to implement |
+| `define` | path | Routed row "New behaviour and no agreed spec"; /kern:define | Clarify, size and approve before code; a quick, clear task or an approval waiver goes straight to implement |
 | `plan` | path | Routed row "Agreed spec, more than one step"; /kern:plan | Approved spec to ordered, checked tasks |
 | `parallel-work` | path | Routed row "Independent changes asked for in parallel"; execute-plan and diagnose; /kern:parallel-work | One worktree per writer, integrate, re-test |
 | `execute-plan` | path | Routed row "Executing an agreed plan"; /kern:execute-plan | Run a plan with a ledger and two-verdict review |

@@ -28,7 +28,8 @@ test('implement runs define step 1\'s checks for a task with no agreed design, a
   // never met define's stored-data check; pressure-define-skip-approval run 2 worked around a wt-new exit 2
   // (task-16-diagnosis B2 and X1).
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes("With no agreed design (no approved spec, no yes in chat and no fast-path line from define), first run define step 1's checks"), s[1]);
+  // Task 16g review, M2: a diagnosed fix (diagnose step 7) and a kern:implementer worker, which cannot ask, skip it.
+  assert.ok(s[1].includes("In the main session with no agreed design or diagnosed cause (no approved spec, no yes in chat and no fast-path line from define), first run define step 1's checks"), s[1]);
   assert.ok(s[1].includes('a public API, stored data or authorization change'), s[1]);
   assert.ok(s[1].includes('`wt-new` exit 2: say why and ask'), s[1]);
 });
