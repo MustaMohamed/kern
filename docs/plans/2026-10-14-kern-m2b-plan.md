@@ -5873,6 +5873,40 @@ The user's answers: "Yes, fix the grader" (judge each chained part by its own pr
 - finish-branch's size gate: the split question stands alone. The reply doesn't list the commit, push and PR menu until the user has answered the split. Byte cap as lint sets it.
 - Tests: the 2026-10-18 `finish-menu-first` shape (wt-diff `rc=0` inside a chain whose last part exited 3) passes the steps 4 and 5 check. A chain where wt-diff itself failed still fails. The finish-branch wording is pinned.
 
+### Task 16d: Inline route rows with absolute paths, and routing that holds under pressure
+
+Measured on 2026-10-20, after the weekly limit reset (Claude Code 2.1.302, `claude-sonnet-5-5`):
+
+| Run | Result |
+|---|---|
+| Adherence, routed | 11/15. Fails: `row-define` 1/3, `row-diagnose` 0/3, `row-prove-it` 0/3, `multi-diagnose` 0/3 |
+| Adherence, inline-rows | 14/15 |
+| Adherence, Haiku (not gating) | 14/15 |
+| Behaviour | 4/19 |
+
+- `multi-diagnose` failed in all three variants: the second task never read the route again.
+- In behaviour, only 23 of 57 runs touched a kern file.
+- 6 of 57 behaviour runs read a path with a placeholder still in it (`{KERN}/...`, `${CLAUDE_PLUGIN_ROOT}/kernel/routes.md`) and then gave up on kern.
+- Claude Code fills in `${CLAUDE_PLUGIN_ROOT}` only in a skill loaded through the Skill tool, not in a file read by path. It is not set in the Bash tool's environment. A SessionStart hook can export variables for later Bash calls through `$CLAUDE_ENV_FILE` (code.claude.com/docs/en/hooks), but the docs do not say whether that works for plugin hooks or in `-p` runs.
+
+The F3 rule brought the routed against inline-rows choice to the user. The answer was "Inline rows". On behaviour, the answer was "Fix, then re-measure".
+
+**Files:**
+- `kernel/kernel.md` (Routing, the rows table)
+- `kernel/routes.md` (removed, or kept only if a test needs it, with the reason)
+- `hooks/session-start` and `hooks/lib/render.sh` (render absolute paths; `$CLAUDE_ENV_FILE`)
+- `scripts/lib/kernel-rows.mjs`, `scripts/lib/lint-rules.mjs` (rules 6 and 7), `scripts/route-eval.mjs` and its tests (rows now in the kernel)
+- `scripts/lib/adherence.mjs` (`inlineRows`, which the routed variant now already is)
+- `tests/`, `docs/specs/2026-10-12-kern-design.md` (4.2, 4.3), `docs/plans/contract.md`, `CHANGELOG.md`
+
+1. **Inline rows (the user's "Inline rows").** Every routed row moves from `kernel/routes.md` into the kernel's table. The Routing paragraph drops the `routes.md` hop. Lint, route-eval and `kernelRows` read the rows from the kernel. The adherence runner's `--variant inline-rows` either becomes a no-op that says so, or is removed with its test.
+2. **Absolute paths.** The session-start render replaces `{ROOT}` and `{KERN}` in the kernel with absolute paths, so no rendered row or kernel line holds a placeholder. The kernel's header keeps one line saying what `${CLAUDE_PLUGIN_ROOT}` means in a skill read by path.
+3. **`$CLAUDE_ENV_FILE`.** When session-start sees `$CLAUDE_ENV_FILE`, it appends `export CLAUDE_PLUGIN_ROOT=<root>`, quoted for the shell, so a skill's `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>` runs as written. Check the 2.1.302 binary for whether plugin hooks and `-p` sessions get the variable, and write what you found in the commit body. Never write anything else to that file.
+4. **Routing under pressure.** The Routing text makes a row match any task that changes code, fixes a bug, commits or claims done, even one the user calls quick, small or obvious. Only a question or a casual turn with no change matches nothing. It also says that each new task reads its route, even when the same route was read earlier in the session.
+5. **Budget.** Rule 7's targets may move only as far as the inlined rows need, and every moved number is named in the commit body. The standing cost is measured again; per the user's earlier "Accept the measured number", the new measurement is the gate.
+
+Then re-run Task 16 Steps 2 to 5 on the user's yes.
+
 Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
