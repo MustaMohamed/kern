@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText, workspace } from './lib/claude-run.mjs';
-import { caseResult, digest, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, tryRun } from './lib/behave.mjs';
+import { behaveDigest, caseResult, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, tryRun } from './lib/behave.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -45,7 +45,7 @@ try {
       const gdir = mkdtempSync(join(tmpdir(), 'g-'));
       let verdict = null; let invalid = !!problem; let reason = problem;
       if (!invalid) {
-        const g = tryRun({ cwd: gdir, prompts: [graderPrompt(c.expectations, digest(run.events))], model: GRADER, maxTurns: 1 });
+        const g = tryRun({ cwd: gdir, prompts: [graderPrompt(c.expectations, behaveDigest(run.events))], model: GRADER, maxTurns: 1 });
         if (g.problem) { invalid = true; reason = `grader: ${g.problem}`; }
         else try { verdict = parseVerdict(finalText(g.run.events), c.expectations.length); } catch (e) { invalid = true; reason = e.message; }
       }

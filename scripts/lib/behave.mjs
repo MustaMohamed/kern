@@ -44,12 +44,21 @@ export function loadCases(root) {
   return out;
 }
 
-// digest(events): what the grader sees. Tool calls one per line (a Write's content or an Edit's new_string
-// indented under its line, cut at 800 characters), then the final reply. No system prompt, no skill text,
-// so the grader judges behaviour, not the instructions. Over max, only the tool-call section is cut.
-// With { results: true } each call is followed by its result: the last 600 characters of a Bash result
-// (marked "(error)" when the tool reported one), the first 300 of any other tool's.
-export function digest(events, max = 24000, { results = false } = {}) {
+// RECORD: the behaviour grader's record (Task 16e; task-16-diagnosis X2), in characters. The transcript is
+// cut to max (its first 40% and last 60% kept), each Markdown Write or Edit body to markdownBody, any other
+// body to body, a Bash result to its last bashResult, any other tool's result to its first otherResult, and
+// the final reply to its first reply. So a record is at most about 48,100 characters (some 12,000 tokens).
+export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashResult: 600, otherResult: 300, reply: 8000 };
+
+// digest(events, max, { results, transcript }): what a grader sees. No system prompt, no skill text, so the
+// grader judges behaviour, not the instructions. By default: tool calls one per line (a Write's content or
+// an Edit's new_string indented under its line, cut at 800 characters), then the final reply; over max,
+// only the tool-call section is cut. With { results: true } (the head-to-head grader) each call is
+// followed by its result: the last 600 characters of a Bash result (marked "(error)" when the tool
+// reported one), the first 300 of any other tool's. With { transcript: true } (the behaviour grader, see
+// behaveDigest) the assistant's text comes in order with the calls, a Markdown body keeps up to 6,000
+// characters, every tool's error is marked, and the final reply is cut at 8,000.
+export function digest(events, max = 24000, { results = false, transcript = false } = {}) {
   const out = new Map();
   if (results) {
     const names = new Map();
@@ -59,23 +68,46 @@ export function digest(events, max = 24000, { results = false } = {}) {
         if (c?.type === 'tool_result') {
           const text = typeof c.content === 'string' ? c.content : (c.content ?? []).map((x) => x?.text ?? '').join('');
           const t = text.trim();
-          out.set(c.tool_use_id, names.get(c.tool_use_id) === 'Bash' ? `${c.is_error ? '(error) ' : ''}${t.length > 600 ? t.slice(-600) : t}` : t.slice(0, 300));
+          const bash = names.get(c.tool_use_id) === 'Bash';
+          const flag = c.is_error && (bash || transcript) ? '(error) ' : '';
+          out.set(c.tool_use_id, `${flag}${bash ? (t.length > RECORD.bashResult ? t.slice(-RECORD.bashResult) : t) : t.slice(0, RECORD.otherResult)}`);
         }
       }
     }
   }
-  const ids = events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => c.id));
-  const calls = toolUses(events).map((u, i) => {
+  const indent = (text) => text.split('\n').map((l) => `    ${l}`).join('\n');
+  const callLine = (u, i, id) => {
     const arg = u.input.file_path || u.input.command || u.input.skill || u.input.subject || u.input.description || JSON.stringify(u.input).slice(0, 200);
     let line = `${i + 1}. ${u.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 300)}`;
     const body = u.name === 'Write' ? u.input.content : u.name === 'Edit' ? u.input.new_string : '';
     if (typeof body === 'string' && body) {
-      const cut = body.length > 800 ? `${body.slice(0, 800)}[cut]` : body;
-      line += `\n${cut.split('\n').map((l) => `    ${l}`).join('\n')}`;
+      const limit = transcript && /\.(md|markdown)$/i.test(String(u.input.file_path || '')) ? RECORD.markdownBody : RECORD.body;
+      line += `\n${indent(body.length > limit ? `${body.slice(0, limit)}[cut]` : body)}`;
     }
-    if (out.get(ids[i])) line += `\n${out.get(ids[i]).split('\n').map((l) => `    ${l}`).join('\n')}`;
+    if (out.get(id)) line += `\n${indent(out.get(id))}`;
     return line;
-  });
+  };
+  if (transcript) {
+    const items = [];
+    let n = 0;
+    for (const e of events) {
+      if (e?.type !== 'assistant') continue;
+      for (const c of e.message?.content ?? []) {
+        if (c?.type === 'text' && c.text?.trim()) {
+          const [first, ...rest] = c.text.trim().split('\n');
+          items.push(`Assistant: ${first}${rest.length ? `\n${indent(rest.join('\n'))}` : ''}`);
+        }
+        if (c?.type === 'tool_use') items.push(callLine({ name: c.name, input: c.input ?? {} }, n++, c.id));
+      }
+    }
+    const head = `Transcript:\n${items.join('\n') || '(none)'}`;
+    const keep = Math.floor(max * 0.4);
+    const body = head.length <= max ? head : `${head.slice(0, keep)}\n[digest: middle cut]\n${head.slice(head.length - (max - keep))}`;
+    const reply = finalText(events);
+    return `${body}\n\nFinal reply:\n${reply.length > RECORD.reply ? `${reply.slice(0, RECORD.reply)}[cut]` : reply}`;
+  }
+  const ids = events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => c.id));
+  const calls = toolUses(events).map((u, i) => callLine(u, i, ids[i]));
   const head = `Tool calls:\n${calls.join('\n') || '(none)'}`;
   const tail = `Final reply:\n${finalText(events)}`;
   // With results on (the head-to-head grader), a long run keeps its first and last calls, since the last
@@ -86,6 +118,10 @@ export function digest(events, max = 24000, { results = false } = {}) {
       : `${head.slice(0, max)}\n[digest truncated]`;
   return `${body}\n\n${tail}`;
 }
+
+// behaveDigest(events): the behaviour grader's record: digest with tool results and the transcript layout,
+// cut as RECORD says.
+export const behaveDigest = (events) => digest(events, RECORD.max, { results: true, transcript: true });
 
 // pluginCopy(root): a copy of the plugin in <tmp>/<random>/kern without the answer keys (evals, tests, docs)
 // or repo internals, so a run cannot read them. The caller removes it with rmSync(dirname(dir), { recursive: true, force: true }).

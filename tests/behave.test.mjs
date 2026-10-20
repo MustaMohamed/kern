@@ -2,11 +2,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { caseResult, digest, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, tryRun } from '../scripts/lib/behave.mjs';
+import { RECORD, behaveDigest, caseResult, digest, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError } from '../scripts/lib/claude-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -139,6 +139,62 @@ test('the digest shows tool results only when asked: a Bash tail with the error 
   assert.match(on, /1\. Bash: npm test\n {4}\(error\) o+FAILTAIL\n2\. Read: x\.js\n {4}HEADTEXTr+\n/);
   assert.ok(on.includes(`${'o'.repeat(592)}FAILTAIL`) && !on.includes('o'.repeat(593)));
   assert.ok(on.includes(`HEADTEXT${'r'.repeat(292)}`) && !on.includes('r'.repeat(293)));
+});
+
+// Task 16e item 3: the behaviour grader's record (task-16-diagnosis X2).
+const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+const use = (id, name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
+const back = (id, content, isError = false) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content }] } });
+
+test('the behaviour record keeps assistant text in order with the tool calls', () => {
+  const ev = [say('I will read the route first.'), use('a', 'Read', { file_path: '/k/skills/diagnose/SKILL.md' }), back('a', 'steps'),
+    say('Root cause: sum subtracts.\nI will write the failing test before editing.'), use('b', 'Edit', { file_path: 'src/sum.js', old_string: 'a - b', new_string: 'a + b' }), back('b', 'ok'),
+    say('Fixed.'), { type: 'result', subtype: 'success', result: 'Fixed.' }];
+  const d = behaveDigest(ev);
+  assert.equal(d, ['Transcript:', 'Assistant: I will read the route first.', '1. Read: /k/skills/diagnose/SKILL.md', '    steps',
+    'Assistant: Root cause: sum subtracts.', '    I will write the failing test before editing.', '2. Edit: src/sum.js', '    a + b', '    ok',
+    'Assistant: Fixed.', '', 'Final reply:', 'Fixed.'].join('\n'));
+  assert.ok(d.indexOf('Root cause') < d.indexOf('2. Edit'), 'what it said before the edit reads before the edit');
+});
+
+test('the behaviour record keeps a Markdown Write or Edit body up to 6,000 characters, any other body 800', () => {
+  const spec = `# Spec\n${'s'.repeat(4900)}\n## Constraints\n- invoices stay readable\n${'t'.repeat(1500)}`;
+  const d = behaveDigest([use('a', 'Write', { file_path: '.kern/specs/invoices.md', content: spec }), use('b', 'Edit', { file_path: 'docs/notes.markdown', new_string: 'n'.repeat(6000) }),
+    use('c', 'Write', { file_path: 'src/app.js', content: 'j'.repeat(1000) })]);
+  assert.equal(RECORD.markdownBody, 6000);
+  assert.ok(d.includes('## Constraints') && d.includes('- invoices stay readable'), 'a section past 800 characters is seen');
+  assert.ok(d.includes(`    ${spec.slice(spec.lastIndexOf('\n') + 1, 6000)}[cut]`), 'cut at 6,000 characters, marked');
+  assert.ok(d.includes(`    ${'n'.repeat(6000)}\n`), 'exactly 6,000 is not cut');
+  assert.ok(d.includes(`    ${'j'.repeat(800)}[cut]`) && !d.includes('j'.repeat(801)), 'code stays at 800');
+});
+
+test('the behaviour record includes each tool result: a Bash tail of 600 characters, the first 300 of any other, errors marked', () => {
+  const ev = [use('a', 'Bash', { command: 'npm test' }), back('a', `${'o'.repeat(900)}# pass 3\n# fail 0`),
+    use('b', 'Read', { file_path: 'src/sum.js' }), back('b', [{ type: 'text', text: `HEAD${'r'.repeat(900)}` }]),
+    use('c', 'Edit', { file_path: 'src/sum.js', new_string: 'x' }), back('c', 'kern G20: denied', true)];
+  const d = behaveDigest(ev);
+  assert.deepEqual([RECORD.bashResult, RECORD.otherResult], [600, 300]);
+  assert.ok(d.includes(`    ${'o'.repeat(600 - '# pass 3\n# fail 0'.length)}# pass 3\n    # fail 0`) && !d.includes('o'.repeat(601 - '# pass 3\n# fail 0'.length)), 'the Bash tail, where a test summary is');
+  assert.ok(d.includes(`    HEAD${'r'.repeat(296)}\n`) && !d.includes('r'.repeat(297)));
+  assert.match(d, /3\. Edit: src\/sum\.js\n {4}x\n {4}\(error\) kern G20: denied/, 'a denied edit reads as an error, not as done');
+});
+
+test('the behaviour record is bounded: 40,000 characters of transcript, its first and last items kept, and an 8,000 character reply', () => {
+  const ev = Array.from({ length: 300 }, (_, i) => [say(`step ${i} ${'w'.repeat(200)}`), use(`t${i}`, 'Bash', { command: `echo ${i}` }), back(`t${i}`, 'z'.repeat(700))]).flat();
+  ev.push({ type: 'result', subtype: 'success', result: `${'f'.repeat(9000)}END` });
+  const d = behaveDigest(ev);
+  assert.deepEqual([RECORD.max, RECORD.reply], [40000, 8000]);
+  assert.ok(d.length <= 40000 + 8000 + 80, `record is ${d.length} characters`);
+  assert.match(d, /^Transcript:\nAssistant: step 0 /);
+  assert.match(d, /\n300\. Bash: echo 299\n/);
+  assert.match(d, /\[digest: middle cut\]/);
+  assert.ok(d.endsWith(`Final reply:\n${'f'.repeat(8000)}[cut]`));
+});
+
+test('the behaviour runner grades on that record; the head-to-head digest is unchanged', () => {
+  const src = readFileSync(join(ROOT, 'scripts', 'behave.mjs'), 'utf8');
+  assert.match(src, /graderPrompt\(c\.expectations, behaveDigest\(run\.events\)\)/);
+  assert.match(readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8'), /digest\(run\.events, 24000, \{ results: true \}\)/);
 });
 
 test('the plugin copy keeps the plugin and leaves out answer keys', () => {
