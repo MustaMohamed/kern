@@ -187,12 +187,42 @@ test('runClaude: a missing binary, exit 126 or 127, a timeout and a signal all t
   assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], env: {} }), /needs a model/);
 });
 
-test('runClaude: a timeout stops claude itself, not only the driver that runs it', () => {
+// pause(ms) blocks the test; alive(pid) is false once the process is gone (a zombie still answers, so poll).
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const gone = (pid) => { for (let i = 0; i < 60 && alive(pid); i++) pause(50); return !alive(pid); };
+const pids = (cwd, ...files) => files.map((f) => Number(readFileSync(join(cwd, f), 'utf8')));
+const reap = (list) => { for (const pid of list) try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } };
+
+test('runClaude: a timeout stops claude itself, not only the driver that runs it, and leaves no process', () => {
   const cwd = work();
-  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, env: fakeClaude('trap \'echo term > stopped.txt; exit 143\' TERM; sleep 30 & wait $!') }), /timed out/);
-  const wait = new Int32Array(new SharedArrayBuffer(4));
-  for (let i = 0; i < 40 && !existsSync(join(cwd, 'stopped.txt')); i++) Atomics.wait(wait, 0, 0, 50);
-  assert.equal(readFileSync(join(cwd, 'stopped.txt'), 'utf8'), 'term\n', 'claude got SIGTERM');
+  const stub = 'echo $$ > claude.pid; trap \'echo term > stopped.txt; kill $!; exit 143\' TERM; sleep 30 & echo $! > sleep.pid; wait $!';
+  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, env: fakeClaude(stub) }), /timed out/);
+  const left = pids(cwd, 'claude.pid', 'sleep.pid');
+  try {
+    for (let i = 0; i < 40 && !existsSync(join(cwd, 'stopped.txt')); i++) pause(50);
+    assert.equal(readFileSync(join(cwd, 'stopped.txt'), 'utf8'), 'term\n', 'claude got SIGTERM');
+    assert.ok(left.every(gone), 'claude and its sleep are gone');
+  } finally { reap(left); }
+});
+
+test('runClaude: a claude that ignores SIGTERM after the timeout is killed after a short grace, with its process group', () => {
+  const cwd = work();
+  const stub = "echo $$ > claude.pid; trap '' TERM; sleep 30 & echo $! > sleep.pid; wait $!";
+  const start = Date.now();
+  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, killGraceMs: 300, env: fakeClaude(stub) }), (e) => !e.fatal && /timed out/.test(e.message));
+  const left = pids(cwd, 'claude.pid', 'sleep.pid');
+  try {
+    assert.ok(left.every(gone), 'claude, which ignored SIGTERM, and the sleep it started are gone');
+    assert.ok(Date.now() - start < 5000, `took ${Date.now() - start} ms`);
+  } finally { reap(left); }
+});
+
+test('runClaude: output over the buffer limit is a run cut off, said as such, not a driver failure', () => {
+  const stub = `head -c 4096 /dev/zero | tr '\\0' x; echo; echo '{"type":"result","subtype":"success","result":"x"}'`;
+  assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', maxBuffer: 1024, env: fakeClaude(stub) }),
+    (e) => e instanceof ClaudeRunError && !e.fatal && /^claude printed more than 1024 bytes to stdout or stderr/.test(e.message));
+  assert.equal(runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env: fakeClaude(stub) }).badLines, 1, 'under the default 64 MB it is returned');
 });
 
 test('runClaude: a non-zero exit is returned for the caller to fail on, with stdin as stream-json turns and the budget cap', () => {
@@ -781,6 +811,20 @@ test('Task 16e: a stat diff in a chained call that errored counts when the outpu
   assert.equal(sizeGateRan(ran('d', OCT20_PROOF, ['git diff --shortstat $MB 1efaabe', false, 'kern G1: denied'])), false, 'a denied call ran nothing');
   const grade = (events) => GRADERS['finish-split-nine-files']({ events: [...events, say(OFFER)], ghLog: [], git: (...a) => (a[0] === 'rev-list' ? '0' : ''), branch: 'feat/many' });
   assert.deepEqual(grade(ran('o', OCT20_PROOF, [OCT20_GATE, false, OCT20_OUT])).reasons, [], 'the case passes on that run');
+});
+
+test('Task 16e fix I1: in an errored call, a stat line another command printed, or a gate part whose own marker failed, is not the gate', () => {
+  // The review's five calls: each holds a stat line, but not from the gate diff.
+  for (const [cmd, out] of [
+    ['git diff --shortstat 1a2b 3c4d; echo "10 files changed"; false', 'fatal: bad revision 1a2b\n10 files changed'],
+    ['git commit -qm wip; git diff --shortstat 1a2b 3c4d; exit 1', ' 2 files changed, 3 insertions(+)\nfatal: bad revision 1a2b'],
+    ['git diff --shortstat 1a2b 3c4d; echo rc=$?; git diff --stat; false', 'rc=128\n 3 files changed, 1 insertion(+)'],
+    ['git show --stat HEAD && git diff --shortstat 1a2b 3c4d', ' 4 files changed\nfatal: something'],
+    ['git diff --numstat 1a2b 3c4d || true; git diff --numstat; false', '1\t1\tsrc/a.js'],
+  ]) assert.equal(sizeGateRan(ran('x', OCT20_PROOF, [cmd, false, out])), false, cmd);
+  assert.equal(sizeGateRan(ran('m', OCT20_PROOF, ['git diff --shortstat $MB 1efaabe; echo "rc=$?"; false', false, ' 10 files changed, 10 insertions(+)\nrc=0'])), true, 'its own marker read 0');
+  assert.equal(sizeGateRan(ran('m', OCT20_PROOF, ['git diff --shortstat $MB 1efaabe; git diff --stat; false', false, ' 10 files changed\n 1 file changed'])), true, 'one line per command that prints one');
+  assert.equal(sizeGateRan(ran('m', OCT20_PROOF, ['git diff --shortstat $MB 1efaabe; git log --stat -3; false', false, ' 10 files changed\n 1 file changed\n 2 files changed'])), false, 'a log prints a line per commit, so the lines cannot be told apart');
 });
 
 // E4: kern's own state decides whether an autopilot case tested autopilot. No model call: the run is built here.

@@ -77,8 +77,10 @@ const DRIVER = fileURLToPath(new URL('./claude-drive.mjs', import.meta.url));
 // (126, 127), killed by the timeout or a signal. The child sees childEnv(), not the caller's whole
 // environment. A non-zero exit is returned in status; use runProblem() to decide whether the run may be
 // graded. Capped by turns (--max-turns, which `claude --help` does not list but the CLI reference
-// documents) and by dollars (--max-budget-usd).
-export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000 }) {
+// documents) and by dollars (--max-budget-usd). On the timeout claude's process group gets SIGTERM, then
+// SIGKILL after killGraceMs. More than maxBuffer bytes on stdout or stderr cuts the run off the same way.
+export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000,
+  killGraceMs = 5000, maxBuffer = 64 * 1024 * 1024 }) {
   if (!model) throw new ClaudeRunError('runClaude needs a model', true);
   const root = realpathSync(tmpdir());
   let real;
@@ -87,9 +89,12 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   const argv = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
     '--model', model, '--max-turns', String(maxTurns), '--max-budget-usd', String(maxBudgetUsd), ...PERMISSIONS, ...ISOLATION, ...pluginDirs.flatMap((d) => ['--plugin-dir', d])];
   // fd 3 carries the driver's one-line report of how claude ended.
-  const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify(prompts), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
-    encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: childEnv(process.env, env) });
+  const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify({ prompts, graceMs: killGraceMs }), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnv(process.env, env) });
   if (run.error?.code === 'ETIMEDOUT') throw new ClaudeRunError(`claude timed out after ${timeoutMs} ms`);
+  // ENOBUFS: spawnSync stopped the driver, which stopped claude, before either could report. Only this run
+  // printed that much, so it is not fatal.
+  if (run.error?.code === 'ENOBUFS') throw new ClaudeRunError(`claude printed more than ${maxBuffer} bytes to stdout or stderr, so the run was cut off`);
   let end = null;
   try { end = JSON.parse(run.output?.[3] || 'null'); } catch { end = null; }
   if (end?.error?.code === 'ENOENT') throw new ClaudeRunError('claude is not on PATH', true);

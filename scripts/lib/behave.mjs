@@ -45,20 +45,19 @@ export function loadCases(root) {
 }
 
 // RECORD: the behaviour grader's record (Task 16e; task-16-diagnosis X2), in characters. The transcript is
-// cut to max (its first 40% and last 60% kept), each Markdown Write or Edit body to markdownBody, any other
-// body to body, a Bash result to its last bashResult, any other tool's result to its first otherResult, and
-// the final reply to its first reply. So a record is at most about 48,100 characters (some 12,000 tokens).
+// cut to max, between whole items (its first 40% and last 60% kept), each Markdown Write or Edit body to
+// markdownBody, any other body to body, a Bash result to its last bashResult, any other tool's result to
+// its first otherResult, and the final reply to its first reply. So a record is at most about 48,400
+// characters (some 12,000 tokens). No cut splits a surrogate pair.
 export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashResult: 600, otherResult: 300, reply: 8000 };
 
-// digest(events, max, { results, transcript }): what a grader sees. No system prompt, no skill text, so the
-// grader judges behaviour, not the instructions. By default: tool calls one per line (a Write's content or
-// an Edit's new_string indented under its line, cut at 800 characters), then the final reply; over max,
-// only the tool-call section is cut. With { results: true } (the head-to-head grader) each call is
-// followed by its result: the last 600 characters of a Bash result (marked "(error)" when the tool
-// reported one), the first 300 of any other tool's. With { transcript: true } (the behaviour grader, see
-// behaveDigest) the assistant's text comes in order with the calls, a Markdown body keeps up to 6,000
-// characters, every tool's error is marked, and the final reply is cut at 8,000.
-export function digest(events, max = 24000, { results = false, transcript = false } = {}) {
+// digest(events, max, { results }): what the head-to-head grader sees, and the older record. No system
+// prompt, no skill text, so the grader judges behaviour, not the instructions. Tool calls one per line (a
+// Write's content or an Edit's new_string indented under its line, cut at 800 characters), then the final
+// reply; over max, only the tool-call section is cut. With { results: true } (the head-to-head grader)
+// each call is followed by its result: the last 600 characters of a Bash result (marked "(error)" when the
+// tool reported one), the first 300 of any other tool's.
+export function digest(events, max = 24000, { results = false } = {}) {
   const out = new Map();
   if (results) {
     const names = new Map();
@@ -66,48 +65,24 @@ export function digest(events, max = 24000, { results = false, transcript = fals
       for (const c of e?.message?.content ?? []) {
         if (c?.type === 'tool_use') names.set(c.id, c.name);
         if (c?.type === 'tool_result') {
-          const text = typeof c.content === 'string' ? c.content : (c.content ?? []).map((x) => x?.text ?? '').join('');
-          const t = text.trim();
-          const bash = names.get(c.tool_use_id) === 'Bash';
-          const flag = c.is_error && (bash || transcript) ? '(error) ' : '';
-          out.set(c.tool_use_id, `${flag}${bash ? (t.length > RECORD.bashResult ? t.slice(-RECORD.bashResult) : t) : t.slice(0, RECORD.otherResult)}`);
+          const t = resultText(c);
+          out.set(c.tool_use_id, names.get(c.tool_use_id) === 'Bash' ? `${c.is_error ? '(error) ' : ''}${t.length > 600 ? t.slice(-600) : t}` : t.slice(0, 300));
         }
       }
     }
   }
-  const indent = (text) => text.split('\n').map((l) => `    ${l}`).join('\n');
-  const callLine = (u, i, id) => {
+  const ids = events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => c.id));
+  const calls = toolUses(events).map((u, i) => {
     const arg = u.input.file_path || u.input.command || u.input.skill || u.input.subject || u.input.description || JSON.stringify(u.input).slice(0, 200);
     let line = `${i + 1}. ${u.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 300)}`;
     const body = u.name === 'Write' ? u.input.content : u.name === 'Edit' ? u.input.new_string : '';
     if (typeof body === 'string' && body) {
-      const limit = transcript && /\.(md|markdown)$/i.test(String(u.input.file_path || '')) ? RECORD.markdownBody : RECORD.body;
-      line += `\n${indent(body.length > limit ? `${body.slice(0, limit)}[cut]` : body)}`;
+      const cut = body.length > 800 ? `${body.slice(0, 800)}[cut]` : body;
+      line += `\n${cut.split('\n').map((l) => `    ${l}`).join('\n')}`;
     }
-    if (out.get(id)) line += `\n${indent(out.get(id))}`;
+    if (out.get(ids[i])) line += `\n${out.get(ids[i]).split('\n').map((l) => `    ${l}`).join('\n')}`;
     return line;
-  };
-  if (transcript) {
-    const items = [];
-    let n = 0;
-    for (const e of events) {
-      if (e?.type !== 'assistant') continue;
-      for (const c of e.message?.content ?? []) {
-        if (c?.type === 'text' && c.text?.trim()) {
-          const [first, ...rest] = c.text.trim().split('\n');
-          items.push(`Assistant: ${first}${rest.length ? `\n${indent(rest.join('\n'))}` : ''}`);
-        }
-        if (c?.type === 'tool_use') items.push(callLine({ name: c.name, input: c.input ?? {} }, n++, c.id));
-      }
-    }
-    const head = `Transcript:\n${items.join('\n') || '(none)'}`;
-    const keep = Math.floor(max * 0.4);
-    const body = head.length <= max ? head : `${head.slice(0, keep)}\n[digest: middle cut]\n${head.slice(head.length - (max - keep))}`;
-    const reply = finalText(events);
-    return `${body}\n\nFinal reply:\n${reply.length > RECORD.reply ? `${reply.slice(0, RECORD.reply)}[cut]` : reply}`;
-  }
-  const ids = events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => c.id));
-  const calls = toolUses(events).map((u, i) => callLine(u, i, ids[i]));
+  });
   const head = `Tool calls:\n${calls.join('\n') || '(none)'}`;
   const tail = `Final reply:\n${finalText(events)}`;
   // With results on (the head-to-head grader), a long run keeps its first and last calls, since the last
@@ -119,9 +94,81 @@ export function digest(events, max = 24000, { results = false, transcript = fals
   return `${body}\n\n${tail}`;
 }
 
-// behaveDigest(events): the behaviour grader's record: digest with tool results and the transcript layout,
-// cut as RECORD says.
-export const behaveDigest = (events) => digest(events, RECORD.max, { results: true, transcript: true });
+// resultText(c): a tool result's text, trimmed, whether its content is a string or a list of text blocks.
+const resultText = (c) => (typeof c.content === 'string' ? c.content : (c.content ?? []).map((x) => x?.text ?? '').join('')).trim();
+// first(s, n), last(s, n): s cut to its first or last n characters, one fewer when the cut would split a
+// surrogate pair.
+const first = (s, n) => (s.length <= n ? s : s.slice(0, /[\uD800-\uDBFF]/.test(s[n - 1]) ? n - 1 : n));
+const last = (s, n) => (s.length <= n ? s : s.slice(/[\uDC00-\uDFFF]/.test(s[s.length - n]) ? s.length - n + 1 : s.length - n));
+// prefixed(text, p): each line of text after p.
+const prefixed = (text, p) => text.split('\n').map((l) => `${p}${l}`).join('\n');
+
+const LEGEND = 'Transcript (in order: "Assistant:" or "Subagent:" heads text, each line of it after "> "; "N. Tool:" is a tool call, '
+  + '"+ " lines what a Write or Edit wrote, "=> " lines its result, "(error)" when the tool failed; a subagent\'s lines sit indented under the call that started it):';
+
+// behaveDigest(events, max): the behaviour grader's record. No system prompt; skill text only as far as a
+// tool result shows it (the first 300 characters of a Read). The main assistant's text blocks ("Assistant:")
+// and tool calls in order. Under each call: what a Write or Edit wrote ("+ "), the events of the subagent
+// it started, if any (an Agent call or a forked Skill; events with its id as parent_tool_use_id:
+// "Subagent:" text and calls, indented), then its result ("=> "). Every line starts with its label, so no text can pass for another kind. Cut as
+// RECORD says; a subagent whose Agent call is missing is shown at the end.
+export function behaveDigest(events, max = RECORD.max) {
+  const names = new Map(), results = new Map(), kids = new Map();
+  for (const e of events) {
+    for (const c of e?.message?.content ?? []) {
+      if (c?.type === 'tool_use') names.set(c.id, c.name);
+      if (c?.type !== 'tool_result') continue;
+      const t = resultText(c);
+      const cut = names.get(c.tool_use_id) === 'Bash' ? last(t, RECORD.bashResult) : first(t, RECORD.otherResult);
+      results.set(c.tool_use_id, `${c.is_error ? '(error) ' : ''}${cut}`);
+    }
+    if (e?.type !== 'assistant') continue;
+    const parent = e.parent_tool_use_id ?? null;
+    if (!kids.has(parent)) kids.set(parent, []);
+    kids.get(parent).push(...(e.message?.content ?? []));
+  }
+  const items = [];
+  const shown = new Set();
+  let n = 0;
+  const render = (parent, pad) => {
+    shown.add(parent);
+    for (const c of kids.get(parent) ?? []) {
+      if (c?.type === 'text' && c.text?.trim()) items.push(`${pad}${parent === null ? 'Assistant' : 'Subagent'}:\n${prefixed(c.text.trim(), `${pad}> `)}`);
+      if (c?.type !== 'tool_use') continue;
+      const input = c.input ?? {};
+      const arg = input.file_path || input.command || input.skill || input.subject || input.description || first(JSON.stringify(input), 200);
+      let item = `${pad}${++n}. ${c.name}: ${first(String(arg).replace(/\s+/g, ' '), 300)}`;
+      const body = c.name === 'Write' ? input.content : c.name === 'Edit' ? input.new_string : '';
+      if (typeof body === 'string' && body) {
+        const limit = /\.(md|markdown)$/i.test(String(input.file_path || '')) ? RECORD.markdownBody : RECORD.body;
+        item += `\n${prefixed(body.length > limit ? `${first(body, limit)}[cut]` : body, `${pad}    + `)}`;
+      }
+      const result = results.has(c.id) ? prefixed(results.get(c.id), `${pad}    => `) : '';
+      if (kids.has(c.id)) {
+        items.push(item);
+        render(c.id, `${pad}    `);
+        if (result) items.push(result);
+      } else items.push(result ? `${item}\n${result}` : item);
+    }
+  };
+  render(null, '');
+  for (const parent of kids.keys()) if (!shown.has(parent)) render(parent, '');
+  // Over max: whole items from the start up to 40% of it, and from the end up to the rest.
+  let body = items.join('\n');
+  if (body.length > max) {
+    const take = (list, budget) => {
+      const kept = [];
+      for (let used = 0; kept.length < list.length && used + list[kept.length].length + 1 <= budget; used += list[kept.length].length + 1) kept.push(list[kept.length]);
+      return kept;
+    };
+    const keep = Math.floor(max * 0.4);
+    const head = take(items, keep);
+    const tail = take([...items].reverse(), max - keep).reverse();
+    body = [...head, `[digest: ${items.length - head.length - tail.length} middle items cut]`, ...tail].join('\n');
+  }
+  const reply = finalText(events);
+  return `${LEGEND}\n${body || '(none)'}\n\nFinal reply:\n${reply.length > RECORD.reply ? `${first(reply, RECORD.reply)}[cut]` : reply}`;
+}
 
 // pluginCopy(root): a copy of the plugin in <tmp>/<random>/kern without the answer keys (evals, tests, docs)
 // or repo internals, so a run cannot read them. The caller removes it with rmSync(dirname(dir), { recursive: true, force: true }).

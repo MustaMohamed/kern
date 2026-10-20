@@ -42,17 +42,17 @@ export function shellSegments(cmd) {
 // subcommand, with the global options before it (-C <path>, -c <k=v>) dropped, so `git -C /w commit -F m`
 // and `git commit -F m` read alike and `cd x && git commit` is still seen.
 export function gitCalls(cmds) {
-  const out = [];
-  for (const cmd of cmds) {
-    for (const seg of shellSegments(cmd)) {
-      let k = seg.findIndex((x) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(x));
-      if (k < 0 || seg[k].replace(/.*\//, '') !== 'git') continue;
-      for (k += 1; k < seg.length && seg[k].startsWith('-'); k += (seg[k] === '-C' || seg[k] === '-c') ? 2 : 1);
-      if (k < seg.length) out.push({ sub: seg[k], args: seg.slice(k + 1) });
-    }
-  }
-  return out;
+  return cmds.flatMap((cmd) => shellSegments(cmd).map(gitOf).filter(Boolean));
 }
+// commandHead(seg): the index of a simple command's name, past leading assignments; -1 when there is none.
+const commandHead = (seg) => seg.findIndex((x) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(x));
+// gitOf(seg): one simple command as { sub, args } when it runs git, else null.
+const gitOf = (seg) => {
+  let k = commandHead(seg);
+  if (k < 0 || seg[k].replace(/.*\//, '') !== 'git') return null;
+  for (k += 1; k < seg.length && seg[k].startsWith('-'); k += (seg[k] === '-C' || seg[k] === '-c') ? 2 : 1);
+  return k < seg.length ? { sub: seg[k], args: seg.slice(k + 1) } : null;
+};
 
 const pushes = (cmds) => gitCalls(cmds).some((g) => g.sub === 'push');
 const messageFiles = (cmds) => gitCalls(cmds).filter((g) => g.sub === 'commit')
@@ -153,11 +153,12 @@ const hasPipe = (part) => {
   }
   return false;
 };
-// partResults(command, output, errored): each part of a chained command as { command, ok }. Each echo that
+// partResults(command, output, errored): each part of a chained command as { command, ok, marked }. Each echo that
 // prints `<label>=` consumes the next printed `<label>=N` in the output, in order; a part followed by an echo of `$?`
-// is ok when that printed N is 0, so a literal echo or an earlier line cannot stand in for it. When a label's echoes
-// and printed lines differ in number, or the part is a pipeline with no earlier `set ... pipefail`, or no echo of
-// `$?` follows, the part keeps the old reading: ok when the call did not error.
+// is ok when that printed N is 0, so a literal echo or an earlier line cannot stand in for it, and marked is true.
+// When a label's echoes and printed lines differ in number, or the part is a pipeline with no earlier
+// `set ... pipefail`, or no echo of `$?` follows, the part keeps the old reading, ok when the call did not
+// error, and marked is false.
 const partResults = (command, output, errored) => {
   const parts = chainParts(command);
   const echoes = parts.map(echoLabel);
@@ -182,8 +183,8 @@ const partResults = (command, output, errored) => {
   return parts.map((part, i) => {
     const next = echoes[i + 1];
     const value = next?.live && !echoes[i] ? at[i + 1] : null;
-    if (value === null || value === undefined || (hasPipe(part) && !pipefail(i))) return { command: part, ok: !errored };
-    return { command: part, ok: value === '0' };
+    if (value === null || value === undefined || (hasPipe(part) && !pipefail(i))) return { command: part, ok: !errored, marked: false };
+    return { command: part, ok: value === '0', marked: true };
   });
 };
 
@@ -253,22 +254,56 @@ const statOverRange = (g, git) => {
   if (words.length === 1) return isRange(words[0]);
   return words.length === 2 && words.every((w) => !isRange(w) && isRevision(w, git));
 };
-// statPrinted(g, output): output holds the line git diff g prints: a numstat row (added, deleted, path,
-// tab-separated; `-` for a binary file) for --numstat, else the `N files changed` summary of --shortstat
-// and --stat.
-const statPrinted = (g, output) => (g.args.includes('--numstat') ? /^(\d+|-)\t(\d+|-)\t\S/m : /\b\d+ files? changed\b/).test(output);
+const SUMMARY_LINE = /\b\d+ files? changed\b/;
+const NUMSTAT_ROW = /^(\d+|-)\t(\d+|-)\t\S/m;
+const STAT_FLAG = (a) => a === '--stat' || a === '--shortstat' || a.startsWith('--stat=');
+// statPrinters(command): which commands of a Bash call can print a stat line. summary: how many print an
+// `N files changed` line, at most one each: a git command with --stat or --shortstat, git commit, merge,
+// pull, cherry-pick or revert, and an echo or printf of such a line. numstat: how many print numstat rows
+// (git with --numstat, or an echo or printf with a tab). many: a git log, show or whatchanged with a stat
+// flag, or a git stash show, which print a line per commit, so lines cannot be counted against commands.
+const statPrinters = (command) => {
+  const out = { summary: 0, numstat: 0, many: false };
+  for (const seg of shellSegments(command)) {
+    const k = commandHead(seg);
+    if (k >= 0 && ['echo', 'printf'].includes(seg[k].replace(/.*\//, ''))) {
+      const text = seg.slice(k + 1).join(' ');
+      if (SUMMARY_LINE.test(text)) out.summary += 1;
+      if (/\t|\\t/.test(text)) out.numstat += 1;
+      continue;
+    }
+    const g = gitOf(seg);
+    if (!g) continue;
+    const stat = g.args.some(STAT_FLAG), numstat = g.args.includes('--numstat');
+    const stashShow = g.sub === 'stash' && g.args[0] === 'show';
+    if ((['log', 'show', 'whatchanged'].includes(g.sub) && (stat || numstat)) || stashShow) out.many = true;
+    if (stat || ['commit', 'merge', 'pull', 'cherry-pick', 'revert'].includes(g.sub)) out.summary += 1;
+    if (numstat) out.numstat += 1;
+  }
+  return out;
+};
+// statPrinted(g, command, output): in a call that errored, output holds the stat line of its part git diff g.
+// Output is not split by part, so lines are counted against the commands that print them: for --numstat,
+// a numstat row and no other command that prints rows; else at least as many `N files changed` lines as
+// commands that print one. A git log or show with a stat flag prints any number of lines, so no line counts.
+const statPrinted = (g, command, output) => {
+  const p = statPrinters(command);
+  if (p.many) return false;
+  if (g.args.includes('--numstat')) return p.numstat === 1 && NUMSTAT_ROW.test(output);
+  return (output.match(new RegExp(SUMMARY_LINE.source, 'g')) || []).length >= p.summary;
+};
 // sizeGateRan(events, git): finish-branch step 6 ran: a stat diff over two revisions (statOverRange)
 // after a test command that went green. It counts in a call that succeeded, or as a part of a call that
-// errored (another part failed) when the call's output holds that part's stat line (statPrinted): on
-// 2026-10-20 the gate ran in a chained call whose last part exited 2. git, the fixture repo's git, settles
-// a word that could be a path or a revision. Self-review's wt-diff is not counted: every finish run runs
-// it in step 5, so it cannot show that step 6 ran.
+// errored (another part failed) when its own printed exit marker is not non-zero and the call's output
+// holds its stat line (statPrinted): on 2026-10-20 the gate ran in a chained call whose last part exited 2.
+// git, the fixture repo's git, settles a word that could be a path or a revision. Self-review's wt-diff is
+// not counted: every finish run runs it in step 5, so it cannot show that step 6 ran.
 export function sizeGateRan(events, git) {
   const runs = bashRuns(events);
   const green = runs.findIndex((r) => r.ok && TEST_CMD.test(r.command));
   const gate = (command, printed) => gitCalls([command]).some((g) => statOverRange(g, git) && printed(g));
   return green >= 0 && runs.slice(green + 1).some((r) => (r.ok ? gate(r.command, () => true)
-    : r.parts.some((p) => gate(p.command, (g) => statPrinted(g, r.output)))));
+    : r.parts.some((p) => !(p.marked && !p.ok) && gate(p.command, (g) => statPrinted(g, r.command, r.output)))));
 }
 // reviewRan(events): finish-branch steps 4 and 5 ran: a wt-snap call and a self-review package (wt-diff
 // with --out), both succeeding.

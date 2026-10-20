@@ -146,15 +146,39 @@ const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text',
 const use = (id, name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
 const back = (id, content, isError = false) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content }] } });
 
-test('the behaviour record keeps assistant text in order with the tool calls', () => {
+// lines(record): the transcript's lines after its legend line, up to the final reply.
+const lines = (d) => d.slice(0, d.indexOf('\n\nFinal reply:\n')).split('\n').slice(1);
+const sub = (parent, content) => ({ type: 'assistant', parent_tool_use_id: parent, message: { content } });
+
+test('the behaviour record keeps assistant text in order with the tool calls, each kind of line labelled', () => {
   const ev = [say('I will read the route first.'), use('a', 'Read', { file_path: '/k/skills/diagnose/SKILL.md' }), back('a', 'steps'),
     say('Root cause: sum subtracts.\nI will write the failing test before editing.'), use('b', 'Edit', { file_path: 'src/sum.js', old_string: 'a - b', new_string: 'a + b' }), back('b', 'ok'),
     say('Fixed.'), { type: 'result', subtype: 'success', result: 'Fixed.' }];
   const d = behaveDigest(ev);
-  assert.equal(d, ['Transcript:', 'Assistant: I will read the route first.', '1. Read: /k/skills/diagnose/SKILL.md', '    steps',
-    'Assistant: Root cause: sum subtracts.', '    I will write the failing test before editing.', '2. Edit: src/sum.js', '    a + b', '    ok',
-    'Assistant: Fixed.', '', 'Final reply:', 'Fixed.'].join('\n'));
-  assert.ok(d.indexOf('Root cause') < d.indexOf('2. Edit'), 'what it said before the edit reads before the edit');
+  assert.match(d, /^Transcript \(in order[^\n]*\):\n/, 'a legend line says what each label means');
+  assert.deepEqual(lines(d), ['Assistant:', '> I will read the route first.', '1. Read: /k/skills/diagnose/SKILL.md', '    => steps',
+    'Assistant:', '> Root cause: sum subtracts.', '> I will write the failing test before editing.', '2. Edit: src/sum.js', '    + a + b', '    => ok',
+    'Assistant:', '> Fixed.']);
+  assert.ok(d.endsWith('\n\nFinal reply:\nFixed.'));
+});
+
+test('the behaviour record tells a body, a result and assistant text apart, whatever they hold (review M3)', () => {
+  const ev = [use('a', 'Write', { file_path: 'notes.md', content: '# Notes\n# pass 3\n# fail 0' }), back('a', 'File created successfully at: notes.md'),
+    say('Done.\n    => all tests pass\n2. Bash: npm test')];
+  assert.deepEqual(lines(behaveDigest(ev)), ['1. Write: notes.md', '    + # Notes', '    + # pass 3', '    + # fail 0', '    => File created successfully at: notes.md',
+    'Assistant:', '> Done.', '>     => all tests pass', '> 2. Bash: npm test']);
+});
+
+test('the behaviour record labels a subagent\'s text and calls as its own, under its Agent call, before the call\'s result (review M4)', () => {
+  const ev = [say('Dispatching the reviewer.'), use('g', 'Agent', { description: 'review the spec' }),
+    sub('g', [{ type: 'text', text: 'Reading the spec.' }]), sub('g', [{ type: 'tool_use', id: 's1', name: 'Read', input: { file_path: 'spec.md' } }]),
+    { type: 'user', parent_tool_use_id: 'g', message: { content: [{ type: 'tool_result', tool_use_id: 's1', content: '# Spec' }] } },
+    sub('g', [{ type: 'text', text: 'Verdict: ready.' }]), back('g', 'Verdict: ready.'), say('The reviewer says ready.')];
+  assert.deepEqual(lines(behaveDigest(ev)), ['Assistant:', '> Dispatching the reviewer.', '1. Agent: review the spec',
+    '    Subagent:', '    > Reading the spec.', '    2. Read: spec.md', '        => # Spec', '    Subagent:', '    > Verdict: ready.',
+    '    => Verdict: ready.', 'Assistant:', '> The reviewer says ready.']);
+  const orphan = lines(behaveDigest([sub('zz', [{ type: 'text', text: 'lost' }])]));
+  assert.deepEqual(orphan, ['Subagent:', '> lost'], 'a subagent whose Agent call is not in the record is still shown, as a subagent');
 });
 
 test('the behaviour record keeps a Markdown Write or Edit body up to 6,000 characters, any other body 800', () => {
@@ -162,10 +186,10 @@ test('the behaviour record keeps a Markdown Write or Edit body up to 6,000 chara
   const d = behaveDigest([use('a', 'Write', { file_path: '.kern/specs/invoices.md', content: spec }), use('b', 'Edit', { file_path: 'docs/notes.markdown', new_string: 'n'.repeat(6000) }),
     use('c', 'Write', { file_path: 'src/app.js', content: 'j'.repeat(1000) })]);
   assert.equal(RECORD.markdownBody, 6000);
-  assert.ok(d.includes('## Constraints') && d.includes('- invoices stay readable'), 'a section past 800 characters is seen');
-  assert.ok(d.includes(`    ${spec.slice(spec.lastIndexOf('\n') + 1, 6000)}[cut]`), 'cut at 6,000 characters, marked');
-  assert.ok(d.includes(`    ${'n'.repeat(6000)}\n`), 'exactly 6,000 is not cut');
-  assert.ok(d.includes(`    ${'j'.repeat(800)}[cut]`) && !d.includes('j'.repeat(801)), 'code stays at 800');
+  assert.ok(d.includes('    + ## Constraints\n    + - invoices stay readable'), 'a section past 800 characters is seen');
+  assert.ok(d.includes(`    + ${spec.slice(spec.lastIndexOf('\n') + 1, 6000)}[cut]`), 'cut at 6,000 characters, marked');
+  assert.ok(d.includes(`    + ${'n'.repeat(6000)}\n`), 'exactly 6,000 is not cut');
+  assert.ok(d.includes(`    + ${'j'.repeat(800)}[cut]`) && !d.includes('j'.repeat(801)), 'code stays at 800');
 });
 
 test('the behaviour record includes each tool result: a Bash tail of 600 characters, the first 300 of any other, errors marked', () => {
@@ -174,21 +198,36 @@ test('the behaviour record includes each tool result: a Bash tail of 600 charact
     use('c', 'Edit', { file_path: 'src/sum.js', new_string: 'x' }), back('c', 'kern G20: denied', true)];
   const d = behaveDigest(ev);
   assert.deepEqual([RECORD.bashResult, RECORD.otherResult], [600, 300]);
-  assert.ok(d.includes(`    ${'o'.repeat(600 - '# pass 3\n# fail 0'.length)}# pass 3\n    # fail 0`) && !d.includes('o'.repeat(601 - '# pass 3\n# fail 0'.length)), 'the Bash tail, where a test summary is');
-  assert.ok(d.includes(`    HEAD${'r'.repeat(296)}\n`) && !d.includes('r'.repeat(297)));
-  assert.match(d, /3\. Edit: src\/sum\.js\n {4}x\n {4}\(error\) kern G20: denied/, 'a denied edit reads as an error, not as done');
+  assert.ok(d.includes(`    => ${'o'.repeat(600 - '# pass 3\n# fail 0'.length)}# pass 3\n    => # fail 0`) && !d.includes('o'.repeat(601 - '# pass 3\n# fail 0'.length)), 'the Bash tail, where a test summary is');
+  assert.ok(d.includes(`    => HEAD${'r'.repeat(296)}\n`) && !d.includes('r'.repeat(297)));
+  assert.match(d, /3\. Edit: src\/sum\.js\n {4}\+ x\n {4}=> \(error\) kern G20: denied/, 'a denied edit reads as an error, not as done');
 });
 
-test('the behaviour record is bounded: 40,000 characters of transcript, its first and last items kept, and an 8,000 character reply', () => {
+test('the behaviour record is bounded: 40,000 characters of transcript, cut between whole items, and an 8,000 character reply (review M5)', () => {
   const ev = Array.from({ length: 300 }, (_, i) => [say(`step ${i} ${'w'.repeat(200)}`), use(`t${i}`, 'Bash', { command: `echo ${i}` }), back(`t${i}`, 'z'.repeat(700))]).flat();
   ev.push({ type: 'result', subtype: 'success', result: `${'f'.repeat(9000)}END` });
   const d = behaveDigest(ev);
   assert.deepEqual([RECORD.max, RECORD.reply], [40000, 8000]);
-  assert.ok(d.length <= 40000 + 8000 + 80, `record is ${d.length} characters`);
-  assert.match(d, /^Transcript:\nAssistant: step 0 /);
-  assert.match(d, /\n300\. Bash: echo 299\n/);
-  assert.match(d, /\[digest: middle cut\]/);
+  assert.ok(d.length <= 40000 + 8000 + 400, `record is ${d.length} characters`);
+  const kept = lines(d);
+  assert.deepEqual(kept.slice(0, 2), ['Assistant:', `> step 0 ${'w'.repeat(200)}`]);
+  assert.deepEqual(kept.slice(-2), ['300. Bash: echo 299', `    => ${'z'.repeat(600)}`]);
+  const at = kept.findIndex((l) => /^\[digest: \d+ middle items cut\]$/.test(l));
+  assert.ok(at > 0, 'the cut is marked');
+  assert.match(kept[at - 1], /^(> step \d+ w+| {4}=> z+)$/, 'the head ends with a whole item');
+  assert.ok(/^(Assistant:|\d+\. Bash: )/.test(kept[at + 1]), 'the tail starts with a whole item, not inside a result');
   assert.ok(d.endsWith(`Final reply:\n${'f'.repeat(8000)}[cut]`));
+});
+
+test('no cut in the behaviour record splits a surrogate pair (review M5)', () => {
+  const pair = '\u{1F600}';
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  const ev = [use('a', 'Write', { file_path: 'x.md', content: `${'a'.repeat(5999)}${pair}` }), use('b', 'Write', { file_path: 'x.js', content: `${'b'.repeat(799)}${pair}` }),
+    use('c', 'Bash', { command: `echo ${'c'.repeat(299)}${pair}` }), back('c', `${pair}${'d'.repeat(599)}`), use('e', 'Read', { file_path: 'y' }), back('e', `${'e'.repeat(299)}${pair}`),
+    { type: 'result', subtype: 'success', result: `${'f'.repeat(7999)}${pair}` }];
+  assert.doesNotMatch(behaveDigest(ev), lone);
+  const long = Array.from({ length: 300 }, (_, i) => [say(`${pair.repeat(60)} ${i}`), use(`t${i}`, 'Bash', { command: `echo ${i}` }), back(`t${i}`, pair.repeat(400))]).flat();
+  assert.doesNotMatch(behaveDigest(long), lone);
 });
 
 test('the behaviour runner grades on that record; the head-to-head digest is unchanged', () => {
