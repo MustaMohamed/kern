@@ -14,9 +14,9 @@ export class UsageError extends Error {}
 export const ASSUMES = 'Bash is pre-approved (--allowedTools Bash), so Claude Code never asks: a pass shows what kern allows, asks and denies, not the prompts a user who has not allowed Bash would see (kern gives git add no autopilot allow, for one)';
 
 // caseEnv({ bin, path, log, pr, snapshot }): the variables a case's claude run gets on top of the
-// inherited ones: the gh stub first on PATH, its log and PR state, a gh token that cannot reach
-// GitHub, and KERN_SHELL_SNAPSHOT naming an empty file, so the hooks read no alias or function from the
-// host's own shell snapshot.
+// inherited ones: the gh stub first on PATH (exec-eval copies evals/exec/bin beside the workspace), its
+// log and PR state, a gh token that cannot reach GitHub, and KERN_SHELL_SNAPSHOT naming an empty file, so
+// the hooks read no alias or function from the host's own shell snapshot.
 export function caseEnv({ bin, path, log, pr, snapshot }) {
   return { PATH: `${bin}:${path}`, KERN_EXEC_LOG: log, KERN_EXEC_PR: pr, GH_TOKEN: 'invalid', GH_HOST: 'example.invalid', KERN_SHELL_SNAPSHOT: snapshot };
 }
@@ -99,7 +99,7 @@ export function gradeCase({ c, run, ghLog, git, configDir, graders = GRADERS, re
   const problem = runProblem(run, casePrompts(c).length);
   if (problem) return invalid(problem);
   const missed = stubMissed(run.events, ghLog);
-  if (missed.length) return invalid(`the stub never logged \`gh ${missed[0]}\`: the Bash tool did not see evals/exec/bin first on PATH`);
+  if (missed.length) return invalid(`the stub never logged \`gh ${missed[0]}\`: the Bash tool did not see the gh stand-in from evals/exec/bin first on PATH`);
   let g;
   try { g = graders[c.id]({ events: run.events, ghLog, git, branch: c.branch }); } catch (e) { g = invalid(`grader error: ${e.message}`); }
   const off = c.autopilot ? autopilotProblem(run.events, configDir, read) : '';

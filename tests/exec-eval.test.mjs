@@ -3,13 +3,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ATTRIBUTION, GRADERS, chainParts, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, userSettingsProblem, writeEvents, writeReply } from '../scripts/lib/exec-run.mjs';
+import { pluginCopy } from '../scripts/lib/behave.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
@@ -1062,4 +1063,40 @@ test('the gh stand-in logs the body of a PR it creates, on one line', () => {
     { cwd: d, env: { ...process.env, KERN_EXEC_LOG: log }, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(readFileSync(log, 'utf8').split('\n').filter(Boolean), ['pr create --draft --title t --body-file body.md', 'body: ## Why\\nsum subtracted.']);
+});
+
+// Task 16h item 2 (task-16-diagnosis-2 Y4): exec ran kern from the live repo, a git work tree that holds
+// evals/, so on 2026-10-20 a model that cd'd into the plugin's scripts/ got the repo's own settings back
+// (finish-pr-at-head.events.jsonl:16-17). It now runs from pluginCopy, as behave and adherence do.
+const REPO = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
+test('Task 16h: exec runs kern from a plugin copy, and the gh stand-in from beside the workspace, so no path in a run names the repo', () => {
+  const src = readFileSync(join(REPO, 'scripts', 'exec-eval.mjs'), 'utf8');
+  assert.doesNotMatch(src, /pluginDirs: \[ROOT\]/, 'the live repo is a git work tree that holds evals/');
+  assert.match(src, /pluginCopy\(ROOT\)/);
+  assert.match(src, /pluginDirs: \[pluginDir\(\)\]/);
+  assert.doesNotMatch(src, /bin: join\(ROOT, 'evals', 'exec', 'bin'\)/, 'PATH named evals/exec/bin in the repo');
+  assert.match(src, /cpSync\(join\(ROOT, 'evals', 'exec', 'bin'\), bin, \{ recursive: true \}\)/);
+});
+
+test('Task 16h: the plugin copy holds every file the exec cases run from kern, executable as in the repo, and no .git or evals', () => {
+  const d = pluginCopy(REPO);
+  try {
+    const runners = new Set(['scripts/h2h.mjs', 'scripts/behave.mjs', 'scripts/kernel-adherence.mjs', 'scripts/standing-cost.mjs', 'scripts/pilot.mjs', 'scripts/exec-eval.mjs',
+      ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive'].map((f) => `scripts/lib/${f}.mjs`)]);
+    const tracked = spawnSync('git', ['-C', REPO, 'ls-files', '.claude-plugin', 'agents', 'hooks', 'kernel', 'modes', 'scripts', 'skills'], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
+    assert.ok(tracked.length > 50, 'git listed the plugin files');
+    for (const f of tracked.filter((x) => !runners.has(x))) {
+      assert.ok(existsSync(join(d, f)), `${f} is in the copy`);
+      assert.equal(statSync(join(d, f)).mode & 0o111, statSync(join(REPO, f)).mode & 0o111, `${f} keeps its mode`);
+    }
+    for (const f of runners) assert.ok(!existsSync(join(d, f)), `${f} stays out`);
+    const named = ['commit', 'finish-branch', 'autopilot', 'prove-it', 'self-review', 'technical-writing'].map((s) => `skills/${s}/SKILL.md`).concat('kernel/kernel.md')
+      .flatMap((f) => [...readFileSync(join(REPO, f), 'utf8').matchAll(/scripts\/([a-z][a-z0-9-]*)/g)].map((m) => m[1])).filter((n) => n !== 'lib');
+    assert.ok(named.includes('kern-get') && named.includes('wt-snap'));
+    for (const n of named) assert.ok(statSync(join(d, 'scripts', n)).mode & 0o100, `scripts/${n}, which an exec skill runs, is executable in the copy`);
+    for (const h of Object.values(JSON.parse(readFileSync(join(d, 'hooks', 'hooks.json'), 'utf8')).hooks).flat().flatMap((m) => m.hooks)) {
+      for (const a of h.args) assert.ok(existsSync(a.replace('${CLAUDE_PLUGIN_ROOT}', d)), a);
+    }
+    for (const p of ['.git', '.upstream', 'evals', 'tests', 'docs', '.superpowers']) assert.ok(!existsSync(join(d, p)), `${p} stays out`);
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); }
 });

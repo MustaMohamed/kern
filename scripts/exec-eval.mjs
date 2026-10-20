@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Execution evals for commit and finish-branch: real headless runs on a fixture repo with a bare origin
-// and a gh stub, graded from the tool calls, the stub's call log and git state. Spends tokens: ask the
-// user before a run. Usage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]
+// and a gh stub, kern loaded from a plugin copy, graded from the tool calls, the stub's call log and git
+// state. Spends tokens: ask the user before a run. Usage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]
 // Each case's final reply goes to evals/results/exec-<date>/<id>.txt (gitignored), or (no reply: <why>) for
 // an invalid case, and its stream-json events, tool results included, to <id>.events.jsonl beside it; the
 // last line prints the directory; a --dry-run writes none. A case that turns autopilot on is INVALID when
@@ -14,10 +14,11 @@
 // ran passed; 2 for a usage error, before anything runs. A claude run that exits non-zero, times out,
 // ends early or cannot start is an invalid case, never a pass; a missing or non-executable claude stops.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ClaudeRunError, claudeVersion, finalText, runClaude, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
+import { pluginCopy } from './lib/behave.mjs';
 import { GRADERS } from './lib/exec-grade.mjs';
 import { UsageError, caseEnv, casePrompts, claudeConfigDir, dateStamp, gradeCase, parseArgs, runEval, snapshotBody, userSettingsProblem, writeEvents, writeReply } from './lib/exec-run.mjs';
 
@@ -43,6 +44,12 @@ if (!opts.dryRun) {
 }
 
 const DATE = dateStamp();
+// kern runs from a copy, as in behave and adherence: no .git, evals, tests or docs, and none of the eval
+// runners. From the live repo, a git work tree, a model that cd'd into the plugin's scripts/ got the repo's
+// own settings back, and the run looked right (task-16-diagnosis-2 Y4, finish-pr-at-head on 2026-10-20).
+// One copy serves every case; it is made at the first case, so a dry run or a failed version check makes none.
+let plugin = null;
+const pluginDir = () => (plugin ??= realpathSync(pluginCopy(ROOT)));
 const REPLIES = join(ROOT, 'evals', 'results', `exec-${DATE}`);
 
 function runCase(c, save) {
@@ -54,12 +61,15 @@ function runCase(c, save) {
     writeFileSync(log, '');
     const snapshot = join(dirname(dir), 'empty-shell-snapshot.sh');
     writeFileSync(snapshot, '');
+    // The gh stand-in goes beside the workspace, so PATH names no folder of the repo either.
+    const bin = join(dirname(dir), 'bin');
+    cpSync(join(ROOT, 'evals', 'exec', 'bin'), bin, { recursive: true });
     let run;
     try {
       run = runClaude({
         // 60 turns: finish-branch runs its proof and a whole self-review before the size gate, and 30 was reached; the $3 budget still caps spend.
-        cwd: dir, prompts, pluginDirs: [ROOT], model: MODEL, maxTurns: 60,
-        env: caseEnv({ bin: join(ROOT, 'evals', 'exec', 'bin'), path: process.env.PATH, log, pr: c.pr || 'none', snapshot }),
+        cwd: dir, prompts, pluginDirs: [pluginDir()], model: MODEL, maxTurns: 60,
+        env: caseEnv({ bin, path: process.env.PATH, log, pr: c.pr || 'none', snapshot }),
       });
     } catch (e) {
       if (!(e instanceof ClaudeRunError) || e.fatal) throw e;
@@ -85,8 +95,12 @@ function writeSnapshot(results, claude) {
   console.log(`snapshot: ${out}`);
 }
 
-process.exit(runEval({
-  cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion: claudeVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason),
-  saveEvents: (id, events) => writeEvents(REPLIES, id, events), log: console.log,
-  describe: (c) => `${c.id}: ${casePrompts(c).map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
-}));
+let code;
+try {
+  code = runEval({
+    cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion: claudeVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason),
+    saveEvents: (id, events) => writeEvents(REPLIES, id, events), log: console.log,
+    describe: (c) => `${c.id}: ${casePrompts(c).map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
+  });
+} finally { if (plugin) rmSync(dirname(plugin), { recursive: true, force: true }); }
+process.exit(code);
