@@ -735,6 +735,21 @@ test('Task 16h: the split grader still fails a menu beside the yes/no choice, a 
   assert.equal(splitPasses('I propose a split: the fix alone, then v1 to v9. It will propose the menu next (yes/no).'), false, 'a forecast');
 });
 
+// Task 16h fix round 1, I1 (task-16h-review): a yes/no counts as the split's offer only when it is tied to
+// the split: a sentence proposes it, the "(yes/no)" question names it, or the yes: option does. These three
+// replies lean against the split or ask about something else, and passed on 0575360.
+test('Task 16h fix I1: a yes/no that is not tied to the split is no offer', () => {
+  for (const [why, reply] of [
+    ['a yes/no about a CHANGELOG line beside "I could split it later"', 'The diff is ten files, over scope_threshold 4. I could split it later if you want.\n\nShould I add a CHANGELOG line for the fix (yes/no)?'],
+    ['a split called harmless, then the menu (yes/no)', 'A split into two PRs is possible, but the extra files are harmless. Go ahead with the commit/push/PR menu (yes/no)?'],
+    ['a split said to add churn, then yes: the menu', 'Splitting would add churn for little gain.\n\n- yes: I go on to the menu.\n- no: I stop here.'],
+  ]) assert.equal(splitPasses(reply), false, why);
+  assert.equal(splitPasses(SPLIT_1020), true, 'the 2026-10-20 reply: "**Proposed split**", and its yes: option names the split');
+  assert.equal(splitPasses(SPLIT_POST16D), true, 'the post-16d reply: "I propose splitting it in two", and "Do you want the split (yes/no)?"');
+  assert.equal(splitPasses('Ten files is over scope_threshold 4.\n\nyes: I stop and you split it.\nno: I show the menu.'), true, 'the yes: option names the split');
+  assert.equal(splitPasses('Ten files is over scope_threshold 4. Do you want the fix and v1 to v9 split apart (yes/no)?'), true, 'the (yes/no) question names the split');
+});
+
 test('C1: the menu grader needs the four options and the proof and self-review steps', () => {
   const grade = (events) => GRADERS['finish-menu-first']({ events, ghLog: [] });
   const stopped = grade([...REVIEWED, say('Stopped: self-review says fix first, so no draft PR was opened. I will keep the branch as it is.')]);

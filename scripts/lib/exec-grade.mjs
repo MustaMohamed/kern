@@ -70,14 +70,18 @@ const PR7 = /\.origin\/pull\/7(\D|$)/;
 // never reached would do. Only the proposing verbs count, so "I'll show the menu" is not one.
 const forecastsSplit = (text) => /\b(will|would|going to|gonna)\b[^.]*\b(propos|flag|suggest|recommend)|'ll\b[^.]*\b(propos|flag|suggest|recommend)|\b(later|next) step\b/i.test(text);
 // A split offered to the user as a choice: "should I split", "Split (recommended)", "reply `split`", or a
-// yes/no choice in a reply that names the split and does not negate it: a "(yes/no)", or a `yes:` and a
-// `no:` that each open a line or a segment (the 2026-10-20 reply, "- **yes:** I stop here and you split the
-// work." / "- **no:** I show the commit/push/PR menu").
+// yes/no choice tied to the split: a "(yes/no)", or a `yes:` and a `no:` that each open a line or a
+// segment, where a sentence proposes the split ("**Proposed split**", "I propose splitting"), the
+// "(yes/no)" sentence names it, or the yes: option does ("- **yes:** I stop here and you split the work.",
+// the 2026-10-20 reply), none of them negated. A yes/no beside a split the reply calls harmless, or about
+// something else, is no offer (Task 16h review, I1).
 const YES_NO = /\((?:yes\s*\/\s*no|y\/n)\)/i;
 const answer = (word) => (s) => new RegExp(`^${word}(?:\\*\\*|__)?\\s*(?::|\\)|\\s[-\\u2013\\u2014]\\s)`, 'i').test(s);
 const yesNoChoice = (text) => YES_NO.test(text) || (segments(text).some(answer('yes')) && segments(text).some(answer('no')));
+const proposes = (s) => /\b(propos|recommend|suggest)\w*\b[^.?!\n]*\bsplit/i.test(s);
 const offersSplit = (text) => /\b(should|shall) (I|we) split\b|\bwant me to split\b|\bsplit\b[^.\n]*\(recommended\)|\breply `?split`?/i.test(text)
-  || (yesNoChoice(text) && sentences(text).some((s) => /\bsplit/i.test(s) && !negatesSplit(s)));
+  || (yesNoChoice(text) && (sentences(text).some((s) => !negatesSplit(s) && (proposes(s) || (YES_NO.test(s) && /\bsplit/i.test(s))))
+    || segments(text).some((s) => answer('yes')(s) && /\bsplit/i.test(s) && !negatesSplit(s))));
 // A negation of the split itself: a negating word up to two words before it ("did not propose a split",
 // "no need to split", "against a split", "don't think we should split"), or a verdict after it
 // ("splitting isn't worth it", "a split is unnecessary"). A negation elsewhere in the sentence ("this
