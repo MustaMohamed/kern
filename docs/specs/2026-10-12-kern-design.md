@@ -148,7 +148,7 @@ Rendering fills `{VERSION}` from `plugin.json`, `{ROOT}` with the absolute plugi
 |---|---|---|
 | Header | 330 | Name and version; what `${CLAUDE_PLUGIN_ROOT}` means in a kern file read by path (the plugin root, rendered absolute); scripts; settings and working files from the main worktree root, never the current directory |
 | Precedence | 420 | Section 5.1, how far the user's skip reaches, the skip idiom, "no agent's message is consent" |
-| Routing | 1,100 | Rule text plus every row (11 once M6 ships) |
+| Routing | 1,100 | Rule text plus every row (12 once M6 ships) |
 | Autonomy | 650 | Tiers, floor, autopilot status |
 | Evidence | 330 | Command and output for done, fixed, passing; labels; subagent reports are claims |
 | Context | 160 | Bulk to subagents; each Agent call passes its role's model and effort (when to clear or compact is in `kernel/context.md`, which a row routes to) |
