@@ -4,11 +4,13 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readSteps, grade, rowPrompt, removeTemp, runFailure } from '../scripts/lib/adherence.mjs';
 import { kernelRows, parseRow } from '../scripts/lib/kernel-rows.mjs';
 import { loadModel } from '../scripts/lib/lint-rules.mjs';
+import { stage } from '../scripts/lib/behave.mjs';
+import { workspace } from '../scripts/lib/claude-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const K = '/opt/kern';
@@ -308,4 +310,36 @@ test('the project skill counts when read by a relative path too', () => {
   const proj = { route: null, root: K, kind: 'negative', projectSkill: 'diagnose' };
   assert.equal(grade(ev(['Bash', { command: 'cat .claude/skills/diagnose/SKILL.md' }]), proj).pass, true);
   assert.equal(grade(ev(['Bash', { command: 'cat ./.claude/skills/diagnose/SKILL.md && npm test' }]), proj).pass, true);
+});
+
+// Task 16h item 5 (task-16-diagnosis-2 section 1, D3). The user, asked whether a follow-up on the bug just
+// fixed is a new task that must read its route again, answered "No, it continues": "A follow-up on the bug
+// just fixed is the same task. The case's second prompt becomes an unrelated bug, so it really tests 'each
+// new task reads its route'. The kernel stays as is." The second prompt used to report the README's wrong
+// total, a symptom of the sum bug the first task fixed. It now names a bug in another file with another
+// cause, which no test shows, so the first task cannot meet it.
+test('multi-diagnose: the second prompt names a bug the first task cannot touch, in a file of its own', () => {
+  const c = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8')).find((x) => x.id === 'multi-diagnose');
+  assert.deepEqual([c.kind, c.route], ['multi-turn', 'diagnose']);
+  assert.equal(c.prompts[0], 'npm test fails on the sum test. Find out why and fix it.');
+  assert.match(c.prompts[1], /src\/format\.js/);
+  assert.doesNotMatch(c.prompts[1], /README|sum|also/i, 'the second prompt reads as a follow-up on the first bug');
+  const src = stage(ROOT, c.files);
+  let ws = null;
+  try {
+    ws = workspace(src, { name: 'billing-service' });
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT'));
+    const run = (cmd) => spawnSync('bash', ['-c', cmd], { cwd: ws, env, encoding: 'utf8', timeout: 60000 });
+    const money = "node --input-type=module -e \"import { money } from './src/format.js'; console.log(money(1234))\"";
+    const before = run('node --test 2>&1');
+    assert.notEqual(before.status, 0);
+    assert.match(before.stdout, /not ok \d+ - sum adds/);
+    assert.match(before.stdout, /# fail 1\n/, 'the first task meets only the sum bug');
+    assert.equal(run(money).stdout, '123.40\n', 'money(1234) prints 123.40, as the second prompt says');
+    assert.equal(run("printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js && node --test 2>&1").status, 0, 'the first fix makes the suite pass');
+    assert.equal(run(money).stdout, '123.40\n', 'and leaves the second bug where it was');
+  } finally {
+    if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
+    if (ws) rmSync(dirname(ws), { recursive: true, force: true });
+  }
 });

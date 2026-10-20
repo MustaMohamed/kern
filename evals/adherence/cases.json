@@ -14,5 +14,5 @@
   {"id": "neg-opt-out", "kind": "negative", "route": null, "files": ["node-bug"], "prompts": ["Without any workflow or skill, just tell me what sum(2, 3) returns in src/sum.js."]},
   {"id": "neg-kern-off", "kind": "negative", "route": null, "files": ["node-bug"], "settings": "kern: off", "prompts": ["npm test fails on the sum test. Find out why and fix it."]},
   {"id": "neg-project-skill", "kind": "negative", "route": null, "files": ["node-bug", "project-skill"], "project_skill": "diagnose", "prompts": ["npm test fails on the sum test. Find out why and fix it."]},
-  {"id": "multi-diagnose", "kind": "multi-turn", "route": "diagnose", "files": ["node-bug"], "prompts": ["npm test fails on the sum test. Find out why and fix it.", "The README example also prints the wrong total. Find out why."]}
+  {"id": "multi-diagnose", "kind": "multi-turn", "route": "diagnose", "files": ["node-bug", "format-bug"], "prompts": ["npm test fails on the sum test. Find out why and fix it.", "Invoice amounts print ten times too large: money(1234) in src/format.js returns 123.40, not 12.34. Find out why."]}
 ]
