@@ -5417,7 +5417,7 @@ git commit -m "M2: autopilot and the PR body follow commit.attribution" -m "Cove
 ### Task 16: The evidence runs (ask before each)
 
 **Files:**
-- Create: `evals/snapshots/adherence-routed-<model>-<date>.json`, `evals/snapshots/adherence-inline-rows-<model>-<date>.json`, `evals/snapshots/adherence-routed-haiku-<version>-<date>.json`, `evals/snapshots/behave-<model>-<date>.json`, `evals/snapshots/h2h-<model>-<date>.json`, `evals/snapshots/standing-cost-<date>.json`, and `evals/snapshots/exec-<date>.json` when M2a's is stale
+- Create: `evals/snapshots/adherence-routed-<model>-<date>.json`, `evals/snapshots/adherence-inline-rows-<model>-<date>.json` (the F3 A/B run before Task 16d), `evals/snapshots/adherence-routed-haiku-<version>-<date>.json`, `evals/snapshots/behave-<model>-<date>.json`, `evals/snapshots/h2h-<model>-<date>.json`, `evals/snapshots/standing-cost-<date>.json`, and `evals/snapshots/exec-<date>.json` when M2a's is stale
 - Modify: `CHANGELOG.md`; any skill, kernel or hook file a failed gate shows is wrong, each through a task added under "Tasks added during execution"
 
 **Interfaces:**
@@ -5430,7 +5430,7 @@ Gates, fixed before any run (design spec 14 row M2b, and the review rulings):
 |---|---|---|
 | Adherence, routed, `claude-sonnet-5-5` | every case passes (two of three runs) | yes |
 | Adherence, routed, `claude-haiku-5-5` | reported | no |
-| F3 A/B: routed against inline-rows, same model | routed stays when its positive passes are at least inline-rows' minus one and its negative passes are at least inline-rows'; otherwise stop and bring both snapshots to the user, who decides whether F3 stands | decision, not a pass |
+| F3 A/B: routed against inline-rows, same model | routed stays when its positive passes are at least inline-rows' minus one and its negative passes are at least inline-rows'; otherwise stop and bring both snapshots to the user, who decides whether F3 stands. Decided on 2026-10-20: the user chose "Inline rows" (Task 16d), so `--variant inline-rows` is gone and later runs have one arm | decision, not a pass |
 | Behaviour | every case passes (two of three valid runs, at most one invalid) | yes |
 | Head-to-head | in each category, kern's mean score is at least the strongest other arm's and its mean false alarms are at most that arm's | yes |
 | Standing cost | delta at most 1,300 input tokens | yes |
@@ -5445,10 +5445,10 @@ Expected: each lists its plan with no model call; the h2h dry-run test no longer
 
 - [ ] **Step 2: Ask, then run the adherence grader**
 
-Show the user: 15 cases x 3 runs = 45 headless sessions per variant, on `claude-sonnet-5-5` (routed and inline-rows) and `claude-haiku-5-5` (routed, reported only): 135 sessions. Run only on yes.
+Show the user: 15 cases x 3 runs = 45 headless sessions on `claude-sonnet-5-5` and 45 on `claude-haiku-5-5` (reported only): 90 sessions. Run only on yes. (Before Task 16d this step had an inline-rows arm too: 135 sessions.)
 
-Run: `node scripts/kernel-adherence.mjs && node scripts/kernel-adherence.mjs --variant inline-rows; node scripts/kernel-adherence.mjs --model claude-haiku-5-5`
-Expected: one `PASS` or `FAIL` line per case per variant and three snapshots. Apply the F3 A/B rule from the gates table and record the result in the commit body.
+Run: `node scripts/kernel-adherence.mjs; node scripts/kernel-adherence.mjs --model claude-haiku-5-5`
+Expected: one `PASS` or `FAIL` line per case per model and two snapshots. The F3 A/B result (routed 11/15, inline-rows 14/15, the user's "Inline rows") goes in the commit body.
 
 - [ ] **Step 3: Ask, then run the behavioural evals**
 
@@ -5477,7 +5477,7 @@ For each failure: read its snapshot's reasons, find the cause in kern (route tex
 
 - [ ] **Step 7: Record and commit**
 
-Add under `## [Unreleased]` in `CHANGELOG.md`: `- Evidence for 0.4.0: adherence <p>/15 routed (<q>/15 inline-rows; haiku <h>/15, not gating); behaviour <b>/<n>; head-to-head plan <s>, diagnose <s>, review <s> against the strongest arm; standing cost <t> input tokens.` with the measured numbers.
+Add under `## [Unreleased]` in `CHANGELOG.md`: `- Evidence for 0.4.0: adherence <p>/15 with the rows inline (haiku <h>/15, not gating); behaviour <b>/<n>; head-to-head plan <s>, diagnose <s>, review <s> against the strongest arm; standing cost <t> input tokens.` with the measured numbers.
 
 ```bash
 git add -- evals/snapshots CHANGELOG.md
