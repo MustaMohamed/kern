@@ -257,8 +257,10 @@ export const RULES = [
       const terse = existsSync(join(model.root, 'modes', 'terse.md')) ? readFileSync(join(model.root, 'modes', 'terse.md'), 'utf8').length : 0;
       // Targets measured after Task 16d put every route row in the kernel with absolute paths (the user's "Accept the
       // measured number"): the longest-settings render went from 3,981 to 5,278 (target 4,000 to 5,278), the
-      // standing cost from 4,531 to 5,782 (limit 4,800 to 5,782).
-      if (kernel.length > 5278) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 5,278`));
+      // standing cost from 4,531 to 5,782 (limit 4,800 to 5,782). Task 16g added the Precedence line on how far the
+      // user's skip reaches and the parallel-work row (the user's "My word wins" and "Add a kernel row"): 299 chars
+      // more in both, so 5,577 and 6,081.
+      if (kernel.length > 5577) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 5,577`));
       if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
       // Standing cost (design goal 4): the kernel with no project settings, plus every auto skill and agent
       // description, the text every session carries.
@@ -267,7 +269,7 @@ export const RULES = [
       if (rendered(start) && !rendered(again)) out.push(err(7, 'hooks/session-start', `${failed(again)} with no project settings, so the standing cost was not measured`));
       const bare = norm(again.stdout || '');
       const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
-      if (bare.length + desc > 5782) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 5,782`));
+      if (bare.length + desc > 6081) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 6,081`));
       const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
       let ctx = '';
       try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }

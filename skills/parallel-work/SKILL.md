@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # parallel-work
 
-Run independent units at once, never two writers in one tree. Reached from execute-plan step 4, from diagnose when racing hypotheses, or typed as `/kern:parallel-work`.
+Run independent units at once, never two writers in one tree. Reached by its kernel row, execute-plan step 4, diagnose when racing hypotheses, or `/kern:parallel-work`.
 
 ## Steps
 

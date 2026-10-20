@@ -456,7 +456,7 @@ disable-model-invocation: true
 ---
 ```
 
-**2. Purpose.** Run independent units at once without two writers sharing a tree. Reached from `execute-plan` step 4, `diagnose` (racing hypotheses), or typed `/kern:parallel-work`.
+**2. Purpose.** Run independent units at once without two writers sharing a tree. Reached by the kernel row "Independent changes asked for in parallel" (Task 16g, the user's "Add a kernel row", 2026-10-20), from `execute-plan` step 4, `diagnose` (racing hypotheses), or typed `/kern:parallel-work`.
 
 **3. Inputs.** `base_branch`, `worktree.dir`, `worktree.setup`, `shared_services`, `parallel.max` (3), `model.*`.
 

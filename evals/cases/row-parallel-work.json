@@ -1,0 +1,46 @@
+{
+  "skill_name": "row-parallel-work",
+  "trigger": {
+    "positive": [
+      {
+        "prompt": "Do these two independent changes in parallel",
+        "top_k": 3
+      },
+      {
+        "prompt": "Run the three independent fixes in parallel, one per module",
+        "top_k": 3
+      },
+      {
+        "prompt": "Make these changes in parallel worktrees",
+        "top_k": 3
+      },
+      {
+        "prompt": "Fan out the independent edits to parallel workers",
+        "top_k": 3
+      }
+    ],
+    "negative": [
+      {
+        "prompt": "npm test fails in two modules, find out why",
+        "owner": "row-diagnose"
+      },
+      {
+        "prompt": "Make the bounded change we agreed: add the retry flag",
+        "owner": "row-implement"
+      }
+    ]
+  },
+  "evals": [
+    {
+      "id": 1,
+      "kind": "dialogue",
+      "prompt": "Both changes are agreed and independent: export double(n) from src/sum.js, and make tax in src/tax.js 20% instead of 10%, updating its test. Do them in parallel.",
+      "expected_output": "Routes to parallel-work first and follows its steps.",
+      "expectations": [
+        "Reads skills/parallel-work/SKILL.md first",
+        "Creates one worktree per writer with wt-new, or names why it ran them serially",
+        "Does not commit"
+      ]
+    }
+  ]
+}

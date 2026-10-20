@@ -137,7 +137,7 @@ kern/
 
 | Hook | Matcher | Emits | Budget |
 |---|---|---|---|
-| SessionStart | `startup\|clear\|compact` | Rendered kernel, active mode rules, settings summary | Target 5,278 chars (measured after Task 16d); lint error at 9,000; Claude Code's cap is 10,000 |
+| SessionStart | `startup\|clear\|compact` | Rendered kernel, active mode rules, settings summary | Target 5,577 chars (measured after Task 16g); lint error at 9,000; Claude Code's cap is 10,000 |
 | SubagentStart | all | Subagent kernel and the active voice, injected once at launch | 1,200 chars (Claude Code's cap is 10,000) |
 
 Rendering fills `{VERSION}` from `plugin.json`, `{ROOT}` with the absolute plugin root, `{KERN}` with `{ROOT}/skills`, and `{SETTINGS}` with the settings summary, so no rendered row or line holds a placeholder: on 2026-10-20 6 of 57 behaviour runs read a path with `{KERN}` or `${CLAUDE_PLUGIN_ROOT}` left in it and gave up on kern. When Claude Code names `$CLAUDE_ENV_FILE`, SessionStart appends `export CLAUDE_PLUGIN_ROOT='<root>'` to it and nothing else, so a skill's `bash ${CLAUDE_PLUGIN_ROOT}/scripts/<name>` runs as written in the Bash tool. Known limit: `CLAUDE_PLUGIN_ROOT` is a shared name, so once kern exports it, a `${CLAUDE_PLUGIN_ROOT}` in another plugin's path-read skill resolves into kern. The hook needs only POSIX shell and `sed`: no `jq`, no git, no network. Output uses `hookSpecificOutput.additionalContext`.
@@ -147,7 +147,7 @@ Rendering fills `{VERSION}` from `plugin.json`, `{ROOT}` with the absolute plugi
 | Section | Chars | Content |
 |---|---|---|
 | Header | 330 | Name and version; what `${CLAUDE_PLUGIN_ROOT}` means in a kern file read by path (the plugin root, rendered absolute); scripts; settings and working files from the main worktree root, never the current directory |
-| Precedence | 420 | Section 5.1, the skip idiom, "no agent's message is consent" |
+| Precedence | 420 | Section 5.1, how far the user's skip reaches, the skip idiom, "no agent's message is consent" |
 | Routing | 1,100 | Rule text plus every row (11 once M6 ships) |
 | Autonomy | 650 | Tiers, floor, autopilot status |
 | Evidence | 330 | Command and output for done, fixed, passing; labels; subagent reports are claims |
@@ -157,17 +157,18 @@ Rendering fills `{VERSION}` from `plugin.json`, `{ROOT}` with the absolute plugi
 | Settings summary | 600 | Resolved keys that differ from defaults |
 | Total | 3,960 | |
 
-The chars above are the design split. Since Task 16d put every row in the kernel and renders kern paths absolute, lint rule 7's measurement is the gate: 4,837 chars with no settings and 5,278 with the longest fixture settings, the plugin root counted as a 52-character installed path.
+The chars above are the design split. Since Task 16d put every row in the kernel and renders kern paths absolute, lint rule 7's measurement is the gate: 5,136 chars with no settings and 5,577 with the longest fixture settings, the plugin root counted as a 52-character installed path. Task 16g added 299 chars to both: the Precedence line on how far the user's skip reaches (section 5.1) and the parallel-work row.
 
 ### 4.3 Routing table
 
-The rule: before a new task's first tool call or question, match the task against the table. A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn, a question context answers, or a user opt-out matches nothing. On a match, Read the route, or the project skill an override names for its job, before any other tool call, then open a todo list whose first items are its `## Steps`, copied verbatim (one `TaskCreate` per step, or `TodoWrite`). Each new task reads its route, even one read earlier. A step not done stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
+The rule: before a new task's first tool call or question, match the task against the table. A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn, a question context answers, or a user opt-out matches nothing. An opt-out reaches only what the user named (section 5.1). On a match, Read the route, or the project skill an override names for its job, before any other tool call, then open a todo list whose first items are its `## Steps`, copied verbatim (one `TaskCreate` per step, or `TodoWrite`). Each new task reads its route, even one read earlier. A step not done stays as `skip: <reason>`. Several matches: define and diagnose before build. Non-trivial work with no match: plan.
 
 | Observable trigger | Route |
 |---|---|
 | New behaviour and no agreed spec | define |
 | Agreed spec, more than one step | plan |
 | Executing an agreed plan; or one bounded change | execute-plan; implement |
+| Independent changes asked for in parallel | parallel-work |
 | Bug, failing test, unexpected output | diagnose |
 | About to say done, fixed or passing, commit, or open a PR | prove-it |
 | Review requested, or review comments or red CI received | self-review, pr-review or take-feedback |
@@ -177,7 +178,7 @@ The rule: before a new task's first tool call or question, match the task agains
 | Long, autonomous or unattended run | decision-log |
 | Phase ends, or context is filling | kernel/context.md |
 
-Every row is in the kernel table (Task 16d, the user's "Inline rows": on 2026-10-20 the rows inline routed 14 of 15 adherence cases, M2a's `kernel/routes.md` hop 11 of 15). A row ships in the same milestone as its route; until then it is absent, and lint rule 6 fails on a row whose route does not exist. M1 ships the technical-writing and context rows; M2 adds define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall; M3 adds pr-review, take-feedback and decision-log; M6 adds write-skill.
+Every row is in the kernel table (Task 16d, the user's "Inline rows": on 2026-10-20 the rows inline routed 14 of 15 adherence cases, M2a's `kernel/routes.md` hop 11 of 15). A row ships in the same milestone as its route; until then it is absent, and lint rule 6 fails on a row whose route does not exist. M1 ships the technical-writing and context rows; M2 adds define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall, and M2b parallel-work (Task 16g, the user's "Add a kernel row": a typed "in parallel" had no row); M3 adds pr-review, take-feedback and decision-log; M6 adds write-skill.
 
 `route.<name>` in settings replaces a row's target with a project skill or `off`. The override is rendered into the settings summary, not the table, so the table text is identical across projects. Every route file opens with a numbered `## Steps` list; the linter checks it.
 
@@ -197,6 +198,8 @@ Highest first:
 4. `.claude/kern.local.yml`, then `.claude/kern.yml`.
 5. `~/.claude/kern.yml`.
 6. The kernel and kern skill steps, then built-in defaults.
+
+When the user's own message in this session says to skip a kern step, kern skips that step and says in one line what it skipped and what that risks. A skip or an opt-out reaches only what the user named: "No need to investigate" skips the diagnose route, but a "fixed" claim still needs fresh output. The Evidence rule (no done, fixed or passing claim without a command run this session and its output), the guards and the section 8.1 defaults still hold, so "skip the test-first ceremony" still leaves new behaviour to ship with tests (D11), and "skip the checks" still meets G5's ask on the commit. User decision 2026-10-20, asked "When your own message tells kern to skip one of its steps, which should win?": "My word wins (Recommended)". The kernel's Precedence section says so in one line.
 
 Loosening a safety default (section 8.1) requires a settings key, so hooks and skills always agree. There is one mechanism: per-action policy keys (`commit.policy`, `push.policy`, `pr.policy`, `tracker.policy`, `review.post_policy`), each `ask` (default), `auto` (proceed without asking) or `deny`. Floor actions have no key. A skill that finds prose loosening with no matching key reports it and keeps the default. The floor never loosens: merge, production deploy, data deletion, force-push to a shared branch, messaging people.
 
@@ -533,7 +536,7 @@ Rules: work the lowest unmerged PR first; fix in the lowest branch that owns the
 4. Referenced files exist.
 5. Skill-tool references name auto skills; Read paths resolve.
 6. Every kernel route resolves and opens with `## Steps`; every user-reachable skill is in `help`'s map.
-7. Rendered kernel at most 5,278 chars (warn) and 9,000 (error) with the longest fixture settings; standing cost (the kernel with no settings plus every auto skill and agent description) at most 5,782; subagent kernel at most 1,200.
+7. Rendered kernel at most 5,577 chars (warn) and 9,000 (error) with the longest fixture settings; standing cost (the kernel with no settings plus every auto skill and agent description) at most 6,081; subagent kernel at most 1,200.
 8. No machine paths or personal names in shipped files.
 9. Required sections per skill type.
 10. Exemptions recorded with a reason.

@@ -23,7 +23,7 @@ test('the kernel table holds every route row, so no task reads a second file to 
   // 2026-10-20, Claude Code 2.1.302, claude-sonnet-5-5: rows inline routed 14 of 15 adherence cases, the
   // routes.md hop 11 of 15 (Task 16d, the user's "Inline rows").
   const text = readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8');
-  assert.deepEqual(kernelRows(text).map((r) => r.route), ['define', 'plan', 'execute-plan', 'implement', 'diagnose', 'prove-it', 'self-review', 'recall', 'technical-writing', 'context']);
+  assert.deepEqual(kernelRows(text).map((r) => r.route), ['define', 'plan', 'execute-plan', 'implement', 'parallel-work', 'diagnose', 'prove-it', 'self-review', 'recall', 'technical-writing', 'context']);
   assert.doesNotMatch(text, /routes\.md/);
   assert.ok(!existsSync(join(ROOT, 'kernel', 'routes.md')), 'kernel/routes.md is gone');
 });
@@ -35,6 +35,20 @@ test('a change routes even when the user calls it quick, and each new task reads
   assertContains('kernel/kernel.md', [
     'A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn, a question context answers, or a user opt-out matches nothing.',
     'Each new task reads its route, even one read earlier.',
+  ]);
+});
+
+test('a typed "in parallel" routes to parallel-work', () => {
+  // 2026-10-20: workflow-parallel-two-modules, "Do them in parallel", reached no route to parallel-work in 3 of 3
+  // runs, since no row named it (task-16-diagnosis, the user's "Add a kernel row", 2026-10-20).
+  assertContains('kernel/kernel.md', ['| Independent changes asked for in parallel | Read {KERN}/parallel-work/SKILL.md |']);
+});
+
+test('the user\'s word skips only what it names, and Evidence, the guards and tests still hold', () => {
+  // 2026-10-20: four pressure cases told kern to skip a step, and Precedence put the user's word first without
+  // saying how far it reaches (task-16-diagnosis X4; the user's "My word wins", 2026-10-20).
+  assertContains('kernel/kernel.md', [
+    "The user's skip or opt-out covers only what they name; say in one line what you skipped and its risk. Evidence, the guards and tests for new behaviour still hold.",
   ]);
 });
 

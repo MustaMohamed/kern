@@ -3,6 +3,7 @@
   {"id": "row-plan", "kind": "positive", "route": "plan", "files": ["node-bug", "approved-spec"]},
   {"id": "row-execute-plan", "kind": "positive", "route": "execute-plan", "files": ["node-bug", "approved-spec", "approved-plan"]},
   {"id": "row-implement", "kind": "positive", "route": "implement", "files": ["node-bug"]},
+  {"id": "row-parallel-work", "kind": "positive", "route": "parallel-work", "files": ["node-bug", "two-modules"], "origin": true},
   {"id": "row-diagnose", "kind": "positive", "route": "diagnose", "files": ["node-bug"]},
   {"id": "row-prove-it", "kind": "positive", "route": "prove-it", "files": ["node-bug"], "origin": true, "branch": "fix-sum", "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"]},
   {"id": "row-self-review", "kind": "positive", "route": "self-review", "files": ["node-bug"], "origin": true, "branch": "fix-sum", "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"]},
