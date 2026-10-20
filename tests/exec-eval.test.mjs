@@ -2,7 +2,7 @@
 // dry run. No model call: the runner tests put a stand-in `claude` first on PATH.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -1158,7 +1158,7 @@ test('Task 16h: exec runs kern from a plugin copy, and the gh stand-in from besi
   const src = readFileSync(join(REPO, 'scripts', 'exec-eval.mjs'), 'utf8');
   assert.doesNotMatch(src, /pluginDirs: \[ROOT\]/, 'the live repo is a git work tree that holds evals/');
   assert.match(src, /pluginCopy\(ROOT\)/);
-  assert.match(src, /pluginDirs: \[pluginDir\(\)\]/);
+  assert.match(src, /pluginDirs: \[kern\]/);
   assert.doesNotMatch(src, /bin: join\(ROOT, 'evals', 'exec', 'bin'\)/, 'PATH named evals/exec/bin in the repo');
   assert.match(src, /cpSync\(join\(ROOT, 'evals', 'exec', 'bin'\), bin, \{ recursive: true \}\)/);
 });
@@ -1255,3 +1255,25 @@ test('Task 16h fix M5: exec-eval runs claude with --plugin-dir at a temp copy wi
   assert.equal(canon(seen.gh), canon(join(dirname(seen.cwd), 'bin', 'gh')), 'the gh stand-in beside the workspace');
   assert.ok(!existsSync(dirname(seen.plugin)) && !existsSync(dirname(seen.cwd)), 'the copy and the workspace are removed after the run');
 });
+
+const until = async (ok, ms) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise((d) => setTimeout(d, 50))) if (ok()) return true; return ok(); };
+for (const [sig, group] of [['SIGINT', true], ['SIGTERM', false], ['SIGHUP', false]]) {
+  test(`Task 16h fix M2: ${sig} to exec-eval${group ? '\'s process group, as a terminal sends it,' : ' alone'} removes the plugin copy and the workspace and stops claude`, async () => {
+    const stub = recordingClaude(false);
+    const runner = spawn(process.execPath, [EXEC(), '--case', 'finish-menu-first'], { env: stub.env, stdio: 'ignore', detached: true });
+    const ended = new Promise((done) => runner.on('exit', (code, signal) => done({ code, signal })));
+    let seen = null;
+    try {
+      assert.ok(await until(() => (seen = stub.seen()), 60000), 'claude started');
+      assert.ok(existsSync(seen.plugin) && existsSync(seen.cwd));
+      process.kill(group ? -runner.pid : runner.pid, sig);
+      assert.deepEqual(await ended, { code: null, signal: sig }, 'the runner ends on the signal');
+      assert.ok(await until(() => !existsSync(dirname(seen.plugin)), 5000), 'the plugin copy is removed');
+      assert.ok(await until(() => !existsSync(dirname(seen.cwd)), 5000), 'the workspace is removed');
+      assert.ok(await until(() => !alive(seen.pid), 5000), 'claude is stopped');
+    } finally {
+      if (runner.exitCode === null && runner.signalCode === null) runner.kill('SIGKILL');
+      if (seen) reap([seen.pid]);
+    }
+  });
+}

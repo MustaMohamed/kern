@@ -26,7 +26,8 @@ let reported = false;
 const report = (end) => {
   if (reported) return;
   reported = true;
-  writeSync(3, `${JSON.stringify(end)}\n`);
+  // fd 3 is closed once the runner is gone, and then there is no one left to tell.
+  try { writeSync(3, `${JSON.stringify(end)}\n`); } catch { /* the runner is gone */ }
 };
 let exited = false;
 // A spawn failure (no claude on PATH, not executable) has no pid; any later error comes with 'close'.
@@ -51,6 +52,13 @@ const stop = (code) => {
 process.on('SIGTERM', () => stop(143));
 process.on('SIGINT', () => stop(130));
 process.on('SIGHUP', () => stop(129));
+// The runner can end without signalling this driver: a signal sent to its pid alone, or SIGKILL. claude
+// leads its own group, so it would run on with no one to read it. The driver checks every 250 ms that its
+// parent is still the runner, and treats a write to the runner's closed stdout (EPIPE) the same way; either
+// stops claude as a signal does (Task 16h review, M2).
+const runner = process.ppid;
+setInterval(() => { if (process.ppid !== runner) stop(129); }, 250).unref();
+process.stdout.on('error', () => stop(129));
 
 // EPIPE: claude exited before it read a prompt. That is its own result, which 'close' reports.
 child.stdin.on('error', () => {});

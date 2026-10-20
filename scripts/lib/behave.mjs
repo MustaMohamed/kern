@@ -209,7 +209,7 @@ export function behaveDigest(events, max = RECORD.max) {
 export const COPY_OMITS = {
   top: ['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers', 'CHANGELOG.md', '.github', '.gitignore'],
   paths: [...['h2h', 'behave', 'kernel-adherence', 'standing-cost', 'pilot', 'exec-eval', 'route-eval', 'seeded-diffs', 'lint-skills'].map((f) => `scripts/${f}.mjs`), 'scripts/ci-local',
-    ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive', 'lint-rules', 'kernel-rows', 'rank'].map((f) => `scripts/lib/${f}.mjs`)],
+    ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive', 'reaper', 'lint-rules', 'kernel-rows', 'rank'].map((f) => `scripts/lib/${f}.mjs`)],
 };
 
 // pluginCopy(root): a copy of the plugin in <tmp>/<random>/kern without COPY_OMITS. The caller removes it

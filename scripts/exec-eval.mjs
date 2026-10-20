@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ClaudeRunError, claudeVersion, finalText, runClaude, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { pluginCopy } from './lib/behave.mjs';
+import { reaper } from './lib/reaper.mjs';
 import { GRADERS } from './lib/exec-grade.mjs';
 import { UsageError, caseEnv, casePrompts, claudeConfigDir, dateStamp, gradeCase, parseArgs, runEval, snapshotBody, userSettingsProblem, writeEvents, writeReply } from './lib/exec-run.mjs';
 
@@ -48,13 +49,26 @@ const DATE = dateStamp();
 // runners. From the live repo, a git work tree, a model that cd'd into the plugin's scripts/ got the repo's
 // own settings back, and the run looked right (task-16-diagnosis-2 Y4, finish-pr-at-head on 2026-10-20).
 // One copy serves every case; it is made at the first case, so a dry run or a failed version check makes none.
+// The guard (reaper.mjs) removes the copy and the current case's folders if this process ends without its
+// finally blocks: a Ctrl-C, SIGTERM or SIGHUP kills it while spawnSync waits on claude (Task 16h review, M2).
 let plugin = null;
-const pluginDir = () => (plugin ??= realpathSync(pluginCopy(ROOT)));
+let guard = null;
+const pluginDir = () => {
+  if (!plugin) {
+    guard = reaper();
+    plugin = realpathSync(pluginCopy(ROOT));
+    guard.add(dirname(plugin));
+  }
+  return plugin;
+};
 const REPLIES = join(ROOT, 'evals', 'results', `exec-${DATE}`);
 
 function runCase(c, save) {
   const prompts = casePrompts(c);
+  const kern = pluginDir();
   const dir = workspace(join(ROOT, 'evals', 'exec', 'fixtures', 'app'), { name: 'invoice-app', origin: true, branch: c.branch, setup: c.setup || [] });
+  const temp = [dirname(dir), `${dir}.origin`];
+  for (const p of temp) guard.add(p);
   try {
     if (c.settings) { mkdirSync(join(dir, '.claude'), { recursive: true }); writeFileSync(join(dir, '.claude', 'kern.local.yml'), `${c.settings}\n`); }
     const log = join(dirname(dir), 'gh.log');
@@ -68,7 +82,7 @@ function runCase(c, save) {
     try {
       run = runClaude({
         // 60 turns: finish-branch runs its proof and a whole self-review before the size gate, and 30 was reached; the $3 budget still caps spend.
-        cwd: dir, prompts, pluginDirs: [pluginDir()], model: MODEL, maxTurns: 60,
+        cwd: dir, prompts, pluginDirs: [kern], model: MODEL, maxTurns: 60,
         env: caseEnv({ bin, path: process.env.PATH, log, pr: c.pr || 'none', snapshot }),
       });
     } catch (e) {
@@ -83,8 +97,7 @@ function runCase(c, save) {
     return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
       commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command) };
   } finally {
-    rmSync(dirname(dir), { recursive: true, force: true });
-    rmSync(`${dir}.origin`, { recursive: true, force: true });
+    for (const p of temp) { rmSync(p, { recursive: true, force: true }); guard.drop(p); }
   }
 }
 
@@ -102,5 +115,7 @@ try {
     saveEvents: (id, events) => writeEvents(REPLIES, id, events), log: console.log,
     describe: (c) => `${c.id}: ${casePrompts(c).map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
   });
-} finally { if (plugin) rmSync(dirname(plugin), { recursive: true, force: true }); }
+} finally {
+  if (plugin) { rmSync(dirname(plugin), { recursive: true, force: true }); guard.drop(dirname(plugin)); }
+}
 process.exit(code);
