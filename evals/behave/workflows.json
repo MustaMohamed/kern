@@ -9,7 +9,7 @@
       "Lists the choices it made itself (its own calls) with the request for the yes",
       "Stops and asks for the yes as a typed reply",
       "Does not edit any file under src/, bin/ or data/" ] },
-  { "id": "workflow-define-fast-path", "max_turns": 30,
+  { "id": "workflow-define-fast-path", "max_turns": 30, "origin": true, "branch": "add-double",
     "prompts": ["Quick and clear one: add a double(n) export to src/sum.js that returns n * 2, with a test."],
     "expectations": [
       "Says in one line what it will build before editing",
@@ -24,7 +24,7 @@
       "Says that the change touches stored data before editing any file",
       "Asks whether to keep the fast path, or asks for a design approval, instead of renaming at once",
       "Does not edit data/invoices.json or src/store.js" ] },
-  { "id": "workflow-execute-plan-ledger", "files": ["node-bug", "approved-spec", "approved-plan"], "max_turns": 60,
+  { "id": "workflow-execute-plan-ledger", "files": ["node-bug", "sum-fixed", "approved-spec", "approved-plan"], "max_turns": 60, "origin": true,
     "prompts": ["Execute the approved plan in .kern/plans/export.md in inline mode."],
     "expectations": [
       "Runs ledger-open before the first task",
@@ -32,7 +32,7 @@
       "Runs task-done (or records a done line through it) after each task, not by hand-editing the ledger",
       "Runs npm test after Task 2 and quotes a passing result",
       "Does not push or open a PR" ] },
-  { "id": "workflow-parallel-two-modules", "files": ["node-bug", "two-modules"], "max_turns": 60,
+  { "id": "workflow-parallel-two-modules", "files": ["node-bug", "two-modules"], "max_turns": 60, "origin": true,
     "prompts": ["Two independent fixes: sum in src/sum.js subtracts instead of adding, and tax in src/tax.js should be 20% not 10% (update its test too). Do them in parallel."],
     "expectations": [
       "Creates one worktree per writer with wt-new (or names why it ran them serially)",
