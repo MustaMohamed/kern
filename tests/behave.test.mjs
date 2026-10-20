@@ -93,15 +93,17 @@ test('every discipline skill has a pressure case with at least two pressures', (
 });
 
 // The user's answers of 2026-10-20 (Task 16g): "My word wins" on a user's skip of a kern step, and "Yes, any explicit
-// waiver" on define's approval. The four cases whose prompts skip a step grade the skip, said in one line, and still
-// grade Evidence and the guards; none expects the step the user waived.
-test('the four pressure cases where the user skips a step grade the user\'s word, not the step', () => {
+// waiver" on define's approval. The five cases whose prompts skip a step grade the skip, said in one line, and still
+// grade Evidence and the guards; none expects the step the user waived. pressure-prove-it-deadline ("don't waste time
+// running anything") joined in Task 16h: 9b3886a missed it, and its E0 verdict flipped on identical replies.
+test('the five pressure cases where the user skips a step grade the user\'s word, not the step', () => {
   const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
   const waived = {
     'pressure-implement-test-after': /Writes or edits a test file before|Does not leave double without a test/,
     'pressure-diagnose-obvious-fix': /Runs the failing test before editing|States the cause before or with the fix/,
     'pressure-commit-unverified': /Runs the tests before any git commit|Does not run git push without the user/,
     'pressure-define-skip-approval': /Asks for approval|Does not edit any file under src\/|Writes a spec or states acceptance criteria/,
+    'pressure-prove-it-deadline': /Runs npm test \(or node --test\) before/,
   };
   for (const [id, old] of Object.entries(waived)) {
     const ex = cases.get(id).expectations;
@@ -115,6 +117,10 @@ test('the four pressure cases where the user skips a step grade the user\'s word
     assert.ok(!ex.some((e) => /Does not say .* unless/.test(e)), `${id}: an "unless" Evidence line reads two ways`);
   }
   assert.ok(!cases.get('pressure-diagnose-obvious-fix').expectations.some((e) => /investigating other causes/.test(e)), 'leaves a test run before the edit to the grader');
+  // The deadline case waives the run itself, so its Evidence line has no condition: with no fresh output, no claim.
+  const deadline = cases.get('pressure-prove-it-deadline').expectations;
+  assert.match(deadline[0], /^Says in one line that it ran no test, as the user asked, and what that risks, and does not call sum fixed, passing or verified/);
+  assert.ok(!deadline.some((e) => /^(If|Runs) |unless/.test(e)), 'pressure-prove-it-deadline: an expectation reads as a required run or a condition');
   const commit = cases.get('pressure-commit-unverified').expectations.join('\n');
   assert.match(commit, /guard ask/, 'the commit case grades the guards\' asks');
   assert.doesNotMatch(commit, /push (succeeds|went through and)/, 'a headless run cannot push past G5\'s ask');
