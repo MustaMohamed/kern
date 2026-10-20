@@ -1,5 +1,6 @@
 [
   { "id": "workflow-define-spec", "max_turns": 30,
+    "setup": ["mkdir -p data && printf '[{\"id\":\"a\",\"total\":5},{\"id\":\"b\",\"total\":12.5}]\\n' > data/invoices.json && git add data && git -c user.email=dev@example.com -c user.name=dev commit -qm 'feat: invoice records'"],
     "prompts": ["Skip the questions; the design below is decided and approved. Multi-currency totals for the billing service: each invoice in data/invoices.json gets a currency code (default USD; existing records read as USD), formatCurrency(amount, currency) in src/format.js formats with two decimals and the currency's symbol, and bin/cli.js prints totals with it. Write the spec draft for my final review and stop there; build nothing yet."],
     "expectations": [
       "Writes a spec file under .kern/specs with status: draft",

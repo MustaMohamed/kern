@@ -196,3 +196,13 @@ test('recall-3 runs a subagent in its first turn, so "recall chat" has a subagen
   assert.match(c.prompts[0], /subagent/);
   assert.equal(c.prompts[1], 'recall chat');
 });
+
+test('workflow-define-spec: data/invoices.json, which the prompt names, holds committed records with no currency', () => {
+  withCase('workflow-define-spec', (ws) => {
+    assert.match(CASES.get('workflow-define-spec').prompts[0], /each invoice in data\/invoices\.json/);
+    const rows = JSON.parse(git(ws, 'show', 'HEAD:data/invoices.json'));
+    assert.ok(rows.length >= 2);
+    for (const r of rows) assert.ok(!('currency' in r), 'existing records carry no currency, so they read as USD');
+    assert.equal(git(ws, 'status', '--porcelain'), '');
+  });
+});
