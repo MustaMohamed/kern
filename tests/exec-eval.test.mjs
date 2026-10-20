@@ -194,6 +194,16 @@ test('runClaude: a non-zero exit is returned for the caller to fail on, with std
   assert.ok(attempt(fakeClaude('exit 0'), { maxTurns: 30, maxBudgetUsd: 5 })().argv.join(' ').includes('--max-turns 30 --max-budget-usd 5'));
 });
 
+test('runClaude: a usage-limit reply from Claude Code stops the runner; it is never graded', () => {
+  const synth = (text, model = '<synthetic>') => JSON.stringify({ type: 'assistant', message: { model, content: [{ type: 'text', text }] } });
+  const limit = synth("You've hit your weekly limit · resets Oct 20 at 2pm (Africa/Cairo)");
+  const out = `echo '${limit.replace(/'/g, "'\\''")}'; echo '{"type":"result","subtype":"success","is_error":true,"result":"limit"}'`;
+  assert.throws(attempt(fakeClaude(out)), (e) => e instanceof ClaudeRunError && e.fatal && /weekly limit/.test(e.message));
+  const real = synth("You've hit your weekly limit, the user said", 'claude-sonnet-5-5');
+  const ok = attempt(fakeClaude(`echo '${real.replace(/'/g, "'\\''")}'; echo '{"type":"result","subtype":"success","result":"x"}'`))();
+  assert.equal(ok.events.length, 2, 'a model that writes the words is not a limit');
+});
+
 test('the gh stub logs every call, answers pr list from the case, and fails on a call it does not know', () => {
   const stub = fileURLToPath(new URL('../evals/exec/bin/gh', import.meta.url));
   const log = join(mkdtempSync(join(tmpdir(), 'gh-')), 'gh.log');

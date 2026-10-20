@@ -30,7 +30,10 @@ function once(withKern) {
   const r = spawnSync('claude', argv, { cwd, encoding: 'utf8', timeout: 180000, env: childEnv(process.env) });
   rmSync(cwd, { recursive: true, force: true });
   if (r.status !== 0) throw new Error(`standing-cost: claude exited ${r.status}: ${r.error?.message ?? r.stderr.trim().split('\n').pop()}`);
-  return inputTokens(JSON.parse(r.stdout).usage);
+  const j = JSON.parse(r.stdout);
+  // A usage limit comes back as an error result with zero usage: never a measurement.
+  if (j.is_error) throw new Error(`standing-cost: claude reported an error, not a measurement: ${String(j.result ?? '').trim()}`);
+  return inputTokens(j.usage);
 }
 
 if (isMain(import.meta.url)) {

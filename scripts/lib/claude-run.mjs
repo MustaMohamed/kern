@@ -96,6 +96,11 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   for (const l of (run.stdout || '').split('\n').filter(Boolean)) {
     try { events.push(JSON.parse(l)); } catch { badLines += 1; }
   }
+  // A usage or rate limit: Claude Code answers by itself (model "<synthetic>") and no model ran. Every
+  // later run would get the same reply, so the caller stops instead of grading it as a failed case.
+  const limit = events.find((e) => e?.type === 'assistant' && e.message?.model === '<synthetic>' &&
+    /\blimit\b/i.test((e.message.content ?? []).map((c) => c?.text ?? '').join(' ')));
+  if (limit) throw new ClaudeRunError(`claude stopped at a usage limit: ${limit.message.content.map((c) => c?.text ?? '').join(' ').trim()}`, true);
   return { argv, events, badLines, status: run.status, stderr: run.stderr || '' };
 }
 
