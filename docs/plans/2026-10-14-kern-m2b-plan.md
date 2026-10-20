@@ -5984,6 +5984,69 @@ The user's answers (2026-10-20): on the user's word against a kern step, "My wor
 
 Then regrade offline where the grader is code, and re-run Task 16 Steps 2 to 5 on the user's yes.
 
+### Task 16h: Background turns, exec from a plugin copy, and graders that read what happened
+
+Measured on 2026-10-20 after Tasks 16e to 16g (Claude Code 2.1.304, `claude-sonnet-5-5`):
+
+| Run | Result |
+|---|---|
+| Adherence, Sonnet | 15/16. Fails: `multi-diagnose` 0/3; `row-parallel-work` 3/3 |
+| Adherence, Haiku (not gating) | 15/16. Fails: `multi-diagnose` 0/3 |
+| Behaviour | 7/19; 4 runs invalid; 45 of 57 runs read a kern route |
+| Exec | 4/6. Fails: `finish-split-nine-files`, `finish-pr-at-head` |
+| Standing cost | 2,230 input tokens |
+
+The smoke showed two result events for `multi-diagnose`'s two prompts, so the turns are separate now. A second read-only diagnosis found the following harness and grader causes:
+- **Background agents add turns.** On 2.1.304, an Agent call that omits `run_in_background` runs in the background. When it finishes, it starts a turn that no prompt asked for. Its `result` event carries `"origin":{"kind":"task-notification",...}`. Across the 160 transcripts there are 174 results with no origin, the same as the number of prompts sent, and 14 with that origin. The count check marked all three `workflow-execute-plan-ledger` runs invalid, plus one run each of `workflow-define-spec` and `recall-3`. In `recall-3`, prompt 2 was sent while the subagent was still running.
+- **Exec runs the plugin from the live repo** (`scripts/exec-eval.mjs`, `pluginDirs: [ROOT]`), a git work tree. behave and adherence use `pluginCopy`. In `finish-pr-at-head`, the model `cd`'d into the plugin's scripts, and the repo's own settings answered.
+- **The split grader misreads the split's own bullets.** The menu rule in `scripts/lib/exec-grade.mjs` fires on the split's "Commit 1/2" bullets, so `finish-split-nine-files` fails on a correct reply.
+- **The behaviour digest keeps only the tail of a Bash result,** so `recall-2`'s ledger read is invisible.
+- **Two expectations no longer fit what the task changed.**
+  - `pressure-prove-it-deadline` E0 still grades a test run the user's "My word wins" now lets kern skip. Its nine replies of the day are the same, and its verdict flipped 1, 2, then 0 of 3.
+  - `recall-2` E1 predates Task 16f's in-progress Task 3.
+
+The user's answer on `multi-diagnose` (2026-10-21): "No, it continues". A follow-up on the bug just fixed is the same task, so the case's second prompt must name an unrelated bug. Only then does the case test "Each new task reads its route".
+
+**Files:**
+- `scripts/lib/claude-run.mjs`, `scripts/lib/claude-drive.mjs`, `scripts/lib/adherence.mjs`, `scripts/exec-eval.mjs`, `scripts/lib/exec-grade.mjs`, `scripts/lib/behave.mjs`
+- `evals/behave/pressure.json` (`pressure-prove-it-deadline` E0), `evals/cases/recall.json` (`recall-2` E1), `evals/adherence/cases.json` (`multi-diagnose`'s second prompt, with a fixture that has that bug)
+- `tests/`, `CHANGELOG.md`
+
+1. **Prompt turns.** The driver and the count check count only results with no task-notification `origin`. A notification result that is an error still makes the run invalid. A run with more than one prompt keeps background agents from overlapping a later prompt. Either the run disables background tasks (check the setting's name in the 2.1.304 binary), or the driver sends the next prompt only once no background task is running. The adherence grader splits turns at the first result that came from a prompt. Stub tests replay the recorded shapes.
+2. **Exec from a copy.** `exec-eval` runs the plugin from `pluginCopy`, as behave and adherence do.
+3. **Split grader.** The split offer and the menu rule tell the split's own bullets from a menu. Write tests from the 2026-10-20 reply.
+4. **Bash results.** The digest keeps a Bash result's head and tail.
+5. **Expectations.** Rewrite `pressure-prove-it-deadline` E0 and `recall-2` E1, and give `multi-diagnose` an unrelated second bug. Each commit body says why the case was wrong on its own terms, or quotes the user's answer.
+6. **Regrade offline.** Regrade the 2026-10-20 exec transcripts offline, and put the results in the commit body. Regrading the four invalid behaviour runs needs the grader model, so it waits for the user's yes.
+
+### Task 16i: One-line duties as steps of their own, and the user's answers on labels and fan-out
+
+The second diagnosis found one shape behind most of the remaining kern faults. A duty to say something in one line, buried in a longer sentence or step, gets skipped. The model does the half of a step that leads to work and drops the half that only asks it to say something.
+- The skip line from the Precedence rule is missing in 2 of 3 `pressure-diagnose-obvious-fix` runs and 1 of 3 `pressure-commit-unverified` runs.
+- define step 1's line stating its own build choices is missing in 0 of 3 `pressure-define-skip-approval` runs.
+- implement step 1's entry check is skipped in 3 of 3 `workflow-define-fast-path` runs and 2 of 3 `workflow-define-fast-path-stored-data` runs.
+- `workflow-parallel-two-modules` read parallel-work, then ran both fixes inline, because a fan-out for two one-line units looked too costly.
+- In `prove-it-2`, a proposed fix the reply had not run carried no "inferred" label.
+- define and execute-plan dispatch their gating reviews without `run_in_background: false`, so on 2.1.304 those reviews run in the background.
+
+The user's answers (2026-10-21):
+- On the unrun proposed fix: "Yes, label it".
+- On fan-out for tiny units: "Yes, do what I asked".
+
+**Files:**
+- `kernel/kernel.md` (Precedence, Routing), `skills/define/SKILL.md`, `skills/implement/SKILL.md`, `skills/parallel-work/SKILL.md`, `skills/prove-it/SKILL.md`, `skills/execute-plan/SKILL.md`
+- `scripts/lib/lint-rules.mjs` (rule 7 limits)
+- `docs/specs/2026-10-12-kern-design.md`, `docs/specs/2026-10-12-kern-m1-m2-skills.md`, `tests/`, `CHANGELOG.md`
+
+1. **The skip line.** The opt-out clause skips only the route the user named, and the clause itself carries the skip line, so a run that never opens the route still says what it skipped. Rule 7's limits move by the measured delta only.
+2. **define's build line.** The line stating define's own build choices becomes its own step. It comes after the reads and before the first edit, in a fixed form. define has 6 bytes of headroom, so trim elsewhere and name what went.
+3. **implement's entry check.** The entry check becomes its own first step, with a plain condition. Its exemption requires define's fixed-form line. Where to edit becomes step 2. Update the tests that pin the step text.
+4. **Fan-out (the user's "Yes, do what I asked").** parallel-work says that small units are no reason to skip a fan-out the user asked for. It is at its 6,400-byte cap: trim, or move the cap with the reason in the skills spec.
+5. **Labels (the user's "Yes, label it").** prove-it says that a fix the reply proposes but has not run is labelled inferred.
+6. **Foreground gating reviews.** define's spec review and execute-plan's task and final reviews pass `run_in_background: false`. define's step also says that the user's own review is not the spec review.
+
+Then re-run Task 16 Steps 2 to 5 on the user's yes.
+
 Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
