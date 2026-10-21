@@ -430,7 +430,7 @@ const state = (lines = [' M src/sum.js abc'], more = {}) => ({ worktrees: { '.':
 const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
-  assert.deepEqual(Object.keys(CHECKS).sort(), ['git-or-gh-state', 'ledger-before-transcript', 'no-write']);
+  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'git-or-gh-state', 'ledger-before-transcript', 'no-write', 'skipped-line']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
@@ -521,6 +521,45 @@ test('ledger-before-transcript passes when a read of the workspace ledger shows 
     assert.equal(check([init, ...ran(cmd), ...ran('cat .kern/ledgers/export/ledger.md', ledger), ...reply('x')], {}).pass, true, cmd);
   }
   assert.equal(check([...ran('cat .kern/ledgers/export/ledger.md', '# kern ledger: /any/where/.kern/plans/p.md'), ...reply('x')], {}).pass, true, 'with no init event, any .kern/plans/ path counts');
+});
+
+// Task 16j review, M9: since Task 16i kern's text fixes two one-line forms, `Skipped: <what>. Risk: <risk>.` before
+// any tool call (kernel/kernel.md:18) and `Building: <what>. My choices: <each>.` before any edit (define and
+// implement step 1), so a line said is a mechanical expectation.
+test('skipped-line passes on the fixed skip line in the main session\'s text before its first tool call', () => {
+  const check = CHECKS['skipped-line'];
+  const line = 'Skipped: running the proving checks before commit and push. Risk: a broken change goes to the remote.';
+  assert.deepEqual(check([say(line), ...ran('git commit -am x'), ...reply('x')], {}), { pass: true, evidence: `before its first tool call: "${line}"` });
+  for (const ok of ['**Skipped:** the investigation (tests/x.js). **Risk:** another cause stays hidden.', 'I will commit now.\nSkipped: the tests. Risk: CI is the only check', '- Skipped: e.g. the test-first slice. Risk: double ships untested.']) {
+    assert.equal(check([say(ok), ...ran('ls'), ...reply('x')], {}).pass, true, ok);
+  }
+  assert.deepEqual(check([...ran('ls'), say(line), ...reply('x')], {}), { pass: false, evidence: `the line comes after the first tool call: "${line}"` });
+  for (const bad of ['Skipping the tests, as you asked. Risk: CI only.', 'Skipped: the tests.\nRisk: CI only.', 'Risk: CI only. Skipped: the tests.', 'Skipped the tests. Risk: CI only.']) {
+    assert.deepEqual(check([say(bad), ...ran('ls'), ...reply('x')], {}), { pass: false, evidence: 'no `Skipped: <what>. Risk: <risk>.` line in the main session' }, bad);
+  }
+  assert.equal(check([use('g', 'Agent', { description: 'x' }), sub('g', [{ type: 'text', text: line }]), ...reply('x')], {}).pass, false, 'a subagent\'s line is not the session\'s');
+  assert.equal(check([{ type: 'assistant', message: { content: [{ type: 'text', text: line }, { type: 'tool_use', id: 't', name: 'Bash', input: { command: 'ls' } }] } }, ...reply('x')], {}).pass, true, 'text and a call in one message, text first');
+});
+
+test('building-line passes on the fixed build line before the first edit of a non-test source file', () => {
+  const check = CHECKS['building-line'];
+  const line = 'Building: `double(n)` in `src/sum.js`, plus a test. My choices: edit in place on `add-double`.';
+  const edit = (id, file_path) => [use(id, 'Edit', { file_path, new_string: 'x' }), back(id, 'ok')];
+  assert.deepEqual(check([...ran('cat package.json'), say(line), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}), { pass: true, evidence: `before its first edit of a source file (Edit /w/src/sum.js): "${line}"` });
+  assert.equal(check([...edit('t', '/w/test/sum.test.js'), say(line), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, 'a test edit first does not count');
+  assert.equal(check([say(line), ...reply('x')], {}).pass, true, 'no source edit at all: the line said is enough');
+  for (const first of [edit('e', 'src/currency.js'), [use('w', 'Write', { file_path: '/w/src/currency.js', content: 'x' }), back('w', 'ok')], [use('m', 'MultiEdit', { file_path: 'lib/a.ts', edits: [] }), back('m', 'ok')],
+    ran("echo 'export const double = (n) => n;' >> src/sum.js"), ran("cat > src/currency.js <<'EOF'\nexport {};\nEOF"), ran('sed -i.bak s/a/b/ src/sum.js')]) {
+    const v = check([...first, say(line), ...reply('x')], {});
+    assert.equal(v.pass, false, JSON.stringify(first[0].message.content[0].input));
+    assert.match(v.evidence, /^the line comes after the first edit of a source file \((Edit|Write|MultiEdit|Bash) [^)]+\): "Building: /);
+  }
+  for (const notSource of [edit('d', '/w/README.md'), edit('j', '/w/test/sum.test.js'), edit('k', '/w/src/sum.test.js'), ran('npm test 2>&1 > /dev/null'), ran("cat > test/currency.test.js <<'EOF'\nx\nEOF")]) {
+    assert.equal(check([...notSource, say(line), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, JSON.stringify(notSource[0].message.content[0].input));
+  }
+  assert.equal(check([{ type: 'assistant', message: { content: [{ type: 'text', text: line }, { type: 'tool_use', id: 'e', name: 'Edit', input: { file_path: 'src/sum.js' } }] } }, ...reply('x')], {}).pass, true, 'text and the edit in one message, text first');
+  assert.deepEqual(check([...edit('e', '/w/src/sum.js'), say('I added double. My choices: n * 2.'), ...reply('x')], {}),
+    { pass: false, evidence: 'no `Building: <what>. My choices: <each>.` line in the main session' });
 });
 
 test('gradeRun sends the model only the expectations no check decides, and lines its verdicts up with theirs', () => {

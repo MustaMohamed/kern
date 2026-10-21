@@ -325,12 +325,14 @@ export function parseVerdict(text, n) {
 }
 
 // steps(events): each tool call and result in stream order, the main session's and every subagent's:
-// { at (event index), id, call: { name, input } } or { at, id (the call's), result: text }.
-const steps = (events) => events.flatMap((e, at) => (e?.message?.content ?? []).flatMap((c) => {
-  if (e.type === 'assistant' && c?.type === 'tool_use') return [{ at, id: c.id, call: { name: c.name, input: c.input ?? {} } }];
-  if (c?.type === 'tool_result') return [{ at, id: c.tool_use_id, result: resultText(c) }];
+// { at (event index), k (block index), id, call: { name, input } } or { at, k, id (the call's), result: text }.
+const steps = (events) => events.flatMap((e, at) => (e?.message?.content ?? []).flatMap((c, k) => {
+  if (e.type === 'assistant' && c?.type === 'tool_use') return [{ at, k, id: c.id, call: { name: c.name, input: c.input ?? {} } }];
+  if (c?.type === 'tool_result') return [{ at, k, id: c.tool_use_id, result: resultText(c) }];
   return [];
 }));
+// precedes(a, b): whether stream position a ({ at, k }) comes before b.
+const precedes = (a, b) => a.at < b.at || (a.at === b.at && a.k < b.k);
 // replyAt(events): the index of the event that holds the final reply, the main session's last assistant text
 // (events.length when there is none).
 const replyAt = (events) => {
@@ -428,6 +430,42 @@ const treeDiff = (start, end) => {
     ...Object.keys(a).filter((k) => k in b).flatMap((k) => lineDiff(k, a[k], b[k])), ...lineDiff('.git', start.git ?? [], end.git ?? [])];
 };
 
+// SKIPPED_LINE, BUILDING_LINE: Task 16i's fixed one-line forms, `Skipped: <what>. Risk: <risk>.`
+// (kernel/kernel.md:18) and `Building: <what>. My choices: <each>.` (define and implement step 1), on one line,
+// each label plain or in bold or italics.
+const label = (word) => `[*_]{0,2}${word}:[*_]{0,2}[ \\t]+\\S`;
+const SKIPPED_LINE = new RegExp(`(?:^|[^\\w])${label('Skipped')}[^\\n]*?\\.[*_]{0,2}[ \\t]+${label('Risk')}`);
+const BUILDING_LINE = new RegExp(`(?:^|[^\\w])${label('Building')}[^\\n]*?\\.[*_]{0,2}[ \\t]+${label('My choices')}`);
+// sayings(events): the main session's text blocks and tool calls in order: { at (event index), k (block
+// index), text } or { at, k, call }.
+const sayings = (events) => events.flatMap((e, at) => (e?.type === 'assistant' && !e.parent_tool_use_id ? (e.message?.content ?? []) : []).flatMap((c, k) => {
+  if (c?.type === 'text' && c.text?.trim()) return [{ at, k, text: c.text }];
+  if (c?.type === 'tool_use') return [{ at, k, call: { name: c.name, input: c.input ?? {} } }];
+  return [];
+}));
+// lineOf(text, re): the line of text that re matches, trimmed and cut to 300 characters, or null.
+const lineOf = (text, re) => {
+  const m = text.match(re);
+  if (!m) return null;
+  const from = text.lastIndexOf('\n', m.index + m[0].length - 1) + 1, nl = text.indexOf('\n', m.index + m[0].length);
+  return first(text.slice(from, nl < 0 ? text.length : nl).trim(), 300);
+};
+// SOURCE: a code file's extension. isTest(path): a file under a test folder, or named as a test.
+const SOURCE = /\.(?:[cm]?[jt]sx?|py|go|rb|rs|java|kt|swift|c|h|cc|cpp|hpp|cs|php|sh)$/i;
+const isTest = (p) => /(^|\/)(tests?|__tests__|specs?)\//i.test(p) || /[._-](test|spec)\.[a-z]+$/i.test(p) || /(^|\/)test_[^/]*\.py$/.test(p) || /_test\.go$/.test(p);
+const isSource = (p) => SOURCE.test(p) && !isTest(p);
+// sourceEdit(call): the non-test source file an Edit, Write or MultiEdit changes, or a Bash call writes through
+// a `>` or `>>` redirect, tee or `sed -i`/`perl -i`; null when it changes none.
+const sourceEdit = ({ name, input }) => {
+  if (['Edit', 'Write', 'MultiEdit'].includes(name)) return isSource(String(input.file_path ?? '')) ? input.file_path : null;
+  if (name !== 'Bash') return null;
+  const text = String(input.command ?? '');
+  const unq = (w) => w.replace(/^['"]|['"]$/g, '');
+  const targets = [...text.matchAll(/(?:(?<![<0-9&])>>?|\btee(?:\s+-a)?)\s*(['"]?[^\s'";&|<>()]+['"]?)/g)].map((m) => unq(m[1]));
+  for (const stage of text.split(/&&|\|\||[;&|\n]/)) if (/^\s*(?:sed|perl)\s+(?:-\S*\s+)*-[a-z]*i/.test(stage)) targets.push(...stage.trim().split(/\s+/).map(unq));
+  return targets.find((t) => isSource(t)) ?? null;
+};
+
 // CHECKS: the scripted checks a case's `checks` may name (Task 16j, task-16-diagnosis-3 fix group 1; the
 // user's "Scripted checks + one model", 2026-10-21). check(events, { tree }) decides one expectation with no
 // model and returns { pass, evidence }; tree is { start, end }, treeState at the run's start and end. A check
@@ -451,6 +489,27 @@ export const CHECKS = {
     if (diff.length) return { pass: false, evidence: `the workspace changed: ${diff.slice(0, 6).join('; ')}${diff.length > 6 ? `; ${diff.length - 6} more` : ''}` };
     const n = Object.keys(tree.end.worktrees).length;
     return { pass: true, evidence: `no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of ${n} worktree${n === 1 ? '' : 's'} the same at the run's start and end` };
+  },
+  // The main session says the `Skipped: <what>. Risk: <risk>.` line before its first tool call.
+  'skipped-line': (events) => {
+    const all = sayings(events);
+    const firstCall = all.findIndex((x) => x.call);
+    const said = all.map((x, i) => ({ i, line: x.text ? lineOf(x.text, SKIPPED_LINE) : null })).find((x) => x.line);
+    if (!said) return { pass: false, evidence: 'no `Skipped: <what>. Risk: <risk>.` line in the main session' };
+    return firstCall < 0 || said.i < firstCall ? { pass: true, evidence: `before its first tool call: "${said.line}"` }
+      : { pass: false, evidence: `the line comes after the first tool call: "${said.line}"` };
+  },
+  // The main session says the `Building: <what>. My choices: <each>.` line before the first edit of a non-test
+  // source file (sourceEdit), the main session's or a subagent's; with no such edit, the line said is enough.
+  'building-line': (events) => {
+    const all = sayings(events);
+    const edit = steps(events).find((x) => x.call && sourceEdit(x.call));
+    const said = all.map((x) => ({ ...x, line: x.text ? lineOf(x.text, BUILDING_LINE) : null })).find((x) => x.line);
+    if (!said) return { pass: false, evidence: 'no `Building: <what>. My choices: <each>.` line in the main session' };
+    if (!edit) return { pass: true, evidence: `no source edit, and the main session says: "${said.line}"` };
+    const where = `${edit.call.name} ${first(String(sourceEdit(edit.call)), 120)}`;
+    return precedes(said, edit) ? { pass: true, evidence: `before its first edit of a source file (${where}): "${said.line}"` }
+      : { pass: false, evidence: `the line comes after the first edit of a source file (${where}): "${said.line}"` };
   },
   // A read of a ledger under the workspace's .kern/ledgers/ (ledgerRead) shows its first line, naming a plan
   // under the workspace's .kern/plans/, before any call reads a .jsonl transcript (transcriptRead). The
