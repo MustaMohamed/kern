@@ -583,6 +583,10 @@ expect_hook() {
     'git diff -- hooks/prompt-submit' 'shellcheck hooks/prompt-submit'
 }
 
+@test "calling state_ensure, the state function that writes the default state, asks too" {
+  expect_hook "bash -c 'state_ensure test-session'" 'eval state_ensure s' 'x=1; state_ensure s'
+}
+
 @test "a hooks directory named elsewhere in the command, or reached by a glob, makes a hook's bare name ask" {
   K=$(kern_root)
   # shellcheck disable=SC2016 # literal $PATH and $f

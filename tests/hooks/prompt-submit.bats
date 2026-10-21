@@ -297,7 +297,9 @@ run_prompt() {
   [[ "$output" == *"autopilot ON:"* ]] || false
 }
 
-@test "a state read that fails once is tried again, and the prompt sees the state as it is" {
+# A hook cannot tell a read that was retried from one left alone, so this checks only that the state
+# survives; state.bats proves the retry by state_ensure's exit code.
+@test "a state read that fails once leaves the state as it is, and the prompt then reads it" {
   S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   set_autopilot on
   read_fails awk "$S" 1

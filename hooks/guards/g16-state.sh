@@ -34,7 +34,7 @@ BEGIN {
   e = "([^" a "._-]|$)"
   hit = "hooks/(/|[.]/)*(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
   hit = hit "|hooks/guards/[^/ \t\r;|&<>()]*[.]sh"
-  hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset)([^" a "_]|$)"
+  hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset|state_ensure)([^" a "_]|$)"
   dir = "(^|[^" a "._-])hooks" e
 }
 { $0 = tolower($0) }
@@ -632,7 +632,7 @@ _g16_glob() {
 # covered. The vote is the strongest over every reading of the text (see _g16_hooks); _g16_hooks_read
 # matches one reading and counts:
 # - in the text (_G16_HOOK_AWK): a hook after hooks/, a .sh file under hooks/lib/, or state_set,
-#   _state_put or state_reset; a hook name elsewhere (a branch m2/session-start, a URL) is not hook code;
+#   _state_put, state_reset or state_ensure; a hook name elsewhere (a branch m2/session-start, a URL) is not hook code;
 # - in a word inside a hooks directory: a last part that names a hook or a hooks/lib file, holds a
 #   glob that could match one (_g16_glob), or holds a $, a backtick or a { (a variable, command
 #   output, or the {} of find -exec and xargs). Every word is inside one when the text names a hooks
@@ -692,7 +692,8 @@ _g16_hooks_read() {
   if [ "$ctx" = 0 ]; then
     case "$t" in
       *[Hh][Oo][Oo][Kk][Ss]* | *[Ss][Tt][Aa][Tt][Ee]_[Ss][Ee][Tt]* | *_[Ss][Tt][Aa][Tt][Ee]_[Pp][Uu][Tt]* | \
-        *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[\*\?\[\{\(^#]*/*) ;;
+        *[Ss][Tt][Aa][Tt][Ee]_[Rr][Ee][Ss][Ee][Tt]* | *[Ss][Tt][Aa][Tt][Ee]_[Ee][Nn][Ss][Uu][Rr][Ee]* | \
+        *[\*\?\[\{\(^#]*/*) ;;
       *) return 1 ;;
     esac
   fi
