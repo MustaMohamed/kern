@@ -146,7 +146,7 @@ _settings_local_ok() {
   pm=$(cd "$main" 2>/dev/null && pwd -P) && pd=$(cd "$d" 2>/dev/null && pwd -P) || return 1
   [ "$pd" = "$pm/.claude" ] || return 1
   [ -O "$d/kern.local.yml" ] || return 3
-  { git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null || printf 'git failed\n'; } | env LC_ALL=C awk -F '\t' '
+  { git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null || printf '\ngit failed\n'; } | env LC_ALL=C awk -F '\t' '
     $0 == "git failed" { gf = 1; next }
     { p = tolower($2); m = substr($1, 1, 6) }
     m == "160000" && p == ".claude" { bad = 1 }

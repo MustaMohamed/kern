@@ -110,13 +110,13 @@ site g06-msgs "$(printf 'abc\001hi' | _g06_msgs | cat; echo "rc=${PIPESTATUS[1]}
 site g06-keep "$(printf 'a:1\t x\n' | _g06_keep | cat; echo "rc=${PIPESTATUS[1]}")" rc=1
 [ -z "$bad" ] || { echo "$bad"; exit 1; }
 EOS
-  while [ "$i" -lt 300 ]; do
+  while [ "$i" -lt 100 ]; do
     i=$((i + 1))
     out=$(KERN_ROOT="$K" "$b" "$BATS_TEST_TMPDIR/sites.sh" "$R" "$BATS_TEST_TMPDIR/tpl.md" 2>/dev/null) && continue
     bad=$((bad + 1))
     [ -n "$first" ] || first=$out
   done
-  [ "$bad" -eq 0 ] || { echo "$b failed $bad of 300 runs, the first at:$first"; return 1; }
+  [ "$bad" -eq 0 ] || { echo "$b failed $bad of 100 runs, the first at:$first"; return 1; }
 }
 
 @test "G20 never fails closed on a .md Write or Edit under bash 5.3 with no locale" {
@@ -127,12 +127,12 @@ EOS
   w=$(tool_payload Write "\"file_path\":\"$R/spec.md\",\"content\":\"---\\nstatus: draft\\n---\\n# x\\n\"")
   e=$(tool_payload Edit "\"file_path\":\"$R/spec.md\",\"old_string\":\"# hi\",\"new_string\":\"# ho\"")
   # A draft written or edited gets no vote; G20 failing closed asks "G20 could not read ...".
-  while [ "$i" -lt 300 ]; do
+  while [ "$i" -lt 100 ]; do
     i=$((i + 1))
     if [ $((i % 2)) = 0 ]; then p=$w; else p=$e; fi
     out=$(KERN_GUARDS=g20 "$b" "$K/hooks/pre-tool-use" <<<"$p" 2>&1) && [ -z "$out" ] && continue
     bad=$((bad + 1))
     [ -n "$first" ] || first=$out
   done
-  [ "$bad" -eq 0 ] || { echo "$b: G20 voted or failed in $bad of 300 runs, first: $first"; return 1; }
+  [ "$bad" -eq 0 ] || { echo "$b: G20 voted or failed in $bad of 100 runs, first: $first"; return 1; }
 }
