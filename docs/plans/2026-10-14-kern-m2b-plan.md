@@ -5434,7 +5434,7 @@ Gates, fixed before any run (design spec 14 row M2b, and the review rulings):
 | Behaviour | every case passes (two of three valid runs, at most one invalid). From 2026-10-21, the user's "Adopt the stopping rule": a case blocks only when, read on its transcripts, a kern defect fails it in two or more of three runs in two measurements in a row; a grader flip or a case-wording fault stops blocking once its fix lands; a kern duty that two wording rounds did not move gets one structural change, and if it is still under two of three it is reported, not gating (the user's "Known limit, report only"); a fix is confirmed by one full run | yes |
 | Head-to-head | in each category, kern's mean score is at least the strongest other arm's and its mean false alarms are at most that arm's | yes |
 | Standing cost | delta at most 1,300 input tokens | yes |
-| Exec evals (M2a) | every case passes, on a snapshot newer than the last change to commit, finish-branch, prove-it, G1, G2 or G5 | yes |
+| Exec evals (M2a) | every case passes, on a snapshot newer than the last change to commit, finish-branch, prove-it, G1, G2 or G5. From 2026-10-21, the user's "Adopt the stopping rule": a run whose failure is traced to a cause outside kern's text and code is marked invalid by the harness, with its reason, and does not block | yes |
 
 - [ ] **Step 1: Fetch the upstream trees and check every dry run**
 
