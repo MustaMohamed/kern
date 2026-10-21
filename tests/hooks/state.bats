@@ -151,3 +151,58 @@ autopilot: on"
   state_reset s1
   [ "$(state_get s1 voice)" = normal ]
 }
+
+# A read of the state file that fails, as one does when a fork or exec is refused under load, must never
+# reset a state that exists (exec traces of 2026-10-21: autopilot turned off mid-session).
+@test "state_ensure writes the default state only when the session has no state file" {
+  run state_ensure s1
+  [ "$status" -eq 0 ]
+  [ "$(state_get s1 autopilot)" = off ]
+  [ "$(state_get s1 voice)" = normal ]
+  state_set s1 autopilot=on voice=terse
+  run state_ensure s1
+  [ "$status" -eq 0 ]
+  [ "$(state_get s1 autopilot)" = on ]
+  [ "$(state_get s1 voice)" = terse ]
+  # A file kern did not write whole (no voice line) is still the session's state, and stays.
+  printf 'autopilot: on\n' >"$(state_file s1)"
+  run state_ensure s1
+  [ "$status" -eq 1 ]
+  [ "$(sed -n p "$(state_file s1)")" = "autopilot: on" ]
+}
+
+@test "state_ensure tries a read that fails once more, and leaves a file it cannot read as it is" {
+  state_reset s1
+  state_set s1 autopilot=on since=2026-10-12T00:00:00Z
+  f=$(state_file s1)
+  before=$(sed -n p "$f")
+  read_fails awk "$f" 1
+  run state_ensure s1
+  [ "$status" -eq 0 ]
+  [ "$(read_failures awk)" -eq 1 ]
+  read_fails awk "$f"
+  run state_ensure s1
+  [ "$status" -eq 1 ]
+  [ "$(read_failures awk)" -eq 3 ]
+  [ "$(sed -n p "$f")" = "$before" ]
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+  read_fails awk "$f" 0
+  autopilot_on s1
+}
+
+@test "state_ensure leaves a bad id, a symlinked state file and a symlinked state dir alone" {
+  run state_ensure "../x"
+  [ "$status" -eq 2 ]
+  mkdir -p "$(state_dir)" "$BATS_TEST_TMPDIR/elsewhere"
+  printf 'autopilot: on\n' >"$BATS_TEST_TMPDIR/target"
+  ln -s "$BATS_TEST_TMPDIR/target" "$(state_file s1)"
+  run state_ensure s1
+  [ "$status" -eq 2 ]
+  [ "$(sed -n p "$BATS_TEST_TMPDIR/target")" = "autopilot: on" ]
+  rm -rf "$(state_dir)"
+  ln -s "$BATS_TEST_TMPDIR/elsewhere" "$(state_dir)"
+  run state_ensure s2
+  [ "$status" -eq 2 ]
+  [ ! -e "$BATS_TEST_TMPDIR/elsewhere/s2.state" ]
+}

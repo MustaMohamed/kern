@@ -134,6 +134,51 @@ set_autopilot() {
     >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
 }
 
+# read_fails TOOL PATTERN [COUNT]: puts first on PATH a stub TOOL that fails a call with an argument
+# matching the glob PATTERN, as a read fails when a fork or exec is refused under load: exit 2 and a fork
+# error on stderr. It fails the next COUNT such calls, every one when COUNT is left out and none when it
+# is 0, so a later call with COUNT 0 turns it off. Every other call runs the real TOOL, found once, before
+# any stub. Each failed call appends its matching argument to $BATS_TEST_TMPDIR/failbin/TOOL.log.
+read_fails() {
+  local d="$BATS_TEST_TMPDIR/failbin" stub
+  # Built and written with builtins only: a cat or other tool already stubbed here may be the one it
+  # rewrites, and the stub itself runs builtins only, since the tool it stands in for may be one it calls.
+  IFS= read -r -d '' stub <<'STUB' || true
+IFS= read -r real <"$d/$t.real"
+IFS= read -r pat <"$d/$t.match"
+IFS= read -r left <"$d/$t.left"
+if [ "$left" != 0 ]; then
+  for a in "$@"; do
+    case "$a" in
+      $pat)
+        [ "$left" -lt 0 ] || printf '%s\n' "$((left - 1))" >"$d/$t.left"
+        printf '%s\n' "$a" >>"$d/$t.log"
+        printf '%s: fork: Resource temporarily unavailable\n' "$t" >&2
+        exit 2
+        ;;
+    esac
+  done
+fi
+exec "$real" "$@"
+STUB
+  mkdir -p "$d"
+  [ -f "$d/$1.real" ] || command -v "$1" >"$d/$1.real"
+  printf '%s\n' "$2" >"$d/$1.match"
+  printf '%s\n' "${3--1}" >"$d/$1.left"
+  printf "#!/bin/sh\nt='%s' d='%s'\n%s" "$1" "$d" "$stub" >"$d/$1"
+  chmod +x "$d/$1"
+  case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH" ;; esac
+  hash -r
+}
+
+# read_failures TOOL: how many calls the read_fails stub for TOOL has failed.
+read_failures() {
+  local n=0
+  [ -f "$BATS_TEST_TMPDIR/failbin/$1.log" ] || { printf '0\n'; return 0; }
+  while IFS= read -r _; do n=$((n + 1)); done <"$BATS_TEST_TMPDIR/failbin/$1.log"
+  printf '%s\n' "$n"
+}
+
 # fake_gh: puts a stub `gh` first on PATH. FAKE_GH_STATES (comma list) answers `pr list`,
 # FAKE_GH_RC its exit code, FAKE_GH_ME answers `api user`, FAKE_GH_AUTHOR answers `pr view`.
 fake_gh() {

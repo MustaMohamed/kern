@@ -29,7 +29,9 @@ KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
 export CWD KERN_MAIN
 kern_enabled || exit 0
 state_file "$SID" >/dev/null || exit 0
-state_get "$SID" voice >/dev/null 2>&1 || state_reset "$SID"
+# A session with no state file gets the default state. One that exists is kept even when a read of it
+# fails, since a reset there turns autopilot off mid-session.
+state_ensure "$SID"
 
 NOTICE=""
 SHOW_LINE=0

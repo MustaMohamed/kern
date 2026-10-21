@@ -462,3 +462,35 @@ e"
   [ "$(printf '%s' "$output" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).hookSpecificOutput.additionalContext)' | grep -c '^In kern files read by path')" -eq 1 ]
   [[ "$(printf '%s' "$output" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).hookSpecificOutput.additionalContext)')" == *"\${CLAUDE_PLUGIN_ROOT} means $F."* ]] || false
 }
+
+# A read of the state file that fails, as one does when a fork or exec is refused under load, must not
+# reset a state that exists (exec traces of 2026-10-21: autopilot turned off mid-session).
+@test "compact and resume keep an existing state when reading it fails" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  for src in compact resume; do
+    set_autopilot on
+    read_fails awk "$S"
+    start "$src"
+    [ "$status" -eq 0 ]
+    [ "$(sed -n 's/^autopilot: //p' "$S")" = on ] || { echo "$src"; return 1; }
+    [ "$(sed -n 's/^since: //p' "$S")" = 2026-10-12T00:00:00Z ]
+    # A read that fails never reads as autopilot on.
+    [[ "$output" == *"autopilot=off"* ]] || false
+    read_fails awk "$S" 0
+    start "$src"
+    [[ "$output" == *"autopilot=on"* ]] || false
+  done
+}
+
+@test "compact and resume give a session with no state file the default state" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  for src in compact resume; do
+    rm -f "$S"
+    start "$src"
+    [ "$status" -eq 0 ]
+    [ "$(sed -n 's/^voice: //p' "$S")" = normal ] || { echo "$src"; return 1; }
+    [ "$(sed -n 's/^autopilot: //p' "$S")" = off ]
+    [ -n "$(sed -n 's/^since: //p' "$S")" ]
+    [[ "$output" == *"autopilot=off"* ]] || false
+  done
+}

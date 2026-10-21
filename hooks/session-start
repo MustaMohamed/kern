@@ -47,7 +47,8 @@ need() {
 need json.sh json_get json_get_raw json_escape json_ok ti_get
 need settings.sh kern_main_root _settings_files _settings_lookup _settings_ignored _settings_local_ok settings_get
 need settings.sh settings_source settings_keys settings_known_keys settings_unknown_keys policy_for kern_enabled list_has
-need state.sh state_dir state_file state_get state_set _state_put now_iso default_voice state_reset autopilot_denied_by autopilot_on
+need state.sh state_dir state_file state_get state_set _state_put now_iso default_voice state_reset state_ensure
+need state.sh autopilot_denied_by autopilot_on
 need state.sh prompt_hashes
 need render.sh render_template kern_version mode_line autopilot_text settings_summary
 
@@ -107,7 +108,8 @@ kern_enabled || exit 0
 
 if [ -n "$SID" ]; then
   case "$SOURCE" in
-    compact | resume) state_get "$SID" voice >/dev/null 2>&1 || state_reset "$SID" ;;
+    # The state is kept, even when a read of it fails; a session with no state file gets the default.
+    compact | resume) state_ensure "$SID" ;;
     *) state_reset "$SID" ;;
   esac
 fi

@@ -274,3 +274,63 @@ run_prompt() {
   run_prompt "$p"
   [ "$(st voice)" = normal ]
 }
+
+# A read of the state file that fails, as one does when a fork or exec is refused under load, must not
+# reset a state that exists. Exec traces of 2026-10-21 showed a prompt reset a session's state mid-run,
+# which turned autopilot off; the same input replayed offline kept it on.
+@test "a typed prompt keeps an existing state when reading it fails" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  printf 'voice: terse\nsurface: html\nautopilot: on\nsince: 2026-10-12T00:00:00Z\n' >"$S"
+  read_fails awk "$S"
+  submit "next task"
+  [ "$status" -eq 0 ]
+  [ "$(st autopilot)" = on ]
+  [ "$(st since)" = 2026-10-12T00:00:00Z ]
+  [ "$(st voice)" = terse ]
+  [ "$(st surface)" = html ]
+  # The prompt's hashes are still recorded.
+  [ -n "$(st prompt_hashes)" ]
+  # A read that fails never reads as autopilot on.
+  [[ "$output" != *"autopilot ON:"* ]] || false
+  read_fails awk "$S" 0
+  submit "next task"
+  [[ "$output" == *"autopilot ON:"* ]] || false
+}
+
+@test "a state read that fails once is tried again, and the prompt sees the state as it is" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  set_autopilot on
+  read_fails awk "$S" 1
+  submit "next task"
+  [ "$status" -eq 0 ]
+  [ "$(read_failures awk)" -eq 1 ]
+  [ "$(st autopilot)" = on ]
+  [ "$(st since)" = 2026-10-12T00:00:00Z ]
+  [[ "$output" == *"autopilot ON:"* ]] || false
+}
+
+@test "a command expansion keeps an existing state when reading it fails" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  set_autopilot on
+  read_fails awk "$S"
+  expand kern:finish-branch ""
+  [ "$status" -eq 0 ]
+  [ "$(st autopilot)" = on ]
+  [ "$(st since)" = 2026-10-12T00:00:00Z ]
+  [ "$(st voice)" = normal ]
+}
+
+@test "a prompt or a command expansion in a session with no state file gives it the default state" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  rm "$S"
+  submit "next task"
+  [ "$(st voice)" = normal ]
+  [ "$(st surface)" = auto ]
+  [ "$(st autopilot)" = off ]
+  [ -n "$(st since)" ]
+  rm "$S"
+  expand kern:finish-branch ""
+  [ "$(st voice)" = normal ]
+  [ "$(st autopilot)" = off ]
+  [ -n "$(st since)" ]
+}

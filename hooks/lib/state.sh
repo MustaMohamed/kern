@@ -88,6 +88,24 @@ state_reset() {
   _state_put 1 "$1" "voice=$voice" "surface=$surface" "autopilot=off" "since=$(now_iso)"
 }
 
+# state_ensure SID: a session with no state file gets the default state (state_reset). A state file that
+# exists is never reset: a read of it that fails (a fork or exec refused under load) is tried once more,
+# and when that fails too the file is left as it is and each reader fails safe for its own call
+# (autopilot_on reads off, so a guard asks). Exit 0 when the state reads or was written, 1 when an existing
+# file did not read, 2 for a bad id, a symlinked state file or dir (left alone, as state_get refuses
+# them), or a failed write. A failed read's error goes to stderr.
+state_ensure() {
+  local f
+  f=$(state_file "$1") || return 2
+  [ -L "${f%/*}" ] && return 2
+  [ -L "$f" ] && return 2
+  if [ -e "$f" ]; then
+    state_get "$1" voice >/dev/null || state_get "$1" voice >/dev/null || return 1
+    return 0
+  fi
+  state_reset "$1"
+}
+
 # autopilot_denied_by: prints the first settings file (in precedence order) that says `autopilot: denied`.
 # Exit 1 when no layer denies.
 autopilot_denied_by() {
