@@ -155,8 +155,18 @@ test('execute-plan runs its task and final reviews in the foreground', () => {
   assert.ok(s[9].includes('gets a `re-review` with that file, dispatched, saved and recorded as step 8 does'), s[9]);
   assert.ok(s[12].includes('dispatch `kern:task-reviewer` in mode `whole-branch` on `model.final_review` (`run_in_background: false`) with the package'), s[12]);
   assert.ok(s[12].includes('packaged with an `--allow-file` per task, dispatched as the whole-branch review is.'), s[12]);
-  // A worker stays as it was: a wave's implementers run in the background as parallel-work step 4 spawns them.
+  // Step 6 names no run_in_background: a wave's implementers spawn as parallel-work step 4 does, in the background,
+  // and its serial delegate implementer, which step 7 waits on, runs in the foreground by model-selection.md's rule
+  // (Task 16i review, M4).
   assert.ok(!s[6].includes('run_in_background'), s[6]);
+});
+
+test('an Agent call the next step waits on runs in the foreground, by the file every Agent call follows', () => {
+  // Task 16i review, M4: self-review's lanes, recall's miners, plan's and diagnose's investigators and execute-plan's
+  // serial and fix implementers gate their next step and name no run_in_background, so on Claude Code 2.1.304 they
+  // ran in the background. One rule in the file the kernel's Context line names covers each of them.
+  assertContains('skills/execute-plan/references/model-selection.md', ["- Pass `run_in_background: false` when your next step waits on the agent's return; only parallel-work's workers and define's explorers run in the background."]);
+  assertContains('kernel/kernel.md', ['Agent calls pass their role\'s model and effort: {KERN}/execute-plan/references/model-selection.md.']);
 });
 
 test('execute-plan reruns its plan checks on every invocation and writes only missing lines', () => {

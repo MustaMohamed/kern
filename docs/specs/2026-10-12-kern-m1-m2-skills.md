@@ -138,7 +138,7 @@ On only when no settings layer says `autopilot: denied` and the session state sa
 
 ### A10. Model table (`references/model-selection.md`, owned by execute-plan)
 
-Implementer: `haiku` for batched mechanical edits, `sonnet` by default, `opus` for cross-module work or a round-3 fix. Task reviewer `sonnet`. Final review `opus`. Investigator `sonnet`. Transcript miners `haiku`. Each dispatch names its model explicitly, the investigator's included (`model.investigator`) [SP subagent-driven-development:184-219]; `model.<role>` overrides.
+Implementer: `haiku` for batched mechanical edits, `sonnet` by default, `opus` for cross-module work or a round-3 fix. Task reviewer `sonnet`. Final review `opus`. Investigator `sonnet`. Transcript miners `haiku`. Each dispatch names its model explicitly, the investigator's included (`model.investigator`) [SP subagent-driven-development:184-219]; `model.<role>` overrides. A dispatch whose return the next step waits on passes `run_in_background: false`; only parallel-work's workers and define's explorers run in the background. Claude Code 2.1.304 runs an Agent call that omits the parameter in the background, so self-review's lanes, recall's miners, plan's and diagnose's investigators and execute-plan's serial and fix implementers ran there until this rule (Task 16i review, M4). The kernel's Context line sends every Agent call to this file.
 
 ---
 ## B. M1 skills

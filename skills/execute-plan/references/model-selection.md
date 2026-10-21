@@ -17,6 +17,7 @@ Every dispatch names its model and its effort. A `model.<role>` setting override
 ## Rules
 
 - Name the model and pass `effort` in every Agent call; never rely on the agent file's default alone.
+- Pass `run_in_background: false` when your next step waits on the agent's return; only parallel-work's workers and define's explorers run in the background.
 - Effort is the role's `model.<role>.effort`, else the table's. Raise it one step, to `high` at most, for cross-module work or a round-3 fix; keep lookups and transcript mining at `low`.
 - A BLOCKED status may move one tier up once; record it as a `Decision:` line.
 - Cost grows with tier and effort; do not raise a reviewer to fix an implementer problem.
