@@ -6,20 +6,29 @@ state_dir() {
   printf '%s/sessions\n' "${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/kern-kern}"
 }
 
-# state_file SID: path of the session's state file. Exit 2 for an id outside [A-Za-z0-9_-].
-state_file() {
+# _state_path SID: sets _KERN_STATE_PATH to the session's state file, in state_dir. It uses no command
+# substitution: one whose pipe cannot be made (a full fd table) gives status 0 and no output, which no
+# || sees. Exit 2 for an id outside [A-Za-z0-9_-].
+_state_path() {
   local LC_ALL=C
   case "$1" in
     '' | *[!A-Za-z0-9_-]*) return 2 ;;
   esac
-  printf '%s/%s.state\n' "$(state_dir)" "$1"
+  _KERN_STATE_PATH="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/kern-kern}/sessions/$1.state"
+}
+
+# state_file SID: path of the session's state file. Exit 2 for an id outside [A-Za-z0-9_-].
+state_file() {
+  _state_path "$1" || return 2
+  printf '%s\n' "$_KERN_STATE_PATH"
 }
 
 # state_get SID KEY: prints the value. Exit 1 unset, 2 bad id or unsafe file.
 state_get() {
   local f
-  f=$(state_file "$1") || return 2
-  [ -L "$(dirname "$f")" ] && return 2
+  _state_path "$1" || return 2
+  f=$_KERN_STATE_PATH
+  [ -L "${f%/*}" ] && return 2
   [ -L "$f" ] && return 2
   [ -f "$f" ] || return 1
   LC_ALL=C awk -v k="$2" 'index($0, k ": ") == 1 { v = substr($0, length(k) + 3); found = 1 }
@@ -33,35 +42,48 @@ state_set() {
 
 # _state_put FRESH SID KEY=VALUE...: FRESH=1 starts from empty content, ignoring any old file. Keys are
 # checked in the C locale: bash 3.2 matches [a-z] by the caller's collation, which in en_US.UTF-8 takes
-# upper-case letters too.
+# upper-case letters too. The old lines but those of the keys set go straight from awk into the temp
+# file, so a read that fails (a fork or exec refused under load) shows in awk's status, never as an
+# empty read; it is tried once more. When it fails again nothing is written, since the keys not read
+# would be lost, autopilot among them. The keys set follow, a key set twice taking its last value. Exit 2
+# when nothing was written.
 _state_put() {
   local LC_ALL=C
-  local fresh="$1" sid="$2" f dir tmp kv k v content
+  local fresh="$1" sid="$2" f dir tmp kv k v later keys="" keep
   shift 2
-  f=$(state_file "$sid") || return 2
-  dir=$(dirname "$f")
+  _state_path "$sid" || return 2
+  f=$_KERN_STATE_PATH
+  dir=${f%/*}
   (umask 077 && mkdir -p "$dir") || return 2
   [ -L "$dir" ] && return 2
   [ -L "$f" ] && return 2
-  content=""
-  # A read that fails (a fork or exec refused under load) is tried once more. When it fails again, or a
-  # key cannot be merged in, nothing is written: the keys not read would be lost, autopilot among them.
-  if [ "$fresh" = 0 ] && [ -f "$f" ]; then
-    content=$(LC_ALL=C cat "$f") || content=$(LC_ALL=C cat "$f") || return 2
-  fi
   for kv in "$@"; do
     k=${kv%%=*}
     v=${kv#*=}
     case "$k" in '' | *[!a-z_]*) return 2 ;; esac
     case "$v" in *"
 "*) return 2 ;; esac
-    content=$(printf '%s\n' "$content" | LC_ALL=C awk -v k="$k" 'index($0, k ": ") != 1 && $0 != ""') || return 2
-    content="$content
-$k: $v"
+    keys="$keys $k"
   done
   tmp=$(umask 077 && mktemp "$dir/.state.XXXXXX") || return 2
-  printf '%s\n' "$content" | LC_ALL=C sed '/^$/d' >"$tmp" || { rm -f "$tmp"; return 2; }
-  mv -f "$tmp" "$f"
+  [ -n "$tmp" ] || return 2
+  # shellcheck disable=SC2016 # awk text
+  keep='BEGIN { n = split(keys, a, " "); for (i = 1; i <= n; i++) drop[a[i] ": "] = 1 }
+    $0 == "" { next }
+    { for (p in drop) if (index($0, p) == 1) next; print }'
+  if [ "$fresh" = 0 ] && [ -f "$f" ]; then
+    LC_ALL=C awk -v keys="$keys" "$keep" "$f" >"$tmp" || LC_ALL=C awk -v keys="$keys" "$keep" "$f" >"$tmp" ||
+      { rm -f "$tmp"; return 2; }
+  fi
+  for kv in "$@"; do
+    shift
+    k=${kv%%=*}
+    later=0
+    for v in "$@"; do [ "${v%%=*}" = "$k" ] && later=1; done
+    [ "$later" = 1 ] && continue
+    printf '%s: %s\n' "$k" "${kv#*=}" >>"$tmp" || { rm -f "$tmp"; return 2; }
+  done
+  mv -f "$tmp" "$f" || { rm -f "$tmp"; return 2; }
 }
 
 # now_iso: current UTC time, ISO 8601.
@@ -97,10 +119,12 @@ state_reset() {
 # and when that fails too the file is left as it is and each reader fails safe for its own call
 # (autopilot_on reads off, so a guard asks). Exit 0 when the state reads or was written, 1 when an existing
 # file did not read, 2 for a bad id, a symlinked state file or dir (left alone, as state_get refuses
-# them), or a failed write. A failed read's error goes to stderr.
+# them), or a failed write. A failed read's error goes to stderr. Neither the path nor the read is a
+# command substitution, whose failed pipe would read as no file.
 state_ensure() {
   local f
-  f=$(state_file "$1") || return 2
+  _state_path "$1" || return 2
+  f=$_KERN_STATE_PATH
   [ -L "${f%/*}" ] && return 2
   [ -L "$f" ] && return 2
   if [ -e "$f" ]; then

@@ -212,30 +212,74 @@ autopilot: on"
   state_set s1 autopilot=on since=2026-10-12T00:00:00Z
   f=$(state_file s1)
   before=$(sed -n p "$f")
-  read_fails cat "$f"
+  # The awk that copies the old lines but those of the keys set into the new file.
+  read_fails awk 'keys=*'
   run state_set s1 prompt_hashes=1
   [ "$status" -eq 2 ]
-  [ "$(read_failures cat)" -eq 2 ]
+  [ "$(read_failures awk)" -eq 2 ]
   [ "$(sed -n p "$f")" = "$before" ]
   [ -z "$(find "$(state_dir)" -name '.state.*')" ]
   # A read that fails once is tried again, and the write keeps every key.
-  read_fails cat "$f" 1
+  read_fails awk 'keys=*' 1
   state_set s1 prompt_hashes=2
   [ "$(state_get s1 prompt_hashes)" = 2 ]
   [ "$(state_get s1 autopilot)" = on ]
   [ "$(state_get s1 since)" = 2026-10-12T00:00:00Z ]
 }
 
-@test "state_set writes nothing when merging a key into the state fails" {
+@test "state_set exits 2 and leaves no temp file when the rename fails" {
   state_reset s1
-  state_set s1 autopilot=on since=2026-10-12T00:00:00Z
   f=$(state_file s1)
   before=$(sed -n p "$f")
-  # The awk that drops a key's old line before the new one is added.
-  read_fails awk '*index($0, k ": ") != 1*'
-  run state_set s1 prompt_hashes=1
+  read_fails mv "$f"
+  run state_set s1 voice=terse
   [ "$status" -eq 2 ]
-  [ "$(read_failures awk)" -eq 1 ]
   [ "$(sed -n p "$f")" = "$before" ]
   [ -z "$(find "$(state_dir)" -name '.state.*')" ]
+}
+
+@test "state_set keeps the last value of a key set twice, after the keys it keeps" {
+  state_reset s1
+  state_set s1 autopilot=on voice=terse autopilot=off
+  [ "$(state_get s1 autopilot)" = off ]
+  [ "$(grep -c '^autopilot: ' "$(state_file s1)")" -eq 1 ]
+  [ "$(sed -n '$p' "$(state_file s1)")" = "autopilot: off" ]
+  [ "$(sed -n 1p "$(state_file s1)")" = "surface: auto" ]
+}
+
+# A command substitution whose pipe cannot be made, as when the fd table is full, gives status 0 and no
+# output, so no || sees it (review of 2026-10-21). Each substitution in turn is made to fail that way.
+ON_STATE='voice: terse
+surface: html
+autopilot: on
+since: 2026-10-12T00:00:00Z'
+
+@test "state_ensure never resets an existing state when a command substitution's pipe fails" {
+  local n=1 f
+  mkdir -p "$(state_dir)"
+  f=$(state_file s1)
+  while [ "$n" -le 40 ]; do
+    printf '%s\n' "$ON_STATE" >"$f"
+    (pipe_fails "$n" state_ensure s1) 2>/dev/null || true
+    [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || break
+    [ "$(sed -n p "$f")" = "$ON_STATE" ] || { echo "reset when substitution $n failed:"; sed -n p "$f"; return 1; }
+    n=$((n + 1))
+  done
+  [ "$n" -le 40 ]
+}
+
+@test "state_set never shrinks the state when a command substitution's pipe fails" {
+  local n=1 f got
+  mkdir -p "$(state_dir)"
+  f=$(state_file s1)
+  while [ "$n" -le 40 ]; do
+    printf '%s\n' "$ON_STATE" >"$f"
+    (pipe_fails "$n" state_set s1 prompt_hashes=123) 2>/dev/null || true
+    [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || break
+    got=$(grep -v '^prompt_hashes: 123$' "$f" || true)
+    [ "$got" = "$ON_STATE" ] || { echo "shrunk when substitution $n failed:"; sed -n p "$f"; return 1; }
+    [ -z "$(find "$(state_dir)" -name '.state.*')" ] || { echo "temp file left at $n"; return 1; }
+    n=$((n + 1))
+  done
+  [ "$n" -le 40 ]
 }

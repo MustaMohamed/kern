@@ -288,8 +288,8 @@ run_prompt() {
   [ "$(st since)" = 2026-10-12T00:00:00Z ]
   [ "$(st voice)" = terse ]
   [ "$(st surface)" = html ]
-  # The prompt's hashes are still recorded.
-  [ -n "$(st prompt_hashes)" ]
+  # No write merges into a state it cannot read, so the prompt's hashes are not recorded either.
+  [ -z "$(st prompt_hashes)" ]
   # A read that fails never reads as autopilot on.
   [[ "$output" != *"autopilot ON:"* ]] || false
   read_fails awk "$S" 0
@@ -323,8 +323,10 @@ run_prompt() {
 @test "a prompt whose hashes cannot be merged into the state leaves the state whole" {
   S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   set_autopilot on
-  read_fails cat "$S"
+  # The awk that merges the prompt's hashes into the state.
+  read_fails awk 'keys=*'
   submit "next task"
+  [ "$(read_failures awk)" -eq 2 ]
   [ "$status" -eq 0 ]
   [ "$(st autopilot)" = on ]
   [ "$(st since)" = 2026-10-12T00:00:00Z ]

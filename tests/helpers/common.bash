@@ -171,6 +171,47 @@ STUB
   hash -r
 }
 
+# pipe_fails N CMD...: runs CMD, a shell function, so that the Nth command substitution it starts cannot
+# make its pipe, as when the fd table is full: bash then gives that substitution status 0 and no output.
+# A DEBUG trap, inherited by functions and subshells, counts each command whose text holds `$(`, fills
+# every free fd but one just before the Nth, and frees them at the next command. Each process counts on
+# its own: a subshell counts from where its parent was. Touches $BATS_TEST_TMPDIR/pipe-failed when the
+# Nth one came. Run it in a subshell: it lowers the soft fd limit to 64.
+pipe_fails() {
+  _pf_n=$1 _pf_seen=0 _pf_full=0 _pf_free=""
+  shift
+  ulimit -S -n 64 || return 1
+  local x=3
+  while [ "$x" -lt 64 ]; do
+    [ -e "/dev/fd/$x" ] || _pf_free="$_pf_free $x"
+    x=$((x + 1))
+  done
+  rm -f "$BATS_TEST_TMPDIR/pipe-failed"
+  set -T
+  trap '_pf_step' DEBUG
+  "$@"
+}
+_pf_step() {
+  local x first=1
+  if [ "$_pf_full" = 1 ]; then
+    for x in $_pf_free; do eval "exec $x<&-"; done
+    _pf_full=2
+  fi
+  case "$BASH_COMMAND" in
+    *'$('*)
+      [ "$_pf_full" = 0 ] || return 0
+      _pf_seen=$((_pf_seen + 1))
+      [ "$_pf_seen" = "$_pf_n" ] || return 0
+      : >"$BATS_TEST_TMPDIR/pipe-failed"
+      for x in $_pf_free; do
+        if [ "$first" = 1 ]; then first=0; continue; fi
+        eval "exec $x</dev/null"
+      done
+      _pf_full=1
+      ;;
+  esac
+}
+
 # read_failures TOOL: how many calls the read_fails stub for TOOL has failed.
 read_failures() {
   local n=0
