@@ -40,6 +40,8 @@ test('an explicit approval waiver takes the fast path, as "quick and clear" does
   assert.ok(s[1].includes("when the user's own words call the task quick and clear, or explicitly waive approval: no design, spec or approval."), s[1]);
   // Task 16g review, M4: "Don't ask me questions" leaves no question to ask, so a missing fact becomes kern's assumption.
   assert.ok(s[1].includes('under a waiver, ask nothing: say it in that line, a missing fact as your assumption.'), s[1]);
+  // Task 16i review, I1: the carve-out reads as implement's does, so "add a double(n) export" keeps the fast path.
+  assert.ok(s[1].includes('A change to an existing public API (not a new export), schema or authorization, or a missing fact that changes the build: say so, and ask whether to keep it'), s[1]);
 });
 
 test('the fast-path build line is a sentence of its own, after the reads and before any edit, in a fixed form', () => {

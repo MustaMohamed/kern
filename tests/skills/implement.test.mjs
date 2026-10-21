@@ -28,7 +28,9 @@ test('implement runs define step 1\'s checks for a task with no agreed design, a
   // never met define's stored-data check; pressure-define-skip-approval run 2 worked around a wt-new exit 2
   // (task-16-diagnosis B2 and X1).
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes('A public API, stored data or authorization change: say so, and ask whether to keep the fast path'), s[1]);
+  // Task 16i review, I1: workflow-define-fast-path adds a double(n) export, and the skills spec expects the fast path
+  // for it, so a new export is not a public API change; only a contract callers outside the repo depend on is.
+  assert.ok(s[1].includes('A change to an existing public API (not a new export), stored data or authorization: say so, and ask whether to keep the fast path'), s[1]);
   assert.ok(s[2].includes('`wt-new` exit 2: say why and ask'), s[2]);
 });
 
