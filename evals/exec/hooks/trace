@@ -229,7 +229,8 @@ append() {
 view >"$TRACE_WORK/view" 2>/dev/null
 TRACE_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 TRACE_START=$(now_ms)
-# A subshell that execs the command gives it the environment, SHLVL included, it gets without the trace.
+# A subshell that execs the command gives it the environment it gets without the trace, but for SHLVL:
+# under bash 5 the hook sees it one higher (bash 3.2 gives the same value). kern reads no SHLVL.
 (exec "$@") <"$TRACE_WORK/in" >"$TRACE_WORK/out" 2>"$TRACE_WORK/err"
 TRACE_RC=$?
 TRACE_END=$(now_ms)
