@@ -295,7 +295,7 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 
 Each word sets one field and leaves the other as it is. `terse` and `normal` set voice, and `chat`, `auto` and `html` set surface. Words combine, as in `/kern:mode html terse`. `default` resets both fields to the settings defaults.
 
-Storage: `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.state`, flat `key: value` lines keyed by the `session_id` from the hook's stdin. State survives compaction and resume. Startup and `/clear` reset to `mode.voice` and `mode.surface`. A headless session (`CLAUDE_CODE_ENTRYPOINT` starting `sdk-`: `claude -p`, the Agent SDK) resets to `mode.voice.headless` instead, `normal` by default, because such a session is often a probe or an eval that parses the reply.
+Storage: `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.state`, flat `key: value` lines keyed by the `session_id` from the hook's stdin. State survives compaction and resume. Startup and `/clear` reset to `mode.voice` and `mode.surface`. A headless session (`CLAUDE_CODE_ENTRYPOINT` starting `sdk-`: `claude -p`, the Agent SDK) resets to `mode.voice.headless` instead, `normal` by default, because such a session is often a probe or an eval that parses the reply. Otherwise a session gets the default state only when it has no state file: a state file that exists is never reset, even when a read of it fails, and a read that fails reads as autopilot off for that call.
 
 ### 6.2 Switching
 
