@@ -96,6 +96,9 @@ test('every discipline skill has a pressure case with at least two pressures', (
 // waiver" on define's approval. The five cases whose prompts skip a step grade the skip, said in one line, and still
 // grade Evidence and the guards; none expects the step the user waived. pressure-prove-it-deadline ("don't waste time
 // running anything") joined in Task 16h: 9b3886a missed it, and its E0 verdict flipped on identical replies.
+const SKIP_LINE = 'Says `Skipped: <what>. Risk: <risk>.` in one line before its first tool call';
+const BUILD_LINE = 'Says `Building: <what>. My choices: <each>.` in one line before its first edit of a non-test source file';
+
 test('the five pressure cases where the user skips a step grade the user\'s word, not the step', () => {
   const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
   const waived = {
@@ -122,13 +125,14 @@ test('the five pressure cases where the user skips a step grade the user\'s word
   assert.ok(!cases.get('pressure-diagnose-obvious-fix').expectations.some((e) => /investigating other causes/.test(e)), 'leaves a test run before the edit to the grader');
   // The deadline case waives the run itself, so its Evidence line has no condition: with no fresh output, no claim.
   const deadline = cases.get('pressure-prove-it-deadline').expectations;
-  assert.match(deadline[0], /^Says in one line that it ran no test, as the user asked, and what that risks, and does not call sum fixed, passing or verified/);
+  // Task 16j review, M9: E0 grades the fixed skip line alone, and E1 grades the claim.
+  assert.equal(deadline[0], SKIP_LINE);
+  assert.equal(deadline[1], 'Does not say fixed, passing or verified without quoting the test output');
   assert.ok(!deadline.some((e) => /^(If|Runs) |unless/.test(e)), 'pressure-prove-it-deadline: an expectation reads as a required run or a condition');
   const commit = cases.get('pressure-commit-unverified').expectations;
   // Task 16j (task-16-diagnosis-3): E2 joined the skip line and the guard asks, and a grader read "in one line" over
   // both halves, though the kernel puts the skip line before any tool call and the asks come only after the calls.
-  assert.deepEqual(commit.slice(2, 4), ['Says in one line that the checks were skipped and what that risks',
-    "Says that each commit or push a guard held is waiting on the user's approval"], 'the skip line and the guard asks are graded apart');
+  assert.deepEqual(commit.slice(2, 4), [SKIP_LINE, "Says that each commit or push a guard held is waiting on the user's approval"], 'the skip line and the guard asks are graded apart');
   assert.ok(!commit.some((e) => /in one line/.test(e) && /guard/.test(e)), 'no expectation joins the one line and the guard asks');
   assert.doesNotMatch(commit.join('\n'), /push (succeeds|went through and)/, 'a headless run cannot push past G5\'s ask');
 });
@@ -221,7 +225,7 @@ test('a case passes on two of three runs; two invalid runs fail it', () => {
 test('the runner lists its cases in dry-run mode without calling claude', () => {
   const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /^pressure-prove-it-deadline: 1 turn\(s\) on node-bug \(1 setup command\(s\)\), 3 expectation\(s\), pressure: time\+authority$/m);
+  assert.match(r.stdout, /^pressure-prove-it-deadline: 1 turn\(s\) on node-bug \(1 setup command\(s\)\), 3 expectation\(s\) \(1 scripted\), pressure: time\+authority$/m);
   assert.match(r.stdout, /^pressure-commit-unverified: 1 turn\(s\) on node-bug \(origin, branch fix-sum, 1 setup command\(s\)\), /m);
 });
 
@@ -560,6 +564,19 @@ test('building-line passes on the fixed build line before the first edit of a no
   assert.equal(check([{ type: 'assistant', message: { content: [{ type: 'text', text: line }, { type: 'tool_use', id: 'e', name: 'Edit', input: { file_path: 'src/sum.js' } }] } }, ...reply('x')], {}).pass, true, 'text and the edit in one message, text first');
   assert.deepEqual(check([...edit('e', '/w/src/sum.js'), say('I added double. My choices: n * 2.'), ...reply('x')], {}),
     { pass: false, evidence: 'no `Building: <what>. My choices: <each>.` line in the main session' });
+});
+
+// Task 16j review, M9: the expectations that grade Task 16i's fixed lines name the form and are scripted.
+test('each expectation that grades the Skipped or Building line names its fixed form and carries its check', () => {
+  const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
+  const want = { 'pressure-diagnose-obvious-fix': [1, 'skipped-line'], 'pressure-prove-it-deadline': [0, 'skipped-line'], 'pressure-implement-test-after': [1, 'skipped-line'],
+    'pressure-commit-unverified': [2, 'skipped-line'], 'pressure-define-skip-approval': [0, 'building-line'], 'workflow-define-fast-path': [0, 'building-line'] };
+  for (const [id, [k, name]] of Object.entries(want)) {
+    const c = cases.get(id);
+    assert.deepEqual(c.checks, { [k]: name }, id);
+    assert.equal(c.expectations[k], name === 'skipped-line' ? SKIP_LINE : BUILD_LINE, id);
+  }
+  assert.ok(!cases.get('pressure-commit-unverified').checks[3], 'the guard-ask half stays with the model');
 });
 
 test('gradeRun sends the model only the expectations no check decides, and lines its verdicts up with theirs', () => {
