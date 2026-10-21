@@ -103,7 +103,9 @@ _KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
 # _settings_ignored FILE KEY VALUE: exit 0 when the layer FILE must not set KEY to VALUE. The committed
 # project file cannot turn kern off, cannot loosen a *.policy key to auto or rebase.push to autopilot:
 # it may only tighten. Such a value reads as unset, so a lower layer or the default applies. The local
-# file loosens only while it is the user's own untracked file: see _settings_local_ok.
+# file loosens only while it is the user's own untracked file: see _settings_local_ok. Exit 1 when the
+# value applies, 2 when git cannot tell whether the local file is the user's own: its loosening value
+# then counts as unread, as a layer that could not be read does.
 _settings_ignored() {
   case "$1" in "$HOME/.claude/kern.yml") return 1 ;; esac
   case "$2" in
@@ -113,27 +115,44 @@ _settings_ignored() {
     *) return 1 ;;
   esac
   case "$1" in
-    */kern.local.yml) ! _settings_local_ok "${1%/.claude/kern.local.yml}" ;;
+    */kern.local.yml)
+      _settings_local_ok "${1%/.claude/kern.local.yml}"
+      case $? in
+        0) return 1 ;;
+        1) return 0 ;;
+        *) return 2 ;;
+      esac
+      ;;
     *) return 0 ;;
   esac
 }
 
 # _settings_local_ok MAIN: exit 0 when MAIN/.claude/kern.local.yml is the user's own untracked file. A
 # clone can ship it under another shape, so all of these must hold: the file is a regular file, not a
-# symlink; .claude is a real directory (no symlink, no .git inside, no gitlink in the index) whose
-# physical path is MAIN's own .claude; and git does not track the file, matched in any case. One git
-# call, made only for a loosening value.
+# symlink, owned by the user; .claude is a real directory (no symlink, no .git inside, no gitlink in the
+# index) whose physical path is MAIN's own .claude; and git does not track the file, matched in any
+# case. One git call, made only for a loosening value. Exit 1 when one of these fails, 2 when git cannot
+# answer: a repository git refuses (dubious ownership, git unable to run) proves nothing, so git's own
+# status counts, through pipefail, not only awk's.
 _settings_local_ok() {
   local main="$1" d="$1/.claude" pm pd
-  [ -f "$d/kern.local.yml" ] && [ ! -L "$d/kern.local.yml" ] || return 1
+  [ -f "$d/kern.local.yml" ] && [ ! -L "$d/kern.local.yml" ] && [ -O "$d/kern.local.yml" ] || return 1
   [ -d "$d" ] && [ ! -L "$d" ] && [ ! -e "$d/.git" ] && [ ! -L "$d/.git" ] || return 1
   pm=$(cd "$main" 2>/dev/null && pwd -P) && pd=$(cd "$d" 2>/dev/null && pwd -P) || return 1
   [ "$pd" = "$pm/.claude" ] || return 1
-  git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null | env LC_ALL=C awk -F '\t' '
-    { p = tolower($2); m = substr($1, 1, 6) }
-    m == "160000" && p == ".claude" { bad = 1 }
-    p == ".claude/kern.local.yml" { bad = 1 }
-    END { exit bad }'
+  (
+    set -o pipefail
+    git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null | env LC_ALL=C awk -F '\t' '
+      { p = tolower($2); m = substr($1, 1, 6) }
+      m == "160000" && p == ".claude" { bad = 1 }
+      p == ".claude/kern.local.yml" { bad = 1 }
+      END { exit bad }'
+  )
+  case $? in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) return 2 ;;
+  esac
 }
 
 # _settings_read FILE KEY: sets _KERN_SV to KEY's value in FILE. Exit 0 found, 1 FILE does not set KEY,
@@ -209,7 +228,14 @@ settings_get() {
         done
         ;;
       *)
-        _settings_ignored "$f" "$1" "$v" && continue
+        _settings_ignored "$f" "$1" "$v"
+        case $? in
+          0) continue ;;
+          2)
+            unread=1
+            continue
+            ;;
+        esac
         if [ "$unread" = 1 ]; then
           case "$strict" in
             policy) [ "$v" = deny ] || v=unknown ;;
@@ -271,7 +297,8 @@ settings_source() {
     [ -f "$f" ] || continue
     v=$(_settings_lookup "$f" "$1") || continue
     case "$_KERN_UNION_KEYS" in *" $1 "*) out="${out:+$out, }$f"; continue ;; esac
-    _settings_ignored "$f" "$1" "$v" && continue
+    _settings_ignored "$f" "$1" "$v"
+    [ $? = 1 ] || continue
     printf '%s\n' "$f"
     return 0
   done <<EOT

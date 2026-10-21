@@ -103,3 +103,64 @@ stale() {
   decide "$P" "curl -s https://example.com"
   [ "$d" = none ] || { echo "$output"; return 1; }
 }
+
+# A kern.local.yml loosens only while it is the user's own untracked file, which only git can prove.
+# In a repository git refuses, a committed one (a clone's) must not turn kern off; nor may an untracked
+# one whose status git cannot tell (re-review 2 of 2026-10-21).
+protect() {
+  printf 'protected_targets: prod.example.com\n' >"$HOME/.claude/kern.yml"
+}
+
+@test "a committed kern.local.yml never turns kern off in a repository git refuses" {
+  protect
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  git -C "$R" add -f .claude/kern.local.yml
+  git -C "$R" commit -q -m "chore: local settings"
+  set_autopilot off
+  decide "$R" "ssh prod.example.com"
+  [ "$d" = deny ] || { echo "git works: $output"; return 1; }
+  refuse
+  decide "$R" "ssh prod.example.com"
+  [ "$d" = deny ] || { echo "$output"; return 1; }
+  decide "$R" "git commit -m 'feat: x'"
+  [ "$d" != none ] || { echo "commit: $output"; return 1; }
+  decide "$R" "git push origin feat/x"
+  [ "$d" != none ] || { echo "push: $output"; return 1; }
+}
+
+@test "an untracked kern.local.yml whose status git cannot tell loosens nothing" {
+  protect
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  set_autopilot off
+  # git works: the user's own untracked file turns kern off.
+  decide "$R" "ssh prod.example.com"
+  [ "$d" = none ] || { echo "git works: $output"; return 1; }
+  refuse
+  decide "$R" "ssh prod.example.com"
+  [ "$d" = deny ] || { echo "$output"; return 1; }
+}
+
+@test "with git unable to run, a kern.local.yml loosens nothing" {
+  protect
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  git -C "$R" add -f .claude/kern.local.yml
+  git -C "$R" commit -q -m "chore: local settings"
+  mkdir -p "$BATS_TEST_TMPDIR/nogit"
+  printf '#!/bin/sh\necho "xcrun: error: invalid active developer path" >&2\nexit 1\n' >"$BATS_TEST_TMPDIR/nogit/git"
+  chmod +x "$BATS_TEST_TMPDIR/nogit/git"
+  set_autopilot off
+  PATH="$BATS_TEST_TMPDIR/nogit:$PATH" decide "$R" "ssh prod.example.com"
+  [ "$d" = deny ] || { echo "$output"; return 1; }
+  PATH="$BATS_TEST_TMPDIR/nogit:$PATH" decide "$R" "git push origin feat/x"
+  [ "$d" != none ] || { echo "push: $output"; return 1; }
+}
+
+@test "under a stale .git file, a kern.local.yml is not read and kern stays on" {
+  protect
+  stale "$BATS_TEST_TMPDIR/plain"
+  mkdir -p "$BATS_TEST_TMPDIR/plain/.claude"
+  printf 'kern: off\n' >"$BATS_TEST_TMPDIR/plain/.claude/kern.local.yml"
+  set_autopilot off
+  decide "$BATS_TEST_TMPDIR/plain/sub" "ssh prod.example.com"
+  [ "$d" = deny ] || { echo "$output"; return 1; }
+}
