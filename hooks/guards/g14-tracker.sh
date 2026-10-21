@@ -81,8 +81,8 @@ _g14_mcp() {
     IFS= read -r plain
   } <<EOT
 $(printf '%s\n%s\n%s\n' "${rest%%__*}" "$name" "$name" |
-    LC_ALL=C sed '2s/\([a-z0-9]\)\([A-Z]\)/\1 \2/g; 2s/\([A-Z]\)\([A-Z][a-z]\)/\1 \2/g' |
-    LC_ALL=C tr '[:upper:]' '[:lower:]')
+    env LC_ALL=C sed '2s/\([a-z0-9]\)\([A-Z]\)/\1 \2/g; 2s/\([A-Z]\)\([A-Z][a-z]\)/\1 \2/g' |
+    env LC_ALL=C tr '[:upper:]' '[:lower:]')
 EOT
   for first in ${words//[!$_G14_ALNUM]/ }; do break; done
   case " $KERN_G14_READS " in *" $first "*) _g14_is_write "$words $plain" "$KERN_G14_STRONG" || return 0 ;; esac

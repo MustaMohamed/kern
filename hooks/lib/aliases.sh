@@ -267,7 +267,7 @@ aliases_load() {
       return 0
     fi
   fi
-  out=$(set -o pipefail; head -c 4194304 2>/dev/null <"$snap" | LC_ALL=C awk -v sq="'" "$_ALIASES_AWK" 2>/dev/null) || return 0
+  out=$(set -o pipefail; head -c 4194304 2>/dev/null <"$snap" | env LC_ALL=C awk -v sq="'" "$_ALIASES_AWK" 2>/dev/null) || return 0
   _alias_table <<<"$out"
   # A new file in the state dir, then a rename over the cache, so a planted symlink is never written through.
   if [ -n "$cache" ] && (umask 077 && mkdir -p "$dir") 2>/dev/null && [ ! -L "$dir" ] &&
@@ -334,7 +334,7 @@ alias_expand() {
         t=${t%+}
         case "$t" in '' | [0123456789]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;; esac
         { IFS= read -r pre || :; IFS= read -r w || :; IFS= read -r rest || :; } <<EOF
-$(printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_ALIAS_HEAD_AWK")
+$(printf '%s' "$1" | env LC_ALL=C awk -v sq="'" "$_ALIAS_HEAD_AWK")
 EOF
         [ -n "$w" ] || return 1
         rest="$w$rest"

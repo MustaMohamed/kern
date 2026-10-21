@@ -304,7 +304,7 @@ guard_g00() {
   # _GW_QB asks git_words for each quoted here-doc body that may hold an array subscript, as a \035
   # record only this judge reads. It is set in the substitution subshell, so no other guard gets one.
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
-  out=$(set -o pipefail; _GW_QB=1; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G00_AWK") || out=""
+  out=$(set -o pipefail; _GW_QB=1; git_words "$cmd" | env LC_ALL=C awk -v sq="'" "$_GW_AWK$_G00_AWK") || out=""
   while IFS= read -r line; do
     case "$line" in
       .) seen=1 ;;

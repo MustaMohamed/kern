@@ -52,7 +52,7 @@ EOT
 # ${x//[...]/} is cubic on long text in a UTF-8 locale. Text with none of them is kept as is.
 _g13_flat() {
   case "$1" in
-    *[\"\'\\]*) _G13_FLAT=$(printf '%s' "$1" | LC_ALL=C tr -d '\\"\047') ;;
+    *[\"\'\\]*) _G13_FLAT=$(printf '%s' "$1" | env LC_ALL=C tr -d '\\"\047') ;;
     *) _G13_FLAT=$1 ;;
   esac
 }
@@ -60,24 +60,30 @@ _g13_flat() {
 # _g13_names TEXT: exit 0 when TEXT holds a client or transfer name G13 reads, in any case (nc only as
 # a whole word: as a substring it is in too many commands).
 _g13_names() {
-  # [!A-Za-z0-9_-] follows the locale's collation in bash 3.2: in en_US.UTF-8 it leaves out letters
-  # such as e-acute, which the C locale reads as non-word bytes.
-  local LC_ALL=C
   case "$1" in
     *[Ss][Ss][Hh]* | *[Ss][Cc][Pp]* | *[Ff][Tt][Pp]* | *[Rr][Ss][Yy][Nn][Cc]* | *[Mm][Yy][Ss][Qq][Ll]* | \
       *[Mm][Aa][Rr][Ii][Aa][Dd][Bb]* | *[Pp][Ss][Qq][Ll]* | *[Ss][Qq][Ll][Ii][Tt][Ee]* | *[Ss][Qq][Ll][Cc][Mm][Dd]* | \
       *[Pp][Gg]_* | *[Pp][Ll][Ii][Nn][Kk]* | *[Mm][Yy][Cc][Ll][Ii]* | *[Pp][Gg][Cc][Ll][Ii]* | *[Uu][Ss][Qq][Ll]* | \
       *[Ll][Ii][Tt][Ee][Cc][Ll][Ii]* | *[Cc][Uu][Rr][Ll]* | *[Ww][Gg][Ee][Tt]* | *[Ss][Mm][Bb]* | *[Mm][Oo][Ss][Hh]* | \
       *[Pp][Ww][Ss][Hh]* | *[Pp][Oo][Ww][Ee][Rr][Ss][Hh][Ee][Ll][Ll]* | *[Nn][Cc][Aa][Tt]* | *[Nn][Ee][Tt][Cc][Aa][Tt]* | \
-      *[Tt][Ee][Ll][Nn][Ee][Tt]* | *[Ss][Qq][Ss][Hh]* | *[Ii][Ss][Qq][Ll]* | [Nn][Cc] | [Nn][Cc][!A-Za-z0-9_-]* | \
-      *[!A-Za-z0-9_-][Nn][Cc] | *[!A-Za-z0-9_-][Nn][Cc][!A-Za-z0-9_-]*) return 0 ;;
+      *[Tt][Ee][Ll][Nn][Ee][Tt]* | *[Ss][Qq][Ss][Hh]* | *[Ii][Ss][Qq][Ll]* | [Nn][Cc]) return 0 ;;
+  esac
+  # nc as a whole word: a byte before and after it that is not a word byte, or the text's end. The word
+  # bytes are listed: a range such as A-Z follows the locale's collation in bash 3.2, which in en_US.UTF-8
+  # leaves out letters such as e-acute, and a `local LC_ALL=C` crashes bash 5.3 now and then (state.sh).
+  case "$1" in
+    [Nn][Cc][!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]* | \
+      *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-][Nn][Cc] | \
+      *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-][Nn][Cc][!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]*)
+      return 0
+      ;;
   esac
   return 1
 }
 
 # _g13_unescape CMD: CMD with the JSON escapes \u0000 to \u007f decoded (ti_get leaves \uXXXX as is).
 _g13_unescape() {
-  printf '%s' "$1" | LC_ALL=C awk '
+  printf '%s' "$1" | env LC_ALL=C awk '
     BEGIN { for (i = 0; i < 128; i++) hex[sprintf("%04x", i)] = sprintf("%c", i) }
     { buf = buf (NR > 1 ? "\n" : "") $0 }
     END {
@@ -93,7 +99,7 @@ _g13_unescape() {
 # _g13_join CMD: CMD with each backslash-newline the shell drops removed (one an even run of
 # backslashes ends stays), so a continued line reads as git_words reads it.
 _g13_join() {
-  printf '%s' "$1" | LC_ALL=C awk '
+  printf '%s' "$1" | env LC_ALL=C awk '
     NR > 1 { printf "%s", sep }
     {
       if (match($0, /\\+$/) && RLENGTH % 2 == 1) { printf "%s", substr($0, 1, length($0) - 1); sep = "" }
@@ -152,7 +158,7 @@ _g13_upstream() {
 _g13_judge() {
   local why out
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
-  if ! out=$(printf '%s' "$1" | G13_TG="$2" G13_FED="$3" G13_CMD="$4" G13_UP="$5" LC_ALL=C \
+  if ! out=$(printf '%s' "$1" | G13_TG="$2" G13_FED="$3" G13_CMD="$4" G13_UP="$5" env LC_ALL=C \
     awk -v sq="'" "$_GW_AWK$_G13_AWK$_G13_SQL_AWK$_G13_XFER_AWK" 2>&1); then
     vote deny G13 "the protected_targets check failed: ${out%%$'\n'*}"
     return 0

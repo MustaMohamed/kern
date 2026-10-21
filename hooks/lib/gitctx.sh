@@ -470,7 +470,7 @@ git_words() {
   # blanks). So an expansion never changes the context a record of the command is read in, such as a
   # cd before it: it can only add votes.
   if [ -z "${_GW_IN-}" ] && [ -n "${KERN_ALIASES-}" ]; then
-    _GW_IN=1 git_words "$1" | LC_ALL=C awk '/^\t/ { a[++n] = substr($0, 2); next } { print } END { for (i = 1; i <= n; i++) print a[i] }'
+    _GW_IN=1 git_words "$1" | env LC_ALL=C awk '/^\t/ { a[++n] = substr($0, 2); next } { print } END { for (i = 1; i <= n; i++) print a[i] }'
     return
   fi
   _split_words "$1" | while IFS= read -r seg; do
@@ -495,7 +495,7 @@ git_words() {
     # followed the head-word chain.
     if [ -z "${_GW_NOALIAS-}" ] && declare -F alias_expand >/dev/null && alias_expand "$seg"; then
       _GW_NOALIAS=1
-      git_words "$ALIAS_EXP" | LC_ALL=C sed $'s/^/\t/'
+      git_words "$ALIAS_EXP" | env LC_ALL=C sed $'s/^/\t/'
       _GW_NOALIAS=
     fi
     # shellcheck disable=SC2016 # a literal $( in the text
@@ -512,7 +512,7 @@ git_words() {
     # One tr pass strips the quotes, and only when the word holds one: ${first//[...]/} is cubic in
     # the word's length on bash 3.2 in a UTF-8 locale.
     first=${seg%%[[:space:]]*}
-    case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+    case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | env LC_ALL=C tr -d "\"'\\\\") ;; esac
     case "/$first" in
       *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
         */noglob | */nocorrect | */coproc | */repeat | \
@@ -526,7 +526,7 @@ git_words() {
     # read by the rules of bash and of zsh. Each is split on its own, so one cannot quote the other away.
     # The awk pass fails closed ($KERN_UNREAD, which G00 denies) if it ever errors; its false is masked by
     # the while loop below, so only the record reaches git_words' caller.
-    { printf '%s' "$seg" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+    { printf '%s' "$seg" | env LC_ALL=C awk -v sq="'" "$_GW_AWK"'
       { buf = buf (NR > 1 ? "\037" : "") $0 }
       END {
         sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k])
@@ -556,7 +556,7 @@ git_words() {
 # An awk error prints $KERN_UNREAD; the false after it is masked by the while loop that reads this
 # output in git_words, so only the record, not the exit status, reaches git_words' caller.
 _subst_bodies() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" -v kd="${2:-t}" "$_GW_SCAN"'
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v kd="${2:-t}" "$_GW_SCAN"'
     function sc_lt(i, cs) { return i }
     function sc_nl(i) { return i }
     { buf = buf (NR > 1 ? " " : "") $0 }
@@ -583,7 +583,7 @@ _subst_bodies() {
 # never closes keeps the rest of the text in its record; that text is then read flat too, split at each
 # separator, quoted or not, so a quote the scanner misreads cannot hide the commands after it.
 _split_words() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" -v qb="${_GW_QB-}" "$_GW_AWK$_GW_SCAN"'
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v qb="${_GW_QB-}" "$_GW_AWK$_GW_SCAN"'
     # emit(s): prints the record s. In the flat reading (fl) a record printed already is left out.
     function emit(s) {
       gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s)
@@ -755,7 +755,7 @@ _split_words() {
 # starts a new word unless it follows an fd number or another operator: `main>/dev/null` gives
 # `main` and `>/dev/null`, while `2>&1` stays whole.
 _shell_words() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     { buf = buf (NR > 1 ? "\037" : "") $0 }
     END { sw(buf); for (k = 1; k <= sw_n; k++) print sw_w[k] }'
 }
@@ -771,7 +771,7 @@ _shell_words() {
 # prefix such as --ch) takes no value, so the word after it is read as the command name; G1 and G2
 # still ask for a later git or gh.
 _cmd_words() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     { buf = buf (NR > 1 ? "\037" : "") $0 }
     END { sw(buf); cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k]); for (k = 1; k <= cw_n; k++) print cw_w[k] }'
 }
@@ -786,7 +786,7 @@ _cmd_words() {
 # words.
 cmd_mod() {
   case "$1" in *noglob* | *nocorrect* | *coproc* | *repeat* | *[\"\'\\]*) ;; *) return 1 ;; esac
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     { buf = buf (NR > 1 ? "\037" : "") $0 }
     END {
       sw(buf); cw_reset()
@@ -804,7 +804,7 @@ cmd_mod() {
 # G5 and G6 judge where git would run without a move as well, so they count such a cd as a move.
 cmd_plain() {
   case "$1" in cd | cd[[:space:]]* | pushd | pushd[[:space:]]* | popd | popd[[:space:]]*) return 0 ;; esac
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     { buf = buf (NR > 1 ? "\037" : "") $0 }
     END {
       sw(buf)

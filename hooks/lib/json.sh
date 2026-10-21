@@ -74,19 +74,19 @@ END {
 
 # json_get KEY: decoded string value of the first "KEY": whose value is a string.
 json_get() {
-  printf '%s' "${KERN_INPUT-}" | LC_ALL=C awk -v key="$1" -v mode=str "$_KERN_JSON_AWK"
+  printf '%s' "${KERN_INPUT-}" | env LC_ALL=C awk -v key="$1" -v mode=str "$_KERN_JSON_AWK"
 }
 
 # json_get_raw KEY: raw JSON text of the first "KEY": value (object, array, string or literal).
 json_get_raw() {
-  printf '%s' "${KERN_INPUT-}" | LC_ALL=C awk -v key="$1" -v mode=raw "$_KERN_JSON_AWK"
+  printf '%s' "${KERN_INPUT-}" | env LC_ALL=C awk -v key="$1" -v mode=raw "$_KERN_JSON_AWK"
 }
 
 # json_escape: stdin escaped for the body of a JSON string, without the surrounding quotes. Every
 # byte below 0x20 is escaped (tab, CR and newline as \t, \r and \n, the rest as \u00XX): reasons
 # echo command words, and json_get decodes \b and \f to raw bytes.
 json_escape() {
-  LC_ALL=C awk '
+  env LC_ALL=C awk '
     BEGIN {
       for (i = 1; i < 32; i++) if (i != 10) { c = sprintf("%c", i); e[c] = sprintf("\\u%04x", i); cls = cls c }
       e["\t"] = "\\t"; e["\r"] = "\\r"; e["\\"] = "\\\\"; e["\""] = "\\\""

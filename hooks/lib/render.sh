@@ -10,7 +10,7 @@
 render_template() {
   K_VERSION="${K_VERSION-}" K_ROOT="${K_ROOT-}" K_KERN="${K_KERN-}" K_MODE="${K_MODE-}" \
     K_AUTOPILOT="${K_AUTOPILOT-}" K_VOICE="${K_VOICE-}" K_SETTINGS="${K_SETTINGS-}" \
-    LC_ALL=C awk '
+    env LC_ALL=C awk '
     BEGIN {
       n = split("VERSION MODE AUTOPILOT ROOT_PATH KERN ROOT", name, " ")
       for (i = 1; i <= n; i++) ph[i] = "{" name[i] "}"

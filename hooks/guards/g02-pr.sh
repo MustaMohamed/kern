@@ -172,7 +172,7 @@ _gh_args() {
 # cannot parse. A long option is its exact name (pflag has no abbreviations); a value option takes
 # the next word even when it starts with -; short options cluster, and `-xVAL` and `-x=VAL` attach.
 _gh_opts() {
-  LC_ALL=C awk -v table="$1" '
+  env LC_ALL=C awk -v table="$1" '
     BEGIN {
       nt = split(table, ent, " ")
       for (i = 1; i <= nt; i++) {
@@ -262,7 +262,7 @@ _gh_pos() {
 # _gh_literal RECORD: exit 0 when no word of RECORD expands: no $ or backtick outside single
 # quotes, and no unquoted ~, glob (* ? [) or brace list ({a,b} or {a..b}).
 _gh_literal() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
     { buf = buf (NR > 1 ? "\n" : "") $0 }
     END {
       n = length(buf); q = ""; br = 0

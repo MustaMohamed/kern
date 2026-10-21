@@ -188,7 +188,7 @@ guard_g15() {
   _g15_named "$cmd ${KERN_ALIAS_TEXT-}" || return 0
   # A failed parse or judge leaves no `.`, so G15 asks.
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
-  out=$(set -o pipefail; git_words "$cmd" | LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK") || out=""
+  out=$(set -o pipefail; git_words "$cmd" | env LC_ALL=C awk -v sq="'" "$_GW_AWK$_G15_AWK") || out=""
   while IFS= read -r line; do
     case "$line" in
       .) seen=1; continue ;;
@@ -239,7 +239,7 @@ EOT
 # a UTF-8 locale.
 _g15_named() {
   local flat=$1
-  case "$1" in *[\"\'\\]* | *$'\n'*) flat=$(printf '%s' "$1" | LC_ALL=C tr -d '"\047\\\n') ;; esac
+  case "$1" in *[\"\'\\]* | *$'\n'*) flat=$(printf '%s' "$1" | env LC_ALL=C tr -d '"\047\\\n') ;; esac
   case "$flat" in
     *[Gg][Hh]* | *[Nn][Pp][Mm]* | *[Yy][Aa][Rr][Nn]* | *[Bb][Uu][Nn]* | *[Cc][Aa][Rr][Gg][Oo]* | \
       *[Pp][Oo][Ee][Tt][Rr][Yy]* | *[Uu][Vv]* | *[Ll][Ee][Rr][Nn][Aa]* | \

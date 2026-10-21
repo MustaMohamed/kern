@@ -117,7 +117,7 @@ EOT
 # cluster) is read first as words, split as _cmd_words' cw_line splits it, so a -C or an assignment
 # inside it counts.
 _g05_env() {
-  _shell_words "$1" | LC_ALL=C awk -v sq="'" "$_GW_AWK"'
+  _shell_words "$1" | env LC_ALL=C awk -v sq="'" "$_GW_AWK"'
     BEGIN {
       n = split("env sudo command builtin exec nice nohup time timeout", a, " ")
       for (k = 1; k <= n; k++) wrap[a[k]] = 1
@@ -319,7 +319,7 @@ _g05_problems() {
   if [ -n "$id" ]; then
     # The id counts only when a non-alphanumeric character or the end follows it: CDS-24650 is not
     # CDS-2465.
-    printf '%s\n' "$subject" | LC_ALL=C awk -v id="$id" '
+    printf '%s\n' "$subject" | env LC_ALL=C awk -v id="$id" '
       { s = $0; while ((i = index(s, id)) > 0) { if (substr(s, i + length(id), 1) !~ /[A-Za-z0-9]/) { f = 1; exit } s = substr(s, i + 1) } }
       END { exit !f }' || echo "subject lacks the ticket id $id from branch $branch"
   fi

@@ -359,12 +359,8 @@ since: 2026-10-12T00:00:00Z'
 }
 
 @test "state_file and a settings read survive many fresh bash 5.3 runs" {
-  local b found=""
-  for b in /opt/homebrew/bin/bash /usr/local/bin/bash /usr/bin/bash /bin/bash; do
-    [ -x "$b" ] || continue
-    case "$("$b" -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')" in 5.[3-9] | [6-9].*) found=$b; break ;; esac
-  done
-  [ -n "$found" ] || skip "no bash 5.3 or later here"
+  local found
+  found=$(bash53) || skip "no bash 5.3 or later here"
   # The crash comes only with neither LANG nor LC_ALL set, and LC_CTYPE alone does not stop it, so the
   # caller's locale goes. They are unset here, not with env -u: env's unsetenv changes the environment's
   # layout, and with it the crash rate, down to none in some runs.

@@ -257,7 +257,7 @@ _g01_opts() {
   local table="$1"
   shift
   [ $# -gt 0 ] || return 0
-  printf '%s\n' "$@" | LC_ALL=C awk -v table="$table" '
+  printf '%s\n' "$@" | env LC_ALL=C awk -v table="$table" '
     BEGIN {
       nt = split(table, ent, " ")
       for (i = 1; i <= nt; i++) {

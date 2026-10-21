@@ -154,7 +154,7 @@ _g06_secs() {
 # between a `diff` line and the first `@@`, so no text is taken for a path. A merge comes as a
 # combined diff (--cc): a line counts when it is added against every parent.
 _g06_parse() {
-  LC_ALL=C awk -v nm="$_G06_NAME" '
+  env LC_ALL=C awk -v nm="$_G06_NAME" '
     # name(): prints the pending file name of the header just read, unless the file was deleted.
     function name() { if (pn != "") print nm pn; pn = "" }
     /^diff --git / {
@@ -186,7 +186,7 @@ _g06_parse() {
 # digits alone names the commit; every other record is message text. A forged NUL or \001 in a
 # message can only shift labels: every byte is still scanned, and hex digits alone match no rule.
 _g06_msgs() {
-  LC_ALL=C awk -v RS=$'\001' '
+  env LC_ALL=C awk -v RS=$'\001' '
     /^[0-9a-f]+$/ { c = $0; next }
     { n = split($0, l, "\n"); for (i = 1; i <= n; i++) print "commit " c " message:" i "\t " l[i] }'
 }
@@ -202,7 +202,7 @@ EOT
 
 # _g06_keep: keeps the \035 name lines and the scan lines whose text field hits a rule.
 _g06_keep() {
-  LC_ALL=C grep -a -E -- "^$_G06_NAME|^[^	]*	.*($(_g06_any))"
+  env LC_ALL=C grep -a -E -- "^$_G06_NAME|^[^	]*	.*($(_g06_any))"
 }
 
 # _g06_walk SECS PARSER DIR ARGS...: `git ARGS` in DIR under with_timeout SECS, its NULs turned into
@@ -215,21 +215,21 @@ _g06_walk() {
     printf '%s124\n' "$_G06_RC"
     return 0
   fi
-  with_timeout "$secs" _g06_git "$@" | LC_ALL=C tr '\000' '\001' | "$parse" | _g06_keep
+  with_timeout "$secs" _g06_git "$@" | env LC_ALL=C tr '\000' '\001' | "$parse" | _g06_keep
   printf '%s%s\n' "$_G06_RC" "${PIPESTATUS[0]}"
 }
 
 # _g06_msg LABEL TEXT: TEXT as scan lines `LABEL:<n>\t <text>`.
 _g06_msg() {
   [ -n "$2" ] || return 0
-  printf '%s\n' "$2" | LC_ALL=C awk -v l="$1" '{ print l ":" NR "\t " $0 }'
+  printf '%s\n' "$2" | env LC_ALL=C awk -v l="$1" '{ print l ":" NR "\t " $0 }'
 }
 
 # _g06_rules HITS: `<label> <rule>` for each rule each kept scan line hits. Never prints the text.
 _g06_rules() {
   local rule re
   while IFS='|' read -r rule re; do
-    printf '%s\n' "$1" | LC_ALL=C grep -a -E -- "^[^	]*	.*($re)" | LC_ALL=C cut -f1 | LC_ALL=C sed "s/\$/ $rule/"
+    printf '%s\n' "$1" | env LC_ALL=C grep -a -E -- "^[^	]*	.*($re)" | env LC_ALL=C cut -f1 | env LC_ALL=C sed "s/\$/ $rule/"
   done <<EOT
 $_G06_RULES
 EOT
@@ -277,7 +277,7 @@ _g06_leaks() {
   shift
   {
     _g06_git "$d" "$@"
-    [ ${#_G06_MSGARGS[@]} -eq 0 ] || _g06_git "$d" "${_G06_MSGARGS[@]}" | LC_ALL=C tr '\000' '\n'
+    [ ${#_G06_MSGARGS[@]} -eq 0 ] || _g06_git "$d" "${_G06_MSGARGS[@]}" | env LC_ALL=C tr '\000' '\n'
   } | gitleaks stdin --no-banner --redact >/dev/null 2>&1
 }
 
@@ -288,12 +288,12 @@ _g06_leaks() {
 _g06_finish() {
   local out="$1" rc names hits secs leak
   shift
-  rc=$(printf '%s\n' "$out" | LC_ALL=C sed -n "s/^$_G06_RC//p" | grep -v '^0$' | head -n 1)
-  names=$(printf '%s\n' "$out" | LC_ALL=C sed -n "s/^$_G06_NAME//p" | LC_ALL=C awk '!s[$0]++')
-  hits=$(printf '%s\n' "$out" | LC_ALL=C grep -a -v -E "^($_G06_NAME|$_G06_RC)")
+  rc=$(printf '%s\n' "$out" | env LC_ALL=C sed -n "s/^$_G06_RC//p" | grep -v '^0$' | head -n 1)
+  names=$(printf '%s\n' "$out" | env LC_ALL=C sed -n "s/^$_G06_NAME//p" | env LC_ALL=C awk '!s[$0]++')
+  hits=$(printf '%s\n' "$out" | env LC_ALL=C grep -a -v -E "^($_G06_NAME|$_G06_RC)")
   _g06_paths "$names"
   if [ -n "$hits" ]; then
-    vote deny G6 "possible secret, not committed or pushed: $(_g06_rules "$hits" | LC_ALL=C awk '!s[$0]++' | head -n 5 | paste -sd ';' - | LC_ALL=C sed 's/;/; /g')"
+    vote deny G6 "possible secret, not committed or pushed: $(_g06_rules "$hits" | env LC_ALL=C awk '!s[$0]++' | head -n 5 | paste -sd ';' - | env LC_ALL=C sed 's/;/; /g')"
   fi
   if [ -z "$rc" ] && [ -z "$hits" ] && command -v gitleaks >/dev/null 2>&1; then
     secs=$(_g06_secs "$_G06_SECS")

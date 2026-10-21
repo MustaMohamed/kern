@@ -70,20 +70,20 @@ END {
 
 # _g20_approved FRONTMATTER: exit 0 when a line of FRONTMATTER sets status: approved.
 _g20_approved() {
-  printf '%s\n' "$1" | LC_ALL=C grep -Eiq "$_G20_STATUS_RE"
+  printf '%s\n' "$1" | env LC_ALL=C grep -Eiq "$_G20_STATUS_RE"
 }
 
 # _g20_holds FILE: exit 0 when any line of FILE sets status: approved, in its frontmatter or not. A
 # shell edit can turn body lines into frontmatter (sed deleting a ---, tail dropping a first line), so
 # for a shell write every line counts.
 _g20_holds() {
-  [ -f "$1" ] && [ -r "$1" ] && LC_ALL=C grep -Eiq "$_G20_STATUS_RE" "$1" 2> /dev/null
+  [ -f "$1" ] && [ -r "$1" ] && env LC_ALL=C grep -Eiq "$_G20_STATUS_RE" "$1" 2> /dev/null
 }
 
 # _g20_lines FRONTMATTER: the value of every approved: line, in order.
 _g20_lines() {
   printf '%s\n' "$1" |
-    LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd][\"']?[[:space:]]*:[[:space:]]*//p"
+    env LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd][\"']?[[:space:]]*:[[:space:]]*//p"
 }
 
 # _g20_any LIST WORDS: exit 0 when WORDS (blank-padded) holds one of the |-separated words or phrases of
@@ -123,7 +123,7 @@ _g20_mdfile() {
 # reader; an unclosed block counts to its end. Fails closed, and returns 1, when the reader cannot run.
 _g20_fm() {
   local rc=0
-  _G20_FM=$(LC_ALL=C awk -v fm_print=1 -f "$_G20_FM_FILE" 2> /dev/null) || rc=$?
+  _G20_FM=$(env LC_ALL=C awk -v fm_print=1 -f "$_G20_FM_FILE" 2> /dev/null) || rc=$?
   case "$rc" in 0 | 3) return 0 ;; esac
   fail_closed "G20 could not read the frontmatter of $1 to judge an approval"
   return 1
@@ -167,14 +167,14 @@ _g20_file() {
     rc=4
     if [ -f "$p" ]; then
       rc=0
-      post=$(G20_OLD="$old" G20_NEW="$new" G20_ALL="$all" LC_ALL=C awk "$_G20_EDIT_AWK" "$p" 2> /dev/null) || rc=$?
+      post=$(G20_OLD="$old" G20_NEW="$new" G20_ALL="$all" env LC_ALL=C awk "$_G20_EDIT_AWK" "$p" 2> /dev/null) || rc=$?
     fi
     case "$rc" in
       0) _g20_fm "$base" <<< "$post" || return 0 ;;
       4)
         # G20's model of the Edit found nothing to replace. If Claude Code's own matching differs, an
         # Edit that writes a status or approved: line could approve unseen, so it fails closed.
-        if printf '%s\n' "$new" | LC_ALL=C grep -Eiq "^[[:space:]]*[\"']?(status|approved)[\"']?[[:space:]]*:"; then
+        if printf '%s\n' "$new" | env LC_ALL=C grep -Eiq "^[[:space:]]*[\"']?(status|approved)[\"']?[[:space:]]*:"; then
           vote deny G20 "old_string is not in $base as G20 reads it, so it cannot judge an Edit that writes a status or approved: line; read the file and edit it again"
         fi
         return 0
@@ -196,7 +196,7 @@ _g20_file() {
   fi
   # ledger-open reads the first line that starts exactly with approved:, so G20 judges only a
   # frontmatter where that line is the one it checks.
-  if [ "$(printf '%s\n' "$after" | LC_ALL=C grep -Eic "$_G20_APPROVED_RE")" -gt 1 ]; then
+  if [ "$(printf '%s\n' "$after" | env LC_ALL=C grep -Eic "$_G20_APPROVED_RE")" -gt 1 ]; then
     vote deny G20 "the frontmatter holds more than one approved: line; keep exactly one, so the quote G20 checks is the one ledger-open reads"
     return 0
   fi
@@ -207,7 +207,7 @@ _g20_file() {
     vote deny G20 "status: approved needs an approved: line with the date and the user's words in double quotes, in the same edit"
     return 0
   fi
-  norm=$(printf '%s\n' "$quote" | LC_ALL=C tr '[:upper:]' '[:lower:]' |
+  norm=$(printf '%s\n' "$quote" | env LC_ALL=C tr '[:upper:]' '[:lower:]' |
     sed -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //' -e 's/ $//' -e 's/[.!?,;:]*$//' -e 's/ $//')
   norm=${norm//$_G20_RSQ/\'}
   case "$_G20_NOT_YES" in
@@ -218,7 +218,7 @@ _g20_file() {
   esac
   # words: the quote's words, split at anything but a letter, a digit or an apostrophe, with the
   # apostrophes at a word's ends taken off, padded with blanks.
-  words=" $(printf '%s\n' "$norm" | LC_ALL=C tr -c "[:alnum:]'\n" ' ' |
+  words=" $(printf '%s\n' "$norm" | env LC_ALL=C tr -c "[:alnum:]'\n" ' ' |
     sed -e "s/ '*/ /g" -e "s/'* / /g" -e "s/^'*//" -e "s/'*\$//" -e 's/  */ /g') "
   trimmed=${quote%"${quote##*[![:space:]]}"}
   if ! _g20_any "$_G20_YES" "$words" || _g20_any "$_G20_HOLD" "$words" || [ "${trimmed%\?}" != "$trimmed" ]; then
@@ -448,7 +448,7 @@ _g20_cmd() {
   local head w skip=0 inplace=0 i n=0 inner=() m=0 dir
   [ "$#" -gt 0 ] && [ -z "$_G20_WHY" ] || return 0
   head=${1##*/}
-  case "$head" in *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*) head=$(printf '%s' "$head" | LC_ALL=C tr '[:upper:]' '[:lower:]') ;; esac
+  case "$head" in *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*) head=$(printf '%s' "$head" | env LC_ALL=C tr '[:upper:]' '[:lower:]') ;; esac
   shift
   case "$head" in
     builtin) case "${1-}" in cd | pushd | popd) _g20_cmd "$@" ;; esac ;;
@@ -744,7 +744,7 @@ _g20_bash() {
   local cmd t seg s
   cmd=$(ti_get command) || return 0
   t=$cmd
-  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | env LC_ALL=C tr -d "\"'\\\\") ;; esac
   _G20_W=0
   _G20_M=0
   case "$t" in *[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd]*) _G20_W=1 ;; esac
@@ -767,7 +767,7 @@ CMD
   # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file). Each path is
   # read once; past 1024 of them the command is denied, since the rest would go unread.
   if [ -z "$_G20_WHY" ] && [ "$_G20_WRITES" = 1 ]; then
-    s=$(printf '%s\n' ${_G20_SRC[@]+"${_G20_SRC[@]}"} | LC_ALL=C awk '!s[$0]++')
+    s=$(printf '%s\n' ${_G20_SRC[@]+"${_G20_SRC[@]}"} | env LC_ALL=C awk '!s[$0]++')
     if [ "$(printf '%s\n' "$s" | wc -l)" -gt 1024 ]; then
       _G20_WHY="the command writes a Markdown file and names more files than G20 reads (1024), so one could copy an approval past the quote check; write fewer files per call"
     else

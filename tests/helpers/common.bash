@@ -235,3 +235,19 @@ GH
   chmod +x "$BATS_TEST_TMPDIR/bin/gh"
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
 }
+
+# bash53: prints the first bash 5.3 or later found here (Homebrew's on macOS), whose locale crash the
+# Task 16l and 16m tests run against; exit 1 when there is none.
+bash53() {
+  local b
+  for b in /opt/homebrew/bin/bash /usr/local/bin/bash /usr/bin/bash /bin/bash; do
+    [ -x "$b" ] || continue
+    case "$("$b" -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')" in
+      5.[3-9] | [6-9].*)
+        printf '%s\n' "$b"
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}

@@ -64,13 +64,13 @@ _g16_fold() {
 
 # _g16_lower STR: STR in lower case (bash 3.2 has no ${var,,}).
 _g16_lower() {
-  printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]'
+  printf '%s' "$1" | env LC_ALL=C tr '[:upper:]' '[:lower:]'
 }
 
 # _g16_norm PATH: absolute PATH with `.`, `..` and repeated slashes resolved as text, so a `..`
 # through a directory that does not exist yet is still seen.
 _g16_norm() {
-  printf '%s\n' "$1" | LC_ALL=C awk -F/ '{
+  printf '%s\n' "$1" | env LC_ALL=C awk -F/ '{
     n = 0
     for (i = 1; i <= NF; i++) {
       if ($i == "" || $i == ".") continue
@@ -355,7 +355,7 @@ EOT
 
 # _g16_redirects STR: the target word of each `>` or `>>` outside quotes, one per line.
 _g16_redirects() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
     { buf = buf (NR > 1 ? " " : "") $0 }
     END {
       n = length(buf); q = ""
@@ -408,7 +408,7 @@ _g16_bash() {
   # when the text holds one, so ke''rn.yml is still seen. The sessions dir ends in sessions, so its
   # path needs no pattern of its own.
   t=$cmd
-  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | env LC_ALL=C tr -d "\"'\\\\") ;; esac
   case "$t" in
     *[Ss][Ee][Ss][Ss][Ii][Oo][Nn][Ss]* | *.[Ss][Tt][Aa][Tt][Ee]* | *[Kk][Ee][Rr][Nn].[Yy][Mm][Ll]* | \
       *[Kk][Ee][Rr][Nn].[Ll][Oo][Cc][Aa][Ll].[Yy][Mm][Ll]* | *[Ss][Ee][Tt][Tt][Ii][Nn][Gg][Ss]*.[Jj][Ss][Oo][Nn]* | \
@@ -421,7 +421,7 @@ _g16_bash() {
   mixed=0
   case "$t" in
     *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*)
-      if printf '%s' "$t" | LC_ALL=C awk '
+      if printf '%s' "$t" | env LC_ALL=C awk '
         { n = split($0, w, /[^A-Za-z]+/); for (i = 1; i <= n; i++) if (w[i] != tolower(w[i]) && tolower(w[i]) ~ /^(cd|pushd|popd)$/) f = 1 }
         END { exit !f }'; then
         mixed=1
@@ -686,7 +686,7 @@ _g16_hooks_read() {
   # and only when the text holds one.
   t=${1//\$\'/}
   t=${t//\$\"/}
-  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | LC_ALL=C tr -d "\"'\\\\") ;; esac
+  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | env LC_ALL=C tr -d "\"'\\\\") ;; esac
   case "$CWD" in */[Hh][Oo][Oo][Kk][Ss] | */[Hh][Oo][Oo][Kk][Ss]/*) ctx=1 ;; esac
   # Only text that could count is read; any case still counts.
   if [ "$ctx" = 0 ]; then
@@ -697,7 +697,7 @@ _g16_hooks_read() {
       *) return 1 ;;
     esac
   fi
-  r=$(printf '%s\n' "$t" | LC_ALL=C awk "$_G16_HOOK_AWK") || return 2
+  r=$(printf '%s\n' "$t" | env LC_ALL=C awk "$_G16_HOOK_AWK") || return 2
   names=$_G16_HOOK_NAMES
   for f in "$KERN_ROOT"/hooks/lib/*.sh "$KERN_ROOT"/hooks/guards/*.sh; do
     [ -e "$f" ] && names="$names ${f##*/}"

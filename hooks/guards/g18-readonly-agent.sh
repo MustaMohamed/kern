@@ -97,7 +97,7 @@ EOF
 # backtick outside single quotes ($_, ${x:--o}, $'-o'), or a brace expansion ({-o,out.txt}). A brace
 # pair after @ with no comma or .. inside, such as git's HEAD@{1} or @{u}, does not expand.
 _g18_expands() {
-  printf '%s' "$1" | LC_ALL=C awk -v sq="'" '
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
     { buf = buf (NR > 1 ? "\n" : "") $0 }
     END {
       n = split(buf, C, ""); q = ""; s = ""
