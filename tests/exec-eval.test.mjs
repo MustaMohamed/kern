@@ -1650,3 +1650,39 @@ test('Task 16l fix M2: a lock or work dir a killed trace left is broken and swep
     assert.deepEqual([work(), lines(), existsSync(lock)], [[], 5, false], 'the next call sweeps it and appends its own line');
   } finally { s.done(); }
 });
+
+// Task 16l fix round 1, M3: every trace line is strict UTF-8 JSON, whatever bytes it logs. The hook's
+// own output keeps its bytes; in the line an invalid sequence reads as U+FFFD (perl) or is dropped (iconv,
+// when there is no perl).
+test('Task 16l fix M3: a trace line is strict UTF-8 JSON when the input, the output or the state text holds bytes that are not UTF-8', () => {
+  const s = traceSession();
+  try {
+    const hook = join(s.plugin, 'hooks', 'stand-in');
+    writeFileSync(hook, "cat; printf 'out \\377 \\342\\202 end\\n'; printf 'err \\300\\257 caf\\303\\251\\n' >&2; exit 2\n");
+    const noPerl = join(s.plugin, 'hooks', 'trace-no-perl');
+    writeFileSync(noPerl, readFileSync(join(s.plugin, 'hooks', 'trace'), 'utf8').replace(/^TRACE_PERL=.*$/m, 'TRACE_PERL=""'));
+    assert.notEqual(readFileSync(noPerl, 'utf8'), readFileSync(join(s.plugin, 'hooks', 'trace'), 'utf8'));
+    writeFileSync(join(s.data, 'sessions', `${SID}.state`), `autopilot: on\n${'x'.repeat(4081)}é\n`);
+    const input = Buffer.concat([Buffer.from(`{"session_id":"${SID}","cwd":"${s.ws}","tool_input":{"content":"a `), Buffer.from([0xff, 0xfe, 0xe2, 0x82]), Buffer.from(' é"}}')]);
+    const env = { PATH: '/usr/bin:/bin', HOME: s.home, CLAUDE_PLUGIN_DATA: s.data };
+    const direct = spawnSync('bash', [hook], { input, cwd: s.ws, env });
+    const strict = new TextDecoder('utf-8', { fatal: true });
+    for (const script of [join(s.plugin, 'hooks', 'trace'), noPerl]) {
+      const trace = join(s.root, `${script.endsWith('no-perl') ? 'np' : 'perl'}.jsonl`);
+      const r = spawnSync('bash', [script, 'bash', hook], { input, cwd: s.ws, env: { ...env, KERN_EXEC_TRACE: trace } });
+      assert.ok(r.stdout.equals(direct.stdout) && r.stderr.equals(direct.stderr), `${script}: the hook's bytes are kept`);
+      assert.equal(r.status, 2);
+      const bytes = readFileSync(trace);
+      let text;
+      assert.doesNotThrow(() => { text = strict.decode(bytes); }, `${script}: the line is strict UTF-8`);
+      const t = JSON.parse(text);
+      assert.match(t.input, /^\{"session_id":"[^"]+","cwd":"[^"]+","tool_input":\{"content":"a .* é"\}\}$/s, 'the valid parts of the input are kept');
+      assert.match(t.stdout, /^\{.*\}out .* end\n$/s);
+      assert.match(t.stderr, /^err .*café\n$/);
+      assert.equal(t.exit, 2);
+      assert.equal(t.kern.session_id, SID);
+      assert.match(t.kern.state.text, /^autopilot: on\nx{4081}/, 'the state text, cut at 4 KB inside a character');
+      if (!script.endsWith('no-perl')) assert.ok(t.input.includes('�') && t.stdout.includes('�') && t.stderr.includes('�'), 'perl reads an invalid sequence as U+FFFD');
+    }
+  } finally { s.done(); }
+});

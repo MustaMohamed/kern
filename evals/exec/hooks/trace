@@ -9,7 +9,8 @@
 # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 case "${KERN_EXEC_TRACE-}" in /*) ;; *) exec "$@" ;; esac
 set +o posix
-TRACE_PERL=$(command -v perl 2>/dev/null) || TRACE_PERL=""
+# perl, when it has Encode, escapes and checks the UTF-8 of every logged string (jesc).
+TRACE_PERL=$(command -v perl 2>/dev/null) && "$TRACE_PERL" -MEncode -e 1 2>/dev/null || TRACE_PERL=""
 TRACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exec "$@"
 TRACE_WORK=$(mktemp -d "$KERN_EXEC_TRACE.XXXXXX" 2>/dev/null) || exec "$@"
 TRACE_LOCK=$KERN_EXEC_TRACE.lock
@@ -28,24 +29,31 @@ now_ms() {
   fi
 }
 
-# jesc: stdin as the body of a JSON string, escaped as json.sh's json_escape escapes it. perl when there
-# is one: json_escape takes seconds on a long line with many quotes, such as a large Write input, and the
-# hook's timeout counts the trace's time too.
+# jesc: stdin as the body of a JSON string, escaped as json.sh's json_escape escapes it, and strict
+# UTF-8, so every line is strict UTF-8 JSON whatever bytes a hook prints. perl, when there is one, reads
+# each invalid sequence as U+FFFD; json_escape takes seconds on a long line with many quotes, such as a
+# large Write input, and the hook's timeout counts the trace's time too. Without perl, iconv drops the
+# invalid bytes; without iconv too, they pass as they are.
 jesc() {
   if [ -n "$TRACE_PERL" ]; then
-    # shellcheck disable=SC2016 # $1 is perl's
-    "$TRACE_PERL" -0777 -pe 's/([\\"])/\\$1/g; s/\n/\\n/g; s/\r/\\r/g; s/\t/\\t/g; s/([\x00-\x1f])/sprintf("\\u%04x", ord($1))/ge'
+    # shellcheck disable=SC2016 # $_ and $1 are perl's
+    "$TRACE_PERL" -0777 -MEncode -pe '$_ = Encode::decode("UTF-8", $_); s/([\\"])/\\$1/g; s/\n/\\n/g; s/\r/\\r/g; s/\t/\\t/g;
+      s/([\x00-\x1f])/sprintf("\\u%04x", ord($1))/ge; $_ = Encode::encode("UTF-8", $_)'
   else
-    json_escape
+    json_escape | {
+      iconv -c -f UTF-8 -t UTF-8 2>/dev/null
+      [ $? -ne 127 ] || cat
+    }
   fi
 }
 
 # jstr TEXT / jfile FILE: TEXT, or FILE's bytes, as a JSON string, a final newline kept. jopt NAME: the
 # variable NAME as a JSON string, null when unset. jnum N: N, or null when it is not a number. Need json.sh.
 jstr() {
-  local s
+  local s LC_ALL=C
+  # Printable ASCII with no quote or backslash is its own JSON; anything else goes through jesc.
   case "$1" in
-    *[\"\\]* | *[[:cntrl:]]*) ;;
+    *[![:print:]]* | *[\"\\]*) ;;
     *) printf '"%s"' "$1"; return 0 ;;
   esac
   s=$({ printf '%s' "$1"; printf x; } | jesc)
