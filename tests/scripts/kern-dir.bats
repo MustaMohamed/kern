@@ -87,3 +87,17 @@ setup() {
   run bash "$K/kern-dir" ":specs"
   [ "$status" -eq 2 ]
 }
+
+# kern-dir creates the work dir and edits .git/info/exclude, so it does not act on a work_dir a settings
+# file it cannot read may set (Task 16l, fix round 2).
+@test "kern-dir exits 2 and says why when a settings file that could set work_dir cannot be read" {
+  mkdir -p "$R/.claude"
+  printf 'work_dir: .kwork\n' >"$R/.claude/kern.local.yml"
+  read_fails awk "$(cd "$R" && pwd -P)/.claude/kern.local.yml"
+  cd "$R"
+  run --separate-stderr bash "$K/kern-dir" tmp
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [[ "$stderr" == *"kern-dir: work_dir is unknown: "*"kern.local.yml could not be read"* ]] || false
+  [ ! -e "$R/.kern" ] && [ ! -e "$R/.kwork" ]
+}

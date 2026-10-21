@@ -152,10 +152,10 @@ G13, G14 and G15 (Task 13):
 | Script | Signature | Output | Exit |
 |---|---|---|---|
 | `kern-root` | `kern-root [dir]` | line 1 `MAIN`, line 2 git common dir | 0; 2 not a repo |
-| `kern-get` | `kern-get KEY [DEFAULT]` | `value<TAB>source` | 0; 3 unset, no default |
-| `kern-dir` | `kern-dir SUB` | absolute `WORK/SUB` path (created); first call appends `/<work_dir>/` to `<common-dir>/info/exclude` and prints `kern: added /.kern/ to .git/info/exclude` on stderr | 0; 2 `git ls-files <work_dir>` non-empty |
+| `kern-get` | `kern-get KEY [DEFAULT]` | `value<TAB>source`; when a settings file that could set KEY cannot be read (settings_get exit 4), the value it has (a policy `unknown` or `deny`) and `kern-get: KEY may not be the whole answer: <cause>` on stderr | 0; 3 unset, no default (on exit 4 too when nothing readable sets KEY) |
+| `kern-dir` | `kern-dir SUB` | absolute `WORK/SUB` path (created); first call appends `/<work_dir>/` to `<common-dir>/info/exclude` and prints `kern: added /.kern/ to .git/info/exclude` on stderr | 0; 2 `git ls-files <work_dir>` non-empty, or `work_dir` unknown because a settings file cannot be read (`kern-dir: work_dir is unknown: <cause>`, nothing created) |
 | `kern-detect` | `kern-detect KEY` for `base_branch`, `branch.pattern`, `commit.convention`, `test.focused`, `test.full`, `typecheck`, `lint`, `build`, `tracker`, `pr.template` | `value<TAB>evidence` | 0; 3 not detectable |
-| `wt-new` | `wt-new SLUG [--detach] [--base REF] [--branch NAME]` | worktree path | 0; 2 error (including a `branch.pattern` placeholder it cannot fill without `--branch`) |
+| `wt-new` | `wt-new SLUG [--detach] [--base REF] [--branch NAME]` | worktree path | 0; 2 error (including a `branch.pattern` placeholder it cannot fill without `--branch`, and `base_branch`, `worktree.dir` or `branch.pattern` unknown because a settings file cannot be read, before anything is made) |
 | `wt-check` | `wt-check WT BASE_REF` | `ok` or the first mismatch | 0; 1 mismatch; 2 usage |
 | `wt-snap` | `wt-snap WT` | tree id | 0; 2 error |
 | `wt-diff` | `wt-diff WT FROM_TREE [TO_TREE] [--out FILE] [--allow PATH]... [--allow-file FILE]` | line 1 package path, line 2 `TO_TREE`, then changed paths; with an allow list, each changed path outside it on stderr as `wt-diff: outside the allowed paths: <path>`. An entry covers the same path, every path under it when it ends in `/`, every path starting with it when it ends in `*`. The package diffs run with `--no-ext-diff --no-color`; `<package>.patch` is `git diff-tree -r -p --binary --full-index` | 0; 3 empty diff; 4 a path outside the allow list (package still written); 2 error |
@@ -174,7 +174,7 @@ G13, G14 and G15 (Task 13):
 | `claim-check` | `claim-check WT DIFF_FILE` | one line per unreachable SHA or absolute word | 0 clean; 1 hits; 2 usage |
 | `probe` | `probe [--exclude-tests] WT PATCH -- CMD...`; `probe --mutate FILE:LINE WT -- CMD...` | `probe: fail-then-pass ok` / `probe: test did not fail with the guard removed` / `probe: mutation caught (<line>)` / `probe: mutation survived (<line>)` / `probe: inconclusive (<why>)` | 0 ok; 1 not covered or mutation survived; 3 inconclusive; 2 usage |
 
-`worktree.dir` default: `MAIN/.claude/worktrees`. Branch for `wt-new` (non-detached): `branch.pattern` with `{slug}` substituted, else `kern/<slug>`. A script that sets `MAIN` exports `KERN_MAIN="$MAIN"` before reading settings.
+`worktree.dir` default: `MAIN/.claude/worktrees`. On settings_get exit 4 (Task 16l, fix round 2) the scripts that create something refuse with exit 2 and the cause (`kern-dir`, `wt-new`, `wt-fork`, `wt_setup` for `worktree.setup`), and the ones that only read use the value they have (`kern-get` with a warning, `wt-audit`, `recall-sessions`, `plan-check`, `floor-scan`). Branch for `wt-new` (non-detached): `branch.pattern` with `{slug}` substituted, else `kern/<slug>`. A script that sets `MAIN` exports `KERN_MAIN="$MAIN"` before reading settings.
 
 Skill scripts (run as `bash ${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/<name>`): `find-polluter.sh POLLUTION_PATH TEST_GLOB -- TEST_CMD...` (1 with `polluter: <file> creates <path>`; 0 with `no polluter found among <n> test files`; 2 usage, no matching file, TEST_CMD not found, the path already present, a run that exits 126 or 127, or every run failing with no polluter) and `loop-rate.sh N -- CMD...` (`loop-rate: <red>/<N> red, median <seconds>s`; 0; 2 usage, CMD not found, or a run that exits 126 or 127).
 

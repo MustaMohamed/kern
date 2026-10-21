@@ -152,3 +152,20 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"setup marker missing"* ]] || false
 }
+
+# wt-new creates a worktree from base_branch, worktree.dir and branch.pattern, so it does not act on one
+# a settings file it cannot read may set (Task 16l, fix round 2).
+@test "wt-new exits 2 and creates nothing while a settings file that could set its keys cannot be read" {
+  load ../helpers/common
+  mkdir -p "$REPO/.claude"
+  printf 'worktree.dir: ../elsewhere\n' >"$REPO/.claude/kern.local.yml"
+  read_fails awk "$REPO/.claude/kern.local.yml"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-u
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"base_branch is unknown"*"kern.local.yml could not be read"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-u --base main
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"worktree.dir may not be the whole answer"* ]] || false
+  [ "$(git -C "$REPO" worktree list | wc -l | tr -d ' ')" = 1 ]
+  [ ! -e "$REPO/.claude/worktrees" ]
+}

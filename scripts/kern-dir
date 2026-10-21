@@ -15,7 +15,14 @@ esac
 CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD") || { echo "kern-dir: not a git repository" >&2; exit 2; }
 export CWD KERN_MAIN
-wd=$(settings_get work_dir .kern)
+# It creates the directory and edits .git/info/exclude, so it does not act on a work_dir that a settings
+# file it cannot read may set.
+rc=0
+wd=$(settings_get work_dir .kern) || rc=$?
+if [ "$rc" != 0 ]; then
+  echo "kern-dir: work_dir is unknown: $(settings_unread_why work_dir)" >&2
+  exit 2
+fi
 wd=${wd%/}
 case "$wd" in
   '' | . | :* | .git | .git* | /* | *..*) echo "kern-dir: work_dir must be a relative path inside the repo, not '.', '.git*' or ':*', got '$wd'" >&2; exit 2 ;;

@@ -35,7 +35,7 @@ fi
 MAIN=$(kern_main_root "$PWD" 2> /dev/null) || MAIN=''
 export KERN_MAIN="$MAIN"
 SHARED=$(settings_get shared_services '' 2> /dev/null || true)
-WD=$(settings_get work_dir .kern 2> /dev/null || echo .kern)
+WD=$(settings_get work_dir .kern 2> /dev/null) || [ -n "$WD" ] || WD=.kern
 
 # Acceptance numbers of the plan's spec, when the spec: line names a file that resolves.
 ACCEPT='' SPECPATH='' SPECBAD=''

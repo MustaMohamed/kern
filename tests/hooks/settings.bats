@@ -401,3 +401,24 @@ get() {
   [ "$rc" -eq 0 ]
   [ "$got" = auto ]
 }
+
+# kern-get feeds skills, which read exit 3 as "take the default" and handle no other failure; the hooks
+# decide on settings themselves. So on a settings file that cannot be read it prints the value it has
+# and says why on stderr (Task 16l, fix round 2).
+@test "kern-get prints what it has, with a warning, when a settings file cannot be read" {
+  printf 'work_dir: .kwork\n' >"$HOME/.claude/kern.yml"
+  printf 'test.full: make test\n' >"$R/.claude/kern.local.yml"
+  read_fails awk "$RP/.claude/kern.local.yml"
+  cd "$R"
+  run --separate-stderr bash "$KERN_ROOT/scripts/kern-get" work_dir .kern
+  [ "$status" -eq 0 ]
+  [ "$output" = ".kwork	$HOME/.claude/kern.yml" ]
+  [[ "$stderr" == *"kern-get: work_dir may not be the whole answer: $RP/.claude/kern.local.yml could not be read"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/kern-get" commit.policy
+  [ "$status" -eq 0 ]
+  [ "${output%%	*}" = unknown ]
+  # Nothing readable sets the key and there is no default: unset, as a skill expects.
+  run --separate-stderr bash "$KERN_ROOT/scripts/kern-get" test.full
+  [ "$status" -eq 3 ]
+  [[ "$stderr" == *"test.full may not be the whole answer"* ]] || false
+}

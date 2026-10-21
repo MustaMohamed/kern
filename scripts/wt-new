@@ -30,10 +30,16 @@ MAIN=$(kern_main_root "$PWD") || { echo "wt-new: not a git repository" >&2; exit
 # settings_get reads KERN_MAIN, so worktree.dir and worktree.setup come from MAIN, not the caller's cwd.
 export KERN_MAIN="$MAIN"
 if [ -z "$base" ]; then
-  if ! base=$(settings_get base_branch); then
-    base=$(bash "$here/kern-detect" base_branch | cut -f1) ||
-      { echo "wt-new: base_branch is not set and not detectable; set it in .claude/kern.local.yml" >&2; exit 2; }
-  fi
+  rc=0
+  base=$(settings_get base_branch) || rc=$?
+  case "$rc" in
+    0) ;;
+    4) echo "wt-new: base_branch is unknown: $(settings_unread_why base_branch); pass --base" >&2; exit 2 ;;
+    *)
+      base=$(bash "$here/kern-detect" base_branch | cut -f1) ||
+        { echo "wt-new: base_branch is not set and not detectable; set it in .claude/kern.local.yml" >&2; exit 2; }
+      ;;
+  esac
 fi
 
 if printf '%s' "$base" | grep -Eq '^[0-9a-f]{7,64}$'; then
@@ -49,7 +55,7 @@ else
     { echo "wt-new: $start is missing after the fetch" >&2; exit 2; }
 fi
 
-dir=$(wt_dir)
+dir=$(wt_dir) || { echo "wt-new: no worktree made while worktree.dir is unknown" >&2; exit 2; }
 path="$dir/$slug"
 wt_path_free "$path" || exit 2
 mkdir -p "$dir"
@@ -59,7 +65,9 @@ if [ "$detach" = 1 ]; then
   git -C "$MAIN" worktree add --quiet --detach "$path" "$start" >&2
 else
   if [ -z "$branch" ]; then
-    pattern=$(settings_get branch.pattern 'kern/{slug}')
+    rc=0
+    pattern=$(settings_get branch.pattern 'kern/{slug}') || rc=$?
+    [ "$rc" = 0 ] || { echo "wt-new: branch.pattern is unknown: $(settings_unread_why branch.pattern); pass --branch NAME" >&2; exit 2; }
     branch=${pattern//\{slug\}/$slug}
     case "$branch" in
       *'{'*) echo "wt-new: branch.pattern has placeholders wt-new cannot fill ($branch); pass --branch NAME" >&2; exit 2 ;;

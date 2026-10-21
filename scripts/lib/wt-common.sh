@@ -2,12 +2,18 @@
 # shellcheck disable=SC2154  # MAIN is set by the sourcing script
 # Shared by wt-new and wt-fork. Sourced, never run. Needs hooks/lib/settings.sh and MAIN.
 
-# wt_dir: the directory kern worktrees live in (worktree.dir, default MAIN/.claude/worktrees).
+# wt_dir: the directory kern worktrees live in (worktree.dir, default MAIN/.claude/worktrees). Exit 4, with
+# a line on stderr, when a settings file that could set worktree.dir cannot be read: the path it prints is
+# what the readable layers and the default give, which a caller that only reads may use and one that
+# creates a worktree refuses.
 wt_dir() {
-  local d
-  d=$(settings_get worktree.dir .claude/worktrees)
+  local d rc=0
+  d=$(settings_get worktree.dir .claude/worktrees) || rc=$?
   case "$d" in /*) ;; *) d="$MAIN/$d" ;; esac
   printf '%s\n' "$d"
+  [ "$rc" = 0 ] && return 0
+  printf 'wt: worktree.dir may not be the whole answer: %s\n' "$(settings_unread_why worktree.dir)" >&2
+  return 4
 }
 
 # wt_path_free PATH: exit 2 when PATH already exists.
@@ -36,7 +42,7 @@ wt_exclude_dir() {
 wt_include() {
   local dst=$1 f wtrel
   [ -f "$MAIN/.worktreeinclude" ] || return 0
-  wtrel=$(wt_dir)
+  wtrel=$(wt_dir 2>/dev/null) || [ $? = 4 ]
   wtrel=${wtrel#"$MAIN"/}
   git -C "$MAIN" ls-files --others --ignored --directory --exclude-from="$MAIN/.worktreeinclude" |
     while IFS= read -r f; do
@@ -50,9 +56,14 @@ wt_include() {
 
 # wt_setup WT: run worktree.setup in WT and write the marker wt-check looks for.
 wt_setup() {
-  local wt=$1 setup gitdir
+  local wt=$1 setup gitdir rc=0
   gitdir=$(git -C "$wt" rev-parse --path-format=absolute --git-dir)
-  if setup=$(settings_get worktree.setup); then
+  setup=$(settings_get worktree.setup) || rc=$?
+  if [ "$rc" = 4 ]; then
+    echo "wt: worktree.setup is unknown, so $wt is not set up: $(settings_unread_why worktree.setup)" >&2
+    return 2
+  fi
+  if [ "$rc" = 0 ]; then
     if ! (cd "$wt" && bash -c "$setup") > "$gitdir/kern-setup.log" 2>&1; then
       echo "wt: worktree.setup failed in $wt (log: $gitdir/kern-setup.log)" >&2
       return 2

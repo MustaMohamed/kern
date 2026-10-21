@@ -81,7 +81,7 @@ fi
 wts=$(git -C "$MAIN" worktree list --porcelain | sed -n 's/^worktree //p') || die "git worktree list failed"
 [ -n "$wts" ] || die "git worktree list named no worktree"
 # The worktree dir is a prefix only when it exists inside the main checkout.
-wt_root=$(wt_dir) || die "cannot resolve the worktree dir"
+wt_root=$(wt_dir) || [ $? = 4 ] || die "cannot resolve the worktree dir"
 WTP=''
 if [ -d "$wt_root" ]; then
   wt_phys=$(CDPATH='' cd -- "$wt_root" && pwd -P) || die "cannot resolve $wt_root"

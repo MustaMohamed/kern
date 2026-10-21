@@ -23,9 +23,9 @@ done
 case "$days" in '' | *[!0-9]*) echo "wt-audit: --days takes a whole number" >&2; exit 2 ;; esac
 MAIN=$(kern_main_root "$PWD") || { echo "wt-audit: not a git repository" >&2; exit 2; }
 export KERN_MAIN="$MAIN"
-dir=$(wt_dir)
+dir=$(wt_dir) || [ $? = 4 ]
 dir=$(cd "$dir" 2> /dev/null && pwd -P) || exit 0
-base=$(settings_get base_branch '') || base=''
+base=$(settings_get base_branch '') || [ $? = 4 ] || base=''
 [ -n "$base" ] || base=$(bash "$here/kern-detect" base_branch 2> /dev/null | cut -f1) || base=''
 have_gh=0
 command -v gh > /dev/null 2>&1 && have_gh=1

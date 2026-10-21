@@ -20,7 +20,7 @@ for k in $(while IFS= read -r f; do [ -f "$f" ] && settings_keys "$f"; done <<EO
 $(_settings_files)
 EOT
 ); do
-  v=$(settings_get "$k") || continue
+  v=$(settings_get "$k") || [ $? = 4 ] || continue
   d=min
   case "$v" in *:max) d=max; v=${v%:max} ;; *:min) v=${v%:min} ;; esac
   RATCHETS="$RATCHETS${k#ratchet.}	${v%:*}	${v##*:}	$d

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Layered settings read. Prints `value<TAB>source`; exit 3 when unset and no default is given.
+# Layered settings read. Prints `value<TAB>source`; exit 3 when unset and no default is given. When a
+# settings file that could set the key cannot be read, it still prints what it has (a policy reads unknown
+# or deny), with a line on stderr saying why: skills read exit 3 as "take the default" and handle no other
+# failure, and the hooks decide on settings themselves.
 set -euo pipefail
 KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export KERN_ROOT
@@ -9,9 +12,18 @@ export KERN_ROOT
 CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
 export CWD KERN_MAIN
+rc=0
 if [ $# -ge 2 ]; then
-  value=$(settings_get "$1" "$2")
+  value=$(settings_get "$1" "$2") || rc=$?
 else
-  value=$(settings_get "$1") || exit 3
+  value=$(settings_get "$1") || rc=$?
 fi
+case "$rc" in
+  0) ;;
+  4)
+    printf 'kern-get: %s may not be the whole answer: %s\n' "$1" "$(settings_unread_why "$1")" >&2
+    [ $# -ge 2 ] || [ -n "$value" ] || exit 3
+    ;;
+  *) exit 3 ;;
+esac
 printf '%s\t%s\n' "$value" "$(settings_source "$1")"

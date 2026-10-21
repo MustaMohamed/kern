@@ -22,7 +22,7 @@ export KERN_MAIN="$MAIN"
 head=$(git -C "$src" rev-parse --verify --quiet HEAD) || { echo "wt-fork: $src has no commits" >&2; exit 2; }
 tree=$(bash "$here/wt-snap" "$src")
 
-dir=$(wt_dir)
+dir=$(wt_dir) || { echo "wt-fork: no worktree made while worktree.dir is unknown" >&2; exit 2; }
 path="$dir/$slug"
 wt_path_free "$path" || exit 2
 mkdir -p "$dir"
