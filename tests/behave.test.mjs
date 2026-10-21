@@ -139,6 +139,16 @@ test('recall-2 grades finishing Task 3, which its workspace leaves in progress, 
   assert.doesNotMatch(setup, /^Task 3: (review|complete) /m);
 });
 
+// Task 16j (task-16-diagnosis-3, recall-2): the fixture holds no session transcript, so "before any transcript" had
+// one side only and graders read it three ways; and kern's recall requires wt-snap, which adds git objects and
+// changes no file, while a grader read "Writes no file" as ruling it out.
+test('recall-2 grades the ledger read and the unchanged tree in words that hold on a fixture with no transcript', () => {
+  const ex = loadCases(ROOT).find((c) => c.id === 'recall-2').expectations;
+  assert.equal(ex[0], 'Reads .kern/ledgers/export/ledger.md and reads no session transcript before it');
+  assert.equal(ex[2], 'Makes no Write or Edit call and changes no file in the working tree');
+  assert.equal(ex.length, 3, 'E1 is unchanged');
+});
+
 test('define, execute-plan and parallel-work each have a seeded workflow case', () => {
   const ids = loadCases(ROOT).map((c) => c.id);
   for (const id of ['workflow-define-spec', 'workflow-define-fast-path', 'workflow-define-fast-path-stored-data', 'workflow-execute-plan-ledger', 'workflow-parallel-two-modules']) assert.ok(ids.includes(id), id);

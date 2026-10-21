@@ -39,9 +39,9 @@
       "prompt": "Where did I leave off on the export plan?",
       "expected_output": "Reads the ledger, sees Tasks 1 and 2 complete and Task 3 started but not complete, and names Task 3 as the next move.",
       "expectations": [
-        "Reads .kern/ledgers/export/ledger.md before any transcript",
+        "Reads .kern/ledgers/export/ledger.md and reads no session transcript before it",
         "Names finishing Task 3 of the export plan as the next move",
-        "Writes no file"
+        "Makes no Write or Edit call and changes no file in the working tree"
       ],
       "checks": { "0": "ledger-before-transcript", "2": "no-write" }
     },
