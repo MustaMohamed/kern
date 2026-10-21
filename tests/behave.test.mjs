@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECKS, RECORD, behaveDigest, caseResult, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
+import { CHECKS, RECORD, behaveDigest, caseResult, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -414,7 +414,8 @@ test('the plugin copy leaves out the eval runners and keeps the plugin scripts',
 // expectation is decided by a check from a fixed registry, and only the rest go to the model.
 const ran = (cmd, out = '') => [use(cmd, 'Bash', { command: cmd }), back(cmd, out)];
 const reply = (text) => [say(text), { type: 'result', subtype: 'success', result: text }];
-const same = { start: { '.': [' M src/sum.js abc'] }, end: { '.': [' M src/sum.js abc'] } };
+const state = (lines = [' M src/sum.js abc'], more = {}) => ({ worktrees: { '.': lines, ...more }, git: ['ref refs/heads/main 1a2b', 'config 3c4d', 'info/exclude 5e6f'] });
+const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
   assert.deepEqual(Object.keys(CHECKS).sort(), ['git-or-gh-state', 'ledger-before-transcript', 'no-write']);
@@ -458,17 +459,23 @@ test('git-or-gh-state passes on a git or gh command that reads branch, worktree 
     'Bash reads git or gh state before the final reply: git -C w worktree list; gh pr list --head b 2>&1', 'the evidence names each state command');
 });
 
-test('no-write passes only with no Write, Edit or NotebookEdit call and the same git status at the start and end', () => {
+test('no-write passes only with no write tool call and the same files, refs and git config at the start and end', () => {
   const check = CHECKS['no-write'];
-  assert.deepEqual(check([...ran('git status'), ...reply('x')], { tree: same }), { pass: true, evidence: "no Write, Edit or NotebookEdit call, and git status the same at the run's start and end in 1 worktree" });
-  for (const name of ['Write', 'Edit', 'NotebookEdit']) {
+  assert.deepEqual(check([...ran('git status'), ...reply('x')], { tree: same }),
+    { pass: true, evidence: "no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of 1 worktree the same at the run's start and end" });
+  for (const name of ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']) {
     const v = check([use('w', name, { file_path: 'notes.md', notebook_path: 'n.ipynb' }), ...reply('x')], { tree: same });
     assert.equal(v.pass, false, name);
     assert.match(v.evidence, new RegExp(`^${name} call on `));
   }
-  const moved = check([...ran('sed -i s/a/b/ src/sum.js'), ...reply('x')], { tree: { start: same.start, end: { '.': [' M src/sum.js def'] } } });
-  assert.deepEqual(moved, { pass: false, evidence: 'git status changed: .: -  M src/sum.js abc; .: +  M src/sum.js def' });
-  assert.match(check(reply('x'), { tree: { start: same.start, end: { error: 'not a git repository' } } }).evidence, /^git status failed at the run's end: not a git repository$/);
+  const moved = check([...ran('sed -i s/a/b/ src/sum.js'), ...reply('x')], { tree: { start: same.start, end: state([' M src/sum.js def']) } });
+  assert.deepEqual(moved, { pass: false, evidence: 'the workspace changed: .: -  M src/sum.js abc; .: +  M src/sum.js def' });
+  // Task 16j review, M3: a worktree added or removed with no status lines is a change.
+  assert.deepEqual(check(reply('x'), { tree: { start: same.start, end: state(undefined, { '../probe-out': [] }) } }), { pass: false, evidence: 'the workspace changed: + worktree ../probe-out' });
+  assert.deepEqual(check(reply('x'), { tree: { start: state(undefined, { '.wt': [] }), end: same.end } }), { pass: false, evidence: 'the workspace changed: - worktree .wt' });
+  // Task 16j review, M4: a ref or the git config is a change.
+  const branched = { ...state(), git: [...state().git, 'ref refs/heads/x 1a2b'] };
+  assert.deepEqual(check(reply('x'), { tree: { start: same.start, end: branched } }), { pass: false, evidence: 'the workspace changed: .git: + ref refs/heads/x 1a2b' });
   assert.throws(() => check(reply('x'), {}), /^Error: check no-write: the run recorded no git status at its start and end$/, 'an old run cannot pass it');
 });
 
@@ -517,32 +524,61 @@ test('gradeRun sends the model only the expectations no check decides, and lines
   assert.equal(gradeRun({ id: 'd', expectations: ['e'] }, events, undefined, () => '{"results":[{"n":1,"pass":true,"evidence":"y"}]}')[0].pass, true, 'a case with no checks grades as before');
 });
 
-test('treeState reads every worktree\'s status, with the content of each listed file, and changes nothing', () => {
+test('treeState reads every worktree\'s HEAD and status with each listed file\'s content, the refs and the git config, and changes nothing', () => {
   const f = mkdtempSync(join(tmpdir(), 'fx-'));
   mkdirSync(join(f, '_kern'));
   writeFileSync(join(f, 'a.txt'), 'a\n');
   writeFileSync(join(f, '_kern', 'ledger.md'), '# kern ledger: x\n');
   const d = workspace(f, { setup: ['git worktree add -q -b wt .wt && printf "/.wt/\\n" >> .git/info/exclude && printf "b\\n" > .wt/b.txt'] });
+  const git = (...a) => spawnSync('git', ['-C', d, ...a], { encoding: 'utf8' });
   try {
     const before = treeState(d);
-    assert.deepEqual(Object.keys(before), ['.', '.wt']);
-    assert.ok(before['.wt'].some((l) => /^\?\? b\.txt [0-9a-f]{12}$/.test(l)), before['.wt'].join('|'));
-    assert.ok(before['.'].some((l) => /^!! \.kern\/ledger\.md [0-9a-f]{12}$/.test(l)), 'an excluded file, such as a ledger, is listed');
+    assert.deepEqual(Object.keys(before.worktrees), ['.', '.wt']);
+    assert.match(before.worktrees['.'][0], /^HEAD refs\/heads\/main [0-9a-f]{40}$/);
+    assert.ok(before.worktrees['.wt'].some((l) => /^\?\? b\.txt [0-9a-f]{12}$/.test(l)), before.worktrees['.wt'].join('|'));
+    assert.ok(before.worktrees['.'].some((l) => /^!! \.kern\/ledger\.md [0-9a-f]{12}$/.test(l)), 'an excluded file, such as a ledger, is listed');
+    assert.ok(before.git.some((l) => /^ref refs\/heads\/wt [0-9a-f]{40}$/.test(l)) && before.git.some((l) => /^config [0-9a-f]{12}$/.test(l)) && before.git.some((l) => /^info\/exclude [0-9a-f]{12}$/.test(l)));
     assert.deepEqual(treeState(d), before, 'reading it twice changes nothing');
-    writeFileSync(join(d, '.wt', 'b.txt'), 'b2\n');
-    assert.notDeepEqual(treeState(d)['.wt'], before['.wt'], 'a second edit to a file already changed shows');
-    writeFileSync(join(d, '.kern', 'ledger.md'), 'changed\n');
-    assert.notDeepEqual(treeState(d)['.'], before['.'], 'a ledger write shows');
+    const changes = [
+      ['a second edit to a file already changed', () => writeFileSync(join(d, '.wt', 'b.txt'), 'b2\n')],
+      ['a ledger write', () => writeFileSync(join(d, '.kern', 'ledger.md'), 'changed\n')],
+      ['git branch', () => git('branch', 'probe')],
+      ['git tag', () => git('tag', 'v0')],
+      ['git config', () => git('config', 'probe.key', '1')],
+      ['an exclude append', () => writeFileSync(join(d, '.git', 'info', 'exclude'), '/x/\n', { flag: 'a' })],
+      ['a switch of HEAD', () => git('checkout', '-q', '-b', 'other')],
+      ['a worktree outside the workspace', () => git('worktree', 'add', '-q', '-b', 'out', join(dirname(d), 'out'))]];
+    let last = before;
+    for (const [what, act] of changes) {
+      act();
+      const now = treeState(d);
+      assert.notDeepEqual(now, last, what);
+      last = now;
+    }
+    assert.ok(Object.keys(last.worktrees).includes('../out'));
   } finally {
     rmSync(dirname(d), { recursive: true, force: true });
     rmSync(f, { recursive: true, force: true });
   }
 });
 
-test('the runner records the git status at each run\'s start and end, saves it with the events, and the snapshot names the checks', () => {
+// Task 16j review, M5: a git failure at either end of a run makes that run invalid, and the runner goes on.
+test('readTree turns a git failure into a reason the run is invalid; only a case with a tree check reads the tree', () => {
+  const d = mkdtempSync(join(tmpdir(), 'nogit-'));
+  try {
+    assert.match(readTree(d, 'start').problem, /^git status at the run's start could not be read: .*not a git repository/i);
+    assert.equal(readTree(d, 'end').state, undefined);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+  assert.equal(readsTree({ checks: { 3: 'no-write' } }), true);
+  assert.equal(readsTree({ checks: { 1: 'git-or-gh-state' } }), false);
+  assert.equal(readsTree({}), false);
+});
+
+test('the runner records the tree at each run\'s start and end for a case with a tree check, an unreadable tree is an invalid run, and the snapshot names the checks', () => {
   const src = readFileSync(join(ROOT, 'scripts', 'behave.mjs'), 'utf8');
-  assert.match(src, /const cwd = caseWorkspace\(ROOT, c\);\n\s+const start = treeState\(cwd\);\n\s+const \{ run, problem, events \} = tryRun\(/);
-  assert.match(src, /let end;\n\s+try \{ end = treeState\(cwd\); \} catch \(e\) \{ end = \{ error: e\.message \}; \}/);
-  assert.match(src, /writeFileSync\(join\(raw, `\$\{c\.id\}-\$\{i\}\.tree\.json`\)/);
+  assert.match(src, /const cwd = caseWorkspace\(ROOT, c\);\n(?:\s*\/\/.*\n)*\s+const before = readsTree\(c\) \? readTree\(cwd, 'start'\) : null;\n\s+if \(before\?\.problem\) \{ runs\.push\(\{ invalid: true, reason: before\.problem, verdict: null, exit: null \}\);/);
+  assert.match(src, /const after = before \? readTree\(cwd, 'end'\) : null;/);
+  assert.match(src, /let verdict = null; let invalid = !!problem \|\| !!after\?\.problem; let reason = problem \|\| after\?\.problem \|\| '';/);
+  assert.match(src, /if \(before\) writeFileSync\(join\(raw, `\$\{c\.id\}-\$\{i\}\.tree\.json`\)/);
   assert.match(src, /results\.push\(\{ id: c\.id, source: c\.source, checks: c\.checks \?\? \{\}, \.\.\.r, runs \}\)/);
 });

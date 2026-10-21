@@ -72,34 +72,54 @@ export function loadCases(root) {
   return out;
 }
 
-// treeState(cwd): what a run may not change, read without writing anything (no index refresh). For each
-// worktree of cwd's repo, keyed by its path from cwd ('.' for cwd): `git status --porcelain
-// --untracked-files=all --ignored` lines, `XY path`, each file's line followed by the first 12 hex digits of
-// the sha256 of its content (a symlink's, of its target). The content shows a second change to a file already
-// changed; --ignored shows the .kern files that .git/info/exclude hides. Throws when git fails.
+// treeState(cwd): what a run may not change, read without writing anything (no index refresh):
+// { worktrees, git }. worktrees maps each worktree of cwd's repo, by its path from cwd ('.' for cwd), to its
+// lines: `HEAD <ref or HEAD> <commit>`, then `git status --porcelain --untracked-files=all --ignored` lines,
+// `XY path`, each file's line followed by the first 12 hex digits of the sha256 of its content (a symlink's,
+// of its target). The content shows a second change to a file already changed; --ignored shows the .kern
+// files that .git/info/exclude hides. git holds `ref <name> <object>` for each ref, then `config <hash>` and
+// `info/exclude <hash>` (`none` when absent) from the common git dir (Task 16j review, M4: a branch, a tag or
+// a config write is a change). Throws when git fails.
 export function treeState(cwd) {
   const git = (dir, ...a) => execFileSync('git', ['--no-optional-locks', '-C', dir, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
-  const out = {};
+  const hash = (path) => {
+    try {
+      const st = lstatSync(path);
+      const body = st.isSymbolicLink() ? readlinkSync(path) : st.isFile() ? readFileSync(path) : null;
+      return body === null ? null : createHash('sha256').update(body).digest('hex').slice(0, 12);
+    } catch { return null; }
+  };
+  const worktrees = {};
   const here = realpathSync(cwd);
   for (const tree of git(cwd, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9))) {
+    const lines = [`HEAD ${git(tree, 'rev-parse', '--symbolic-full-name', 'HEAD').trim()} ${git(tree, 'rev-parse', 'HEAD').trim()}`];
     const entries = git(tree, 'status', '--porcelain', '-z', '--untracked-files=all', '--ignored').split('\0');
-    const lines = [];
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
       if (!e) continue;
       if (/^[RC]/.test(e)) i += 1;
-      const path = join(tree, e.slice(3));
-      let sum = null;
-      try {
-        const st = lstatSync(path);
-        if (st.isSymbolicLink()) sum = readlinkSync(path);
-        else if (st.isFile()) sum = readFileSync(path);
-      } catch { sum = null; }
-      lines.push(sum === null ? e : `${e} ${createHash('sha256').update(sum).digest('hex').slice(0, 12)}`);
+      const sum = hash(join(tree, e.slice(3)));
+      lines.push(sum === null ? e : `${e} ${sum}`);
     }
-    out[relative(here, realpathSync(tree)) || '.'] = lines;
+    worktrees[relative(here, realpathSync(tree)) || '.'] = lines;
   }
-  return out;
+  const common = git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir').trim();
+  const refs = git(cwd, 'for-each-ref', '--format=ref %(refname) %(objectname)').split('\n').filter(Boolean);
+  return { worktrees, git: [...refs, ...['config', 'info/exclude'].map((f) => `${f} ${hash(join(common, f)) ?? 'none'}`)] };
+}
+
+// TREE_CHECKS: the CHECKS that read treeState. readsTree(c): whether case c names one, so the runner reads
+// the tree only for such a case (Task 16j review, M5).
+const TREE_CHECKS = new Set(['no-write']);
+export const readsTree = (c) => Object.values(c.checks ?? {}).some((name) => TREE_CHECKS.has(name));
+
+// readTree(cwd, when): { state } (treeState), or { problem } when git fails, which makes the run invalid
+// (Task 16j review, M5; such as a worktree the run removed, which git still lists).
+export function readTree(cwd, when) {
+  try { return { state: treeState(cwd) }; } catch (e) {
+    const why = String(e.stderr || e.message || e).trim().split('\n').filter(Boolean).pop() ?? 'git failed';
+    return { problem: `git status at the run's ${when} could not be read: ${why}` };
+  }
 }
 
 // RECORD: the behaviour grader's record (Task 16e; task-16-diagnosis X2), in characters. The transcript is
@@ -397,16 +417,20 @@ const ledgerRead = ({ name, input }) => {
 };
 // bare(p): p without macOS's /private prefix, so /var/... and /private/var/... compare equal.
 const bare = (p) => String(p).replace(/^\/private(?=\/)/, '');
-// treeDiff(start, end): the status lines one side has and the other lacks, `<worktree>: - <line>` or `: + <line>`.
-const treeDiff = (start, end) => [...new Set([...Object.keys(start), ...Object.keys(end)])].flatMap((t) => {
-  const a = start[t] ?? [], b = end[t] ?? [];
-  return [...a.filter((l) => !b.includes(l)).map((l) => `${t}: - ${l}`), ...b.filter((l) => !a.includes(l)).map((l) => `${t}: + ${l}`)];
-});
+// treeDiff(start, end): how two treeStates differ: `- worktree <key>` or `+ worktree <key>` for a worktree on
+// one side only (Task 16j review, M3), then `<worktree>: - <line>` or `+ <line>` for a line one side of a
+// worktree both hold lacks, and `.git: - <line>` or `+ <line>` for refs and config.
+const lineDiff = (label, a, b) => [...a.filter((l) => !b.includes(l)).map((l) => `${label}: - ${l}`), ...b.filter((l) => !a.includes(l)).map((l) => `${label}: + ${l}`)];
+const treeDiff = (start, end) => {
+  const a = start.worktrees ?? {}, b = end.worktrees ?? {};
+  return [...Object.keys(a).filter((k) => !(k in b)).map((k) => `- worktree ${k}`), ...Object.keys(b).filter((k) => !(k in a)).map((k) => `+ worktree ${k}`),
+    ...Object.keys(a).filter((k) => k in b).flatMap((k) => lineDiff(k, a[k], b[k])), ...lineDiff('.git', start.git ?? [], end.git ?? [])];
+};
 
 // CHECKS: the scripted checks a case's `checks` may name (Task 16j, task-16-diagnosis-3 fix group 1; the
 // user's "Scripted checks + one model", 2026-10-21). check(events, { tree }) decides one expectation with no
-// model and returns { pass, evidence }; tree is { start, end }, treeState at the run's start and end ({ error }
-// when the end could not be read). A check throws when the run lacks what it reads, so the run is invalid.
+// model and returns { pass, evidence }; tree is { start, end }, treeState at the run's start and end. A check
+// throws when the run lacks what it reads, so the run is invalid.
 export const CHECKS = {
   // A Bash call, the main session's or a subagent's, reads branch, worktree or PR state with git or gh
   // (stateCommands) before the final reply.
@@ -416,16 +440,16 @@ export const CHECKS = {
     return runs.length ? { pass: true, evidence: `Bash reads git or gh state before the final reply: ${runs.slice(0, 6).join('; ')}${runs.length > 6 ? `; ${runs.length - 6} more` : ''}` }
       : { pass: false, evidence: 'no Bash call reads git or gh state (status, branch, log, worktree list, for-each-ref, rev-list, show-ref, gh pr) before the final reply' };
   },
-  // No Write, Edit, MultiEdit or NotebookEdit call, and treeState the same at the run's start and end.
+  // No Write, Edit, MultiEdit or NotebookEdit call, and treeState (files, HEADs, refs, git config) the same at
+  // the run's start and end. A tree that could not be read makes the run invalid in the runner (readTree).
   'no-write': (events, { tree } = {}) => {
     const w = toolUses(events).filter((u) => WRITE_TOOLS.includes(u.name));
     if (w.length) return { pass: false, evidence: `${w.map((u) => `${u.name} call on ${argOf(u)}`).slice(0, 3).join('; ')}${w.length > 3 ? `; ${w.length - 3} more` : ''}` };
-    if (!tree?.start || !tree?.end) throw new Error('check no-write: the run recorded no git status at its start and end');
-    if (tree.end.error) return { pass: false, evidence: `git status failed at the run's end: ${tree.end.error}` };
+    if (!tree?.start?.worktrees || !tree?.end?.worktrees) throw new Error('check no-write: the run recorded no git status at its start and end');
     const diff = treeDiff(tree.start, tree.end);
-    if (diff.length) return { pass: false, evidence: `git status changed: ${diff.slice(0, 6).join('; ')}${diff.length > 6 ? `; ${diff.length - 6} more` : ''}` };
-    const n = Object.keys(tree.end).length;
-    return { pass: true, evidence: `no Write, Edit or NotebookEdit call, and git status the same at the run's start and end in ${n} worktree${n === 1 ? '' : 's'}` };
+    if (diff.length) return { pass: false, evidence: `the workspace changed: ${diff.slice(0, 6).join('; ')}${diff.length > 6 ? `; ${diff.length - 6} more` : ''}` };
+    const n = Object.keys(tree.end.worktrees).length;
+    return { pass: true, evidence: `no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of ${n} worktree${n === 1 ? '' : 's'} the same at the run's start and end` };
   },
   // A read of a ledger under the workspace's .kern/ledgers/ (ledgerRead) shows its first line, naming a plan
   // under the workspace's .kern/plans/, before any call reads a .jsonl transcript (transcriptRead). The

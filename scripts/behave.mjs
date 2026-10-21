@@ -3,13 +3,14 @@
 // Spends tokens; never runs in CI; ask the user before a run.
 // Usage: node scripts/behave.mjs [--case <id>] [--runs N] [--model <m>] [--grader-model <m>] [--dry-run]
 // Writes evals/snapshots/behave-<model>-<date>.json (committed). An expectation a case's `checks` names is decided
-// by that scripted check, with no model (Task 16j); the rest get one grader call per run.
+// by that scripted check, with no model (Task 16j); the rest get one grader call per run. A case with a tree
+// check also saves each run's treeState, at its start and end, as <case>-<i>.tree.json beside its events.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText } from './lib/claude-run.mjs';
-import { caseResult, caseWorkspace, gradeRun, graderPrompt, loadCases, pluginCopy, treeState, tryRun } from './lib/behave.mjs';
+import { caseResult, caseWorkspace, gradeRun, graderPrompt, loadCases, pluginCopy, readTree, readsTree, tryRun } from './lib/behave.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -44,18 +45,19 @@ try {
     const runs = [];
     for (let i = 0; i < RUNS; i++) {
       const cwd = caseWorkspace(ROOT, c);
-      const start = treeState(cwd);
+      // A case with a tree check (no-write) compares the workspace at the run's start and end; a tree git
+      // cannot read at either end makes the run invalid, and no model runs on one unread at the start.
+      const before = readsTree(c) ? readTree(cwd, 'start') : null;
+      if (before?.problem) { runs.push({ invalid: true, reason: before.problem, verdict: null, exit: null }); rmSync(dirname(cwd), { recursive: true, force: true }); continue; }
       const { run, problem, events } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20 });
-      // The no-write check compares the workspace's git status at the run's start and end.
-      let end;
-      try { end = treeState(cwd); } catch (e) { end = { error: e.message }; }
-      const tree = { start, end };
+      const after = before ? readTree(cwd, 'end') : null;
+      const tree = before ? { start: before.state, end: after.state } : undefined;
       // A run cut off by the timeout keeps the events it printed.
       const kept = run ? run.events : events;
       if (kept.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
-      writeFileSync(join(raw, `${c.id}-${i}.tree.json`), JSON.stringify(tree, null, 2) + '\n');
+      if (before) writeFileSync(join(raw, `${c.id}-${i}.tree.json`), JSON.stringify({ ...tree, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
       const gdir = mkdtempSync(join(tmpdir(), 'g-'));
-      let verdict = null; let invalid = !!problem; let reason = problem;
+      let verdict = null; let invalid = !!problem || !!after?.problem; let reason = problem || after?.problem || '';
       if (!invalid) {
         try {
           verdict = gradeRun(c, run.events, tree, (ex, record) => {
