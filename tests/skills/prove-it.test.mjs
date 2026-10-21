@@ -25,6 +25,13 @@ test('prove-it sections, steps, gate and red flags', () => {
   assertMaxBytes(SKILL, 3800);
 });
 
+test('a fix the reply proposes but did not run is labelled inferred', () => {
+  // 2026-10-20 prove-it-2 (task-16-diagnosis-2): 3 of 3 runs proposed a guard fix they had not run, unlabelled. The
+  // user, asked whether such a fix is a claim kern must label, answered "Yes, label it (Recommended)", 2026-10-21.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[7].endsWith('or label it measured, inferred or guess. A fix you propose but did not run is labelled inferred.'), s[7]);
+});
+
 test('evidence reference', () => {
   assertHeadings('skills/prove-it/references/evidence.md', ['# Evidence by claim', '## Claim table', '## Labels', '## Inconclusive is a fail']);
   assertContains('skills/prove-it/references/evidence.md', ['zero tests ran']);

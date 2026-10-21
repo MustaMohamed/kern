@@ -80,6 +80,15 @@ test('parallel-work pins the drain mapping, entry check, package location, teard
   }
 });
 
+test('small units are no reason to skip a fan-out the user asked for', () => {
+  // 2026-10-20 workflow-parallel-two-modules (task-16-diagnosis-2): all three runs read parallel-work first, then ran
+  // both one-line fixes inline, "because it would have cost far more than these one-line changes". The user, asked
+  // whether a typed "in parallel" still fans out for one-line units, answered "Yes, do what I asked (Recommended)",
+  // 2026-10-21. Overlap stays the only reason to run serially.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].includes('Overlapping units run serially. Small units are no reason to skip a fan-out the user asked for.'), s[1]);
+});
+
 test('brief template fields and worktrees reference', () => {
   assertHeadings(TEMPLATE, ['# Brief template', '## Fields', '## Standing orders']);
   assertContains(TEMPLATE, ['GOAL', 'SCOPE', 'CONTEXT', 'ACCEPTANCE', 'VERIFY', 'TIMEBOX', 'FORBIDDEN', 'REPORT', 'STANDING', 'brief-check']);

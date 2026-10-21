@@ -17,7 +17,7 @@ Updated 2026-10-14 for the M2 split: M2a (`docs/plans/2026-10-14-kern-m2a-plan.m
 | `parallel-work` | path | M2a | at most 6.4 KB, 6.4 built (+2 KB ref) | Fan out with one worktree per writer, integrate, re-test |
 | `implement` | path | M2a | at most 5.5 KB, 4.2 planned (+5.5 KB refs) | Thin slices, test first, full suite |
 | `diagnose` | path | M2a | at most 6.5 KB, 5.0 planned (+7 KB refs, 2 scripts) | Red-capable loop before any fix |
-| `prove-it` | auto | M2a | at most 3.6 KB, 3.3 planned (+1.8 KB ref) | Evidence before any "done" |
+| `prove-it` | auto | M2a | at most 3.8 KB, 3.3 planned (+1.8 KB ref) | Evidence before any "done" |
 | `self-review` | path | M2a | at most 7 KB, 4.3 planned (+5 KB refs) | Author's pre-PR check and verdict |
 | `commit` | slash | M2a | at most 5.2 KB, 4.0 planned | Commit named files to the project convention |
 | `finish-branch` | slash | M2a | at most 5 KB, 4.6 planned (+1.5 KB ref) | Verify, review, then commit / push / draft PR / keep |
@@ -466,7 +466,7 @@ disable-model-invocation: true
 
 **4. Steps**
 0. Defer (A6).
-1. Classify each unit independent, related or shared-state, and build the overlap list from each unit's files and `shared_services`. Overlapping units run serially. Separate a shared write target before anything serializes on it. With 3 or more writers doing one kind of change, run one pilot unit first and read its result before the rest. [SP dispatching-parallel-agents:18-45; PS principle-separate-before-serializing-shared-state:9-16; PB orchestrate:62]
+1. Classify each unit independent, related or shared-state, and build the overlap list from each unit's files and `shared_services`. Overlapping units run serially. Small units are no reason to skip a fan-out the user asked for (the user's "Yes, do what I asked (Recommended)", 2026-10-21: on 2026-10-20 all three workflow-parallel-two-modules runs read parallel-work, then ran both one-line fixes inline as too costly). Separate a shared write target before anything serializes on it. With 3 or more writers doing one kind of change, run one pilot unit first and read its result before the rest. [SP dispatching-parallel-agents:18-45; PS principle-separate-before-serializing-shared-state:9-16; PB orchestrate:62]
 2. Frame the run: the done predicate; partition or race; for a race, the selection rule declared before spawning; at most `parallel.max` workers; a model and effort named for each worker (`model.implementer` default `sonnet`, `model.investigator` default `sonnet`, each with its `.effort`). [PS swarm:20-26]
 3. Write one brief per worker from `references/brief-template.md`, its VERIFY starting with the entry check `wt-check <wt> <base-ref>` and then the focused baseline, and run `brief-check <brief>`; anything but `brief-check: ok` means do not spawn. Readers use `kern:investigator` or Explore and get no worktree. Writers get `wt-fork <source-wt> <slug>`, or `wt-new <slug> --detach` when there is no earlier uncommitted work. Record each writer's starting tree with `wt-snap <wt>` before spawning. [PB orchestrate:34-56; ADR orchestration-patterns:113; PB orchestrate:56; SP using-git-worktrees:16-39,121-140; DE parallel-work (VERIFY before brief-check)]
 4. Spawn every worker in one message with `run_in_background: true`. Never poll a worker or resume it to check liveness. [SP dispatching-parallel-agents:66-77; PB orchestrate:16,95]
@@ -482,11 +482,12 @@ disable-model-invocation: true
 **7. Acceptance**
 - Three disjoint tasks: three forks, one message with three background agents, patches applied one by one, full suite once in the integration worktree.
 - Two tasks both touching `db/migrations`: run serially, and the report says why.
+- Two one-line fixes the user asks to run in parallel: a worktree and a worker each, as for larger units; their size is no reason to run them inline.
 - A worker returns no test output: respawned once, then reported as a gap.
 
 The full checklist is `tests/skills/parallel-work.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** SP dispatching-parallel-agents, using-git-worktrees; PS swarm, principle-separate-before-serializing-shared-state; PB orchestrate, worktree-cleanup; ADR orchestration-patterns. SKILL.md at most 6,400 bytes (raised from 5,000 in M2a Task 21: the drain mapping, exit handling and teardown guard did not fit); `references/worktrees.md` at most 2,200 bytes (the plan's cap).
+**8. Sources; size.** SP dispatching-parallel-agents, using-git-worktrees; PS swarm, principle-separate-before-serializing-shared-state; PB orchestrate, worktree-cleanup; ADR orchestration-patterns. SKILL.md at most 6,400 bytes (raised from 5,000 in M2a Task 21: the drain mapping, exit handling and teardown guard did not fit; Task 16i made room for the fan-out line: step 3 names `wt-new` without its path, after `wt-fork`'s, and the brief template as `references/brief-template.md`); `references/worktrees.md` at most 2,200 bytes (the plan's cap).
 
 ---
 ### C5. `implement` (path, M2)
@@ -608,7 +609,7 @@ description: Use before saying work is done, fixed, passing or verified; before 
 4. For a new guard or regression test, take the change's patch (the `.patch` beside a `wt-diff` package) and run `probe --exclude-tests <wt> <change.patch> -- <test command>`; it must print `probe: fail-then-pass ok`. The allow case uses a value a real caller sends. Exit 3 is reported as "probe inconclusive", never as a pass. [SP verification-before-completion:82-86; USR; BV prove-it: --exclude-tests]
 5. For "requirements met", re-read the acceptance lines from `spec.source` and tick each one against evidence. [SP verification-before-completion:48,94-98; ADR definition-of-done:22]
 6. For a subagent's "success", read its worktree diff yourself with `wt-diff <wt> <tree-before>` and open the artifacts it names. [SP verification-before-completion:47,100-104]
-7. State each claim with its evidence as `claim: command, result`, or label it measured, inferred or guess. [PS poteto-mode:111]
+7. State each claim with its evidence as `claim: command, result`, or label it measured, inferred or guess. A fix the reply proposes but did not run is labelled inferred (the user's "Yes, label it (Recommended)", 2026-10-21: in 3 of 3 prove-it-2 runs on 2026-10-20 the reply proposed a guard fix it had not run, with no label). [PS poteto-mode:111]
 
 Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words done, fixed, passing, verified. Then, for a commit, Read `commit`; for a push or a PR, Read `finish-branch`; and follow its steps. [SE routing: the only natural-language path to commit and finish-branch]
 
@@ -621,12 +622,13 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 **7. Acceptance**
 - After an edit, "fixed, right?": runs the focused test and quotes exit code and failure count before saying fixed.
 - An implementer returns DONE: the diff is read before the user is told.
+- The reply proposes a fix it did not run: the fix is labelled inferred.
 - "What does this regex match?": stays quiet.
 - "Explain why the CI job is slow": stays quiet.
 
 The full checklist is `tests/skills/prove-it.acceptance.md` (M2b), ticked in the pilot.
 
-**8. Sources; size.** SP verification-before-completion; PS principle-prove-it-works, poteto-mode:111; PB bug-fix:10; ADR definition-of-done. SKILL.md at most 3,800 bytes (raised from 3,600 in M2a Task 25: the Gate hands off to commit or finish-branch, except from inside them); `references/evidence.md` at most 2,100 bytes (the plan's cap).
+**8. Sources; size.** SP verification-before-completion; PS principle-prove-it-works, poteto-mode:111; PB bug-fix:10; ADR definition-of-done. SKILL.md at most 3,800 bytes (raised from 3,600 in M2a Task 25: the Gate hands off to commit or finish-branch, except from inside them; Task 16i made room for the unrun-fix line: step 1 names `kern-detect` without its path, after `kern-get`'s, and step 6 names `wt-diff` without the path step 4 gives); `references/evidence.md` at most 2,100 bytes (the plan's cap).
 
 ---
 ### C8. `self-review` (path, M2)
