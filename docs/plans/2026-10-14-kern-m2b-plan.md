@@ -6122,6 +6122,40 @@ The user's answer (2026-10-21): "Debug it as a kern bug".
 
 Then re-run Task 16 Steps 2 to 5 on the user's yes.
 
+### Task 16m: No locale change Homebrew bash 5.3 must undo, anywhere in kern
+
+Task 16l found the root cause of its resets. On this Mac, `bash` resolves to Homebrew bash 5.3.15 (`/opt/homebrew/bin/bash`). That bash crashes now and then when a subshell undoes a locale change: a `local LC_ALL=C` going out of scope, or an `LC_ALL=C cmd` prefix with more commands after it inside `$( )`.
+- It happens only when neither LANG nor LC_ALL is set. LC_CTYPE alone does not prevent it.
+- Measured: a minimal script failed 7 of 160 times under Homebrew bash and 0 of 160 under `/bin/bash` 3.2.
+- Task 16l fixed state.sh and settings.sh.
+
+The re-review's inventory lists the rest:
+- **Live:** `hooks/guards/g20-approval.sh:126` and `:170`. A Write or Edit of any `.md` file fails closed in 27 of 400 calls with no locale, and under autopilot it is a deny in 14 of 200.
+- **Latent:**
+  - `hooks/guards/g06-secrets.sh:157`, `:189` and `:205`, which are pipeline elements inside `$(_g06_walk)`;
+  - `hooks/lib/json.sh:89` (`json_escape`);
+  - `hooks/lib/render.sh:11-13` (`render_template`);
+  - `hooks/guards/g02-pr.sh:175` (`_gh_opts`), used by G2, G3, G4 and G14.
+
+Two minors from Task 16l's last re-review belong here:
+- `hooks/lib/settings.sh:139` drops a `kern.local.yml` owned by another uid without naming the cause.
+- Under pipefail, git's exit 1 reads the same as awk's "tracked", with no cause named.
+
+**Files:**
+- `hooks/session-start`, `hooks/prompt-submit`, `hooks/pre-tool-use`, `hooks/subagent-start`, and the guard and lib files above
+- `scripts/lib/lint-rules.mjs` (a new rule) and its tests
+- `tests/hooks/`
+- `docs/specs/2026-10-12-kern-design.md`, `docs/plans/contract.md`, `CHANGELOG.md`
+
+1. **Entry guard.** Each entry hook exports `LANG=C` when neither LANG nor LC_ALL is set. The effective locale stays the same, and the crash's trigger is gone for every function the hook calls. Test it under `/opt/homebrew/bin/bash` with the locale cleared, with enough runs that the old code fails.
+2. **Sites.** Rewrite each live and latent site so it makes no locale change bash must undo. Use `env LC_ALL=C <cmd>`, or a locale change that never leaves a subshell's scope. Then the entry guard is not the only defence.
+3. **Lint rule.** Forbid `local LC_ALL` and an `LC_ALL=C` prefix on anything but `env` in hooks/ and the scripts hooks call. Cover the existing sites the rule allows, with the reason for each.
+4. **The two minors.**
+   - A local file whose owner differs counts as unread, with an ownership cause.
+   - git's own exit status is checked through `PIPESTATUS[0]` inside the subshell, or the docs say what it really does.
+
+Then re-run Task 16 Steps 2 to 5 on the user's yes.
+
 Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
