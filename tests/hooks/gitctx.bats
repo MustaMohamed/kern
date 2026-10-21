@@ -996,3 +996,18 @@ words_are() {
   run branch_protected feat/y
   [ "$status" -eq 0 ]
 }
+
+# A command substitution whose pipe cannot be made gives status 0 and no output; an empty branch name
+# read that way must not pass for an unprotected branch (re-review of 2026-10-21).
+@test "current_branch fails when its read of HEAD comes back empty, and an empty branch counts as protected" {
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  rc=0
+  got=$(pipe_fails 1 current_branch "$R" 2>/dev/null) || rc=$?
+  [ "$rc" -ne 0 ]
+  [ -z "$got" ]
+  [ "$(current_branch "$R")" = main ]
+  run branch_protected ""
+  [ "$status" -eq 0 ]
+}

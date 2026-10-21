@@ -875,10 +875,12 @@ in_main_checkout() {
 
 # current_branch DIR: the branch HEAD points to, without refs/heads/. Read by symbolic-ref:
 # rev-parse --abbrev-ref prints heads/<name> when a tag has the same name. Exit 1, printing
-# nothing, on a detached HEAD.
+# nothing, on a detached HEAD; exit 2, printing nothing, when the read came back empty, as a command
+# substitution whose pipe cannot be made does (status 0, no output).
 current_branch() {
   local r
   r=$(git -C "$1" symbolic-ref -q HEAD 2>/dev/null) || return 1
+  [ -n "$r" ] || return 2
   printf '%s\n' "${r#refs/heads/}"
 }
 
@@ -896,10 +898,12 @@ base_branch_name() {
 # branch_protected BRANCH: the settings base_branch, the origin/HEAD branch, branch.protected or
 # deploy.envs. With no origin/HEAD, main, master, trunk and develop count as protected. A base_branch
 # only adds a branch, so a committed one cannot unprotect main. `*` (every branch, from
-# push_targets) is protected too, and so is every branch while a settings layer that could name one
-# cannot be read (exit 4 from settings_get).
+# push_targets) is protected too, as is an empty name, and so is every branch while a settings layer
+# that could name one cannot be read (exit 4 from settings_get).
 branch_protected() {
   local b
+  # An empty name is a branch that could not be read, never an unprotected one.
+  [ -n "$1" ] || return 0
   [ "$1" = "*" ] && return 0
   b=$(settings_get base_branch '')
   [ $? = 4 ] && return 0

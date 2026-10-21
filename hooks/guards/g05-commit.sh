@@ -374,7 +374,23 @@ EOT
     _G05_WHY="the -F file is not a regular file in the repo"
     return 1
   fi
-  t=$(current_branch "$_G05_DIR") || { _G05_WHY="HEAD is detached"; return 1; }
+  t=$(current_branch "$_G05_DIR")
+  case $? in
+    0) ;;
+    1)
+      _G05_WHY="HEAD is detached"
+      return 1
+      ;;
+    *)
+      _G05_WHY="the current branch could not be read"
+      return 1
+      ;;
+  esac
+  # Empty with status 0: this substitution's own pipe could not be made.
+  if [ -z "$t" ]; then
+    _G05_WHY="the current branch could not be read"
+    return 1
+  fi
   if branch_protected "$t"; then
     _G05_WHY="$t is a protected branch"
     return 1

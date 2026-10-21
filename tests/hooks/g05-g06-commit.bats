@@ -1205,3 +1205,22 @@ key AKIAABCDEFGHIJKLMNOP"
   [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
   [[ "$output" == *"commit.policy could not be read (retry the commit)"*"(autopilot: nobody to ask)"* ]] || false
 }
+
+@test "G5: a current branch that reads empty counts as protected, so an autopilot commit on main is denied" {
+  # current_branch prints nothing when its caller's command substitution cannot make its pipe. A hook
+  # copy whose current_branch prints nothing stands in for that.
+  local K C
+  K=$(kern_root)
+  C="$BATS_TEST_TMPDIR/k"
+  mkdir -p "$C"
+  cp -R "$K/hooks" "$K/scripts" "$K/kernel" "$K/modes" "$K/.claude-plugin" "$C/"
+  printf '\ncurrent_branch() { :; }\n' >>"$C/hooks/lib/gitctx.sh"
+  git -C "$R" switch -q main
+  printf 'CDS-2465: swap MinIO for Floci\n\nWhy.\n' >"$R/msg.txt"
+  set_autopilot on
+  g "git commit -F msg.txt" g05
+  [ "$(decision_of "$output")" = deny ]
+  run env KERN_GUARDS=g05 bash "$C/hooks/pre-tool-use" <<<"$(bash_payload "git commit -F msg.txt")"
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [[ "$output" == *"the current branch could not be read"* ]] || false
+}
