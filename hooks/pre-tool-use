@@ -96,6 +96,13 @@ AGENT=$(json_get agent_type) || case $? in 1) AGENT="" ;; *) unparseable agent_t
 # Monitor runs a shell command from the same `command` key, so every guard reads it as Bash.
 [ "$TOOL" = Monitor ] && TOOL=Bash
 kern_enabled || exit 0
+# An empty tool name with status 0 means its command substitution's pipe could not be made. No guard runs
+# on an empty name, so the call fails closed.
+if [ -z "$TOOL" ]; then
+  fail_closed "the tool name in the hook input came back empty, so no guard could check this call (retry)"
+  emit_decision
+  exit 0
+fi
 # The shell's aliases that run git or gh, so git_words judges `gp` as `git push` too.
 [ "$TOOL" = Bash ] && aliases_load
 # The expansions in this command, which G2, G3, G4, G13, G14 and G15 read with its text before they parse it.

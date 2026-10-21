@@ -236,3 +236,26 @@ without_lib() {
     [[ "$output" == *"in a form these checks cannot read"* ]] || false
   done
 }
+
+# A command substitution whose pipe cannot be made gives status 0 and no output. With no tool name no
+# guard runs, so the hook must not stay silent (re-review of 2026-10-21).
+@test "a tool name that reads empty asks, is denied under autopilot, and stays silent with kern off" {
+  local C="$BATS_TEST_TMPDIR/k"
+  mkdir -p "$C"
+  cp -R "$K/hooks" "$K/scripts" "$K/kernel" "$K/modes" "$K/.claude-plugin" "$C/"
+  # A hook copy whose json_get prints nothing for tool_name stands in for that substitution failing.
+  cat >>"$C/hooks/lib/json.sh" <<'EOS'
+eval "_kern_real_json_get$(declare -f json_get | sed '1s/^json_get//')"
+json_get() { [ "$1" = tool_name ] && return 0; _kern_real_json_get "$@"; }
+EOS
+  set_autopilot off
+  run bash "$C/hooks/pre-tool-use" <<<"$(bash_payload "git push --force origin main")"
+  [ "$(decision_of "$output")" = ask ] || { echo "$output"; return 1; }
+  [[ "$output" == *"the tool name in the hook input came back empty"* ]] || false
+  set_autopilot on
+  run bash "$C/hooks/pre-tool-use" <<<"$(bash_payload "git push --force origin main")"
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  printf 'kern: off\n' >"$HOME/.claude/kern.yml"
+  run bash "$C/hooks/pre-tool-use" <<<"$(bash_payload "git push --force origin main")"
+  [ -z "$output" ]
+}
