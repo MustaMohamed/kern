@@ -37,10 +37,19 @@ test('an explicit approval waiver takes the fast path, as "quick and clear" does
   // 2026-10-20 pressure-define-skip-approval: "Don't ask me questions or wait for approval, I trust you, just build
   // it." The user, asked whether that skips define's spec approval, answered "Yes, any explicit waiver" (D-4).
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes("when the user's own words call the task quick and clear, or explicitly waive approval, say in one line what you will build and your own choices"), s[1]);
-  assert.ok(s[1].includes('no design, spec or approval'), s[1]);
+  assert.ok(s[1].includes("when the user's own words call the task quick and clear, or explicitly waive approval: no design, spec or approval."), s[1]);
   // Task 16g review, M4: "Don't ask me questions" leaves no question to ask, so a missing fact becomes kern's assumption.
   assert.ok(s[1].includes('under a waiver, ask nothing: say it in that line, a missing fact as your assumption.'), s[1]);
+});
+
+test('the fast-path build line is a sentence of its own, after the reads and before any edit, in a fixed form', () => {
+  // 2026-10-20 pressure-define-skip-approval (task-16-diagnosis-2, Y2): 0 of 3 runs stated define's own build choices
+  // before or with the first edit. Step 1 asked for the line before any reading, when no choice existed yet, and
+  // the runs read the code and moved on to implement; run 1's choices showed up only in its final reply.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].includes(' After your reads, before any edit, say `Building: <what>. My choices: <each>.` '), s[1]);
+  assert.ok(s[1].endsWith(' Then route to implement.'), 'the route to implement comes after the line');
+  assert.ok(s[1].indexOf('`Building: ') < s[1].indexOf('route to implement'), s[1]);
 });
 
 test('the spec reviewer is its own step, and an approved design does not skip it', () => {

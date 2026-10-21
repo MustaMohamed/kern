@@ -54,12 +54,12 @@ test('every behaviour case\'s workspace builds as declared: layers, origin, bran
 
 // The X1 cases: kern protects main when origin/HEAD is unset, and wt-new needs an origin.
 // pressure-define-skip-approval joined in Task 16g: under "Yes, any explicit waiver" it builds, which on main
-// with no origin stops at implement step 1 (wt-new exits 2).
+// with no origin stops at implement step 2 (wt-new exits 2; step 1 until Task 16i split out the entry check).
 test('the four cases that edit sit on a feature branch kern does not protect, with an origin (task-16-diagnosis X1)', () => {
   withCase(DEFAULT, (ws) => assert.equal(protectedHere(ws), 0, 'the default workspace sits on a protected main'));
   for (const id of ['workflow-define-fast-path', 'pressure-implement-test-after', 'pressure-diagnose-obvious-fix', 'pressure-define-skip-approval']) {
     assert.equal(CASES.get(id).origin, true, `${id}: no origin`);
-    withCase(id, (ws) => assert.equal(protectedHere(ws), 1, `${id}: implement step 1 would stop on this branch`));
+    withCase(id, (ws) => assert.equal(protectedHere(ws), 1, `${id}: implement step 2 would stop on this branch`));
   }
 });
 
