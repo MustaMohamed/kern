@@ -135,22 +135,22 @@ state_ensure() {
 }
 
 # autopilot_denied_by: prints the first settings file (in precedence order) that says `autopilot: denied`.
-# A layer kern cannot read may say it, so a file that exists but could not be read prints with
-# " (could not be read)", and a list of layers that could not be made prints "the settings files (could
-# not be listed)". Inside a git work tree whose main worktree root git could not find (_settings_files
-# exit 2), the project layers are unknown: "the project settings (could not be found)". Exit 1 when no
-# layer denies.
+# A layer kern cannot read may say it, so it counts as denying, named with its cause: a file that exists
+# but could not be read, a list of layers that could not be made, or a repository whose .git git cannot
+# open and kern cannot follow (_settings_files exit 2). Each reads after "autopilot denied by". Exit 1
+# when no layer denies.
 autopilot_denied_by() {
   local f files rc
   files=$(_settings_files)
   rc=$?
   # _settings_files always names the user's file, so no output means the list could not be made.
   if [ -z "$files" ]; then
-    printf 'the settings files (could not be listed)\n'
+    printf 'the settings files, which kern could not list (retry)\n'
     return 0
   fi
   if [ "$rc" != 0 ]; then
-    printf 'the project settings (could not be found)\n'
+    # shellcheck disable=SC2016 # the backticks are text
+    printf 'the project'"'"'s .claude settings, which kern cannot read: git cannot open this repository (run `git status` to see why)\n'
     return 0
   fi
   # Walked with parameter expansion: a here-document needs a file that may not open.
@@ -164,7 +164,7 @@ autopilot_denied_by() {
       0) [ "$_KERN_SV" = denied ] || continue ;;
       1) continue ;;
       *)
-        printf '%s (could not be read)\n' "$f"
+        printf '%s, which could not be read\n' "$f"
         return 0
         ;;
     esac

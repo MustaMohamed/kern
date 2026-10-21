@@ -221,7 +221,7 @@ guard_g15() {
       elif list_has "$envs" "$t"; then
         _g15_vote "push to deploy branch $t"
       elif [ "$unread" = 1 ]; then
-        _g15_vote "push to $t: a settings file could not be read, so deploy.envs is unknown"
+        _g15_vote "push to $t, and deploy.envs is unknown: $(settings_unread_why deploy.envs)"
       fi
     done <<EOT
 $(push_targets "$dir" "$rest")

@@ -887,12 +887,15 @@ EOT
 }
 
 # A settings layer kern cannot read must not loosen G13, G14 or G15 (review of 2026-10-21).
-@test "G13: a protected_targets layer that cannot be read denies a client command" {
+@test "G13: a protected_targets layer that cannot be read asks on a client command; a readable target still denies" {
   printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
+  printf 'protected_targets: prod-db.internal\n' >"$HOME/.claude/kern.yml"
   read_fails awk "$(cd "$R" && pwd -P)/.claude/kern.local.yml"
   g "scp a.txt v1-host:/data/" g13
-  [ "$(decision_of "$output")" = deny ]
-  [[ "$output" == *"protected_targets"* ]] || false
+  [ "$(decision_of "$output")" = ask ] || { echo "$output"; return 1; }
+  [[ "$output" == *"protected_targets is unknown: "*"kern.local.yml could not be read"* ]] || false
+  g "psql -h prod-db.internal -c 'UPDATE users SET a=1'" g13
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
 }
 
 @test "G14: an mcp.write_servers layer that cannot be read counts a write to an unknown server" {
@@ -901,11 +904,13 @@ EOT
   [ "$(decision_of "$output")" = ask ]
   read_fails awk "$HOME/.claude/kern.yml"
   mcp mcp__youtrack__update_issue
-  # tracker.policy cannot be read either, so it reads deny.
-  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
-  # A server no layer names counts too while a layer cannot be read.
+  [ "$(decision_of "$output")" = ask ] || { echo "$output"; return 1; }
+  [[ "$output" == *"mcp.write_servers is unknown: "*"kern.yml could not be read"* ]] || false
+  # A server no layer names asks too while a layer cannot be read, and a read-only tool gets no vote.
   mcp mcp__acme__update_issue
-  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [ "$(decision_of "$output")" = ask ] || { echo "$output"; return 1; }
+  mcp mcp__acme__get_issue
+  [[ "$output" != *permissionDecision* ]] || { echo "$output"; return 1; }
 }
 
 @test "G15: a deploy.envs layer that cannot be read asks on a push" {

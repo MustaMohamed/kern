@@ -22,11 +22,9 @@ guard_g13() {
   _g13_flat "$cmd ${KERN_ALIAS_TEXT-}"
   _g13_names "$_G13_FLAT" || return 0
   list=$(settings_get protected_targets '')
-  # A settings layer that could not be read may name more targets, so this command cannot be cleared.
-  if [ $? = 4 ]; then
-    vote deny G13 "a settings file could not be read, so protected_targets is unknown; retry the command"
-    return 0
-  fi
+  # A settings layer that could not be read may name more targets, so a command naming a client asks;
+  # the targets the readable layers name are still checked.
+  [ $? != 4 ] || vote ask G13 "protected_targets is unknown: $(settings_unread_why protected_targets)"
   [ -n "$list" ] || return 0
   _g13_scan "$cmd" "$list" 0
 }

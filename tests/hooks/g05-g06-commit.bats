@@ -1169,7 +1169,9 @@ key AKIAABCDEFGHIJKLMNOP"
   [ "$(decision_of "$output")" = deny ]
   read_fails awk "$(cd "$R" && pwd -P)/.claude/kern.local.yml"
   g "git commit -F msg.txt" g05
-  [ "$(decision_of "$output")" = deny ]
+  # The policy is unknown, so G5 asks with the cause; the unreadable layer also denies autopilot.
+  [ "$(decision_of "$output")" = ask ] || { echo "$output"; return 1; }
+  [[ "$output" == *"commit.policy unknown: "*"kern.local.yml could not be read"* ]] || false
 }
 
 @test "G6: a never_commit layer that cannot be read asks, under autopilot too" {
@@ -1201,5 +1203,5 @@ key AKIAABCDEFGHIJKLMNOP"
   [ "$(decision_of "$output")" = allow ]
   run env KERN_GUARDS=g05 bash "$C/hooks/pre-tool-use" <<<"$(bash_payload "git commit -F msg.txt")"
   [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
-  [[ "$output" == *"commit.policy could not be read"* ]] || false
+  [[ "$output" == *"commit.policy could not be read (retry the commit)"*"(autopilot: nobody to ask)"* ]] || false
 }

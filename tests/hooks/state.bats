@@ -297,7 +297,7 @@ since: 2026-10-12T00:00:00Z'
   read_fails awk "$HOME/.claude/kern.yml"
   run autopilot_on s1
   [ "$status" -ne 0 ]
-  [ "$(autopilot_denied_by 2>/dev/null)" = "$HOME/.claude/kern.yml (could not be read)" ]
+  [ "$(autopilot_denied_by 2>/dev/null)" = "$HOME/.claude/kern.yml, which could not be read" ]
   printf 'autopilot: allowed\n' >"$HOME/.claude/kern.yml"
   run autopilot_on s1
   [ "$status" -ne 0 ]
@@ -339,7 +339,7 @@ since: 2026-10-12T00:00:00Z'
   export CWD="$BATS_TEST_TMPDIR/plain/sub"
   run autopilot_on s1
   [ "$status" -ne 0 ]
-  [ "$(autopilot_denied_by 2>/dev/null)" = "the project settings (could not be found)" ]
+  [[ "$(autopilot_denied_by 2>/dev/null)" == "the project's .claude settings, which kern cannot read: git cannot open this repository"* ]] || false
   # Outside any repository the user's layer alone decides, as before.
   export CWD="$BATS_TEST_TMPDIR/norepo"
   mkdir -p "$CWD"

@@ -63,8 +63,9 @@ _g03_post() {
       fi
       ;;
     ask) vote ask G3 "$1 posts to the PR" ;;
+    unknown) vote ask G3 "$1 posts to the PR, and review.post_policy is unknown: $(settings_unread_why review.post_policy)" ;;
     # An empty policy means its command substitution's pipe could not be made.
-    *) vote deny G3 "review.post_policy could not be read; retry the command" ;;
+    *) vote ask G3 "$1 posts to the PR, and review.post_policy could not be read (retry the command)" ;;
   esac
 }
 

@@ -408,9 +408,13 @@ _g05_commit() {
       return 0
       ;;
     ask | auto) ;;
+    unknown)
+      vote ask G5 "commit.policy unknown: $(settings_unread_why commit.policy)"
+      return 0
+      ;;
     # An empty policy means its command substitution's pipe could not be made.
     *)
-      vote deny G5 "commit.policy could not be read; retry the commit"
+      vote ask G5 "commit.policy could not be read (retry the commit)"
       return 0
       ;;
   esac

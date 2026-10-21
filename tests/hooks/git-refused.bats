@@ -33,6 +33,12 @@ decide() {
   d=$(decision_of "$output")
 }
 
+# stale DIR: a plain directory DIR whose .git file names a gitdir that is gone.
+stale() {
+  mkdir -p "$1/sub"
+  printf 'gitdir: %s/gone/.git/worktrees/x\n' "$BATS_TEST_TMPDIR" >"$1/.git"
+}
+
 @test "a repository git refuses still reads its project settings, found from its .git directory" {
   printf 'commit.policy: deny\n' >"$R/.claude/kern.local.yml"
   refuse
@@ -83,4 +89,17 @@ decide() {
   set_autopilot off
   run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"kern:autopilot","command_args":"on","command_source":"plugin","prompt":"/kern:autopilot on"')"
   [ "$(sed -n 's/^autopilot: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = on ] || { echo "$output"; return 1; }
+}
+
+@test "under a stale .git file, a plain curl or ls is never denied, and the user's kern: off holds" {
+  stale "$BATS_TEST_TMPDIR/plain"
+  P="$BATS_TEST_TMPDIR/plain/sub"
+  set_autopilot off
+  for c in "curl -s https://example.com" "ls ~/.ssh" "grep -rn sqlite src"; do
+    decide "$P" "$c"
+    [ "$d" != deny ] || { echo "$c -> $output"; return 1; }
+  done
+  printf 'kern: off\n' >"$HOME/.claude/kern.yml"
+  decide "$P" "curl -s https://example.com"
+  [ "$d" = none ] || { echo "$output"; return 1; }
 }

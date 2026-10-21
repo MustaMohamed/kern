@@ -211,7 +211,7 @@ Loosening a safety default (section 8.1) requires a settings key, so hooks and s
 | `.claude/kern.yml` | Optional shared project settings | Only if a team wants it |
 | `.claude/kern.local.yml` | The default per-project file | Never; `/kern:help setup` adds it to `.git/info/exclude` |
 
-Format: flat `key: value` lines; `#` comments; lists as comma-separated values; no nesting beyond dotted keys. Hooks read it with `sed`. Unknown keys produce a warning in the settings summary. A settings file kern cannot read never loosens a guard: it counts as denying autopilot, a policy reads `deny`, `rebase.push` reads `ask`, `kern` reads `on`, and a guard whose list key it may extend fails closed. When git refuses a repository (dubious ownership, git unable to run), kern finds its root from the `.git` itself and reads the project files; only a broken `.git` leaves them unread.
+Format: flat `key: value` lines; `#` comments; lists as comma-separated values; no nesting beyond dotted keys. Hooks read it with `sed`. Unknown keys produce a warning in the settings summary. A settings file kern cannot read never loosens a guard: it counts as denying autopilot, a policy reads unknown and its guard asks, naming the cause (a deny under autopilot), `rebase.push` reads `ask`, and a guard whose list key it may extend asks or, for a git call, fails closed. The user's own file still counts, so its `kern: off` holds, and a call that is not a git call is never denied only because a project file cannot be read. When git refuses a repository (dubious ownership, git unable to run), kern finds its root from the `.git` itself and reads the project files; only a broken `.git` leaves them unread.
 
 ### 5.3 Resolution of each key
 

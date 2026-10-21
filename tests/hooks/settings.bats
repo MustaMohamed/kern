@@ -318,22 +318,27 @@ get() {
   got=$(settings_get "$@" 2>/dev/null) || rc=$?
 }
 
-@test "a layer that cannot be read gives policy deny, rebase.push ask and kern on, with exit 4" {
+@test "a layer that cannot be read leaves a policy unknown, rebase.push ask, and the user's kern: off, with exit 4" {
   printf 'commit.policy: auto\nrebase.push: ask\nkern: on\n' >"$R/.claude/kern.local.yml"
-  printf 'rebase.push: autopilot\nkern: off\npush.policy: auto\n' >"$HOME/.claude/kern.yml"
+  printf 'rebase.push: autopilot\nkern: off\npush.policy: auto\npr.policy: deny\n' >"$HOME/.claude/kern.yml"
   read_fails awk "$RP/.claude/kern.local.yml"
   get commit.policy ask
   [ "$rc" -eq 4 ]
-  [ "$got" = deny ]
-  [ "$(policy_for commit 2>/dev/null)" = deny ]
-  [ "$(policy_for push 2>/dev/null)" = deny ]
+  [ "$got" = unknown ]
+  [ "$(policy_for commit 2>/dev/null)" = unknown ]
+  # A readable lower layer's auto cannot stand, its deny does.
+  [ "$(policy_for push 2>/dev/null)" = unknown ]
+  [ "$(policy_for pr 2>/dev/null)" = deny ]
   get rebase.push ask
   [ "$rc" -eq 4 ]
   [ "$got" = ask ]
+  # The user's own kern: off holds whatever a layer that cannot be read may say.
   get kern on
   [ "$rc" -eq 4 ]
-  [ "$got" = on ]
-  kern_enabled 2>/dev/null
+  [ "$got" = off ]
+  run kern_enabled
+  [ "$status" -ne 0 ]
+  [[ "$(settings_unread_why commit.policy 2>/dev/null)" == "$RP/.claude/kern.local.yml could not be read" ]] || false
   # A layer above the one that cannot be read decides alone.
   read_fails awk "$RP/.claude/kern.local.yml" 0
   read_fails awk "$HOME/.claude/kern.yml"
@@ -360,7 +365,8 @@ get() {
   printf 'commit.policy: deny\n' >"$R/.claude/kern.local.yml"
   while [ "$n" -le 40 ]; do
     got=$(pipe_fails "$n" policy_for commit 2>/dev/null)
-    [ "$got" = deny ] || { echo "policy read $got when substitution $n failed"; return 1; }
+    # deny, or unknown, which a guard asks on; never ask or auto, which would let a commit through.
+    case "$got" in deny | unknown) ;; *) echo "policy read $got when substitution $n failed"; return 1 ;; esac
     [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || break
     n=$((n + 1))
   done
@@ -386,7 +392,8 @@ get() {
   [ "$rc" -eq 2 ]
   get commit.policy ask
   [ "$rc" -eq 4 ]
-  [ "$got" = deny ]
+  [ "$got" = unknown ]
+  [[ "$(settings_unread_why commit.policy)" == "git cannot open this repository"* ]] || false
   # Outside any repository the user's layer alone decides, as before.
   export CWD="$BATS_TEST_TMPDIR/norepo"
   mkdir -p "$CWD"

@@ -161,20 +161,21 @@ _settings_read() {
 # brackets around each layer's value ([a, b]) is dropped, items are trimmed, and an empty or repeated
 # item is dropped, so each item keeps its first place.
 # Exit 4 when a layer that could set KEY could not be read, or the list of layers could not be made: it
-# may hold a stricter value, so a guard must not take the result as the whole answer. A policy key then
-# prints deny, rebase.push ask and kern on; any other key prints what the readable layers and DEFAULT give.
+# may hold a stricter value, so a guard must not take the result as the whole answer, and
+# settings_unread_why says why. The layers that read still count, the user's own file always among them.
+# A policy key then prints deny when a layer that reads says deny, else unknown; rebase.push prints ask;
+# any other key, kern included, prints what the readable layers and DEFAULT give, so the user's kern: off
+# holds.
 settings_get() {
   local f v out="" found=0 rest item seen=$'\n' files unread=0 strict=""
   case "$1" in
-    *.policy | review.post_policy) strict=deny ;;
+    *.policy | review.post_policy) strict=policy ;;
     rebase.push) strict=ask ;;
-    kern) strict=on ;;
   esac
   # _settings_files always names the user's file, so no output means the list could not be made; exit 2
   # means the project layers are unknown. The list is walked with parameter expansion: a here-document
   # needs a file that may not open.
   if ! files=$(_settings_files) || [ -z "$files" ]; then
-    [ -z "$strict" ] || { printf '%s\n' "$strict"; return 4; }
     unread=1
   fi
   files="$files"$'\n'
@@ -187,7 +188,6 @@ settings_get() {
       0) v=$_KERN_SV ;;
       1) continue ;;
       *)
-        [ -z "$strict" ] || { printf '%s\n' "$strict"; return 4; }
         unread=1
         continue
         ;;
@@ -210,14 +210,25 @@ settings_get() {
         ;;
       *)
         _settings_ignored "$f" "$1" "$v" && continue
+        if [ "$unread" = 1 ]; then
+          case "$strict" in
+            policy) [ "$v" = deny ] || v=unknown ;;
+            ask) v=ask ;;
+          esac
+          printf '%s\n' "$v"
+          return 4
+        fi
         printf '%s\n' "$v"
-        [ "$unread" = 0 ] || return 4
         return 0
         ;;
     esac
   done
   if [ "$found" = 1 ]; then
     printf '%s\n' "$out"
+  elif [ "$unread" = 1 ] && [ "$strict" = policy ]; then
+    printf 'unknown\n'
+  elif [ "$unread" = 1 ] && [ "$strict" = ask ]; then
+    printf 'ask\n'
   elif [ $# -ge 2 ]; then
     printf '%s\n' "$2"
   elif [ "$unread" = 0 ]; then
@@ -225,6 +236,31 @@ settings_get() {
   fi
   [ "$unread" = 0 ] || return 4
   return 0
+}
+
+# settings_unread_why KEY: why KEY read with exit 4 from settings_get, as a phrase for a reason: git
+# cannot open the repository (_settings_files exit 2), a settings file that cannot be read, or a read
+# that failed for a moment (worth a retry).
+settings_unread_why() {
+  local files f rc
+  files=$(_settings_files)
+  rc=$?
+  if [ "$rc" = 2 ]; then
+    # shellcheck disable=SC2016 # the backticks are text
+    printf 'git cannot open this repository, so kern cannot read its .claude settings (run `git status` to see why)\n'
+    return 0
+  fi
+  files="$files"$'\n'
+  while [ -n "$files" ]; do
+    f=${files%%$'\n'*}
+    files=${files#*$'\n'}
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    _settings_read "$f" "$1"
+    [ $? = 2 ] || continue
+    printf '%s could not be read\n' "$f"
+    return 0
+  done
+  printf 'a kern settings file could not be read (retry)\n'
 }
 
 # settings_source KEY: prints the file that sets KEY, or `default`. Exit 0 always. A key in
@@ -286,9 +322,10 @@ EOT
 }
 
 # policy_for ACTION: ask|auto|deny for commit, push, pr, tracker or review.post; any other action reads as ask.
-# A policy that could not be read reads as deny: a settings layer that could not be read (settings_get
-# exit 4), or a command substitution that came back without its status line, as one whose pipe cannot be
-# made does. A caller that gets no output must read deny too.
+# A policy that could not be resolved reads as unknown: a settings layer that could not be read
+# (exit 4 from settings_get; deny still prints when a layer that reads says deny), or a command substitution
+# that came back without its status line, as one whose pipe cannot be made does. A guard asks on unknown,
+# naming the cause (settings_unread_why), and on no output at all, the caller's own substitution failing.
 policy_for() {
   local key v
   case "$1" in
@@ -302,7 +339,14 @@ policy_for() {
       v=${v%$'\n'0}
       v=${v%$'\n'}
       ;;
-    *) printf 'deny\n'; return 0 ;;
+    *$'\n'4)
+      v=${v%$'\n'4}
+      v=${v%$'\n'}
+      [ "$v" = deny ] || v=unknown
+      printf '%s\n' "$v"
+      return 0
+      ;;
+    *) printf 'unknown\n'; return 0 ;;
   esac
   case "$v" in
     auto|deny) printf '%s\n' "$v" ;;

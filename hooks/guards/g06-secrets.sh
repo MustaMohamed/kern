@@ -241,7 +241,7 @@ _g06_paths() {
   local list glob name rest hits=""
   list=$(settings_get never_commit '')
   # A settings layer that could not be read may list more paths: the staged paths cannot be cleared.
-  [ $? != 4 ] || _g06_unscanned "a settings file could not be read, so kern cannot check the staged paths against never_commit"
+  [ $? != 4 ] || _g06_unscanned "never_commit is unknown, so kern cannot check the staged paths against it: $(settings_unread_why never_commit)"
   list=${list#"${list%%[![:space:]]*}"}
   list=${list%"${list##*[![:space:]]}"}
   case "$list" in "["*"]") list=${list#\[}; list=${list%\]} ;; esac

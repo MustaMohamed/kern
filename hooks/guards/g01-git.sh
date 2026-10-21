@@ -631,9 +631,13 @@ EOT
       return 0
       ;;
     ask | auto) ;;
+    unknown)
+      vote ask G1 "push.policy unknown: $(settings_unread_why push.policy)"
+      return 0
+      ;;
     # An empty policy means its command substitution's pipe could not be made.
     *)
-      vote deny G1 "push.policy could not be read; retry the push"
+      vote ask G1 "push.policy could not be read (retry the push)"
       return 0
       ;;
   esac

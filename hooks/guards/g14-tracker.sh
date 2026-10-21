@@ -70,7 +70,7 @@ _g14_has_word() {
 # votes; an allow needs the family as a whole word of the server name (claude_ai_Linear is claude,
 # ai, linear), the tool's exact name on that family's list, and its arguments proven.
 _g14_mcp() {
-  local rest name srv words plain kind="" extra ok=0 first=""
+  local rest name srv words plain kind="" extra ok=0 first="" unsure=0
   rest=${TOOL#mcp__}
   name=${rest#*__}
   # Lowercased: the server, the tool name with camelCase split (createJiraIssue), and the tool name
@@ -89,13 +89,16 @@ EOT
   _g14_has_word "$srv" "$KERN_G14_CHAT" && kind=chat
   [ -z "$kind" ] && _g14_has_word "$srv" "$KERN_G14_TRACKERS" && kind=tracker
   if [ -z "$kind" ]; then
-    # A settings layer that could not be read may name this server, so it counts as a tracker.
-    if extra=$(settings_get mcp.write_servers ''); then
-      extra=$(printf '%s\n' "$extra" | tr '[:upper:]' '[:lower:]' | tr ',' ' ')
-      [ -n "$extra" ] && _g14_has_word "$srv" "$extra" && kind=tracker
-    else
-      kind=tracker
-    fi
+    extra=$(settings_get mcp.write_servers '')
+    # A settings layer that could not be read may name this server, so a write to it asks.
+    [ $? = 4 ] && unsure=1
+    extra=$(printf '%s\n' "$extra" | tr '[:upper:]' '[:lower:]' | tr ',' ' ')
+    [ -n "$extra" ] && _g14_has_word "$srv" "$extra" && kind=tracker
+  fi
+  if [ -z "$kind" ] && [ "$unsure" = 1 ]; then
+    _g14_is_write "$words $plain" || return 0
+    vote ask G14 "$TOOL may write to a tracker: mcp.write_servers is unknown: $(settings_unread_why mcp.write_servers)"
+    return 0
   fi
   [ -n "$kind" ] || return 0
   _g14_is_write "$words $plain" || return 0
@@ -192,8 +195,9 @@ _g14_decide() {
       ;;
     deny) vote deny G14 "tracker.policy deny" ;;
     ask) vote ask G14 "$2 writes to the tracker" ;;
+    unknown) vote ask G14 "$2 writes to the tracker, and tracker.policy is unknown: $(settings_unread_why tracker.policy)" ;;
     # An empty policy means its command substitution's pipe could not be made.
-    *) vote deny G14 "tracker.policy could not be read; retry the command" ;;
+    *) vote ask G14 "$2 writes to the tracker, and tracker.policy could not be read (retry the command)" ;;
   esac
 }
 
