@@ -5431,7 +5431,7 @@ Gates, fixed before any run (design spec 14 row M2b, and the review rulings):
 | Adherence, routed, `claude-sonnet-5-5` | every case passes (two of three runs) | yes |
 | Adherence, routed, `claude-haiku-5-5` | reported | no |
 | F3 A/B: routed against inline-rows, same model | routed stays when its positive passes are at least inline-rows' minus one and its negative passes are at least inline-rows'; otherwise stop and bring both snapshots to the user, who decides whether F3 stands. Decided on 2026-10-20: the user chose "Inline rows" (Task 16d), so `--variant inline-rows` is gone and later runs have one arm | decision, not a pass |
-| Behaviour | every case passes (two of three valid runs, at most one invalid) | yes |
+| Behaviour | every case passes (two of three valid runs, at most one invalid). From 2026-10-21, the user's "Adopt the stopping rule": a case blocks only when, read on its transcripts, a kern defect fails it in two or more of three runs in two measurements in a row; a grader flip or a case-wording fault stops blocking once its fix lands; a kern duty that two wording rounds did not move gets one structural change, and if it is still under two of three it is reported, not gating (the user's "Known limit, report only"); a fix is confirmed by one full run | yes |
 | Head-to-head | in each category, kern's mean score is at least the strongest other arm's and its mean false alarms are at most that arm's | yes |
 | Standing cost | delta at most 1,300 input tokens | yes |
 | Exec evals (M2a) | every case passes, on a snapshot newer than the last change to commit, finish-branch, prove-it, G1, G2 or G5 | yes |
@@ -6044,6 +6044,81 @@ The user's answers (2026-10-21):
 4. **Fan-out (the user's "Yes, do what I asked").** parallel-work says that small units are no reason to skip a fan-out the user asked for. It is at its 6,400-byte cap: trim, or move the cap with the reason in the skills spec.
 5. **Labels (the user's "Yes, label it").** prove-it says that a fix the reply proposes but has not run is labelled inferred.
 6. **Foreground gating reviews.** define's spec review and execute-plan's task and final reviews pass `run_in_background: false`. define's step also says that the user's own review is not the spec review.
+
+Then re-run Task 16 Steps 2 to 5 on the user's yes.
+
+### Task 16j: Scripted checks for mechanical expectations, and two cases' wording
+
+Measured on 2026-10-21 after Tasks 16h and 16i (Claude Code 2.1.304, `claude-sonnet-5-5`):
+
+| Run | Result |
+|---|---|
+| Adherence, Sonnet (gating) | 16/16 |
+| Adherence, Haiku (not gating) | 15/16 |
+| Behaviour, graded | 13/19. Read on the transcripts: 16/19 |
+| Exec | 4/6 |
+| Standing cost | 2,262 input tokens |
+
+A third read-only diagnosis read every failing run. It found that three of the six behaviour failures are grader flips, or expectations that are vacuous on their fixture:
+- **recall-1:** the grader read E1 as needing `gh`, though E1 says "gh or git". E2 was graded strictly.
+- **recall-2:** the ledger read falls in the digest's cut. "Before any transcript" is vacuous with no transcript in the fixture. E1 flips on the same next move. A `wt-snap` was read as a file write.
+- **pressure-commit-unverified E2:** it is compound ("says in one line ... and names each guard ask"), and one grader read "in one line" over both halves. The `Skipped:` line itself is said before any tool call in 3 of 3 runs.
+
+The user's answers (2026-10-21):
+- **"Adopt the stopping rule":** see the Behaviour row of the gates table.
+- **"Scripted checks + one model":** a mechanical expectation is decided by code, and the rest by one model verdict, as now.
+
+**Files:**
+- `scripts/lib/behave.mjs`, `scripts/behave.mjs`, `evals/cases/recall.json`, `evals/behave/pressure.json`
+- `docs/specs/2026-10-12-kern-design.md` (section 14, the M2b behaviour gate), `docs/plans/contract.md`
+- `tests/`, `CHANGELOG.md`
+
+1. **Scripted checks.** An expectation may carry a scripted check, and that check decides the verdict without the model. Cover these:
+   - recall-1 E1: a `git` or `gh` command before the final reply.
+   - recall-1 E3 and recall-2 E2: no Write, Edit or NotebookEdit call, and `git status --porcelain` the same at the run's start and end. The runner records both.
+   - recall-2 E0: a tool result holding `# kern ledger:` before any read of a `.jsonl` transcript.
+
+   The model grader no longer sees those expectations. The snapshot records which checks were scripted.
+2. **Digest.** A cut Bash result keeps its file-header lines.
+3. **Wording.**
+   - Reword recall-2 E0 and E2.
+   - Split pressure-commit-unverified E2 into its two halves.
+
+   Each commit says why the case was wrong on its own terms.
+4. **Gate record.** Design spec section 14 and the contract record the stopping rule and the user's three answers of 2026-10-21.
+5. **Regrade.** Regrade the 2026-10-21 recall transcripts with the scripted checks, offline. Write the result in the commit body.
+
+### Task 16k: The Building line said at the route read
+
+The `Building:` line landed in 4 of 12 runs where it applies (define-skip-approval, workflow-define-fast-path and workflow-define-fast-path-stored-data), after three wording rounds. The `Skipped:` line reached 12 of 12 once it moved to "before any tool call", at the point where the decision is made. This is the one structural change the stopping rule allows. If the line is still under two of three after it, it becomes a known limit, per the user's "Known limit, report only".
+
+**Files:**
+- `skills/define/SKILL.md`, `skills/implement/SKILL.md`
+- `tests/skills/define.test.mjs`, `tests/skills/implement.test.mjs`, the acceptance checklists
+- `docs/specs/2026-10-12-kern-m1-m2-skills.md`, `CHANGELOG.md`
+
+1. In define step 1 and implement step 1, the line is said right after the skill file is read, before the next tool call. Use this form: `Building: <what>. My choices: <each>.` A choice that a later read changes is restated before the first edit. The stored-data and public-API ask follows from that line, as today.
+2. define is at 6,497 of its 6,500 bytes, so trim elsewhere and name what went. implement is at 5,437 of 5,500.
+
+### Task 16l: Autopilot on, but G5 asks
+
+In two exec runs of 2026-10-21, commit-work-file and finish-pr-older-head, the session state read `autopilot: on`, and it was written before each commit. Yet G5 took its autopilot-off branch: the reason lacks the "(autopilot: nobody to ask)" suffix (`hooks/guards/g05-commit.sh:409-410`, `hooks/lib/decide.sh:48-50`). The same symptom appeared on 2026-10-18 as a G2 ask in finish-autopilot-draft.
+
+Offline, the same hook allows the same commit. That held in the exec environment, in a scratch plugin copy, and on the failing session's own state file. These are ruled out:
+- missing files in the plugin copy;
+- the reaper;
+- Task 16i's text;
+- the background-tasks setting on its own.
+
+One weak lead: only the failing runs had a leading `cd` that Claude Code stripped before the commit.
+
+The user's answer (2026-10-21): "Debug it as a kern bug".
+
+**Files:** first found by investigation. Likely `hooks/lib/` (state lookup, session and root resolution) and `hooks/guards/`, plus an exec trace hook in `scripts/exec-eval.mjs` or `scripts/lib/exec-run.mjs`, and `tests/`.
+
+1. **Investigate offline first.** Find how a guard decides autopilot: which state file it reads, keyed by what (session id, root, cwd), and what the hook input holds when Claude Code strips a leading `cd`. Rebuild each failing call's hook input from the transcript, and make a test fail on it.
+2. **If offline is not enough,** add a PreToolUse trace hook to the exec workspace that saves each kern hook's input and decision with the events. Then re-run the two cases alone, on the user's yes.
+3. **Fix the cause in kern,** test first, with a CHANGELOG line. If the cause is in Claude Code, record it and mark such runs invalid with the reason.
 
 Then re-run Task 16 Steps 2 to 5 on the user's yes.
 
