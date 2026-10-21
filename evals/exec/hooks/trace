@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# Hook trace: `bash hooks/trace COMMAND ARG...` runs one kern hook command with the stdin, argv and
+# environment it was given, and keeps its stdout, stderr and exit code. With KERN_EXEC_TRACE unset, empty
+# or not an absolute path, it only runs the command. Set, it also appends one JSON line per call to that
+# file: the time, pid, ppid and directory, the hook input, the Claude Code variables, kern's own view of
+# the session (computed with kern's libraries, which only read) and the hook's output and exit code. Its
+# work files go beside that file, never under the plugin data dir, and a failure of its own never changes
+# the hook's run.
+# shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
+case "${KERN_EXEC_TRACE-}" in /*) ;; *) exec "$@" ;; esac
+set +o posix
+TRACE_PERL=$(command -v perl 2>/dev/null) || TRACE_PERL=""
+TRACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exec "$@"
+TRACE_WORK=$(mktemp -d "$KERN_EXEC_TRACE.XXXXXX" 2>/dev/null) || exec "$@"
+cat >"$TRACE_WORK/in"
+
+# now_ms: the epoch time in milliseconds; whole seconds when neither bash 5 nor perl can say more.
+now_ms() {
+  local t
+  if [ -n "${EPOCHREALTIME-}" ]; then
+    # The radix character is the locale's, not always a dot.
+    t=${EPOCHREALTIME//[!0-9]/}
+    printf '%s\n' "${t%???}"
+  elif [ -z "$TRACE_PERL" ] || ! "$TRACE_PERL" -MTime::HiRes=time -e 'printf("%d\n", time() * 1000)' 2>/dev/null; then
+    printf '%s000\n' "$(date +%s)"
+  fi
+}
+
+# jesc: stdin as the body of a JSON string, escaped as json.sh's json_escape escapes it. perl when there
+# is one: json_escape takes seconds on a long line with many quotes, such as a large Write input, and the
+# hook's timeout counts the trace's time too.
+jesc() {
+  if [ -n "$TRACE_PERL" ]; then
+    # shellcheck disable=SC2016 # $1 is perl's
+    "$TRACE_PERL" -0777 -pe 's/([\\"])/\\$1/g; s/\n/\\n/g; s/\r/\\r/g; s/\t/\\t/g; s/([\x00-\x1f])/sprintf("\\u%04x", ord($1))/ge'
+  else
+    json_escape
+  fi
+}
+
+# jstr TEXT / jfile FILE: TEXT, or FILE's bytes, as a JSON string, a final newline kept. jopt NAME: the
+# variable NAME as a JSON string, null when unset. jnum N: N, or null when it is not a number. Need json.sh.
+jstr() {
+  local s
+  case "$1" in
+    *[\"\\]* | *[[:cntrl:]]*) ;;
+    *) printf '"%s"' "$1"; return 0 ;;
+  esac
+  s=$({ printf '%s' "$1"; printf x; } | jesc)
+  printf '"%s"' "${s%x}"
+}
+jfile() {
+  local s
+  s=$({ cat "$1"; printf x; } | jesc)
+  printf '"%s"' "${s%x}"
+}
+jopt() {
+  if [ -n "${!1+x}" ]; then jstr "${!1}"; else printf null; fi
+}
+jnum() {
+  case "$1" in '' | *[!0-9]*) printf null ;; *) printf '%s' "$1" ;; esac
+}
+
+# view: kern's view of this call as pre-tool-use computes it, from the same libraries and the same git
+# settings: the session id, cwd and main worktree it resolves, the state file and its autopilot line,
+# each settings layer with its autopilot value, and whether autopilot reads on. Runs in a subshell so
+# nothing it sets reaches the hook.
+view() (
+  case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]* | ??????????*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
+  export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
+    "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"
+  KERN_ROOT=$TRACE_ROOT
+  export KERN_ROOT
+  local lib
+  for lib in json settings state; do
+    # shellcheck source=/dev/null
+    . "$KERN_ROOT/hooks/lib/$lib.sh" 2>/dev/null || { printf '{"error":"hooks/lib/%s.sh did not load"}' "$lib"; return 0; }
+  done
+  local sid sid_rc cwd cwd_rc main enabled=false f f_rc st mtime="" inode="" ap ap_rc text=null s v first=1 denied apo_rc=null autopilot=false
+  # shellcheck disable=SC2034 # read by json.sh
+  KERN_INPUT=$(cat "$TRACE_WORK/in")
+  sid=$(json_get session_id 2>/dev/null)
+  sid_rc=$?
+  [ "$sid_rc" = 0 ] || sid=""
+  cwd=$(json_get cwd 2>/dev/null)
+  cwd_rc=$?
+  [ "$cwd_rc" = 0 ] || cwd=$PWD
+  main=$(kern_main_root "$cwd" 2>/dev/null) || main=""
+  CWD=$cwd KERN_MAIN=$main
+  export CWD KERN_MAIN
+  kern_enabled 2>/dev/null && enabled=true
+  printf '{"session_id":%s,"session_id_rc":%s,"cwd":%s,"cwd_rc":%s,"main":%s,"enabled":%s,"state_dir":%s,' \
+    "$(jstr "$sid")" "$sid_rc" "$(jstr "$cwd")" "$cwd_rc" "$(jstr "$main")" "$enabled" "$(jstr "$(state_dir)")"
+  f=$(state_file "$sid")
+  f_rc=$?
+  ap=$(state_get "$sid" autopilot 2>/dev/null)
+  ap_rc=$?
+  if [ "$f_rc" = 0 ] && [ -f "$f" ]; then
+    st=$(stat -c '%Y %i' "$f" 2>/dev/null || stat -f '%m %i' "$f" 2>/dev/null) && { mtime=${st%% *} inode=${st#* }; }
+    text=$(head -c 4096 "$f" >"$TRACE_WORK/state" && jfile "$TRACE_WORK/state") || text=null
+    printf '"state":{"file":%s,"file_rc":0,"exists":true,"mtime":%s,"inode":%s,' "$(jstr "$f")" "$(jnum "$mtime")" "$(jnum "$inode")"
+  elif [ "$f_rc" = 0 ]; then
+    printf '"state":{"file":%s,"file_rc":0,"exists":false,"mtime":null,"inode":null,' "$(jstr "$f")"
+  else
+    printf '"state":{"file":null,"file_rc":%s,"exists":false,"mtime":null,"inode":null,' "$f_rc"
+  fi
+  if [ "$ap_rc" = 0 ]; then ap=$(jstr "$ap"); else ap=null; fi
+  printf '"autopilot":%s,"autopilot_rc":%s,"text":%s},"settings":[' "$ap" "$ap_rc" "$text"
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    [ "$first" = 1 ] || printf ','
+    first=0
+    if [ -f "$s" ]; then
+      if v=$(_settings_lookup "$s" autopilot 2>/dev/null); then v=$(jstr "$v"); else v=null; fi
+      printf '{"file":%s,"exists":true,"autopilot":%s}' "$(jstr "$s")" "$v"
+    else
+      printf '{"file":%s,"exists":false,"autopilot":null}' "$(jstr "$s")"
+    fi
+  done <<EOT
+$(_settings_files)
+EOT
+  if denied=$(autopilot_denied_by 2>/dev/null); then denied=$(jstr "$denied"); else denied=null; fi
+  if [ -n "$sid" ]; then
+    autopilot_on "$sid" 2>/dev/null
+    apo_rc=$?
+    [ "$apo_rc" = 0 ] && autopilot=true
+  fi
+  printf '],"denied_by":%s,"autopilot_on_rc":%s,"autopilot":%s}' "$denied" "$apo_rc" "$autopilot"
+)
+
+# line START_MS ISO END_MS RC COMMAND...: the trace line for this call.
+line() (
+  # shellcheck source=hooks/lib/json.sh
+  . "$TRACE_ROOT/hooks/lib/json.sh" || return 1
+  local a first=1 event
+  # shellcheck disable=SC2034 # read by json.sh
+  KERN_INPUT=$(cat "$TRACE_WORK/in")
+  if event=$(json_get hook_event_name 2>/dev/null); then event=$(jstr "$event"); else event=null; fi
+  printf '{"time":"%s","ms":%s,"event":%s,"argv":[' "$2" "$(jnum "$1")" "$event"
+  for a in "${@:5}"; do
+    [ "$first" = 1 ] || printf ','
+    first=0
+    jstr "$a"
+  done
+  printf '],"pid":%s,"ppid":%s,"cwd":%s,"input":%s,"env":{' "$$" "$PPID" "$(jstr "$PWD")" "$(jfile "$TRACE_WORK/in")"
+  first=1
+  for a in CLAUDE_PLUGIN_DATA CLAUDE_PLUGIN_ROOT CLAUDE_PROJECT_DIR CLAUDE_CODE_SESSION_ID CLAUDE_CONFIG_DIR HOME TMPDIR PATH; do
+    [ "$first" = 1 ] || printf ','
+    first=0
+    printf '"%s":%s' "$a" "$(jopt "$a")"
+  done
+  printf '},"kern":'
+  if [ -s "$TRACE_WORK/view" ]; then cat "$TRACE_WORK/view"; else printf null; fi
+  a=""
+  case "$1" in '' | *[!0-9]*) ;; *) case "$3" in '' | *[!0-9]*) ;; *) a=$(($3 - $1)) ;; esac ;; esac
+  printf ',"stdout":%s,"stderr":%s,"exit":%s,"duration_ms":%s}\n' "$(jfile "$TRACE_WORK/out")" "$(jfile "$TRACE_WORK/err")" "$4" "$(jnum "$a")"
+)
+
+# append: the line onto KERN_EXEC_TRACE whole, under a lock directory, so calls that end together do not
+# interleave. After about 2 seconds without the lock it appends anyway.
+append() {
+  local i=0
+  while ! mkdir "$KERN_EXEC_TRACE.lock" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -lt 200 ] || break
+    sleep 0.01
+  done
+  cat "$TRACE_WORK/line" >>"$KERN_EXEC_TRACE"
+  [ "$i" -lt 200 ] && rmdir "$KERN_EXEC_TRACE.lock"
+}
+
+view >"$TRACE_WORK/view" 2>/dev/null
+TRACE_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+TRACE_START=$(now_ms)
+# A subshell that execs the command gives it the environment, SHLVL included, it gets without the trace.
+(exec "$@") <"$TRACE_WORK/in" >"$TRACE_WORK/out" 2>"$TRACE_WORK/err"
+TRACE_RC=$?
+TRACE_END=$(now_ms)
+cat "$TRACE_WORK/out"
+cat "$TRACE_WORK/err" >&2
+{ line "$TRACE_START" "$TRACE_ISO" "$TRACE_END" "$TRACE_RC" "$@" >"$TRACE_WORK/line" && append; } 2>/dev/null
+rm -rf "$TRACE_WORK" 2>/dev/null
+exit "$TRACE_RC"

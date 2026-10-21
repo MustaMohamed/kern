@@ -14,6 +14,6 @@ shellcheck scripts/fetch-upstream scripts/ci-local evals/exec/bin/gh
 tests/run-bats tests/hooks
 bash tests/hook-shape.sh
 shellcheck -x -S warning hooks/lib/*.sh hooks/guards/*.sh hooks/session-start hooks/subagent-start hooks/prompt-submit hooks/pre-tool-use scripts/kern-* tests/hook-shape.sh tests/run-bats tests/helpers/common.bash
-find scripts skills evals/exec/bin -type f \( -name '*.sh' -o ! -name '*.*' \) -print0 | xargs -0 shellcheck -x -S warning
+find scripts skills evals/exec/bin evals/exec/hooks -type f \( -name '*.sh' -o ! -name '*.*' \) -print0 | xargs -0 shellcheck -x -S warning
 node scripts/seeded-diffs.mjs
 echo "ci-local: all steps passed"

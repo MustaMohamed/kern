@@ -2,7 +2,7 @@
 // drive it with an injected runner: argument checking, the order of results, the snapshot rule and the
 // one place the exit code is decided.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ISOLATION, PERMISSIONS, runProblem } from './claude-run.mjs';
@@ -13,12 +13,35 @@ export class UsageError extends Error {}
 // What a pass assumes about the host, recorded in every snapshot.
 export const ASSUMES = 'Bash is pre-approved (--allowedTools Bash), so Claude Code never asks: a pass shows what kern allows, asks and denies, not the prompts a user who has not allowed Bash would see (kern gives git add no autopilot allow, for one)';
 
-// caseEnv({ bin, path, log, pr, snapshot }): the variables a case's claude run gets on top of the
+// caseEnv({ bin, path, log, pr, snapshot, trace }): the variables a case's claude run gets on top of the
 // inherited ones: the gh stub first on PATH (exec-eval copies evals/exec/bin beside the workspace), its
-// log and PR state, a gh token that cannot reach GitHub, and KERN_SHELL_SNAPSHOT naming an empty file, so
-// the hooks read no alias or function from the host's own shell snapshot.
-export function caseEnv({ bin, path, log, pr, snapshot }) {
-  return { PATH: `${bin}:${path}`, KERN_EXEC_LOG: log, KERN_EXEC_PR: pr, GH_TOKEN: 'invalid', GH_HOST: 'example.invalid', KERN_SHELL_SNAPSHOT: snapshot };
+// log and PR state, a gh token that cannot reach GitHub, KERN_SHELL_SNAPSHOT naming an empty file, so
+// the hooks read no alias or function from the host's own shell snapshot, and KERN_EXEC_TRACE naming the
+// case's hook trace (traceHooks), which childEnv passes on by its KERN_EXEC_ prefix.
+export function caseEnv({ bin, path, log, pr, snapshot, trace }) {
+  return { PATH: `${bin}:${path}`, KERN_EXEC_LOG: log, KERN_EXEC_PR: pr, GH_TOKEN: 'invalid', GH_HOST: 'example.invalid', KERN_SHELL_SNAPSHOT: snapshot,
+    ...(trace ? { KERN_EXEC_TRACE: trace } : {}) };
+}
+
+// traceHooks(plugin, script): makes the plugin copy at plugin run each of its hooks through script
+// (evals/exec/hooks/trace, written to the copy as hooks/trace): a hook `command` with `args` becomes
+// `bash ${CLAUDE_PLUGIN_ROOT}/hooks/trace <command> <args>...`, every other field kept. The trace runs the
+// hook unchanged and, while KERN_EXEC_TRACE names a file, appends one JSON line per call to it: the hook
+// input, the Claude Code variables, kern's view of the session and the hook's output (Task 16l). Only the
+// copy's hooks.json is rewritten; a hook with no args list throws rather than run untraced.
+export function traceHooks(plugin, script) {
+  const file = join(plugin, 'hooks', 'hooks.json');
+  const config = JSON.parse(readFileSync(file, 'utf8'));
+  for (const [event, matchers] of Object.entries(config.hooks)) {
+    for (const h of matchers.flatMap((m) => m.hooks)) {
+      if (h.type !== 'command' || typeof h.command !== 'string' || !Array.isArray(h.args)) throw new Error(`traceHooks: a ${event} hook has no command with an args list: ${JSON.stringify(h)}`);
+      h.args = ['${CLAUDE_PLUGIN_ROOT}/hooks/trace', h.command, ...h.args];
+      h.command = 'bash';
+    }
+  }
+  copyFileSync(script, join(plugin, 'hooks', 'trace'));
+  chmodSync(join(plugin, 'hooks', 'trace'), 0o755);
+  writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
 }
 
 // userSettingsProblem(home, env): why a run must not start, or ''. kern's hooks read the user layer
@@ -53,6 +76,13 @@ export function writeReply(dir, id, reply, reason) {
 export function writeEvents(dir, id, events) {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${id}.events.jsonl`), events.map((e) => `${JSON.stringify(e)}\n`).join(''));
+}
+
+// writeTrace(dir, id, file): <dir>/<id>.trace.jsonl is a copy of the case's hook trace file, beside its
+// events.
+export function writeTrace(dir, id, file) {
+  mkdirSync(dir, { recursive: true });
+  copyFileSync(file, join(dir, `${id}.trace.jsonl`));
 }
 
 // claudeConfigDir(env): the config dir the child claude uses, which childEnv passes through.
@@ -132,9 +162,10 @@ export const exitCode = (results) => (results.length > 0 && results.every((r) =>
 // version first, so a failure there stops the run before any case is paid for; then runs the cases in
 // order, writes the snapshot (results, version) only for a full run with at least one valid case, so an
 // all-INVALID run never replaces a same-day snapshot, and returns the exit code for every non-dry run
-// alike. Each runCase gets a save({ reply, reason, events }) to call before its workspace goes; it saves the
-// reply, then the events when saveEvents is given; the last line names the replies directory.
-export function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, saveEvents, repliesDir, log }) {
+// alike. Each runCase gets a save({ reply, reason, events, trace }) to call before its workspace goes; it
+// saves the reply, then the events when saveEvents is given, then the hook trace file when saveTrace is;
+// the last line names the replies directory.
+export function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, saveEvents, saveTrace, repliesDir, log }) {
   if (dryRun) {
     for (const c of cases) log(describe(c));
     return 0;
@@ -153,9 +184,10 @@ export function runEval({ cases, only, dryRun, runCase, describe, readVersion, w
         write();
       } catch (e) { log(`replies: could not write ${c.id}${what}: ${e.message}`); }
     };
-    const save = ({ reply, reason, events } = {}) => {
+    const save = ({ reply, reason, events, trace } = {}) => {
       attempt('', () => saveReply(c.id, reply, reason));
       if (events && saveEvents) attempt(' events', () => saveEvents(c.id, events));
+      if (trace && saveTrace) attempt(' trace', () => saveTrace(c.id, trace));
     };
     const r = runCase(c, save);
     results.push(r);

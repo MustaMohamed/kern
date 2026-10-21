@@ -47,7 +47,7 @@ jobs:
       - name: Shellcheck hooks and kern scripts
         run: shellcheck -x -S warning hooks/lib/*.sh hooks/guards/*.sh hooks/session-start hooks/subagent-start hooks/prompt-submit hooks/pre-tool-use scripts/kern-* tests/hook-shape.sh tests/run-bats tests/helpers/common.bash
       - name: Shellcheck every bash script
-        run: find scripts skills evals/exec/bin -type f \( -name '*.sh' -o ! -name '*.*' \) -print0 | xargs -0 shellcheck -x -S warning
+        run: find scripts skills evals/exec/bin evals/exec/hooks -type f \( -name '*.sh' -o ! -name '*.*' \) -print0 | xargs -0 shellcheck -x -S warning
       - name: Seeded-diff set
         run: node scripts/seeded-diffs.mjs
   macos:

@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ATTRIBUTION, GRADERS, chainParts, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
-import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, userSettingsProblem, writeEvents, writeReply } from '../scripts/lib/exec-run.mjs';
+import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from '../scripts/lib/exec-run.mjs';
 import { COPY_OMITS, pluginCopy } from '../scripts/lib/behave.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
@@ -229,7 +229,7 @@ test('Task 16h fix M6: a run the timeout cuts off keeps the events it printed, a
   assert.equal(err.message, 'claude timed out after 1500 ms; the 2 events it printed are kept');
   assert.deepEqual(err.events.map((e) => e.type), ['system', 'assistant']);
   for (const [runner, saved] of [['behave.mjs', /const kept = run \? run\.events : events;/], ['h2h.mjs', /const kept = run \? run\.events : events;/],
-    ['kernel-adherence.mjs', /problem = failure = e\.message; events = e\.events \?\? \[\];/], ['exec-eval.mjs', /save\(\{ reason: e\.message, events: e\.events \}\)/]]) {
+    ['kernel-adherence.mjs', /problem = failure = e\.message; events = e\.events \?\? \[\];/], ['exec-eval.mjs', /save\(\{ reason: e\.message, events: e\.events, trace \}\)/]]) {
     assert.match(readFileSync(join(REPO, 'scripts', runner), 'utf8'), saved, `${runner} saves a cut-off run's events`);
   }
 });
@@ -1290,5 +1290,243 @@ for (const [sig, group] of [['SIGINT', true], ['SIGTERM', false], ['SIGHUP', fal
       if (runner.exitCode === null && runner.signalCode === null) runner.kill('SIGKILL');
       if (seen) reap([seen.pid]);
     }
+  });
+}
+
+// Task 16l item 2 (task-16l-investigation): the exec plugin copy runs each kern hook through a trace
+// wrapper, hooks/trace, that appends one JSON line per call to $KERN_EXEC_TRACE: the hook input, the
+// Claude Code variables, kern's own view of the session and the hook's output. The live hooks.json and
+// the hook's own output and exit code stay as they are.
+const TRACE = join(REPO, 'evals', 'exec', 'hooks', 'trace');
+const hooksJson = (dir) => JSON.parse(readFileSync(join(dir, 'hooks', 'hooks.json'), 'utf8'));
+const files = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? [`${e.name}/`, ...files(join(dir, e.name)).map((f) => `${e.name}/${f}`)] : [e.name])).sort();
+const STATE_ON = 'voice: normal\nsurface: auto\nautopilot: on\nsince: 2026-10-21T07:26:59Z\n';
+// traceSession(): a traced plugin copy and one G5 call to make through it: a repo with a staged file and a
+// message under .kern/tmp, kern state for SID saying autopilot on, an empty shell snapshot and HOME.
+// call(hooks, extra) runs the PreToolUse entry of a parsed hooks.json as Claude Code does, with
+// ${CLAUDE_PLUGIN_ROOT} the copy and the variables Claude Code sets.
+function traceSession() {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tr-')));
+  const plugin = pluginCopy(REPO);
+  traceHooks(plugin, TRACE);
+  const ws = join(root, 'app');
+  mkdirSync(join(ws, '.kern', 'tmp'), { recursive: true });
+  const g = (...a) => assert.equal(spawnSync('git', ['-C', ws, '-c', 'user.name=t', '-c', 'user.email=t@example.com', ...a], { encoding: 'utf8' }).status, 0, a.join(' '));
+  g('init', '-q', '-b', 'feat/sum');
+  g('commit', '-q', '--allow-empty', '-m', 'init');
+  writeFileSync(join(ws, 'sum.js'), 'export const sum = (a, b) => a + b;\n');
+  g('add', '--', 'sum.js');
+  writeFileSync(join(ws, '.kern', 'tmp', 'msg'), 'fix: sum adds its two arguments\n\nsum subtracted b from a.\n');
+  const data = join(root, 'data');
+  mkdirSync(join(data, 'sessions'), { recursive: true });
+  writeFileSync(join(data, 'sessions', `${SID}.state`), STATE_ON);
+  mkdirSync(join(root, 'home'));
+  writeFileSync(join(root, 'snap.sh'), '');
+  const env = { PATH: '/usr/bin:/bin', HOME: join(root, 'home'), CLAUDE_PLUGIN_ROOT: plugin, CLAUDE_PLUGIN_DATA: data, CLAUDE_PROJECT_DIR: ws,
+    CLAUDE_CODE_SESSION_ID: SID, KERN_SHELL_SNAPSHOT: join(root, 'snap.sh') };
+  const input = JSON.stringify({ session_id: SID, transcript_path: join(root, 't.jsonl'), cwd: ws, permission_mode: 'acceptEdits', hook_event_name: 'PreToolUse',
+    tool_name: 'Bash', tool_input: { command: `git -C ${ws} commit -F ${ws}/.kern/tmp/msg` }, tool_use_id: 'toolu_1' });
+  const call = (hooks, extra = {}, text = input) => {
+    const h = hooks.hooks.PreToolUse[0].hooks[0];
+    return spawnSync(h.command, h.args.map((a) => a.split('${CLAUDE_PLUGIN_ROOT}').join(plugin)), { input: text, cwd: ws, env: { ...env, ...extra }, encoding: 'utf8' });
+  };
+  const done = () => { rmSync(root, { recursive: true, force: true }); rmSync(dirname(plugin), { recursive: true, force: true }); };
+  return { root, plugin, ws, data, home: env.HOME, input, call, done };
+}
+const outcome = (r) => ({ stdout: r.stdout, stderr: r.stderr, status: r.status });
+
+test('Task 16l: traceHooks points every hook of the copy at hooks/trace and keeps the rest of each entry; the live hooks.json is untouched', () => {
+  const before = readFileSync(join(REPO, 'hooks', 'hooks.json'));
+  const d = pluginCopy(REPO);
+  try {
+    traceHooks(d, TRACE);
+    const live = JSON.parse(before);
+    const copy = hooksJson(d);
+    assert.deepEqual(Object.keys(copy.hooks), Object.keys(live.hooks));
+    for (const [event, matchers] of Object.entries(live.hooks)) {
+      assert.equal(copy.hooks[event].length, matchers.length, event);
+      matchers.forEach((m, i) => {
+        assert.deepEqual({ ...copy.hooks[event][i], hooks: [] }, { ...m, hooks: [] }, `${event}: the matcher is kept`);
+        m.hooks.forEach((h, j) => assert.deepEqual(copy.hooks[event][i].hooks[j], { ...h, command: 'bash', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/trace', h.command, ...h.args] }, event));
+      });
+    }
+    assert.equal(readFileSync(join(d, 'hooks', 'trace'), 'utf8'), readFileSync(TRACE, 'utf8'));
+    assert.ok(statSync(join(d, 'hooks', 'trace')).mode & 0o100, 'the trace is executable');
+    assert.ok(readFileSync(join(REPO, 'hooks', 'hooks.json')).equals(before), 'the live hooks.json is not changed');
+    const words = /\bgrader|evals\/|route-eval|seeded-diffs|kernel-adherence|exec-eval|\bh2h\b|behave\.mjs|adherence\.mjs|\bexpectations?\b/i;
+    assert.doesNotMatch(readFileSync(TRACE, 'utf8'), words, 'the trace lands in the copy, so it names no eval');
+    writeFileSync(join(d, 'hooks', 'hooks.json'), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'bash x' }] }] } }));
+    assert.throws(() => traceHooks(d, TRACE), /args/, 'a hook without an args list is refused, not left untraced');
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); }
+});
+
+test('Task 16l: through the traced hooks.json a kern hook call keeps its output and exit code, and writes one trace line with the input, the variables and kern\'s view', () => {
+  const s = traceSession();
+  try {
+    const live = JSON.parse(readFileSync(join(REPO, 'hooks', 'hooks.json'), 'utf8'));
+    const direct = s.call(live);
+    assert.match(direct.stdout, /"permissionDecision":"allow".*kern G5: autopilot commit/, 'the real hook allows the commit under autopilot');
+    const kept = files(s.data);
+    const trace = join(s.root, 'trace.jsonl');
+    const traced = s.call(hooksJson(s.plugin), { KERN_EXEC_TRACE: trace });
+    assert.deepEqual(outcome(traced), outcome(direct), 'the same stdout, stderr and exit code');
+    assert.deepEqual(files(s.data), kept, 'the trace writes nothing into the data dir kern reads');
+    // A second call whose input names another session and whose user layer denies autopilot: the
+    // investigation's two candidate causes, each visible in the line.
+    mkdirSync(join(s.home, '.claude'));
+    writeFileSync(join(s.home, '.claude', 'kern.yml'), 'autopilot: denied\n');
+    const other = s.call(hooksJson(s.plugin), { KERN_EXEC_TRACE: trace }, s.input.replace(SID, 'other-session'));
+    assert.match(other.stdout, /needs user approval: kern G5: commit \(message checks pass\)/);
+    const lines = readFileSync(trace, 'utf8').split('\n');
+    assert.equal(lines.pop(), '', 'each line ends in a newline');
+    assert.equal(lines.length, 2, 'one line per call');
+    const [t, u] = lines.map((l) => JSON.parse(l));
+    assert.match(t.time, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+    assert.ok(Number.isInteger(t.ms) && Math.abs(t.ms - Date.now()) < 120000, 'ms is the epoch time in milliseconds');
+    assert.ok(Number.isInteger(t.pid) && Number.isInteger(t.ppid) && Number.isInteger(t.duration_ms));
+    assert.equal(t.event, 'PreToolUse');
+    assert.deepEqual(t.argv, ['bash', join(s.plugin, 'hooks', 'pre-tool-use')]);
+    assert.equal(t.cwd, s.ws);
+    assert.equal(t.input, s.input, 'the hook input verbatim');
+    assert.deepEqual(t.env, { CLAUDE_PLUGIN_DATA: s.data, CLAUDE_PLUGIN_ROOT: s.plugin, CLAUDE_PROJECT_DIR: s.ws, CLAUDE_CODE_SESSION_ID: SID,
+      CLAUDE_CONFIG_DIR: null, HOME: s.home, TMPDIR: null, PATH: '/usr/bin:/bin' });
+    const state = join(s.data, 'sessions', `${SID}.state`);
+    const st = statSync(state);
+    const settings = [join(s.ws, '.claude', 'kern.local.yml'), join(s.ws, '.claude', 'kern.yml'), join(s.home, '.claude', 'kern.yml')];
+    assert.deepEqual(t.kern, {
+      session_id: SID, session_id_rc: 0, cwd: s.ws, cwd_rc: 0, main: s.ws, enabled: true, state_dir: join(s.data, 'sessions'),
+      state: { file: state, file_rc: 0, exists: true, mtime: Math.floor(st.mtimeMs / 1000), inode: st.ino, autopilot: 'on', autopilot_rc: 0, text: STATE_ON },
+      settings: settings.map((file) => ({ file, exists: false, autopilot: null })), denied_by: null, autopilot_on_rc: 0, autopilot: true,
+    });
+    assert.deepEqual([t.stdout, t.stderr, t.exit], [direct.stdout, direct.stderr, direct.status]);
+    assert.equal(u.kern.session_id, 'other-session');
+    assert.deepEqual(u.kern.state, { file: join(s.data, 'sessions', 'other-session.state'), file_rc: 0, exists: false, mtime: null, inode: null, autopilot: null, autopilot_rc: 1, text: null });
+    assert.deepEqual(u.kern.settings[2], { file: settings[2], exists: true, autopilot: 'denied' });
+    assert.deepEqual([u.kern.denied_by, u.kern.autopilot_on_rc, u.kern.autopilot], [settings[2], 1, false]);
+    assert.deepEqual([u.stdout, u.exit], [other.stdout, 0]);
+  } finally { s.done(); }
+});
+
+test('Task 16l: the trace passes stdin, argv and the environment to the hook, keeps a failing exit code and stdout and stderr byte for byte, and a trace it cannot write changes nothing', () => {
+  const s = traceSession();
+  try {
+    const hook = join(s.plugin, 'hooks', 'stand-in');
+    writeFileSync(hook, 'env | LC_ALL=C sort | grep -v "^KERN_EXEC_TRACE="; printf "argv:%s|" "$0" "$@"; cat; printf "err\\n\\n" >&2; exit 3\n');
+    const text = 'line one\n{"session_id":"s"}';
+    const env = { PATH: '/usr/bin:/bin', HOME: s.home, LC_ALL: 'C' };
+    const run = (args, extra = {}) => spawnSync('bash', args, { input: text, cwd: s.ws, env: { ...env, ...extra }, encoding: 'utf8' });
+    const direct = run([hook, 'a b', '']);
+    assert.match(direct.stdout, /argv:.*stand-in\|argv:a b\|argv:\|line one\n\{"session_id":"s"\}$/);
+    assert.deepEqual([direct.stderr, direct.status], ['err\n\n', 3]);
+    const trace = join(s.root, 'trace.jsonl');
+    const traced = run([join(s.plugin, 'hooks', 'trace'), 'bash', hook, 'a b', ''], { KERN_EXEC_TRACE: trace });
+    assert.deepEqual(outcome(traced), outcome(direct), 'the hook sees the same environment, argv and stdin, and its output and exit code are kept');
+    const t = JSON.parse(readFileSync(trace, 'utf8'));
+    assert.deepEqual([t.input, t.stdout, t.stderr, t.exit], [text, direct.stdout, 'err\n\n', 3]);
+    assert.deepEqual(t.argv, ['bash', hook, 'a b', '']);
+    assert.deepEqual([t.kern.session_id, t.kern.state.file, t.kern.state.exists, t.kern.autopilot], ['s', join(s.home, '.claude', 'plugins', 'data', 'kern-kern', 'sessions', 's.state'), false, false],
+      "kern's own reading: its scanner finds the id past the text, and with no CLAUDE_PLUGIN_DATA the state is under HOME's kern-kern");
+    for (const bad of [join(s.root, 'no-such-dir', 'trace.jsonl'), join(s.root, 'trace.jsonl', 'x')]) {
+      assert.deepEqual(outcome(run([join(s.plugin, 'hooks', 'trace'), 'bash', hook, 'a b', ''], { KERN_EXEC_TRACE: bad })), outcome(direct), bad);
+    }
+  } finally { s.done(); }
+});
+
+test('Task 16l: with KERN_EXEC_TRACE unset the traced hook is the hook: the same output, exit code and files, and no trace file', () => {
+  const s = traceSession();
+  try {
+    const live = JSON.parse(readFileSync(join(REPO, 'hooks', 'hooks.json'), 'utf8'));
+    const direct = s.call(live);
+    const after = [files(s.root), files(s.plugin)];
+    const traced = s.call(hooksJson(s.plugin));
+    assert.deepEqual(outcome(traced), outcome(direct));
+    assert.deepEqual([files(s.root), files(s.plugin)], after, 'no trace file and no other file');
+    const hook = join(s.plugin, 'hooks', 'stand-in');
+    writeFileSync(hook, 'env | LC_ALL=C sort; printf "argv:%s|" "$0" "$@"; cat; echo err >&2; exit 4\n');
+    const run = (args) => spawnSync('bash', args, { input: 'in', cwd: s.ws, env: { PATH: '/usr/bin:/bin', HOME: s.home, LC_ALL: 'C' }, encoding: 'utf8' });
+    assert.deepEqual(outcome(run([join(s.plugin, 'hooks', 'trace'), 'bash', hook, 'x'])), outcome(run([hook, 'x'])));
+    assert.deepEqual([files(s.root), files(s.plugin).filter((f) => f !== 'hooks/stand-in')], after);
+  } finally { s.done(); }
+});
+
+test('Task 16l: caseEnv names the case\'s trace file, which the child environment passes on; runEval saves it best-effort', () => {
+  const env = caseEnv({ bin: '/b', path: '/usr/bin', log: '/t/gh.log', pr: 'none', snapshot: '/t/s.sh', trace: '/t/trace.jsonl' });
+  assert.equal(env.KERN_EXEC_TRACE, '/t/trace.jsonl');
+  assert.equal(childEnv({ PATH: '/p' }, env).KERN_EXEC_TRACE, '/t/trace.jsonl');
+  const root = mkdtempSync(join(tmpdir(), 'trace-'));
+  const dir = join(root, 'exec-2026-10-21');
+  const src = join(root, 'trace.jsonl');
+  writeFileSync(src, '{"event":"PreToolUse"}\n');
+  const lines = [];
+  const drive = (saveTrace, dryRun = false) => runEval({ cases: [{ id: 'a' }, { id: 'b' }], only: null, dryRun, describe: (c) => c.id, log: (l) => lines.push(l), readVersion: () => 'v',
+    repliesDir: dir, saveReply: (id, reply, reason) => writeReply(dir, id, reply, reason), saveEvents: (id, ev) => writeEvents(dir, id, ev), saveTrace, writeSnapshot: () => {},
+    runCase: (c, save) => { save(c.id === 'a' ? { reply: 'r', events: [], trace: src } : { reason: 'claude timed out', events: [], trace: src }); return result(c.id, c.id === 'a', c.id === 'b'); } });
+  assert.equal(drive((id, f) => writeTrace(dir, id, f), true), 0);
+  assert.equal(existsSync(dir), false, 'a dry run writes nothing');
+  drive((id, f) => writeTrace(dir, id, f));
+  for (const id of ['a', 'b']) assert.equal(readFileSync(join(dir, `${id}.trace.jsonl`), 'utf8'), '{"event":"PreToolUse"}\n', `${id}: a valid run and an invalid one both keep the trace`);
+  lines.length = 0;
+  drive((id) => { if (id === 'a') throw new Error('disk full'); });
+  assert.ok(lines.includes('replies: could not write a trace: disk full'));
+  assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'r\n', 'the reply is still written');
+});
+
+// hookClaude(end): a stand-in claude that, at each prompt, runs kern's PreToolUse hook from the
+// --plugin-dir copy's hooks.json as Claude Code does (CLAUDE_PLUGIN_ROOT, CLAUDE_PLUGIN_DATA under the
+// config dir's kern-inline, the session id in the input and CLAUDE_CODE_SESSION_ID), writes the call to
+// calls.json, then ends the turn: 'result' answers, 'exit' exits 1, 'kill' is killed by SIGKILL, a run
+// cut off as a timeout cuts it off.
+function hookClaude(end) {
+  const dir = mkdtempSync(join(tmpdir(), 'hc-'));
+  writeFileSync(join(dir, 'claude'), `#!${process.execPath}
+const fs = require('fs');
+const { spawnSync } = require('child_process');
+if (process.argv[2] === '--version') { console.log('9.9.9 (stand-in)'); process.exit(0); }
+const argv = process.argv.slice(2);
+const plugin = argv[argv.indexOf('--plugin-dir') + 1];
+const h = JSON.parse(fs.readFileSync(plugin + '/hooks/hooks.json', 'utf8')).hooks.PreToolUse[0].hooks[0];
+const input = JSON.stringify({ session_id: 's1', cwd: process.cwd(), permission_mode: 'acceptEdits', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git status' }, tool_use_id: 'toolu_1' });
+const data = process.env.CLAUDE_CONFIG_DIR + '/plugins/data/kern-inline';
+const env = { ...process.env, CLAUDE_PLUGIN_ROOT: plugin, CLAUDE_PLUGIN_DATA: data, CLAUDE_PROJECT_DIR: process.cwd(), CLAUDE_CODE_SESSION_ID: 's1' };
+let buf = '';
+process.stdin.on('data', (d) => { buf += d; for (let i; (i = buf.indexOf('\\n')) >= 0; buf = buf.slice(i + 1)) {
+  const r = spawnSync(h.command, h.args.map((a) => a.split('\${CLAUDE_PLUGIN_ROOT}').join(plugin)), { input, env, encoding: 'utf8' });
+  fs.writeFileSync(${JSON.stringify(join(dir, 'calls.json'))}, JSON.stringify({ input, args: h.args, plugin, data, cwd: process.cwd(), trace: process.env.KERN_EXEC_TRACE || null, stdout: r.stdout, stderr: r.stderr, status: r.status }));
+  fs.writeSync(1, JSON.stringify({ type: 'system', subtype: 'init', session_id: 's1' }) + '\\n');
+  ${end === 'kill' ? "process.kill(process.pid, 'SIGKILL');" : end === 'exit' ? 'process.exit(1);' : ''}
+  fs.writeSync(1, JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'stand-in' }) + '\\n'); } });
+process.stdin.on('end', () => process.exit(0));
+`);
+  chmodSync(join(dir, 'claude'), 0o755);
+  const env = { PATH: `${dir}:/usr/bin:/bin`, HOME: mkdtempSync(join(tmpdir(), 'xh-')), CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'xg-')), TMPDIR: tmpdir() };
+  assert.equal(spawnSync('/bin/sh', ['-c', 'command -v claude'], { env, encoding: 'utf8' }).stdout.trim(), join(dir, 'claude'), 'the stand-in, never the real claude, is first on PATH');
+  return { env, call: () => (existsSync(join(dir, 'calls.json')) ? JSON.parse(readFileSync(join(dir, 'calls.json'), 'utf8')) : null) };
+}
+
+for (const [end, verdict] of [['result', /^FAIL finish-menu-first: /m], ['exit', /^INVALID finish-menu-first: claude exited 1/m], ['kill', /^INVALID finish-menu-first: claude was killed by SIGKILL/m]]) {
+  test(`Task 16l: exec-eval traces the case's kern hooks and saves the trace beside the events, for a run that ${end === 'result' ? 'is graded' : end === 'exit' ? 'is invalid' : 'is cut off, as a timeout cuts it off'}`, () => {
+    const live = readFileSync(join(sandbox(), 'hooks', 'hooks.json'));
+    const results = join(sandbox(), 'evals', 'results');
+    if (existsSync(results)) for (const d of readdirSync(results)) rmSync(join(results, d, 'finish-menu-first.trace.jsonl'), { force: true });
+    const stub = hookClaude(end);
+    const r = spawnSync(process.execPath, [EXEC(), '--case', 'finish-menu-first'], { env: stub.env, encoding: 'utf8', timeout: 120000 });
+    assert.match(r.stdout, verdict, `${r.stdout}${r.stderr}`);
+    const call = stub.call();
+    assert.ok(call, 'the stand-in ran the hook');
+    assert.equal(call.args[0], '${CLAUDE_PLUGIN_ROOT}/hooks/trace', "the copy's hooks.json runs the hook through the trace");
+    assert.equal(call.status, 0);
+    assert.equal(canon(call.trace), canon(join(dirname(call.cwd), 'trace.jsonl')), 'the trace file is beside the workspace, one per case');
+    const replies = r.stdout.match(/^replies: (.*)$/m)[1];
+    const lines = readFileSync(join(replies, 'finish-menu-first.trace.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    assert.equal(lines.length, 1);
+    const [t] = lines;
+    assert.deepEqual([t.event, t.input, t.stdout, t.stderr, t.exit], ['PreToolUse', call.input, call.stdout, call.stderr, 0]);
+    assert.deepEqual([t.env.CLAUDE_PLUGIN_ROOT, t.env.CLAUDE_PLUGIN_DATA, t.env.CLAUDE_CODE_SESSION_ID], [call.plugin, call.data, 's1']);
+    assert.deepEqual([t.kern.session_id, t.kern.state.file, t.kern.autopilot], ['s1', join(call.data, 'sessions', 's1.state'), false]);
+    assert.ok(existsSync(join(replies, 'finish-menu-first.events.jsonl')), 'beside the events');
+    assert.deepEqual(readdirSync(join(call.data, 'sessions')).filter((f) => f !== 'aliases.cache'), [], 'nothing but the hook\'s own cache in the data dir');
+    assert.ok(readFileSync(join(sandbox(), 'hooks', 'hooks.json')).equals(live), "the runner's own hooks.json is not changed");
+    assert.ok(live.equals(readFileSync(join(REPO, 'hooks', 'hooks.json'))));
+    assert.ok(!existsSync(dirname(call.plugin)) && !existsSync(dirname(call.cwd)), 'the copy and the workspace are removed after the run');
   });
 }
