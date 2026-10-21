@@ -265,8 +265,9 @@ settings_get() {
 }
 
 # settings_unread_why KEY: why KEY read with exit 4 from settings_get, as a phrase for a reason: git
-# cannot open the repository (_settings_files exit 2), a settings file that cannot be read, or a read
-# that failed for a moment (worth a retry).
+# cannot open the repository (_settings_files exit 2), a settings file that cannot be read, a
+# kern.local.yml whose loosening value git cannot vouch for (_settings_ignored exit 2), or a read that
+# failed for a moment (worth a retry).
 settings_unread_why() {
   local files f rc
   files=$(_settings_files)
@@ -282,9 +283,19 @@ settings_unread_why() {
     files=${files#*$'\n'}
     [ -n "$f" ] && [ -f "$f" ] || continue
     _settings_read "$f" "$1"
-    [ $? = 2 ] || continue
-    printf '%s could not be read\n' "$f"
-    return 0
+    case $? in
+      0)
+        _settings_ignored "$f" "$1" "$_KERN_SV"
+        [ $? = 2 ] || continue
+        # shellcheck disable=SC2016 # the backticks are text
+        printf 'git cannot tell whether %s is your own untracked file (run `git status` to see why)\n' "$f"
+        return 0
+        ;;
+      2)
+        printf '%s could not be read\n' "$f"
+        return 0
+        ;;
+    esac
   done
   printf 'a kern settings file could not be read (retry)\n'
 }

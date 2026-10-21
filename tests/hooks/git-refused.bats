@@ -164,3 +164,12 @@ protect() {
   decide "$BATS_TEST_TMPDIR/plain/sub" "ssh prod.example.com"
   [ "$d" = deny ] || { echo "$output"; return 1; }
 }
+
+@test "a loosening kern.local.yml git cannot vouch for is named as the cause" {
+  printf 'commit.policy: auto\n' >"$R/.claude/kern.local.yml"
+  set_autopilot off
+  refuse
+  decide "$R" "git commit -m 'feat: x'"
+  [ "$d" = ask ] || { echo "$output"; return 1; }
+  [[ "$output" == *"commit.policy unknown: git cannot tell whether "*"kern.local.yml is your own untracked file (run \`git status\` to see why)"* ]] || false
+}
