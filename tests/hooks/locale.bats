@@ -1,9 +1,10 @@
 #!/usr/bin/env bats
 # Homebrew bash 5.3.15 (macOS, measured 2026-10-21) segfaults now and then when a subshell undoes a locale
 # change, and only while neither LANG nor LC_ALL is set (Task 16l). kern makes no such change anywhere a
-# hook runs (Task 16m). The crash depends on the process's memory layout: one process either crashes on
-# every try or on none, so each check runs many fresh processes. The caller's locale is unset in the test
-# shell, not with env -u, whose effect on the crash rate was measured both ways.
+# hook runs, and each entry hook exports LANG=C when neither is set, which leaves the locale as it was
+# (Task 16m). The crash depends on the process's memory layout: one process either crashes on every try
+# or on none, so each check runs many fresh processes. The caller's locale is unset in the test shell,
+# not with env -u, whose effect on the crash rate was measured both ways.
 
 load ../helpers/common
 
@@ -13,6 +14,67 @@ setup() {
   R=$(cd "$R" && pwd -P)
   kern_env "$R"
   K="$(kern_root)"
+}
+
+# The guard line every entry hook runs first.
+GUARD='[ -n "${LANG-}${LC_ALL-}" ] || export LANG=C'
+
+# first_command FILE: the first line of FILE that is neither blank nor a comment.
+first_command() {
+  grep -vE '^[[:space:]]*(#|$)' "$1" | head -n 1
+}
+
+@test "each entry hook runs the locale guard before anything else" {
+  local h
+  for h in session-start prompt-submit pre-tool-use subagent-start; do
+    [ "$(first_command "$K/hooks/$h")" = "$GUARD" ] || { echo "$h starts with: $(first_command "$K/hooks/$h")"; return 1; }
+  done
+}
+
+@test "the entry guard stops the bash 5.3 locale crash" {
+  local b i=0 bad=0
+  b=$(bash53) || skip "no bash 5.3 or later here"
+  unset LANG LC_ALL LC_CTYPE
+  # The crash's minimal shape after the first command of pre-tool-use: a `local LC_ALL=C` undone at
+  # return, inside $( ) with a command after it.
+  printf '%s\n' "$(first_command "$K/hooks/pre-tool-use")" 'f() { local LC_ALL=C; :; }' 'v=$(f; echo t)' '[ "$v" = t ]' \
+    >"$BATS_TEST_TMPDIR/once.sh"
+  while [ "$i" -lt 300 ]; do
+    i=$((i + 1))
+    "$b" "$BATS_TEST_TMPDIR/once.sh" 2>/dev/null || bad=$((bad + 1))
+  done
+  [ "$bad" -eq 0 ] || { echo "$b failed $bad of 300 runs"; return 1; }
+}
+
+@test "the entry guard sets LANG only when neither LANG nor LC_ALL is set, for git too" {
+  local real h want got p
+  real=$(command -v git)
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/sh\nprintf "%%s %%s\\n" "${LANG-unset}" "${LC_ALL-unset}" >>"%s"\nexec "%s" "$@"\n' \
+    "$BATS_TEST_TMPDIR/git.log" "$real" >"$BATS_TEST_TMPDIR/bin/git"
+  chmod +x "$BATS_TEST_TMPDIR/bin/git"
+  for h in session-start prompt-submit pre-tool-use subagent-start; do
+    case "$h" in
+      session-start) p=$(payload SessionStart '"source":"startup"') ;;
+      prompt-submit) p=$(payload UserPromptSubmit '"prompt":"hello"') ;;
+      pre-tool-use) p=$(bash_payload 'git push origin main') ;;
+      subagent-start) p=$(payload SubagentStart '"agent_id":"a","agent_type":"Explore"') ;;
+    esac
+    for want in 'C unset' 'en_US.UTF-8 unset' 'unset en_US.UTF-8' 'C unset/LC_CTYPE'; do
+      : >"$BATS_TEST_TMPDIR/git.log"
+      (
+        unset LANG LC_ALL LC_CTYPE
+        case "$want" in
+          en_US.UTF-8*) export LANG=en_US.UTF-8 ;;
+          unset*) export LC_ALL=en_US.UTF-8 ;;
+          */LC_CTYPE) export LC_CTYPE=UTF-8 ;;
+        esac
+        PATH="$BATS_TEST_TMPDIR/bin:$PATH" bash "$K/hooks/$h" <<<"$p" >/dev/null 2>&1
+      )
+      got=$(sort -u "$BATS_TEST_TMPDIR/git.log")
+      [ "$got" = "${want%/LC_CTYPE}" ] || { echo "$h with $want: git saw '$got'"; return 1; }
+    done
+  done
 }
 
 @test "no hook site makes a locale change bash 5.3 must undo, without the entry guard" {

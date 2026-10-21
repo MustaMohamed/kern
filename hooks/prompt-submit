@@ -2,6 +2,11 @@
 # kern UserPromptSubmit and UserPromptExpansion: applies mode and autopilot switches the user typed,
 # then prints the mode line and a short reminder when the session is outside the default preset.
 # Plain stdout is added to Claude's context.
+# Homebrew bash 5.3.15 segfaults now and then when a subshell undoes a locale change, but only while
+# neither LANG nor LC_ALL is set (Task 16l). An unset LANG already means the C locale, and an LC_* still
+# overrides it, so exporting LANG=C changes no locale: it only takes the trigger away from this hook and
+# every command it runs. It comes first, before anything that could crash.
+[ -n "${LANG-}${LC_ALL-}" ] || export LANG=C
 KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export KERN_ROOT
 # Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
