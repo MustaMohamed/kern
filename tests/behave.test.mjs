@@ -472,18 +472,33 @@ test('no-write passes only with no Write, Edit or NotebookEdit call and the same
   assert.throws(() => check(reply('x'), {}), /^Error: check no-write: the run recorded no git status at its start and end$/, 'an old run cannot pass it');
 });
 
-test('ledger-before-transcript passes when a result holds the ledger header before any .jsonl transcript read', () => {
+test('ledger-before-transcript passes when a read of the workspace ledger shows its first line before any transcript read', () => {
   const check = CHECKS['ledger-before-transcript'];
-  const ledger = '# kern ledger: /w/.kern/plans/export.md\nMain: /w branch=main';
-  assert.deepEqual(check([...ran('cat .kern/ledgers/export/ledger.md', ledger), ...reply('x')], {}),
-    { pass: true, evidence: 'the result of Bash cat .kern/ledgers/export/ledger.md holds "# kern ledger:", and no .jsonl transcript was read before it' });
-  assert.equal(check([use('r', 'Read', { file_path: '/w/.kern/ledgers/export/ledger.md' }), back('r', `     1\t${ledger}`), use('t', 'Read', { file_path: '/h/p/s.jsonl' }), back('t', '{}'), ...reply('x')], {}).pass, true, 'a transcript after the ledger is fine');
-  for (const first of [ran('grep -h export ~/.claude/projects/x/*.jsonl', '{}'), [use('t', 'Read', { file_path: '/h/p/s.jsonl' }), back('t', '{}')], [use('g', 'Grep', { pattern: 'export', path: '/h/p/s.jsonl' }), back('g', '{}')]]) {
-    const v = check([...first, ...ran('cat ledger.md', ledger), ...reply('x')], {});
-    assert.equal(v.pass, false);
+  const init = { type: 'system', subtype: 'init', cwd: '/private/tmp/w' };
+  const ledger = '# kern ledger: /private/tmp/w/.kern/plans/export.md\nMain: /tmp/w branch=main';
+  assert.deepEqual(check([init, ...ran('cat .kern/ledgers/export/ledger.md', ledger), ...reply('x')], {}),
+    { pass: true, evidence: "the result of Bash cat .kern/ledgers/export/ledger.md shows the ledger's first line, and no .jsonl transcript was read before it" });
+  assert.equal(check([init, use('r', 'Read', { file_path: '/tmp/w/.kern/ledgers/export/ledger.md' }), back('r', `     1\t${ledger}`), use('t', 'Read', { file_path: '/h/p/s.jsonl' }), back('t', '{}'), ...reply('x')], {}).pass, true, 'a Read, and a transcript after the ledger');
+  assert.equal(check([init, ...ran('cd $W/.kern; for f in $(find . -name "*.md"); do echo "=== $f"; head -60 $f; done', `=== ./ledgers/export/ledger.md\n${ledger}`), ...reply('x')], {}).pass, true, 'a loop over the .kern files');
+  assert.equal(check([init, ...ran('grep -rn "kern ledger" .kern', `.kern/ledgers/export/ledger.md:1:${ledger}`), ...reply('x')], {}).pass, true, 'a grep line');
+  // Task 16j review, M1: two plugin files hold the text, and so can another workspace's ledger.
+  for (const [cmd, out] of [['cat $P/skills/execute-plan/references/ledger-format.md', '| `# kern ledger: <plan path>` | `ledger-open` | first line, once |'],
+    ['cat $P/scripts/ledger-open', '  printf \'# kern ledger: %s\\nMain: %s\\n\' "$plan" "$state" > "$ledger"'],
+    ['cat /tmp/other/.kern/ledgers/x/ledger.md', '# kern ledger: /tmp/other/.kern/plans/x.md'], ['echo "# kern ledger: /private/tmp/w/.kern/plans/export.md"', ledger]]) {
+    assert.match(check([init, ...ran(cmd, out), ...reply('x')], {}).evidence, /^no read of a file under \.kern\/ledgers\/ shows a ledger's first line, "# kern ledger: \/tmp\/w\/\.kern\/plans\/<plan>"$/, cmd);
+  }
+  for (const first of [ran('grep -h export ~/.claude/projects/x/*.jsonl', '{}'), ran('cat ~/.claude/projects/x/s.jsonl | head', '{}'), ran('sed -n 1,5p s.jsonl'), ran('tail -1 s.jsonl'), ran('jq .type s.jsonl'),
+    ran('find ~/.claude/projects -name "*.jsonl" | xargs grep -l export'), ran('find . -name "*.jsonl" -exec grep -l export {} +'), ran('for f in ~/.claude/projects/x/*.jsonl; do head -1 "$f"; done'),
+    [use('t', 'Read', { file_path: '/h/p/s.jsonl' }), back('t', '{}')], [use('g', 'Grep', { pattern: 'export', path: '/h/p/s.jsonl' }), back('g', '{}')]]) {
+    const v = check([init, ...first, ...ran('cat .kern/ledgers/export/ledger.md', ledger), ...reply('x')], {});
+    assert.equal(v.pass, false, JSON.stringify(first[0].message.content[0].input));
     assert.match(v.evidence, /^a \.jsonl transcript was read before the ledger: /);
   }
-  assert.deepEqual(check([...ran('ls .kern'), ...reply('x')], {}), { pass: false, evidence: 'no tool result holds "# kern ledger:"' });
+  // Task 16j review, M2: listing or measuring a transcript is not reading it.
+  for (const cmd of ['ls ~/.claude/projects/-w/*.jsonl', 'find ~/.claude/projects -name "*.jsonl"', 'wc -c ~/.claude/projects/-w/s.jsonl', 'ls *.jsonl; cat notes.md']) {
+    assert.equal(check([init, ...ran(cmd), ...ran('cat .kern/ledgers/export/ledger.md', ledger), ...reply('x')], {}).pass, true, cmd);
+  }
+  assert.equal(check([...ran('cat .kern/ledgers/export/ledger.md', '# kern ledger: /any/where/.kern/plans/p.md'), ...reply('x')], {}).pass, true, 'with no init event, any .kern/plans/ path counts');
 });
 
 test('gradeRun sends the model only the expectations no check decides, and lines its verdicts up with theirs', () => {

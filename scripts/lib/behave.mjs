@@ -347,9 +347,56 @@ const stateCommands = (command) => String(command).split(/&&|\|\||\$\(|(?<![>&])
   return reads ? [first(w.join(' '), 60)] : [];
 });
 const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
-// transcriptRead(call): a Read of a .jsonl file, a Grep whose path or glob names one, or a Bash call that names one.
-const transcriptRead = ({ name, input }) => (name === 'Read' && /\.jsonl$/i.test(String(input.file_path ?? '')))
-  || (name === 'Grep' && /\.jsonl/i.test(`${input.path ?? ''} ${input.glob ?? ''}`)) || (name === 'Bash' && /\.jsonl\b/i.test(String(input.command ?? '')));
+// stageRuns(stage): the command a pipeline stage runs, by basename: its first word after variable assignments,
+// do, then, else, !, {, time, command or env, and after xargs with its options; for find, the command its
+// -exec runs (find itself without one).
+const stageRuns = (stage) => {
+  const w = stage.trim().split(/\s+/).filter(Boolean);
+  while (w.length && (/^[A-Za-z_]\w*=/.test(w[0]) || ['do', 'then', 'else', '!', '{', 'time', 'command', 'env'].includes(w[0]))) w.shift();
+  if (w[0] === 'xargs') { w.shift(); while (w.length && w[0].startsWith('-')) w.shift(); }
+  const cmd = (w[0] ?? '').replace(/^.*\//, '');
+  if (cmd !== 'find') return cmd;
+  const x = w.indexOf('-exec');
+  return x < 0 ? 'find' : (w[x + 1] ?? '').replace(/^.*\//, '');
+};
+// TRANSCRIPT_READERS: the commands that read a transcript's text (Task 16j review, M2); ls, find and wc only
+// name or measure one.
+const TRANSCRIPT_READERS = new Set(['cat', 'sed', 'head', 'tail', 'jq', 'grep']);
+const JSONL = /\.jsonl\b/i;
+// transcriptRead(call): a Read of a .jsonl file, a Grep whose path or glob names one, or a Bash call in which a
+// TRANSCRIPT_READERS command reads one: the stage names a .jsonl file, an earlier stage of its pipeline does
+// (find ... | xargs grep), or a for loop runs over .jsonl files.
+const transcriptRead = ({ name, input }) => {
+  if (name === 'Read') return /\.jsonl$/i.test(String(input.file_path ?? ''));
+  if (name === 'Grep') return JSONL.test(`${input.path ?? ''} ${input.glob ?? ''}`);
+  if (name !== 'Bash') return false;
+  const text = String(input.command ?? '');
+  const loop = /\bfor\s+\w+\s+in\b[^;\n]*\.jsonl/i.test(text);
+  return text.split(/&&|\|\||(?<![>&|])&(?!>)|[;\n]/).some((pipeline) => {
+    let fed = false;
+    for (const stage of pipeline.split('|')) {
+      const named = JSONL.test(stage);
+      if (TRANSCRIPT_READERS.has(stageRuns(stage)) && (named || fed || loop)) return true;
+      fed ||= named;
+    }
+    return false;
+  });
+};
+// LEDGER_HEAD: a ledger's first line, `# kern ledger: <plan path>`, as cat, a Read (line number, tab) or grep
+// (`path:`, `path:N:`) prints it; group 1 is the plan path.
+const LEDGER_HEAD = /^(?:\s*\d+\t|[^\s:]+:(?:\d+:)?)?# kern ledger: (\/\S+)$/m;
+// ledgerRead(call): a Read of a file under .kern/ledgers/, a Grep under .kern, or a Bash call that names .kern
+// or a ledgers folder and runs cat, sed, head, tail, grep, awk or less (recall-2-0 read the ledger in a loop
+// over `cd $W/.kern; find .`).
+const ledgerRead = ({ name, input }) => {
+  if (name === 'Read') return /(^|\/)\.kern\/ledgers\//.test(String(input.file_path ?? ''));
+  if (name === 'Grep') return /(^|\/)\.kern(\/|$)/.test(String(input.path ?? ''));
+  const text = String(input.command ?? '');
+  return name === 'Bash' && /(^|[\s/'"=])\.kern(\/|[\s;'"]|$)|\/ledgers\//.test(text)
+    && text.split(/&&|\|\||[;&|\n]/).some((stage) => [...TRANSCRIPT_READERS, 'awk', 'less'].includes(stageRuns(stage)));
+};
+// bare(p): p without macOS's /private prefix, so /var/... and /private/var/... compare equal.
+const bare = (p) => String(p).replace(/^\/private(?=\/)/, '');
 // treeDiff(start, end): the status lines one side has and the other lacks, `<worktree>: - <line>` or `: + <line>`.
 const treeDiff = (start, end) => [...new Set([...Object.keys(start), ...Object.keys(end)])].flatMap((t) => {
   const a = start[t] ?? [], b = end[t] ?? [];
@@ -380,15 +427,24 @@ export const CHECKS = {
     const n = Object.keys(tree.end).length;
     return { pass: true, evidence: `no Write, Edit or NotebookEdit call, and git status the same at the run's start and end in ${n} worktree${n === 1 ? '' : 's'}` };
   },
-  // A tool result holds "# kern ledger:" (a ledger's first line) before any call reads a .jsonl transcript.
+  // A read of a ledger under the workspace's .kern/ledgers/ (ledgerRead) shows its first line, naming a plan
+  // under the workspace's .kern/plans/, before any call reads a .jsonl transcript (transcriptRead). The
+  // workspace is the cwd of the run's system init event; with none, any .kern/plans/ path counts.
   'ledger-before-transcript': (events) => {
     const all = steps(events);
-    const ledger = all.findIndex((s) => s.result?.includes('# kern ledger:'));
-    if (ledger < 0) return { pass: false, evidence: 'no tool result holds "# kern ledger:"' };
+    const calls = new Map(all.filter((s) => s.call).map((s) => [s.id, s.call]));
+    const ws = events.find((e) => e?.type === 'system' && e.subtype === 'init' && e.cwd)?.cwd;
+    const plans = ws ? `${bare(ws).replace(/\/$/, '')}/.kern/plans/` : null;
+    const ledger = all.findIndex((s) => {
+      const head = s.result?.match(LEDGER_HEAD);
+      const call = calls.get(s.id);
+      return head && call && ledgerRead(call) && (plans ? bare(head[1]).startsWith(plans) : /\/\.kern\/plans\//.test(head[1]));
+    });
+    if (ledger < 0) return { pass: false, evidence: `no read of a file under .kern/ledgers/ shows a ledger's first line, "# kern ledger: ${plans ?? '<workspace>/.kern/plans/'}<plan>"` };
     const read = all.findIndex((s, i) => i < ledger && s.call && transcriptRead(s.call));
     if (read >= 0) return { pass: false, evidence: `a .jsonl transcript was read before the ledger: ${all[read].call.name} ${argOf(all[read].call)}` };
-    const by = all.find((s) => s.call && s.id === all[ledger].id);
-    return { pass: true, evidence: `the result of ${by ? `${by.call.name} ${argOf(by.call)}` : 'a tool call'} holds "# kern ledger:", and no .jsonl transcript was read before it` };
+    const by = calls.get(all[ledger].id);
+    return { pass: true, evidence: `the result of ${by.name} ${argOf(by)} shows the ledger's first line, and no .jsonl transcript was read before it` };
   },
 };
 
