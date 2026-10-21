@@ -435,13 +435,16 @@ test('a case names scripted checks by expectation index, from the registry only'
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
   const word = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { E0: 'no-write' } }]);
+  // Task 16j review, M7: "01" and "1" would both name expectation 1, and the later one would win.
+  const padded = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write', '01': 'git-or-gh-state' } }]);
   try {
+    assert.throws(() => loadCases(padded), /^Error: behave: demo-1: checks key 01 names no expectation \(0 to 1; evals\/cases\/demo\.json\)$/);
     const [demo, x] = loadCases(r);
     assert.deepEqual([demo.checks, x.checks], [{ 1: 'no-write' }, { 0: 'no-write' }]);
     assert.throws(() => loadCases(gone), /^Error: behave: demo-1: expectation 0 names check tests-pass, which is not in CHECKS \(evals\/cases\/demo\.json\)$/);
     assert.throws(() => loadCases(past), /^Error: behave: demo-1: checks key 1 names no expectation \(0 to 0; evals\/cases\/demo\.json\)$/);
     assert.throws(() => loadCases(word), /checks key E0 names no expectation/);
-  } finally { for (const d of [r, gone, past, word]) rmSync(d, { recursive: true, force: true }); }
+  } finally { for (const d of [r, gone, past, word, padded]) rmSync(d, { recursive: true, force: true }); }
 });
 
 test('recall-1 and recall-2 script their mechanical expectations; the rest stay with the model', () => {

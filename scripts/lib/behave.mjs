@@ -38,7 +38,7 @@ export function caseWorkspace(root, c) {
 // loadCases(root): [{ id, source, files, prompts, expectations, pressure, origin?, branch?, setup?,
 // max_turns?, checks? }], ids unique. An evals/cases entry may give prompts (several turns) beside its prompt,
 // the turn route-eval checks; then prompt is the last of them. checks maps an expectation's index (0-based, a
-// string key in JSON) to the name of the CHECKS entry that decides it. Throws when a case names a fixture
+// string key in JSON with no leading zero) to the name of the CHECKS entry that decides it. Throws when a case names a fixture
 // layer that does not exist, or a check key or name that is not one.
 export function loadCases(root) {
   const out = [];
@@ -65,7 +65,7 @@ export function loadCases(root) {
     if (!Array.isArray(c.expectations) || !c.expectations.length) throw new Error(`behave: ${c.id} has no expectations`);
     for (const f of c.files) if (!existsSync(join(root, 'evals', 'fixtures', f))) throw new Error(`behave: ${c.id} names fixture layer ${f}, which does not exist (evals/fixtures/${f}; ${c.source})`);
     for (const [k, name] of Object.entries(c.checks ?? {})) {
-      if (!/^\d+$/.test(k) || Number(k) >= c.expectations.length) throw new Error(`behave: ${c.id}: checks key ${k} names no expectation (0 to ${c.expectations.length - 1}; ${c.source})`);
+      if (!/^(0|[1-9]\d*)$/.test(k) || Number(k) >= c.expectations.length) throw new Error(`behave: ${c.id}: checks key ${k} names no expectation (0 to ${c.expectations.length - 1}; ${c.source})`);
       if (!Object.hasOwn(CHECKS, name)) throw new Error(`behave: ${c.id}: expectation ${k} names check ${name}, which is not in CHECKS (${c.source})`);
     }
   }
