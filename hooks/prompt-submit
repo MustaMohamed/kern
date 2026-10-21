@@ -79,6 +79,15 @@ set_surface() {
   state_set "$SID" "surface=$1" && CHANGED_SURFACE="$1"
 }
 
+# autopilot_off: writes autopilot off. When state_set cannot read the state to keep its other keys, the
+# default state is written instead (state_reset reads nothing; autopilot off), so turning autopilot off
+# never depends on a read; losing voice and surface is the safe loss, and the notice says so.
+autopilot_off() {
+  state_set "$SID" autopilot=off && return 0
+  state_reset "$SID" || return 1
+  NOTICE="kern: the session state could not be read, so autopilot off also reset voice and surface to their defaults."
+}
+
 # apply_autopilot ARGS ALLOW_ON: ALLOW_ON is 1 only for a command the user typed.
 apply_autopilot() {
   local arg denier
@@ -95,7 +104,7 @@ apply_autopilot() {
         state_set "$SID" autopilot=on "since=$(now_iso)" && AP_TURNED_ON=1
       fi
       ;;
-    off) state_set "$SID" autopilot=off ;;
+    off) autopilot_off ;;
     "" | status) ;;
     *) NOTICE="kern: autopilot argument not recognized; use on, off or status." ;;
   esac
@@ -143,7 +152,7 @@ natural() {
     "html mode" | "go html" | "switch to html" | "html on") set_surface html && SHOW_LINE=1 ;;
     "stop html" | "html off") set_surface "$(settings_get mode.surface auto | sed 's/^html$/auto/')" && SHOW_LINE=1 ;;
     "chat only" | "chat mode") set_surface chat && SHOW_LINE=1 ;;
-    "stop autopilot" | "autopilot off") state_set "$SID" autopilot=off && SHOW_LINE=1 ;;
+    "stop autopilot" | "autopilot off") autopilot_off && SHOW_LINE=1 ;;
   esac
   return 0
 }

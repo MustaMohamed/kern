@@ -348,3 +348,50 @@ run_prompt() {
   [ "$(st autopilot)" = off ]
   [ -n "$(st since)" ]
 }
+
+# commit_decision: G5's decision on `git commit -F msg.txt` on a feature branch of the repo, a commit that
+# passes every message check.
+commit_decision() {
+  git -C "$R" rev-parse -q --verify refs/heads/feat/thing >/dev/null || git -C "$R" switch -q -c feat/thing
+  printf 'feat: add a thing\n' >"$R/msg.txt"
+  run_guard "$(bash_payload "git commit -F msg.txt")" g05
+  decision_of "$output"
+}
+
+# Turning autopilot off must not depend on reading the state: a write that cannot keep the other keys
+# writes the default state instead (review of 2026-10-21).
+@test "a typed autopilot off lands when the state cannot be read, so the next commit asks" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  set_autopilot on
+  [ "$(commit_decision)" = allow ]
+  read_fails awk "$S"
+  submit "/kern:autopilot off"
+  said=$output
+  expand kern:autopilot off
+  read_fails awk "$S" 0
+  [ "$(st autopilot)" = off ]
+  [ "$(commit_decision)" = ask ]
+  [[ "$said" == *"reset voice and surface to their defaults"* ]] || false
+}
+
+@test "stop autopilot lands when the state cannot be read, so the next commit asks" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  set_autopilot on
+  [ "$(commit_decision)" = allow ]
+  read_fails awk "$S"
+  submit "stop autopilot"
+  said=$output
+  read_fails awk "$S" 0
+  [ "$(st autopilot)" = off ]
+  [ "$(commit_decision)" = ask ]
+  [[ "$said" == *"reset voice and surface to their defaults"* ]] || false
+}
+
+@test "autopilot off keeps voice and surface when the state reads" {
+  printf 'voice: terse\nsurface: html\nautopilot: on\nsince: 2026-10-12T00:00:00Z\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit "stop autopilot"
+  [ "$(st autopilot)" = off ]
+  [ "$(st voice)" = terse ]
+  [ "$(st surface)" = html ]
+  [[ "$output" != *"reset voice and surface"* ]] || false
+}
