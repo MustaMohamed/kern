@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1580,5 +1580,73 @@ test('Task 16l fix I1: on a table of hook inputs the trace resolves the session 
     assert.deepEqual([at('a linked worktree cwd').cwd, at('a linked worktree cwd').main], [wt, s.ws]);
     assert.equal(at('no cwd, spawned in a nested folder').cwd, nested);
     assert.equal(at('a user layer that denies autopilot').autopilot, false);
+  } finally { s.done(); }
+});
+
+// Task 16l fix round 1, M2: a trace killed at the hook timeout leaves its lock or its work dir. The next
+// call breaks a lock whose holder has ended or that is older than a few seconds, and sweeps the work dir
+// of a trace that has ended, so no later call waits on it; a live holder's lock and work dir are kept.
+test('Task 16l fix M2: a lock or work dir a killed trace left is broken and swept by the next call; a live holder\'s is kept', async () => {
+  const s = traceSession();
+  try {
+    const hook = join(s.plugin, 'hooks', 'stand-in');
+    writeFileSync(hook, 'cat; exit 0\n');
+    const trace = join(s.root, 'trace.jsonl');
+    const lock = `${trace}.lock`;
+    const env = { PATH: '/usr/bin:/bin', HOME: s.home, KERN_EXEC_TRACE: trace };
+    const args = [join(s.plugin, 'hooks', 'trace'), 'bash', hook];
+    const call = () => assert.equal(spawnSync('bash', args, { input: 'x', cwd: s.ws, env, encoding: 'utf8' }).stdout, 'x');
+    const lines = () => (existsSync(trace) ? readFileSync(trace, 'utf8').split('\n').filter(Boolean).length : 0);
+    const dead = spawnSync('/bin/sh', ['-c', 'echo $$'], { encoding: 'utf8' }).stdout.trim();
+    assert.ok(!alive(Number(dead)));
+    mkdirSync(lock);
+    writeFileSync(join(lock, 'pid'), `${dead}\n`);
+    call();
+    assert.equal(lines(), 1);
+    assert.ok(!existsSync(lock), 'a lock whose holder has ended is broken, and the new holder releases it');
+    mkdirSync(lock);
+    const old = new Date(Date.now() - 60000);
+    utimesSync(lock, old, old);
+    call();
+    assert.equal(lines(), 2);
+    assert.ok(!existsSync(lock), 'a lock older than a few seconds is broken');
+    const [gone, live, young] = ['Ab12Cd', 'Ef34Gh', 'Ij56Kl'].map((x) => `${trace}.${x}`);
+    for (const d of [gone, live, young]) mkdirSync(d);
+    writeFileSync(join(gone, 'pid'), `${dead}\n`);
+    writeFileSync(join(gone, 'out'), 'left');
+    writeFileSync(join(live, 'pid'), `${process.pid}\n`);
+    call();
+    assert.equal(lines(), 3);
+    assert.deepEqual([existsSync(gone), existsSync(live), existsSync(young)], [false, true, true], "an ended trace's work dir is swept; a live one's, or one with no pid yet, is kept");
+    for (const d of [live, young]) rmSync(d, { recursive: true });
+    // A live holder's fresh lock is waited on, not broken (kept fresh while the call waits): after the
+    // wait the line is appended anyway, and the holder's lock stays.
+    mkdirSync(lock);
+    writeFileSync(join(lock, 'pid'), `${process.pid}\n`);
+    const fresh = setInterval(() => { try { const now = new Date(); utimesSync(lock, now, now); } catch { /* removed */ } }, 300);
+    const waited = spawn('bash', args, { cwd: s.ws, env, stdio: ['pipe', 'ignore', 'ignore'] });
+    waited.stdin.end('x');
+    await new Promise((done) => waited.on('exit', done));
+    clearInterval(fresh);
+    assert.equal(lines(), 4);
+    assert.equal(readFileSync(join(lock, 'pid'), 'utf8').trim(), String(process.pid), "a live holder's lock is not broken");
+    rmSync(lock, { recursive: true });
+    // A trace killed while its hook runs: its work dir stays until the next call.
+    const hookPid = join(s.root, 'hook.pid');
+    writeFileSync(hook, `echo $$ > ${hookPid}; exec sleep 30\n`);
+    const killed = spawn('bash', args, { cwd: s.ws, env, stdio: ['pipe', 'ignore', 'ignore'] });
+    const ended = new Promise((done) => killed.on('exit', done));
+    killed.stdin.end('x');
+    let pid = 0;
+    try {
+      assert.ok(await until(() => existsSync(hookPid) && (pid = Number(readFileSync(hookPid, 'utf8').trim())) > 0, 20000), 'the hook started');
+      killed.kill('SIGKILL');
+      await ended;
+    } finally { if (pid) reap([pid]); if (killed.exitCode === null && killed.signalCode === null) killed.kill('SIGKILL'); }
+    const work = () => readdirSync(s.root).filter((f) => f.startsWith('trace.jsonl.') && f !== 'trace.jsonl.lock');
+    assert.equal(work().length, 1, 'the killed call left its work dir');
+    writeFileSync(hook, 'cat; exit 0\n');
+    call();
+    assert.deepEqual([work(), lines(), existsSync(lock)], [[], 5, false], 'the next call sweeps it and appends its own line');
   } finally { s.done(); }
 });

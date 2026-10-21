@@ -12,6 +12,8 @@ set +o posix
 TRACE_PERL=$(command -v perl 2>/dev/null) || TRACE_PERL=""
 TRACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exec "$@"
 TRACE_WORK=$(mktemp -d "$KERN_EXEC_TRACE.XXXXXX" 2>/dev/null) || exec "$@"
+TRACE_LOCK=$KERN_EXEC_TRACE.lock
+printf '%s\n' "$$" >"$TRACE_WORK/pid"
 cat >"$TRACE_WORK/in"
 
 # now_ms: the epoch time in milliseconds; whole seconds when neither bash 5 nor perl can say more.
@@ -157,17 +159,60 @@ line() (
   printf ',"stdout":%s,"stderr":%s,"exit":%s,"duration_ms":%s}\n' "$(jfile "$TRACE_WORK/out")" "$(jfile "$TRACE_WORK/err")" "$4" "$(jnum "$a")"
 )
 
-# append: the line onto KERN_EXEC_TRACE whole, under a lock directory, so calls that end together do not
-# interleave. After about 2 seconds without the lock it appends anyway.
-append() {
-  local i=0
-  while ! mkdir "$KERN_EXEC_TRACE.lock" 2>/dev/null; do
+# A trace killed at the hook's timeout leaves its work dir, and, if the kill came while it appended, the
+# lock. Both name the trace's pid, so a later call can tell they are left over and clear them.
+# ended DIR: exit 0 when DIR's pid file names a process that is gone.
+ended() {
+  local p
+  p=$(cat "$1/pid" 2>/dev/null) || return 1
+  case "$p" in '' | *[!0-9]*) return 1 ;; esac
+  ! kill -0 "$p" 2>/dev/null
+}
+# age PATH: seconds since PATH last changed. Exit 1 when stat cannot say.
+age() {
+  local m
+  m=$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null) || return 1
+  case "$m" in '' | *[!0-9]*) return 1 ;; esac
+  printf '%s\n' "$(($(date +%s) - m))"
+}
+# sweep: removes the work dir of each trace that has ended. One with no pid file yet is starting, and stays.
+sweep() {
+  local d
+  for d in "$KERN_EXEC_TRACE".??????; do
+    if [ "$d" != "$TRACE_WORK" ] && [ -d "$d" ] && ended "$d"; then rm -rf "$d"; fi
+  done
+  return 0
+}
+# lock: takes the lock directory and writes this trace's pid in it. A lock whose holder has ended, or
+# that is older than 5 seconds (a holder only appends one line), is stale and is broken. Exit 1 when it
+# is still held after 200 tries, about 2 seconds.
+lock() {
+  local i=0 a
+  while [ "$i" -lt 200 ]; do
+    if mkdir "$TRACE_LOCK" 2>/dev/null; then
+      printf '%s\n' "$$" >"$TRACE_LOCK/pid"
+      return 0
+    fi
     i=$((i + 1))
-    [ "$i" -lt 200 ] || break
+    a=$(age "$TRACE_LOCK") || a=0
+    if ended "$TRACE_LOCK" || [ "$a" -gt 5 ]; then
+      rm -rf "$TRACE_LOCK"
+      continue
+    fi
     sleep 0.01
   done
-  cat "$TRACE_WORK/line" >>"$KERN_EXEC_TRACE"
-  [ "$i" -lt 200 ] && rmdir "$KERN_EXEC_TRACE.lock"
+  return 1
+}
+# append: the line onto KERN_EXEC_TRACE whole, under the lock, so calls that end together do not
+# interleave. Without the lock it appends anyway, and leaves the holder's lock alone.
+append() {
+  if lock; then
+    cat "$TRACE_WORK/line" >>"$KERN_EXEC_TRACE"
+    [ "$(cat "$TRACE_LOCK/pid" 2>/dev/null)" = "$$" ] && rm -rf "$TRACE_LOCK"
+  else
+    cat "$TRACE_WORK/line" >>"$KERN_EXEC_TRACE"
+  fi
+  return 0
 }
 
 view >"$TRACE_WORK/view" 2>/dev/null
@@ -179,6 +224,6 @@ TRACE_RC=$?
 TRACE_END=$(now_ms)
 cat "$TRACE_WORK/out"
 cat "$TRACE_WORK/err" >&2
-{ line "$TRACE_START" "$TRACE_ISO" "$TRACE_END" "$TRACE_RC" "$@" >"$TRACE_WORK/line" && append; } 2>/dev/null
+{ sweep; line "$TRACE_START" "$TRACE_ISO" "$TRACE_END" "$TRACE_RC" "$@" >"$TRACE_WORK/line" && append; } 2>/dev/null
 rm -rf "$TRACE_WORK" 2>/dev/null
 exit "$TRACE_RC"
