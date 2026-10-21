@@ -104,8 +104,9 @@ _KERN_UNION_KEYS=" protected_targets never_commit branch.protected deploy.envs "
 # project file cannot turn kern off, cannot loosen a *.policy key to auto or rebase.push to autopilot:
 # it may only tighten. Such a value reads as unset, so a lower layer or the default applies. The local
 # file loosens only while it is the user's own untracked file: see _settings_local_ok. Exit 1 when the
-# value applies, 2 when git cannot tell whether the local file is the user's own: its loosening value
-# then counts as unread, as a layer that could not be read does.
+# value applies, 2 when git cannot tell whether the local file is the user's own, 3 when another user owns
+# it: its loosening value then counts as unread, as a layer that could not be read does, and
+# settings_unread_why names the cause.
 _settings_ignored() {
   case "$1" in "$HOME/.claude/kern.yml") return 1 ;; esac
   case "$2" in
@@ -120,6 +121,7 @@ _settings_ignored() {
       case $? in
         0) return 1 ;;
         1) return 0 ;;
+        3) return 3 ;;
         *) return 2 ;;
       esac
       ;;
@@ -131,23 +133,25 @@ _settings_ignored() {
 # clone can ship it under another shape, so all of these must hold: the file is a regular file, not a
 # symlink, owned by the user; .claude is a real directory (no symlink, no .git inside, no gitlink in the
 # index) whose physical path is MAIN's own .claude; and git does not track the file, matched in any
-# case. One git call, made only for a loosening value. Exit 1 when one of these fails, 2 when git cannot
-# answer: a repository git refuses (dubious ownership, git unable to run) proves nothing, so git's own
-# status counts, through pipefail, not only awk's.
+# case. One git call, made only for a loosening value. Exit 1 when one of these fails, 3 when the file is
+# owned by another user (a container that runs as root on the user's checkout, for one), and 2 when git
+# cannot answer: a repository git refuses (dubious ownership) or a git that cannot run (the xcrun shim
+# exits 1 without the developer tools) proves nothing. A failed git ends its output with the line `git
+# failed`, which no ls-files -s line can be (each starts with a mode), so awk's status alone tells its
+# exit 1 from awk's "tracked". PIPESTATUS is not read: under a DEBUG trap, as bats sets, bash 3.2 loses it.
 _settings_local_ok() {
   local main="$1" d="$1/.claude" pm pd
-  [ -f "$d/kern.local.yml" ] && [ ! -L "$d/kern.local.yml" ] && [ -O "$d/kern.local.yml" ] || return 1
+  [ -f "$d/kern.local.yml" ] && [ ! -L "$d/kern.local.yml" ] || return 1
   [ -d "$d" ] && [ ! -L "$d" ] && [ ! -e "$d/.git" ] && [ ! -L "$d/.git" ] || return 1
   pm=$(cd "$main" 2>/dev/null && pwd -P) && pd=$(cd "$d" 2>/dev/null && pwd -P) || return 1
   [ "$pd" = "$pm/.claude" ] || return 1
-  (
-    set -o pipefail
-    git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null | env LC_ALL=C awk -F '\t' '
-      { p = tolower($2); m = substr($1, 1, 6) }
-      m == "160000" && p == ".claude" { bad = 1 }
-      p == ".claude/kern.local.yml" { bad = 1 }
-      END { exit bad }'
-  )
+  [ -O "$d/kern.local.yml" ] || return 3
+  { git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null || printf 'git failed\n'; } | env LC_ALL=C awk -F '\t' '
+    $0 == "git failed" { gf = 1; next }
+    { p = tolower($2); m = substr($1, 1, 6) }
+    m == "160000" && p == ".claude" { bad = 1 }
+    p == ".claude/kern.local.yml" { bad = 1 }
+    END { exit gf ? 2 : bad }'
   case $? in
     0) return 0 ;;
     1) return 1 ;;
@@ -231,7 +235,7 @@ settings_get() {
         _settings_ignored "$f" "$1" "$v"
         case $? in
           0) continue ;;
-          2)
+          2 | 3)
             unread=1
             continue
             ;;
@@ -266,8 +270,8 @@ settings_get() {
 
 # settings_unread_why KEY: why KEY read with exit 4 from settings_get, as a phrase for a reason: git
 # cannot open the repository (_settings_files exit 2), a settings file that cannot be read, a
-# kern.local.yml whose loosening value git cannot vouch for (_settings_ignored exit 2), or a read that
-# failed for a moment (worth a retry).
+# kern.local.yml whose loosening value git cannot vouch for (_settings_ignored exit 2) or that another user
+# owns (exit 3), or a read that failed for a moment (worth a retry).
 settings_unread_why() {
   local files f rc
   files=$(_settings_files)
@@ -286,10 +290,17 @@ settings_unread_why() {
     case $? in
       0)
         _settings_ignored "$f" "$1" "$_KERN_SV"
-        [ $? = 2 ] || continue
-        # shellcheck disable=SC2016 # the backticks are text
-        printf 'git cannot tell whether %s is your own untracked file (run `git status` to see why)\n' "$f"
-        return 0
+        case $? in
+          2)
+            # shellcheck disable=SC2016 # the backticks are text
+            printf 'git cannot tell whether %s is your own untracked file (run `git status` to see why)\n' "$f"
+            return 0
+            ;;
+          3)
+            printf '%s is owned by another user, so kern does not take it as your own file\n' "$f"
+            return 0
+            ;;
+        esac
         ;;
       2)
         printf '%s could not be read\n' "$f"

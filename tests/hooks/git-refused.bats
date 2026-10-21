@@ -173,3 +173,36 @@ protect() {
   [ "$d" = ask ] || { echo "$output"; return 1; }
   [[ "$output" == *"commit.policy unknown: git cannot tell whether "*"kern.local.yml is your own untracked file (run \`git status\` to see why)"* ]] || false
 }
+
+# Making a file another user owns needs root, so this test's copy of _settings_local_ok reads the user's own
+# file as another user's: its ownership check is turned around.
+@test "a kern.local.yml another user owns loosens nothing and is named as the cause" {
+  printf 'commit.policy: auto\nkern: off\n' >"$R/.claude/kern.local.yml"
+  export KERN_ROOT="$K"
+  . "$K/hooks/lib/settings.sh"
+  [ "$(settings_get commit.policy ask)" = auto ]
+  eval "$(declare -f _settings_local_ok | sed 's/\[ -O /[ ! -O /')"
+  declare -f _settings_local_ok | grep -q '\[ ! -O ' || { echo "no ownership check to turn around"; return 1; }
+  rc=0
+  got=$(settings_get commit.policy ask) || rc=$?
+  [ "$rc" -eq 4 ] && [ "$got" = unknown ] || { echo "exit $rc: $got"; return 1; }
+  [ "$(settings_get kern on)" = on ]
+  why=$(settings_unread_why commit.policy)
+  [[ "$why" == *"/.claude/kern.local.yml is owned by another user, so kern does not take it as your own file" ]] || false
+}
+
+@test "a git that exits 1 cannot vouch for a kern.local.yml and is named as the cause" {
+  printf 'commit.policy: auto\n' >"$R/.claude/kern.local.yml"
+  mkdir -p "$BATS_TEST_TMPDIR/nogit"
+  printf '#!/bin/sh\necho "xcrun: error: invalid active developer path" >&2\nexit 1\n' >"$BATS_TEST_TMPDIR/nogit/git"
+  chmod +x "$BATS_TEST_TMPDIR/nogit/git"
+  export KERN_ROOT="$K"
+  . "$K/hooks/lib/settings.sh"
+  [ "$(settings_get commit.policy ask)" = auto ]
+  PATH="$BATS_TEST_TMPDIR/nogit:$PATH"
+  rc=0
+  got=$(settings_get commit.policy ask) || rc=$?
+  [ "$rc" -eq 4 ] && [ "$got" = unknown ] || { echo "exit $rc: $got"; return 1; }
+  why=$(settings_unread_why commit.policy)
+  [[ "$why" == "git cannot tell whether "*"/.claude/kern.local.yml is your own untracked file (run \`git status\` to see why)" ]] || false
+}
