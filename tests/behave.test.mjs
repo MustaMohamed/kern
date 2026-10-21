@@ -417,7 +417,7 @@ const reply = (text) => [say(text), { type: 'result', subtype: 'success', result
 const same = { start: { '.': [' M src/sum.js abc'] }, end: { '.': [' M src/sum.js abc'] } };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
-  assert.deepEqual(Object.keys(CHECKS).sort(), ['git-or-gh-command', 'ledger-before-transcript', 'no-write']);
+  assert.deepEqual(Object.keys(CHECKS).sort(), ['git-or-gh-state', 'ledger-before-transcript', 'no-write']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
@@ -433,22 +433,29 @@ test('a case names scripted checks by expectation index, from the registry only'
 
 test('recall-1 and recall-2 script their mechanical expectations; the rest stay with the model', () => {
   const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
-  assert.deepEqual(cases.get('recall-1').checks, { 1: 'git-or-gh-command', 3: 'no-write' });
+  assert.deepEqual(cases.get('recall-1').checks, { 1: 'git-or-gh-state', 3: 'no-write' });
   assert.deepEqual(cases.get('recall-2').checks, { 0: 'ledger-before-transcript', 2: 'no-write' });
   const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', 'recall-1'], { encoding: 'utf8' });
   assert.match(r.stdout, /^recall-1: 1 turn\(s\) on .+, 4 expectation\(s\) \(2 scripted\)$/m);
 });
 
-test('git-or-gh-command passes on a git or gh command before the final reply, not on a mention of either', () => {
-  const check = CHECKS['git-or-gh-command'];
-  assert.equal(check([...ran('bash wt-audit; git worktree list; git branch -a'), ...reply('Threads: ...')], {}).pass, true);
-  assert.equal(check([...ran('cd w && gh pr list --head kern/export'), ...reply('x')], {}).pass, true);
-  assert.equal(check([...ran('echo $(git rev-parse HEAD)'), ...reply('x')], {}).pass, true);
-  const none = check([...ran('cat .git/HEAD; ls ~/.config/gh/; bash wt-audit'), ...reply('x')], {});
-  assert.deepEqual(none, { pass: false, evidence: 'no Bash call runs git or gh before the final reply' });
+// Task 16j review, I1: recall step 3 runs `git rev-parse --git-common-dir` before any state check, so a check
+// that took any git command could not fail a recall run.
+test('git-or-gh-state passes on a git or gh command that reads branch, worktree or PR state before the final reply', () => {
+  const check = CHECKS['git-or-gh-state'];
+  const reads = ['git status --short', 'git branch -a', 'git log --oneline -5', 'git worktree list', 'git for-each-ref refs/heads', 'git rev-list --count main..HEAD',
+    'git show-ref --heads', 'gh pr list --head kern/export --state all', 'gh pr view 3', 'gh pr status', 'gh pr checks 3', 'git -C .claude/worktrees/export status --short',
+    'git -C "$W" log -1', '/usr/bin/git status', 'git --no-pager log -1', 'git --no-optional-locks -c core.x=1 branch', 'GIT_PAGER=cat git log -1', 'gh -R o/r pr view 3',
+    'cd w && git branch -a', 'x=$(git status --short)', 'bash wt-audit; git worktree list 2>&1 | head'];
+  for (const cmd of reads) assert.equal(check([...ran(cmd), ...reply('x')], {}).pass, true, cmd);
+  const none = ['git rev-parse --path-format=absolute --git-common-dir', 'git --version', 'which gh', 'command -v git', 'echo "use git later"', 'cat a.txt # git',
+    'cat .git/HEAD', 'git worktree add x', 'gh pr create --fill', 'git rev-parse HEAD', 'bash wt-audit'];
+  for (const cmd of none) assert.equal(check([...ran(cmd), ...reply('x')], {}).pass, false, cmd);
+  assert.deepEqual(check([...ran('bash kern-get work_dir .kern; git rev-parse --path-format=absolute --git-common-dir'), ...reply('x')], {}),
+    { pass: false, evidence: 'no Bash call reads git or gh state (status, branch, log, worktree list, for-each-ref, rev-list, show-ref, gh pr) before the final reply' }, "recall's own rev-parse alone fails");
   assert.equal(check([say('Threads: one.'), ...ran('git status')], {}).pass, false, 'a call after the final reply does not count');
   assert.equal(check([...ran('bash wt-audit; git -C w worktree list && gh pr list --head b 2>&1 | head -3'), ...reply('x')], {}).evidence,
-    'Bash runs git or gh before the final reply: git -C w worktree list; gh pr list --head b 2>&1', 'the evidence names each git or gh command');
+    'Bash reads git or gh state before the final reply: git -C w worktree list; gh pr list --head b 2>&1', 'the evidence names each state command');
 });
 
 test('no-write passes only with no Write, Edit or NotebookEdit call and the same git status at the start and end', () => {
@@ -480,13 +487,13 @@ test('ledger-before-transcript passes when a result holds the ledger header befo
 });
 
 test('gradeRun sends the model only the expectations no check decides, and lines its verdicts up with theirs', () => {
-  const c = { id: 'demo', expectations: ['Says the scope', 'Runs git', 'Gives one tag', 'Writes no file'], checks: { 1: 'git-or-gh-command', 3: 'no-write' } };
+  const c = { id: 'demo', expectations: ['Says the scope', 'Runs git', 'Gives one tag', 'Writes no file'], checks: { 1: 'git-or-gh-state', 3: 'no-write' } };
   const events = [say('Scope: 7 days.'), ...ran('git worktree list'), ...reply('Threads: one.')];
   const seen = [];
   const grade = (ex, record) => { seen.push({ ex, record }); return '{"results":[{"n":1,"pass":true,"evidence":"Scope: 7 days."},{"n":2,"pass":false,"evidence":"two tags"}]}'; };
   const v = gradeRun(c, events, same, grade);
   assert.deepEqual(seen, [{ ex: ['Says the scope', 'Gives one tag'], record: behaveDigest(events) }], 'one model call, on the record, with the two left');
-  assert.deepEqual(v.map((x) => [x.pass, x.check ?? 'model']), [[true, 'model'], [true, 'git-or-gh-command'], [false, 'model'], [true, 'no-write']]);
+  assert.deepEqual(v.map((x) => [x.pass, x.check ?? 'model']), [[true, 'model'], [true, 'git-or-gh-state'], [false, 'model'], [true, 'no-write']]);
   assert.equal(caseResult([{ invalid: false, verdict: v }]).passed, 0);
   assert.throws(() => gradeRun(c, events, same, () => '{"results":[{"n":1,"pass":true,"evidence":"x"}]}'), /expected 2 results, got 1/, 'the model answers for the expectations it was given');
   let called = false;

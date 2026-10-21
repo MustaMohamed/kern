@@ -27,7 +27,7 @@
         "Gives exactly one tag per thread and one next move",
         "Writes no file"
       ],
-      "checks": { "1": "git-or-gh-command", "3": "no-write" }
+      "checks": { "1": "git-or-gh-state", "3": "no-write" }
     },
     {
       "id": 2,

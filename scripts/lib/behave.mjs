@@ -321,9 +321,31 @@ const replyAt = (events) => {
 };
 // argOf(call): the input field a call acts on, cut to 200 characters for evidence.
 const argOf = ({ input }) => first(String(input.command ?? input.file_path ?? input.notebook_path ?? input.path ?? JSON.stringify(input)).replace(/\s+/g, ' '), 200);
-// VCS: git or gh as a command word, after the start, a space or a shell separator, and before one; the
-// capture runs to the next separator (a `>&` redirect is not one).
-const VCS = /(?:^|[\s;&|(`])((?:git|gh)(?=[\s;&|)`]|$)(?:>&|[^;&|\n)`])*)/g;
+// stateCommands(command): the simple commands in a Bash command that read git or gh state (Task 16j review,
+// I1): `git status`, `git branch`, `git log`, `git worktree list`, `git for-each-ref`, `git rev-list`, `git
+// show-ref`, and `gh pr list`, `view`, `status` or `checks`. git or gh may be named by a path, after variable
+// assignments, and with the global options -C, -c, --git-dir, --work-tree, --no-pager, --no-optional-locks
+// (git) or -R, --repo (gh). The command is split on ; & | ( ) ` and newlines (not the & of 2>&1 or &>), so
+// `git rev-parse`, `git --version`, `which gh` or a word in an echo or a comment reads no state.
+const GIT_STATE = new Set(['status', 'branch', 'log', 'for-each-ref', 'rev-list', 'show-ref']);
+const stateCommands = (command) => String(command).split(/&&|\|\||\$\(|(?<![>&])&(?!>)|[;|()`\n]/).flatMap((part) => {
+  const w = part.trim().split(/\s+/).filter(Boolean);
+  while (w.length && /^[A-Za-z_]\w*=/.test(w[0])) w.shift();
+  const tool = (w[0] ?? '').replace(/^.*\//, '');
+  if (tool !== 'git' && tool !== 'gh') return [];
+  let i = 1;
+  for (;;) {
+    const o = w[i] ?? '';
+    if (tool === 'git' && ['-C', '-c', '--git-dir', '--work-tree'].includes(o)) i += 2;
+    else if (tool === 'git' && /^(--no-pager|--no-optional-locks|--(git-dir|work-tree)=.*)$/.test(o)) i += 1;
+    else if (tool === 'gh' && ['-R', '--repo'].includes(o)) i += 2;
+    else if (tool === 'gh' && /^--repo=/.test(o)) i += 1;
+    else break;
+  }
+  const [sub, verb] = [w[i], w[i + 1]];
+  const reads = tool === 'git' ? GIT_STATE.has(sub) || (sub === 'worktree' && verb === 'list') : sub === 'pr' && ['list', 'view', 'status', 'checks'].includes(verb);
+  return reads ? [first(w.join(' '), 60)] : [];
+});
 const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 // transcriptRead(call): a Read of a .jsonl file, a Grep whose path or glob names one, or a Bash call that names one.
 const transcriptRead = ({ name, input }) => (name === 'Read' && /\.jsonl$/i.test(String(input.file_path ?? '')))
@@ -339,13 +361,13 @@ const treeDiff = (start, end) => [...new Set([...Object.keys(start), ...Object.k
 // model and returns { pass, evidence }; tree is { start, end }, treeState at the run's start and end ({ error }
 // when the end could not be read). A check throws when the run lacks what it reads, so the run is invalid.
 export const CHECKS = {
-  // A Bash call, the main session's or a subagent's, runs git or gh before the final reply.
-  'git-or-gh-command': (events) => {
+  // A Bash call, the main session's or a subagent's, reads branch, worktree or PR state with git or gh
+  // (stateCommands) before the final reply.
+  'git-or-gh-state': (events) => {
     const end = replyAt(events);
-    const runs = [...new Set(steps(events).filter((s) => s.call?.name === 'Bash' && s.at < end)
-      .flatMap((s) => [...String(s.call.input.command ?? '').matchAll(VCS)].map((m) => first(m[1].trim().replace(/\s+/g, ' '), 60))))];
-    return runs.length ? { pass: true, evidence: `Bash runs git or gh before the final reply: ${runs.slice(0, 6).join('; ')}${runs.length > 6 ? `; ${runs.length - 6} more` : ''}` }
-      : { pass: false, evidence: 'no Bash call runs git or gh before the final reply' };
+    const runs = [...new Set(steps(events).filter((s) => s.call?.name === 'Bash' && s.at < end).flatMap((s) => stateCommands(s.call.input.command ?? '')))];
+    return runs.length ? { pass: true, evidence: `Bash reads git or gh state before the final reply: ${runs.slice(0, 6).join('; ')}${runs.length > 6 ? `; ${runs.length - 6} more` : ''}` }
+      : { pass: false, evidence: 'no Bash call reads git or gh state (status, branch, log, worktree list, for-each-ref, rev-list, show-ref, gh pr) before the final reply' };
   },
   // No Write, Edit, MultiEdit or NotebookEdit call, and treeState the same at the run's start and end.
   'no-write': (events, { tree } = {}) => {
