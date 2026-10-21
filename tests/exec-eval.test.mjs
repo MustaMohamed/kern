@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1395,12 +1395,12 @@ test('Task 16l: through the traced hooks.json a kern hook call keeps its output 
     const settings = [join(s.ws, '.claude', 'kern.local.yml'), join(s.ws, '.claude', 'kern.yml'), join(s.home, '.claude', 'kern.yml')];
     assert.deepEqual(t.kern, {
       session_id: SID, session_id_rc: 0, cwd: s.ws, cwd_rc: 0, main: s.ws, enabled: true, state_dir: join(s.data, 'sessions'),
-      state: { file: state, file_rc: 0, exists: true, mtime: Math.floor(st.mtimeMs / 1000), inode: st.ino, autopilot: 'on', autopilot_rc: 0, text: STATE_ON },
+      state: { file: state, file_rc: 0, exists: true, symlink: false, mtime: Math.floor(st.mtimeMs / 1000), inode: st.ino, autopilot: 'on', autopilot_rc: 0, text: STATE_ON },
       settings: settings.map((file) => ({ file, exists: false, autopilot: null })), denied_by: null, autopilot_on_rc: 0, autopilot: true,
     });
     assert.deepEqual([t.stdout, t.stderr, t.exit], [direct.stdout, direct.stderr, direct.status]);
     assert.equal(u.kern.session_id, 'other-session');
-    assert.deepEqual(u.kern.state, { file: join(s.data, 'sessions', 'other-session.state'), file_rc: 0, exists: false, mtime: null, inode: null, autopilot: null, autopilot_rc: 1, text: null });
+    assert.deepEqual(u.kern.state, { file: join(s.data, 'sessions', 'other-session.state'), file_rc: 0, exists: false, symlink: false, mtime: null, inode: null, autopilot: null, autopilot_rc: 1, text: null });
     assert.deepEqual(u.kern.settings[2], { file: settings[2], exists: true, autopilot: 'denied' });
     assert.deepEqual([u.kern.denied_by, u.kern.autopilot_on_rc, u.kern.autopilot], [settings[2], 1, false]);
     assert.deepEqual([u.stdout, u.exit], [other.stdout, 0]);
@@ -1684,5 +1684,39 @@ test('Task 16l fix M3: a trace line is strict UTF-8 JSON when the input, the out
       assert.match(t.kern.state.text, /^autopilot: on\nx{4081}/, 'the state text, cut at 4 KB inside a character');
       if (!script.endsWith('no-perl')) assert.ok(t.input.includes('�') && t.stdout.includes('�') && t.stderr.includes('�'), 'perl reads an invalid sequence as U+FFFD');
     }
+  } finally { s.done(); }
+});
+
+// Task 16l fix round 1, M4: kern's state_get refuses a symlinked state file or state dir, so the trace
+// reads no text through one either; it says the link is there.
+test('Task 16l fix M4: the trace reads no state text through a symlinked state file or sessions dir, as state_get refuses both', () => {
+  const s = traceSession();
+  try {
+    const hook = join(s.plugin, 'hooks', 'stand-in');
+    writeFileSync(hook, 'cat >/dev/null; exit 0\n');
+    const secret = join(s.root, 'secret');
+    writeFileSync(secret, 'autopilot: on\nsecret: yes\n');
+    const state = join(s.data, 'sessions', `${SID}.state`);
+    rmSync(state);
+    symlinkSync(secret, state);
+    const linkedData = join(s.root, 'linked-data');
+    mkdirSync(join(s.root, 'real-sessions'));
+    writeFileSync(join(s.root, 'real-sessions', `${SID}.state`), 'autopilot: on\nsecret: yes\n');
+    mkdirSync(linkedData);
+    symlinkSync(join(s.root, 'real-sessions'), join(linkedData, 'sessions'));
+    for (const [name, data] of [['a symlinked state file', s.data], ['a symlinked sessions dir', linkedData]]) {
+      const trace = join(s.root, `${name.split(' ')[2]}.jsonl`);
+      spawnSync('bash', [join(s.plugin, 'hooks', 'trace'), 'bash', hook], { input: s.input, cwd: s.ws,
+        env: { PATH: '/usr/bin:/bin', HOME: s.home, CLAUDE_PLUGIN_DATA: data, KERN_EXEC_TRACE: trace }, encoding: 'utf8' });
+      const st = JSON.parse(readFileSync(trace, 'utf8')).kern.state;
+      assert.deepEqual([st.exists, st.symlink, st.text, st.autopilot, st.autopilot_rc], [true, true, null, null, 2], name);
+    }
+    const plain = join(s.root, 'plain.jsonl');
+    rmSync(state);
+    writeFileSync(state, STATE_ON);
+    spawnSync('bash', [join(s.plugin, 'hooks', 'trace'), 'bash', hook], { input: s.input, cwd: s.ws,
+      env: { PATH: '/usr/bin:/bin', HOME: s.home, CLAUDE_PLUGIN_DATA: s.data, KERN_EXEC_TRACE: plain }, encoding: 'utf8' });
+    const st = JSON.parse(readFileSync(plain, 'utf8')).kern.state;
+    assert.deepEqual([st.exists, st.symlink, st.text, st.autopilot], [true, false, STATE_ON, 'on'], 'a plain state file is read');
   } finally { s.done(); }
 });

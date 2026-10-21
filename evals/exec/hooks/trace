@@ -87,7 +87,7 @@ view() (
     # shellcheck source=/dev/null
     . "$KERN_ROOT/hooks/lib/$lib.sh" 2>/dev/null || { printf '{"error":"hooks/lib/%s.sh did not load"}' "$lib"; return 0; }
   done
-  local sid sid_rc cwd cwd_rc main enabled=false f f_rc st mtime="" inode="" ap ap_rc text=null s v first=1 denied apo_rc=null autopilot=false
+  local sid sid_rc cwd cwd_rc main enabled=false f f_rc st mtime="" inode="" link=false ap ap_rc text=null s v first=1 denied apo_rc=null autopilot=false
   # shellcheck disable=SC2034 # read by json.sh
   KERN_INPUT=$(cat "$TRACE_WORK/in")
   sid=$(json_get session_id 2>/dev/null)
@@ -106,14 +106,17 @@ view() (
   f_rc=$?
   ap=$(state_get "$sid" autopilot 2>/dev/null)
   ap_rc=$?
+  # state_get refuses a symlinked state file or state dir, so no text is read through one either; mtime
+  # and inode are the link's own.
+  if [ "$f_rc" = 0 ] && { [ -L "$f" ] || [ -L "$(dirname "$f")" ]; }; then link=true; fi
   if [ "$f_rc" = 0 ] && [ -f "$f" ]; then
     st=$(stat -c '%Y %i' "$f" 2>/dev/null || stat -f '%m %i' "$f" 2>/dev/null) && { mtime=${st%% *} inode=${st#* }; }
-    text=$(head -c 4096 "$f" >"$TRACE_WORK/state" && jfile "$TRACE_WORK/state") || text=null
-    printf '"state":{"file":%s,"file_rc":0,"exists":true,"mtime":%s,"inode":%s,' "$(jstr "$f")" "$(jnum "$mtime")" "$(jnum "$inode")"
+    if [ "$link" = false ]; then text=$(head -c 4096 "$f" >"$TRACE_WORK/state" && jfile "$TRACE_WORK/state") || text=null; fi
+    printf '"state":{"file":%s,"file_rc":0,"exists":true,"symlink":%s,"mtime":%s,"inode":%s,' "$(jstr "$f")" "$link" "$(jnum "$mtime")" "$(jnum "$inode")"
   elif [ "$f_rc" = 0 ]; then
-    printf '"state":{"file":%s,"file_rc":0,"exists":false,"mtime":null,"inode":null,' "$(jstr "$f")"
+    printf '"state":{"file":%s,"file_rc":0,"exists":false,"symlink":%s,"mtime":null,"inode":null,' "$(jstr "$f")" "$link"
   else
-    printf '"state":{"file":null,"file_rc":%s,"exists":false,"mtime":null,"inode":null,' "$f_rc"
+    printf '"state":{"file":null,"file_rc":%s,"exists":false,"symlink":false,"mtime":null,"inode":null,' "$f_rc"
   fi
   if [ "$ap_rc" = 0 ]; then ap=$(jstr "$ap"); else ap=null; fi
   printf '"autopilot":%s,"autopilot_rc":%s,"text":%s},"settings":[' "$ap" "$ap_rc" "$text"
