@@ -25,11 +25,12 @@ state_file() {
 }
 
 # state_get SID KEY: prints the value. Exit 1 unset, 2 bad id or unsafe file.
-# This library makes no locale change bash must undo. bash 5.3 (5.3.15 on macOS, 2026-10-21) segfaults
-# now and then, about one run in 16, when a subshell undoes one: a `local LC_ALL=C` at return, or the
-# temporary LC_ALL of a command that more commands follow. The old state_file's `local LC_ALL=C` ran
-# inside `$(state_file)`, so state_get failed that way and prompt-submit reset the state (Task 16l).
-# `env LC_ALL=C cmd` sets the locale in cmd's environment only.
+# This library makes no locale change bash must undo. Homebrew bash 5.3.15 on macOS (2026-10-21)
+# segfaults now and then, about one run in 16, when a subshell undoes one: a `local LC_ALL=C` at return,
+# or the temporary LC_ALL of a command that more commands follow. It does so only while neither LANG nor
+# LC_ALL is set, as for a hook a GUI app or an `env -i` runner starts; LC_CTYPE alone does not prevent
+# it. The old state_file's `local LC_ALL=C` ran inside `$(state_file)`, so state_get failed that way and
+# prompt-submit reset the state (Task 16l). `env LC_ALL=C cmd` sets the locale in cmd's environment only.
 state_get() {
   local f
   _state_path "$1" || return 2

@@ -365,6 +365,10 @@ since: 2026-10-12T00:00:00Z'
     case "$("$b" -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')" in 5.[3-9] | [6-9].*) found=$b; break ;; esac
   done
   [ -n "$found" ] || skip "no bash 5.3 or later here"
+  # The crash comes only with neither LANG nor LC_ALL set, and LC_CTYPE alone does not stop it, so the
+  # caller's locale goes. They are unset here, not with env -u: env's unsetenv changes the environment's
+  # layout, and with it the crash rate, down to none in some runs.
+  unset LANG LC_ALL LC_CTYPE
   mkdir -p "$R/.claude"
   printf 'kern: off\n' >"$R/.claude/kern.local.yml"
   cat >"$BATS_TEST_TMPDIR/once.sh" <<'EOS'
@@ -376,9 +380,9 @@ _settings_read "$1" kern || exit 3
 [ "$_KERN_SV" = off ] || exit 4
 EOS
   local i=0 bad=0
-  while [ "$i" -lt 120 ]; do
+  while [ "$i" -lt 300 ]; do
     i=$((i + 1))
     "$found" "$BATS_TEST_TMPDIR/once.sh" "$R/.claude/kern.local.yml" 2>/dev/null || bad=$((bad + 1))
   done
-  [ "$bad" -eq 0 ] || { echo "$found failed $bad of 120 runs"; return 1; }
+  [ "$bad" -eq 0 ] || { echo "$found failed $bad of 300 runs"; return 1; }
 }
