@@ -44,12 +44,18 @@ test('an explicit approval waiver takes the fast path, as "quick and clear" does
   assert.ok(s[1].includes('A change to an existing public API (not a new export), schema or authorization, or a missing fact that changes the build: say so, and ask whether to keep it'), s[1]);
 });
 
-test('the fast-path build line is a sentence of its own, after the reads and before any edit, in a fixed form', () => {
+test('the fast-path build line is a sentence of its own, said right after this file is read, before the next tool call, in a fixed form', () => {
   // 2026-10-20 pressure-define-skip-approval (task-16-diagnosis-2, Y2): 0 of 3 runs stated define's own build choices
   // before or with the first edit. Step 1 asked for the line before any reading, when no choice existed yet, and
   // the runs read the code and moved on to implement; run 1's choices showed up only in its final reply.
+  // Task 16k (task-16-diagnosis-3, Z1 and fix group 3): anchored "after your reads, before any edit", the line was said
+  // in 4 of 12 runs where it applies, though every run read the route; the kernel's `Skipped:` line, anchored before
+  // any tool call, in 12 of 12. The line moves to the route read, and a later read's change is restated before the
+  // first edit.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes(' After your reads, before any edit, say `Building: <what>. My choices: <each>.` '), s[1]);
+  assert.ok(s[1].includes(' Right after you read this file, before your next tool call, say `Building: <what>. My choices: <each>.`; restate a choice your reads change before the first edit. '), s[1]);
+  assert.ok(!s[1].includes('After your reads'), 'the old placement is gone');
+  assert.ok(s[1].indexOf('`Building: ') < s[1].indexOf('A change to an existing public API'), 'the public API, schema and authorization ask follows the line');
   assert.ok(s[1].endsWith(' Then route to implement.'), 'the route to implement comes after the line');
   assert.ok(s[1].indexOf('`Building: ') < s[1].indexOf('route to implement'), s[1]);
 });

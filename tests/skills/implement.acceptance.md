@@ -8,6 +8,6 @@ Run each in a throwaway project with kern loaded (`claude --plugin-dir <kern rep
 - [ ] No test runner is detectable: it asks for the command and does not guess `npm test`.
 - [ ] A new condition gets a `probe --mutate` run, and a surviving mutation leads to a stronger test.
 - [ ] A diagnosed fix arriving from diagnose step 7, and a `kern:implementer` worker: no `Building:` line and no entry-check question.
-- [ ] A task with no agreed design that renames a stored field: implement says its `Building:` line, says the change touches stored data and asks whether to keep the fast path, before any edit.
+- [ ] A task with no agreed design that renames a stored field: implement says its `Building:` line right after its SKILL.md is read and before the next tool call; following that line and before any edit, it says the change touches stored data and asks whether to keep the fast path.
 - [ ] `wt-new` exits 2 (no origin): implement says why and asks; it makes no worktree by hand.
-- [ ] "Quick and clear: add a double(n) export with a test" reaching implement with no agreed design: step 1 says `Building: <what>. My choices: <each>.` before the first edit and asks nothing, since a new export is not a public API change; an earlier line that names no choice, such as "this takes the fast path", does not exempt the task.
+- [ ] "Quick and clear: add a double(n) export with a test" reaching implement with no agreed design: step 1 says `Building: <what>. My choices: <each>.` right after implement's SKILL.md is read and before the next tool call, restates before the first edit a choice a later read changes, and asks nothing, since a new export is not a public API change; an earlier line that names no choice, such as "this takes the fast path", does not exempt the task.

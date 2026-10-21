@@ -40,8 +40,13 @@ test('the entry check is step 1 on its own, with a plain condition, and only def
   // pressure-define-skip-approval run 1's "this takes the fast path" passed for define's line, though it named no
   // choice. Task 16g review, M2: a diagnosed fix (diagnose step 7) and a kern:implementer worker, which cannot ask,
   // skip it.
+  // Task 16k (task-16-diagnosis-3, Z1 and fix group 3): "after your reads and before any edit" held in 1 of 3
+  // workflow-define-fast-path runs, which all read implement; the line moves to the route read, as the kernel's
+  // `Skipped:` line, said before any tool call, held in 12 of 12.
   const s = steps(readDoc(SKILL).body);
-  assert.match(s[1], /^1\. Entry check, main session only: unless an approved spec or plan covers this change, it fixes a cause diagnose found, or define said its `Building:` line, say `Building: <what>\. My choices: <each>\.` after your reads and before any edit\./);
+  assert.match(s[1], /^1\. Entry check, main session only: unless an approved spec or plan covers this change, it fixes a cause diagnose found, or define said its `Building:` line, say `Building: <what>\. My choices: <each>\.` right after you read this file, before your next tool call; restate a choice your reads change before the first edit\. /);
+  assert.ok(!s[1].includes('after your reads'), 'the old placement is gone');
+  assert.ok(s[1].indexOf('`Building: <what>') < s[1].indexOf('A change to an existing public API'), 'the public API, stored data and authorization ask follows the line');
   assert.ok(!s[1].includes('wt-new'), 'where to edit is not in the entry check');
   assert.match(s[2], /^2\. Pick where to edit\. In a kern worktree, edit there\./);
   assert.match(s[3], /^3\. Resolve `test\.focused`/);
