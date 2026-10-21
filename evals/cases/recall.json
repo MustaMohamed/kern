@@ -25,7 +25,7 @@
         "Says the window, topic and workspace back before mining",
         "Checks PR or branch state with gh or git before tagging a thread",
         "Gives exactly one tag per thread and one next move",
-        "Writes no file"
+        "Makes no Write, Edit, MultiEdit or NotebookEdit call and changes no file, ref or git config in the workspace"
       ],
       "checks": { "1": "git-or-gh-state", "3": "no-write" }
     },
@@ -41,7 +41,7 @@
       "expectations": [
         "Reads .kern/ledgers/export/ledger.md and reads no session transcript before it",
         "Names finishing Task 3 of the export plan as the next move",
-        "Makes no Write or Edit call and changes no file in the working tree"
+        "Makes no Write, Edit, MultiEdit or NotebookEdit call and changes no file, ref or git config in the workspace"
       ],
       "checks": { "0": "ledger-before-transcript", "2": "no-write" }
     },

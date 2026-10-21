@@ -149,8 +149,16 @@ test('recall-2 grades finishing Task 3, which its workspace leaves in progress, 
 test('recall-2 grades the ledger read and the unchanged tree in words that hold on a fixture with no transcript', () => {
   const ex = loadCases(ROOT).find((c) => c.id === 'recall-2').expectations;
   assert.equal(ex[0], 'Reads .kern/ledgers/export/ledger.md and reads no session transcript before it');
-  assert.equal(ex[2], 'Makes no Write or Edit call and changes no file in the working tree');
   assert.equal(ex.length, 3, 'E1 is unchanged');
+});
+
+// Task 16j review, M4 and M8: no-write decides recall-1 E3 and recall-2 E2. It fails on four write tools and on
+// a changed file, ref or git config anywhere in the workspace, so both say so, as recall's own text does.
+test('recall-1 E3 and recall-2 E2 name what the no-write check reads', () => {
+  const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
+  const line = 'Makes no Write, Edit, MultiEdit or NotebookEdit call and changes no file, ref or git config in the workspace';
+  assert.deepEqual([cases.get('recall-1').expectations[3], cases.get('recall-2').expectations[2]], [line, line]);
+  assert.deepEqual([cases.get('recall-1').checks[3], cases.get('recall-2').checks[2]], ['no-write', 'no-write']);
 });
 
 test('define, execute-plan and parallel-work each have a seeded workflow case', () => {
