@@ -69,10 +69,10 @@ export function loadCases(root) {
 // cut to max, between whole items (its first 40% and last 60% kept), each Markdown Write or Edit body to
 // markdownBody, any other body to body, a Bash result longer than bashHead + bashTail to its first bashHead
 // and last bashTail with the cut marked (Task 16h: a listing or the first file a call printed comes first,
-// a test summary last; task-16-diagnosis-2, recall-2), any other tool's result to its first otherResult,
-// and the final reply to its first reply. So a record is at most about 48,400 characters (some 12,000
-// tokens). No cut splits a surrogate pair.
-export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashHead: 400, bashTail: 600, otherResult: 300, reply: 8000 };
+// a test summary last; task-16-diagnosis-2, recall-2) and up to bashHeaders file-header lines from the cut
+// (Task 16j), any other tool's result to its first otherResult, and the final reply to its first reply. So a
+// record is at most about 48,400 characters (some 12,000 tokens). No cut splits a surrogate pair.
+export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashHead: 400, bashTail: 600, bashHeaders: 20, otherResult: 300, reply: 8000 };
 
 // digest(events, max, { results }): what the head-to-head grader sees, and the older record. No system
 // prompt, no skill text, so the grader judges behaviour, not the instructions. Tool calls one per line (a
@@ -125,11 +125,28 @@ const first = (s, n) => (s.length <= n ? s : s.slice(0, /[\uD800-\uDBFF]/.test(s
 const last = (s, n) => (s.length <= n ? s : s.slice(/[\uDC00-\uDFFF]/.test(s[s.length - n]) ? s.length - n + 1 : s.length - n));
 // prefixed(text, p): each line of text after p.
 const prefixed = (text, p) => text.split('\n').map((l) => `${p}${l}`).join('\n');
-// ends(s): a Bash result, its head and tail around a marked cut when it is longer than both.
+// HEADER: a line that names the file a print of several files goes on to: `=== <path>` (a loop's echo, with an
+// optional closing ` ===`) or `==> <path> <==` (head or tail given several files).
+const HEADER = /^(?:=== \S+(?: ===)?|==> .+ <==)$/;
+// ends(s): a Bash result, its head and tail around a marked cut when it is longer than both. The cut keeps each
+// whole HEADER line in it, up to RECORD.bashHeaders of them, in order, each run of cut text around them marked
+// (Task 16j: on 2026-10-21 recall-2 run 0 printed the ledger third in a loop, and the cut held it).
 const ends = (s) => {
   if (s.length <= RECORD.bashHead + RECORD.bashTail) return s;
   const head = first(s, RECORD.bashHead), tail = last(s, RECORD.bashTail);
-  return `${head}\n[digest: ${s.length - head.length - tail.length} characters cut]\n${tail}`;
+  const from = head.length, to = s.length - tail.length;
+  const parts = [head];
+  let at = from;
+  const cut = (end) => { if (s.slice(at, end).trim()) parts.push(`[digest: ${end - at} characters cut]`); };
+  let kept = 0;
+  for (let start = s.lastIndexOf('\n', from - 1) + 1; start < to && kept < RECORD.bashHeaders;) {
+    const nl = s.indexOf('\n', start), end = nl < 0 ? s.length : nl;
+    if (start >= from && end <= to && HEADER.test(s.slice(start, end))) { cut(start); parts.push(s.slice(start, end)); at = end; kept += 1; }
+    if (nl < 0) break;
+    start = nl + 1;
+  }
+  cut(to);
+  return [...parts, tail].join('\n');
 };
 
 const LEGEND = 'Transcript (in order: "Assistant:" or "Subagent:" heads text, each line of it after "> "; "N. Tool:" is a tool call, '

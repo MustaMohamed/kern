@@ -326,6 +326,26 @@ test('the behaviour record keeps the head of a long Bash result as well as its t
   assert.deepEqual(lines(behaveDigest([use('b', 'Bash', { command: 'ls' }), back('b', short)])), ['1. Bash: ls', `    => ${short}`], 'a result of 1,000 characters is whole');
 });
 
+// Task 16j (task-16-diagnosis-3, recall-2): run 0's loop printed the plan, the spec, then the ledger, each after an
+// "=== <path>" line, and the ledger fell in the cut between the head and the tail.
+test('a cut Bash result keeps its file-header lines, each between marked cuts, so a loop over files shows what it printed', () => {
+  const file = (head, n) => `${head}\n${'q'.repeat(n)}\n`;
+  const out = `${'l'.repeat(420)}\n${file('=== ./plans/export.md', 1200)}${file('=== ./specs/export.md', 1200)}${file('=== ./ledgers/export/ledger.md', 700)}${file('==> ./ledgers/export/reports/task-3.md <==', 300)}${'t'.repeat(590)}`;
+  const kept = lines(behaveDigest([use('a', 'Bash', { command: 'for f in $(find . -name "*.md"); do echo "=== $f"; head -60 $f; done' }), back('a', out)]));
+  const at = (l) => kept.indexOf(`    => ${l}`);
+  assert.ok(at('=== ./plans/export.md') > 0 && at('=== ./specs/export.md') > at('=== ./plans/export.md'), 'the headers in the cut are kept, in order');
+  assert.ok(at('=== ./ledgers/export/ledger.md') > at('=== ./specs/export.md'), 'the ledger the loop printed third is named');
+  assert.ok(at('==> ./ledgers/export/reports/task-3.md <==') > at('=== ./ledgers/export/ledger.md'), 'head and tail headers of several files count');
+  assert.deepEqual(kept.filter((l) => /\[digest: \d+ characters cut\]/.test(l)).length, 5, 'each run of cut text between two headers is marked');
+  assert.deepEqual(kept.join('\n').match(/q{100,}/g) ?? [], [], 'no file body is kept');
+  const plain = `${'o'.repeat(1900)}\n=== RUN   TestSum\n${'o'.repeat(100)}`;
+  assert.equal(lines(behaveDigest([use('b', 'Bash', { command: 'go test' }), back('b', plain)])).filter((l) => /characters cut/.test(l)).length, 1, 'a line that names no file is not a header');
+  const many = `${'m'.repeat(420)}\n${Array.from({ length: 25 }, (_, i) => file(`=== f${i}.md`, 50)).join('')}${'t'.repeat(600)}`;
+  const capped = lines(behaveDigest([use('c', 'Bash', { command: 'cat *.md' }), back('c', many)])).filter((l) => /=> === f\d+\.md$/.test(l));
+  assert.equal(RECORD.bashHeaders, 20);
+  assert.deepEqual(capped, Array.from({ length: 20 }, (_, i) => `    => === f${i}.md`), 'at most 20 headers, the first ones');
+});
+
 test('the behaviour record is bounded: 40,000 characters of transcript, cut between whole items, and an 8,000 character reply (review M5)', () => {
   const ev = Array.from({ length: 300 }, (_, i) => [say(`step ${i} ${'w'.repeat(200)}`), use(`t${i}`, 'Bash', { command: `echo ${i}` }), back(`t${i}`, 'z'.repeat(700))]).flat();
   ev.push({ type: 'result', subtype: 'success', result: `${'f'.repeat(9000)}END` });
