@@ -183,7 +183,7 @@ _G15_AWK='
 
 guard_g15() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd out line seen=0 got=0 envs="" parsed dir rest sub t
+  local cmd out line seen=0 got=0 unread=0 envs="" parsed dir rest sub t
   cmd=$(ti_get command) || return 0
   _g15_named "$cmd ${KERN_ALIAS_TEXT-}" || return 0
   # A failed parse or judge leaves no `.`, so G15 asks.
@@ -197,8 +197,13 @@ guard_g15() {
       *) continue ;;
     esac
     # deploy.envs is read only for a git push.
-    [ "$got" = 1 ] || { envs=$(settings_get deploy.envs ''); got=1; }
-    [ -n "$envs" ] || continue
+    # A settings layer that could not be read may name more deploy branches: every target may be one.
+    if [ "$got" = 0 ]; then
+      envs=$(settings_get deploy.envs '')
+      [ $? = 4 ] && unread=1
+      got=1
+    fi
+    [ -n "$envs" ] || [ "$unread" = 1 ] || continue
     parsed=$(git_sub "${line#P	}") || continue
     dir=${parsed%%	*}
     rest=${parsed#*	}
@@ -215,6 +220,8 @@ guard_g15() {
         _g15_vote "push of every branch or a pattern may reach a deploy branch"
       elif list_has "$envs" "$t"; then
         _g15_vote "push to deploy branch $t"
+      elif [ "$unread" = 1 ]; then
+        _g15_vote "push to $t: a settings file could not be read, so deploy.envs is unknown"
       fi
     done <<EOT
 $(push_targets "$dir" "$rest")

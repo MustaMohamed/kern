@@ -308,3 +308,79 @@ YML
   ln -s "$BATS_TEST_TMPDIR/out" "$R/.claude"
   kern_enabled
 }
+
+# A settings layer kern cannot read (awk fails, or a command substitution's pipe cannot be made) must not
+# loosen a guard: the key reads as its strictest value, or settings_get exits 4 for the caller to fail
+# closed (review of 2026-10-21).
+# get KEY [DEFAULT]: sets got to settings_get's stdout and rc to its exit code; the stub's stderr is dropped.
+get() {
+  rc=0
+  got=$(settings_get "$@" 2>/dev/null) || rc=$?
+}
+
+@test "a layer that cannot be read gives policy deny, rebase.push ask and kern on, with exit 4" {
+  printf 'commit.policy: auto\nrebase.push: ask\nkern: on\n' >"$R/.claude/kern.local.yml"
+  printf 'rebase.push: autopilot\nkern: off\npush.policy: auto\n' >"$HOME/.claude/kern.yml"
+  read_fails awk "$RP/.claude/kern.local.yml"
+  get commit.policy ask
+  [ "$rc" -eq 4 ]
+  [ "$got" = deny ]
+  [ "$(policy_for commit 2>/dev/null)" = deny ]
+  [ "$(policy_for push 2>/dev/null)" = deny ]
+  get rebase.push ask
+  [ "$rc" -eq 4 ]
+  [ "$got" = ask ]
+  get kern on
+  [ "$rc" -eq 4 ]
+  [ "$got" = on ]
+  kern_enabled 2>/dev/null
+  # A layer above the one that cannot be read decides alone.
+  read_fails awk "$RP/.claude/kern.local.yml" 0
+  read_fails awk "$HOME/.claude/kern.yml"
+  get commit.policy ask
+  [ "$rc" -eq 0 ]
+  [ "$got" = auto ]
+}
+
+@test "a list key with a layer that cannot be read exits 4 with the items the other layers give" {
+  printf 'never_commit: secrets/*\n' >"$R/.claude/kern.local.yml"
+  printf 'never_commit: *.pem\n' >"$HOME/.claude/kern.yml"
+  read_fails awk "$RP/.claude/kern.local.yml"
+  get never_commit ''
+  [ "$rc" -eq 4 ]
+  [ "$got" = '*.pem' ]
+  # Any other key gives what the readable layers and the default give, with exit 4.
+  get base_branch dflt
+  [ "$rc" -eq 4 ]
+  [ "$got" = dflt ]
+}
+
+@test "a policy layer is never lost to a failed command substitution" {
+  local n=1 got
+  printf 'commit.policy: deny\n' >"$R/.claude/kern.local.yml"
+  while [ "$n" -le 40 ]; do
+    got=$(pipe_fails "$n" policy_for commit 2>/dev/null)
+    [ "$got" = deny ] || { echo "policy read $got when substitution $n failed"; return 1; }
+    [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || break
+    n=$((n + 1))
+  done
+  [ "$n" -le 40 ]
+}
+
+@test "inside a repository whose main worktree root git cannot find, the project layers count as unread" {
+  printf 'commit.policy: auto\n' >"$HOME/.claude/kern.yml"
+  printf 'commit.policy: deny\n' >"$R/.claude/kern.local.yml"
+  read_fails git worktree
+  rc=0
+  _settings_files >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 2 ]
+  get commit.policy ask
+  [ "$rc" -eq 4 ]
+  [ "$got" = deny ]
+  # Outside any repository the user's layer alone decides, as before.
+  export CWD="$BATS_TEST_TMPDIR/norepo"
+  mkdir -p "$CWD"
+  get commit.policy ask
+  [ "$rc" -eq 0 ]
+  [ "$got" = auto ]
+}

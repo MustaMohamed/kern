@@ -402,10 +402,18 @@ _g05_commit() {
     return 0
   fi
   policy=$(policy_for commit)
-  if [ "$policy" = deny ]; then
-    vote deny G5 "commit.policy deny"
-    return 0
-  fi
+  case "$policy" in
+    deny)
+      vote deny G5 "commit.policy deny"
+      return 0
+      ;;
+    ask | auto) ;;
+    # policy_for prints nothing only when its command substitution's pipe could not be made.
+    *)
+      vote deny G5 "commit.policy could not be read; retry the commit"
+      return 0
+      ;;
+  esac
   if [ "$AUTOPILOT" != 1 ] && [ "$policy" != auto ]; then
     vote ask G5 "commit (message checks pass)"
     return 0

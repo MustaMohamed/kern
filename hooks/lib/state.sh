@@ -135,18 +135,42 @@ state_ensure() {
 }
 
 # autopilot_denied_by: prints the first settings file (in precedence order) that says `autopilot: denied`.
-# Exit 1 when no layer denies.
+# A layer kern cannot read may say it, so a file that exists but could not be read prints with
+# " (could not be read)", and a list of layers that could not be made prints "the settings files (could
+# not be listed)". Inside a git work tree whose main worktree root git could not find (_settings_files
+# exit 2), the project layers are unknown: "the project settings (could not be found)". Exit 1 when no
+# layer denies.
 autopilot_denied_by() {
-  local f
-  while IFS= read -r f; do
-    [ -f "$f" ] || continue
-    if [ "$(_settings_lookup "$f" autopilot)" = denied ]; then
-      printf '%s\n' "$f"
-      return 0
-    fi
-  done <<EOT
-$(_settings_files)
-EOT
+  local f files rc
+  files=$(_settings_files)
+  rc=$?
+  # _settings_files always names the user's file, so no output means the list could not be made.
+  if [ -z "$files" ]; then
+    printf 'the settings files (could not be listed)\n'
+    return 0
+  fi
+  if [ "$rc" != 0 ]; then
+    printf 'the project settings (could not be found)\n'
+    return 0
+  fi
+  # Walked with parameter expansion: a here-document needs a file that may not open.
+  files="$files"$'\n'
+  while [ -n "$files" ]; do
+    f=${files%%$'\n'*}
+    files=${files#*$'\n'}
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    _settings_read "$f" autopilot
+    case $? in
+      0) [ "$_KERN_SV" = denied ] || continue ;;
+      1) continue ;;
+      *)
+        printf '%s (could not be read)\n' "$f"
+        return 0
+        ;;
+    esac
+    printf '%s\n' "$f"
+    return 0
+  done
   return 1
 }
 

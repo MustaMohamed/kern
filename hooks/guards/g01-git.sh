@@ -625,10 +625,18 @@ EOT
     return 0
   fi
   policy=$(policy_for push)
-  if [ "$policy" = deny ]; then
-    vote deny G1 "push.policy deny"
-    return 0
-  fi
+  case "$policy" in
+    deny)
+      vote deny G1 "push.policy deny"
+      return 0
+      ;;
+    ask | auto) ;;
+    # policy_for prints nothing only when its command substitution's pipe could not be made.
+    *)
+      vote deny G1 "push.policy could not be read; retry the push"
+      return 0
+      ;;
+  esac
   if [ "$del" = 1 ]; then
     vote ask G1 "git push deleting a remote branch; deletion always needs the user's word"
     [ "$AUTOPILOT" = 1 ] && vote deny G1 "remote branch delete under autopilot"

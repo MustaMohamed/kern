@@ -1159,3 +1159,47 @@ key AKIAABCDEFGHIJKLMNOP"
     [[ "$output" == *"could not scan"* ]] || false
   done
 }
+
+# A settings layer kern cannot read must not loosen G5 or G6 (review of 2026-10-21).
+@test "G5: commit.policy deny in a layer that cannot be read still keeps the commit from going through" {
+  printf 'commit.convention: "^CDS-[0-9]+: "\ncommit.policy: deny\n' >"$R/.claude/kern.local.yml"
+  printf 'CDS-2465: swap MinIO for Floci\n\nWhy.\n' >"$R/msg.txt"
+  set_autopilot on
+  g "git commit -F msg.txt" g05
+  [ "$(decision_of "$output")" = deny ]
+  read_fails awk "$(cd "$R" && pwd -P)/.claude/kern.local.yml"
+  g "git commit -F msg.txt" g05
+  [ "$(decision_of "$output")" = deny ]
+}
+
+@test "G6: a never_commit layer that cannot be read asks, under autopilot too" {
+  printf 'never_commit: *.db\n' >"$R/.claude/kern.local.yml"
+  printf 'x\n' >"$R/data.db"
+  git -C "$R" add data.db
+  read_fails awk "$(cd "$R" && pwd -P)/.claude/kern.local.yml"
+  g "git commit -m 'CDS-2465: db'" g06
+  [ "$(decision_of "$output")" = ask ] || { echo "$output"; return 1; }
+  [[ "$output" == *"never_commit"* ]] || false
+  # The layer that cannot be read also denies autopilot, so the hook still asks.
+  set_autopilot on
+  g "git commit -m 'CDS-2465: db'" g06
+  [ "$(decision_of "$output")" = ask ] || { echo "$output"; return 1; }
+}
+
+@test "G5: a commit.policy read that comes back empty is denied, not taken as ask under autopilot" {
+  # policy_for prints nothing when its command substitution's pipe cannot be made. A hook copy whose
+  # policy_for prints nothing stands in for that.
+  local K C
+  K=$(kern_root)
+  C="$BATS_TEST_TMPDIR/k"
+  mkdir -p "$C"
+  cp -R "$K/hooks" "$K/scripts" "$K/kernel" "$K/modes" "$K/.claude-plugin" "$C/"
+  printf '\npolicy_for() { :; }\n' >>"$C/hooks/lib/settings.sh"
+  printf 'CDS-2465: swap MinIO for Floci\n\nWhy.\n' >"$R/msg.txt"
+  set_autopilot on
+  g "git commit -F msg.txt" g05
+  [ "$(decision_of "$output")" = allow ]
+  run env KERN_GUARDS=g05 bash "$C/hooks/pre-tool-use" <<<"$(bash_payload "git commit -F msg.txt")"
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [[ "$output" == *"commit.policy could not be read"* ]] || false
+}

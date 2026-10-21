@@ -45,8 +45,8 @@ need() {
 . "$KERN_ROOT/hooks/lib/render.sh" || no_lib render.sh
 # Every function each library defines. A bats test keeps these lists equal to the definitions.
 need json.sh json_get json_get_raw json_escape json_ok ti_get
-need settings.sh kern_main_root _settings_files _settings_lookup _settings_ignored _settings_local_ok settings_get
-need settings.sh settings_source settings_keys settings_known_keys settings_unknown_keys policy_for kern_enabled list_has
+need settings.sh kern_main_root _settings_files _settings_lookup _settings_read _settings_ignored _settings_local_ok
+need settings.sh settings_get settings_source settings_keys settings_known_keys settings_unknown_keys policy_for kern_enabled list_has
 need state.sh state_dir _state_path state_file state_get state_set _state_put now_iso default_voice state_reset
 need state.sh state_ensure autopilot_denied_by autopilot_on
 need state.sh prompt_hashes

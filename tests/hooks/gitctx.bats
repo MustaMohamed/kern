@@ -980,3 +980,19 @@ words_are() {
   done
   finds "$(printf '%s\n' "BASH <<'EOF'" 'git push --force origin main' 'EOF')" push
 }
+
+@test "every branch is protected while a settings layer that could protect one cannot be read" {
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  mkdir -p "$R/.claude"
+  printf 'branch.protected: feat/x\n' >"$R/.claude/kern.local.yml"
+  branch_protected feat/x
+  run branch_protected feat/y
+  [ "$status" -eq 1 ]
+  read_fails awk "$(cd "$R" && pwd -P)/.claude/kern.local.yml"
+  run branch_protected feat/x
+  [ "$status" -eq 0 ]
+  run branch_protected feat/y
+  [ "$status" -eq 0 ]
+}

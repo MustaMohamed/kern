@@ -283,3 +283,56 @@ since: 2026-10-12T00:00:00Z'
   done
   [ "$n" -le 40 ]
 }
+
+# A settings layer kern cannot read may hold `autopilot: denied`, so it counts as denying (review of
+# 2026-10-21: a failed read of a denying layer let autopilot read on).
+@test "a settings layer that cannot be read denies autopilot, whatever it says" {
+  state_reset s1
+  state_set s1 autopilot=on
+  printf 'autopilot: denied\n' >"$HOME/.claude/kern.yml"
+  read_fails awk "$HOME/.claude/kern.yml"
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+  [ "$(autopilot_denied_by 2>/dev/null)" = "$HOME/.claude/kern.yml (could not be read)" ]
+  printf 'autopilot: allowed\n' >"$HOME/.claude/kern.yml"
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+  read_fails awk "$HOME/.claude/kern.yml" 0
+  autopilot_on s1
+  # A project layer too.
+  mkdir -p "$R/.claude"
+  printf 'mode.voice: terse\n' >"$R/.claude/kern.yml"
+  read_fails awk "$(cd "$R" && pwd -P)/.claude/kern.yml"
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+}
+
+@test "a denying layer keeps autopilot off when a command substitution's pipe fails" {
+  local n=1
+  state_reset s1
+  state_set s1 autopilot=on
+  printf 'autopilot: denied\n' >"$HOME/.claude/kern.yml"
+  while [ "$n" -le 40 ]; do
+    if (pipe_fails "$n" autopilot_on s1) 2>/dev/null; then
+      echo "autopilot read on when substitution $n failed"
+      return 1
+    fi
+    [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || break
+    n=$((n + 1))
+  done
+  [ "$n" -le 40 ]
+}
+
+@test "autopilot is denied inside a repository whose main worktree root git cannot find" {
+  state_reset s1
+  state_set s1 autopilot=on
+  autopilot_on s1
+  read_fails git worktree
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+  [ "$(autopilot_denied_by 2>/dev/null)" = "the project settings (could not be found)" ]
+  # Outside any repository the user's layer alone decides, as before.
+  export CWD="$BATS_TEST_TMPDIR/norepo"
+  mkdir -p "$CWD"
+  autopilot_on s1 2>/dev/null
+}

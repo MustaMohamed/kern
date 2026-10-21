@@ -89,8 +89,13 @@ EOT
   _g14_has_word "$srv" "$KERN_G14_CHAT" && kind=chat
   [ -z "$kind" ] && _g14_has_word "$srv" "$KERN_G14_TRACKERS" && kind=tracker
   if [ -z "$kind" ]; then
-    extra=$(settings_get mcp.write_servers '' | tr '[:upper:]' '[:lower:]' | tr ',' ' ')
-    [ -n "$extra" ] && _g14_has_word "$srv" "$extra" && kind=tracker
+    # A settings layer that could not be read may name this server, so it counts as a tracker.
+    if extra=$(settings_get mcp.write_servers ''); then
+      extra=$(printf '%s\n' "$extra" | tr '[:upper:]' '[:lower:]' | tr ',' ' ')
+      [ -n "$extra" ] && _g14_has_word "$srv" "$extra" && kind=tracker
+    else
+      kind=tracker
+    fi
   fi
   [ -n "$kind" ] || return 0
   _g14_is_write "$words $plain" || return 0
@@ -186,7 +191,9 @@ _g14_decide() {
       fi
       ;;
     deny) vote deny G14 "tracker.policy deny" ;;
-    *) vote ask G14 "$2 writes to the tracker" ;;
+    ask) vote ask G14 "$2 writes to the tracker" ;;
+    # policy_for prints nothing only when its command substitution's pipe could not be made.
+    *) vote deny G14 "tracker.policy could not be read; retry the command" ;;
   esac
 }
 

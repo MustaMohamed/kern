@@ -364,10 +364,18 @@ _g02_create() {
     return 0
   fi
   policy=$(policy_for pr)
-  if [ "$policy" = deny ]; then
-    vote deny G2 "pr.policy deny"
-    return 0
-  fi
+  case "$policy" in
+    deny)
+      vote deny G2 "pr.policy deny"
+      return 0
+      ;;
+    ask | auto) ;;
+    # policy_for prints nothing only when its command substitution's pipe could not be made.
+    *)
+      vote deny G2 "pr.policy could not be read; retry the command"
+      return 0
+      ;;
+  esac
   cur=$(current_branch "$CWD") || cur=""
   head=$(_gh_last "$toks" head) || head=$cur
   file=$(_gh_last "$toks" body-file) || file=""

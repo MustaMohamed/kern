@@ -10,14 +10,24 @@ kern_main_root() {
   printf '%s\n' "$line"
 }
 
-# _settings_files: the settings files in precedence order, one per line (existing or not).
+# _settings_files: the settings files in precedence order, one per line (existing or not). Exit 2 when
+# no main worktree root resolves, yet the directory or one above it holds a .git: git failed to find the
+# root, so the project layers are unknown. Only the user's file prints then.
 _settings_files() {
-  local main="${KERN_MAIN-}"
+  local main="${KERN_MAIN-}" d
   if [ -z "$main" ]; then main=$(kern_main_root "${CWD:-$PWD}" 2>/dev/null) || main=""; fi
   if [ -n "$main" ]; then
     printf '%s\n' "$main/.claude/kern.local.yml" "$main/.claude/kern.yml"
   fi
   printf '%s\n' "$HOME/.claude/kern.yml"
+  [ -z "$main" ] || return 0
+  d=${CWD:-$PWD}
+  case "$d" in /*) ;; *) return 0 ;; esac
+  while [ -n "$d" ]; do
+    [ -e "$d/.git" ] && return 2
+    d=${d%/*}
+  done
+  return 0
 }
 
 # _settings_lookup FILE KEY: prints the value of KEY in FILE (last occurrence wins). Exit 1 absent.
@@ -88,15 +98,62 @@ _settings_local_ok() {
     END { exit bad }'
 }
 
+# _settings_read FILE KEY: sets _KERN_SV to KEY's value in FILE. Exit 0 found, 1 FILE does not set KEY,
+# 2 FILE could not be read: awk failed, or its command substitution came back without the status line it
+# always ends with, as one whose pipe cannot be made (a full fd table) does, with status 0 and no output.
+# A read that fails is tried once more.
+_settings_read() {
+  local out _
+  for _ in 1 2; do
+    out=$(_settings_lookup "$1" "$2"; printf '\n%s' "$?")
+    case "$out" in
+      *$'\n'0)
+        out=${out%$'\n'0}
+        _KERN_SV=${out%$'\n'}
+        return 0
+        ;;
+      *$'\n'1) return 1 ;;
+    esac
+  done
+  return 2
+}
+
 # settings_get KEY [DEFAULT]: prints the resolved value. Exit 0 found or defaulted, 3 unset. A key in
 # _KERN_UNION_KEYS joins the items of every layer that sets it, highest first, with ", ": one pair of
 # brackets around each layer's value ([a, b]) is dropped, items are trimmed, and an empty or repeated
 # item is dropped, so each item keeps its first place.
+# Exit 4 when a layer that could set KEY could not be read, or the list of layers could not be made: it
+# may hold a stricter value, so a guard must not take the result as the whole answer. A policy key then
+# prints deny, rebase.push ask and kern on; any other key prints what the readable layers and DEFAULT give.
 settings_get() {
-  local f v out="" found=0 rest item seen=$'\n'
-  while IFS= read -r f; do
-    [ -f "$f" ] || continue
-    v=$(_settings_lookup "$f" "$1") || continue
+  local f v out="" found=0 rest item seen=$'\n' files unread=0 strict=""
+  case "$1" in
+    *.policy | review.post_policy) strict=deny ;;
+    rebase.push) strict=ask ;;
+    kern) strict=on ;;
+  esac
+  # _settings_files always names the user's file, so no output means the list could not be made; exit 2
+  # means the project layers are unknown. The list is walked with parameter expansion: a here-document
+  # needs a file that may not open.
+  if ! files=$(_settings_files) || [ -z "$files" ]; then
+    [ -z "$strict" ] || { printf '%s\n' "$strict"; return 4; }
+    unread=1
+  fi
+  files="$files"$'\n'
+  while [ -n "$files" ]; do
+    f=${files%%$'\n'*}
+    files=${files#*$'\n'}
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    _settings_read "$f" "$1"
+    case $? in
+      0) v=$_KERN_SV ;;
+      1) continue ;;
+      *)
+        [ -z "$strict" ] || { printf '%s\n' "$strict"; return 4; }
+        unread=1
+        continue
+        ;;
+    esac
     case "$_KERN_UNION_KEYS" in
       *" $1 "*)
         found=1
@@ -116,21 +173,20 @@ settings_get() {
       *)
         _settings_ignored "$f" "$1" "$v" && continue
         printf '%s\n' "$v"
+        [ "$unread" = 0 ] || return 4
         return 0
         ;;
     esac
-  done <<EOT
-$(_settings_files)
-EOT
+  done
   if [ "$found" = 1 ]; then
     printf '%s\n' "$out"
-    return 0
-  fi
-  if [ $# -ge 2 ]; then
+  elif [ $# -ge 2 ]; then
     printf '%s\n' "$2"
-    return 0
+  elif [ "$unread" = 0 ]; then
+    return 3
   fi
-  return 3
+  [ "$unread" = 0 ] || return 4
+  return 0
 }
 
 # settings_source KEY: prints the file that sets KEY, or `default`. Exit 0 always. A key in
@@ -192,6 +248,9 @@ EOT
 }
 
 # policy_for ACTION: ask|auto|deny for commit, push, pr, tracker or review.post; any other action reads as ask.
+# A policy that could not be read reads as deny: a settings layer that could not be read (settings_get
+# exit 4), or a command substitution that came back without its status line, as one whose pipe cannot be
+# made does. A caller that gets no output must read deny too.
 policy_for() {
   local key v
   case "$1" in
@@ -199,7 +258,14 @@ policy_for() {
     commit|push|pr|tracker) key="$1.policy" ;;
     *) printf 'ask\n'; return 0 ;;
   esac
-  v=$(settings_get "$key" ask)
+  v=$(settings_get "$key" ask; printf '\n%s' "$?")
+  case "$v" in
+    *$'\n'0)
+      v=${v%$'\n'0}
+      v=${v%$'\n'}
+      ;;
+    *) printf 'deny\n'; return 0 ;;
+  esac
   case "$v" in
     auto|deny) printf '%s\n' "$v" ;;
     *) printf 'ask\n' ;;
