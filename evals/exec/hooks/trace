@@ -61,10 +61,11 @@ jnum() {
   case "$1" in '' | *[!0-9]*) printf null ;; *) printf '%s' "$1" ;; esac
 }
 
-# view: kern's view of this call as pre-tool-use computes it, from the same libraries and the same git
-# settings: the session id, cwd and main worktree it resolves, the state file and its autopilot line,
-# each settings layer with its autopilot value, and whether autopilot reads on. Runs in a subshell so
-# nothing it sets reaches the hook.
+# view: kern's view of this call as hooks/pre-tool-use computes it, from the same libraries and the same
+# git settings: the session id, cwd and main worktree it resolves, the state file and its autopilot line,
+# each settings layer with its autopilot value, and whether autopilot reads on. Its glue is a copy of
+# pre-tool-use's lines from KERN_INPUT=$(cat) to the AUTOPILOT block; a test runs both over a table of
+# inputs and fails when they disagree. Runs in a subshell so nothing it sets reaches the hook.
 view() (
   case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]* | ??????????*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
   export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \

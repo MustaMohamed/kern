@@ -1530,3 +1530,55 @@ for (const [end, verdict] of [['result', /^FAIL finish-menu-first: /m], ['exit',
     assert.ok(!existsSync(dirname(call.plugin)) && !existsSync(dirname(call.cwd)), 'the copy and the workspace are removed after the run');
   });
 }
+
+// Task 16l fix round 1, I1: the trace's view copies pre-tool-use's glue (its lines from KERN_INPUT=$(cat)
+// to the AUTOPILOT block), so a change there must show here. hookResolves runs the real hook, sourced, and
+// prints at its exit the SID, CWD and KERN_MAIN it resolved, its state file and AUTOPILOT; no guard sets
+// those names and no hook sets a trap.
+const HOOK_DUMP = `trap 'f=$(state_file "$SID" 2>/dev/null) || f=""; printf "%s\\t%s\\t%s\\t%s\\t%s\\n" "$SID" "$CWD" "$KERN_MAIN" "$f" "$AUTOPILOT" >&3' EXIT; . "$0"`;
+test('Task 16l fix I1: on a table of hook inputs the trace resolves the session id, cwd, main worktree, state file and autopilot exactly as hooks/pre-tool-use does', () => {
+  const s = traceSession();
+  try {
+    const nested = join(s.ws, 'src', 'deep');
+    mkdirSync(nested, { recursive: true });
+    const wt = join(s.root, 'wt');
+    assert.equal(spawnSync('git', ['-C', s.ws, 'worktree', 'add', '-q', '-b', 'feat/wt', wt], { encoding: 'utf8' }).status, 0);
+    const deny = join(s.root, 'deny-home');
+    mkdirSync(join(deny, '.claude'), { recursive: true });
+    writeFileSync(join(deny, '.claude', 'kern.yml'), 'autopilot: denied\n');
+    const base = JSON.parse(s.input);
+    const input = (over, drop = []) => { const o = { ...base, ...over }; for (const k of drop) delete o[k]; return JSON.stringify(o); };
+    const env = { PATH: '/usr/bin:/bin', HOME: s.home, CLAUDE_PLUGIN_ROOT: s.plugin, CLAUDE_PLUGIN_DATA: s.data, CLAUDE_PROJECT_DIR: s.ws, KERN_SHELL_SNAPSHOT: join(s.root, 'snap.sh') };
+    const cases = [
+      ['the commit call as recorded', input({})],
+      ['an empty session_id', input({ session_id: '' })],
+      ['no session_id', input({}, ['session_id'])],
+      ['no cwd, spawned in a nested folder', input({}, ['cwd']), { cwd: nested }],
+      ['CLAUDE_CODE_SESSION_ID naming another session', input({}), { env: { CLAUDE_CODE_SESSION_ID: 'env-session' } }],
+      ['CLAUDE_CODE_SESSION_ID with no session_id', input({}, ['session_id']), { env: { CLAUDE_CODE_SESSION_ID: SID } }],
+      ['a nested cwd', input({ cwd: nested })],
+      ['a linked worktree cwd', input({ cwd: wt }), { cwd: wt }],
+      ['an id kern refuses', input({ session_id: '../x' })],
+      ['a cwd that does not exist', input({ cwd: join(s.root, 'gone') })],
+      ['truncated JSON', input({}).slice(0, 60)],
+      ['a user layer that denies autopilot', input({}), { env: { HOME: deny } }],
+    ];
+    const seen = [];
+    for (const [name, text, { cwd = s.ws, env: extra = {} } = {}] of cases) {
+      const e = { ...env, ...extra };
+      const r = spawnSync('bash', ['-c', HOOK_DUMP, join(s.plugin, 'hooks', 'pre-tool-use')], { input: text, cwd, env: e, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], encoding: 'utf8' });
+      const [sid, c, main, file, ap] = (r.output[3] || '').replace(/\n$/, '').split('\t');
+      const hook = { session_id: sid, cwd: c, main, state_file: file || null, autopilot: ap === '1' };
+      const trace = join(s.root, `trace-${seen.length}.jsonl`);
+      spawnSync('bash', [join(s.plugin, 'hooks', 'trace'), 'bash', join(s.plugin, 'hooks', 'pre-tool-use')], { input: text, cwd, env: { ...e, KERN_EXEC_TRACE: trace }, encoding: 'utf8' });
+      const k = JSON.parse(readFileSync(trace, 'utf8')).kern;
+      assert.deepEqual({ session_id: k.session_id, cwd: k.cwd, main: k.main, state_file: k.state.file, autopilot: k.autopilot }, hook, name);
+      seen.push([name, hook]);
+    }
+    const at = (name) => seen.find(([n]) => n === name)[1];
+    assert.deepEqual(at('the commit call as recorded'), { session_id: SID, cwd: s.ws, main: s.ws, state_file: join(s.data, 'sessions', `${SID}.state`), autopilot: true }, 'the table is not all blank');
+    assert.deepEqual([at('a linked worktree cwd').cwd, at('a linked worktree cwd').main], [wt, s.ws]);
+    assert.equal(at('no cwd, spawned in a nested folder').cwd, nested);
+    assert.equal(at('a user layer that denies autopilot').autopilot, false);
+  } finally { s.done(); }
+});
