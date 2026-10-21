@@ -30,8 +30,9 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
 }
 
 # The rule 7 target for the rendered kernel, measured after Task 16d put every route row in the kernel and
-# Task 16g added the Precedence skip line, the parallel-work row and the "in parallel" clause.
-TARGET=5667
+# Task 16g added the Precedence skip line, the parallel-work row and the "in parallel" clause, and Task 16i the
+# skip line in the Routing opt-out clause.
+TARGET=5756
 
 @test "the rendered kernel stays within the rule 7 target with no settings" {
   start startup

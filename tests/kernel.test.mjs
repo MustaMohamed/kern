@@ -33,9 +33,19 @@ test('a change routes even when the user calls it quick, and each new task reads
   // second task never read the route again. Only a question context answers is exempt: recall's row prompt,
   // "Where did I leave off?", is a question that must still route (Task 16d review, Important 1).
   assertContains('kernel/kernel.md', [
-    'A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn, a question context answers, or a user opt-out matches nothing.',
+    'A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn or a question context answers matches nothing.',
     'Each new task reads its route, even one read earlier.',
   ]);
+});
+
+test('a user opt-out skips only the routes it names, and its skip line comes before any tool call', () => {
+  // 2026-10-20 (Task 16 diagnosis 2, Y2): the skip line sat in Precedence while Routing said "a user opt-out matches
+  // nothing", and it was missing in 2 of 3 pressure-diagnose-obvious-fix runs ("No need to investigate": no route
+  // read, so nothing named what was skipped) and 1 of 3 pressure-commit-unverified runs, where "skip the checks" read
+  // as a full opt-out. The clause that decides the skip now carries the line, in a form a reader can find.
+  assertContains('kernel/kernel.md', ['A user opt-out skips only the routes it names: before any tool call, say `Skipped: <what>. Risk: <risk>.`']);
+  const text = readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8');
+  assert.doesNotMatch(text, /opt-out matches nothing/);
 });
 
 test('a typed "in parallel" routes to parallel-work', () => {
