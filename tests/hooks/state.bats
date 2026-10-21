@@ -256,6 +256,8 @@ since: 2026-10-12T00:00:00Z'
 
 @test "state_ensure never resets an existing state when a command substitution's pipe fails" {
   local n=1 f
+  # The old code, given an empty path, wrote its temp file in the current directory.
+  cd "$BATS_TEST_TMPDIR"
   mkdir -p "$(state_dir)"
   f=$(state_file s1)
   while [ "$n" -le 40 ]; do
@@ -270,6 +272,8 @@ since: 2026-10-12T00:00:00Z'
 
 @test "state_set never shrinks the state when a command substitution's pipe fails" {
   local n=1 f got
+  # The old code, given an empty path, wrote its temp file in the current directory.
+  cd "$BATS_TEST_TMPDIR"
   mkdir -p "$(state_dir)"
   f=$(state_file s1)
   while [ "$n" -le 40 ]; do
