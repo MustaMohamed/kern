@@ -450,7 +450,124 @@ export const RULES = [
     for (const r of kernelRows(model.kernelText)) need(`row-${r.route}`, 'kernel/kernel.md');
     return out;
   } },
+  { id: 17, check(model) {
+    // Homebrew bash 5.3.15, which a hook's `bash` runs on macOS, segfaults now and then when a subshell
+    // undoes a locale change while neither LANG nor LC_ALL is set (Tasks 16l and 16m). Hooks and the
+    // scripts they run make none: `env LC_ALL=C cmd` sets the locale in cmd's environment only. A site
+    // proven safe takes a scripts/lint-exemptions.json entry with its reason; none has one.
+    const out = [];
+    for (const f of localeFiles(model)) {
+      for (const c of localeChanges(readFileSync(f, 'utf8'))) {
+        out.push(err(17, rel(model, f), `line ${c.line}: ${c.what}, and bash 5.3 can crash undoing it while LANG and LC_ALL are unset; use env LC_ALL=C <command>`));
+      }
+    }
+    return out;
+  } },
 ];
+
+// Rule 17: the shell files rule 17 reads: every file under hooks/ but hooks.json, and each scripts/ file
+// a hook names as scripts/<name> (one it runs or sources), when it is a shell file there.
+export function localeFiles(model) {
+  const hooks = walk(join(model.root, 'hooks')).filter((f) => !f.endsWith('.json'));
+  const scripts = new Set();
+  for (const f of hooks) {
+    for (const m of readFileSync(f, 'utf8').matchAll(/\bscripts\/([A-Za-z0-9_][A-Za-z0-9_./-]*)/g)) {
+      const p = join(model.root, 'scripts', m[1].replace(/[.]+$/, ''));
+      if (existsSync(p) && statSync(p).isFile() && !/\.(awk|m?js|json|md|txt)$/.test(p)) scripts.add(p);
+    }
+  }
+  return [...hooks, ...scripts];
+}
+
+// maskQuotes(line): line with quoted text and ${...} replaced by x, so a separator or a name inside them is
+// not read as syntax or as an assignment. A $( ) is code, also inside double quotes, and stays.
+function maskQuotes(line) {
+  // code(i, close): the text from i up to the unquoted close (')' for a $( ) or a subshell, '' for the
+  // line's end), masked; returns [text, index of close].
+  const code = (i, close) => {
+    let out = '';
+    while (i < line.length && line[i] !== close) {
+      const c = line[i];
+      if (c === '\\') {
+        out += line.slice(i, i + 2);
+        i += 2;
+      } else if (c === "'") {
+        const j = line.indexOf("'", i + 1) < 0 ? line.length : line.indexOf("'", i + 1);
+        out += `'${'x'.repeat(j - i - 1)}'`;
+        i = j + 1;
+      } else if (c === '"') {
+        const [t, j] = dq(i + 1);
+        out += `"${t}"`;
+        i = j + 1;
+      } else if (c === '$' && line[i + 1] === '{') {
+        let j = i + 2;
+        for (let depth = 1; j < line.length && depth; j++) depth += line[j] === '{' ? 1 : line[j] === '}' ? -1 : 0;
+        out += `$${'x'.repeat(j - i - 1)}`;
+        i = j;
+      } else if (c === '(') {
+        const [t, j] = code(i + 1, ')');
+        out += `(${t})`;
+        i = j + 1;
+      } else {
+        out += c;
+        i++;
+      }
+    }
+    return [out, i];
+  };
+  // dq(i): the inside of a double-quoted string from i, masked but for each $( ); returns [text, index of
+  // the closing quote].
+  const dq = (i) => {
+    let out = '';
+    while (i < line.length && line[i] !== '"') {
+      if (line[i] === '\\') {
+        out += 'xx';
+        i += 2;
+      } else if (line[i] === '$' && line[i + 1] === '(') {
+        const [t, j] = code(i + 2, ')');
+        out += `$(${t})`;
+        i = j + 1;
+      } else {
+        out += 'x';
+        i++;
+      }
+    }
+    return [out, i];
+  };
+  return code(0, '')[0];
+}
+
+// localeChanges(text): each locale change bash must undo, as { line, what }: a `local`, `declare` or
+// `typeset` of LC_* or LANG, which bash undoes at the function's return, and an LC_* or LANG assignment
+// before a command word, which bash undoes after the command. An assignment that env or any other
+// command takes as an argument is none, and neither is a plain or exported one. Comment lines are
+// skipped, a backslash-newline joins lines, and quoted text and ${...} are masked (maskQuotes).
+export function localeChanges(text) {
+  const out = [];
+  const phys = text.replace(/\r\n/g, '\n').split('\n');
+  const VAL = String.raw`(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"';&|()]+)*`;
+  const ASSIGN = String.raw`[A-Za-z_][A-Za-z0-9_]*=${VAL}`;
+  const prefixOnly = new RegExp(String.raw`^\s*(?:(?:if|then|do|else|elif|while|until|!|time)\s+)*(?:${ASSIGN}\s+)*$`);
+  const valueThenCommand = new RegExp(String.raw`^(?:LC_[A-Z]+|LANG)=${VAL}(?:\s+${ASSIGN})*\s+(?![A-Za-z_][A-Za-z0-9_]*=)[^\s;&|)#]`);
+  for (let i = 0; i < phys.length; i++) {
+    const at = i + 1;
+    let line = phys[i];
+    while (/(^|[^\\])(\\\\)*\\$/.test(line) && i + 1 < phys.length) line = `${line.slice(0, -1)} ${phys[++i]}`;
+    if (/^\s*#/.test(line)) continue;
+    line = maskQuotes(line);
+    for (const m of line.matchAll(/(?:^|[\s;&|({])(?:local|declare|typeset)\b([^;&|)]*)/g)) {
+      const v = m[1].match(/(?:^|\s)(LC_[A-Z]+|LANG)(?==|\s|$)/);
+      if (v) out.push({ line: at, what: `local ${v[1]}, which bash undoes at the function's return` });
+    }
+    for (const m of line.matchAll(/(?<![\w${}=\/.-])(LC_[A-Z]+|LANG)=/g)) {
+      const before = line.slice(0, m.index);
+      const start = Math.max(...[';', '&', '|', '(', ')', '{', '}', '`'].map((c) => before.lastIndexOf(c)));
+      if (!prefixOnly.test(before.slice(start + 1))) continue;
+      if (valueThenCommand.test(line.slice(m.index))) out.push({ line: at, what: `${m[1]}= before a command, which bash undoes after it` });
+    }
+  }
+  return out;
+}
 
 export function runLint(model) {
   const findings = RULES.flatMap((r) => r.check(model));

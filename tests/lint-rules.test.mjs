@@ -440,6 +440,60 @@ test('rule 16: a WORK folder is read whole, in any case', () => {
   assert.deepEqual(run('Write WORK/spec/x.md and WORK/plans.'), []);
 });
 
+// Homebrew bash 5.3.15 segfaults now and then when a subshell undoes a locale change while neither LANG
+// nor LC_ALL is set (Tasks 16l and 16m).
+test('rule 17: each locale change bash must undo, in a hook file, is an error', () => {
+  const bad = [
+    'f() { local LC_ALL; }',
+    'f() { local LC_ALL=C; }',
+    'f() { local x LANG=C; }',
+    'f() { declare LC_CTYPE=C; }',
+    'LC_ALL=C awk 1 f',
+    'x=$(LC_ALL=C awk 1 f 2>/dev/null)',
+    'printf x | LC_ALL=C tr a b',
+    'v="$(printf x | LC_ALL=C tr a b)"',
+    'K="${K-}" FOO="a b" LC_ALL=C awk 1 f',
+    'LC_ALL=C FOO=1 awk 1 f',
+    'LC_ALL=C \\\n  awk 1 f',
+    'if LC_ALL=C grep -q x f; then :; fi',
+    'case $x in a) LC_ALL=C sed 1q f ;; esac',
+    'LANG=C sort f',
+    'LC_ALL=C env awk 1 f',
+  ];
+  for (const line of bad) {
+    const found = lint({ 'hooks/lib/x.sh': `# shellcheck shell=bash\n${line}\n` }).filter((f) => f.rule === 17);
+    assert.equal(found.length, 1, line);
+    assert.equal(found[0].path, 'hooks/lib/x.sh');
+    assert.match(found[0].message, /^line 2: (local [A-Z_]+, which bash undoes at the function's return|[A-Z_]+= before a command, which bash undoes after it), and bash 5\.3 can crash undoing it while LANG and LC_ALL are unset; use env LC_ALL=C <command>$/, line);
+  }
+});
+
+test('rule 17: env, plain and exported assignments, comments and quoted text are not locale changes bash undoes', () => {
+  const good = [
+    'env LC_ALL=C awk 1 f',
+    'x=$(FOO=1 env LC_ALL=C awk 1 f 2>/dev/null)',
+    'printf x | env LC_ALL=C tr a b',
+    '[ -n "${LANG-}${LC_ALL-}" ] || export LANG=C',
+    'LC_ALL=C',
+    'LC_ALL=C; awk 1 f',
+    'LC_ALL=C FOO=1',
+    'f() { local saved=$LANG; }',
+    '# local LC_ALL=C makes bash undo it, and so does LC_ALL=C awk',
+    'echo "LC_ALL=C awk is not run here" \'local LC_ALL\'',
+    'echo ${x:-LC_ALL=C awk}',
+  ];
+  for (const line of good) assert.deepEqual(rules(lint({ 'hooks/lib/x.sh': `# shellcheck shell=bash\n${line}\n` })), [], line);
+});
+
+test('rule 17 reads the scripts a hook names, and an exemption with a reason covers a site', () => {
+  const s = '#!/usr/bin/env bash\nLC_ALL=C awk 1 f\n';
+  const hook = '#!/usr/bin/env bash\nbash "$KERN_ROOT/scripts/kern-detect" a\nawk -f "$KERN_ROOT/scripts/lib/f.awk" x\n';
+  const files = { 'hooks/x': hook, 'scripts/kern-detect': s, 'scripts/other': s, 'scripts/lib/f.awk': 'LC_ALL=C x\n' };
+  assert.deepEqual(lint(files).filter((f) => f.rule === 17).map((f) => f.path), ['scripts/kern-detect']);
+  const exempt = { ...files, 'scripts/lint-exemptions.json': '[{"rule":17,"path":"scripts/kern-detect","reason":"runs in the main shell only"}]' };
+  assert.deepEqual(rules(lint(exempt)), []);
+});
+
 // Since Task 16d every route row is in the kernel table; M2a's kernel/routes.md is gone.
 test('rule 6: the kernel table\'s rows resolve, and rows left in kernel/routes.md are an error', () => {
   const files = {
