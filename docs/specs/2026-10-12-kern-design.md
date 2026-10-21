@@ -594,6 +594,12 @@ Signal, then cited evidence, then kind (one-off, missed trigger, wrong shape, me
 | M5 | Specialists and stack references; coverage gaps 27 to 31 | 14 to 20 | Each skill's eval cases pass |
 | M6 | handoff, retro, correct, plain, write-skill, skill-eval; nightly behavioural evals; coverage gaps 32 to 34 | 10 to 14 | Nightly run green for a week |
 
+M2b's behaviour gate, as the user set it on 2026-10-21 (plan Task 16's gates table, from `task-16-diagnosis-3`):
+- A behaviour case passes on two of three valid runs, with at most one invalid.
+- The user's "Adopt the stopping rule": a case blocks only when, read on its transcripts, a kern defect fails it in two or more of three runs in two measurements in a row. A grader flip or a case-wording fault stops blocking once its fix lands. A kern duty that two wording rounds did not move gets one structural change. A fix is confirmed by one full run, since a re-run of only the failing cases regresses toward the mean.
+- The user's "Scripted checks + one model": a mechanical expectation (a file read, a command run, a line said) is decided by code, and the rest by one model verdict per run, as before. There is no extra grader cost.
+- The user's "Known limit, report only": a duty still under two of three after its structural change is reported, not gating. This applies to the `Building:` line if it is still under two of three after Task 16k.
+
 Elsewhere in this spec, "M2" means M2a and M2b together. The first build is M0 to M2b (about 69 to 78 hours), with the pilot inside M2b. The full framework is about 114 to 143 hours.
 
 ## 15. Risks and spikes
