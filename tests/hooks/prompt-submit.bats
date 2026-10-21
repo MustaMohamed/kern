@@ -320,6 +320,18 @@ run_prompt() {
   [ "$(st voice)" = normal ]
 }
 
+@test "a prompt whose hashes cannot be merged into the state leaves the state whole" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  set_autopilot on
+  read_fails cat "$S"
+  submit "next task"
+  [ "$status" -eq 0 ]
+  [ "$(st autopilot)" = on ]
+  [ "$(st since)" = 2026-10-12T00:00:00Z ]
+  [ "$(st voice)" = normal ]
+  [ "$(st surface)" = auto ]
+}
+
 @test "a prompt or a command expansion in a session with no state file gives it the default state" {
   S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   rm "$S"

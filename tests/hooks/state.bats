@@ -153,7 +153,7 @@ autopilot: on"
 }
 
 # A read of the state file that fails, as one does when a fork or exec is refused under load, must never
-# reset a state that exists (exec traces of 2026-10-21: autopilot turned off mid-session).
+# reset or shrink a state that exists (exec traces of 2026-10-21: autopilot turned off mid-session).
 @test "state_ensure writes the default state only when the session has no state file" {
   run state_ensure s1
   [ "$status" -eq 0 ]
@@ -205,4 +205,37 @@ autopilot: on"
   run state_ensure s2
   [ "$status" -eq 2 ]
   [ ! -e "$BATS_TEST_TMPDIR/elsewhere/s2.state" ]
+}
+
+@test "state_set writes nothing when the read of the existing state fails twice" {
+  state_reset s1
+  state_set s1 autopilot=on since=2026-10-12T00:00:00Z
+  f=$(state_file s1)
+  before=$(sed -n p "$f")
+  read_fails cat "$f"
+  run state_set s1 prompt_hashes=1
+  [ "$status" -eq 2 ]
+  [ "$(read_failures cat)" -eq 2 ]
+  [ "$(sed -n p "$f")" = "$before" ]
+  [ -z "$(find "$(state_dir)" -name '.state.*')" ]
+  # A read that fails once is tried again, and the write keeps every key.
+  read_fails cat "$f" 1
+  state_set s1 prompt_hashes=2
+  [ "$(state_get s1 prompt_hashes)" = 2 ]
+  [ "$(state_get s1 autopilot)" = on ]
+  [ "$(state_get s1 since)" = 2026-10-12T00:00:00Z ]
+}
+
+@test "state_set writes nothing when merging a key into the state fails" {
+  state_reset s1
+  state_set s1 autopilot=on since=2026-10-12T00:00:00Z
+  f=$(state_file s1)
+  before=$(sed -n p "$f")
+  # The awk that drops a key's old line before the new one is added.
+  read_fails awk '*index($0, k ": ") != 1*'
+  run state_set s1 prompt_hashes=1
+  [ "$status" -eq 2 ]
+  [ "$(read_failures awk)" -eq 1 ]
+  [ "$(sed -n p "$f")" = "$before" ]
+  [ -z "$(find "$(state_dir)" -name '.state.*')" ]
 }

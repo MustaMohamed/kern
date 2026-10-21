@@ -44,14 +44,18 @@ _state_put() {
   [ -L "$dir" ] && return 2
   [ -L "$f" ] && return 2
   content=""
-  [ "$fresh" = 0 ] && [ -f "$f" ] && content=$(LC_ALL=C cat "$f")
+  # A read that fails (a fork or exec refused under load) is tried once more. When it fails again, or a
+  # key cannot be merged in, nothing is written: the keys not read would be lost, autopilot among them.
+  if [ "$fresh" = 0 ] && [ -f "$f" ]; then
+    content=$(LC_ALL=C cat "$f") || content=$(LC_ALL=C cat "$f") || return 2
+  fi
   for kv in "$@"; do
     k=${kv%%=*}
     v=${kv#*=}
     case "$k" in '' | *[!a-z_]*) return 2 ;; esac
     case "$v" in *"
 "*) return 2 ;; esac
-    content=$(printf '%s\n' "$content" | LC_ALL=C awk -v k="$k" 'index($0, k ": ") != 1 && $0 != ""')
+    content=$(printf '%s\n' "$content" | LC_ALL=C awk -v k="$k" 'index($0, k ": ") != 1 && $0 != ""') || return 2
     content="$content
 $k: $v"
   done
