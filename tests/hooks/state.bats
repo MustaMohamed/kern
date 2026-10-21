@@ -327,11 +327,16 @@ since: 2026-10-12T00:00:00Z'
   [ "$n" -le 40 ]
 }
 
-@test "autopilot is denied inside a repository whose main worktree root git cannot find" {
+@test "autopilot stays on when git cannot list the worktrees, and is denied under a broken .git" {
   state_reset s1
   state_set s1 autopilot=on
   autopilot_on s1
   read_fails git worktree
+  autopilot_on s1 2>/dev/null
+  # A plain directory under a .git file whose gitdir is gone: the project layers are unknown.
+  mkdir -p "$BATS_TEST_TMPDIR/plain/sub"
+  printf 'gitdir: %s/gone/.git\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/plain/.git"
+  export CWD="$BATS_TEST_TMPDIR/plain/sub"
   run autopilot_on s1
   [ "$status" -ne 0 ]
   [ "$(autopilot_denied_by 2>/dev/null)" = "the project settings (could not be found)" ]

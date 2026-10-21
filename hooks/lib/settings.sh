@@ -10,23 +10,61 @@ kern_main_root() {
   printf '%s\n' "$line"
 }
 
-# _settings_files: the settings files in precedence order, one per line (existing or not). Exit 2 when
-# no main worktree root resolves, yet the directory or one above it holds a .git: git failed to find the
-# root, so the project layers are unknown. Only the user's file prints then.
+# _settings_walk_root DIR: sets _KERN_WALK_ROOT to the main worktree root found from the .git at or above
+# DIR without running git, for a repository git refuses (dubious ownership, git unable to run). A .git
+# directory holding a HEAD: its parent. A .git file: its `gitdir:` directory must hold a HEAD; with a
+# commondir file there (a linked worktree) the root is the parent of the common dir, or the common dir
+# itself for a bare repository; without one (a submodule) it is the directory holding the .git file.
+# Exit 1 when no .git is at or above DIR, 2 when the nearest one is broken (a .git directory with no HEAD,
+# a .git file whose gitdir is gone, anything else named .git).
+_settings_walk_root() {
+  local d="$1" line gd cdir common
+  case "$d" in /*) ;; *) return 1 ;; esac
+  while [ -n "$d" ]; do
+    if [ -d "$d/.git" ]; then
+      [ -f "$d/.git/HEAD" ] || return 2
+      _KERN_WALK_ROOT=$d
+      return 0
+    fi
+    if [ -f "$d/.git" ]; then
+      line=""
+      IFS= read -r line <"$d/.git" || [ -n "$line" ] || return 2
+      case "$line" in 'gitdir: '?*) gd=${line#gitdir: } ;; *) return 2 ;; esac
+      case "$gd" in /*) ;; *) gd="$d/$gd" ;; esac
+      [ -f "$gd/HEAD" ] || return 2
+      if [ -f "$gd/commondir" ]; then
+        cdir=""
+        IFS= read -r cdir <"$gd/commondir" || [ -n "$cdir" ] || return 2
+        case "$cdir" in /*) ;; *) cdir="$gd/$cdir" ;; esac
+        common=$(cd "$cdir" 2>/dev/null && pwd -P) && [ -n "$common" ] || return 2
+        case "$common" in */.git) _KERN_WALK_ROOT=${common%/.git} ;; *) _KERN_WALK_ROOT=$common ;; esac
+      else
+        _KERN_WALK_ROOT=$d
+      fi
+      return 0
+    fi
+    [ -e "$d/.git" ] && return 2
+    d=${d%/*}
+  done
+  return 1
+}
+
+# _settings_files: the settings files in precedence order, one per line (existing or not). When git finds
+# no main worktree root, the .git at or above the directory gives it (_settings_walk_root). Exit 2 when
+# that .git is broken too: the project layers are unknown, and only the user's file prints.
 _settings_files() {
-  local main="${KERN_MAIN-}" d
+  local main="${KERN_MAIN-}" rc=0
   if [ -z "$main" ]; then main=$(kern_main_root "${CWD:-$PWD}" 2>/dev/null) || main=""; fi
+  if [ -z "$main" ]; then
+    _settings_walk_root "${CWD:-$PWD}"
+    rc=$?
+    [ "$rc" != 0 ] || main=$_KERN_WALK_ROOT
+  fi
   if [ -n "$main" ]; then
     printf '%s\n' "$main/.claude/kern.local.yml" "$main/.claude/kern.yml"
   fi
   printf '%s\n' "$HOME/.claude/kern.yml"
-  [ -z "$main" ] || return 0
-  d=${CWD:-$PWD}
-  case "$d" in /*) ;; *) return 0 ;; esac
-  while [ -n "$d" ]; do
-    [ -e "$d/.git" ] && return 2
-    d=${d%/*}
-  done
+  [ "$rc" != 2 ] || return 2
   return 0
 }
 

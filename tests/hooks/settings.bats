@@ -367,10 +367,20 @@ get() {
   [ "$n" -le 40 ]
 }
 
-@test "inside a repository whose main worktree root git cannot find, the project layers count as unread" {
+@test "when git cannot list the worktrees, the root comes from the .git, and a broken .git leaves the project layers unread" {
   printf 'commit.policy: auto\n' >"$HOME/.claude/kern.yml"
   printf 'commit.policy: deny\n' >"$R/.claude/kern.local.yml"
   read_fails git worktree
+  rc=0
+  _settings_files >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 0 ]
+  get commit.policy ask
+  [ "$rc" -eq 0 ]
+  [ "$got" = deny ]
+  # A plain directory under a .git file whose gitdir is gone: only the user's file is known.
+  mkdir -p "$BATS_TEST_TMPDIR/plain/sub"
+  printf 'gitdir: %s/gone/.git\n' "$BATS_TEST_TMPDIR" >"$BATS_TEST_TMPDIR/plain/.git"
+  export CWD="$BATS_TEST_TMPDIR/plain/sub"
   rc=0
   _settings_files >/dev/null 2>&1 || rc=$?
   [ "$rc" -eq 2 ]
