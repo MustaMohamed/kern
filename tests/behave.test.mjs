@@ -366,6 +366,10 @@ test('a cut Bash result keeps its file-header lines, each between marked cuts, s
   const capped = lines(behaveDigest([use('c', 'Bash', { command: 'cat *.md' }), back('c', many)])).filter((l) => /=> === f\d+\.md$/.test(l));
   assert.equal(RECORD.bashHeaders, 20);
   assert.deepEqual(capped, Array.from({ length: 20 }, (_, i) => `    => === f${i}.md`), 'at most 20 headers, the first ones');
+  // Task 16j review, M6: a header's path or name is at most 200 characters, so one long line cannot fill the record.
+  const long = `${'m'.repeat(420)}\n${file(`=== ${'p'.repeat(200)}`, 50)}${file(`=== ${'p'.repeat(201)}`, 50)}${file(`==> ${'n'.repeat(201)} <==`, 50)}${'t'.repeat(600)}`;
+  const kept2 = lines(behaveDigest([use('d', 'Bash', { command: 'cat *.md' }), back('d', long)])).filter((l) => /=> (===|==>) /.test(l));
+  assert.deepEqual(kept2, [`    => === ${'p'.repeat(200)}`], 'a 201-character path is cut as text');
 });
 
 test('the behaviour record is bounded: 40,000 characters of transcript, cut between whole items, and an 8,000 character reply (review M5)', () => {

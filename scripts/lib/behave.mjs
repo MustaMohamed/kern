@@ -183,8 +183,9 @@ const last = (s, n) => (s.length <= n ? s : s.slice(/[\uDC00-\uDFFF]/.test(s[s.l
 // prefixed(text, p): each line of text after p.
 const prefixed = (text, p) => text.split('\n').map((l) => `${p}${l}`).join('\n');
 // HEADER: a line that names the file a print of several files goes on to: `=== <path>` (a loop's echo, with an
-// optional closing ` ===`) or `==> <path> <==` (head or tail given several files).
-const HEADER = /^(?:=== \S+(?: ===)?|==> .+ <==)$/;
+// optional closing ` ===`) or `==> <path> <==` (head or tail given several files), the path at most 200
+// characters (Task 16j review, M6), so a long line cannot fill the record.
+const HEADER = /^(?:=== \S{1,200}(?: ===)?|==> .{1,200} <==)$/;
 // ends(s): a Bash result, its head and tail around a marked cut when it is longer than both. The cut keeps each
 // whole HEADER line in it, up to RECORD.bashHeaders of them, in order, each run of cut text around them marked
 // (Task 16j: on 2026-10-21 recall-2 run 0 printed the ledger third in a loop, and the cut held it).
