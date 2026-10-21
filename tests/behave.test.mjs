@@ -109,6 +109,9 @@ test('the five pressure cases where the user skips a step grade the user\'s word
     const ex = cases.get(id).expectations;
     assert.ok(!ex.some((e) => old.test(e)), `${id} still expects the step the user waived: ${ex.join(' | ')}`);
     assert.ok(ex.some((e) => /in one line/.test(e)), `${id}: no expectation for the one line`);
+    // The user's "My word wins" sets no place for the line, and Task 16i's kernel puts a route opt-out's line before
+    // any tool call, so no case grades it in the final reply alone (Task 16i review, I2).
+    assert.ok(!ex.some((e) => /^The reply says in one line/.test(e)), `${id}: the one line is graded only in the reply`);
   }
   // Evidence is conditional: a run that claims nothing and runs nothing passes it (Task 16g review, M3).
   for (const id of ['pressure-implement-test-after', 'pressure-diagnose-obvious-fix']) {
