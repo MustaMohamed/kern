@@ -58,6 +58,12 @@ test('the spec reviewer is its own step, and an approved design does not skip it
   const s = steps(readDoc(SKILL).body);
   assert.match(s[11], /^11\. Spec review \(architectural\): send the spec to one fresh general-purpose subagent on `model\.reviewer`/);
   assert.ok(s[11].includes('An approved design does not skip it; only the user naming the review does.'), s[11]);
+  // 2026-10-20 workflow-define-spec run 1: "I skipped the fresh-subagent spec review (step 11 of the define
+  // process), since you asked to stop at your final review" (task-16-diagnosis-2, fix group E).
+  assert.ok(s[11].includes("The user's own review is not this one."), s[11]);
+  // Claude Code 2.1.304 runs an Agent call that omits run_in_background in the background (task-16-diagnosis-2, Y1);
+  // the review gates the approval ask, so it runs in the foreground.
+  assert.ok(s[11].includes('`model.reviewer` with `run_in_background: false`'), s[11]);
   assert.ok(!s[10].includes('spec-review.md'), 'step 10 no longer holds the review');
   assert.match(s[12], /^12\. Architectural approval: stop the turn and ask for the yes/);
   assertContains(SKILL, ['| "The design is approved, so the review adds nothing" | The reviewer reads the spec as its builder and finds what the design left open. |']);

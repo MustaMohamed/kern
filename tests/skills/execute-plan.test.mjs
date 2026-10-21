@@ -86,7 +86,7 @@ export const PINS = {
     "(SendMessage to its agent id, or `references/resume.md`'s fallback; inline and step: fix it yourself)",
     'round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief, the report and that file',
     "Each round packages its fix diff with `wt-diff` from the round's tree to a new `tree-after`", '`--out <ledger dir>/reviews/task-N-fix<r>-<tree7>.diff`, same `--allow-file` and exits',
-    'gets a `re-review` with that file, and is saved and recorded as step 8 does',
+    'gets a `re-review` with that file, dispatched, saved and recorded as step 8 does',
     "Still open after round 3, or a re-review finds a bug in an earlier round's fix: stop and escalate with a split proposal", 'there is no fourth round.'],
   10: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger> <N> <wt> <tree-after> --probe <package>.patch -- <task test command>`',
     'or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe', 'One command, no shell: a compound `Run:` goes in a `kern-dir tmp` script, passed as `-- bash <path>`.',
@@ -144,6 +144,19 @@ test('execute-plan pins each step, the modes, the stops and the ledger rules', (
     const text = where[k] ?? s[Number(k)];
     for (const n of needles) assert.ok(text.includes(n), `${k}: must contain: ${n}`);
   }
+});
+
+test('execute-plan runs its task and final reviews in the foreground', () => {
+  // Claude Code 2.1.304 runs an Agent call that omits run_in_background in the background, and the notification
+  // starts a turn no prompt asked for: in the three workflow-execute-plan-ledger runs of 2026-10-20 four such
+  // results came after the last turn's text (task-16-diagnosis-2, Y1). task-done waits on the review's verdict.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[8].includes('Dispatch `kern:task-reviewer` on `model.reviewer` in mode `task` (`run_in_background: false`) with `briefs/task-N.md`'), s[8]);
+  assert.ok(s[9].includes('gets a `re-review` with that file, dispatched, saved and recorded as step 8 does'), s[9]);
+  assert.ok(s[12].includes('dispatch `kern:task-reviewer` in mode `whole-branch` on `model.final_review` (`run_in_background: false`) with the package'), s[12]);
+  assert.ok(s[12].includes('packaged with an `--allow-file` per task, dispatched as the whole-branch review is.'), s[12]);
+  // A worker stays as it was: a wave's implementers run in the background as parallel-work step 4 spawns them.
+  assert.ok(!s[6].includes('run_in_background'), s[6]);
 });
 
 test('execute-plan reruns its plan checks on every invocation and writes only missing lines', () => {
