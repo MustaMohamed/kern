@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RECORD, behaveDigest, caseResult, digest, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, tryRun } from '../scripts/lib/behave.mjs';
+import { CHECKS, RECORD, behaveDigest, caseResult, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -375,7 +375,8 @@ test('no cut in the behaviour record splits a surrogate pair (review M5)', () =>
 
 test('the behaviour runner grades on that record; the head-to-head digest is unchanged', () => {
   const src = readFileSync(join(ROOT, 'scripts', 'behave.mjs'), 'utf8');
-  assert.match(src, /graderPrompt\(c\.expectations, behaveDigest\(run\.events\)\)/);
+  // Task 16j: gradeRun gives the model behaveDigest(events) with the expectations no check decides (tested below).
+  assert.match(src, /gradeRun\(c, run\.events, tree, \(ex, record\) => \{\n\s+const g = tryRun\(\{ cwd: gdir, prompts: \[graderPrompt\(ex, record\)\]/);
   assert.match(readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8'), /digest\(run\.events, 24000, \{ results: true \}\)/);
 });
 
@@ -393,4 +394,119 @@ test('the plugin copy leaves out the eval runners and keeps the plugin scripts',
     for (const p of ['scripts/h2h.mjs', 'scripts/behave.mjs', 'scripts/lib/behave.mjs', 'scripts/lib/claude-run.mjs', 'scripts/lib/claude-drive.mjs', 'scripts/kernel-adherence.mjs', 'scripts/lib/adherence.mjs', '.superpowers']) assert.ok(!existsSync(join(d, p)), p);
     for (const p of ['scripts/plan-check', 'scripts/kern-get']) assert.ok(existsSync(join(d, p)), p);
   } finally { rmSync(dirname(d), { recursive: true, force: true }); }
+});
+
+// Task 16j (task-16-diagnosis-3, fix group 1; the user's "Scripted checks + one model", 2026-10-21): a mechanical
+// expectation is decided by a check from a fixed registry, and only the rest go to the model.
+const ran = (cmd, out = '') => [use(cmd, 'Bash', { command: cmd }), back(cmd, out)];
+const reply = (text) => [say(text), { type: 'result', subtype: 'success', result: text }];
+const same = { start: { '.': [' M src/sum.js abc'] }, end: { '.': [' M src/sum.js abc'] } };
+
+test('a case names scripted checks by expectation index, from the registry only', () => {
+  assert.deepEqual(Object.keys(CHECKS).sort(), ['git-or-gh-command', 'ledger-before-transcript', 'no-write']);
+  const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
+  const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
+  const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
+  const word = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { E0: 'no-write' } }]);
+  try {
+    const [demo, x] = loadCases(r);
+    assert.deepEqual([demo.checks, x.checks], [{ 1: 'no-write' }, { 0: 'no-write' }]);
+    assert.throws(() => loadCases(gone), /^Error: behave: demo-1: expectation 0 names check tests-pass, which is not in CHECKS \(evals\/cases\/demo\.json\)$/);
+    assert.throws(() => loadCases(past), /^Error: behave: demo-1: checks key 1 names no expectation \(0 to 0; evals\/cases\/demo\.json\)$/);
+    assert.throws(() => loadCases(word), /checks key E0 names no expectation/);
+  } finally { for (const d of [r, gone, past, word]) rmSync(d, { recursive: true, force: true }); }
+});
+
+test('recall-1 and recall-2 script their mechanical expectations; the rest stay with the model', () => {
+  const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
+  assert.deepEqual(cases.get('recall-1').checks, { 1: 'git-or-gh-command', 3: 'no-write' });
+  assert.deepEqual(cases.get('recall-2').checks, { 0: 'ledger-before-transcript', 2: 'no-write' });
+  const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', 'recall-1'], { encoding: 'utf8' });
+  assert.match(r.stdout, /^recall-1: 1 turn\(s\) on .+, 4 expectation\(s\) \(2 scripted\)$/m);
+});
+
+test('git-or-gh-command passes on a git or gh command before the final reply, not on a mention of either', () => {
+  const check = CHECKS['git-or-gh-command'];
+  assert.equal(check([...ran('bash wt-audit; git worktree list; git branch -a'), ...reply('Threads: ...')], {}).pass, true);
+  assert.equal(check([...ran('cd w && gh pr list --head kern/export'), ...reply('x')], {}).pass, true);
+  assert.equal(check([...ran('echo $(git rev-parse HEAD)'), ...reply('x')], {}).pass, true);
+  const none = check([...ran('cat .git/HEAD; ls ~/.config/gh/; bash wt-audit'), ...reply('x')], {});
+  assert.deepEqual(none, { pass: false, evidence: 'no Bash call runs git or gh before the final reply' });
+  assert.equal(check([say('Threads: one.'), ...ran('git status')], {}).pass, false, 'a call after the final reply does not count');
+  assert.equal(check([...ran('bash wt-audit; git -C w worktree list && gh pr list --head b 2>&1 | head -3'), ...reply('x')], {}).evidence,
+    'Bash runs git or gh before the final reply: git -C w worktree list; gh pr list --head b 2>&1', 'the evidence names each git or gh command');
+});
+
+test('no-write passes only with no Write, Edit or NotebookEdit call and the same git status at the start and end', () => {
+  const check = CHECKS['no-write'];
+  assert.deepEqual(check([...ran('git status'), ...reply('x')], { tree: same }), { pass: true, evidence: "no Write, Edit or NotebookEdit call, and git status the same at the run's start and end in 1 worktree" });
+  for (const name of ['Write', 'Edit', 'NotebookEdit']) {
+    const v = check([use('w', name, { file_path: 'notes.md', notebook_path: 'n.ipynb' }), ...reply('x')], { tree: same });
+    assert.equal(v.pass, false, name);
+    assert.match(v.evidence, new RegExp(`^${name} call on `));
+  }
+  const moved = check([...ran('sed -i s/a/b/ src/sum.js'), ...reply('x')], { tree: { start: same.start, end: { '.': [' M src/sum.js def'] } } });
+  assert.deepEqual(moved, { pass: false, evidence: 'git status changed: .: -  M src/sum.js abc; .: +  M src/sum.js def' });
+  assert.match(check(reply('x'), { tree: { start: same.start, end: { error: 'not a git repository' } } }).evidence, /^git status failed at the run's end: not a git repository$/);
+  assert.throws(() => check(reply('x'), {}), /^Error: check no-write: the run recorded no git status at its start and end$/, 'an old run cannot pass it');
+});
+
+test('ledger-before-transcript passes when a result holds the ledger header before any .jsonl transcript read', () => {
+  const check = CHECKS['ledger-before-transcript'];
+  const ledger = '# kern ledger: /w/.kern/plans/export.md\nMain: /w branch=main';
+  assert.deepEqual(check([...ran('cat .kern/ledgers/export/ledger.md', ledger), ...reply('x')], {}),
+    { pass: true, evidence: 'the result of Bash cat .kern/ledgers/export/ledger.md holds "# kern ledger:", and no .jsonl transcript was read before it' });
+  assert.equal(check([use('r', 'Read', { file_path: '/w/.kern/ledgers/export/ledger.md' }), back('r', `     1\t${ledger}`), use('t', 'Read', { file_path: '/h/p/s.jsonl' }), back('t', '{}'), ...reply('x')], {}).pass, true, 'a transcript after the ledger is fine');
+  for (const first of [ran('grep -h export ~/.claude/projects/x/*.jsonl', '{}'), [use('t', 'Read', { file_path: '/h/p/s.jsonl' }), back('t', '{}')], [use('g', 'Grep', { pattern: 'export', path: '/h/p/s.jsonl' }), back('g', '{}')]]) {
+    const v = check([...first, ...ran('cat ledger.md', ledger), ...reply('x')], {});
+    assert.equal(v.pass, false);
+    assert.match(v.evidence, /^a \.jsonl transcript was read before the ledger: /);
+  }
+  assert.deepEqual(check([...ran('ls .kern'), ...reply('x')], {}), { pass: false, evidence: 'no tool result holds "# kern ledger:"' });
+});
+
+test('gradeRun sends the model only the expectations no check decides, and lines its verdicts up with theirs', () => {
+  const c = { id: 'demo', expectations: ['Says the scope', 'Runs git', 'Gives one tag', 'Writes no file'], checks: { 1: 'git-or-gh-command', 3: 'no-write' } };
+  const events = [say('Scope: 7 days.'), ...ran('git worktree list'), ...reply('Threads: one.')];
+  const seen = [];
+  const grade = (ex, record) => { seen.push({ ex, record }); return '{"results":[{"n":1,"pass":true,"evidence":"Scope: 7 days."},{"n":2,"pass":false,"evidence":"two tags"}]}'; };
+  const v = gradeRun(c, events, same, grade);
+  assert.deepEqual(seen, [{ ex: ['Says the scope', 'Gives one tag'], record: behaveDigest(events) }], 'one model call, on the record, with the two left');
+  assert.deepEqual(v.map((x) => [x.pass, x.check ?? 'model']), [[true, 'model'], [true, 'git-or-gh-command'], [false, 'model'], [true, 'no-write']]);
+  assert.equal(caseResult([{ invalid: false, verdict: v }]).passed, 0);
+  assert.throws(() => gradeRun(c, events, same, () => '{"results":[{"n":1,"pass":true,"evidence":"x"}]}'), /expected 2 results, got 1/, 'the model answers for the expectations it was given');
+  let called = false;
+  const all = gradeRun({ id: 'd', expectations: ['Writes no file'], checks: { 0: 'no-write' } }, events, same, () => { called = true; return ''; });
+  assert.deepEqual([called, all.map((x) => x.pass)], [false, [true]], 'no model call when every expectation is scripted');
+  assert.equal(gradeRun({ id: 'd', expectations: ['e'] }, events, undefined, () => '{"results":[{"n":1,"pass":true,"evidence":"y"}]}')[0].pass, true, 'a case with no checks grades as before');
+});
+
+test('treeState reads every worktree\'s status, with the content of each listed file, and changes nothing', () => {
+  const f = mkdtempSync(join(tmpdir(), 'fx-'));
+  mkdirSync(join(f, '_kern'));
+  writeFileSync(join(f, 'a.txt'), 'a\n');
+  writeFileSync(join(f, '_kern', 'ledger.md'), '# kern ledger: x\n');
+  const d = workspace(f, { setup: ['git worktree add -q -b wt .wt && printf "/.wt/\\n" >> .git/info/exclude && printf "b\\n" > .wt/b.txt'] });
+  try {
+    const before = treeState(d);
+    assert.deepEqual(Object.keys(before), ['.', '.wt']);
+    assert.ok(before['.wt'].some((l) => /^\?\? b\.txt [0-9a-f]{12}$/.test(l)), before['.wt'].join('|'));
+    assert.ok(before['.'].some((l) => /^!! \.kern\/ledger\.md [0-9a-f]{12}$/.test(l)), 'an excluded file, such as a ledger, is listed');
+    assert.deepEqual(treeState(d), before, 'reading it twice changes nothing');
+    writeFileSync(join(d, '.wt', 'b.txt'), 'b2\n');
+    assert.notDeepEqual(treeState(d)['.wt'], before['.wt'], 'a second edit to a file already changed shows');
+    writeFileSync(join(d, '.kern', 'ledger.md'), 'changed\n');
+    assert.notDeepEqual(treeState(d)['.'], before['.'], 'a ledger write shows');
+  } finally {
+    rmSync(dirname(d), { recursive: true, force: true });
+    rmSync(f, { recursive: true, force: true });
+  }
+});
+
+test('the runner records the git status at each run\'s start and end, saves it with the events, and the snapshot names the checks', () => {
+  const src = readFileSync(join(ROOT, 'scripts', 'behave.mjs'), 'utf8');
+  assert.match(src, /const cwd = caseWorkspace\(ROOT, c\);\n\s+const start = treeState\(cwd\);\n\s+const \{ run, problem, events \} = tryRun\(/);
+  assert.match(src, /let end;\n\s+try \{ end = treeState\(cwd\); \} catch \(e\) \{ end = \{ error: e\.message \}; \}/);
+  assert.match(src, /writeFileSync\(join\(raw, `\$\{c\.id\}-\$\{i\}\.tree\.json`\)/);
+  assert.match(src, /results\.push\(\{ id: c\.id, source: c\.source, checks: c\.checks \?\? \{\}, \.\.\.r, runs \}\)/);
 });

@@ -26,7 +26,8 @@
         "Checks PR or branch state with gh or git before tagging a thread",
         "Gives exactly one tag per thread and one next move",
         "Writes no file"
-      ]
+      ],
+      "checks": { "1": "git-or-gh-command", "3": "no-write" }
     },
     {
       "id": 2,
@@ -41,7 +42,8 @@
         "Reads .kern/ledgers/export/ledger.md before any transcript",
         "Names finishing Task 3 of the export plan as the next move",
         "Writes no file"
-      ]
+      ],
+      "checks": { "0": "ledger-before-transcript", "2": "no-write" }
     },
     {
       "id": 3,

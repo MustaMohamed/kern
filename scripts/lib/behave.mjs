@@ -4,7 +4,9 @@
 // grader owns those), and evals/behave/{pressure,workflows}.json. A case's `files` names fixture layers under
 // evals/fixtures/, copied in order (the M0 eval format); the default is node-bug.
 // Grader shape adapted from superpowers tests/claude-code (MIT; ideas only).
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { finalText, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
@@ -34,9 +36,10 @@ export function caseWorkspace(root, c) {
 }
 
 // loadCases(root): [{ id, source, files, prompts, expectations, pressure, origin?, branch?, setup?,
-// max_turns? }], ids unique. An evals/cases entry may give prompts (several turns) beside its prompt, the
-// turn route-eval checks; then prompt is the last of them. Throws when a case names a fixture layer that
-// does not exist.
+// max_turns?, checks? }], ids unique. An evals/cases entry may give prompts (several turns) beside its prompt,
+// the turn route-eval checks; then prompt is the last of them. checks maps an expectation's index (0-based, a
+// string key in JSON) to the name of the CHECKS entry that decides it. Throws when a case names a fixture
+// layer that does not exist, or a check key or name that is not one.
 export function loadCases(root) {
   const out = [];
   const dir = join(root, 'evals', 'cases');
@@ -47,7 +50,7 @@ export function loadCases(root) {
       if (e.prompts && e.prompts[e.prompts.length - 1] !== e.prompt) throw new Error(`behave: ${id}: prompt must be the last of prompts (evals/cases/${f})`);
       const shape = Object.fromEntries(WORKSPACE_KEYS.filter((k) => e[k] !== undefined).map((k) => [k, e[k]]));
       out.push({ id, source: `evals/cases/${f}`, files: e.files || ['node-bug'],
-        prompts: e.prompts || [e.prompt], expectations: e.expectations, pressure: [], ...shape });
+        prompts: e.prompts || [e.prompt], expectations: e.expectations, pressure: [], ...shape, ...(e.checks ? { checks: e.checks } : {}) });
     }
   }
   for (const f of ['pressure.json', 'workflows.json']) {
@@ -61,6 +64,40 @@ export function loadCases(root) {
     seen.add(c.id);
     if (!Array.isArray(c.expectations) || !c.expectations.length) throw new Error(`behave: ${c.id} has no expectations`);
     for (const f of c.files) if (!existsSync(join(root, 'evals', 'fixtures', f))) throw new Error(`behave: ${c.id} names fixture layer ${f}, which does not exist (evals/fixtures/${f}; ${c.source})`);
+    for (const [k, name] of Object.entries(c.checks ?? {})) {
+      if (!/^\d+$/.test(k) || Number(k) >= c.expectations.length) throw new Error(`behave: ${c.id}: checks key ${k} names no expectation (0 to ${c.expectations.length - 1}; ${c.source})`);
+      if (!Object.hasOwn(CHECKS, name)) throw new Error(`behave: ${c.id}: expectation ${k} names check ${name}, which is not in CHECKS (${c.source})`);
+    }
+  }
+  return out;
+}
+
+// treeState(cwd): what a run may not change, read without writing anything (no index refresh). For each
+// worktree of cwd's repo, keyed by its path from cwd ('.' for cwd): `git status --porcelain
+// --untracked-files=all --ignored` lines, `XY path`, each file's line followed by the first 12 hex digits of
+// the sha256 of its content (a symlink's, of its target). The content shows a second change to a file already
+// changed; --ignored shows the .kern files that .git/info/exclude hides. Throws when git fails.
+export function treeState(cwd) {
+  const git = (dir, ...a) => execFileSync('git', ['--no-optional-locks', '-C', dir, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+  const out = {};
+  const here = realpathSync(cwd);
+  for (const tree of git(cwd, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9))) {
+    const entries = git(tree, 'status', '--porcelain', '-z', '--untracked-files=all', '--ignored').split('\0');
+    const lines = [];
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      if (!e) continue;
+      if (/^[RC]/.test(e)) i += 1;
+      const path = join(tree, e.slice(3));
+      let sum = '';
+      try {
+        const st = lstatSync(path);
+        if (st.isSymbolicLink()) sum = readlinkSync(path);
+        else if (st.isFile()) sum = readFileSync(path);
+      } catch { sum = ''; }
+      lines.push(sum === '' ? e : `${e} ${createHash('sha256').update(sum).digest('hex').slice(0, 12)}`);
+    }
+    out[relative(here, realpathSync(tree)) || '.'] = lines;
   }
   return out;
 }
@@ -264,6 +301,87 @@ export function parseVerdict(text, n) {
     if (typeof x.evidence !== 'string' || !x.evidence.trim()) throw new Error(`grader: blank evidence for expectation ${i + 1}`);
     return { pass: x.pass, evidence: x.evidence };
   });
+}
+
+// steps(events): each tool call and result in stream order, the main session's and every subagent's:
+// { at (event index), id, call: { name, input } } or { at, id (the call's), result: text }.
+const steps = (events) => events.flatMap((e, at) => (e?.message?.content ?? []).flatMap((c) => {
+  if (e.type === 'assistant' && c?.type === 'tool_use') return [{ at, id: c.id, call: { name: c.name, input: c.input ?? {} } }];
+  if (c?.type === 'tool_result') return [{ at, id: c.tool_use_id, result: resultText(c) }];
+  return [];
+}));
+// replyAt(events): the index of the event that holds the final reply, the main session's last assistant text
+// (events.length when there is none).
+const replyAt = (events) => {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e?.type === 'assistant' && !e.parent_tool_use_id && (e.message?.content ?? []).some((c) => c?.type === 'text' && c.text?.trim())) return i;
+  }
+  return events.length;
+};
+// argOf(call): the input field a call acts on, cut to 200 characters for evidence.
+const argOf = ({ input }) => first(String(input.command ?? input.file_path ?? input.notebook_path ?? input.path ?? JSON.stringify(input)).replace(/\s+/g, ' '), 200);
+// VCS: git or gh as a command word, after the start, a space or a shell separator, and before one; the
+// capture runs to the next separator (a `>&` redirect is not one).
+const VCS = /(?:^|[\s;&|(`])((?:git|gh)(?=[\s;&|)`]|$)(?:>&|[^;&|\n)`])*)/g;
+const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
+// transcriptRead(call): a Read of a .jsonl file, a Grep whose path or glob names one, or a Bash call that names one.
+const transcriptRead = ({ name, input }) => (name === 'Read' && /\.jsonl$/i.test(String(input.file_path ?? '')))
+  || (name === 'Grep' && /\.jsonl/i.test(`${input.path ?? ''} ${input.glob ?? ''}`)) || (name === 'Bash' && /\.jsonl\b/i.test(String(input.command ?? '')));
+// treeDiff(start, end): the status lines one side has and the other lacks, `<worktree>: -<line>` or `+<line>`.
+const treeDiff = (start, end) => [...new Set([...Object.keys(start), ...Object.keys(end)])].flatMap((t) => {
+  const a = start[t] ?? [], b = end[t] ?? [];
+  return [...a.filter((l) => !b.includes(l)).map((l) => `${t}: - ${l}`), ...b.filter((l) => !a.includes(l)).map((l) => `${t}: + ${l}`)];
+});
+
+// CHECKS: the scripted checks a case's `checks` may name (Task 16j, task-16-diagnosis-3 fix group 1; the
+// user's "Scripted checks + one model", 2026-10-21). check(events, { tree }) decides one expectation with no
+// model and returns { pass, evidence }; tree is { start, end }, treeState at the run's start and end ({ error }
+// when the end could not be read). A check throws when the run lacks what it reads, so the run is invalid.
+export const CHECKS = {
+  // A Bash call, the main session's or a subagent's, runs git or gh before the final reply.
+  'git-or-gh-command': (events) => {
+    const end = replyAt(events);
+    const runs = [...new Set(steps(events).filter((s) => s.call?.name === 'Bash' && s.at < end)
+      .flatMap((s) => [...String(s.call.input.command ?? '').matchAll(VCS)].map((m) => first(m[1].trim().replace(/\s+/g, ' '), 60))))];
+    return runs.length ? { pass: true, evidence: `Bash runs git or gh before the final reply: ${runs.slice(0, 6).join('; ')}${runs.length > 6 ? `; ${runs.length - 6} more` : ''}` }
+      : { pass: false, evidence: 'no Bash call runs git or gh before the final reply' };
+  },
+  // No Write, Edit, MultiEdit or NotebookEdit call, and treeState the same at the run's start and end.
+  'no-write': (events, { tree } = {}) => {
+    const w = toolUses(events).filter((u) => WRITE_TOOLS.includes(u.name));
+    if (w.length) return { pass: false, evidence: `${w.map((u) => `${u.name} call on ${argOf(u)}`).slice(0, 3).join('; ')}${w.length > 3 ? `; ${w.length - 3} more` : ''}` };
+    if (!tree?.start || !tree?.end) throw new Error('check no-write: the run recorded no git status at its start and end');
+    if (tree.end.error) return { pass: false, evidence: `git status failed at the run's end: ${tree.end.error}` };
+    const diff = treeDiff(tree.start, tree.end);
+    if (diff.length) return { pass: false, evidence: `git status changed: ${diff.slice(0, 6).join('; ')}${diff.length > 6 ? `; ${diff.length - 6} more` : ''}` };
+    const n = Object.keys(tree.end).length;
+    return { pass: true, evidence: `no Write, Edit or NotebookEdit call, and git status the same at the run's start and end in ${n} worktree${n === 1 ? '' : 's'}` };
+  },
+  // A tool result holds "# kern ledger:" (a ledger's first line) before any call reads a .jsonl transcript.
+  'ledger-before-transcript': (events) => {
+    const all = steps(events);
+    const ledger = all.findIndex((s) => s.result?.includes('# kern ledger:'));
+    if (ledger < 0) return { pass: false, evidence: 'no tool result holds "# kern ledger:"' };
+    const read = all.findIndex((s, i) => i < ledger && s.call && transcriptRead(s.call));
+    if (read >= 0) return { pass: false, evidence: `a .jsonl transcript was read before the ledger: ${all[read].call.name} ${argOf(all[read].call)}` };
+    const by = all.find((s) => s.call && s.id === all[ledger].id);
+    return { pass: true, evidence: `the result of ${by ? `${by.call.name} ${argOf(by.call)}` : 'a tool call'} holds "# kern ledger:", and no .jsonl transcript was read before it` };
+  },
+};
+
+// gradeRun(c, events, tree, grade): the run's verdict, one { pass, evidence } per expectation in order. A
+// scripted expectation (c.checks) is decided by its CHECKS entry and carries its name as `check`; the rest go
+// to grade(expectations, behaveDigest(events)) in one model call, whose reply parseVerdict reads, so the model
+// numbers only the expectations it was given. With every expectation scripted, grade is not called. Throws (an
+// invalid run) when a check cannot decide or the reply is malformed.
+export function gradeRun(c, events, tree, grade) {
+  const checks = c.checks ?? {};
+  const scripted = new Map(Object.entries(checks).map(([k, name]) => [Number(k), { ...CHECKS[name](events, { tree }), check: name }]));
+  const left = c.expectations.map((text, k) => ({ text, k })).filter(({ k }) => !scripted.has(k));
+  const model = left.length ? parseVerdict(grade(left.map((x) => x.text), behaveDigest(events)), left.length) : [];
+  const byModel = new Map(left.map(({ k }, j) => [k, model[j]]));
+  return c.expectations.map((_, k) => scripted.get(k) ?? byModel.get(k));
 }
 
 // tryRun(opts, run): one headless run and why it may not be graded ('' when it may). A run cut off by its

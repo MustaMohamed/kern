@@ -2,13 +2,14 @@
 // Behavioural evals: does kern behave as the skill says, under pressure and across a workflow?
 // Spends tokens; never runs in CI; ask the user before a run.
 // Usage: node scripts/behave.mjs [--case <id>] [--runs N] [--model <m>] [--grader-model <m>] [--dry-run]
-// Writes evals/snapshots/behave-<model>-<date>.json (committed).
+// Writes evals/snapshots/behave-<model>-<date>.json (committed). An expectation a case's `checks` names is decided
+// by that scripted check, with no model (Task 16j); the rest get one grader call per run.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText } from './lib/claude-run.mjs';
-import { behaveDigest, caseResult, caseWorkspace, graderPrompt, loadCases, parseVerdict, pluginCopy, tryRun } from './lib/behave.mjs';
+import { caseResult, caseWorkspace, gradeRun, graderPrompt, loadCases, pluginCopy, treeState, tryRun } from './lib/behave.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -22,7 +23,10 @@ if (only && !cases.length) { console.error(`behave: no case ${only}`); process.e
 // shape(c): the workspace fields a case sets beyond its layers, for the dry run.
 const shape = (c) => [c.origin && 'origin', c.branch && `branch ${c.branch}`, c.setup?.length && `${c.setup.length} setup command(s)`].filter(Boolean).join(', ');
 if (args.includes('--dry-run')) {
-  for (const c of cases) console.log(`${c.id}: ${c.prompts.length} turn(s) on ${c.files.join('+')}${shape(c) ? ` (${shape(c)})` : ''}, ${c.expectations.length} expectation(s)${c.pressure.length ? `, pressure: ${c.pressure.join('+')}` : ''}`);
+  for (const c of cases) {
+    const scripted = Object.keys(c.checks ?? {}).length;
+    console.log(`${c.id}: ${c.prompts.length} turn(s) on ${c.files.join('+')}${shape(c) ? ` (${shape(c)})` : ''}, ${c.expectations.length} expectation(s)${scripted ? ` (${scripted} scripted)` : ''}${c.pressure.length ? `, pressure: ${c.pressure.join('+')}` : ''}`);
+  }
   process.exit(0);
 }
 const results = [];
@@ -40,22 +44,32 @@ try {
     const runs = [];
     for (let i = 0; i < RUNS; i++) {
       const cwd = caseWorkspace(ROOT, c);
+      const start = treeState(cwd);
       const { run, problem, events } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20 });
+      // The no-write check compares the workspace's git status at the run's start and end.
+      let end;
+      try { end = treeState(cwd); } catch (e) { end = { error: e.message }; }
+      const tree = { start, end };
       // A run cut off by the timeout keeps the events it printed.
       const kept = run ? run.events : events;
       if (kept.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
+      writeFileSync(join(raw, `${c.id}-${i}.tree.json`), JSON.stringify(tree, null, 2) + '\n');
       const gdir = mkdtempSync(join(tmpdir(), 'g-'));
       let verdict = null; let invalid = !!problem; let reason = problem;
       if (!invalid) {
-        const g = tryRun({ cwd: gdir, prompts: [graderPrompt(c.expectations, behaveDigest(run.events))], model: GRADER, maxTurns: 1 });
-        if (g.problem) { invalid = true; reason = `grader: ${g.problem}`; }
-        else try { verdict = parseVerdict(finalText(g.run.events), c.expectations.length); } catch (e) { invalid = true; reason = e.message; }
+        try {
+          verdict = gradeRun(c, run.events, tree, (ex, record) => {
+            const g = tryRun({ cwd: gdir, prompts: [graderPrompt(ex, record)], model: GRADER, maxTurns: 1 });
+            if (g.problem) throw new Error(`grader: ${g.problem}`);
+            return finalText(g.run.events);
+          });
+        } catch (e) { if (e.fatal) throw e; invalid = true; reason = e.message; }
       }
       runs.push({ invalid, reason, verdict, exit: run ? run.status : null });
       rmSync(dirname(cwd), { recursive: true, force: true }); rmSync(gdir, { recursive: true, force: true });
     }
     const r = caseResult(runs);
-    results.push({ id: c.id, source: c.source, ...r, runs });
+    results.push({ id: c.id, source: c.source, checks: c.checks ?? {}, ...r, runs });
     const failed = c.expectations.filter((_, k) => runs.some((x) => x.verdict && !x.verdict[k].pass));
     save();
     console.log(`${r.pass ? 'PASS' : 'FAIL'} ${c.id}: ${r.passed}/${r.valid}${r.invalid ? ` (${r.invalid} invalid: ${runs.filter((x) => x.invalid).map((x) => x.reason).join(' | ')})` : ''}${failed.length ? `; missed: ${failed.join(' | ')}` : ''}`);
