@@ -63,7 +63,7 @@ _g03_post() {
       fi
       ;;
     ask) vote ask G3 "$1 posts to the PR" ;;
-    # policy_for prints nothing only when its command substitution's pipe could not be made.
+    # An empty policy means its command substitution's pipe could not be made.
     *) vote deny G3 "review.post_policy could not be read; retry the command" ;;
   esac
 }

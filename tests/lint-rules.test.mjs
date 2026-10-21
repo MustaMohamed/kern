@@ -218,6 +218,12 @@ test('rule 13: _settings_lookup of a literal key is a read; the generic "$1" for
   assert.match(generic[0].message, /^autopilot names a hook or kern script as reader, but none reads it$/);
 });
 
+test('rule 13: _settings_read of a literal key is a read, as _settings_lookup is', () => {
+  const table = '| Key | Default | Values | Read by |\n|---|---|---|---|\n| `autopilot` | `allowed` | x | prompt-submit |\n';
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table, 'hooks/x': '#!/usr/bin/env bash\n_settings_read "$f" autopilot\n' })), []);
+  assert.deepEqual(rules(lint({ 'kernel/settings.md': table, 'hooks/x': '#!/usr/bin/env bash\n_settings_read "$f" autopilot\n_settings_read "$f" banana.key\n' })), [13]);
+});
+
 test('rule 7: a session-start that fails or prints nothing is an error', () => {
   const sub = '#!/usr/bin/env bash\nprintf \'{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"k"}}\'\n';
   for (const start of ['#!/usr/bin/env bash\necho kernel\nexit 1\n', '#!/usr/bin/env bash\nexit 0\n']) {

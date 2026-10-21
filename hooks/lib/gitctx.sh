@@ -897,18 +897,19 @@ base_branch_name() {
 # deploy.envs. With no origin/HEAD, main, master, trunk and develop count as protected. A base_branch
 # only adds a branch, so a committed one cannot unprotect main. `*` (every branch, from
 # push_targets) is protected too, and so is every branch while a settings layer that could name one
-# cannot be read (settings_get exit 4).
+# cannot be read (exit 4 from settings_get).
 branch_protected() {
-  local b k
+  local b
   [ "$1" = "*" ] && return 0
-  for k in base_branch branch.protected deploy.envs; do
-    b=$(settings_get "$k" '')
-    [ $? = 4 ] && return 0
-    case "$k" in
-      base_branch) [ -n "$b" ] && [ "$1" = "$b" ] && return 0 ;;
-      *) list_has "$b" "$1" && return 0 ;;
-    esac
-  done
+  b=$(settings_get base_branch '')
+  [ $? = 4 ] && return 0
+  [ -n "$b" ] && [ "$1" = "$b" ] && return 0
+  b=$(settings_get branch.protected '')
+  [ $? = 4 ] && return 0
+  list_has "$b" "$1" && return 0
+  b=$(settings_get deploy.envs '')
+  [ $? = 4 ] && return 0
+  list_has "$b" "$1" && return 0
   if b=$(git -C "${KERN_MAIN:-${CWD:-$PWD}}" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null); then
     [ "$1" = "${b#origin/}" ] && return 0
   else

@@ -299,7 +299,7 @@ export const RULES = [
     for (const { f, text } of code) {
       // A hook's `need LIB FUNCTION...` line names the functions a library must define; it calls none.
       const calls = text.replace(/^need .*$/gm, '');
-      for (const m of calls.matchAll(/(?:settings_(?:get|source)|_settings_lookup\s+"?\$\w+"?)\s+["']?([a-z_][a-z0-9_.]*)/g)) add(m[1], f);
+      for (const m of calls.matchAll(/(?:settings_(?:get|source)|_settings_(?:lookup|read)\s+"?\$\w+"?)\s+["']?([a-z_][a-z0-9_.]*)/g)) add(m[1], f);
       for (const m of calls.matchAll(/policy_for\s+["']?([a-z][a-z.]*)/g)) if (m[1] !== 'ACTION') add(m[1] === 'review.post' ? 'review.post_policy' : `${m[1]}.policy`, f);
       if (/policy_for\s+["']?\$/.test(calls)) out.push(err(13, rel(model, f), 'policy_for takes a variable, so rule 13 cannot check its key; pass the action literally'));
       if (f.endsWith('/kern-detect')) for (const m of text.matchAll(/^ {2}([a-z_.]+)\)$/gm)) add(m[1], f);

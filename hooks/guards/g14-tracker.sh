@@ -192,7 +192,7 @@ _g14_decide() {
       ;;
     deny) vote deny G14 "tracker.policy deny" ;;
     ask) vote ask G14 "$2 writes to the tracker" ;;
-    # policy_for prints nothing only when its command substitution's pipe could not be made.
+    # An empty policy means its command substitution's pipe could not be made.
     *) vote deny G14 "tracker.policy could not be read; retry the command" ;;
   esac
 }

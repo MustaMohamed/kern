@@ -631,7 +631,7 @@ EOT
       return 0
       ;;
     ask | auto) ;;
-    # policy_for prints nothing only when its command substitution's pipe could not be made.
+    # An empty policy means its command substitution's pipe could not be made.
     *)
       vote deny G1 "push.policy could not be read; retry the push"
       return 0
