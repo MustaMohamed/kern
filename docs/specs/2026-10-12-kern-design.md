@@ -435,6 +435,7 @@ G8, an edit-time typecheck, was dropped: projects keep their own hooks, which mu
 5. PostToolUse and Stop warnings exit 2 with the message on stderr, so Claude sees them.
 6. The Skill tool's input fields are not documented, so G3 matches `--comment` against the raw `tool_input` text. That check is best effort, backed by the skill's own rule and G3's checks on `gh` posting commands.
 7. Each guard has a bats test with allow, ask and deny cases in both modes.
+8. No hook, and no script a hook runs, makes a locale change bash must undo: a command pinned to the C locale runs as `env LC_ALL=C cmd`, never under a `local LC_ALL` or an `LC_ALL=C cmd` prefix. Homebrew bash 5.3.15, the `bash` a hook runs on macOS, segfaults now and then when a subshell undoes one while neither `LANG` nor `LC_ALL` is set, which failed reads at random (Tasks 16l and 16m). Each entry hook also exports `LANG=C` first when neither is set, which leaves the locale as it was.
 
 ## 9. Skill catalogue
 
@@ -545,6 +546,8 @@ Rules: work the lowest unmerged PR first; fix in the lowest branch that owns the
 13. Every settings key the hooks parse is documented in `kernel/settings.md`, and the reverse.
 14. `plugin.json`, `marketplace.json` and the newest CHANGELOG release agree; PRs touching `skills/`, `kernel/` or `hooks/` add an `Unreleased` line.
 15. Hook-shape tests over fixture projects: no settings, shared only, local only, both, `kern: off`, a policy key on a floor action, an unknown key.
+16. Every script, `WORK/` folder and ledger line a shipped skill or agent names has its producer in `docs/plans/contract.md`.
+17. No hook file, and no script a hook names, makes a locale change bash must undo (8.4, rule 8).
 
 ### 11.3 Behavioural fixtures
 
