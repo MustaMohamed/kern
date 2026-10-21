@@ -442,7 +442,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 - Context compacted after Task 2: resumes at Task 3; Tasks 1-2 are not re-dispatched.
 - Implementer edits a file outside its Files list: run pauses and names the file.
 - A task fails review three times: stops with a split proposal; no fourth round.
-- Every task review, re-review and final review is an Agent call with `run_in_background: false`; a wave's implementers still run in the background.
+- Every task review, re-review and final review is an Agent call with `run_in_background: false`, as is the serial `delegate` implementer (A10's rule); a wave's implementers still run in the background.
 
 The full checklist is `tests/skills/execute-plan.acceptance.md` (M2a), ticked in the M2b pilot.
 

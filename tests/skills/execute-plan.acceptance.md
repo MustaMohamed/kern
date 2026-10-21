@@ -5,4 +5,5 @@
 - [ ] Context compacted after Task 2: it resumes at Task 3; Tasks 1 and 2 are not re-dispatched.
 - [ ] The implementer edits a file outside its Files list: `wt-diff` exits 4 and the run pauses naming the file.
 - [ ] A task fails review three times: it stops with a split proposal; there is no fourth round.
+- [ ] Every task review, re-review and final review is an Agent call with `run_in_background: false`, as is the serial `delegate` implementer; a wave's implementers run in the background.
 - [ ] A 2-task wave: two review packages and two complete lines, then the patches applied one at a time.

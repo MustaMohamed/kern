@@ -7,4 +7,5 @@ Tick each item the first time its situation comes up in the pilot, with the sess
 - [ ] An inconclusive run, a skipped run, or a run where zero tests ran was reported as a fail.
 - [ ] A new regression test was probed with `probe --exclude-tests` and printed `probe: fail-then-pass ok`; exit 3 was reported as "probe inconclusive".
 - [ ] "Requirements met" ticked each acceptance line from `spec.source` against evidence.
+- [ ] A fix the reply proposed but did not run was labelled inferred.
 - [ ] Before a commit or a push, the Gate handed off by Read to `commit` or `finish-branch`, and that skill's steps were followed.
