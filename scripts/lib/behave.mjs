@@ -89,13 +89,13 @@ export function treeState(cwd) {
       if (!e) continue;
       if (/^[RC]/.test(e)) i += 1;
       const path = join(tree, e.slice(3));
-      let sum = '';
+      let sum = null;
       try {
         const st = lstatSync(path);
         if (st.isSymbolicLink()) sum = readlinkSync(path);
         else if (st.isFile()) sum = readFileSync(path);
-      } catch { sum = ''; }
-      lines.push(sum === '' ? e : `${e} ${createHash('sha256').update(sum).digest('hex').slice(0, 12)}`);
+      } catch { sum = null; }
+      lines.push(sum === null ? e : `${e} ${createHash('sha256').update(sum).digest('hex').slice(0, 12)}`);
     }
     out[relative(here, realpathSync(tree)) || '.'] = lines;
   }
@@ -328,7 +328,7 @@ const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 // transcriptRead(call): a Read of a .jsonl file, a Grep whose path or glob names one, or a Bash call that names one.
 const transcriptRead = ({ name, input }) => (name === 'Read' && /\.jsonl$/i.test(String(input.file_path ?? '')))
   || (name === 'Grep' && /\.jsonl/i.test(`${input.path ?? ''} ${input.glob ?? ''}`)) || (name === 'Bash' && /\.jsonl\b/i.test(String(input.command ?? '')));
-// treeDiff(start, end): the status lines one side has and the other lacks, `<worktree>: -<line>` or `+<line>`.
+// treeDiff(start, end): the status lines one side has and the other lacks, `<worktree>: - <line>` or `: + <line>`.
 const treeDiff = (start, end) => [...new Set([...Object.keys(start), ...Object.keys(end)])].flatMap((t) => {
   const a = start[t] ?? [], b = end[t] ?? [];
   return [...a.filter((l) => !b.includes(l)).map((l) => `${t}: - ${l}`), ...b.filter((l) => !a.includes(l)).map((l) => `${t}: + ${l}`)];
