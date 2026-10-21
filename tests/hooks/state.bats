@@ -345,3 +345,40 @@ since: 2026-10-12T00:00:00Z'
   mkdir -p "$CWD"
   autopilot_on s1 2>/dev/null
 }
+
+# bash 5.3 (5.3.15 on macOS, measured 2026-10-21) segfaults now and then (about 6% of runs) when a subshell
+# undoes a locale change: a `local LC_ALL=C` going out of scope, or the temporary `LC_ALL=C` of a
+# command that more commands follow. The old state_file's `local LC_ALL=C`, run inside `$(state_file)`,
+# made state_get fail that way, which reset the session state mid-run (Task 16l). The state and settings
+# libraries make no such change; `env LC_ALL=C cmd` changes only cmd's environment.
+@test "the state and settings libraries make no locale change that bash must undo" {
+  run grep -nE 'local[[:space:]]+(LC_[A-Z]+|LANG)=|(^|[;&|({[:space:]])(LC_[A-Z]+|LANG)=[^[:space:]]*[[:space:]]+[a-z]' \
+    "$KERN_ROOT/hooks/lib/state.sh" "$KERN_ROOT/hooks/lib/settings.sh"
+  # Comment lines aside, `env LC_ALL=C awk` lines match the second form through "env "; only those may.
+  [ -z "$(printf '%s\n' "$output" | grep -v ':[0-9]*:[[:space:]]*#' | grep -v 'env LC_ALL=C ')" ] || { echo "$output"; return 1; }
+}
+
+@test "state_file and a settings read survive many fresh bash 5.3 runs" {
+  local b found=""
+  for b in /opt/homebrew/bin/bash /usr/local/bin/bash /usr/bin/bash /bin/bash; do
+    [ -x "$b" ] || continue
+    case "$("$b" -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')" in 5.[3-9] | [6-9].*) found=$b; break ;; esac
+  done
+  [ -n "$found" ] || skip "no bash 5.3 or later here"
+  mkdir -p "$R/.claude"
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  cat >"$BATS_TEST_TMPDIR/once.sh" <<'EOS'
+. "$KERN_ROOT/hooks/lib/settings.sh"
+. "$KERN_ROOT/hooks/lib/state.sh"
+f=$(state_file s1) || exit 1
+[ "$f" = "$CLAUDE_PLUGIN_DATA/sessions/s1.state" ] || exit 2
+_settings_read "$1" kern || exit 3
+[ "$_KERN_SV" = off ] || exit 4
+EOS
+  local i=0 bad=0
+  while [ "$i" -lt 120 ]; do
+    i=$((i + 1))
+    "$found" "$BATS_TEST_TMPDIR/once.sh" "$R/.claude/kern.local.yml" 2>/dev/null || bad=$((bad + 1))
+  done
+  [ "$bad" -eq 0 ] || { echo "$found failed $bad of 120 runs"; return 1; }
+}

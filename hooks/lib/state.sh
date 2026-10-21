@@ -10,9 +10,10 @@ state_dir() {
 # substitution: one whose pipe cannot be made (a full fd table) gives status 0 and no output, which no
 # || sees. Exit 2 for an id outside [A-Za-z0-9_-].
 _state_path() {
-  local LC_ALL=C
+  # The letters are listed: a range such as A-Z follows the locale's collation in bash 3.2, and a
+  # `local LC_ALL=C` undone at return crashes bash 5.3 now and then inside $( ) (see state_get).
   case "$1" in
-    '' | *[!A-Za-z0-9_-]*) return 2 ;;
+    '' | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]*) return 2 ;;
   esac
   _KERN_STATE_PATH="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/kern-kern}/sessions/$1.state"
 }
@@ -24,6 +25,11 @@ state_file() {
 }
 
 # state_get SID KEY: prints the value. Exit 1 unset, 2 bad id or unsafe file.
+# This library makes no locale change bash must undo. bash 5.3 (5.3.15 on macOS, 2026-10-21) segfaults
+# now and then, about one run in 16, when a subshell undoes one: a `local LC_ALL=C` at return, or the
+# temporary LC_ALL of a command that more commands follow. The old state_file's `local LC_ALL=C` ran
+# inside `$(state_file)`, so state_get failed that way and prompt-submit reset the state (Task 16l).
+# `env LC_ALL=C cmd` sets the locale in cmd's environment only.
 state_get() {
   local f
   _state_path "$1" || return 2
@@ -31,7 +37,7 @@ state_get() {
   [ -L "${f%/*}" ] && return 2
   [ -L "$f" ] && return 2
   [ -f "$f" ] || return 1
-  LC_ALL=C awk -v k="$2" 'index($0, k ": ") == 1 { v = substr($0, length(k) + 3); found = 1 }
+  env LC_ALL=C awk -v k="$2" 'index($0, k ": ") == 1 { v = substr($0, length(k) + 3); found = 1 }
     END { if (found) { print v; exit 0 } exit 1 }' "$f"
 }
 
@@ -41,14 +47,13 @@ state_set() {
 }
 
 # _state_put FRESH SID KEY=VALUE...: FRESH=1 starts from empty content, ignoring any old file. Keys are
-# checked in the C locale: bash 3.2 matches [a-z] by the caller's collation, which in en_US.UTF-8 takes
-# upper-case letters too. The old lines but those of the keys set go straight from awk into the temp
-# file, so a read that fails (a fork or exec refused under load) shows in awk's status, never as an
-# empty read; it is tried once more. When it fails again nothing is written, since the keys not read
+# checked against the letters listed: bash 3.2 matches [a-z] by the caller's collation, which in
+# en_US.UTF-8 takes upper-case letters too. The old lines but those of the keys set go straight from awk
+# into the temp file, so a read that fails shows in awk's status, never as an empty read; it is tried
+# once more. When it fails again nothing is written, since the keys not read
 # would be lost, autopilot among them. The keys set follow, a key set twice taking its last value. Exit 2
 # when nothing was written.
 _state_put() {
-  local LC_ALL=C
   local fresh="$1" sid="$2" f dir tmp kv k v later keys="" keep
   shift 2
   _state_path "$sid" || return 2
@@ -60,7 +65,7 @@ _state_put() {
   for kv in "$@"; do
     k=${kv%%=*}
     v=${kv#*=}
-    case "$k" in '' | *[!a-z_]*) return 2 ;; esac
+    case "$k" in '' | *[!abcdefghijklmnopqrstuvwxyz_]*) return 2 ;; esac
     case "$v" in *"
 "*) return 2 ;; esac
     keys="$keys $k"
@@ -72,8 +77,8 @@ _state_put() {
     $0 == "" { next }
     { for (p in drop) if (index($0, p) == 1) next; print }'
   if [ "$fresh" = 0 ] && [ -f "$f" ]; then
-    LC_ALL=C awk -v keys="$keys" "$keep" "$f" >"$tmp" || LC_ALL=C awk -v keys="$keys" "$keep" "$f" >"$tmp" ||
-      { rm -f "$tmp"; return 2; }
+    env LC_ALL=C awk -v keys="$keys" "$keep" "$f" >"$tmp" ||
+      env LC_ALL=C awk -v keys="$keys" "$keep" "$f" >"$tmp" || { rm -f "$tmp"; return 2; }
   fi
   for kv in "$@"; do
     shift
@@ -185,7 +190,7 @@ autopilot_on() {
 # trimmed, and a final run of . and ! dropped, so "Yes, approved!" and "yes,  approved" hash the same.
 # G20 hashes an approved: quote the same way and looks for it among the user's last prompt's hashes.
 prompt_hashes() {
-  LC_ALL=C awk '
+  env LC_ALL=C awk '
     BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i }
     {
       s = tolower($0); gsub(/[ \t\r]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); sub(/[.!]+$/, "", s)

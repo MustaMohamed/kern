@@ -70,7 +70,7 @@ _settings_files() {
 
 # _settings_lookup FILE KEY: prints the value of KEY in FILE (last occurrence wins). Exit 1 absent.
 _settings_lookup() {
-  LC_ALL=C awk -v key="$2" -v sq="'" '
+  env LC_ALL=C awk -v key="$2" -v sq="'" '
     {
       line = $0
       sub(/\r$/, "", line)
@@ -129,7 +129,7 @@ _settings_local_ok() {
   [ -d "$d" ] && [ ! -L "$d" ] && [ ! -e "$d/.git" ] && [ ! -L "$d/.git" ] || return 1
   pm=$(cd "$main" 2>/dev/null && pwd -P) && pd=$(cd "$d" 2>/dev/null && pwd -P) || return 1
   [ "$pd" = "$pm/.claude" ] || return 1
-  git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null | LC_ALL=C awk -F '\t' '
+  git -C "$main" ls-files -s -- ':(icase).claude' 2>/dev/null | env LC_ALL=C awk -F '\t' '
     { p = tolower($2); m = substr($1, 1, 6) }
     m == "160000" && p == ".claude" { bad = 1 }
     p == ".claude/kern.local.yml" { bad = 1 }
@@ -282,7 +282,7 @@ EOT
 
 # settings_keys FILE: every key set in FILE, one per line.
 settings_keys() {
-  LC_ALL=C awk '
+  env LC_ALL=C awk '
     { line = $0; sub(/\r$/, "", line) }
     line ~ /^[ \t]*#/ || line ~ /^[ \t]*$/ { next }
     { p = index(line, ":"); if (p == 0) next
