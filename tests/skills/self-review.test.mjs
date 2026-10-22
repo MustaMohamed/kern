@@ -123,3 +123,10 @@ test('self-review text hygiene', () => {
     assert.ok(!/[—–‘’“”]/.test(raw), `${f}: no long dashes or curly quotes`);
   }
 });
+
+test('the skills spec names the finish-branch step that runs self-review', () => {
+  // Task 16o review, M5: spec C8 said step 4 after finish-branch moved its self-review read to step 5.
+  const n = steps(readDoc('skills/finish-branch/SKILL.md').body).findIndex((l) => l.includes('skills/self-review/SKILL.md'));
+  assert.equal(n, 5);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [`by \`finish-branch\` step ${n}, or typed \`/kern:self-review\`.`]);
+});

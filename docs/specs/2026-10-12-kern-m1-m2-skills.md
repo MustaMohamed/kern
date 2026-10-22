@@ -643,7 +643,7 @@ disable-model-invocation: true
 ---
 ```
 
-**2. Purpose.** The author finds what the diff breaks beyond itself and runs every cheap check before anyone else spends tokens. Reached by the kernel row "review requested" when the diff is the user's own and no PR exists, by `finish-branch` step 4, or typed `/kern:self-review`. The SKILL.md leaves the "Reached by" sentence out to stay within its 7,000 bytes (Task 16o), as plan's and define's do.
+**2. Purpose.** The author finds what the diff breaks beyond itself and runs every cheap check before anyone else spends tokens. Reached by the kernel row "review requested" when the diff is the user's own and no PR exists, by `finish-branch` step 5, or typed `/kern:self-review`. The SKILL.md leaves the "Reached by" sentence out to stay within its 7,000 bytes (Task 16o), as plan's and define's do.
 
 **3. Inputs.** `base_branch`, `verify.fast`, `test.focused`, `review.rules`, `review.taxonomy`, `review.builtin` (`on`), `review.builtin.self_effort` (`low`), `review.builtin.max_findings` (15), `lessons`, `scope_threshold`, `spec.source` and `model.reviewer` (`sonnet`) for the spec lane.
 
