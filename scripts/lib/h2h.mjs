@@ -122,6 +122,11 @@ export function gate(results, tasks = []) {
   });
 }
 
+// touchedTasks(all, run): every loaded task in a category the run touched. The gate gets these, so a
+// `--task` rerun of one task cannot print a PASS or FAIL for its whole category (Task 16n review, I2): the
+// category's other tasks read as ungraded, and the category as INCOMPLETE.
+export const touchedTasks = (all, run) => all.filter((t) => run.some((x) => x.category === t.category));
+
 // verdictLine(v): the line the runner prints for one category, such as `INCOMPLETE plan: 2 of 4 tasks graded; ...`.
 export const verdictLine = (v) => `${v.status} ${v.category}${v.reason ? `: ${v.reason}` : ''}`;
 

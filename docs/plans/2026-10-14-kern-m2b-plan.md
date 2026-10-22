@@ -5462,7 +5462,7 @@ Expected: one line per case and the snapshot.
 Show the user: 13 tasks x 5 arms x 3 runs = 195 headless sessions on `claude-sonnet-5-5`, plus 39 grader calls on `claude-opus-5-5`. This is the largest spend in M2b. Run only on yes; the user may run one category first with `--category diagnose`.
 
 Run: `node scripts/h2h.mjs`
-Expected: `PASS` or `FAIL` per category with the scores, and the snapshot. A `VOID` line means a grader reply was malformed or a run was cut off; re-run that task with `--task <category/id>`. The first run also shows whether pstack's Claude Code tree loads with `--plugin-dir`: a `VOID` naming pstack on every task means it does not, which is a question for the user (drop the arm with the reason in `docs/specs/coverage.md`, or fix the tree), not a pass.
+Expected: `PASS`, `FAIL` or `INCOMPLETE` per category with the scores, and the snapshot; exit 0 when every category passes, 1 when one fails, 3 when none fails but one has a task with no graded run (Task 16n). A `VOID` line means a grader reply was malformed or a run was cut off; re-run that task with `--task <category/id>`, which prints `INCOMPLETE <category>: 1 of <n> tasks graded; ...` and exits 3, since the gate counts every task of the category; no script yet joins two runs' results into one verdict. The first run also shows whether pstack's Claude Code tree loads with `--plugin-dir`: a `VOID` naming pstack on every task means it does not, which is a question for the user (drop the arm with the reason in `docs/specs/coverage.md`, or fix the tree), not a pass.
 
 - [ ] **Step 5: Ask, then measure the standing cost and re-run stale exec evals**
 

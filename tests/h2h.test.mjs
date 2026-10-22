@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspace } from '../scripts/lib/claude-run.mjs';
-import { armCopy, blindIds, factsLine, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, taskWorkspace, verdictLine } from '../scripts/lib/h2h.mjs';
+import { armCopy, blindIds, factsLine, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, taskWorkspace, touchedTasks, verdictLine } from '../scripts/lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const arms = [{ id: 'kern', dir: '/w/kern' }, { id: 'superpowers', dir: '/w/kern/.upstream/superpowers' }, { id: 'pstack', dir: '/w/kern/.upstream/pstack/harness/pstack/claude-code' }, { id: 'control', dir: null }];
@@ -76,9 +76,23 @@ test('a category with an ungraded task is INCOMPLETE, never PASS or FAIL, and th
   assert.equal(gateExit([...pass, v]), 3);
 });
 
-test('the runner gives the gate every loaded task, prints each verdict line and exits by gateExit', () => {
+test('a --task run gives the gate every task of its category, so one graded task reads INCOMPLETE', () => {
+  // Task 16n review, I2: the plan's recovery for a VOID is "re-run that task with --task <category/id>", and with
+  // only the filtered tasks the gate printed PASS or FAIL for the whole category from that one task.
+  const all = loadTasks(ROOT);
+  const touched = touchedTasks(all, all.filter((t) => t.id === 'plan/rename-small'));
+  assert.deepEqual(touched.map((t) => t.id), ['plan/archive-invoices', 'plan/reminder-seam', 'plan/rename-small', 'plan/scope-split']);
+  assert.deepEqual(touchedTasks(all, all).map((t) => t.id), all.map((t) => t.id), 'a full run gates on every task');
+  assert.deepEqual(touchedTasks(all, all.filter((t) => t.category === 'review')).map((t) => t.id), ['review/invoice-branch']);
+  const r = (arm, score) => ({ task: 'plan/rename-small', category: 'plan', arm, score, falseAlarms: 0 });
+  const v = gate([r('kern', 0.9), r('superpowers', 0.5)], touched);
+  assert.equal(verdictLine(v[0]), 'INCOMPLETE plan: 1 of 4 tasks graded; no graded run: plan/archive-invoices, plan/reminder-seam, plan/scope-split');
+  assert.equal(gateExit(v), 3);
+});
+
+test('the runner gives the gate every task of the categories it ran, prints each verdict line and exits by gateExit', () => {
   const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
-  assert.ok(src.includes('const verdict = gate(results, tasks.map((t) => ({ id: t.id, category: t.category })));'), 'gate gets every loaded task');
+  assert.ok(src.includes('const verdict = gate(results, touchedTasks(loadTasks(ROOT), tasks).map((t) => ({ id: t.id, category: t.category })));'), 'gate gets every task of each category the run touched');
   assert.ok(src.includes('for (const v of verdict) console.log(verdictLine(v));'));
   assert.ok(src.includes('process.exit(gateExit(verdict));'));
 });

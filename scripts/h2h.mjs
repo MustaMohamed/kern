@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses } from './lib/claude-run.mjs';
 import { digest, pluginCopy, tryRun } from './lib/behave.mjs';
-import { armCopy, blindIds, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, taskWorkspace, verdictLine } from './lib/h2h.mjs';
+import { armCopy, blindIds, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, taskWorkspace, touchedTasks, verdictLine } from './lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -102,7 +102,7 @@ for (const t of tasks) {
   for (const c of armCopies) rmSync(dirname(c), { recursive: true, force: true });
 }
 writeFileSync(join(raw, 'key.json'), JSON.stringify(key, null, 2) + '\n');
-const verdict = gate(results, tasks.map((t) => ({ id: t.id, category: t.category })));
+const verdict = gate(results, touchedTasks(loadTasks(ROOT), tasks).map((t) => ({ id: t.id, category: t.category })));
 for (const v of verdict) console.log(verdictLine(v));
 const out = join(ROOT, 'evals', 'snapshots', `h2h-${MODEL.replace(/^claude-/, '')}-${date}.json`);
 writeFileSync(out, JSON.stringify({ model: MODEL, grader: GRADER, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS,
