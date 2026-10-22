@@ -38,7 +38,8 @@ if (args.includes('--transcript')) {
   const events = readFileSync(opt('--transcript'), 'utf8').split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });
   const file = routeFileOf(allCases.find((c) => c.route === route) || { route });
   if (!existsSync(join(root, file))) usage(`no route file ${file} under ${root}`);
-  const g = grade(events, { route, routeFile: file, steps: readSteps(readFileSync(join(root, file), 'utf8')), root });
+  const text = readFileSync(join(root, file), 'utf8');
+  const g = grade(events, { route, routeFile: file, steps: readSteps(text), text, root });
   console.log(`${g.pass ? 'PASS' : 'FAIL'} ${route} (${g.hops} hops, ${g.before} before, todo: ${g.todo}${g.todo ? `, steps: ${g.todoSteps}` : ''})${g.pass ? '' : `: ${g.reasons.join('; ')}`}`);
   process.exit(g.pass ? 0 : 1);
 }
@@ -60,7 +61,9 @@ const raw = join(ROOT, 'evals', 'results', `adherence-${VARIANT}-${MODEL.replace
 mkdirSync(raw, { recursive: true });
 try {
   for (const c of cases) {
-    const steps = c.route ? readSteps(readFileSync(join(root, routeFileOf(c)), 'utf8')) : [];
+    // The route's text, so a read of it counts only when it reaches the route's first step (Task 16p).
+    const text = c.route ? readFileSync(join(root, routeFileOf(c)), 'utf8') : null;
+    const steps = text ? readSteps(text) : [];
     const runs = [];
     for (let i = 0; i < RUNS; i++) {
       const src = stage(ROOT, c.files);
@@ -76,7 +79,7 @@ try {
         catch (e) { if (e.fatal) throw e; problem = failure = e.message; events = e.events ?? []; }
         // A run cut off by the timeout keeps the events it printed.
         if (events.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), events.map((x) => JSON.stringify(x)).join('\n') + '\n');
-        const g = run && !failure ? grade(run.events, { route: c.route, routeFile: c.route_file, steps, root, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
+        const g = run && !failure ? grade(run.events, { route: c.route, routeFile: c.route_file, steps, text, root, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
         runs.push({ pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: run ? run.status : null, invalid: !!failure });
       } finally {
         if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
