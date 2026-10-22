@@ -6179,6 +6179,42 @@ The user's answers, 2026-10-22: on the fix, "kern and grader"; on a gating revie
 4. **Gate completeness.** `gate()` reports a category with a task that has no graded run as incomplete, not as PASS or FAIL.
 5. **Rerun.** Rerun the plan category, 4 tasks x 5 arms x 3 runs (60 sessions plus 12 grader calls), once this task is reviewed, per the user's yes.
 
+### Task 16o: A review finding is a defect on a changed line, and the review key lists the real issues every arm raises
+
+The 2026-10-22 head-to-head failed the review gate on false alarms. One task, review/invoice-branch, ran 3 times: kern scored 0.83 with 3.67 false alarms, and superpowers 0.80 with 2.33. In review a false alarm is `decoyHits + unmatched` (scripts/lib/h2h.mjs:76): any finding the grader matches to a decoy, or to no label, counts, true or not.
+
+A read-only diagnosis found where kern's 11 false alarms came from:
+- 6 of the 11 sit under self-review step 9's `nit` class (skills/self-review/SKILL.md:22, default `review.taxonomy` at :35): changes that keep behaviour, a missing test filed as its own item, a guess kern called "probably fine", and advice to split the commit.
+- Nothing in self-review says a change that keeps behaviour is not a finding.
+- There is no Cleared list (SKILL.md:41), so a harmless observation can only be reported as a finding.
+- kern skipped step 3, the code-review lane, in all 3 runs. Task 16n's rule that only the user's word skips a review covers that.
+- 7 of the 11 are real issues the key leaves out, such as CSV escaping, which all 15 sessions raised. Even on the 4 clear-cut ones, kern loses 1.33 against 1.00.
+
+The user's answers (2026-10-22):
+- **Scope: "kern and key".** The key changes too. That is the user's explicit exception to this plan's rule that answer keys "are fixed before any run and are not tuned after". The commit quotes the answer.
+- **Nits: "Keep, but limited".**
+- **Rerun: "Yes, after the fix".**
+
+**Files:**
+- `skills/self-review/SKILL.md` and its references, `tests/skills/self-review.test.mjs`, the self-review acceptance file
+- the review task's answer key (`labels.json` for review/invoice-branch)
+- `scripts/lib/h2h.mjs` (per-row decoy and unmatched split, and the grader's raw reply)
+- `docs/specs/2026-10-12-kern-m1-m2-skills.md` (C8), `docs/plans/contract.md`, `CHANGELOG.md`
+
+1. **What a finding is.** In self-review step 9, a finding is a defect on an added or changed line, given with its `path:line` and how it fails. These are not findings:
+   - a change that keeps behaviour, or a floor-scan hit kern has justified; each goes to a new Cleared list, with the check that cleared it;
+   - a missing test, which becomes one line under the finding it would have caught;
+   - a "probably fine" guess;
+   - a split suggestion in a first round.
+2. **Nits (the user's "Keep, but limited").** `nit` stays in the default taxonomy, only for a real defect too small to block. A nit meets the same definition as any other finding.
+3. **Cleared list.** The report's Outputs gain the Cleared list. self-review is at its 7,000-byte cap, so trim to fit and name what went. Moving detail into a reference is allowed.
+4. **Key (the user's "kern and key").** The review key lists, as acceptable extras that count neither as a match nor as a false alarm:
+   - CSV escaping;
+   - the missing `exports/` directory;
+   - missing tests for the changed code.
+5. **Harness.** Each review result row stores its `decoys` and `unmatched` counts and the grader's raw reply, so a split can be checked.
+6. **Rerun.** Rerun the review category, 15 sessions plus 3 grader calls, after this task is reviewed, together with Task 16n's plan rerun, per the user's yes.
+
 Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
