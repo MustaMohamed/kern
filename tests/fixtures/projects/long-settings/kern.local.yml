@@ -18,4 +18,3 @@ never_commit: migration-dashboard/data/migration_dashboard.db, .env*, *.pem
 scope_threshold: 4
 overrides.commit: commit
 overrides.self-review: self-review
-route.diagnose: investigate-bug

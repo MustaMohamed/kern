@@ -181,7 +181,7 @@ The rule: before a new task's first tool call or question, match the task agains
 
 Every row is in the kernel table (Task 16d, the user's "Inline rows": on 2026-10-20 the rows inline routed 14 of 15 adherence cases, M2a's `kernel/routes.md` hop 11 of 15). A row ships in the same milestone as its route; until then it is absent, and lint rule 6 fails on a row whose route does not exist. M1 ships the technical-writing and context rows; M2 adds define, plan, execute-plan, implement, diagnose, prove-it, self-review and recall, and M2b parallel-work (Task 16g, the user's "Add a kernel row": a typed "in parallel" had no row); M3 adds pr-review, take-feedback and decision-log; M6 adds write-skill.
 
-`route.<name>` in settings replaces a row's target with a project skill or `off`. The override is rendered into the settings summary, not the table, so the table text is identical across projects. Every route file opens with a numbered `## Steps` list; the linter checks it.
+`overrides.<job>` in settings names a project skill that replaces the job's route; `off` means no override, so kern's route stays and a project skill with the job's name is not matched. `route.<name>` was dropped (Task 17a P13, the user's "No override", 2026-10-22). The override is rendered into the settings summary, not the table, so the table text is identical across projects. Every route file opens with a numbered `## Steps` list; the linter checks it.
 
 ### 4.4 Subagent kernel
 
@@ -267,7 +267,7 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 | Modes | `mode.voice`, `mode.surface` | `normal`, `auto` | session-start, prompt-submit |
 | Learning | `lessons` | `.kern/lessons.md` | retro, correct |
 | Learning | `rule_bar` | 3 occurrences or 1 severe incident for prose; 2 for a mechanism | retro, correct |
-| Overrides | `overrides.<job>`, `route.<name>` | None | kernel, all |
+| Overrides | `overrides.<job>` (`off`: no override); `route.<name>` dropped in Task 17a P13 | None | kernel, all |
 | Stack | `stack` | Detected | architect, build-ui, implement |
 | Switch | `kern` | `on`; `off` disables kern in this project | all hooks |
 
