@@ -10,9 +10,9 @@ import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
-import { caseInputs, changedCases, rangeSources, treeSource } from './case-inputs.mjs';
+import { caseInputs, changedCases, rangeSources, skillHashes, touchedSkills, treeSource } from './case-inputs.mjs';
 import { filesVersion, openRun, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
-import { limiter, ordered } from './pool.mjs';
+import { limiter, ordered, tracker } from './pool.mjs';
 import { COPY_OMITS, dirtyRefusal, treeRecord } from './run-record.mjs';
 import { ISOLATION, PERMISSIONS, claudeVersion, evalConfigProblem, finalText, pluginProblem, runClaudeAsync, runProblem, toolUses, workspace } from './claude-run.mjs';
 
@@ -703,7 +703,9 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
   // session keeps what --regrade needs to judge the run again: its exit, its stderr's tail and the plugin it loaded.
   const runUnit = async (c, i) => {
     const unit = `${c.id}-${i}`;
-    const record = (r, session) => ({ valid: !r.invalid, run: r, session, expectations: c.expectations });
+    // touched: the kern skills the run read, each with its hash now, so a cached run goes stale when one changes.
+    const record = (r, session, events = []) => ({ valid: !r.invalid, run: r, session, expectations: c.expectations,
+      touched: Object.fromEntries(touchedSkills(events, hashes).map((n) => [n, hashes.get(n)])) });
     const cwd = caseWorkspace(root, c);
     const gdir = mkdtempSync(join(tmpdir(), 'g-'));
     try {
@@ -728,14 +730,24 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
           });
         } catch (e) { if (e.fatal) throw e; invalid = true; reason = e.message; }
       }
-      return record({ invalid, reason, verdict, exit: r ? r.status : null }, r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin } : null);
+      return record({ invalid, reason, verdict, exit: r ? r.status : null }, r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin } : null, kept);
     } finally { rmSync(dirname(cwd), { recursive: true, force: true }); rmSync(gdir, { recursive: true, force: true }); }
   };
   const src = treeSource(root);
+  const hashes = skillHashes(src);
+  const fresh = (rec) => Object.entries(rec.touched ?? {}).every(([n, h]) => hashes.get(n) === h);
   const graderVersion = filesVersion(root, BEHAVE_CODE, { grader: GRADER });
   const inputs = new Map(cases.map((c) => [c.id, caseInputs(src, caseParts(c)).hash]));
   const limit = limiter(JOBS);
   const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest, limit });
+  const specs = cases.map((c) => Array.from({ length: RUNS }, (_, i) => ({ name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.tree.json`],
+    key: unitKey({ runner: 'behave', inputs: inputs.get(c.id), case: c, model: MODEL, grader: graderVersion, claude, run: i }), fresh, work: () => runUnit(c, i) })));
+  if (manifest) {
+    const n = specs.flat().filter((s) => store.stale(s.name, s.key, fresh)).length;
+    if (n) log(`--resume: ${n} run(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again`);
+  }
+  // live: every unit going, so a fatal error waits for the sessions already running to finish and save.
+  const live = tracker();
   const units = [];
   let stop = null;
   const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
@@ -748,13 +760,10 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
     save(partial, false);
     log(`${caseLine(c, cr, runs)}${reuseNote(recs)}`);
   });
-  const jobs = cases.map((c, k) => Promise.all(Array.from({ length: RUNS }, (_, i) => store.unit({
-    name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.tree.json`],
-    key: unitKey({ runner: 'behave', inputs: inputs.get(c.id), case: c, model: MODEL, grader: graderVersion, claude, run: i }),
-    work: () => runUnit(c, i),
-  }))).then((recs) => emit(k, recs)).catch(fail));
+  const jobs = specs.map((runs, k) => Promise.all(runs.map((s) => live.track(store.unit(s)))).then((recs) => emit(k, recs)).catch(fail));
   try {
     await Promise.allSettled(jobs);
+    await live.idle();
     if (stop) throw stop;
   } finally { rmSync(dirname(plugin), { recursive: true, force: true }); }
   log(roundLine(units, Date.now() - t0, JOBS));

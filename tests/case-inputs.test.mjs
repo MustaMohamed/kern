@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { blobSha, caseInputs, changedCases, dirHash, rangeSources, skillClosure, treeSource } from '../scripts/lib/case-inputs.mjs';
+import { blobSha, caseInputs, changedCases, dirHash, rangeSources, skillClosure, skillHashes, touchedSkills, treeSource } from '../scripts/lib/case-inputs.mjs';
 
 const made = [];
 after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
@@ -144,4 +144,21 @@ test('rangeSources reads A..B, A...B and a lone rev (that rev against the workin
   write(root, { 'evals/fixtures/node-bug/untracked.js': 'new\n', 'skills/prove-it/SKILL.md': FILES['skills/prove-it/SKILL.md'] });
   assert.deepEqual(ids('HEAD'), ['p-diagnose', 'p-plan'], 'an untracked fixture file counts');
   for (const bad of ['nope', 'nope..HEAD', `${first}..nope`, '']) assert.throws(() => rangeSources(root, bad), /--changed: /, bad);
+});
+
+test('skillClosure follows a skill that routes to another by its bare name, as define and plan do', () => {
+  const root = repo();
+  write(root, { 'skills/define/SKILL.md': skill('define', 'A quick change: route to implement. An agreed spec routes to `plan`.'), 'skills/implement/SKILL.md': skill('implement', 'Build it.') });
+  assert.deepEqual(skillClosure(treeSource(root), ['define']), ['define', 'implement', 'plan']);
+});
+
+test('touchedSkills names each kern skill a run\'s tool calls read or called, and skillHashes gives each skill\'s hash', () => {
+  const src = treeSource(repo());
+  const call = (name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name, input }] } });
+  const events = [call('Read', { file_path: '/tmp/p/kern/skills/plan/SKILL.md' }), call('Bash', { command: 'cat /tmp/p/kern/skills/recall/references/x.md' }),
+    call('Skill', { skill: 'kern:prove-it' }), call('Read', { file_path: '/tmp/w/app/skills/none-such/SKILL.md' }), { type: 'user', message: { content: [{ type: 'tool_result', content: 'skills/diagnose/ in a result' }] } }];
+  assert.deepEqual(touchedSkills(events, skillHashes(src)), ['plan', 'prove-it', 'recall']);
+  const h = skillHashes(src);
+  assert.match(h.get('plan'), /^[0-9a-f]{64}$/);
+  assert.notEqual(h.get('plan'), h.get('recall'));
 });

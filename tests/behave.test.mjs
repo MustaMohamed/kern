@@ -1022,3 +1022,43 @@ test('every behave case names kern skills that exist, and its input hash can be 
     assert.match(caseInputs(src, caseParts(c)).hash, /^[0-9a-f]{64}$/, c.id);
   }
 });
+
+// Opus review of the fast rounds, Important 1: Promise.all over a case's runs rejects at the first fatal error; the
+// runner must still wait for a run already going, which saves its record, before it removes the plugin copy.
+test('a fatal error stops new runs, but a run already going finishes with its plugin copy in place and saves its record', async () => {
+  let pluginThere = null;
+  const run = async (opts) => {
+    if (isGrader(opts)) return runOf([resultEvent(graderReply(opts.prompts[0]))]);
+    if (opts.cwd && run.n++ === 1) throw new ClaudeRunError('claude stopped at a usage limit: x', true);
+    await new Promise((r) => setTimeout(r, 150));
+    pluginThere = existsSync(opts.pluginDirs[0]);
+    return runOf([...started(opts.pluginDirs), resultEvent('done')]);
+  };
+  run.n = 0;
+  const r = await drive({ argv: ['--runs', '2', '--jobs', '2', '--no-cache'], cases: [stubCase('x-1')], run });
+  try {
+    assert.match(String(r.thrown?.message), /usage limit/);
+    assert.equal(pluginThere, true, 'the plugin copy outlived the run');
+    assert.ok(existsSync(join(r.raw, 'x-1-0.result.json')), 'the run that was going saved its record');
+  } finally { r.done(); }
+});
+
+// Review, Important 2: a run that read a skill its case's closure does not name is cached only while that skill is
+// unchanged.
+test('a cached run is reused only while every kern skill it read is unchanged, and --resume says up front what it must run again', async () => {
+  const root = gitSandbox(ROOT);
+  try {
+    const reads = (opts) => runOf([...started(opts.pluginDirs), use('t1', 'Read', { file_path: `${opts.pluginDirs[0]}/skills/self-review/SKILL.md` }), back('t1', 'steps'), resultEvent('done')]);
+    const cases = [stubCase('x-reads', { skills: ['recall'] }), stubCase('x-quiet', { skills: ['recall'] })];
+    const arm = (opts) => (opts.prompts[0].includes('x-reads') ? reads(opts) : runOf([...started(opts.pluginDirs), resultEvent('done')]));
+    const first = await drive({ argv: ['--runs', '1'], cases, root, run: stubRun(arm).run });
+    assert.equal(first.code, 0, first.lines.join('\n'));
+    writeFileSync(join(root, 'skills', 'self-review', 'SKILL.md'), `${readFileSync(join(root, 'skills', 'self-review', 'SKILL.md'), 'utf8')}\nOne more line.\n`);
+    const second = stubRun(arm);
+    await drive({ argv: ['--runs', '1'], cases, root, run: second.run, dir: first.dir });
+    assert.deepEqual(second.calls.filter((o) => !isGrader(o)).map((o) => o.prompts[0]), ['fix it (x-reads)'], 'only the run that read self-review ran again');
+    const resumed = await drive({ argv: ['--resume', first.raw], cases, root, dir: first.dir, version: '10.0.0 (stand-in)' });
+    assert.match(resumed.lines[0], /^--resume: 2 run\(s\) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again$/);
+    first.done();
+  } finally { rmSync(dirname(root), { recursive: true, force: true }); }
+});

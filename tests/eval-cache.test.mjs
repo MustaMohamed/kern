@@ -157,3 +157,20 @@ test('openRun reads run.json, or the one run-*.json a shared results dir holds, 
   assert.equal(openRun(join(dir, 'run-sonnet-5-5-review.json'), 'h2h').dir, dir);
 });
 
+
+test('unitStore reuses a record only while fresh says so, from the cache and from a resumed dir alike, and counts stale resumes', async () => {
+  const raw = scratch();
+  const cache = join(scratch(), 'cache');
+  const store = unitStore({ raw, cache, from: 'x' });
+  await store.unit({ name: 'a', key: 'k', work: async () => ({ valid: true, touched: { plan: 'h1' } }) });
+  const now = (h) => (rec) => rec.touched.plan === h;
+  const again = unitStore({ raw: scratch(), cache, from: 'y' });
+  assert.equal((await again.unit({ name: 'a', key: 'k', fresh: now('h1'), work: async () => ({ valid: true, touched: { plan: 'h1' } }) })).how, 'cache');
+  assert.equal((await again.unit({ name: 'a', key: 'k', fresh: now('h2'), work: async () => ({ valid: true, touched: { plan: 'h2' } }) })).how, 'ran', 'a skill the run read has changed');
+  const resumed = unitStore({ raw, cache: join(scratch(), 'none'), from: 'x', resume: true });
+  assert.equal(resumed.stale('a', 'k', now('h1')), false);
+  assert.equal(resumed.stale('a', 'k', now('h2')), true);
+  assert.equal(resumed.stale('a', 'k2', now('h1')), true, 'its key no longer matches');
+  assert.equal(resumed.stale('b', 'k', now('h1')), false, 'no record is no stale record');
+  assert.equal((await resumed.unit({ name: 'a', key: 'k', fresh: now('h2'), work: async () => ({ valid: true, touched: { plan: 'h2' } }) })).how, 'ran');
+});

@@ -1,7 +1,7 @@
 // tests/pool.test.mjs: the session pool every eval runner shares (scripts/lib/pool.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { limiter, ordered } from '../scripts/lib/pool.mjs';
+import { limiter, ordered, tracker } from '../scripts/lib/pool.mjs';
 
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 // gate(): a promise and the function that settles it, so a test decides when a job ends.
@@ -99,4 +99,14 @@ test('ordered emits each index in order, as soon as every earlier one is done', 
   done(3, 'd');
   assert.deepEqual(out.map(([i]) => i), [0, 1, 2, 3]);
   assert.throws(() => done(3, 'again'), /ordered: index 3 done twice/);
+});
+
+test('tracker waits for every promise it tracks, ones tracked while it waits included', async () => {
+  const live = tracker();
+  const order = [];
+  live.track(new Promise((r) => setTimeout(() => { order.push('slow'); r(); }, 40)));
+  live.track(Promise.reject(new Error('fatal'))).catch(() => order.push('fatal'));
+  setTimeout(() => live.track(new Promise((r) => setTimeout(() => { order.push('late'); r(); }, 60))), 10);
+  await live.idle();
+  assert.deepEqual(order, ['fatal', 'slow', 'late']);
 });

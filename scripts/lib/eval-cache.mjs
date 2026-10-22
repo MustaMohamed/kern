@@ -116,8 +116,11 @@ export function lockedUpdate(file, update, { waitMs = 30000, staleMs = 60000 } =
   } finally { rmSync(lock, { recursive: true, force: true }); }
 }
 
-// unitStore({ raw, cache, from, noCache, resume, limit }): { unit({ name, key, files, work, priority }) } for one run
-// whose results dir is raw. unit gives the unit's record, with how it was got: 'resume', 'cache' or 'ran'.
+// unitStore({ raw, cache, from, noCache, resume, limit }): { unit({ name, key, files, work, priority, fresh }), stale(name,
+// key, fresh) } for one run whose results dir is raw. unit gives the unit's record, with how it was got: 'resume',
+// 'cache' or 'ran'. fresh(record), when given, must also hold for a record to be reused: a run's record names the kern
+// skills it touched (case-inputs.mjs touchedSkills), and one of them that changed since makes it stale. stale says
+// whether raw holds a valid record for the unit that --resume would not keep, for a runner to say so before it spends.
 // - resume (--resume): raw's own record for the unit, kept as it is when it is valid and has this key; a record
 //   whose key differs is stale, since the unit's inputs changed after it ran.
 // - Else, unless noCache, a cache entry under key: its record, marked cached ({ from, at } of the run that made
@@ -131,14 +134,18 @@ export function lockedUpdate(file, update, { waitMs = 30000, staleMs = 60000 } =
 // ran is written, and cached, before its slot is handed on.
 export function unitStore({ raw, cache, from, noCache = false, resume = false, limit = null }) {
   return {
-    async unit({ name, key, files = [], work, priority = 0 }) {
+    stale(name, key, fresh = () => true) {
+      const r = readRecord(raw, name);
+      return !!r?.valid && (r.key !== key || !fresh(r));
+    },
+    async unit({ name, key, files = [], work, priority = 0, fresh = () => true }) {
       const pairs = files.map((f) => (Array.isArray(f) ? f : [f, f]));
       if (resume) {
         const r = readRecord(raw, name);
-        if (r?.valid && r.key === key) return { ...r, how: 'resume' };
+        if (r?.valid && r.key === key && fresh(r)) return { ...r, how: 'resume' };
       }
       const hit = noCache ? null : cacheGet(cache, key);
-      if (hit?.record?.valid) {
+      if (hit?.record?.valid && fresh(hit.record)) {
         const rawName = new Map(pairs);
         for (const [n, p] of Object.entries(hit.files)) {
           const to = join(raw, rawName.get(n) ?? n);

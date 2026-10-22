@@ -1901,3 +1901,16 @@ test('exec-eval --quick writes its snapshot beside its replies, a second run reu
   const before = JSON.parse(readFileSync(join(replies, 'snapshot.json'), 'utf8')).results;
   assert.deepEqual(again.map((r) => [r.id, r.pass, r.invalid]), before.map((r) => [r.id, r.pass, r.invalid]));
 });
+
+test('exec-eval --resume runs on the model its run.json names, not on today\'s KERN_EVAL_MODEL', () => {
+  const stub = recordingClaude(true);
+  const run = (env, ...a) => spawnSync(process.execPath, [EXEC(), ...a], { env: { ...stub.env, ...env }, encoding: 'utf8', timeout: 120000 });
+  // commit-work-file turns autopilot on, which the stand-in never does, so the case is INVALID and a resume reruns it.
+  const first = run({ KERN_EVAL_MODEL: 'claude-model-a' }, '--case', 'commit-work-file', '--no-cache');
+  assert.match(first.stdout, /^INVALID commit-work-file/m, `${first.stdout}${first.stderr}`);
+  const replies = first.stdout.match(/^replies: (.*)$/m)[1];
+  const again = run({ KERN_EVAL_MODEL: 'claude-model-b' }, '--resume', replies);
+  assert.match(again.stdout, /^INVALID commit-work-file/m, `${again.stdout}${again.stderr}`);
+  const argv = stub.seen().argv;
+  assert.equal(argv[argv.indexOf('--model') + 1], 'claude-model-a');
+});

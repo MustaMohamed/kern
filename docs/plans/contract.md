@@ -354,6 +354,7 @@ These supersede the "Additions from the M2 plan" entries above where they differ
   - `scripts/lib/pool.mjs`:
     - `limiter(n)` → `{ run(fn, { priority }), close(err) }`. At most n fns run at once; a free slot goes to the highest priority, then to the earliest queued. A slot is handed on at setImmediate.
     - `ordered(count, emit)` → `done(i, value)`, which emits in index order.
+    - `tracker()` → `{ track(p), idle() }`. A runner awaits `idle()` before it cleans up after a fatal error.
   - `claude-run.runClaudeAsync(opts)`: runClaude's argv, guards, result and ClaudeRunErrors, on spawn. The two share `prepare` and `ended`.
   - `args.LOOP_FLAGS`: `--jobs` (`jobs`, default 6), `--quick` (`quick`), `--changed <range>` (`changed`), `--regrade <dir>` (`regrade`), `--resume <dir>` (`resume`) and `--no-cache` (`noCache`).
   - `args.loopProblem(o, { select })` gives the usage message for flags that do not go together. `select` maps each case-filter key to its flag.
@@ -364,15 +365,17 @@ These supersede the "Additions from the M2 plan" entries above where they differ
     - `caseInputs(src, { skills, entries, paths }, kernSrc)` → `{ hash, skills }`;
     - `dirHash(dir, omit)`;
     - `rangeSources(root, range)` → `{ before, after }`, taking `A..B`, `A...B` or a lone rev against the working tree;
-    - `changedCases(cases, partsOf, before, after)`.
+    - `changedCases(cases, partsOf, before, after)`;
+    - `skillHashes(src)` and `touchedSkills(events, hashes)`. A unit record's `touched` maps each kern skill the run read or called to its hash. The closure follows `skills/<n>/`, `kern:<n>` and "route(s|d) to <n>".
   - Each runner's case parts are `behave.caseParts(c)` (with `caseSkills(c)`), `adherence.adherenceParts(c)`, `exec-run.execParts(c)` and `h2h.taskParts(t)` (with `CATEGORY_SKILLS`). Each evals/behave case names its `skills`.
   - `scripts/lib/eval-cache.mjs` exports:
     - `unitKey(parts)`;
     - `filesVersion(root, files, extra)`;
     - `cacheGet(cache, key)` and `cachePut(cache, key, record, files)`;
     - `writeRecord` and `readRecord` for `<dir>/<unit>.result.json`;
-    - `writeManifest` and `readManifest(dir, runner)` for `<dir>/run.json`, which holds `{ runner, date, started, resumed?, claude, kern, options }`;
-    - `unitStore({ raw, cache, from, noCache, resume, limit })` → `unit({ name, key, files, work, priority })`, whose record carries `how` (`resume`, `cache` or `ran`);
+    - `writeManifest(dir, m, name)` for `<dir>/run.json` (h2h: `run-<model>-<filter>.json`), which holds `{ runner, date, started, resumed?, claude, kern, options }`, and `openRun(path, runner)` → `{ m, dir, file }` (`readManifest` gives `m`);
+    - `lockedUpdate(file, update)`, a mkdir-locked read-modify-write; h2h merges `key.json` with it;
+    - `unitStore({ raw, cache, from, noCache, resume, limit })` → `{ unit({ name, key, files, work, priority, fresh }), stale(name, key, fresh) }`. A unit's record carries `how` (`resume`, `cache` or `ran`).
     - `timeStamp(now)`, `reuseNote(units)` and `roundLine(units, ms, jobs)`.
   - The cache is `evals/results/cache/<behave|adherence|h2h|exec>/<key[0:2]>/<key>/`.
   - The seams `behaveMain`, `adherenceMain` and `h2hMain` return a promise of the exit code and take `cache`. `exec-run.runEval` is async and takes `jobs`, `limit`, `snapshot` (`committed`, `beside` or `none`), `mode` and `unit`. `exec-run.parseArgs` adds each loop flag given.

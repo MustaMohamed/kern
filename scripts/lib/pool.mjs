@@ -58,3 +58,19 @@ export function ordered(count, emit) {
     }
   };
 }
+
+// tracker(): { track(p), idle() }. track returns p; idle() settles once every promise tracked so far, and any tracked
+// while it waits, has settled. A runner waits on it after a fatal error: Promise.all over a case's runs rejects at the
+// first failure, and a session still running must finish and save its record before the runner cleans up.
+export function tracker() {
+  const live = new Set();
+  return {
+    track(p) {
+      live.add(p);
+      const drop = () => live.delete(p);
+      p.then(drop, drop);
+      return p;
+    },
+    async idle() { while (live.size) await Promise.allSettled([...live]); },
+  };
+}

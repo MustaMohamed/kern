@@ -5,15 +5,16 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 ## [Unreleased]
 
 - Fast eval rounds (after Task 17a). exec-eval, behave, kernel-adherence and h2h share these flags, so a paid round no longer runs one session at a time:
-  - **Pool.** `--jobs N` runs N sessions at once (default 6) on `runClaudeAsync`, which keeps runClaude's guards and end rules. Results, log lines and snapshots keep case order. An h2h task-run runs its arms side by side, and its grader call jumps the queue. A fatal error stops new sessions; the running ones finish and save.
+  - **Pool.** `--jobs N` runs N sessions at once (default 6) on `runClaudeAsync`, which keeps runClaude's guards and end rules. Results, log lines and snapshots keep case order. An h2h task-run runs its arms side by side, and its grader call jumps the queue. A fatal error stops new sessions; the running ones finish and save their records before the runner cleans up.
   - **Quick and changed rounds.** `--quick` runs each case once. `--changed <range>` runs only the cases whose inputs changed in a git range (`A..B`, `A...B`, or a lone rev against the working tree). A case's inputs are:
     - every plugin-copy file outside `skills/`;
     - the frontmatter of every SKILL.md;
-    - the folders of the skills it routes to and of each skill those name;
+    - the folders of the skills it routes to and of each skill those name, by path, as `kern:<name>`, or as a route ("route to implement");
     - its fixtures and its own case entry.
     Neither kind writes `evals/snapshots/`: each writes to its own results dir beside the transcripts. A quick run may measure a dirty tree. Each behave case now names its skills (`skills`).
-  - **Cache.** A unit whose key matches a valid cached result is reused, its transcripts copied in, unless `--no-cache`. A unit is a run, an exec case, or an h2h arm attempt or grade. The key holds the case's inputs and text, the model, the Claude Code version, the run's index and the grader version. The grader version is the runner's code and the grader model. An invalid unit is never cached. The cache lives in `evals/results/cache/<runner>/`.
-  - **Resume.** Each unit's record goes beside its transcripts, and `run.json` keeps the run's options. `--resume <dir>` reruns only the units with no valid result and finishes that run, its committed snapshot included for a gating run.
+  - **Cache.** A unit whose key matches a valid cached result is reused, its transcripts copied in, unless `--no-cache`. A unit is a run, an exec case, or an h2h arm attempt or grade. The key holds the case's inputs and text, the model, the Claude Code version, the run's index and the grader version. The grader version is the runner's code and the grader model. An invalid unit is never cached. A cached or resumed run is reused only while every kern skill it read or called is unchanged, so a routing the inputs miss still makes it stale. The cache lives in `evals/results/cache/<runner>/`.
+  - **Resume.** Each unit's record goes beside its transcripts, and `run.json` keeps the run's options. `--resume <dir>` reruns only the units with no valid result and finishes that run, its committed snapshot included for a gating run. Before it runs, it says how many records no longer match and will run again. A resumed exec run keeps its model.
+  - **h2h categories at once.** Runs of two categories share the day's results dir. Each writes its own `run-<model>-<filter>.json`, and `key.json` is merged under a lock. `--resume` and `--regrade` take that file, or a dir holding one run.
   - **Regrade.** `--regrade <dir>` grades saved transcripts again with today's graders and scripted checks, and starts no session. Its result goes to `regrade-<HHMMSS>.json` beside them, never `evals/snapshots/`.
     - **exec:** each case now also keeps its gh log, kern's state file and its final workspace and origin.
     - **behave:** a model verdict is reused only for an expectation whose text is unchanged.

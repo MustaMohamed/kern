@@ -32,7 +32,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { pluginCopy } from './lib/behave.mjs';
-import { caseInputs, changedCases, rangeSources, treeSource } from './lib/case-inputs.mjs';
+import { caseInputs, changedCases, rangeSources, skillHashes, touchedSkills, treeSource } from './lib/case-inputs.mjs';
 import { filesVersion, openRun, timeStamp, unitKey, unitStore, writeManifest } from './lib/eval-cache.mjs';
 import { limiter } from './lib/pool.mjs';
 import { dirtyRefusal, treeRecord } from './lib/run-record.mjs';
@@ -42,7 +42,6 @@ import { UsageError, caseEnv, casePrompts, claudeConfigDir, dateStamp, execParts
   userSettingsProblem, writeEvents, writeReply, writeTrace } from './lib/exec-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const MODEL = process.env.KERN_EVAL_MODEL || 'claude-sonnet-5-5';
 const all = JSON.parse(readFileSync(join(ROOT, 'evals', 'exec', 'cases.json'), 'utf8'));
 for (const c of all) if (!GRADERS[c.id]) throw new Error(`no grader for ${c.id}`);
 // EXEC_CODE: the files whose code runs and grades a case; their content is part of each case's cache key.
@@ -67,6 +66,8 @@ if (opts.resume !== undefined) {
   try { ({ m: manifest, dir: resumeDir } = openRun(opts.resume, 'exec')); } catch (e) { if (e instanceof UsageError) usage(e.message); throw e; }
   opts = { ...manifest.options, jobs: opts.jobs ?? manifest.options.jobs, noCache: !!opts.noCache };
 }
+// A resumed run keeps the model it started on, whatever KERN_EVAL_MODEL says now.
+const MODEL = manifest?.options.model ?? (process.env.KERN_EVAL_MODEL || 'claude-sonnet-5-5');
 let cases;
 if (manifest) cases = all.filter((c) => manifest.options.ids.includes(c.id));
 else if (opts.changed !== undefined) {
@@ -169,7 +170,8 @@ async function runCase(c, save) {
     });
     return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
       commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command),
-      session: { status: run.status, badLines: run.badLines, stderr: run.stderr.slice(-4000), plugin: kern } };
+      session: { status: run.status, badLines: run.badLines, stderr: run.stderr.slice(-4000), plugin: kern },
+      touched: Object.fromEntries(touchedSkills(run.events, hashes).map((n) => [n, hashes.get(n)])) };
   } finally {
     for (const p of temp) { rmSync(p, { recursive: true, force: true }); guard.drop(p); }
   }
@@ -187,6 +189,10 @@ const limit = limiter(opts.jobs ?? 6);
 let claude = null;
 let store = null;
 let inputs = null;
+let hashes = null;
+// fresh(rec): every kern skill the case's run read is unchanged since.
+const fresh = (rec) => Object.entries(rec.touched ?? {}).every(([n, h]) => hashes.get(n) === h);
+const keyOf = (c) => unitKey({ runner: 'exec', inputs: inputs.get(c.id), case: c, model: MODEL, code, claude, userSettings });
 const readVersion = () => {
   claude = claudeVersion();
   writeManifest(REPLIES, { runner: 'exec', date: DATE, started: manifest?.started ?? now.toISOString(), ...(manifest ? { resumed: [...(manifest.resumed ?? []), now.toISOString()] } : {}),
@@ -194,15 +200,18 @@ const readVersion = () => {
       allowDirty: !!opts.allowDirty, ids: cases.map((c) => c.id) } });
   store = unitStore({ raw: REPLIES, cache: join(ROOT, 'evals', 'results', 'cache', 'exec'), from: basename(REPLIES), noCache: !!opts.noCache, resume: !!manifest, limit });
   const src = treeSource(ROOT);
+  hashes = skillHashes(src);
   inputs = new Map(cases.map((c) => [c.id, caseInputs(src, execParts(c)).hash]));
+  const stale = manifest ? cases.filter((c) => store.stale(c.id, keyOf(c), fresh)).length : 0;
+  if (stale) console.log(`--resume: ${stale} case(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again`);
   return claude;
 };
 const code = filesVersion(ROOT, EXEC_CODE);
 const unit = async (c, work) => {
   const rec = await store.unit({
     name: c.id, files: ['txt', 'events.jsonl', 'trace.jsonl', 'gh.log', 'state', 'ws'].map((x) => `${c.id}.${x}`),
-    key: unitKey({ runner: 'exec', inputs: inputs.get(c.id), case: c, model: MODEL, code, claude, userSettings }),
-    work: async () => { const { session, ...result } = await work(); return { valid: !result.invalid, result, session }; },
+    key: keyOf(c), fresh,
+    work: async () => { const { session, touched, ...result } = await work(); return { valid: !result.invalid, result, session, touched }; },
   });
   return { ...rec.result, ...(rec.cached ? { cached: rec.cached } : {}), how: rec.how };
 };

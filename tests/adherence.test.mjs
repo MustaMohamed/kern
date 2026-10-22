@@ -629,3 +629,17 @@ test('every adherence case\'s input hash can be read', () => {
   const src = treeSource(ROOT);
   for (const c of JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'))) assert.match(caseInputs(src, adherenceParts(c)).hash, /^[0-9a-f]{64}$/, c.id);
 });
+
+test('a fatal adherence error waits for the run already going, which saves its record', async () => {
+  let n = 0;
+  const run = async (opts) => {
+    if (n++ === 1) throw new ClaudeRunError('claude stopped at a usage limit: x', true);
+    await new Promise((r) => setTimeout(r, 150));
+    return answer('pass', opts);
+  };
+  const r = await driveAdherence({ argv: ['--runs', '2', '--jobs', '2', '--no-cache'], run });
+  try {
+    assert.match(String(r.thrown?.message), /usage limit/);
+    assert.ok(existsSync(join(r.results, 'adherence-routed-sonnet-5-5-2026-10-22', 'row-x-0.result.json')));
+  } finally { r.done(); }
+});

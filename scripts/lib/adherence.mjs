@@ -11,9 +11,9 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
-import { caseInputs, changedCases, rangeSources, treeSource } from './case-inputs.mjs';
+import { caseInputs, changedCases, rangeSources, skillHashes, touchedSkills, treeSource } from './case-inputs.mjs';
 import { filesVersion, openRun, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
-import { limiter, ordered } from './pool.mjs';
+import { limiter, ordered, tracker } from './pool.mjs';
 import { caseResult, pluginCopy, stage } from './behave.mjs';
 import { dirtyRefusal, treeRecord } from './run-record.mjs';
 import { ISOLATION, PERMISSIONS, claudeVersion, countProblem, evalConfigProblem, pluginProblem, promptResult, runClaudeAsync, runProblem, toolUses, workspace } from './claude-run.mjs';
@@ -420,7 +420,8 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
       if (events.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), events.map((x) => JSON.stringify(x)).join('\n') + '\n');
       const g = r && !failure ? gradeCase(c, r.events, text, pluginRoot) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
       const detail = { pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: r ? r.status : null, invalid: !!failure };
-      return { valid: !failure, run: detail, session: r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin: pluginRoot } : null, text };
+      return { valid: !failure, run: detail, session: r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin: pluginRoot } : null, text,
+        touched: Object.fromEntries(touchedSkills(events, hashes).map((n) => [n, hashes.get(n)])) };
     } finally {
       if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
       if (cwd) rmSync(dirname(cwd), { recursive: true, force: true });
@@ -428,10 +429,20 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
   };
   const src = treeSource(root);
   const kernSrc = PLUGIN === root ? src : treeSource(PLUGIN);
+  const hashes = skillHashes(kernSrc);
+  const fresh = (rec) => Object.entries(rec.touched ?? {}).every(([n, h]) => hashes.get(n) === h);
   const code = filesVersion(root, ADHERENCE_CODE);
   const inputs = new Map(cases.map((c) => [c.id, caseInputs(src, adherenceParts(c), kernSrc).hash]));
   const limit = limiter(JOBS);
   const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest, limit });
+  const specs = cases.map((c) => Array.from({ length: RUNS }, (_, i) => ({ name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`],
+    key: unitKey({ runner: 'adherence', inputs: inputs.get(c.id), case: c, model: MODEL, variant: VARIANT, code, claude, run: i }), fresh, work: () => runUnit(c, i) })));
+  if (manifest) {
+    const n = specs.flat().filter((s) => store.stale(s.name, s.key, fresh)).length;
+    if (n) log(`--resume: ${n} run(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again`);
+  }
+  // live: every unit going, so a fatal error waits for the sessions already running to finish and save.
+  const live = tracker();
   const units = [];
   let stop = null;
   const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
@@ -443,13 +454,10 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
     save(progress, false);
     log(`${caseLine(c, results.at(-1))}${reuseNote(recs)}`);
   });
-  const jobs = cases.map((c, k) => Promise.all(Array.from({ length: RUNS }, (_, i) => store.unit({
-    name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`],
-    key: unitKey({ runner: 'adherence', inputs: inputs.get(c.id), case: c, model: MODEL, variant: VARIANT, code, claude, run: i }),
-    work: () => runUnit(c, i),
-  }))).then((recs) => emit(k, recs)).catch(fail));
+  const jobs = specs.map((runs, k) => Promise.all(runs.map((s) => live.track(store.unit(s)))).then((recs) => emit(k, recs)).catch(fail));
   try {
     await Promise.allSettled(jobs);
+    await live.idle();
     if (stop) throw stop;
   } finally { removeTemp(dirname(pluginRoot)); }
   log(roundLine(units, Date.now() - t0, JOBS));

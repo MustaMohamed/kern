@@ -920,3 +920,36 @@ test('h2h runs of two categories at once share the day\'s dir: each keeps its ow
     assert.match(regraded.lines.at(-1), /regrade-sonnet-5-5-plan-120000\.json$/);
   } finally { rmSync(dir, { recursive: true, force: true }); for (const t of [p, v]) rmSync(t.dir, { recursive: true, force: true }); }
 });
+
+test('a fatal error in one arm waits for the other arm\'s session, which saves its record', async () => {
+  const p = synthTask('plan');
+  const arm = async (opts) => {
+    if (!opts.pluginDirs.length) throw new ClaudeRunError('claude stopped at a usage limit: x', true);
+    await new Promise((r) => setTimeout(r, 150));
+    return plainArm(opts);
+  };
+  const r = await driveH2H({ argv: ['--runs', '1', '--no-cache'], tasks: [p], arm });
+  try {
+    assert.match(String(r.thrown?.message), /usage limit/);
+    assert.ok(existsSync(join(r.raw, `${p.id.replace('/', '--')}-0-kern.result.json`)), 'the kern arm saved its record');
+  } finally { r.done(); }
+});
+
+test('an h2h rubric edit in task.json asks the grader again but reruns no arm; a floor-scan rule edit reruns every arm', async () => {
+  const root = gitSandbox(ROOT);
+  const d = synthTask('diagnose');
+  try {
+    writeFileSync(join(d.dir, 'task.json'), JSON.stringify({ ...d, dir: undefined }));
+    const arm = (opts) => { writeFileSync(join(opts.cwd, 'src', 'a.js'), 'export const a = 2;\n'); return plainArm(opts); };
+    const first = await driveH2H({ tasks: [d], arm, root, keep: true });
+    assert.equal(first.code, 0, first.lines.join('\n'));
+    const t2 = { ...d, rubric: ['does it well'] };
+    writeFileSync(join(d.dir, 'task.json'), JSON.stringify({ ...t2, dir: undefined }));
+    const rubric = await driveH2H({ tasks: [t2], arm, root, dir: first.dir, keep: true });
+    assert.deepEqual([rubric.calls.filter((o) => !isGrader(o)).length, rubric.graderPrompts.length], [0, 1]);
+    writeFileSync(join(root, 'scripts', 'lib', 'floor-scan.awk'), `${readFileSync(join(root, 'scripts', 'lib', 'floor-scan.awk'), 'utf8')}\n# a rule changed\n`);
+    const scan = await driveH2H({ tasks: [t2], arm, root, dir: first.dir, keep: true });
+    assert.equal(scan.calls.filter((o) => !isGrader(o)).length, 2, 'both arms\' floor hits come from the new scanner');
+    first.done();
+  } finally { rmSync(dirname(root), { recursive: true, force: true }); rmSync(d.dir, { recursive: true, force: true }); }
+});

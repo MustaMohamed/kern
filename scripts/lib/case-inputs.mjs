@@ -5,7 +5,8 @@
 //   away, so each counts for every case.
 // - the frontmatter of every SKILL.md, which every session lists;
 // - the whole folder of each skill the case routes to, and of each skill those folders name, by path
-//   (skills/<name>/) or as kern:<name>, followed to the end (skillClosure);
+//   (skills/<name>/), as kern:<name>, or as a route to it ("route to implement", "routes to `plan`"), followed to
+//   the end (skillClosure);
 // - its fixtures and its own case entry.
 // A file the plugin copy leaves out (COPY_OMITS) is no input, and another skill's body is none either. A
 // file is hashed as git hashes a blob, with its mode, so a commit (git ls-tree) and the working tree compare
@@ -94,11 +95,11 @@ function kern(src) {
   const named = (s) => {
     if (!refs.has(s)) {
       const text = skillFiles.get(s).map(([p]) => src.text(p) ?? '').filter((t) => !t.includes('\0')).join('\n');
-      refs.set(s, names.filter((n) => n !== s && (text.includes(`skills/${n}/`) || new RegExp(`\\bkern:${n}(?![\\w-])`).test(text))));
+      refs.set(s, names.filter((n) => n !== s && (text.includes(`skills/${n}/`) || new RegExp(`\\bkern:${n}(?![\\w-])|\\broute[sd]? to \`?${n}(?![\\w-])`, 'i').test(text))));
     }
     return refs.get(s);
   };
-  src.kern = { names, skillFiles, named,
+  src.kern = { names, skillFiles, named, hashes: new Map(names.map((n) => [n, sha256(JSON.stringify(skillFiles.get(n)))])),
     core: sha256(JSON.stringify(files.filter(([p]) => !p.startsWith('skills/')))),
     front: sha256(JSON.stringify(front)) };
   return src.kern;
@@ -135,10 +136,30 @@ export function caseInputs(src, { skills = [], entries = [], paths = [] }, kernS
     return found === undefined ? null : sha256(canonical(found));
   };
   const parts = { core: k.core, front: k.front,
-    skills: closure.map((s) => [s, sha256(JSON.stringify(k.skillFiles.get(s)))]),
+    skills: closure.map((s) => [s, k.hashes.get(s)]),
     entries: entries.map((e) => [e.file, entry(e)]),
     paths: paths.map((p) => [p, sha256(JSON.stringify(src.list(p)))]) };
   return { hash: sha256(JSON.stringify(parts)), skills: closure };
+}
+
+// skillHashes(src): each kern skill's name to the hash of its folder's files.
+export const skillHashes = (src) => kern(src).hashes;
+
+// touchedSkills(events, hashes): the kern skills (hashes' names) a run's tool calls read or called, sorted: a call
+// whose input names skills/<name>/ (a Read, a Bash cat, a Grep path), or a Skill call of kern:<name>. A routing the
+// static closure misses (the kernel sending a plan task to define) shows here, so a cached run stays valid only while
+// every skill it touched is unchanged (eval-cache.mjs unitStore's fresh).
+export function touchedSkills(events, hashes) {
+  const seen = new Set();
+  for (const e of events) {
+    if (e?.type !== 'assistant') continue;
+    for (const c of e.message?.content ?? []) {
+      if (c?.type !== 'tool_use') continue;
+      const input = JSON.stringify(c.input ?? {});
+      for (const n of hashes.keys()) if (input.includes(`skills/${n}/`) || (c.name === 'Skill' && c.input?.skill === `kern:${n}`)) seen.add(n);
+    }
+  }
+  return [...seen].sort();
 }
 
 // dirHash(dir, omit): the hash of every file under dir, .git and each top-level name in omit left out: another
