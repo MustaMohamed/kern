@@ -380,6 +380,32 @@ g00_all() {
     "$(printf '%s\n' "x=\$(cat <<'H'" '[$(git push --force origin main)]' 'H' '); echo $((x))')"
 }
 
+@test "a zsh (e) flag or a bash @P transform that re-evaluates a stored string is denied under autopilot" {
+  # x='$(cmd)' stores the substitution as literal text. zsh's ${(e)x}, and any flag group that holds e
+  # (${(Le)x}), and bash 5.3's ${x@P} expand the value again and run cmd, as arithmetic runs a stored
+  # subscript; git_words reads the single quote as literal text (Opus audit A11). Outside autopilot no
+  # guard votes, an M3 limit. ${(L)x} and ${x@Q} run nothing in zsh, bash 3.2 or bash 5.3, and a flag
+  # group in single quotes is literal text.
+  local c
+  for c in 'x='\''$(git push --force origin main)'\''; echo ${(e)x}' \
+    'x='\''$(git push --force origin main)'\''; echo "${(Le)x}"' \
+    'x='\''$(git push --force origin main)'\''; echo ${x@P}'; do
+    set_autopilot on
+    gx "$c" ""
+    [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
+    [[ "$output" == *"G00: under autopilot kern denies what it cannot read: "*"re-evaluates a stored string"* ]] || { echo "on: $c -> $output"; return 1; }
+    set_autopilot off
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
+  done
+  set_autopilot on
+  for c in 'x='\''$(git push --force origin main)'\''; echo ${(L)x}' \
+    'x='\''$(git push --force origin main)'\''; echo ${x@Q}' "echo '\${(e)x}' '\${x@P}'"; do
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
 @test "a plain arithmetic builtin or a surfaced substitution is not denied by the builtin rule" {
   # The builtin-eval rule fires only on a hidden ($( ) or backtick in single quotes) construct, so a
   # plain let, read or [[ -eq ]], and a substitution git_words already surfaces (unquoted or in double

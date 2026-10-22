@@ -22,7 +22,11 @@
 #   inside single quotes, which the arithmetic re-runs though git_words read it as literal text; or it
 #   holds, in any single-quoted string, an array subscript that opens with a substitution ([$( or [`,
 #   optional spaces after [), whose value is stored and evaluated as arithmetic later. Reading the inner
-#   command exactly is not practical, so autopilot denies; interactively no guard votes (M3).
+#   command exactly is not practical, so autopilot denies; interactively no guard votes (M3);
+# - it holds, outside single quotes, a parameter expansion that re-evaluates the stored string it reads:
+#   a zsh flag group that holds e (${(e)x}, ${(Le)x}) or the bash @P transform (${x@P}). zsh and bash 5.3
+#   run a $( ) or backtick in the value, which git_words read where it was stored, often as literal
+#   single-quoted text. Autopilot denies; interactively no guard votes (M3).
 # Accepted limits, as a script file run by an interpreter is: the inline code, here-doc or pipe of an
 # interpreter other than a shell (python -c, node -e or -p, perl -e or -E, ruby -e, php -r, deno
 # eval, osascript -e, lua -e, R -e, julia -e, pwsh -c, `python3 - <<EOF`); a program or script
@@ -198,6 +202,24 @@ _G00_AWK='
     }
     return 0
   }
+  # g0_reeval(s): true when s holds, outside single quotes, a parameter expansion that re-evaluates the
+  # stored string it reads: a zsh flag group that holds e (${(e)x}, ${(Le)x}) or the bash @P transform
+  # (${x@P}). zsh and bash 5.3 then run a $( ) or backtick in the value, as arithmetic runs one in a
+  # stored subscript. A flag whose argument is an e (${(s:e:)x}) counts too; ${(L)x} and ${x@Q} do not.
+  function g0_reeval(s,   nn, C, i, c, q, t) {
+    nn = split(s, C, ""); q = ""
+    for (i = 1; i <= nn; i++) {
+      c = C[i]
+      if (q == sq) { if (c == sq) q = ""; continue }
+      if (c == "\\") { i++; continue }
+      if (c == "\"") { q = q == "\"" ? "" : "\""; continue }
+      if (c == sq && q == "") { q = sq; continue }
+      if (c != "$" || C[i + 1] != "{") continue
+      t = substr(s, i + 2)
+      if (t ~ /^[(][^)]*e/ || t ~ /^[^}]*@P[}]/) return 1
+    }
+    return 0
+  }
   # g0_judge(f, k, b): judges the shell b, of family f, at cw_w[k].
   function g0_judge(f, k, b,   s0, s1, src, w) {
     # su and runuser run a -c through a shell; fish also takes -C and --command. Any word may hold it.
@@ -238,6 +260,9 @@ _G00_AWK='
       next
     }
     if (g0_sqarr($0, 0)) { g0_out("a single-quoted array subscript holds a $( ) or backtick kern cannot read"); next }
+    # A zsh (e) flag or a bash @P transform re-evaluates its stored value, read on the raw record for the
+    # same reason: the value was stored as literal text, often in single quotes (Opus audit A11).
+    if (g0_reeval($0)) { g0_out("a zsh (e) flag or a bash @P transform re-evaluates a stored string kern cannot read"); next }
     sw(g0_flat($0)); cw_reset()
     for (k = 1; k <= sw_n; k++) cw(sw_w[k])
     # The redirections after the command name, and their targets, are not arguments.
