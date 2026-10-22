@@ -62,17 +62,32 @@ autopilot_text() {
 
 KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy delete.policy message.policy messaging.policy"
 
-# settings_summary: the Project settings block, at most 600 chars. Overrides and ignored floor keys come
-# before Set:, and only Set: is shortened to fit, a whole `key=value` entry at a time, so no other line
-# is cut and no character is split. The 600 counts the plugin root in the "more" note as {ROOT}, so the
-# entries kept do not depend on where kern is installed; the note prints the absolute path.
+# settings_summary: the Project settings block, at most 600 chars. Its lines: `Main worktree: <path>` only
+# when the session's cwd is not the main worktree root (cwd names it otherwise), or that this is not a git
+# repository; the settings files; Overrides; ignored floor keys; Set:; unknown keys. Set: lists known keys
+# whose value differs from a literal default (a Default cell that is one `value` in kernel/settings.md),
+# policy keys first. `overrides.<job>: off` is no override: kern's route stays, and a project skill with
+# the job's name is not matched. Over 600, each of Overrides, Set: and Unknown starts at its shortest form
+# and takes the room left in that order, so the Unknown list is cut first; a whole entry at a time, so no
+# character is split. A cut Overrides or Unknown list ends with `and N more` (`N not shown` when no entry
+# fits), a cut Set: with the "more" note. The main worktree, settings files and floor lines are never cut.
+# The 600 counts the plugin root in the note as {ROOT}, so the entries kept do not depend on where kern is
+# installed; the note prints the absolute path.
 settings_summary() {
-  local out="" f files="" k v job name dir seen="" line sets="" unknown floor tail="" room sep e
+  local out="" f files="" k v job name dir seen="" here root floor="" nl=$'\n' defaults unk ov="" pol="" oth=""
+  local ov_line="" floor_line="" set_line="" unk_line="" ov_full set_full unk_full ov_n set_n unk_n set_cut=""
+  local ov_least set_least unk_least part items pre sep sep2 rest e body least n line full room kept tail
   local more=" ... (more: bash {ROOT}/scripts/kern-get <key>)"
+  local ov_pre="${nl}Overrides (follow the project skill, say so in one line):" set_pre="${nl}Set:" unk_pre="${nl}Unknown keys, ignored:"
   if [ -z "${KERN_MAIN-}" ]; then
-    out="Not a git repository: user settings only."
+    out="Not a git repository: user settings only.$nl"
   else
-    out="Main worktree: $KERN_MAIN"
+    here=${CWD:-$PWD}
+    if [ "$here" != "$KERN_MAIN" ]; then
+      here=$(cd "$here" 2>/dev/null && pwd -P) || here=""
+      root=$(cd "$KERN_MAIN" 2>/dev/null && pwd -P) || root=$KERN_MAIN
+      [ -n "$here" ] && [ "$here" = "$root" ] || out="Main worktree: $KERN_MAIN$nl"
+    fi
   fi
   while IFS= read -r f; do
     [ -f "$f" ] || continue
@@ -82,8 +97,11 @@ settings_summary() {
   done <<EOT
 $(_settings_files)
 EOT
-  out="$out
-Settings files: ${files:-none; defaults apply}"
+  out="${out}Settings files: ${files:-none; defaults apply}"
+  # Unknown keys once each, floor keys left to their own line; `key value` for each literal default.
+  unk=$(settings_unknown_keys | env LC_ALL=C awk -F '\t' -v floor=" $KERN_FLOOR_KEYS " 'index(floor, " " $2 " ") == 0 && !s[$2]++ { print $2 }')
+  [ -z "$unk" ] || unk="$unk$nl"
+  defaults=$(sed -n 's/^| `\([^`]*\)` | `\([^`]*\)` |.*/\1 \2/p' "$KERN_ROOT/kernel/settings.md")
   while IFS= read -r f; do
     [ -f "$f" ] || continue
     while IFS= read -r k; do
@@ -91,73 +109,96 @@ Settings files: ${files:-none; defaults apply}"
       case " $seen " in *" $k "*) continue ;; esac
       seen="$seen $k"
       case " $KERN_FLOOR_KEYS " in *" $k "*) continue ;; esac
-      case "$k" in overrides.* | route.*) continue ;; esac
+      case "$k" in overrides.*) continue ;; esac
+      case "$nl$unk" in *"$nl$k$nl"*) continue ;; esac
       v=$(settings_get "$k") || continue
-      sets="$sets$k=$v
-"
+      case "$nl$defaults$nl" in *"$nl$k $v$nl"*) continue ;; esac
+      case "$k" in
+        *.policy | review.post_policy) pol="$pol$k=$v$nl" ;;
+        *) oth="$oth$k=$v$nl" ;;
+      esac
     done <<EOT
 $(settings_keys "$f")
 EOT
   done <<EOT
 $(_settings_files)
 EOT
-  line=""
   for dir in "$KERN_ROOT"/skills/*/; do
     job=$(basename "$dir")
     case "$job" in mode | autopilot | help) continue ;; esac
     name=$(settings_get "overrides.$job" '')
+    case "$name" in off) continue ;; esac
     if [ -z "$name" ] && [ -n "${KERN_MAIN-}" ]; then
       if [ -f "$KERN_MAIN/.claude/skills/$job/SKILL.md" ] || [ -f "$KERN_MAIN/.claude/commands/$job.md" ]; then
         name="$job"
       fi
     fi
-    [ -n "$name" ] && line="${line:+$line; }$job -> project skill $name"
+    [ -z "$name" ] || ov="$ov$job -> project skill $name$nl"
   done
-  [ -n "$line" ] && out="$out
-Overrides (follow the project skill, say so in one line): $line"
-  floor=""
   for k in $seen; do
     case " $KERN_FLOOR_KEYS " in *" $k "*) floor="${floor:+$floor, }$k" ;; esac
   done
-  [ -n "$floor" ] && out="$out
-Ignored, floor actions have no key: $floor"
-  line=""
-  for k in $seen; do
-    case "$k" in route.*) line="${line:+$line; }${k#route.} -> $(settings_get "$k")" ;; esac
-  done
-  [ -n "$line" ] && tail="$tail
-Routes: $line"
-  unknown=$(settings_unknown_keys | awk -F '\t' '{ print $2 }' | grep -v -x -F -e merge.policy -e deploy.policy -e production.policy -e force_push.policy -e delete.policy -e message.policy -e messaging.policy | paste -sd ',' - | sed 's/,/, /g')
-  [ -n "$unknown" ] && tail="$tail
-Unknown keys, ignored: $unknown"
-  if [ -n "$sets" ]; then
-    # Full Set: line first; if the block is over 600, keep the entries that fit and mark the rest.
-    line="
-Set:"
-    sep=" "
-    while IFS= read -r e; do
-      [ -n "$e" ] || continue
-      line="$line$sep$e"
-      sep="; "
-    done <<EOT
-$sets
-EOT
-    if [ $((${#out} + ${#line} + ${#tail})) -gt 600 ]; then
-      room=$((600 - ${#out} - ${#tail} - ${#more}))
-      line="
-Set:"
-      sep=" "
-      while IFS= read -r e; do
-        [ -n "$e" ] || continue
-        [ $((${#line} + ${#sep} + ${#e})) -le "$room" ] || break
-        line="$line$sep$e"
-        sep="; "
-      done <<EOT
-$sets
-EOT
-      line="$line${more%%"{ROOT}"*}$KERN_ROOT${more#*"{ROOT}"}"
+  [ -z "$floor" ] || floor_line="${nl}Ignored, floor actions have no key: $floor"
+  # Each list's full line, its entry count and its shortest form.
+  for part in ov set unk; do
+    case $part in
+      ov) items=$ov sep2="; " pre=$ov_pre ;;
+      set) items="$pol$oth" sep2="; " pre=$set_pre ;;
+      *) items=$unk sep2=", " pre=$unk_pre ;;
+    esac
+    body="" sep=" " rest=$items n=0 least=""
+    while [ -n "$rest" ]; do
+      body="$body$sep${rest%%"$nl"*}"
+      rest=${rest#*"$nl"}
+      sep=$sep2
+      n=$((n + 1))
+    done
+    if [ "$n" -gt 0 ]; then
+      body="$pre$body"
+      if [ "$part" = set ]; then least="$pre$more"; else least="$pre $n not shown"; fi
     fi
-    out="$out$line"
+    case $part in
+      ov) ov_line=$body ov_full=$body ov_n=$n ov_least=$least ;;
+      set) set_line=$body set_full=$body set_n=$n set_least=$least ;;
+      *) unk_line=$body unk_full=$body unk_n=$n unk_least=$least ;;
+    esac
+  done
+  if [ $((${#out} + ${#ov_line} + ${#floor_line} + ${#set_line} + ${#unk_line})) -gt 600 ]; then
+    ov_line=$ov_least set_line=$set_least unk_line=$unk_least
+    for part in ov set unk; do
+      case $part in
+        ov) items=$ov sep2="; " pre=$ov_pre full=$ov_full n=$ov_n line=$ov_line ;;
+        set) items="$pol$oth" sep2="; " pre=$set_pre full=$set_full n=$set_n line=$set_line ;;
+        *) items=$unk sep2=", " pre=$unk_pre full=$unk_full n=$unk_n line=$unk_line ;;
+      esac
+      [ "$n" -gt 0 ] || continue
+      room=$((600 - ${#out} - ${#ov_line} - ${#floor_line} - ${#set_line} - ${#unk_line} + ${#line}))
+      if [ "${#full}" -le "$room" ]; then
+        line=$full
+      else
+        # Keep each entry that still fits with the mark for the rest, in order.
+        body=$pre sep=" " rest=$items kept=0
+        while [ -n "$rest" ]; do
+          e=${rest%%"$nl"*}
+          rest=${rest#*"$nl"}
+          if [ "$part" = set ]; then tail=$more; else tail="${sep2}and $((n - kept - 1)) more"; fi
+          [ $((${#body} + ${#sep} + ${#e} + ${#tail})) -le "$room" ] || continue
+          body="$body$sep$e"
+          sep=$sep2
+          kept=$((kept + 1))
+          line="$body$tail"
+        done
+      fi
+      case $part in
+        ov) ov_line=$line ;;
+        set)
+          set_line=$line
+          [ "$line" = "$full" ] || set_cut=1
+          ;;
+        *) unk_line=$line ;;
+      esac
+    done
   fi
-  printf '%s\n' "$out$tail"
+  [ -z "$set_cut" ] || set_line="${set_line%"$more"}${more%%"{ROOT}"*}$KERN_ROOT${more#*"{ROOT}"}"
+  printf '%s\n' "$out$ov_line$floor_line$set_line$unk_line"
 }

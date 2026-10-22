@@ -183,6 +183,12 @@ YML
   [ "$output" = "$RP/.claude/kern.local.yml	foo.bar" ]
 }
 
+@test "route.<name> is not a known key: overrides.<job> names a project skill for a job" {
+  printf 'route.define: off\noverrides.define: off\n' >"$R/.claude/kern.local.yml"
+  run settings_unknown_keys
+  [ "$output" = "$RP/.claude/kern.local.yml	route.define" ]
+}
+
 @test "kern: off disables; list_has trims" {
   printf 'kern: off\n' >"$R/.claude/kern.local.yml"
   run kern_enabled
