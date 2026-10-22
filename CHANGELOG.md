@@ -4,6 +4,13 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- recall (Task 17a P14, audit E1, E2, E4, E5, E14): `recall-sessions` finds the transcript folder Claude Code names for a non-ASCII or long path, marks the running session `current`, and finds a submodule's sessions; recall reads `WORK` where `kern-dir` writes it.
+  - Before: the slug turned each byte outside A-Za-z0-9 into `-`. Claude Code 2.1.308 turns each UTF-16 code unit into `-` and cuts a name over 200 characters to 200 plus `-<hash>`. So a path with `é`, a CJK character or an emoji, and any long path, listed no session and exited 0, which recall reads as no prior work.
+  - The slug is now per character in a C-locale awk: a 2- or 3-byte UTF-8 sequence gives `-`, a 4-byte one `--`. Above 200 characters it takes a `<first 200>-*` folder in which a transcript's first `cwd` is the path, and the same for a long `worktree.dir` prefix. A path stored in NFD is a stated limit.
+  - The session whose id is `CLAUDE_CODE_SESSION_ID` prints `current` in place of `session`. recall step 4 and `references/transcripts.md` say "Skip the `current` session" where they said the newest session is usually this one, which skipped a second active session in the same project. With the variable unset, no line is `current`, and a transcript holding only this request is this one.
+  - In a submodule or a `--separate-git-dir` checkout, the main worktree's sessions and prompts are the checkout's, not the git dir's.
+  - `--days 0` (and `00`) is a usage error (exit 2). Before, it matched nothing and exited 0.
+  - recall step 3 finds `WORK` as line 1 of `kern-root`, a `/`, then `kern-get work_dir .kern`, as `kern-dir` and autopilot do. Step 6 names `kern-get tracker`, then `kern-detect tracker`.
 - Eval harness, for the confirming run (Task 17a P5, Opus audit lane G):
   - Flags: behave, h2h, kernel-adherence and exec-eval share one strict flag parser (`scripts/lib/args.mjs`). An unknown, valueless or repeated flag, or a `--runs` that is not a whole number of at least 1, exits 2 before anything runs, so `--dryrun` or `--case=x` no longer runs every case.
   - Snapshots: only a full, unfiltered run with a valid run writes `evals/snapshots/`. A `--case`, `--category`, `--task`, `--arms` or `--plugin` run, an all-invalid run or a stopped run writes its snapshot beside its transcripts. Every snapshot carries `complete`, `cases` and `kern` (HEAD, `dirty` and the measured uncommitted changes). A full run refuses a dirty kern tree unless `--allow-dirty`; every non-dry h2h run does too, since its `--category` runs may be the evidence.
