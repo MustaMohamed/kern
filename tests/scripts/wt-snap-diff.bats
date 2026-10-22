@@ -92,6 +92,18 @@ index_sum() { cksum < "$(git -C "$WT" rev-parse --path-format=absolute --git-dir
   [ "$(grep -c -E 'new/|old/' "$TMP/pkg.diff")" -eq 0 ]
 }
 
+@test "a change a textconv driver hides is not an empty diff" {
+  t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  printf 'four\n' >> "$WT/a.txt"
+  printf '*.txt diff=hide\n' > "$TMP/attributes"
+  git -C "$WT" config core.attributesFile "$TMP/attributes"
+  git -C "$WT" config diff.hide.textconv 'sed -n 1p'
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$t0" --out "$TMP/pkg.diff"
+  [ "$status" -eq 0 ]
+  [ "${lines[2]}" = "a.txt" ]
+  grep -q '^+four$' "$TMP/pkg.diff"
+}
+
 @test "wt-diff defaults the package into WORK/reviews" {
   t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
   printf 'new\n' > "$WT/b.txt"

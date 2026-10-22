@@ -7,9 +7,10 @@
 # and every path that starts with it when it ends in * (src/* covers src/a.js and src/x/b.js; a * inside
 # an entry is literal, so src/*.js covers neither).
 # The .patch comes from plumbing (diff-tree), which ignores diff.noprefix, textconv and external diff
-# drivers in the user's config, so wt-apply and probe read the same bytes on any machine. The package's
-# porcelain diffs pin the a/ and b/ prefixes and turn off textconv, so floor-scan and claim-check read
-# the real paths and lines whatever diff.srcPrefix, diff.dstPrefix or a textconv driver says.
+# drivers in the user's config, so wt-apply and probe read the same bytes on any machine. The porcelain
+# diffs (the empty check and the package) turn off textconv, and the package pins the a/ and b/ prefixes,
+# so floor-scan and claim-check read the real paths and lines whatever diff.srcPrefix, diff.dstPrefix or a
+# textconv driver says.
 # Adapted from superpowers subagent-driven-development/scripts/review-package (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -35,7 +36,7 @@ git -C "$wt" rev-parse --git-dir > /dev/null 2>&1 || { echo "wt-diff: not a git 
 [ -n "$to" ] || to=$(bash "$here/wt-snap" "$wt")
 fromt=$(git -C "$wt" rev-parse --verify --quiet "$from^{tree}") || { echo "wt-diff: not a tree: $from" >&2; exit 2; }
 tot=$(git -C "$wt" rev-parse --verify --quiet "$to^{tree}") || { echo "wt-diff: not a tree: $to" >&2; exit 2; }
-if git -C "$wt" diff --quiet "$fromt" "$tot"; then
+if git -C "$wt" diff --quiet --no-ext-diff --no-textconv "$fromt" "$tot"; then
   echo "wt-diff: empty diff ${fromt:0:7}..${tot:0:7}" >&2
   exit 3
 fi
