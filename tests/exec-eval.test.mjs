@@ -226,10 +226,15 @@ test('runClaude: a claude that ignores SIGTERM after the timeout is killed after
   const stub = "echo $$ > claude.pid; trap '' TERM; sleep 30 & echo $! > sleep.pid; wait $!";
   const start = Date.now();
   assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, killGraceMs: 300, env: fakeClaude(stub) }), (e) => !e.fatal && /timed out/.test(e.message));
+  // Under load the stand-in's pid files can land after runClaude returns: wait up to 3 s for them, and leave
+  // that wait out of the time the run took.
+  const waitStart = Date.now();
+  for (let i = 0; i < 60 && !['claude.pid', 'sleep.pid'].every((f) => existsSync(join(cwd, f))); i++) pause(50);
+  const waited = Date.now() - waitStart;
   const left = pids(cwd, 'claude.pid', 'sleep.pid');
   try {
     assert.ok(left.every(gone), 'claude, which ignored SIGTERM, and the sleep it started are gone');
-    assert.ok(Date.now() - start < 5000, `took ${Date.now() - start} ms`);
+    assert.ok(Date.now() - start - waited < 5000, `took ${Date.now() - start - waited} ms`);
   } finally { reap(left); }
 });
 
