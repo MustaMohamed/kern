@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspace } from '../scripts/lib/claude-run.mjs';
-import { armCopy, blindIds, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, verdictLine } from '../scripts/lib/h2h.mjs';
+import { armCopy, blindIds, factsLine, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, taskWorkspace, verdictLine } from '../scripts/lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const arms = [{ id: 'kern', dir: '/w/kern' }, { id: 'superpowers', dir: '/w/kern/.upstream/superpowers' }, { id: 'pstack', dir: '/w/kern/.upstream/pstack/harness/pstack/claude-code' }, { id: 'control', dir: null }];
@@ -83,45 +83,70 @@ test('the runner gives the gate every loaded task, prints each verdict line and 
   assert.ok(src.includes('process.exit(gateExit(verdict));'));
 });
 
-test('git facts are read with plain git from the workspace an arm starts in', () => {
-  const plan = loadTasks(ROOT).find((x) => x.id === 'plan/archive-invoices');
-  const d = workspace(join(plan.dir, 'repo'), { name: plan.project || 'app' });
+// The SHA-free form of a facts record: each commit's time enters its hash, so only the SHAs may differ by arm.
+const shaFree = (f) => ({ ...f, head: '<sha>', recent: f.recent.map((c) => c.replace(/^\S+/, '<sha>')) });
+
+test('git facts are what Claude Code\'s git status context shows, read with plain git, and hold no remote', () => {
+  // Task 16n review, I1: that context lists the current branch, the main branch, the git user, the status and the
+  // recent commits; it lists no remote, so the grader is not told one.
+  const at = (id) => loadTasks(ROOT).find((x) => x.id === id);
+  const d = taskWorkspace(at('plan/archive-invoices'));
   try {
     const f = gitFacts(d);
-    assert.deepEqual({ branch: f.branch, commits: f.commits, remotes: f.remotes }, { branch: 'main', commits: 1, remotes: [] });
-    assert.match(f.head, /^[0-9a-f]{7,}$/);
-    assert.equal(f.head, spawnSync('git', ['-C', d, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout.trim());
+    const head = spawnSync('git', ['-C', d, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    assert.deepEqual(f, { branch: 'main', main: 'main', head, commits: 1, recent: [`${head} chore: initial import`] });
   } finally { rmSync(dirname(d), { recursive: true, force: true }); }
-  const review = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
-  const d2 = workspace(join(review.dir, 'repo'), { name: review.project || 'app', origin: !!review.origin, branch: review.branch || '', setup: review.setup || [] });
+  // The review task has an origin, a feature branch and the change committed on it.
+  const d2 = taskWorkspace(at('review/invoice-branch'));
   try {
     const f = gitFacts(d2);
-    assert.deepEqual({ branch: f.branch, commits: f.commits, remotes: f.remotes }, { branch: 'feat/discounts', commits: 1, remotes: ['origin'] });
+    assert.deepEqual(shaFree(f), { branch: 'feat/discounts', main: 'main', head: '<sha>', commits: 2, recent: ['<sha> feat: discounts, CSV export and invoice lookup', '<sha> chore: initial import'] });
+    assert.ok(!('remotes' in f));
   } finally { rmSync(dirname(d2), { recursive: true, force: true }); }
-  // The runner reads them in the arm's workspace after the task's own commit and before the arm runs.
+  // The runner reads them in the arm's workspace after the task's own setup and commit, and before the arm runs.
   const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
-  const at = src.indexOf('const facts = gitFacts(cwd);');
-  assert.ok(at > src.indexOf("git('commit', '-qm', t.patch_message") && at < src.indexOf('tryRun({ cwd, prompts: t.prompts'), 'facts are read after the patch commit and before the run');
+  const read = src.indexOf('const facts = gitFacts(cwd);');
+  assert.ok(src.indexOf('const cwd = taskWorkspace(t);') < read && read < src.indexOf('tryRun({ cwd, prompts: t.prompts'), 'facts are read after the workspace and before the run');
   assert.ok(src.includes('heldout, git: facts, text: redact('), 'each attempt carries its facts');
 });
 
-test('the grader is told the git facts each attempt saw, so a claim that matches them is supported, in every category', () => {
+test('every task\'s git facts are the same for every arm but the SHAs, so they name no arm', () => {
+  // Task 16n review, I1: the recent commit subjects go to the grader too, so each must be the same under every arm.
+  for (const t of loadTasks(ROOT)) {
+    const [a, b] = [taskWorkspace(t), taskWorkspace(t)];
+    try {
+      const [fa, fb] = [gitFacts(a), gitFacts(b)];
+      assert.deepEqual(shaFree(fa), shaFree(fb), t.id);
+      assert.ok(fa.recent.length >= 1, t.id);
+      assert.doesNotMatch(factsLine(fa), /kern|superpowers|pocock|pstack|poteto|caveman|remote/i, t.id);
+    } finally { for (const d of [a, b]) rmSync(dirname(d), { recursive: true, force: true }); }
+  }
+});
+
+test('the grader is told the git facts each session was shown, so a claim that matches them is supported, and a remote claim still needs a command', () => {
   // 2026-10-22 head-to-head: the grader counted kern's true `base: main` as unsupported. The branch came from
-  // Claude Code's git status block, which every arm sees and the grader does not (the user's "kern and grader").
-  const facts = { branch: 'main', commits: 1, remotes: [], head: '902f007' };
-  const general = "Each attempt's block opens with the git facts its session showed it from the start, read with git from its workspace. They were visible to the attempt, so a claim that matches them is supported, though no command printed it.";
-  const plan = graderPrompt({ category: 'plan', prompts: ['plan it'], rubric: ['orders tasks'] }, [{ id: 'arm-A', text: 'x', git: facts }, { id: 'arm-B', text: 'y', git: { ...facts, head: 'abc1234' } }]);
+  // Claude Code's git status context, which every arm sees and the grader does not (the user's "kern and grader").
+  // Task 16n review, I1: that context shows no remote, so the grader is told none.
+  const facts = { branch: 'main', main: 'main', head: '902f007', commits: 1, recent: ['902f007 chore: initial import'] };
+  const general = "Each attempt's block opens with git facts read from its workspace before it started. Its session's git status showed it the branch, the main branch, HEAD's short SHA and the recent commits with their subjects, so a claim that matches those is supported, though no command printed it. It was not shown the remotes, so a claim about a remote still needs a command and its output. A claim that contradicts any fact is unsupported.";
+  const plan = graderPrompt({ category: 'plan', prompts: ['plan it'], rubric: ['orders tasks'] }, [{ id: 'arm-A', text: 'x', git: facts }, { id: 'arm-B', text: 'y', git: { ...facts, head: 'abc1234', recent: ['abc1234 chore: initial import'] } }]);
   assert.ok(plan.includes(general), plan);
-  assert.ok(plan.includes("Count the claims about the repo that neither the fixture files nor the attempt's git facts support."), plan);
+  assert.ok(plan.includes('Count the claims about the repo that neither the fixture files nor the git facts its session was shown support.'), plan);
   assert.ok(!plan.includes('that the fixture files do not support'));
-  assert.ok(plan.includes('\n=== arm-A ===\nGit facts: branch main; 1 commit; no remote; HEAD 902f007.\nx'), plan);
-  assert.ok(plan.includes('\n=== arm-B ===\nGit facts: branch main; 1 commit; no remote; HEAD abc1234.\ny'), plan);
+  assert.ok(!plan.includes('They were visible to the attempt'));
+  assert.ok(plan.includes('\n=== arm-A ===\nGit facts: branch main; main branch main; HEAD 902f007; 1 commit, newest first:\n  902f007 chore: initial import\nx'), plan);
+  assert.ok(plan.includes('\n=== arm-B ===\nGit facts: branch main; main branch main; HEAD abc1234; 1 commit, newest first:\n  abc1234 chore: initial import\ny'), plan);
   assert.doesNotMatch(plan, /kern|superpowers|pocock|pstack|poteto|control/i);
   for (const category of ['diagnose', 'review']) {
-    const p = graderPrompt({ category, prompts: ['p'], rubric: ['r'], labels: [] }, [{ id: 'arm-A', text: 'x', git: { branch: 'feat/discounts', commits: 2, remotes: ['origin'], head: '1a2b3c4' } }]);
+    const three = { branch: 'feat/discounts', main: 'main', head: '1a2b3c4', commits: 3, recent: ['1a2b3c4 feat: c', '2b3c4d5 fix: b', '3c4d5e6 chore: a'] };
+    const p = graderPrompt({ category, prompts: ['p'], rubric: ['r'], labels: [] }, [{ id: 'arm-A', text: 'x', git: three }]);
     assert.ok(p.includes(general), category);
-    assert.ok(p.includes('\n=== arm-A ===\nGit facts: branch feat/discounts; 2 commits; remote origin; HEAD 1a2b3c4.\nx'), p);
+    assert.ok(p.includes('\n=== arm-A ===\nGit facts: branch feat/discounts; main branch main; HEAD 1a2b3c4; 3 commits, newest first:\n  1a2b3c4 feat: c\n  2b3c4d5 fix: b\n  3c4d5e6 chore: a\nx'), p);
   }
+  // The context lists five commits, so a longer history shows only that it has more.
+  const seven = { ...facts, commits: 7, recent: ['a1 s1', 'a2 s2', 'a3 s3', 'a4 s4', 'a5 s5'] };
+  assert.equal(factsLine(seven).split('\n')[0], 'Git facts: branch main; main branch main; HEAD 902f007; more than 5 commits, the 5 newest first:');
+  assert.equal(factsLine({ ...facts, branch: '(detached HEAD)' }).split('\n')[0], 'Git facts: branch (detached HEAD); main branch main; HEAD 902f007; 1 commit, newest first:');
 });
 
 test('redaction turns .kern/ into .work/ and hides a /private temp prefix', () => {

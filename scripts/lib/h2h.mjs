@@ -11,8 +11,19 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { workspace } from './claude-run.mjs';
 
 export const CATEGORIES = ['plan', 'diagnose', 'review'];
+
+// taskWorkspace(t): the project one arm's session starts in: the task's repo as workspace() builds it (git
+// history, origin, branch, setup), then the task's patch committed, as a review task's change under review.
+// The caller removes dirname(cwd).
+export function taskWorkspace(t) {
+  const cwd = workspace(join(t.dir, 'repo'), { name: t.project || 'app', origin: !!t.origin, branch: t.branch || '', setup: t.setup || [] });
+  const git = (...g) => execFileSync('git', ['-C', cwd, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...g], { stdio: 'ignore' });
+  if (t.patch) { git('apply', join(t.dir, t.patch)); git('add', '-A'); git('commit', '-qm', t.patch_message || 'feat: the change under review'); }
+  return cwd;
+}
 
 // armCopy(dir, id): the plugin tree at dir copied to <tmp>/<random>/<id>, without .git and with symlinks
 // resolved, so a run cannot reach back into the repo. The caller removes dirname(copy).
@@ -72,7 +83,8 @@ export function outOfArea(files, area) {
 
 // falseAlarms(category, evidence): the count the gate compares. review: findings the grader matched to
 // a decoy, plus findings matched to nothing; diagnose: floor-scan hits plus files outside the task's
-// area; plan: claims the grader marked unsupported by the fixture.
+// area; plan: claims the grader marked unsupported by both the fixture files and the git facts the
+// session was shown.
 export function falseAlarms(category, e) {
   if (category === 'review') return (e.decoyHits ?? 0) + (e.unmatched ?? 0);
   if (category === 'diagnose') return (e.floorHits ?? 0) + (e.outOfArea ?? 0);
@@ -116,35 +128,50 @@ export const verdictLine = (v) => `${v.status} ${v.category}${v.reason ? `: ${v.
 // gateExit(verdict): the runner's exit code. 1 when a category failed, else 3 when one is incomplete, else 0.
 export const gateExit = (verdict) => (verdict.some((v) => v.status === 'FAIL') ? 1 : verdict.some((v) => v.status === 'INCOMPLETE') ? 3 : 0);
 
-// gitFacts(dir): what Claude Code's git status context shows a session that starts in dir, read with plain
-// git, never from a transcript: the current branch, the commit count, the remote names ([] for none) and
-// HEAD's short SHA. The runner reads them in each arm's workspace before the arm runs; the grader never sees
-// that context, so graderPrompt gives it these.
+// RECENT: how many recent commits Claude Code's git status context lists (5 in this session's own context).
+export const RECENT = 5;
+
+// gitFacts(dir): the parts of Claude Code's git status context a session that starts in dir is shown, read
+// with plain git, never from a transcript. That context lists the current branch, the main branch, the git
+// user, the status and the recent commits (short SHA and subject); it lists no remote, so none is kept here,
+// and the git user (the machine's, the same for every arm) is left out. main is origin/HEAD's branch, else
+// main, else master, else the current branch: inferred, since Claude Code's own rule is not read here; every
+// fixture gives main. commits counts the whole history, which the context shows only up to RECENT. The runner
+// reads them in each arm's workspace before the arm runs; the grader never sees that context, so
+// graderPrompt gives it these.
 export function gitFacts(dir) {
   const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  const tryGit = (...a) => { try { return execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; } };
+  const branch = git('branch', '--show-current') || '(detached HEAD)';
+  const has = (b) => tryGit('show-ref', '--verify', '--quiet', `refs/heads/${b}`) !== null;
+  const originHead = tryGit('symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD');
   return {
-    branch: git('branch', '--show-current') || '(detached HEAD)',
-    commits: Number(git('rev-list', '--count', 'HEAD')),
-    remotes: git('remote').split('\n').filter(Boolean),
+    branch,
+    main: originHead ? originHead.replace(/^origin\//, '') : has('main') ? 'main' : has('master') ? 'master' : branch,
     head: git('rev-parse', '--short', 'HEAD'),
+    commits: Number(git('rev-list', '--count', 'HEAD')),
+    recent: git('log', '-n', String(RECENT), '--no-decorate', '--format=%h %s').split('\n').filter(Boolean),
   };
 }
 
 // factsLine(f): one attempt's gitFacts as the grader reads them. It names no arm: every arm's workspace is the
-// same fixture, and only HEAD's SHA, from each commit's time, can differ.
-export const factsLine = (f) => `Git facts: branch ${f.branch}; ${f.commits} commit${f.commits === 1 ? '' : 's'}; ${f.remotes.length ? `remote ${f.remotes.join(', ')}` : 'no remote'}; HEAD ${f.head}.`;
+// same fixture with the same commit subjects, and only the SHAs, from each commit's time, can differ.
+export const factsLine = (f) => {
+  const count = f.commits > RECENT ? `more than ${RECENT} commits, the ${RECENT} newest first:` : `${f.commits} commit${f.commits === 1 ? '' : 's'}, newest first:`;
+  return [`Git facts: branch ${f.branch}; main branch ${f.main}; HEAD ${f.head}; ${count}`, ...f.recent.map((c) => `  ${c}`)].join('\n');
+};
 
-// graderPrompt(task, outputs): each output is { id, text, git }, git from gitFacts. Every arm's session saw
-// those facts in Claude Code's git status context (the 2026-10-22 plan gate counted kern's true `base: main`
-// as unsupported), so the grader is told them and a claim that matches them is supported (the user's "kern and
-// grader", 2026-10-22).
+// graderPrompt(task, outputs): each output is { id, text, git }, git from gitFacts. Every arm's session was
+// shown those facts in Claude Code's git status context (the 2026-10-22 plan gate counted kern's true
+// `base: main` as unsupported), so the grader is told them and a claim that matches them is supported (the
+// user's "kern and grader", 2026-10-22). The context shows no remote, so a remote claim still needs a command.
 export function graderPrompt(task, outputs) {
   return [
     `You grade ${outputs.length} anonymous attempts at the same ${task.category} task. You do not know which tool made which.`,
     'Score each attempt 0 to 10 on the rubric. Judge only what each attempt shows; a claim it does not support with a command and its output earns nothing.',
-    "Each attempt's block opens with the git facts its session showed it from the start, read with git from its workspace. They were visible to the attempt, so a claim that matches them is supported, though no command printed it.",
+    "Each attempt's block opens with git facts read from its workspace before it started. Its session's git status showed it the branch, the main branch, HEAD's short SHA and the recent commits with their subjects, so a claim that matches those is supported, though no command printed it. It was not shown the remotes, so a claim about a remote still needs a command and its output. A claim that contradicts any fact is unsupported.",
     ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, or "none".'] : []),
-    ...(task.category === 'plan' ? ["Count the claims about the repo that neither the fixture files nor the attempt's git facts support."] : []),
+    ...(task.category === 'plan' ? ['Count the claims about the repo that neither the fixture files nor the git facts its session was shown support.'] : []),
     'Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],"unmatched":1,"unsupported":0,"why":"..."}]}.',
     '', 'Task given to each attempt:', task.prompts.join('\n---\n'), '', 'Rubric:', ...task.rubric.map((r, i) => `${i + 1}. ${r}`),
     ...(task.category === 'review' ? ['', 'Labels:', JSON.stringify(task.labels)] : []),

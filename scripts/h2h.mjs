@@ -12,9 +12,9 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses, workspace } from './lib/claude-run.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses } from './lib/claude-run.mjs';
 import { digest, pluginCopy, tryRun } from './lib/behave.mjs';
-import { armCopy, blindIds, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, verdictLine } from './lib/h2h.mjs';
+import { armCopy, blindIds, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, taskWorkspace, verdictLine } from './lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -52,9 +52,8 @@ for (const t of tasks) {
     const attempts = [];
     let voided = '';
     for (const a of arms) {
-      const cwd = workspace(join(t.dir, 'repo'), { name: t.project || 'app', origin: !!t.origin, branch: t.branch || '', setup: t.setup || [] });
+      const cwd = taskWorkspace(t);
       const git = (...g) => execFileSync('git', ['-C', cwd, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...g], { encoding: 'utf8' });
-      if (t.patch) { git('apply', join(t.dir, t.patch)); git('add', '-A'); git('commit', '-qm', t.patch_message || 'feat: the change under review'); }
       // What Claude Code's git status context shows this session, read before it starts; the grader gets it.
       const facts = gitFacts(cwd);
       const { run, problem, events } = tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model: MODEL, maxTurns: t.max_turns || 40 });
