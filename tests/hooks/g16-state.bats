@@ -434,11 +434,13 @@ expect_cmd() {
 @test "when tr cannot take the quotes out of a Bash command, G16 still reads the whole command" {
   # Quotes and backslashes come out in one tr pass, ended by a sentinel line, before the cheap name
   # check. A failed pass left the text empty, so the check let the command through unread (A13, P1
-  # review ruling); now a missing sentinel skips the check, and the command is read in full.
+  # review ruling); now a missing sentinel skips the check, and the command is read in full. The hook
+  # check denies any quoted command under the same failure (fix round 2), so the state reason beside its
+  # own is what shows the command was read.
   read_fails tr "*\\'*"
   expect_bash deny "echo 'autopilot: on' > $S/test-session.state"
   [[ "$output" == *"kern G16: commands may not write kern session state"* ]] || false
-  expect_bash ask "echo '{}' > .claude/settings.json"
+  [[ "$output" == *"the command's quotes could not be taken out (tr did not run)"* ]] || false
   [ "$(read_failures tr)" -gt 0 ]
 }
 
@@ -631,6 +633,18 @@ expect_cmd() {
   expect_cmd none "cd $S && cd /tmp; echo x > foo"
 }
 
+@test "when awk cannot check a command's cd words for case, G16 denies it" {
+  # The mixed-case cd check is an awk run. A failed awk read as "no mixed-case cd", so CD /tmp was
+  # followed as a plain cd and the write after it left the sessions dir (A13, P1 fix round 2); a status
+  # other than found or not found now denies. The stub fails only that awk program, not cmd_plain's.
+  read_fails awk '*tolower(w\[i\]) ~*'
+  expect_cmd deny "cd $S && CD /tmp; echo x > foo"
+  [[ "$output" == *"kern G16: the command's cd words could not be checked for case (awk did not run)"* ]] || false
+  [ "$(read_failures awk)" -gt 0 ]
+  read_fails awk '*tolower(w\[i\]) ~*' 0
+  expect_cmd none "cd $S && cd /tmp; echo x > foo" "echo X > notes-on-sessions.txt"
+}
+
 @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
   mkdir -p "$R/.claude"
   # The re-review's probes: a tracked file moved onto kern.local.yml, a removal, and diff --output.
@@ -805,6 +819,22 @@ EOF
   # Reading 2 fails (the joined `echo ab`), and reading 1 names the hook.
   awk_fails_on '^cat hooks/prompt-submit; echo ab$'
   expect_hook "cat hooks/prompt-submit; echo a\\${nl}b"
+}
+
+@test "when tr cannot take the quotes out of a command for the hook check, G16 denies it" {
+  # _g16_hooks_read takes quotes and backslashes out in a tr pass that ends with a sentinel line. A failed
+  # pass left the text empty, so a quoted hook path got no vote (A13, P1 fix round 2); a missing sentinel
+  # now denies, in both modes. Text with no quote needs no pass, so it is read as before.
+  read_fails tr "*\\'*"
+  expect_cmd deny "bash 'hooks/prompt-submit'"
+  [[ "$output" == *"kern G16: the command's quotes could not be taken out (tr did not run)"* ]] || false
+  expect_cmd ask "bash hooks/prompt-submit"
+  set_autopilot on
+  expect_cmd deny "bash 'hooks/prompt-submit'"
+  set_autopilot off
+  [ "$(read_failures tr)" -gt 0 ]
+  read_fails tr "*\\'*" 0
+  expect_cmd ask "bash 'hooks/prompt-submit'"
 }
 
 @test "a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied" {

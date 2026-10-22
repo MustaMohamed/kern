@@ -16,6 +16,8 @@ _G16_SETTINGS="kern settings change guard policy; the user confirms each write"
 _G16_CC="Claude Code settings set permissions and hooks; the user confirms each write"
 _G16_UNREAD="the target path could not be lower-cased (tr did not run), so G16 cannot tell it from kern session state; try the write again"
 _G16_UNREAD_CMD="the command could not be lower-cased (tr did not run), so G16 cannot tell whether it writes kern session state or settings; try the command again"
+_G16_UNREAD_CD="the command's cd words could not be checked for case (awk did not run), so G16 cannot tell which directory it writes in; try the command again"
+_G16_UNREAD_HOOKS="the command's quotes could not be taken out (tr did not run), so G16 cannot tell whether it names kern's hook code; try the command again"
 _G16_UNREAD_IN="input could not be lower-cased (tr did not run), so G16 cannot tell whether it carries /kern:autopilot or /kern:mode; try the call again"
 _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory or \$CLAUDE_CONFIG_DIR, where kern and Claude Code settings live; the user confirms each write"
@@ -66,12 +68,14 @@ _g16_fold() {
   _G16_F=${_G16_F//$_G16_KELVIN/k}
 }
 
-# _g16_lowerall STR...: sets the array _G16_LO to each STR in lower case (bash 3.2 has no ${var,,}), from
-# one tr pass that ends with a sentinel line. Each STR but the last is one line, a newline inside it read
-# as _GW_NL; the last is kept whole. Exit 1 when the sentinel is missing: tr did not run (a fork refused
-# under load), and the caller votes rather than check text that came back empty (Opus audit A13).
-_g16_lowerall() {
-  local out n=0 k=$(($# - 1)) nl=$'\n' end=.g16-end.
+# _g16_tr MODE STR...: sets the array _G16_LO to each STR after one tr pass that ends with a sentinel
+# line. MODE lower lower-cases (bash 3.2 has no ${var,,}); MODE unquote takes out double quotes, single
+# quotes and backslashes. Each STR but the last is one line, a newline inside it read as _GW_NL; the last
+# is kept whole. Exit 1 when the sentinel is missing: tr did not run (a fork refused under load), and the
+# caller votes rather than check text that came back empty (Opus audit A13).
+_g16_tr() {
+  local mode=$1 out n=0 k=$(($# - 2)) nl=$'\n' end=.g16-end.
+  shift
   _G16_LO=()
   out=$(
     {
@@ -80,7 +84,11 @@ _g16_lowerall() {
         shift
       done
       printf '%s\n%s\n' "$1" "$end"
-    } | env LC_ALL=C tr '[:upper:]' '[:lower:]'
+    } | if [ "$mode" = unquote ]; then
+      env LC_ALL=C tr -d "\"'\\\\"
+    else
+      env LC_ALL=C tr '[:upper:]' '[:lower:]'
+    fi
   )
   case "$out" in
     *"$nl$end") out=${out%"$nl$end"} ;;
@@ -174,7 +182,7 @@ _g16_ccnamed() {
 # _g16_file: a Write, Edit or NotebookEdit target, compared in lower case as written, with `..`
 # resolved, and through its physical parent dir, so a case variant or a symlinked dir is seen. Under
 # kern's hooks/ directory it asks (APFS opens HOOKS/ as hooks/), with kern's root read as written and
-# physically. Every path it compares is lower-cased in one _g16_lowerall pass; when tr did not run, the
+# physically. Every path it compares is lower-cased in one _g16_tr pass; when tr did not run, the
 # Write is denied, as its target could be session state (Opus audit A13).
 _g16_file() {
   local p norm real="" rsd="" kp="" c hook=0 nl=$'\n' sd kr ccd ccp hc
@@ -189,7 +197,7 @@ _g16_file() {
   _g16_ccdir
   _g16_hookcands "$norm"
   # Nine paths of one line each, then the hook readings, one per line.
-  if ! _g16_lowerall "$(state_dir)" "$rsd" "$p" "$norm" "$real" "$(_g16_norm "$KERN_ROOT/hooks")" "$kp" \
+  if ! _g16_tr lower "$(state_dir)" "$rsd" "$p" "$norm" "$real" "$(_g16_norm "$KERN_ROOT/hooks")" "$kp" \
     "$_G16_CCD" "$_G16_CCP" "$_G16_HC"; then
     vote deny G16 "$_G16_UNREAD"
     return 0
@@ -490,21 +498,19 @@ _g16_redirects() {
 # (accepted limit).
 _g16_bash() {
   local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m sd_f cc_f
-  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir mixed all=0 nl=$'\n' end=.g16-end.
+  local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir mixed all=0
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
   cmd=$_G16_F
   # Only a command whose text could name state, a settings file, a .claude directory or
   # CLAUDE_CONFIG_DIR's directory (_g16_ccnamed), in any case, is lower-cased and parsed. Quotes and
-  # backslashes are taken out first, in one tr pass and only when the text holds one, so ke''rn.yml is
-  # still seen. The pass ends with a sentinel line; when tr did not run, the check is skipped and the
-  # whole command is read (all). The sessions dir ends in sessions, so its path needs no pattern of its
-  # own.
+  # backslashes are taken out first, in one _g16_tr pass and only when the text holds one, so ke''rn.yml
+  # is still seen; when tr did not run, the check is skipped and the whole command is read (all). The
+  # sessions dir ends in sessions, so its path needs no pattern of its own.
   t=$cmd
   case "$t" in
     *[\"\'\\]*)
-      t=$(printf '%s\n%s\n' "$t" "$end" | env LC_ALL=C tr -d "\"'\\\\")
-      case "$t" in *"$nl$end") t=${t%"$nl$end"} ;; *) t=$cmd all=1 ;; esac
+      if _g16_tr unquote "$t"; then t=${_G16_LO[0]}; else all=1; fi
       ;;
   esac
   if [ "$all" = 0 ]; then
@@ -517,22 +523,26 @@ _g16_bash() {
   fi
   # mixed: the command, quotes taken out, holds cd, pushd or popd in another case. An upper-case CD runs
   # /usr/bin/cd on macOS, which never moves the shell; once the text is lower-cased it would read as a
-  # plain cd, so no cd in such a command is plain.
+  # plain cd, so no cd in such a command is plain. The awk exits 0 when it finds one and 3 when it finds
+  # none; any other status means it did not run, and the command is denied (Opus audit A13).
   mixed=0
   case "$t" in
     *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*)
-      if printf '%s' "$t" | env LC_ALL=C awk '
+      printf '%s' "$t" | env LC_ALL=C awk '
         { n = split($0, w, /[^A-Za-z]+/); for (i = 1; i <= n; i++) if (w[i] != tolower(w[i]) && tolower(w[i]) ~ /^(cd|pushd|popd)$/) f = 1 }
-        END { exit !f }'; then
-        mixed=1
-      fi
+        END { exit (f ? 0 : 3) }'
+      case $? in
+        0) mixed=1 ;;
+        3) ;;
+        *) vote deny G16 "$_G16_UNREAD_CD"; return 0 ;;
+      esac
       ;;
   esac
-  # One _g16_lowerall pass lower-cases the command with every path it is compared with; when tr did not
+  # One _g16_tr pass lower-cases the command with every path it is compared with; when tr did not
   # run, the command is denied, as it could write session state (Opus audit A13). cdir: the directory
   # while dk is 1, lower-cased text with . and .. resolved as text.
   _g16_ccdir
-  if ! _g16_lowerall "$(state_dir)" "${SID-}" "${HOME-}" "${CWD:-$PWD}" "$_G16_CCD" "$_G16_CCP" "$cmd"; then
+  if ! _g16_tr lower "$(state_dir)" "${SID-}" "${HOME-}" "${CWD:-$PWD}" "$_G16_CCD" "$_G16_CCP" "$cmd"; then
     vote deny G16 "$_G16_UNREAD_CMD"
     return 0
   fi
@@ -751,7 +761,7 @@ _g16_glob() {
 # interpreter code that builds a hook path, a script written to disk and then run by name, and any
 # other spelling-level evasion beyond the forms above.
 _g16_hooks() {
-  local cmd t hit=0 failed=0 nl=$'\n'
+  local cmd t hit=0 failed=0 unread=0 nl=$'\n'
   local -a readings
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
@@ -773,8 +783,11 @@ _g16_hooks() {
     case $? in
       0) hit=1 ;;
       2) failed=1 ;;
+      3) unread=1 ;;
     esac
   done
+  # A reading whose quotes tr could not take out was not read at all (Opus audit A13).
+  [ "$unread" = 0 ] || vote deny G16 "$_G16_UNREAD_HOOKS"
   if [ "$hit" = 1 ]; then
     vote ask G16 "$_G16_HOOKS"
   elif [ "$failed" = 1 ]; then
@@ -784,14 +797,20 @@ _g16_hooks() {
 }
 
 # _g16_hooks_read TEXT: exit 0 when one reading of a command, TEXT, names kern's hook code or a state
-# function (see _g16_hooks), 1 when it does not, 2 when awk could not read it.
+# function (see _g16_hooks), 1 when it does not, 2 when awk could not read it, 3 when tr could not take
+# its quotes out.
 _g16_hooks_read() {
   local t r w d c last names f ctx=0 inside hit=0
-  # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one tr pass
-  # and only when the text holds one.
+  # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one _g16_tr
+  # pass and only when the text holds one.
   t=${1//\$\'/}
   t=${t//\$\"/}
-  case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | env LC_ALL=C tr -d "\"'\\\\") ;; esac
+  case "$t" in
+    *[\"\'\\]*)
+      _g16_tr unquote "$t" || return 3
+      t=${_G16_LO[0]}
+      ;;
+  esac
   case "$CWD" in */[Hh][Oo][Oo][Kk][Ss] | */[Hh][Oo][Oo][Kk][Ss]/*) ctx=1 ;; esac
   # Only text that could count is read; any case still counts.
   if [ "$ctx" = 0 ]; then
@@ -850,11 +869,11 @@ EOT
 # _g16_relay: a scheduled or relayed prompt whose text, after leading whitespace, opens with a mode
 # or autopilot command. A mention later in the text passes. RemoteTrigger keeps its routine prompt
 # inside a nested body and a remote run starts its own session with it, so any mention there counts.
-# The text is lower-cased by _g16_lowerall; when tr did not run, the call is denied (Opus audit A13).
+# The text is lower-cased by _g16_tr; when tr did not run, the call is denied (Opus audit A13).
 _g16_relay() {
   local k t
   if [ "$TOOL" = RemoteTrigger ]; then
-    _g16_lowerall "$TOOL_INPUT" || { vote deny G16 "the $TOOL $_G16_UNREAD_IN"; return 0; }
+    _g16_tr lower "$TOOL_INPUT" || { vote deny G16 "the $TOOL $_G16_UNREAD_IN"; return 0; }
     case "${_G16_LO[0]}" in
       */kern:autopilot* | */kern:mode*) vote deny G16 "$TOOL may not carry /kern:autopilot or /kern:mode; only the user types them" ;;
     esac
@@ -862,7 +881,7 @@ _g16_relay() {
   fi
   for k in prompt message; do
     t=$(ti_get "$k") || continue
-    _g16_lowerall "$t" || { vote deny G16 "the $TOOL $_G16_UNREAD_IN"; return 0; }
+    _g16_tr lower "$t" || { vote deny G16 "the $TOOL $_G16_UNREAD_IN"; return 0; }
     t=${_G16_LO[0]}
     t="${t#"${t%%[![:space:]]*}"}"
     case "${t%%[[:space:]]*}" in
@@ -874,12 +893,12 @@ _g16_relay() {
   done
 }
 
-# _g16_skill: a Skill call to the mode or autopilot skill. The name is lower-cased by _g16_lowerall; when
+# _g16_skill: a Skill call to the mode or autopilot skill. The name is lower-cased by _g16_tr; when
 # tr did not run, the call is denied (Opus audit A13).
 _g16_skill() {
   local s
   s=$(ti_get skill) || return 0
-  _g16_lowerall "$s" || { vote deny G16 "the $TOOL $_G16_UNREAD_IN"; return 0; }
+  _g16_tr lower "$s" || { vote deny G16 "the $TOOL $_G16_UNREAD_IN"; return 0; }
   s=${_G16_LO[0]}
   case "${s#/}" in
     kern:autopilot | kern:mode | autopilot | mode)
