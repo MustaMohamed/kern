@@ -362,6 +362,11 @@ expect_cmd() {
   expect_file_tools "$BATS_TEST_TMPDIR/ccd-link/settings.json" ask
   expect_bash ask "echo {} > $d/settings.json" "echo {} > \$CLAUDE_CONFIG_DIR/settings.json" \
     "echo {} > \${CLAUDE_CONFIG_DIR}/settings.json" "cp /tmp/s.json \$CLAUDE_CONFIG_DIR/settings.json"
+  # The variable with a modifier (${CLAUDE_CONFIG_DIR:?}, ${CLAUDE_CONFIG_DIR:-...} and the like) still
+  # names the directory while it is set (P1 review Minor 2).
+  expect_bash ask "echo {} > \${CLAUDE_CONFIG_DIR:?}/settings.json" \
+    "echo {} > \${CLAUDE_CONFIG_DIR:-/tmp/x}/settings.json" "tee \${CLAUDE_CONFIG_DIR-x}/settings.json" \
+    "cp /tmp/s.json \${CLAUDE_CONFIG_DIR:?}/"
   export CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/ccd-link"
   expect_file_tools "$d/settings.json" ask
   mkdir -p "$HOME/.claude-eval"

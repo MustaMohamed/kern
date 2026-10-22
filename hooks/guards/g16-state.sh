@@ -349,19 +349,30 @@ _g16_claude() {
   esac
 }
 
+# _g16_home_expand WORD: sets _G16_HE to WORD with a leading ~, $home or ${home} (lower-cased, as the
+# command is) replaced by _G16_HOME; any other WORD is unchanged.
+_g16_home_expand() {
+  # shellcheck disable=SC2016 # the literal words Claude wrote, lower-cased
+  case "$1" in
+    '~' | '~'/*) _G16_HE="$_G16_HOME${1#'~'}" ;;
+    '$home' | '$home'/*) _G16_HE="$_G16_HOME${1#'$home'}" ;;
+    '${home}' | '${home}'/*) _G16_HE="$_G16_HOME${1#'${home}'}" ;;
+    *) _G16_HE="$1" ;;
+  esac
+}
+
 # _g16_isccd WORD: exit 0 when CLAUDE_CONFIG_DIR is set and the lower-cased WORD, read as text, names its
-# directory: _G16_CCD or _G16_CCP once a leading ~, $HOME or ${HOME} is expanded, or the variable itself.
+# directory: _G16_CCD or _G16_CCP once a leading ~, $HOME or ${HOME} is expanded, or the variable itself,
+# bare, braced, or braced with a modifier (${CLAUDE_CONFIG_DIR:?}, ${CLAUDE_CONFIG_DIR:-...} and the like).
 _g16_isccd() {
-  local w=$1
+  local w
   [ -n "$_G16_CCD" ] || return 1
   # shellcheck disable=SC2016 # the literal words Claude wrote, lower-cased
-  case "$w" in
-    '$claude_config_dir' | '${claude_config_dir}') return 0 ;;
-    '~' | '~'/*) w="$_G16_HOME${w#'~'}" ;;
-    '$home' | '$home'/*) w="$_G16_HOME${w#'$home'}" ;;
-    '${home}' | '${home}'/*) w="$_G16_HOME${w#'${home}'}" ;;
+  case "$1" in
+    '$claude_config_dir' | '${claude_config_dir}' | '${claude_config_dir'[-:?+=#%/]*) return 0 ;;
   esac
-  w=${w%/}
+  _g16_home_expand "$1"
+  w=${_G16_HE%/}
   [ "$w" = "${_G16_CCD%/}" ] || [ "$w" = "${_G16_CCP%/}" ]
 }
 
@@ -397,14 +408,12 @@ _g16_name() {
   if [ -n "$_G16_SID" ]; then
     case "$1" in "$_G16_SID".state | */"$_G16_SID".state) _G16_K=state; return 0 ;; esac
   fi
+  _g16_home_expand "$1"
+  e=$_G16_HE
   # shellcheck disable=SC2016 # the literal words Claude wrote, lower-cased
   case "$1" in
-    '~'/*) e="$_G16_HOME${1#'~'}" ;;
-    '$home'/*) e="$_G16_HOME${1#'$home'}" ;;
-    '${home}'/*) e="$_G16_HOME${1#'${home}'}" ;;
     '$claude_plugin_data'/*) e="$_G16_DATA${1#'$claude_plugin_data'}" ;;
     '${claude_plugin_data}'/*) e="$_G16_DATA${1#'${claude_plugin_data}'}" ;;
-    *) e="$1" ;;
   esac
   case "$e" in
     *"$_G16_SD"*) _G16_K=state; return 0 ;;

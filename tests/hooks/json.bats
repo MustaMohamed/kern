@@ -130,3 +130,25 @@ next \ end' ]
   [ "$status" -eq 1 ]
   [ $(($(date +%s) - start)) -le 2 ]
 }
+
+@test "when tr cannot trim the hook input, json_ok fails and the call asks, or is denied under autopilot" {
+  # json_ok trims the input with one tr -d pass; a tr that did not run (a fork refused under load) leaves
+  # the text empty, which is not an object, so the dispatcher calls unparseable and fails closed (P1
+  # review Minor 3). The stub fails only that tr call, whose set holds the two bytes \t.
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  read_fails tr '*\\t*'
+  run_guard "$(bash_payload ls)"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *'"needs user approval: kern G0: hook input not parseable"'* ]] || false
+  set_autopilot on
+  run_guard "$(bash_payload ls)"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'"kern G0: hook input not parseable (autopilot: nobody to ask)"'* ]] || false
+  [ "$(read_failures tr)" -gt 0 ]
+  read_fails tr '*\\t*' 0
+  set_autopilot off
+  run_guard "$(bash_payload ls)"
+  [ "$(decision_of "$output")" = none ]
+}
