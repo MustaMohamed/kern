@@ -50,7 +50,9 @@ test('verify.fast defaults to each of typecheck and lint that resolves, as setti
   const d16 = 'each of `typecheck` and `lint` that resolves; at least one';
   assertContains(SKILL, [`| \`verify.fast\` | ${d16} | quick proof before a commit |`]);
   assertContains('kernel/settings.md', [`| \`verify.fast\` | ${d16} | command | self-review, prove-it |`]);
-  assert.ok(!readDoc(SKILL).raw.includes('`typecheck`, then `lint`'), 'the two-reading default is gone');
+  for (const f of [SKILL, 'kernel/settings.md']) assert.ok(!/`typecheck`,? then `lint`/.test(readDoc(f).raw), `${f}: the two-reading default is gone`);
+  // Fix round 1, Minor 1: the default must win over step 1's "When both exit 3, ask" in a lint-only repo.
+  assertContains('tests/skills/prove-it.acceptance.md', ['A repo with a lint script and no typecheck: `verify.fast` runs lint alone, with no ask and no failed check, under autopilot too.']);
 });
 
 test('evidence reference', () => {

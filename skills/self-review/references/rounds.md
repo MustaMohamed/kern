@@ -12,5 +12,5 @@ The package with the highest N is the previous one. None means a first round: no
 
 ## Since package
 
-In a later round, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <previous-tree> --out <reviews>/<slug>-<N+1>-since.diff`. It holds what changed since the previous run; exit 3 means nothing did. Its name does not match the `<slug>-<N>.diff` pattern, so it is never taken for a package. A later round's verdict is `split` when this package has more than `scope_threshold` paths and the previous one did not, or a `blocker` or `should-fix` finding lands on a line the previous round's findings asked to change.
+In a later round, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <previous-tree> --out <reviews>/<slug>-<N+1>-since.diff`. It holds what changed since the previous run; exit 3 means nothing did. Its name does not match the `<slug>-<N>.diff` pattern, so it is never taken for a package. A later round's verdict is `split` when this package has more than `scope_threshold` paths and the previous one did not, or a finding in the first two classes lands on a line the previous round's findings asked to change.
 

@@ -62,7 +62,7 @@ test('self-review exits, order and dispatches', () => {
     '`fix first`: a failed or unrun check (step 2 or 7), an unresolved hit, or a finding in the first two classes', "(the spec lane's Critical and Important count)",
     // Task 17a P10: the restated `rev-parse <baseref>` test went to pay for D19; a diff that names a path already
     // means `<baseref>` differs from `<merge-base>`.
-    '`rebase first`: `git -C <wt> diff --name-only <merge-base> <baseref>` names a path the package also changed', 'names a path the package also changed',
+    '`rebase first`: `git -C <wt> diff --name-only <merge-base> <baseref>` names a path the package also changed',
     'or "base not refreshed" is reported', 'self-review never rebases', 'If `fix first` wins, still report a rebase need', 'A lane skip line is reported and does not change the verdict',
     // autopilot
     'never through AskUserQuestion', '`autopilot ON:` reminder', '`kern mode:` line with `autopilot=on`', 'the kernel\'s "Autopilot:" line',
@@ -77,8 +77,8 @@ test('a self-review finding is a defect on a changed line, a nit is a small one,
   const nine = steps(readDoc(SKILL).body)[9];
   // Fix round 1, I1: the definition agrees with the `pre-existing` class, the smell baseline and step 6's callers.
   for (const s of ['9. Verdict. A finding is a defect on a changed line or at a caller or contract the change breaks: `path:line` and how it fails.',
-    // Task 17a P10, D3: a smell is a `nit` (the user, 2026-10-22: "Smells are nits"), pinned in the test below
-    'A defect the change did not cause goes under `pre-existing`;', 'a `nit` is a real defect too small to block;', 'a smell is a `nit`.',
+    // Task 17a P10, D3: "a smell is a `nit`" (the user, 2026-10-22: "Smells are nits") is pinned in the test below
+    'A defect the change did not cause goes under `pre-existing`;', 'a `nit` is a real defect too small to block;',
     'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename) or a justified step 2 hit, each under Cleared with its check;',
     // Fix round 1, M2: a missing test no finding covers stays in the report as its own line. Task 17a P10, D19: that
     // line goes under `Untested` and says it is not a finding (pinned in the test below).
@@ -88,11 +88,11 @@ test('a self-review finding is a defect on a changed line, a nit is a small one,
   assertContains(SKILL, ['| `review.taxonomy` | `blocker,should-fix,nit,pre-existing` |', 'the Declined to judge list, the Cleared and `Untested` lists, the verdict.']);
   // The "Reached by" sentence went to fit the 7,000-byte cap (Task 16o), as plan's and define's did.
   assert.ok(!readDoc(SKILL).raw.includes('Reached by'), 'no Reached by sentence');
-  assertContains('tests/skills/self-review.acceptance.md', ['behaviour-keeping change', 'lands in Cleared with its check', 'with no such finding, the missing test is one line under `Untested`',
+  // Task 17a P10: the acceptance line for the missing test is pinned in the test below.
+  assertContains('tests/skills/self-review.acceptance.md', ['behaviour-keeping change', 'lands in Cleared with its check',
     'for any reason but a new module or a test-only patch']);
-  // The classes and the smell rule step 9 now names must still say so where they live.
+  // The classes step 9 names must still say so where they live; the smell rule is pinned in the test below.
   assertContains(SKILL, ['`blocker,should-fix,nit,pre-existing`']);
-  assertContains(`${REF}/smells.md`, ['in the `nit` class.']);
 });
 
 test('a smell or an uncovered missing test never blocks, and a later round splits only on a blocking fix-line finding', () => {
@@ -100,9 +100,12 @@ test('a smell or an uncovered missing test never blocks, and a later round split
   // `should-fix` made the verdict `fix first`, which stops finish-branch. D4: in a later round any finding on an added
   // line of the since package, a nit included, gave `split`. D19: the trim dropped "not a finding" from the missing-test
   // clause, and Outputs had no slot for the line. The user, 2026-10-22: "Smells are nits"; `split` holds on the size
-  // rule, or when a `blocker` or `should-fix` finding lands on a line the previous round asked to change.
+  // rule, or when a `blocker` or `should-fix` finding lands on a line the previous round asked to change. Fix round 1:
+  // rounds.md says "the first two classes", as step 9's `fix first` does, so a custom review.taxonomy splits too.
+  // Fix round 1, Important 1: the missing-test clause keeps its covered half, so a missing test a finding covers is
+  // never filed as a finding of its own; the clause sits in the "Not findings:" list.
   const nine = steps(readDoc(SKILL).body)[9];
-  for (const s of ['a smell is a `nit`.', 'a missing test no finding covers: one line under `Untested`, not a finding; the verdict ignores it;'])
+  for (const s of ['a smell is a `nit`.', 'a missing test, one line under the finding it would catch, else under `Untested`, which the verdict ignores;'])
     assert.ok(nine.includes(s), `step 9 lacks: ${s}`);
   assert.ok(!readDoc(SKILL).raw.includes('`should-fix` at most'), 'step 9 no longer files a smell as should-fix');
   assertContains(`${REF}/smells.md`, ['- A smell is a labelled judgment call, such as "possible Feature Envy", in the `nit` class.']);
@@ -111,7 +114,9 @@ test('a smell or an uncovered missing test never blocks, and a later round split
   assert.ok(!readDoc(`${REF}/rounds.md`).raw.includes('an added line of the since package'), 'a finding on any added line no longer splits');
   assertContains('tests/skills/self-review.acceptance.md', ['A smell alone leaves the verdict `ready`.',
     'a `nit` on a line the round 1 findings asked to change does not give `split`', 'a `should-fix` finding in the new work gives `fix first`, not `split`',
-    'one line under `Untested`, not a finding, and the verdict ignores it']);
+    'with no such finding, the missing test is one line under `Untested`, not a finding, and the verdict ignores it',
+    // Fix round 1, Minor 1: the D16 default must win over Inputs' "When both exit 3, ask" in a lint-only repo
+    'A repo with a lint script and no typecheck: `verify.fast` runs lint alone, with no ask and no failed check, under autopilot too.']);
 });
 
 test('self-review runs its checks in the worktree, and verify.fast defaults to each of typecheck and lint that resolves', () => {
@@ -119,11 +124,9 @@ test('self-review runs its checks in the worktree, and verify.fast defaults to e
   // call of its own, as finish-branch step 2 does it.
   assert.ok(steps(readDoc(SKILL).body)[2].includes("Run `verify.fast` and step 7's `<test>` from `<wt>`, a `cd <wt>` as its own call first."), 'step 2 names the tree');
   // D16: "`typecheck` then `lint`" read as both, so a repo with lint and no typecheck never got a green verify.fast.
-  const d16 = 'each of `typecheck` and `lint` that resolves; at least one';
-  assertContains(SKILL, [`| \`verify.fast\` | ${d16} |`, '| `base_branch`, `test.focused` | detected |']);
-  assertContains('skills/prove-it/SKILL.md', [`| \`verify.fast\` | ${d16} | quick proof before a commit |`]);
-  assertContains('kernel/settings.md', [`| \`verify.fast\` | ${d16} | command | self-review, prove-it |`]);
-  for (const f of [SKILL, 'skills/prove-it/SKILL.md', 'kernel/settings.md']) assert.ok(!/`typecheck`,? then `lint`/.test(readDoc(f).raw), `${f}: no "typecheck then lint" default`);
+  // prove-it's row and kernel/settings.md:41 are pinned in tests/skills/prove-it.test.mjs.
+  assertContains(SKILL, ['| `verify.fast` | each of `typecheck` and `lint` that resolves; at least one |']);
+  assert.ok(!/`typecheck`,? then `lint`/.test(readDoc(SKILL).raw), 'no "typecheck then lint" default');
 });
 
 test('self-review references', () => {
@@ -134,7 +137,7 @@ test('self-review references', () => {
     'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1700],
     'smells.md': [['# Smell baseline', '## Rules', '## Smells'], 2200],
   };
-  assertContains(`${REF}/smells.md`, ['in the `nit` class.', 'A `review.rules` file that endorses what a smell would flag wins',
+  assertContains(`${REF}/smells.md`, ['A `review.rules` file that endorses what a smell would flag wins',
     'Skip what lint, the formatter or the type checker already enforces', ...['Mysterious Name', 'Duplicated Code', 'Feature Envy', 'Data Clumps', 'Primitive Obsession',
       'Repeated Switches', 'Shotgun Surgery', 'Divergent Change', 'Speculative Generality', 'Message Chains', 'Middle Man', 'Refused Bequest'].map((s) => `- ${s}: `)]);
   for (const [f, [hs, max]] of Object.entries(refs)) {
@@ -146,11 +149,13 @@ test('self-review references', () => {
     'prove the new code with `--mutate` on its condition',
     // Task 17a P10, from the P4 review: probe refuses an absolute or `..` `--mutate` path with exit 2
     '`probe --mutate <file>:<line> <wt> -- <test>`, `<file>` relative to `<wt>`, inverts the first operator on that line',
+    // Fix round 1, Minor 3: step 2's "pasting commands and output" does not reach step 7's probes
+    'catch what reviewers miss; paste each run.',
     // Task 16o: SKILL.md step 7 now names only the two passes and points here, so exit 1 says it fails the check, as step 7 did
     'probe: fail-then-pass ok', 'Exit 1 (no failure, or the mutation survived) fails the check', 'Exit 3 is inconclusive, never a pass, and fails the check']);
-  assertContains(`${REF}/rounds.md`, ['<reviews>/<slug>-<N+1>.diff', 'kern-dir reviews', 'the text after `..`', 'wt-diff <wt> <previous-tree> --out', 'means a first round', '`detached`',
+  assertContains(`${REF}/rounds.md`, ['<reviews>/<slug>-<N+1>.diff', 'kern-dir reviews', 'the text after `..`', 'wt-diff <wt> <previous-tree> --out', '`detached`',
     // Task 16o: moved from SKILL.md step 9 to fit its cap. Task 17a P10, D4: only a blocking finding on a fix line splits.
-    "A later round's verdict is `split` when this package has more than `scope_threshold` paths and the previous one did not, or a `blocker` or `should-fix` finding lands on a line the previous round's findings asked to change."]);
+    "A later round's verdict is `split` when this package has more than `scope_threshold` paths and the previous one did not, or a finding in the first two classes lands on a line the previous round's findings asked to change."]);
   assertContains(`${REF}/blast-radius.md`, ['You said so', 'You pointed at the line', 'You showed the bad case can\'t happen', 'You ran it', 'You reproduced it in the app', 'every writer', 'reader sweep only answers who breaks', 'feature flag', 'reported as unproven', 'or "unproven"', 'never make up a caller or an API', 'Paste what happened']);
   assertContains(`${REF}/doubt-cycle.md`, ['Never the claim', '- contract misread: ', '- actionable: a real fault', '- trade-off: ', '- noise: ', 'none was classed actionable', 'assume the author is overconfident', 'say explicitly when no fault turns up', 'under autopilot, park it', 'validating, not doubting', 'goes back to be split',
     // Task 16o fix round 1: moved here from SKILL.md step 8, which points to this file

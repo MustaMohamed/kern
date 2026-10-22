@@ -1,6 +1,6 @@
 # Claim checks
 
-Three scripts run in seconds and catch what reviewers miss.
+Three scripts run in seconds and catch what reviewers miss; paste each run.
 
 ## floor-scan
 
