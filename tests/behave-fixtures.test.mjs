@@ -169,7 +169,7 @@ test('export-in-progress: the implementer reported DONE for Task 3, its diff fro
     const before = ledger.match(/^Task 3: start tree=(\w+)/m)[1];
     const out = join(mkdtempSync(join(tmpdir(), 'pkg-')), 'task-3.diff');
     try {
-      // prove-it step 6: the subagent's worktree diff, from the tree its task started on.
+      // prove-it step 2: the subagent's worktree diff, from the tree its task started on, read before its test runs.
       const d = kern(ws, 'wt-diff', wt, before, '--out', out);
       assert.equal(d.status, 0, d.stderr);
       assert.deepEqual(d.stdout.trim().split('\n').slice(2), ['src/export.js', 'test/export.test.js']);

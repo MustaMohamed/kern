@@ -605,12 +605,12 @@ description: Use before saying work is done, fixed, passing or verified; before 
 **4. Steps**
 0. Defer (A6).
 1. Name the claim and its proving command from `references/evidence.md`. Resolve commands with `kern-get <key>`, else `kern-detect <key>`, and print each with its source. [SP verification-before-completion:24-36; PS principle-prove-it-works:13-16]
-2. Run it fresh and in full on the tree that will be integrated: the worktree, when the work lives there. [SP verification-before-completion:29; SP finishing-a-development-branch:216]
-3. Read the exit code, the failure count and the whole output. Inconclusive, skipped, zero tests run, or the wrong environment counts as a fail. Suspect the observation method before the system. [SP verification-before-completion:29; PB bug-fix:10; PS principle-prove-it-works:16; BV prove-it: zero tests ran is a fail]
-4. For a new guard or regression test, take the change's patch (the `.patch` beside a `wt-diff` package) and run `probe --exclude-tests <wt> <change.patch> -- <test command>`; it must print `probe: fail-then-pass ok`. The allow case uses a value a real caller sends. Exit 3 is reported as "probe inconclusive", never as a pass. [SP verification-before-completion:82-86; USR; BV prove-it: --exclude-tests]
-5. For "requirements met", re-read the acceptance lines from `spec.source` and tick each one against evidence. [SP verification-before-completion:48,94-98; ADR definition-of-done:22]
-6. For a subagent's "success", read its worktree diff yourself with `wt-diff <wt> <tree-before>` and open the artifacts it names. [SP verification-before-completion:47,100-104]
-7. State each claim with its evidence as `claim: command, result`, or label it measured, inferred or guess. A fix the reply proposes but did not run is labelled inferred (the user's "Yes, label it (Recommended)", 2026-10-21: in 3 of 3 prove-it-2 runs on 2026-10-20 the reply proposed a guard fix it had not run, with no label). [PS poteto-mode:111]
+2. For a subagent's "success", read its worktree diff with `wt-diff <wt> <tree-before>`, or the files it names, before you run its test; a failing test does not skip this (Task 16p: in the 2026-10-22 prove-it-2 runs this was step 6, after the run, and runs 0 and 1 stopped at the red test without opening the changed file). [SP verification-before-completion:47,100-104]
+3. Run the proving command fresh and in full on the tree that will be integrated: the worktree, when the work lives there. [SP verification-before-completion:29; SP finishing-a-development-branch:216]
+4. Read the exit code, the failure count and the whole output. Inconclusive, skipped, zero tests run, or the wrong environment counts as a fail. Suspect the observation method before the system. [SP verification-before-completion:29; PB bug-fix:10; PS principle-prove-it-works:16; BV prove-it: zero tests ran is a fail]
+5. For a new guard or regression test, take the change's patch (the `.patch` beside a `wt-diff` package) and run `probe --exclude-tests <wt> <change.patch> -- <test command>`; it must print `probe: fail-then-pass ok`. The allow case uses a value a real caller sends. Exit 3 is reported as "probe inconclusive", never as a pass. [SP verification-before-completion:82-86; USR; BV prove-it: --exclude-tests]
+6. For "requirements met", re-read the acceptance lines from `spec.source` and tick each one against evidence. [SP verification-before-completion:48,94-98; ADR definition-of-done:22]
+7. State each claim with its evidence as `claim: command, result`, or write it as `inferred: <claim>` or `guess: <claim>`; a fix you did not run is `inferred: <fix>` (the user's "Yes, label it (Recommended)", 2026-10-21: in 3 of 3 prove-it-2 runs on 2026-10-20 the reply proposed a guard fix it had not run, with no label; Task 16p gave the label its fixed form after 0 of 6 prove-it-2 replies on 2026-10-21 and 2026-10-22 used a label word). [PS poteto-mode:111]
 
 Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words done, fixed, passing, verified. Then, for a commit, Read `commit`; for a push or a PR, Read `finish-branch`; and follow its steps. [SE routing: the only natural-language path to commit and finish-branch]
 
@@ -622,14 +622,14 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 **7. Acceptance**
 - After an edit, "fixed, right?": runs the focused test and quotes exit code and failure count before saying fixed.
-- An implementer returns DONE: the diff is read before the user is told.
-- The reply proposes a fix it did not run: the fix is labelled inferred.
+- An implementer returns DONE: the diff is read before its test is re-run and before the user is told.
+- The reply proposes a fix it did not run: the fix is written `inferred: <fix>`.
 - "What does this regex match?": stays quiet.
 - "Explain why the CI job is slow": stays quiet.
 
 The full checklist is `tests/skills/prove-it.acceptance.md` (M2b), ticked in the pilot.
 
-**8. Sources; size.** SP verification-before-completion; PS principle-prove-it-works, poteto-mode:111; PB bug-fix:10; ADR definition-of-done. SKILL.md at most 3,800 bytes (raised from 3,600 in M2a Task 25: the Gate hands off to commit or finish-branch, except from inside them; Task 16i made room for the unrun-fix line: step 1 names `kern-detect` without its path, after `kern-get`'s, and step 6 names `wt-diff` without the path step 4 gives); `references/evidence.md` at most 2,100 bytes (the plan's cap).
+**8. Sources; size.** SP verification-before-completion; PS principle-prove-it-works, poteto-mode:111; PB bug-fix:10; ADR definition-of-done. SKILL.md at most 3,800 bytes (raised from 3,600 in M2a Task 25: the Gate hands off to commit or finish-branch, except from inside them; Task 16i made room for the unrun-fix line: step 1 names `kern-detect` without its path, after `kern-get`'s, and step 6 named `wt-diff` without the path step 4 gave; Task 16p moved that diff read to step 2, which now gives the path, and made room for its "before you run its test" and the `inferred: <claim>` form by cutting "yourself" and "open" from the diff read, "beside its package" from the probe step's `.patch` note, "propose but" and "labelled" from the unrun-fix line, "Inconclusive is" from the last red-flag reply, and step 1's "label the claim guess" to "the claim is a guess", so 3,797 bytes); `references/evidence.md` at most 2,100 bytes (the plan's cap).
 
 ---
 ### C8. `self-review` (path, M2)
