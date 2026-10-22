@@ -380,16 +380,18 @@ g00_all() {
     "$(printf '%s\n' "x=\$(cat <<'H'" '[$(git push --force origin main)]' 'H' '); echo $((x))')"
 }
 
-@test "a zsh (e) flag or a bash @P transform that re-evaluates a stored string is denied under autopilot" {
-  # x='$(cmd)' stores the substitution as literal text. zsh's ${(e)x}, and any flag group that holds e
-  # (${(Le)x}), and bash 5.3's ${x@P} expand the value again and run cmd, as arithmetic runs a stored
-  # subscript; git_words reads the single quote as literal text (Opus audit A11). Outside autopilot no
-  # guard votes, an M3 limit. ${(L)x} and ${x@Q} run nothing in zsh, bash 3.2 or bash 5.3, and a flag
-  # group in single quotes is literal text.
+@test "a parameter expansion that re-evaluates a stored string is denied under autopilot" {
+  # x='$(cmd)' stores the substitution as literal text. zsh's ${(e)x}, a flag group that holds e outside
+  # its delimited arguments (${(Le)x}, ${(j:):e)x}), zsh's (P), (%) and (%%) flags, bash 5.3's ${x@P}, and
+  # bash's ${!y} indirection on a name holding a subscript all expand a stored value again and run cmd, as
+  # arithmetic runs a stored subscript; git_words reads the single quote as literal text (Opus audit A11,
+  # P3 review add-on). Each form here was measured to run a stored command in zsh 5.9, bash 3.2 or bash
+  # 5.3. Outside autopilot no guard votes, an M3 limit.
+  local sub='$(git push --force origin main)'
   local c
-  for c in 'x='\''$(git push --force origin main)'\''; echo ${(e)x}' \
-    'x='\''$(git push --force origin main)'\''; echo "${(Le)x}"' \
-    'x='\''$(git push --force origin main)'\''; echo ${x@P}'; do
+  for c in "x='$sub'; echo \${(e)x}" "x='$sub'; echo \"\${(Le)x}\"" "x='$sub'; echo \${(j:):e)x}" \
+    "x='$sub'; echo \${(pj:x:e)x}" 'echo ${(P)y}' 'echo ${(%)x}' 'echo ${(%%)x}' \
+    "x='$sub'; echo \${x@P}" 'echo ${!y}' 'echo ${!y:-z}' 'echo ${!1}'; do
     set_autopilot on
     gx "$c" ""
     [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
@@ -398,9 +400,12 @@ g00_all() {
     gx "$c" ""
     [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
   done
+  # An e inside a delimited flag argument is not the eval flag; ${(L)x}, ${x@Q}, the bash list and
+  # array-key indirections, and a flag group in single quotes do not re-evaluate.
   set_autopilot on
-  for c in 'x='\''$(git push --force origin main)'\''; echo ${(L)x}' \
-    'x='\''$(git push --force origin main)'\''; echo ${x@Q}' "echo '\${(e)x}' '\${x@P}'"; do
+  for c in "x='$sub'; echo \${(s:e:)x}" "x='$sub'; echo \${(l:5::e:)x}" "x='$sub'; echo \${(L)x}" \
+    "x='$sub'; echo \${x@Q}" 'echo ${!a[@]}' 'echo "${!pre@}"' 'echo ${!pre*}' \
+    "echo '\${(e)x}' '\${x@P}' '\${!y}'"; do
     gx "$c" ""
     [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
   done

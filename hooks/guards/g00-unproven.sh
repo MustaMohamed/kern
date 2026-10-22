@@ -24,9 +24,11 @@
 #   optional spaces after [), whose value is stored and evaluated as arithmetic later. Reading the inner
 #   command exactly is not practical, so autopilot denies; interactively no guard votes (M3);
 # - it holds, outside single quotes, a parameter expansion that re-evaluates the stored string it reads:
-#   a zsh flag group that holds e (${(e)x}, ${(Le)x}) or the bash @P transform (${x@P}). zsh and bash 5.3
-#   run a $( ) or backtick in the value, which git_words read where it was stored, often as literal
-#   single-quoted text. Autopilot denies; interactively no guard votes (M3).
+#   a zsh flag group with an e flag outside its delimited arguments (${(e)x}, ${(Le)x}, ${(j:):e)x}) or a
+#   P, % or %% flag (${(P)y}, ${(%)x}); the bash @P transform (${x@P}); or bash indirect expansion
+#   ${!name} that resolves a name holding a subscript. zsh and bash 5.3 run a $( ) or backtick in the
+#   value, which git_words read where it was stored, often as literal single-quoted text. Autopilot
+#   denies; interactively no guard votes (M3).
 # Accepted limits, as a script file run by an interpreter is: the inline code, here-doc or pipe of an
 # interpreter other than a shell (python -c, node -e or -p, perl -e or -E, ruby -e, php -r, deno
 # eval, osascript -e, lua -e, R -e, julia -e, pwsh -c, `python3 - <<EOF`); a program or script
@@ -202,11 +204,19 @@ _G00_AWK='
     }
     return 0
   }
-  # g0_reeval(s): true when s holds, outside single quotes, a parameter expansion that re-evaluates the
-  # stored string it reads: a zsh flag group that holds e (${(e)x}, ${(Le)x}) or the bash @P transform
-  # (${x@P}). zsh and bash 5.3 then run a $( ) or backtick in the value, as arithmetic runs one in a
-  # stored subscript. A flag whose argument is an e (${(s:e:)x}) counts too; ${(L)x} and ${x@Q} do not.
-  function g0_reeval(s,   nn, C, i, c, q, t) {
+  # g0_reeval(s): true when s holds, outside single quotes, a parameter expansion that re-evaluates its
+  # stored value and runs a $( ) or backtick kept in it, often as single-quoted literal text (as
+  # arithmetic runs one in a stored subscript). Four forms, each proven to run a stored command:
+  #   - a zsh flag group with an `e` flag outside any delimited flag argument (${(e)x}, ${(Le)x},
+  #     ${(j:):e)x}), or a `P`, `%` or `%%` flag (${(P)y}, ${(%)x}, ${(%%)x});
+  #   - the bash @P transform (${x@P});
+  #   - bash indirect expansion ${!name}, which resolves the value of name and evaluates a subscript in
+  #     it (y=a[$(cmd)]; ${!y}); not the ${!pre*}, ${!pre@}, ${!arr[@]} or ${!arr[*]} list forms.
+  # The flag-group walk follows zsh (g0_zflags): a flag with a delimited argument (j s l r Z _ I g, with
+  # l and r taking up to three) skips from its delimiter to the matching close, so an `e` inside an
+  # argument (${(s:e:)x}) is not a flag. ${(L)x} and ${x@Q} do not re-evaluate. P3 keeps a twin of this
+  # matcher for here-doc bodies, which P20 unifies later.
+  function g0_reeval(s,   nn, C, i, c, q) {
     nn = split(s, C, ""); q = ""
     for (i = 1; i <= nn; i++) {
       c = C[i]
@@ -215,8 +225,55 @@ _G00_AWK='
       if (c == "\"") { q = q == "\"" ? "" : "\""; continue }
       if (c == sq && q == "") { q = sq; continue }
       if (c != "$" || C[i + 1] != "{") continue
-      t = substr(s, i + 2)
-      if (t ~ /^[(][^)]*e/ || t ~ /^[^}]*@P[}]/) return 1
+      if (C[i + 2] == "(") { if (g0_zflags(C, i + 3, nn)) return 1 }
+      else if (C[i + 2] == "!") { if (g0_indirect(C, i + 3, nn)) return 1 }
+      else if (g0_atp(C, i + 2, nn)) return 1
+    }
+    return 0
+  }
+  # g0_zflags(C, p, nn): true when the zsh flag group starting at p (just after `${(`) holds an `e`, `P`
+  # or `%` flag outside any delimited argument. Stops at the `)` that closes the group.
+  function g0_zflags(C, p, nn,   c) {
+    while (p <= nn) {
+      c = C[p]
+      if (c == ")") return 0
+      if (c == "e" || c == "P" || c == "%") return 1
+      if (c == "j" || c == "s" || c == "Z" || c == "_" || c == "I" || c == "g" || c == "l" || c == "r")
+        p = g0_skipargs(C, p + 1, nn, (c == "l" || c == "r") ? 3 : 1)
+      else p++
+    }
+    return 0
+  }
+  # g0_skipargs(C, p, nn, reps): skips up to reps delimited arguments starting at p, each from its opening
+  # delimiter to the matching close (( ) [ ] { } < >, else the same byte); returns the index after them. A
+  # second or third argument (l and r) is taken only while the next byte opens one with the same delimiter.
+  function g0_skipargs(C, p, nn, reps,   d, e, n) {
+    for (n = 0; n < reps; n++) {
+      if (p > nn) return p
+      d = C[p]
+      if (d == ")" || d == "") return p
+      e = d == "(" ? ")" : d == "[" ? "]" : d == "{" ? "}" : d == "<" ? ">" : d
+      for (p++; p <= nn && C[p] != e; p++) ;
+      p++
+      if (n + 1 < reps && C[p] != d) return p
+    }
+    return p
+  }
+  # g0_indirect(C, p, nn): true when `${!` at p-3 is a bash indirect expansion ${!name} (name present,
+  # then a modifier or `}`), not a list form (${!pre*}, ${!pre@}) or an array-keys form (${!arr[...]}).
+  function g0_indirect(C, p, nn,   start, c) {
+    start = p
+    while (p <= nn && C[p] ~ /[A-Za-z0-9_]/) p++
+    if (p == start) return 0
+    c = C[p]
+    if (c == "*" || c == "@" || c == "[") return 0
+    return 1
+  }
+  # g0_atp(C, p, nn): true when the bash @P transform appears before the `}` that closes the expansion.
+  function g0_atp(C, p, nn) {
+    for (; p <= nn; p++) {
+      if (C[p] == "}") return 0
+      if (C[p] == "@" && C[p + 1] == "P") return 1
     }
     return 0
   }
@@ -262,7 +319,7 @@ _G00_AWK='
     if (g0_sqarr($0, 0)) { g0_out("a single-quoted array subscript holds a $( ) or backtick kern cannot read"); next }
     # A zsh (e) flag or a bash @P transform re-evaluates its stored value, read on the raw record for the
     # same reason: the value was stored as literal text, often in single quotes (Opus audit A11).
-    if (g0_reeval($0)) { g0_out("a zsh (e) flag or a bash @P transform re-evaluates a stored string kern cannot read"); next }
+    if (g0_reeval($0)) { g0_out("a zsh (e), (P) or (%) flag, a bash @P transform or ${!name} re-evaluates a stored string kern cannot read"); next }
     sw(g0_flat($0)); cw_reset()
     for (k = 1; k <= sw_n; k++) cw(sw_w[k])
     # The redirections after the command name, and their targets, are not arguments.
