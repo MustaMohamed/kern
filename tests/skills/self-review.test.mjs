@@ -44,10 +44,14 @@ test('self-review exits, order and dispatches', () => {
     '`{file}` or `{dir}` replaced by the one test file covering the change, no shell syntax', "it must fail with the branch's non-test changes reversed.",
     '`<file>` is relative to `<wt>`', '`<line>` from the working file', 'probe inverts the first operator on that line', 'For each new guard test',
     // Task 16o: the other exits, and the new-module exit 3, are stated in references/claim-checks.md (pinned below)
-    'Only `probe: fail-then-pass ok` and `probe: mutation caught` pass; any other exit fails the check, except a new module (`references/claim-checks.md`).',
+    // Task 16o fix round 1, M1: the test-only exception is inline again; probe prints it as inconclusive (scripts/probe)
+    'Only `probe: fail-then-pass ok` and `probe: mutation caught` pass; any other exit fails the check, except a new module or a test-only patch (`references/claim-checks.md`).',
     // dispatches
     '`kern:task-reviewer` on model `model.reviewer`', '`kern:investigator` on model `model.reviewer`', "the spec's acceptance lines stand in for the plan's acceptance lines and Review Focus",
-    'where does this artifact fail this contract?', 'never your claim or reasoning', 'with absolute paths only', 'both absolute paths as scope',
+    'with absolute paths only',
+    // Task 16o fix round 1: the doubt cycle's dispatch text lives in references/doubt-cycle.md (pinned below), which a
+    // run reads anyway: its step 1 writes the two files the dispatch names
+    '8. Doubt cycle, for non-trivial decisions only: per `references/doubt-cycle.md`, dispatching `kern:investigator` on model `model.reviewer`; at most 3 cycles.',
     // verdict
     '(ordered high to low)', 'then one verdict, tested in order: `split`, `fix first`, `rebase first`, else `ready`',
     // Task 16o: the later-round split rule is in references/rounds.md (pinned below)
@@ -66,15 +70,22 @@ test('a self-review finding is a defect on a changed line, a nit is a small one,
   // test move (decoy d3), a missing test as its own item, a guess kern called probably fine, and a split suggestion
   // (task-16-h2h-review-diagnosis). The user kept the nit class, limited to real defects ("Keep, but limited").
   const nine = steps(readDoc(SKILL).body)[9];
-  for (const s of ['9. Verdict. A finding is a defect on an added or changed line: `path:line` and how it fails; a `nit` is one too small to block.',
+  // Fix round 1, I1: the definition agrees with the `pre-existing` class, the smell baseline and step 6's callers.
+  for (const s of ['9. Verdict. A finding is a defect on a changed line or at a caller or contract the change breaks: `path:line` and how it fails.',
+    'A defect the change did not cause goes under `pre-existing`;', 'a `nit` is a real defect too small to block;', 'a smell counts, `should-fix` at most.',
     'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename) or a justified step 2 hit, each under Cleared with its check;',
-    'a missing test, one line under the finding it would catch;', 'a probably-fine guess;', 'style advice;', 'a first-round split idea.',
+    // Fix round 1, M2: a missing test no finding covers stays in the report as its own line
+    'a missing test, one line under the finding it would catch, else its own line;', 'a probably-fine guess;', 'style advice;', 'a first-round split idea.',
     'List findings in `review.taxonomy` classes (ordered high to low)']) assert.ok(nine.includes(s), `step 9 lacks: ${s}`);
   assert.ok(nine.indexOf('A finding is a defect') < nine.indexOf('List findings in'), 'the definition comes before the findings are listed');
   assertContains(SKILL, ['| `review.taxonomy` | `blocker,should-fix,nit,pre-existing` |', 'the Declined to judge list, the Cleared list, the verdict.']);
   // The "Reached by" sentence went to fit the 7,000-byte cap (Task 16o), as plan's and define's did.
   assert.ok(!readDoc(SKILL).raw.includes('Reached by'), 'no Reached by sentence');
-  assertContains('tests/skills/self-review.acceptance.md', ['behaviour-keeping change', 'lands in Cleared with its check']);
+  assertContains('tests/skills/self-review.acceptance.md', ['behaviour-keeping change', 'lands in Cleared with its check', 'with no such finding, the missing test is a line of its own',
+    'for any reason but a new module or a test-only patch']);
+  // The classes and the smell rule step 9 now names must still say so where they live.
+  assertContains(SKILL, ['`blocker,should-fix,nit,pre-existing`']);
+  assertContains(`${REF}/smells.md`, ['in the `should-fix` class at most, never a blocker']);
 });
 
 test('self-review references', () => {
@@ -101,7 +112,9 @@ test('self-review references', () => {
     // Task 16o: moved from SKILL.md step 9 to fit its cap
     "A later round's verdict is `split` when this package has more than `scope_threshold` paths and the previous one did not, or a finding lands in an added line of the since package."]);
   assertContains(`${REF}/blast-radius.md`, ['You said so', 'You pointed at the line', 'You showed the bad case can\'t happen', 'You ran it', 'You reproduced it in the app', 'every writer', 'reader sweep only answers who breaks', 'feature flag', 'reported as unproven', 'or "unproven"', 'never make up a caller or an API', 'Paste what happened']);
-  assertContains(`${REF}/doubt-cycle.md`, ['Never the claim', '- contract misread: ', '- actionable: a real fault', '- trade-off: ', '- noise: ', 'none was classed actionable', 'assume the author is overconfident', 'say explicitly when no fault turns up', 'under autopilot, park it', 'validating, not doubting', 'goes back to be split']);
+  assertContains(`${REF}/doubt-cycle.md`, ['Never the claim', '- contract misread: ', '- actionable: a real fault', '- trade-off: ', '- noise: ', 'none was classed actionable', 'assume the author is overconfident', 'say explicitly when no fault turns up', 'under autopilot, park it', 'validating, not doubting', 'goes back to be split',
+    // Task 16o fix round 1: moved here from SKILL.md step 8, which points to this file
+    'Dispatch `kern:investigator` on model `model.reviewer`', 'the question "where does this artifact fail this contract?"', 'the two absolute paths as scope', 'Never the claim, never your reasoning']);
 });
 
 test('self-review text hygiene', () => {
