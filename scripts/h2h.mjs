@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses, workspace } from './lib/claude-run.mjs';
 import { digest, pluginCopy, tryRun } from './lib/behave.mjs';
-import { armCopy, blindIds, falseAlarms, gate, gateExit, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, verdictLine } from './lib/h2h.mjs';
+import { armCopy, blindIds, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, verdictLine } from './lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -55,6 +55,8 @@ for (const t of tasks) {
       const cwd = workspace(join(t.dir, 'repo'), { name: t.project || 'app', origin: !!t.origin, branch: t.branch || '', setup: t.setup || [] });
       const git = (...g) => execFileSync('git', ['-C', cwd, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...g], { encoding: 'utf8' });
       if (t.patch) { git('apply', join(t.dir, t.patch)); git('add', '-A'); git('commit', '-qm', t.patch_message || 'feat: the change under review'); }
+      // What Claude Code's git status context shows this session, read before it starts; the grader gets it.
+      const facts = gitFacts(cwd);
       const { run, problem, events } = tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model: MODEL, maxTurns: t.max_turns || 40 });
       // A run cut off by the timeout keeps the events it printed.
       const kept = run ? run.events : events;
@@ -76,7 +78,7 @@ for (const t of tasks) {
       writeFileSync(join(raw, `${t.id.replace('/', '--')}-${r}-${ids[a.id]}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n'));
       // A plan lands in an ignored work directory, so the grader reads what each run wrote, not the diff.
       const wrote = t.category === 'plan' ? toolUses(run.events).filter((u) => u.name === 'Write').map((u) => `--- ${u.input.file_path}\n${u.input.content}`).join('\n\n') : '';
-      attempts.push({ arm: a.id, id: ids[a.id], e, heldout, text: redact(`${digest(run.events, 24000, { results: true })}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) });
+      attempts.push({ arm: a.id, id: ids[a.id], e, heldout, git: facts, text: redact(`${digest(run.events, 24000, { results: true })}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) });
       rmSync(dirname(cwd), { recursive: true, force: true });
     }
     if (voided) { console.log(`VOID ${t.id} run ${r}: ${voided}`); continue; }
@@ -92,7 +94,7 @@ for (const t of tasks) {
       const g = grades[x.id];
       const e = { ...x.e, decoyHits: (g.decoys ?? []).length, unmatched: g.unmatched ?? 0, unsupported: g.unsupported ?? 0 };
       const score = t.category === 'diagnose' && !x.heldout ? 0 : g.score / 10;
-      results.push({ task: t.id, category: t.category, run: r, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, matched: g.matched ?? [], why: g.why ?? '' });
+      results.push({ task: t.id, category: t.category, run: r, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, git: x.git, matched: g.matched ?? [], why: g.why ?? '' });
     }
   }
 }

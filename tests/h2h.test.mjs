@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspace } from '../scripts/lib/claude-run.mjs';
-import { armCopy, blindIds, falseAlarms, gate, gateExit, graderPrompt, loadTasks, outOfArea, parseGrades, redact, verdictLine } from '../scripts/lib/h2h.mjs';
+import { armCopy, blindIds, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, verdictLine } from '../scripts/lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const arms = [{ id: 'kern', dir: '/w/kern' }, { id: 'superpowers', dir: '/w/kern/.upstream/superpowers' }, { id: 'pstack', dir: '/w/kern/.upstream/pstack/harness/pstack/claude-code' }, { id: 'control', dir: null }];
@@ -81,6 +81,47 @@ test('the runner gives the gate every loaded task, prints each verdict line and 
   assert.ok(src.includes('const verdict = gate(results, tasks.map((t) => ({ id: t.id, category: t.category })));'), 'gate gets every loaded task');
   assert.ok(src.includes('for (const v of verdict) console.log(verdictLine(v));'));
   assert.ok(src.includes('process.exit(gateExit(verdict));'));
+});
+
+test('git facts are read with plain git from the workspace an arm starts in', () => {
+  const plan = loadTasks(ROOT).find((x) => x.id === 'plan/archive-invoices');
+  const d = workspace(join(plan.dir, 'repo'), { name: plan.project || 'app' });
+  try {
+    const f = gitFacts(d);
+    assert.deepEqual({ branch: f.branch, commits: f.commits, remotes: f.remotes }, { branch: 'main', commits: 1, remotes: [] });
+    assert.match(f.head, /^[0-9a-f]{7,}$/);
+    assert.equal(f.head, spawnSync('git', ['-C', d, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout.trim());
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); }
+  const review = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  const d2 = workspace(join(review.dir, 'repo'), { name: review.project || 'app', origin: !!review.origin, branch: review.branch || '', setup: review.setup || [] });
+  try {
+    const f = gitFacts(d2);
+    assert.deepEqual({ branch: f.branch, commits: f.commits, remotes: f.remotes }, { branch: 'feat/discounts', commits: 1, remotes: ['origin'] });
+  } finally { rmSync(dirname(d2), { recursive: true, force: true }); }
+  // The runner reads them in the arm's workspace after the task's own commit and before the arm runs.
+  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
+  const at = src.indexOf('const facts = gitFacts(cwd);');
+  assert.ok(at > src.indexOf("git('commit', '-qm', t.patch_message") && at < src.indexOf('tryRun({ cwd, prompts: t.prompts'), 'facts are read after the patch commit and before the run');
+  assert.ok(src.includes('heldout, git: facts, text: redact('), 'each attempt carries its facts');
+});
+
+test('the grader is told the git facts each attempt saw, so a claim that matches them is supported, in every category', () => {
+  // 2026-10-22 head-to-head: the grader counted kern's true `base: main` as unsupported. The branch came from
+  // Claude Code's git status block, which every arm sees and the grader does not (the user's "kern and grader").
+  const facts = { branch: 'main', commits: 1, remotes: [], head: '902f007' };
+  const general = "Each attempt's block opens with the git facts its session showed it from the start, read with git from its workspace. They were visible to the attempt, so a claim that matches them is supported, though no command printed it.";
+  const plan = graderPrompt({ category: 'plan', prompts: ['plan it'], rubric: ['orders tasks'] }, [{ id: 'arm-A', text: 'x', git: facts }, { id: 'arm-B', text: 'y', git: { ...facts, head: 'abc1234' } }]);
+  assert.ok(plan.includes(general), plan);
+  assert.ok(plan.includes("Count the claims about the repo that neither the fixture files nor the attempt's git facts support."), plan);
+  assert.ok(!plan.includes('that the fixture files do not support'));
+  assert.ok(plan.includes('\n=== arm-A ===\nGit facts: branch main; 1 commit; no remote; HEAD 902f007.\nx'), plan);
+  assert.ok(plan.includes('\n=== arm-B ===\nGit facts: branch main; 1 commit; no remote; HEAD abc1234.\ny'), plan);
+  assert.doesNotMatch(plan, /kern|superpowers|pocock|pstack|poteto|control/i);
+  for (const category of ['diagnose', 'review']) {
+    const p = graderPrompt({ category, prompts: ['p'], rubric: ['r'], labels: [] }, [{ id: 'arm-A', text: 'x', git: { branch: 'feat/discounts', commits: 2, remotes: ['origin'], head: '1a2b3c4' } }]);
+    assert.ok(p.includes(general), category);
+    assert.ok(p.includes('\n=== arm-A ===\nGit facts: branch feat/discounts; 2 commits; remote origin; HEAD 1a2b3c4.\nx'), p);
+  }
 });
 
 test('redaction turns .kern/ into .work/ and hides a /private temp prefix', () => {

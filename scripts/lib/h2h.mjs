@@ -6,6 +6,7 @@
 // Blinding rules from pstack skills/poteto-mode/playbooks/eval.md:5-13 (MIT; nothing the candidate sees names
 // an eval; the judge sees sanitized labels and scores all arms in one pass); the no-plugin control from
 // caveman evals/README.md:17 (Apache-2.0; ideas only).
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -115,16 +116,39 @@ export const verdictLine = (v) => `${v.status} ${v.category}${v.reason ? `: ${v.
 // gateExit(verdict): the runner's exit code. 1 when a category failed, else 3 when one is incomplete, else 0.
 export const gateExit = (verdict) => (verdict.some((v) => v.status === 'FAIL') ? 1 : verdict.some((v) => v.status === 'INCOMPLETE') ? 3 : 0);
 
+// gitFacts(dir): what Claude Code's git status context shows a session that starts in dir, read with plain
+// git, never from a transcript: the current branch, the commit count, the remote names ([] for none) and
+// HEAD's short SHA. The runner reads them in each arm's workspace before the arm runs; the grader never sees
+// that context, so graderPrompt gives it these.
+export function gitFacts(dir) {
+  const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  return {
+    branch: git('branch', '--show-current') || '(detached HEAD)',
+    commits: Number(git('rev-list', '--count', 'HEAD')),
+    remotes: git('remote').split('\n').filter(Boolean),
+    head: git('rev-parse', '--short', 'HEAD'),
+  };
+}
+
+// factsLine(f): one attempt's gitFacts as the grader reads them. It names no arm: every arm's workspace is the
+// same fixture, and only HEAD's SHA, from each commit's time, can differ.
+export const factsLine = (f) => `Git facts: branch ${f.branch}; ${f.commits} commit${f.commits === 1 ? '' : 's'}; ${f.remotes.length ? `remote ${f.remotes.join(', ')}` : 'no remote'}; HEAD ${f.head}.`;
+
+// graderPrompt(task, outputs): each output is { id, text, git }, git from gitFacts. Every arm's session saw
+// those facts in Claude Code's git status context (the 2026-10-22 plan gate counted kern's true `base: main`
+// as unsupported), so the grader is told them and a claim that matches them is supported (the user's "kern and
+// grader", 2026-10-22).
 export function graderPrompt(task, outputs) {
   return [
     `You grade ${outputs.length} anonymous attempts at the same ${task.category} task. You do not know which tool made which.`,
     'Score each attempt 0 to 10 on the rubric. Judge only what each attempt shows; a claim it does not support with a command and its output earns nothing.',
+    "Each attempt's block opens with the git facts its session showed it from the start, read with git from its workspace. They were visible to the attempt, so a claim that matches them is supported, though no command printed it.",
     ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, or "none".'] : []),
-    ...(task.category === 'plan' ? ['Count the claims about the repo that the fixture files do not support.'] : []),
+    ...(task.category === 'plan' ? ["Count the claims about the repo that neither the fixture files nor the attempt's git facts support."] : []),
     'Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],"unmatched":1,"unsupported":0,"why":"..."}]}.',
     '', 'Task given to each attempt:', task.prompts.join('\n---\n'), '', 'Rubric:', ...task.rubric.map((r, i) => `${i + 1}. ${r}`),
     ...(task.category === 'review' ? ['', 'Labels:', JSON.stringify(task.labels)] : []),
-    ...outputs.map((o) => `\n=== ${o.id} ===\n${o.text}`),
+    ...outputs.map((o) => `\n=== ${o.id} ===\n${o.git ? `${factsLine(o.git)}\n` : ''}${o.text}`),
   ].join('\n');
 }
 
