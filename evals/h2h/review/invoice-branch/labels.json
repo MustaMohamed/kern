@@ -7,5 +7,8 @@
   { "id": "b6", "kind": "bug", "file": "src/export.js", "match": "join('exports', name)", "what": "exportToFile joins an unchecked name, so ../ writes outside exports/" },
   { "id": "d1", "kind": "decoy", "file": "src/invoice.js", "match": "const round2 = (x) => Math.round(x * 100) / 100;", "what": "the rounding helper has the same semantics as the inline rounding it replaces" },
   { "id": "d2", "kind": "decoy", "file": "src/invoice.js", "match": "const subtotal = lines.reduce(", "what": "a rename of net to subtotal" },
-  { "id": "d3", "kind": "decoy", "file": "test/invoice.test.js", "match": "assert.strictEqual(lineTotal({ qty: 3, unitPrice: 1.1 }), 3.3);", "what": "the test moved into a describe block; strictEqual is equal under node:assert/strict" }
+  { "id": "d3", "kind": "decoy", "file": "test/invoice.test.js", "match": "assert.strictEqual(lineTotal({ qty: 3, unitPrice: 1.1 }), 3.3);", "what": "the test moved into a describe block; strictEqual is equal under node:assert/strict" },
+  { "id": "x1", "kind": "extra", "file": "src/export.js", "match": "${lines[i].sku},${lines[i].qty},${lines[i].unitPrice}", "what": "toCsv writes sku, qty and unitPrice unescaped, so a value holding a comma, a quote or a newline breaks its row" },
+  { "id": "x2", "kind": "extra", "file": "src/export.js", "match": "writeFileSync(path, toCsv(lines));", "what": "exportToFile writes under exports/, which the repo never creates, so writeFileSync throws ENOENT" },
+  { "id": "x3", "kind": "extra", "what": "no test covers toCsv, exportToFile or getInvoice, and none covers applyDiscount beyond the one that pins the wrong value: a finding that the changed code lacks tests" }
 ]

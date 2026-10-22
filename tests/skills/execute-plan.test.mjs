@@ -59,8 +59,8 @@ export const PINS = {
     'each `overlap` row becomes a `Preflight:` line with its ruling', "this run's `wave` rows feed step 4"],
   3: ['one todo per task', 'A spec or scope conflict the graph does not show: stop and ask; record the answer, or a mechanical call, as a `Decision:` line.'],
   4: ['at most `parallel.max`', 'unless parallel-work step 1 finds an overlap', 'spawn them in one message as `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/SKILL.md` step 4 does',
-    'Others run serially, in task order.', 'into one dispatch and one review over their joined Files lists'],
-  5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --base <plan base>`', "(`<plan-slug>`: the ledger dir's name)",
+    'Others run serially, in task order.', 'Batch small tasks of one shape (the same one-line edit across files) into one dispatch and one review over their joined Files lists'],
+  5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --plan <plan>`', "(`<plan-slug>`: the ledger dir's name)",
     'adding `--branch <name>` when `branch.pattern` holds `{id}`', 'Exit 2: say why and ask.', 'both exit 3: ask', 'a red baseline goes to the user',
     'Then write `Worktree: <path> branch=<name> base-tree=<id>`, the id from `wt-snap`.'],
   6: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork <plan-wt> <plan-slug>-task-<N>` (exit 2 or 3: say why and ask)',
@@ -159,6 +159,14 @@ test('execute-plan runs its task and final reviews in the foreground', () => {
   // and its serial delegate implementer, which step 7 waits on, runs in the foreground by model-selection.md's rule
   // (Task 16i review, M4).
   assert.ok(!s[6].includes('run_in_background'), s[6]);
+});
+
+test('only the user\'s word skips the final review; task-done refuses a task no review approved', () => {
+  // The user's "Only by my word" (2026-10-22, Task 16n): a gating review is skipped only when the user says so. The
+  // kernel's Routing line states it for every route; task-done already refuses a tree no approved review saw.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[12].startsWith("12. Final review (only the user's word skips it): `ledger-open --summary <ledger dir>`"), s[12]);
+  assert.ok(s[10].includes('only when an approved review saw this tree'), s[10]);
 });
 
 test('an Agent call the next step waits on runs in the foreground, by the file every Agent call follows', () => {

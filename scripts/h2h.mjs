@@ -5,15 +5,17 @@
 // Usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--task <category/id>] [--arms a,b]
 //        [--runs N] [--model <m>] [--grader-model <m>] [--dry-run]
 // Raw runs and key.json go to evals/results/h2h-<date>/ (gitignored); the unblinded scores and the gate
-// go to evals/snapshots/h2h-<model>-<date>.json (committed).
+// go to evals/snapshots/h2h-<model>-<date>.json (committed), each review row with its decoy and unmatched
+// counts and the grader's raw reply (resultRow). Exit 0 when every category passes, 1 when one
+// fails, 3 when none fails but one is incomplete (a loaded task with no graded run), 2 when no task matched.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses, workspace } from './lib/claude-run.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses } from './lib/claude-run.mjs';
 import { digest, pluginCopy, tryRun } from './lib/behave.mjs';
-import { armCopy, blindIds, falseAlarms, gate, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact } from './lib/h2h.mjs';
+import { armCopy, blindIds, gate, gateExit, gitFacts, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, resultRow, taskWorkspace, touchedTasks, verdictLine } from './lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -51,9 +53,10 @@ for (const t of tasks) {
     const attempts = [];
     let voided = '';
     for (const a of arms) {
-      const cwd = workspace(join(t.dir, 'repo'), { name: t.project || 'app', origin: !!t.origin, branch: t.branch || '', setup: t.setup || [] });
+      const cwd = taskWorkspace(t);
       const git = (...g) => execFileSync('git', ['-C', cwd, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...g], { encoding: 'utf8' });
-      if (t.patch) { git('apply', join(t.dir, t.patch)); git('add', '-A'); git('commit', '-qm', t.patch_message || 'feat: the change under review'); }
+      // What Claude Code's git status context shows this session, read before it starts; the grader gets it.
+      const facts = gitFacts(cwd);
       const { run, problem, events } = tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model: MODEL, maxTurns: t.max_turns || 40 });
       // A run cut off by the timeout keeps the events it printed.
       const kept = run ? run.events : events;
@@ -75,7 +78,7 @@ for (const t of tasks) {
       writeFileSync(join(raw, `${t.id.replace('/', '--')}-${r}-${ids[a.id]}.jsonl`), run.events.map((x) => JSON.stringify(x)).join('\n'));
       // A plan lands in an ignored work directory, so the grader reads what each run wrote, not the diff.
       const wrote = t.category === 'plan' ? toolUses(run.events).filter((u) => u.name === 'Write').map((u) => `--- ${u.input.file_path}\n${u.input.content}`).join('\n\n') : '';
-      attempts.push({ arm: a.id, id: ids[a.id], e, heldout, text: redact(`${digest(run.events, 24000, { results: true })}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) });
+      attempts.push({ arm: a.id, id: ids[a.id], e, heldout, git: facts, text: redact(`${digest(run.events, 24000, { results: true })}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) });
       rmSync(dirname(cwd), { recursive: true, force: true });
     }
     if (voided) { console.log(`VOID ${t.id} run ${r}: ${voided}`); continue; }
@@ -85,14 +88,11 @@ for (const t of tasks) {
     rmSync(gdir, { recursive: true, force: true });
     if (graded.problem) { console.log(`VOID ${t.id} run ${r}: grader: ${graded.problem}`); continue; }
     let grades;
-    try { grades = parseGrades(finalText(graded.run.events), attempts.map((x) => x.id)); } catch (err) { console.log(`VOID ${t.id} run ${r}: ${err.message}`); continue; }
+    const reply = finalText(graded.run.events);
+    try { grades = parseGrades(reply, attempts.map((x) => x.id)); } catch (err) { console.log(`VOID ${t.id} run ${r}: ${err.message}`); continue; }
     key[seed] = ids;
-    for (const x of attempts) {
-      const g = grades[x.id];
-      const e = { ...x.e, decoyHits: (g.decoys ?? []).length, unmatched: g.unmatched ?? 0, unsupported: g.unsupported ?? 0 };
-      const score = t.category === 'diagnose' && !x.heldout ? 0 : g.score / 10;
-      results.push({ task: t.id, category: t.category, run: r, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, matched: g.matched ?? [], why: g.why ?? '' });
-    }
+    // A review row keeps the grader's raw reply and its decoy and unmatched counts (resultRow).
+    for (const x of attempts) results.push(resultRow(t, r, x, grades[x.id], reply));
   }
 }
 } finally {
@@ -100,10 +100,10 @@ for (const t of tasks) {
   for (const c of armCopies) rmSync(dirname(c), { recursive: true, force: true });
 }
 writeFileSync(join(raw, 'key.json'), JSON.stringify(key, null, 2) + '\n');
-const verdict = gate(results, [...new Set(tasks.map((t) => t.category))]);
-for (const v of verdict) console.log(`${v.pass ? 'PASS' : 'FAIL'} ${v.category}${v.reason ? `: ${v.reason}` : ''}`);
+const verdict = gate(results, touchedTasks(loadTasks(ROOT), tasks).map((t) => ({ id: t.id, category: t.category })));
+for (const v of verdict) console.log(verdictLine(v));
 const out = join(ROOT, 'evals', 'snapshots', `h2h-${MODEL.replace(/^claude-/, '')}-${date}.json`);
 writeFileSync(out, JSON.stringify({ model: MODEL, grader: GRADER, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS,
   arms: arms.map((a) => ({ id: a.id, plugin: a.plugin, commit: a.dir ? rev(a.srcDir ?? a.dir) : null })), gate: verdict, results }, null, 2) + '\n');
 console.log(`snapshot: ${out}`);
-process.exit(verdict.every((v) => v.pass) ? 0 : 1);
+process.exit(gateExit(verdict));

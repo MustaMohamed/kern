@@ -6,12 +6,24 @@
 // Blinding rules from pstack skills/poteto-mode/playbooks/eval.md:5-13 (MIT; nothing the candidate sees names
 // an eval; the judge sees sanitized labels and scores all arms in one pass); the no-plugin control from
 // caveman evals/README.md:17 (Apache-2.0; ideas only).
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { workspace } from './claude-run.mjs';
 
 export const CATEGORIES = ['plan', 'diagnose', 'review'];
+
+// taskWorkspace(t): the project one arm's session starts in: the task's repo as workspace() builds it (git
+// history, origin, branch, setup), then the task's patch committed, as a review task's change under review.
+// The caller removes dirname(cwd).
+export function taskWorkspace(t) {
+  const cwd = workspace(join(t.dir, 'repo'), { name: t.project || 'app', origin: !!t.origin, branch: t.branch || '', setup: t.setup || [] });
+  const git = (...g) => execFileSync('git', ['-C', cwd, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...g], { stdio: 'ignore' });
+  if (t.patch) { git('apply', join(t.dir, t.patch)); git('add', '-A'); git('commit', '-qm', t.patch_message || 'feat: the change under review'); }
+  return cwd;
+}
 
 // armCopy(dir, id): the plugin tree at dir copied to <tmp>/<random>/<id>, without .git and with symlinks
 // resolved, so a run cannot reach back into the repo. The caller removes dirname(copy).
@@ -71,41 +83,135 @@ export function outOfArea(files, area) {
 
 // falseAlarms(category, evidence): the count the gate compares. review: findings the grader matched to
 // a decoy, plus findings matched to nothing; diagnose: floor-scan hits plus files outside the task's
-// area; plan: claims the grader marked unsupported by the fixture.
+// area; plan: claims the grader marked unsupported by both the fixture files and the git facts the
+// session was shown.
 export function falseAlarms(category, e) {
   if (category === 'review') return (e.decoyHits ?? 0) + (e.unmatched ?? 0);
   if (category === 'diagnose') return (e.floorHits ?? 0) + (e.outOfArea ?? 0);
   return e.unsupported ?? 0;
 }
 
-// gate(results): per category, kern passes when its mean score is at least the strongest other arm's,
-// and its mean false alarms are at most that arm's. The control arm counts as an arm.
-export function gate(results, expected = []) {
+// resultRow(task, run, attempt, grade, reply): one arm's row in the snapshot, from its attempt ({ arm, id, e,
+// heldout, git }) and its grade. gate reads score and falseAlarms. A review row also keeps the split behind
+// falseAlarms, decoys and unmatched as counts, the count of extras the grader set aside, and the grader's raw
+// reply for that task-run, so a split can be checked against what the grader wrote: the 2026-10-22 snapshot kept
+// only the sum, and the review diagnosis had to infer each split from `why` (Task 16o). The row holds no blind id,
+// since keys stay out of snapshots; the arm's entry in the reply is blindIds(arm ids, `<date>:<task>:<run>`)[arm].
+// An extra the grader lists under decoys, bare or as "extra:<id>", is dropped before the decoys are counted and
+// counts as an extra (Task 16o review, M3). An extras value that is not a list counts nothing.
+export function resultRow(t, run, x, g, reply) {
+  const extraIds = new Set((t.labels ?? []).filter((l) => l.kind === 'extra').map((l) => l.id));
+  const isExtra = (d) => /^extra:/.test(String(d)) || extraIds.has(labelId(d));
+  const listed = Array.isArray(g.decoys) ? g.decoys : null;
+  const decoys = listed ? listed.filter((d) => !isExtra(d)) : g.decoys ?? [];
+  const extras = new Set([...(Array.isArray(g.extras) ? g.extras : []), ...(listed ?? []).filter(isExtra)].map(labelId));
+  const e = { ...x.e, decoyHits: decoys.length, unmatched: g.unmatched ?? 0, unsupported: g.unsupported ?? 0 };
+  const score = t.category === 'diagnose' && !x.heldout ? 0 : g.score / 10;
+  const row = { task: t.id, category: t.category, run, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, git: x.git, matched: g.matched ?? [], why: g.why ?? '' };
+  if (t.category !== 'review') return row;
+  return { ...row, decoys: e.decoyHits, unmatched: e.unmatched, extras: extras.size, reply };
+}
+
+// labelId(entry): a grader's label entry without its kind prefix, so "extra:x1" and "x1" name the same label.
+const labelId = (d) => String(d).replace(/^(?:bug|decoy|extra):/, '');
+
+// gate(results, tasks): per category, kern passes when its mean score is at least the strongest other arm's,
+// and its mean false alarms are at most that arm's. The control arm counts as an arm. tasks are the loaded
+// tasks ({ id, category }): a category in which one has no graded run is INCOMPLETE, never PASS or FAIL,
+// since its verdict would rest on part of the category (2026-10-22: a plan verdict from 2 of 4 tasks, the
+// other two voided by an outage). status is PASS, FAIL or INCOMPLETE; pass is true only for PASS.
+export function gate(results, tasks = []) {
   const by = {};
   for (const r of results) ((by[r.category] ??= {})[r.arm] ??= []).push(r);
+  const want = {};
+  for (const t of tasks) (want[t.category] ??= []).push(t.id);
+  const graded = new Set(results.map((r) => r.task));
   const mean = (xs, k) => xs.reduce((s, x) => s + x[k], 0) / xs.length;
-  const missing = expected.filter((c) => !by[c]).map((category) => ({ category, pass: false, reason: 'no graded run' }));
-  return Object.entries(by).map(([category, arms]) => {
-    if (!arms.kern) return { category, pass: false, reason: 'no kern runs' };
+  const done = (category, v) => ({ category, status: v.pass ? 'PASS' : 'FAIL', ...v });
+  return [...new Set([...Object.keys(by), ...Object.keys(want)])].map((category) => {
+    const ids = want[category] ?? [];
+    const ungraded = ids.filter((id) => !graded.has(id));
+    if (ungraded.length) {
+      const n = ids.length - ungraded.length;
+      return { category, status: 'INCOMPLETE', pass: false, graded: n, tasks: ids.length, ungraded, reason: `${n} of ${ids.length} tasks graded; no graded run: ${ungraded.join(', ')}` };
+    }
+    const arms = by[category];
+    if (!arms.kern) return done(category, { pass: false, reason: 'no kern runs' });
     const others = Object.entries(arms).filter(([a]) => a !== 'kern').map(([arm, xs]) => ({ arm, score: mean(xs, 'score'), fa: mean(xs, 'falseAlarms') }));
     const best = others.sort((a, b) => b.score - a.score || a.fa - b.fa)[0];
     const kern = { score: mean(arms.kern, 'score'), fa: mean(arms.kern, 'falseAlarms') };
-    if (!best) return { category, pass: false, reason: 'no other arm ran', kern };
+    if (!best) return done(category, { pass: false, reason: 'no other arm ran', kern });
     const pass = kern.score >= best.score && kern.fa <= best.fa;
-    return { category, pass, kern, best, reason: pass ? '' : `kern ${kern.score.toFixed(2)} score, ${kern.fa.toFixed(2)} false alarms; ${best.arm} ${best.score.toFixed(2)}, ${best.fa.toFixed(2)}` };
-  }).concat(missing);
+    return done(category, { pass, kern, best, reason: pass ? '' : `kern ${kern.score.toFixed(2)} score, ${kern.fa.toFixed(2)} false alarms; ${best.arm} ${best.score.toFixed(2)}, ${best.fa.toFixed(2)}` });
+  });
 }
 
+// touchedTasks(all, run): every loaded task in a category the run touched. The gate gets these, so a
+// `--task` rerun of one task cannot print a PASS or FAIL for its whole category (Task 16n review, I2): the
+// category's other tasks read as ungraded, and the category as INCOMPLETE.
+export const touchedTasks = (all, run) => all.filter((t) => run.some((x) => x.category === t.category));
+
+// verdictLine(v): the line the runner prints for one category, such as `INCOMPLETE plan: 2 of 4 tasks graded; ...`.
+export const verdictLine = (v) => `${v.status} ${v.category}${v.reason ? `: ${v.reason}` : ''}`;
+
+// gateExit(verdict): the runner's exit code. 1 when a category failed, else 3 when one is incomplete, else 0.
+export const gateExit = (verdict) => (verdict.some((v) => v.status === 'FAIL') ? 1 : verdict.some((v) => v.status === 'INCOMPLETE') ? 3 : 0);
+
+// RECENT: how many recent commits Claude Code's git status context lists (5 in this session's own context).
+export const RECENT = 5;
+
+// gitFacts(dir): the parts of Claude Code's git status context a session that starts in dir is shown, read
+// with plain git, never from a transcript. That context lists the current branch, the main branch, the git
+// user, the status and the recent commits (short SHA and subject); it lists no remote, so none is kept here,
+// and the git user (the machine's, the same for every arm) is left out. main is origin/HEAD's branch, else
+// main, else master, else the current branch: inferred, since Claude Code's own rule is not read here; every
+// fixture gives main. commits counts the whole history, which the context shows only up to RECENT. The runner
+// reads them in each arm's workspace before the arm runs; the grader never sees that context, so
+// graderPrompt gives it these.
+export function gitFacts(dir) {
+  const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  const tryGit = (...a) => { try { return execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; } };
+  const branch = git('branch', '--show-current') || '(detached HEAD)';
+  const has = (b) => tryGit('show-ref', '--verify', '--quiet', `refs/heads/${b}`) !== null;
+  const originHead = tryGit('symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD');
+  return {
+    branch,
+    main: originHead ? originHead.replace(/^origin\//, '') : has('main') ? 'main' : has('master') ? 'master' : branch,
+    head: git('rev-parse', '--short', 'HEAD'),
+    commits: Number(git('rev-list', '--count', 'HEAD')),
+    recent: git('log', '-n', String(RECENT), '--no-decorate', '--format=%h %s').split('\n').filter(Boolean),
+  };
+}
+
+// factsLine(f): one attempt's gitFacts as the grader reads them. It names no arm: every arm's workspace is the
+// same fixture with the same commit subjects, and only the SHAs, from each commit's time, can differ.
+export const factsLine = (f) => {
+  const count = f.commits > RECENT ? `more than ${RECENT} commits, the ${RECENT} newest first:` : `${f.commits} commit${f.commits === 1 ? '' : 's'}, newest first:`;
+  return [`Git facts: branch ${f.branch}; main branch ${f.main}; HEAD ${f.head}; ${count}`, ...f.recent.map((c) => `  ${c}`)].join('\n');
+};
+
+// EXTRA_RULE: how the review grader treats a label of kind "extra", a real issue the key accepts beyond the
+// seeded bugs. On 2026-10-22 every arm raised CSV escaping in 15 of 15 sessions and was charged a false alarm for
+// it; the user chose to list it, the missing exports/ directory and missing tests as extras after that run
+// (the user's "kern and key", an exception to the plan's rule that keys are fixed before any run). An extra is
+// optional: leaving it out costs nothing, and rubric line 1's "real problem" means a bug label (Task 16o review, I2).
+export const EXTRA_RULE = 'A label of kind "extra" is a real issue the key accepts beyond the seeded bugs. A finding that matches an extra counts neither as a match nor as a false alarm: list its id in "extras", never in "matched", "decoys" or "unmatched", and let it neither raise nor lower the score. An attempt that does not raise an extra loses nothing for it, and a rubric line about real problems counts only the bug labels, never an extra.';
+
+// graderPrompt(task, outputs): each output is { id, text, git }, git from gitFacts. Every arm's session was
+// shown those facts in Claude Code's git status context (the 2026-10-22 plan gate counted kern's true
+// `base: main` as unsupported), so the grader is told them and a claim that matches them is supported (the
+// user's "kern and grader", 2026-10-22). The context shows no remote, so a remote claim still needs a command.
 export function graderPrompt(task, outputs) {
   return [
     `You grade ${outputs.length} anonymous attempts at the same ${task.category} task. You do not know which tool made which.`,
     'Score each attempt 0 to 10 on the rubric. Judge only what each attempt shows; a claim it does not support with a command and its output earns nothing.',
-    ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, or "none".'] : []),
-    ...(task.category === 'plan' ? ['Count the claims about the repo that the fixture files do not support.'] : []),
-    'Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],"unmatched":1,"unsupported":0,"why":"..."}]}.',
+    "Each attempt's block opens with git facts read from its workspace before it started. Its session's git status showed it the branch, the main branch, HEAD's short SHA and the recent commits with their subjects, so a claim that matches those is supported, though no command printed it. It was not shown the remotes, so a claim about a remote still needs a command and its output. A claim that contradicts any fact is unsupported.",
+    ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".', EXTRA_RULE] : []),
+    ...(task.category === 'plan' ? ['Count the claims about the repo that neither the fixture files nor the git facts its session was shown support.'] : []),
+    `Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],${task.category === 'review' ? '"extras":["x1"],' : ''}"unmatched":1,"unsupported":0,"why":"..."}]}.`,
     '', 'Task given to each attempt:', task.prompts.join('\n---\n'), '', 'Rubric:', ...task.rubric.map((r, i) => `${i + 1}. ${r}`),
     ...(task.category === 'review' ? ['', 'Labels:', JSON.stringify(task.labels)] : []),
-    ...outputs.map((o) => `\n=== ${o.id} ===\n${o.text}`),
+    ...outputs.map((o) => `\n=== ${o.id} ===\n${o.git ? `${factsLine(o.git)}\n` : ''}${o.text}`),
   ].join('\n');
 }
 

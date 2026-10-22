@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspace } from '../scripts/lib/claude-run.mjs';
-import { armCopy, blindIds, falseAlarms, gate, graderPrompt, loadTasks, outOfArea, parseGrades, redact } from '../scripts/lib/h2h.mjs';
+import { armCopy, blindIds, factsLine, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, resultRow, taskWorkspace, touchedTasks, verdictLine } from '../scripts/lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const arms = [{ id: 'kern', dir: '/w/kern' }, { id: 'superpowers', dir: '/w/kern/.upstream/superpowers' }, { id: 'pstack', dir: '/w/kern/.upstream/pstack/harness/pstack/claude-code' }, { id: 'control', dir: null }];
@@ -43,11 +43,165 @@ test('out-of-area files, false alarms and the per-category gate', () => {
   assert.equal(gate([r('kern', 0.6, 0), r('control', 0.7, 0)])[0].pass, false, 'the control arm counts');
 });
 
-test('a category with no graded run fails the gate when it was expected', () => {
-  assert.deepEqual(gate([], ['diagnose']), [{ category: 'diagnose', pass: false, reason: 'no graded run' }]);
-  const r = [{ category: 'diagnose', arm: 'kern', score: 0.8, falseAlarms: 0 }, { category: 'diagnose', arm: 'control', score: 0.4, falseAlarms: 0 }];
-  assert.deepEqual(gate(r, ['diagnose']), gate(r));
-  assert.equal(gate(r, ['diagnose', 'review']).length, 2);
+test('a category with no graded run is incomplete when its tasks were loaded', () => {
+  const v = gate([], [{ id: 'diagnose/x', category: 'diagnose' }]);
+  assert.deepEqual(v, [{ category: 'diagnose', status: 'INCOMPLETE', pass: false, graded: 0, tasks: 1, ungraded: ['diagnose/x'], reason: '0 of 1 tasks graded; no graded run: diagnose/x' }]);
+  const r = [{ task: 'diagnose/x', category: 'diagnose', arm: 'kern', score: 0.8, falseAlarms: 0 }, { task: 'diagnose/x', category: 'diagnose', arm: 'control', score: 0.4, falseAlarms: 0 }];
+  assert.deepEqual(gate(r, [{ id: 'diagnose/x', category: 'diagnose' }]), gate(r));
+  assert.equal(gate(r, [{ id: 'diagnose/x', category: 'diagnose' }, { id: 'review/y', category: 'review' }]).length, 2);
+});
+
+test('a category with an ungraded task is INCOMPLETE, never PASS or FAIL, and the exit code follows', () => {
+  // 2026-10-22: rename-small and scope-split voided every run (a TLS-interception outage), and the gate still
+  // printed a plan verdict from 2 of 4 tasks (task-16-h2h-plan-diagnosis, Task 16n).
+  const tasks = ['plan/a', 'plan/b', 'plan/c', 'plan/d'].map((id) => ({ id, category: 'plan' }));
+  const r = (task, arm, score, fa) => ({ task, category: 'plan', arm, score, falseAlarms: fa });
+  const two = [r('plan/a', 'kern', 0.8, 0), r('plan/a', 'superpowers', 0.7, 0), r('plan/b', 'kern', 0.8, 0), r('plan/b', 'superpowers', 0.7, 0)];
+  const [v] = gate(two, tasks);
+  assert.equal(v.status, 'INCOMPLETE');
+  assert.equal(v.pass, false);
+  assert.equal(verdictLine(v), 'INCOMPLETE plan: 2 of 4 tasks graded; no graded run: plan/c, plan/d');
+  assert.equal(gateExit([v]), 3);
+  assert.equal(gate([r('plan/a', 'kern', 0.2, 5), r('plan/a', 'superpowers', 0.9, 0)], tasks)[0].status, 'INCOMPLETE', 'a losing part is not a FAIL');
+  const all = (k) => tasks.flatMap((t) => [r(t.id, 'kern', k, 0), r(t.id, 'control', 0.5, 0)]);
+  const pass = gate(all(0.8), tasks);
+  assert.equal(pass[0].status, 'PASS');
+  assert.equal(verdictLine(pass[0]), 'PASS plan');
+  assert.equal(gateExit(pass), 0);
+  const fail = gate(all(0.2), tasks);
+  assert.equal(fail[0].status, 'FAIL');
+  assert.match(verdictLine(fail[0]), /^FAIL plan: kern 0\.20 score/);
+  assert.equal(gateExit(fail), 1);
+  assert.equal(gateExit([...fail, v]), 1, 'a FAIL outranks an incomplete category');
+  assert.equal(gateExit([...pass, v]), 3);
+});
+
+test('a --task run gives the gate every task of its category, so one graded task reads INCOMPLETE', () => {
+  // Task 16n review, I2: the plan's recovery for a VOID is "re-run that task with --task <category/id>", and with
+  // only the filtered tasks the gate printed PASS or FAIL for the whole category from that one task.
+  const all = loadTasks(ROOT);
+  const touched = touchedTasks(all, all.filter((t) => t.id === 'plan/rename-small'));
+  assert.deepEqual(touched.map((t) => t.id), ['plan/archive-invoices', 'plan/reminder-seam', 'plan/rename-small', 'plan/scope-split']);
+  assert.deepEqual(touchedTasks(all, all).map((t) => t.id), all.map((t) => t.id), 'a full run gates on every task');
+  assert.deepEqual(touchedTasks(all, all.filter((t) => t.category === 'review')).map((t) => t.id), ['review/invoice-branch']);
+  const r = (arm, score) => ({ task: 'plan/rename-small', category: 'plan', arm, score, falseAlarms: 0 });
+  const v = gate([r('kern', 0.9), r('superpowers', 0.5)], touched);
+  assert.equal(verdictLine(v[0]), 'INCOMPLETE plan: 1 of 4 tasks graded; no graded run: plan/archive-invoices, plan/reminder-seam, plan/scope-split');
+  assert.equal(gateExit(v), 3);
+});
+
+test('a review result row keeps its decoy and unmatched counts, its extras and the grader\'s raw reply, and the gate still reads it', () => {
+  // Task 16o: the 2026-10-22 snapshot kept only the sum, so the review diagnosis had to infer each split from `why`.
+  const reply = '{"grades":[{"id":"arm-A","score":8,"matched":["b1","b2"],"decoys":["decoy:d3"],"extras":["extra:x1","extra:x3"],"unmatched":2,"why":"w"},{"id":"arm-B","score":6,"why":"v"}]}';
+  const g = parseGrades(reply, ['arm-A', 'arm-B']);
+  const t = { id: 'review/invoice-branch', category: 'review' };
+  const git = { branch: 'feat/discounts', main: 'main', head: 'abc1234', commits: 2, recent: [] };
+  const a = resultRow(t, 1, { arm: 'kern', id: 'arm-A', e: { outOfArea: 0 }, heldout: null, git }, g['arm-A'], reply);
+  assert.deepEqual(a, { task: 'review/invoice-branch', category: 'review', run: 1, arm: 'kern', score: 0.8, falseAlarms: 3, heldout: null, git, matched: ['b1', 'b2'], why: 'w',
+    decoys: 1, unmatched: 2, extras: 2, reply });
+  assert.ok(!Object.values(a).includes('arm-A'), 'no blind id: keys stay out of snapshots');
+  assert.equal(a.falseAlarms, a.decoys + a.unmatched, 'the split adds up to the sum, and extras are in neither');
+  const b = resultRow(t, 1, { arm: 'control', id: 'arm-B', e: { outOfArea: 0 }, heldout: null, git }, g['arm-B'], reply);
+  assert.deepEqual([b.decoys, b.unmatched, b.extras, b.falseAlarms, b.matched], [0, 0, 0, 0, []]);
+  assert.equal(verdictLine(gate([a, b])[0]), 'FAIL review: kern 0.80 score, 3.00 false alarms; control 0.60, 0.00', 'the gate reads score and falseAlarms as before');
+  // Other categories keep their rows as they were: no reply, no split.
+  const p = resultRow({ id: 'plan/x', category: 'plan' }, 0, { arm: 'kern', id: 'arm-A', e: { outOfArea: 0 }, heldout: null, git }, { score: 7, unsupported: 1, why: 'u' }, '{}');
+  assert.deepEqual(p, { task: 'plan/x', category: 'plan', run: 0, arm: 'kern', score: 0.7, falseAlarms: 1, heldout: null, git, matched: [], why: 'u' });
+  const d = resultRow({ id: 'diagnose/x', category: 'diagnose' }, 0, { arm: 'kern', id: 'arm-A', e: { outOfArea: 1, floorHits: 1 }, heldout: false, git }, { score: 9 }, '{}');
+  assert.deepEqual([d.score, d.falseAlarms, 'reply' in d], [0, 2, false], 'a failed heldout run scores 0');
+  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
+  assert.ok(src.includes('const reply = finalText(graded.run.events);'), src);
+  assert.ok(src.includes('for (const x of attempts) results.push(resultRow(t, r, x, grades[x.id], reply));'), 'the runner builds each row with resultRow');
+});
+
+test('an extra the grader misfiles under decoys is dropped before the decoys are counted', () => {
+  // Task 16o review, M3: the decoy count was the length of whatever list the grader returned, so an extra listed
+  // there, bare or as "extra:<id>", counted as a false alarm.
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  const git = { branch: 'feat/discounts', main: 'main', head: 'abc1234', commits: 2, recent: [] };
+  const x = { arm: 'kern', id: 'arm-A', e: { outOfArea: 0 }, heldout: null, git };
+  const g = { score: 8, matched: ['b6'], decoys: ['decoy:d3', 'extra:x1', 'x2', 'd1'], extras: ['extra:x1', 'x3'], unmatched: 1, why: 'w' };
+  const row = resultRow(t, 0, x, g, 'r');
+  assert.equal(row.decoys, 2, 'd3 and d1 count; x1 and x2 do not');
+  assert.equal(row.falseAlarms, 3);
+  assert.equal(row.extras, 3, 'x1, x2 and x3, each once');
+  // A decoy id is never dropped, and a task with no extra labels drops only an "extra:" entry.
+  assert.equal(resultRow(t, 0, x, { score: 5, decoys: ['d3', 'decoy:d2'] }, 'r').decoys, 2);
+  assert.equal(resultRow({ id: 'review/y', category: 'review', labels: [] }, 0, x, { score: 5, decoys: ['extra:x9', 'd3'] }, 'r').decoys, 1);
+  assert.equal(resultRow({ id: 'review/y', category: 'review' }, 0, x, { score: 5, extras: 'x1' }, 'r').extras, 0, 'an extras value that is not a list counts nothing');
+});
+
+test('the runner gives the gate every task of the categories it ran, prints each verdict line and exits by gateExit', () => {
+  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
+  assert.ok(src.includes('const verdict = gate(results, touchedTasks(loadTasks(ROOT), tasks).map((t) => ({ id: t.id, category: t.category })));'), 'gate gets every task of each category the run touched');
+  assert.ok(src.includes('for (const v of verdict) console.log(verdictLine(v));'));
+  assert.ok(src.includes('process.exit(gateExit(verdict));'));
+});
+
+// The SHA-free form of a facts record: each commit's time enters its hash, so only the SHAs may differ by arm.
+const shaFree = (f) => ({ ...f, head: '<sha>', recent: f.recent.map((c) => c.replace(/^\S+/, '<sha>')) });
+
+test('git facts are what Claude Code\'s git status context shows, read with plain git, and hold no remote', () => {
+  // Task 16n review, I1: that context lists the current branch, the main branch, the git user, the status and the
+  // recent commits; it lists no remote, so the grader is not told one.
+  const at = (id) => loadTasks(ROOT).find((x) => x.id === id);
+  const d = taskWorkspace(at('plan/archive-invoices'));
+  try {
+    const f = gitFacts(d);
+    const head = spawnSync('git', ['-C', d, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    assert.deepEqual(f, { branch: 'main', main: 'main', head, commits: 1, recent: [`${head} chore: initial import`] });
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); }
+  // The review task has an origin, a feature branch and the change committed on it.
+  const d2 = taskWorkspace(at('review/invoice-branch'));
+  try {
+    const f = gitFacts(d2);
+    assert.deepEqual(shaFree(f), { branch: 'feat/discounts', main: 'main', head: '<sha>', commits: 2, recent: ['<sha> feat: discounts, CSV export and invoice lookup', '<sha> chore: initial import'] });
+    assert.ok(!('remotes' in f));
+  } finally { rmSync(dirname(d2), { recursive: true, force: true }); }
+  // The runner reads them in the arm's workspace after the task's own setup and commit, and before the arm runs.
+  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
+  const read = src.indexOf('const facts = gitFacts(cwd);');
+  assert.ok(src.indexOf('const cwd = taskWorkspace(t);') < read && read < src.indexOf('tryRun({ cwd, prompts: t.prompts'), 'facts are read after the workspace and before the run');
+  assert.ok(src.includes('heldout, git: facts, text: redact('), 'each attempt carries its facts');
+});
+
+test('every task\'s git facts are the same for every arm but the SHAs, so they name no arm', () => {
+  // Task 16n review, I1: the recent commit subjects go to the grader too, so each must be the same under every arm.
+  for (const t of loadTasks(ROOT)) {
+    const [a, b] = [taskWorkspace(t), taskWorkspace(t)];
+    try {
+      const [fa, fb] = [gitFacts(a), gitFacts(b)];
+      assert.deepEqual(shaFree(fa), shaFree(fb), t.id);
+      assert.ok(fa.recent.length >= 1, t.id);
+      assert.doesNotMatch(factsLine(fa), /kern|superpowers|pocock|pstack|poteto|caveman|remote/i, t.id);
+    } finally { for (const d of [a, b]) rmSync(dirname(d), { recursive: true, force: true }); }
+  }
+});
+
+test('the grader is told the git facts each session was shown, so a claim that matches them is supported, and a remote claim still needs a command', () => {
+  // 2026-10-22 head-to-head: the grader counted kern's true `base: main` as unsupported. The branch came from
+  // Claude Code's git status context, which every arm sees and the grader does not (the user's "kern and grader").
+  // Task 16n review, I1: that context shows no remote, so the grader is told none.
+  const facts = { branch: 'main', main: 'main', head: '902f007', commits: 1, recent: ['902f007 chore: initial import'] };
+  const general = "Each attempt's block opens with git facts read from its workspace before it started. Its session's git status showed it the branch, the main branch, HEAD's short SHA and the recent commits with their subjects, so a claim that matches those is supported, though no command printed it. It was not shown the remotes, so a claim about a remote still needs a command and its output. A claim that contradicts any fact is unsupported.";
+  const plan = graderPrompt({ category: 'plan', prompts: ['plan it'], rubric: ['orders tasks'] }, [{ id: 'arm-A', text: 'x', git: facts }, { id: 'arm-B', text: 'y', git: { ...facts, head: 'abc1234', recent: ['abc1234 chore: initial import'] } }]);
+  assert.ok(plan.includes(general), plan);
+  assert.ok(plan.includes('Count the claims about the repo that neither the fixture files nor the git facts its session was shown support.'), plan);
+  assert.ok(!plan.includes('that the fixture files do not support'));
+  assert.ok(!plan.includes('They were visible to the attempt'));
+  assert.ok(plan.includes('\n=== arm-A ===\nGit facts: branch main; main branch main; HEAD 902f007; 1 commit, newest first:\n  902f007 chore: initial import\nx'), plan);
+  assert.ok(plan.includes('\n=== arm-B ===\nGit facts: branch main; main branch main; HEAD abc1234; 1 commit, newest first:\n  abc1234 chore: initial import\ny'), plan);
+  assert.doesNotMatch(plan, /kern|superpowers|pocock|pstack|poteto|control/i);
+  for (const category of ['diagnose', 'review']) {
+    const three = { branch: 'feat/discounts', main: 'main', head: '1a2b3c4', commits: 3, recent: ['1a2b3c4 feat: c', '2b3c4d5 fix: b', '3c4d5e6 chore: a'] };
+    const p = graderPrompt({ category, prompts: ['p'], rubric: ['r'], labels: [] }, [{ id: 'arm-A', text: 'x', git: three }]);
+    assert.ok(p.includes(general), category);
+    assert.ok(p.includes('\n=== arm-A ===\nGit facts: branch feat/discounts; main branch main; HEAD 1a2b3c4; 3 commits, newest first:\n  1a2b3c4 feat: c\n  2b3c4d5 fix: b\n  3c4d5e6 chore: a\nx'), p);
+  }
+  // The context lists five commits, so a longer history shows only that it has more.
+  const seven = { ...facts, commits: 7, recent: ['a1 s1', 'a2 s2', 'a3 s3', 'a4 s4', 'a5 s5'] };
+  assert.equal(factsLine(seven).split('\n')[0], 'Git facts: branch main; main branch main; HEAD 902f007; more than 5 commits, the 5 newest first:');
+  assert.equal(factsLine({ ...facts, branch: '(detached HEAD)' }).split('\n')[0], 'Git facts: branch (detached HEAD); main branch main; HEAD 902f007; 1 commit, newest first:');
 });
 
 test('redaction turns .kern/ into .work/ and hides a /private temp prefix', () => {
@@ -110,10 +264,52 @@ for (const t of loadTasks(ROOT).filter((x) => x.category === 'review')) {
       }
       assert.equal(t.labels.filter((x) => x.kind === 'bug').length, 6);
       assert.equal(t.labels.filter((x) => x.kind === 'decoy').length, 3);
-      for (const x of t.labels) assert.ok((added[x.file] ?? []).some((l) => l.includes(x.match)), `${x.id}: "${x.match}" is not an added line of ${x.file}`);
+      assert.deepEqual(t.labels.map((x) => x.kind).filter((k) => !['bug', 'decoy', 'extra'].includes(k)), [], 'a label is a bug, a decoy or an extra');
+      for (const x of t.labels.filter((l) => l.kind !== 'extra')) assert.ok(x.match, `${x.id}: a bug or decoy names its line`);
+      // An extra that names a line sits on it too; one for an absence, such as a missing test, names none.
+      for (const x of t.labels.filter((l) => l.match)) assert.ok((added[x.file] ?? []).some((l) => l.includes(x.match)), `${x.id}: "${x.match}" is not an added line of ${x.file}`);
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 }
+
+test('the review key lists CSV escaping, the missing exports/ directory and missing tests as extras (the user\'s "kern and key")', () => {
+  // 2026-10-22: every arm raised CSV escaping in 15 of 15 sessions and each was charged a false alarm for it; the
+  // user chose to change the key after the run, breaking the plan's rule that keys are fixed before any run.
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  const extras = t.labels.filter((x) => x.kind === 'extra');
+  assert.deepEqual(extras.map((x) => [x.id, x.file ?? null, x.match ?? null]), [
+    ['x1', 'src/export.js', '${lines[i].sku},${lines[i].qty},${lines[i].unitPrice}'],
+    ['x2', 'src/export.js', 'writeFileSync(path, toCsv(lines));'],
+    ['x3', null, null],
+  ]);
+  assert.match(extras[0].what, /escap/);
+  assert.match(extras[1].what, /exports\//);
+  assert.match(extras[2].what, /toCsv/);
+  assert.match(extras[2].what, /getInvoice/);
+  assert.doesNotMatch(JSON.stringify(t.labels), /kern|superpowers|pocock|pstack|poteto|caveman|control/i, 'the key names no arm');
+});
+
+test('the review grader is told an extra counts neither as a match nor as a false alarm, and other categories are not', () => {
+  const rule = 'A label of kind "extra" is a real issue the key accepts beyond the seeded bugs. A finding that matches an extra counts neither as a match nor as a false alarm: list its id in "extras", never in "matched", "decoys" or "unmatched", and let it neither raise nor lower the score.' +
+    // Task 16o review, I2: an extra is optional, so leaving it out costs nothing, and rubric line 1 ("Each real problem is
+    // named ...") counts only the bugs: on 2026-10-22 kern raised the missing exports/ directory as its own item and
+    // superpowers folded it into its b6 finding.
+    ' An attempt that does not raise an extra loses nothing for it, and a rubric line about real problems counts only the bug labels, never an extra.';
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  assert.match(t.rubric[0], /real problem/, 'rubric line 1 is the line the rule narrows');
+  const p = graderPrompt(t, [{ id: 'arm-A', text: 'x' }, { id: 'arm-B', text: 'y' }]);
+  assert.ok(p.includes('For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".'), p);
+  assert.ok(p.includes(rule), p);
+  assert.ok(p.includes('"decoys":["d2"],"extras":["x1"],"unmatched":1'), 'the review reply example has extras');
+  assert.ok(p.includes('"kind":"extra"'), 'the grader reads the extras in the labels');
+  assert.doesNotMatch(p, /kern|superpowers|pocock|pstack|poteto|caveman|control/i);
+  // The plan and diagnose prompts are unchanged by it (Task 16n's plan rerun reads the plan prompt).
+  for (const category of ['plan', 'diagnose']) {
+    const q = graderPrompt({ category, prompts: ['p'], rubric: ['r'] }, [{ id: 'arm-A', text: 'x' }]);
+    assert.doesNotMatch(q, /extra/, category);
+    assert.ok(q.includes('Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],"unmatched":1,"unsupported":0,"why":"..."}]}.'), category);
+  }
+});
 
 for (const t of loadTasks(ROOT).filter((x) => x.category === 'plan')) {
   test(`${t.id}: the spec and every trap file exist, and the rubric covers each trap`, () => {
