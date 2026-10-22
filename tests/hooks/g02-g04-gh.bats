@@ -758,6 +758,32 @@ gh_write() {
   done
 }
 
+@test "G2: auth status shows no token and repo read-file writes no file unasked; the forms that do ask" {
+  local c ap reads=(
+    "gh auth status" "gh auth status -a" "gh auth status -h github.com" "gh auth status --hostname=github.com --active"
+    "gh repo read-file o/r README.md" "gh repo read-file o/r x --ref main --json path" "gh repo read-file x -R o/r"
+  ) writes=(
+    "gh auth status -t" "gh auth status --show-token" "gh auth status -at" "gh auth status --show-token=true"
+    "gh repo read-file o/r x -o README.md --clobber" "gh repo read-file o/r x --output=.git/hooks/pre-commit"
+    "gh repo read-file o/r x -oREADME.md" "gh repo read-file o/r x --bogus"
+  )
+  for ap in off on; do
+    set_autopilot "$ap"
+    for c in "${reads[@]}"; do
+      g "$c" g02
+      [ "$(decision_of "$output")" = none ] || { echo "$ap: $c -> $output"; return 1; }
+    done
+  done
+  for c in "${writes[@]}"; do
+    set_autopilot off
+    g "$c" g02
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+    set_autopilot on
+    g "$c" g02
+    [ "$(decision_of "$output")" = deny ] || { echo "autopilot: $c -> $output"; return 1; }
+  done
+}
+
 @test "G2: gh repo sync with a repository writes that repository on GitHub; without one G1 judges it" {
   local c
   g "gh repo sync o/fork" g02

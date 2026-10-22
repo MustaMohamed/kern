@@ -59,9 +59,10 @@ guard_g01() {
     fail_closed "the Bash command came back empty, so kern could not check it (retry)"
     return 0
   fi
-  # Spec 8.4 rule 4: input the hook cannot parse asks, in every mode. With no end line the records were
-  # not read whole (the substitution's pipe could not be made, or it stopped partway); a $KERN_UNREAD
-  # record is an awk pass that failed. The records read are still judged, so a deny among them holds.
+  # Spec 8.4 rule 4: input the hook cannot parse asks, in every mode. No end line means the
+  # substitution's pipe could not be made, or the substitution died before git_words returned. A
+  # $KERN_UNREAD record is an awk pass that failed, or a split stage inside git_words that died
+  # (git_words prints it then). The records read are still judged, so a deny among them holds.
   _G01_RECS=()
   while IFS= read -r rec; do
     case "$rec" in
@@ -197,17 +198,28 @@ _g01_gh() {
   esac
   case "${a[0]-} ${a[1]-}" in
     "pr checkout" | "pr co") _g01_main_op "$dir" "pr checkout" gh ;;
-    "repo sync") _g01_local_sync "${a[@]:2}" && _g01_main_op "$dir" "repo sync" gh ;;
+    "repo sync")
+      _g01_local_sync "${a[@]:2}" || return 0
+      _g01_main_op "$dir" "repo sync" gh
+      # gh moves the synced branch with git update-ref wherever it is checked out, so from any worktree
+      # it is a rewrite of that branch, as git update-ref is (A6). Without -b it syncs the default
+      # branch, whose name kern does not read, so it counts as protected.
+      branch_protected "$_G01_SYNC_BRANCH" &&
+        _g01_protected "gh repo sync" "${_G01_SYNC_BRANCH:-(the default branch, which kern does not read)}"
+      ;;
   esac
 }
 
 # _g01_local_sync WORDS...: the words after `gh repo sync`, read as gh reads them (G2's _gh_opts),
-# name no repository and ask for no help. Without G2's reader every sync counts as local.
+# name no repository and ask for no help. Sets _G01_SYNC_BRANCH to the -b or --branch value, or empty
+# when there is none. Without G2's reader every sync counts as local, of an unknown branch.
 _g01_local_sync() {
   local toks
+  _G01_SYNC_BRANCH=""
   [ $# -gt 0 ] && declare -F _gh_opts >/dev/null || return 0
   toks=$(printf '%s\n' "$@" | _gh_opts "$_GH_SYNC_OPTS")
-  [ "$(_gh_last "$toks" help)" != true ] && [ -z "$(_gh_pos "$toks")" ]
+  [ "$(_gh_last "$toks" help)" != true ] && [ -z "$(_gh_pos "$toks")" ] || return 1
+  _G01_SYNC_BRANCH=$(_gh_last "$toks" branch) || _G01_SYNC_BRANCH=""
 }
 
 _g01_merge() {
@@ -396,7 +408,7 @@ _g01_main_op() {
 
 # _g01_git DIR PLAIN SUB WORDS...
 _g01_git() {
-  local dir="$1" plain="$2" sub="$3" rest t
+  local dir="$1" plain="$2" sub="$3" rest t n n1
   shift 3
   rest="$*"
   case "$sub" in
@@ -451,14 +463,26 @@ _g01_git() {
       t=$(_g01_opts "$_G01_BRANCH_OPTS" "$@")
       if word_has "$t" -D || { word_has "$t" --delete && word_has "$t" --force; }; then
         _g01_destructive "git branch -D"
-      elif word_has "$t" -M -C || { word_has "$t" --move --copy && word_has "$t" --force; }; then
+        return 0
+      fi
+      n=$(printf '%s\n' "$t" | sed -n 's/^@//p')
+      # A rename of two names moves the first away, so a protected branch is gone under its name.
+      if word_has "$t" --move -M; then
+        case "$n" in
+          *$'\n'*)
+            n1=${n%%$'\n'*}
+            branch_protected "$n1" && _g01_protected "git branch $rest" "$n1"
+            ;;
+        esac
+      fi
+      if word_has "$t" -M -C || { word_has "$t" --move --copy && word_has "$t" --force; }; then
         # A forced rename or copy overwrites its last name; one name renames or copies the current branch.
-        t=$(printf '%s\n' "$t" | sed -n 's/^@//p' | sed -n '$p')
-        [ -n "$t" ] && branch_protected "$t" && _g01_protected "git branch $rest" "$t"
+        n=${n##*$'\n'}
+        [ -n "$n" ] && branch_protected "$n" && _g01_protected "git branch $rest" "$n"
       elif word_has "$t" --force; then
         # A forced create resets its first name to the start point.
-        t=$(printf '%s\n' "$t" | sed -n 's/^@//p' | sed -n 1p)
-        [ -n "$t" ] && branch_protected "$t" && _g01_protected "git branch $rest" "$t"
+        n=${n%%$'\n'*}
+        [ -n "$n" ] && branch_protected "$n" && _g01_protected "git branch $rest" "$n"
       fi
       ;;
     worktree)

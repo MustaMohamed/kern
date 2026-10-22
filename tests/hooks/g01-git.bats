@@ -800,7 +800,7 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
 @test "gh pr checkout and a local gh repo sync ask in the main checkout, and are denied under autopilot" {
   local W="$BATS_TEST_TMPDIR/wt" cmds=(
     "gh pr checkout 3" "gh pr co 3" "gh -R o/r pr checkout 3" "gh repo sync" "gh repo sync --force"
-    "gh repo sync -b main --source o/up"
+    "gh repo sync -b main --source o/up" "gh repo sync -b feat"
   )
   expect ask "${cmds[@]}"
   [[ "$output" == *"gh repo sync in the main checkout changes shared state (D3)"* ]] || false
@@ -808,26 +808,41 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   [[ "$output" == *"gh pr checkout after cd, --git-dir or --work-tree"* ]] || false
   set_autopilot on
   expect deny "${cmds[@]}"
-  # A repository operand syncs that repository on GitHub, which G2 judges; a linked worktree is the
-  # session's own checkout.
+  set_autopilot off
+  # A repository operand syncs that repository on GitHub, which G2 judges.
   expect none "gh repo sync o/fork" "gh repo sync --help"
+  # In a linked worktree gh pr checkout changes the session's own checkout. A local repo sync moves the
+  # branch it syncs with git update-ref wherever that branch is checked out: the default branch, unless
+  # -b names another, so a sync with no -b counts as one of a protected branch.
   export CWD="$W"
-  expect none "${cmds[@]}"
+  expect none "gh pr checkout 3" "gh pr co 3" "gh -R o/r pr checkout 3" "gh repo sync -b feat" \
+    "gh repo sync --branch=feat --force"
+  expect ask "gh repo sync -b main --source o/up" "gh repo sync --branch main"
+  [[ "$output" == *"gh repo sync rewrites protected branch main"* ]] || false
+  expect ask "gh repo sync" "gh repo sync --force"
+  [[ "$output" == *"gh repo sync rewrites protected branch (the default branch, which kern does not read)"* ]] || false
+  set_autopilot on
+  expect deny "gh repo sync" "gh repo sync --force" "gh repo sync -b main"
 }
 
 @test "branch -f, -M or -C onto a protected branch, and update-ref of one, ask in any worktree, and are denied under autopilot" {
   local W="$BATS_TEST_TMPDIR/wt" cmds=(
     "git branch -f main HEAD~1" "git branch --force main feat" "git branch -M feat main" "git branch -m -f feat main"
     "git branch -C feat main" "git branch -M main" "git -C $W branch -f main HEAD"
+    "git branch -m main x" "git branch -M main x" "git -C $W branch --move main x"
     "git update-ref refs/heads/main HEAD~1" "git update-ref -d refs/heads/main" "git update-ref --stdin"
     "git -C $W update-ref -m x refs/heads/main feat" "git update-ref HEAD feat"
   )
   expect ask "${cmds[@]}"
   [[ "$output" == *"git update-ref HEAD rewrites protected branch main"* ]] || false
+  expect ask "git branch -m main x"
+  [[ "$output" == *"git branch -m main x rewrites protected branch main"* ]] || false
   set_autopilot on
   expect deny "${cmds[@]}"
   set_autopilot off
-  expect none "git branch -f x HEAD" "git branch -M feat x" "git branch -C feat x" "git branch y" \
+  # A rename of another branch, or a copy of a protected one, leaves the protected branch as it was.
+  expect none "git branch -m feat x" "git branch -c main x" "git branch -C main x" \
+    "git branch -f x HEAD" "git branch -M feat x" "git branch -C feat x" "git branch y" \
     "git update-ref refs/heads/x HEAD" "git update-ref -d refs/heads/x" "git update-ref refs/remotes/origin/main HEAD" \
     "git -C $W update-ref HEAD HEAD"
 }
@@ -870,4 +885,22 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   run env KERN_GUARDS=g01 bash "$k/hooks/pre-tool-use" <<<"$(bash_payload "git status")"
   [ "$(decision_of "$output")" = ask ]
   [[ "$output" == *"kern could not read the whole command"* ]] || false
+}
+
+@test "a split stage that dies before its awk's end line fails closed in both modes" {
+  local real
+  real=$(command -v env)
+  mkdir -p "$BATS_TEST_TMPDIR/envbin"
+  # The env that starts _split_words' awk kills the subshell that ran it, as a fork that fails in it
+  # does: no record and no \$KERN_UNREAD reach git_words' reader. Every other env call runs the real one.
+  printf '#!/bin/sh\ncase "$*" in *"function emit("*) kill -9 $PPID; exit 1 ;; esac\nexec %s "$@"\n' "$real" \
+    >"$BATS_TEST_TMPDIR/envbin/env"
+  chmod +x "$BATS_TEST_TMPDIR/envbin/env"
+  PATH="$BATS_TEST_TMPDIR/envbin:$PATH"
+  g1 "git reset --hard HEAD~3"
+  [ "$(decision_of "$output")" = ask ] || { echo "$output"; return 1; }
+  [[ "$output" == *"kern G0: kern could not parse the command"* ]] || false
+  set_autopilot on
+  g1 "git reset --hard HEAD~3"
+  [ "$(decision_of "$output")" = deny ]
 }

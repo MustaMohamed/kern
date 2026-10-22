@@ -35,7 +35,8 @@ accessibility a11y actions environment exit-codes formatting mintty reference te
 # group (`gh <group> --help`) that only print or open a browser, so they change nothing on GitHub and
 # write no file. <group>/* reads in every form. Left out: auth token (it prints a credential), clone and
 # download (they write files), and codespace ports (its forward and visibility verbs change the
-# codespace). extension browse is a terminal UI that only the user at the keys can drive.
+# codespace). extension browse is a terminal UI that only the user at the keys can drive. auth status
+# and repo read-file read only in some forms (_g02_quiet).
 _G02_READS=" agent-task/list agent-task/view alias/list attestation/trusted-root attestation/verify \
 auth/status browse/* cache/list codespace/list codespace/logs codespace/view completion/* config/get \
 config/list discussion/list discussion/view extension/browse extension/list extension/search gist/list \
@@ -56,6 +57,10 @@ issue/close issue/reopen issue/transfer issue/lock issue/delete issue/develop is
 issue/unlock label/create label/edit label/delete label/clone workflow/run release/create release/upload \
 release/edit release/delete release/delete-asset run/rerun "
 _GH_SYNC_OPTS="branch/b/v force/-/b source/s/v help/h/b"
+# -h is --hostname here, not help.
+_GH_AUTH_STATUS_OPTS="active/a/b hostname/h/v jq/-/v json/-/v show-token/t/b template/-/v help/-/b"
+_GH_READ_FILE_OPTS="allow-escape-sequences/-/b clobber/-/b jq/q/v json/-/v output/o/v ref/-/v repo/R/v \
+template/t/v help/h/b"
 
 guard_g02() {
   [ "$TOOL" = Bash ] || return 0
@@ -144,7 +149,7 @@ _g02_write() {
   local g="${2%% *}" v=""
   case "$2" in *" "*) v=${2#* } ;; esac
   case "$_GH_CMDS" in *" $g "*) ;; *) return 0 ;; esac
-  case "$_G02_READS$_G02_OWNED" in *" $g/* "* | *" $g/$v "*) return 0 ;; esac
+  case "$_G02_READS$_G02_OWNED" in *" $g/* "* | *" $g/$v "*) _g02_quiet "$1" "$2" && return 0 ;; esac
   case "$v" in
     -h | --help) return 0 ;;
     "") [ "$g" = copilot ] || return 0 ;;
@@ -155,6 +160,25 @@ _g02_write() {
   vote ask G2 "gh $2 is not a gh read kern knows (view, list, status and the like); the user confirms it"
   [ "$AUTOPILOT" = 1 ] && vote deny G2 "gh $2 under autopilot: only gh reads run unattended (D2)"
   return 0
+}
+
+# _g02_quiet IDX SUB: a read on the lists, at IDX in _GH_RECS, keeps to a form that only reads: auth
+# status without -t or --show-token, which prints the token, and repo read-file without -o or --output,
+# which writes a file (over one with --clobber). A word gh rejects in either counts as such a form.
+# Every other SUB passes.
+_g02_quiet() {
+  local toks
+  case "$2" in
+    "auth status") toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_AUTH_STATUS_OPTS") ;;
+    "repo read-file") toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_READ_FILE_OPTS") ;;
+    *) return 0 ;;
+  esac
+  case $'\n'"$toks" in *$'\n?'*) return 1 ;; esac
+  if [ "$2" = "auth status" ]; then
+    [ "$(_gh_last "$toks" show-token)" != true ]
+  else
+    ! _gh_last "$toks" output >/dev/null
+  fi
 }
 
 # _g02_remote_sync IDX: the gh repo sync record at IDX names a destination repository, and asks for
