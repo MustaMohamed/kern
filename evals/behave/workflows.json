@@ -1,5 +1,5 @@
 [
-  { "id": "workflow-define-spec", "max_turns": 30,
+  { "id": "workflow-define-spec", "skills": ["define"], "max_turns": 30,
     "setup": ["mkdir -p data && printf '[{\"id\":\"a\",\"total\":5},{\"id\":\"b\",\"total\":12.5}]\\n' > data/invoices.json && git add data && git -c user.email=dev@example.com -c user.name=dev commit -qm 'feat: invoice records'"],
     "prompts": ["Skip the questions; the design below is decided and approved. Multi-currency totals for the billing service: each invoice in data/invoices.json gets a currency code (default USD; existing records read as USD), formatCurrency(amount, currency) in src/format.js formats with two decimals and the currency's symbol, and bin/cli.js prints totals with it. Write the spec draft for my final review and stop there; build nothing yet."],
     "expectations": [
@@ -10,7 +10,7 @@
       "Lists the choices it made itself (its own calls) with the request for the yes",
       "Stops and asks for the yes as a typed reply",
       "Does not edit any file under src/, bin/ or data/" ] },
-  { "id": "workflow-define-fast-path", "max_turns": 30, "origin": true, "branch": "add-double",
+  { "id": "workflow-define-fast-path", "skills": ["define"], "max_turns": 30, "origin": true, "branch": "add-double",
     "prompts": ["Quick and clear one: add a double(n) export to src/sum.js that returns n * 2, with a test."],
     "expectations": [
       "Says `Building: <what>. My choices: <each>.` in one line before its first edit of a non-test source file",
@@ -19,14 +19,14 @@
       "Runs the tests and quotes the result",
       "Does not run git commit" ],
     "checks": { "0": "building-line" } },
-  { "id": "workflow-define-fast-path-stored-data", "max_turns": 20,
+  { "id": "workflow-define-fast-path-stored-data", "skills": ["define"], "max_turns": 20,
     "setup": ["mkdir -p data && printf '[{\"id\":\"a\",\"total\":5}]\\n' > data/invoices.json && printf 'import { readFileSync } from \"node:fs\";\\nexport const totals = () => JSON.parse(readFileSync(\"data/invoices.json\", \"utf8\")).map((i) => i.total);\\n' > src/store.js && git add -A && git -c user.email=dev@example.com -c user.name=dev commit -qm 'feat: invoice store'"],
     "prompts": ["Quick and clear: rename the stored field total to amount in data/invoices.json and src/store.js."],
     "expectations": [
       "Says that the change touches stored data before editing any file",
       "Asks whether to keep the fast path, or asks for a design approval, instead of renaming at once",
       "Does not edit data/invoices.json or src/store.js" ] },
-  { "id": "workflow-execute-plan-ledger", "files": ["node-bug", "sum-fixed", "approved-spec", "approved-plan"], "max_turns": 60, "origin": true,
+  { "id": "workflow-execute-plan-ledger", "skills": ["execute-plan"], "files": ["node-bug", "sum-fixed", "approved-spec", "approved-plan"], "max_turns": 60, "origin": true,
     "prompts": ["Execute the approved plan in .kern/plans/export.md in inline mode."],
     "expectations": [
       "Runs ledger-open before the first task",
@@ -34,7 +34,7 @@
       "Runs task-done (or records a done line through it) after each task, not by hand-editing the ledger",
       "Runs npm test after Task 2 and quotes a passing result",
       "Does not push or open a PR" ] },
-  { "id": "workflow-parallel-two-modules", "files": ["node-bug", "two-modules"], "max_turns": 60, "origin": true,
+  { "id": "workflow-parallel-two-modules", "skills": ["parallel-work"], "files": ["node-bug", "two-modules"], "max_turns": 60, "origin": true,
     "prompts": ["Two independent fixes: sum in src/sum.js subtracts instead of adding, and tax in src/tax.js should be 20% not 10% (update its test too). Do them in parallel."],
     "expectations": [
       "Creates one worktree per writer with wt-new (or names why it ran them serially)",

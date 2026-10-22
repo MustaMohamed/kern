@@ -36,3 +36,23 @@ export function parseArgs(args, flags) {
   }
   return out;
 }
+
+// LOOP_FLAGS: the flags every runner shares for fast rounds. --jobs N runs N sessions at once (default 6);
+// --quick runs each case once and writes no committed snapshot; --changed <range> runs only the cases whose
+// inputs changed in a git range (case-inputs.mjs); --regrade <dir> grades a results dir's saved transcripts
+// again with today's graders and starts no session; --resume <dir> reruns only the units of that run with no
+// valid result; --no-cache runs every unit, even one whose inputs match a cached valid result.
+export const LOOP_FLAGS = { '--jobs': { key: 'jobs', value: 'count' }, '--quick': { key: 'quick' }, '--changed': { key: 'changed', value: 'a git range' },
+  '--regrade': { key: 'regrade', value: 'a results dir' }, '--resume': { key: 'resume', value: 'a results dir' }, '--no-cache': { key: 'noCache' } };
+
+// loopProblem(o, { select }): the usage message for parsed flags o that do not go together, or ''. select names the
+// keys of the runner's own case filters, which --changed replaces.
+export function loopProblem(o, { select = [] } = {}) {
+  const given = Object.keys(o);
+  if (o.regrade !== undefined && given.length > 1) return '--regrade <dir> takes no other flag: it grades that run again as it ran';
+  if (o.resume !== undefined && given.some((k) => !['resume', 'jobs', 'noCache'].includes(k))) return '--resume <dir> takes only --jobs and --no-cache: the rest comes from the run.json of that run';
+  if (o.quick && o.runs !== undefined) return '--quick runs each case once; leave out --runs';
+  const picked = select.find((k) => o[k] !== undefined);
+  if (o.changed !== undefined && picked) return `--changed picks the cases itself; leave out --${picked}`;
+  return '';
+}

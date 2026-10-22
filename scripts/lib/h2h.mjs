@@ -10,11 +10,14 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { UsageError, parseArgs } from './args.mjs';
+import { basename, dirname, join } from 'node:path';
+import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
+import { caseInputs, changedCases, dirHash, rangeSources, treeSource } from './case-inputs.mjs';
+import { filesVersion, readManifest, readRecord, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
+import { limiter, ordered } from './pool.mjs';
 import { digest, pluginCopy, tryRun } from './behave.mjs';
 import { dirtyRefusal, statusEntries, treeRecord } from './run-record.mjs';
-import { ISOLATION, PERMISSIONS, childEnv, claudeVersion, evalConfigProblem, finalText, runClaude, workspace } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, childEnv, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, workspace } from './claude-run.mjs';
 
 export const CATEGORIES = ['plan', 'diagnose', 'review'];
 
@@ -23,7 +26,7 @@ export const CATEGORIES = ['plan', 'diagnose', 'review'];
 export const h2hFlags = (ids, armIds) => ({ '--category': { key: 'category', value: 'a category', choices: CATEGORIES, noun: 'category' },
   '--task': { key: 'task', value: 'a task id', choices: ids, noun: 'task' }, '--arms': { key: 'arms', value: 'arm ids, comma-separated', list: armIds, noun: 'arm' },
   '--runs': { key: 'runs', value: 'count' }, '--model': { key: 'model', value: 'a model id' }, '--grader-model': { key: 'grader', value: 'a model id' },
-  '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' } });
+  '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' }, ...LOOP_FLAGS });
 
 // taskWorkspace(t): the project one arm's session starts in: the task's repo as workspace() builds it (git
 // history, origin, branch, setup), then the task's patch committed, as a review task's change under review.
@@ -308,16 +311,47 @@ export function finalFiles(cwd, perFile = 20000, total = 60000) {
   return blocks.join('\n\n');
 }
 
-const USAGE = 'usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--task <category/id>] [--arms a,b] [--runs N] [--model <m>] [--grader-model <m>] [--allow-dirty] [--dry-run]';
+const USAGE = 'usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--task <category/id> | --changed <range>] [--arms a,b] [--runs N | --quick] [--jobs N] [--no-cache]\n'
+  + '       [--model <m>] [--grader-model <m>] [--allow-dirty] [--dry-run]\n'
+  + '       node scripts/h2h.mjs --resume <results dir> [--jobs N] [--no-cache]\n'
+  + '       node scripts/h2h.mjs --regrade <results dir>';
 
-// h2hMain({ root, argv, env, tasks, arms, armIds, run, version, tree, snapshots, results, floorScan, parse, log, error, now }):
-// what scripts/h2h.mjs runs, its exit code returned, with the seams a test needs: the tasks, the arms (arms(pick),
-// loadArms by default), the run (runClaude, or a stub), the Claude Code version, the tree record, the snapshot and
-// results dirs, the floor-scan script and the grade parser (parseGrades) (Task 17a). env is the caller's environment.
-// - Flags (h2hFlags) are read by the shared parser: any other word is a usage error (2) before anything runs.
-// - Every run but a dry run refuses a kern tree with uncommitted changes it would measure, unless --allow-dirty, a
-//   --category or --task run too, since those may be the evidence (G11; P5 review, Minor 1). The snapshot records
-//   the tree as kern.
+// CATEGORY_SKILLS: the kern skills each category's tasks route to, so a task's kern inputs are those skills (with the
+// kern core, every skill's frontmatter and the skills they name; case-inputs.mjs).
+export const CATEGORY_SKILLS = { plan: ['plan'], diagnose: ['diagnose'], review: ['self-review'] };
+
+// taskParts(t): what task t reads, for --changed: its category's kern skills, its folder and arms.json.
+export const taskParts = (t) => ({ skills: CATEGORY_SKILLS[t.category] ?? [], paths: [`evals/h2h/${t.id}/`], entries: [{ file: 'evals/h2h/arms.json', pick: (j) => j }] });
+
+// H2H_CODE: the files whose code runs an arm's attempt, measures it and grades the task-run; their content is part of
+// every attempt's and every grade's cache key.
+const H2H_CODE = ['scripts/lib/h2h.mjs', 'scripts/lib/behave.mjs', 'scripts/lib/claude-run.mjs', 'scripts/lib/claude-drive.mjs', 'scripts/floor-scan'];
+
+// GRADING_ONLY: the task fields only the grader reads. An attempt's cache key leaves them out, so a new rubric or
+// answer key asks the grader again but reruns no arm.
+const GRADING_ONLY = ['rubric', 'labels', 'traps'];
+const without = (t, keys) => Object.fromEntries(Object.entries(t).filter(([k]) => !keys.includes(k)));
+
+// h2hMain({ root, argv, env, tasks, arms, armIds, run, version, tree, snapshots, results, cache, floorScan, parse, log, error, now }):
+// what scripts/h2h.mjs runs, a promise of its exit code, with the seams a test needs: the tasks, the arms (arms(pick),
+// loadArms by default), the run (runClaudeAsync, or a stub), the Claude Code version, the tree record, the snapshot,
+// results and cache dirs, the floor-scan script and the grade parser (parseGrades) (Task 17a; the fast rounds after it).
+// env is the caller's environment.
+// - Flags (h2hFlags, LOOP_FLAGS) are read by the shared parser: any other word, or flags that do not go together
+//   (loopProblem), are a usage error (2) before anything runs.
+// - Sessions go to a pool (pool.mjs): --jobs N at once, 6 by default. A task-run's arms run side by side; its grader
+//   call jumps the queue once they end. Rows, voids, keys and snapshots keep task-run order. The first fatal error
+//   stops new sessions; running ones finish, and the error is thrown.
+// - Every run but a dry or --quick one refuses a kern tree with uncommitted changes it would measure, unless
+//   --allow-dirty, a --category, --task or --changed run too, since those may be the evidence (G11; P5 review, Minor
+//   1). The snapshot records the tree as kern.
+// - --quick runs each task once, into h2h-<date>-quick-<HHMMSS>; --changed <range> runs only the tasks whose inputs
+//   changed (taskParts), into h2h-<date>-changed-<HHMMSS>.
+// - Each arm's attempt is a unit cached under its inputs (the task but its grading-only fields, the task folder but
+//   labels.json, the arm's plugin or kern's inputs for the category, the model, the code, the Claude Code version and
+//   the run's index); each task-run's grade under its attempts, the task, the code, the grader model and the seed,
+//   whose date sets the blind ids. A reused attempt's transcript takes this run's blind id. --no-cache runs them all;
+//   --resume <dir> runs only what that run lacks; --regrade <dir> reads its saved grades again (regradeH2H).
 // - Each arm's run must load its plugin, and kern's must print the kernel, every other arm's not (G10). A child
 //   process's failure in an arm's workspace (git, a setup command), or a floor-scan that exits other than 0 or 1,
 //   voids that task-run, not the run (G13, G9); any other error stops the run (P5 review, Minor 3). Heldout tests
@@ -327,48 +361,76 @@ const USAGE = 'usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--
 //   error, before the task-run is VOID: a VOID throws away every arm session of it (P5 review, Important 1).
 // - key.json beside the transcripts is merged with the day's earlier keys, never replaced (G3). One that is not
 //   JSON stops the run before anything runs (P5 review, Minor 5).
-// - Snapshots (G3): only a full run with at least one graded task-run writes <snapshots>/h2h-<model>-<date>.json;
-//   a filtered run, an all-VOID run or a run a fatal error stops writes snapshot-<model>-<filter>.json beside the
-//   transcripts instead, complete false when it stopped. Each records the tasks under cases and the VOID task-runs.
-//   After each task-run, the progress so far goes to that file beside the transcripts (complete false) and key.json
-//   is merged, so a run a signal kills, which runs no finally, keeps what it graded (P5 review, Minor 6); a full
-//   run removes the progress file once the committed snapshot is written.
+// - Snapshots (G3): only a full run (no filter, no --quick) with at least one graded task-run writes
+//   <snapshots>/h2h-<model>-<date>.json; any other run, an all-VOID run or a run a fatal error stops writes
+//   snapshot-<model>-<filter>.json beside the transcripts instead, complete false when it stopped. Each records the
+//   tasks under cases and the VOID task-runs. After each task-run, the progress so far goes to that file beside the
+//   transcripts (complete false) and key.json is merged, so a run a signal kills, which runs no finally, keeps what it
+//   graded (P5 review, Minor 6); a full run removes the progress file once the committed snapshot is written.
 // Exit: gateExit (0 pass, 1 a category failed, 3 one incomplete), 2 for a usage error or no task matched.
-export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms: armsOf = (pick) => loadArms(root, pick), armIds = null, run = runClaude, version = claudeVersion,
-  tree = treeRecord, snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), floorScan = join(root, 'scripts', 'floor-scan'),
-  parse = parseGrades, log = console.log, error = console.error, now = new Date() }) {
+export async function h2hMain({ root, argv, env = process.env, tasks: all = null, arms: armsOf = (pick) => loadArms(root, pick), armIds = null, run = runClaudeAsync, version = claudeVersion,
+  tree = treeRecord, snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), cache = join(resultsDir, 'cache', 'h2h'),
+  floorScan = join(root, 'scripts', 'floor-scan'), parse = parseGrades, log = console.log, error = console.error, now = new Date() }) {
+  const t0 = Date.now();
   const usage = (msg) => { error(`h2h: ${msg}\n${USAGE}`); return 2; };
   const allTasks = all ?? loadTasks(root);
   const allArms = armIds ?? JSON.parse(readFileSync(join(root, 'evals', 'h2h', 'arms.json'), 'utf8')).map((a) => a.id);
   let o;
   try { o = parseArgs(argv, h2hFlags(allTasks.map((t) => t.id), allArms)); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  const loop = loopProblem(o, { select: ['task'] });
+  if (loop) return usage(loop);
+  if (o.regrade !== undefined) return regradeH2H({ dir: o.regrade, tasks: allTasks, parse, log, usage, now });
+  const resumeDir = o.resume ?? null;
+  let manifest = null;
+  if (resumeDir) {
+    try { manifest = readManifest(resumeDir, 'h2h'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+    o = { ...manifest.options, jobs: o.jobs ?? manifest.options.jobs, noCache: !!o.noCache };
+  }
   const MODEL = o.model ?? (env.KERN_EVAL_MODEL || 'claude-sonnet-5-5');
   const GRADER = o.grader ?? 'claude-opus-5-5';
-  const RUNS = o.runs ?? 3;
+  const RUNS = o.runs ?? (o.quick ? 1 : 3);
+  const JOBS = o.jobs ?? 6;
   let arms;
   try { arms = armsOf(o.arms ?? null); } catch (e) { error(e.message); return 2; }
-  const tasks = allTasks.filter((t) => (!o.category || t.category === o.category) && (!o.task || t.id === o.task));
-  if (!tasks.length) { error('h2h: no task matched'); return 2; }
+  let tasks;
+  if (manifest) {
+    const gone = manifest.options.ids.filter((id) => !allTasks.some((t) => t.id === id));
+    if (gone.length) return usage(`--resume: no task has the id ${gone.join(', ')} now; start a new run`);
+    tasks = allTasks.filter((t) => manifest.options.ids.includes(t.id));
+  } else {
+    tasks = allTasks.filter((t) => (!o.category || t.category === o.category) && (!o.task || t.id === o.task));
+    if (!tasks.length) { error('h2h: no task matched'); return 2; }
+    if (o.changed !== undefined) {
+      const of = tasks.length;
+      try {
+        const { before, after } = rangeSources(root, o.changed);
+        tasks = changedCases(tasks, taskParts, before, after);
+      } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+      if (o.dryRun) log(`--changed ${o.changed}: ${tasks.length} of ${of} tasks`);
+    }
+  }
   if (o.dryRun) {
     for (const t of tasks) log(`${t.id}: ${arms.map((a) => a.id).join(', ')} x ${RUNS} runs; ${t.prompts.length} turn(s)`);
     return 0;
   }
   const refusal = evalConfigProblem(env);
   if (refusal) { error(`h2h: ${refusal}`); return 2; }
-  const full = !o.category && !o.task && !o.arms;
+  const full = !o.category && !o.task && !o.arms && o.changed === undefined && !o.quick;
   const kern = tree(root);
-  if (!o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
+  if (!o.quick && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
+  if (!tasks.length) { log(`--changed ${o.changed}: no task reads a file that changed; nothing ran`); return 0; }
   let claude;
   try { claude = version(); } catch (e) { error(`h2h: cannot read the claude version (${String(e.message).split('\n')[0]}); nothing ran`); return 1; }
-  const date = now.toISOString().slice(0, 10);
+  const date = manifest?.date ?? now.toISOString().slice(0, 10);
   const model = MODEL.replace(/^claude-/, '');
   const rev = (dir) => { try { return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return 'unknown: not a git checkout'; } };
   // Raw runs and key.json go to the results dir (gitignored); the key (blind id to arm) is written only after
   // grading, outside anything the grader reads.
-  const raw = join(resultsDir, `h2h-${date}`);
+  const mode = o.quick ? 'quick' : o.changed !== undefined ? 'changed' : null;
+  const raw = resumeDir ?? join(resultsDir, `h2h-${date}${mode ? `-${mode}-${timeStamp(now)}` : ''}`);
   mkdirSync(raw, { recursive: true });
   const committed = join(snapshots, `h2h-${model}-${date}.json`);
-  const filter = full ? 'all' : [o.category, o.task?.replace('/', '--'), o.arms && `arms-${o.arms.join('+')}`].filter(Boolean).join('-');
+  const filter = full ? 'all' : [o.category, o.task?.replace('/', '--'), o.arms && `arms-${o.arms.join('+')}`, o.changed !== undefined && 'changed'].filter(Boolean).join('-') || 'all';
   const beside = join(raw, `snapshot-${model}-${filter}.json`);
   const keyFile = join(raw, 'key.json');
   // readKey(): the day's keys so far, {} only when there is no key.json yet. It is the one map from the day's blind
@@ -384,17 +446,22 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
   try { readKey(); } catch (e) { error(e.message); return 2; }
   // Merged, so a filtered rerun keeps the keys of the day's other task-runs (Task 17a, G3).
   const writeKey = () => writeFileSync(keyFile, JSON.stringify({ ...readKey(), ...key }, null, 2) + '\n');
+  const ids0 = tasks.map((t) => t.id);
+  writeManifest(raw, { runner: 'h2h', date, started: manifest?.started ?? now.toISOString(), ...(manifest ? { resumed: [...(manifest.resumed ?? []), now.toISOString()] } : {}),
+    claude, kern, options: { model: MODEL, grader: GRADER, runs: RUNS, jobs: JOBS, category: o.category ?? null, task: o.task ?? null, arms: o.arms ?? null, armIds: arms.map((a) => a.id),
+      quick: !!o.quick, ...(o.changed !== undefined ? { changed: o.changed } : {}), allowDirty: !!o.allowDirty, ids: ids0 } });
   const results = []; const voided = []; const key = {};
   let verdict = null;
   const save = (file, complete) => {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({ model: MODEL, grader: GRADER, claude, isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS, kern, complete, cases: tasks.map((t) => t.id),
+    writeFileSync(file, JSON.stringify({ model: MODEL, grader: GRADER, claude, isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS, ...(o.quick ? { quick: true } : {}),
+      ...(o.changed !== undefined ? { changed: o.changed } : {}), kern, complete, cases: ids0,
       arms: arms.map((a) => ({ id: a.id, plugin: a.plugin, commit: a.id === 'kern' ? kern.commit : a.dir ? rev(a.srcDir ?? a.dir) : null })), voided, gate: verdict, results }, null, 2) + '\n');
   };
   // gradeTaskRun(t, attempts): { grades, reply, regrade } from the grader, or { problem }. A reply that does not parse
   // or validate is asked for once more, with the error after the same prompt; regrade keeps that first error. A
   // grader run that failed, or a second reply that fails too, is the problem (P5 review, Important 1).
-  const gradeTaskRun = (t, attempts) => {
+  const gradeTaskRun = async (t, attempts) => {
     const prompt = graderPrompt(t, attempts);
     let first = '';
     // Two asks at most, counted, whatever the first error says (P5 re-review, Minor C).
@@ -402,7 +469,7 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
       const text = ask > 1 ? `${prompt}\n\nA reply to this prompt could not be used: ${first}. Reply again with JSON only, in the shape above, with every field for every attempt.` : prompt;
       const gdir = mkdtempSync(join(tmpdir(), 'g-'));
       let graded;
-      try { graded = tryRun({ cwd: gdir, prompts: [text], model: GRADER, maxTurns: 1 }, run); } finally { rmSync(gdir, { recursive: true, force: true }); }
+      try { graded = await tryRun({ cwd: gdir, prompts: [text], model: GRADER, maxTurns: 1 }, run); } finally { rmSync(gdir, { recursive: true, force: true }); }
       if (graded.problem) return { problem: `grader: ${graded.problem}` };
       const reply = finalText(graded.run.events);
       try { return { grades: parse(reply, attempts.map((x) => x.id), t), reply, regrade: ask > 1 ? first : '' }; } catch (err) {
@@ -413,25 +480,59 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
     }
     throw new Error('h2h: gradeTaskRun asked more than twice');
   };
-  // taskRun(t, r): task t's run r: each arm's attempt, then one blind grade of them all, its rows in results and its
-  // key in key; a task-run that cannot be graded goes to voided with the reason.
-  const taskRun = (t, r) => {
+  const src = treeSource(root);
+  const code = filesVersion(root, H2H_CODE);
+  const graderVersion = filesVersion(root, H2H_CODE, { grader: GRADER });
+  const kernInputs = new Map();
+  const kernOf = (category) => {
+    if (!kernInputs.has(category)) kernInputs.set(category, caseInputs(src, { skills: CATEGORY_SKILLS[category] ?? [] }).hash);
+    return kernInputs.get(category);
+  };
+  const taskFiles = new Map();
+  const filesOf = (t) => {
+    if (!taskFiles.has(t.id)) taskFiles.set(t.id, dirHash(t.dir, ['labels.json']));
+    return taskFiles.get(t.id);
+  };
+  const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest });
+  const limit = limiter(JOBS);
+  const units = [];
+  let stop = null;
+  const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
+  // taskRun(t, r): task t's run r: each arm's attempt, side by side, then one blind grade of them all. Returns its rows,
+  // seed and blind ids, or void: the reason it cannot be graded.
+  const taskRun = async (t, r) => {
     const seed = `${date}:${t.id}:${r}`;
     const ids = blindIds(arms.map((a) => a.id), seed);
-    const attempts = [];
-    const fail = (reason) => { voided.push({ task: t.id, run: r, reason }); log(`VOID ${t.id} run ${r}: ${reason}`); };
-    for (const a of arms) {
-      const x = armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan });
-      if (x.problem) return fail(`${a.id}: ${x.problem}`);
-      attempts.push(x.attempt);
-    }
-    attempts.sort((x, y) => x.id.localeCompare(y.id));
-    const g = gradeTaskRun(t, attempts);
-    if (g.problem) return fail(g.problem);
-    key[seed] = ids;
+    const base = t.id.replace('/', '--');
+    const recs = await Promise.all(arms.map((a) => store.unit({
+      name: `${base}-${r}-${a.id}`, files: [['attempt.jsonl', `${base}-${r}-${ids[a.id]}.jsonl`]],
+      key: unitKey({ runner: 'h2h', task: without(t, ['dir', ...GRADING_ONLY]), files: filesOf(t), arm: a.id, kern: a.id === 'kern' ? kernOf(t.category) : null,
+        plugin: a.content ?? null, model: MODEL, code, claude, run: r }),
+      work: () => limit.run(async () => {
+        const x = await armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan });
+        if (x.problem) return { valid: false, problem: x.problem };
+        const { id: _, ...attempt } = x.attempt;
+        return { valid: true, attempt };
+      }),
+    })));
+    units.push(...recs);
+    const bad = recs.findIndex((x) => !x.valid);
+    if (bad >= 0) return { void: `${arms[bad].id}: ${recs[bad].problem}` };
+    const attempts = recs.map((x) => ({ ...x.attempt, id: ids[x.attempt.arm] })).sort((x, y) => x.id.localeCompare(y.id));
+    const cached = new Map(recs.filter((x) => x.cached).map((x) => [x.attempt.arm, x.cached]));
+    const g = await store.unit({ name: `${base}-${r}.grade`,
+      key: unitKey({ runner: 'h2h-grade', seed, task: without(t, ['dir']), attempts: recs.map((x) => x.key), grader: graderVersion }),
+      work: () => limit.run(async () => {
+        const res = await gradeTaskRun(t, attempts);
+        return res.problem ? { valid: false, problem: res.problem } : { valid: true, ids, reply: res.reply, regrade: res.regrade };
+      }, { priority: 1 }) });
+    if (!g.valid) return { void: g.problem };
+    let grades;
+    try { grades = parse(g.reply, attempts.map((x) => x.id), t); } catch (e) { return { void: e.message }; }
     // A review row keeps the grader's raw reply and its decoy and unmatched counts (resultRow); a row whose grade
-    // came from the re-ask says why the first reply was not used.
-    for (const x of attempts) results.push({ ...resultRow(t, r, x, g.grades[x.id], g.reply), ...(g.regrade ? { regrade: g.regrade } : {}) });
+    // came from the re-ask says why the first reply was not used; a reused attempt's row says where it came from.
+    return { seed, ids, rows: attempts.map((x) => ({ ...resultRow(t, r, x, grades[x.id], g.reply), ...(g.regrade ? { regrade: g.regrade } : {}),
+      ...(cached.has(x.arm) ? { cached: cached.get(x.arm) } : {}) })) };
   };
   // The kern arm runs from a copy of the plugin without evals/, tests/ and the answer keys, so a model in that
   // arm cannot read labels.json or heldout/ under its plugin root. Every other plugin arm runs from a copy too:
@@ -442,17 +543,23 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
     for (const a of arms) {
       if (!a.plugin) continue;
       a.srcDir = a.dir;
+      a.content = a.id === 'kern' ? null : dirHash(a.srcDir);
       a.dir = a.id === 'kern' ? pluginCopy(a.srcDir) : armCopy(a.srcDir, a.id);
       copies.push(a.dir);
     }
-    for (const t of tasks) {
-      for (let r = 0; r < RUNS; r++) {
-        taskRun(t, r);
-        // Progress, so a run a signal kills keeps what it graded (P5 review, Minor 6).
-        save(beside, false);
-        writeKey();
+    const taskRuns = tasks.flatMap((t) => Array.from({ length: RUNS }, (_, r) => ({ t, r })));
+    // Progress after each task-run, in order, so a run a signal kills keeps what it graded (P5 review, Minor 6).
+    const emit = ordered(taskRuns.length, (k, out) => {
+      const { t, r } = taskRuns[k];
+      if (out.void) { voided.push({ task: t.id, run: r, reason: out.void }); log(`VOID ${t.id} run ${r}: ${out.void}`); } else {
+        key[out.seed] = out.ids;
+        results.push(...out.rows);
       }
-    }
+      save(beside, false);
+      writeKey();
+    });
+    await Promise.allSettled(taskRuns.map(({ t, r }, k) => taskRun(t, r).then((out) => emit(k, out)).catch(fail)));
+    if (stop) throw stop;
     complete = true;
   } finally {
     for (const c of copies) rmSync(dirname(c), { recursive: true, force: true });
@@ -460,14 +567,49 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
   }
   verdict = gate(results, touchedTasks(allTasks, tasks).map((t) => ({ id: t.id, category: t.category })));
   for (const v of verdict) log(verdictLine(v));
+  log(roundLine(units, Date.now() - t0, JOBS));
   if (full && results.length) {
     save(committed, true);
     rmSync(beside, { force: true });
     log(`snapshot: ${committed}`);
   } else {
     save(beside, true);
-    log(`${full ? 'no task-run was graded: no committed snapshot, and any earlier one stays' : 'a filtered run: no committed snapshot'}; this one is beside the transcripts: ${beside}`);
+    log(`${full ? 'no task-run was graded: no committed snapshot, and any earlier one stays' : o.quick ? 'a --quick run: no committed snapshot' : 'a filtered run: no committed snapshot'}; this one is beside the transcripts: ${beside}`);
   }
+  return gateExit(verdict);
+}
+
+// regradeH2H({ dir, tasks, parse, log, usage, now }): --regrade. Each task-run that dir's run.json names is read again
+// from its saved attempts and grader reply: today's parse (parseGrades) and resultRow, then the gate. No session
+// starts, so a reply today's rules refuse makes its task-run VOID, with no re-ask. The result, shaped as a snapshot
+// with regraded: { from, at }, goes to <dir>/regrade-<HHMMSS>.json, never evals/snapshots.
+async function regradeH2H({ dir, tasks: allTasks, parse, log, usage, now }) {
+  let m;
+  try { m = readManifest(dir, 'h2h'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  const byId = new Map(allTasks.map((t) => [t.id, t]));
+  const tasks = m.options.ids.map((id) => byId.get(id)).filter(Boolean);
+  const results = []; const voided = [];
+  for (const t of tasks) {
+    const base = t.id.replace('/', '--');
+    for (let r = 0; r < m.options.runs; r++) {
+      const fail = (reason) => { voided.push({ task: t.id, run: r, reason }); log(`VOID ${t.id} run ${r}: ${reason}`); };
+      const recs = m.options.armIds.map((a) => readRecord(dir, `${base}-${r}-${a}`));
+      const bad = recs.findIndex((x) => !x?.valid);
+      if (bad >= 0) { fail(`${m.options.armIds[bad]}: ${recs[bad]?.problem ?? 'no record: the attempt never finished'}`); continue; }
+      const g = readRecord(dir, `${base}-${r}.grade`);
+      if (!g?.valid) { fail(g?.problem ?? 'no record: the task-run was never graded'); continue; }
+      const attempts = recs.map((x) => ({ ...x.attempt, id: g.ids[x.attempt.arm] })).sort((x, y) => x.id.localeCompare(y.id));
+      let grades;
+      try { grades = parse(g.reply, attempts.map((x) => x.id), t); } catch (e) { fail(e.message || 'h2h grader: the reply could not be used'); continue; }
+      for (const x of attempts) results.push({ ...resultRow(t, r, x, grades[x.id], g.reply), ...(g.regrade ? { regrade: g.regrade } : {}) });
+    }
+  }
+  const verdict = gate(results, touchedTasks(allTasks, tasks).map((t) => ({ id: t.id, category: t.category })));
+  for (const v of verdict) log(verdictLine(v));
+  const file = join(dir, `regrade-${timeStamp(now)}.json`);
+  writeFileSync(file, JSON.stringify({ regraded: { from: dir, at: now.toISOString() }, model: m.options.model, grader: m.options.grader, claude: m.claude, runs: m.options.runs, kern: m.kern,
+    complete: true, cases: m.options.ids, voided, gate: verdict, results }, null, 2) + '\n');
+  log(`regrade: ${file}`);
   return gateExit(verdict);
 }
 
@@ -477,7 +619,7 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
 // { attempt } or { problem }, the reason the task-run is VOID: a run that may not be graded, a plugin that did not
 // load as the arm needs (G10), a floor-scan exit other than 0 or 1 (G9) or a child process's failure (G13); any other
 // error is thrown. The workspace goes either way.
-function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }) {
+async function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }) {
   let cwd = null;
   try {
     cwd = taskWorkspace(t);
@@ -485,7 +627,7 @@ function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }) {
     // What Claude Code's git status context shows this session, read before it starts; the grader gets it.
     const facts = gitFacts(cwd);
     const expect = { plugins: a.dir ? [a.dir] : [], kernel: a.id === 'kern' ? 'on' : 'off' };
-    const { run: got, problem, events } = tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model, maxTurns: t.max_turns || 40, expect }, run);
+    const { run: got, problem, events } = await tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model, maxTurns: t.max_turns || 40, expect }, run);
     // A run cut off by the timeout keeps the events it printed.
     const kept = got ? got.events : events;
     if (kept.length) writeFileSync(join(raw, `${t.id.replace('/', '--')}-${r}-${id}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n'));

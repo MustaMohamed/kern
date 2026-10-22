@@ -4,7 +4,7 @@
 // the stream-json a stub run returns through a runner's `run` seam.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -93,3 +93,14 @@ process.stdin.on('end', () => log('eof'));
   return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
 }
 
+
+// gitSandbox(repo): a git repo, one commit, holding what a runner reads of the kern repo at repo: the plugin files,
+// the eval runners and evals/fixtures and evals/h2h/arms.json, so --changed has a range to read. The caller removes
+// dirname(root).
+export function gitSandbox(repo) {
+  const root = join(mkdtempSync(join(tmpdir(), 'gs-')), 'kern');
+  for (const d of ['scripts', 'hooks', 'kernel', 'skills', 'agents', 'modes', '.claude-plugin', 'evals/fixtures', 'evals/h2h/arms.json']) cpSync(join(repo, d), join(root, d), { recursive: true });
+  const git = (...a) => spawnSync('git', ['-C', root, '-c', 'user.email=t@example.com', '-c', 'user.name=t', ...a], { encoding: 'utf8' });
+  git('init', '-q', '-b', 'main'); git('add', '-A'); git('commit', '-qm', 'base');
+  return root;
+}

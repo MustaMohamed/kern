@@ -8,14 +8,17 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, sep } from 'node:path';
-import { UsageError, parseArgs } from './args.mjs';
+import { basename, dirname, join, relative, sep } from 'node:path';
+import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
+import { caseInputs, changedCases, rangeSources, treeSource } from './case-inputs.mjs';
+import { filesVersion, readManifest, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
+import { limiter, ordered } from './pool.mjs';
 import { COPY_OMITS, dirtyRefusal, treeRecord } from './run-record.mjs';
-import { ISOLATION, PERMISSIONS, claudeVersion, evalConfigProblem, finalText, pluginProblem, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, evalConfigProblem, finalText, pluginProblem, runClaudeAsync, runProblem, toolUses, workspace } from './claude-run.mjs';
 
 // behaveFlags(ids): scripts/behave.mjs's flags for the shared parser (args.mjs), ids being the case ids.
 export const behaveFlags = (ids) => ({ '--case': { key: 'case', value: 'a case id', choices: ids, noun: 'case' }, '--runs': { key: 'runs', value: 'count' },
-  '--model': { key: 'model', value: 'a model id' }, '--grader-model': { key: 'grader', value: 'a model id' }, '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' } });
+  '--model': { key: 'model', value: 'a model id' }, '--grader-model': { key: 'grader', value: 'a model id' }, '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' }, ...LOOP_FLAGS });
 
 // stage(root, files): one directory holding the fixture layers in order. A single layer is used in place;
 // several are copied into a new temp directory, which the caller removes.
@@ -41,8 +44,9 @@ export function caseWorkspace(root, c) {
   }
 }
 
-// loadCases(root): [{ id, source, files, prompts, expectations, pressure, origin?, branch?, setup?,
-// max_turns?, checks? }], ids unique. An evals/cases entry may give prompts (several turns) beside its prompt,
+// loadCases(root): [{ id, source, files, prompts, expectations, pressure, skills?, origin?, branch?, setup?,
+// max_turns?, checks? }], ids unique. skills names the kern skills a case routes to (caseSkills): an evals/cases
+// file's skill_name, or an evals/behave case's own list. An evals/cases entry may give prompts (several turns) beside its prompt,
 // the turn route-eval checks; then prompt is the last of them. checks maps an expectation's index (0-based, a
 // string key in JSON with no leading zero) to the name of the CHECKS entry that decides it. Throws when a case names a fixture
 // layer that does not exist, or a check key or name that is not one.
@@ -55,7 +59,7 @@ export function loadCases(root) {
       const id = `${j.skill_name}-${e.id}`;
       if (e.prompts && e.prompts[e.prompts.length - 1] !== e.prompt) throw new Error(`behave: ${id}: prompt must be the last of prompts (evals/cases/${f})`);
       const shape = Object.fromEntries(WORKSPACE_KEYS.filter((k) => e[k] !== undefined).map((k) => [k, e[k]]));
-      out.push({ id, source: `evals/cases/${f}`, files: e.files || ['node-bug'],
+      out.push({ id, source: `evals/cases/${f}`, files: e.files || ['node-bug'], skills: [j.skill_name],
         prompts: e.prompts || [e.prompt], expectations: e.expectations, pressure: [], ...shape, ...(e.checks ? { checks: e.checks } : {}) });
     }
   }
@@ -559,14 +563,14 @@ export const CHECKS = {
 
 // gradeRun(c, events, tree, grade): the run's verdict, one { pass, evidence } per expectation in order. A
 // scripted expectation (c.checks) is decided by its CHECKS entry and carries its name as `check`; the rest go
-// to grade(expectations, behaveDigest(events)) in one model call, whose reply parseVerdict reads, so the model
-// numbers only the expectations it was given. With every expectation scripted, grade is not called. Throws (an
-// invalid run) when a check cannot decide or the reply is malformed.
-export function gradeRun(c, events, tree, grade) {
+// to grade(expectations, behaveDigest(events)) in one model call (awaited), whose reply parseVerdict reads, so
+// the model numbers only the expectations it was given. With every expectation scripted, grade is not called.
+// Rejects (an invalid run) when a check cannot decide or the reply is malformed.
+export async function gradeRun(c, events, tree, grade) {
   const checks = c.checks ?? {};
   const scripted = new Map(Object.entries(checks).map(([k, name]) => [Number(k), { ...CHECKS[name](events, { tree }), check: name }]));
   const left = c.expectations.map((text, k) => ({ text, k })).filter(({ k }) => !scripted.has(k));
-  const model = left.length ? parseVerdict(grade(left.map((x) => x.text), behaveDigest(events)), left.length) : [];
+  const model = left.length ? parseVerdict(await grade(left.map((x) => x.text), behaveDigest(events)), left.length) : [];
   const byModel = new Map(left.map(({ k }, j) => [k, model[j]]));
   return c.expectations.map((_, k) => scripted.get(k) ?? byModel.get(k));
 }
@@ -575,13 +579,14 @@ export function gradeRun(c, events, tree, grade) {
 // turn or budget cap, a non-zero exit, a timeout, or a result count that differs from opts.prompts.length
 // is an invalid run (M2a's runProblem), never a graded one; a fatal error (no claude at all) still stops
 // the runner. A run that threw comes back as { run: null, problem, events }, events being what it printed
-// before a timeout ([] otherwise), for the runner to save. run is runClaude, or a stub in tests. With
-// expect ({ plugins, kernel }, which run never sees), a run that did not load those plugins or print or
-// leave out the kernel as told is invalid too (pluginProblem, Task 17a G10).
-export function tryRun({ expect = null, ...opts }, run = runClaude) {
+// before a timeout ([] otherwise), for the runner to save. run is runClaudeAsync, or a stub in tests (its result
+// is awaited, so a stub may return it directly). With expect ({ plugins, kernel }, which run never sees), a run
+// that did not load those plugins or print or leave out the kernel as told is invalid too (pluginProblem, Task
+// 17a G10).
+export async function tryRun({ expect = null, ...opts }, run = runClaudeAsync) {
   let r;
   try {
-    r = run(opts);
+    r = await run(opts);
   } catch (e) {
     if (e.fatal) throw e;
     return { run: null, problem: e.message, events: e.events ?? [] };
@@ -589,100 +594,242 @@ export function tryRun({ expect = null, ...opts }, run = runClaude) {
   return { run: r, problem: runProblem(r, opts.prompts?.length) || (expect ? pluginProblem(r.events, expect) : '') };
 }
 
-// behaveMain({ root, argv, env, cases, run, version, tree, snapshots, results, log, error, now }): what
-// scripts/behave.mjs runs, its exit code returned, with every seam a test needs: the cases, the run (runClaude,
-// or a stub), the Claude Code version, the tree record and the snapshot and results dirs (Task 17a).
-// - Flags (behaveFlags) are read by the shared parser: any other word is a usage error (2) before anything runs.
-// - A full run (no --case) refuses a kern tree with uncommitted changes it would measure (dirtyRefusal), unless
-//   --allow-dirty; every snapshot records the tree as kern (treeRecord).
+// caseSkills(c): the kern skills case c routes to: its skills (an evals/cases file's skill_name, or a behave case's
+// own list), and each /kern:<name> its prompts type.
+export const caseSkills = (c) => [...new Set([...(c.skills ?? []), ...c.prompts.flatMap((p) => [...p.matchAll(/\/kern:([a-z][a-z0-9-]*)/g)].map((m) => m[1]))])];
+
+// caseParts(c): what case c reads, for its input hash and --changed (case-inputs.mjs): the skills it routes to, its
+// fixture layers, and its own entry in its source file.
+export const caseParts = (c) => ({ skills: caseSkills(c), paths: c.files.map((f) => `evals/fixtures/${f}/`),
+  entries: [{ file: c.source, pick: c.source.startsWith('evals/cases/') ? (j) => (j.evals ?? []).find((e) => `${j.skill_name}-${e.id}` === c.id) : (j) => (Array.isArray(j) ? j.find((x) => x.id === c.id) : undefined) }] });
+
+// BEHAVE_CODE: the files whose code runs and grades a behave run. Their content and the grader model are the grader
+// version in each run's cache key, so an edit to any of them runs every case again.
+const BEHAVE_CODE = ['scripts/lib/behave.mjs', 'scripts/lib/claude-run.mjs', 'scripts/lib/claude-drive.mjs'];
+
+const USAGE = 'usage: node scripts/behave.mjs [--case <id> | --changed <range>] [--runs N | --quick] [--jobs N] [--no-cache] [--model <m>] [--grader-model <m>] [--allow-dirty] [--dry-run]\n'
+  + '       node scripts/behave.mjs --resume <results dir> [--jobs N] [--no-cache]\n'
+  + '       node scripts/behave.mjs --regrade <results dir>';
+
+// behaveMain({ root, argv, env, cases, run, version, tree, snapshots, results, cache, log, error, now }): what
+// scripts/behave.mjs runs, a promise of its exit code, with every seam a test needs: the cases, the run
+// (runClaudeAsync, or a stub), the Claude Code version, the tree record, and the snapshot, results and cache dirs
+// (Task 17a; the fast rounds after it).
+// - Flags (behaveFlags, LOOP_FLAGS) are read by the shared parser: any other word, or flags that do not go together
+//   (loopProblem), are a usage error (2) before anything runs.
+// - Runs go to a pool (pool.mjs): --jobs N sessions at once, 6 by default; results, log lines and snapshots keep
+//   case order. A run holds its slot through its grader call. The first fatal error stops new runs; running ones
+//   finish and save, and the error is thrown.
+// - A gating run is a full one (no --case, --changed or --quick). It refuses a kern tree with uncommitted changes it
+//   would measure (dirtyRefusal), unless --allow-dirty; every snapshot records the tree as kern (treeRecord).
+// - --quick runs each case once, --changed <range> only the cases whose inputs changed (caseParts); each writes to a
+//   results dir of its own, <name>-quick-<HHMMSS> or <name>-changed-<HHMMSS>.
+// - Each run is a unit with a cache key (unitKey: the case's input hash and text, the model, the grader version, the
+//   Claude Code version and the run's index). A valid run with the same key in the cache is reused, its transcripts
+//   copied in, unless --no-cache; every run's record goes beside its transcripts (<case>-<i>.result.json), and
+//   run.json holds the options, so --resume <dir> runs only what that run lacks.
+// - --regrade <dir> grades that dir's runs again (regradeBehave) and starts no session.
 // - The Claude Code version is read before the first case, so a failure there spends nothing.
 // - Each run must load the kern copy and print the kernel (tryRun's expect).
 // - Snapshots (G3): after each case, the progress so far goes beside the transcripts, as snapshot-<case|all>.json
-//   with complete false. Only a full run with at least one valid run writes the committed snapshot
+//   with complete false. Only a gating run with at least one valid run writes the committed snapshot
 //   (<snapshots>/behave-<model>-<date>.json, complete true, every case id under cases), and then the progress file
-//   goes. A --case run, an all-invalid run or a run a fatal error stops leaves the committed snapshot as it was.
-export function behaveMain({ root, argv, env = process.env, cases: all = null, run = runClaude, version = claudeVersion, tree = treeRecord,
-  snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), log = console.log, error = console.error, now = new Date() }) {
-  const usage = (msg) => { error(`behave: ${msg}\nusage: node scripts/behave.mjs [--case <id>] [--runs N] [--model <m>] [--grader-model <m>] [--allow-dirty] [--dry-run]`); return 2; };
+//   goes. Any other run, an all-invalid run or a run a fatal error stops leaves the committed snapshot as it was.
+export async function behaveMain({ root, argv, env = process.env, cases: all = null, run = runClaudeAsync, version = claudeVersion, tree = treeRecord,
+  snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), cache = join(resultsDir, 'cache', 'behave'),
+  log = console.log, error = console.error, now = new Date() }) {
+  const t0 = Date.now();
+  const usage = (msg) => { error(`behave: ${msg}\n${USAGE}`); return 2; };
   const cases0 = all ?? loadCases(root);
   let o;
   try { o = parseArgs(argv, behaveFlags(cases0.map((c) => c.id))); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  const loop = loopProblem(o, { select: ['case'] });
+  if (loop) return usage(loop);
+  if (o.regrade !== undefined) return regradeBehave({ dir: o.regrade, cases: cases0, log, usage, now });
+  const resumeDir = o.resume ?? null;
+  let manifest = null;
+  if (resumeDir) {
+    try { manifest = readManifest(resumeDir, 'behave'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+    o = { ...manifest.options, jobs: o.jobs ?? manifest.options.jobs, noCache: !!o.noCache };
+  }
   const MODEL = o.model ?? (env.KERN_EVAL_MODEL || 'claude-sonnet-5-5');
   const GRADER = o.grader ?? 'claude-sonnet-5-5';
-  const RUNS = o.runs ?? 3;
+  const RUNS = o.runs ?? (o.quick ? 1 : 3);
+  const JOBS = o.jobs ?? 6;
   const only = o.case ?? null;
-  const cases = cases0.filter((c) => !only || c.id === only);
+  let cases;
+  if (manifest) {
+    const gone = manifest.options.ids.filter((id) => !cases0.some((c) => c.id === id));
+    if (gone.length) return usage(`--resume: no case has the id ${gone.join(', ')} now; start a new run`);
+    cases = cases0.filter((c) => manifest.options.ids.includes(c.id));
+  } else if (o.changed !== undefined) {
+    try {
+      const { before, after } = rangeSources(root, o.changed);
+      cases = changedCases(cases0, caseParts, before, after);
+    } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  } else cases = cases0.filter((c) => !only || c.id === only);
   if (o.dryRun) {
+    if (o.changed !== undefined) log(`--changed ${o.changed}: ${cases.length} of ${cases0.length} cases`);
     for (const c of cases) log(dryLine(c));
     return 0;
   }
   const refusal = evalConfigProblem(env);
   if (refusal) { error(`behave: ${refusal}`); return 2; }
-  const full = !only;
+  const gating = !only && o.changed === undefined && !o.quick;
   const kern = tree(root);
-  if (full && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
+  if (gating && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
+  if (!cases.length) { log(`--changed ${o.changed}: no case reads a file that changed; nothing ran`); return 0; }
   let claude;
   try { claude = version(); } catch (e) { error(`behave: cannot read the claude version (${String(e.message).split('\n')[0]}); nothing ran`); return 1; }
-  const name = `behave-${MODEL.replace(/^claude-/, '')}-${now.toISOString().slice(0, 10)}`;
+  const date = manifest?.date ?? now.toISOString().slice(0, 10);
+  const name = `behave-${MODEL.replace(/^claude-/, '')}-${date}`;
   const committed = join(snapshots, `${name}.json`);
+  const mode = o.quick ? 'quick' : o.changed !== undefined ? 'changed' : null;
   // Each run's events go to the results dir (gitignored), so a missed expectation can be read in the transcript.
-  const raw = join(resultsDir, name);
+  const raw = resumeDir ?? join(resultsDir, mode ? `${name}-${mode}-${timeStamp(now)}` : name);
   const partial = join(raw, `snapshot-${only || 'all'}.json`);
-  mkdirSync(raw, { recursive: true });
+  const ids = cases.map((c) => c.id);
+  writeManifest(raw, { runner: 'behave', date, started: manifest?.started ?? now.toISOString(), ...(manifest ? { resumed: [...(manifest.resumed ?? []), now.toISOString()] } : {}),
+    claude, kern, options: { model: MODEL, grader: GRADER, runs: RUNS, jobs: JOBS, case: only, quick: !!o.quick, ...(o.changed !== undefined ? { changed: o.changed } : {}), allowDirty: !!o.allowDirty, ids } });
   const results = [];
   const save = (file, complete) => {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({ model: MODEL, grader: GRADER, claude, isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS, kern, complete, cases: cases.map((c) => c.id), results }, null, 2) + '\n');
+    writeFileSync(file, JSON.stringify({ model: MODEL, grader: GRADER, claude, isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS, ...(o.quick ? { quick: true } : {}),
+      ...(o.changed !== undefined ? { changed: o.changed } : {}), kern, complete, cases: ids, results }, null, 2) + '\n');
   };
   const plugin = pluginCopy(root);
   const expect = { plugins: [plugin], kernel: 'on' };
-  try {
-    for (const c of cases) {
-      const runs = [];
-      for (let i = 0; i < RUNS; i++) {
-        const cwd = caseWorkspace(root, c);
-        // A case with a tree check (no-write) compares the workspace at the run's start and end; a tree git
-        // cannot read at either end makes the run invalid, and no model runs on one unread at the start.
-        const before = readsTree(c) ? readTree(cwd, 'start') : null;
-        if (before?.problem) { runs.push({ invalid: true, reason: before.problem, verdict: null, exit: null }); rmSync(dirname(cwd), { recursive: true, force: true }); continue; }
-        const { run: r, problem, events } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20, expect }, run);
-        const after = before ? readTree(cwd, 'end') : null;
-        const states = before ? { start: before.state, end: after.state } : undefined;
-        // A run cut off by the timeout keeps the events it printed.
-        const kept = r ? r.events : events;
-        if (kept.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
-        if (before) writeFileSync(join(raw, `${c.id}-${i}.tree.json`), JSON.stringify({ ...states, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
-        const gdir = mkdtempSync(join(tmpdir(), 'g-'));
-        let verdict = null; let invalid = !!problem || !!after?.problem; let reason = problem || after?.problem || '';
-        if (!invalid) {
-          try {
-            verdict = gradeRun(c, r.events, states, (ex, record) => {
-              const g = tryRun({ cwd: gdir, prompts: [graderPrompt(ex, record)], model: GRADER, maxTurns: 1 }, run);
-              if (g.problem) throw new Error(`grader: ${g.problem}`);
-              return finalText(g.run.events);
-            });
-          } catch (e) { if (e.fatal) throw e; invalid = true; reason = e.message; }
-        }
-        runs.push({ invalid, reason, verdict, exit: r ? r.status : null });
-        rmSync(dirname(cwd), { recursive: true, force: true }); rmSync(gdir, { recursive: true, force: true });
+  // runUnit(c, i): run i of case c in a fresh workspace, graded; its record ({ valid, run, session, expectations }).
+  // session keeps what --regrade needs to judge the run again: its exit, its stderr's tail and the plugin it loaded.
+  const runUnit = async (c, i) => {
+    const unit = `${c.id}-${i}`;
+    const record = (r, session) => ({ valid: !r.invalid, run: r, session, expectations: c.expectations });
+    const cwd = caseWorkspace(root, c);
+    const gdir = mkdtempSync(join(tmpdir(), 'g-'));
+    try {
+      // A case with a tree check (no-write) compares the workspace at the run's start and end; a tree git cannot
+      // read at either end makes the run invalid, and no model runs on one unread at the start.
+      const before = readsTree(c) ? readTree(cwd, 'start') : null;
+      if (before?.problem) return record({ invalid: true, reason: before.problem, verdict: null, exit: null }, null);
+      const { run: r, problem, events } = await tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20, expect }, run);
+      const after = before ? readTree(cwd, 'end') : null;
+      const states = before ? { start: before.state, end: after.state } : undefined;
+      // A run cut off by the timeout keeps the events it printed.
+      const kept = r ? r.events : events;
+      if (kept.length) writeFileSync(join(raw, `${unit}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
+      if (before) writeFileSync(join(raw, `${unit}.tree.json`), JSON.stringify({ ...states, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
+      let verdict = null; let invalid = !!problem || !!after?.problem; let reason = problem || after?.problem || '';
+      if (!invalid) {
+        try {
+          verdict = await gradeRun(c, r.events, states, async (ex, rec) => {
+            const g = await tryRun({ cwd: gdir, prompts: [graderPrompt(ex, rec)], model: GRADER, maxTurns: 1 }, run);
+            if (g.problem) throw new Error(`grader: ${g.problem}`);
+            return finalText(g.run.events);
+          });
+        } catch (e) { if (e.fatal) throw e; invalid = true; reason = e.message; }
       }
-      const cr = caseResult(runs);
-      results.push({ id: c.id, source: c.source, checks: c.checks ?? {}, ...cr, runs });
-      const failed = c.expectations.filter((_, k) => runs.some((x) => x.verdict && !x.verdict[k].pass));
-      save(partial, false);
-      log(`${cr.pass ? 'PASS' : 'FAIL'} ${c.id}: ${cr.passed}/${cr.valid}${cr.invalid ? ` (${cr.invalid} invalid: ${runs.filter((x) => x.invalid).map((x) => x.reason).join(' | ')})` : ''}${failed.length ? `; missed: ${failed.join(' | ')}` : ''}`);
-    }
+      return record({ invalid, reason, verdict, exit: r ? r.status : null }, r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin } : null);
+    } finally { rmSync(dirname(cwd), { recursive: true, force: true }); rmSync(gdir, { recursive: true, force: true }); }
+  };
+  const src = treeSource(root);
+  const graderVersion = filesVersion(root, BEHAVE_CODE, { grader: GRADER });
+  const inputs = new Map(cases.map((c) => [c.id, caseInputs(src, caseParts(c)).hash]));
+  const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest });
+  const limit = limiter(JOBS);
+  const units = [];
+  let stop = null;
+  const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
+  const emit = ordered(cases.length, (k, recs) => {
+    const c = cases[k];
+    units.push(...recs);
+    const runs = recs.map((x) => ({ ...x.run, ...(x.cached ? { cached: x.cached } : {}) }));
+    const cr = caseResult(runs);
+    results.push({ id: c.id, source: c.source, checks: c.checks ?? {}, ...cr, runs });
+    save(partial, false);
+    log(`${caseLine(c, cr, runs)}${reuseNote(recs)}`);
+  });
+  const jobs = cases.map((c, k) => Promise.all(Array.from({ length: RUNS }, (_, i) => store.unit({
+    name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.tree.json`],
+    key: unitKey({ runner: 'behave', inputs: inputs.get(c.id), case: c, model: MODEL, grader: graderVersion, claude, run: i }),
+    work: () => limit.run(() => runUnit(c, i)),
+  }))).then((recs) => emit(k, recs)).catch(fail));
+  try {
+    await Promise.allSettled(jobs);
+    if (stop) throw stop;
   } finally { rmSync(dirname(plugin), { recursive: true, force: true }); }
-  if (full && results.some((x) => x.valid > 0)) {
+  log(roundLine(units, Date.now() - t0, JOBS));
+  if (gating && results.some((x) => x.valid > 0)) {
     save(committed, true);
     rmSync(partial, { force: true });
     log(`snapshot: ${committed}`);
   } else {
     save(partial, true);
-    log(`${full ? 'no run was valid: no committed snapshot, and any earlier one stays' : '--case run: no committed snapshot'}; this one is beside the transcripts: ${partial}`);
+    log(`${gating ? 'no run was valid: no committed snapshot, and any earlier one stays' : `${only ? '--case' : o.quick ? '--quick' : '--changed'} run: no committed snapshot`}; this one is beside the transcripts: ${partial}`);
   }
   return results.every((x) => x.pass) ? 0 : 1;
 }
+
+// caseLine(c, cr, runs): a case's log line: PASS or FAIL, valid runs passed, the invalid ones' reasons, and the
+// expectations a valid run missed.
+const caseLine = (c, cr, runs) => {
+  const failed = c.expectations.filter((_, k) => runs.some((x) => x.verdict && !x.verdict[k]?.pass));
+  return `${cr.pass ? 'PASS' : 'FAIL'} ${c.id}: ${cr.passed}/${cr.valid}${cr.invalid ? ` (${cr.invalid} invalid: ${runs.filter((x) => x.invalid).map((x) => x.reason).join(' | ')})` : ''}${failed.length ? `; missed: ${failed.join(' | ')}` : ''}`;
+};
+
+// regradeBehave({ dir, cases, log, usage, now }): --regrade. Each run that dir's run.json names is graded again from
+// its saved transcript and record with today's code and today's case (regradeRun); no session starts. The result,
+// shaped as a snapshot with regraded: { from, at }, goes to <dir>/regrade-<HHMMSS>.json, never evals/snapshots.
+async function regradeBehave({ dir, cases, log, usage, now }) {
+  let m;
+  try { m = readManifest(dir, 'behave'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  const byId = new Map(cases.map((c) => [c.id, c]));
+  const results = [];
+  for (const id of m.options.ids) {
+    const c = byId.get(id);
+    if (!c) { log(`SKIP ${id}: no case has this id now`); continue; }
+    const runs = [];
+    for (let i = 0; i < m.options.runs; i++) runs.push(await regradeRun(c, readRecord(dir, `${id}-${i}`), dir, i));
+    const cr = caseResult(runs);
+    results.push({ id, source: c.source, checks: c.checks ?? {}, ...cr, runs });
+    log(caseLine(c, cr, runs));
+  }
+  const file = join(dir, `regrade-${timeStamp(now)}.json`);
+  writeFileSync(file, JSON.stringify({ regraded: { from: dir, at: now.toISOString() }, model: m.options.model, grader: m.options.grader, claude: m.claude, runs: m.options.runs,
+    kern: m.kern, complete: true, cases: m.options.ids, results }, null, 2) + '\n');
+  log(`regrade: ${file}`);
+  return results.every((x) => x.pass) ? 0 : 1;
+}
+
+// regradeRun(c, rec, dir, i): run i of case c judged again from its record and saved files: runProblem and
+// pluginProblem on its exit and events, its saved tree for a tree check, today's CHECKS for c.checks, and, for each
+// expectation left to the model, the model's verdict from the run on an expectation of the same text (savedReply).
+// A run with no record, no session, an unreadable file or an expectation no saved verdict answers is invalid.
+async function regradeRun(c, rec, dir, i) {
+  const invalid = (reason) => ({ invalid: true, reason, verdict: null, exit: rec?.run?.exit ?? null });
+  if (!rec) return invalid('no record: the run never finished');
+  if (!rec.session) return invalid(rec.run.reason);
+  let events;
+  try { events = readFileSync(join(dir, `${c.id}-${i}.jsonl`), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch (e) { return invalid(`its transcript cannot be read: ${e.message}`); }
+  const problem = runProblem({ ...rec.session, events }, c.prompts.length) || pluginProblem(events, { plugins: [rec.session.plugin], kernel: 'on' });
+  if (problem) return invalid(problem);
+  let tree;
+  if (readsTree(c)) {
+    try { tree = JSON.parse(readFileSync(join(dir, `${c.id}-${i}.tree.json`), 'utf8')); } catch (e) { return invalid(`its tree record cannot be read: ${e.message}`); }
+    if (tree.problem) return invalid(tree.problem);
+  }
+  try {
+    return { invalid: false, reason: '', verdict: await gradeRun(c, events, tree && { start: tree.start, end: tree.end }, (ex) => savedReply(rec, ex)), exit: rec.run.exit };
+  } catch (e) { return invalid(e.message); }
+}
+
+// savedReply(rec, ex): a grader reply built from the run's own model verdicts, one per expectation text in ex, for
+// gradeRun to read. An expectation the model did not grade in that run (new, reworded, or a scripted check then)
+// throws: a regrade starts no grader call.
+const savedReply = (rec, ex) => JSON.stringify({ results: ex.map((text, j) => {
+  const k = (rec.expectations ?? []).findIndex((t, at) => t === text && rec.run.verdict?.[at] && !rec.run.verdict[at].check);
+  if (k < 0) throw new Error(`regrade: "${first(text, 80)}" has no model verdict from the run (it is new, reworded, or was a scripted check then); a regrade starts no session, so it needs a grader call: run the case again`);
+  return { n: j + 1, pass: rec.run.verdict[k].pass, evidence: rec.run.verdict[k].evidence };
+}) });
 
 // dryLine(c): a case as the dry run lists it: its turns, layers, workspace shape, expectations and pressures.
 const dryLine = (c) => {

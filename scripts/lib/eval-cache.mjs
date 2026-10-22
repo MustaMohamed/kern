@@ -73,3 +73,63 @@ export function readManifest(dir, runner) {
   if (m?.runner !== runner) throw new UsageError(`${f} was written by ${m?.runner ?? 'no runner'}, not ${runner}`);
   return m;
 }
+
+// unitStore({ raw, cache, from, noCache, resume }): { unit({ name, key, files, work }) } for one run whose results dir
+// is raw. unit gives the unit's record, with how it was got: 'resume', 'cache' or 'ran'.
+// - resume (--resume): raw's own record for the unit, kept as it is when it is valid and has this key; a record
+//   whose key differs is stale, since the unit's inputs changed after it ran.
+// - Else, unless noCache, a cache entry under key: its record, marked cached ({ from, at } of the run that made
+//   it), and its files copied into raw.
+// - Else work(), which writes the unit's files into raw and returns its record ({ valid, ... }); seconds is added,
+//   and a valid record is cached with the files named in files, which must then be in raw: each a name, or a pair
+//   [name in the cache, name in raw] for a file whose name changes from run to run (h2h's blind ids). from names
+//   this run in the cache entries it writes.
+// Every record is written to raw as <name>.result.json with its key, so --resume and --regrade can read it.
+export function unitStore({ raw, cache, from, noCache = false, resume = false }) {
+  return {
+    async unit({ name, key, files = [], work }) {
+      const pairs = files.map((f) => (Array.isArray(f) ? f : [f, f]));
+      if (resume) {
+        const r = readRecord(raw, name);
+        if (r?.valid && r.key === key) return { ...r, how: 'resume' };
+      }
+      const hit = noCache ? null : cacheGet(cache, key);
+      if (hit?.record?.valid) {
+        const rawName = new Map(pairs);
+        for (const [n, p] of Object.entries(hit.files)) cpSync(p, join(raw, rawName.get(n) ?? n), { recursive: true, verbatimSymlinks: true });
+        const r = { ...hit.record, key };
+        writeRecord(raw, name, r);
+        return { ...r, how: 'cache' };
+      }
+      const t0 = Date.now();
+      const r = { ...(await work()), key, seconds: Math.round((Date.now() - t0) / 100) / 10 };
+      writeRecord(raw, name, r);
+      if (r.valid) {
+        const kept = Object.fromEntries(pairs.filter(([, r]) => existsSync(join(raw, r))).map(([c, r]) => [c, join(raw, r)]));
+        cachePut(cache, key, { ...r, cached: { from, at: new Date().toISOString() } }, kept);
+      }
+      return { ...r, how: 'ran' };
+    },
+  };
+}
+
+// timeStamp(now): the UTC time of day, HHMMSS, that names a --quick or --changed run's results dir, or a regrade file.
+export const timeStamp = (now) => now.toISOString().slice(11, 19).replace(/:/g, '');
+
+// reuseNote(units): how many of a case's units were reused, as the case's log line ends: ' (2 cached)', ' (1 cached,
+// 1 kept from the resumed run)', or '' when every one ran.
+export function reuseNote(units) {
+  const n = (how) => units.filter((u) => u.how === how).length;
+  const parts = [n('cache') && `${n('cache')} cached`, n('resume') && `${n('resume')} kept from the resumed run`].filter(Boolean);
+  return parts.length ? ` (${parts.join(', ')})` : '';
+}
+
+// roundLine(units, ms, jobs): the line a runner prints after its last unit: the wall time, the sessions run and the
+// units reused.
+export function roundLine(units, ms, jobs) {
+  const n = (how) => units.filter((u) => u.how === how).length;
+  const s = Math.round(ms / 1000);
+  const reused = n('cache') + n('resume');
+  const from = [n('cache') && `${n('cache')} from the cache`, n('resume') && `${n('resume')} kept from the resumed run`].filter(Boolean).join(', ');
+  return `round: ${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s wall; ${n('ran')} session(s) run, ${reused} reused${from ? ` (${from})` : ''}; --jobs ${jobs}`;
+}

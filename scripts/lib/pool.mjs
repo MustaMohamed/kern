@@ -22,7 +22,9 @@ export function limiter(n) {
       }
       const job = waiting.splice(best, 1)[0];
       active += 1;
-      Promise.resolve().then(job.fn).then(job.resolve, job.reject).finally(() => { active -= 1; next(); });
+      // The slot is handed on at setImmediate, after the promise jobs the result starts: the caller's record, progress
+      // file and key are written, and a grader call it queues is waiting, before the next session starts.
+      Promise.resolve().then(job.fn).then(job.resolve, job.reject).finally(() => { active -= 1; setImmediate(next); });
     }
   };
   return {

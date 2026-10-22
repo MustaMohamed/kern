@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { limiter, ordered } from '../scripts/lib/pool.mjs';
 
-const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 // gate(): a promise and the function that settles it, so a test decides when a job ends.
 const gate = () => {
   let open;
@@ -41,8 +41,22 @@ test('limiter: a job given a higher priority starts before the ones already wait
   jobs.push(limit.run(async () => { order.push('grader'); }, { priority: 1 }));
   await tick();
   first.open();
+  // Queued by arm 0's caller a few promise jobs after arm 0 is done (its record written, say), before the slot arm 0
+  // freed is handed on.
+  jobs.push(jobs[0].then(async () => { for (let i = 0; i < 5; i++) await null; return limit.run(async () => { order.push('grader 2'); }, { priority: 1 }); }));
   await Promise.all(jobs);
-  assert.deepEqual(order, ['arm 0', 'grader', 'arm 1', 'arm 2']);
+  assert.deepEqual(order, ['arm 0', 'grader', 'grader 2', 'arm 1', 'arm 2']);
+});
+
+test('limiter hands a freed slot on only after the promise jobs its result starts, so a grader call queued then goes first', async () => {
+  const limit = limiter(1);
+  const order = [];
+  const arm = limit.run(async () => { order.push('arm 0'); });
+  const later = [limit.run(async () => { order.push('arm 1'); })];
+  // The caller writes its record and queues the grade a few promise jobs after arm 0 is done.
+  later.push(arm.then(async () => { for (let i = 0; i < 5; i++) await null; return limit.run(async () => { order.push('grader'); }, { priority: 1 }); }));
+  await Promise.all(later);
+  assert.deepEqual(order, ['arm 0', 'grader', 'arm 1']);
 });
 
 test('limiter: a job that throws frees its slot and rejects only its own promise', async () => {

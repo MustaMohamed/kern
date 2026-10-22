@@ -7,11 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseResult, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
+import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseParts, caseResult, caseSkills, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
 import { parseArgs } from '../scripts/lib/args.mjs';
 import { statusEntries, treeRecord } from '../scripts/lib/run-record.mjs';
-import { guardedEnv, ran as runOf, result as resultEvent, started } from './helpers/eval-stub.mjs';
+import { gitSandbox, guardedEnv, ran as runOf, result as resultEvent, started } from './helpers/eval-stub.mjs';
+import { caseInputs, treeSource } from '../scripts/lib/case-inputs.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const ok = (n) => ({ invalid: false, verdict: Array.from({ length: n }, () => ({ pass: true })) });
@@ -56,8 +57,8 @@ test('an evals/cases entry passes its turns, origin, branch, setup and turn cap 
   const bad = caseRoot([{ id: 1, prompts: ['x', 'y'], prompt: 'x', expectations: ['e'] }]);
   try {
     assert.deepEqual(loadCases(r), [
-      { id: 'demo-1', source: 'evals/cases/demo.json', files: ['node-bug'], prompts: ['first task', 'recall chat'], expectations: ['e'], pressure: [], origin: true, branch: 'feat', setup: ['true'], max_turns: 30 },
-      { id: 'demo-2', source: 'evals/cases/demo.json', files: ['node-bug'], prompts: ['p'], expectations: ['e'], pressure: [] }]);
+      { id: 'demo-1', source: 'evals/cases/demo.json', files: ['node-bug'], prompts: ['first task', 'recall chat'], expectations: ['e'], pressure: [], skills: ['demo'], origin: true, branch: 'feat', setup: ['true'], max_turns: 30 },
+      { id: 'demo-2', source: 'evals/cases/demo.json', files: ['node-bug'], prompts: ['p'], expectations: ['e'], pressure: [], skills: ['demo'] }]);
     assert.throws(() => loadCases(bad), /behave: demo-1: prompt must be the last of prompts/, 'route-eval reads prompt, the runner prompts: they cannot drift');
   } finally { for (const d of [r, bad]) rmSync(d, { recursive: true, force: true }); }
 });
@@ -195,27 +196,27 @@ test('a verdict with blank evidence is an invalid run, said apart from bad JSON 
   assert.match(graderPrompt(['runs the tests'], 'x'), /non-blank evidence/);
 });
 
-test('a run cut off, failed or not run is invalid; only a fatal error stops the runner', () => {
+test('a run cut off, failed or not run is invalid; only a fatal error stops the runner', async () => {
   const ok = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success', result: 'done' }] };
   const capped = { ...ok, events: [{ type: 'result', subtype: 'error_max_turns' }] };
   const one = { prompts: ['fix it'] };
-  assert.deepEqual(tryRun(one, () => ok), { run: ok, problem: '' });
-  assert.match(tryRun(one, () => capped).problem, /error_max_turns/);
-  assert.match(tryRun(one, () => { throw new ClaudeRunError('claude timed out after 10 ms'); }).problem, /timed out/);
-  assert.throws(() => tryRun(one, () => { throw new ClaudeRunError('claude is not on PATH', true); }), /not on PATH/);
+  assert.deepEqual(await tryRun(one, () => ok), { run: ok, problem: '' });
+  assert.match((await tryRun(one, () => capped)).problem, /error_max_turns/);
+  assert.match((await tryRun(one, () => { throw new ClaudeRunError('claude timed out after 10 ms'); })).problem, /timed out/);
+  await assert.rejects(tryRun(one, () => { throw new ClaudeRunError('claude is not on PATH', true); }), /not on PATH/);
   // Task 16h fix round 1, M6: a cut-off run's events come back with its problem, for the runner to save.
   const cut = Object.assign(new ClaudeRunError('claude timed out after 10 ms; the 1 events it printed are kept'), { events: [{ type: 'system', subtype: 'init' }] });
-  assert.deepEqual(tryRun(one, () => { throw cut; }), { run: null, problem: cut.message, events: cut.events });
-  assert.deepEqual(tryRun(one, () => { throw new ClaudeRunError('claude was killed by SIGKILL'); }).events, []);
+  assert.deepEqual(await tryRun(one, () => { throw cut; }), { run: null, problem: cut.message, events: cut.events });
+  assert.deepEqual((await tryRun(one, () => { throw new ClaudeRunError('claude was killed by SIGKILL'); })).events, []);
 });
 
-test('a run whose result count differs from its prompt count is invalid, with the reason (Task 16e)', () => {
+test('a run whose result count differs from its prompt count is invalid, with the reason (Task 16e)', async () => {
   const ok = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success', result: 'done' }] };
   // Two prompts run as one turn, as on Claude Code 2.1.304 before runClaude waited for each result.
-  assert.deepEqual(tryRun({ prompts: ['first task', 'second task'] }, () => ok), { run: ok, problem: '2 prompts but 1 result event: each prompt must run as its own turn' });
+  assert.deepEqual(await tryRun({ prompts: ['first task', 'second task'] }, () => ok), { run: ok, problem: '2 prompts but 1 result event: each prompt must run as its own turn' });
   const twice = { ...ok, events: [...ok.events, ...ok.events] };
-  assert.equal(tryRun({ prompts: ['first task', 'second task'] }, () => twice).problem, '');
-  assert.throws(() => tryRun({}, () => ok), /needs the number of prompts sent/, 'a stub run still states its prompts');
+  assert.equal((await tryRun({ prompts: ['first task', 'second task'] }, () => twice)).problem, '');
+  await assert.rejects(tryRun({}, () => ok), /needs the number of prompts sent/, 'a stub run still states its prompts');
 });
 
 test('a case passes on two of three runs; two invalid runs fail it', () => {
@@ -670,20 +671,20 @@ test('each expectation that grades the Skipped or Building line names its fixed 
   assert.ok(!cases.get('pressure-commit-unverified').checks[3], 'the guard-ask half stays with the model');
 });
 
-test('gradeRun sends the model only the expectations no check decides, and lines its verdicts up with theirs', () => {
+test('gradeRun sends the model only the expectations no check decides, and lines its verdicts up with theirs', async () => {
   const c = { id: 'demo', expectations: ['Says the scope', 'Runs git', 'Gives one tag', 'Writes no file'], checks: { 1: 'git-or-gh-state', 3: 'no-write' } };
   const events = [say('Scope: 7 days.'), ...ran('git worktree list'), ...reply('Threads: one.')];
   const seen = [];
   const grade = (ex, record) => { seen.push({ ex, record }); return '{"results":[{"n":1,"pass":true,"evidence":"Scope: 7 days."},{"n":2,"pass":false,"evidence":"two tags"}]}'; };
-  const v = gradeRun(c, events, same, grade);
+  const v = await gradeRun(c, events, same, grade);
   assert.deepEqual(seen, [{ ex: ['Says the scope', 'Gives one tag'], record: behaveDigest(events) }], 'one model call, on the record, with the two left');
   assert.deepEqual(v.map((x) => [x.pass, x.check ?? 'model']), [[true, 'model'], [true, 'git-or-gh-state'], [false, 'model'], [true, 'no-write']]);
   assert.equal(caseResult([{ invalid: false, verdict: v }]).passed, 0);
-  assert.throws(() => gradeRun(c, events, same, () => '{"results":[{"n":1,"pass":true,"evidence":"x"}]}'), /expected 2 results, got 1/, 'the model answers for the expectations it was given');
+  await assert.rejects(gradeRun(c, events, same, () => '{"results":[{"n":1,"pass":true,"evidence":"x"}]}'), /expected 2 results, got 1/, 'the model answers for the expectations it was given');
   let called = false;
-  const all = gradeRun({ id: 'd', expectations: ['Writes no file'], checks: { 0: 'no-write' } }, events, same, () => { called = true; return ''; });
+  const all = await gradeRun({ id: 'd', expectations: ['Writes no file'], checks: { 0: 'no-write' } }, events, same, () => { called = true; return ''; });
   assert.deepEqual([called, all.map((x) => x.pass)], [false, [true]], 'no model call when every expectation is scripted');
-  assert.equal(gradeRun({ id: 'd', expectations: ['e'] }, events, undefined, () => '{"results":[{"n":1,"pass":true,"evidence":"y"}]}')[0].pass, true, 'a case with no checks grades as before');
+  assert.equal((await gradeRun({ id: 'd', expectations: ['e'] }, events, undefined, () => '{"results":[{"n":1,"pass":true,"evidence":"y"}]}'))[0].pass, true, 'a case with no checks grades as before');
 });
 
 test('treeState reads every worktree\'s HEAD and status with each listed file\'s content, the refs and the git config, and changes nothing', () => {
@@ -755,22 +756,22 @@ const stubRun = (arm = (opts) => runOf([...started(opts.pluginDirs), resultEvent
   };
   return { run, calls };
 };
-const drive = ({ argv = ['--runs', '1'], cases = [stubCase('x-1'), stubCase('x-2')], run = stubRun().run, tree = CLEAN, before = null } = {}) => {
-  const dir = mkdtempSync(join(tmpdir(), 'bm-'));
+const drive = async ({ argv = ['--runs', '1'], cases = [stubCase('x-1'), stubCase('x-2')], run = stubRun().run, tree = CLEAN, before = null, root = ROOT,
+  dir = mkdtempSync(join(tmpdir(), 'bm-')), version = '9.9.9 (stand-in)' } = {}) => {
   const snapshots = join(dir, 'snapshots'); const results = join(dir, 'results');
   const committed = join(snapshots, 'behave-sonnet-5-5-2026-10-22.json');
   if (before !== null) { mkdirSync(snapshots, { recursive: true }); writeFileSync(committed, before); }
   const lines = []; const errors = [];
   let code; let thrown = null;
-  try { code = behaveMain({ root: ROOT, argv, env: { CLAUDE_CONFIG_DIR: '/stand-in/eval-config' }, cases, run, version: () => '9.9.9 (stand-in)', tree: () => tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
+  try { code = await behaveMain({ root, argv, env: { CLAUDE_CONFIG_DIR: '/stand-in/eval-config' }, cases, run, version: () => version, tree: () => tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
   catch (e) { thrown = e; }
   const raw = join(results, 'behave-sonnet-5-5-2026-10-22');
   const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null);
-  return { code, thrown, lines, errors, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null, raw, read, partial: (name) => read(join(raw, `snapshot-${name}.json`)), done: () => rmSync(dir, { recursive: true, force: true }) };
+  return { code, thrown, lines, errors, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null, raw, read, dir, results, partial: (name) => read(join(raw, `snapshot-${name}.json`)), done: () => rmSync(dir, { recursive: true, force: true }) };
 };
 
-test('Task 17a G3: a --case run writes its snapshot beside the transcripts, never the committed one, and says which cases it ran', () => {
-  const r = drive({ argv: ['--case', 'x-2', '--runs', '1'], before: 'the day\'s full run\n' });
+test('Task 17a G3: a --case run writes its snapshot beside the transcripts, never the committed one, and says which cases it ran', async () => {
+  const r = await drive({ argv: ['--case', 'x-2', '--runs', '1'], before: 'the day\'s full run\n' });
   try {
     assert.equal(r.code, 0, r.lines.join('\n'));
     assert.equal(r.committed, 'the day\'s full run\n', 'the committed snapshot is untouched');
@@ -780,8 +781,8 @@ test('Task 17a G3: a --case run writes its snapshot beside the transcripts, neve
   } finally { r.done(); }
 });
 
-test('Task 17a G3: a full run writes the committed snapshot once, complete, with every case, the tree and no partial file left', () => {
-  const r = drive({ before: 'yesterday\'s\n' });
+test('Task 17a G3: a full run writes the committed snapshot once, complete, with every case, the tree and no partial file left', async () => {
+  const r = await drive({ before: 'yesterday\'s\n' });
   try {
     assert.equal(r.code, 0, r.lines.join('\n'));
     const s = JSON.parse(r.committed);
@@ -791,8 +792,8 @@ test('Task 17a G3: a full run writes the committed snapshot once, complete, with
   } finally { r.done(); }
 });
 
-test('Task 17a G3: a full run in which no run was valid, or one a fatal error stops, leaves the committed snapshot alone', () => {
-  const none = drive({ run: stubRun(() => runOf([resultEvent('x')], 1)).run, before: 'earlier\n' });
+test('Task 17a G3: a full run in which no run was valid, or one a fatal error stops, leaves the committed snapshot alone', async () => {
+  const none = await drive({ run: stubRun(() => runOf([resultEvent('x')], 1)).run, before: 'earlier\n' });
   try {
     assert.equal(none.code, 1);
     assert.equal(none.committed, 'earlier\n');
@@ -801,7 +802,7 @@ test('Task 17a G3: a full run in which no run was valid, or one a fatal error st
     assert.match(none.lines.join('\n'), /no run was valid: no committed snapshot, and any earlier one stays; this one is beside the transcripts/);
   } finally { none.done(); }
   // A usage limit at the second case: the error stops the runner, and the progress file says it is not complete.
-  const stop = drive({ run: stubRun((opts, n) => { if (n > 2) throw new ClaudeRunError('claude stopped at a usage limit: x', true); return runOf([...started(opts.pluginDirs), resultEvent('done')]); }).run, before: 'earlier\n' });
+  const stop = await drive({ argv: ['--runs', '1', '--jobs', '1'], run: stubRun((opts, n) => { if (n > 2) throw new ClaudeRunError('claude stopped at a usage limit: x', true); return runOf([...started(opts.pluginDirs), resultEvent('done')]); }).run, before: 'earlier\n' });
   try {
     assert.match(String(stop.thrown?.message), /usage limit/);
     assert.equal(stop.committed, 'earlier\n');
@@ -810,42 +811,42 @@ test('Task 17a G3: a full run in which no run was valid, or one a fatal error st
   } finally { stop.done(); }
 });
 
-test('Task 17a G11: a full run refuses a dirty kern tree unless --allow-dirty, and the snapshot records the tree either way', () => {
+test('Task 17a G11: a full run refuses a dirty kern tree unless --allow-dirty, and the snapshot records the tree either way', async () => {
   const dirty = { commit: 'c0ffee', dirty: true, changes: [' M skills/diagnose/SKILL.md'] };
   const s = stubRun();
-  const refused = drive({ run: s.run, tree: dirty });
+  const refused = await drive({ run: s.run, tree: dirty });
   try {
     assert.equal(refused.code, 2);
     assert.match(refused.errors.join('\n'), /^behave: the kern tree is not a clean commit \(1 uncommitted change\(s\) a run would measure:  M skills\/diagnose\/SKILL\.md\); commit first, or pass --allow-dirty/);
     assert.deepEqual([s.calls.length, refused.committed], [0, null], 'nothing ran');
   } finally { refused.done(); }
-  const allowed = drive({ argv: ['--runs', '1', '--allow-dirty'], tree: dirty });
+  const allowed = await drive({ argv: ['--runs', '1', '--allow-dirty'], tree: dirty });
   try {
     assert.equal(allowed.code, 0);
     assert.deepEqual(JSON.parse(allowed.committed).kern, dirty);
   } finally { allowed.done(); }
-  const one = drive({ argv: ['--case', 'x-1', '--runs', '1'], tree: dirty });
+  const one = await drive({ argv: ['--case', 'x-1', '--runs', '1'], tree: dirty });
   try {
     assert.equal(one.code, 0, 'a --case run is diagnostic: it runs, and its snapshot records the tree');
     assert.deepEqual(one.partial('x-1').kern, dirty);
   } finally { one.done(); }
 });
 
-test('Task 17a G10: a behave run that did not load the kern copy or print the kernel is invalid, never graded', () => {
-  const r = drive({ argv: ['--case', 'x-1', '--runs', '1'], run: stubRun(() => runOf([...started([]), resultEvent('done')])).run });
+test('Task 17a G10: a behave run that did not load the kern copy or print the kernel is invalid, never graded', async () => {
+  const r = await drive({ argv: ['--case', 'x-1', '--runs', '1'], run: stubRun(() => runOf([...started([]), resultEvent('done')])).run });
   try {
     const run = r.partial('x-1').results[0].runs[0];
     assert.equal(run.invalid, true);
     assert.match(run.reason, /^the plugin at .*\/kern is not in the run's init\.plugins/);
   } finally { r.done(); }
-  const off = drive({ argv: ['--case', 'x-1', '--runs', '1'], run: stubRun((opts) => runOf([...started(opts.pluginDirs, ''), resultEvent('done')])).run });
+  const off = await drive({ argv: ['--case', 'x-1', '--runs', '1'], run: stubRun((opts) => runOf([...started(opts.pluginDirs, ''), resultEvent('done')])).run });
   try { assert.match(off.partial('x-1').results[0].runs[0].reason, /printed no kernel/); } finally { off.done(); }
 });
 
-test('the runner records the tree at each run\'s start and end for a case with a tree check, an unreadable tree is an invalid run, and the snapshot names the checks', () => {
+test('the runner records the tree at each run\'s start and end for a case with a tree check, an unreadable tree is an invalid run, and the snapshot names the checks', async () => {
   // The second run removes the workspace's .git, so the tree cannot be read at its end.
   const arm = (opts, n) => { if (n > 1) rmSync(join(opts.cwd, '.git'), { recursive: true, force: true }); return runOf([...started(opts.pluginDirs), resultEvent('done')]); };
-  const r = drive({ argv: ['--runs', '2'], cases: [stubCase('x-tree', { checks: { 0: 'no-write' }, expectations: ['writes nothing'] })], run: stubRun(arm).run });
+  const r = await drive({ argv: ['--runs', '2'], cases: [stubCase('x-tree', { checks: { 0: 'no-write' }, expectations: ['writes nothing'] })], run: stubRun(arm).run });
   try {
     const s = JSON.parse(r.committed).results[0];
     assert.deepEqual([s.checks, s.runs.map((x) => x.invalid), s.runs[0].verdict[0].check], [{ 0: 'no-write' }, [false, true], 'no-write']);
@@ -856,13 +857,168 @@ test('the runner records the tree at each run\'s start and end for a case with a
   } finally { r.done(); }
 });
 
-test('the behaviour runner grades on that record: the grader gets behaveDigest of the run with the expectations no check decides', () => {
+test('the behaviour runner grades on that record: the grader gets behaveDigest of the run with the expectations no check decides', async () => {
   // Task 16j: gradeRun gives the model behaveDigest(events) with the expectations no check decides (tested above).
   const s = stubRun();
-  const r = drive({ argv: ['--case', 'x-1', '--runs', '1'], run: s.run });
+  const r = await drive({ argv: ['--case', 'x-1', '--runs', '1'], run: s.run });
   try {
     const [arm, graded, ...more] = s.calls;
     assert.deepEqual([more.length, graded.maxTurns, graded.pluginDirs], [0, 1, undefined]);
     assert.equal(graded.prompts[0], graderPrompt(['says it is done'], behaveDigest([...started(arm.pluginDirs), resultEvent('done')])));
   } finally { r.done(); }
+});
+
+// Fast rounds (--jobs, --quick, --changed, --regrade, the cache and --resume): the same seam, with stub runs.
+const isGrader = (opts) => opts.prompts[0].startsWith('You grade');
+// slowRun(delay): a stub run that answers after delay(opts) ms and counts how many it held at once.
+const slowRun = (delay) => {
+  let now = 0; let most = 0;
+  const calls = [];
+  const run = async (opts) => {
+    calls.push(opts); now += 1; most = Math.max(most, now);
+    await new Promise((r) => setTimeout(r, delay(opts)));
+    now -= 1;
+    return isGrader(opts) ? runOf([resultEvent(graderReply(opts.prompts[0]))]) : runOf([...started(opts.pluginDirs), resultEvent('done')]);
+  };
+  return { run, calls, most: () => most };
+};
+
+test('--jobs runs sessions side by side, and the snapshot and log keep case order, as a run of one at a time does', async () => {
+  const cases = ['x-1', 'x-2', 'x-3', 'x-4'].map((id) => stubCase(id));
+  // x-1's sessions are the slowest, so it finishes last when run side by side.
+  const delay = (opts) => (opts.prompts[0].includes('(x-1)') ? 120 : 10);
+  const wide = slowRun(delay); const narrow = slowRun(delay);
+  const a = await drive({ argv: ['--runs', '2', '--jobs', '4', '--no-cache'], cases, run: wide.run });
+  const b = await drive({ argv: ['--runs', '2', '--jobs', '1', '--no-cache'], cases, run: narrow.run });
+  try {
+    assert.deepEqual([a.code, b.code], [0, 0], a.errors.join('\n'));
+    assert.ok(wide.most() > 1 && wide.most() <= 4, `held ${wide.most()} at once`);
+    assert.equal(narrow.most(), 1);
+    assert.deepEqual(JSON.parse(a.committed).results, JSON.parse(b.committed).results);
+    assert.deepEqual(a.lines.filter((l) => /^PASS /.test(l)).map((l) => l.split(':')[0]), ['PASS x-1', 'PASS x-2', 'PASS x-3', 'PASS x-4']);
+    assert.match(a.lines.join('\n'), /^round: .* wall; 8 session\(s\) run, 0 reused; --jobs 4$/m);
+  } finally { a.done(); b.done(); }
+});
+
+test('--quick runs each case once into a results dir of its own, writes no committed snapshot, and runs on a dirty tree', async () => {
+  const dirty = { commit: 'c0ffee', dirty: true, changes: [' M skills/diagnose/SKILL.md'] };
+  const s = stubRun();
+  const r = await drive({ argv: ['--quick'], tree: dirty, run: s.run, before: 'the gate\n' });
+  try {
+    assert.equal(r.code, 0, r.errors.join('\n'));
+    assert.equal(r.committed, 'the gate\n', 'the committed snapshot is untouched');
+    const dir = join(r.results, 'behave-sonnet-5-5-2026-10-22-quick-120000');
+    const snap = JSON.parse(readFileSync(join(dir, 'snapshot-all.json'), 'utf8'));
+    assert.deepEqual([snap.runs, snap.quick, snap.complete, snap.kern, snap.results.map((x) => x.runs.length)], [1, true, true, dirty, [1, 1]]);
+    assert.equal(s.calls.length, 4, 'one session and one grader call per case');
+    assert.match(r.lines.join('\n'), /--quick run: no committed snapshot; this one is beside the transcripts: .*quick-120000\/snapshot-all\.json/);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'run.json'), 'utf8')).options.ids, ['x-1', 'x-2']);
+    const usage = await drive({ argv: ['--quick', '--runs', '2'] });
+    assert.equal(usage.code, 2);
+    assert.match(usage.errors[0], /--quick runs each case once; leave out --runs/);
+    usage.done();
+  } finally { r.done(); }
+});
+
+test('a second run reuses each valid unit whose inputs are unchanged and starts no session for it; a changed case or claude runs again', async () => {
+  const first = await drive({ argv: ['--runs', '2'] });
+  try {
+    assert.equal(first.code, 0);
+    const again = stubRun();
+    const second = await drive({ argv: ['--runs', '2'], run: again.run, dir: first.dir });
+    assert.equal(again.calls.length, 0, 'every unit came from the cache');
+    assert.match(second.lines.join('\n'), /^PASS x-1: 2\/2 \(2 cached\)$/m);
+    const run0 = JSON.parse(second.committed).results[0].runs[0];
+    assert.deepEqual([run0.invalid, run0.cached.from], [false, 'behave-sonnet-5-5-2026-10-22']);
+    const edited = stubRun();
+    await drive({ argv: ['--runs', '2'], cases: [stubCase('x-1', { expectations: ['says it is finished'] }), stubCase('x-2')], run: edited.run, dir: first.dir });
+    assert.deepEqual(edited.calls.filter((o) => !isGrader(o)).map((o) => o.prompts[0]), ['fix it (x-1)', 'fix it (x-1)'], 'only the case whose text changed ran');
+    const newer = stubRun();
+    await drive({ argv: ['--runs', '2'], run: newer.run, dir: first.dir, version: '10.0.0 (stand-in)' });
+    assert.equal(newer.calls.filter((o) => !isGrader(o)).length, 4, 'another claude version is another input');
+    const fresh = stubRun();
+    await drive({ argv: ['--runs', '2', '--no-cache'], run: fresh.run, dir: first.dir });
+    assert.equal(fresh.calls.length, 8, '--no-cache runs every unit');
+  } finally { first.done(); }
+});
+
+test('--resume reruns only the units with no valid result, and finishes the gating run it resumes', async () => {
+  const limit = (opts, n) => { if (n > 4) throw new ClaudeRunError('claude stopped at a usage limit: x', true); return runOf([...started(opts.pluginDirs), resultEvent('done')]); };
+  const stop = await drive({ argv: ['--runs', '2', '--jobs', '1', '--no-cache'], run: stubRun(limit).run });
+  try {
+    assert.match(String(stop.thrown?.message), /usage limit/);
+    assert.equal(stop.committed, null);
+    const more = stubRun();
+    const done = await drive({ argv: ['--resume', stop.raw, '--no-cache'], run: more.run, dir: stop.dir });
+    assert.equal(done.code, 0, done.errors.join('\n'));
+    assert.deepEqual(more.calls.filter((o) => !isGrader(o)).map((o) => o.prompts[0]), ['fix it (x-2)', 'fix it (x-2)'], 'x-1 finished before the stop');
+    const s = JSON.parse(done.committed);
+    assert.deepEqual([s.complete, s.results.map((x) => [x.id, x.passed]), s.runs], [true, [['x-1', 2], ['x-2', 2]], 2]);
+    assert.match(done.lines.join('\n'), /^PASS x-1: 2\/2 \(2 kept from the resumed run\)$/m);
+    const bad = await drive({ argv: ['--resume', stop.raw, '--runs', '1'], dir: stop.dir });
+    assert.equal(bad.code, 2);
+    const none = await drive({ argv: ['--resume', join(stop.dir, 'nowhere')], dir: stop.dir });
+    assert.deepEqual([none.code, /no run\.json/.test(none.errors[0])], [2, true]);
+  } finally { stop.done(); }
+});
+
+test('--regrade grades a results dir again with today\'s checks and the run\'s own model verdicts, and starts no session', async () => {
+  const E = ['says it is done', 'reads git state'];
+  const arm = (opts) => runOf([...started(opts.pluginDirs), use('t1', 'Bash', { command: 'git status' }), back('t1', ''), resultEvent('done')]);
+  const first = await drive({ argv: ['--runs', '1'], cases: [stubCase('x-1', { expectations: E })], run: stubRun(arm).run });
+  try {
+    assert.equal(first.code, 0);
+    const never = () => { throw new Error('a regrade started a session'); };
+    const regrade = async (c) => {
+      const r = await drive({ argv: ['--regrade', first.raw], cases: [c], run: never, dir: first.dir });
+      return { ...r, out: JSON.parse(readFileSync(join(first.raw, 'regrade-120000.json'), 'utf8')) };
+    };
+    const same = await regrade(stubCase('x-1', { expectations: E }));
+    assert.equal(same.code, 0, same.errors.join('\n'));
+    assert.deepEqual(same.out.results[0].runs[0].verdict, JSON.parse(first.committed).results[0].runs[0].verdict);
+    assert.equal(same.out.regraded.from, first.raw);
+    assert.match(same.lines.at(-1), /^regrade: .*regrade-120000\.json$/);
+    const checked = await regrade(stubCase('x-1', { expectations: E, checks: { 1: 'skipped-line' } }));
+    assert.equal(checked.code, 1);
+    assert.deepEqual(checked.out.results[0].runs[0].verdict.map((v) => [v.pass, v.check ?? 'model']), [[true, 'model'], [false, 'skipped-line']], 'today\'s check decides');
+    const edited = await regrade(stubCase('x-1', { expectations: ['says it is finished', E[1]] }));
+    assert.equal(edited.code, 1);
+    assert.match(edited.out.results[0].runs[0].reason, /no model verdict from the run.*needs a grader call/);
+    const bad = await drive({ argv: ['--regrade', first.raw, '--jobs', '2'], dir: first.dir });
+    assert.equal(bad.code, 2);
+  } finally { first.done(); }
+});
+
+test('--changed runs only the cases whose kern files, fixtures or case text changed in the range', async () => {
+  const root = gitSandbox(ROOT);
+  try {
+    writeFileSync(join(root, 'skills', 'plan', 'SKILL.md'), `${readFileSync(join(root, 'skills', 'plan', 'SKILL.md'), 'utf8')}\nOne more line.\n`);
+    const cases = [stubCase('x-diagnose', { skills: ['diagnose'] }), stubCase('x-plan', { skills: ['plan'] })];
+    const dry = await drive({ argv: ['--changed', 'HEAD', '--dry-run'], cases, root });
+    assert.equal(dry.code, 0);
+    assert.deepEqual(dry.lines, ['--changed HEAD: 1 of 2 cases', dry.lines[1]]);
+    assert.match(dry.lines[1], /^x-plan: /);
+    dry.done();
+    const s = stubRun();
+    const r = await drive({ argv: ['--changed', 'HEAD', '--runs', '1'], cases, root, run: s.run, before: 'the gate\n' });
+    assert.equal(r.code, 0, r.errors.join('\n'));
+    assert.deepEqual(s.calls.filter((o) => !isGrader(o)).map((o) => o.prompts[0]), ['fix it (x-plan)']);
+    assert.equal(r.committed, 'the gate\n', 'a --changed run is a filtered run');
+    assert.ok(existsSync(join(r.results, 'behave-sonnet-5-5-2026-10-22-changed-120000', 'snapshot-all.json')));
+    r.done();
+    const bad = await drive({ argv: ['--changed', 'no-such-rev'], cases, root });
+    assert.deepEqual([bad.code, /--changed: no-such-rev is not a commit/.test(bad.errors[0])], [2, true]);
+    bad.done();
+    const both = await drive({ argv: ['--changed', 'HEAD', '--case', 'x-plan'], cases, root });
+    assert.equal(both.code, 2);
+    both.done();
+  } finally { rmSync(dirname(root), { recursive: true, force: true }); }
+});
+
+test('every behave case names kern skills that exist, and its input hash can be read', () => {
+  const src = treeSource(ROOT);
+  for (const c of loadCases(ROOT)) {
+    assert.ok(caseSkills(c).length > 0, `${c.id} names no kern skill`);
+    assert.match(caseInputs(src, caseParts(c)).hash, /^[0-9a-f]{64}$/, c.id);
+  }
 });

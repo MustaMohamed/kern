@@ -141,8 +141,9 @@ export function caseInputs(src, { skills = [], entries = [], paths = [] }, kernS
   return { hash: sha256(JSON.stringify(parts)), skills: closure };
 }
 
-// dirHash(dir): the hash of every file under dir, .git left out: another plugin's content, for h2h's arms.
-export const dirHash = (dir) => sha256(JSON.stringify(walk(dir, '')));
+// dirHash(dir, omit): the hash of every file under dir, .git and each top-level name in omit left out: another
+// plugin's content, or an h2h task's folder without its answer key, for h2h.
+export const dirHash = (dir, omit = []) => sha256(JSON.stringify(walk(dir, '').filter(([p]) => !omit.some((n) => p === n || p.startsWith(`${n}/`)))));
 
 // rangeSources(root, range): { before, after } for --changed <range>: A..B the two commits (an empty side is
 // HEAD), A...B their merge base and B, and a lone rev that commit and the working tree, as `git diff <rev>`

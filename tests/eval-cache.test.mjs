@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { UsageError } from '../scripts/lib/args.mjs';
-import { cacheGet, cachePut, filesVersion, readManifest, readRecord, unitKey, writeManifest, writeRecord } from '../scripts/lib/eval-cache.mjs';
+import { cacheGet, cachePut, filesVersion, readManifest, readRecord, unitKey, unitStore, writeManifest, writeRecord } from '../scripts/lib/eval-cache.mjs';
 
 const made = [];
 after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
@@ -74,4 +74,35 @@ test('filesVersion hashes the named files\' content with the extra values, so an
   writeFileSync(join(dir, 'b.mjs'), 'three');
   assert.notEqual(filesVersion(dir, ['a.mjs', 'b.mjs'], { grader: 'opus' }), v);
   assert.throws(() => filesVersion(dir, ['missing.mjs']), /ENOENT/);
+});
+
+test('unitStore reuses a matching valid record from the resumed dir, then the cache, and else runs the unit, caching only a valid one', async () => {
+  const raw = scratch();
+  const cache = join(scratch(), 'cache');
+  const ran = [];
+  const work = (name, valid) => async () => { ran.push(name); writeFileSync(join(raw, `${name}.jsonl`), `${name}\n`); return { valid, verdict: name }; };
+  const store = unitStore({ raw, cache, from: 'behave-x' });
+  const a = await store.unit({ name: 'a-0', key: 'k-a', files: ['a-0.jsonl'], work: work('a-0', true) });
+  const b = await store.unit({ name: 'b-0', key: 'k-b', files: ['b-0.jsonl'], work: work('b-0', false) });
+  assert.deepEqual([a.valid, a.key, a.how, b.valid, b.how], [true, 'k-a', 'ran', false, 'ran']);
+  assert.deepEqual(readRecord(raw, 'a-0').verdict, 'a-0');
+  assert.ok(cacheGet(cache, 'k-a') && !cacheGet(cache, 'k-b'), 'an invalid unit is never cached');
+  // A later run, in a new results dir: the valid unit comes from the cache, its transcript copied in; the invalid one runs again.
+  const raw2 = scratch();
+  const later = unitStore({ raw: raw2, cache, from: 'behave-y' });
+  const again = await later.unit({ name: 'a-0', key: 'k-a', files: ['a-0.jsonl'], work: work('a-0', true) });
+  assert.deepEqual([again.how, again.verdict, again.cached.from], ['cache', 'a-0', 'behave-x']);
+  assert.equal(readFileSync(join(raw2, 'a-0.jsonl'), 'utf8'), 'a-0\n');
+  assert.equal(readRecord(raw2, 'a-0').cached.from, 'behave-x');
+  assert.equal((await later.unit({ name: 'a-0', key: 'k-other', files: [], work: async () => ({ valid: true, verdict: 'fresh' }) })).how, 'ran', 'another key is a miss');
+  const off = unitStore({ raw: scratch(), cache, from: 'z', noCache: true });
+  assert.equal((await off.unit({ name: 'a-0', key: 'k-a', files: [], work: async () => ({ valid: true }) })).how, 'ran', '--no-cache never reads the cache');
+  // --resume: the dir's own valid record with the same key is kept as it is; an invalid or stale one runs again.
+  ran.length = 0;
+  const resumed = unitStore({ raw, cache: join(scratch(), 'empty'), from: 'behave-x', resume: true });
+  assert.equal((await resumed.unit({ name: 'a-0', key: 'k-a', files: [], work: work('a-0', true) })).how, 'resume');
+  assert.equal((await resumed.unit({ name: 'b-0', key: 'k-b', files: [], work: work('b-0', true) })).how, 'ran');
+  assert.equal((await resumed.unit({ name: 'a-0', key: 'k-a2', files: [], work: work('a-0', true) })).how, 'ran', 'a record whose inputs changed since is stale');
+  assert.deepEqual(ran, ['b-0', 'a-0']);
+  assert.ok(typeof a.seconds === 'number');
 });
