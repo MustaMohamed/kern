@@ -4,6 +4,12 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- Settings block (Task 17a P13; Opus audit B1, B6, B7, B8):
+  - `overrides.<job>: off` now means no override: kern's route for the job stays, and a project skill with the job's name is no longer matched (the user's "No override", 2026-10-22). Before, it rendered "project skill off". help's `check` no longer flags `off`.
+  - `route.<name>` is gone from kernel/settings.md and the design spec. It had no reader, and it now reads as an unknown key.
+  - `Set:` lists only known keys whose value differs from a literal default, policy keys first. A typo such as `push.polcy` shows only under `Unknown keys, ignored:`.
+  - The block holds to 600 chars, except when the session's cwd is outside a main worktree whose path is over about 92 chars. Over 600 the Unknown list is cut first, then `Set:`, then as a last resort Overrides entries, the same-name ones before those a setting names; an unknown key never cuts an override. A cut Overrides line names each job it does not show (`not shown: <job>, ...`).
+  - `Main worktree: <path>` prints only when the session's cwd is not the main root. This cuts 136 chars from rule 7's standing cost, 6,345 to 6,209.
 - Guards, after the 2026-10-22 Opus audit (Task 17a P3: A1, A2, A3, A4 = A12, A6, A7):
   - G2 gives each of gh 2.100.0's command groups a closed read list (`_G02_READS`: view, list, status, diff, checks, search and the like; `auth status`, `pr list` and `pr view` among them). Any other verb of one of gh's own commands that no other guard judges (`_G02_OWNED`) asks, and is denied under autopilot (spec 8.1 D2; the user's "Ask, deny on autopilot"): `gh repo delete`, `gist create --public`, `secret set`, `pr close`, `repo sync <repo>`, `auth token`, and an option word in the verb's place. G2 reads `auth status` only without `-t`/`--show-token`, and `repo read-file` only without `-o`/`--output`; each writing form of a listed read gets its own reason.
   - G1 sends `gh pr checkout` and a local `gh repo sync` through its main-checkout rule, as it does `git checkout` and `git reset --hard`. `git restore` (unless only `--staged`), `checkout-index -f` and `read-tree -u` or `--reset` go through it too. From a linked worktree, a local `gh repo sync` asks, and is denied under autopilot, when it syncs a protected branch, including with no `-b`, since the default branch's name is not read.
