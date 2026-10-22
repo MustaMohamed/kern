@@ -1,15 +1,19 @@
 // tests/route-eval.test.mjs
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildCorpus, rank } from '../scripts/lib/rank.mjs';
 import { evaluate } from '../scripts/route-eval.mjs';
 
 const skill = (name, desc) => `---\nname: ${name}\ndescription: ${desc}\n---\n\n## Steps\n\n1. a\n`;
+// Each repo() dir is removed when the file's tests are done.
+const made = [];
+after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
 function repo(files) {
   const root = mkdtempSync(join(tmpdir(), 'kern-eval-'));
+  made.push(root);
   for (const [p, c] of Object.entries(files)) {
     mkdirSync(join(root, p, '..'), { recursive: true });
     writeFileSync(join(root, p), typeof c === 'string' ? c : JSON.stringify(c));

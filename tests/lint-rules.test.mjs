@@ -1,5 +1,5 @@
 // tests/lint-rules.test.mjs
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -9,8 +9,16 @@ import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
 import { fileURLToPath } from 'node:url';
 import { RULE7_REPO_LEN, fixedLengthRepo, loadModel, runLint } from '../scripts/lib/lint-rules.mjs';
 
+// scratch(prefix): a new temp dir, removed when the file's tests are done.
+const made = [];
+after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
+function scratch(prefix) {
+  const d = mkdtempSync(join(tmpdir(), prefix));
+  made.push(d);
+  return d;
+}
 function repo(files) {
-  const root = mkdtempSync(join(tmpdir(), 'kern-lint-'));
+  const root = scratch('kern-lint-');
   for (const [p, content] of Object.entries(files)) {
     mkdirSync(join(root, p, '..'), { recursive: true });
     writeFileSync(join(root, p), content);
@@ -235,7 +243,7 @@ test('rule 7: a session-start that fails or prints nothing is an error', () => {
 test('rule 7: its temp directory is removed when a check throws', () => {
   const root = repo({ 'hooks/session-start': '#!/usr/bin/env bash\necho k\n', 'tests/fixtures/projects/long-settings/kern.local.yml/x': 'not a file' });
   const saved = process.env.TMPDIR;
-  process.env.TMPDIR = mkdtempSync(join(tmpdir(), 'kern-lint-tmp-'));
+  process.env.TMPDIR = scratch('kern-lint-tmp-');
   try {
     assert.throws(() => runLint(loadModel(root)));
     assert.deepEqual(readdirSync(process.env.TMPDIR), []);
@@ -598,7 +606,7 @@ test('rule 7: a missing long-settings fixture is an error', () => {
 });
 
 test('rule 7: a git init that fails is an error', () => {
-  const bin = mkdtempSync(join(tmpdir(), 'kern-lint-bin-'));
+  const bin = scratch('kern-lint-bin-');
   symlinkSync(spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' }).stdout.trim(), join(bin, 'bash'));
   const saved = process.env.PATH;
   process.env.PATH = bin;

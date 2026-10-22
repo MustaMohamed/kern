@@ -1,5 +1,5 @@
 // tests/route-eval-rows.test.mjs
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
@@ -12,8 +12,12 @@ import { kernelRows } from '../scripts/lib/kernel-rows.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
+// Each repo() dir is removed when the file's tests are done.
+const made = [];
+after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
 function repo(files) {
   const root = mkdtempSync(join(tmpdir(), 'kern-rows-'));
+  made.push(root);
   for (const [p, content] of Object.entries(files)) {
     mkdirSync(join(root, p, '..'), { recursive: true });
     writeFileSync(join(root, p), content);
