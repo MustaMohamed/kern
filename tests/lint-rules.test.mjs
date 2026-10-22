@@ -534,10 +534,13 @@ test('rule 7: the route rows count in the standing cost, which has a combined bu
   const start = (n) => `#!/usr/bin/env bash\n${HEADER}head -c ${n} /dev/zero | tr "\\0" x\n`;
   const desc = `description: Use when ${'w'.repeat(280)}.`;
   const files = (n) => ({ 'hooks/session-start': start(n), 'hooks/subagent-start': sub, 'skills/a/SKILL.md': skill('a', desc), ...LONG });
-  assert.deepEqual(rules(lint(files(5943))).filter((r) => r === 7), []);
-  const big = lint(files(5963)).filter((f) => f.rule === 7 && f.level === 'error');
+  // 110 chars of header line plus 290 of description: 5,635 x's make 6,035, two under the 6,037 limit Task 17a P11
+  // locked; 5,655 make 6,055.
+  assert.deepEqual(rules(lint(files(5635))).filter((r) => r === 7), []);
+  const big = lint(files(5655)).filter((f) => f.rule === 7 && f.level === 'error');
   assert.equal(big.length, 1);
-  assert.match(big[0].message, /^standing cost 6363 chars/);
+  assert.match(big[0].message, /^standing cost 6055 chars/);
+  assert.match(big[0].message, /limit 6,037$/);
 });
 
 

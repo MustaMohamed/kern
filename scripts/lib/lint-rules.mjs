@@ -52,9 +52,10 @@ function scanMarkdown(text) {
 }
 const h2Lines = (scan) => scan.lines.filter((l) => /^## /.test(l)).map((l) => l.trimEnd());
 
-// Rule 7 renders the kernel in a repo whose real path has one fixed length: the settings block names the
-// main worktree and keeps to 600 chars, so a longer path drops a Set: entry, and the measurement would
-// move with the machine's temp dir.
+// Rule 7 renders the kernel in a repo whose real path has one fixed length. The settings block keeps to 600 chars
+// and named the main worktree, so a longer path dropped a Set: entry and the measurement moved with the machine's
+// temp dir. Since Task 17a P13 the block names it only when the cwd is not the main root, and rule 7 renders at
+// the root, so the path no longer reaches the render; the fixed length keeps any later path line from moving it.
 export const RULE7_REPO_LEN = 120;
 export function fixedLengthRepo(tmp) {
   const real = realpathSync(tmp);
@@ -274,8 +275,11 @@ export const RULES = [
       // Task 16n added to the skip-idiom sentence that only the user's word skips a review, never kern's own
       // judgement (the user's "Only by my word", 2026-10-22): 63 chars, so 5,819 and 6,323. Its review (M3) named a
       // skill's own rule beside the user's word, since self-review skips a lane by its stated rule: 22 chars, so 5,841
-      // and 6,345.
-      if (kernel.length > 5841) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 5,841`));
+      // and 6,345. On the Task 17a base, with P12 and P13 merged, they measured 5,872 (P13's full 600-char settings
+      // block) and 6,209. Task 17a P11 cut the three agent descriptions from 423 chars to 175 and added 76 to the
+      // kernel (audit B2, B5 and B13), so 5,948 and 6,037, and locked both at the measured value with no headroom
+      // (the user's "Cut and lock", 2026-10-22).
+      if (kernel.length > 5948) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 5,948`));
       if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
       // Standing cost (design goal 4): the kernel with no project settings, plus every auto skill and agent
       // description, the text every session carries.
@@ -284,7 +288,7 @@ export const RULES = [
       if (rendered(start) && !rendered(again)) out.push(err(7, 'hooks/session-start', `${failed(again)} with no project settings, so the standing cost was not measured`));
       const bare = norm(again.stdout || '');
       const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
-      if (bare.length + desc > 6345) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 6,345`));
+      if (bare.length + desc > 6037) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 6,037`));
       const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
       let ctx = '';
       try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }
