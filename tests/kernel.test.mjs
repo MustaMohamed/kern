@@ -106,6 +106,8 @@ test('the kernel\'s safety lines are pinned: every Autonomy line, the consent li
   // way to lose one.
   // Audit B5: "Only policy keys may set auto or deny." contradicted Precedence 3, where a CLAUDE.md line such as
   // "never push" is a deny no key sets; design spec 5.1 needs a key only to loosen.
+  // These pins compare whole lines on purpose: a reworded safety line must force a deliberate edit here, never a
+  // paste of its new text. The anchor-term test below is the second layer.
   const text = readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8');
   assert.deepEqual(section(text, '## Autonomy').split('\n').filter(Boolean), [
     'Proceed, then report: reads, edits, tests, local tools.',
@@ -127,7 +129,23 @@ test('the subagent kernel\'s Autonomy line is pinned, and its precedence puts th
   // dispatching model's text, outranked project rules and could allow a merge or a message, which kernel.md allows
   // only on the user's word; and the agent's own definition, such as a third-party agent's output contract, had no
   // place in the order.
+  // Whole lines on purpose, as above: a reworded line must force a deliberate edit here.
   const lines = readFileSync(join(ROOT, 'kernel', 'kernel-subagent.md'), 'utf8').split('\n');
   assert.ok(lines.includes('Autonomy: read, search and edit inside your scope. Never merge or message anyone; commit, push or post only when the brief says so.'), 'the subagent Autonomy line');
   assert.ok(lines.includes("Precedence: your agent definition and the brief, then the project's CLAUDE.md and rules (they only tighten), then kern steps, then your defaults."), 'the subagent Precedence line');
+});
+
+test('the safety lines keep their anchor terms, so a rewording that drops a rule fails here too', () => {
+  // Task 17a P11 review, Minor 1, after lane F's acceptance anchors (opus audit lane F): the pins above catch any
+  // change; these name what each line must still cover, so a pin edited to new text cannot drop one unseen.
+  const autonomy = section(readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8'), '## Autonomy').split('\n');
+  const floor = autonomy.filter((l) => l.includes("user's word"));
+  assert.equal(floor.length, 1, 'one Autonomy line names what only the user\'s word allows');
+  for (const term of ['merge', 'production deploy', 'data deletion', 'force-push to a shared branch', 'messaging people']) assert.ok(floor[0].includes(term), `the user's-word line names ${term}`);
+  const autopilot = autonomy.filter((l) => l.startsWith('Autopilot:'));
+  assert.equal(autopilot.length, 1, 'one Autopilot line');
+  assert.ok(autopilot[0].includes('Only the user starts it') && autopilot[0].includes('/kern:autopilot on'), autopilot[0]);
+  const sub = readFileSync(join(ROOT, 'kernel', 'kernel-subagent.md'), 'utf8').split('\n').filter((l) => l.startsWith('Autonomy:'));
+  assert.equal(sub.length, 1, 'one subagent Autonomy line');
+  assert.match(sub[0], /Never merge or message anyone/);
 });
