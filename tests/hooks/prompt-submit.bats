@@ -551,3 +551,20 @@ $output")" -eq 0 ]
   [ "$status" -eq 0 ]
   [ "$(reminders "$output")" -eq 0 ]
 }
+
+# A pasted blob, such as minified JSON, can be one line of megabytes. prompt_hashes skips a line over 20,000
+# characters before any other work on it, so the hook stays far inside its 10 s timeout and still replaces the
+# last prompt's hashes, which G20 reads as the user's last message (audit 2026-10-22, B9).
+@test "a 3 MB single-line prompt finishes in under 2 s and replaces the last prompt's hashes" {
+  submit "yes, approved"
+  [ -n "$(st prompt_hashes)" ]
+  long=$(awk 'BEGIN { s = "ab cd "; while (length(s) < 3000000) s = s s; print substr(s, 1, 3000000) }')
+  [ "${#long}" -eq 3000000 ]
+  t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  printf '{"session_id":"test-session","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt":"%s"}' "$CWD" "$long" |
+    bash "$K/hooks/prompt-submit" >"$BATS_TEST_TMPDIR/out"
+  t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  [ "$(cat "$BATS_TEST_TMPDIR/out")" = "$REMINDER" ]
+  grep -qx 'prompt_hashes: ' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
+}
