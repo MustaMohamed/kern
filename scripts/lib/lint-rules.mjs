@@ -61,6 +61,15 @@ export function fixedLengthRepo(tmp) {
   return join(real, 'r'.repeat(Math.max(1, RULE7_REPO_LEN - real.length - 1)));
 }
 
+// Replaces the plugin root only where it is a whole path: no path character before it, and after it a slash, the
+// end, or a character that cannot continue a path name (a sentence's "." or ":" counts when one follows it). A root
+// mounted at /kern otherwise also matched /kern:autopilot and the /kern of /kernel/ (Task 17a P15).
+export function replaceRoot(text, root, to) {
+  const esc = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const name = '\\w.~:@+-';
+  return text.replace(new RegExp(`(?<![${name}/])${esc}(?=$|/|[.,:;!?]?(?:$|[^${name}/]))`, 'g'), () => to);
+}
+
 export function loadModel(root) {
   const skills = [];
   const skillsDir = join(root, 'skills');
@@ -245,7 +254,7 @@ export const RULES = [
       const hook = (name, payload) => run(name, payload).stdout || '';
       // The render names kern files by absolute path, every one under model.root: each becomes one typical
       // installed root, so the measurement does not move with the checkout path.
-      const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
+      const norm = (s) => replaceRoot(s, model.root, '/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
       // A render is the kernel only when it exits 0 and carries the header line that names the plugin root. "kern
       // did not load", or any other output, is not a kernel, and its length is not a measurement.
       const header = `In kern files read by path, \${CLAUDE_PLUGIN_ROOT} means ${model.root}.`;
