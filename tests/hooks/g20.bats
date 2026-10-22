@@ -74,6 +74,18 @@ approve() {
   done
 }
 
+@test "a yes that ends in a question mark is a question, not a yes" {
+  # "Yes, go ahead?" holds yes and go ahead and no hold word, so only the final question mark denies it
+  # (Opus audit F-G20b: no test pinned that rule). The same line without it approves.
+  say 'Yes, go ahead?'
+  approve 'Yes, go ahead?'
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'"Yes, go ahead?\" is not an explicit yes (it needs a word such as yes, ok or go ahead, no word such as no, not, wait or later, and no final question mark)'* ]] || false
+  say 'Yes, go ahead.'
+  approve 'Yes, go ahead.'
+  [ -z "$output" ]
+}
+
 @test "a line that holds an affirmative word and no negation approves" {
   say 'ok good, go\nyes, delegate'
   approve 'ok good, go'

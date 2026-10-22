@@ -22,12 +22,24 @@
 #   inside single quotes, which the arithmetic re-runs though git_words read it as literal text; or it
 #   holds, in any single-quoted string, an array subscript that opens with a substitution ([$( or [`,
 #   optional spaces after [), whose value is stored and evaluated as arithmetic later. Reading the inner
-#   command exactly is not practical, so autopilot denies; interactively no guard votes (M3).
+#   command exactly is not practical, so autopilot denies; interactively no guard votes (M3);
+# - it holds, in text the shell would expand, a parameter expansion that re-evaluates the stored string
+#   it reads: a zsh flag group with an e flag outside its delimited arguments (${(e)x}, ${(Le)x},
+#   ${(j:):e)x}) or a P, % or %% flag (${(P)y}, ${(%)x}); the bash @P transform (${x@P}); or bash indirect
+#   expansion (${!y}, ${!y[0]}, ${!z@P}, ${!@}) that resolves a name holding a subscript. zsh and bash 5.3
+#   run a $( ) or backtick in the value, which git_words read where it was stored, often as literal
+#   single-quoted text. The judging is hreev, the matcher git_words shares (hooks/lib/reeval.awk).
+#   Autopilot denies; interactively no guard votes (M3).
 # Accepted limits, as a script file run by an interpreter is: the inline code, here-doc or pipe of an
 # interpreter other than a shell (python -c, node -e or -p, perl -e or -E, ruby -e, php -r, deno
 # eval, osascript -e, lua -e, R -e, julia -e, pwsh -c, `python3 - <<EOF`); a program or script
 # operand that is a path under a variable ($VAR/literal-path or "$VAR"/literal-path); an awk program,
 # a sed script and the commands other tools embed (git -c, ssh -o ProxyCommand, watch, npx -c).
+
+# _G00_REEVAL: the shared hreev matcher (hooks/lib/reeval.awk), prepended to G00's awk program so
+# g0_reeval and git_words' here-doc check judge a re-evaluating expansion the same way. Empty when the
+# file cannot be read: g0_reeval then calls an undefined hreev, the judge fails, and G00 fails closed.
+_G00_REEVAL=$(cat "${KERN_ROOT:-${CLAUDE_PLUGIN_ROOT:-.}}/hooks/lib/reeval.awk" 2>/dev/null) || _G00_REEVAL=""
 
 # _G00_AWK: the judge, run on git_words records after _GW_AWK. Prints `U<TAB>what` for each thing it
 # cannot read, once, and `.` at the end.
@@ -153,12 +165,22 @@ _G00_AWK='
         if (c == "`" || (c == "$" && C[i + 1] == "(")) return 1
         continue
       }
+      # An ANSI-C dollar-single-quote span ($ then a single quote): its text is stored literally and the
+      # arithmetic evaluates it, as a single-quoted span, so a $( ) or backtick in it counts (re-review
+      # Important 1). A backslash escapes the next byte, and the span closes at an unescaped single quote.
+      if (q == "c") {
+        if (c == "\\") { i++; continue }
+        if (c == sq) { q = ""; continue }
+        if (c == "`" || (c == "$" && C[i + 1] == "(")) return 1
+        continue
+      }
       if (q == "\"") {
         if (c == "\\" && index("\"\\$`", C[i + 1])) i++
         else if (c == "\"") q = ""
         continue
       }
       if (c == "\\") { i++; continue }
+      if (c == "$" && C[i + 1] == sq) { i++; q = "c"; continue }
       if (c == sq) q = sq
       else if (c == "\"") q = "\""
     }
@@ -186,6 +208,21 @@ _G00_AWK='
         p = c
         continue
       }
+      # An ANSI-C dollar-single-quote span (see g0_sqsub): its text is scanned as a single-quoted span, so
+      # a stored array subscript in it counts (re-review Important 1). A backslash escapes the next byte,
+      # and the span closes at an unescaped single quote.
+      if (q == "c") {
+        if (c == "\\") { i++; p = ""; continue }
+        if (c == sq) { q = ""; br = 0; p = ""; continue }
+        if (c == "[") { br = p ~ /[A-Za-z0-9_]/; p = c; continue }
+        if (br) {
+          if (c == " " || c == "\t") continue
+          if (c == "`" || (c == "$" && C[i + 1] == "(")) return 1
+          br = 0
+        }
+        p = c
+        continue
+      }
       p = c
       if (q == "\"") {
         if (c == "\\" && index("\"\\$`", C[i + 1])) i++
@@ -193,10 +230,35 @@ _G00_AWK='
         continue
       }
       if (c == "\\") { i++; continue }
+      if (c == "$" && C[i + 1] == sq) { i++; q = "c"; p = ""; continue }
       if (c == sq) q = sq
       else if (c == "\"") q = "\""
     }
     return 0
+  }
+  # g0_reeval(s): true when the command record s holds, in text the shell would expand, a parameter
+  # expansion that re-evaluates its stored value and runs a $( ) or backtick kept in it (${x@P}, ${!y}, a
+  # zsh (e)/(P)/(%) flag group, and so on). The judging is hreev, the shared matcher in
+  # hooks/lib/reeval.awk (prepended as $_G00_REEVAL), so this site and the git_words here-doc check cannot
+  # drift. g0_reeval only supplies the command quote context, which a here-doc body has not: it drops the
+  # single-quoted spans, the ANSI-C dollar-single-quote spans and the backslash-escaped bytes (none of
+  # which the shell expands), keeps the unquoted text and the inside of double quotes, and runs hreev on
+  # that. So a single-quoted or ANSI-C or backslash-escaped expansion is literal and not flagged, while an
+  # unquoted or double-quoted one is. An arithmetic re-evaluation of a stored single-quoted subscript is
+  # g0_sqsub and g0_sqarr, not here.
+  function g0_reeval(s,   nn, C, i, c, q, out) {
+    nn = split(s, C, ""); q = ""; out = ""
+    for (i = 1; i <= nn; i++) {
+      c = C[i]
+      if (q == sq) { if (c == sq) q = ""; continue }
+      if (q == "c") { if (c == "\\") i++; else if (c == sq) q = ""; continue }
+      if (c == "\\") { i++; continue }
+      if (c == "\"") { q = q == "\"" ? "" : "\""; continue }
+      if (c == "$" && C[i + 1] == sq && q == "") { i++; q = "c"; continue }
+      if (c == sq && q == "") { q = sq; continue }
+      out = out c
+    }
+    return hreev(out)
   }
   # g0_judge(f, k, b): judges the shell b, of family f, at cw_w[k].
   function g0_judge(f, k, b,   s0, s1, src, w) {
@@ -238,6 +300,9 @@ _G00_AWK='
       next
     }
     if (g0_sqarr($0, 0)) { g0_out("a single-quoted array subscript holds a $( ) or backtick kern cannot read"); next }
+    # A zsh (e) flag or a bash @P transform re-evaluates its stored value, read on the raw record for the
+    # same reason: the value was stored as literal text, often in single quotes (Opus audit A11).
+    if (g0_reeval($0)) { g0_out("a zsh (e), (P) or (%) flag, a bash @P transform or ${!name} re-evaluates a stored string kern cannot read"); next }
     sw(g0_flat($0)); cw_reset()
     for (k = 1; k <= sw_n; k++) cw(sw_w[k])
     # The redirections after the command name, and their targets, are not arguments.
@@ -304,7 +369,7 @@ guard_g00() {
   # _GW_QB asks git_words for each quoted here-doc body that may hold an array subscript, as a \035
   # record only this judge reads. It is set in the substitution subshell, so no other guard gets one.
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
-  out=$(set -o pipefail; _GW_QB=1; git_words "$cmd" | env LC_ALL=C awk -v sq="'" "$_GW_AWK$_G00_AWK") || out=""
+  out=$(set -o pipefail; _GW_QB=1; git_words "$cmd" | env LC_ALL=C awk -v sq="'" "$_G00_REEVAL$_GW_AWK$_G00_AWK") || out=""
   while IFS= read -r line; do
     case "$line" in
       .) seen=1 ;;

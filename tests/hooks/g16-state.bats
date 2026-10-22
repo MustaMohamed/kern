@@ -313,7 +313,7 @@ expect_cmd() {
     "cp -t .claude /tmp/kern.local.yml" "cd .claude && cp /tmp/kern.local.yml ." "cp /tmp/kern.local.yml .claude/./" \
     "rsync -a /tmp/kern.local.yml .claude/" "ditto /tmp/settings.json .claude" "mv .claude/kern.local.yml /tmp/" \
     "cp /tmp/kern.local.yml 2>/dev/null .claude/"
-  [[ "$output" == *"a command other than a read names a .claude directory, where kern and Claude Code settings live"* ]] || false
+  [[ "$output" == *"a command other than a read names a .claude directory or \$CLAUDE_CONFIG_DIR, where kern and Claude Code settings live"* ]] || false
   ln -s "$R/.claude" "$R/c"
   expect_bash ask "cp /tmp/kern.local.yml c/"
   set_autopilot on
@@ -345,6 +345,147 @@ expect_cmd() {
     "grep allow $R/.claude/settings.local.json" \
     "git diff .claude/settings.json" "echo x > .vscode/settings.json" "cp /tmp/s.json .vscode/settings.json"
   expect_file_tools "$R/.vscode/settings.json" none
+}
+
+@test "with CLAUDE_CONFIG_DIR set, a write to its settings.json asks, and denies under autopilot" {
+  # With CLAUDE_CONFIG_DIR set, Claude Code keeps the user's settings in $CLAUDE_CONFIG_DIR/settings.json
+  # (Opus audit A9). A Write there asks, as written, with .. in it, or through a symlink to the
+  # directory, and so does a redirect to the path written out or through the variable. A read, another
+  # file in the directory, and the same path once the variable is unset get no vote.
+  local d="$BATS_TEST_TMPDIR/ccd"
+  mkdir -p "$d"
+  ln -s "$d" "$BATS_TEST_TMPDIR/ccd-link"
+  export CLAUDE_CONFIG_DIR="$d"
+  expect_file_tools "$d/settings.json" ask
+  [[ "$output" == *"Claude Code settings set permissions and hooks; the user confirms each write"* ]] || false
+  expect_file_tools "$d/x/../Settings.JSON" ask
+  expect_file_tools "$BATS_TEST_TMPDIR/ccd-link/settings.json" ask
+  expect_bash ask "echo {} > $d/settings.json" "echo {} > \$CLAUDE_CONFIG_DIR/settings.json" \
+    "echo {} > \${CLAUDE_CONFIG_DIR}/settings.json" "cp /tmp/s.json \$CLAUDE_CONFIG_DIR/settings.json"
+  # The variable with a modifier (${CLAUDE_CONFIG_DIR:?}, ${CLAUDE_CONFIG_DIR:-...} and the like) still
+  # names the directory while it is set (P1 review Minor 2).
+  expect_bash ask "echo {} > \${CLAUDE_CONFIG_DIR:?}/settings.json" \
+    "echo {} > \${CLAUDE_CONFIG_DIR:-/tmp/x}/settings.json" "tee \${CLAUDE_CONFIG_DIR-x}/settings.json" \
+    "cp /tmp/s.json \${CLAUDE_CONFIG_DIR:?}/"
+  export CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/ccd-link"
+  expect_file_tools "$d/settings.json" ask
+  mkdir -p "$HOME/.claude-eval"
+  export CLAUDE_CONFIG_DIR="$HOME/.claude-eval"
+  expect_bash ask "echo {} > ~/.claude-eval/settings.json" "tee \$HOME/.claude-eval/settings.json"
+  export CLAUDE_CONFIG_DIR="$d"
+  set_autopilot on
+  expect_file_tools "$d/settings.json" deny
+  expect_bash deny "echo {} > \$CLAUDE_CONFIG_DIR/settings.json"
+  set_autopilot off
+  expect_bash none "cat \$CLAUDE_CONFIG_DIR/settings.json" "echo x > $d/notes.txt"
+  expect_file_tools "$d/notes.json" none
+  unset CLAUDE_CONFIG_DIR
+  expect_file_tools "$d/settings.json" none
+  expect_bash none "echo {} > $d/settings.json"
+}
+
+@test "CLAUDE_CONFIG_DIR is read as a .claude directory is: a relative path, a cd into it, a copy into it" {
+  # G16 finds Claude Code's settings in a .claude directory through a relative path or a symlinked
+  # directory (_g16_real), after a cd into the directory (_G16_INCC), and in a copy or move into it
+  # (_g16_into). With CLAUDE_CONFIG_DIR set, its directory is read the same way (P1 review ruling on A9).
+  local d="$BATS_TEST_TMPDIR/ccd"
+  mkdir -p "$d" "$BATS_TEST_TMPDIR/ccd-other"
+  ln -s "$d" "$R/cc"
+  export CLAUDE_CONFIG_DIR="$d"
+  expect_bash ask "echo {} > ../ccd/settings.json" "tee cc/settings.json" "echo {} > ../CCD/x/../settings.json" \
+    "cd $d && echo {} > settings.json" "cd \$CLAUDE_CONFIG_DIR && echo {} > settings.json" \
+    "cd ~ && cd ../ccd && tee settings.json" "cd ../ccd && tee settings.json"
+  [[ "$output" == *"Claude Code settings set permissions and hooks; the user confirms each write"* ]] || false
+  expect_bash ask "cp /tmp/s.json $d/" "cp /tmp/s.json \$CLAUDE_CONFIG_DIR" "mv /tmp/s.json ../ccd/" \
+    "cd $d && cp /tmp/s.json ." "cp /tmp/settings.json cc/" "rsync -a /tmp/s.json \${CLAUDE_CONFIG_DIR}/"
+  [[ "$output" == *"a command other than a read names a .claude directory or \$CLAUDE_CONFIG_DIR, where kern and Claude Code settings live"* ]] || false
+  set_autopilot on
+  expect_bash deny "cd ../ccd && tee settings.json" "cp /tmp/s.json ../ccd/"
+  set_autopilot off
+  expect_bash none "cd $d && cat settings.json" "ls ../ccd" "cat ../ccd/settings.json" "cp /tmp/s.json ../ccd-other/" \
+    "cd ../ccd-other && echo {} > settings.json"
+  unset CLAUDE_CONFIG_DIR
+  expect_bash none "cp /tmp/s.json ../ccd/" "cd ../ccd && echo {} > settings.json" "echo {} > ../ccd/settings.json"
+}
+
+@test "when tr cannot lower-case the paths of a Write, G16 denies it" {
+  # _g16_file lower-cases every path it compares in one tr pass that ends with a sentinel line. A tr that
+  # fails, as a fork refused under load does, left each path empty and skipped the state-dir check
+  # (Opus audit A13); a missing sentinel now denies any Write, Edit or NotebookEdit.
+  read_fails tr '*upper*'
+  expect_file_tools "$S/test-session.state" deny
+  [[ "$output" == *"kern G16: the target path could not be lower-cased"* ]] || false
+  expect_file_tools "$R/notes.md" deny
+  [ "$(read_failures tr)" -gt 0 ]
+  read_fails tr '*upper*' 0
+  expect_file_tools "$R/notes.md" none
+  expect_file_tools "$S/test-session.state" deny
+}
+
+@test "when tr cannot lower-case a Bash command, G16 denies it" {
+  # _g16_bash lower-cases the command with the sessions dir, the session id, HOME, CWD and
+  # CLAUDE_CONFIG_DIR in one tr pass that ends with a sentinel line. A failed pass left the command
+  # empty, so a write to the state file got no vote (A13, P1 review ruling); a missing sentinel denies.
+  # A command the cheap name check passes over is never lower-cased, so it still gets no vote.
+  read_fails tr '*upper*'
+  expect_bash deny "echo autopilot: on > $S/test-session.state" "echo x > notes-on-sessions.txt"
+  [[ "$output" == *"kern G16: the command could not be lower-cased (tr did not run)"* ]] || false
+  expect_bash none "ls -la"
+  [ "$(read_failures tr)" -gt 0 ]
+  read_fails tr '*upper*' 0
+  expect_bash none "echo x > notes-on-sessions.txt"
+}
+
+@test "when tr cannot take the quotes out of a Bash command, G16 still reads the whole command" {
+  # Quotes and backslashes come out in one tr pass, ended by a sentinel line, before the cheap name
+  # check. A failed pass left the text empty, so the check let the command through unread (A13, P1
+  # review ruling); now a missing sentinel skips the check, and the command is read in full. The hook
+  # check denies any quoted command under the same failure (fix round 2), so the state reason beside its
+  # own is what shows the command was read.
+  read_fails tr "*\\'*"
+  expect_bash deny "echo 'autopilot: on' > $S/test-session.state"
+  [[ "$output" == *"kern G16: commands may not write kern session state"* ]] || false
+  [[ "$output" == *"the command's quotes could not be taken out (tr did not run)"* ]] || false
+  [ "$(read_failures tr)" -gt 0 ]
+}
+
+@test "when tr cannot lower-case a scheduled prompt or a relayed message, G16 denies it" {
+  # _g16_relay lower-cases the prompt or message in a tr pass that ends with a sentinel line. A failed
+  # pass left it empty, so a relayed /kern:autopilot got no vote (A13, P1 review ruling).
+  local t
+  read_fails tr '*upper*'
+  for t in CronCreate SendMessage; do
+    run_guard "$(payload PreToolUse "\"tool_name\":\"$t\",\"tool_input\":{\"prompt\":\"/kern:autopilot on\"}")" g16
+    [ "$(decision_of "$output")" = deny ] || { echo "$t -> $output"; return 1; }
+  done
+  [[ "$output" == *"kern G16: the SendMessage input could not be lower-cased (tr did not run)"* ]] || false
+  read_fails tr '*upper*' 0
+  run_guard "$(payload PreToolUse "\"tool_name\":\"CronCreate\",\"tool_input\":{\"prompt\":\"check CI\"}")" g16
+  [ "$(decision_of "$output")" = none ]
+}
+
+@test "when tr cannot lower-case a RemoteTrigger body, G16 denies it" {
+  # The RemoteTrigger input is lower-cased whole, in a tr pass that ends with a sentinel line (A13, P1
+  # review ruling).
+  read_fails tr '*upper*'
+  run_guard "$(tool_payload RemoteTrigger "\"action\":\"create\",\"body\":{\"job_config\":{\"prompt\":\"/kern:autopilot on\"}}")" g16
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"kern G16: the RemoteTrigger input could not be lower-cased (tr did not run)"* ]] || false
+  read_fails tr '*upper*' 0
+  run_guard "$(tool_payload RemoteTrigger "\"action\":\"list\"")" g16
+  [ "$(decision_of "$output")" = none ]
+}
+
+@test "when tr cannot lower-case a Skill name, G16 denies the call" {
+  # _g16_skill lower-cases the skill name in a tr pass that ends with a sentinel line. A failed pass left
+  # it empty, so a Skill call to kern:autopilot got no vote (A13, P1 review ruling).
+  read_fails tr '*upper*'
+  run_guard "$(tool_payload Skill "\"skill\":\"kern:autopilot\",\"args\":\"on\"")" g16
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"kern G16: the Skill input could not be lower-cased (tr did not run)"* ]] || false
+  read_fails tr '*upper*' 0
+  run_guard "$(tool_payload Skill "\"skill\":\"kern:help\",\"args\":\"x\"")" g16
+  [ "$(decision_of "$output")" = none ]
 }
 
 @test "settings files and .claude directories follow the state model: any head but a reader asks" {
@@ -495,6 +636,18 @@ expect_cmd() {
   expect_cmd deny "${cc[@]}" "${sd[@]}"
   set_autopilot off
   expect_cmd none "cd $S && cd /tmp; echo x > foo"
+}
+
+@test "when awk cannot check a command's cd words for case, G16 denies it" {
+  # The mixed-case cd check is an awk run. A failed awk read as "no mixed-case cd", so CD /tmp was
+  # followed as a plain cd and the write after it left the sessions dir (A13, P1 fix round 2); a status
+  # other than found or not found now denies. The stub fails only that awk program, not cmd_plain's.
+  read_fails awk '*tolower(w\[i\]) ~*'
+  expect_cmd deny "cd $S && CD /tmp; echo x > foo"
+  [[ "$output" == *"kern G16: the command's cd words could not be checked for case (awk did not run)"* ]] || false
+  [ "$(read_failures awk)" -gt 0 ]
+  read_fails awk '*tolower(w\[i\]) ~*' 0
+  expect_cmd none "cd $S && cd /tmp; echo x > foo" "echo X > notes-on-sessions.txt"
 }
 
 @test "git reads only through its read-only subcommands; any other git naming settings or .claude asks" {
@@ -671,6 +824,22 @@ EOF
   # Reading 2 fails (the joined `echo ab`), and reading 1 names the hook.
   awk_fails_on '^cat hooks/prompt-submit; echo ab$'
   expect_hook "cat hooks/prompt-submit; echo a\\${nl}b"
+}
+
+@test "when tr cannot take the quotes out of a command for the hook check, G16 denies it" {
+  # _g16_hooks_read takes quotes and backslashes out in a tr pass that ends with a sentinel line. A failed
+  # pass left the text empty, so a quoted hook path got no vote (A13, P1 fix round 2); a missing sentinel
+  # now denies, in both modes. Text with no quote needs no pass, so it is read as before.
+  read_fails tr "*\\'*"
+  expect_cmd deny "bash 'hooks/prompt-submit'"
+  [[ "$output" == *"kern G16: the command's quotes could not be taken out (tr did not run)"* ]] || false
+  expect_cmd ask "bash hooks/prompt-submit"
+  set_autopilot on
+  expect_cmd deny "bash 'hooks/prompt-submit'"
+  set_autopilot off
+  [ "$(read_failures tr)" -gt 0 ]
+  read_fails tr "*\\'*" 0
+  expect_cmd ask "bash 'hooks/prompt-submit'"
 }
 
 @test "a backslash-newline inside a hook path is read as the line it continues; asks, and under autopilot is denied" {
