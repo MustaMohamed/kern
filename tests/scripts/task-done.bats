@@ -238,7 +238,7 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   [ "$status" -eq 3 ]
   [[ "$output" == *"probe: inconclusive (the patch changes only test files"* ]] || false
   [[ "$stderr" == *"probe is inconclusive"* ]] || false
-  ! grep -q '^Task 1: complete' "$L/ledger.md"
+  run ! grep -q '^Task 1: complete' "$L/ledger.md"
   # A stale patch from an earlier round: after a fix to check.sh it no longer reverse-applies.
   printf '[ "$1" -ge 0 ] || exit 1\n' > "$WT/check.sh"
   T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")

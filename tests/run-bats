@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Runs bats with /bin/bash first on PATH on macOS, so hooks are tested on the bash 3.2 they meet there.
-# --jobs N (first argument): runs each .bats file under the given directories or files as its own bats
-# process, N at a time, with xargs -P; no GNU parallel needed. Every test keeps its own BATS_TEST_TMPDIR,
-# HOME and plugin data dir, so files share no state. Each file's TAP output is printed whole, in file order,
-# and the run fails when any file fails.
+# --jobs [N] (first argument): runs each .bats file under the given directories or files as its own bats
+# process, N at a time, with xargs -P; no GNU parallel needed. With no number after it, N is
+# min(6, cores - 1) and at least 1. Every test keeps its own BATS_TEST_TMPDIR, HOME and plugin data dir,
+# so files share no state. Each file's TAP output is printed whole, in file order, and the run fails when
+# any file fails. A failed file whose output holds a fork failure also gets an `# INFRA:` line: the
+# machine ran out of processes, which a hook that fails closed reports as a wrong decision.
 set -euo pipefail
 # bash 3.2 does not fail a test on a false [[ ]] unless it is the test's last command, so every
 # [[ ]] assertion must end with || false. Refuse to run while a bare one exists.
@@ -14,11 +16,40 @@ if [ -n "$bare" ]; then
   printf '%s\n' "$bare" >&2
   exit 1
 fi
-jobs=1
+# No bash fails a test on a command negated with ! unless it is the test's last command: errexit ignores
+# it. Refuse a ! line with no || that a later command line follows before the closing brace.
+bang=$(find "$root/tests" -name '*.bats' -exec awk '
+  FNR == 1 { p = "" }
+  /^[[:space:]]*(#|$)/ { next }
+  p != "" { if ($0 !~ /^}[[:space:]]*$/) print p; p = "" }
+  /^[[:space:]]+![[:space:]]/ && !/\|\|/ { p = FILENAME ":" FNR ":" $0 }
+' {} + || true)
+if [ -n "$bang" ]; then
+  echo "a ! command before the test's last line never fails it; write run ! <command>, or end it with || false:" >&2
+  printf '%s\n' "$bang" >&2
+  exit 1
+fi
+jobs=0
 if [ "${1-}" = --jobs ]; then
-  jobs=${2-}
-  case "$jobs" in '' | *[!0-9]* | 0) echo "run-bats: --jobs needs a positive number" >&2; exit 2 ;; esac
-  shift 2
+  shift
+  case "${1-}" in
+    '' | *[!0-9]*)
+      cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)
+      case "$cores" in '' | *[!0-9]*) cores=2 ;; esac
+      jobs=$((cores - 1))
+      [ "$jobs" -le 6 ] || jobs=6
+      [ "$jobs" -ge 1 ] || jobs=1
+      ;;
+    *)
+      jobs=$1
+      shift
+      [ "$jobs" -gt 0 ] || { echo "run-bats: --jobs needs a positive number" >&2; exit 2; }
+      ;;
+  esac
+  for a in "$@"; do
+    [ -e "$a" ] || { echo "run-bats: no such file or directory: $a" >&2; exit 2; }
+  done
+  echo "# jobs: $jobs"
 fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -27,14 +58,14 @@ if [ "$(uname)" = Darwin ] && [ -x /bin/bash ]; then
   ln -s /bin/bash "$work/shim/bash"
   PATH="$work/shim:$PATH"
 fi
-if [ "$jobs" = 1 ]; then
+if [ "$jobs" = 0 ]; then
   bats "$@"
   exit $?
 fi
 # One line per .bats file, in sorted order; a directory names every .bats file directly inside it, as bats does.
 for a in "$@"; do
   if [ -d "$a" ]; then
-    find "$a" -maxdepth 1 -name '*.bats' | LC_ALL=C sort
+    find "$a" -maxdepth 1 -name '*.bats' | env LC_ALL=C sort
   else
     printf '%s\n' "$a"
   fi
@@ -46,13 +77,20 @@ while IFS= read -r f; do
   printf '%s\t%s\n' "$n" "$f"
 done <"$work/files" >"$work/list"
 export work
-# Each file: its TAP into out.<n>, its exit status into rc.<n>.
-tr '\t\n' '\0\0' <"$work/list" | xargs -0 -n 2 -P "$jobs" sh -c 'bats "$2" >"$work/out.$1" 2>&1; echo $? >"$work/rc.$1"' sh
+# Each file: its TAP into out.<n>, its exit status into rc.<n>. bash, not sh: Ubuntu's sh is dash, which
+# drops the functions bats exports, so a bats nested in a test (as in run-bats.bats) would break there.
+tr '\t\n' '\0\0' <"$work/list" | xargs -0 -n 2 -P "$jobs" bash -c 'bats "$2" >"$work/out.$1" 2>&1; echo $? >"$work/rc.$1"' bash
 status=0
 while IFS="$(printf '\t')" read -r i f; do
   printf '# file %s\n' "$f"
   cat "$work/out.$i"
   rc=$(cat "$work/rc.$i" 2>/dev/null || echo 1)
-  [ "$rc" = 0 ] || { status=1; printf '# FAILED: %s (exit %s)\n' "$f" "$rc"; }
+  if [ "$rc" != 0 ]; then
+    status=1
+    printf '# FAILED: %s (exit %s)\n' "$f" "$rc"
+    if grep -q 'fork: Resource temporarily unavailable' "$work/out.$i"; then
+      printf '# INFRA: fork failures in %s\n' "$f"
+    fi
+  fi
 done <"$work/list"
 exit "$status"
