@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { UsageError } from '../scripts/lib/args.mjs';
 import { cacheGet, cachePut, filesVersion, lockedUpdate, openRun, readManifest, readRecord, unitKey, unitStore, writeManifest, writeRecord } from '../scripts/lib/eval-cache.mjs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const made = [];
 after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
@@ -173,4 +173,38 @@ test('unitStore reuses a record only while fresh says so, from the cache and fro
   assert.equal(resumed.stale('a', 'k2', now('h1')), true, 'its key no longer matches');
   assert.equal(resumed.stale('b', 'k', now('h1')), false, 'no record is no stale record');
   assert.equal((await resumed.unit({ name: 'a', key: 'k', fresh: now('h2'), work: async () => ({ valid: true, touched: { plan: 'h2' } }) })).how, 'ran');
+});
+
+test('lockedUpdate breaks a lock whose owner is dead at once, waits for a live one, and lets only one waiter break a dead lock', async () => {
+  const dir = scratch();
+  const file = join(dir, 'key.json');
+  const dead = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout;
+  mkdirSync(`${file}.lock`);
+  writeFileSync(join(`${file}.lock`, 'owner'), dead);
+  const t0 = Date.now();
+  lockedUpdate(file, () => '{"a":1}', { waitMs: 5000 });
+  assert.ok(Date.now() - t0 < 1000, 'a dead owner\'s fresh lock is broken without waiting for it to go stale');
+  mkdirSync(`${file}.lock`);
+  writeFileSync(join(`${file}.lock`, 'owner'), String(process.pid));
+  assert.throws(() => lockedUpdate(file, () => '{}', { waitMs: 200 }), /held by another run/);
+  rmSync(`${file}.lock`, { recursive: true, force: true });
+  // Two waiters at a dead lock: each must still merge its own key.
+  mkdirSync(`${file}.lock`);
+  writeFileSync(join(`${file}.lock`, 'owner'), dead);
+  writeFileSync(file, '{}');
+  const lib = new URL('../scripts/lib/eval-cache.mjs', import.meta.url).href;
+  const child = (k) => new Promise((done) => {
+    const p = spawn(process.execPath, ['--input-type=module', '-e', `import { lockedUpdate } from ${JSON.stringify(lib)};
+      for (let i = 0; i < 20; i++) lockedUpdate(${JSON.stringify(file)}, (text) => JSON.stringify({ ...JSON.parse(text), ['${k}' + i]: i }));`], { stdio: 'inherit' });
+    p.on('exit', done);
+  });
+  assert.deepEqual(await Promise.all(['a', 'b', 'c'].map(child)), [0, 0, 0]);
+  assert.equal(Object.keys(JSON.parse(readFileSync(file, 'utf8'))).length, 60);
+});
+
+test('openRun counts run.json with the run-*.json beside it', () => {
+  const dir = scratch();
+  writeManifest(dir, { runner: 'h2h', options: {} });
+  writeManifest(dir, { runner: 'h2h', options: {} }, 'run-sonnet-5-5-plan.json');
+  assert.throws(() => openRun(dir, 'h2h'), /holds 2 runs: pass one of .*run-sonnet-5-5-plan\.json, .*run\.json/);
 });

@@ -162,3 +162,19 @@ test('touchedSkills names each kern skill a run\'s tool calls read or called, an
   assert.match(h.get('plan'), /^[0-9a-f]{64}$/);
   assert.notEqual(h.get('plan'), h.get('recall'));
 });
+
+test('touchedSkills counts every way a run reaches a skill, and a search of the skills folder or the plugin root touches them all', () => {
+  const hashes = skillHashes(treeSource(repo()));
+  const call = (name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name, input }] } });
+  const one = (name, input, roots = []) => touchedSkills([call(name, input)], hashes, roots);
+  assert.deepEqual(one('Grep', { pattern: 'spec', path: '/tmp/p/kern/skills/plan' }), ['plan'], 'a folder named without its slash');
+  assert.deepEqual(one('Bash', { command: 'grep -rn spec /tmp/p/kern/skills/plan' }), ['plan']);
+  assert.deepEqual(one('SlashCommand', { command: '/kern:plan' }), ['plan']);
+  assert.deepEqual(one('Skill', { skill: 'plan' }), ['plan'], 'a bare skill name');
+  assert.deepEqual(one('Grep', { pattern: 'x', path: '/tmp/p/kern/skills/plan-old' }), [], 'another name that starts with one');
+  const all = [...hashes.keys()].sort();
+  assert.deepEqual(one('Grep', { pattern: 'x', path: '/tmp/p/kern/skills' }), all);
+  assert.deepEqual(one('Glob', { pattern: 'skills/**/SKILL.md', path: '/tmp/p/kern' }), all);
+  assert.deepEqual(one('Bash', { command: 'grep -rn x /private/tmp/p/kern | head' }, ['/tmp/p/kern']), all, 'the plugin root, either spelling');
+  assert.deepEqual(one('Read', { file_path: '/tmp/p/kern/kernel/kernel.md' }, ['/tmp/p/kern']), [], 'a file under the root that is no skill');
+});

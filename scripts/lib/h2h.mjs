@@ -109,7 +109,8 @@ export function falseAlarms(category, e) {
 // falseAlarms, decoys and unmatched as counts, the count of extras the grader set aside, and the grader's raw
 // reply for that task-run, so a split can be checked against what the grader wrote: the 2026-10-22 snapshot kept
 // only the sum, and the review diagnosis had to infer each split from `why` (Task 16o). The row holds no blind id,
-// since keys stay out of snapshots; the arm's entry in the reply is blindIds(arm ids, `<date>:<task>:<run>`)[arm].
+// since keys stay out of snapshots; the arm's entry in the reply is blindIds(arm ids, `<date>:<task>:<run>`)[arm], the seed
+// ending `:arms-<a>+<b>` for an --arms run.
 // Each label named in matched, decoys or extras counts once, by its kind in the key, whichever list the grader put it
 // in (Task 17a, G2): a decoy under matched is a false alarm, an extra under decoys is an extra (Task 16o review, M3),
 // and matched holds the bug labels named. A label the key lacks counts by its prefix ("decoy:d1"), else by its
@@ -373,7 +374,7 @@ const without = (t, keys) => Object.fromEntries(Object.entries(t).filter(([k]) =
 // Exit: gateExit (0 pass, 1 a category failed, 3 one incomplete), 2 for a usage error or no task matched.
 export async function h2hMain({ root, argv, env = process.env, tasks: all = null, arms: armsOf = (pick) => loadArms(root, pick), armIds = null, run = runClaudeAsync, version = claudeVersion,
   tree = treeRecord, snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), cache = join(resultsDir, 'cache', 'h2h'),
-  floorScan = join(root, 'scripts', 'floor-scan'), parse = parseGrades, log = console.log, error = console.error, now = new Date() }) {
+  floorScan = join(root, 'scripts', 'floor-scan'), parse = parseGrades, keyWait = 30000, log = console.log, error = console.error, now = new Date() }) {
   const t0 = Date.now();
   const usage = (msg) => { error(`h2h: ${msg}\n${USAGE}`); return 2; };
   const allTasks = all ?? loadTasks(root);
@@ -453,7 +454,7 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
   try { readKey(); } catch (e) { error(e.message); return 2; }
   // Merged, so a filtered rerun keeps the keys of the day's other task-runs (Task 17a, G3).
   // It is merged under a lock (lockedUpdate): runs of two categories at once share this dir and its key.json.
-  const writeKey = () => lockedUpdate(keyFile, (text) => JSON.stringify({ ...parseKey(text), ...key }, null, 2) + '\n');
+  const writeKey = () => lockedUpdate(keyFile, (text) => JSON.stringify({ ...parseKey(text), ...key }, null, 2) + '\n', { waitMs: keyWait });
   const ids0 = tasks.map((t) => t.id);
   // Its own manifest, run-<model>-<filter>.json: runs of two categories may share this dir.
   writeManifest(raw, { runner: 'h2h', date, started: manifest?.started ?? now.toISOString(), ...(manifest ? { resumed: [...(manifest.resumed ?? []), now.toISOString()] } : {}),
@@ -504,6 +505,10 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
   };
   const limit = limiter(JOBS);
   const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest, limit });
+  // armsTag: what an --arms run adds to its seeds and grade records, so runs of two arm sets over the same tasks in one
+  // dir keep apart their blind ids, keys and grades.
+  const armsTag = o.arms ? `:arms-${o.arms.join('+')}` : '';
+  const armsName = armsTag.replace(':', '-');
   // The kern arm's attempt names the kern skills it read, each with its hash now: one that changed makes it stale.
   const hashes = skillHashes(src);
   const fresh = (rec) => Object.entries(rec.touched ?? {}).every(([n, h]) => hashes.get(n) === h);
@@ -523,7 +528,7 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
   // taskRun(t, r): task t's run r: each arm's attempt, side by side, then one blind grade of them all. Returns its rows,
   // seed and blind ids, or void: the reason it cannot be graded.
   const taskRun = async (t, r) => {
-    const seed = `${date}:${t.id}:${r}`;
+    const seed = `${date}:${t.id}:${r}${armsTag}`;
     const ids = blindIds(arms.map((a) => a.id), seed);
     const base = t.id.replace('/', '--');
     const recs = await Promise.all(arms.map((a) => live.track(store.unit({ ...attemptSpec(t, r, a, ids), fresh,
@@ -531,7 +536,7 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
         const x = await armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan });
         if (x.problem) return { valid: false, problem: x.problem };
         const { id: _, events, ...attempt } = x.attempt;
-        return { valid: true, attempt, touched: a.id === 'kern' ? Object.fromEntries(touchedSkills(events, hashes).map((n) => [n, hashes.get(n)])) : {} };
+        return { valid: true, attempt, touched: a.id === 'kern' ? Object.fromEntries(touchedSkills(events, hashes, [a.dir]).map((n) => [n, hashes.get(n)])) : {} };
       },
     }))));
     units.push(...recs);
@@ -540,7 +545,7 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
     const attempts = recs.map((x) => ({ ...x.attempt, id: ids[x.attempt.arm] })).sort((x, y) => x.id.localeCompare(y.id));
     const cached = new Map(recs.filter((x) => x.cached).map((x) => [x.attempt.arm, x.cached]));
     // The grade's key holds what the grader reads of each attempt, so an attempt run again gets a new grade.
-    const g = await live.track(store.unit({ name: `${base}-${r}.grade`,
+    const g = await live.track(store.unit({ name: `${base}-${r}${armsName}.grade`,
       key: unitKey({ runner: 'h2h-grade', seed, task: without(t, ['dir']), attempts: attempts.map((x) => without(x, ['id'])), grader: graderVersion }),
       // The grader call jumps the queue: its task-run's arm sessions are spent, and its grade ends the task-run.
       priority: 1, work: async () => {
@@ -577,15 +582,18 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
         results.push(...out.rows);
       }
       save(beside, false);
-      writeKey();
+      // key holds every seed so far, so a merge that fails here (a lock a killed run left too young to break) is tried
+      // again after the next task-run, and once more at the end.
+      try { writeKey(); } catch (e) { log(`key.json: could not merge (${e.message}); tried again after the next task-run`); }
     });
     if (manifest) {
-      const n = taskRuns.flatMap(({ t, r }) => arms.map((a) => attemptSpec(t, r, a, blindIds(arms.map((x) => x.id), `${date}:${t.id}:${r}`)))).filter((s) => store.stale(s.name, s.key, fresh)).length;
-      if (n) log(`--resume: ${n} attempt(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again`);
+      const n = taskRuns.flatMap(({ t, r }) => arms.map((a) => attemptSpec(t, r, a, blindIds(arms.map((x) => x.id), `${date}:${t.id}:${r}${armsTag}`)))).filter((s) => store.stale(s.name, s.key, fresh)).length;
+      if (n) log(`--resume: ${n} attempt(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, so they are not kept`);
     }
     await Promise.allSettled(taskRuns.map(({ t, r }, k) => taskRun(t, r).then((out) => emit(k, out)).catch(fail)));
     await live.idle();
     if (stop) throw stop;
+    writeKey();
     complete = true;
   } finally {
     for (const c of copies) rmSync(dirname(c), { recursive: true, force: true });
@@ -624,7 +632,7 @@ async function regradeH2H({ dir, tasks: allTasks, parse, log, usage, now }) {
       const recs = m.options.armIds.map((a) => readRecord(dir, `${base}-${r}-${a}`));
       const bad = recs.findIndex((x) => !x?.valid);
       if (bad >= 0) { fail(`${m.options.armIds[bad]}: ${recs[bad]?.problem ?? 'no record: the attempt never finished'}`); continue; }
-      const g = readRecord(dir, `${base}-${r}.grade`);
+      const g = readRecord(dir, `${base}-${r}${m.options.arms ? `-arms-${m.options.arms.join('+')}` : ''}.grade`);
       if (!g?.valid) { fail(g?.problem ?? 'no record: the task-run was never graded'); continue; }
       const attempts = recs.map((x) => ({ ...x.attempt, id: g.ids[x.attempt.arm] })).sort((x, y) => x.id.localeCompare(y.id));
       let grades;
@@ -634,7 +642,8 @@ async function regradeH2H({ dir, tasks: allTasks, parse, log, usage, now }) {
   }
   const verdict = gate(results, touchedTasks(allTasks, tasks).map((t) => ({ id: t.id, category: t.category })));
   for (const v of verdict) log(verdictLine(v));
-  const out = join(dir, `regrade-${basename(file, '.json').replace(/^run-?/, '')}-${timeStamp(now)}.json`);
+  const tag = basename(file, '.json').replace(/^run-?/, '');
+  const out = join(dir, `regrade-${tag ? `${tag}-` : ''}${timeStamp(now)}.json`);
   writeFileSync(out, JSON.stringify({ regraded: { from: dir, at: now.toISOString() }, model: m.options.model, grader: m.options.grader, claude: m.claude, runs: m.options.runs, kern: m.kern,
     complete: true, cases: m.options.ids, voided, gate: verdict, results }, null, 2) + '\n');
   log(`regrade: ${out}`);

@@ -171,7 +171,7 @@ async function runCase(c, save) {
     return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
       commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command),
       session: { status: run.status, badLines: run.badLines, stderr: run.stderr.slice(-4000), plugin: kern },
-      touched: Object.fromEntries(touchedSkills(run.events, hashes).map((n) => [n, hashes.get(n)])) };
+      touched: Object.fromEntries(touchedSkills(run.events, hashes, [kern]).map((n) => [n, hashes.get(n)])) };
   } finally {
     for (const p of temp) { rmSync(p, { recursive: true, force: true }); guard.drop(p); }
   }
@@ -203,7 +203,7 @@ const readVersion = () => {
   hashes = skillHashes(src);
   inputs = new Map(cases.map((c) => [c.id, caseInputs(src, execParts(c)).hash]));
   const stale = manifest ? cases.filter((c) => store.stale(c.id, keyOf(c), fresh)).length : 0;
-  if (stale) console.log(`--resume: ${stale} case(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again`);
+  if (stale) console.log(`--resume: ${stale} case(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, so they are not kept`);
   return claude;
 };
 const code = filesVersion(ROOT, EXEC_CODE);

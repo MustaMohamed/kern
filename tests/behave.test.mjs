@@ -1058,7 +1058,7 @@ test('a cached run is reused only while every kern skill it read is unchanged, a
     await drive({ argv: ['--runs', '1'], cases, root, run: second.run, dir: first.dir });
     assert.deepEqual(second.calls.filter((o) => !isGrader(o)).map((o) => o.prompts[0]), ['fix it (x-reads)'], 'only the run that read self-review ran again');
     const resumed = await drive({ argv: ['--resume', first.raw], cases, root, dir: first.dir, version: '10.0.0 (stand-in)' });
-    assert.match(resumed.lines[0], /^--resume: 2 run\(s\) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again$/);
+    assert.match(resumed.lines[0], /^--resume: 2 run\(s\) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, so they are not kept$/);
     first.done();
   } finally { rmSync(dirname(root), { recursive: true, force: true }); }
 });

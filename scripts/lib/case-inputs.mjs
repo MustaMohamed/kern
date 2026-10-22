@@ -145,18 +145,27 @@ export function caseInputs(src, { skills = [], entries = [], paths = [] }, kernS
 // skillHashes(src): each kern skill's name to the hash of its folder's files.
 export const skillHashes = (src) => kern(src).hashes;
 
-// touchedSkills(events, hashes): the kern skills (hashes' names) a run's tool calls read or called, sorted: a call
-// whose input names skills/<name>/ (a Read, a Bash cat, a Grep path), or a Skill call of kern:<name>. A routing the
+// touchedSkills(events, hashes, roots): the kern skills (hashes' names) a run's tool calls read or called, sorted. A
+// call reaches a skill when its input names skills/<name> (a Read, a Bash grep, a Grep path), kern:<name> (a Skill or
+// slash command), or <name> as a Skill call's whole skill. One that names the skills folder itself, or a plugin root in
+// roots, can read any skill, so it touches them all. /private/var and /var name one folder on macOS. A routing the
 // static closure misses (the kernel sending a plan task to define) shows here, so a cached run stays valid only while
 // every skill it touched is unchanged (eval-cache.mjs unitStore's fresh).
-export function touchedSkills(events, hashes) {
+const unprivate = (s) => s.replace(/\/private(?=\/)/g, '');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function touchedSkills(events, hashes, roots = []) {
+  const names = [...hashes.keys()];
+  const end = '(?=["\'\\s*|;&)]|$)';
+  const whole = new RegExp([`(?:^|[^\\w.-])skills/?${end}`, ...roots.map((r) => `${escapeRe(unprivate(r))}/?${end}`)].join('|'));
+  const named = new Map(names.map((n) => [n, new RegExp(`skills/${escapeRe(n)}(?![\\w-])|\\bkern:${escapeRe(n)}(?![\\w-])`)]));
   const seen = new Set();
   for (const e of events) {
     if (e?.type !== 'assistant') continue;
     for (const c of e.message?.content ?? []) {
       if (c?.type !== 'tool_use') continue;
-      const input = JSON.stringify(c.input ?? {});
-      for (const n of hashes.keys()) if (input.includes(`skills/${n}/`) || (c.name === 'Skill' && c.input?.skill === `kern:${n}`)) seen.add(n);
+      const input = unprivate(JSON.stringify(c.input ?? {}));
+      if (whole.test(input)) return [...names].sort();
+      for (const n of names) if (named.get(n).test(input) || (c.name === 'Skill' && c.input?.skill === n)) seen.add(n);
     }
   }
   return [...seen].sort();

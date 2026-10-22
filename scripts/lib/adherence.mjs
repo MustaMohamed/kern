@@ -421,7 +421,7 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
       const g = r && !failure ? gradeCase(c, r.events, text, pluginRoot) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
       const detail = { pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: r ? r.status : null, invalid: !!failure };
       return { valid: !failure, run: detail, session: r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin: pluginRoot } : null, text,
-        touched: Object.fromEntries(touchedSkills(events, hashes).map((n) => [n, hashes.get(n)])) };
+        touched: Object.fromEntries(touchedSkills(events, hashes, [pluginRoot]).map((n) => [n, hashes.get(n)])) };
     } finally {
       if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
       if (cwd) rmSync(dirname(cwd), { recursive: true, force: true });
@@ -439,7 +439,7 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
     key: unitKey({ runner: 'adherence', inputs: inputs.get(c.id), case: c, model: MODEL, variant: VARIANT, code, claude, run: i }), fresh, work: () => runUnit(c, i) })));
   if (manifest) {
     const n = specs.flat().filter((s) => store.stale(s.name, s.key, fresh)).length;
-    if (n) log(`--resume: ${n} run(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again`);
+    if (n) log(`--resume: ${n} run(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, so they are not kept`);
   }
   // live: every unit going, so a fatal error waits for the sessions already running to finish and save.
   const live = tracker();

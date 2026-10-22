@@ -705,7 +705,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
     const unit = `${c.id}-${i}`;
     // touched: the kern skills the run read, each with its hash now, so a cached run goes stale when one changes.
     const record = (r, session, events = []) => ({ valid: !r.invalid, run: r, session, expectations: c.expectations,
-      touched: Object.fromEntries(touchedSkills(events, hashes).map((n) => [n, hashes.get(n)])) });
+      touched: Object.fromEntries(touchedSkills(events, hashes, [plugin]).map((n) => [n, hashes.get(n)])) });
     const cwd = caseWorkspace(root, c);
     const gdir = mkdtempSync(join(tmpdir(), 'g-'));
     try {
@@ -744,7 +744,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
     key: unitKey({ runner: 'behave', inputs: inputs.get(c.id), case: c, model: MODEL, grader: graderVersion, claude, run: i }), fresh, work: () => runUnit(c, i) })));
   if (manifest) {
     const n = specs.flat().filter((s) => store.stale(s.name, s.key, fresh)).length;
-    if (n) log(`--resume: ${n} run(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, and run again`);
+    if (n) log(`--resume: ${n} run(s) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, so they are not kept`);
   }
   // live: every unit going, so a fatal error waits for the sessions already running to finish and save.
   const live = tracker();

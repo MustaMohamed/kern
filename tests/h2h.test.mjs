@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -488,7 +488,7 @@ const okGrades = (prompt, category) => JSON.stringify({ grades: blindOf(prompt).
 const kernArms = (pick, root = ROOT) => [{ id: 'kern', plugin: '.', dir: root }, { id: 'control', plugin: null, dir: null }].filter((a) => !pick || pick.includes(a.id));
 const plainArm = (opts) => runOf(opts.pluginDirs.length ? [...started(opts.pluginDirs), resultEvent('done')] : [initOf([]), resultEvent('done')]);
 const driveH2H = async ({ argv = ['--runs', '1'], tasks, arm = plainArm, grade = okGrades, tree = () => CLEAN, before = null, key = null, env = { PATH: process.env.PATH, CLAUDE_CONFIG_DIR: '/stand-in/eval-config' }, floorScan, parse,
-  root = ROOT, dir = mkdtempSync(join(tmpdir(), 'hm-')), now = DAY, keep = false } = {}) => {
+  root = ROOT, dir = mkdtempSync(join(tmpdir(), 'hm-')), now = DAY, keep = false, keyWait } = {}) => {
   const snapshots = join(dir, 'snapshots'); const results = join(dir, 'results');
   const day = now.toISOString().slice(0, 10);
   const committed = join(snapshots, `h2h-sonnet-5-5-${day}.json`);
@@ -511,7 +511,7 @@ const driveH2H = async ({ argv = ['--runs', '1'], tasks, arm = plainArm, grade =
   let code; let thrown = null;
   try {
     code = await h2hMain({ root, argv, env, tasks, arms: (pick) => kernArms(pick, root), armIds: ['kern', 'control'], run, version: () => '9.9.9 (stand-in)', tree, snapshots, results,
-      ...(floorScan ? { floorScan } : {}), ...(parse ? { parse } : {}), log: (l) => lines.push(l), error: (l) => errors.push(l), now });
+      ...(floorScan ? { floorScan } : {}), ...(parse ? { parse } : {}), ...(keyWait ? { keyWait } : {}), log: (l) => lines.push(l), error: (l) => errors.push(l), now });
   } catch (e) { thrown = e; }
   return { code, thrown, calls, graderPrompts, lines, errors, raw, read, dir, results, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null,
     beside, done: () => { rmSync(dir, { recursive: true, force: true }); if (!keep) for (const t of tasks) if (t.dir.startsWith(tmpdir())) rmSync(t.dir, { recursive: true, force: true }); } };
@@ -952,4 +952,31 @@ test('an h2h rubric edit in task.json asks the grader again but reruns no arm; a
     assert.equal(scan.calls.filter((o) => !isGrader(o)).length, 2, 'both arms\' floor hits come from the new scanner');
     first.done();
   } finally { rmSync(dirname(root), { recursive: true, force: true }); rmSync(d.dir, { recursive: true, force: true }); }
+});
+
+// Opus re-review, Minors 2 and 6: a key.json write that fails is said and tried again at the next task-run, and an
+// --arms run's seeds name its arms, so a run of other arms over the same tasks keeps its own key.
+test('h2h tries a failed key.json merge again after the next task-run, and an --arms run keys its seeds by its arms', async () => {
+  const [p1, p2] = [synthTask('plan'), synthTask('plan')];
+  const dir = mkdtempSync(join(tmpdir(), 'hm-'));
+  const raw = join(dir, 'results', 'h2h-2026-10-22');
+  mkdirSync(join(raw, 'key.json.lock'), { recursive: true });
+  writeFileSync(join(raw, 'key.json.lock', 'owner'), String(process.pid));
+  const arm = (opts) => { if (opts.prompts[0] === p2.prompts[0]) rmSync(join(raw, 'key.json.lock'), { recursive: true, force: true }); return plainArm(opts); };
+  const r = await driveH2H({ argv: ['--runs', '1', '--jobs', '1', '--arms', 'kern,control'], tasks: [p1, p2], arm, dir, keyWait: 100 });
+  try {
+    assert.equal(r.code, 0, r.lines.concat(r.errors).join('\n'));
+    assert.ok(r.lines.some((l) => /^key\.json: could not merge .*held by another run.*; tried again after the next task-run$/.test(l)), r.lines.join('\n'));
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(raw, 'key.json'), 'utf8'))).sort(), [`2026-10-22:${p1.id}:0:arms-kern+control`, `2026-10-22:${p2.id}:0:arms-kern+control`]);
+  } finally { r.done(); }
+});
+
+test('h2h --regrade of a run from before run files had names writes regrade-<HHMMSS>.json', async () => {
+  const p = synthTask('plan');
+  const first = await driveH2H({ tasks: [p], keep: true });
+  try {
+    renameSync(join(first.raw, 'run-sonnet-5-5-all.json'), join(first.raw, 'run.json'));
+    const r = await driveH2H({ argv: ['--regrade', first.raw], tasks: [p], dir: first.dir, keep: true });
+    assert.match(r.lines.at(-1), /\/regrade-120000\.json$/);
+  } finally { first.done(); rmSync(p.dir, { recursive: true, force: true }); }
 });

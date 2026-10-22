@@ -366,7 +366,7 @@ These supersede the "Additions from the M2 plan" entries above where they differ
     - `dirHash(dir, omit)`;
     - `rangeSources(root, range)` → `{ before, after }`, taking `A..B`, `A...B` or a lone rev against the working tree;
     - `changedCases(cases, partsOf, before, after)`;
-    - `skillHashes(src)` and `touchedSkills(events, hashes)`. A unit record's `touched` maps each kern skill the run read or called to its hash. The closure follows `skills/<n>/`, `kern:<n>` and "route(s|d) to <n>".
+    - `skillHashes(src)` and `touchedSkills(events, hashes, roots)`; a call that names the skills folder or a plugin root touches every skill. A unit record's `touched` maps each kern skill the run read or called to its hash. The closure follows `skills/<n>/`, `kern:<n>` and "route(s|d) to <n>".
   - Each runner's case parts are `behave.caseParts(c)` (with `caseSkills(c)`), `adherence.adherenceParts(c)`, `exec-run.execParts(c)` and `h2h.taskParts(t)` (with `CATEGORY_SKILLS`). Each evals/behave case names its `skills`.
   - `scripts/lib/eval-cache.mjs` exports:
     - `unitKey(parts)`;
@@ -374,7 +374,7 @@ These supersede the "Additions from the M2 plan" entries above where they differ
     - `cacheGet(cache, key)` and `cachePut(cache, key, record, files)`;
     - `writeRecord` and `readRecord` for `<dir>/<unit>.result.json`;
     - `writeManifest(dir, m, name)` for `<dir>/run.json` (h2h: `run-<model>-<filter>.json`), which holds `{ runner, date, started, resumed?, claude, kern, options }`, and `openRun(path, runner)` → `{ m, dir, file }` (`readManifest` gives `m`);
-    - `lockedUpdate(file, update)`, a mkdir-locked read-modify-write; h2h merges `key.json` with it;
+    - `lockedUpdate(file, update, { waitMs, staleMs })`, a mkdir-locked read-modify-write with the holder's pid in `<file>.lock/owner`; a lock whose owner is dead or that is older than staleMs is removed under `<file>.lock.break`; h2h merges `key.json` with it;
     - `unitStore({ raw, cache, from, noCache, resume, limit })` → `{ unit({ name, key, files, work, priority, fresh }), stale(name, key, fresh) }`. A unit's record carries `how` (`resume`, `cache` or `ran`).
     - `timeStamp(now)`, `reuseNote(units)` and `roundLine(units, ms, jobs)`.
   - The cache is `evals/results/cache/<behave|adherence|h2h|exec>/<key[0:2]>/<key>/`.
@@ -384,5 +384,6 @@ These supersede the "Additions from the M2 plan" entries above where they differ
     - a `--quick` or `--changed` run writes to `<name>-quick-<HHMMSS>` or `<name>-changed-<HHMMSS>`;
     - a regrade writes `regrade-<HHMMSS>.json`;
     - exec also keeps `<id>.gh.log`, `<id>.state` and `<id>.ws/`.
+  - h2h: an `--arms` run's seed is `<date>:<task>:<run>:arms-<a>+<b>`, and its grade record `<task>-<run>-arms-<a>+<b>.grade.result.json`.
   - Snapshot fields: `quick: true` and `changed: <range>` when given, and `cached: { from, at }` on each reused run, h2h row or exec result.
   - Open for the user: whether a `--quick` round may run without the per-run ask under a daily cap. Until the user decides, every paid run, quick ones included, is asked for.

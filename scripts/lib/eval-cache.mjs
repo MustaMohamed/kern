@@ -76,7 +76,7 @@ export function openRun(path, runner) {
   let st;
   try { st = statSync(path); } catch { throw none(); }
   if (st.isDirectory()) {
-    const runs = existsSync(join(path, 'run.json')) ? ['run.json'] : readdirSync(path).filter((n) => /^run-.+\.json$/.test(n)).sort();
+    const runs = readdirSync(path).filter((n) => /^run(?:-.+)?\.json$/.test(n)).sort();
     if (!runs.length) throw none();
     if (runs.length > 1) throw new UsageError(`${path} holds ${runs.length} runs: pass one of ${runs.map((n) => join(path, n)).join(', ')}`);
     file = join(path, runs[0]);
@@ -89,22 +89,45 @@ export function openRun(path, runner) {
 export const readManifest = (path, runner) => openRun(path, runner).m;
 
 // lockedUpdate(file, update, { waitMs, staleMs }): file rewritten as update(text), text being its content or null when
-// there is none, under <file>.lock, a folder mkdir makes only while no other process holds it. So h2h runs of two
-// categories at once, which share a results dir, both merge key.json and lose no key. The new text goes to a temp file
-// renamed into place. A lock older than staleMs (60 s) was left by a dead run and is removed; after waitMs (30 s) of
-// waiting it throws. An update that throws writes nothing and releases the lock.
+// there is none, under <file>.lock, a folder mkdir makes only while no other process holds it, with the holder's pid in
+// it (owner). So h2h runs of two categories at once, which share a results dir, both merge key.json and lose no key. The
+// new text goes to a temp file renamed into place. A lock whose owner is dead, or older than staleMs (60 s), was left
+// by a killed run: it is removed under <file>.lock.break, a second mkdir lock, and checked again there, so two waiters
+// never both remove it (the second would remove the first's new lock). A live holder is waited for up to waitMs (30
+// s), then it throws: the lock is held for a write of a few ms. An update that throws writes nothing and releases the
+// lock.
+const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 export function lockedUpdate(file, update, { waitMs = 30000, staleMs = 60000 } = {}) {
   const lock = `${file}.lock`;
+  const brk = `${lock}.break`;
+  const age = (p) => { try { return Date.now() - statSync(p).mtimeMs; } catch { return null; } };
+  // left(): the lock is there and its holder is gone. An owner not written yet is a holder that has just taken it.
+  const left = () => {
+    const a = age(lock);
+    if (a === null) return false;
+    let pid = null;
+    try { pid = Number(readFileSync(join(lock, 'owner'), 'utf8')) || null; } catch { pid = null; }
+    return (pid !== null && !pidAlive(pid)) || a > staleMs;
+  };
   const t0 = Date.now();
   for (;;) {
-    try { mkdirSync(lock); break; } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-    }
-    let age = 0;
-    try { age = Date.now() - statSync(lock).mtimeMs; } catch { continue; }
-    if (age > staleMs) { rmSync(lock, { recursive: true, force: true }); continue; }
-    if (Date.now() - t0 > waitMs) throw new Error(`${lock} is held by another run for over ${waitMs / 1000} s`);
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    try {
+      mkdirSync(lock);
+      writeFileSync(join(lock, 'owner'), String(process.pid));
+      break;
+    } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    if (left()) {
+      try {
+        mkdirSync(brk);
+        try { if (left()) rmSync(lock, { recursive: true, force: true }); } finally { rmSync(brk, { recursive: true, force: true }); }
+        continue;
+      } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+        if ((age(brk) ?? 0) > staleMs) rmSync(brk, { recursive: true, force: true });
+      }
+    } else if (Date.now() - t0 > waitMs) throw new Error(`${lock} is held by another run for over ${waitMs / 1000} s`);
+    sleepMs(10);
   }
   try {
     let text = null;
