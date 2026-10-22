@@ -67,10 +67,12 @@ KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy 
 # repository; the settings files; Overrides; ignored floor keys; Set:; unknown keys. Set: lists known keys
 # whose value differs from a literal default (a Default cell that is one `value` in kernel/settings.md),
 # policy keys first. `overrides.<job>: off` is no override: kern's route stays, and a project skill with
-# the job's name is not matched. Over 600, each of Overrides, Set: and Unknown starts at its shortest form
-# and takes the room left in that order, so the Unknown list is cut first; a whole entry at a time, so no
-# character is split. A cut Overrides or Unknown list ends with `and N more` (`N not shown` when no entry
-# fits), a cut Set: with the "more" note. The main worktree, settings files and floor lines are never cut.
+# the job's name is not matched. Over 600, Overrides and Set: start at their shortest form (the full line
+# when it is shorter) and Unknown at none, and they take the room left in that order, so the Unknown list
+# is cut first and an unknown key never cuts an override; a whole entry at a time, so no character is
+# split. A cut Overrides or Unknown list ends with `and N more` (`N not shown` when no entry fits; Unknown
+# drops its line when that does not fit either), a cut Set: with the "more" note. The main worktree,
+# settings files and floor lines are never cut.
 # The 600 counts the plugin root in the note as {ROOT}, so the entries kept do not depend on where kern is
 # installed; the note prints the absolute path.
 settings_summary() {
@@ -156,6 +158,7 @@ EOT
     if [ "$n" -gt 0 ]; then
       body="$pre$body"
       if [ "$part" = set ]; then least="$pre$more"; else least="$pre $n not shown"; fi
+      [ "${#body}" -gt "${#least}" ] || least=$body
     fi
     case $part in
       ov) ov_line=$body ov_full=$body ov_n=$n ov_least=$least ;;
@@ -164,19 +167,21 @@ EOT
     esac
   done
   if [ $((${#out} + ${#ov_line} + ${#floor_line} + ${#set_line} + ${#unk_line})) -gt 600 ]; then
-    ov_line=$ov_least set_line=$set_least unk_line=$unk_least
+    ov_line=$ov_least set_line=$set_least unk_line=""
     for part in ov set unk; do
       case $part in
-        ov) items=$ov sep2="; " pre=$ov_pre full=$ov_full n=$ov_n line=$ov_line ;;
-        set) items="$pol$oth" sep2="; " pre=$set_pre full=$set_full n=$set_n line=$set_line ;;
-        *) items=$unk sep2=", " pre=$unk_pre full=$unk_full n=$unk_n line=$unk_line ;;
+        ov) items=$ov sep2="; " pre=$ov_pre full=$ov_full n=$ov_n line=$ov_line least=$ov_least ;;
+        set) items="$pol$oth" sep2="; " pre=$set_pre full=$set_full n=$set_n line=$set_line least=$set_least ;;
+        *) items=$unk sep2=", " pre=$unk_pre full=$unk_full n=$unk_n line=$unk_line least=$unk_least ;;
       esac
       [ "$n" -gt 0 ] || continue
       room=$((600 - ${#out} - ${#ov_line} - ${#floor_line} - ${#set_line} - ${#unk_line} + ${#line}))
       if [ "${#full}" -le "$room" ]; then
         line=$full
       else
-        # Keep each entry that still fits with the mark for the rest, in order.
+        # Unknown takes its shortest form only when it fits. Then keep each entry that still fits with the
+        # mark for the rest, in order.
+        [ "${#least}" -gt "$room" ] || line=$least
         body=$pre sep=" " rest=$items kept=0
         while [ -n "$rest" ]; do
           e=${rest%%"$nl"*}

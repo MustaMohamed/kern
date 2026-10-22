@@ -180,6 +180,22 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   has_line "Overrides (follow the project skill, say so in one line): 1 not shown"
 }
 
+@test "unknown keys never cut an override, and a short Set: line holds no more room than it needs" {
+  # Twelve same-name project skills fill 523 chars of Overrides; with Set: and an unknown key the block is
+  # 617. Only the Unknown list may give way, here as a whole line: no shortest form of it fits.
+  for job in commit define diagnose execute-plan finish-branch implement parallel-work plan prove-it recall self-review technical-writing; do
+    mkdir -p "$R/.claude/skills/$job"
+    printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
+  done
+  printf 'base_branch: develop\nfoo.bar: 1\n' >"$R/.claude/kern.local.yml"
+  start startup
+  summary
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  has_line "Overrides (follow the project skill, say so in one line): commit -> project skill commit; define -> project skill define; diagnose -> project skill diagnose; execute-plan -> project skill execute-plan; finish-branch -> project skill finish-branch; implement -> project skill implement; parallel-work -> project skill parallel-work; plan -> project skill plan; prove-it -> project skill prove-it; recall -> project skill recall; self-review -> project skill self-review; technical-writing -> project skill technical-writing"
+  has_line "Set: base_branch=develop"
+  [[ "$summary" != *"Unknown keys"* ]] || { echo "$summary"; return 1; }
+}
+
 @test "Main worktree names the main root only when the session's cwd is elsewhere" {
   RP=$(cd "$R" && pwd -P)
   start startup
