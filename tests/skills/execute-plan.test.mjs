@@ -161,6 +161,17 @@ test('execute-plan runs its task and final reviews in the foreground', () => {
   assert.ok(!s[6].includes('run_in_background'), s[6]);
 });
 
+test('the task test command names no worktree path and has no cd, in step 10 and in the implementer agent', () => {
+  // Audit C-I2, its text half (Task 17a P7): task-done runs the command in the worktree, and probe runs it again
+  // in a fork with the change reversed. A command or script that cds to the worktree's absolute path ran the
+  // reversed test in the unreversed worktree; probe now exits 3 for it (P4). agents/implementer.md said "start
+  // shell commands with `cd <WT> &&`", and plans often wrote `Run:` that way (lane C, I2).
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[10].includes('passed as `-- bash <path>`. Neither may `cd` or name the worktree\'s absolute path: task-done runs them there and in the fork.'), s[10]);
+  const rule = readDoc('agents/implementer.md').body.split('\n').find((l) => l.startsWith('1. Work only in WT.')) ?? '';
+  assert.ok(rule.includes('so start shell commands with `cd <WT> &&`; the test command you report has no `cd` and names WT\'s files by relative path, as the controller runs it in WT and in a fork.'), rule);
+});
+
 test('only the user\'s word skips the final review; task-done refuses a task no review approved', () => {
   // The user's "Only by my word" (2026-10-22, Task 16n): a gating review is skipped only when the user says so. The
   // kernel's Routing line states it for every route; task-done already refuses a tree no approved review saw.
