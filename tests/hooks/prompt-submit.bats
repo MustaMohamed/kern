@@ -58,11 +58,40 @@ expand() {
   [[ "$output" != *human* ]] || false
 }
 
+# The line keeps the rules settings.md states for an unattended run: a commit lands only on a branch that is
+# not protected, and only a shell script kern cannot parse is denied, since kern's own steps run
+# `bash <script>` (audit 2026-10-22, B11).
+@test "the per-prompt autopilot line names the non-protected branch for a commit and bans only unparseable scripts" {
+  expand kern:autopilot on
+  submit "next task"
+  [[ "$output" == *"autopilot ON: commit on a non-protected branch with exactly one -m '<msg>' or -F <file> in the repo,"* ]] || false
+  [[ "$output" == *"no run-time-built name, no unparseable shell script, no code piped to a shell, no gh alias;"* ]] || false
+  [[ "$output" != *"no shell script or code"* ]] || false
+}
+
 @test "autopilot on is refused when settings deny it" {
   mkdir -p "$R/.claude"; printf 'autopilot: denied\n' >"$R/.claude/kern.local.yml"
   expand kern:autopilot on
   [ "$(st autopilot)" = off ]
   [[ "$output" == *"autopilot denied by"* ]] || false
+}
+
+# A typed autopilot on whose state write fails says so, so the model does not guess why autopilot stayed off
+# (audit 2026-10-22, B10).
+@test "autopilot on whose state cannot be written says so and stays off" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  chmod 000 "$S"
+  [ ! -r "$S" ] || skip "this user reads a mode-000 file"
+  submit "/kern:autopilot on"
+  typed=$output
+  expand kern:autopilot on
+  expanded=$output
+  chmod 600 "$S"
+  [ "$(st autopilot)" = off ]
+  for o in "$typed" "$expanded"; do
+    [[ "$o" == *"kern: autopilot not turned on: the session state could not be written; retry."* ]] || { echo "$o"; return 1; }
+    [[ "$o" != *"autopilot ON:"* ]] || { echo "$o"; return 1; }
+  done
 }
 
 @test "wrapped prompts never switch: task notification, cross-session, scheduled task" {
@@ -400,14 +429,17 @@ commit_decision() {
 
 # The routing reminder (Task 16p, task-16-diagnosis-5; the user's "Add the reminder", 2026-10-22). The kernel's
 # Routing rule arrives once, at SessionStart; on the 2026-10-22 multi-diagnose runs Sonnet read no route for its
-# second task in 3 of 3 runs. Each later prompt gets one line; a session's first prompt gets none.
-REMINDER='kern: new request? Match it against the Routing table and Read its route first.'
+# second task in 3 of 3 runs. Each later prompt gets one line; a session's first prompt gets none. The line
+# names the override in the same sentence as the route, as the kernel's Routing rule does, or a model with a
+# project skill for the job reads kern's route first (audit 2026-10-22, B4).
+REMINDER='kern: new request? Match it against the Routing table; Read its route, or the override named for its job, first.'
 
 # reminders TEXT: how many lines of TEXT are the reminder.
 reminders() { printf '%s\n' "$1" | grep -cxF "$REMINDER" || true; }
 
-@test "the routing reminder is one short line" {
-  [ "${#REMINDER}" -le 80 ]
+@test "the routing reminder is one short line that names the override for the job" {
+  [ "${#REMINDER}" -le 120 ]
+  [[ "$REMINDER" == *"Read its route, or the override named for its job, first."* ]] || false
   grep -qF "$REMINDER" "$K/hooks/prompt-submit"
 }
 
