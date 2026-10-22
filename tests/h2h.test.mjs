@@ -196,6 +196,24 @@ test('finalFiles cuts each file at perFile characters and the whole block at tot
   } finally { rmSync(dirname(d), { recursive: true, force: true }); }
 });
 
+// Fix round 2 (P5 re-review, Minor A): git lists tracked changes, then untracked files, then ignored ones, so the cap
+// cut kern's ignored .kern/plans/ first and the grader scored kern without its plan. Plan files now come first.
+test('finalFiles lists every path with "plan" in it first, so each arm\'s plan survives the cap', () => {
+  const d = workspace(join(ROOT, 'evals', 'h2h', 'plan', 'rename-small', 'repo'), { name: 'app' });
+  try {
+    for (const [f, text] of [...[0, 1, 2, 3].map((i) => [`src/gen${i}.js`, `${'x'.repeat(19000)}\n`]), ['.kern/plans/p.md', 'kern plan\n'],
+      ['docs/plan.md', 'control plan\n'], ['docs/superpowers/plans/s.md', 'superpowers plan\n'], ['notes.md', 'notes\n']]) {
+      mkdirSync(dirname(join(d, f)), { recursive: true });
+      writeFileSync(join(d, f), text);
+    }
+    const out = finalFiles(d);
+    const heads = [...out.matchAll(/^--- (\S+)/gm)].map((m) => m[1]);
+    assert.deepEqual(heads.slice(0, 3).sort(), ['.kern/plans/p.md', 'docs/plan.md', 'docs/superpowers/plans/s.md'], heads.join(' '));
+    assert.ok(out.includes('--- .kern/plans/p.md\nkern plan\n'), 'kern\'s plan is in the block');
+    assert.match(out, /\[cut: \d+ more files\]$/, 'the cap still holds');
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); }
+});
+
 test('Task 17a G2: decoy and extra hits are counted by the label\'s kind in the key, from every list the grader used', () => {
   const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
   const git = { branch: 'feat/discounts', main: 'main', head: 'abc1234', commits: 2, recent: [] };
@@ -364,7 +382,9 @@ test('the review grader is told an extra counts neither as a match nor as a fals
   const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
   assert.match(t.rubric[0], /real problem/, 'rubric line 1 is the line the rule narrows');
   const p = graderPrompt(t, [{ id: 'arm-A', text: 'x' }, { id: 'arm-B', text: 'y' }]);
-  assert.ok(p.includes('For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".'), p);
+  // Fix round 2 (P5 re-review, Minor E): a finding that matches no label is counted, never named "none".
+  assert.ok(p.includes('For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or count it in "unmatched".'), p);
+  assert.ok(!p.includes('or "none"'), p);
   assert.ok(p.includes(rule), p);
   assert.ok(p.includes('"decoys":["d2"],"extras":["x1"],"unmatched":1'), 'the review reply example has extras');
   assert.ok(p.includes('"kind":"extra"'), 'the grader reads the extras in the labels');
@@ -467,7 +487,7 @@ const fields = { plan: { unsupported: 0 }, review: { matched: [], decoys: [], un
 const okGrades = (prompt, category) => JSON.stringify({ grades: blindOf(prompt).map((id) => ({ id, score: 7, why: 'w', ...fields[category] })) });
 const kernArms = (pick) => [{ id: 'kern', plugin: '.', dir: ROOT }, { id: 'control', plugin: null, dir: null }].filter((a) => !pick || pick.includes(a.id));
 const plainArm = (opts) => runOf(opts.pluginDirs.length ? [...started(opts.pluginDirs), resultEvent('done')] : [initOf([]), resultEvent('done')]);
-const driveH2H = ({ argv = ['--runs', '1'], tasks, arm = plainArm, grade = okGrades, tree = () => CLEAN, before = null, key = null, env = { PATH: process.env.PATH }, floorScan } = {}) => {
+const driveH2H = ({ argv = ['--runs', '1'], tasks, arm = plainArm, grade = okGrades, tree = () => CLEAN, before = null, key = null, env = { PATH: process.env.PATH }, floorScan, parse } = {}) => {
   const dir = mkdtempSync(join(tmpdir(), 'hm-'));
   const snapshots = join(dir, 'snapshots'); const results = join(dir, 'results');
   const committed = join(snapshots, 'h2h-sonnet-5-5-2026-10-22.json');
@@ -482,13 +502,15 @@ const driveH2H = ({ argv = ['--runs', '1'], tasks, arm = plainArm, grade = okGra
     calls.push(opts);
     if (!opts.prompts[0].startsWith('You grade')) return arm(opts, calls.length, { raw, beside });
     graderPrompts.push(opts.prompts[0]);
+    // A runaway re-ask would spend paid grader calls without end; a test stops at the fifth.
+    if (graderPrompts.length > 4 * tasks.length) throw new ClaudeRunError("stub grader: more grader calls than any test needs", true);
     const t = tasks.find((x) => opts.prompts[0].includes(x.prompts[0]));
     return runOf([resultEvent(grade(opts.prompts[0], t.category, byId))]);
   };
   let code; let thrown = null;
   try {
     code = h2hMain({ root: ROOT, argv, env, tasks, arms: kernArms, armIds: ['kern', 'control'], run, version: () => '9.9.9 (stand-in)', tree, snapshots, results,
-      ...(floorScan ? { floorScan } : {}), log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY });
+      ...(floorScan ? { floorScan } : {}), ...(parse ? { parse } : {}), log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY });
   } catch (e) { thrown = e; }
   return { code, thrown, calls, graderPrompts, lines, errors, raw, read, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null,
     beside, done: () => { rmSync(dir, { recursive: true, force: true }); for (const t of tasks) if (t.dir.startsWith(tmpdir())) rmSync(t.dir, { recursive: true, force: true }); } };
@@ -701,11 +723,20 @@ test('a grader reply that fails to parse or validate is re-asked once with the e
   const t3 = synthTask('plan');
   const notJson = driveH2H({ tasks: [t3], grade: (prompt, category) => (prompt.includes('could not be used') ? okGrades(prompt, category) : 'I cannot grade these.') });
   try { assert.equal(JSON.parse(notJson.committed).results.length, 2, 'a reply with no JSON is re-asked too'); } finally { notJson.done(); }
+  // Fix round 2 (P5 re-review, Minor C): the re-ask is bounded by a count, not by the first error's message.
+  const t4 = synthTask('plan');
+  const silent = driveH2H({ tasks: [t4], parse: () => { throw new Error(''); } });
+  try {
+    assert.equal(silent.thrown, null, String(silent.thrown));
+    assert.equal(silent.graderPrompts.length, 2, 'an error with no message is re-asked once, no more');
+    assert.match(silent.beside('all').voided[0].reason, /^h2h grader: the reply could not be used \(asked twice; first: h2h grader: the reply could not be used\)$/);
+  } finally { silent.done(); }
 });
 
 // Fix round 1 (P5 review, Minor 3): only a child process's failure (git, floor-scan) voids a task-run; any other
 // error is a harness fault, and it stops the run rather than turn every task-run into a VOID.
-test('a harness fault in an arm\'s attempt stops the h2h run, and what was graded stays beside the runs', () => {
+// Fix round 2 (P5 re-review, Minor D): root reads a mode-000 file, so the fault never happens; skipped there.
+test('a harness fault in an arm\'s attempt stops the h2h run, and what was graded stays beside the runs', { skip: process.getuid?.() === 0 && 'root reads a mode-000 file' }, () => {
   const t = synthTask('plan');
   const arm = (opts) => {
     mkdirSync(join(opts.cwd, '.kern'), { recursive: true });

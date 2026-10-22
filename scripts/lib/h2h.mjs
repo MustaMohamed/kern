@@ -223,7 +223,7 @@ export function graderPrompt(task, outputs) {
     `You grade ${outputs.length} anonymous attempts at the same ${task.category} task. You do not know which tool made which.`,
     'Score each attempt 0 to 10 on the rubric. Judge only what each attempt shows; a claim it does not support with a command and its output earns nothing.',
     "Each attempt's block opens with git facts read from its workspace before it started. Its session's git status showed it the branch, the main branch, HEAD's short SHA and the recent commits with their subjects, so a claim that matches those is supported, though no command printed it. It was not shown the remotes, so a claim about a remote still needs a command and its output. A claim that contradicts any fact is unsupported.",
-    ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".', EXTRA_RULE] : []),
+    ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or count it in "unmatched".', EXTRA_RULE] : []),
     ...(task.category === 'plan' ? ['Count the claims about the repo that neither the fixture files nor the git facts its session was shown support.'] : []),
     // P5 review, Important 1: the reply shape was shown only by an example with non-empty values.
     'Give every field for every attempt: [] when no label matches, 0 when there is nothing to count.',
@@ -275,12 +275,17 @@ export function parseGrades(text, ids, task = null) {
 // finalFiles(cwd, perFile, total): what an arm's session left in its workspace, for the grader (Task 17a, G1): every
 // file `git status --porcelain --ignored --untracked-files=all` lists, changed, untracked or ignored, each as
 // `--- <path>` then its final text, cut at perFile characters; a file gone, a symlink or a binary file says so in
-// place of its text. The block stops before it would pass total characters and ends `[cut: N more files]`, so an
-// arm that ran npm install or wrote build output cannot overflow the grader's prompt (P5 review, Minor 4). A plan
+// place of its text. Every path with "plan" in it comes first, in git's order, then the rest: git lists ignored
+// files last, so kern's .kern/plans/ would be the first cut, against docs/plan.md or docs/superpowers/plans/ of the
+// other arms (P5 re-review, Minor A). The block stops before it would pass total characters and ends
+// `[cut: N more files]`, so an arm that ran npm install or wrote build output cannot overflow the grader's prompt
+// (P5 review, Minor 4). A plan
 // lands in .kern/, which .git/info/exclude ignores, so `git diff` never shows it, and an Edit after the first Write
 // changed what the grader must read: the runner once gave it each Write's input.
 export function finalFiles(cwd, perFile = 20000, total = 60000) {
-  const entries = statusEntries(cwd, ['--ignored', '--untracked-files=all']);
+  const all = statusEntries(cwd, ['--ignored', '--untracked-files=all']);
+  const isPlan = ({ path }) => /plan/i.test(path);
+  const entries = [...all.filter(isPlan), ...all.filter((e) => !isPlan(e))];
   const blocks = [];
   let size = 0;
   for (const [n, { path }] of entries.entries()) {
@@ -305,10 +310,10 @@ export function finalFiles(cwd, perFile = 20000, total = 60000) {
 
 const USAGE = 'usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--task <category/id>] [--arms a,b] [--runs N] [--model <m>] [--grader-model <m>] [--allow-dirty] [--dry-run]';
 
-// h2hMain({ root, argv, env, tasks, arms, armIds, run, version, tree, snapshots, results, floorScan, log, error, now }):
+// h2hMain({ root, argv, env, tasks, arms, armIds, run, version, tree, snapshots, results, floorScan, parse, log, error, now }):
 // what scripts/h2h.mjs runs, its exit code returned, with the seams a test needs: the tasks, the arms (arms(pick),
 // loadArms by default), the run (runClaude, or a stub), the Claude Code version, the tree record, the snapshot and
-// results dirs and the floor-scan script (Task 17a). env is the caller's environment.
+// results dirs, the floor-scan script and the grade parser (parseGrades) (Task 17a). env is the caller's environment.
 // - Flags (h2hFlags) are read by the shared parser: any other word is a usage error (2) before anything runs.
 // - Every run but a dry run refuses a kern tree with uncommitted changes it would measure, unless --allow-dirty, a
 //   --category or --task run too, since those may be the evidence (G11; P5 review, Minor 1). The snapshot records
@@ -331,7 +336,7 @@ const USAGE = 'usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--
 // Exit: gateExit (0 pass, 1 a category failed, 3 one incomplete), 2 for a usage error or no task matched.
 export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms: armsOf = (pick) => loadArms(root, pick), armIds = null, run = runClaude, version = claudeVersion,
   tree = treeRecord, snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), floorScan = join(root, 'scripts', 'floor-scan'),
-  log = console.log, error = console.error, now = new Date() }) {
+  parse = parseGrades, log = console.log, error = console.error, now = new Date() }) {
   const usage = (msg) => { error(`h2h: ${msg}\n${USAGE}`); return 2; };
   const allTasks = all ?? loadTasks(root);
   const allArms = armIds ?? JSON.parse(readFileSync(join(root, 'evals', 'h2h', 'arms.json'), 'utf8')).map((a) => a.id);
@@ -390,18 +395,21 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
   const gradeTaskRun = (t, attempts) => {
     const prompt = graderPrompt(t, attempts);
     let first = '';
-    for (;;) {
-      const text = first ? `${prompt}\n\nA reply to this prompt could not be used: ${first}. Reply again with JSON only, in the shape above, with every field for every attempt.` : prompt;
+    // Two asks at most, counted, whatever the first error says (P5 re-review, Minor C).
+    for (let ask = 1; ask <= 2; ask++) {
+      const text = ask > 1 ? `${prompt}\n\nA reply to this prompt could not be used: ${first}. Reply again with JSON only, in the shape above, with every field for every attempt.` : prompt;
       const gdir = mkdtempSync(join(tmpdir(), 'g-'));
       let graded;
       try { graded = tryRun({ cwd: gdir, prompts: [text], model: GRADER, maxTurns: 1 }, run); } finally { rmSync(gdir, { recursive: true, force: true }); }
       if (graded.problem) return { problem: `grader: ${graded.problem}` };
       const reply = finalText(graded.run.events);
-      try { return { grades: parseGrades(reply, attempts.map((x) => x.id), t), reply, regrade: first }; } catch (err) {
-        if (first) return { problem: `${err.message} (asked twice; first: ${first})` };
-        first = err.message;
+      try { return { grades: parse(reply, attempts.map((x) => x.id), t), reply, regrade: ask > 1 ? first : '' }; } catch (err) {
+        const why = err.message || 'h2h grader: the reply could not be used';
+        if (ask > 1) return { problem: `${why} (asked twice; first: ${first})` };
+        first = why;
       }
     }
+    throw new Error('h2h: gradeTaskRun asked more than twice');
   };
   // taskRun(t, r): task t's run r: each arm's attempt, then one blind grade of them all, its rows in results and its
   // key in key; a task-run that cannot be graded goes to voided with the reason.

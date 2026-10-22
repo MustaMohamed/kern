@@ -54,9 +54,10 @@ export function treeRecord(root) {
   return { commit: head, dirty: changes.length > 0, changes };
 }
 
-// dirtyRefusal(tree): the usage message that stops a run which would write a committed snapshot of a
-// tree with uncommitted changes, or '' for a clean tree. --allow-dirty runs it anyway, and the snapshot records
-// the changes.
+// dirtyRefusal(tree): the usage message that stops a run of a tree with uncommitted changes it would measure, or
+// '' for a clean tree. Each runner refuses with it every run that writes a committed snapshot, and h2h every run
+// but a dry one, since its --category runs may be the evidence. --allow-dirty runs it anyway, and the snapshot
+// records the changes.
 export function dirtyRefusal(tree) {
   if (!tree.dirty) return '';
   const what = tree.problem || `${tree.changes.length} uncommitted change(s) a run would measure: ${tree.changes.slice(0, 5).join(', ')}${tree.changes.length > 5 ? ', ...' : ''}`;
