@@ -11,6 +11,7 @@
   {"id": "row-technical-writing", "kind": "positive", "route": "technical-writing", "files": ["node-bug"], "origin": true, "branch": "fix-sum", "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"]},
   {"id": "row-context", "kind": "positive", "route": "context", "route_file": "kernel/context.md", "files": ["node-bug"]},
   {"id": "neg-casual", "kind": "negative", "route": null, "files": ["node-bug"], "prompts": ["What does git rebase --onto do, in one sentence?"]},
+  {"id": "neg-codebase-question", "kind": "negative", "route": null, "files": ["node-bug", "format-bug"], "prompts": ["How does money() in src/format.js round?"]},
   {"id": "neg-opt-out", "kind": "negative", "route": null, "files": ["node-bug"], "prompts": ["Without any workflow or skill, just tell me what sum(2, 3) returns in src/sum.js."]},
   {"id": "neg-kern-off", "kind": "negative", "route": null, "files": ["node-bug"], "settings": "kern: off", "prompts": ["npm test fails on the sum test. Find out why and fix it."]},
   {"id": "neg-project-skill", "kind": "negative", "route": null, "files": ["node-bug", "project-skill"], "project_skill": "diagnose", "prompts": ["npm test fails on the sum test. Find out why and fix it."]},

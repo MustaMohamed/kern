@@ -30,12 +30,25 @@ test('the kernel table holds every route row, so no task reads a second file to 
 
 test('a change routes even when the user calls it quick, and each new task reads its route again', () => {
   // 2026-10-20 behaviour runs: under pressure prompts most runs skipped routing, and in multi-diagnose the
-  // second task never read the route again. Only a question context answers is exempt: recall's row prompt,
-  // "Where did I leave off?", is a question that must still route (Task 16d review, Important 1).
+  // second task never read the route again. recall's row prompt, "Where did I leave off?", is a question that must
+  // still route (Task 16d review, Important 1): it matches its own row.
   assertContains('kernel/kernel.md', [
-    'A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn or a question context answers matches nothing.',
+    'A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn or a question that changes nothing matches nothing: answer it, reading what you need.',
     'Each new task reads its route, even one read earlier.',
   ]);
+});
+
+test('a question that changes nothing is answered, reading what it needs; only a change with no match goes to plan', () => {
+  // 2026-10-22 Opus audit, B2: "only a casual turn or a question context answers matches nothing" left a codebase
+  // question that needs reads with no row, and "Non-trivial work with no match: plan." sent it to plan, whose step 1
+  // routes to define: a spec interview for a question. The negative adherence case asks one such question.
+  assertContains('kernel/kernel.md', ['A non-trivial change with no match: plan.']);
+  const text = readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8');
+  assert.doesNotMatch(text, /Non-trivial work with no match/);
+  const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
+  assert.deepEqual(cases.find((c) => c.id === 'neg-codebase-question'), {
+    id: 'neg-codebase-question', kind: 'negative', route: null, files: ['node-bug', 'format-bug'], prompts: ['How does money() in src/format.js round?'],
+  });
 });
 
 test('a user opt-out skips only the routes it names, and its skip line comes before any tool call', () => {
