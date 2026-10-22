@@ -39,6 +39,7 @@ wt_exclude_dir() {
 }
 
 # wt_include DST: copy untracked files that MAIN/.worktreeinclude names (gitignore syntax) into DST.
+# An entry that holds worktree.dir, such as .claude/, is refused: copying it would copy every worktree.
 wt_include() {
   local dst=$1 f wtrel
   [ -f "$MAIN/.worktreeinclude" ] || return 0
@@ -48,6 +49,12 @@ wt_include() {
     while IFS= read -r f; do
       f=${f%/}
       case "$f" in "$wtrel"|"$wtrel"/*|.kern|.kern/*) continue ;; esac
+      case "$wtrel" in
+        "$f"/*)
+          echo "wt: .worktreeinclude names $f/, which holds the worktree dir $wtrel; not copied (name the files inside it instead)" >&2
+          continue
+          ;;
+      esac
       [ -e "$dst/$f" ] && continue
       mkdir -p "$dst/$(dirname "$f")"
       cp -R "$MAIN/$f" "$dst/$f"
