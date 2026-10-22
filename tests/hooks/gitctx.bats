@@ -1156,8 +1156,8 @@ hreev_g00() {
   [ "$_GW_REEVAL" = "$file" ]
   [ "$_G00_REEVAL" = "$file" ]
   # Only reeval.awk defines hreev; the two sources load it, they do not carry their own copy.
-  ! grep -q 'function hreev' "$KERN_ROOT/hooks/guards/g00-unproven.sh"
-  ! grep -q 'function hreev' "$KERN_ROOT/hooks/lib/gitctx.sh"
+  ! grep -q 'function hreev' "$KERN_ROOT/hooks/guards/g00-unproven.sh" || false
+  ! grep -q 'function hreev' "$KERN_ROOT/hooks/lib/gitctx.sh" || false
 }
 
 @test "the two re-eval call sites agree with the shared matcher on every differential input" {
