@@ -17,12 +17,20 @@ if [ -n "$bare" ]; then
   exit 1
 fi
 # No bash fails a test on a command negated with ! unless it is the test's last command: errexit ignores
-# it. Refuse a ! line with no || that a later command line follows before the closing brace.
+# it. Refuse a ! command (backslash-continued lines joined) that a later command line follows before a
+# closing brace, unless it ends in || false, || return, || exit, or a || { ...; } that ends in one of them.
 bang=$(find "$root/tests" -name '*.bats' -exec awk '
-  FNR == 1 { p = "" }
-  /^[[:space:]]*(#|$)/ { next }
-  p != "" { if ($0 !~ /^}[[:space:]]*$/) print p; p = "" }
-  /^[[:space:]]+![[:space:]]/ && !/\|\|/ { p = FILENAME ":" FNR ":" $0 }
+  FNR == 1 { p = ""; acc = "" }
+  {
+    if (acc == "") { at = FNR; line = $0 } else line = acc " " $0
+    if (line ~ /\\$/) { acc = substr(line, 1, length(line) - 1); next }
+    acc = ""
+  }
+  line ~ /^[[:space:]]*(#|$)/ { next }
+  p != "" { if (line !~ /^[[:space:]]*}/) print p; p = "" }
+  line ~ /^[[:space:]]+![[:space:]]/ && line !~ /\|\|[[:space:]]*(false|return([[:space:]]+[0-9]+)?|exit([[:space:]]+[0-9]+)?|\{.*;[[:space:]]*(false|return([[:space:]]+[0-9]+)?|exit([[:space:]]+[0-9]+)?)[[:space:]]*;?[[:space:]]*\})[[:space:]]*$/ {
+    p = FILENAME ":" at ":" line
+  }
 ' {} + || true)
 if [ -n "$bang" ]; then
   echo "a ! command before the test's last line never fails it; write run ! <command>, or end it with || false:" >&2
