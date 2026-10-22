@@ -643,7 +643,7 @@ disable-model-invocation: true
 ---
 ```
 
-**2. Purpose.** The author finds what the diff breaks beyond itself and runs every cheap check before anyone else spends tokens. Reached by the kernel row "review requested" when the diff is the user's own and no PR exists, by `finish-branch` step 4, or typed `/kern:self-review`.
+**2. Purpose.** The author finds what the diff breaks beyond itself and runs every cheap check before anyone else spends tokens. Reached by the kernel row "review requested" when the diff is the user's own and no PR exists, by `finish-branch` step 4, or typed `/kern:self-review`. The SKILL.md leaves the "Reached by" sentence out to stay within its 7,000 bytes (Task 16o), as plan's and define's do.
 
 **3. Inputs.** `base_branch`, `verify.fast`, `test.focused`, `review.rules`, `review.taxonomy`, `review.builtin` (`on`), `review.builtin.self_effort` (`low`), `review.builtin.max_findings` (15), `lessons`, `scope_threshold`, `spec.source` and `model.reviewer` (`sonnet`) for the spec lane.
 
@@ -655,12 +655,12 @@ disable-model-invocation: true
 4. Spec lane: when `spec.source` or a plan names a spec for this work, dispatch `kern:task-reviewer` on `model.reviewer` in mode `whole-branch` with the package and the spec's acceptance lines: what is missing or partial, what was not asked for, and what looks implemented but wrong, each quoting the spec line. No spec: `skip: no spec`. Keep its findings apart from the standards findings. [PO code-review:68-80; BV self-review]
 5. Walk the `review.rules` items the diff touches; the rules are already in context. [PO code-review:36]
 6. Blast radius, when a changed symbol has callers outside its directory (`references/blast-radius.md`): sweep every writer with `rg` and read each one; look where grep stops; push the one fact the change is safe because of down to "ran it"; list Risks and Cleared separately. [PS blast-radius:19-46; PS blast-radius:35 (where grep stops)]
-7. Probes: for each new guard test, `probe --exclude-tests <wt> <package>.patch -- <test>`; for each new conditional, one `probe --mutate <file>:<line> <wt> -- <test>`, which mutates a throwaway fork, never the worktree. [AD code-review-and-quality:164; USR]
+7. Probes: for each new guard test, `probe --exclude-tests <wt> <package>.patch -- <test>`; for each new conditional, one `probe --mutate <file>:<line> <wt> -- <test>`, which mutates a throwaway fork, never the worktree. Only `probe: fail-then-pass ok` and `probe: mutation caught` pass; any other exit fails the check, except the new-module exit 3, which `references/claim-checks.md` states with every other exit (Task 16o moved that detail out of SKILL.md to fit its cap). [AD code-review-and-quality:164; USR]
 8. Doubt cycle, for non-trivial decisions only (`references/doubt-cycle.md`): a fresh subagent gets the artifact and the contract, never your claim or reasoning; reconcile each point as contract misread, actionable, trade-off or noise; at most 3 cycles. [AD doubt-driven-development:16-22,62-191; AD doubt-driven-development:215 (doubt theater)]
-9. Verdict, with findings in `review.taxonomy` classes and a "Declined to judge" list (each behaviour you set aside as outside the spec, with the reason): `ready`, `fix first`, `rebase first` or `split`. Split when a round fixes the previous round's fixes, or when fixing findings pushed the diff past `scope_threshold`. [USR; SP code-reviewer.md:43-48 (Declined to judge)]
+9. Verdict, with findings in `review.taxonomy` classes and a "Declined to judge" list (each behaviour you set aside as outside the spec, with the reason): `ready`, `fix first`, `rebase first` or `split`. Split when a round fixes the previous round's fixes, or when fixing findings pushed the diff past `scope_threshold`; the later-round rule is in `references/rounds.md` (Task 16o), and a first round never splits. A finding is a defect on an added or changed line, given with its `path:line` and how it fails; a `nit` is one too small to block, and meets the same rule (the user's "Keep, but limited", 2026-10-22: nits stay, but only for real defects too small to block). Not findings: a change that keeps behaviour (a moved test, an equivalent helper or a rename) and a justified floor-scan or claim-check hit, each listed under Cleared with the check that cleared it; a missing test, which is one line under the finding it would have caught; a guess kern would call probably fine; style advice; and, in a first round, a split suggestion. On 2026-10-22 six of kern's 11 head-to-head review false alarms sat under Nits: the behaviour-keeping test move, a missing test filed as its own item, a probably-fine rounding guess and a split suggestion (Task 16o). [USR; SP code-reviewer.md:43-48 (Declined to judge)]
 10. Propose lesson candidates for `lessons`; write them only on yes.
 
-**5. Outputs.** Chat report (findings page when installed).
+**5. Outputs.** Chat report: the deterministic output, the findings, the Declined to judge list, the Cleared list (what was checked and is fine, with the check; Task 16o) and the verdict (findings page when installed).
 
 **6. Stops; autopilot.** `fix first` or `split` stops `finish-branch`. Under autopilot the same; lessons are not written.
 
@@ -669,6 +669,7 @@ disable-model-invocation: true
 - The diff changes a shared function with five external callers: the writer sweep lists them with paths, and one fact is run.
 - Project has `.claude/skills/self-review/`: defers in one line.
 - Built-in `code-review` missing: a skip line; the other steps run.
+- The diff moves a test into a `describe` block and renames a variable, keeping behaviour: neither is a finding, and each is under Cleared with its check (Task 16o).
 
 The full checklist is `tests/skills/self-review.acceptance.md` (M2a), ticked in the M2b pilot.
 
