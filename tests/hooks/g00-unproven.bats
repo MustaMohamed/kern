@@ -382,16 +382,25 @@ g00_all() {
 
 @test "a parameter expansion that re-evaluates a stored string is denied under autopilot" {
   # x='$(cmd)' stores the substitution as literal text. zsh's ${(e)x}, a flag group that holds e outside
-  # its delimited arguments (${(Le)x}, ${(j:):e)x}), zsh's (P), (%) and (%%) flags, bash 5.3's ${x@P}, and
-  # bash's ${!y} indirection on a name holding a subscript all expand a stored value again and run cmd, as
-  # arithmetic runs a stored subscript; git_words reads the single quote as literal text (Opus audit A11,
-  # P3 review add-on). Each form here was measured to run a stored command in zsh 5.9, bash 3.2 or bash
-  # 5.3. Outside autopilot no guard votes, an M3 limit.
+  # its delimited arguments (${(Le)x}, ${(j:):e)x}, and ${(j)e)e)x} where ) is the delimiter), zsh's (P)
+  # flag, bash 5.3's ${x@P}, and bash's indirection on a name holding a subscript (${!y}, ${!y[0]},
+  # ${!y[1]:-z}, ${!x@P}, ${!z@P}, ${!y@Q}, ${!y@U}, ${!a[0]}, ${!a[$i]}, ${!a[@]:-q}, ${!@}, ${!*}) all
+  # expand a stored value again and run cmd, as arithmetic runs a stored subscript; git_words reads the
+  # single quote as literal text (Opus audit A11, P3 review add-on and re-review, P1 review). zsh's (%)
+  # and (%%) flags run a stored command only under setopt promptsubst, which kern cannot see, so they
+  # count too. Each other form here was measured to run a stored command in zsh 5.9, bash 3.2 or bash
+  # 5.3. An ANSI-C $'\'' before the expansion does not hide it: inside $'...' a backslash escapes the next
+  # byte, so \' does not close the string (P1 review Minor 1). The matcher mirrors P3's here-doc matcher
+  # hreev. Outside autopilot no guard votes, an M3 limit.
   local sub='$(git push --force origin main)'
   local c
   for c in "x='$sub'; echo \${(e)x}" "x='$sub'; echo \"\${(Le)x}\"" "x='$sub'; echo \${(j:):e)x}" \
-    "x='$sub'; echo \${(pj:x:e)x}" 'echo ${(P)y}' 'echo ${(%)x}' 'echo ${(%%)x}' \
-    "x='$sub'; echo \${x@P}" 'echo ${!y}' 'echo ${!y:-z}' 'echo ${!1}'; do
+    "x='$sub'; echo \${(pj:x:e)x}" "x='$sub'; echo \${(j)e)e)x}" "x='$sub'; echo \${(s)e)e)x}" \
+    'echo ${(P)y}' 'echo ${(%)x}' 'echo ${(%%)x}' \
+    "x='$sub'; echo \${x@P}" 'echo ${!y}' 'echo ${!y:-z}' 'echo ${!1}' 'echo ${!y[0]}' \
+    'echo ${!y[1]:-z}' 'y=x; echo ${!x@P}' 'echo ${!z@P}' 'echo ${!y@Q}' 'echo ${!y@U}' \
+    'echo ${!a[0]}' 'echo ${!a[$i]}' 'echo ${!a[@]:-q}' 'echo ${!@}' 'echo ${!*}' \
+    "x='$sub'; echo \$'\\''\${(e)x}" "x='$sub'; echo \$'\\''\${x@P}"; do
     set_autopilot on
     gx "$c" ""
     [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
@@ -401,13 +410,33 @@ g00_all() {
     [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
   done
   # An e inside a delimited flag argument is not the eval flag; ${(L)x}, ${x@Q}, the bash list and
-  # array-key indirections, and a flag group in single quotes do not re-evaluate.
+  # array-key indirections, and a flag group in single quotes do not re-evaluate. ${!} and $! are the
+  # last background pid, a special parameter, not an indirection (P3 un-flags ${!} too).
   set_autopilot on
   for c in "x='$sub'; echo \${(s:e:)x}" "x='$sub'; echo \${(l:5::e:)x}" "x='$sub'; echo \${(L)x}" \
-    "x='$sub'; echo \${x@Q}" 'echo ${!a[@]}' 'echo "${!pre@}"' 'echo ${!pre*}' \
-    "echo '\${(e)x}' '\${x@P}' '\${!y}'"; do
+    "x='$sub'; echo \${x@Q}" 'echo ${!a[@]}' 'echo ${!a[*]}' 'echo "${!pre@}"' 'echo ${!pre*}' \
+    'echo ${!}' 'echo $!' "echo '\${(e)x}' '\${x@P}' '\${!y}'" "echo \$'it\\'s \${(e)x}'"; do
     gx "$c" ""
     [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "an ANSI-C \$'...' string does not hide a single-quoted substitution from the arithmetic rules" {
+  # Inside $'...' a backslash escapes the next byte, so $'\'' is one quote character and the string ends
+  # at the third quote. Read as a plain single quote, the walk closed early and saw the next single-quoted
+  # span as unquoted, so a stored subscript (X=$'\'' y='a[$(cmd)]'; echo $((y))) and an arithmetic
+  # builtin's argument (X=$'\'' let 'a[$(cmd)]') went through; both run cmd in bash 3.2, bash 5.3 and zsh
+  # 5.9 (P1 review Minor 1). Outside autopilot no guard votes, an M3 limit.
+  local sub='$(git push --force origin main)'
+  local c
+  for c in "X=\$'\\'' y='a[$sub]'; echo \$((y))" "X=\$'\\'' let 'a[$sub]'"; do
+    set_autopilot on
+    gx "$c" ""
+    [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
+    [[ "$output" == *"G00: under autopilot kern denies what it cannot read: "* ]] || { echo "on: $c -> $output"; return 1; }
+    set_autopilot off
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
   done
 }
 

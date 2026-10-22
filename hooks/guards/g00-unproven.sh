@@ -26,9 +26,9 @@
 # - it holds, outside single quotes, a parameter expansion that re-evaluates the stored string it reads:
 #   a zsh flag group with an e flag outside its delimited arguments (${(e)x}, ${(Le)x}, ${(j:):e)x}) or a
 #   P, % or %% flag (${(P)y}, ${(%)x}); the bash @P transform (${x@P}); or bash indirect expansion
-#   ${!name} that resolves a name holding a subscript. zsh and bash 5.3 run a $( ) or backtick in the
-#   value, which git_words read where it was stored, often as literal single-quoted text. Autopilot
-#   denies; interactively no guard votes (M3).
+#   (${!y}, ${!y[0]}, ${!z@P}, ${!@}) that resolves a name holding a subscript. zsh and bash 5.3 run a
+#   $( ) or backtick in the value, which git_words read where it was stored, often as literal
+#   single-quoted text. Autopilot denies; interactively no guard votes (M3).
 # Accepted limits, as a script file run by an interpreter is: the inline code, here-doc or pipe of an
 # interpreter other than a shell (python -c, node -e or -p, perl -e or -E, ruby -e, php -r, deno
 # eval, osascript -e, lua -e, R -e, julia -e, pwsh -c, `python3 - <<EOF`); a program or script
@@ -159,12 +159,17 @@ _G00_AWK='
         if (c == "`" || (c == "$" && C[i + 1] == "(")) return 1
         continue
       }
+      # An ANSI-C dollar-single-quote span ($ then a single quote): a backslash escapes the next byte, so
+      # it is not a plain single quote (A10). Its own content is parked for M3; it is tracked only so a
+      # following single-quoted span is read as single-quoted, not as unquoted (re-review Minor 1).
+      if (q == "c") { if (c == "\\") i++; else if (c == sq) q = ""; continue }
       if (q == "\"") {
         if (c == "\\" && index("\"\\$`", C[i + 1])) i++
         else if (c == "\"") q = ""
         continue
       }
       if (c == "\\") { i++; continue }
+      if (c == "$" && C[i + 1] == sq) { i++; q = "c"; continue }
       if (c == sq) q = sq
       else if (c == "\"") q = "\""
     }
@@ -192,6 +197,9 @@ _G00_AWK='
         p = c
         continue
       }
+      # An ANSI-C dollar-single-quote span (see g0_sqsub): tracked so a following single-quoted span is
+      # read as single-quoted (re-review Minor 1). Its own content is parked for M3.
+      if (q == "c") { if (c == "\\") i++; else if (c == sq) q = ""; p = ""; continue }
       p = c
       if (q == "\"") {
         if (c == "\\" && index("\"\\$`", C[i + 1])) i++
@@ -199,6 +207,7 @@ _G00_AWK='
         continue
       }
       if (c == "\\") { i++; continue }
+      if (c == "$" && C[i + 1] == sq) { i++; q = "c"; p = ""; continue }
       if (c == sq) q = sq
       else if (c == "\"") q = "\""
     }
@@ -206,67 +215,67 @@ _G00_AWK='
   }
   # g0_reeval(s): true when s holds, outside single quotes, a parameter expansion that re-evaluates its
   # stored value and runs a $( ) or backtick kept in it, often as single-quoted literal text (as
-  # arithmetic runs one in a stored subscript). Four forms, each proven to run a stored command:
-  #   - a zsh flag group with an `e` flag outside any delimited flag argument (${(e)x}, ${(Le)x},
-  #     ${(j:):e)x}), or a `P`, `%` or `%%` flag (${(P)y}, ${(%)x}, ${(%%)x});
+  # arithmetic runs one in a stored subscript):
+  #   - a zsh flag group (g0_zflags) with an `e` flag outside any delimited argument (${(e)x}, ${(Le)x},
+  #     ${(j:):e)x}, ${(j)e)e)x}), or a `P`, `%` or `%%` flag (${(P)y}, ${(%)x}, ${(%%)x});
   #   - the bash @P transform (${x@P});
-  #   - bash indirect expansion ${!name}, which resolves the value of name and evaluates a subscript in
-  #     it (y=a[$(cmd)]; ${!y}); not the ${!pre*}, ${!pre@}, ${!arr[@]} or ${!arr[*]} list forms.
-  # The flag-group walk follows zsh (g0_zflags): a flag with a delimited argument (j s l r Z _ I g, with
-  # l and r taking up to three) skips from its delimiter to the matching close, so an `e` inside an
-  # argument (${(s:e:)x}) is not a flag. ${(L)x} and ${x@Q} do not re-evaluate. P3 keeps a twin of this
-  # matcher for here-doc bodies, which P20 unifies later.
+  #   - bash indirect expansion (g0_indirect) that resolves a name whose value may hold a subscript
+  #     (${!y}, ${!y[0]}, ${!z@P}, ${!@}, ${!*}); not ${!pre*}, ${!pre@}, ${!arr[@]}, ${!arr[*]} or ${!}.
+  # ${(L)x} and ${x@Q} do not re-evaluate. g0_zflags and g0_indirect mirror P3 here-doc matcher hreev,
+  # so the two copies stay in step until one shared matcher replaces them (P20, M3).
   function g0_reeval(s,   nn, C, i, c, q) {
     nn = split(s, C, ""); q = ""
     for (i = 1; i <= nn; i++) {
       c = C[i]
       if (q == sq) { if (c == sq) q = ""; continue }
+      # An ANSI-C dollar-single-quote span (see g0_sqsub): a backslash escapes the next byte, so the span
+      # is tracked and a following ${(e)x} outside it is still read as unquoted (re-review Minor 1).
+      if (q == "c") { if (c == "\\") i++; else if (c == sq) q = ""; continue }
       if (c == "\\") { i++; continue }
       if (c == "\"") { q = q == "\"" ? "" : "\""; continue }
+      if (c == "$" && C[i + 1] == sq && q == "") { i++; q = "c"; continue }
       if (c == sq && q == "") { q = sq; continue }
       if (c != "$" || C[i + 1] != "{") continue
       if (C[i + 2] == "(") { if (g0_zflags(C, i + 3, nn)) return 1 }
-      else if (C[i + 2] == "!") { if (g0_indirect(C, i + 3, nn)) return 1 }
+      else if (C[i + 2] == "!") { if (g0_indirect(C, i + 3, nn) || g0_atp(C, i + 3, nn)) return 1 }
       else if (g0_atp(C, i + 2, nn)) return 1
     }
     return 0
   }
-  # g0_zflags(C, p, nn): true when the zsh flag group starting at p (just after `${(`) holds an `e`, `P`
-  # or `%` flag outside any delimited argument. Stops at the `)` that closes the group.
-  function g0_zflags(C, p, nn,   c) {
-    while (p <= nn) {
+  # g0_zflags(C, p, nn): mirrors the P3 hreev flag walk, so the two copies judge a flag group the same way.
+  # True when the zsh flag group that begins at p (just after `${(`) holds an `e`, `P` or `%` flag outside
+  # a delimited argument. j s Z _ I g take one argument, l and r up to three, each from its delimiter to
+  # the match ( ) [ ] { } < > or the same byte (so a `)` delimiter is read as one, ${(j)e)e)x}); a
+  # delimiter at end of input, or an argument that never closes, counts. The group ends at the first `)`
+  # that is not a delimiter.
+  function g0_zflags(C, p, nn,   c, d, e, m) {
+    for (; p <= nn && C[p] != ")"; p++) {
       c = C[p]
-      if (c == ")") return 0
       if (c == "e" || c == "P" || c == "%") return 1
-      if (c == "j" || c == "s" || c == "Z" || c == "_" || c == "I" || c == "g" || c == "l" || c == "r")
-        p = g0_skipargs(C, p + 1, nn, (c == "l" || c == "r") ? 3 : 1)
-      else p++
+      if (index("jsZ_Ig", c)) m = 1
+      else if (c == "l" || c == "r") m = 3
+      else continue
+      d = C[p + 1]
+      e = d == "(" ? ")" : d == "[" ? "]" : d == "{" ? "}" : d == "<" ? ">" : d
+      if (d == "") return 1
+      for (; m > 0 && C[p + 1] == d; m--) {
+        for (p += 2; p <= nn && C[p] != e; p++) ;
+        if (p > nn) return 1
+      }
     }
     return 0
   }
-  # g0_skipargs(C, p, nn, reps): skips up to reps delimited arguments starting at p, each from its opening
-  # delimiter to the matching close (( ) [ ] { } < >, else the same byte); returns the index after them. A
-  # second or third argument (l and r) is taken only while the next byte opens one with the same delimiter.
-  function g0_skipargs(C, p, nn, reps,   d, e, n) {
-    for (n = 0; n < reps; n++) {
-      if (p > nn) return p
-      d = C[p]
-      if (d == ")" || d == "") return p
-      e = d == "(" ? ")" : d == "[" ? "]" : d == "{" ? "}" : d == "<" ? ">" : d
-      for (p++; p <= nn && C[p] != e; p++) ;
-      p++
-      if (n + 1 < reps && C[p] != d) return p
-    }
-    return p
-  }
-  # g0_indirect(C, p, nn): true when `${!` at p-3 is a bash indirect expansion ${!name} (name present,
-  # then a modifier or `}`), not a list form (${!pre*}, ${!pre@}) or an array-keys form (${!arr[...]}).
-  function g0_indirect(C, p, nn,   start, c) {
+  # g0_indirect(C, p, nn): mirrors the P3 hreev indirection rule. True when `${!` at p-3 is a bash indirect
+  # expansion that resolves a name whose value may hold a subscript: a name (${!y}, ${!y[0]}, ${!y[1]:-z},
+  # ${!z@P}), or ${!@} and ${!*}. Only the list forms ${!pre*} and ${!pre@} and the array-keys forms
+  # ${!arr[@]} and ${!arr[*]} are not, and neither is ${!} (the last background pid, a special parameter
+  # P3 un-flags too).
+  function g0_indirect(C, p, nn,   start, t) {
     start = p
     while (p <= nn && C[p] ~ /[A-Za-z0-9_]/) p++
-    if (p == start) return 0
-    c = C[p]
-    if (c == "*" || c == "@" || c == "[") return 0
+    if (p == start && C[p] == "}") return 0
+    t = C[p] C[p + 1] C[p + 2] C[p + 3]
+    if (p > start && (t == "[@]}" || t == "[*]}" || C[p] C[p + 1] == "*}" || C[p] C[p + 1] == "@}")) return 0
     return 1
   }
   # g0_atp(C, p, nn): true when the bash @P transform appears before the `}` that closes the expansion.
