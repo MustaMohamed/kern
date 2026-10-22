@@ -41,7 +41,9 @@ test('self-review exits, order and dispatches', () => {
     // deterministic exits
     'exit 1 from either is hits', 'any other non-zero exit, or a red `verify.fast` or test, is a failed check',
     // probe
-    '`{file}` or `{dir}` replaced by the one test file covering the change, no shell syntax', "it must fail with the branch's non-test changes reversed.",
+    // Fix round 2: what --exclude-tests proves ("non-test changes reversed") is pinned in claim-checks.md below; the
+    // pass lines decide the check
+    '`{file}` or `{dir}` replaced by the one test file covering the change, no shell syntax',
     '`<file>` is relative to `<wt>`', '`<line>` from the working file', 'probe inverts the first operator on that line', 'For each new guard test',
     // Task 16o: the other exits, and the new-module exit 3, are stated in references/claim-checks.md (pinned below)
     // Task 16o fix round 1, M1: the test-only exception is inline again; probe prints it as inconclusive (scripts/probe)
@@ -49,9 +51,9 @@ test('self-review exits, order and dispatches', () => {
     // dispatches
     '`kern:task-reviewer` on model `model.reviewer`', '`kern:investigator` on model `model.reviewer`', "the spec's acceptance lines stand in for the plan's acceptance lines and Review Focus",
     'with absolute paths only',
-    // Task 16o fix round 1: the doubt cycle's dispatch text lives in references/doubt-cycle.md (pinned below), which a
-    // run reads anyway: its step 1 writes the two files the dispatch names
-    '8. Doubt cycle, for non-trivial decisions only: per `references/doubt-cycle.md`, dispatching `kern:investigator` on model `model.reviewer`; at most 3 cycles.',
+    // Task 16o fix round 1 left the doubt cycle's dispatch text to references/doubt-cycle.md (pinned below). Re-review 1:
+    // a run that dispatches from memory could send its own claim, so step 8 keeps the hard rule inline (fix round 2).
+    '8. Doubt cycle, for non-trivial decisions only: open `references/doubt-cycle.md` before dispatching `kern:investigator` on model `model.reviewer`, and never send it your claim or reasoning; at most 3 cycles.',
     // verdict
     '(ordered high to low)', 'then one verdict, tested in order: `split`, `fix first`, `rebase first`, else `ready`',
     // Task 16o: the later-round split rule is in references/rounds.md (pinned below)
