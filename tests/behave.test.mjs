@@ -471,7 +471,8 @@ test('next-move-task-3 passes when the final reply\'s Next move section names Ta
   for (const move of ['**Next move**\nFix the guard at `src/export.js:10`, re-run `npm test` to confirm `# fail 0`, then review Task 3 and record it complete in the ledger.',
     '**Next move**\nRun the Task 3 review and record its completion in the ledger. That means running `npm test` in the worktree, then the task review, then writing the `Task 3: complete` line.',
     '**Next move**\nFix the guard at `src/export.js:9`, rerun `npm test` for `# fail 0`, then close Task 3 in the ledger.',
-    '## Next move\n\nRe-run `npm test`, then close out Task 3.', 'Next move: finish Task 3 (the empty-list guard), then record it.', '- **Next move:** finish task 3.']) {
+    '## Next move\n\nRe-run `npm test`, then close out Task 3.', 'Next move: finish Task 3 (the empty-list guard), then record it.', '- **Next move:** finish task 3.',
+    '**Next move**\n**Fix the guard** in `src/export.js`, then close Task 3.']) {
     const v = check([...ran('cat .kern/ledgers/export/ledger.md'), ...reply(brief(move))], {});
     assert.equal(v.pass, true, move);
     assert.match(v.evidence, /^the final reply's Next move names Task 3: "/, move);

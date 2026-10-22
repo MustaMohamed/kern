@@ -452,9 +452,10 @@ const lineOf = (text, re) => {
 };
 // NEXT_MOVE: recall's Next move label at the start of a line, plain, bold or italic, as a heading or a bullet,
 // with or without a colon; group 1 is the rest of that line. NEXT_PART: a line that starts the brief's next
-// part: a heading, a bold or italic label, or an output-contract label (skills/recall/SKILL.md).
+// part: a heading, a bold or italic label alone on its line or ending in a colon, or an output-contract label
+// (skills/recall/SKILL.md). A line that only opens with bold words, as "**Fix the guard**, then", is not one.
 const NEXT_MOVE = /^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+)?[*_]{0,2}Next move[*_]{0,2}[ \t]*:?[*_]{0,2}[ \t]*(.*)$/im;
-const NEXT_PART = /^[ \t]*(?:#{1,6}[ \t]|(?:[-*][ \t]+)?[*_]{2}[^*_\n]+[*_]{2}|(?:Capsule|Threads|Problems|Sources skipped)\b)/i;
+const NEXT_PART = /^[ \t]*(?:#{1,6}[ \t]|(?:[-*][ \t]+)?[*_]{2}[^*_\n]+(?:[*_]{2}[ \t]*$|:[*_]{2}|[*_]{2}:)|(?:Capsule|Threads|Problems|Sources skipped)\b)/i;
 // nextMove(text): the Next move section of a reply, its whitespace folded, or null when it has no such label.
 const nextMove = (text) => {
   const m = text.match(NEXT_MOVE);
