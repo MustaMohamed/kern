@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Runs CI's steps locally, in the same order, except the PR-only Unreleased check.
+# Runs the commands of CI's checks job locally, in the same order, but for the tool installs and the PR-only
+# Unreleased check; tests/ci-local.test.mjs holds the two in step. CI's install job is left out: it installs
+# kern into Claude Code's user scope. tests/run-bats --jobs runs min(6, cores - 1) bats files at a time.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)' || { echo "ci-local: Node 22 or later is required (found $(node --version)); put \$HOME/.volta/bin first on PATH" >&2; exit 2; }
@@ -9,9 +11,9 @@ node scripts/check-version.mjs
 node scripts/route-eval.mjs
 claude plugin validate . --strict
 claude plugin validate .claude-plugin/plugin.json --strict
-tests/run-bats --jobs 6 tests/scripts
+tests/run-bats --jobs tests/scripts
 shellcheck scripts/fetch-upstream scripts/ci-local evals/exec/bin/gh
-tests/run-bats --jobs 6 tests/hooks
+tests/run-bats --jobs tests/hooks
 bash tests/hook-shape.sh
 shellcheck -x -S warning hooks/lib/*.sh hooks/guards/*.sh hooks/session-start hooks/subagent-start hooks/prompt-submit hooks/pre-tool-use scripts/kern-* tests/hook-shape.sh tests/run-bats tests/helpers/common.bash
 find scripts skills evals/exec/bin evals/exec/hooks -type f \( -name '*.sh' -o ! -name '*.*' \) -print0 | xargs -0 shellcheck -x -S warning
