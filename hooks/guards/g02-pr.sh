@@ -1,5 +1,6 @@
 # shellcheck shell=bash
-# G2 PR create: drafts only, no duplicate PR for a head, `gh pr ready` stays human under autopilot.
+# G2 PR create: drafts only, no duplicate PR for a head, no attribution in a body file under
+# `commit.attribution: none` (_g02_body), `gh pr ready` stays human under autopilot.
 # Any other gh command that is not on a closed read list, and that no other guard judges, asks, and is
 # denied under autopilot (_g02_write).
 # An allow approves the whole Bash call, so G2 allows a draft only in the shape _g02_proven accepts;
@@ -439,6 +440,35 @@ _g02_here() {
   ! _gh_last "$2" repo >/dev/null
 }
 
+# _g02_body FILE: under `commit.attribution: none`, the default, a --body-file FILE that holds Claude
+# Code's footer or an attribution trailer (G5's _g05_attributed) is denied in both modes (audit D5).
+# FILE is read as gh reads it, relative to CWD, and only its first 262,144 bytes: GitHub takes a PR body
+# of at most 65,536 characters, at most 4 bytes each. A FILE that is `-` or not a regular file is left to
+# the shape check, which allows no such draft. Exit 1 when it voted.
+_g02_body() {
+  local f="$1" why
+  [ -n "$f" ] && [ "$f" != - ] || return 0
+  [ "$(settings_get commit.attribution none)" = none ] || return 0
+  case "$f" in /*) ;; *) f="$CWD/$f" ;; esac
+  [ -f "$f" ] || return 0
+  if ! declare -F _g05_attributed >/dev/null; then
+    why="kern could not load G5's attribution check, so the PR body cannot be checked"
+  else
+    head -c 262144 2>/dev/null <"$f" | _g05_attributed body
+    case $? in
+      0)
+        vote deny G2 "the PR body file holds an attribution footer or trailer (commit.attribution: none): remove those lines"
+        return 1
+        ;;
+      1) return 0 ;;
+    esac
+    why="the PR body's attribution check could not run (retry the command)"
+  fi
+  vote ask G2 "$why"
+  [ "$AUTOPILOT" = 1 ] && vote deny G2 "$why (under autopilot)"
+  return 1
+}
+
 # _g02_proven IDX TOKS FILE: _gh_proven, only _GH_CREATE_SAFE options, no argument, and a body FILE
 # that passes _gh_file_ok.
 _g02_proven() {
@@ -456,6 +486,8 @@ _g02_create() {
     vote deny G2 "open PRs as drafts: add --draft"
     return 0
   fi
+  file=$(_gh_last "$toks" body-file) || file=""
+  _g02_body "$file" || return 0
   policy=$(policy_for pr)
   case "$policy" in
     deny)
@@ -475,7 +507,6 @@ _g02_create() {
   esac
   cur=$(current_branch "$CWD") || cur=""
   head=$(_gh_last "$toks" head) || head=$cur
-  file=$(_gh_last "$toks" body-file) || file=""
   if _g02_here "$1" "$toks" "$cur" "$head"; then
     if ! states=$(_g02_states "$cur"); then
       vote ask G2 "could not check for an existing PR on $cur (gh unavailable)"

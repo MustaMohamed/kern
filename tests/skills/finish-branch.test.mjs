@@ -1,7 +1,7 @@
 // tests/skills/finish-branch.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { readDoc, assertFrontmatter, h2s, steps, section, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/finish-branch/SKILL.md';
 const OPS = 'skills/finish-branch/references/branch-ops.md';
@@ -131,7 +131,13 @@ test('finish-branch: the size command runs every time, since its line count is w
   assert.match(s[6], /^6\. Size gate: `git merge-base HEAD <baseref>`, then `git diff --shortstat <merge-base> <tree>` \(step 4's tree, so untracked files count\)\. Always run it, even after self-review listed the files: `pr\.max_lines` reads its line count\. /);
 });
 
-test('the PR body follows commit.attribution (coverage gap 54)', () => {
-  assertContains(BODY, ["With `commit.attribution: none`, the default, the body carries no attribution footer such as \"Generated with Claude Code\" and no Co-Authored-By line, even when Claude Code's attribution reminder asks for one."]);
+test('the PR body follows commit.attribution, a pr.template body too (coverage gap 54, audit D5)', () => {
+  const rule = 'With `commit.attribution: none` (the default) neither body has a "Generated with Claude Code" footer or Co-Authored-By line, even if Claude Code asks: G2 denies one.';
+  assertOnce(PUSH, [rule]);
+  // The PR section names both bodies before the gh command, so a model writing from pr.template reads it.
+  const pr = section(readDoc(PUSH).body, '## PR');
+  assert.ok(pr.indexOf('Write the body from `pr.template`, else `references/pr-body.md`') < pr.indexOf(rule), 'the rule follows the sentence naming both bodies');
+  assert.ok(pr.indexOf(rule) < pr.indexOf('gh pr create'), 'the rule comes before the gh command');
+  assert.ok(!readDoc(BODY).raw.includes('attribution'), 'pr-body.md no longer holds the rule: only the no-template path read it there');
   assertContains('kernel/settings.md', ["Governs commit trailers and a PR body's attribution footer | pre-tool-use G5, commit, finish-branch, autopilot |"]);
 });
