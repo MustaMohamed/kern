@@ -126,9 +126,14 @@ const RUNNERS = [
   ['h2h', ['--task', 'plan/rename-small', '--arms', 'kern,control', '--runs', '1', '--allow-dirty']],
   ['kernel-adherence', ['--case', 'row-define', '--runs', '1', '--allow-dirty']],
   ['standing-cost', ['--runs', '1']],
+  // The fast rounds (--quick, --jobs) refuse the same way: a quick run is still a paid run.
+  ['exec-eval', ['--quick', '--jobs', '2']],
+  ['behave', ['--quick', '--case', 'recall-1', '--jobs', '2']],
+  ['h2h', ['--quick', '--task', 'plan/rename-small', '--arms', 'kern,control']],
+  ['kernel-adherence', ['--quick', '--case', 'row-define']],
 ];
 for (const [name, args] of RUNNERS) {
-  test(`${name} exits 2 before any claude call on every such environment`, () => {
+  test(`${name} ${args.join(' ')} exits 2 before any claude call on every such environment`, () => {
     const env = guardedEnv({ config: false, log: true });
     for (const [e, why] of refusals(env)) {
       const r = spawnSync(process.execPath, [join(sandbox(), 'scripts', `${name}.mjs`), ...args], { env: e, encoding: 'utf8', timeout: 120000 });

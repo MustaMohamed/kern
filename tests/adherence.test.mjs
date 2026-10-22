@@ -6,9 +6,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { adherenceFlags, adherenceMain, readSteps, stepLine, grade, rowPrompt, removeTemp, runFailure } from '../scripts/lib/adherence.mjs';
+import { adherenceFlags, adherenceMain, adherenceParts, readSteps, stepLine, grade, rowPrompt, removeTemp, runFailure } from '../scripts/lib/adherence.mjs';
 import { parseArgs } from '../scripts/lib/args.mjs';
-import { KERNEL, guardedEnv, ran as runOf, result as resultEvent, started, use } from './helpers/eval-stub.mjs';
+import { KERNEL, gitSandbox, guardedEnv, ran as runOf, result as resultEvent, started, use } from './helpers/eval-stub.mjs';
+import { caseInputs, treeSource } from '../scripts/lib/case-inputs.mjs';
 import { kernelRows, parseRow } from '../scripts/lib/kernel-rows.mjs';
 import { loadModel } from '../scripts/lib/lint-rules.mjs';
 import { pluginCopy, stage } from '../scripts/lib/behave.mjs';
@@ -434,23 +435,23 @@ const answer = (kind, opts) => {
   if (kind === 'kernel' || kind === 'quiet') return runOf([...started([dir], kind === 'kernel' ? KERNEL : ''), resultEvent('done')]);
   return runOf([...started([dir]), ...(kind === 'pass' ? [use('Read', { file_path: `${dir}/skills/diagnose/SKILL.md` })] : []), resultEvent('done')]);
 };
-const driveAdherence = ({ argv = ['--runs', '1'], cases = [rowCase()], answers = ['pass'], tree = () => CLEAN, before = null, run: given = null } = {}) => {
-  const dir = mkdtempSync(join(tmpdir(), 'am-'));
+const driveAdherence = async ({ argv = ['--runs', '1'], cases = [rowCase()], answers = ['pass'], tree = () => CLEAN, before = null, run: given = null, root = ROOT,
+  dir = mkdtempSync(join(tmpdir(), 'am-')) } = {}) => {
   const snapshots = join(dir, 'snapshots'); const results = join(dir, 'results');
   const committed = join(snapshots, 'adherence-routed-sonnet-5-5-2026-10-22.json');
   if (before !== null) { mkdirSync(snapshots, { recursive: true }); writeFileSync(committed, before); }
   const calls = []; const lines = []; const errors = [];
   const run = given ?? ((opts) => { calls.push(opts); return answer(answers[(calls.length - 1) % answers.length], opts); });
   let code; let thrown = null;
-  try { code = adherenceMain({ root: ROOT, argv, env: { CLAUDE_CONFIG_DIR: '/stand-in/eval-config' }, cases, run, version: () => '9.9.9 (stand-in)', tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
+  try { code = await adherenceMain({ root, argv, env: { CLAUDE_CONFIG_DIR: '/stand-in/eval-config' }, cases, run, version: () => '9.9.9 (stand-in)', tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
   catch (e) { thrown = e; }
   const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null);
-  return { code, thrown, calls, lines, errors, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null, results, read, done: () => rmSync(dir, { recursive: true, force: true }) };
+  return { code, thrown, calls, lines, errors, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null, results, read, dir, done: () => rmSync(dir, { recursive: true, force: true }) };
 };
 
-test('Task 17a G5: adherence passes a case by caseResult, so an invalid run is left out, not counted as a failure', () => {
+test('Task 17a G5: adherence passes a case by caseResult, so an invalid run is left out, not counted as a failure', async () => {
   // Lane G: at --runs 5, one invalid run, three passes and one fail was FAIL (3 of 5) though 3 of the 4 valid runs passed.
-  const r = driveAdherence({ argv: ['--runs', '5'], answers: ['pass', 'miss', 'invalid', 'pass', 'pass'] });
+  const r = await driveAdherence({ argv: ['--runs', '5'], answers: ['pass', 'miss', 'invalid', 'pass', 'pass'] });
   try {
     assert.equal(r.code, 0, r.lines.join('\n'));
     const s = JSON.parse(r.committed).results[0];
@@ -458,24 +459,24 @@ test('Task 17a G5: adherence passes a case by caseResult, so an invalid run is l
     assert.deepEqual(s.detail.map((x) => [x.pass, x.invalid]), [[true, false], [false, false], [false, true], [true, false], [true, false]]);
     assert.match(r.lines[0], /^PASS row-x: 3\/4 \(1 invalid, not graded\), todo 0\/5: /);
   } finally { r.done(); }
-  const two = driveAdherence({ argv: ['--runs', '3'], answers: ['pass', 'invalid', 'invalid'] });
+  const two = await driveAdherence({ argv: ['--runs', '3'], answers: ['pass', 'invalid', 'invalid'] });
   try { assert.equal(JSON.parse(two.committed).results[0].pass, false, 'two invalid runs of three fail the case, as behave\'s rule says'); } finally { two.done(); }
 });
 
-test('Task 17a G3: adherence keeps a --case, --plugin, all-invalid or stopped run off the committed snapshot', () => {
-  const one = driveAdherence({ argv: ['--case', 'row-x', '--runs', '1'], before: 'earlier\n' });
+test('Task 17a G3: adherence keeps a --case, --plugin, all-invalid or stopped run off the committed snapshot', async () => {
+  const one = await driveAdherence({ argv: ['--case', 'row-x', '--runs', '1'], before: 'earlier\n' });
   try {
     assert.equal(one.committed, 'earlier\n');
     const s = one.read(join(one.results, `adherence-routed-sonnet-5-5-2026-10-22-row-x-${ROOT.split('/').pop()}`, 'snapshot.json'));
     assert.deepEqual([s.complete, s.cases, s.kern], [true, ['row-x'], CLEAN]);
   } finally { one.done(); }
-  const none = driveAdherence({ answers: ['invalid'], before: 'earlier\n' });
+  const none = await driveAdherence({ answers: ['invalid'], before: 'earlier\n' });
   try {
     assert.equal(none.committed, 'earlier\n');
     assert.match(none.lines.join('\n'), /no run was valid: no committed snapshot, and any earlier one stays/);
     assert.equal(none.read(join(none.results, 'adherence-routed-sonnet-5-5-2026-10-22', 'snapshot.json')).complete, true);
   } finally { none.done(); }
-  const full = driveAdherence({ cases: [rowCase('row-x'), rowCase('row-y')], before: 'earlier\n' });
+  const full = await driveAdherence({ cases: [rowCase('row-x'), rowCase('row-y')], before: 'earlier\n' });
   try {
     const s = JSON.parse(full.committed);
     assert.deepEqual([s.complete, s.cases, s.kern, s.gating], [true, ['row-x', 'row-y'], CLEAN, true]);
@@ -484,7 +485,7 @@ test('Task 17a G3: adherence keeps a --case, --plugin, all-invalid or stopped ru
   // Fix round 1 (P5 review, Minor 7): a usage limit at the second case stops the run; the committed snapshot stays,
   // and the progress file says what was done and that it is not complete.
   const stop = { calls: 0 };
-  const stopped = driveAdherence({ cases: [rowCase('row-x'), rowCase('row-y')], before: 'earlier\n',
+  const stopped = await driveAdherence({ cases: [rowCase('row-x'), rowCase('row-y')], before: 'earlier\n',
     run: (opts) => { stop.calls += 1; if (stop.calls > 1) throw new ClaudeRunError('claude stopped at a usage limit: x', true); return answer('pass', opts); } });
   try {
     assert.match(String(stopped.thrown?.message), /usage limit/);
@@ -495,7 +496,7 @@ test('Task 17a G3: adherence keeps a --case, --plugin, all-invalid or stopped ru
   // --plugin grades another kern tree: diagnostic, beside the transcripts, with that tree's record too.
   const other = pluginCopy(ROOT);
   const OTHER = { commit: null, dirty: true, changes: [], problem: 'not a git checkout: x' };
-  const old = driveAdherence({ argv: ['--plugin', other, '--runs', '1'], tree: (d) => (d === ROOT ? CLEAN : OTHER), before: 'earlier\n' });
+  const old = await driveAdherence({ argv: ['--plugin', other, '--runs', '1'], tree: (d) => (d === ROOT ? CLEAN : OTHER), before: 'earlier\n' });
   try {
     assert.equal(old.code, 0, old.errors.join('\n'));
     assert.equal(old.committed, 'earlier\n');
@@ -504,37 +505,37 @@ test('Task 17a G3: adherence keeps a --case, --plugin, all-invalid or stopped ru
   } finally { old.done(); rmSync(dirname(other), { recursive: true, force: true }); }
 });
 
-test('Task 17a G11: a full adherence run refuses a dirty kern tree unless --allow-dirty', () => {
+test('Task 17a G11: a full adherence run refuses a dirty kern tree unless --allow-dirty', async () => {
   const dirty = { commit: 'c0ffee', dirty: true, changes: [' M kernel/kernel.md'] };
-  const r = driveAdherence({ tree: () => dirty });
+  const r = await driveAdherence({ tree: () => dirty });
   try {
     assert.equal(r.code, 2);
     assert.match(r.errors.join('\n'), /^kernel-adherence: the kern tree is not a clean commit .*--allow-dirty/);
     assert.equal(r.calls.length, 0, 'nothing ran');
   } finally { r.done(); }
-  const ok = driveAdherence({ argv: ['--runs', '1', '--allow-dirty'], tree: () => dirty });
+  const ok = await driveAdherence({ argv: ['--runs', '1', '--allow-dirty'], tree: () => dirty });
   try { assert.deepEqual(JSON.parse(ok.committed).kern, dirty); } finally { ok.done(); }
 });
 
-test('Task 17a G10: an adherence run that did not load kern is invalid, and neg-kern-off must show kern absent', () => {
-  const r = driveAdherence({ answers: ['unloaded'] });
+test('Task 17a G10: an adherence run that did not load kern is invalid, and neg-kern-off must show kern absent', async () => {
+  const r = await driveAdherence({ answers: ['unloaded'] });
   try {
     const d = r.read(join(r.results, 'adherence-routed-sonnet-5-5-2026-10-22', 'snapshot.json')).results[0].detail[0];
     assert.equal(d.invalid, true);
     assert.match(d.reasons[0], /is not in the run's init\.plugins/);
   } finally { r.done(); }
   const off = rowCase('neg-off', { kind: 'negative', route: null, settings: 'kern: off' });
-  const printed = driveAdherence({ cases: [off], answers: ['kernel'] });
+  const printed = await driveAdherence({ cases: [off], answers: ['kernel'] });
   try {
     const d = printed.read(join(printed.results, 'adherence-routed-sonnet-5-5-2026-10-22', 'snapshot.json')).results[0].detail[0];
     assert.deepEqual([d.invalid, d.reasons], [true, ['kern was meant to be off, but its SessionStart printed the kernel']]);
   } finally { printed.done(); }
-  const quiet = driveAdherence({ cases: [off], answers: ['quiet'] });
+  const quiet = await driveAdherence({ cases: [off], answers: ['quiet'] });
   try { assert.equal(JSON.parse(quiet.committed).results[0].pass, true); } finally { quiet.done(); }
 });
 
-test('the runner grades each run on the route file\'s text, reports the todo list per run, and marks a run that did not happen invalid', () => {
-  const r = driveAdherence({ argv: ['--runs', '3'], answers: ['short', 'pass', 'invalid'] });
+test('the runner grades each run on the route file\'s text, reports the todo list per run, and marks a run that did not happen invalid', async () => {
+  const r = await driveAdherence({ argv: ['--runs', '3'], answers: ['short', 'pass', 'invalid'] });
   try {
     const s = JSON.parse(r.committed).results[0];
     assert.match(s.detail[0].reasons[0], /^read skills\/diagnose\/SKILL\.md only as lines 1 to 12, which miss its first step at line \d+$/);
@@ -542,4 +543,89 @@ test('the runner grades each run on the route file\'s text, reports the todo lis
     assert.deepEqual([s.detail[1].pass, s.detail[1].todo, s.detail[2].invalid, s.detail[2].exit], [true, false, true, 1]);
     assert.match(s.detail[2].reasons[0], /^claude exited 1/);
   } finally { r.done(); }
+});
+
+// Fast rounds for adherence (--jobs, --quick, the cache, --resume, --regrade, --changed): the same seam.
+test('adherence runs sessions side by side with --jobs, and its snapshot keeps case order', async () => {
+  const cases = [rowCase('row-a'), rowCase('row-b'), rowCase('row-c')];
+  let held = 0; let most = 0;
+  const run = async (opts) => {
+    held += 1; most = Math.max(most, held);
+    await new Promise((r) => setTimeout(r, opts.prompts[0].includes('row-a') ? 80 : 10));
+    held -= 1;
+    return answer('pass', opts);
+  };
+  const r = await driveAdherence({ argv: ['--runs', '2', '--jobs', '3'], cases, run });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.ok(most > 1 && most <= 3, `held ${most} at once`);
+    assert.deepEqual(JSON.parse(r.committed).results.map((x) => [x.id, x.passed]), [['row-a', 2], ['row-b', 2], ['row-c', 2]]);
+    assert.deepEqual(r.lines.filter((l) => /^PASS/.test(l)).map((l) => l.split(':')[0]), ['PASS row-a', 'PASS row-b', 'PASS row-c']);
+  } finally { r.done(); }
+});
+
+test('adherence --quick runs each case once into its own results dir and writes no committed snapshot, on a dirty tree too', async () => {
+  const dirty = { commit: 'c0ffee', dirty: true, changes: [' M kernel/kernel.md'] };
+  const r = await driveAdherence({ argv: ['--quick'], tree: () => dirty, before: 'the gate\n' });
+  try {
+    assert.equal(r.code, 0, r.errors.join('\n'));
+    assert.equal(r.committed, 'the gate\n');
+    const s = r.read(join(r.results, 'adherence-routed-sonnet-5-5-2026-10-22-quick-120000', 'snapshot.json'));
+    assert.deepEqual([s.runs, s.quick, s.complete, s.results[0].runs], [1, true, true, 1]);
+    assert.match(r.lines.join('\n'), /--quick run: no committed snapshot; this one is beside the transcripts/);
+  } finally { r.done(); }
+});
+
+test('adherence reuses a cached valid run, never an invalid one, and --resume runs only what the stopped run lacks', async () => {
+  const first = await driveAdherence({ argv: ['--runs', '2'], answers: ['pass', 'invalid'] });
+  try {
+    const again = await driveAdherence({ argv: ['--runs', '2'], answers: ['pass'], dir: first.dir });
+    assert.equal(again.calls.length, 1, 'the valid run is cached; the invalid one runs again');
+    assert.match(again.lines.join('\n'), /^PASS row-x: 2\/2, todo 0\/2 \(1 cached\)$/m);
+  } finally { first.done(); }
+  const cases = [rowCase('row-x'), rowCase('row-y')];
+  let n = 0;
+  const limit = (opts) => { n += 1; if (n > 2) throw new ClaudeRunError('claude stopped at a usage limit: x', true); return answer('pass', opts); };
+  const stop = await driveAdherence({ argv: ['--runs', '2', '--jobs', '1', '--no-cache'], cases, run: limit });
+  try {
+    assert.match(String(stop.thrown?.message), /usage limit/);
+    const raw = join(stop.results, 'adherence-routed-sonnet-5-5-2026-10-22');
+    const more = await driveAdherence({ argv: ['--resume', raw, '--no-cache'], cases, dir: stop.dir });
+    assert.equal(more.code, 0, more.errors.join('\n'));
+    assert.deepEqual(more.calls.map((o) => o.prompts[0]), ['fix it (row-y)', 'fix it (row-y)']);
+    assert.deepEqual(JSON.parse(more.committed).results.map((x) => [x.id, x.passed]), [['row-x', 2], ['row-y', 2]]);
+  } finally { stop.done(); }
+});
+
+test('adherence --regrade grades the saved transcripts again with today\'s grader and case, on the route text each run saw, and starts no session', async () => {
+  const first = await driveAdherence({ argv: ['--runs', '3'], answers: ['pass', 'pass', 'short'] });
+  try {
+    assert.equal(first.code, 0, first.lines.join('\n'));
+    const raw = join(first.results, 'adherence-routed-sonnet-5-5-2026-10-22');
+    const out = () => first.read(join(raw, 'regrade-120000.json'));
+    const never = () => { throw new Error('a regrade started a session'); };
+    const same = await driveAdherence({ argv: ['--regrade', raw], run: never, dir: first.dir });
+    assert.equal(same.code, 0, same.errors.join('\n'));
+    assert.deepEqual(out().results[0].detail.map((x) => [x.pass, x.reasons]), JSON.parse(first.committed).results[0].detail.map((x) => [x.pass, x.reasons]));
+    const negative = await driveAdherence({ argv: ['--regrade', raw], cases: [rowCase('row-x', { kind: 'negative' })], run: never, dir: first.dir });
+    assert.equal(negative.code, 1, 'today\'s case says no kern route may be read');
+    assert.match(out().results[0].detail[0].reasons[0], /^a kern route was read: Read /);
+  } finally { first.done(); }
+});
+
+test('adherence --changed runs only the cases whose route changed in the range', async () => {
+  const root = gitSandbox(ROOT);
+  try {
+    writeFileSync(join(root, 'skills', 'plan', 'SKILL.md'), `${readFileSync(join(root, 'skills', 'plan', 'SKILL.md'), 'utf8')}\nOne more line.\n`);
+    const cases = [rowCase('row-diagnose'), rowCase('row-plan', { route: 'plan' })];
+    const r = await driveAdherence({ argv: ['--changed', 'HEAD', '--runs', '1'], cases, root, answers: ['miss'] });
+    assert.deepEqual(r.calls.map((o) => o.prompts[0]), ['fix it (row-plan)']);
+    assert.equal(r.committed, null);
+    r.done();
+  } finally { rmSync(dirname(root), { recursive: true, force: true }); }
+});
+
+test('every adherence case\'s input hash can be read', () => {
+  const src = treeSource(ROOT);
+  for (const c of JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'))) assert.match(caseInputs(src, adherenceParts(c)).hash, /^[0-9a-f]{64}$/, c.id);
 });

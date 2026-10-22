@@ -2,12 +2,15 @@
 // drive it with an injected runner: argument checking, the order of results, the snapshot rule and the
 // one place the exit code is decided.
 
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { UsageError, parseArgs as parseFlags } from './args.mjs';
+import { LOOP_FLAGS, UsageError, loopProblem, parseArgs as parseFlags } from './args.mjs';
 import { ISOLATION, PERMISSIONS, pluginProblem, runProblem } from './claude-run.mjs';
+import { readManifest, readRecord, reuseNote, roundLine, timeStamp } from './eval-cache.mjs';
 import { GRADERS, stubMissed } from './exec-grade.mjs';
+import { limiter, ordered } from './pool.mjs';
 
 export { UsageError };
 
@@ -141,25 +144,42 @@ export function gradeCase({ c, run, ghLog, git, configDir, plugin = null, grader
   return { pass: false, invalid: true, reasons: [off, ...graded] };
 }
 
-// parseArgs(args, ids): { only, dryRun, allowDirty }, read by the runners' shared parser (args.mjs). A --case with
-// no value or an id no case has is a usage error, and so is any other word: an unrecognised argument must never
-// widen into a paid run of every case. --allow-dirty lets a full run measure a kern tree with uncommitted changes.
+// parseArgs(args, ids): { only, dryRun, allowDirty }, and each loop flag given (LOOP_FLAGS: jobs, quick, changed,
+// regrade, resume, noCache), read by the runners' shared parser (args.mjs). A --case with no value or an id no case
+// has is a usage error, and so is any other word, or loop flags that do not go together (loopProblem): an
+// unrecognised argument must never widen into a paid run of every case. --allow-dirty lets a full run measure a kern
+// tree with uncommitted changes.
+const LOOP_KEYS = new Set(Object.values(LOOP_FLAGS).map((x) => x.key));
 export function parseArgs(args, ids) {
-  const o = parseFlags(args, { '--case': { key: 'only', value: 'a case id', choices: ids, noun: 'case' }, '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' } });
-  return { only: o.only ?? null, dryRun: !!o.dryRun, allowDirty: !!o.allowDirty };
+  const o = parseFlags(args, { '--case': { key: 'only', value: 'a case id', choices: ids, noun: 'case' }, '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' }, ...LOOP_FLAGS });
+  const loop = loopProblem(o, { select: { only: '--case' } });
+  if (loop) throw new UsageError(loop);
+  return { only: o.only ?? null, dryRun: !!o.dryRun, allowDirty: !!o.allowDirty, ...Object.fromEntries(Object.entries(o).filter(([k]) => LOOP_KEYS.has(k))) };
 }
+
+// execParts(c): what case c reads, for its input hash and --changed (case-inputs.mjs): the kern skills its prompts
+// call (/kern:<name>, /kern:autopilot on among them), the fixture repo, the gh stand-in and the hook trace, and its
+// entry in evals/exec/cases.json.
+export const execParts = (c) => ({ skills: [...new Set(casePrompts(c).flatMap((p) => [...p.matchAll(/\/kern:([a-z][a-z0-9-]*)/g)].map((m) => m[1])))],
+  paths: ['evals/exec/fixtures/app/', 'evals/exec/bin/', 'evals/exec/hooks/'], entries: [{ file: 'evals/exec/cases.json', pick: (j) => (Array.isArray(j) ? j.find((x) => x.id === c.id) : undefined) }] });
 
 // exitCode(results): 0 only when at least one case ran and every case that ran passed.
 export const exitCode = (results) => (results.length > 0 && results.every((r) => r.pass) ? 0 : 1);
 
-// runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, log }): reads the claude
-// version first, so a failure there stops the run before any case is paid for; then runs the cases in
-// order, writes the snapshot (results, version) only for a full run with at least one valid case, so an
-// all-INVALID run never replaces a same-day snapshot, and returns the exit code for every non-dry run
-// alike. Each runCase gets a save({ reply, reason, events, trace }) to call before its workspace goes; it
-// saves the reply, then the events when saveEvents is given, then the hook trace file when saveTrace is;
-// the last line names the replies directory.
-export function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, saveEvents, saveTrace, repliesDir, log }) {
+// runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, log, jobs, snapshot, mode, unit }):
+// reads the claude version first, so a failure there stops the run before any case is paid for; then runs the cases
+// in a pool (pool.mjs) of jobs at once (6 by default), each through unit(c, work) when given (the result cache and
+// --resume; unit's result may carry how it was got and cached, its provenance), and logs and keeps their results in
+// case order. The first fatal error stops new cases; running ones finish, and the error is thrown. snapshot says where
+// the results go: 'committed' (a full run: written only with at least one valid case, so an all-INVALID run never
+// replaces a same-day snapshot), 'beside' (a --quick or --changed run, mode naming it: always, beside the replies) or
+// 'none' (a --case run); writeSnapshot(results, version, snapshot) writes it. It returns the exit code for every
+// non-dry run alike. Each runCase gets a save({ reply, reason, events, trace }) to call before its workspace goes; it
+// saves the reply, then the events when saveEvents is given, then the hook trace file when saveTrace is; the last line
+// names the replies directory.
+export async function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, saveEvents, saveTrace, repliesDir, log, jobs = 6,
+  snapshot = only ? 'none' : 'committed', mode = '--case', unit = (c, work) => work() }) {
+  const t0 = Date.now();
   if (dryRun) {
     for (const c of cases) log(describe(c));
     return 0;
@@ -170,7 +190,17 @@ export function runEval({ cases, only, dryRun, runCase, describe, readVersion, w
     return 1;
   }
   const results = [];
-  for (const c of cases) {
+  const how = [];
+  const limit = limiter(jobs);
+  let stop = null;
+  const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
+  const emit = ordered(cases.length, (k, r) => {
+    const { how: got, ...kept } = r;
+    how.push({ how: got ?? 'ran' });
+    results.push(kept);
+    log(`${r.pass ? 'PASS' : r.invalid ? 'INVALID' : 'FAIL'} ${cases[k].id}${r.pass ? '' : `: ${r.reasons.join('; ')}`}${reuseNote([{ how: got }])}`);
+  });
+  const jobsDone = cases.map((c, k) => {
     // Best effort: a failed write is logged, never thrown, so it cannot end a paid run or hide a verdict.
     const attempt = (what, write) => {
       try {
@@ -183,13 +213,70 @@ export function runEval({ cases, only, dryRun, runCase, describe, readVersion, w
       if (events && saveEvents) attempt(' events', () => saveEvents(c.id, events));
       if (trace && saveTrace) attempt(' trace', () => saveTrace(c.id, trace));
     };
-    const r = runCase(c, save);
-    results.push(r);
-    log(`${r.pass ? 'PASS' : r.invalid ? 'INVALID' : 'FAIL'} ${c.id}${r.pass ? '' : `: ${r.reasons.join('; ')}`}`);
-  }
-  if (only) log('--case run: no snapshot written; a full run writes it');
-  else if (!results.some((r) => !r.invalid)) log('no case was valid: no snapshot written, and any earlier one stays');
-  else writeSnapshot(results, version);
+    return Promise.resolve(unit(c, () => limit.run(() => runCase(c, save)))).then((r) => emit(k, r)).catch(fail);
+  });
+  await Promise.allSettled(jobsDone);
+  if (stop) throw stop;
+  log(roundLine(how, Date.now() - t0, jobs));
+  if (snapshot === 'none') log(`${mode} run: no snapshot written; a full run writes it`);
+  else if (snapshot === 'beside') { writeSnapshot(results, version, 'beside'); log(`${mode} run: its snapshot is beside the replies`); } else if (!results.some((r) => !r.invalid)) log('no case was valid: no snapshot written, and any earlier one stays');
+  else writeSnapshot(results, version, 'committed');
   log(`replies: ${repliesDir}`);
   return exitCode(results);
+}
+
+// saveWorkspace(dir, id, ws): a copy of a case's final workspace ws and its origin (ws.origin, when there is one) in
+// <dir>/<id>.ws/, so --regrade can run the case's git-reading grader again (regradeExec).
+export function saveWorkspace(dir, id, ws) {
+  const out = join(dir, `${id}.ws`);
+  rmSync(out, { recursive: true, force: true });
+  for (const p of [ws, `${ws}.origin`].filter((x) => existsSync(x))) cpSync(p, join(out, p.split('/').pop()), { recursive: true, verbatimSymlinks: true });
+}
+
+// regradeExec({ dir, cases, log, now, graders }): --regrade. Each case that dir's run.json names is graded again by
+// gradeCase with today's code and graders, from its saved record and files: its events, the gh stub's log, kern's
+// state file for the session, and a temp copy of its workspace whose origin remote is set to the copy's origin. No
+// session starts. A case with no record or no session keeps its saved verdict. The result goes to
+// <dir>/regrade-<HHMMSS>.json, never evals/snapshots. Returns the exit code; a dir with no exec run.json throws a
+// UsageError.
+export async function regradeExec({ dir, cases, log, now, graders = GRADERS }) {
+  const m = readManifest(dir, 'exec');
+  const byId = new Map(cases.map((c) => [c.id, c]));
+  const results = [];
+  for (const id of m.options.ids) {
+    const c = byId.get(id);
+    if (!c) { log(`SKIP ${id}: no case has this id now`); continue; }
+    const rec = readRecord(dir, id);
+    let r;
+    if (!rec) r = { id, pass: false, invalid: true, reasons: ['no record: the case never finished'] };
+    else if (!rec.session) r = rec.result;
+    else r = { ...rec.result, ...regradeOne(dir, c, rec, graders) };
+    results.push(r);
+    log(`${r.pass ? 'PASS' : r.invalid ? 'INVALID' : 'FAIL'} ${id}${r.pass ? '' : `: ${r.reasons.join('; ')}`}`);
+  }
+  const file = join(dir, `regrade-${timeStamp(now)}.json`);
+  writeFileSync(file, JSON.stringify({ regraded: { from: dir, at: now.toISOString() }, model: m.options.model, claude: m.claude, kern: m.kern, results }, null, 2) + '\n');
+  log(`regrade: ${file}`);
+  return exitCode(results);
+}
+
+// regradeOne(dir, c, rec, graders): { pass, invalid, reasons } for case c from its saved files (regradeExec).
+function regradeOne(dir, c, rec, graders) {
+  const invalid = (why) => ({ pass: false, invalid: true, reasons: [why] });
+  let events;
+  try { events = readFileSync(join(dir, `${c.id}.events.jsonl`), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch (e) { return invalid(`its events cannot be read: ${e.message}`); }
+  const ghLog = existsSync(join(dir, `${c.id}.gh.log`)) ? readFileSync(join(dir, `${c.id}.gh.log`), 'utf8').split('\n').filter(Boolean) : [];
+  const saved = join(dir, `${c.id}.ws`);
+  if (!existsSync(saved)) return invalid('its workspace was not saved, so its git state cannot be read');
+  const tmp = mkdtempSync(join(tmpdir(), 'xg-'));
+  try {
+    cpSync(saved, tmp, { recursive: true, verbatimSymlinks: true });
+    const name = readdirSync(tmp).find((n) => !n.endsWith('.origin'));
+    const ws = join(tmp, name);
+    const git = (...a) => execFileSync('git', ['-C', ws, ...a], { encoding: 'utf8', timeout: 60 * 1000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    if (existsSync(`${ws}.origin`)) git('remote', 'set-url', 'origin', `${ws}.origin`);
+    const g = gradeCase({ c, run: { ...rec.session, events }, ghLog, git, configDir: dir, plugin: rec.session.plugin, graders,
+      read: () => readFileSync(join(dir, `${c.id}.state`), 'utf8') });
+    return { pass: g.pass, invalid: g.invalid || false, reasons: g.reasons };
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
 }

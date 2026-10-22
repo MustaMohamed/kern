@@ -643,7 +643,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
   const cases0 = all ?? loadCases(root);
   let o;
   try { o = parseArgs(argv, behaveFlags(cases0.map((c) => c.id))); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
-  const loop = loopProblem(o, { select: ['case'] });
+  const loop = loopProblem(o, { select: { case: '--case' } });
   if (loop) return usage(loop);
   if (o.regrade !== undefined) return regradeBehave({ dir: o.regrade, cases: cases0, log, usage, now });
   const resumeDir = o.resume ?? null;

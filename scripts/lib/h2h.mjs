@@ -377,7 +377,7 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
   const allArms = armIds ?? JSON.parse(readFileSync(join(root, 'evals', 'h2h', 'arms.json'), 'utf8')).map((a) => a.id);
   let o;
   try { o = parseArgs(argv, h2hFlags(allTasks.map((t) => t.id), allArms)); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
-  const loop = loopProblem(o, { select: ['task'] });
+  const loop = loopProblem(o, { select: { task: '--task' } });
   if (loop) return usage(loop);
   if (o.regrade !== undefined) return regradeH2H({ dir: o.regrade, tasks: allTasks, parse, log, usage, now });
   const resumeDir = o.resume ?? null;

@@ -14,7 +14,7 @@ test('LOOP_FLAGS reads --jobs as a count, --changed, --regrade and --resume as v
 });
 
 test('loopProblem refuses the combinations that would not mean one thing', () => {
-  const p = (...a) => loopProblem(read(...a), { select: ['case'] });
+  const p = (...a) => loopProblem(read(...a), { select: { case: '--case' } });
   assert.equal(p('--quick', '--jobs', '3', '--changed', 'HEAD'), '');
   assert.equal(p('--resume', 'd', '--jobs', '2', '--no-cache'), '');
   assert.equal(p('--regrade', 'd'), '');

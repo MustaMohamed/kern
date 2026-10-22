@@ -10,17 +10,20 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
-import { UsageError, parseArgs } from './args.mjs';
+import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
+import { caseInputs, changedCases, rangeSources, treeSource } from './case-inputs.mjs';
+import { filesVersion, readManifest, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
+import { limiter, ordered } from './pool.mjs';
 import { caseResult, pluginCopy, stage } from './behave.mjs';
 import { dirtyRefusal, treeRecord } from './run-record.mjs';
-import { ISOLATION, PERMISSIONS, claudeVersion, countProblem, evalConfigProblem, pluginProblem, promptResult, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, countProblem, evalConfigProblem, pluginProblem, promptResult, runClaudeAsync, runProblem, toolUses, workspace } from './claude-run.mjs';
 
 // adherenceFlags(ids): scripts/kernel-adherence.mjs's flags for the shared parser (args.mjs), ids being the case
 // ids; --transcript, --route and --root are the offline grade of one saved session.
 export const adherenceFlags = (ids) => ({ '--case': { key: 'case', value: 'a case id', choices: ids, noun: 'case' }, '--runs': { key: 'runs', value: 'count' },
   '--model': { key: 'model', value: 'a model id' }, '--variant': { key: 'variant', value: 'a variant' }, '--plugin': { key: 'plugin', value: 'a kern tree' },
   '--transcript': { key: 'transcript', value: 'a session file' }, '--route': { key: 'route', value: 'a route' }, '--root': { key: 'root', value: 'a plugin root' },
-  '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' } });
+  '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' }, ...LOOP_FLAGS });
 
 // rowPrompt(root, route): a positive case's prompt is its row's first routing eval, so the two cannot drift.
 export const rowPrompt = (root, route) => JSON.parse(readFileSync(join(root, 'evals', 'cases', `row-${route}.json`), 'utf8')).evals[0].prompt;
@@ -258,34 +261,69 @@ export function grade(events, { route, routeFile, steps = [], text = null, root,
   return { pass: reasons.length === 0, reasons, items, hops, before, todo: items.length > 0, todoSteps: items.length > 0 && missing.length === 0, notes };
 }
 
-const USAGE = 'usage: node scripts/kernel-adherence.mjs [--case <id>] [--runs N] [--model <m>] [--variant routed] [--plugin <kern tree>] [--allow-dirty] [--dry-run]\n'
+const USAGE = 'usage: node scripts/kernel-adherence.mjs [--case <id> | --changed <range>] [--runs N | --quick] [--jobs N] [--no-cache] [--model <m>] [--variant routed] [--plugin <kern tree>] [--allow-dirty] [--dry-run]\n'
+  + '       node scripts/kernel-adherence.mjs --resume <results dir> [--jobs N] [--no-cache]\n'
+  + '       node scripts/kernel-adherence.mjs --regrade <results dir>\n'
   + '       node scripts/kernel-adherence.mjs --transcript <session.jsonl> --route <route> [--root <plugin root>]';
 const routeFileOf = (c) => c.route_file || `skills/${c.route}/SKILL.md`;
 // kernOff(c): the case's settings turn kern off, so its run must show no kernel (neg-kern-off).
 const kernOff = (c) => /^\s*kern:\s*off\s*$/m.test(c.settings ?? '');
 
-// adherenceMain({ root, argv, env, cases, run, version, tree, snapshots, results, log, error, now }): what
-// scripts/kernel-adherence.mjs runs, its exit code returned, with the seams a test needs: the cases, the run
-// (runClaude, or a stub), the Claude Code version, the tree record (tree(dir)) and the snapshot and results dirs
-// (Task 17a).
-// - Flags (adherenceFlags) are read by the shared parser: any other word is a usage error (2) before anything runs.
+// adherenceParts(c): what case c reads, for its input hash and --changed (case-inputs.mjs): its route's skill (none for a
+// kernel-file route or a negative case, which read the kern core and every skill's frontmatter), its fixture layers,
+// its entry in evals/adherence/cases.json, and the row prompt it takes when it gives none.
+export const adherenceParts = (c) => ({ skills: c.route && !c.route_file ? [c.route] : [], paths: c.files.map((f) => `evals/fixtures/${f}/`),
+  entries: [{ file: 'evals/adherence/cases.json', pick: (j) => (Array.isArray(j) ? j.find((x) => x.id === c.id) : undefined) },
+    ...(c.prompts ? [] : [{ file: `evals/cases/row-${c.route}.json`, pick: (j) => j.evals?.[0]?.prompt }])] });
+
+// ADHERENCE_CODE: the files whose code runs and grades an adherence run; their content is part of every run's cache key.
+const ADHERENCE_CODE = ['scripts/lib/adherence.mjs', 'scripts/lib/behave.mjs', 'scripts/lib/claude-run.mjs', 'scripts/lib/claude-drive.mjs'];
+
+// adherenceMain({ root, argv, env, cases, run, version, tree, snapshots, results, cache, log, error, now }): what
+// scripts/kernel-adherence.mjs runs, a promise of its exit code, with the seams a test needs: the cases, the run
+// (runClaudeAsync, or a stub), the Claude Code version, the tree record (tree(dir)) and the snapshot, results and cache
+// dirs (Task 17a; the fast rounds after it).
+// - Flags (adherenceFlags, LOOP_FLAGS) are read by the shared parser: any other word, or flags that do not go together
+//   (loopProblem), are a usage error (2) before anything runs.
 // - --transcript grades one saved session against --route offline, with --root as the plugin root.
-// - A full run (no --case, no --plugin) refuses a kern tree with uncommitted changes it would measure, unless
-//   --allow-dirty; every snapshot records the tree as kern, and with --plugin that tree's as plugin_tree.
+// - Runs go to a pool (pool.mjs): --jobs N sessions at once, 6 by default; results, log lines and snapshots keep case
+//   order. The first fatal error stops new runs; running ones finish and save, and the error is thrown.
+// - A gating run is a full one (no --case, --plugin, --changed or --quick). It refuses a kern tree with uncommitted
+//   changes it would measure, unless --allow-dirty; every snapshot records the tree as kern, and with --plugin that
+//   tree's as plugin_tree.
+// - --quick runs each case once, --changed <range> only the cases whose inputs changed (adherenceParts); each writes to
+//   a results dir of its own, <name>-quick-<HHMMSS> or <name>-changed-<HHMMSS>.
+// - Each run is a unit cached under its key (the case's inputs, with --plugin's tree for the kern files, the case, the
+//   model, the code, the Claude Code version and the run's index); a valid one is reused unless --no-cache. Its record
+//   goes beside its transcript, with the route text the run saw; --resume <dir> runs only what that run lacks, and
+//   --regrade <dir> grades its transcripts again (regradeAdherence).
 // - Each run must load the kern copy, and print the kernel unless the case turns kern off (pluginProblem, G10).
 // - A case passes by caseResult (G5): at least two thirds of its valid runs pass, with at most one invalid run.
 // - Snapshots: after each case, the progress so far goes to snapshot.json beside the transcripts (complete false).
-//   Only a full run with at least one valid run writes <snapshots>/adherence-<variant>-<model>-<date>.json
-//   (complete true, every case id under cases), and then the progress file goes. A --case or --plugin run is
-//   diagnostic, and like an all-invalid run or a stopped one it leaves the committed snapshot as it was.
-export function adherenceMain({ root, argv, env = process.env, cases: all = null, run = runClaude, version = claudeVersion, tree = treeRecord,
-  snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), log = console.log, error = console.error, now = new Date() }) {
+//   Only a gating run with at least one valid run writes <snapshots>/adherence-<variant>-<model>-<date>.json
+//   (complete true, every case id under cases), and then the progress file goes. Any other run, like an all-invalid
+//   run or a stopped one, leaves the committed snapshot as it was.
+export async function adherenceMain({ root, argv, env = process.env, cases: all = null, run = runClaudeAsync, version = claudeVersion, tree = treeRecord,
+  snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), cache = join(resultsDir, 'cache', 'adherence'),
+  log = console.log, error = console.error, now = new Date() }) {
+  const t0 = Date.now();
   const usage = (msg) => { error(`kernel-adherence: ${msg}\n${USAGE}`); return 2; };
   const allCases = all ?? JSON.parse(readFileSync(join(root, 'evals', 'adherence', 'cases.json'), 'utf8'));
   let o;
   try { o = parseArgs(argv, adherenceFlags(allCases.map((c) => c.id))); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  const loop = loopProblem(o, { select: { case: '--case' } });
+  if (loop) return usage(loop);
+  const withRoot = (c) => ({ ...c, prompts: c.prompts ?? [rowPrompt(root, c.route)] });
+  if (o.regrade !== undefined) return regradeAdherence({ dir: o.regrade, cases: allCases.map(withRoot), log, usage, now });
+  const resumeDir = o.resume ?? null;
+  let manifest = null;
+  if (resumeDir) {
+    try { manifest = readManifest(resumeDir, 'adherence'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+    o = { ...manifest.options, jobs: o.jobs ?? manifest.options.jobs, noCache: !!o.noCache };
+  }
   const MODEL = o.model ?? (env.KERN_EVAL_MODEL || 'claude-sonnet-5-5');
-  const RUNS = o.runs ?? 3;
+  const RUNS = o.runs ?? (o.quick ? 1 : 3);
+  const JOBS = o.jobs ?? 6;
   const VARIANT = o.variant ?? 'routed';
   const only = o.case ?? null;
   // --plugin grades another kern tree (an older tag's worktree, for one); the cases still come from this repo.
@@ -310,9 +348,20 @@ export function adherenceMain({ root, argv, env = process.env, cases: all = null
     return g.pass ? 0 : 1;
   }
 
-  const cases = allCases.filter((c) => !only || c.id === only)
-    .map((c) => ({ ...c, prompts: c.prompts ?? [rowPrompt(root, c.route)] }));
+  let picked;
+  if (manifest) {
+    const gone = manifest.options.ids.filter((id) => !allCases.some((c) => c.id === id));
+    if (gone.length) return usage(`--resume: no case has the id ${gone.join(', ')} now; start a new run`);
+    picked = allCases.filter((c) => manifest.options.ids.includes(c.id));
+  } else if (o.changed !== undefined) {
+    try {
+      const { before, after } = rangeSources(root, o.changed);
+      picked = changedCases(allCases, adherenceParts, before, after);
+    } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  } else picked = allCases.filter((c) => !only || c.id === only);
+  const cases = picked.map(withRoot);
   if (o.dryRun) {
+    if (o.changed !== undefined) log(`--changed ${o.changed}: ${cases.length} of ${allCases.length} cases`);
     for (const c of cases) log(`${c.id}: ${c.kind} ${c.route || '-'} on ${c.files.join('+')}: ${c.prompts.map((p) => JSON.stringify(p)).join(' then ')}`);
     if (PLUGIN !== root) log(`plugin: ${PLUGIN}`);
     return 0;
@@ -320,70 +369,146 @@ export function adherenceMain({ root, argv, env = process.env, cases: all = null
   const refusal = evalConfigProblem(env);
   if (refusal) { error(`kernel-adherence: ${refusal}`); return 2; }
   if (PLUGIN !== root && !existsSync(join(PLUGIN, 'kernel', 'kernel.md'))) return usage(`--plugin ${PLUGIN} holds no kernel/kernel.md`);
+  const gating = !partial && !o.quick && o.changed === undefined;
   const kern = tree(root);
   const pluginTree = PLUGIN !== root ? tree(PLUGIN) : null;
-  if (!partial && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
+  if (gating && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
+  if (!cases.length) { log(`--changed ${o.changed}: no case reads a file that changed; nothing ran`); return 0; }
   let claude;
   try { claude = version(); } catch (e) { error(`kernel-adherence: cannot read the claude version (${String(e.message).split('\n')[0]}); nothing ran`); return 1; }
-  const name = `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${now.toISOString().slice(0, 10)}`;
+  const date = manifest?.date ?? now.toISOString().slice(0, 10);
+  const name = `adherence-${VARIANT}-${MODEL.replace(/^claude-/, '')}-${date}`;
   const committed = join(snapshots, `${name}.json`);
+  const mode = o.quick ? 'quick' : o.changed !== undefined ? 'changed' : null;
   // Each run's events go to the results dir (gitignored), so a failed case can be read, not only its grade.
-  const raw = join(resultsDir, `${name}${partial ? `-${only || 'all'}-${basename(PLUGIN)}` : ''}`);
+  const raw = resumeDir ?? join(resultsDir, `${name}${partial ? `-${only || 'all'}-${basename(PLUGIN)}` : ''}${mode ? `-${mode}-${timeStamp(now)}` : ''}`);
   const progress = join(raw, 'snapshot.json');
-  mkdirSync(raw, { recursive: true });
+  const ids = cases.map((c) => c.id);
+  writeManifest(raw, { runner: 'adherence', date, started: manifest?.started ?? now.toISOString(), ...(manifest ? { resumed: [...(manifest.resumed ?? []), now.toISOString()] } : {}),
+    claude, kern, options: { model: MODEL, runs: RUNS, jobs: JOBS, variant: VARIANT, case: only, ...(o.plugin !== undefined ? { plugin: o.plugin } : {}), quick: !!o.quick,
+      ...(o.changed !== undefined ? { changed: o.changed } : {}), allowDirty: !!o.allowDirty, ids } });
   const results = [];
   const save = (file, complete) => {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({ model: MODEL, claude, isolation: ISOLATION, permissions: PERMISSIONS, variant: VARIANT, runs: RUNS, plugin: PLUGIN, kern,
-      ...(pluginTree ? { plugin_tree: pluginTree } : {}), gating: VARIANT === 'routed' && !/haiku/.test(MODEL), complete, cases: cases.map((c) => c.id), results }, null, 2) + '\n');
+    writeFileSync(file, JSON.stringify({ model: MODEL, claude, isolation: ISOLATION, permissions: PERMISSIONS, variant: VARIANT, runs: RUNS, ...(o.quick ? { quick: true } : {}),
+      ...(o.changed !== undefined ? { changed: o.changed } : {}), plugin: PLUGIN, kern, ...(pluginTree ? { plugin_tree: pluginTree } : {}), gating: VARIANT === 'routed' && !/haiku/.test(MODEL),
+      complete, cases: ids, results }, null, 2) + '\n');
   };
   const pluginRoot = realpathSync(pluginCopy(PLUGIN));
-  try {
-    for (const c of cases) {
-      // The route's text, so a read of it counts only when it reaches the route's first step (Task 16p).
-      const text = c.route ? readFileSync(join(pluginRoot, routeFileOf(c)), 'utf8') : null;
-      const steps = text ? readSteps(text) : [];
-      const expect = { plugins: [pluginRoot], kernel: kernOff(c) ? 'off' : 'on' };
-      const runs = [];
-      for (let i = 0; i < RUNS; i++) {
-        const src = stage(root, c.files);
-        let cwd = null;
-        try {
-          cwd = workspace(src, { name: 'billing-service', origin: !!c.origin, branch: c.branch || '', setup: c.setup || [] });
-          if (c.settings) { mkdirSync(join(cwd, '.claude'), { recursive: true }); writeFileSync(join(cwd, '.claude', 'kern.local.yml'), `${c.settings}\n`); }
-          // A turn cap is expected here: routing is graded from the first calls, so a capped run is still graded and
-          // its problem recorded. Any other run that did not happen (a timeout, a signal, a non-zero exit, a result
-          // count that differs from the prompt count, a run without kern loaded as the case wants) fails the run,
-          // with the reason.
-          let r = null; let problem = ''; let failure = ''; let events = [];
-          try {
-            r = run({ cwd, prompts: c.prompts, pluginDirs: [pluginRoot], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 });
-            const loaded = pluginProblem(r.events, expect);
-            problem = runProblem(r, c.prompts.length) || loaded; failure = runFailure(r, c.prompts.length) || loaded; events = r.events;
-          } catch (e) { if (e.fatal) throw e; problem = failure = e.message; events = e.events ?? []; }
-          // A run cut off by the timeout keeps the events it printed.
-          if (events.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), events.map((x) => JSON.stringify(x)).join('\n') + '\n');
-          const g = r && !failure ? grade(r.events, { route: c.route, routeFile: c.route_file, steps, text, root: pluginRoot, kind: c.kind, projectSkill: c.project_skill || null }) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
-          runs.push({ pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: r ? r.status : null, invalid: !!failure });
-        } finally {
-          if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
-          if (cwd) rmSync(dirname(cwd), { recursive: true, force: true });
-        }
-      }
-      // The pass rule is behave's (Task 17a G5): an invalid run is left out, never counted as a failed one.
-      const cr = caseResult(runs.map((x) => ({ invalid: x.invalid, verdict: [{ pass: x.pass }] })));
-      results.push({ id: c.id, kind: c.kind, route: c.route, passed: cr.passed, valid: cr.valid, invalid: cr.invalid, runs: runs.length, pass: cr.pass, detail: runs });
-      save(progress, false);
-      log(`${cr.pass ? 'PASS' : 'FAIL'} ${c.id}: ${cr.passed}/${cr.valid}${cr.invalid ? ` (${cr.invalid} invalid, not graded)` : ''}, todo ${runs.filter((x) => x.todo).length}/${runs.length}${cr.passed === runs.length ? '' : `: ${runs.filter((x) => !x.pass).map((x) => x.reasons.join(', ')).join(' | ')}`}`);
+  // runUnit(c, i): run i of case c in a fresh workspace, graded; its record ({ valid, run, session, text }). session and
+  // text keep what --regrade needs: the run's exit, its stderr's tail, the plugin root it loaded and the route text.
+  const runUnit = async (c, i) => {
+    // The route's text, so a read of it counts only when it reaches the route's first step (Task 16p).
+    const text = c.route ? readFileSync(join(pluginRoot, routeFileOf(c)), 'utf8') : null;
+    const expect = { plugins: [pluginRoot], kernel: kernOff(c) ? 'off' : 'on' };
+    const src = stage(root, c.files);
+    let cwd = null;
+    try {
+      cwd = workspace(src, { name: 'billing-service', origin: !!c.origin, branch: c.branch || '', setup: c.setup || [] });
+      if (c.settings) { mkdirSync(join(cwd, '.claude'), { recursive: true }); writeFileSync(join(cwd, '.claude', 'kern.local.yml'), `${c.settings}\n`); }
+      // A turn cap is expected here: routing is graded from the first calls, so a capped run is still graded and
+      // its problem recorded. Any other run that did not happen (a timeout, a signal, a non-zero exit, a result
+      // count that differs from the prompt count, a run without kern loaded as the case wants) fails the run,
+      // with the reason.
+      let r = null; let problem = ''; let failure = ''; let events = [];
+      try {
+        r = await run({ cwd, prompts: c.prompts, pluginDirs: [pluginRoot], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 });
+        const loaded = pluginProblem(r.events, expect);
+        problem = runProblem(r, c.prompts.length) || loaded; failure = runFailure(r, c.prompts.length) || loaded; events = r.events;
+      } catch (e) { if (e.fatal) throw e; problem = failure = e.message; events = e.events ?? []; }
+      // A run cut off by the timeout keeps the events it printed.
+      if (events.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), events.map((x) => JSON.stringify(x)).join('\n') + '\n');
+      const g = r && !failure ? gradeCase(c, r.events, text, pluginRoot) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
+      const detail = { pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: r ? r.status : null, invalid: !!failure };
+      return { valid: !failure, run: detail, session: r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin: pluginRoot } : null, text };
+    } finally {
+      if (c.files.length > 1) rmSync(src, { recursive: true, force: true });
+      if (cwd) rmSync(dirname(cwd), { recursive: true, force: true });
     }
+  };
+  const src = treeSource(root);
+  const kernSrc = PLUGIN === root ? src : treeSource(PLUGIN);
+  const code = filesVersion(root, ADHERENCE_CODE);
+  const inputs = new Map(cases.map((c) => [c.id, caseInputs(src, adherenceParts(c), kernSrc).hash]));
+  const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest });
+  const limit = limiter(JOBS);
+  const units = [];
+  let stop = null;
+  const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
+  const emit = ordered(cases.length, (k, recs) => {
+    const c = cases[k];
+    units.push(...recs);
+    const runs = recs.map((x) => ({ ...x.run, ...(x.cached ? { cached: x.cached } : {}) }));
+    results.push(caseRecord(c, runs));
+    save(progress, false);
+    log(`${caseLine(c, results.at(-1))}${reuseNote(recs)}`);
+  });
+  const jobs = cases.map((c, k) => Promise.all(Array.from({ length: RUNS }, (_, i) => store.unit({
+    name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`],
+    key: unitKey({ runner: 'adherence', inputs: inputs.get(c.id), case: c, model: MODEL, variant: VARIANT, code, claude, run: i }),
+    work: () => limit.run(() => runUnit(c, i)),
+  }))).then((recs) => emit(k, recs)).catch(fail));
+  try {
+    await Promise.allSettled(jobs);
+    if (stop) throw stop;
   } finally { removeTemp(dirname(pluginRoot)); }
-  if (!partial && results.some((x) => x.valid > 0)) {
+  log(roundLine(units, Date.now() - t0, JOBS));
+  if (gating && results.some((x) => x.valid > 0)) {
     save(committed, true);
     rmSync(progress, { force: true });
     log(`snapshot: ${committed}`);
   } else {
     save(progress, true);
-    log(`${partial ? `${only ? '--case' : '--plugin'} run: no committed snapshot` : 'no run was valid: no committed snapshot, and any earlier one stays'}; this one is beside the transcripts: ${progress}`);
+    log(`${!gating ? `${only ? '--case' : PLUGIN !== root ? '--plugin' : o.quick ? '--quick' : '--changed'} run: no committed snapshot` : 'no run was valid: no committed snapshot, and any earlier one stays'}; this one is beside the transcripts: ${progress}`);
   }
+  return results.every((x) => x.pass) ? 0 : 1;
+}
+
+// gradeCase(c, events, text, root): grade() for case c's run, on the route text it saw, under the plugin root it loaded.
+const gradeCase = (c, events, text, root) => grade(events, { route: c.route, routeFile: c.route_file, steps: text ? readSteps(text) : [], text, root, kind: c.kind, projectSkill: c.project_skill || null });
+
+// caseRecord(c, runs): a case's snapshot row. The pass rule is behave's (Task 17a G5): an invalid run is left out, never
+// counted as a failed one.
+const caseRecord = (c, runs) => {
+  const cr = caseResult(runs.map((x) => ({ invalid: x.invalid, verdict: [{ pass: x.pass }] })));
+  return { id: c.id, kind: c.kind, route: c.route, passed: cr.passed, valid: cr.valid, invalid: cr.invalid, runs: runs.length, pass: cr.pass, detail: runs };
+};
+const caseLine = (c, x) => `${x.pass ? 'PASS' : 'FAIL'} ${c.id}: ${x.passed}/${x.valid}${x.invalid ? ` (${x.invalid} invalid, not graded)` : ''}, todo ${x.detail.filter((d) => d.todo).length}/${x.runs}${x.passed === x.runs ? '' : `: ${x.detail.filter((d) => !d.pass).map((d) => d.reasons.join(', ')).join(' | ')}`}`;
+
+// regradeAdherence({ dir, cases, log, usage, now }): --regrade. Each run that dir's run.json names is graded again from
+// its saved transcript and record: runFailure and pluginProblem on its exit and events, then grade() on the route text
+// the run saw, with today's code and today's case. No session starts. The result, shaped as a snapshot with
+// regraded: { from, at }, goes to <dir>/regrade-<HHMMSS>.json, never evals/snapshots.
+async function regradeAdherence({ dir, cases, log, usage, now }) {
+  let m;
+  try { m = readManifest(dir, 'adherence'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  const byId = new Map(cases.map((c) => [c.id, c]));
+  const results = [];
+  for (const id of m.options.ids) {
+    const c = byId.get(id);
+    if (!c) { log(`SKIP ${id}: no case has this id now`); continue; }
+    const runs = [];
+    for (let i = 0; i < m.options.runs; i++) {
+      const rec = readRecord(dir, `${id}-${i}`);
+      const invalid = (why) => ({ pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [why], problem: why, exit: rec?.run?.exit ?? null, invalid: true });
+      if (!rec) { runs.push(invalid('no record: the run never finished')); continue; }
+      if (!rec.session) { runs.push(rec.run); continue; }
+      let events;
+      try { events = readFileSync(join(dir, `${id}-${i}.jsonl`), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch (e) { runs.push(invalid(`its transcript cannot be read: ${e.message}`)); continue; }
+      const r = { ...rec.session, events };
+      const loaded = pluginProblem(events, { plugins: [rec.session.plugin], kernel: kernOff(c) ? 'off' : 'on' });
+      const problem = runProblem(r, c.prompts.length) || loaded;
+      const failure = runFailure(r, c.prompts.length) || loaded;
+      if (failure) { runs.push({ ...invalid(failure), problem }); continue; }
+      const g = gradeCase(c, events, rec.text, rec.session.plugin);
+      runs.push({ pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: rec.session.status, invalid: false });
+    }
+    results.push(caseRecord(c, runs));
+    log(caseLine(c, results.at(-1)));
+  }
+  const file = join(dir, `regrade-${timeStamp(now)}.json`);
+  writeFileSync(file, JSON.stringify({ regraded: { from: dir, at: now.toISOString() }, model: m.options.model, claude: m.claude, variant: m.options.variant, runs: m.options.runs, kern: m.kern,
+    complete: true, cases: m.options.ids, results }, null, 2) + '\n');
+  log(`regrade: ${file}`);
   return results.every((x) => x.pass) ? 0 : 1;
 }
