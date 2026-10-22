@@ -274,8 +274,10 @@ setup() {
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c "cd '$WT' && sh test-guard.sh"
   [ "$status" -eq 3 ] || { echo "$output"; return 1; }
   [ "$output" = "probe: inconclusive (the command names the worktree by its absolute path, so the fork would run the worktree)" ]
-  # WT followed by whitespace, a slash, or the end of the word; a double quote, in a script.
-  for cmd in "cd $WT && sh test-guard.sh" "sh $WT/test-guard.sh" "cd $WT"; do
+  # WT followed by whitespace, a slash, a shell operator with no space, or the end of the word; a double
+  # quote, in a script.
+  for cmd in "cd $WT && sh test-guard.sh" "sh $WT/test-guard.sh" "cd $WT" "cd $WT;sh test-guard.sh" \
+    "cd $WT&&sh test-guard.sh" "(cd $WT)&&sh test-guard.sh"; do
     run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c "$cmd"
     [ "$status" -eq 3 ] || { echo "$cmd: $output"; return 1; }
   done
@@ -301,6 +303,10 @@ setup() {
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
   [ "$output" = "probe: fail-then-pass ok" ]
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c "ls '$WT-b' > /dev/null && sh test-guard.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: fail-then-pass ok" ]
+  mkdir -p "$WT.bak"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c "ls $WT.bak>/dev/null&&sh test-guard.sh"
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
   [ "$output" = "probe: fail-then-pass ok" ]
 }

@@ -67,8 +67,8 @@ else
 fi
 
 # A command that names WT by its absolute path, as a word or inside a script it names, runs WT, not the fork.
-# names_wt [FILE]: a line of FILE (or stdin) holds WT, physical or as given, followed by /, a quote,
-# whitespace or the line's end; a sibling path such as WT-b does not count.
+# names_wt [FILE]: a line of FILE (or stdin) holds WT, physical or as given, followed by a character
+# outside [A-Za-z0-9._-] or the line's end; a sibling path such as WT-b or WT.bak does not count.
 wtl=$(cd "$wtarg" && pwd)
 names_wt() {
   # shellcheck disable=SC2016 # $0 is awk's, not the shell's
@@ -76,7 +76,7 @@ names_wt() {
     function at(s, p,   i, c) {
       while ((i = index(s, p)) > 0) {
         c = substr(s, i + length(p), 1)
-        if (c == "" || index("/\"\047 \t\r", c)) return 1
+        if (c !~ /^[A-Za-z0-9._-]$/) return 1
         s = substr(s, i + 1)
       }
       return 0
