@@ -11,7 +11,8 @@ setup() {
   cd "$REPO"
   printf 'exit 0\n' > check.sh
   git add check.sh && git commit --quiet -m check && git push --quiet origin main
-  WT=$(bash "$KERN_ROOT/scripts/wt-new" task-x 2> /dev/null)
+  # wt-new's stderr stays in the test's output, so a setup that fails under load says why.
+  WT=$(bash "$KERN_ROOT/scripts/wt-new" task-x)
   L="$TMP/ledger"
   mkdir -p "$L"
   printf '# kern ledger: plan.md\n' > "$L/ledger.md"
