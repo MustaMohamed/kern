@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { pluginCopy } from './lib/behave.mjs';
 import { caseInputs, changedCases, rangeSources, treeSource } from './lib/case-inputs.mjs';
-import { filesVersion, readManifest, timeStamp, unitKey, unitStore, writeManifest } from './lib/eval-cache.mjs';
+import { filesVersion, openRun, timeStamp, unitKey, unitStore, writeManifest } from './lib/eval-cache.mjs';
 import { limiter } from './lib/pool.mjs';
 import { dirtyRefusal, treeRecord } from './lib/run-record.mjs';
 import { reaper } from './lib/reaper.mjs';
@@ -61,10 +61,10 @@ try { opts = parseArgs(process.argv.slice(2), all.map((c) => c.id)); } catch (e)
 if (opts.regrade !== undefined) {
   try { process.exit(await regradeExec({ dir: opts.regrade, cases: all, log: console.log, now: new Date() })); } catch (e) { if (e instanceof UsageError) usage(e.message); throw e; }
 }
-const resumeDir = opts.resume ?? null;
+let resumeDir = null;
 let manifest = null;
-if (resumeDir) {
-  try { manifest = readManifest(resumeDir, 'exec'); } catch (e) { if (e instanceof UsageError) usage(e.message); throw e; }
+if (opts.resume !== undefined) {
+  try { ({ m: manifest, dir: resumeDir } = openRun(opts.resume, 'exec')); } catch (e) { if (e instanceof UsageError) usage(e.message); throw e; }
   opts = { ...manifest.options, jobs: opts.jobs ?? manifest.options.jobs, noCache: !!opts.noCache };
 }
 let cases;

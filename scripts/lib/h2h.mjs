@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
 import { caseInputs, changedCases, dirHash, rangeSources, treeSource } from './case-inputs.mjs';
-import { filesVersion, readManifest, readRecord, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
+import { filesVersion, lockedUpdate, openRun, readRecord, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
 import { limiter, ordered } from './pool.mjs';
 import { digest, pluginCopy, tryRun } from './behave.mjs';
 import { dirtyRefusal, statusEntries, treeRecord } from './run-record.mjs';
@@ -380,10 +380,10 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
   const loop = loopProblem(o, { select: { task: '--task' } });
   if (loop) return usage(loop);
   if (o.regrade !== undefined) return regradeH2H({ dir: o.regrade, tasks: allTasks, parse, log, usage, now });
-  const resumeDir = o.resume ?? null;
+  let resumeDir = null;
   let manifest = null;
-  if (resumeDir) {
-    try { manifest = readManifest(resumeDir, 'h2h'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  if (o.resume !== undefined) {
+    try { ({ m: manifest, dir: resumeDir } = openRun(o.resume, 'h2h')); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
     o = { ...manifest.options, jobs: o.jobs ?? manifest.options.jobs, noCache: !!o.noCache };
   }
   const MODEL = o.model ?? (env.KERN_EVAL_MODEL || 'claude-sonnet-5-5');
@@ -438,6 +438,10 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
   const readKey = () => {
     let text;
     try { text = readFileSync(keyFile, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return {}; throw e; }
+    return parseKey(text);
+  };
+  const parseKey = (text) => {
+    if (text === null) return {};
     let k;
     try { k = JSON.parse(text); } catch (e) { throw new Error(`h2h: ${keyFile} is not JSON (${e.message}); move it aside before a run`); }
     if (!k || typeof k !== 'object' || Array.isArray(k)) throw new Error(`h2h: ${keyFile} is not JSON (not an object of seeds); move it aside before a run`);
@@ -445,11 +449,13 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
   };
   try { readKey(); } catch (e) { error(e.message); return 2; }
   // Merged, so a filtered rerun keeps the keys of the day's other task-runs (Task 17a, G3).
-  const writeKey = () => writeFileSync(keyFile, JSON.stringify({ ...readKey(), ...key }, null, 2) + '\n');
+  // It is merged under a lock (lockedUpdate): runs of two categories at once share this dir and its key.json.
+  const writeKey = () => lockedUpdate(keyFile, (text) => JSON.stringify({ ...parseKey(text), ...key }, null, 2) + '\n');
   const ids0 = tasks.map((t) => t.id);
+  // Its own manifest, run-<model>-<filter>.json: runs of two categories may share this dir.
   writeManifest(raw, { runner: 'h2h', date, started: manifest?.started ?? now.toISOString(), ...(manifest ? { resumed: [...(manifest.resumed ?? []), now.toISOString()] } : {}),
     claude, kern, options: { model: MODEL, grader: GRADER, runs: RUNS, jobs: JOBS, category: o.category ?? null, task: o.task ?? null, arms: o.arms ?? null, armIds: arms.map((a) => a.id),
-      quick: !!o.quick, ...(o.changed !== undefined ? { changed: o.changed } : {}), allowDirty: !!o.allowDirty, ids: ids0 } });
+      quick: !!o.quick, ...(o.changed !== undefined ? { changed: o.changed } : {}), allowDirty: !!o.allowDirty, ids: ids0 } }, `run-${model}-${filter}.json`);
   const results = []; const voided = []; const key = {};
   let verdict = null;
   const save = (file, complete) => {
@@ -583,10 +589,12 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
 // regradeH2H({ dir, tasks, parse, log, usage, now }): --regrade. Each task-run that dir's run.json names is read again
 // from its saved attempts and grader reply: today's parse (parseGrades) and resultRow, then the gate. No session
 // starts, so a reply today's rules refuse makes its task-run VOID, with no re-ask. The result, shaped as a snapshot
-// with regraded: { from, at }, goes to <dir>/regrade-<HHMMSS>.json, never evals/snapshots.
+// with regraded: { from, at }, goes to <dir>/regrade-<model>-<filter>-<HHMMSS>.json, never evals/snapshots. dir may hold
+// several runs: then it names the one, run-<model>-<filter>.json (openRun).
 async function regradeH2H({ dir, tasks: allTasks, parse, log, usage, now }) {
   let m;
-  try { m = readManifest(dir, 'h2h'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  let file;
+  try { ({ m, dir, file } = openRun(dir, 'h2h')); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
   const byId = new Map(allTasks.map((t) => [t.id, t]));
   const tasks = m.options.ids.map((id) => byId.get(id)).filter(Boolean);
   const results = []; const voided = [];
@@ -607,10 +615,10 @@ async function regradeH2H({ dir, tasks: allTasks, parse, log, usage, now }) {
   }
   const verdict = gate(results, touchedTasks(allTasks, tasks).map((t) => ({ id: t.id, category: t.category })));
   for (const v of verdict) log(verdictLine(v));
-  const file = join(dir, `regrade-${timeStamp(now)}.json`);
-  writeFileSync(file, JSON.stringify({ regraded: { from: dir, at: now.toISOString() }, model: m.options.model, grader: m.options.grader, claude: m.claude, runs: m.options.runs, kern: m.kern,
+  const out = join(dir, `regrade-${basename(file, '.json').replace(/^run-?/, '')}-${timeStamp(now)}.json`);
+  writeFileSync(out, JSON.stringify({ regraded: { from: dir, at: now.toISOString() }, model: m.options.model, grader: m.options.grader, claude: m.claude, runs: m.options.runs, kern: m.kern,
     complete: true, cases: m.options.ids, voided, gate: verdict, results }, null, 2) + '\n');
-  log(`regrade: ${file}`);
+  log(`regrade: ${out}`);
   return gateExit(verdict);
 }
 

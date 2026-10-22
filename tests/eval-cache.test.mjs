@@ -1,11 +1,12 @@
 // tests/eval-cache.test.mjs: the eval result cache, unit records and the run manifest (scripts/lib/eval-cache.mjs).
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { UsageError } from '../scripts/lib/args.mjs';
-import { cacheGet, cachePut, filesVersion, readManifest, readRecord, unitKey, unitStore, writeManifest, writeRecord } from '../scripts/lib/eval-cache.mjs';
+import { cacheGet, cachePut, filesVersion, lockedUpdate, openRun, readManifest, readRecord, unitKey, unitStore, writeManifest, writeRecord } from '../scripts/lib/eval-cache.mjs';
+import { spawn } from 'node:child_process';
 
 const made = [];
 after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
@@ -124,3 +125,35 @@ test('a cache hit replaces a unit\'s files already in the results dir, read-only
   assert.equal(hit.how, 'cache');
   assert.equal(readFileSync(join(raw, 'a.ws', '.git', 'objects', 'ac', 'obj'), 'utf8'), 'cached\n');
 });
+
+test('lockedUpdate merges writes from processes that run at once, so none is lost; a stale lock is broken', async () => {
+  const dir = scratch();
+  const file = join(dir, 'key.json');
+  const lib = new URL('../scripts/lib/eval-cache.mjs', import.meta.url).href;
+  const child = (k) => new Promise((done) => {
+    const p = spawn(process.execPath, ['--input-type=module', '-e', `
+      import { lockedUpdate } from ${JSON.stringify(lib)};
+      for (let i = 0; i < 25; i++) lockedUpdate(${JSON.stringify(file)}, (text) => JSON.stringify({ ...JSON.parse(text ?? '{}'), ['${k}-' + i]: i }));`], { stdio: 'inherit' });
+    p.on('exit', done);
+  });
+  assert.deepEqual(await Promise.all(['a', 'b', 'c', 'd'].map(child)), [0, 0, 0, 0]);
+  assert.equal(Object.keys(JSON.parse(readFileSync(file, 'utf8'))).length, 100, 'every process\'s 25 keys are there');
+  assert.deepEqual(readdirSync(dir).sort(), ['key.json'], 'no lock or temp file left');
+  mkdirSync(`${file}.lock`);
+  utimesSync(`${file}.lock`, new Date(Date.now() - 120000), new Date(Date.now() - 120000));
+  lockedUpdate(file, () => '{"after":"a stale lock"}');
+  assert.equal(readFileSync(file, 'utf8'), '{"after":"a stale lock"}');
+  assert.throws(() => lockedUpdate(file, () => { throw new Error('not JSON'); }), /not JSON/);
+  assert.ok(!existsSync(`${file}.lock`), 'a failed update releases the lock');
+});
+
+test('openRun reads run.json, or the one run-*.json a shared results dir holds, or a manifest named by path', () => {
+  const dir = scratch();
+  writeManifest(dir, { runner: 'h2h', options: { ids: ['plan/a'] } }, 'run-sonnet-5-5-plan.json');
+  assert.deepEqual(openRun(dir, 'h2h'), { m: { runner: 'h2h', options: { ids: ['plan/a'] } }, dir, file: join(dir, 'run-sonnet-5-5-plan.json') });
+  writeManifest(dir, { runner: 'h2h', options: { ids: ['review/b'] } }, 'run-sonnet-5-5-review.json');
+  assert.throws(() => openRun(dir, 'h2h'), (e) => e instanceof UsageError && /holds 2 runs: pass one of .*run-sonnet-5-5-plan\.json, .*run-sonnet-5-5-review\.json/.test(e.message));
+  assert.deepEqual(openRun(join(dir, 'run-sonnet-5-5-review.json'), 'h2h').m.options.ids, ['review/b']);
+  assert.equal(openRun(join(dir, 'run-sonnet-5-5-review.json'), 'h2h').dir, dir);
+});
+

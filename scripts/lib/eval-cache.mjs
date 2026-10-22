@@ -6,8 +6,8 @@
 //   transcripts under its key, the hash of everything the unit's result depends on (unitKey). A later run whose
 //   unit has the same key reuses that result instead of starting a session, unless --no-cache.
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { UsageError } from './args.mjs';
 import { blobSha } from './case-inputs.mjs';
 
@@ -35,7 +35,8 @@ export function cacheGet(cache, key) {
 
 // cachePut(cache, key, record, files): the entry under key, record and a copy of each file ({ name: source path },
 // a folder copied whole), replacing any earlier one. It is built in a temp folder and renamed into place, so a
-// reader never sees half an entry.
+// reader never sees half an entry. When another process put the same key between the remove and the rename, its
+// entry stays.
 export function cachePut(cache, key, record, files = {}) {
   mkdirSync(cache, { recursive: true });
   const tmp = mkdtempSync(join(cache, '.put-'));
@@ -45,7 +46,7 @@ export function cachePut(cache, key, record, files = {}) {
     const dir = entryDir(cache, key);
     mkdirSync(join(dir, '..'), { recursive: true });
     rmSync(dir, { recursive: true, force: true });
-    renameSync(tmp, dir);
+    try { renameSync(tmp, dir); } catch (e) { if (!['ENOTEMPTY', 'EEXIST'].includes(e.code) || !existsSync(dir)) throw e; }
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 }
 
@@ -59,19 +60,60 @@ export function readRecord(dir, unit) {
   try { return JSON.parse(readFileSync(join(dir, `${unit}.result.json`), 'utf8')); } catch { return null; }
 }
 
-// writeManifest(dir, manifest), readManifest(dir, runner): <dir>/run.json, the run's runner and resolved options.
-// Reading one that is missing, not JSON or another runner's is a UsageError.
-export const writeManifest = (dir, manifest) => {
+// writeManifest(dir, manifest, name): <dir>/<name> (run.json by default), the run's runner and resolved options. h2h
+// names its own run-<model>-<filter>.json, since runs of two categories may share a results dir.
+export const writeManifest = (dir, manifest, name = 'run.json') => {
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'run.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(join(dir, name), `${JSON.stringify(manifest, null, 2)}\n`);
 };
-export function readManifest(dir, runner) {
-  const f = join(dir, 'run.json');
-  if (!existsSync(f)) throw new UsageError(`${dir} holds no run.json: it is not a results dir this runner wrote (or a run from before --resume and --regrade)`);
+
+// openRun(path, runner): { m, dir, file } for --resume and --regrade. path is a manifest file, or a results dir holding
+// run.json or exactly one run-*.json. A dir holding several runs, a missing or unreadable manifest, or another
+// runner's, is a UsageError.
+export function openRun(path, runner) {
+  let file = path;
+  const none = () => new UsageError(`${path} holds no run.json: it is not a results dir this runner wrote (or a run from before --resume and --regrade)`);
+  let st;
+  try { st = statSync(path); } catch { throw none(); }
+  if (st.isDirectory()) {
+    const runs = existsSync(join(path, 'run.json')) ? ['run.json'] : readdirSync(path).filter((n) => /^run-.+\.json$/.test(n)).sort();
+    if (!runs.length) throw none();
+    if (runs.length > 1) throw new UsageError(`${path} holds ${runs.length} runs: pass one of ${runs.map((n) => join(path, n)).join(', ')}`);
+    file = join(path, runs[0]);
+  }
   let m;
-  try { m = JSON.parse(readFileSync(f, 'utf8')); } catch (e) { throw new UsageError(`${f} is not JSON (${e.message})`); }
-  if (m?.runner !== runner) throw new UsageError(`${f} was written by ${m?.runner ?? 'no runner'}, not ${runner}`);
-  return m;
+  try { m = JSON.parse(readFileSync(file, 'utf8')); } catch (e) { throw new UsageError(`${file} is not JSON (${e.message})`); }
+  if (m?.runner !== runner) throw new UsageError(`${file} was written by ${m?.runner ?? 'no runner'}, not ${runner}`);
+  return { m, dir: dirname(file), file };
+}
+export const readManifest = (path, runner) => openRun(path, runner).m;
+
+// lockedUpdate(file, update, { waitMs, staleMs }): file rewritten as update(text), text being its content or null when
+// there is none, under <file>.lock, a folder mkdir makes only while no other process holds it. So h2h runs of two
+// categories at once, which share a results dir, both merge key.json and lose no key. The new text goes to a temp file
+// renamed into place. A lock older than staleMs (60 s) was left by a dead run and is removed; after waitMs (30 s) of
+// waiting it throws. An update that throws writes nothing and releases the lock.
+export function lockedUpdate(file, update, { waitMs = 30000, staleMs = 60000 } = {}) {
+  const lock = `${file}.lock`;
+  const t0 = Date.now();
+  for (;;) {
+    try { mkdirSync(lock); break; } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+    }
+    let age = 0;
+    try { age = Date.now() - statSync(lock).mtimeMs; } catch { continue; }
+    if (age > staleMs) { rmSync(lock, { recursive: true, force: true }); continue; }
+    if (Date.now() - t0 > waitMs) throw new Error(`${lock} is held by another run for over ${waitMs / 1000} s`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  }
+  try {
+    let text = null;
+    try { text = readFileSync(file, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    const next = update(text);
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, next);
+    renameSync(tmp, file);
+  } finally { rmSync(lock, { recursive: true, force: true }); }
 }
 
 // unitStore({ raw, cache, from, noCache, resume, limit }): { unit({ name, key, files, work, priority }) } for one run

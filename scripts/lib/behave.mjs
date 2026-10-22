@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
 import { caseInputs, changedCases, rangeSources, treeSource } from './case-inputs.mjs';
-import { filesVersion, readManifest, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
+import { filesVersion, openRun, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
 import { limiter, ordered } from './pool.mjs';
 import { COPY_OMITS, dirtyRefusal, treeRecord } from './run-record.mjs';
 import { ISOLATION, PERMISSIONS, claudeVersion, evalConfigProblem, finalText, pluginProblem, runClaudeAsync, runProblem, toolUses, workspace } from './claude-run.mjs';
@@ -646,10 +646,10 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
   const loop = loopProblem(o, { select: { case: '--case' } });
   if (loop) return usage(loop);
   if (o.regrade !== undefined) return regradeBehave({ dir: o.regrade, cases: cases0, log, usage, now });
-  const resumeDir = o.resume ?? null;
+  let resumeDir = null;
   let manifest = null;
-  if (resumeDir) {
-    try { manifest = readManifest(resumeDir, 'behave'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  if (o.resume !== undefined) {
+    try { ({ m: manifest, dir: resumeDir } = openRun(o.resume, 'behave')); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
     o = { ...manifest.options, jobs: o.jobs ?? manifest.options.jobs, noCache: !!o.noCache };
   }
   const MODEL = o.model ?? (env.KERN_EVAL_MODEL || 'claude-sonnet-5-5');
@@ -781,7 +781,7 @@ const caseLine = (c, cr, runs) => {
 // shaped as a snapshot with regraded: { from, at }, goes to <dir>/regrade-<HHMMSS>.json, never evals/snapshots.
 async function regradeBehave({ dir, cases, log, usage, now }) {
   let m;
-  try { m = readManifest(dir, 'behave'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  try { ({ m, dir } = openRun(dir, 'behave')); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
   const byId = new Map(cases.map((c) => [c.id, c]));
   const results = [];
   for (const id of m.options.ids) {

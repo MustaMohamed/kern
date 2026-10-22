@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
 import { caseInputs, changedCases, rangeSources, treeSource } from './case-inputs.mjs';
-import { filesVersion, readManifest, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
+import { filesVersion, openRun, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
 import { limiter, ordered } from './pool.mjs';
 import { caseResult, pluginCopy, stage } from './behave.mjs';
 import { dirtyRefusal, treeRecord } from './run-record.mjs';
@@ -315,10 +315,10 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
   if (loop) return usage(loop);
   const withRoot = (c) => ({ ...c, prompts: c.prompts ?? [rowPrompt(root, c.route)] });
   if (o.regrade !== undefined) return regradeAdherence({ dir: o.regrade, cases: allCases.map(withRoot), log, usage, now });
-  const resumeDir = o.resume ?? null;
+  let resumeDir = null;
   let manifest = null;
-  if (resumeDir) {
-    try { manifest = readManifest(resumeDir, 'adherence'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  if (o.resume !== undefined) {
+    try { ({ m: manifest, dir: resumeDir } = openRun(o.resume, 'adherence')); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
     o = { ...manifest.options, jobs: o.jobs ?? manifest.options.jobs, noCache: !!o.noCache };
   }
   const MODEL = o.model ?? (env.KERN_EVAL_MODEL || 'claude-sonnet-5-5');
@@ -481,7 +481,7 @@ const caseLine = (c, x) => `${x.pass ? 'PASS' : 'FAIL'} ${c.id}: ${x.passed}/${x
 // regraded: { from, at }, goes to <dir>/regrade-<HHMMSS>.json, never evals/snapshots.
 async function regradeAdherence({ dir, cases, log, usage, now }) {
   let m;
-  try { m = readManifest(dir, 'adherence'); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  try { ({ m, dir } = openRun(dir, 'adherence')); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
   const byId = new Map(cases.map((c) => [c.id, c]));
   const results = [];
   for (const id of m.options.ids) {

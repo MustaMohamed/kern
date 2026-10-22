@@ -8,7 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LOOP_FLAGS, UsageError, loopProblem, parseArgs as parseFlags } from './args.mjs';
 import { ISOLATION, PERMISSIONS, pluginProblem, runProblem } from './claude-run.mjs';
-import { readManifest, readRecord, reuseNote, roundLine, timeStamp } from './eval-cache.mjs';
+import { openRun, readRecord, reuseNote, roundLine, timeStamp } from './eval-cache.mjs';
 import { GRADERS, stubMissed } from './exec-grade.mjs';
 import { limiter, ordered } from './pool.mjs';
 
@@ -238,8 +238,8 @@ export function saveWorkspace(dir, id, ws) {
 // session starts. A case with no record or no session keeps its saved verdict. The result goes to
 // <dir>/regrade-<HHMMSS>.json, never evals/snapshots. Returns the exit code; a dir with no exec run.json throws a
 // UsageError.
-export async function regradeExec({ dir, cases, log, now, graders = GRADERS }) {
-  const m = readManifest(dir, 'exec');
+export async function regradeExec({ dir: path, cases, log, now, graders = GRADERS }) {
+  const { m, dir } = openRun(path, 'exec');
   const byId = new Map(cases.map((c) => [c.id, c]));
   const results = [];
   for (const id of m.options.ids) {

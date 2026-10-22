@@ -867,7 +867,7 @@ test('h2h --regrade reads each task-run\'s saved grader reply again with today\'
   try {
     assert.equal(first.code, 0, first.lines.join('\n'));
     const regrade = (opts = {}) => driveH2H({ argv: ['--regrade', first.raw], tasks: [t], dir: first.dir, arm: () => { throw new Error('a regrade started a session'); }, ...opts });
-    const out = () => JSON.parse(readFileSync(join(first.raw, 'regrade-120000.json'), 'utf8'));
+    const out = () => JSON.parse(readFileSync(join(first.raw, 'regrade-sonnet-5-5-all-120000.json'), 'utf8'));
     const same = await regrade();
     assert.deepEqual([same.code, same.calls.length], [0, 0], same.errors.join('\n'));
     const before = JSON.parse(first.committed);
@@ -894,4 +894,29 @@ test('h2h --changed runs only the tasks whose category\'s kern skills changed', 
     assert.deepEqual([none.code, none.lines[0]], [0, '--changed HEAD~0: 0 of 1 tasks']);
     none.done();
   } finally { rmSync(dirname(root), { recursive: true, force: true }); for (const t of [p, d]) rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test('h2h runs of two categories at once share the day\'s dir: each keeps its own run file, and key.json holds both', async () => {
+  const [p, v] = [synthTask('plan'), synthTask('review', { labels: [] })];
+  const dir = mkdtempSync(join(tmpdir(), 'hm-'));
+  const slow = async (opts) => { await new Promise((r) => setTimeout(r, 20)); return plainArm(opts); };
+  const [plan, review] = await Promise.all([
+    driveH2H({ argv: ['--category', 'plan', '--runs', '2'], tasks: [p, v], arm: slow, dir, keep: true }),
+    driveH2H({ argv: ['--category', 'review', '--runs', '2'], tasks: [p, v], arm: slow, dir, keep: true }),
+  ]);
+  try {
+    assert.deepEqual([plan.code, review.code], [0, 0], plan.lines.concat(review.lines).join('\n'));
+    const key = JSON.parse(readFileSync(join(plan.raw, 'key.json'), 'utf8'));
+    assert.deepEqual(Object.keys(key).sort(), [0, 1].flatMap((r) => [`2026-10-22:${p.id}:${r}`, `2026-10-22:${v.id}:${r}`]).sort());
+    for (const c of ['plan', 'review']) assert.ok(existsSync(join(plan.raw, `run-sonnet-5-5-${c}.json`)), c);
+    assert.ok(!existsSync(join(plan.raw, 'key.json.lock')), 'no lock left');
+    const which = await driveH2H({ argv: ['--resume', plan.raw], tasks: [p, v], dir, keep: true });
+    assert.equal(which.code, 2);
+    assert.match(which.errors[0], /holds 2 runs: pass one of .*run-sonnet-5-5-plan\.json, .*run-sonnet-5-5-review\.json/);
+    const named = await driveH2H({ argv: ['--resume', join(plan.raw, 'run-sonnet-5-5-review.json')], tasks: [p, v], dir, keep: true });
+    assert.deepEqual([named.code, named.calls.length], [0, 0], 'the review run is complete, so its resume runs nothing');
+    const regraded = await driveH2H({ argv: ['--regrade', join(plan.raw, 'run-sonnet-5-5-plan.json')], tasks: [p, v], dir, keep: true });
+    assert.equal(regraded.code, 0, regraded.errors.join('\n'));
+    assert.match(regraded.lines.at(-1), /regrade-sonnet-5-5-plan-120000\.json$/);
+  } finally { rmSync(dir, { recursive: true, force: true }); for (const t of [p, v]) rmSync(t.dir, { recursive: true, force: true }); }
 });
