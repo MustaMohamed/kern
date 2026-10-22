@@ -161,6 +161,14 @@ test('execute-plan runs its task and final reviews in the foreground', () => {
   assert.ok(!s[6].includes('run_in_background'), s[6]);
 });
 
+test('only the user\'s word skips the final review; task-done refuses a task no review approved', () => {
+  // The user's "Only by my word" (2026-10-22, Task 16n): a gating review is skipped only when the user says so. The
+  // kernel's Routing line states it for every route; task-done already refuses a tree no approved review saw.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[12].startsWith("12. Final review (only the user's word skips it): `ledger-open --summary <ledger dir>`"), s[12]);
+  assert.ok(s[10].includes('only when an approved review saw this tree'), s[10]);
+});
+
 test('an Agent call the next step waits on runs in the foreground, by the file every Agent call follows', () => {
   // Task 16i review, M4: self-review's lanes, recall's miners, plan's and diagnose's investigators and execute-plan's
   // serial and fix implementers gate their next step and name no run_in_background, so on Claude Code 2.1.304 they

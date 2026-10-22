@@ -110,3 +110,11 @@ test('the base names its source, an undetected base is the current branch and is
   assert.ok(!tpl.includes('base: <base branch>;'), 'the old header line, with no source, is gone');
   assert.ok(tpl.includes('add a regression check that runs the same scenario on base and head, naming the base by branch, never by a SHA no command printed'), 'the template check names the base by branch');
 });
+
+test('only the user\'s word skips the plan review', () => {
+  // 2026-10-22 head-to-head: kern skipped step 11's review in 3 of 6 plan runs, "to save budget" or because "the plan
+  // is small"; in one the reviewer's catch, a RED step that runs a real fetch, stayed in the plan. The user's answer:
+  // "Only by my word" (Task 16n).
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[11].includes('round 1 only. Only the user\'s word skips this review, never size or budget.'), s[11]);
+});

@@ -67,6 +67,15 @@ test('the user\'s word skips only what it names, and Evidence, the guards and th
   ]);
 });
 
+test('a step not done stays in the todo list, and only the user\'s word skips a review', () => {
+  // 2026-10-22 head-to-head (task-16-h2h-plan-diagnosis): "A step you do not do stays as `skip: <reason>`" let kern
+  // skip plan's review on its own judgement in 3 of 6 runs. The user's answer, "Only by my word": plan's and
+  // define's reviews, and execute-plan's task and final reviews, are skipped only when the user says so (Task 16n).
+  assertContains('kernel/kernel.md', ["A step you do not do stays as `skip: <reason>`; only the user's word skips a review, never your own judgement."]);
+  const text = readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8');
+  assert.doesNotMatch(text, /A step you do not do stays as `skip: <reason>`\. /, 'the unconditional skip sentence is gone');
+});
+
 test('the header says what ${CLAUDE_PLUGIN_ROOT} means in a kern file read by path', () => {
   // The session-start render fills {ROOT} with the plugin root, so the line names an absolute path.
   assertContains('kernel/kernel.md', ['In kern files read by path, ${CLAUDE_PLUGIN_ROOT} means {ROOT}.']);
