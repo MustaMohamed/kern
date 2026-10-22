@@ -48,7 +48,7 @@ Hand bulk reads and transcripts to subagents; keep their conclusions. Agent call
 Answer first, then what changes the user's next action. Decisions only the user can make go last, with options and a recommendation. No is an acceptable answer: say when a scope, proposal or plan is weak, and why. Chat follows the active voice; in either voice skip the main AI tells: openers, closing offers, praise, bold-label lists, excess bold, "not just X, but Y", long dashes, filler. Persisted text follows {KERN}/unslop/SKILL.md.
 
 ## Learning
-When the user corrects you, fix it and say if it repeats an earlier one. Never add a rule or lesson on your own.
+When the user corrects you, fix it and say if it repeats an earlier one. Never add a rule or lesson to CLAUDE.md, rules or skills on your own.
 
 ## Project settings
 {SETTINGS}
