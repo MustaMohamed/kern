@@ -8,36 +8,13 @@ plan=$1 n=$2 ledger_dir=$3
 [ -f "$plan" ] || { echo "task-brief: no such plan: $plan" >&2; exit 2; }
 case "$n" in ''|*[!0-9]*) echo "task-brief: N must be a number: $n" >&2; exit 2 ;; esac
 
-# Code fences as plan-check reads them (its fence_run rule): an opener is a run of 3 or more backticks or
-# tildes after at most 3 spaces, and the info string of a backtick opener holds no backtick; only a run of
-# the same character, at least as long, with nothing but spaces after it, closes the fence. So a tilde
-# fence may hold a backtick line, and a longer fence may hold a shorter one. fmark is 1 on an opening line
-# and -1 on a closing one; a line's CR is ignored here and kept in the brief. Its globals (fmark, fence,
-# fch, flen, fc, run, rest, l) must not clash with a program's own: the task program's n is the task.
-# shellcheck disable=SC2016 # awk text
-FENCE='
-function fence_run(s, c,   n) {
-  sub(/^ ? ? ?/, "", s)
-  n = 0
-  while (substr(s, n + 1, 1) == c) n++
-  return n
-}
-{
-  fmark = 0
-  l = $0; sub(/\r$/, "", l)
-  if (fence) {
-    run = fence_run(l, fch)
-    if (run >= flen) { rest = l; sub(/^ ? ? ?/, "", rest); if (substr(rest, run + 1) ~ /^[ \t]*$/) fmark = -1 }
-  } else {
-    fc = "`"; run = fence_run(l, fc)
-    if (run < 3) { fc = "~"; run = fence_run(l, fc) }
-    if (run >= 3) { rest = l; sub(/^ ? ? ?/, "", rest); if (fc == "~" || index(substr(rest, run + 1), "`") == 0) fmark = 1 }
-  }
-  if (fmark == 1) { fence = 1; fch = fc; flen = run } else if (fmark == -1) fence = 0
-}
-'
+here=$(cd "$(dirname "$0")" && pwd -P)
+# Code fences as plan-check reads them: both load scripts/lib/fence.awk. fence_mark keeps its state in
+# fence, fence_ch and fence_len, so a program's own names (the task program's n) stay its own.
+FENCE_AWK=$(cat "$here/lib/fence.awk") || { echo "task-brief: cannot read $here/lib/fence.awk" >&2; exit 2; }
 
-task=$(awk -v n="$n" "$FENCE"'
+task=$(awk -v n="$n" "$FENCE_AWK"'
+  { fmark = fence_mark($0) }
   fmark || fence { if (intask) print; next }
   /^#+[ \t]/ {
     match($0, /^#+/); lvl = RLENGTH
@@ -51,7 +28,8 @@ task=$(awk -v n="$n" "$FENCE"'
 ' "$plan")
 [ -n "$task" ] || { echo "task-brief: no heading 'Task $n' in $plan" >&2; exit 2; }
 
-constraints=$(awk "$FENCE"'
+constraints=$(awk "$FENCE_AWK"'
+  { fmark = fence_mark($0) }
   !fmark && !fence && /^## / { gc = ($0 ~ /^## Global Constraints/) }
   gc { print }
 ' "$plan")
