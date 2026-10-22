@@ -67,7 +67,7 @@ function flush(   i, j, t, k, m, d, K, V) {
 }
 function newfile(   f) {
   flush()
-  na = 0; nr = 0; deleted = 0; file = ""; old = ""
+  na = 0; nr = 0; deleted = 0; file = ""; old = ""; rfrom = ""
   for (f in aset) delete aset[f]
   for (f in rset) delete rset[f]
   for (f in dir) delete dir[f]
@@ -84,6 +84,10 @@ function setkeys(   i, n, r, q) {
 }
 /^diff --git / { newfile(); inhunk = 0; next }
 !inhunk && /^deleted file mode/ { deleted = 1; next }
+# A pure rename has no ---/+++ lines. A test renamed to a non-test name (foo.test.js.disabled) is no
+# longer collected, so it counts as deleted.
+!inhunk && /^rename from / { rfrom = substr($0, 13); next }
+!inhunk && /^rename to / { if (is_test(rfrom) && !is_test(substr($0, 11))) hit(rfrom, 0, "test-deleted", "renamed to " substr($0, 11)); next }
 !inhunk && /^--- / { old = substr($0, 5); sub(/^a\//, "", old); next }
 !inhunk && /^\+\+\+ / {
   file = substr($0, 5); sub(/^b\//, "", file)
