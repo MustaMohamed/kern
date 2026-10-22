@@ -75,6 +75,62 @@ index_sum() { cksum < "$(git -C "$WT" rev-parse --path-format=absolute --git-dir
   grep -q '^diff --git a/b.txt b/b.txt$' "$TMP/pkg.diff.patch"
 }
 
+@test "the package ignores diff.dstPrefix and textconv in the user's git config" {
+  t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  printf 'four\n' >> "$WT/a.txt"
+  printf '*.txt diff=num\n' > "$TMP/attributes"
+  git -C "$WT" config core.attributesFile "$TMP/attributes"
+  git -C "$WT" config diff.num.textconv 'cat -n'
+  git -C "$WT" config diff.srcPrefix old/
+  git -C "$WT" config diff.dstPrefix new/
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$t0" --out "$TMP/pkg.diff"
+  [ "$status" -eq 0 ]
+  grep -q '^diff --git a/a.txt b/a.txt$' "$TMP/pkg.diff"
+  grep -q '^--- a/a.txt$' "$TMP/pkg.diff"
+  grep -q '^+++ b/a.txt$' "$TMP/pkg.diff"
+  grep -q '^+four$' "$TMP/pkg.diff"
+  [ "$(grep -c -E 'new/|old/' "$TMP/pkg.diff")" -eq 0 ]
+}
+
+@test "a change a textconv driver hides is not an empty diff" {
+  t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  printf 'four\n' >> "$WT/a.txt"
+  printf '*.txt diff=hide\n' > "$TMP/attributes"
+  git -C "$WT" config core.attributesFile "$TMP/attributes"
+  git -C "$WT" config diff.hide.textconv 'sed -n 1p'
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$t0" --out "$TMP/pkg.diff"
+  [ "$status" -eq 0 ]
+  [ "${lines[2]}" = "a.txt" ]
+  grep -q '^+four$' "$TMP/pkg.diff"
+}
+
+# gitlink_tree SHA: a tree holding one submodule entry, sub, at SHA.
+gitlink_tree() { printf '160000 commit %s\tsub\n' "$1" | git -C "$WT" mktree; }
+
+@test "a submodule-only change under diff.submodule=log is a package both scanners read" {
+  t0=$(gitlink_tree 1111111111111111111111111111111111111111)
+  t1=$(gitlink_tree 2222222222222222222222222222222222222222)
+  git -C "$WT" config diff.submodule log
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$t0" "$t1" --out "$TMP/pkg.diff"
+  [ "$status" -eq 0 ]
+  grep -q '^diff --git a/sub b/sub$' "$TMP/pkg.diff"
+  grep -q '^+Subproject commit 2222222222222222222222222222222222222222$' "$TMP/pkg.diff"
+  run --separate-stderr bash "$KERN_ROOT/scripts/floor-scan" "$TMP/pkg.diff"
+  [ "$status" -eq 0 ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/claim-check" "$WT" "$TMP/pkg.diff"
+  [ "$status" -eq 0 ]
+}
+
+@test "a submodule-only change under diff.ignoreSubmodules=all is not an empty diff" {
+  t0=$(gitlink_tree 1111111111111111111111111111111111111111)
+  t1=$(gitlink_tree 2222222222222222222222222222222222222222)
+  git -C "$WT" config diff.ignoreSubmodules all
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$t0" "$t1" --out "$TMP/pkg.diff"
+  [ "$status" -eq 0 ]
+  [ "${lines[2]}" = "sub" ]
+  grep -q '^diff --git a/sub b/sub$' "$TMP/pkg.diff"
+}
+
 @test "wt-diff defaults the package into WORK/reviews" {
   t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
   printf 'new\n' > "$WT/b.txt"

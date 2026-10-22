@@ -114,6 +114,83 @@ setup() {
   [ ! -d "$REPO/.claude/worktrees/feat-i" ]
 }
 
+# A fetch failure names git's reason, the first line git prints for it: the last is the advice "and the
+# repository exists.", which names none (Task 17a, C-M5).
+@test "an unreachable origin or a missing branch exits 2 with git's reason" {
+  git remote set-url origin "$TMP/nowhere"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-n --base main
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"git fetch origin main failed"*"does not appear to be a git repository"* ]] || false
+  git remote set-url origin "$REPO.origin"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-n --base nosuch
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"git fetch origin nosuch failed"*"couldn't find remote ref"* ]] || false
+  [ ! -e "$REPO/.claude/worktrees/feat-n" ]
+}
+
+# ssh prints a capitalised "Warning:" line, such as its first-connect host-key notice, before the reason
+# (P8 review, Minor 1). The stub stands in for ssh, so nothing leaves the machine.
+@test "a failed ssh fetch names the reason, not ssh's Warning line" {
+  printf '%s\n' '#!/bin/sh' \
+    "echo \"Warning: Permanently added 'github.com' (ED25519) to the list of known hosts.\" >&2" \
+    'echo "git@github.com: Permission denied (publickey)." >&2' 'exit 255' > "$TMP/fake-ssh"
+  chmod +x "$TMP/fake-ssh"
+  git remote set-url origin git@github.invalid:kern/demo.git
+  GIT_SSH_COMMAND="$TMP/fake-ssh" run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ssh --base main
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"git fetch origin main failed (git@github.com: Permission denied (publickey).)"* ]] || false
+  [[ "$stderr" != *"Permanently added"* ]] || false
+}
+
+# A single-branch clone fetches only its own branch by default, so wt-new names the refspec (C-M5).
+@test "wt-new bases on another branch in a single-branch clone" {
+  git checkout --quiet -b release
+  git commit --quiet --allow-empty -m release
+  git push --quiet origin release
+  git checkout --quiet main
+  git clone --quiet --single-branch -b main "$REPO.origin" "$TMP/single"
+  cd "$TMP/single"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-o --detach --base release
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git -C "$REPO" rev-parse release)" ]
+}
+
+# X7 keeps the fresh origin base, so a local base with commits origin lacks stops wt-new instead of
+# giving a worktree without them (Task 17a, C-I1; the user's decision 6, 2026-10-22).
+@test "a local base ahead of origin exits 2 with the count, and a local base behind it does not" {
+  git commit --quiet --allow-empty -m two
+  git commit --quiet --allow-empty -m three
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-w
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"wt-new: local main is 2 commits ahead of origin/main; push, or pass --base <sha>"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-w --detach --base origin/main
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"local main is 2 commits ahead"* ]] || false
+  [ ! -e "$REPO/.claude/worktrees" ]
+  git push --quiet origin main
+  git reset --quiet --hard HEAD~2
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-w
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse origin/main)" ]
+}
+
+# A .worktreeinclude entry such as .claude/ holds worktree.dir, so copying it would copy every worktree,
+# their .git files too, into the new one (C-M6).
+@test "a .worktreeinclude entry that holds worktree.dir is refused with a message" {
+  printf '.claude/\nsecret.log\n' > .worktreeinclude
+  git add .worktreeinclude && git commit --quiet -m include && git push --quiet origin main
+  printf 'token\n' > secret.log
+  mkdir -p .claude
+  printf 'note\n' > .claude/notes.txt
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" one
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"wt: .worktreeinclude names .claude/, which holds the worktree dir .claude/worktrees; not copied"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" two
+  [ "$status" -eq 0 ]
+  [ ! -e "$output/.claude" ]
+  [ "$(cat "$output/secret.log")" = "token" ]
+}
+
 @test "wt-new works when the repo path has a space" {
   SPACED="$TMP/my project"
   make_fixture "$SPACED"
@@ -215,13 +292,38 @@ release_on_origin() {
   [[ "$stderr" == *"base_branch is not set and not detectable"* ]] || false
 }
 
-@test "wt-new --plan refuses a missing plan, and --plan with --base" {
+@test "wt-new --plan refuses a missing plan, and --plan with a --base that is not a SHA" {
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --plan "$TMP/none.md"
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"no plan at $TMP/none.md"* ]] || false
   printf -- '---\nbase: main (settings)\n---\n' > "$TMP/plan.md"
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --plan "$TMP/plan.md" --base main
   [ "$status" -eq 2 ]
+  [[ "$stderr" == *"--base takes a commit SHA"*"usage"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --base main --plan "$TMP/plan.md"
+  [ "$status" -eq 2 ]
   [[ "$stderr" == *"usage"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --base "$(git rev-parse HEAD)" --plan "$TMP/none.md"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"no plan at $TMP/none.md"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --plan "$TMP/plan.md" --base deadbeef0
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"unknown commit deadbeef0"* ]] || false
   [ ! -e "$REPO/.claude/worktrees/feat-v" ]
+}
+
+# The escape the ahead-of-origin stop names, for execute-plan step 5, which passes the plan (C-I1).
+@test "wt-new --plan with --base SHA builds on that commit, in either order" {
+  git commit --quiet --allow-empty -m local-only
+  printf -- '---\nbase: main (settings); promotion: none\n---\n' > "$TMP/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-x --plan "$TMP/plan.md"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"local main is 1 commits ahead of origin/main"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-x --plan "$TMP/plan.md" --base "$(git rev-parse HEAD)"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse main)" ]
+  [ "$(git -C "$output" rev-parse --abbrev-ref HEAD)" = "kern/feat-x" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-y --base "$(git rev-parse --short HEAD)" --plan "$TMP/plan.md"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse main)" ]
 }
