@@ -106,7 +106,7 @@ if [ -n "$patch" ]; then
     *) echo "task-done: probe exited $prc; Task $n not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 2 ;;
   esac
 fi
-last=$(grep -v '^[[:space:]]*$' "$log" | tail -n 1 | LC_ALL=C tr -d '\000-\037\177' || true)
+last=$(grep -v '^[[:space:]]*$' "$log" | tail -n 1 | env LC_ALL=C tr -d '\000-\037\177' || true)
 line="Task $n: complete tree=$tree test=$cmd exit=0 review=approved probe=$probe last=$last"
 printf '%s\n' "$line" >> "$ledger"
 echo "ledger: $line"

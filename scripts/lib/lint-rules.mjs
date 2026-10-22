@@ -469,11 +469,14 @@ export const RULES = [
   } },
 ];
 
-// Rule 17: the shell files rule 17 reads: every file under hooks/ but hooks.json, and each scripts/ file
-// a hook names as scripts/<name> (one it runs or sources), when it is a shell file there.
+// Rule 17: the shell files rule 17 reads: every file under hooks/ but hooks.json, each scripts/ file a
+// hook names as scripts/<name> (one it runs or sources), when it is a shell file there, and every bash
+// file under scripts/ (a bash shebang or a `# shellcheck shell=bash` first line), since skills run those
+// through the bash on PATH.
 export function localeFiles(model) {
   const hooks = walk(join(model.root, 'hooks')).filter((f) => !f.endsWith('.json'));
-  const scripts = new Set();
+  const bash = /^(#!\s*(\/usr\/bin\/env\s+|\S*\/)bash\b|# shellcheck shell=bash\b)/;
+  const scripts = new Set(walk(join(model.root, 'scripts')).filter((f) => bash.test(readFileSync(f, 'utf8').slice(0, 200))));
   for (const f of hooks) {
     for (const m of readFileSync(f, 'utf8').matchAll(/\bscripts\/([A-Za-z0-9_][A-Za-z0-9_./-]*)/g)) {
       const p = join(model.root, 'scripts', m[1].replace(/[.]+$/, ''));

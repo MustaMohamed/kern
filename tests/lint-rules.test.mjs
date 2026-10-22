@@ -502,12 +502,29 @@ test('rule 17: env, plain and exported assignments, comments and quoted text are
 });
 
 test('rule 17 reads the scripts a hook names, and an exemption with a reason covers a site', () => {
-  const s = '#!/usr/bin/env bash\nLC_ALL=C awk 1 f\n';
+  // An sh script: rule 17 reads a bash script under scripts/ whether or not a hook names it.
+  const s = '#!/bin/sh\nLC_ALL=C awk 1 f\n';
   const hook = '#!/usr/bin/env bash\nbash "$KERN_ROOT/scripts/kern-detect" a\nawk -f "$KERN_ROOT/scripts/lib/f.awk" x\n';
   const files = { 'hooks/x': hook, 'scripts/kern-detect': s, 'scripts/other': s, 'scripts/lib/f.awk': 'LC_ALL=C x\n' };
   assert.deepEqual(lint(files).filter((f) => f.rule === 17).map((f) => f.path), ['scripts/kern-detect']);
   const exempt = { ...files, 'scripts/lint-exemptions.json': '[{"rule":17,"path":"scripts/kern-detect","reason":"runs in the main shell only"}]' };
   assert.deepEqual(rules(lint(exempt)), []);
+});
+
+// Skills run these scripts through the bash on PATH, which is Homebrew bash 5.3 on macOS (P6 review).
+test('rule 17 reads every bash script and bash library under scripts/, which no hook names', () => {
+  const files = {
+    'scripts/task-done': '#!/usr/bin/env bash\nlast=$(tail -n 1 f | LC_ALL=C tr -d x)\n',
+    'scripts/lib/x.sh': '# shellcheck shell=bash\nLC_ALL=C awk 1 f\n',
+    'scripts/plain': '#!/bin/bash\nf() { local LC_ALL=C; }\n',
+    'scripts/sh-only': '#!/bin/sh\nLC_ALL=C awk 1 f\n',
+    'scripts/x.mjs': '#!/usr/bin/env node\nLC_ALL=C awk 1 f\n',
+  };
+  const found = lint(files).filter((f) => f.rule === 17);
+  assert.deepEqual(found.map((f) => f.path).sort(), ['scripts/lib/x.sh', 'scripts/plain', 'scripts/task-done']);
+  assert.match(found.find((f) => f.path === 'scripts/task-done').message, /^line 2: LC_ALL= before a command, which bash undoes after it/);
+  const fixed = { ...files, 'scripts/task-done': '#!/usr/bin/env bash\nlast=$(tail -n 1 f | env LC_ALL=C tr -d x)\n' };
+  assert.deepEqual(lint(fixed).filter((f) => f.rule === 17).map((f) => f.path).sort(), ['scripts/lib/x.sh', 'scripts/plain']);
 });
 
 // Since Task 16d every route row is in the kernel table; M2a's kernel/routes.md is gone.
