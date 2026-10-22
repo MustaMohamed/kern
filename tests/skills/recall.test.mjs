@@ -36,10 +36,24 @@ test('recall sections, steps and the source lines it keeps', () => {
   assertMaxBytes(SKILL, 7200);
 });
 
+// Audit E4: WORK is kern-root's main root plus work_dir, as kern-dir and autopilot find it. The parent of
+// --git-common-dir is not the checkout in a submodule or a separate-git-dir checkout.
 test('recall resolves WORK read-only and never calls kern-dir', () => {
-  assertOnce(SKILL, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern`', '`git rev-parse --path-format=absolute --git-common-dir`',
-    'never `kern-dir`, which creates folders and edits `.git/info/exclude`', 'from a linked worktree too']);
+  assertOnce(SKILL, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern`',
+    'it is line 1 of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root`, a `/`, then the text before the tab in `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get',
+    'never `kern-dir`, which creates folders and edits `.git/info/exclude`']);
   assert.ok(!readDoc(SKILL).raw.includes('scripts/kern-dir'), 'recall never calls kern-dir');
+  assert.ok(!readDoc(SKILL).raw.includes('git-common-dir'), 'WORK does not come from the git common dir');
+});
+
+// Audit E2 and E14: the running session is the one recall-sessions marks, not the newest; the tracker key
+// names its commands.
+test('recall skips the session marked current and names how tracker is found', () => {
+  assertOnce(SKILL, ['Skip the `current` session: it is this one',
+    '(`tracker` from `kern-get tracker`, else `kern-detect tracker`; `workflow_records` unset is none; no tracker found is said once)']);
+  assertOnce(REF, ['Skip the `current` session: recall-sessions marks the one whose id is `CLAUDE_CODE_SESSION_ID`',
+    'the running session (in a subagent, its parent)', 'With no `current` line, skip none.']);
+  for (const rel of [SKILL, REF]) assert.ok(!/usually (this one|the running session)/.test(readDoc(rel).raw), `${rel}: the newest session is not taken for the running one`);
 });
 
 test('recall gives every script exit an action', () => {
@@ -57,7 +71,7 @@ test('recall pins the unverified tag and the verified-uncommitted rules', () => 
     'equal to `HEAD^{tree}` means committed, so tag by its branch or PR, as for a differing `tree=`',
     'No `Worktree:` line, a `<wt>` not in `git worktree list`, or a failing `wt-snap` rules the tag out',
     'tag from its branch or PR when the `Worktree:` line or the thread names a branch (never the `Main:` line\'s), else `[unverified, worktree unavailable]`',
-    'A missing `WORK`, or a failed `rev-parse`, is not an error: say there are no kern working files',
+    'A missing `WORK`, or a failed `kern-root`, is not an error: say there are no kern working files',
     '"My work on X means everything this week" | Keep the topic.', 'the next move still comes from the incomplete ledger task',
     'The one exception is `wt-snap`', '`wt-snap` is the one exception named above']);
 });
@@ -72,11 +86,10 @@ test('recall dispatches a named agent, model and read-only commands', () => {
 
 test('recall keeps the load-bearing lines a sentence deletion would lose', () => {
   assertOnce(SKILL, ['An incomplete ledger task is the next move when one exists', 'with "cleanup pending" on the same line', '`recall chat`: go to step 9',
-    'A full state capsule already in the prompt: skip the mining', 'The newest session is usually this one; skip it', 'Two sessions or fewer: read them directly',
+    'A full state capsule already in the prompt: skip the mining', 'Two sessions or fewer: read them directly',
     'leaves the thread with the unverified tag', 'Cite transcript findings by session id and live findings by PR, issue or ticket number', 'Nothing is written.',
     'No step asks a question', '`recall chat`: follow `references/chat.md`', '(exit 2 outside a git repository: no live state either, say so and stop)',
-    'Read kern\'s working files first', '`WORK` is that parent plus the folder name', 'Write the brief per the output contract below',
-    '(a key unset: `tracker` is detected, `workflow_records` is none; no tracker found is said once)',
+    'Read kern\'s working files first', 'Write the brief per the output contract below',
     'with a topic, `prompt` lines are its prompts that name it (`-` is an unknown session id)',
     'Capsule: at most 5 bullets','| `work_dir` | `.kern` | ledgers, plans, specs |', '| `model.miner` | `haiku` | transcript miners |', 'Read-only, the same under autopilot', 'Problems: at most 5, the recurring ones', 'Next move: one concrete action', 'Sources skipped: one line naming each source that did not run, or omit',
     'Chat only (a page only when kern\'s `visual` skill is installed and the brief is long; otherwise say once "visual pages not installed")',
@@ -115,6 +128,8 @@ test('chat reference keeps the ketchup rules', () => {
 test('transcripts reference', () => {
   assertHeadings(REF, ['# Where the records are', '## Transcripts', '## Prompt index', '## Working files', '## Live state']);
   assertContains(REF, ['recall-sessions']);
+  // Audit E1: Claude Code slugs UTF-16 code units, not bytes, and cuts a long slug.
+  assertOnce(REF, ['every UTF-16 code unit outside A-Z, a-z and 0-9 turned into `-`', 'a slug over 200 characters is cut to 200 and gets `-<hash>`']);
   assertMaxBytes(REF, 2200);
 });
 
