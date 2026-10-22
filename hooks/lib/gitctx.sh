@@ -2,6 +2,12 @@
 # Shell and git parsing for guards. Needs settings.sh; uses aliases.sh when it is loaded. Reads CWD and
 # KERN_MAIN.
 
+# _GW_REEVAL: the shared hreev matcher (hooks/lib/reeval.awk), prepended to _split_words' awk program so
+# its here-doc check and G00's g0_reeval (which loads the same file) judge a re-evaluating expansion the
+# same way. Empty when the file cannot be read: the awk then has no hreev, so git_words fails and the
+# guards fail closed, as a broken install should.
+_GW_REEVAL=$(cat "${KERN_ROOT:-${CLAUDE_PLUGIN_ROOT:-.}}/hooks/lib/reeval.awk" 2>/dev/null) || _GW_REEVAL=""
+
 # A newline inside one record (quoted text, or the inside of $( )) is printed as this byte, so a
 # caller that reads records line by line never takes a quoted line for a command.
 _GW_NL=$'\037'
@@ -600,7 +606,7 @@ _subst_bodies() {
 # never closes keeps the rest of the text in its record; that text is then read flat too, split at each
 # separator, quoted or not, so a quote the scanner misreads cannot hide the commands after it.
 _split_words() {
-  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v qb="${_GW_QB-}" "$_GW_AWK$_GW_SCAN"'
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v qb="${_GW_QB-}" "$_GW_REEVAL$_GW_AWK$_GW_SCAN"'
     # emit(s): prints the record s. In the flat reading (fl) a record printed already is left out.
     function emit(s) {
       gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s)
@@ -683,48 +689,10 @@ _split_words() {
         a = off[last[h]] + length(L[last[h]]) + 1
       }
     }
-    # hreev(s): the unquoted here-doc body s, whose quotes are literal text, holds an expansion that
-    # evaluates its value again, so a $( ) stored in the value runs: a bash @P transform (${x@P}); a bash
-    # indirection through a name or a positional parameter (${!y}, ${!1}, ${!@}, ${!*}: the value may
-    # hold a subscript), but not ${!y[@]}, ${!y[*]}, ${!pre*} or ${!pre@}, which list keys or names, nor
-    # ${!} and ${!#}, ${!-}, ${!?}, ${!$}, which read the value of a special parameter; or a zsh flag
-    # group holding e, P (its name may hold a subscript), or % (prompt expansion, which runs a $( ) under
-    # PROMPT_SUBST). The group is walked as zsh reads it: j s Z _ I g take one delimited argument, l and
-    # r up to three, each from its delimiter to the match ( ) [ ] { } < >, or the same character again,
-    # and a flag inside an argument is its text. A backslash before the $ is not read, so an escaped
-    # expansion counts too; an argument that never closes counts. g0_reeval in G00 judges command
-    # records; P1 is aligning it to this walk, and P20 (M3) replaces the two copies with one matcher.
-    function hreev(s,   n, C, i, k, c, d, e, m, t) {
-      if (index(s, "@P}")) return 1
-      if (!index(s, "${")) return 0
-      n = split(s, C, "")
-      for (i = 1; i < n; i++) {
-        if (C[i] != "$" || C[i + 1] != "{") continue
-        if (C[i + 2] == "!") {
-          for (k = i + 3; k <= n && C[k] ~ /[A-Za-z0-9_]/; k++) ;
-          if (k == i + 3 && C[k] != "@" && C[k] != "*") continue
-          t = substr(s, k, 4)
-          if (k > i + 3 && (t == "[@]}" || t == "[*]}" || substr(t, 1, 2) == "*}" || substr(t, 1, 2) == "@}")) continue
-          return 1
-        }
-        if (C[i + 2] != "(") continue
-        for (k = i + 3; k <= n && C[k] != ")"; k++) {
-          c = C[k]
-          if (c == "e" || c == "P" || c == "%") return 1
-          if (index("jsZ_Ig", c)) m = 1
-          else if (c == "l" || c == "r") m = 3
-          else continue
-          d = C[k + 1]
-          e = d == "(" ? ")" : d == "[" ? "]" : d == "{" ? "}" : d == "<" ? ">" : d
-          if (d == "") return 1
-          for (; m > 0 && C[k + 1] == d; m--) {
-            for (k += 2; k <= n && C[k] != e; k++) ;
-            if (k > n) return 1
-          }
-        }
-      }
-      return 0
-    }
+    # hreev(s) is the shared matcher in hooks/lib/reeval.awk, prepended as $_GW_REEVAL: true when the
+    # unquoted here-doc body s holds a parameter expansion that re-evaluates its stored value (${x@P},
+    # ${!y}, a zsh (e)/(P)/(%) flag group, and so on). G00 g0_reeval loads the same file, so the two
+    # sites cannot drift.
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
     function bodies(j,   h, k, t) {
