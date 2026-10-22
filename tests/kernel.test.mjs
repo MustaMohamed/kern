@@ -42,13 +42,15 @@ test('a change routes even when the user calls it quick, and each new task reads
 test('a question that changes nothing is answered, reading what it needs; only a change with no match goes to plan', () => {
   // 2026-10-22 Opus audit, B2: "only a casual turn or a question context answers matches nothing" left a codebase
   // question that needs reads with no row, and "Non-trivial work with no match: plan." sent it to plan, whose step 1
-  // routes to define: a spec interview for a question. The negative adherence case asks one such question.
+  // routes to define: a spec interview for a question. The negative adherence case asks one such question, about
+  // code with no defect: format-bug's money() is buggy, so a run that read diagnose's route there would not show
+  // whether the fallback or the bug drew it (Task 17a P11 review, Important 2).
   assertContains('kernel/kernel.md', ['A non-trivial change with no match: plan.']);
   const text = readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8');
   assert.doesNotMatch(text, /Non-trivial work with no match/);
   const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
   assert.deepEqual(cases.find((c) => c.id === 'neg-codebase-question'), {
-    id: 'neg-codebase-question', kind: 'negative', route: null, files: ['node-bug', 'format-bug'], prompts: ['How does money() in src/format.js round?'],
+    id: 'neg-codebase-question', kind: 'negative', route: null, files: ['node-bug', 'two-modules'], prompts: ['What rate does tax() in src/tax.js apply, and which test checks it?'],
   });
 });
 
