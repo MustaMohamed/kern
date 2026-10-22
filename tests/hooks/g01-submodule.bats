@@ -56,6 +56,23 @@ fix_review() {
   expect none "git -C $W/mod switch -c y" "git -C $W/mod reset --hard HEAD" "git -C $W/mod checkout -b x"
 }
 
+# git add -A stages a linked worktree inside the main checkout as a gitlink ("adding embedded git
+# repository"), so git names the main checkout as its superproject; it is still the same repository's
+# linked worktree (P2 re-review 1).
+@test "a linked worktree inside the main checkout, staged there as a gitlink, gives no vote" {
+  X="$R/.claude/worktrees/x"
+  git -C "$R" worktree add -q -b x "$X" >/dev/null 2>&1
+  git -C "$R" add -A 2>/dev/null
+  [ "$(git -C "$R" ls-files -s .claude/worktrees/x | cut -c1-6)" = 160000 ]
+  [ -n "$(git -C "$X" rev-parse --show-superproject-working-tree)" ]
+  expect none "git -C $X reset --hard HEAD" "git -C $X switch -c y"
+  export CWD="$X"
+  expect none "git reset --hard HEAD"
+  [ "$(fix_review)" = none ]
+  set_autopilot on
+  expect none "git reset --hard HEAD" "git switch -c q"
+}
+
 @test "G3's code-review --fix asks in the main checkout and its submodule, not in a linked worktree or its submodule" {
   [ "$(fix_review)" = ask ]
   export CWD="$R/mod"
