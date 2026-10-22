@@ -3,9 +3,12 @@
 # Mutate mode: CMD passes in WT; on a fork with one condition inverted at FILE:LINE, CMD fails.
 # Usage: probe [--exclude-tests] WT PATCH -- CMD...
 #        probe --mutate FILE:LINE WT -- CMD...
-# --exclude-tests reverses only the non-test files of PATCH, so a test the patch adds stays in the fork;
-# without it, a PATCH that touches a test file is inconclusive. A command word that names a path in WT
-# must still exist in the fork. Exit 0 ok; 1 the test did not fail; 3 inconclusive; 2 usage.
+# --exclude-tests reverses only the non-test files of PATCH, so a test the patch adds stays in the fork,
+# with its test data, fixtures, snapshots and golden files (is_probe_keep); without it, a PATCH that
+# touches one is inconclusive. A command word that names a path in WT must still exist in the fork, and a
+# command word, or a file one names, that holds WT's absolute path is inconclusive. FILE is relative to
+# WT, with no .. part, and must not resolve through a symlink outside the fork. Exit 0 ok, with the last
+# lines of the reversed run on stderr; 1 the test did not fail; 3 inconclusive; 2 usage.
 # The fork is always removed.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -21,6 +24,7 @@ if [ -n "$mutate" ]; then
   shift 2
   mfile=${mutate%:*} mline=${mutate##*:}
   case "$mline" in '' | *[!0-9]*) usage ;; esac
+  case "$mfile" in /* | .. | ../* | */.. | */../*) echo "probe: --mutate takes a path relative to WT, with no .. part: $mfile" >&2; exit 2 ;; esac
 else
   [ $# -ge 4 ] && [ "$3" = -- ] || usage
   wtarg=$1
@@ -42,11 +46,11 @@ excludes=()
 if [ -n "$mutate" ]; then
   [ -f "$wt/$mfile" ] || { echo "probe: inconclusive (no such file in the worktree: $mfile)"; exit 3; }
 else
-  # Every path the patch touches (both sides of a rename), then the test paths among them.
+  # Every path the patch touches (both sides of a rename), then the test paths and test data among them.
   git -C "$wt" apply --numstat -z "$patch" > "$logs/numstat" 2> /dev/null || { echo "probe: inconclusive (cannot read the patch)"; exit 3; }
   tr '\0' '\n' < "$logs/numstat" |
     awk 'n > 0 { print; n--; next } /^[0-9-]+\t[0-9-]+\t$/ { n = 2; next } { sub(/^[0-9-]+\t[0-9-]+\t/, ""); if ($0 != "") print }' > "$logs/paths"
-  awk -v print_tests=1 -f "$here/lib/test-paths.awk" "$logs/paths" > "$logs/tests"
+  awk -v print_keep=1 -f "$here/lib/test-paths.awk" "$logs/paths" > "$logs/tests"
   if [ -s "$logs/tests" ]; then
     if [ "$excl" = 0 ]; then
       echo "probe: inconclusive (the patch changes test files: $(paste -sd ' ' - < "$logs/tests"); pass --exclude-tests so they stay in the fork)"
@@ -61,6 +65,17 @@ else
     done < "$logs/tests"
   fi
 fi
+
+# A command that names WT by its absolute path, as a word or inside a script it names, runs WT, not the fork.
+wtl=$(cd "$wtarg" && pwd)
+for a in "$@"; do
+  case "$a" in *"$wt"* | *"$wtl"*) echo "probe: inconclusive (the command names the worktree by its absolute path, so the fork would run the worktree)"; exit 3 ;; esac
+  case "$a" in /*) f=$a ;; *) f=$wt/$a ;; esac
+  if [ -f "$f" ] && [ -r "$f" ] && grep -Fq -e "$wt" -e "$wtl" "$f"; then
+    echo "probe: inconclusive ($a names the worktree by its absolute path, so the fork would run the worktree)"
+    exit 3
+  fi
+done
 
 if ! (cd "$wt" && "$@") > "$logs/with.log" 2>&1; then
   echo "probe: inconclusive (the command fails with the guard in place)"
@@ -82,6 +97,19 @@ if ! (cd "$fork" && "$@") > "$logs/control.log" 2>&1; then
 fi
 
 if [ -n "$mutate" ]; then
+  # The write below follows symlinks, so FILE and each link it leads through must end inside the fork.
+  mpath=$fork/$mfile hops=0
+  while [ -L "$mpath" ] && [ "$hops" -lt 40 ]; do
+    link=$(readlink "$mpath")
+    hops=$((hops + 1))
+    case "$link" in /*) mpath=$link ;; *) mpath=${mpath%/*}/$link ;; esac
+  done
+  mdir=$(cd -P "${mpath%/*}" 2> /dev/null && pwd -P) || mdir=''
+  case "$mdir/" in "$fork"/*) inside=1 ;; *) inside=0 ;; esac
+  if [ -L "$mpath" ] || [ "$inside" = 0 ]; then
+    echo "probe: inconclusive ($mfile resolves through a symlink outside the fork)"
+    exit 3
+  fi
   # Invert the first operator found on the line, in this order; a word must stand alone.
   if ! awk -v ln="$mline" '
     function word(s, w,   i, b, a) {
@@ -123,9 +151,18 @@ if (cd "$fork" && "$@") > "$logs/without.log" 2>&1; then
   if [ -n "$mutate" ]; then echo "probe: mutation survived ($(cat "$logs/mutated-line"))"; else echo "probe: test did not fail with the guard removed"; fi
   exit 1
 fi
+# Words that mean the test did not run, in any case. A missing name is the error a reversed patch gives
+# when it adds a function or export the test calls; a plain TypeError can be a real assertion, so it stays out.
 blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|command not found|: not found|Permission denied|ENOENT|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
-if grep -Eq "$blocked" "$logs/without.log"; then
-  echo "probe: inconclusive (the test did not run without the guard: $(grep -Em1 "$blocked" "$logs/without.log"))"
+blocked="$blocked|is not a function|is not defined|NameError|has no attribute|cannot find (function|value|type)|unresolved import"
+blocked="$blocked|could not compile|NoMethodError|uninitialized constant|cannot find '.*' in scope|Unresolved reference|undeclared identifier"
+if grep -Eiq "$blocked" "$logs/without.log"; then
+  echo "probe: inconclusive (the test did not run without the guard: $(grep -Eim1 "$blocked" "$logs/without.log"))"
   exit 3
 fi
-if [ -n "$mutate" ]; then echo "probe: mutation caught ($(cat "$logs/mutated-line"))"; else echo "probe: fail-then-pass ok"; fi
+if [ -n "$mutate" ]; then
+  echo "probe: mutation caught ($(cat "$logs/mutated-line"))"
+else
+  echo "probe: fail-then-pass ok"
+  tail -n 5 "$logs/without.log" >&2
+fi
