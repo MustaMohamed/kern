@@ -72,10 +72,9 @@ test('plan pins order, routing and stop rules', () => {
   assert.ok(w >= 0 && w < s[11].indexOf('scripts/plan-check'), 'step 11 writes the plan before it runs plan-check');
   assert.ok(!s[12].includes('kern-dir plans') && !s[12].includes('Write tool'), 'step 12 writes nothing new');
   assertContains(SKILL, [
-    'A plan for this spec exists: update it in place',
     'An unfinished plan for other work: stop and ask',
     'issue acceptance criteria alone are not approved (its bounded path records them as an approved short spec)',
-    '(no issue id: the slug or title words)',
+    'Look for existing PRs with `gh pr list --search <id> --state all`; if gh fails',
     'else stop and ask the user to confirm the scope or split',
     'Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel',
     'round 1 only',
@@ -123,4 +122,20 @@ test('only the user\'s word skips the plan review', () => {
   // "Only by my word" (Task 16n).
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[11].includes('round 1 only. Only the user\'s word skips this review, never size or budget.'), s[11]);
+});
+
+test('plan runs its gating review in the foreground', () => {
+  // Audit C-I6 (2026-10-22): in 2 of 3 kern plan transcripts the review's Agent call passed no
+  // run_in_background, so Claude Code ran it in the background and step 12 could ask for the yes before the
+  // review returned. define's spec review and execute-plan's reviews already pass false (ff764f9).
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[11].includes('send the plan to one fresh general-purpose subagent on `model.reviewer` (`run_in_background: false`), with `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md` as its brief'), s[11]);
+});
+
+test('an existing plan goes back to draft before it is updated, so its approval and its ledger are new', () => {
+  // Audit C-I5: a plan updated in place kept `status: approved`, and execute-plan reused the old ledger's
+  // complete lines. ledger-open now refuses a ledger opened for other plan text; a draft needs a new yes.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].includes('A plan for this spec exists: set `status: draft`, then update it in place.'), s[1]);
+  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask.'), s[1]);
 });
