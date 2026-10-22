@@ -450,6 +450,19 @@ const lineOf = (text, re) => {
   const from = text.lastIndexOf('\n', m.index + m[0].length - 1) + 1, nl = text.indexOf('\n', m.index + m[0].length);
   return first(text.slice(from, nl < 0 ? text.length : nl).trim(), 300);
 };
+// NEXT_MOVE: recall's Next move label at the start of a line, plain, bold or italic, as a heading or a bullet,
+// with or without a colon; group 1 is the rest of that line. NEXT_PART: a line that starts the brief's next
+// part: a heading, a bold or italic label, or an output-contract label (skills/recall/SKILL.md).
+const NEXT_MOVE = /^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+)?[*_]{0,2}Next move[*_]{0,2}[ \t]*:?[*_]{0,2}[ \t]*(.*)$/im;
+const NEXT_PART = /^[ \t]*(?:#{1,6}[ \t]|(?:[-*][ \t]+)?[*_]{2}[^*_\n]+[*_]{2}|(?:Capsule|Threads|Problems|Sources skipped)\b)/i;
+// nextMove(text): the Next move section of a reply, its whitespace folded, or null when it has no such label.
+const nextMove = (text) => {
+  const m = text.match(NEXT_MOVE);
+  if (!m) return null;
+  const rest = text.slice(m.index + m[0].length).split('\n').slice(1);
+  const end = rest.findIndex((l) => NEXT_PART.test(l));
+  return [m[1], ...(end < 0 ? rest : rest.slice(0, end))].join(' ').replace(/\s+/g, ' ').trim();
+};
 // SOURCE: a code file's extension. isTest(path): a file under a test folder, or named as a test.
 const SOURCE = /\.(?:[cm]?[jt]sx?|py|go|rb|rs|java|kt|swift|c|h|cc|cpp|hpp|cs|php|sh)$/i;
 const isTest = (p) => /(^|\/)(tests?|__tests__|specs?)\//i.test(p) || /[._-](test|spec)\.[a-z]+$/i.test(p) || /(^|\/)test_[^/]*\.py$/.test(p) || /_test\.go$/.test(p);
@@ -529,6 +542,21 @@ export const CHECKS = {
     if (read >= 0) return { pass: false, evidence: `a .jsonl transcript was read before the ledger: ${all[read].call.name} ${argOf(all[read].call)}` };
     const by = calls.get(all[ledger].id);
     return { pass: true, evidence: `the result of ${by.name} ${argOf(by)} shows the ledger's first line, and no .jsonl transcript was read before it` };
+  },
+  // recall-2's fixture leaves Task 3 of the export plan started and not complete (Task 16p, task-16-diagnosis-5).
+  // The final reply, the main session's last text (replyAt), has a Next move section (nextMove) whose first
+  // `Task <n>` is Task 3.
+  'next-move-task-3': (events) => {
+    const at = replyAt(events);
+    if (at >= events.length) return { pass: false, evidence: 'no final reply' };
+    const text = events[at].message.content.filter((c) => c?.type === 'text').map((c) => c.text).join('\n');
+    const move = nextMove(text);
+    if (move === null) return { pass: false, evidence: 'the final reply has no Next move label' };
+    const quote = `"${first(move, 300)}"`;
+    const named = move.match(/\bTask\s+(\d+)\b/i);
+    if (!named) return { pass: false, evidence: `the final reply's Next move names no task: ${quote}` };
+    if (named[1] === '3') return { pass: true, evidence: `the final reply's Next move names Task 3: ${quote}` };
+    return { pass: false, evidence: `the final reply's Next move names Task ${named[1]} ${/\bTask\s+3\b/i.test(move) ? 'before' : 'and not'} Task 3: ${quote}` };
   },
 };
 
