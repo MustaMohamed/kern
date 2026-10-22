@@ -44,6 +44,10 @@ trap cleanup EXIT
 
 excludes=()
 if [ -n "$mutate" ]; then
+  if [ -L "$wt/$mfile" ] && [ ! -f "$wt/$mfile" ]; then
+    echo "probe: inconclusive ($mfile is a symlink that does not resolve to a file: a loop, a dangling link or a directory)"
+    exit 3
+  fi
   [ -f "$wt/$mfile" ] || { echo "probe: inconclusive (no such file in the worktree: $mfile)"; exit 3; }
 else
   # Every path the patch touches (both sides of a rename), then the test paths and test data among them.
@@ -187,9 +191,14 @@ fi
 blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|command not found|Permission denied|ENOENT|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
 blocked="$blocked|is not a function|is not defined|NameError|has no attribute|cannot find (function|value|type)|unresolved import"
 blocked="$blocked|could not compile|NoMethodError|uninitialized constant|cannot find '.*' in scope|Unresolved reference|undeclared identifier"
+# RSpec prints the class alone on a line and the message on the next, so such a header is joined with the
+# next line first. NUL bytes become blanks and every grep reads text (-a): no grep may skip a binary log.
 receiver="'NoneType' object has no attribute|undefined method .* for nil([ :]|\$)|NilClass"
-{ grep -Ei "$blocked" "$logs/without.log" || true; grep ': not found' "$logs/without.log" || true; } |
-  { grep -Ev "$receiver" || true; } > "$logs/blocked"
+# shellcheck disable=SC2016 # $0 is awk's, not the shell's
+env LC_ALL=C tr '\000' ' ' < "$logs/without.log" |
+  env LC_ALL=C awk '/^[[:space:]]*(NoMethodError|AttributeError):[[:space:]]*$/ { h = $0; if ((getline n) > 0) $0 = h " " n } { print }' > "$logs/joined"
+{ grep -aEi "$blocked" "$logs/joined" || true; grep -a ': not found' "$logs/joined" || true; } |
+  { grep -aEv "$receiver" || true; } > "$logs/blocked"
 if [ -s "$logs/blocked" ]; then
   echo "probe: inconclusive (the test did not run without the guard: $(head -n 1 "$logs/blocked"))"
   exit 3

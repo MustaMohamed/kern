@@ -235,18 +235,37 @@ setup() {
 # A reversed None or nil guard fails on a None or nil receiver: a real failure, not a missing name.
 @test "a None or nil receiver in the reversed run is a real failure, not a missing name" {
   printf 'sh check.sh -1 && { printf "%%s\\n" "$1"; exit 1; }\nexit 0\n' > "$WT/test-says.sh"
+  # One-line forms, then RSpec's two-line forms (Ruby 3.4, then Ruby 3.2): the class alone on a line, the
+  # message on the next.
   for say in "AttributeError: 'NoneType' object has no attribute 'get'" "undefined method 'get' for nil (NoMethodError)" \
-    "undefined method \`get' for nil:NilClass (NoMethodError)"; do
+    "undefined method \`get' for nil:NilClass (NoMethodError)" \
+    "$(printf '     NoMethodError:\n       undefined method %s for nil' "'get'")" \
+    "$(printf '     NoMethodError:\n       undefined method %s for nil:NilClass' "\`get'")" \
+    "$(printf "     AttributeError:\n       'NoneType' object has no attribute 'get'")"; do
     run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-says.sh "$say"
     [ "$status" -eq 0 ] || { echo "$say: $status $output"; return 1; }
     [ "$output" = "probe: fail-then-pass ok" ]
-    [ "$stderr" = "$say" ]
+    # bats reads $stderr with read -d '', which drops the leading blanks.
+    lead=${say%%[! ]*}
+    [ "$stderr" = "${say#"$lead"}" ] || { echo "stderr: [$stderr] say: [$say]"; return 1; }
   done
   # The echoed line skips a None receiver and shows the missing name after it.
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-says.sh \
     "$(printf "%s\n%s" "AttributeError: 'NoneType' object has no attribute 'get'" "AttributeError: 'Gate' object has no attribute 'check'")"
   [ "$status" -eq 3 ] || { echo "$output"; return 1; }
   [ "$output" = "probe: inconclusive (the test did not run without the guard: AttributeError: 'Gate' object has no attribute 'check')" ]
+  # A two-line missing name stays blocked, joined.
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-says.sh \
+    "$(printf "     AttributeError:\n       'Gate' object has no attribute 'check'")"
+  [ "$status" -eq 3 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: inconclusive (the test did not run without the guard:      AttributeError:        'Gate' object has no attribute 'check')" ]
+}
+
+@test "a NUL byte in the reversed run's log does not hide a marker" {
+  printf 'sh check.sh -1 && { printf "x_y\\nTypeError: isPositive is not a function\\n" | tr _ "\\000"; exit 1; }\nexit 0\n' > "$WT/test-nul.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-nul.sh
+  [ "$status" -eq 3 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: inconclusive (the test did not run without the guard: TypeError: isPositive is not a function)" ]
 }
 
 # The shell's `: not found` is matched in its own case only, so an HTTP Not Found stays an assertion.
@@ -393,4 +412,13 @@ setup() {
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate l19:1 "$WT" -- sh test-gate.sh
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
   [ "$output" = 'probe: mutation caught ([ "$1" == bad ])' ]
+  # A loop or a dangling link: the kernel cannot resolve it, so it is caught in WT.
+  ln -s lb "$WT/la"
+  ln -s la "$WT/lb"
+  ln -s missing.sh "$WT/dangling"
+  for m in la dangling; do
+    run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate "$m:1" "$WT" -- sh test-gate.sh
+    [ "$status" -eq 3 ] || { echo "$m: $output"; return 1; }
+    [ "$output" = "probe: inconclusive ($m is a symlink that does not resolve to a file: a loop, a dangling link or a directory)" ]
+  done
 }
