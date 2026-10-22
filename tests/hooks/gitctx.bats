@@ -1100,3 +1100,81 @@ EOF
   PATH=$old
   has_push "$out" || { echo "$out"; return 1; }
 }
+
+# reeval_table: the P1 re-review differential table, one "verdict<TAB>input" per line. verdict is the
+# shared hreev matcher's answer (flag or no). The quoted and backslash-escaped forms at the end differ
+# between the two call sites by design (a command has quote context, a here-doc body does not), so the
+# test compares the G00 command site only on the inputs with no single quote and no backslash.
+reeval_table() {
+  printf '%s\n' \
+    'flag	${(e)x}' 'flag	${(Le)x}' 'flag	see ${(qe)x} here' 'flag	${(qqe)x}' \
+    'flag	${(j:):e)x}' 'flag	${(j)e)e)x}' 'flag	${(s)e)e)x}' 'flag	${(s:):e)x}' \
+    'flag	${(j(,)e)x}' 'flag	${(l:5::):e)x}' 'flag	${(r[3][)][x]e)x}' 'flag	${(P)y}' \
+    'flag	${(%)x}' 'flag	${(%%)x}' 'flag	${${(e)x}}' \
+    'flag	${x@P}' 'flag	${arr[@]@P}' 'flag	${a[${i}]@P}' 'flag	"${a[${#a[@]}-1]@P}"' \
+    'flag	${x#@P}' 'flag	${x:-@P}' 'flag	echo @P} done' \
+    'flag	${!y}' 'flag	${!y:-z}' 'flag	${!y[0]}' 'flag	${!y[1]:-z}' 'flag	${!a[0]}' \
+    'flag	${!a[$i]}' 'flag	${!a[@]:-q}' 'flag	${!1}' 'flag	${!@}' 'flag	${!*}' \
+    'flag	${!z@P}' 'flag	${!y@Q}' 'flag	${!y@U}' \
+    'no	${x}' 'no	${y}' 'no	${(U)x}' 'no	${(L)x}' 'no	${x@Q}' 'no	$x@P' 'no	P}' \
+    'no	${(s:e:)x}' 'no	${(j:%P:)x}' 'no	${(l:5::e::P:)x}' 'no	${(j(e))x}' \
+    'no	${!a[@]}' 'no	${!a[*]}' 'no	${!pre*}' 'no	${!pre@}' 'no	${!}' 'no	${!#}' \
+    'no	${!-}' 'no	${!?}' 'no	${!$}' 'no	${x/@P/y}' 'no	${#a[@]}' 'no	${a[@]}' \
+    'flag	'\''${(e)x}'\'' '\''${x@P}'\'' '\''${!y}'\''' \
+    "flag	\$'it\\'s \${(e)x}'" "flag	\$'\${(e)x}'" \
+    'flag	\${(e)x}' 'flag	\${x@P}' 'flag	\${!y}' \
+    "flag	\$\$'\\'\${x@P}''" "flag	\$\$'\\'\${(e)x}''"
+}
+
+# hreev_direct INPUT: flag|no, from the shared matcher in hooks/lib/reeval.awk, run on INPUT as one line.
+hreev_direct() {
+  printf '%s' "$1" | env LC_ALL=C awk "$_GW_REEVAL"$'\n''{ print (hreev($0) ? "flag" : "no") }'
+}
+# hreev_gitctx INPUT: flag|no, from the git_words call site (an unquoted here-doc body flagged with a
+# $KERN_UNREAD record on G00's call).
+hreev_gitctx() {
+  local body out
+  body=$(printf '%s\n%s\n%s\n' 'cat <<EOF' "$1" 'EOF')
+  out=$(_GW_QB=1; git_words "$body")
+  case "$out" in *'$KERN_UNREAD'*) printf 'flag\n' ;; *) printf 'no\n' ;; esac
+}
+# hreev_g00 INPUT: flag|no, from the G00 call site (g0_reeval, the only check that prints the
+# re-evaluates reason). INPUT is fed as one git_words record to the full G00 awk program.
+hreev_g00() {
+  local out
+  out=$(printf '%s\n' "$1" | env LC_ALL=C awk -v sq="'" "$_G00_REEVAL$_GW_AWK$_G00_AWK")
+  case "$out" in *'re-evaluates a stored string'*) printf 'flag\n' ;; *) printf 'no\n' ;; esac
+}
+
+@test "the re-eval matcher is one shared file, loaded by both call sites, that neither redefines" {
+  local file
+  file=$(cat "$KERN_ROOT/hooks/lib/reeval.awk")
+  [ -n "$file" ]
+  [[ "$file" == *'function hreev('* ]] || false
+  # shellcheck source=hooks/guards/g00-unproven.sh
+  . "$KERN_ROOT/hooks/guards/g00-unproven.sh"
+  [ "$_GW_REEVAL" = "$file" ]
+  [ "$_G00_REEVAL" = "$file" ]
+  # Only reeval.awk defines hreev; the two sources load it, they do not carry their own copy.
+  ! grep -q 'function hreev' "$KERN_ROOT/hooks/guards/g00-unproven.sh"
+  ! grep -q 'function hreev' "$KERN_ROOT/hooks/lib/gitctx.sh"
+}
+
+@test "the two re-eval call sites agree with the shared matcher on every differential input" {
+  local line want input d
+  # shellcheck source=hooks/guards/g00-unproven.sh
+  . "$KERN_ROOT/hooks/guards/g00-unproven.sh"
+  while IFS=$'\t' read -r want input; do
+    [ -n "$want" ] || continue
+    d=$(hreev_direct "$input")
+    [ "$d" = "$want" ] || { echo "hreev($input) = $d, want $want"; return 1; }
+    d=$(hreev_gitctx "$input")
+    [ "$d" = "$want" ] || { echo "git_words site ($input) = $d, want $want"; return 1; }
+    case "$input" in
+      *\'* | *\\*) ;;
+      *) d=$(hreev_g00 "$input"); [ "$d" = "$want" ] || { echo "G00 site ($input) = $d, want $want"; return 1; } ;;
+    esac
+  done <<TABLE
+$(reeval_table)
+TABLE
+}

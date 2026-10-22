@@ -422,14 +422,17 @@ g00_all() {
 }
 
 @test "an ANSI-C \$'...' string does not hide a single-quoted substitution from the arithmetic rules" {
-  # Inside $'...' a backslash escapes the next byte, so $'\'' is one quote character and the string ends
-  # at the third quote. Read as a plain single quote, the walk closed early and saw the next single-quoted
-  # span as unquoted, so a stored subscript (X=$'\'' y='a[$(cmd)]'; echo $((y))) and an arithmetic
-  # builtin's argument (X=$'\'' let 'a[$(cmd)]') went through; both run cmd in bash 3.2, bash 5.3 and zsh
-  # 5.9 (P1 review Minor 1). Outside autopilot no guard votes, an M3 limit.
+  # Two things. First, the text inside $'...' is stored literally and the arithmetic evaluates it, as a
+  # single-quoted span, so a stored array subscript in it is denied: y=$'a[$(cmd)]'; echo $((y)), the
+  # backtick form, let $'a[$(cmd)]' and a read of the ANSI-C word all run cmd in bash 3.2 and 5.3
+  # (P1 re-review Important 1). Second, $'\'' is one quote character (a backslash escapes the next byte
+  # and the string ends at the third quote), so the walk does not close early and read the next
+  # single-quoted span as unquoted; X=$'\'' y='a[$(cmd)]'; echo $((y)) and X=$'\'' let 'a[$(cmd)]' are
+  # still denied (P1 review Minor 1). Each form was measured to run cmd. Outside autopilot no guard votes.
   local sub='$(git push --force origin main)'
   local c
-  for c in "X=\$'\\'' y='a[$sub]'; echo \$((y))" "X=\$'\\'' let 'a[$sub]'"; do
+  for c in "y=\$'a[$sub]'; echo \$((y))" "let \$'a[$sub]'" "let \$'a[\`git push --force origin main\`]'" \
+    "read -r x <<< \$'a[$sub]'" "X=\$'\\'' y='a[$sub]'; echo \$((y))" "X=\$'\\'' let 'a[$sub]'"; do
     set_autopilot on
     gx "$c" ""
     [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
