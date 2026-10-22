@@ -169,3 +169,59 @@ setup() {
   [ "$(git -C "$REPO" worktree list | wc -l | tr -d ' ')" = 1 ]
   [ ! -e "$REPO/.claude/worktrees" ]
 }
+
+# A plan's header names its base with the source after it, as `base: main (settings); promotion: none`
+# (Task 16n), and execute-plan step 5 passes the plan, so the script, not the model, drops the source.
+# release_on_origin: a release branch one commit past main on origin, and origin/HEAD pointed at it, so a
+# base read from the plan differs from the one detection would give.
+release_on_origin() {
+  git checkout --quiet -b release
+  git commit --quiet --allow-empty -m release
+  git push --quiet origin release
+  git checkout --quiet main
+  git remote set-head origin release
+}
+
+@test "wt-new --plan takes a plan with base: main (settings) as main" {
+  release_on_origin
+  printf -- '---\nstatus: approved\nbase: main (settings); promotion: none\nexecution: inline\n---\n\n# Plan\n' > "$TMP/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-p --plan "$TMP/plan.md"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse origin/main)" ]
+  [ "$(git rev-parse origin/main)" != "$(git rev-parse origin/release)" ]
+}
+
+@test "wt-new --plan drops a source that holds a semicolon, and reads the header form without a source" {
+  release_on_origin
+  git remote set-head origin main
+  printf -- '---\nbase: release (current branch; not detected); promotion: none\n---\n' > "$TMP/a.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-q --plan "$TMP/a.md"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse origin/release)" ]
+  printf -- '---\r\nbase: release; promotion: none\r\n---\r\n' > "$TMP/b.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-r --plan "$TMP/b.md"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse origin/release)" ]
+}
+
+@test "wt-new --plan with an unknown base falls back as with no --base, and exits 2 when nothing names one" {
+  printf -- '---\nbase: unknown (detached HEAD; not detected); promotion: none\n---\n' > "$TMP/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-s --plan "$TMP/plan.md"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse origin/main)" ]
+  git remote set-head origin --delete
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-t --plan "$TMP/plan.md"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"base_branch is not set and not detectable"* ]] || false
+}
+
+@test "wt-new --plan refuses a missing plan, and --plan with --base" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --plan "$TMP/none.md"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"no plan at $TMP/none.md"* ]] || false
+  printf -- '---\nbase: main (settings)\n---\n' > "$TMP/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --plan "$TMP/plan.md" --base main
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"usage"* ]] || false
+  [ ! -e "$REPO/.claude/worktrees/feat-v" ]
+}

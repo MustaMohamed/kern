@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Create a kern worktree off a freshly fetched origin/<base>, copy .worktreeinclude files, run worktree.setup.
-# Usage: wt-new SLUG [--detach] [--base REF] [--branch NAME]
+# Usage: wt-new SLUG [--detach] [--base REF | --plan PLAN] [--branch NAME]
 # A SHA-shaped REF is used as a commit with no fetch (bisection); any other base must fetch from origin.
+# --plan reads the base from PLAN's frontmatter `base:` line, which names its source after the branch, as
+# `base: main (settings); promotion: none`: the branch is the text before the first " (" or ";". A base of
+# `unknown`, or none, falls back as with no --base.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
@@ -9,22 +12,36 @@ here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
 . "$here/lib/wt-common.sh"
 
-usage() { echo "usage: wt-new SLUG [--detach] [--base REF] [--branch NAME]" >&2; exit 2; }
+usage() { echo "usage: wt-new SLUG [--detach] [--base REF | --plan PLAN] [--branch NAME]" >&2; exit 2; }
+
+# plan_base PLAN: the branch PLAN's frontmatter `base:` line names, without its source; empty for none.
+plan_base() {
+  awk '{ sub(/\r$/, "") }
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { exit }
+    /^base:/ { v = substr($0, 6); sub(/;.*/, "", v); sub(/ \(.*/, "", v); gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }' "$1"
+}
 [ $# -ge 1 ] || usage
 slug=$1
 shift
 # The letters are listed: a range such as A-Z follows the locale's collation in bash 3.2, and in
 # en_US.UTF-8 takes letters such as e-acute too.
 case "$slug" in ''|.*|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-]*) echo "wt-new: bad slug: $slug" >&2; exit 2 ;; esac
-detach=0 base='' branch=''
+detach=0 base='' branch='' plan='' based=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --detach) detach=1; shift ;;
-    --base) [ $# -ge 2 ] || usage; base=$2; shift 2 ;;
+    --base) [ $# -ge 2 ] && [ -z "$plan" ] || usage; base=$2; based=1; shift 2 ;;
+    --plan) [ $# -ge 2 ] && [ "$based" = 0 ] || usage; plan=$2; shift 2 ;;
     --branch) [ $# -ge 2 ] || usage; branch=$2; shift 2 ;;
     *) usage ;;
   esac
 done
+if [ -n "$plan" ]; then
+  [ -f "$plan" ] || { echo "wt-new: no plan at $plan" >&2; exit 2; }
+  base=$(plan_base "$plan") || { echo "wt-new: could not read the base line of $plan" >&2; exit 2; }
+  [ "$base" != unknown ] || base=''
+fi
 
 MAIN=$(kern_main_root "$PWD") || { echo "wt-new: not a git repository" >&2; exit 2; }
 # settings_get reads KERN_MAIN, so worktree.dir and worktree.setup come from MAIN, not the caller's cwd.

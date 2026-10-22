@@ -60,7 +60,7 @@ export const PINS = {
   3: ['one todo per task', 'A spec or scope conflict the graph does not show: stop and ask; record the answer, or a mechanical call, as a `Decision:` line.'],
   4: ['at most `parallel.max`', 'unless parallel-work step 1 finds an overlap', 'spawn them in one message as `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/SKILL.md` step 4 does',
     'Others run serially, in task order.', 'into one dispatch and one review over their joined Files lists'],
-  5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --base <plan base>`', "(`<plan-slug>`: the ledger dir's name)",
+  5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --plan <plan>`', "(`<plan-slug>`: the ledger dir's name)",
     'adding `--branch <name>` when `branch.pattern` holds `{id}`', 'Exit 2: say why and ask.', 'both exit 3: ask', 'a red baseline goes to the user',
     'Then write `Worktree: <path> branch=<name> base-tree=<id>`, the id from `wt-snap`.'],
   6: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork <plan-wt> <plan-slug>-task-<N>` (exit 2 or 3: say why and ask)',
