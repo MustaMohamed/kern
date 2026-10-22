@@ -71,7 +71,9 @@ test('a step not done stays in the todo list, and only the user\'s word skips a 
   // 2026-10-22 head-to-head (task-16-h2h-plan-diagnosis): "A step you do not do stays as `skip: <reason>`" let kern
   // skip plan's review on its own judgement in 3 of 6 runs. The user's answer, "Only by my word": plan's and
   // define's reviews, and execute-plan's task and final reviews, are skipped only when the user says so (Task 16n).
-  assertContains('kernel/kernel.md', ["A step you do not do stays as `skip: <reason>`; only the user's word skips a review, never your own judgement."]);
+  // Task 16n review, M3: self-review skips a lane by its own stated rule (`review.builtin: off`, `skip: no spec`),
+  // which is neither the user's word nor kern's judgement, so the line names a skill's own rule too.
+  assertContains('kernel/kernel.md', ["A step you do not do stays as `skip: <reason>`; only a skill's own rule or the user's word skips a review, never your own judgement."]);
   const text = readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8');
   assert.doesNotMatch(text, /A step you do not do stays as `skip: <reason>`\. /, 'the unconditional skip sentence is gone');
 });
