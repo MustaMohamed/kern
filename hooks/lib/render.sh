@@ -70,15 +70,19 @@ KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy 
 # the job's name is not matched. Over 600, Overrides and Set: start at their shortest form (the full line
 # when it is shorter) and Unknown at none, and they take the room left in that order, so the Unknown list
 # is cut first and an unknown key never cuts an override; a whole entry at a time, so no character is
-# split. A cut Overrides or Unknown list ends with `and N more` (`N not shown` when no entry fits; Unknown
-# drops its line when that does not fit either), a cut Set: with the "more" note. The main worktree,
-# settings files and floor lines are never cut.
+# split. A cut Overrides line ends with `not shown: <job>, ...`, naming every job whose entry it cut, so the
+# model knows each job that has a project override; the names are kern's own job names, never a settings
+# value, so the mark stays short (119 chars of names for all 13 jobs), and the shortest form is the mark
+# alone. A cut Unknown list ends with `and N more` (`N not shown` when no entry fits; it drops its line
+# when that does not fit either), a cut Set: with the "more" note. The main worktree, settings files and
+# floor lines are never cut.
 # The 600 counts the plugin root in the note as {ROOT}, so the entries kept do not depend on where kern is
 # installed; the note prints the absolute path.
 settings_summary() {
   local out="" f files="" k v job name dir seen="" here root floor="" nl=$'\n' defaults unk ov="" pol="" oth=""
   local ov_line="" floor_line="" set_line="" unk_line="" ov_full set_full unk_full ov_n set_n unk_n set_cut=""
   local ov_least set_least unk_least part items pre sep sep2 rest e body least n line full room kept tail
+  local ov_jobs="" left names
   local more=" ... (more: bash {ROOT}/scripts/kern-get <key>)"
   local ov_pre="${nl}Overrides (follow the project skill, say so in one line):" set_pre="${nl}Set:" unk_pre="${nl}Unknown keys, ignored:"
   if [ -z "${KERN_MAIN-}" ]; then
@@ -135,7 +139,7 @@ EOT
         name="$job"
       fi
     fi
-    [ -z "$name" ] || ov="$ov$job -> project skill $name$nl"
+    [ -z "$name" ] || ov="$ov$job -> project skill $name$nl" ov_jobs="$ov_jobs$job$nl"
   done
   for k in $seen; do
     case " $KERN_FLOOR_KEYS " in *" $k "*) floor="${floor:+$floor, }$k" ;; esac
@@ -157,7 +161,14 @@ EOT
     done
     if [ "$n" -gt 0 ]; then
       body="$pre$body"
-      if [ "$part" = set ]; then least="$pre$more"; else least="$pre $n not shown"; fi
+      case $part in
+        set) least="$pre$more" ;;
+        ov)
+          names=${ov_jobs%"$nl"}
+          least="$pre not shown: ${names//"$nl"/, }"
+          ;;
+        *) least="$pre $n not shown" ;;
+      esac
       [ "${#body}" -gt "${#least}" ] || least=$body
     fi
     case $part in
@@ -180,18 +191,30 @@ EOT
         line=$full
       else
         # Unknown takes its shortest form only when it fits. Then keep each entry that still fits with the
-        # mark for the rest, in order.
+        # mark for the rest, in order. left holds the jobs of the Overrides entries not kept yet.
         [ "${#least}" -gt "$room" ] || line=$least
-        body=$pre sep=" " rest=$items kept=0
+        body=$pre sep=" " rest=$items kept=0 left="$nl$ov_jobs"
         while [ -n "$rest" ]; do
           e=${rest%%"$nl"*}
           rest=${rest#*"$nl"}
-          if [ "$part" = set ]; then tail=$more; else tail="${sep2}and $((n - kept - 1)) more"; fi
+          case $part in
+            set) tail=$more ;;
+            ov)
+              job=${e%% -> project skill *}
+              names=${left/"$nl$job$nl"/$nl}
+              names=${names#"$nl"}
+              names=${names%"$nl"}
+              tail=""
+              [ -z "$names" ] || tail="${sep2}not shown: ${names//"$nl"/, }"
+              ;;
+            *) tail="${sep2}and $((n - kept - 1)) more" ;;
+          esac
           [ $((${#body} + ${#sep} + ${#e} + ${#tail})) -le "$room" ] || continue
           body="$body$sep$e"
           sep=$sep2
           kept=$((kept + 1))
           line="$body$tail"
+          [ "$part" != ov ] || left=${left/"$nl$job$nl"/$nl}
         done
       fi
       case $part in

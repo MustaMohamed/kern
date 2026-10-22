@@ -171,13 +171,13 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   [ "$status" -eq 0 ]
   summary
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
-  [[ "$summary" == *$'\n'"Overrides (follow the project skill, say so in one line): diagnose -> project skill diagnose; and 1 more"$'\n'* ]] ||
+  [[ "$summary" == *$'\n'"Overrides (follow the project skill, say so in one line): diagnose -> project skill diagnose; not shown: commit"$'\n'* ]] ||
     { echo "$summary"; return 1; }
   [[ "$summary" == *$'\n'"Set: tracker.policy=deny; work_dir=.w ... (more: bash {ROOT}/scripts/kern-get <key>)"* ]] || { echo "$summary"; return 1; }
-  # With no entry that fits, the line still says the job has an override.
+  # With no entry that fits, the line still names the job that has an override.
   rm -r "$R/.claude/skills/diagnose"
   start startup
-  has_line "Overrides (follow the project skill, say so in one line): 1 not shown"
+  has_line "Overrides (follow the project skill, say so in one line): not shown: commit"
 }
 
 @test "unknown keys never cut an override, and a short Set: line holds no more room than it needs" {
@@ -194,6 +194,31 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   has_line "Overrides (follow the project skill, say so in one line): commit -> project skill commit; define -> project skill define; diagnose -> project skill diagnose; execute-plan -> project skill execute-plan; finish-branch -> project skill finish-branch; implement -> project skill implement; parallel-work -> project skill parallel-work; plan -> project skill plan; prove-it -> project skill prove-it; recall -> project skill recall; self-review -> project skill self-review; technical-writing -> project skill technical-writing"
   has_line "Set: base_branch=develop"
   [[ "$summary" != *"Unknown keys"* ]] || { echo "$summary"; return 1; }
+}
+
+@test "a cut Overrides line names each job it does not show: 13 same-name skills from a subdirectory" {
+  # The model must know which jobs have a project override it cannot see (P13 ruling, 2026-10-22).
+  jobs="commit define diagnose execute-plan finish-branch implement parallel-work plan prove-it recall self-review technical-writing unslop"
+  for job in $jobs; do
+    mkdir -p "$R/.claude/skills/$job"
+    printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
+  done
+  mkdir -p "$R/sub"
+  export CWD="$R/sub"
+  start startup
+  summary
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  [[ "$summary" == "Main worktree: "* ]] || false
+  line=$(printf '%s\n' "$summary" | grep '^Overrides ')
+  re='^Overrides \(follow the project skill, say so in one line\): (.+); not shown: ([a-z, -]+)$'
+  [[ "$line" =~ $re ]] || { echo "$line"; return 1; }
+  shown=$(printf '%s\n' "${BASH_REMATCH[1]}" | sed 's/; /\
+/g' | sed 's/ -> project skill .*//')
+  cut=$(printf '%s\n' "${BASH_REMATCH[2]}" | sed 's/, /\
+/g')
+  [ -n "$cut" ]
+  # Every job is shown or named, once.
+  [ "$(printf '%s\n%s\n' "$shown" "$cut" | sort)" = "$(printf '%s\n' $jobs | sort)" ] || { echo "$line"; return 1; }
 }
 
 @test "Main worktree names the main root only when the session's cwd is elsewhere" {
