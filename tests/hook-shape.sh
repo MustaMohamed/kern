@@ -6,8 +6,9 @@
 # stdout is context); PreToolUse exits 0 and prints nothing or valid JSON.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# A CLAUDE_ENV_FILE from the caller would get session-start's export line.
-unset CLAUDE_ENV_FILE
+# A CLAUDE_ENV_FILE from the caller would get session-start's export line, and a CLAUDE_CONFIG_DIR would
+# point PreToolUse at the caller's shell snapshots.
+unset CLAUDE_ENV_FILE CLAUDE_CONFIG_DIR
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 fail=0

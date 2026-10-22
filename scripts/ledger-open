@@ -91,7 +91,7 @@ done
 # The frontmatter as G20 reads it (scripts/lib/frontmatter.awk), so an approval G20 never saw cannot
 # open a ledger.
 rc=0
-fm=$(LC_ALL=C awk -v fm_print=1 -f "$here/lib/frontmatter.awk" "$plan") || rc=$?
+fm=$(env LC_ALL=C awk -v fm_print=1 -f "$here/lib/frontmatter.awk" "$plan") || rc=$?
 case "$rc" in
   0) ;;
   3) echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2 ;;
@@ -112,7 +112,7 @@ if [ $# -eq 2 ]; then
   dir=$2
 else
   name=$(basename "$plan")
-  slug=$(printf '%s\n' "${name%.*}" | tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//')
+  slug=$(printf '%s\n' "${name%.*}" | tr '[:upper:]' '[:lower:]' | env LC_ALL=C sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//')
   [ -n "$slug" ] || { echo "ledger-open: cannot make a ledger name from $plan" >&2; exit 2; }
   dir=$(bash "$here/kern-dir" "ledgers/$slug")
 fi

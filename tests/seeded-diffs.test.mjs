@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,9 +41,10 @@ test('the addy arm says error apply when a diff does not apply, so its guard nev
   assert.equal(addyVerdict({ status: 0 }, { status: 3 }), 'error 3');
 });
 
-test('with no awk on PATH, every diff is an error and none reads clean', () => {
+test('with no awk on PATH, every diff is an error and none reads clean', (t) => {
   // Every command on PATH but awk, so floor-scan and claim-check crash the way an awk failure does.
   const bin = mkdtempSync(join(tmpdir(), 'noawk-'));
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
   const seen = new Set();
   for (const dir of (process.env.PATH || '').split(delimiter)) {
     let names = [];

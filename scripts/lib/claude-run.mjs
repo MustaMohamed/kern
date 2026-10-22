@@ -2,8 +2,8 @@
 // plugins or hooks), no MCP servers, no saved session. Shared by exec-eval (M2a) and the M2b runners.
 import { spawnSync, execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { homedir, tmpdir, userInfo } from 'node:os';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ISOLATION = ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'];
@@ -17,12 +17,42 @@ const SETUP_TIMEOUT_MS = 60 * 1000;
 // The only parent variables a run inherits, by exact name: the shell basics and the auth and config
 // Claude Code reads. No ANTHROPIC_* or CLAUDE_* prefix: the calling session's own plumbing
 // (CLAUDE_CODE_MESSAGING_TOKEN, SESSION_ID, ...) must not reach a model that has unrestricted Bash. Every
-// other credential in the caller's shell (GITHUB_TOKEN, AWS_*, ...) stays out too.
+// other credential in the caller's shell (GITHUB_TOKEN, AWS_*, ...) stays out too. KERN_EVAL_ENV_AUTH goes on,
+// so the claude driver reads the same opt-in its runner did (evalConfigProblem).
 export const INHERITED_NAMES = new Set(['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'TERM',
   'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
-  'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CONFIG_DIR']);
+  'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CONFIG_DIR', 'KERN_EVAL_ENV_AUTH']);
 const INHERITED_PREFIXES = ['LC_', 'KERN_EXEC_'];
 const inherited = (k) => INHERITED_NAMES.has(k) || INHERITED_PREFIXES.some((p) => k.startsWith(p));
+
+// The default login is never used for evals (P15: a standing-cost run used it on 2026-10-22). Every real
+// claude spawn needs CLAUDE_CONFIG_DIR set to the eval account's config dir, never the default ~/.claude; a
+// test's stand-in claude takes a temp one. An auth variable logs claude in whatever the config dir holds, so
+// one that is set refuses the run too, unless KERN_EVAL_ENV_AUTH=1 says to run on it.
+export const NO_EVAL_CONFIG = "set CLAUDE_CONFIG_DIR to the eval account's config dir, $HOME/.claude-kern-eval; the default login (~/.claude) is never used for evals";
+export const AUTH_NAMES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN'];
+const authRefusal = (name) => `${name} is set, so claude would log in with it whatever CLAUDE_CONFIG_DIR says; unset it, or set KERN_EVAL_ENV_AUTH=1 to run on it`;
+// canonical(p): p made absolute, through symlinks where p or its parent exists.
+const canonical = (p) => {
+  const r = resolve(p);
+  try { return realpathSync(r); } catch { /* not there */ }
+  try { return join(realpathSync(dirname(r)), basename(r)); } catch { return r; }
+};
+const accountHome = () => { try { return userInfo().homedir; } catch { return ''; } };
+// evalConfigProblem(env): why env may not start a real claude, or ''. It needs a CLAUDE_CONFIG_DIR that is not
+// blank and is not ~/.claude under env's HOME, this process's home or the account's home (a leading ~ is read
+// as env's HOME), and, without KERN_EVAL_ENV_AUTH=1, no AUTH_NAMES variable set. The refusal names a
+// variable, never its value.
+export function evalConfigProblem(env) {
+  const raw = String(env?.CLAUDE_CONFIG_DIR ?? '').trim();
+  if (!raw) return NO_EVAL_CONFIG;
+  const home = env.HOME || homedir();
+  const dir = canonical(raw === '~' || raw.startsWith('~/') ? join(home, raw.slice(1)) : raw);
+  if ([home, homedir(), accountHome()].filter(Boolean).some((h) => canonical(join(h, '.claude')) === dir)) return NO_EVAL_CONFIG;
+  if (env.KERN_EVAL_ENV_AUTH === '1') return '';
+  const set = AUTH_NAMES.find((k) => String(env[k] ?? '').trim());
+  return set ? authRefusal(set) : '';
+}
 
 // childEnv(parent, extra): the inherited variables of parent, then extra on top.
 export function childEnv(parent, extra = {}) {
@@ -112,6 +142,9 @@ export const NO_BACKGROUND = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
 export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000,
   killGraceMs = 5000, maxBuffer = 64 * 1024 * 1024 }) {
   if (!model) throw new ClaudeRunError('runClaude needs a model', true);
+  const childEnvironment = childEnv(process.env, { ...env, ...(prompts.length > 1 ? NO_BACKGROUND : {}) });
+  const why = evalConfigProblem(childEnvironment);
+  if (why) throw new ClaudeRunError(why, true);
   const root = realpathSync(tmpdir());
   let real;
   try { real = realpathSync(cwd); } catch (e) { throw new ClaudeRunError(`cwd ${cwd} is not usable: ${e.message}`, true); }
@@ -120,7 +153,7 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
     '--model', model, '--max-turns', String(maxTurns), '--max-budget-usd', String(maxBudgetUsd), ...PERMISSIONS, ...ISOLATION, ...pluginDirs.flatMap((d) => ['--plugin-dir', d])];
   // fd 3 carries the driver's one-line report of how claude ended.
   const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify({ prompts, graceMs: killGraceMs }), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
-    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnv(process.env, { ...env, ...(prompts.length > 1 ? NO_BACKGROUND : {}) }) });
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnvironment });
   // A run the timeout cut off is no result, but the events it printed go with the error, so a runner can save
   // them and a reader see how far it got (Task 16h review, M6).
   if (run.error?.code === 'ETIMEDOUT') {
@@ -241,4 +274,9 @@ export function runSummary(events) {
   };
 }
 
-export const claudeVersion = () => execFileSync('claude', ['--version'], { encoding: 'utf8', timeout: SETUP_TIMEOUT_MS }).trim();
+// claudeVersion(env): `claude --version` under env; it refuses as runClaude does when env sets no CLAUDE_CONFIG_DIR.
+export const claudeVersion = (env = process.env) => {
+  const why = evalConfigProblem(env);
+  if (why) throw new ClaudeRunError(why, true);
+  return execFileSync('claude', ['--version'], { encoding: 'utf8', timeout: SETUP_TIMEOUT_MS, env }).trim();
+};

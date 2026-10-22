@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, childEnv, claudeVersion } from './lib/claude-run.mjs';
+import { ISOLATION, childEnv, claudeVersion, evalConfigProblem } from './lib/claude-run.mjs';
 import { isMain } from './lib/is-main.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -24,10 +24,15 @@ export const inputTokens = (u) => {
 };
 export const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
-function once(withKern) {
+// once(withKern, parent): one `claude -p hello` run's input tokens, its child seeing childEnv(parent). It
+// refuses as the runners do (evalConfigProblem), behind main's own check.
+export function once(withKern, parent = process.env) {
+  const env = childEnv(parent);
+  const refusal = evalConfigProblem(env);
+  if (refusal) throw new Error(`standing-cost: ${refusal}`);
   const cwd = mkdtempSync(join(tmpdir(), 'sc-'));
   const argv = ['-p', 'hello', '--output-format', 'json', '--model', MODEL, '--max-turns', '1', '--max-budget-usd', '1', ...ISOLATION, ...(withKern ? ['--plugin-dir', ROOT] : [])];
-  const r = spawnSync('claude', argv, { cwd, encoding: 'utf8', timeout: 180000, env: childEnv(process.env) });
+  const r = spawnSync('claude', argv, { cwd, encoding: 'utf8', timeout: 180000, env });
   rmSync(cwd, { recursive: true, force: true });
   if (r.status !== 0) throw new Error(`standing-cost: claude exited ${r.status}: ${r.error?.message ?? r.stderr.trim().split('\n').pop()}`);
   const j = JSON.parse(r.stdout);
@@ -39,6 +44,8 @@ function once(withKern) {
 if (isMain(import.meta.url)) {
   if (!Number.isInteger(RUNS) || RUNS < 1) { console.error('standing-cost: --runs needs a whole number of at least 1'); process.exit(2); }
   if (args.includes('--dry-run')) { console.log(`claude -p hello x ${RUNS} with --plugin-dir ${ROOT}, x ${RUNS} without; model ${MODEL}`); process.exit(0); }
+  const refusal = evalConfigProblem(process.env);
+  if (refusal) { console.error(`standing-cost: ${refusal}`); process.exit(2); }
   const kern = []; const bare = [];
   for (let i = 0; i < RUNS; i++) { kern.push(once(true)); bare.push(once(false)); }
   const delta = median(kern) - median(bare);

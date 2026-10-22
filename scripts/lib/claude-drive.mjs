@@ -14,8 +14,16 @@
 import { spawn } from 'node:child_process';
 import { readFileSync, writeSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
-import { promptResult } from './claude-run.mjs';
+import { evalConfigProblem, promptResult } from './claude-run.mjs';
 
+// The default login is never used for evals: when evalConfigProblem refuses this environment, claude is not
+// started, and fd 3 says why.
+const refusal = evalConfigProblem(process.env);
+if (refusal) {
+  try { writeSync(3, `${JSON.stringify({ error: { code: 'NO_EVAL_CONFIG', message: refusal } })}\n`); } catch { /* no runner to tell */ }
+  process.stderr.write(`claude-drive: ${refusal}\n`);
+  process.exit(2);
+}
 const { prompts, graceMs } = JSON.parse(readFileSync(0, 'utf8'));
 const turn = (text) => `${JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } })}\n`;
 

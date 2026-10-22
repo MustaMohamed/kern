@@ -11,7 +11,8 @@ setup() {
   cd "$REPO"
   printf 'exit 0\n' > check.sh
   git add check.sh && git commit --quiet -m check && git push --quiet origin main
-  WT=$(bash "$KERN_ROOT/scripts/wt-new" task-x 2> /dev/null)
+  # wt-new's stderr stays in the test's output, so a setup that fails under load says why.
+  WT=$(bash "$KERN_ROOT/scripts/wt-new" task-x)
   L="$TMP/ledger"
   mkdir -p "$L"
   printf '# kern ledger: plan.md\n' > "$L/ledger.md"
@@ -238,7 +239,7 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   [ "$status" -eq 3 ]
   [[ "$output" == *"probe: inconclusive (the patch changes only test files"* ]] || false
   [[ "$stderr" == *"probe is inconclusive"* ]] || false
-  ! grep -q '^Task 1: complete' "$L/ledger.md"
+  run ! grep -q '^Task 1: complete' "$L/ledger.md"
   # A stale patch from an earlier round: after a fix to check.sh it no longer reverse-applies.
   printf '[ "$1" -ge 0 ] || exit 1\n' > "$WT/check.sh"
   T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")

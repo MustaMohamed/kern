@@ -442,7 +442,7 @@ const driveAdherence = ({ argv = ['--runs', '1'], cases = [rowCase()], answers =
   const calls = []; const lines = []; const errors = [];
   const run = given ?? ((opts) => { calls.push(opts); return answer(answers[(calls.length - 1) % answers.length], opts); });
   let code; let thrown = null;
-  try { code = adherenceMain({ root: ROOT, argv, env: {}, cases, run, version: () => '9.9.9 (stand-in)', tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
+  try { code = adherenceMain({ root: ROOT, argv, env: { CLAUDE_CONFIG_DIR: '/stand-in/eval-config' }, cases, run, version: () => '9.9.9 (stand-in)', tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
   catch (e) { thrown = e; }
   const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null);
   return { code, thrown, calls, lines, errors, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null, results, read, done: () => rmSync(dir, { recursive: true, force: true }) };

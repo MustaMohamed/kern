@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RULE, TELLS, attempt, decide, diffAgainst, hide, mergeRow, metrics, parseReview, readSession, reviewPrompt } from '../scripts/lib/pilot.mjs';
+import { guardedEnv, standInCalls } from './helpers/eval-stub.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const at = (s) => `2026-10-20T10:00:${String(s).padStart(2, '0')}.000Z`;
@@ -229,6 +230,25 @@ test('review refuses a paid run outside the eval account, an unknown flag, and s
     const swapped = cli([...reviewFixture(mkdtempSync(join(dir, 'w-')), true), '--dry-run']);
     assert.equal(swapped.status, 2);
     assert.match(swapped.stderr, /outside its repo/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The default login is never used for evals (P15): with CLAUDE_CONFIG_DIR unset, empty or the default ~/.claude,
+// or an auth variable set, a stand-in claude first on a PATH with no real claude is never called.
+test('review with no eval config dir, or an auth variable set, exits 2 with the eval-config refusal and calls no claude', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p-'));
+  try {
+    const a = reviewFixture(dir);
+    const base = guardedEnv({ config: false, log: true });
+    const none = "pilot: set CLAUDE_CONFIG_DIR to the eval account's config dir, $HOME/.claude-kern-eval; the default login (~/.claude) is never used for evals\n";
+    const auth = 'pilot: ANTHROPIC_API_KEY is set, so claude would log in with it whatever CLAUDE_CONFIG_DIR says; unset it, or set KERN_EVAL_ENV_AUTH=1 to run on it\n';
+    for (const [env, want] of [[base, none], [{ ...base, CLAUDE_CONFIG_DIR: '' }, none], [{ ...base, CLAUDE_CONFIG_DIR: `${base.HOME}/.claude/` }, none],
+      [{ ...base, CLAUDE_CONFIG_DIR: join(base.HOME, '.claude-kern-eval'), ANTHROPIC_API_KEY: 'dummy-secret-value-0451' }, auth]]) {
+      const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'pilot.mjs'), ...a], { encoding: 'utf8', env });
+      assert.equal(r.status, 2, r.stderr);
+      assert.equal(r.stderr, want);
+    }
+    assert.equal(standInCalls(base), '', 'the stand-in claude never ran');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

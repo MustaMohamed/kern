@@ -762,7 +762,7 @@ const drive = ({ argv = ['--runs', '1'], cases = [stubCase('x-1'), stubCase('x-2
   if (before !== null) { mkdirSync(snapshots, { recursive: true }); writeFileSync(committed, before); }
   const lines = []; const errors = [];
   let code; let thrown = null;
-  try { code = behaveMain({ root: ROOT, argv, env: {}, cases, run, version: () => '9.9.9 (stand-in)', tree: () => tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
+  try { code = behaveMain({ root: ROOT, argv, env: { CLAUDE_CONFIG_DIR: '/stand-in/eval-config' }, cases, run, version: () => '9.9.9 (stand-in)', tree: () => tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
   catch (e) { thrown = e; }
   const raw = join(results, 'behave-sonnet-5-5-2026-10-22');
   const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null);

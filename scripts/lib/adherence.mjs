@@ -13,7 +13,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { UsageError, parseArgs } from './args.mjs';
 import { caseResult, pluginCopy, stage } from './behave.mjs';
 import { dirtyRefusal, treeRecord } from './run-record.mjs';
-import { ISOLATION, PERMISSIONS, claudeVersion, countProblem, pluginProblem, promptResult, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, countProblem, evalConfigProblem, pluginProblem, promptResult, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
 
 // adherenceFlags(ids): scripts/kernel-adherence.mjs's flags for the shared parser (args.mjs), ids being the case
 // ids; --transcript, --route and --root are the offline grade of one saved session.
@@ -317,6 +317,8 @@ export function adherenceMain({ root, argv, env = process.env, cases: all = null
     if (PLUGIN !== root) log(`plugin: ${PLUGIN}`);
     return 0;
   }
+  const refusal = evalConfigProblem(env);
+  if (refusal) { error(`kernel-adherence: ${refusal}`); return 2; }
   if (PLUGIN !== root && !existsSync(join(PLUGIN, 'kernel', 'kernel.md'))) return usage(`--plugin ${PLUGIN} holds no kernel/kernel.md`);
   const kern = tree(root);
   const pluginTree = PLUGIN !== root ? tree(PLUGIN) : null;

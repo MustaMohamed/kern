@@ -178,7 +178,10 @@ test('a gh call the transcript shows ran but the stub never logged makes the run
   assert.deepEqual(stubMissed(ran('t3', 'gh pr ready 8', true), []), [], 'a denied call never ran');
 });
 
-// A stand-in claude on PATH: never the real one, so these tests spend nothing.
+// A stand-in claude on PATH: never the real one, so these tests spend nothing. It comes with a
+// CLAUDE_CONFIG_DIR, which runClaude needs before it starts any claude, and blanks the auth variables
+// runClaude passes on, so one in the caller's shell neither refuses the run nor reaches the stand-in (P15).
+const NO_AUTH = { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: '', CLAUDE_CODE_OAUTH_TOKEN: '' };
 // By default it reads the one prompt first: a child that exits before reading it races the driver's stdin
 // write (EPIPE). drain: false makes that race the test. It reads one line, not to the end: stdin closes
 // only after the last prompt's result, so a child that waits for the end before answering never answers.
@@ -186,13 +189,13 @@ function fakeClaude(body, { drain = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'fc-'));
   writeFileSync(join(dir, 'claude'), `#!/bin/sh\n${drain ? 'read -r _\n' : ''}${body}\n`);
   chmodSync(join(dir, 'claude'), 0o755);
-  return { PATH: `${dir}:/usr/bin:/bin` };
+  return { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH };
 }
 const work = () => mkdtempSync(join(tmpdir(), 'wk-'));
 const attempt = (env, extra = {}) => () => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env, ...extra });
 
 test('runClaude: a missing binary, exit 126 or 127, a timeout and a signal all throw; none is a result', () => {
-  assert.throws(attempt({ PATH: '/nonexistent' }), (e) => e instanceof ClaudeRunError && e.fatal && /not on PATH/.test(e.message));
+  assert.throws(attempt({ PATH: '/nonexistent', CLAUDE_CONFIG_DIR: '/nonexistent-config', ...NO_AUTH }), (e) => e instanceof ClaudeRunError && e.fatal && /not on PATH/.test(e.message));
   for (const code of [126, 127]) assert.throws(attempt(fakeClaude(`echo boom >&2; exit ${code}`)), (e) => e.fatal && e.message.includes(`exited ${code}`) && e.message.includes('boom'));
   assert.throws(attempt(fakeClaude('sleep 5'), { timeoutMs: 200 }), (e) => e instanceof ClaudeRunError && !e.fatal && /timed out/.test(e.message));
   assert.throws(attempt(fakeClaude('kill -9 $$')), (e) => e instanceof ClaudeRunError && /killed by SIGKILL/.test(e.message));
@@ -204,12 +207,21 @@ const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const gone = (pid) => { for (let i = 0; i < 60 && alive(pid); i++) pause(50); return !alive(pid); };
 const pids = (cwd, ...files) => files.map((f) => Number(readFileSync(join(cwd, f), 'utf8')));
+// waitForPids(cwd): under load a stand-in's pid files can land after runClaude returns, so wait up to 3 s for
+// claude.pid and sleep.pid; returns the ms waited.
+const waitForPids = (cwd) => {
+  const t0 = Date.now();
+  for (let i = 0; i < 60 && !['claude.pid', 'sleep.pid'].every((f) => existsSync(join(cwd, f))); i++) pause(50);
+  return Date.now() - t0;
+};
 const reap = (list) => { for (const pid of list) try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } };
 
 test('runClaude: a timeout stops claude itself, not only the driver that runs it, and leaves no process', () => {
   const cwd = work();
-  const stub = 'echo $$ > claude.pid; trap \'echo term > stopped.txt; kill $!; exit 143\' TERM; sleep 30 & echo $! > sleep.pid; wait $!';
-  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, env: fakeClaude(stub) }), /timed out/);
+  // The pid files come first and stdin is read after them, so a slow start under load still leaves them.
+  const stub = 'echo $$ > claude.pid; trap \'echo term > stopped.txt; kill $!; exit 143\' TERM; sleep 30 & echo $! > sleep.pid; read -r _; wait $!';
+  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, env: fakeClaude(stub, { drain: false }) }), /timed out/);
+  waitForPids(cwd);
   const left = pids(cwd, 'claude.pid', 'sleep.pid');
   try {
     for (let i = 0; i < 40 && !existsSync(join(cwd, 'stopped.txt')); i++) pause(50);
@@ -220,13 +232,16 @@ test('runClaude: a timeout stops claude itself, not only the driver that runs it
 
 test('runClaude: a claude that ignores SIGTERM after the timeout is killed after a short grace, with its process group', () => {
   const cwd = work();
-  const stub = "echo $$ > claude.pid; trap '' TERM; sleep 30 & echo $! > sleep.pid; wait $!";
+  // The pid files come first and stdin is read after them; the trap stays before the sleep, which inherits it.
+  const stub = "echo $$ > claude.pid; trap '' TERM; sleep 30 & echo $! > sleep.pid; read -r _; wait $!";
   const start = Date.now();
-  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, killGraceMs: 300, env: fakeClaude(stub) }), (e) => !e.fatal && /timed out/.test(e.message));
+  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, killGraceMs: 300, env: fakeClaude(stub, { drain: false }) }), (e) => !e.fatal && /timed out/.test(e.message));
+  // The wait for the pid files is left out of the time the run took.
+  const waited = waitForPids(cwd);
   const left = pids(cwd, 'claude.pid', 'sleep.pid');
   try {
     assert.ok(left.every(gone), 'claude, which ignored SIGTERM, and the sleep it started are gone');
-    assert.ok(Date.now() - start < 5000, `took ${Date.now() - start} ms`);
+    assert.ok(Date.now() - start - waited < 5000, `took ${Date.now() - start - waited} ms`);
   } finally { reap(left); }
 });
 
@@ -305,7 +320,7 @@ process.stdin.on('data', (d) => {
 process.stdin.on('end', () => log('eof'));
 `);
   chmodSync(join(dir, 'claude'), 0o755);
-  return { env: { PATH: `${dir}:/usr/bin:/bin` }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
+  return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
 }
 
 test('runClaude sends prompt k+1 only after result k, in one ordered stream, then closes stdin', () => {
@@ -373,7 +388,7 @@ const prompt = async () => { await until(() => lines > used || eof); if (lines <
 })();
 `);
   chmodSync(join(dir, 'claude'), 0o755);
-  return { env: { PATH: `${dir}:/usr/bin:/bin` }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
+  return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
 }
 const replay = (stream, prompts) => {
   const stub = replayClaude(stream);
@@ -940,7 +955,7 @@ test('isolation: a host ~/.claude/kern.yml refuses the run unless KERN_EXEC_ALLO
   assert.match(userSettingsProblem(home, {}), /kern\.yml.*KERN_EXEC_ALLOW_USER_SETTINGS=1/);
   assert.equal(userSettingsProblem(home, { KERN_EXEC_ALLOW_USER_SETTINGS: '1' }), '');
   const evalRun = (env) => spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/exec-eval.mjs', import.meta.url)), '--case', 'commit-work-file'],
-    { encoding: 'utf8', env: { PATH: '/nonexistent', HOME: home, ...env } });
+    { encoding: 'utf8', env: { PATH: '/nonexistent', HOME: home, CLAUDE_CONFIG_DIR: join(home, 'eval-config'), ...env } });
   const refused = evalRun({});
   assert.equal(refused.status, 2);
   assert.match(refused.stderr, /kern\.yml/);
