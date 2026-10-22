@@ -277,12 +277,13 @@ export function behaveDigest(events, max = RECORD.max) {
 // COPY_OMITS: what pluginCopy leaves out, so a run can read none of it.
 // - top: top-level names. The answer keys (evals, tests, docs) and repo internals, and the files that
 //   describe the graders or the cases: CHANGELOG.md, whose Unreleased lines name what each grader checks,
-//   .github's CI steps and .gitignore, which name the evals (Task 16h review, M3).
+//   .github's CI steps and .gitignore, which name the evals (Task 16h review, M3). .claude holds no plugin file,
+//   only local worktrees and settings, and an agent worktree there is a whole copy of the repo, evals included.
 // - paths: the eval runners, whose names tell a model it is being evaluated, and the repo's own eval and
 //   lint tooling (route-eval, seeded-diffs, lint-skills, ci-local and the libs only they use), which reads
 //   evals/ and states what a case needs. No hook, skill or kernel line runs any of it.
 export const COPY_OMITS = {
-  top: ['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers', 'CHANGELOG.md', '.github', '.gitignore'],
+  top: ['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers', 'CHANGELOG.md', '.github', '.gitignore', '.claude'],
   paths: [...['h2h', 'behave', 'kernel-adherence', 'standing-cost', 'pilot', 'exec-eval', 'route-eval', 'seeded-diffs', 'lint-skills'].map((f) => `scripts/${f}.mjs`), 'scripts/ci-local',
     ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive', 'reaper', 'lint-rules', 'kernel-rows', 'rank'].map((f) => `scripts/lib/${f}.mjs`)],
 };

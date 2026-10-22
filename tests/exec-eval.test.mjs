@@ -1197,7 +1197,7 @@ test('Task 16h: the plugin copy holds every file the exec cases run from kern, e
     for (const h of Object.values(JSON.parse(readFileSync(join(d, 'hooks', 'hooks.json'), 'utf8')).hooks).flat().flatMap((m) => m.hooks)) {
       for (const a of h.args) assert.ok(existsSync(a.replace('${CLAUDE_PLUGIN_ROOT}', d)), a);
     }
-    for (const p of ['.git', '.upstream', 'evals', 'tests', 'docs', '.superpowers']) assert.ok(!existsSync(join(d, p)), `${p} stays out`);
+    for (const p of ['.git', '.upstream', 'evals', 'tests', 'docs', '.superpowers', '.claude']) assert.ok(!existsSync(join(d, p)), `${p} stays out`);
     // Task 16h fix round 1, M3: no copied file describes the graders or the cases. CHANGELOG.md's
     // Unreleased lines name what each grader checks, .github's CI steps and .gitignore name the evals, and
     // route-eval, seeded-diffs, lint-skills and their libs read evals/ and state what a case needs; no hook,
