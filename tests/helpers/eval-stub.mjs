@@ -4,16 +4,20 @@
 // the stream-json a stub run returns through a runner's `run` seam.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// guardedEnv(): { PATH, HOME, CLAUDE_CONFIG_DIR, TMPDIR } with a claude that exits 97 and prints nothing.
+// guardedEnv(): { PATH, HOME, CLAUDE_CONFIG_DIR, TMPDIR } with a claude that exits 97 and prints nothing. Its three
+// temp dirs are removed when the test process exits (P5 review, Minor 8).
+const made = [];
+process.once('exit', () => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
 export function guardedEnv() {
-  const bin = mkdtempSync(join(tmpdir(), 'stub-'));
+  const [bin, home, config] = ['stub-', 'sh-', 'sc-'].map((p) => mkdtempSync(join(tmpdir(), p)));
+  made.push(bin, home, config);
   writeFileSync(join(bin, 'claude'), '#!/bin/sh\nexit 97\n');
   chmodSync(join(bin, 'claude'), 0o755);
-  const env = { PATH: `${bin}:/usr/bin:/bin`, HOME: mkdtempSync(join(tmpdir(), 'sh-')), CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'sc-')), TMPDIR: tmpdir() };
+  const env = { PATH: `${bin}:/usr/bin:/bin`, HOME: home, CLAUDE_CONFIG_DIR: config, TMPDIR: tmpdir() };
   assert.equal(spawnSync('/bin/sh', ['-c', 'command -v claude'], { env, encoding: 'utf8' }).stdout.trim(), join(bin, 'claude'), 'the stand-in claude is first on PATH');
   return env;
 }

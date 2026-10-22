@@ -10,6 +10,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { UsageError, parseArgs } from './args.mjs';
+import { COPY_OMITS, dirtyRefusal, treeRecord } from './run-record.mjs';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText, pluginProblem, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
 
 // behaveFlags(ids): scripts/behave.mjs's flags for the shared parser (args.mjs), ids being the case ids.
@@ -279,19 +280,8 @@ export function behaveDigest(events, max = RECORD.max) {
   return `${LEGEND}\n${body || '(none)'}\n\nFinal reply:\n${reply.length > RECORD.reply ? `${first(reply, RECORD.reply)}[cut]` : reply}`;
 }
 
-// COPY_OMITS: what pluginCopy leaves out, so a run can read none of it.
-// - top: top-level names. The answer keys (evals, tests, docs) and repo internals, and the files that
-//   describe the graders or the cases: CHANGELOG.md, whose Unreleased lines name what each grader checks,
-//   .github's CI steps and .gitignore, which name the evals (Task 16h review, M3). .claude holds no plugin file,
-//   only local worktrees and settings, and an agent worktree there is a whole copy of the repo, evals included.
-// - paths: the eval runners, whose names tell a model it is being evaluated, and the repo's own eval and
-//   lint tooling (route-eval, seeded-diffs, lint-skills, ci-local and the libs only they use), which reads
-//   evals/ and states what a case needs. No hook, skill or kernel line runs any of it.
-export const COPY_OMITS = {
-  top: ['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers', 'CHANGELOG.md', '.github', '.gitignore', '.claude'],
-  paths: [...['h2h', 'behave', 'kernel-adherence', 'standing-cost', 'pilot', 'exec-eval', 'route-eval', 'seeded-diffs', 'lint-skills'].map((f) => `scripts/${f}.mjs`), 'scripts/ci-local',
-    ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive', 'reaper', 'lint-rules', 'kernel-rows', 'rank', 'args'].map((f) => `scripts/lib/${f}.mjs`)],
-};
+// COPY_OMITS, what pluginCopy leaves out, lives in run-record.mjs with the tree record; it is exported here too.
+export { COPY_OMITS };
 
 // pluginCopy(root): a copy of the plugin in <tmp>/<random>/kern without COPY_OMITS. The caller removes it
 // with rmSync(dirname(dir), { recursive: true, force: true }).
@@ -301,45 +291,6 @@ export function pluginCopy(root) {
   const paths = new Set(COPY_OMITS.paths.map((p) => p.split('/').join(sep)));
   cpSync(root, dir, { recursive: true, filter: (src) => src === root || (!top.has(relative(root, src).split(sep)[0]) && !paths.has(relative(root, src))) });
   return dir;
-}
-
-// UNMEASURED: the top-level names whose changes no run measures: COPY_OMITS.top but evals (the cases, fixtures
-// and keys a runner reads), and the runners' own output under evals.
-const UNMEASURED = new Set(COPY_OMITS.top.filter((t) => t !== 'evals'));
-const OUTPUT = /^evals\/(?:snapshots|results)\//;
-
-// treeRecord(root): the kern tree a run measures, for its snapshot (Task 17a, G11): { commit, dirty, changes }.
-// commit is HEAD; changes are the `git status --porcelain --untracked-files=all` lines of what a run measures:
-// what pluginCopy copies, plus evals/ (cases, fixtures, keys) and the harness under scripts/, not the snapshots
-// and results the runners write, nor docs, tests, notes or worktrees; dirty is true when there is one. A root
-// git cannot read gives { commit: null, dirty: true, changes: [], problem }.
-export function treeRecord(root) {
-  let head, status;
-  try {
-    head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-    status = execFileSync('git', ['-C', root, 'status', '--porcelain=v1', '-z', '--untracked-files=all'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch (e) {
-    return { commit: null, dirty: true, changes: [], problem: `not a git checkout: ${String(e.stderr || e.message).trim().split('\n')[0]}` };
-  }
-  // -z: each entry is "XY path", and a rename or copy is followed by its source path as an entry of its own.
-  const entries = status.split('\0');
-  const changes = [];
-  for (let i = 0; i < entries.length; i++) {
-    const [xy, path] = [entries[i].slice(0, 2), entries[i].slice(3)];
-    if (!path) continue;
-    if (/[RC]/.test(xy)) i += 1;
-    if (!UNMEASURED.has(path.split('/')[0]) && !OUTPUT.test(path)) changes.push(`${xy} ${path}`);
-  }
-  return { commit: head, dirty: changes.length > 0, changes };
-}
-
-// dirtyRefusal(tree): the usage message that stops a run which would write a committed snapshot of a
-// tree with uncommitted changes, or '' for a clean tree. --allow-dirty runs it anyway, and the snapshot records
-// the changes.
-export function dirtyRefusal(tree) {
-  if (!tree.dirty) return '';
-  const what = tree.problem || `${tree.changes.length} uncommitted change(s) a run would measure: ${tree.changes.slice(0, 5).join(', ')}${tree.changes.length > 5 ? ', ...' : ''}`;
-  return `the kern tree is not a clean commit (${what}); commit first, or pass --allow-dirty to run anyway (the snapshot records the changes)`;
 }
 
 export function graderPrompt(expectations, dig) {
@@ -650,7 +601,7 @@ export function tryRun({ expect = null, ...opts }, run = runClaude) {
 //   with complete false. Only a full run with at least one valid run writes the committed snapshot
 //   (<snapshots>/behave-<model>-<date>.json, complete true, every case id under cases), and then the progress file
 //   goes. A --case run, an all-invalid run or a run a fatal error stops leaves the committed snapshot as it was.
-export function behaveMain({ root, argv, env = process.env, cases: all = null, run = runClaude, version = claudeVersion, tree = () => treeRecord(root),
+export function behaveMain({ root, argv, env = process.env, cases: all = null, run = runClaude, version = claudeVersion, tree = treeRecord,
   snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), log = console.log, error = console.error, now = new Date() }) {
   const usage = (msg) => { error(`behave: ${msg}\nusage: node scripts/behave.mjs [--case <id>] [--runs N] [--model <m>] [--grader-model <m>] [--allow-dirty] [--dry-run]`); return 2; };
   const cases0 = all ?? loadCases(root);
@@ -666,7 +617,7 @@ export function behaveMain({ root, argv, env = process.env, cases: all = null, r
     return 0;
   }
   const full = !only;
-  const kern = tree();
+  const kern = tree(root);
   if (full && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
   let claude;
   try { claude = version(); } catch (e) { error(`behave: cannot read the claude version (${String(e.message).split('\n')[0]}); nothing ran`); return 1; }
@@ -694,16 +645,16 @@ export function behaveMain({ root, argv, env = process.env, cases: all = null, r
         if (before?.problem) { runs.push({ invalid: true, reason: before.problem, verdict: null, exit: null }); rmSync(dirname(cwd), { recursive: true, force: true }); continue; }
         const { run: r, problem, events } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20, expect }, run);
         const after = before ? readTree(cwd, 'end') : null;
-        const tree = before ? { start: before.state, end: after.state } : undefined;
+        const states = before ? { start: before.state, end: after.state } : undefined;
         // A run cut off by the timeout keeps the events it printed.
         const kept = r ? r.events : events;
         if (kept.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
-        if (before) writeFileSync(join(raw, `${c.id}-${i}.tree.json`), JSON.stringify({ ...tree, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
+        if (before) writeFileSync(join(raw, `${c.id}-${i}.tree.json`), JSON.stringify({ ...states, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
         const gdir = mkdtempSync(join(tmpdir(), 'g-'));
         let verdict = null; let invalid = !!problem || !!after?.problem; let reason = problem || after?.problem || '';
         if (!invalid) {
           try {
-            verdict = gradeRun(c, r.events, tree, (ex, record) => {
+            verdict = gradeRun(c, r.events, states, (ex, record) => {
               const g = tryRun({ cwd: gdir, prompts: [graderPrompt(ex, record)], model: GRADER, maxTurns: 1 }, run);
               if (g.problem) throw new Error(`grader: ${g.problem}`);
               return finalText(g.run.events);

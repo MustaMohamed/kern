@@ -22,7 +22,8 @@ import { cpSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ClaudeRunError, claudeVersion, finalText, runClaude, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
-import { dirtyRefusal, pluginCopy, treeRecord } from './lib/behave.mjs';
+import { pluginCopy } from './lib/behave.mjs';
+import { dirtyRefusal, treeRecord } from './lib/run-record.mjs';
 import { reaper } from './lib/reaper.mjs';
 import { GRADERS } from './lib/exec-grade.mjs';
 import { UsageError, caseEnv, casePrompts, claudeConfigDir, dateStamp, gradeCase, parseArgs, runEval, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from './lib/exec-run.mjs';

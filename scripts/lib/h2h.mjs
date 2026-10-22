@@ -12,7 +12,8 @@ import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { UsageError, parseArgs } from './args.mjs';
-import { digest, dirtyRefusal, pluginCopy, treeRecord, tryRun } from './behave.mjs';
+import { digest, pluginCopy, tryRun } from './behave.mjs';
+import { dirtyRefusal, statusEntries, treeRecord } from './run-record.mjs';
 import { ISOLATION, PERMISSIONS, childEnv, claudeVersion, finalText, runClaude, workspace } from './claude-run.mjs';
 
 export const CATEGORIES = ['plan', 'diagnose', 'review'];
@@ -224,6 +225,9 @@ export function graderPrompt(task, outputs) {
     "Each attempt's block opens with git facts read from its workspace before it started. Its session's git status showed it the branch, the main branch, HEAD's short SHA and the recent commits with their subjects, so a claim that matches those is supported, though no command printed it. It was not shown the remotes, so a claim about a remote still needs a command and its output. A claim that contradicts any fact is unsupported.",
     ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".', EXTRA_RULE] : []),
     ...(task.category === 'plan' ? ['Count the claims about the repo that neither the fixture files nor the git facts its session was shown support.'] : []),
+    // P5 review, Important 1: the reply shape was shown only by an example with non-empty values.
+    'Give every field for every attempt: [] when no label matches, 0 when there is nothing to count.',
+    ...(task.category === 'review' ? ['A finding that matches no label counts in "unmatched"; never list "none" in matched, decoys or extras.'] : []),
     `Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],${task.category === 'review' ? '"extras":["x1"],' : ''}"unmatched":1,"unsupported":0,"why":"..."}]}.`,
     '', 'Task given to each attempt:', task.prompts.join('\n---\n'), '', 'Rubric:', ...task.rubric.map((r, i) => `${i + 1}. ${r}`),
     ...(task.category === 'review' ? ['', 'Labels:', JSON.stringify(task.labels)] : []),
@@ -231,15 +235,17 @@ export function graderPrompt(task, outputs) {
   ].join('\n');
 }
 
-// parseGrades(text, ids, task): one grade per blind id, or throws. A malformed reply voids the task-run, since
-// every gate decision rests on these numbers (Task 17a, G2; addy scripts/run-evals.js:453-502, MIT, ideas only):
+// parseGrades(text, ids, task): one grade per blind id, or throws. A malformed reply voids the task-run (h2hMain asks
+// once more first), since every gate decision rests on these numbers (Task 17a, G2; addy scripts/run-evals.js:453-502,
+// MIT, ideas only):
 // - score is a number from 0 to 10;
-// - matched, decoys and extras, when given, are lists; for a task with labels (review), lists of the key's label
-//   ids, each bare or with its kind prefix ("decoy:d1"), and a review grade must give matched and decoys;
-// - unmatched and unsupported, when given, are whole numbers of at least 0; a review grade must give unmatched
-//   and a plan grade unsupported, the counts its false alarms are.
-// A plan or diagnose task has no key, so its lists are kept as the grader gave them (graders have listed rubric
-// line numbers there). Without task, only the types are checked.
+// - only the fields the task's category reads are checked, and the rest are kept as given, so a field no gate reads
+//   never voids a task-run (P5 review, Important 1). A review grade reads matched and decoys, lists of the key's
+//   label ids, each bare or with its kind prefix ("decoy:d1"), extras when given (a list of them too), and
+//   unmatched, a whole number of at least 0. A plan grade reads unsupported, a whole number of at least 0. A
+//   diagnose grade reads only its score: its false alarms are measured, not graded.
+// Without task, only the score is checked.
+const READS = { review: { lists: ['matched', 'decoys', 'extras'], counts: ['unmatched'] }, plan: { lists: [], counts: ['unsupported'] } };
 export function parseGrades(text, ids, task = null) {
   const m = String(text).match(/\{[\s\S]*\}/);
   if (!m) throw new Error('h2h grader: no JSON object in the reply');
@@ -247,46 +253,52 @@ export function parseGrades(text, ids, task = null) {
   if (!Array.isArray(grades)) throw new Error('h2h grader: the reply has no grades list');
   const g = Object.fromEntries(grades.filter((x) => x && typeof x === 'object').map((x) => [x.id, x]));
   const key = task?.labels ? new Set(task.labels.map((l) => l.id)) : null;
-  const needs = { review: ['matched', 'decoys', 'unmatched'], plan: ['unsupported'] }[task?.category] ?? [];
+  const reads = READS[task?.category] ?? { lists: [], counts: [] };
   for (const id of ids) {
     const x = g[id];
     if (!x || typeof x.score !== 'number' || !Number.isFinite(x.score) || x.score < 0 || x.score > 10) throw new Error(`h2h grader: no valid score for ${id}`);
-    for (const list of ['matched', 'decoys', 'extras']) {
-      if (x[list] === undefined) { if (needs.includes(list)) throw new Error(`h2h grader: ${id} has no ${list} list`); continue; }
+    for (const list of reads.lists) {
+      // extras is optional: left out, or null, it names no label.
+      if (x[list] === undefined || (list === 'extras' && x[list] === null)) { if (list !== 'extras') throw new Error(`h2h grader: ${id} has no ${list} list`); continue; }
       if (!Array.isArray(x[list]) || (key && x[list].some((d) => typeof d !== 'string'))) throw new Error(`h2h grader: ${list} for ${id} is not a list of label ids`);
       const stray = key ? x[list].find((d) => !key.has(labelId(d))) : undefined;
       if (stray !== undefined) throw new Error(`h2h grader: ${list} for ${id} names ${stray}, which is no label in the key`);
     }
-    for (const count of ['unmatched', 'unsupported']) {
-      if (x[count] === undefined) { if (needs.includes(count)) throw new Error(`h2h grader: ${id} has no ${count} count`); continue; }
+    for (const count of reads.counts) {
+      if (x[count] === undefined) throw new Error(`h2h grader: ${id} has no ${count} count`);
       if (!Number.isInteger(x[count]) || x[count] < 0) throw new Error(`h2h grader: ${count} for ${id} is not a whole number of at least 0`);
     }
   }
   return g;
 }
 
-// finalFiles(cwd, perFile): what an arm's session left in its workspace, for the grader (Task 17a, G1): every file
-// `git status --porcelain --ignored --untracked-files=all` lists, changed, untracked or ignored, each as
+// finalFiles(cwd, perFile, total): what an arm's session left in its workspace, for the grader (Task 17a, G1): every
+// file `git status --porcelain --ignored --untracked-files=all` lists, changed, untracked or ignored, each as
 // `--- <path>` then its final text, cut at perFile characters; a file gone, a symlink or a binary file says so in
-// place of its text. A plan lands in .kern/, which .git/info/exclude ignores, so `git diff` never shows it, and an
-// Edit after the first Write changed what the grader must read: the runner once gave it each Write's input.
-export function finalFiles(cwd, perFile = 20000) {
-  const out = execFileSync('git', ['-C', cwd, 'status', '--porcelain=v1', '-z', '--ignored', '--untracked-files=all'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  const entries = out.split('\0');
+// place of its text. The block stops before it would pass total characters and ends `[cut: N more files]`, so an
+// arm that ran npm install or wrote build output cannot overflow the grader's prompt (P5 review, Minor 4). A plan
+// lands in .kern/, which .git/info/exclude ignores, so `git diff` never shows it, and an Edit after the first Write
+// changed what the grader must read: the runner once gave it each Write's input.
+export function finalFiles(cwd, perFile = 20000, total = 60000) {
+  const entries = statusEntries(cwd, ['--ignored', '--untracked-files=all']);
   const blocks = [];
-  for (let i = 0; i < entries.length; i++) {
-    const [xy, path] = [entries[i].slice(0, 2), entries[i].slice(3)];
-    if (!path) continue;
-    // -z: a rename or copy is followed by its source path as an entry of its own.
-    if (/[RC]/.test(xy)) i += 1;
+  let size = 0;
+  for (const [n, { path }] of entries.entries()) {
     const f = join(cwd, path);
     let st = null;
-    try { st = lstatSync(f); } catch { blocks.push(`--- ${path} (deleted)`); continue; }
-    if (!st.isFile()) { blocks.push(`--- ${path} (${st.isSymbolicLink() ? 'a symlink' : 'not a file'})`); continue; }
-    const buf = readFileSync(f);
-    if (buf.includes(0)) { blocks.push(`--- ${path} (binary, ${buf.length} bytes)`); continue; }
-    const text = buf.toString('utf8');
-    blocks.push(`--- ${path}\n${text.length > perFile ? `${text.slice(0, perFile)}\n[cut: ${text.length - perFile} more characters]` : text}`);
+    let block;
+    try { st = lstatSync(f); } catch { st = null; }
+    if (!st) block = `--- ${path} (deleted)`;
+    else if (!st.isFile()) block = `--- ${path} (${st.isSymbolicLink() ? 'a symlink' : 'not a file'})`;
+    else {
+      const buf = readFileSync(f);
+      const text = buf.toString('utf8');
+      block = buf.includes(0) ? `--- ${path} (binary, ${buf.length} bytes)` : `--- ${path}\n${text.length > perFile ? `${text.slice(0, perFile)}\n[cut: ${text.length - perFile} more characters]` : text}`;
+    }
+    const grown = size + (blocks.length ? 2 : 0) + block.length;
+    if (grown > total) { blocks.push(`[cut: ${entries.length - n} more files]`); break; }
+    blocks.push(block);
+    size = grown;
   }
   return blocks.join('\n\n');
 }
@@ -298,20 +310,27 @@ const USAGE = 'usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--
 // loadArms by default), the run (runClaude, or a stub), the Claude Code version, the tree record, the snapshot and
 // results dirs and the floor-scan script (Task 17a). env is the caller's environment.
 // - Flags (h2hFlags) are read by the shared parser: any other word is a usage error (2) before anything runs.
-// - A full run (no --category, --task or --arms) refuses a kern tree with uncommitted changes it would measure,
-//   unless --allow-dirty; the snapshot records the tree as kern (G11).
-// - Each arm's run must load its plugin, and kern's must print the kernel, every other arm's not (G10). A git
-//   failure in an arm's workspace, or a floor-scan that exits other than 0 or 1, voids that task-run, not the run
-//   (G13, G9). Heldout tests and floor-scan get childEnv(env), not the caller's whole environment (G9).
+// - Every run but a dry run refuses a kern tree with uncommitted changes it would measure, unless --allow-dirty, a
+//   --category or --task run too, since those may be the evidence (G11; P5 review, Minor 1). The snapshot records
+//   the tree as kern.
+// - Each arm's run must load its plugin, and kern's must print the kernel, every other arm's not (G10). A child
+//   process's failure in an arm's workspace (git, a setup command), or a floor-scan that exits other than 0 or 1,
+//   voids that task-run, not the run (G13, G9); any other error stops the run (P5 review, Minor 3). Heldout tests
+//   and floor-scan get childEnv(env), not the caller's whole environment, and floor-scan an empty temp HOME (G9).
 // - A plan is graded from the workspace's final files (finalFiles, G1), and the grader's reply is checked against
-//   the task's key (parseGrades, G2).
-// - key.json beside the transcripts is merged with the day's earlier keys, never replaced (G3).
+//   the task's key (parseGrades, G2). A reply that fails to parse or validate is asked for once more, with the
+//   error, before the task-run is VOID: a VOID throws away every arm session of it (P5 review, Important 1).
+// - key.json beside the transcripts is merged with the day's earlier keys, never replaced (G3). One that is not
+//   JSON stops the run before anything runs (P5 review, Minor 5).
 // - Snapshots (G3): only a full run with at least one graded task-run writes <snapshots>/h2h-<model>-<date>.json;
 //   a filtered run, an all-VOID run or a run a fatal error stops writes snapshot-<model>-<filter>.json beside the
 //   transcripts instead, complete false when it stopped. Each records the tasks under cases and the VOID task-runs.
+//   After each task-run, the progress so far goes to that file beside the transcripts (complete false) and key.json
+//   is merged, so a run a signal kills, which runs no finally, keeps what it graded (P5 review, Minor 6); a full
+//   run removes the progress file once the committed snapshot is written.
 // Exit: gateExit (0 pass, 1 a category failed, 3 one incomplete), 2 for a usage error or no task matched.
 export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms: armsOf = (pick) => loadArms(root, pick), armIds = null, run = runClaude, version = claudeVersion,
-  tree = () => treeRecord(root), snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), floorScan = join(root, 'scripts', 'floor-scan'),
+  tree = treeRecord, snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), floorScan = join(root, 'scripts', 'floor-scan'),
   log = console.log, error = console.error, now = new Date() }) {
   const usage = (msg) => { error(`h2h: ${msg}\n${USAGE}`); return 2; };
   const allTasks = all ?? loadTasks(root);
@@ -330,8 +349,8 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
     return 0;
   }
   const full = !o.category && !o.task && !o.arms;
-  const kern = tree();
-  if (full && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
+  const kern = tree(root);
+  if (!o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
   let claude;
   try { claude = version(); } catch (e) { error(`h2h: cannot read the claude version (${String(e.message).split('\n')[0]}); nothing ran`); return 1; }
   const date = now.toISOString().slice(0, 10);
@@ -344,12 +363,65 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
   const committed = join(snapshots, `h2h-${model}-${date}.json`);
   const filter = full ? 'all' : [o.category, o.task?.replace('/', '--'), o.arms && `arms-${o.arms.join('+')}`].filter(Boolean).join('-');
   const beside = join(raw, `snapshot-${model}-${filter}.json`);
+  const keyFile = join(raw, 'key.json');
+  // readKey(): the day's keys so far, {} only when there is no key.json yet. It is the one map from the day's blind
+  // ids to arms, so one that does not parse throws and is never overwritten (P5 review, Minor 5).
+  const readKey = () => {
+    let text;
+    try { text = readFileSync(keyFile, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return {}; throw e; }
+    let k;
+    try { k = JSON.parse(text); } catch (e) { throw new Error(`h2h: ${keyFile} is not JSON (${e.message}); move it aside before a run`); }
+    if (!k || typeof k !== 'object' || Array.isArray(k)) throw new Error(`h2h: ${keyFile} is not JSON (not an object of seeds); move it aside before a run`);
+    return k;
+  };
+  try { readKey(); } catch (e) { error(e.message); return 2; }
+  // Merged, so a filtered rerun keeps the keys of the day's other task-runs (Task 17a, G3).
+  const writeKey = () => writeFileSync(keyFile, JSON.stringify({ ...readKey(), ...key }, null, 2) + '\n');
   const results = []; const voided = []; const key = {};
   let verdict = null;
   const save = (file, complete) => {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ model: MODEL, grader: GRADER, claude, isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS, kern, complete, cases: tasks.map((t) => t.id),
       arms: arms.map((a) => ({ id: a.id, plugin: a.plugin, commit: a.id === 'kern' ? kern.commit : a.dir ? rev(a.srcDir ?? a.dir) : null })), voided, gate: verdict, results }, null, 2) + '\n');
+  };
+  // gradeTaskRun(t, attempts): { grades, reply, regrade } from the grader, or { problem }. A reply that does not parse
+  // or validate is asked for once more, with the error after the same prompt; regrade keeps that first error. A
+  // grader run that failed, or a second reply that fails too, is the problem (P5 review, Important 1).
+  const gradeTaskRun = (t, attempts) => {
+    const prompt = graderPrompt(t, attempts);
+    let first = '';
+    for (;;) {
+      const text = first ? `${prompt}\n\nA reply to this prompt could not be used: ${first}. Reply again with JSON only, in the shape above, with every field for every attempt.` : prompt;
+      const gdir = mkdtempSync(join(tmpdir(), 'g-'));
+      let graded;
+      try { graded = tryRun({ cwd: gdir, prompts: [text], model: GRADER, maxTurns: 1 }, run); } finally { rmSync(gdir, { recursive: true, force: true }); }
+      if (graded.problem) return { problem: `grader: ${graded.problem}` };
+      const reply = finalText(graded.run.events);
+      try { return { grades: parseGrades(reply, attempts.map((x) => x.id), t), reply, regrade: first }; } catch (err) {
+        if (first) return { problem: `${err.message} (asked twice; first: ${first})` };
+        first = err.message;
+      }
+    }
+  };
+  // taskRun(t, r): task t's run r: each arm's attempt, then one blind grade of them all, its rows in results and its
+  // key in key; a task-run that cannot be graded goes to voided with the reason.
+  const taskRun = (t, r) => {
+    const seed = `${date}:${t.id}:${r}`;
+    const ids = blindIds(arms.map((a) => a.id), seed);
+    const attempts = [];
+    const fail = (reason) => { voided.push({ task: t.id, run: r, reason }); log(`VOID ${t.id} run ${r}: ${reason}`); };
+    for (const a of arms) {
+      const x = armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan });
+      if (x.problem) return fail(`${a.id}: ${x.problem}`);
+      attempts.push(x.attempt);
+    }
+    attempts.sort((x, y) => x.id.localeCompare(y.id));
+    const g = gradeTaskRun(t, attempts);
+    if (g.problem) return fail(g.problem);
+    key[seed] = ids;
+    // A review row keeps the grader's raw reply and its decoy and unmatched counts (resultRow); a row whose grade
+    // came from the re-ask says why the first reply was not used.
+    for (const x of attempts) results.push({ ...resultRow(t, r, x, g.grades[x.id], g.reply), ...(g.regrade ? { regrade: g.regrade } : {}) });
   };
   // The kern arm runs from a copy of the plugin without evals/, tests/ and the answer keys, so a model in that
   // arm cannot read labels.json or heldout/ under its plugin root. Every other plugin arm runs from a copy too:
@@ -365,43 +437,22 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
     }
     for (const t of tasks) {
       for (let r = 0; r < RUNS; r++) {
-        const seed = `${date}:${t.id}:${r}`;
-        const ids = blindIds(arms.map((a) => a.id), seed);
-        const attempts = [];
-        let voidedBy = '';
-        for (const a of arms) {
-          const x = armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan });
-          if (x.problem) { voidedBy = `${a.id}: ${x.problem}`; break; }
-          attempts.push(x.attempt);
-        }
-        if (voidedBy) { voided.push({ task: t.id, run: r, reason: voidedBy }); log(`VOID ${t.id} run ${r}: ${voidedBy}`); continue; }
-        attempts.sort((x, y) => x.id.localeCompare(y.id));
-        const gdir = mkdtempSync(join(tmpdir(), 'g-'));
-        const graded = tryRun({ cwd: gdir, prompts: [graderPrompt(t, attempts)], model: GRADER, maxTurns: 1 }, run);
-        rmSync(gdir, { recursive: true, force: true });
-        if (graded.problem) { voided.push({ task: t.id, run: r, reason: `grader: ${graded.problem}` }); log(`VOID ${t.id} run ${r}: grader: ${graded.problem}`); continue; }
-        let grades;
-        const reply = finalText(graded.run.events);
-        try { grades = parseGrades(reply, attempts.map((x) => x.id), t); } catch (err) { voided.push({ task: t.id, run: r, reason: err.message }); log(`VOID ${t.id} run ${r}: ${err.message}`); continue; }
-        key[seed] = ids;
-        // A review row keeps the grader's raw reply and its decoy and unmatched counts (resultRow).
-        for (const x of attempts) results.push(resultRow(t, r, x, grades[x.id], reply));
+        taskRun(t, r);
+        // Progress, so a run a signal kills keeps what it graded (P5 review, Minor 6).
+        save(beside, false);
+        writeKey();
       }
     }
     complete = true;
   } finally {
     for (const c of copies) rmSync(dirname(c), { recursive: true, force: true });
-    // Merged, so a filtered rerun keeps the keys of the day's other task-runs (Task 17a, G3).
-    const keyFile = join(raw, 'key.json');
-    let earlier = {};
-    try { earlier = JSON.parse(readFileSync(keyFile, 'utf8')); } catch { earlier = {}; }
-    writeFileSync(keyFile, JSON.stringify({ ...earlier, ...key }, null, 2) + '\n');
     if (!complete) save(beside, false);
   }
   verdict = gate(results, touchedTasks(allTasks, tasks).map((t) => ({ id: t.id, category: t.category })));
   for (const v of verdict) log(verdictLine(v));
   if (full && results.length) {
     save(committed, true);
+    rmSync(beside, { force: true });
     log(`snapshot: ${committed}`);
   } else {
     save(beside, true);
@@ -414,8 +465,8 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
 // workspace, gitFacts read before it runs, its run (events saved as <task>-<run>-<blind id>.jsonl), then the diff, the
 // out-of-area files, for diagnose the floor-scan hits and the heldout tests, and for plan the final files. Returns
 // { attempt } or { problem }, the reason the task-run is VOID: a run that may not be graded, a plugin that did not
-// load as the arm needs (G10), a floor-scan exit other than 0 or 1 (G9) or a git failure (G13). The workspace goes
-// either way.
+// load as the arm needs (G10), a floor-scan exit other than 0 or 1 (G9) or a child process's failure (G13); any other
+// error is thrown. The workspace goes either way.
 function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }) {
   let cwd = null;
   try {
@@ -438,7 +489,10 @@ function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }) {
       writeFileSync(join(dirname(cwd), 'change.diff'), diff);
       e.floorHits = 0;
       if (diff) {
-        const scan = spawnSync('bash', [floorScan, join(dirname(cwd), 'change.diff')], { cwd, encoding: 'utf8', env: childEnv(env) });
+        // floor-scan reads $HOME/.claude/kern.yml ratchets, so it gets an empty HOME, not the host's (P5 review, Minor 2).
+        const home = mkdtempSync(join(tmpdir(), 'fh-'));
+        let scan;
+        try { scan = spawnSync('bash', [floorScan, join(dirname(cwd), 'change.diff')], { cwd, encoding: 'utf8', env: childEnv(env, { HOME: home }) }); } finally { rmSync(home, { recursive: true, force: true }); }
         if (scan.status !== 0 && scan.status !== 1) return { problem: `floor-scan exited ${scan.status ?? scan.signal}: ${(scan.stderr || '').trim().split('\n').pop() || 'no stderr'}` };
         e.floorHits = scan.stdout.split('\n').filter(Boolean).length;
       }
@@ -449,7 +503,9 @@ function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }) {
     const wrote = t.category === 'plan' ? finalFiles(cwd) : '';
     return { attempt: { arm: a.id, id, e, heldout, git: facts, text: redact(`${digest(got.events, 24000, { results: true })}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) } };
   } catch (err) {
-    if (err.fatal) throw err;
+    // Only a child process's failure (git, a setup command: an error with a status or stderr) voids the task-run; any
+    // other error is a harness fault, which would void every task-run after it, so it stops the run (P5 review, Minor 3).
+    if (err.fatal || (err.status === undefined && err.stderr === undefined)) throw err;
     // A git call's own message (its stderr) says more than node's "Command failed" line.
     return { problem: String(err.stderr || err.message).trim().split('\n')[0] };
   } finally {

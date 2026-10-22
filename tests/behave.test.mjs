@@ -7,9 +7,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseResult, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, stage, treeRecord, treeState, tryRun } from '../scripts/lib/behave.mjs';
+import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseResult, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
 import { parseArgs } from '../scripts/lib/args.mjs';
+import { statusEntries, treeRecord } from '../scripts/lib/run-record.mjs';
 import { guardedEnv, ran as runOf, result as resultEvent, started } from './helpers/eval-stub.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -275,6 +276,27 @@ test('Task 17a G11: treeRecord gives HEAD and the uncommitted changes a run meas
     assert.deepEqual([r.commit, r.dirty, r.changes], [null, true, []]);
     assert.match(r.problem, /^not a git checkout: /);
   } finally { rmSync(none, { recursive: true, force: true }); }
+});
+
+// Fix round 1 (P5 review, Minor 9): treeRecord and h2h's finalFiles read `git status -z` through one parser.
+test('statusEntries reads git status -z as { xy, path }, a rename by its new path, its source skipped', () => {
+  const d = mkdtempSync(join(tmpdir(), 'st-'));
+  const git = (...a) => spawnSync('git', ['-C', d, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { encoding: 'utf8' });
+  try {
+    for (const f of ['a.txt', 'b.txt']) writeFileSync(join(d, f), `${f}\n`);
+    git('init', '-q', '--initial-branch=main');
+    writeFileSync(join(d, '.git', 'info', 'exclude'), '/.kern/\n');
+    git('add', '.');
+    git('commit', '-qm', 'init');
+    git('mv', 'a.txt', 'c d.txt');
+    writeFileSync(join(d, 'b.txt'), 'changed\n');
+    writeFileSync(join(d, 'new.txt'), 'n\n');
+    mkdirSync(join(d, '.kern'));
+    writeFileSync(join(d, '.kern', 'p.md'), 'p\n');
+    const by = (xs) => [...xs].sort((x, y) => x.path.localeCompare(y.path));
+    assert.deepEqual(by(statusEntries(d, ['--untracked-files=all'])), [{ xy: ' M', path: 'b.txt' }, { xy: 'R ', path: 'c d.txt' }, { xy: '??', path: 'new.txt' }]);
+    assert.deepEqual(by(statusEntries(d, ['--ignored', '--untracked-files=all'])).map((e) => e.path), ['.kern/p.md', 'b.txt', 'c d.txt', 'new.txt']);
+  } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
 const call = (name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } });

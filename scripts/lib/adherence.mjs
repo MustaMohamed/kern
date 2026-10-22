@@ -11,7 +11,8 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { UsageError, parseArgs } from './args.mjs';
-import { caseResult, dirtyRefusal, pluginCopy, stage, treeRecord } from './behave.mjs';
+import { caseResult, pluginCopy, stage } from './behave.mjs';
+import { dirtyRefusal, treeRecord } from './run-record.mjs';
 import { ISOLATION, PERMISSIONS, claudeVersion, countProblem, pluginProblem, promptResult, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
 
 // adherenceFlags(ids): scripts/kernel-adherence.mjs's flags for the shared parser (args.mjs), ids being the case

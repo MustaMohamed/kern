@@ -12,7 +12,7 @@ import { KERNEL, guardedEnv, ran as runOf, result as resultEvent, started, use }
 import { kernelRows, parseRow } from '../scripts/lib/kernel-rows.mjs';
 import { loadModel } from '../scripts/lib/lint-rules.mjs';
 import { pluginCopy, stage } from '../scripts/lib/behave.mjs';
-import { workspace } from '../scripts/lib/claude-run.mjs';
+import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const K = '/opt/kern';
@@ -434,16 +434,18 @@ const answer = (kind, opts) => {
   if (kind === 'kernel' || kind === 'quiet') return runOf([...started([dir], kind === 'kernel' ? KERNEL : ''), resultEvent('done')]);
   return runOf([...started([dir]), ...(kind === 'pass' ? [use('Read', { file_path: `${dir}/skills/diagnose/SKILL.md` })] : []), resultEvent('done')]);
 };
-const driveAdherence = ({ argv = ['--runs', '1'], cases = [rowCase()], answers = ['pass'], tree = () => CLEAN, before = null } = {}) => {
+const driveAdherence = ({ argv = ['--runs', '1'], cases = [rowCase()], answers = ['pass'], tree = () => CLEAN, before = null, run: given = null } = {}) => {
   const dir = mkdtempSync(join(tmpdir(), 'am-'));
   const snapshots = join(dir, 'snapshots'); const results = join(dir, 'results');
   const committed = join(snapshots, 'adherence-routed-sonnet-5-5-2026-10-22.json');
   if (before !== null) { mkdirSync(snapshots, { recursive: true }); writeFileSync(committed, before); }
   const calls = []; const lines = []; const errors = [];
-  const run = (opts) => { calls.push(opts); return answer(answers[(calls.length - 1) % answers.length], opts); };
-  const code = adherenceMain({ root: ROOT, argv, env: {}, cases, run, version: () => '9.9.9 (stand-in)', tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY });
+  const run = given ?? ((opts) => { calls.push(opts); return answer(answers[(calls.length - 1) % answers.length], opts); });
+  let code; let thrown = null;
+  try { code = adherenceMain({ root: ROOT, argv, env: {}, cases, run, version: () => '9.9.9 (stand-in)', tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
+  catch (e) { thrown = e; }
   const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null);
-  return { code, calls, lines, errors, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null, results, read, done: () => rmSync(dir, { recursive: true, force: true }) };
+  return { code, thrown, calls, lines, errors, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null, results, read, done: () => rmSync(dir, { recursive: true, force: true }) };
 };
 
 test('Task 17a G5: adherence passes a case by caseResult, so an invalid run is left out, not counted as a failure', () => {
@@ -479,6 +481,17 @@ test('Task 17a G3: adherence keeps a --case, --plugin, all-invalid or stopped ru
     assert.deepEqual([s.complete, s.cases, s.kern, s.gating], [true, ['row-x', 'row-y'], CLEAN, true]);
     assert.equal(full.read(join(full.results, 'adherence-routed-sonnet-5-5-2026-10-22', 'snapshot.json')), null, 'no progress file is left');
   } finally { full.done(); }
+  // Fix round 1 (P5 review, Minor 7): a usage limit at the second case stops the run; the committed snapshot stays,
+  // and the progress file says what was done and that it is not complete.
+  const stop = { calls: 0 };
+  const stopped = driveAdherence({ cases: [rowCase('row-x'), rowCase('row-y')], before: 'earlier\n',
+    run: (opts) => { stop.calls += 1; if (stop.calls > 1) throw new ClaudeRunError('claude stopped at a usage limit: x', true); return answer('pass', opts); } });
+  try {
+    assert.match(String(stopped.thrown?.message), /usage limit/);
+    assert.equal(stopped.committed, 'earlier\n');
+    const s = stopped.read(join(stopped.results, 'adherence-routed-sonnet-5-5-2026-10-22', 'snapshot.json'));
+    assert.deepEqual([s.complete, s.cases, s.results.map((x) => x.id)], [false, ['row-x', 'row-y'], ['row-x']]);
+  } finally { stopped.done(); }
   // --plugin grades another kern tree: diagnostic, beside the transcripts, with that tree's record too.
   const other = pluginCopy(ROOT);
   const OTHER = { commit: null, dirty: true, changes: [], problem: 'not a git checkout: x' };
