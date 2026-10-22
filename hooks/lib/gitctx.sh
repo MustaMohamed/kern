@@ -2,9 +2,18 @@
 # Shell and git parsing for guards. Needs settings.sh; uses aliases.sh when it is loaded. Reads CWD and
 # KERN_MAIN.
 
+# _GW_REEVAL: the shared hreev matcher (hooks/lib/reeval.awk), prepended to _split_words' awk program so
+# its here-doc check and G00's g0_reeval (which loads the same file) judge a re-evaluating expansion the
+# same way. Empty when the file cannot be read: the awk then has no hreev, so git_words fails and the
+# guards fail closed, as a broken install should.
+_GW_REEVAL=$(cat "${KERN_ROOT:-${CLAUDE_PLUGIN_ROOT:-.}}/hooks/lib/reeval.awk" 2>/dev/null) || _GW_REEVAL=""
+
 # A newline inside one record (quoted text, or the inside of $( )) is printed as this byte, so a
 # caller that reads records line by line never takes a quoted line for a command.
 _GW_NL=$'\037'
+# The last line _split_words' awk prints. Every record it prints is trimmed of blanks, so none starts
+# with a tab, and a command cannot forge this line.
+_GW_SPLIT_END=$'\t.'
 # git_words' own state, never taken from the environment: _GW_IN marks a call inside the outermost
 # one, _GW_NOALIAS a call that splits an alias's expansion. _GW_QB, set by G00 alone for its call, asks
 # for each quoted here-doc body that may hold an array subscript as one record after a \035 byte.
@@ -459,7 +468,7 @@ _GW_SCAN='
 # G00 is the backstop there. Out of scope here: commands that xargs or find -exec run (G1 and G2 ask for
 # a git or gh among their words), and a here-doc piped into a shell (cat <<EOF | sh).
 git_words() {
-  local seg inner body first hm=$'\036' qm=$'\035' forged=0
+  local seg inner body first hm=$'\036' qm=$'\035' forged=0 split_end
   # hm starts an unquoted here-doc body record from _split_words, and qm a quoted body on G00s call
   # (_GW_QB). A command that holds either byte itself could forge one, so its marked records are then
   # also read as ordinary records.
@@ -473,10 +482,20 @@ git_words() {
     _GW_IN=1 git_words "$1" | env LC_ALL=C awk '/^\t/ { a[++n] = substr($0, 2); next } { print } END { for (i = 1; i <= n; i++) print a[i] }'
     return
   fi
-  _split_words "$1" | while IFS= read -r seg; do
+  # _split_words' awk prints its end line last. A split stage that dies first (a fork that fails in its
+  # subshell, a kill) prints neither its records nor the awk-error $KERN_UNREAD, so the reader prints
+  # $KERN_UNREAD itself when the end line does not come. The readers below, and the substitution around
+  # git_words, can still die unseen; G1's own end line covers that last one.
+  _split_words "$1" | {
+  split_end=0
+  while IFS= read -r seg; do
     # An unquoted here-doc body: only the bodies of its $( ) and backticks are commands, read as the shell
     # expands the body (_subst_bodies kind h); the body itself is data, so it is not printed.
     case "$seg" in
+      "$_GW_SPLIT_END")
+        split_end=1
+        continue
+        ;;
       "$hm"*)
         _subst_bodies "${seg#"$hm"}" h | while IFS= read -r body; do
           if [ -n "$body" ]; then git_words "${body//$_GW_NL/$'\n'}"; fi
@@ -511,10 +530,12 @@ git_words() {
     # shell. A wrapper or shell name matches in any case, as _cmd_words reads it.
     # One tr pass strips the quotes, and only when the word holds one: ${first//[...]/} is cubic in
     # the word's length on bash 3.2 in a UTF-8 locale.
+    # A strip that fails, or comes back empty as a substitution whose pipe cannot be made does, leaves
+    # first empty, and an empty first word runs the pass: it never rules the pass out.
     first=${seg%%[[:space:]]*}
-    case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | env LC_ALL=C tr -d "\"'\\\\") ;; esac
+    case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | env LC_ALL=C tr -d "\"'\\\\") || first="" ;; esac
     case "/$first" in
-      *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
+      / | *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
         */noglob | */nocorrect | */coproc | */repeat | \
         */[Ee][Vv][Aa][Ll] | */[Cc][Oo][Mm][Mm][Aa][Nn][Dd] | */[Ee][Xx][Ee][Cc] | */[Tt][Ii][Mm][Ee] | \
         */[Nn][Oo][Hh][Uu][Pp] | */[Ss][Uu][Dd][Oo] | */[Ee][Nn][Vv] | */[Tt][Ii][Mm][Ee][Oo][Uu][Tt] | \
@@ -545,6 +566,8 @@ git_words() {
       if [ -n "$inner" ]; then git_words "${inner//$_GW_NL/$'\n'}"; fi
     done
   done
+  [ "$split_end" = 1 ] || printf '%s\n' '$KERN_UNREAD'
+  }
 }
 
 # _subst_bodies STR: the body of each outermost $( ) and backtick pair, one per line, as the scanner
@@ -583,7 +606,7 @@ _subst_bodies() {
 # never closes keeps the rest of the text in its record; that text is then read flat too, split at each
 # separator, quoted or not, so a quote the scanner misreads cannot hide the commands after it.
 _split_words() {
-  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v qb="${_GW_QB-}" "$_GW_AWK$_GW_SCAN"'
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v qb="${_GW_QB-}" "$_GW_REEVAL$_GW_AWK$_GW_SCAN"'
     # emit(s): prints the record s. In the flat reading (fl) a record printed already is left out.
     function emit(s) {
       gsub(/\\\n/, "", s); gsub(/^[ \t\n]+|[ \t\n]+$/, "", s)
@@ -651,16 +674,25 @@ _split_words() {
     # $( ) or backtick, after a \036 byte, so git_words reads the command substitutions the shell expands
     # in it and never the body itself as a command. A quoted body is data and is skipped, except that on
     # G00s call (qb, from _GW_QB) one that holds a [ and a $( or backtick is emitted after a \035 byte,
-    # for G00 to scan for an array subscript the body may store for arithmetic. a is the position just
+    # for G00 to scan for an array subscript the body may store for arithmetic. On G00s call too, an
+    # unquoted body that expands a stored string again (hreev) adds a $KERN_UNREAD record, which G00
+    # denies: the $( ) that runs is in the stored value, where no record shows it. a is the position just
     # after the operator line, where the first body starts.
     function hbody(a,   h, s) {
       for (h = 1; h <= nh; h++) {
         s = substr(buf, a, off[last[h]] - a)
-        if (!hq[h]) { if (index(s, "$(") || index(s, "`")) emit("\036" s) }
+        if (!hq[h]) {
+          if (index(s, "$(") || index(s, "`")) emit("\036" s)
+          if (qb && hreev(s)) emit("$KERN_UNREAD")
+        }
         else if (qb && index(s, "[") && (index(s, "$(") || index(s, "`"))) emit("\035" s)
         a = off[last[h]] + length(L[last[h]]) + 1
       }
     }
+    # hreev(s) is the shared matcher in hooks/lib/reeval.awk, prepended as $_GW_REEVAL: true when the
+    # unquoted here-doc body s holds a parameter expansion that re-evaluates its stored value (${x@P},
+    # ${!y}, a zsh (e)/(P)/(%) flag group, and so on). G00 g0_reeval loads the same file, so the two
+    # sites cannot drift.
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
     function bodies(j,   h, k, t) {
@@ -745,6 +777,8 @@ _split_words() {
       # A quote or context that never closes (at i) holds the rest of the text, in the record just cut.
       # That text is then read again flat, so a quote the scanner misreads hides nothing after it.
       if (i <= n) flat(start)
+      # The end line (_GW_SPLIT_END): git_words prints $KERN_UNREAD when it does not come.
+      print "\t."
     }' || { printf '%s\n' '$KERN_UNREAD'; false; }
   # On an awk error the $KERN_UNREAD record is printed and the false is the status this function
   # returns, which git_words' pipeline carries to its own exit under a caller's pipefail.

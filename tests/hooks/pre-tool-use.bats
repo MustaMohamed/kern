@@ -82,6 +82,24 @@ feed() {
   [[ "$output" != *"kern settings"* ]] || false
 }
 
+@test "an ask beats a later allow, and only ask reasons print" {
+  # Opus audit F-H1: no test pinned the dispatcher's ask-over-allow rule. Under push.policy auto, G1
+  # allows a push of the worktree's own branch. In a copy of the hooks whose G00, the first guard to run,
+  # asks on every call, the same push stays an ask.
+  local c="git -C $BATS_TEST_TMPDIR/wt push -u origin feat"
+  git -C "$R" worktree add -q -b feat "$BATS_TEST_TMPDIR/wt" >/dev/null 2>&1
+  mkdir -p "$R/.claude" "$BATS_TEST_TMPDIR/k"
+  printf 'push.policy: auto\n' >"$R/.claude/kern.local.yml"
+  cp -R "$K/hooks" "$BATS_TEST_TMPDIR/k/hooks"
+  run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload "$c")"
+  [ "$(decision_of "$output")" = allow ]
+  [[ "$output" == *'"kern G1: push.policy auto: push feat"'* ]] || false
+  printf 'guard_g00() { vote ask G00 "an earlier ask"; }\n' >"$BATS_TEST_TMPDIR/k/hooks/guards/g00-unproven.sh"
+  run bash "$BATS_TEST_TMPDIR/k/hooks/pre-tool-use" <<<"$(bash_payload "$c")"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *'"permissionDecisionReason":"needs user approval: kern G00: an earlier ask"'* ]] || false
+}
+
 @test "a reason that echoes control bytes still prints JSON that parses" {
   # Tab, newline and 0x1f split words and json_get reads a raw 0x01 as a backslash, so those never
   # reach this reason; json.bats covers them.

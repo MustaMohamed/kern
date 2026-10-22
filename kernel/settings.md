@@ -87,8 +87,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `model.miner.effort` | `low` | as above | recall |
 | `workflow_records` | none | comma list of paths or tools with run records | recall |
 | `stack` | detected | text | architect, build-ui, implement |
-| `overrides.<job>` | none. session-start also finds a project skill with the job's name | project skill name, or `off` | session-start, every skill |
-| `route.<name>` | none | project skill name, or `off` | session-start |
+| `overrides.<job>` | none. session-start also finds a project skill with the job's name | project skill name, or `off` for no override: kern's route stays and the same-name match is off | session-start, every skill |
 
 G13 lets through only proven reads to a `protected_targets` entry and denies every other call that names one, in both modes.
 

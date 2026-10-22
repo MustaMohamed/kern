@@ -1,5 +1,6 @@
 # shellcheck shell=bash
-# G1 git safety: main-checkout state changes, push, force push, merge. Design spec 8.3.
+# G1 git safety: main-checkout state changes (gh pr checkout and a local gh repo sync too), push,
+# force push, merge, protected-branch rewrites and stash drops. Design spec 8.3.
 # An allow approves the whole Bash call, so G1 allows a push only in the one shape _g01_proven
 # accepts; any other push asks, or is denied under autopilot.
 
@@ -23,6 +24,18 @@ _G01_WT_REMOVE_OPTS="force/f/0"
 _G01_SEND_PACK_OPTS="verbose/v/0 quiet/q/0 receive-pack/-/1 exec/-/1 remote/-/1 all/-/0 dry-run/n/0 \
 mirror/-/0 force/f/0 signed/-/o push-option/-/1 progress/-/0 thin/-/0 atomic/-/0 stateless-rpc/-/0 \
 stdin/-/0 helper-status/-/0 force-with-lease/-/o force-if-includes/-/0"
+_G01_RESTORE_OPTS="source/s/1 staged/S/0 worktree/W/0 ignore-unmerged/-/0 overlay/-/0 quiet/q/0 \
+recurse-submodules/-/o progress/-/0 merge/m/0 conflict/-/1 ours/2/0 theirs/3/0 patch/p/0 unified/U/1 \
+inter-hunk-context/-/1 ignore-skip-worktree-bits/-/0 pathspec-from-file/-/1 pathspec-file-nul/-/0"
+_G01_CHECKOUT_INDEX_OPTS="all/a/0 ignore-skip-worktree-bits/-/0 force/f/0 quiet/q/0 no-create/n/0 \
+index/u/0 -/z/0 stdin/-/0 temp/-/0 prefix/-/1 stage/-/1"
+_G01_READ_TREE_OPTS="index-output/-/1 empty/-/0 verbose/v/0 -/m/0 trivial/-/0 aggressive/-/0 reset/-/0 \
+prefix/-/1 -/u/0 exclude-per-directory/-/1 -/i/0 dry-run/n/0 sparse-checkout/-/0 debug-unpack/-/0 \
+recurse-submodules/-/o quiet/q/0"
+_G01_UPDATE_REF_OPTS="-/m/1 -/d/0 deref/-/0 -/z/0 stdin/-/0 create-reflog/-/0 batch-updates/0/0"
+# The line G1 prints after git_words' records, in the same substitution. No record starts with a tab
+# (git_words trims each one), so a command cannot forge it.
+_G01_END=$'\t'end
 # The read-only filters an allowed push may pipe into (_g01_filter). None of these options reads
 # a file. head and tail also take -NUM.
 _G01_TAIL_OPTS="lines/n/1 bytes/c/1 quiet/q/0 silent/-/0 verbose/v/0"
@@ -38,12 +51,30 @@ _G01_NAME_CHARS="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.
 
 guard_g01() {
   [ "$TOOL" = Bash ] || return 0
-  local cmd rec w=() t m moved=0
+  local cmd rec w=() t m moved=0 end=0 unread=0
   cmd=$(ti_get command) || { fail_closed "Bash call without a command"; return 0; }
+  # A command substitution whose pipe could not be made gives status 0 and no output, so an empty
+  # command is never read as one that runs nothing.
+  if [ -z "$cmd" ]; then
+    fail_closed "the Bash command came back empty, so kern could not check it (retry)"
+    return 0
+  fi
+  # Spec 8.4 rule 4: input the hook cannot parse asks, in every mode. No end line means the
+  # substitution's pipe could not be made, or the substitution died before git_words returned. A
+  # $KERN_UNREAD record is an awk pass that failed, or a split stage inside git_words that died
+  # (git_words prints it then). The records read are still judged, so a deny among them holds.
   _G01_RECS=()
-  while IFS= read -r rec; do [ -n "$rec" ] && _G01_RECS+=("$rec"); done <<EOT
-$(git_words "$cmd")
+  while IFS= read -r rec; do
+    case "$rec" in
+      "$_G01_END") end=1; continue ;;
+      '$KERN_UNREAD') unread=1 ;;
+    esac
+    [ -n "$rec" ] && _G01_RECS+=("$rec")
+  done <<EOT
+$(git_words "$cmd"; printf '%s\n' "$_G01_END")
 EOT
+  [ "$end" = 1 ] || fail_closed "kern could not read the whole command (retry)"
+  [ "$unread" = 0 ] || fail_closed "kern could not parse the command"
   _G01_CMD=$cmd
   _G01_IDX=0
   while [ "$_G01_IDX" -lt "${#_G01_RECS[@]}" ]; do
@@ -62,7 +93,11 @@ EOT
       cd | pushd | popd) cmd_mod "$rec" || moved=1 ;;
       builtin) case "${w[1]-}" in cd | pushd | popd) cmd_mod "$rec" || moved=1 ;; esac ;;
       # Any case: on a case-insensitive file system GIT and GH run git and gh.
-      [Gg][Hh] | */[Gg][Hh]) _g01_gh "$rec" "${w[@]}" ;;
+      [Gg][Hh] | */[Gg][Hh])
+        m=$moved
+        _g01_chdir "$rec" && m=1
+        _g01_gh "$rec" "$m" "${w[@]}"
+        ;;
       [Gg][Ii][Tt] | */[Gg][Ii][Tt])
         m=$moved
         _g01_chdir "$rec" && m=1
@@ -137,11 +172,15 @@ _g01_hidden() {
   done
 }
 
-# _g01_gh RECORD gh WORDS...: `gh pr merge`, with or without -R/--repo, and `gh api` on a merge
-# endpoint.
+# _g01_gh RECORD MOVED gh WORDS...: `gh pr merge`, with or without -R/--repo, and `gh api` on a merge
+# endpoint. `gh pr checkout` (co) checks out a branch, and `gh repo sync` with no repository operand
+# moves a local branch (--force hard-resets it), so both are main-checkout state changes, as `git
+# checkout` and `git reset --hard` are (D3); with an operand repo sync writes that repository on
+# GitHub, which G2 judges. gh runs in CWD, or where G1 cannot tell when MOVED is 1.
 _g01_gh() {
-  local rec="$1" a=() skip=0 x
-  shift 2
+  local rec="$1" dir="${CWD:-$PWD}" a=() skip=0 x
+  [ "$2" = 1 ] && dir=""
+  shift 3
   for x in "$@"; do
     if [ "$skip" = 1 ]; then
       skip=0
@@ -157,6 +196,30 @@ _g01_gh() {
     pr) case " ${a[*]} " in *" merge "*) _g01_merge "gh pr merge" ;; esac ;;
     api) case "$rec" in *"/merge"*) _g01_merge "gh api merge endpoint" ;; esac ;;
   esac
+  case "${a[0]-} ${a[1]-}" in
+    "pr checkout" | "pr co") _g01_main_op "$dir" "pr checkout" gh ;;
+    "repo sync")
+      _g01_local_sync "${a[@]:2}" || return 0
+      _g01_main_op "$dir" "repo sync" gh
+      # gh moves the synced branch with git update-ref wherever it is checked out, so from any worktree
+      # it is a rewrite of that branch, as git update-ref is (A6). Without -b it syncs the default
+      # branch, whose name kern does not read, so it counts as protected.
+      branch_protected "$_G01_SYNC_BRANCH" &&
+        _g01_protected "gh repo sync" "${_G01_SYNC_BRANCH:-(the default branch, which kern does not read)}"
+      ;;
+  esac
+}
+
+# _g01_local_sync WORDS...: the words after `gh repo sync`, read as gh reads them (G2's _gh_opts),
+# name no repository and ask for no help. Sets _G01_SYNC_BRANCH to the -b or --branch value, or empty
+# when there is none. Without G2's reader every sync counts as local, of an unknown branch.
+_g01_local_sync() {
+  local toks
+  _G01_SYNC_BRANCH=""
+  [ $# -gt 0 ] && declare -F _gh_opts >/dev/null || return 0
+  toks=$(printf '%s\n' "$@" | _gh_opts "$_GH_SYNC_OPTS")
+  [ "$(_gh_last "$toks" help)" != true ] && [ -z "$(_gh_pos "$toks")" ] || return 1
+  _G01_SYNC_BRANCH=$(_gh_last "$toks" branch) || _G01_SYNC_BRANCH=""
 }
 
 _g01_merge() {
@@ -323,28 +386,29 @@ _g01_opts() {
     }'
 }
 
-# _g01_main_op DIR WHAT: ask in the main checkout (deny under autopilot); nothing elsewhere. An
-# unknown DIR (empty) may be the main checkout.
+# _g01_main_op DIR WHAT [TOOL]: ask in the main checkout (deny under autopilot); nothing elsewhere. An
+# unknown DIR (empty) may be the main checkout. TOOL (git when left out) names the command.
 _g01_main_op() {
+  local tool="${3:-git}"
   if [ -z "$1" ]; then
     if [ "$AUTOPILOT" = 1 ]; then
-      vote deny G1 "git $2 after cd, --git-dir or --work-tree, or under env -C or sudo -D, may hit the main checkout (D3)"
+      vote deny G1 "$tool $2 after cd, --git-dir or --work-tree, or under env -C or sudo -D, may hit the main checkout (D3)"
     else
-      vote ask G1 "git $2 after cd, --git-dir or --work-tree, or under env -C or sudo -D, may change the main checkout (D3)"
+      vote ask G1 "$tool $2 after cd, --git-dir or --work-tree, or under env -C or sudo -D, may change the main checkout (D3)"
     fi
     return 0
   fi
   in_main_checkout "$1" || return 0
   if [ "$AUTOPILOT" = 1 ]; then
-    vote deny G1 "git $2 in the main checkout (D3); use a kern worktree"
+    vote deny G1 "$tool $2 in the main checkout (D3); use a kern worktree"
   else
-    vote ask G1 "git $2 in the main checkout changes shared state (D3)"
+    vote ask G1 "$tool $2 in the main checkout changes shared state (D3)"
   fi
 }
 
 # _g01_git DIR PLAIN SUB WORDS...
 _g01_git() {
-  local dir="$1" plain="$2" sub="$3" rest t
+  local dir="$1" plain="$2" sub="$3" rest t n n1
   shift 3
   rest="$*"
   case "$sub" in
@@ -359,7 +423,32 @@ _g01_git() {
       t=$(_g01_opts "$_G01_RESET_OPTS" "$@")
       word_has "$t" --hard --merge --keep && _g01_main_op "$dir" "reset $rest"
       ;;
-    stash) case "$rest" in list* | show*) ;; *) _g01_main_op "$dir" stash ;; esac ;;
+    # restore, checkout-index -f and read-tree -u discard work as `git checkout -- .` does. restore
+    # writes the working tree unless only --staged names where (the working tree is its default).
+    restore)
+      t=$(_g01_opts "$_G01_RESTORE_OPTS" "$@")
+      word_has "$t" --staged && ! word_has "$t" --worktree --no-staged && return 0
+      _g01_main_op "$dir" restore
+      ;;
+    checkout-index)
+      t=$(_g01_opts "$_G01_CHECKOUT_INDEX_OPTS" "$@")
+      word_has "$t" --force && _g01_main_op "$dir" "checkout-index -f"
+      ;;
+    read-tree)
+      t=$(_g01_opts "$_G01_READ_TREE_OPTS" "$@")
+      word_has "$t" --dry-run && ! word_has "$t" --no-dry-run && return 0
+      word_has "$t" -u --reset && _g01_main_op "$dir" "read-tree $rest"
+      ;;
+    update-ref) _g01_update_ref "$dir" "$@" ;;
+    stash)
+      case "${1-}" in
+        list | show) ;;
+        # refs/stash is in the common git dir, so from any worktree these drop the main checkout's
+        # stashes too.
+        clear | drop) _g01_destructive "git stash $1" ;;
+        *) _g01_main_op "$dir" stash ;;
+      esac
+      ;;
     clean)
       t=$(_g01_opts "$_G01_CLEAN_OPTS" "$@")
       word_has "$t" --dry-run && ! word_has "$t" --no-dry-run && return 0
@@ -374,6 +463,26 @@ _g01_git() {
       t=$(_g01_opts "$_G01_BRANCH_OPTS" "$@")
       if word_has "$t" -D || { word_has "$t" --delete && word_has "$t" --force; }; then
         _g01_destructive "git branch -D"
+        return 0
+      fi
+      n=$(printf '%s\n' "$t" | sed -n 's/^@//p')
+      # A rename of two names moves the first away, so a protected branch is gone under its name.
+      if word_has "$t" --move -M; then
+        case "$n" in
+          *$'\n'*)
+            n1=${n%%$'\n'*}
+            branch_protected "$n1" && _g01_protected "git branch $rest" "$n1"
+            ;;
+        esac
+      fi
+      if word_has "$t" -M -C || { word_has "$t" --move --copy && word_has "$t" --force; }; then
+        # A forced rename or copy overwrites its last name; one name renames or copies the current branch.
+        n=${n##*$'\n'}
+        [ -n "$n" ] && branch_protected "$n" && _g01_protected "git branch $rest" "$n"
+      elif word_has "$t" --force; then
+        # A forced create resets its first name to the start point.
+        n=${n%%$'\n'*}
+        [ -n "$n" ] && branch_protected "$n" && _g01_protected "git branch $rest" "$n"
       fi
       ;;
     worktree)
@@ -421,6 +530,42 @@ EOT
 _g01_destructive() {
   vote ask G1 "$1 discards work"
   [ "$AUTOPILOT" = 1 ] && vote deny G1 "$1 under autopilot"
+}
+
+# _g01_protected WHAT BRANCH: WHAT rewrites the local protected BRANCH. Refs are shared by every
+# worktree, so it asks anywhere, and is denied under autopilot. A push of it is judged on its own.
+_g01_protected() {
+  vote ask G1 "$1 rewrites protected branch $2"
+  [ "$AUTOPILOT" = 1 ] && vote deny G1 "$1 under autopilot: protected branch $2 is not rewritten unattended"
+}
+
+# _g01_update_ref DIR WORDS...: git update-ref of a protected refs/heads/ branch, or of HEAD while it
+# points to one (DIR's current branch; unknown, so protected, when DIR is empty or the read failed),
+# asks. --no-deref HEAD, or HEAD detached, moves HEAD itself. --stdin reads its refs from the input,
+# which kern cannot see.
+_g01_update_ref() {
+  local dir="$1" t ref b
+  shift
+  t=$(_g01_opts "$_G01_UPDATE_REF_OPTS" "$@")
+  if word_has "$t" --stdin; then
+    vote ask G1 "git update-ref --stdin reads the refs it changes from its input, so kern cannot check them for a protected branch"
+    [ "$AUTOPILOT" = 1 ] && vote deny G1 "git update-ref --stdin under autopilot: its refs cannot be checked"
+    return 0
+  fi
+  ref=$(printf '%s\n' "$t" | sed -n 's/^@//p' | sed -n 1p)
+  case "$ref" in
+    HEAD)
+      word_has "$t" --no-deref && return 0
+      b=""
+      if [ -n "$dir" ]; then
+        b=$(current_branch "$dir")
+        [ $? = 1 ] && return 0
+      fi
+      ;;
+    refs/heads/?*) b=${ref#refs/heads/} ;;
+    *) return 0 ;;
+  esac
+  branch_protected "$b" && _g01_protected "git update-ref $ref" "${b:-(kern could not read which)}"
 }
 
 # _g01_ref REF CUR: sets _G01_SRC and _G01_DST for one refspec: `*` for a pattern or `:`; DST

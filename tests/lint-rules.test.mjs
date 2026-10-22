@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
 import { fileURLToPath } from 'node:url';
 import { RULE7_REPO_LEN, fixedLengthRepo, loadModel, runLint } from '../scripts/lib/lint-rules.mjs';
+import { replaceRoot } from '../scripts/lib/lint-rules.mjs';
 
 // scratch(prefix): a new temp dir, removed when the file's tests are done.
 const made = [];
@@ -558,10 +559,13 @@ test('rule 7: the route rows count in the standing cost, which has a combined bu
   const start = (n) => `#!/usr/bin/env bash\n${HEADER}head -c ${n} /dev/zero | tr "\\0" x\n`;
   const desc = `description: Use when ${'w'.repeat(280)}.`;
   const files = (n) => ({ 'hooks/session-start': start(n), 'hooks/subagent-start': sub, 'skills/a/SKILL.md': skill('a', desc), ...LONG });
-  assert.deepEqual(rules(lint(files(5943))).filter((r) => r === 7), []);
-  const big = lint(files(5963)).filter((f) => f.rule === 7 && f.level === 'error');
+  // 110 chars of header line plus 290 of description: 5,653 x's make 6,053, two under the 6,055 limit Task 17a P11
+  // locked; 5,673 make 6,073.
+  assert.deepEqual(rules(lint(files(5653))).filter((r) => r === 7), []);
+  const big = lint(files(5673)).filter((f) => f.rule === 7 && f.level === 'error');
   assert.equal(big.length, 1);
-  assert.match(big[0].message, /^standing cost 6363 chars/);
+  assert.match(big[0].message, /^standing cost 6073 chars/);
+  assert.match(big[0].message, /limit 6,055$/);
 });
 
 
@@ -668,4 +672,24 @@ test('rule 7 renders from a repo path of one fixed length, so the temp dir does 
     const lint = (dir) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'lint-skills.mjs')], { encoding: 'utf8', env: { ...process.env, TMPDIR: dir } }).stdout;
     assert.equal(lint(short), lint(long));
   } finally { rmSync(short, { recursive: true, force: true }); rmSync(long, { recursive: true, force: true }); }
+});
+
+test('rule 7 replaces the plugin root only as a whole path, so a short root such as /kern does not grow the render', () => {
+  // 2026-10-22 (Task 17a P15): in the kern-ci:task17 image the repo is mounted at /kern, and split('/kern') also
+  // replaced /kern:autopilot and the start of /kernel/, so rule 7 measured a standing cost of 6,486 against 6,345.
+  const T = '/opt/x';
+  assert.equal(
+    replaceRoot('means /kern.\nRead /kern/kernel/context.md, /kern/skills/a/SKILL.md; /kern:autopilot on, /kernel, /opt/kern/a, /kern-x, /kern.bak, `/kern`', '/kern', T),
+    'means /opt/x.\nRead /opt/x/kernel/context.md, /opt/x/skills/a/SKILL.md; /kern:autopilot on, /kernel, /opt/kern/a, /kern-x, /kern.bak, `/opt/x`',
+  );
+  assert.equal(replaceRoot('a /k.e+y/b and /kXeYy/b', '/k.e+y', T), 'a /opt/x/b and /kXeYy/b', 'the root is matched as text, not as a pattern');
+  assert.equal(replaceRoot('(/kern/a),/kern/b PATH=/a:/kern/bin', '/kern', T), '(/opt/x/a),/opt/x/b PATH=/a:/opt/x/bin', 'a comma or a colon before the root ends the path before it');
+  assert.equal(replaceRoot('PATH=/kern:/usr/bin; /kern;x /kern, /kern: x /kern..', '/kern', T), 'PATH=/opt/x:/usr/bin; /opt/x;x /opt/x, /opt/x: x /kern..', 'a colon and a slash after the root end it, as in a PATH list');
+  // The real kernel and subagent kernel filled at /kern measure what they measure at the GitHub runner's root.
+  for (const f of ['kernel.md', 'kernel-subagent.md']) {
+    const k = readFileSync(join(ROOT, 'kernel', f), 'utf8');
+    const at = (r) => k.split('{ROOT_PATH}').join(r).split('{ROOT}').join(r).split('{KERN}').join(`${r}/skills`);
+    assert.equal(replaceRoot(at('/kern'), '/kern', T), replaceRoot(at('/home/runner/work/kern/kern'), '/home/runner/work/kern/kern', T), f);
+  }
+  assert.ok(readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8').includes('{ROOT}/kernel/'), 'the kernel names a path under kernel/, the case that doubled');
 });
