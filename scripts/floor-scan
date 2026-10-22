@@ -27,4 +27,4 @@ EOT
 "
 done
 export RATCHETS
-LC_ALL=C awk -f "$here/lib/test-paths.awk" -f "$here/lib/floor-scan.awk" "$1"
+env LC_ALL=C awk -f "$here/lib/test-paths.awk" -f "$here/lib/floor-scan.awk" "$1"

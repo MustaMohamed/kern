@@ -1,6 +1,6 @@
 # Claim checks
 
-Three scripts run in seconds and catch what reviewers miss. Paste each command and its output.
+Three scripts run in seconds and catch what reviewers miss; paste each run.
 
 ## floor-scan
 
@@ -12,7 +12,7 @@ Three scripts run in seconds and catch what reviewers miss. Paste each command a
 
 ## probe
 
-`probe --exclude-tests <wt> <package>.patch -- <test>` shows a guard test fails with the branch's non-test changes reversed and passes with them. One guard alone is implement's per-slice probe. `probe --mutate <file>:<line> <wt> -- <test>` inverts the first operator on that line in a throwaway fork; the test must fail. `probe: fail-then-pass ok` and `probe: mutation caught` are the only passes. Exit 1 (no failure, or the mutation survived) fails the check. Exit 2 is a usage error: a failed check. Exit 3 is inconclusive, never a pass, and fails the check, except when its reason is a module or export the patch adds or the patch holds test files only: report `probe inconclusive: new module`, and prove the new code with `--mutate` on its condition.
+`probe --exclude-tests <wt> <package>.patch -- <test>` shows a guard test fails with the branch's non-test changes reversed and passes with them. One guard alone is implement's per-slice probe. `probe --mutate <file>:<line> <wt> -- <test>`, `<file>` relative to `<wt>`, inverts the first operator on that line in a throwaway fork; the test must fail. `probe: fail-then-pass ok` and `probe: mutation caught` are the only passes. Exit 1 (no failure, or the mutation survived) fails the check. Exit 2 is a usage error: a failed check. Exit 3 is inconclusive, never a pass, and fails the check, except when its reason is a module or export the patch adds or the patch holds test files only: report `probe inconclusive: new module`, and prove the new code with `--mutate` on its condition.
 
 ## A skipped check is a failed check
 

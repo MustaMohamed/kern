@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Execution evals for commit and finish-branch: real headless runs on a fixture repo with a bare origin
 // and a gh stub, kern loaded from a plugin copy, graded from the tool calls, the stub's call log and git
-// state. Spends tokens: ask the user before a run. Usage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]
+// state. Spends tokens: ask the user before a run. Usage: node scripts/exec-eval.mjs [--case <id>] [--allow-dirty] [--dry-run]
 // Each case's final reply goes to evals/results/exec-<date>/<id>.txt (gitignored), or (no reply: <why>) for
 // an invalid case, and its stream-json events, tool results included, to <id>.events.jsonl beside it; the
 // last line prints the directory; a --dry-run writes none. Each kern hook runs through a trace (traceHooks),
@@ -9,8 +9,10 @@
 // turns autopilot on is INVALID when kern's state file for the run's session does not read autopilot: on
 // at the end: it did not test autopilot.
 // A full run writes evals/snapshots/exec-<date>.json (committed) with the model, the Claude Code version,
-// the isolation flags, what a pass assumes and each case's result; a --case run, or a run where no case
-// was valid, writes none. The Claude Code version is read before the first case, and a failure stops the
+// the isolation flags, what a pass assumes, the kern tree it measured (HEAD and any uncommitted changes, as
+// kern) and each case's result; a --case run, or a run where no case was valid, writes none. A full run
+// refuses a kern tree with uncommitted changes it would measure (exit 2) unless --allow-dirty (Task 17a G11).
+// The Claude Code version is read before the first case, and a failure stops the
 // run. A host ~/.claude/kern.yml refuses the run (exit 2) unless KERN_EXEC_ALLOW_USER_SETTINGS=1: kern's
 // hooks read it past the isolation flags. The hooks read an empty shell snapshot, not the host's. Exit 0 only when every case that
 // ran passed; 2 for a usage error, before anything runs. A claude run that exits non-zero, times out,
@@ -21,6 +23,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ClaudeRunError, claudeVersion, finalText, runClaude, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { pluginCopy } from './lib/behave.mjs';
+import { dirtyRefusal, treeRecord } from './lib/run-record.mjs';
 import { reaper } from './lib/reaper.mjs';
 import { GRADERS } from './lib/exec-grade.mjs';
 import { UsageError, caseEnv, casePrompts, claudeConfigDir, dateStamp, gradeCase, parseArgs, runEval, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from './lib/exec-run.mjs';
@@ -33,13 +36,14 @@ for (const c of all) if (!GRADERS[c.id]) throw new Error(`no grader for ${c.id}`
 let opts;
 try { opts = parseArgs(process.argv.slice(2), all.map((c) => c.id)); } catch (e) {
   if (!(e instanceof UsageError)) throw e;
-  console.error(`exec-eval: ${e.message}\nusage: node scripts/exec-eval.mjs [--case <id>] [--dry-run]`);
+  console.error(`exec-eval: ${e.message}\nusage: node scripts/exec-eval.mjs [--case <id>] [--allow-dirty] [--dry-run]`);
   process.exit(2);
 }
 const cases = all.filter((c) => !opts.only || c.id === opts.only);
 const userSettings = !opts.dryRun && userSettingsProblem(process.env.HOME, {}) !== '';
+const tree = opts.dryRun ? null : treeRecord(ROOT);
 if (!opts.dryRun) {
-  const problem = userSettingsProblem(process.env.HOME, process.env);
+  const problem = userSettingsProblem(process.env.HOME, process.env) || (!opts.only && !opts.allowDirty ? dirtyRefusal(tree) : '');
   if (problem) {
     console.error(`exec-eval: ${problem}`);
     process.exit(2);
@@ -101,7 +105,7 @@ function runCase(c, save) {
     }
     const ghLog = readFileSync(log, 'utf8').split('\n').filter(Boolean);
     const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', timeout: 60 * 1000 }).trim();
-    const g = gradeCase({ c, run, ghLog, git, configDir: claudeConfigDir(process.env) });
+    const g = gradeCase({ c, run, ghLog, git, configDir: claudeConfigDir(process.env), plugin: kern });
     save({ ...(g.invalid ? { reason: g.reasons[0] } : { reply: finalText(run.events) }), events: run.events, trace });
     return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
       commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command) };
@@ -113,7 +117,7 @@ function runCase(c, save) {
 function writeSnapshot(results, claude) {
   const out = join(ROOT, 'evals', 'snapshots', `exec-${DATE}.json`);
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify(snapshotBody({ model: MODEL, claude, results, userSettings }), null, 2) + '\n');
+  writeFileSync(out, JSON.stringify(snapshotBody({ model: MODEL, claude, results, userSettings, tree }), null, 2) + '\n');
   console.log(`snapshot: ${out}`);
 }
 
