@@ -95,3 +95,18 @@ test('plan pins order, routing and stop rules', () => {
   ]);
   assertContains('skills/plan/references/plan-template.md', ['## Open questions', 'branch or SHA plus the evidence', '`parked: <question>; default: <choice>; why: <one line>`', 'every acceptance number covered', 'one line per `checklists` item in each', 'regression check that runs the same scenario on base and head']);
 });
+
+test('the base names its source, an undetected base is the current branch and is said, and the base-and-head check names a branch', () => {
+  // 2026-10-22 head-to-head, plan category (task-16-h2h-plan-diagnosis): every kern plan wrote `base: main;
+  // promotion: none` after `kern-detect base_branch` printed "not detectable", and the grader counted that line, or
+  // a base SHA no command printed, as unsupported in 4 of 6 runs. Steps 1 and 3 name a source and say what to do on
+  // exit 3; step 9 named neither (Task 16n).
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[9].includes('Get `base_branch` from `kern-get`, else `kern-detect`, naming its source; both exit 3: `base: <current branch> (current branch; not detected)`, from `git branch --show-current`.'), s[9]);
+  assert.ok(s[10].includes('the base-and-head regression check as plan-template.md says, naming the base by branch, never by a SHA no command printed'), s[10]);
+  assert.ok(s[12].startsWith('12. Present a summary in chat, saying when the base was not detected'), s[12]);
+  const tpl = readDoc('skills/plan/references/plan-template.md').raw;
+  assert.ok(tpl.includes('\nbase: <base branch> (<source>); promotion: <branch chain, or none>\n'), 'the header line names the source');
+  assert.ok(!tpl.includes('base: <base branch>;'), 'the old header line, with no source, is gone');
+  assert.ok(tpl.includes('add a regression check that runs the same scenario on base and head, naming the base by branch, never by a SHA no command printed'), 'the template check names the base by branch');
+});

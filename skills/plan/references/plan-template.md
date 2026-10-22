@@ -6,7 +6,7 @@ Copy from the first `---` line to the end into `WORK/plans/<slug>.md`. `bash ${C
 status: draft
 spec: WORK/specs/<slug>.md
 issue: (tracker id, or none)
-base: <base branch>; promotion: <branch chain, or none>
+base: <base branch> (<source>); promotion: <branch chain, or none>
 approved: (set only on an explicit yes, in the same edit as status: approved: the date, then one whole line of the user's message in double quotes)
 execution:
 commits: ask
@@ -35,4 +35,4 @@ A spike's answer: the branch or SHA plus the evidence. Under autopilot, each `pa
 
 ### Task 1: <name>
 
-(Tasks follow `task-template.md`, one line per `checklists` item in each. Put a checkpoint step every 2 or 3 tasks, and add a regression check that runs the same scenario on base and head.)
+(Tasks follow `task-template.md`, one line per `checklists` item in each. Put a checkpoint step every 2 or 3 tasks, and add a regression check that runs the same scenario on base and head, naming the base by branch, never by a SHA no command printed.)
