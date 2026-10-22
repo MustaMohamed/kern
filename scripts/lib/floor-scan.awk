@@ -2,7 +2,7 @@
 # path:line<TAB>class<TAB>text per hit and exits 1 on any hit. ENVIRON["RATCHETS"] holds
 # metric<TAB>path<TAB>key<TAB>min|max lines from ratchet.<metric> settings.
 # Patterns adapted from addyosmani/agent-skills constraint-driven-development/references/floor-guard.md (MIT).
-function is_doc(p) { return p ~ /\.(md|mdx|txt|rst|adoc)$/ }
+function is_doc(p) { return p ~ /\.(md|mdx|txt|rst|adoc)$/ && p !~ /(^|\/)CMakeLists\.txt$/ }
 function is_ci(p) { return p ~ /(^|\/)\.github\/workflows\/[^\/]+\.ya?ml$|(^|\/)\.gitlab-ci\.ya?ml$|(^|\/)\.circleci\/config\.ya?ml$|(^|\/)azure-pipelines\.ya?ml$|(^|\/)Jenkinsfile$/ }
 function is_lintcfg(p) { return p ~ /(^|\/)(\.eslintrc[^\/]*|eslint\.config\.[a-z]+|biome\.jsonc?|\.rubocop\.ya?ml|ruff\.toml|\.flake8|setup\.cfg|pyproject\.toml|\.golangci\.ya?ml)$/ }
 function is_tscfg(p) { return p ~ /(^|\/)tsconfig[^\/]*\.json$/ }

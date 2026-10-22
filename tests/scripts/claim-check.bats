@@ -77,6 +77,19 @@ check() {
   [ -z "$output" ]
 }
 
+@test "a CMakeLists.txt is code, not a doc: its comment's absolute word is a hit" {
+  mkdir -p lib
+  printf '# this target is always built first\n' > CMakeLists.txt
+  printf '# never link this statically\n' > lib/CMakeLists.txt
+  git add -N CMakeLists.txt lib/CMakeLists.txt
+  git diff > "$TMP/c.diff"
+  run --separate-stderr bash "$KERN_ROOT/scripts/claim-check" "$REPO" "$TMP/c.diff"
+  [ "$status" -eq 1 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = $'CMakeLists.txt:1\tabsolute-claim\t# this target is always built first' ]
+  [ "${lines[1]}" = $'lib/CMakeLists.txt:1\tabsolute-claim\t# never link this statically' ]
+}
+
 @test "a Markdown heading or bullet is not an absolute claim; a doc's unknown commit id still is" {
   printf '# Never commit secrets\n\n* always run the tests first\n\nFixed in deadbee1cafe.\n' > GUIDE.md
   check GUIDE.md

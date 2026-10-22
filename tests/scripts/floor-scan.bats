@@ -173,6 +173,13 @@ count() { printf '%s\n' "$output" | grep -cE "$1" || true; }
   [ "$status" -eq 2 ]
 }
 
+@test "a CMakeLists.txt is code, not a doc: its TODO is unfinished-work" {
+  printf 'add_library(core core.c)\n# TODO: drop the old target\n' > CMakeLists.txt
+  scan
+  [ "$status" -eq 1 ]
+  [ "$output" = $'CMakeLists.txt:2\tunfinished-work\t# TODO: drop the old target' ]
+}
+
 @test "suppressions in a doc file are not hits" {
   printf '# Readme\nUse `// eslint-disable` sparingly. console.log is fine in examples.\n' > README.md
   scan

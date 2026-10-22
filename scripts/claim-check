@@ -12,6 +12,7 @@ grep -q '^diff --git ' "$diff" 2> /dev/null || { echo "claim-check: $diff has no
 
 candidates() {
   env LC_ALL=C awk '
+  function is_doc(p) { return p ~ /\.(md|mdx|txt|rst|adoc)$/ && p !~ /(^|\/)CMakeLists\.txt$/ }
   /^diff --git / { inhunk = 0; next }
   !inhunk && /^\+\+\+ / { file = substr($0, 5); sub(/^b\//, "", file); next }
   /^@@ / { inhunk = 1; split($0, a, " "); nw = a[3]; sub(/^\+/, "", nw); sub(/,.*/, "", nw); newln = nw + 0; next }
@@ -23,15 +24,14 @@ candidates() {
       while (match(s, /[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]+/)) {
         tok = substr(s, RSTART, RLENGTH)
         pre = (RSTART > 1) ? substr(s, RSTART - 1, 1) : ""
-        pre2 = (RSTART > 2) ? substr(s, RSTART - 2, 2) : ""
         post = substr(s, RSTART + RLENGTH, 1)
-        if (RLENGTH <= 40 && tok ~ /[0-9]/ && tok ~ /[a-f]/ && pre !~ /[A-Za-z0-9#_-]/ && post !~ /[A-Za-z0-9_-]/ && pre2 != "0x")
+        if (RLENGTH <= 40 && tok ~ /[0-9]/ && tok ~ /[a-f]/ && pre !~ /[A-Za-z0-9#_-]/ && post !~ /[A-Za-z0-9_-]/)
           print file "\t" newln "\tsha\t" tok
         s = substr(s, RSTART + RLENGTH)
       }
     }
     c = t; sub(/^[ \t]+/, "", c)
-    if (file !~ /\.(md|mdx|txt|rst|adoc)$/ && c ~ /^(\/\/|#|\/\*|\*|--|<!--|;)/) {
+    if (!is_doc(file) && c ~ /^(\/\/|#|\/\*|\*|--|<!--|;)/) {
       lc = tolower(c)
       if (lc ~ /(^|[^a-z])(always|never|guaranteed|guarantees|impossible|cannot happen|can.t happen|no other|nothing else|only (caller|writer|place|path|way)|all (callers|writers|paths))([^a-z]|$)/) {
         if (length(c) > 120) c = substr(c, 1, 120)
