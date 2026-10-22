@@ -75,7 +75,8 @@ else
   # The refspec names the tracking ref, which a single-branch clone's fetch config does not cover.
   if ! err=$(git -C "$MAIN" fetch --quiet origin "+refs/heads/$name:$start" 2>&1 > /dev/null); then
     # git's first line gives the reason (no such repository, auth, no such branch); its last is advice.
-    why=$(printf '%s\n' "$err" | awk '{ sub(/\r$/, "") } NF && !/^(hint|warning):/ { print; exit }')
+    # ssh's own notices start "Warning:", as its first-connect host-key line does, so case is ignored.
+    why=$(printf '%s\n' "$err" | awk '{ sub(/\r$/, "") } NF && !/^([Hh]int|[Ww]arning):/ { print; exit }')
     echo "wt-new: git fetch origin $name failed${why:+ ($why)}; kern branches only off a fresh origin/$name" >&2
     exit 2
   fi

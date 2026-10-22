@@ -128,6 +128,20 @@ setup() {
   [ ! -e "$REPO/.claude/worktrees/feat-n" ]
 }
 
+# ssh prints a capitalised "Warning:" line, such as its first-connect host-key notice, before the reason
+# (P8 review, Minor 1). The stub stands in for ssh, so nothing leaves the machine.
+@test "a failed ssh fetch names the reason, not ssh's Warning line" {
+  printf '%s\n' '#!/bin/sh' \
+    "echo \"Warning: Permanently added 'github.com' (ED25519) to the list of known hosts.\" >&2" \
+    'echo "git@github.com: Permission denied (publickey)." >&2' 'exit 255' > "$TMP/fake-ssh"
+  chmod +x "$TMP/fake-ssh"
+  git remote set-url origin git@github.invalid:kern/demo.git
+  GIT_SSH_COMMAND="$TMP/fake-ssh" run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ssh --base main
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"git fetch origin main failed (git@github.com: Permission denied (publickey).)"* ]] || false
+  [[ "$stderr" != *"Permanently added"* ]] || false
+}
+
 # A single-branch clone fetches only its own branch by default, so wt-new names the refspec (C-M5).
 @test "wt-new bases on another branch in a single-branch clone" {
   git checkout --quiet -b release
@@ -292,6 +306,9 @@ release_on_origin() {
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --base "$(git rev-parse HEAD)" --plan "$TMP/none.md"
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"no plan at $TMP/none.md"* ]] || false
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-v --plan "$TMP/plan.md" --base deadbeef0
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"unknown commit deadbeef0"* ]] || false
   [ ! -e "$REPO/.claude/worktrees/feat-v" ]
 }
 
