@@ -31,9 +31,10 @@ test('the kernel table holds every route row, so no task reads a second file to 
 test('a change routes even when the user calls it quick, and each new task reads its route again', () => {
   // 2026-10-20 behaviour runs: under pressure prompts most runs skipped routing, and in multi-diagnose the
   // second task never read the route again. recall's row prompt, "Where did I leave off?", is a question that must
-  // still route (Task 16d review, Important 1): it matches its own row.
+  // still route (Task 16d review, Important 1), so the no-match class names only a question that fits no row
+  // (Task 17a P11 review, Important 1).
   assertContains('kernel/kernel.md', [
-    'A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn or a question that changes nothing matches nothing: answer it, reading what you need.',
+    'A task that changes code, fixes a bug, commits or claims done matches a row, even a quick, small or obvious one; only a casual turn, or a question that changes nothing and fits no row, matches nothing: answer it, reading what you need.',
     'Each new task reads its route, even one read earlier.',
   ]);
 });
