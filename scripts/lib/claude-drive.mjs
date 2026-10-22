@@ -14,12 +14,14 @@
 import { spawn } from 'node:child_process';
 import { readFileSync, writeSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
-import { NO_EVAL_CONFIG, evalConfigProblem, promptResult } from './claude-run.mjs';
+import { evalConfigProblem, promptResult } from './claude-run.mjs';
 
-// The default login is never used for evals: with no CLAUDE_CONFIG_DIR, claude is not started, and fd 3 says why.
-if (evalConfigProblem(process.env)) {
-  try { writeSync(3, `${JSON.stringify({ error: { code: 'NO_EVAL_CONFIG', message: NO_EVAL_CONFIG } })}\n`); } catch { /* no runner to tell */ }
-  process.stderr.write(`claude-drive: ${NO_EVAL_CONFIG}\n`);
+// The default login is never used for evals: when evalConfigProblem refuses this environment, claude is not
+// started, and fd 3 says why.
+const refusal = evalConfigProblem(process.env);
+if (refusal) {
+  try { writeSync(3, `${JSON.stringify({ error: { code: 'NO_EVAL_CONFIG', message: refusal } })}\n`); } catch { /* no runner to tell */ }
+  process.stderr.write(`claude-drive: ${refusal}\n`);
   process.exit(2);
 }
 const { prompts, graceMs } = JSON.parse(readFileSync(0, 'utf8'));

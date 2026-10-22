@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ClaudeRunError, NO_EVAL_CONFIG, claudeVersion, evalConfigProblem, finalText, runClaude, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
+import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaude, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
 import { pluginCopy } from './lib/behave.mjs';
 import { dirtyRefusal, treeRecord } from './lib/run-record.mjs';
 import { reaper } from './lib/reaper.mjs';
@@ -40,8 +40,9 @@ try { opts = parseArgs(process.argv.slice(2), all.map((c) => c.id)); } catch (e)
   process.exit(2);
 }
 const cases = all.filter((c) => !opts.only || c.id === opts.only);
-if (!opts.dryRun && evalConfigProblem(process.env)) {
-  console.error(`exec-eval: ${NO_EVAL_CONFIG}`);
+const refusal = opts.dryRun ? '' : evalConfigProblem(process.env);
+if (refusal) {
+  console.error(`exec-eval: ${refusal}`);
   process.exit(2);
 }
 const userSettings = !opts.dryRun && userSettingsProblem(process.env.HOME, {}) !== '';

@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { UsageError, parseArgs } from './args.mjs';
 import { digest, pluginCopy, tryRun } from './behave.mjs';
 import { dirtyRefusal, statusEntries, treeRecord } from './run-record.mjs';
-import { ISOLATION, NO_EVAL_CONFIG, PERMISSIONS, childEnv, claudeVersion, evalConfigProblem, finalText, runClaude, workspace } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, childEnv, claudeVersion, evalConfigProblem, finalText, runClaude, workspace } from './claude-run.mjs';
 
 export const CATEGORIES = ['plan', 'diagnose', 'review'];
 
@@ -353,7 +353,8 @@ export function h2hMain({ root, argv, env = process.env, tasks: all = null, arms
     for (const t of tasks) log(`${t.id}: ${arms.map((a) => a.id).join(', ')} x ${RUNS} runs; ${t.prompts.length} turn(s)`);
     return 0;
   }
-  if (evalConfigProblem(env)) { error(`h2h: ${NO_EVAL_CONFIG}`); return 2; }
+  const refusal = evalConfigProblem(env);
+  if (refusal) { error(`h2h: ${refusal}`); return 2; }
   const full = !o.category && !o.task && !o.arms;
   const kern = tree(root);
   if (!o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));

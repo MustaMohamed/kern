@@ -3,11 +3,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RULE, TELLS, attempt, decide, diffAgainst, hide, mergeRow, metrics, parseReview, readSession, reviewPrompt } from '../scripts/lib/pilot.mjs';
+import { guardedEnv, standInCalls } from './helpers/eval-stub.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const at = (s) => `2026-10-20T10:00:${String(s).padStart(2, '0')}.000Z`;
@@ -232,24 +233,22 @@ test('review refuses a paid run outside the eval account, an unknown flag, and s
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-// The default login is never used for evals (P15): with CLAUDE_CONFIG_DIR unset or empty, a stand-in claude
-// first on a PATH with no real claude is never called.
-test('review with no CLAUDE_CONFIG_DIR exits 2 with the eval-config message and calls no claude', () => {
+// The default login is never used for evals (P15): with CLAUDE_CONFIG_DIR unset, empty or the default ~/.claude,
+// or an auth variable set, a stand-in claude first on a PATH with no real claude is never called.
+test('review with no eval config dir, or an auth variable set, exits 2 with the eval-config refusal and calls no claude', () => {
   const dir = mkdtempSync(join(tmpdir(), 'p-'));
   try {
     const a = reviewFixture(dir);
-    const bin = join(dir, 'bin');
-    mkdirSync(bin);
-    writeFileSync(join(bin, 'claude'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${join(dir, 'calls')}'\nexit 0\n`);
-    chmodSync(join(bin, 'claude'), 0o755);
-    const base = { PATH: `${bin}:/usr/bin:/bin`, HOME: mkdtempSync(join(dir, 'h-')), TMPDIR: tmpdir() };
-    assert.equal(spawnSync('/bin/sh', ['-c', 'command -v claude'], { env: base, encoding: 'utf8' }).stdout.trim(), join(bin, 'claude'));
-    for (const env of [base, { ...base, CLAUDE_CONFIG_DIR: '' }]) {
+    const base = guardedEnv({ config: false, log: true });
+    const none = "pilot: set CLAUDE_CONFIG_DIR to the eval account's config dir, $HOME/.claude-kern-eval; the default login (~/.claude) is never used for evals\n";
+    const auth = 'pilot: ANTHROPIC_API_KEY is set, so claude would log in with it whatever CLAUDE_CONFIG_DIR says; unset it, or set KERN_EVAL_ENV_AUTH=1 to run on it\n';
+    for (const [env, want] of [[base, none], [{ ...base, CLAUDE_CONFIG_DIR: '' }, none], [{ ...base, CLAUDE_CONFIG_DIR: `${base.HOME}/.claude/` }, none],
+      [{ ...base, CLAUDE_CONFIG_DIR: join(base.HOME, '.claude-kern-eval'), ANTHROPIC_API_KEY: 'dummy-secret-value-0451' }, auth]]) {
       const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'pilot.mjs'), ...a], { encoding: 'utf8', env });
       assert.equal(r.status, 2, r.stderr);
-      assert.equal(r.stderr, "pilot: set CLAUDE_CONFIG_DIR to the eval account's config dir; the default login is never used for evals\n");
+      assert.equal(r.stderr, want);
     }
-    assert.equal(existsSync(join(dir, 'calls')), false, 'the stand-in claude never ran');
+    assert.equal(standInCalls(base), '', 'the stand-in claude never ran');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

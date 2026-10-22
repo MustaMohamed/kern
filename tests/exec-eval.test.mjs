@@ -179,7 +179,9 @@ test('a gh call the transcript shows ran but the stub never logged makes the run
 });
 
 // A stand-in claude on PATH: never the real one, so these tests spend nothing. It comes with a
-// CLAUDE_CONFIG_DIR, which runClaude needs before it starts any claude (P15).
+// CLAUDE_CONFIG_DIR, which runClaude needs before it starts any claude, and blanks the auth variables
+// runClaude passes on, so one in the caller's shell neither refuses the run nor reaches the stand-in (P15).
+const NO_AUTH = { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: '', CLAUDE_CODE_OAUTH_TOKEN: '' };
 // By default it reads the one prompt first: a child that exits before reading it races the driver's stdin
 // write (EPIPE). drain: false makes that race the test. It reads one line, not to the end: stdin closes
 // only after the last prompt's result, so a child that waits for the end before answering never answers.
@@ -187,13 +189,13 @@ function fakeClaude(body, { drain = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'fc-'));
   writeFileSync(join(dir, 'claude'), `#!/bin/sh\n${drain ? 'read -r _\n' : ''}${body}\n`);
   chmodSync(join(dir, 'claude'), 0o755);
-  return { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config') };
+  return { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH };
 }
 const work = () => mkdtempSync(join(tmpdir(), 'wk-'));
 const attempt = (env, extra = {}) => () => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env, ...extra });
 
 test('runClaude: a missing binary, exit 126 or 127, a timeout and a signal all throw; none is a result', () => {
-  assert.throws(attempt({ PATH: '/nonexistent', CLAUDE_CONFIG_DIR: '/nonexistent-config' }), (e) => e instanceof ClaudeRunError && e.fatal && /not on PATH/.test(e.message));
+  assert.throws(attempt({ PATH: '/nonexistent', CLAUDE_CONFIG_DIR: '/nonexistent-config', ...NO_AUTH }), (e) => e instanceof ClaudeRunError && e.fatal && /not on PATH/.test(e.message));
   for (const code of [126, 127]) assert.throws(attempt(fakeClaude(`echo boom >&2; exit ${code}`)), (e) => e.fatal && e.message.includes(`exited ${code}`) && e.message.includes('boom'));
   assert.throws(attempt(fakeClaude('sleep 5'), { timeoutMs: 200 }), (e) => e instanceof ClaudeRunError && !e.fatal && /timed out/.test(e.message));
   assert.throws(attempt(fakeClaude('kill -9 $$')), (e) => e instanceof ClaudeRunError && /killed by SIGKILL/.test(e.message));
@@ -306,7 +308,7 @@ process.stdin.on('data', (d) => {
 process.stdin.on('end', () => log('eof'));
 `);
   chmodSync(join(dir, 'claude'), 0o755);
-  return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config') }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
+  return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
 }
 
 test('runClaude sends prompt k+1 only after result k, in one ordered stream, then closes stdin', () => {
@@ -374,7 +376,7 @@ const prompt = async () => { await until(() => lines > used || eof); if (lines <
 })();
 `);
   chmodSync(join(dir, 'claude'), 0o755);
-  return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config') }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
+  return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
 }
 const replay = (stream, prompts) => {
   const stub = replayClaude(stream);
