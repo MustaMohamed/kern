@@ -5475,6 +5475,14 @@ Expected: `standing cost: <n> input tokens (...)` with `n` at most 1,300; `PASS`
 
 For each failure: read its snapshot's reasons, find the cause in kern (route text, a step, a guard, a description), and add a task under "Tasks added during execution" that fixes it test first, with its CHANGELOG line. Re-run only the failing case (`--case <id>`, `--task <category/id>`), then the whole runner once the fixes are in. A case, fixture, rubric or answer key changes only when it is wrong on its own terms, and its commit body says why. A standing cost over 1,300 tokens is an open question for the user (trim the kernel, or accept the number), not a silent trim.
 
+**Exit rule (the user, 2026-10-22: "One last run, then close").** Step 6 grew into Tasks 16a to 16p, and every measurement opened another round. So Step 6 ends as follows:
+- The fixes already in flight are finished: Tasks 16n, 16o and 16p.
+- They are merged.
+- The confirming runs run once: the head-to-head plan and review reruns, behaviour, adherence on Sonnet and Haiku, and exec.
+- Whatever those runs show is recorded as 0.4.0's evidence.
+- Anything still failing is named in the CHANGELOG evidence line and design spec section 14 as a known limit, or parked for M3 with a reason.
+- No new diagnosis or fix task is added inside Task 16.
+
 - [ ] **Step 7: Record and commit**
 
 Add under `## [Unreleased]` in `CHANGELOG.md`: `- Evidence for 0.4.0: adherence <p>/15 with the rows inline (haiku <h>/15, not gating); behaviour <b>/<n>; head-to-head plan <s>, diagnose <s>, review <s> against the strongest arm; standing cost <t> input tokens.` with the measured numbers.
