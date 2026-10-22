@@ -1,9 +1,10 @@
 # shellcheck shell=bash
 # G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
-# and the user confirms every write to a kern settings file or to Claude Code's own settings, every
-# Write, Edit or NotebookEdit whose target resolves under kern's hooks/ directory, and every command
-# that names kern's hook code (a hook entry file, a .sh file under hooks/lib/ or hooks/guards/) or a
-# state function, which could forge the user's prompt or turn a guard off.
+# and the user confirms every write to a kern settings file or to Claude Code's own settings (in a
+# .claude directory, or $CLAUDE_CONFIG_DIR/settings.json when that is set), every Write, Edit or
+# NotebookEdit whose target resolves under kern's hooks/ directory, and every command that names kern's
+# hook code (a hook entry file, a .sh file under hooks/lib/ or hooks/guards/) or a state function,
+# which could forge the user's prompt or turn a guard off.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; and any other spelling of a hook path than the ones _g16_hooks reads
@@ -13,6 +14,7 @@ _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user 
 _G16_STATE_CMD="commands may not write kern session state"
 _G16_SETTINGS="kern settings change guard policy; the user confirms each write"
 _G16_CC="Claude Code settings set permissions and hooks; the user confirms each write"
+_G16_UNREAD="the target path could not be lower-cased (tr did not run), so G16 cannot tell it from kern session state; try the write again"
 _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory, where kern and Claude Code settings live; the user confirms each write"
 _G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool"
@@ -98,53 +100,80 @@ _g16_phys() {
   printf '%s\n' "${r%/}/$rest"
 }
 
-# _g16_hookfile PATH: exit 0 when absolute PATH resolves under kern's hooks/ directory, compared in lower
-# case (APFS opens HOOKS/ as hooks/): as text with `..` resolved, through its physical directory, and
-# through a symlink at its end, followed up to 8 links. kern's root is read as written and physically.
-_g16_hookfile() {
-  local p c l i=0 kr="" kp="" cands
-  kr=$(_g16_lower "$(_g16_norm "$KERN_ROOT/hooks")")
-  kp=$(cd -P "$KERN_ROOT/hooks" 2>/dev/null && pwd -P) && kp=$(_g16_lower "$kp")
+# _g16_hookcands PATH: sets _G16_HC to the readings of absolute PATH that _g16_file compares with kern's
+# hooks/ directory, one per line, with a newline inside one read as _GW_NL: as text with `..` resolved,
+# through its physical directory, and through a symlink at its end, followed up to 8 links.
+_g16_hookcands() {
+  local p l i=0 nl=$'\n'
   p=$(_g16_norm "$1")
-  cands=$p
-  p=$(_g16_phys "$p") && cands="$cands
-$p"
+  _G16_HC="${p//$nl/$_GW_NL}$nl"
+  p=$(_g16_phys "$p") || return 0
+  _G16_HC="$_G16_HC${p//$nl/$_GW_NL}$nl"
   while [ "$i" -lt 8 ] && [ -L "$p" ] && l=$(readlink "$p"); do
     case "$l" in /*) ;; *) l="${p%/*}/$l" ;; esac
     p=$(_g16_phys "$l") || break
-    cands="$cands
-$p
-$(_g16_norm "$p")"
+    l=$(_g16_norm "$p")
+    _G16_HC="$_G16_HC${p//$nl/$_GW_NL}$nl${l//$nl/$_GW_NL}$nl"
     i=$((i + 1))
   done
-  while IFS= read -r c; do
-    [ -n "$c" ] || continue
-    c=$(_g16_lower "$c")
-    case "$c" in "$kr"/*) return 0 ;; esac
-    if [ -n "$kp" ]; then
-      case "$c" in "$kp"/*) return 0 ;; esac
-    fi
-  done <<EOF
-$cands
-EOF
-  return 1
+}
+
+# _g16_ccdir: sets _G16_CCD to CLAUDE_CONFIG_DIR, where Claude Code keeps the user's settings.json when
+# the variable is set (Opus audit A9), with `.` and `..` resolved as text from CWD, and _G16_CCP to it
+# resolved physically (_G16_CCD when it does not exist). Both are empty when the variable is unset or
+# empty.
+_g16_ccdir() {
+  local d=${CLAUDE_CONFIG_DIR-}
+  _G16_CCD="" _G16_CCP=""
+  [ -n "$d" ] || return 0
+  case "$d" in /*) ;; *) d="${CWD:-$PWD}/$d" ;; esac
+  _G16_CCD=$(_g16_norm "$d")
+  [ -n "$_G16_CCD" ] || _G16_CCD=$d
+  _G16_CCP=$(cd -P "$d" 2>/dev/null && pwd -P) || _G16_CCP=$_G16_CCD
 }
 
 # _g16_file: a Write, Edit or NotebookEdit target, compared in lower case as written, with `..`
-# resolved, and through its physical parent dir, so a case variant or a symlinked dir is seen.
+# resolved, and through its physical parent dir, so a case variant or a symlinked dir is seen. Under
+# kern's hooks/ directory it asks (APFS opens HOOKS/ as hooks/), with kern's root read as written and
+# physically. Every path it compares is lower-cased in one tr pass, a newline inside one read as
+# _GW_NL, and the pass ends with a sentinel line: a tr that did not run (a fork refused under load)
+# leaves no sentinel, and the Write is denied, as its target could be session state (Opus audit A13).
 _g16_file() {
-  local p norm real="" sd rsd="" c
+  local p norm real="" rsd="" kp="" c out n=0 i hook=0 nl=$'\n' end=.g16-end.
+  local sd kr ccd ccp
+  local -a v
   p=$(ti_get file_path) || p=$(ti_get notebook_path) || return 0
   _g16_fold "$p"
   p=$_G16_F
   case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
   norm=$(_g16_norm "$p")
   real=$(cd "$(dirname "$norm")" 2>/dev/null && pwd -P) && real="$real/${norm##*/}"
-  sd=$(_g16_lower "$(state_dir)")
-  rsd=$(cd "$(state_dir)" 2>/dev/null && pwd -P) && rsd=$(_g16_lower "$rsd")
+  rsd=$(cd "$(state_dir)" 2>/dev/null && pwd -P)
+  kp=$(cd -P "$KERN_ROOT/hooks" 2>/dev/null && pwd -P)
+  _g16_ccdir
+  _g16_hookcands "$norm"
+  # The nine fixed lines, then the hook readings, then the sentinel, all through the one tr.
+  out=$(
+    {
+      for c in "$(state_dir)" "$rsd" "$p" "$norm" "$real" "$(_g16_norm "$KERN_ROOT/hooks")" "$kp" \
+        "$_G16_CCD" "$_G16_CCP"; do
+        printf '%s\n' "${c//$nl/$_GW_NL}"
+      done
+      printf '%s%s\n' "$_G16_HC" "$end"
+    } | env LC_ALL=C tr '[:upper:]' '[:lower:]'
+  )
+  case "$out" in
+    *"$nl$end") out=${out%"$end"} ;;
+    *) vote deny G16 "$_G16_UNREAD"; return 0 ;;
+  esac
+  while [ -n "$out" ]; do
+    v[n]=${out%%"$nl"*}
+    out=${out#*"$nl"}
+    n=$((n + 1))
+  done
+  sd=${v[0]} rsd=${v[1]} p=${v[2]} norm=${v[3]} real=${v[4]} kr=${v[5]} kp=${v[6]} ccd=${v[7]} ccp=${v[8]}
   for c in "$p" "$norm" "$real"; do
     [ -n "$c" ] || continue
-    c=$(_g16_lower "$c")
     case "$c" in
       "$sd"/* | */plugins/data/kern*/sessions/*) vote deny G16 "$_G16_STATE_FILE"; return 0 ;;
     esac
@@ -152,15 +181,28 @@ _g16_file() {
       case "$c" in "$rsd"/*) vote deny G16 "$_G16_STATE_FILE"; return 0 ;; esac
     fi
   done
-  if _g16_hookfile "$norm"; then
+  i=9
+  while [ "$i" -lt "$n" ]; do
+    c=${v[i]}
+    i=$((i + 1))
+    [ -n "$c" ] || continue
+    case "$c" in "$kr"/*) hook=1 ;; esac
+    if [ -n "$kp" ]; then
+      case "$c" in "$kp"/*) hook=1 ;; esac
+    fi
+  done
+  if [ "$hook" = 1 ]; then
     vote ask G16 "$_G16_HOOK_FILE"
     return 0
   fi
   for c in "$p" "$norm" "$real"; do
-    case "$(_g16_lower "$c")" in
+    case "$c" in
       */.claude/kern.yml | */.claude/kern.local.yml) vote ask G16 "$_G16_SETTINGS"; return 0 ;;
       */.claude/settings.json | */.claude/settings.local.json) vote ask G16 "$_G16_CC"; return 0 ;;
     esac
+    if [ -n "$ccd" ] && [ -n "$c" ]; then
+      case "$c" in "${ccd%/}"/settings.json | "${ccp%/}"/settings.json) vote ask G16 "$_G16_CC"; return 0 ;; esac
+    fi
   done
 }
 
@@ -282,7 +324,8 @@ _g16_into() {
 # a /). The bare session id is not enough: Claude Code's scratchpad and task paths contain it.
 # Settings: a word ending in .claude/kern.yml or .claude/kern.local.yml, or exactly kern.yml or
 # kern.local.yml. Claude Code's settings: a word ending in .claude/settings.json or
-# .claude/settings.local.json.
+# .claude/settings.local.json, or, with CLAUDE_CONFIG_DIR set, its settings.json (_G16_CCD or _G16_CCP),
+# written out once a leading ~ or $HOME is expanded, or through the variable.
 _g16_name() {
   local e p a b slash='[!/]'
   _G16_K=""
@@ -307,6 +350,12 @@ _g16_name() {
     '${claude_plugin_data}'/*) e="$_G16_DATA${1#'${claude_plugin_data}'}" ;;
     *) e="$1" ;;
   esac
+  if [ -n "$_G16_CCD" ]; then
+    case "$e" in
+      "${_G16_CCD%/}"/settings.json | "${_G16_CCP%/}"/settings.json | '$claude_config_dir'/settings.json | \
+        '${claude_config_dir}'/settings.json) _G16_K=cc; return 0 ;;
+    esac
+  fi
   case "$e" in
     *"$_G16_SD"*) _G16_K=state; return 0 ;;
     /*[*?[]*) ;;
@@ -433,6 +482,11 @@ _g16_bash() {
   _G16_SID=$(_g16_lower "${SID-}")
   _G16_HOME=$(_g16_lower "${HOME-}")
   _G16_DATA=${_G16_SD%/sessions}
+  _g16_ccdir
+  if [ -n "$_G16_CCD" ]; then
+    _G16_CCD=$(_g16_lower "$_G16_CCD")
+    _G16_CCP=$(_g16_lower "$_G16_CCP")
+  fi
   _G16_INCC=0
   # cdir: the directory while dk is 1, lower-cased text with . and .. resolved as text.
   cdir=$(_g16_lower "${CWD:-$PWD}")

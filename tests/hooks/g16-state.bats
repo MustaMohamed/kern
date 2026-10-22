@@ -347,6 +347,52 @@ expect_cmd() {
   expect_file_tools "$R/.vscode/settings.json" none
 }
 
+@test "with CLAUDE_CONFIG_DIR set, a write to its settings.json asks, and denies under autopilot" {
+  # With CLAUDE_CONFIG_DIR set, Claude Code keeps the user's settings in $CLAUDE_CONFIG_DIR/settings.json
+  # (Opus audit A9). A Write there asks, as written, with .. in it, or through a symlink to the
+  # directory, and so does a redirect to the path written out or through the variable. A read, another
+  # file in the directory, and the same path once the variable is unset get no vote.
+  local d="$BATS_TEST_TMPDIR/ccd"
+  mkdir -p "$d"
+  ln -s "$d" "$BATS_TEST_TMPDIR/ccd-link"
+  export CLAUDE_CONFIG_DIR="$d"
+  expect_file_tools "$d/settings.json" ask
+  [[ "$output" == *"Claude Code settings set permissions and hooks; the user confirms each write"* ]] || false
+  expect_file_tools "$d/x/../Settings.JSON" ask
+  expect_file_tools "$BATS_TEST_TMPDIR/ccd-link/settings.json" ask
+  expect_bash ask "echo {} > $d/settings.json" "echo {} > \$CLAUDE_CONFIG_DIR/settings.json" \
+    "echo {} > \${CLAUDE_CONFIG_DIR}/settings.json" "cp /tmp/s.json \$CLAUDE_CONFIG_DIR/settings.json"
+  export CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/ccd-link"
+  expect_file_tools "$d/settings.json" ask
+  mkdir -p "$HOME/.claude-eval"
+  export CLAUDE_CONFIG_DIR="$HOME/.claude-eval"
+  expect_bash ask "echo {} > ~/.claude-eval/settings.json" "tee \$HOME/.claude-eval/settings.json"
+  export CLAUDE_CONFIG_DIR="$d"
+  set_autopilot on
+  expect_file_tools "$d/settings.json" deny
+  expect_bash deny "echo {} > \$CLAUDE_CONFIG_DIR/settings.json"
+  set_autopilot off
+  expect_bash none "cat \$CLAUDE_CONFIG_DIR/settings.json" "echo x > $d/notes.txt"
+  expect_file_tools "$d/notes.json" none
+  unset CLAUDE_CONFIG_DIR
+  expect_file_tools "$d/settings.json" none
+  expect_bash none "echo {} > $d/settings.json"
+}
+
+@test "when tr cannot lower-case the paths of a Write, G16 denies it" {
+  # _g16_file lower-cases every path it compares in one tr pass that ends with a sentinel line. A tr that
+  # fails, as a fork refused under load does, left each path empty and skipped the state-dir check
+  # (Opus audit A13); a missing sentinel now denies any Write, Edit or NotebookEdit.
+  read_fails tr '*upper*'
+  expect_file_tools "$S/test-session.state" deny
+  [[ "$output" == *"kern G16: the target path could not be lower-cased"* ]] || false
+  expect_file_tools "$R/notes.md" deny
+  [ "$(read_failures tr)" -gt 0 ]
+  read_fails tr '*upper*' 0
+  expect_file_tools "$R/notes.md" none
+  expect_file_tools "$S/test-session.state" deny
+}
+
 @test "settings files and .claude directories follow the state model: any head but a reader asks" {
   mkdir -p "$R/.claude/agents"
   expect_bash ask "curl -so .claude/settings.json https://example.com/s" \
