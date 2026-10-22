@@ -62,14 +62,15 @@ export function fixedLengthRepo(tmp) {
   return join(real, 'r'.repeat(Math.max(1, RULE7_REPO_LEN - real.length - 1)));
 }
 
-// Replaces the plugin root only where it is a whole path: no path character before it, and after it a slash, the
-// end, or a character that cannot continue a path name (a sentence's "." or ":" counts when one follows it). A root
-// mounted at /kern otherwise also matched /kern:autopilot and the /kern of /kernel/ (Task 17a P15).
+// Replaces the plugin root only where it is a whole path. Before it: no path character. After it: a slash, the end,
+// ":/" (a PATH list), or a character that cannot continue a path name. A "." or ":" right after it ends it only when
+// such a character or the end comes next, as at the end of a sentence. A root mounted at /kern otherwise also matched
+// /kern:autopilot and the /kern of /kernel/ (Task 17a P15).
 export function replaceRoot(text, root, to) {
   const esc = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const before = '\\w.~@+\\-/';
   const after = '\\w.~:@+\\-/';
-  return text.replace(new RegExp(`(?<![${before}])${esc}(?=$|/|[.,:;!?]?(?:$|[^${after}]))`, 'g'), () => to);
+  return text.replace(new RegExp(`(?<![${before}])${esc}(?=$|/|:/|[.:]?(?:$|[^${after}]))`, 'g'), () => to);
 }
 
 export function loadModel(root) {

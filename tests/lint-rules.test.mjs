@@ -659,6 +659,7 @@ test('rule 7 replaces the plugin root only as a whole path, so a short root such
   );
   assert.equal(replaceRoot('a /k.e+y/b and /kXeYy/b', '/k.e+y', T), 'a /opt/x/b and /kXeYy/b', 'the root is matched as text, not as a pattern');
   assert.equal(replaceRoot('(/kern/a),/kern/b PATH=/a:/kern/bin', '/kern', T), '(/opt/x/a),/opt/x/b PATH=/a:/opt/x/bin', 'a comma or a colon before the root ends the path before it');
+  assert.equal(replaceRoot('PATH=/kern:/usr/bin; /kern;x /kern, /kern: x /kern..', '/kern', T), 'PATH=/opt/x:/usr/bin; /opt/x;x /opt/x, /opt/x: x /kern..', 'a colon and a slash after the root end it, as in a PATH list');
   // The real kernel and subagent kernel filled at /kern measure what they measure at the GitHub runner's root.
   for (const f of ['kernel.md', 'kernel-subagent.md']) {
     const k = readFileSync(join(ROOT, 'kernel', f), 'utf8');
