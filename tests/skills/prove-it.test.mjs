@@ -44,6 +44,15 @@ test('a subagent\'s diff is read before its test runs, and a failing test does n
   assert.ok(s[6].startsWith('6. For "requirements met"'), s[6]);
 });
 
+test('verify.fast defaults to each of typecheck and lint that resolves, as settings.md says', () => {
+  // Task 17a P10, D16 (Opus audit 2026-10-22): "`typecheck`, then `lint`" read as both, so a repo with a lint script and
+  // no typecheck left verify.fast unresolved, and under autopilot the check failed every time.
+  const d16 = 'each of `typecheck` and `lint` that resolves; at least one';
+  assertContains(SKILL, [`| \`verify.fast\` | ${d16} | quick proof before a commit |`]);
+  assertContains('kernel/settings.md', [`| \`verify.fast\` | ${d16} | command | self-review, prove-it |`]);
+  assert.ok(!readDoc(SKILL).raw.includes('`typecheck`, then `lint`'), 'the two-reading default is gone');
+});
+
 test('evidence reference', () => {
   assertHeadings('skills/prove-it/references/evidence.md', ['# Evidence by claim', '## Claim table', '## Labels', '## Inconclusive is a fail']);
   assertContains('skills/prove-it/references/evidence.md', ['zero tests ran']);
