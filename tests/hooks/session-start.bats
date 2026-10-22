@@ -79,7 +79,7 @@ ap_on() {
   [[ "$output" == *"# kern terse voice"* ]] || false
 }
 
-@test "the summary lists set keys, overrides, routes, floor keys and unknown keys" {
+@test "the summary lists set keys, overrides, floor keys and unknown keys; route.<name> is an unknown key" {
   mkdir -p "$R/.claude/skills/technical-writing"
   printf -- '---\nname: technical-writing\n---\n' >"$R/.claude/skills/technical-writing/SKILL.md"
   printf 'push.policy: auto\nmerge.policy: auto\nroute.define: off\nfoo.bar: 1\n' >"$R/.claude/kern.local.yml"
@@ -88,16 +88,193 @@ ap_on() {
   [[ "$output" == *"push.policy=auto"* ]] || false
   # kern ships technical-writing from Task 15; until then no kern job matches the project skill.
   if [ -d "$K/skills/technical-writing" ]; then [[ "$output" == *"technical-writing -> project skill technical-writing"* ]] || false; fi
-  [[ "$output" == *"Routes: define -> off"* ]] || false
+  # route.<name> had no reader (audit B8): overrides.<job> names a project skill for a job.
+  [[ "$output" != *"Routes:"* ]] || false
   [[ "$output" == *"Ignored, floor actions have no key: merge.policy"* ]] || false
-  [[ "$output" == *"Unknown keys, ignored: foo.bar"* ]] || false
   set_line=$(printf '%s\n' "$output" | grep '^Set: ')
   unknown_line=$(printf '%s\n' "$output" | grep '^Unknown keys, ignored: ')
-  [[ "$set_line" == *"push.policy=auto"* ]] || false
-  [[ "$set_line" != *"merge.policy"* ]] || false
+  [ "$set_line" = "Set: push.policy=auto" ] || { echo "$set_line"; return 1; }
+  [[ "$unknown_line" == *"foo.bar"* ]] || false
+  [[ "$unknown_line" == *"route.define"* ]] || false
   [[ "$unknown_line" != *"merge.policy"* ]] || false
   before_set=${output%%"Set: "*}
   [[ "$before_set" == *"Ignored, floor actions have no key: "* ]] || false
+}
+
+# summary: the lines after the Project settings heading, the plugin root read as {ROOT}, into $summary.
+summary() {
+  summary=$(printf '%s\n' "$output" | sed '1,/^## Project settings$/d')
+  summary=${summary//"$K"/\{ROOT\}}
+}
+
+# has_line LINE: $output holds LINE as a whole line.
+has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
+
+@test "overrides.<job>: off is no override: kern's route stays and a project skill of that name is not matched" {
+  # Audit B1: off rendered as "diagnose -> project skill off", and a same-name project skill still overrode.
+  printf 'overrides.diagnose: off\n' >"$R/.claude/kern.local.yml"
+  start startup
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"project skill off"* ]] || false
+  [[ "$output" != *"Overrides ("* ]] || false
+  [[ "$output" != *"overrides.diagnose"* ]] || false
+  for job in diagnose commit; do
+    mkdir -p "$R/.claude/skills/$job"
+    printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
+  done
+  start startup
+  [[ "$output" != *"diagnose -> project skill"* ]] || false
+  has_line "Overrides (follow the project skill, say so in one line): commit -> project skill commit"
+  # Without off, the same-name project skill overrides kern's route, in the line neg-project-skill reads.
+  rm "$R/.claude/kern.local.yml"
+  start startup
+  has_line "Overrides (follow the project skill, say so in one line): commit -> project skill commit; diagnose -> project skill diagnose"
+}
+
+@test "Set: holds known keys whose value differs from a literal default, policy keys first" {
+  # Audit B6: a typo such as push.polcy read as an auto push policy, and default values were listed.
+  printf 'push.polcy: auto\nfoo.bar: 1\nscope_threshold: 4\nautopilot: allowed\nmode.voice: normal\nparallel.max: 5\nbase_branch: develop\ntracker.policy: deny\n' >"$R/.claude/kern.local.yml"
+  start startup
+  set_line=$(printf '%s\n' "$output" | grep '^Set: ')
+  [ "$set_line" = "Set: tracker.policy=deny; base_branch=develop; parallel.max=5" ] || { echo "$set_line"; return 1; }
+  unknown_line=$(printf '%s\n' "$output" | grep '^Unknown keys, ignored: ')
+  [[ "$unknown_line" == *"push.polcy"* ]] || false
+  [[ "$unknown_line" == *"foo.bar"* ]] || false
+}
+
+@test "25 routes and 60 unknown keys keep the block within 600, the Unknown list cut first and push.policy=deny kept" {
+  # Audit B7: this committed file rendered 1,069 chars, and its Set: line lost push.policy=deny.
+  {
+    printf 'test.full: npm test\npush.policy: deny\n'
+    i=1
+    while [ "$i" -le 25 ]; do printf 'route.r%s: my-project-route-%s\n' "$i" "$i"; i=$((i + 1)); done
+    i=1
+    while [ "$i" -le 60 ]; do printf 'unknown.key%s: %s\n' "$i" "$i"; i=$((i + 1)); done
+  } >"$R/.claude/kern.yml"
+  start startup
+  [ "$status" -eq 0 ]
+  summary
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  [[ "$summary" == *$'\n'"Set: push.policy=deny; test.full=npm test"$'\n'* ]] || { echo "$summary"; return 1; }
+  unknown_line=$(printf '%s\n' "$summary" | grep '^Unknown keys, ignored: ')
+  [[ "$unknown_line" =~ ^Unknown\ keys,\ ignored:\ .+,\ and\ ([0-9]+)\ more$ ]] || { echo "$unknown_line"; return 1; }
+  shown=$(printf '%s\n' "${unknown_line#Unknown keys, ignored: }" | tr ',' '\n' | grep -c -v ' more$')
+  [ $((shown + BASH_REMATCH[1])) -eq 85 ] || { echo "$shown shown, ${BASH_REMATCH[1]} more"; return 1; }
+}
+
+@test "a cut Set: keeps the policy keys, and a huge override value still keeps the block within 600" {
+  long=$(printf '%0400d' 0)
+  printf 'test.full: %s\nlint: %s\nwork_dir: .w\ntracker.policy: deny\noverrides.commit: %s%s\n' "$long" "$long" "$long" "$long" >"$R/.claude/kern.local.yml"
+  mkdir -p "$R/.claude/skills/diagnose"
+  printf -- '---\nname: diagnose\n---\n' >"$R/.claude/skills/diagnose/SKILL.md"
+  start startup
+  [ "$status" -eq 0 ]
+  summary
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  [[ "$summary" == *$'\n'"Overrides (follow the project skill, say so in one line): diagnose -> project skill diagnose; not shown: commit"$'\n'* ]] ||
+    { echo "$summary"; return 1; }
+  [[ "$summary" == *$'\n'"Set: tracker.policy=deny; work_dir=.w ... (more: bash {ROOT}/scripts/kern-get <key>)"* ]] || { echo "$summary"; return 1; }
+  # With no entry that fits, the line still names the job that has an override.
+  rm -r "$R/.claude/skills/diagnose"
+  start startup
+  has_line "Overrides (follow the project skill, say so in one line): not shown: commit"
+}
+
+@test "unknown keys never cut an override, and a short Set: line holds no more room than it needs" {
+  # Twelve same-name project skills fill 523 chars of Overrides; with Set: and an unknown key the block is
+  # 617. Only the Unknown list may give way, here as a whole line: no shortest form of it fits.
+  for job in commit define diagnose execute-plan finish-branch implement parallel-work plan prove-it recall self-review technical-writing; do
+    mkdir -p "$R/.claude/skills/$job"
+    printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
+  done
+  printf 'base_branch: develop\nfoo.bar: 1\n' >"$R/.claude/kern.local.yml"
+  start startup
+  summary
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  has_line "Overrides (follow the project skill, say so in one line): commit -> project skill commit; define -> project skill define; diagnose -> project skill diagnose; execute-plan -> project skill execute-plan; finish-branch -> project skill finish-branch; implement -> project skill implement; parallel-work -> project skill parallel-work; plan -> project skill plan; prove-it -> project skill prove-it; recall -> project skill recall; self-review -> project skill self-review; technical-writing -> project skill technical-writing"
+  has_line "Set: base_branch=develop"
+  [[ "$summary" != *"Unknown keys"* ]] || { echo "$summary"; return 1; }
+}
+
+@test "a cut Overrides line names each job it does not show: 13 same-name skills from a subdirectory" {
+  # The model must know which jobs have a project override it cannot see (P13 ruling, 2026-10-22).
+  jobs="commit define diagnose execute-plan finish-branch implement parallel-work plan prove-it recall self-review technical-writing unslop"
+  for job in $jobs; do
+    mkdir -p "$R/.claude/skills/$job"
+    printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
+  done
+  mkdir -p "$R/sub"
+  export CWD="$R/sub"
+  start startup
+  summary
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  [[ "$summary" == "Main worktree: "* ]] || false
+  line=$(printf '%s\n' "$summary" | grep '^Overrides ')
+  re='^Overrides \(follow the project skill, say so in one line\): (.+); not shown: ([a-z, -]+)$'
+  [[ "$line" =~ $re ]] || { echo "$line"; return 1; }
+  shown=$(printf '%s\n' "${BASH_REMATCH[1]}" | sed 's/; /\
+/g' | sed 's/ -> project skill .*//')
+  cut=$(printf '%s\n' "${BASH_REMATCH[2]}" | sed 's/, /\
+/g')
+  [ -n "$cut" ]
+  # Every job is shown or named, once.
+  [ "$(printf '%s\n%s\n' "$shown" "$cut" | sort)" = "$(printf '%s\n' $jobs | sort)" ] || { echo "$line"; return 1; }
+}
+
+@test "an explicit override is kept ahead of same-name ones, so a cut job's skill is its own name" {
+  # Review Minor 1(a): a cut explicit override lost its skill name, which only kern-get could give back.
+  for job in commit define diagnose execute-plan finish-branch implement parallel-work plan prove-it recall self-review technical-writing; do
+    mkdir -p "$R/.claude/skills/$job"
+    printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
+  done
+  printf 'overrides.unslop: house-style-guide\nbase_branch: develop\n' >"$R/.claude/kern.local.yml"
+  start startup
+  summary
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  line=$(printf '%s\n' "$summary" | grep '^Overrides ')
+  [[ "$line" == *"unslop -> project skill house-style-guide"* ]] || { echo "$line"; return 1; }
+  [[ "$line" == *"; not shown: "* ]] || { echo "$line"; return 1; }
+  cut=${line##*; not shown: }
+  [[ ", $cut, " != *", unslop, "* ]] || { echo "$line"; return 1; }
+}
+
+@test "a value against a default that is not one literal value still prints: pr.policy: ask" {
+  printf 'pr.policy: ask\n' >"$R/.claude/kern.local.yml"
+  start startup
+  has_line "Set: pr.policy=ask"
+}
+
+@test "review.post_policy orders as a policy key in Set:" {
+  printf 'base_branch: develop\nreview.post_policy: deny\n' >"$R/.claude/kern.local.yml"
+  start startup
+  has_line "Set: review.post_policy=deny; base_branch=develop"
+}
+
+@test "an unknown key set in two files is listed once" {
+  printf 'foo.bar: 1\n' >"$R/.claude/kern.local.yml"
+  printf 'foo.bar: 2\n' >"$R/.claude/kern.yml"
+  start startup
+  has_line "Unknown keys, ignored: foo.bar"
+}
+
+@test "Main worktree names the main root only when the session's cwd is elsewhere" {
+  RP=$(cd "$R" && pwd -P)
+  start startup
+  [[ "$output" != *"Main worktree:"* ]] || false
+  summary
+  [ "$summary" = "Settings files: none; defaults apply" ] || { echo "$summary"; return 1; }
+  ln -s "$R" "$BATS_TEST_TMPDIR/link"
+  export CWD="$BATS_TEST_TMPDIR/link"
+  start startup
+  [[ "$output" != *"Main worktree:"* ]] || false
+  mkdir -p "$R/sub"
+  export CWD="$R/sub"
+  start startup
+  [[ "$output" == *$'\n'"## Project settings"$'\n'"Main worktree: $RP"$'\n'* ]] || false
+  git -C "$R" worktree add -q -b wt "$BATS_TEST_TMPDIR/wt"
+  export CWD="$BATS_TEST_TMPDIR/wt"
+  start startup
+  [[ "$output" == *$'\n'"Main worktree: $RP"$'\n'"Settings files: none; defaults apply"* ]] || false
 }
 
 @test "a long summary keeps every override in full and stays within 600 characters" {

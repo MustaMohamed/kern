@@ -35,7 +35,7 @@ test('execute-plan sections, steps, scripts and red flags', () => {
 
 test('ledger format and model table', () => {
   assertHeadings(LEDGER, ['# Ledger format', '## Lines', '## Resume rule', '## Tree ids']);
-  assertContains(LEDGER, ['# kern ledger: <plan path>', 'Main: <root> branch=<name> status=<hash>',
+  assertContains(LEDGER, ['# kern ledger: <plan path>', '| `Plan: <hash>` | `ledger-open` |', 'Main: <root> branch=<name> head=<sha> status=<hash>',
     'Task N: start tree=<id> at=<iso>', 'Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>',
     'Task N: minor (deferred): <text>', 'Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>',
     'parked: <question>; default: <choice>; why: <one line>']);
@@ -159,6 +159,17 @@ test('execute-plan runs its task and final reviews in the foreground', () => {
   // and its serial delegate implementer, which step 7 waits on, runs in the foreground by model-selection.md's rule
   // (Task 16i review, M4).
   assert.ok(!s[6].includes('run_in_background'), s[6]);
+});
+
+test('the task test command names no worktree path and has no cd, in step 10 and in the implementer agent', () => {
+  // Audit C-I2, its text half (Task 17a P7): task-done runs the command in the worktree, and probe runs it again
+  // in a fork with the change reversed. A command or script that cds to the worktree's absolute path ran the
+  // reversed test in the unreversed worktree; probe now exits 3 for it (P4). agents/implementer.md said "start
+  // shell commands with `cd <WT> &&`", and plans often wrote `Run:` that way (lane C, I2).
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[10].includes('passed as `-- bash <path>`. Neither may `cd` or name the worktree\'s absolute path: task-done runs them there and in the fork.'), s[10]);
+  const rule = readDoc('agents/implementer.md').body.split('\n').find((l) => l.startsWith('1. Work only in WT.')) ?? '';
+  assert.ok(rule.includes('so start shell commands with `cd <WT> &&`; the test command you report has no `cd` and names WT\'s files by relative path, as the controller runs it in WT and in a fork.'), rule);
 });
 
 test('only the user\'s word skips the final review; task-done refuses a task no review approved', () => {

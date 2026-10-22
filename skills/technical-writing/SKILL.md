@@ -7,6 +7,7 @@ disable-model-invocation: true
 # Technical writing
 
 ## Steps
+0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
 1. Name the reader and the artifact: PR body, commit message, issue, doc, or a reply others will read.
 2. For a doc, pick its mode (tutorial, how-to, reference or explanation) and keep to it. PR bodies and commit messages skip this step.
 3. Draft with the sentence rules below: the reader as "you", the actor named, the condition before the instruction, one instruction per sentence.

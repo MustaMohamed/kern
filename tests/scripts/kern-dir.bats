@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # scripts/kern-dir and scripts/kern-root.
 
+bats_require_minimum_version 1.5.0
 load ../helpers/common
 
 setup() {
@@ -33,6 +34,34 @@ setup() {
   run bash "$K/kern-dir" plans
   [ "$(grep -cxF '/.kern/' "$R/.git/info/exclude")" -eq 1 ]
   [ -z "$(git -C "$R" status --porcelain)" ]
+}
+
+# In a submodule and a --separate-git-dir checkout, git names the git dir as the main worktree (audit E3).
+@test "kern-dir and kern-root in a submodule or a separate-git-dir checkout use the checkout, not the git dir" {
+  local out
+  S="$BATS_TEST_TMPDIR/sub"
+  git init -q -b main "$S"
+  git -C "$S" -c user.name=t -c user.email=t@t commit -q --allow-empty -m s
+  git -C "$R" -c protocol.file.allow=always submodule add -q "$S" mod
+  M=$(cd "$R/mod" && pwd -P)
+  cd "$R/mod"
+  out=$(bash "$K/kern-dir" ledgers 2>/dev/null)
+  [ "$out" = "$M/.kern/ledgers" ]
+  [ -d "$M/.kern/ledgers" ]
+  [ ! -e "$R/.git/modules/mod/.kern" ]
+  [ "$(grep -cxF '/.kern/' "$R/.git/modules/mod/info/exclude")" -eq 1 ]
+  [ -z "$(git -C "$M" status --porcelain)" ]
+  run bash "$K/kern-root"
+  [ "${lines[0]}" = "$M" ]
+  W="$BATS_TEST_TMPDIR/sepwt"
+  git init -q -b main --separate-git-dir "$BATS_TEST_TMPDIR/sepgit" "$W"
+  WP=$(cd "$W" && pwd -P)
+  cd "$W"
+  out=$(bash "$K/kern-dir" ledgers 2>/dev/null)
+  [ "$out" = "$WP/.kern/ledgers" ]
+  [ ! -e "$BATS_TEST_TMPDIR/sepgit/.kern" ]
+  run bash "$K/kern-root"
+  [ "${lines[0]}" = "$WP" ]
 }
 
 @test "kern-dir refuses an upper-case or non-ASCII name under a UTF-8 locale too" {

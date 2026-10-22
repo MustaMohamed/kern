@@ -429,7 +429,7 @@ export const RULES = [
         if (sub && !contract.includes(`\`WORK/${sub}/\``)) flag(`WORK/${sub}`, 'not listed under "Working directory" in docs/plans/contract.md');
       }
       // `Task <N>:` is the same line as `Task N:`, the contract's spelling.
-      for (const m of text.matchAll(/`((?:Task N|Task <N>|parked|Decision|Worktree|Main|Wave|Applied|Preflight):[^`]*)`/g)) {
+      for (const m of text.matchAll(/`((?:Task N|Task <N>|parked|Decision|Worktree|Plan|Main|Wave|Applied|Preflight):[^`]*)`/g)) {
         if (!contract.includes(`\`${m[1].replace(/^Task <N>:/, 'Task N:')}\``)) flag(m[1], 'ledger line format not in docs/plans/contract.md');
       }
     }

@@ -5,6 +5,9 @@
 # A newline inside one record (quoted text, or the inside of $( )) is printed as this byte, so a
 # caller that reads records line by line never takes a quoted line for a command.
 _GW_NL=$'\037'
+# The last line _split_words' awk prints. Every record it prints is trimmed of blanks, so none starts
+# with a tab, and a command cannot forge this line.
+_GW_SPLIT_END=$'\t.'
 # git_words' own state, never taken from the environment: _GW_IN marks a call inside the outermost
 # one, _GW_NOALIAS a call that splits an alias's expansion. _GW_QB, set by G00 alone for its call, asks
 # for each quoted here-doc body that may hold an array subscript as one record after a \035 byte.
@@ -459,7 +462,7 @@ _GW_SCAN='
 # G00 is the backstop there. Out of scope here: commands that xargs or find -exec run (G1 and G2 ask for
 # a git or gh among their words), and a here-doc piped into a shell (cat <<EOF | sh).
 git_words() {
-  local seg inner body first hm=$'\036' qm=$'\035' forged=0
+  local seg inner body first hm=$'\036' qm=$'\035' forged=0 split_end
   # hm starts an unquoted here-doc body record from _split_words, and qm a quoted body on G00s call
   # (_GW_QB). A command that holds either byte itself could forge one, so its marked records are then
   # also read as ordinary records.
@@ -473,10 +476,20 @@ git_words() {
     _GW_IN=1 git_words "$1" | env LC_ALL=C awk '/^\t/ { a[++n] = substr($0, 2); next } { print } END { for (i = 1; i <= n; i++) print a[i] }'
     return
   fi
-  _split_words "$1" | while IFS= read -r seg; do
+  # _split_words' awk prints its end line last. A split stage that dies first (a fork that fails in its
+  # subshell, a kill) prints neither its records nor the awk-error $KERN_UNREAD, so the reader prints
+  # $KERN_UNREAD itself when the end line does not come. The readers below, and the substitution around
+  # git_words, can still die unseen; G1's own end line covers that last one.
+  _split_words "$1" | {
+  split_end=0
+  while IFS= read -r seg; do
     # An unquoted here-doc body: only the bodies of its $( ) and backticks are commands, read as the shell
     # expands the body (_subst_bodies kind h); the body itself is data, so it is not printed.
     case "$seg" in
+      "$_GW_SPLIT_END")
+        split_end=1
+        continue
+        ;;
       "$hm"*)
         _subst_bodies "${seg#"$hm"}" h | while IFS= read -r body; do
           if [ -n "$body" ]; then git_words "${body//$_GW_NL/$'\n'}"; fi
@@ -511,10 +524,12 @@ git_words() {
     # shell. A wrapper or shell name matches in any case, as _cmd_words reads it.
     # One tr pass strips the quotes, and only when the word holds one: ${first//[...]/} is cubic in
     # the word's length on bash 3.2 in a UTF-8 locale.
+    # A strip that fails, or comes back empty as a substitution whose pipe cannot be made does, leaves
+    # first empty, and an empty first word runs the pass: it never rules the pass out.
     first=${seg%%[[:space:]]*}
-    case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | env LC_ALL=C tr -d "\"'\\\\") ;; esac
+    case "$first" in *[\"\'\\]*) first=$(printf '%s' "$first" | env LC_ALL=C tr -d "\"'\\\\") || first="" ;; esac
     case "/$first" in
-      *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
+      / | *'<'* | *'>'* | *=* | */if | */then | */elif | */else | */do | */while | */until | */'!' | */'{' | \
         */noglob | */nocorrect | */coproc | */repeat | \
         */[Ee][Vv][Aa][Ll] | */[Cc][Oo][Mm][Mm][Aa][Nn][Dd] | */[Ee][Xx][Ee][Cc] | */[Tt][Ii][Mm][Ee] | \
         */[Nn][Oo][Hh][Uu][Pp] | */[Ss][Uu][Dd][Oo] | */[Ee][Nn][Vv] | */[Tt][Ii][Mm][Ee][Oo][Uu][Tt] | \
@@ -545,6 +560,8 @@ git_words() {
       if [ -n "$inner" ]; then git_words "${inner//$_GW_NL/$'\n'}"; fi
     done
   done
+  [ "$split_end" = 1 ] || printf '%s\n' '$KERN_UNREAD'
+  }
 }
 
 # _subst_bodies STR: the body of each outermost $( ) and backtick pair, one per line, as the scanner
@@ -651,15 +668,62 @@ _split_words() {
     # $( ) or backtick, after a \036 byte, so git_words reads the command substitutions the shell expands
     # in it and never the body itself as a command. A quoted body is data and is skipped, except that on
     # G00s call (qb, from _GW_QB) one that holds a [ and a $( or backtick is emitted after a \035 byte,
-    # for G00 to scan for an array subscript the body may store for arithmetic. a is the position just
+    # for G00 to scan for an array subscript the body may store for arithmetic. On G00s call too, an
+    # unquoted body that expands a stored string again (hreev) adds a $KERN_UNREAD record, which G00
+    # denies: the $( ) that runs is in the stored value, where no record shows it. a is the position just
     # after the operator line, where the first body starts.
     function hbody(a,   h, s) {
       for (h = 1; h <= nh; h++) {
         s = substr(buf, a, off[last[h]] - a)
-        if (!hq[h]) { if (index(s, "$(") || index(s, "`")) emit("\036" s) }
+        if (!hq[h]) {
+          if (index(s, "$(") || index(s, "`")) emit("\036" s)
+          if (qb && hreev(s)) emit("$KERN_UNREAD")
+        }
         else if (qb && index(s, "[") && (index(s, "$(") || index(s, "`"))) emit("\035" s)
         a = off[last[h]] + length(L[last[h]]) + 1
       }
+    }
+    # hreev(s): the unquoted here-doc body s, whose quotes are literal text, holds an expansion that
+    # evaluates its value again, so a $( ) stored in the value runs: a bash @P transform (${x@P}); a bash
+    # indirection through a name or a positional parameter (${!y}, ${!1}, ${!@}, ${!*}: the value may
+    # hold a subscript), but not ${!y[@]}, ${!y[*]}, ${!pre*} or ${!pre@}, which list keys or names, nor
+    # ${!} and ${!#}, ${!-}, ${!?}, ${!$}, which read the value of a special parameter; or a zsh flag
+    # group holding e, P (its name may hold a subscript), or % (prompt expansion, which runs a $( ) under
+    # PROMPT_SUBST). The group is walked as zsh reads it: j s Z _ I g take one delimited argument, l and
+    # r up to three, each from its delimiter to the match ( ) [ ] { } < >, or the same character again,
+    # and a flag inside an argument is its text. A backslash before the $ is not read, so an escaped
+    # expansion counts too; an argument that never closes counts. g0_reeval in G00 judges command
+    # records; P1 is aligning it to this walk, and P20 (M3) replaces the two copies with one matcher.
+    function hreev(s,   n, C, i, k, c, d, e, m, t) {
+      if (index(s, "@P}")) return 1
+      if (!index(s, "${")) return 0
+      n = split(s, C, "")
+      for (i = 1; i < n; i++) {
+        if (C[i] != "$" || C[i + 1] != "{") continue
+        if (C[i + 2] == "!") {
+          for (k = i + 3; k <= n && C[k] ~ /[A-Za-z0-9_]/; k++) ;
+          if (k == i + 3 && C[k] != "@" && C[k] != "*") continue
+          t = substr(s, k, 4)
+          if (k > i + 3 && (t == "[@]}" || t == "[*]}" || substr(t, 1, 2) == "*}" || substr(t, 1, 2) == "@}")) continue
+          return 1
+        }
+        if (C[i + 2] != "(") continue
+        for (k = i + 3; k <= n && C[k] != ")"; k++) {
+          c = C[k]
+          if (c == "e" || c == "P" || c == "%") return 1
+          if (index("jsZ_Ig", c)) m = 1
+          else if (c == "l" || c == "r") m = 3
+          else continue
+          d = C[k + 1]
+          e = d == "(" ? ")" : d == "[" ? "]" : d == "{" ? "}" : d == "<" ? ">" : d
+          if (d == "") return 1
+          for (; m > 0 && C[k + 1] == d; m--) {
+            for (k += 2; k <= n && C[k] != e; k++) ;
+            if (k > n) return 1
+          }
+        }
+      }
+      return 0
     }
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
@@ -745,6 +809,8 @@ _split_words() {
       # A quote or context that never closes (at i) holds the rest of the text, in the record just cut.
       # That text is then read again flat, so a quote the scanner misreads hides nothing after it.
       if (i <= n) flat(start)
+      # The end line (_GW_SPLIT_END): git_words prints $KERN_UNREAD when it does not come.
+      print "\t."
     }' || { printf '%s\n' '$KERN_UNREAD'; false; }
   # On an awk error the $KERN_UNREAD record is printed and the false is the status this function
   # returns, which git_words' pipeline carries to its own exit under a caller's pipefail.
@@ -865,10 +931,30 @@ cmd_head() {
     END { print out }'
 }
 
-# in_main_checkout DIR: exit 0 when DIR is inside the main worktree (not a linked worktree).
+# in_main_checkout DIR: exit 0 when DIR is inside the main worktree (not a linked worktree). A repository
+# its superproject tracks as a gitlink (a submodule, or an embedded repository) takes the superproject's
+# answer: git gives each superproject worktree its own submodule git dir, so a submodule in a linked
+# worktree is a main worktree to git. A gitlink to a worktree of the same repository (git add -A stages a
+# linked worktree inside the main checkout so) shares its common dir, and keeps its own answer.
 in_main_checkout() {
-  local top main
-  top=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 1
+  local out top common sup scommon c1 c2 main
+  out=$(git -C "$1" rev-parse --show-toplevel --git-common-dir --show-superproject-working-tree 2>/dev/null) || return 1
+  case "$out" in ?*$'\n'?*) ;; *) return 1 ;; esac
+  top=${out%%$'\n'*}
+  out=${out#*$'\n'}
+  common=${out%%$'\n'*}
+  sup=""
+  case "$out" in *$'\n'?*) sup=${out#*$'\n'} ;; esac
+  if [ -n "$sup" ]; then
+    scommon=$(git -C "$sup" rev-parse --git-common-dir 2>/dev/null) && [ -n "$scommon" ] || return 1
+    case "$common" in /*) ;; *) common="$1/$common" ;; esac
+    case "$scommon" in /*) ;; *) scommon="$sup/$scommon" ;; esac
+    c1=$(cd "$common" 2>/dev/null && pwd -P) && c2=$(cd "$scommon" 2>/dev/null && pwd -P) || return 1
+    if [ "$c1" != "$c2" ]; then
+      in_main_checkout "$sup"
+      return
+    fi
+  fi
   main=$(kern_main_root "$1") || return 1
   [ "$(cd "$top" && pwd -P)" = "$(cd "$main" && pwd -P)" ]
 }

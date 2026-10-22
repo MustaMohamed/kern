@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # hooks/lib/settings.sh and scripts/kern-get: layering, comments, quotes, worktrees, policies.
 
+bats_require_minimum_version 1.5.0
 load ../helpers/common
 
 setup() {
@@ -89,6 +90,76 @@ YML
   [ "$output" = "auto	$RP/.claude/kern.local.yml" ]
 }
 
+# git worktree list names the git dir as the main worktree in a submodule and in a --separate-git-dir
+# checkout, so kern read its settings from under the git dir and missed the committed ones (audit E3).
+@test "kern_main_root is unchanged in a plain repo, its subdirectory, a linked worktree and a bare repo's worktree" {
+  [ "$(kern_main_root "$R")" = "$RP" ]
+  mkdir -p "$R/a/b"
+  [ "$(kern_main_root "$R/a/b")" = "$RP" ]
+  git -C "$R" worktree add -q -b wt "$BATS_TEST_TMPDIR/wt"
+  [ "$(kern_main_root "$BATS_TEST_TMPDIR/wt")" = "$RP" ]
+  git clone -q --bare "$R" "$BATS_TEST_TMPDIR/b.git"
+  git -C "$BATS_TEST_TMPDIR/b.git" worktree add -q "$BATS_TEST_TMPDIR/bwt" main
+  [ "$(kern_main_root "$BATS_TEST_TMPDIR/bwt")" = "$(cd "$BATS_TEST_TMPDIR/b.git" && pwd -P)" ]
+  run kern_main_root "$BATS_TEST_TMPDIR"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+}
+
+@test "in a submodule, kern-get reads the submodule's committed never_commit and branch.protected" {
+  S="$BATS_TEST_TMPDIR/sub"
+  git init -q -b main "$S"
+  mkdir "$S/.claude"
+  printf 'never_commit: secrets/*\nbranch.protected: release\n' >"$S/.claude/kern.yml"
+  git -C "$S" add .claude/kern.yml
+  git -C "$S" -c user.name=t -c user.email=t@t commit -q -m s
+  git -C "$R" -c protocol.file.allow=always submodule add -q "$S" mod
+  M=$(cd "$R/mod" && pwd -P)
+  mkdir "$R/mod/deep"
+  [ "$(kern_main_root "$R/mod/deep")" = "$M" ]
+  # A linked worktree of the submodule finds the checkout through the git dir's core.worktree.
+  git -C "$R/mod" worktree add -q -b wt "$BATS_TEST_TMPDIR/modwt"
+  [ "$(kern_main_root "$BATS_TEST_TMPDIR/modwt")" = "$M" ]
+  cd "$R/mod"
+  run bash "$KERN_ROOT/scripts/kern-get" never_commit
+  [ "$status" -eq 0 ]
+  [ "$output" = "secrets/*	$M/.claude/kern.yml" ]
+  run bash "$KERN_ROOT/scripts/kern-get" branch.protected
+  [ "$status" -eq 0 ]
+  [ "$output" = "release	$M/.claude/kern.yml" ]
+  # From the linked worktree only core.worktree can name the checkout: an absolute one is taken as it
+  # is, and one naming a missing directory leaves no root.
+  git --git-dir="$R/.git/modules/mod" config core.worktree "$M"
+  [ "$(kern_main_root "$BATS_TEST_TMPDIR/modwt")" = "$M" ]
+  git --git-dir="$R/.git/modules/mod" config core.worktree "$BATS_TEST_TMPDIR/gone"
+  run kern_main_root "$BATS_TEST_TMPDIR/modwt"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+}
+
+@test "in a --separate-git-dir checkout, kern-get reads its committed settings; its linked worktree has no main root" {
+  W="$BATS_TEST_TMPDIR/sepwt"
+  git init -q -b main --separate-git-dir "$BATS_TEST_TMPDIR/sepgit" "$W"
+  mkdir "$W/.claude"
+  printf 'never_commit: secrets/*\nbranch.protected: release\n' >"$W/.claude/kern.yml"
+  git -C "$W" add .claude/kern.yml
+  git -C "$W" -c user.name=t -c user.email=t@t commit -q -m s
+  WP=$(cd "$W" && pwd -P)
+  [ "$(kern_main_root "$W")" = "$WP" ]
+  cd "$W"
+  run bash "$KERN_ROOT/scripts/kern-get" never_commit
+  [ "$status" -eq 0 ]
+  [ "$output" = "secrets/*	$WP/.claude/kern.yml" ]
+  run bash "$KERN_ROOT/scripts/kern-get" branch.protected
+  [ "$status" -eq 0 ]
+  [ "$output" = "release	$WP/.claude/kern.yml" ]
+  # git records no path for this main checkout, so a linked worktree cannot find it.
+  git -C "$W" worktree add -q -b wt "$BATS_TEST_TMPDIR/sepwt2"
+  run kern_main_root "$BATS_TEST_TMPDIR/sepwt2"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+}
+
 @test "kern-get prints value and source; exit 3 when unset" {
   cd "$R"
   run bash "$KERN_ROOT/scripts/kern-get" work_dir .kern
@@ -110,6 +181,12 @@ YML
   printf 'overrides.commit: commit\nfoo.bar: 1\npush.policy: ask\n' >"$R/.claude/kern.local.yml"
   run settings_unknown_keys
   [ "$output" = "$RP/.claude/kern.local.yml	foo.bar" ]
+}
+
+@test "route.<name> is not a known key: overrides.<job> names a project skill for a job" {
+  printf 'route.define: off\noverrides.define: off\n' >"$R/.claude/kern.local.yml"
+  run settings_unknown_keys
+  [ "$output" = "$RP/.claude/kern.local.yml	route.define" ]
 }
 
 @test "kern: off disables; list_has trims" {

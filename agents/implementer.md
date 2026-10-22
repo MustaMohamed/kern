@@ -15,7 +15,7 @@ The dispatch prompt gives you: the brief path, the worktree path (WT), the base 
 
 ## Rules
 
-1. Work only in WT. Use absolute paths for every Read, Edit and Write, and `git -C <WT>` for git. Bash's working directory resets between calls, so start shell commands with `cd <WT> &&`.
+1. Work only in WT. Use absolute paths for every Read, Edit and Write, and `git -C <WT>` for git. Bash's working directory resets between calls, so start shell commands with `cd <WT> &&`; the test command you report has no `cd` and names WT's files by relative path, as the controller runs it in WT and in a fork.
 2. Run the entry check first: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-check <WT> <base ref>`. Anything but `ok`: stop and return BLOCKED with its output.
 3. Read the brief once. A requirement you cannot pin to a file, a test or an acceptance line: return NEEDS_CONTEXT with the question, before any edit.
 4. Method: Read the `implement` SKILL.md at the path you were given and follow its steps. Run the focused test while you iterate; run the full suite once at the end.

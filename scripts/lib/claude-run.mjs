@@ -183,6 +183,31 @@ export function runProblem(run, prompts) {
   return bad ? `${promptResult(bad) ? 'the run' : "a background task's turn"} ended with ${bad.subtype ?? 'a result with no subtype'}${bad.is_error === true ? ' (is_error)' : ''}` : '';
 }
 
+// pluginProblem(events, { plugins, kernel }): why a run did not test what it was given, or '' (Task 17a, G10).
+// plugins are the --plugin-dir paths: each must be listed by path in every system/init event, and a run with no
+// init event is a problem. A SessionStart hook whose response is not a success (or exits non-zero) is a problem.
+// kernel 'on': a SessionStart response opens with kern's header ("# kern"), the kernel kern injects; 'off': no
+// response holds it, as for a case that turns kern off or an arm without kern; null or left out: not checked.
+// /var and /private/var name one folder on macOS, and Claude Code lists either.
+const bare = (p) => String(p).replace(/^\/private(?=\/)/, '');
+const KERN_HEADER = /^# kern\b/m;
+export function pluginProblem(events, { plugins = [], kernel = null } = {}) {
+  const inits = events.filter((e) => e?.type === 'system' && e.subtype === 'init');
+  if (!inits.length) return 'no system/init event, so the plugins the run loaded are unknown';
+  for (const e of inits) {
+    const loaded = (e.plugins ?? []).map((p) => bare(p?.path ?? ''));
+    const missing = plugins.find((d) => !loaded.includes(bare(d)));
+    if (missing) return `the plugin at ${missing} is not in the run's init.plugins (loaded: ${(e.plugins ?? []).map((p) => p?.name).join(', ') || 'none'})`;
+  }
+  const starts = events.filter((e) => e?.type === 'system' && e.subtype === 'hook_response' && e.hook_event === 'SessionStart');
+  const failed = starts.find((e) => e.outcome !== 'success' || (e.exit_code ?? 0) !== 0);
+  if (failed) return `a SessionStart hook failed: outcome ${failed.outcome ?? 'none'}, exit ${failed.exit_code ?? 'none'}`;
+  const header = starts.some((e) => KERN_HEADER.test(String(e.output ?? e.stdout ?? '')));
+  if (kernel === 'on' && !header) return 'kern\'s SessionStart printed no kernel (no "# kern" header)';
+  if (kernel === 'off' && header) return 'kern was meant to be off, but its SessionStart printed the kernel';
+  return '';
+}
+
 // toolUses(events): every tool call in order, { name, input }.
 export function toolUses(events) {
   const out = [];

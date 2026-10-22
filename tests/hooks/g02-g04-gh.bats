@@ -285,7 +285,8 @@ gh_log() {
     expect deny "gh api repos/o/r/issues/1/comments -F 'comments[][body]=Looks fine'"
   done
   set_autopilot off
-  expect none "gh pr checkout 12 -b local"
+  # G1 asks because pr checkout changes the main checkout (D3); the line still proves G4 does not deny.
+  expect ask "gh pr checkout 12 -b local"
   # G14 asks because develop is an unproven write; the line still proves G4 does not deny.
   expect ask "gh issue develop 1 -b main -n feat"
 }
@@ -443,7 +444,10 @@ gh_log() {
   expect allow 'gh pr create --draft -tbig --body-file b.md'
   set_autopilot off
   expect deny 'gh pr close 12 --comment hi'
-  expect none 'gh pr close 12 -d'
+  # -d is a boolean, not text: G4 votes nothing, and G2 asks, since pr close is not a read.
+  g 'gh pr close 12 -d' g04
+  [ "$(decision_of "$output")" = none ]
+  expect ask 'gh pr close 12 -d'
   expect ask 'gh pr merge 12 -ds'
 }
 
@@ -619,6 +623,186 @@ gh_log() {
     [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
   done
   for c in "gh extension list" "gh ext search x" "gh ext browse"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+# gh_write GROUP: a command of GROUP, one of _GH_CMDS, outside the group's read list, or - for a group
+# that only reads in every form. org, preview and ruleset have no verb that writes, so theirs is a word
+# gh does not have: the read lists are closed, so it asks too. A new group in _GH_CMDS needs a row here.
+gh_write() {
+  case "$1" in
+    auth) echo "gh auth logout --hostname github.com" ;;
+    codespace | cs) echo "gh $1 delete --all --force" ;;
+    discussion) echo "gh discussion edit 1 --title y" ;;
+    gist) echo "gh gist create --public README.md" ;;
+    issue) echo "gh issue delete 1 --yes" ;;
+    org) echo "gh org leave o" ;;
+    pr) echo "gh pr close 1" ;;
+    project) echo "gh project delete 1 --owner o" ;;
+    release) echo "gh release delete v1 --yes" ;;
+    repo) echo "gh repo delete o/r --yes" ;;
+    skill | skills) echo "gh $1 install o/r s" ;;
+    cache) echo "gh cache delete --all" ;;
+    run) echo "gh run cancel 1" ;;
+    workflow) echo "gh workflow disable ci" ;;
+    agent-task | agent-tasks | agent | agents) echo "gh $1 create task" ;;
+    alias) echo "gh alias delete pm" ;;
+    api) echo "gh api -X DELETE repos/o/r" ;;
+    attestation | at) echo "gh $1 download x" ;;
+    config) echo "gh config set editor vim" ;;
+    copilot) echo "gh copilot" ;;
+    extension | extensions | ext) echo "gh $1 remove x" ;;
+    gpg-key) echo "gh gpg-key delete 1 --yes" ;;
+    label) echo "gh label delete bug --yes" ;;
+    preview) echo "gh preview x" ;;
+    ruleset | rs) echo "gh $1 x" ;;
+    secret) echo "gh secret delete X" ;;
+    ssh-key) echo "gh ssh-key delete 1 --yes" ;;
+    variable) echo "gh variable delete X" ;;
+    browse | completion | licenses | search | status | help | version | credits | accessibility | a11y | \
+      actions | environment | exit-codes | formatting | mintty | reference | telemetry) echo - ;;
+    *) return 1 ;;
+  esac
+}
+
+@test "G2: each gh command group's verbs outside its read list ask, and are denied under autopilot" {
+  local g c
+  . "$(kern_root)/hooks/guards/g02-pr.sh"
+  for g in $_GH_CMDS; do
+    c=$(gh_write "$g") || { echo "no gh_write row for gh group $g"; return 1; }
+    if [ "$c" = - ]; then
+      set_autopilot on
+      expect none "gh $g x" || return 1
+      continue
+    fi
+    set_autopilot off
+    expect ask "$c" || return 1
+    set_autopilot on
+    expect deny "$c" || return 1
+  done
+}
+
+@test "G2: the gh writes the audit found unjudged ask, and are denied under autopilot" {
+  local c cmds=(
+    "gh repo delete --yes o/r" "gh repo sync o/fork --force" "gh repo create x --public --source . --push"
+    "gh repo edit --visibility public --accept-visibility-change-consequences" "gh gist create --public README.md"
+    "gh variable set X -b y" "gh pr close 1" "gh pr edit 1 --base main" "gh pr update-branch 1"
+    "gh pr revert 1" "gh run cancel 1" "gh workflow disable ci" "gh cache delete --all" "gh repo fork --clone"
+    "gh -R o/r pr close 1" "gh pr --repo o/r close 1" "gh repo --yes o/r delete" "gh auth token"
+  )
+  for c in "${cmds[@]}"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+  done
+  [[ "$output" == *"gh auth token is not a gh read kern knows"* ]] || false
+  set_autopilot on
+  for c in "${cmds[@]}"; do
+    g "$c" g02
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
+  [[ "$output" == *"gh auth token under autopilot: only gh reads run unattended"* ]] || false
+}
+
+@test "G2: every gh read on its closed list gets no vote from G2, in either mode; help asks nothing" {
+  local e c ap
+  . "$(kern_root)/hooks/guards/g02-pr.sh"
+  [ -n "$_G02_READS" ] || false
+  for ap in off on; do
+    set_autopilot "$ap"
+    for e in $_G02_READS; do
+      c="gh ${e%/*}"
+      [ "${e#*/}" = "*" ] || c="$c ${e#*/}"
+      g "$c" g02
+      [ "$(decision_of "$output")" = none ] || { echo "$ap: $c -> $output"; return 1; }
+    done
+    for c in "gh pr" "gh repo --help" "gh pr -h close 1" "gh secret --help set X"; do
+      g "$c" g02
+      [ "$(decision_of "$output")" = none ] || { echo "$ap: $c -> $output"; return 1; }
+    done
+  done
+}
+
+@test "G2: a gh command another guard judges is left to it, and that guard votes, in both modes" {
+  local e c
+  . "$(kern_root)/hooks/guards/g02-pr.sh"
+  [ -n "$_G02_OWNED" ] || false
+  for e in $_G02_OWNED; do
+    c="gh ${e%/*} ${e#*/} 1"
+    [ "$e" = "api/*" ] && c="gh api -X DELETE repos/o/r"
+    set_autopilot off
+    g "$c" g02
+    case "$e" in
+      pr/create | pr/ready | alias/* | extension/*) ;;
+      *) [ "$(decision_of "$output")" = none ] || { echo "G2 voted on $c: $output"; return 1; } ;;
+    esac
+    run_guard "$(bash_payload "$c")"
+    case "$(decision_of "$output")" in ask | deny) ;; *) echo "$c -> $output"; return 1 ;; esac
+    set_autopilot on
+    expect deny "$c" || return 1
+  done
+}
+
+@test "G2: the gh reads kern's skills, scripts and the exec gh stub run get no vote in either mode" {
+  local c ap
+  for ap in off on; do
+    set_autopilot "$ap"
+    for c in "gh auth status" "gh pr list --search T-12 --state all" "gh pr list --head feat --state all" \
+      "gh pr list --head feat --state all --json number,state,headRefOid,url" \
+      "gh pr list --head feat --state all --json state --jq '.[].state'" "gh pr view 7" "gh pr view --web" \
+      "gh pr view 7 --json author --jq .author.login" "gh pr status" "gh pr checks" "gh api user" \
+      "gh api user --jq .login"; do
+      expect none "$c" || { echo "autopilot $ap"; return 1; }
+    done
+  done
+}
+
+@test "G2: auth status shows no token and repo read-file writes no file unasked; the forms that do ask" {
+  local c ap reads=(
+    "gh auth status" "gh auth status -a" "gh auth status -h github.com" "gh auth status --hostname=github.com --active"
+    "gh repo read-file o/r README.md" "gh repo read-file o/r x --ref main --json path" "gh repo read-file x -R o/r"
+  ) writes=(
+    "gh auth status -t" "gh auth status --show-token" "gh auth status -at" "gh auth status --show-token=true"
+    "gh repo read-file o/r x -o README.md --clobber" "gh repo read-file o/r x --output=.git/hooks/pre-commit"
+    "gh repo read-file o/r x -oREADME.md" "gh repo read-file o/r x --bogus"
+  )
+  for ap in off on; do
+    set_autopilot "$ap"
+    for c in "${reads[@]}"; do
+      g "$c" g02
+      [ "$(decision_of "$output")" = none ] || { echo "$ap: $c -> $output"; return 1; }
+    done
+  done
+  for c in "${writes[@]}"; do
+    set_autopilot off
+    g "$c" g02
+    [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+    # Each is on the read list, so the reason names what this form does, not the off-list rule.
+    [[ "$output" != *"is not a gh read kern knows"* ]] || { echo "$c -> $output"; return 1; }
+    set_autopilot on
+    g "$c" g02
+    [ "$(decision_of "$output")" = deny ] || { echo "autopilot: $c -> $output"; return 1; }
+  done
+  set_autopilot off
+  g "gh auth status -t" g02
+  [[ "$output" == *"gh auth status with -t or --show-token prints the auth token; the user confirms it"* ]] || false
+  g "gh repo read-file o/r x -o README.md" g02
+  [[ "$output" == *"gh repo read-file with -o or --output writes a file; the user confirms it"* ]] || false
+  g "gh repo read-file o/r x --bogus" g02
+  [[ "$output" == *"gh repo read-file holds a word gh rejects, so kern cannot tell that it only reads; the user confirms it"* ]] || false
+  set_autopilot on
+  g "gh auth status -t" g02
+  [[ "$output" == *"gh auth status with -t or --show-token prints the auth token (under autopilot)"* ]] || false
+}
+
+@test "G2: gh repo sync with a repository writes that repository on GitHub; without one G1 judges it" {
+  local c
+  g "gh repo sync o/fork" g02
+  [ "$(decision_of "$output")" = ask ]
+  g "gh repo sync --branch main o/fork" g02
+  [ "$(decision_of "$output")" = ask ]
+  for c in "gh repo sync" "gh repo sync --force" "gh repo sync -b main --source o/up" "gh repo sync --help o/fork"; do
     g "$c" g02
     [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
   done

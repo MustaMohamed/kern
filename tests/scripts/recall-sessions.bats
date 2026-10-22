@@ -6,6 +6,8 @@ load ../helpers/wt
 
 setup() {
   wt_test_env
+  # The caller's Claude Code session id would mark one of its sessions current; each test sets its own.
+  unset CLAUDE_CODE_SESSION_ID
   REPO="$TMP/repo"
   make_fixture "$REPO"
   cd "$REPO"
@@ -274,18 +276,177 @@ shim() {
 }
 
 @test "a failing awk dies loudly" {
-  shim awk 'exit 3'
+  # Only the history read fails; the slug and the settings reads use the real awk.
+  shim awk "case \"\$*\" in *history.jsonl*) exit 3 ;; esac; exec $(command -v awk) \"\$@\""
   run --separate-stderr env PATH="$TMP/shim:$PATH" bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"recall-sessions: cannot read"* ]] || false
   [ -z "$output" ]
 }
 
-@test "a failing tr dies loudly" {
-  shim tr 'exit 1'
+@test "a failing or empty-handed slug dies loudly" {
+  shim awk "[ -z \"\${KERN_SLUG_IN+x}\" ] || exit 1; exec $(command -v awk) \"\$@\""
   run --separate-stderr env PATH="$TMP/shim:$PATH" bash "$KERN_ROOT/scripts/recall-sessions"
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *recall-sessions:* ]] || false
+  [[ "$stderr" == *"recall-sessions: cannot slug $REPO"* ]] || false
+  [ -z "$output" ]
+  shim awk "[ -z \"\${KERN_SLUG_IN+x}\" ] || exit 0; exec $(command -v awk) \"\$@\""
+  run --separate-stderr env PATH="$TMP/shim:$PATH" bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"recall-sessions: cannot slug $REPO"* ]] || false
+  [ -z "$output" ]
+}
+
+# jslug PATH [HASH]: Claude Code's transcript folder name for PATH, computed as its JS computes it (2.1.308,
+# functions k and J0): every UTF-16 code unit outside A-Za-z0-9 becomes -, and a name over 200 characters
+# is cut to 200 and gets -HASH (the real hash is Claude Code's own; any suffix stands in for it).
+jslug() {
+  node -e 'const n = process.argv[1].replace(/[^a-zA-Z0-9]/g, "-"); process.stdout.write(n.length <= 200 ? n : n.slice(0, 200) + "-" + process.argv[2])' "$1" "${2:-h4sh}"
+}
+
+@test "a path with an é, a 3-byte character or an emoji finds the folder Claude Code names" {
+  # é is 2 UTF-8 bytes and 1 UTF-16 unit, 中 is 3 bytes and 1 unit, 😀 is 4 bytes and 2 units.
+  [ "$(jslug "/proj"$'\303\251'"/repo")" = "-proj--repo" ]
+  [ "$(jslug "/"$'\360\237\230\200'"/repo")" = "----repo" ]
+  for name in "proj"$'\303\251' "c"$'\344\270\255'"k" "e"$'\360\237\230\200'"m"; do
+    R="$TMP/$name/repo"
+    mkdir -p "$R"
+    git init -q "$R"
+    s=$(jslug "$R")
+    mkdir -p "$P/$s"
+    printf 'u\n' > "$P/$s/u.jsonl"
+    cd "$R"
+    run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "${lines[0]##*$'\t'}" = "$P/$s/u.jsonl" ]
+  done
+}
+
+@test "a path whose folder name passes 200 characters finds its folder by the transcript's cwd" {
+  R="$TMP/long/$(printf '%*s' $((210 - ${#TMP} - 6)) '' | tr ' ' d)"
+  [ "${#R}" -eq 210 ]
+  mkdir -p "$R"
+  git init -q "$R"
+  s=$(jslug "$R" abc123)
+  # A second path sharing the first 200 characters: same prefix, its own hash, a cwd that only starts with R.
+  d=$(jslug "${R}x" zzz999)
+  [ "${s%-abc123}" = "${d%-zzz999}" ]
+  mkdir -p "$P/$s" "$P/$d" "$P/$(jslug "$R" | cut -c1-200)"
+  { printf '{"type":"queue-operation"}\n'; printf '{"type":"user","cwd":"%s","sessionId":"long"}\n' "$R"; } > "$P/$s/long.jsonl"
+  printf '{"type":"user","cwd":"%s","sessionId":"decoy"}\n' "${R}x" > "$P/$d/decoy.jsonl"
+  printf 'cut\n' > "$P/$(jslug "$R" | cut -c1-200)/cut.jsonl"
+  cd "$R"
+  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [[ "${lines[0]}" == session$'\t'*$'\tlong\t'*$'\t'"$P/$s/long.jsonl" ]] || false
+}
+
+@test "a cut folder is kept when a later transcript's cwd is the path, though the first one's is not" {
+  R="$TMP/long/$(printf '%*s' $((210 - ${#TMP} - 6)) '' | tr ' ' d)"
+  mkdir -p "$R"
+  git init -q "$R"
+  s=$(jslug "$R" abc123)
+  mkdir -p "$P/$s"
+  # a.jsonl sorts first, and its session's cwd had moved to a subdirectory.
+  printf '{"type":"user","cwd":"%s/sub","sessionId":"a"}\n' "$R" > "$P/$s/a.jsonl"
+  printf '{"type":"user","cwd":"%s","sessionId":"b"}\n' "$R" > "$P/$s/b.jsonl"
+  cd "$R"
+  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [[ "$output" == *$'\t'"$P/$s/a.jsonl"* ]] || false
+  [[ "$output" == *$'\t'"$P/$s/b.jsonl"* ]] || false
+}
+
+@test "a folder name of exactly 200 characters is taken whole, and one of 201 is cut" {
+  for n in 200 201; do
+    R="$TMP/b$n/$(printf '%*s' $((n - ${#TMP} - 6)) '' | tr ' ' d)"
+    [ "${#R}" -eq "$n" ]
+    mkdir -p "$R"
+    git init -q "$R"
+    s=$(jslug "$R" cut$n)
+    want=200
+    [ "$n" = 200 ] || want=207
+    [ "${#s}" -eq "$want" ]
+    mkdir -p "$P/$s"
+    printf '{"type":"user","cwd":"%s","sessionId":"s%s"}\n' "$R" "$n" > "$P/$s/s$n.jsonl"
+    cd "$R"
+    run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "${lines[0]##*$'\t'}" = "$P/$s/s$n.jsonl" ]
+  done
+}
+
+@test "a worktree.dir whose folder name passes 200 characters takes the cut folders whose cwd lies under it" {
+  R="$TMP/lp/$(printf '%*s' $((190 - ${#TMP} - 4)) '' | tr ' ' d)"
+  [ "${#R}" -eq 190 ]
+  mkdir -p "$R/.claude/worktrees"
+  git init -q "$R"
+  # A removed worktree under the worktree dir, and a path outside it with the same first 200 characters.
+  s=$(jslug "$R/.claude/worktrees/gone" abc123)
+  d=$(jslug "$R/.claude/wx/other" zzz999)
+  [ "${s%-abc123}" != "$s" ] && [ "${s:0:200}" = "${d:0:200}" ]
+  mkdir -p "$P/$s" "$P/$d"
+  printf '{"type":"user","cwd":"%s","sessionId":"gone"}\n' "$R/.claude/worktrees/gone" > "$P/$s/gone.jsonl"
+  printf '{"type":"user","cwd":"%s","sessionId":"other"}\n' "$R/.claude/wx/other" > "$P/$d/other.jsonl"
+  cd "$R"
+  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [[ "${lines[0]}" == session$'\t'*$'\tgone\t'*$'\t'"$P/$s/gone.jsonl" ]] || false
+}
+
+@test "the session CLAUDE_CODE_SESSION_ID names is marked current where it sorts, and no other" {
+  CLAUDE_CODE_SESSION_ID=a run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  [[ "${lines[0]}" == session$'\t'*$'\t'b$'\t'* ]] || false
+  [[ "${lines[1]}" == session$'\t'*$'\t'w$'\t'* ]] || false
+  [[ "${lines[2]}" == current$'\t'*$'\t'a$'\t'3$'\t'*"/a.jsonl" ]] || false
+  # An id that names no listed session, and no id at all (setup), mark nothing.
+  CLAUDE_CODE_SESSION_ID=nope run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^session')" -eq 3 ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$(printf '%s\n' "$output" | grep -c '^session')" -eq 3 ]
+}
+
+@test "--days 0 and 00 are usage errors" {
+  for d in 0 00; do
+    run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --days "$d"
+    [ "$status" -eq 2 ]
+    [[ "$stderr" == usage:* ]] || false
+    [ -z "$output" ]
+  done
+}
+
+@test "in a submodule or a separate-git-dir checkout, the sessions are the checkout's, not the git dir's" {
+  S="$TMP/sub"
+  git init -q -b main "$S"
+  git -C "$S" -c user.name=t -c user.email=t@t commit -q --allow-empty -m s
+  git -C "$REPO" -c protocol.file.allow=always submodule add -q "$S" mod
+  M=$(cd "$REPO/mod" && pwd -P)
+  mkdir -p "$P/$(jslug "$M")"
+  printf 'm\n' > "$P/$(jslug "$M")/mod.jsonl"
+  hist_line mod "$M" "floci in the submodule"
+  cd "$REPO/mod"
+  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic floci
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [[ "${lines[0]}" == session$'\t'*$'\tmod\t'*"/mod.jsonl" ]] || false
+  [[ "${lines[1]}" == prompt$'\t'*$'\tmod\tfloci in the submodule' ]] || false
+  W="$TMP/sepwt"
+  git init -q -b main --separate-git-dir "$TMP/sepgit" "$W"
+  mkdir -p "$P/$(jslug "$W")"
+  printf 's\n' > "$P/$(jslug "$W")/sep.jsonl"
+  cd "$W"
+  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [[ "${lines[0]}" == session$'\t'*$'\tsep\t'*"/sep.jsonl" ]] || false
 }
 
 @test "a bad option exits 2" {

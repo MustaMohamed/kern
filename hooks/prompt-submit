@@ -108,7 +108,11 @@ apply_autopilot() {
         return 0
       fi
       if [ "$(state_get "$SID" autopilot 2>/dev/null)" != on ]; then
-        state_set "$SID" autopilot=on "since=$(now_iso)" && AP_TURNED_ON=1
+        if state_set "$SID" autopilot=on "since=$(now_iso)"; then
+          AP_TURNED_ON=1
+        else
+          NOTICE="kern: autopilot not turned on: the session state could not be written; retry."
+        fi
       fi
       ;;
     off) autopilot_off ;;
@@ -220,8 +224,10 @@ fi
 # The routing reminder (Task 16p, the user's "Add the reminder", 2026-10-22): the kernel's Routing rule
 # arrives once, at SessionStart, and a later prompt's new task sat a turn away from it. Only the
 # UserPromptSubmit run prints it, so a slash command's two runs print it once; a prompt that names or
-# switches a mode or autopilot gets none. It comes before the headless exit below: evals run headless.
-[ "$ROUTE" = 1 ] && [ "$SHOW_LINE" = 0 ] && printf '%s\n' 'kern: new request? Match it against the Routing table and Read its route first.'
+# switches a mode or autopilot gets none. It comes before the headless exit below: evals run headless. It
+# names the override in the same sentence as the route, as the kernel's Routing rule does, or a model with a
+# project skill for the job reads kern's route first.
+[ "$ROUTE" = 1 ] && [ "$SHOW_LINE" = 0 ] && printf '%s\n' 'kern: new request? Match it against the Routing table; Read its route, or the override named for its job, first.'
 [ -n "$NOTICE" ] && printf '%s\n' "$NOTICE"
 case "$CHANGED_VOICE" in
   terse) cat "$KERN_ROOT/modes/terse.md" ;;
@@ -237,7 +243,7 @@ fi
 LINE=$(mode_line "$SID")
 if [ "$AP_TURNED_ON" = 1 ] || { autopilot_on "$SID" && [ "${CLAUDE_CODE_ENTRYPOINT#sdk}" = "${CLAUDE_CODE_ENTRYPOINT-}" ]; }; then
   [ "$SCHEDULED" = 1 ] || printf '%s\n' "$LINE"
-  printf '%s\n' "autopilot ON: commit with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or \$( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly, commands spelled out: no wrapper, no cd, no run-time-built name, no shell script or code piped to a shell, no gh alias; git add in its own call, before the commit; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls."
+  printf '%s\n' "autopilot ON: commit on a non-protected branch with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or \$( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly, commands spelled out: no wrapper, no cd, no run-time-built name, no unparseable shell script, no code piped to a shell, no gh alias; git add in its own call, before the commit; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls."
   exit 0
 fi
 if [ "$SHOW_LINE" = 1 ] || [ -n "$CHANGED_VOICE$CHANGED_SURFACE" ]; then

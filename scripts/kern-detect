@@ -42,7 +42,8 @@ script() {
   [ -f "$M/package.json" ] || return 1
   scripts=$(KERN_INPUT=$(cat "$M/package.json") json_get_raw scripts) || return 1
   KERN_INPUT="$scripts" json_get "$1" >/dev/null || return 1
-  if [ "$1" = test ]; then
+  # `bun test` runs bun's own test runner, not scripts.test, so bun gets `bun run test`.
+  if [ "$1" = test ] && [ "$(pm)" != bun ]; then
     printf '%s test\n' "$(pm)"
   else
     printf '%s run %s\n' "$(pm)" "$1"

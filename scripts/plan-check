@@ -41,6 +41,8 @@ WD=$(settings_get work_dir .kern 2> /dev/null) || [ -n "$WD" ] || WD=.kern
 ACCEPT='' SPECPATH='' SPECBAD=''
 # The frontmatter as G20 and ledger-open read it: one reader, so the three agree on where it ends.
 FM_AWK=$(cat "$here/lib/frontmatter.awk") || { echo "plan-check: cannot read $here/lib/frontmatter.awk" >&2; exit 2; }
+# The code fence reader task-brief shares, so a task plan-check counts is a task task-brief finds.
+FENCE_AWK=$(cat "$here/lib/fence.awk") || { echo "plan-check: cannot read $here/lib/fence.awk" >&2; exit 2; }
 spec=$(LC_ALL=C awk -v fm_print=1 "$FM_AWK" "$file" | sed -n 's/^spec:[[:blank:]]*//p') || [ "$?" = 3 ] ||
   { echo "plan-check: could not read the frontmatter of $file" >&2; exit 2; }
 case "$spec" in
@@ -59,7 +61,7 @@ case "$spec" in
 esac
 
 DASH=$(printf '\342\200\223|\342\200\224') CURLY=$(printf '\342\200\230|\342\200\231|\342\200\234|\342\200\235') \
-  MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec LC_ALL=C awk -v sq="'" "$FM_AWK"'
+  MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec LC_ALL=C awk -v sq="'" "$FM_AWK"$'\n'"$FENCE_AWK"'
 function problem(ln, msg) { printf "%s:%d: %s\n", FILENAME, ln, msg; bad = 1 }
 function spans(s, out,   k, t) {
   k = 0
@@ -89,29 +91,10 @@ BEGIN { shared_n = split(tolower(ENVIRON["SHARED"]), shared, /[ \t]*,[ \t]*/) }
 NR == 1 && fm_delim($0, 1) { infm = 1; fmstart = 1; next }
 infm && fm_delim($0, 0) { infm = 0; fmclosed = 1; next }
 infm { k = $0; sub(/:.*/, "", k); v = $0; sub(/^[^:]*:[ \t]*/, "", v); fm[k] = v; fmline[k] = NR; next }
-# Code fences as CommonMark reads them: an opener is a run of 3 or more backticks or tildes after at most
-# 3 spaces, and the info string of a backtick opener holds no backtick; only a run of the same character, at
-# least as long, with nothing but spaces after it, closes the fence. So a tilde fence may hold a backtick
-# line, and a longer fence may hold a shorter one. Rule from pstack check-plan.mjs:47-74 (MIT).
-function fence_run(s, c,   n) {
-  sub(/^ ? ? ?/, "", s)
-  n = 0
-  while (substr(s, n + 1, 1) == c) n++
-  return n
-}
-{
-  fmark = 0
-  if (fence) {
-    n = fence_run($0, fch)
-    if (n >= flen) { rest = $0; sub(/^ ? ? ?/, "", rest); if (substr(rest, n + 1) ~ /^[ \t]*$/) fmark = -1 }
-  } else {
-    fc = "`"; n = fence_run($0, fc)
-    if (n < 3) { fc = "~"; n = fence_run($0, fc) }
-    if (n >= 3) { rest = $0; sub(/^ ? ? ?/, "", rest); if (fc == "~" || index(substr(rest, n + 1), "`") == 0) fmark = 1 }
-  }
-}
-fmark == 1 { fence = 1; fch = fc; flen = n; fenceline = NR; if (cur) text[cur] = text[cur] " " tolower($0); next }
-fmark == -1 { fence = 0; if (cur) text[cur] = text[cur] " " tolower($0); next }
+# Code fences as CommonMark reads them, by scripts/lib/fence.awk, which task-brief loads too.
+{ fmark = fence_mark($0) }
+fmark == 1 { fenceline = NR; if (cur) text[cur] = text[cur] " " tolower($0); next }
+fmark == -1 { if (cur) text[cur] = text[cur] " " tolower($0); next }
 fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
 {
   prose = $0; gsub(/`[^`]*`/, "", prose)

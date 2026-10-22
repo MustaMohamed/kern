@@ -38,7 +38,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `typecheck` | detected | command | kern-detect, implement, prove-it |
 | `lint` | detected | command | kern-detect, prove-it |
 | `build` | detected | command | kern-detect, prove-it |
-| `verify.fast` | `typecheck` then `lint` | command | self-review, prove-it |
+| `verify.fast` | each of `typecheck` and `lint` that resolves; at least one | command | self-review, prove-it |
 | `verify.browser` | none: ask when a UI claim needs it | command | prove-it, diagnose, verify-app |
 | `generated_artifacts` | none | comma list of `trigger-glob=command` | implement, prove-it, self-review |
 | `ratchet.<metric>` | none | `<path>:<key>`, with `:max` appended when a higher value loosens the bar | floor-scan, self-review |
@@ -87,8 +87,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `model.miner.effort` | `low` | as above | recall |
 | `workflow_records` | none | comma list of paths or tools with run records | recall |
 | `stack` | detected | text | architect, build-ui, implement |
-| `overrides.<job>` | none. session-start also finds a project skill with the job's name | project skill name, or `off` | session-start, every skill |
-| `route.<name>` | none | project skill name, or `off` | session-start |
+| `overrides.<job>` | none. session-start also finds a project skill with the job's name | project skill name, or `off` for no override: kern's route stays and the same-name match is off | session-start, every skill |
 
 G13 lets through only proven reads to a `protected_targets` entry and denies every other call that names one, in both modes.
 
