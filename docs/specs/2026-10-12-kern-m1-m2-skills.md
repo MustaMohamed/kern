@@ -787,13 +787,13 @@ description: Use when starting or resuming work and state must be rebuilt first:
 **4. Steps**
 0. Defer (A6).
 1. Route. One named prior session: point to `claude --resume` and stop. A full state capsule already in the prompt: skip the mining. `recall chat`: go to step 9. [LOC recall Steps 1]
-2. Lock the scope and say it back: the window (7 days unless stated; never turn "all" into "recent"), the topic, and the workspace (never another project's transcripts unasked). Adjacent work stays out unless it blocks this. [LOC recall Steps 2; PS recall:18]
+2. Right after reading this file, before any other tool call, say `Scope: <window>, <topic>, <workspace>.`: the window (7 days unless stated; never turn "all" into "recent"), the topic, and the workspace (never another project's transcripts unasked). Adjacent work stays out unless it blocks this. (Task 16p: the scope line has a fixed form at the read, as Task 16k gave the Building line; one 2026-10-22 recall-1 run mined before saying any scope.) [LOC recall Steps 2; PS recall:18]
 3. Read kern's working files first: `WORK/ledgers/*/ledger.md` (incomplete tasks and `parked:` lines), the status lines of `WORK/plans/*` and `WORK/specs/*`, and kern worktrees from `wt-audit`. Memory files are context, never state. [new; SE recall: the tree-id rule for the verified-uncommitted tag]
 4. Find the sessions with `recall-sessions --days <n> --topic <topic>`: this project's transcripts, its worktrees' included, newest first, and its prompts that name the topic. The newest session is usually this one; skip it (`references/transcripts.md`). [LOC recall "Where the records are"; SE recall: recall-sessions]
 5. Mine in parallel: one `model.miner` subagent per 2 to 4 transcripts; each greps the topic first and returns one block per session (id, date, goal, decisions, open threads, corrections, artifacts). Measure a record before reading it and narrow any over 500 characters. Two sessions or fewer: read them directly. [LOC recall Steps 4; SP diagnosing-superpowers/references/context-safety:8-21]
 6. When a feature, ticket or bug is named, sweep `tracker` and `workflow_records` in parallel with step 5. Null results are findings. [LOC recall Steps 5]
 7. Verify every PR, branch, issue and claim the mining inherited against live `git`, `gh` and the tracker before tagging it. For squash merges, trust `gh pr list --head <branch> --state all`, not `git branch --merged`. Tag `[verified, uncommitted]` only when the ledger's last `tree=` for that work equals a fresh `wt-snap <wt>`. [LOC recall Steps 6; SE recall]
-8. Write the brief per the output contract below. [LOC recall output contract; PS recall:24-33]
+8. Write the brief per the output contract below. Each Threads line starts with its one tag, as `- [tag] <thread>`, and a line without a tag goes under Problems or Sources skipped (Task 16p: on 2026-10-21 and 2026-10-22, 5 of 6 recall-1 runs filed untagged Problems or Sources-skipped lines under Threads). [LOC recall output contract; PS recall:24-33]
 9. `recall chat`: gather your own work, subagent reports and others' messages since the user's last message; notifications and subagent results are not the user's messages. Check the live state of each PR, CI run and agent; reply with the action-item count first, then what happened by importance, then per action item: the decision, why now, the options with their cost, a recommendation, and what happens with no answer. An item still waiting from before the user's last message counts; work you can do yourself is not an action item. List what could not be checked. [PS ketchup:13-23]
 
 Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 2 to 6 rows). [LOC recall:42-47]
@@ -803,14 +803,14 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 **6. Stops; autopilot.** Read-only; same under autopilot.
 
 **7. Acceptance**
-- "Where did I leave off on the floci swap?": scope stated back; transcripts mined by subagents; PR states checked with `gh`; one tag per thread; no file written.
+- "Where did I leave off on the floci swap?": a `Scope:` line before the first tool call; transcripts mined by subagents; PR states checked with `gh`; each Threads line starts with its one tag; no file written.
 - A ledger shows Task 3 of 5 incomplete: the brief names it as the next move.
 - "recall chat" after a long background run: action-item count first.
 - "Resume session 7f3a": points to `claude --resume`, no mining. "What does recall mean in ML?": stays quiet.
 
 The full checklist is `tests/skills/recall.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** LOC recall (adapted from PS recall), PS ketchup, SP diagnosing-superpowers context-safety. Hard-coded MoneyApp and infinito sources in LOC become `tracker` and `workflow_records`. SKILL.md at most 7,200 bytes (raised from 6,500 in M2a Task 28: every source exit goes to Sources skipped, and the `[unverified, <source> unavailable]` tag); `references/transcripts.md` at most 2,200 bytes (the plan's cap); `references/chat.md` at most 2,000 bytes (added in M2a Task 28: chat mode and its rules).
+**8. Sources; size.** LOC recall (adapted from PS recall), PS ketchup, SP diagnosing-superpowers context-safety. Hard-coded MoneyApp and infinito sources in LOC become `tracker` and `workflow_records`. SKILL.md at most 7,200 bytes (raised from 6,500 in M2a Task 28: every source exit goes to Sources skipped, and the `[unverified, <source> unavailable]` tag; Task 16p made room for the `Scope:` line and the tag-first Threads line by cutting step 4's "(time, id, bytes, path)", "inside quotes" and "; no redirection" from step 5's G18 sentence, the unverified tag's "for a thread whose live state could not be checked", which step 7 says, and the Stops line's "a failed source is named in Sources skipped and the brief goes on", which steps 3, 4 and 6 say, so 7,195 bytes); `references/transcripts.md` at most 2,200 bytes (the plan's cap); `references/chat.md` at most 2,000 bytes (added in M2a Task 28: chat mode and its rules).
 
 ---
 ## D. Agents
