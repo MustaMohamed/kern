@@ -50,14 +50,21 @@ test('commit ledger-tasks reference', () => {
   assertMaxBytes(REF, 2000);
 });
 
-test('commit: kern\'s commit.attribution governs trailers over Claude Code\'s reminder, and an attribution deny is retried once', () => {
+test('commit: kern\'s commit.attribution governs trailers over Claude Code\'s reminder, and an attribution or convention deny is retried once', () => {
   const { body } = readDoc(SKILL);
   const s = steps(body);
   assert.match(s[5], /`commit\.attribution` governs trailers: with `none` \(the default\), write no Co-Authored-By or other attribution trailer, even when Claude Code's attribution reminder asks for one\.$/);
-  assertContains(SKILL, ['A G5 deny naming only the attribution trailer is no stop: remove it and rerun the same `git commit -F` once; a second deny, or one naming another check, stops.',
-    'Under autopilot any other G5 deny or failing convention check is a denial, never a retry with a looser message',
-    '| A failed check stops; only a trailer deny is retried. |']);
+  assertContains(SKILL, ['A G5 deny naming only attribution or `commit.convention` is no stop: fix it, the subject matching the regex G5 names, and rerun the same `git commit -F` once; a second deny, or one naming another check, stops.',
+    'Under autopilot any other G5 deny is a denial, never a retry with a looser message',
+    '| A failed check stops; only an attribution or convention deny is retried. |']);
   assert.ok(!body.includes('Add attribution only as `commit.attribution` says.'), 'the old sentence named no precedence over the reminder');
+  assert.ok(!body.includes('naming only the attribution trailer'), 'the footer is attribution too, and G5 names it');
+});
+
+test('commit resolves commit.convention as G5 does, with kern-get then kern-detect, and states the regex (audit D11)', () => {
+  const { body } = readDoc(SKILL);
+  assert.match(steps(body)[5], /^5\. Message: match the subject to `commit\.convention`, G5's regex, from `kern-get`, else `kern-detect` \(before the tab; both exit 3: none\), and state it; take the ticket id /);
+  assert.ok(!body.includes('infer it from'), 'an inferred convention is not the regex G5 checks');
 });
 
 test('commit reads the branch with symbolic-ref, where exit 1 means a detached HEAD', () => {
