@@ -183,8 +183,9 @@ export const factsLine = (f) => {
 // EXTRA_RULE: how the review grader treats a label of kind "extra", a real issue the key accepts beyond the
 // seeded bugs. On 2026-10-22 every arm raised CSV escaping in 15 of 15 sessions and was charged a false alarm for
 // it; the user chose to list it, the missing exports/ directory and missing tests as extras after that run
-// (the user's "kern and key", an exception to the plan's rule that keys are fixed before any run).
-export const EXTRA_RULE = 'A label of kind "extra" is a real issue the key accepts beyond the seeded bugs. A finding that matches an extra counts neither as a match nor as a false alarm: list its id in "extras", never in "matched", "decoys" or "unmatched", and let it neither raise nor lower the score.';
+// (the user's "kern and key", an exception to the plan's rule that keys are fixed before any run). An extra is
+// optional: leaving it out costs nothing, and rubric line 1's "real problem" means a bug label (Task 16o review, I2).
+export const EXTRA_RULE = 'A label of kind "extra" is a real issue the key accepts beyond the seeded bugs. A finding that matches an extra counts neither as a match nor as a false alarm: list its id in "extras", never in "matched", "decoys" or "unmatched", and let it neither raise nor lower the score. An attempt that does not raise an extra loses nothing for it, and a rubric line about real problems counts only the bug labels, never an extra.';
 
 // graderPrompt(task, outputs): each output is { id, text, git }, git from gitFacts. Every arm's session was
 // shown those facts in Claude Code's git status context (the 2026-10-22 plan gate counted kern's true

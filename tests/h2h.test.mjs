@@ -273,8 +273,13 @@ test('the review key lists CSV escaping, the missing exports/ directory and miss
 });
 
 test('the review grader is told an extra counts neither as a match nor as a false alarm, and other categories are not', () => {
-  const rule = 'A label of kind "extra" is a real issue the key accepts beyond the seeded bugs. A finding that matches an extra counts neither as a match nor as a false alarm: list its id in "extras", never in "matched", "decoys" or "unmatched", and let it neither raise nor lower the score.';
+  const rule = 'A label of kind "extra" is a real issue the key accepts beyond the seeded bugs. A finding that matches an extra counts neither as a match nor as a false alarm: list its id in "extras", never in "matched", "decoys" or "unmatched", and let it neither raise nor lower the score.' +
+    // Task 16o review, I2: an extra is optional, so leaving it out costs nothing, and rubric line 1 ("Each real problem is
+    // named ...") counts only the bugs: on 2026-10-22 kern raised the missing exports/ directory as its own item and
+    // superpowers folded it into its b6 finding.
+    ' An attempt that does not raise an extra loses nothing for it, and a rubric line about real problems counts only the bug labels, never an extra.';
   const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  assert.match(t.rubric[0], /real problem/, 'rubric line 1 is the line the rule narrows');
   const p = graderPrompt(t, [{ id: 'arm-A', text: 'x' }, { id: 'arm-B', text: 'y' }]);
   assert.ok(p.includes('For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".'), p);
   assert.ok(p.includes(rule), p);
