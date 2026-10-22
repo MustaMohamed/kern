@@ -2,12 +2,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { workspace } from '../scripts/lib/claude-run.mjs';
-import { armCopy, blindIds, factsLine, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, resultRow, taskWorkspace, touchedTasks, verdictLine } from '../scripts/lib/h2h.mjs';
+import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
+import { armCopy, blindIds, factsLine, falseAlarms, finalFiles, gate, gateExit, gitFacts, graderPrompt, h2hFlags, h2hMain, loadTasks, outOfArea, parseGrades, redact, resultRow, taskWorkspace, touchedTasks, verdictLine } from '../scripts/lib/h2h.mjs';
+import { parseArgs } from '../scripts/lib/args.mjs';
+import { guardedEnv, init as initOf, ran as runOf, result as resultEvent, started, use } from './helpers/eval-stub.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const arms = [{ id: 'kern', dir: '/w/kern' }, { id: 'superpowers', dir: '/w/kern/.upstream/superpowers' }, { id: 'pstack', dir: '/w/kern/.upstream/pstack/harness/pstack/claude-code' }, { id: 'control', dir: null }];
@@ -109,9 +111,6 @@ test('a review result row keeps its decoy and unmatched counts, its extras and t
   assert.deepEqual(p, { task: 'plan/x', category: 'plan', run: 0, arm: 'kern', score: 0.7, falseAlarms: 1, heldout: null, git, matched: [], why: 'u' });
   const d = resultRow({ id: 'diagnose/x', category: 'diagnose' }, 0, { arm: 'kern', id: 'arm-A', e: { outOfArea: 1, floorHits: 1 }, heldout: false, git }, { score: 9 }, '{}');
   assert.deepEqual([d.score, d.falseAlarms, 'reply' in d], [0, 2, false], 'a failed heldout run scores 0');
-  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
-  assert.ok(src.includes('const reply = finalText(graded.run.events);'), src);
-  assert.ok(src.includes('for (const x of attempts) results.push(resultRow(t, r, x, grades[x.id], reply));'), 'the runner builds each row with resultRow');
 });
 
 test('an extra the grader misfiles under decoys is dropped before the decoys are counted', () => {
@@ -131,11 +130,99 @@ test('an extra the grader misfiles under decoys is dropped before the decoys are
   assert.equal(resultRow({ id: 'review/y', category: 'review' }, 0, x, { score: 5, extras: 'x1' }, 'r').extras, 0, 'an extras value that is not a list counts nothing');
 });
 
-test('the runner gives the gate every task of the categories it ran, prints each verdict line and exits by gateExit', () => {
-  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
-  assert.ok(src.includes('const verdict = gate(results, touchedTasks(loadTasks(ROOT), tasks).map((t) => ({ id: t.id, category: t.category })));'), 'gate gets every task of each category the run touched');
-  assert.ok(src.includes('for (const v of verdict) console.log(verdictLine(v));'));
-  assert.ok(src.includes('process.exit(gateExit(verdict));'));
+// Task 17a G2: parseGrades checked only the score, and resultRow added whatever counts the grader returned, so a
+// count where a list belongs made false alarms 0, a string or NaN. Lane G's table of grader replies, then the
+// counts by label kind.
+test('Task 17a G2: a grader reply whose lists or counts are malformed voids the task-run', () => {
+  const review = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  const plan = loadTasks(ROOT).find((x) => x.category === 'plan');
+  const diagnose = loadTasks(ROOT).find((x) => x.category === 'diagnose');
+  const reply = (task, grade) => parseGrades(JSON.stringify({ grades: [{ id: 'arm-A', score: 7, why: 'w', ...grade }] }), ['arm-A'], task);
+  const good = { matched: ['b1'], decoys: ['decoy:d1'], extras: [], unmatched: 0 };
+  assert.equal(reply(review, good)['arm-A'].score, 7);
+  for (const [grade, why] of [
+    [{ ...good, decoys: 2 }, /decoys for arm-A is not a list of label ids/],
+    [{ ...good, unmatched: '2' }, /unmatched for arm-A is not a whole number of at least 0/],
+    [{ ...good, unmatched: ['foo'] }, /unmatched for arm-A is not a whole number/],
+    [{ ...good, unmatched: -3 }, /unmatched for arm-A is not a whole number/],
+    [{ ...good, unmatched: 1.5 }, /unmatched for arm-A is not a whole number/],
+    [{ ...good, matched: ['b1', 'b9'] }, /matched for arm-A names b9, which is no label in the key/],
+    [{ ...good, matched: ['none'] }, /names none, which is no label in the key/],
+    [{ ...good, extras: ['bogus:x1'] }, /names bogus:x1, which is no label in the key/],
+    [{ ...good, extras: 'x1' }, /extras for arm-A is not a list of label ids/],
+    [{ matched: ['b1'], unmatched: 0 }, /arm-A has no decoys list/],
+    [{ matched: ['b1'], decoys: [] }, /arm-A has no unmatched count/],
+    [{ ...good, score: '7' }, /no valid score for arm-A/],
+    [{ ...good, score: NaN }, /no valid score for arm-A/]]) {
+    assert.throws(() => reply(review, grade), why, JSON.stringify(grade));
+  }
+  // A plan grade must count its unsupported claims; its lists are kept as given, since a plan has no key.
+  assert.equal(reply(plan, { matched: [1, 'two'], unsupported: 0 })['arm-A'].score, 7);
+  assert.throws(() => reply(plan, { unsupported: ['base: main'] }), /unsupported for arm-A is not a whole number of at least 0/);
+  assert.throws(() => reply(plan, { matched: [] }), /arm-A has no unsupported count/);
+  assert.equal(reply(diagnose, { matched: ['2', '3'] })['arm-A'].score, 7, 'a diagnose grade needs no count: its false alarms are measured');
+  // Fix round 1 (P5 review, Important 1): a field the category never reads cannot void its task-run.
+  for (const [task, grade] of [[plan, { unsupported: 0, unmatched: null }], [plan, { unsupported: 0, decoys: null }], [plan, { unsupported: 0, unmatched: 'n/a', decoys: 2, matched: 'x' }],
+    [review, { ...good, unsupported: null }], [review, { ...good, extras: null }], [diagnose, { unmatched: -1, unsupported: 'none', decoys: ['none'] }]]) {
+    assert.equal(reply(task, grade)['arm-A'].score, 7, `${task.category}: ${JSON.stringify(grade)}`);
+  }
+  assert.throws(() => reply(review, { ...good, decoys: ['none'] }), /decoys for arm-A names none, which is no label in the key/, 'a field the gate reads stays strict');
+});
+
+// Fix round 1 (P5 review, Important 1): the grader is told what an empty list or count is, and that "none" is no label.
+test('the grader is told to give every field, [] or 0 when there is nothing, and never to list "none"', () => {
+  const every = 'Give every field for every attempt: [] when no label matches, 0 when there is nothing to count.';
+  const none = 'A finding that matches no label counts in "unmatched"; never list "none" in matched, decoys or extras.';
+  const review = graderPrompt({ category: 'review', prompts: ['review it'], rubric: ['r'], labels: [{ id: 'b1', kind: 'bug' }] }, [{ id: 'arm-A', text: 'x' }]);
+  assert.ok(review.includes(every) && review.includes(none), review);
+  const plan = graderPrompt({ category: 'plan', prompts: ['plan it'], rubric: ['r'] }, [{ id: 'arm-A', text: 'x' }]);
+  assert.ok(plan.includes(every) && !plan.includes(none), plan);
+});
+
+// Fix round 1 (P5 review, Minor 4): the files block has a total cap as well as a per-file one.
+test('finalFiles cuts each file at perFile characters and the whole block at total, naming how many files it left out', () => {
+  const d = workspace(join(ROOT, 'evals', 'h2h', 'plan', 'rename-small', 'repo'), { name: 'app' });
+  try {
+    mkdirSync(join(d, '.kern', 'plans'), { recursive: true });
+    for (let i = 0; i < 6; i++) writeFileSync(join(d, '.kern', 'plans', `p${i}.md`), `${String(i).repeat(1000)}\n`);
+    const all = finalFiles(d);
+    assert.equal(all.split('\n\n').length, 6);
+    const cut = finalFiles(d, 400, 2500);
+    assert.match(cut, /^--- \.kern\/plans\/p0\.md\n0{400}\n\[cut: 601 more characters\]\n\n--- \.kern\/plans\/p1\.md\n/);
+    assert.ok(cut.length <= 2500 + 40, `${cut.length}`);
+    assert.match(cut, /\n\n\[cut: \d+ more files\]$/);
+    const kept = (cut.match(/^--- /gm) || []).length;
+    assert.equal(Number(cut.match(/\[cut: (\d+) more files\]$/)[1]), 6 - kept);
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); }
+});
+
+// Fix round 2 (P5 re-review, Minor A): git lists tracked changes, then untracked files, then ignored ones, so the cap
+// cut kern's ignored .kern/plans/ first and the grader scored kern without its plan. Plan files now come first.
+test('finalFiles lists every path with "plan" in it first, so each arm\'s plan survives the cap', () => {
+  const d = workspace(join(ROOT, 'evals', 'h2h', 'plan', 'rename-small', 'repo'), { name: 'app' });
+  try {
+    for (const [f, text] of [...[0, 1, 2, 3].map((i) => [`src/gen${i}.js`, `${'x'.repeat(19000)}\n`]), ['.kern/plans/p.md', 'kern plan\n'],
+      ['docs/plan.md', 'control plan\n'], ['docs/superpowers/plans/s.md', 'superpowers plan\n'], ['notes.md', 'notes\n']]) {
+      mkdirSync(dirname(join(d, f)), { recursive: true });
+      writeFileSync(join(d, f), text);
+    }
+    const out = finalFiles(d);
+    const heads = [...out.matchAll(/^--- (\S+)/gm)].map((m) => m[1]);
+    assert.deepEqual(heads.slice(0, 3).sort(), ['.kern/plans/p.md', 'docs/plan.md', 'docs/superpowers/plans/s.md'], heads.join(' '));
+    assert.ok(out.includes('--- .kern/plans/p.md\nkern plan\n'), 'kern\'s plan is in the block');
+    assert.match(out, /\[cut: \d+ more files\]$/, 'the cap still holds');
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); }
+});
+
+test('Task 17a G2: decoy and extra hits are counted by the label\'s kind in the key, from every list the grader used', () => {
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  const git = { branch: 'feat/discounts', main: 'main', head: 'abc1234', commits: 2, recent: [] };
+  const x = { arm: 'kern', id: 'arm-A', e: { outOfArea: 0 }, heldout: null, git };
+  // Lane G: a decoy named under matched counted nothing, against 1 under decoys.
+  const row = resultRow(t, 0, x, { score: 8, matched: ['b1', 'decoy:d1'], decoys: [], unmatched: 0 }, 'r');
+  assert.deepEqual([row.decoys, row.falseAlarms, row.matched], [1, 1, ['b1']]);
+  const both = resultRow(t, 0, x, { score: 8, matched: ['b2', 'd2'], decoys: ['d2', 'decoy:d3'], extras: ['b3', 'x2'], unmatched: 1 }, 'r');
+  assert.deepEqual([both.decoys, both.extras, both.falseAlarms, both.matched], [2, 1, 3, ['b2', 'b3']], 'each label once, by its kind: d2 twice is one decoy, b3 under extras is a match');
 });
 
 // The SHA-free form of a facts record: each commit's time enters its hash, so only the SHAs may differ by arm.
@@ -158,11 +245,8 @@ test('git facts are what Claude Code\'s git status context shows, read with plai
     assert.deepEqual(shaFree(f), { branch: 'feat/discounts', main: 'main', head: '<sha>', commits: 2, recent: ['<sha> feat: discounts, CSV export and invoice lookup', '<sha> chore: initial import'] });
     assert.ok(!('remotes' in f));
   } finally { rmSync(dirname(d2), { recursive: true, force: true }); }
-  // The runner reads them in the arm's workspace after the task's own setup and commit, and before the arm runs.
-  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
-  const read = src.indexOf('const facts = gitFacts(cwd);');
-  assert.ok(src.indexOf('const cwd = taskWorkspace(t);') < read && read < src.indexOf('tryRun({ cwd, prompts: t.prompts'), 'facts are read after the workspace and before the run');
-  assert.ok(src.includes('heldout, git: facts, text: redact('), 'each attempt carries its facts');
+  // The runner reads them in the arm's workspace after the task's own setup and commit, and before the arm runs:
+  // tested through h2hMain at the end of this file.
 });
 
 test('every task\'s git facts are the same for every arm but the SHAs, so they name no arm', () => {
@@ -298,7 +382,9 @@ test('the review grader is told an extra counts neither as a match nor as a fals
   const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
   assert.match(t.rubric[0], /real problem/, 'rubric line 1 is the line the rule narrows');
   const p = graderPrompt(t, [{ id: 'arm-A', text: 'x' }, { id: 'arm-B', text: 'y' }]);
-  assert.ok(p.includes('For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".'), p);
+  // Fix round 2 (P5 re-review, Minor E): a finding that matches no label is counted, never named "none".
+  assert.ok(p.includes('For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or count it in "unmatched".'), p);
+  assert.ok(!p.includes('or "none"'), p);
   assert.ok(p.includes(rule), p);
   assert.ok(p.includes('"decoys":["d2"],"extras":["x1"],"unmatched":1'), 'the review reply example has extras');
   assert.ok(p.includes('"kind":"extra"'), 'the grader reads the extras in the labels');
@@ -327,6 +413,32 @@ test('the runner lists task-arm pairs in dry-run mode when the upstream trees ar
   assert.match(r.stdout, /^diagnose\/three-calls: kern, superpowers, pstack, pocock, control x 1 runs; 1 turn\(s\)$/m);
 });
 
+// Task 17a G4: each of these was ignored, so the run widened to every task or arm, and `--runs abc` ran nothing
+// and then wrote a snapshot of failures. Each is now a usage error; the runner keeps --dry-run and a stand-in claude.
+test('Task 17a G4: the h2h runner refuses an unknown, valueless or repeated flag, a bad --runs and an unknown arm', () => {
+  const ids = loadTasks(ROOT).map((t) => t.id);
+  const armIds = JSON.parse(readFileSync(join(ROOT, 'evals', 'h2h', 'arms.json'), 'utf8')).map((a) => a.id);
+  assert.deepEqual(parseArgs(['--category', 'plan', '--task', 'plan/rename-small', '--arms', 'kern,control', '--runs', '2', '--model', 'm', '--grader-model', 'g', '--dry-run', '--allow-dirty'], h2hFlags(ids, armIds)),
+    { category: 'plan', task: 'plan/rename-small', arms: ['kern', 'control'], runs: 2, model: 'm', grader: 'g', dryRun: true, allowDirty: true });
+  const env = guardedEnv();
+  const h2h = (...a) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'h2h.mjs'), '--dry-run', ...a], { encoding: 'utf8', env });
+  const run = (...a) => h2h('--arms', 'kern,control', ...a);
+  for (const a of [['--dryrun'], ['--category=plan'], ['--task', 'plan/nope'], ['--category', 'planning'], ['--task'], ['--runs', 'abc'], ['--runs', '0'], ['plan'], ['--category', 'plan', '--category', 'review'], ['--arms', 'kern']]) {
+    const r = run(...a);
+    assert.equal(r.status, 2, `${a.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /^h2h: .*\nusage: node scripts\/h2h\.mjs /m, a.join(' '));
+    assert.equal(r.stdout, '', `${a.join(' ')}: nothing ran`);
+  }
+  for (const a of [['--arms', 'kern,kern2'], ['--arms']]) {
+    const r = h2h(...a);
+    assert.equal(r.status, 2, `${a.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /^h2h: /m);
+  }
+  const ok = run('--category', 'review', '--runs', '1');
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(ok.stdout, 'review/invoice-branch: kern, control x 1 runs; 1 turn(s)\n');
+});
+
 test('the fixture set is complete: 4 planning, 8 debugging and 1 review task', () => {
   const n = (c) => loadTasks(ROOT).filter((t) => t.category === c).length;
   assert.deepEqual([n('plan'), n('diagnose'), n('review')], [4, 8, 1]);
@@ -351,4 +463,326 @@ test('an upstream arm runs from a copy outside the repo with no symlink back int
       walk(copy);
     } finally { rmSync(dirname(copy), { recursive: true, force: true }); }
   }
+});
+
+// The h2h runner through its seam (Task 17a): h2hMain with a stub run, temp snapshot and results dirs, a stated
+// tree and two arms, kern (from this repo) and the no-plugin control, so no test writes into the repo's evals/ and
+// no claude runs. A stub arm run opens as its arm's session does; the stub grader gives every arm a valid grade.
+const DAY = new Date('2026-10-22T12:00:00Z');
+const CLEAN = { commit: 'c0ffee', dirty: false, changes: [] };
+let taskN = 0;
+// synthTask(category, extra): a task in a temp dir: repo/ holds src/a.js and docs/spec.md; a diagnose task also
+// gets heldout/ and a test command.
+const synthTask = (category, extra = {}) => {
+  const dir = mkdtempSync(join(tmpdir(), 'ht-'));
+  for (const [f, text] of [['repo/src/a.js', 'export const a = 1;\n'], ['repo/docs/spec.md', '# spec\n'], ['heldout/test/h.test.js', '// heldout\n']]) {
+    mkdirSync(dirname(join(dir, f)), { recursive: true });
+    writeFileSync(join(dir, f), text);
+  }
+  taskN += 1;
+  return { id: `${category}/t${taskN}`, category, dir, prompts: [`do task ${taskN}`], rubric: ['does it'], area: ['src/**'], ...(category === 'diagnose' ? { test: 'true' } : {}), ...extra };
+};
+const blindOf = (prompt) => [...prompt.matchAll(/^=== (arm-[A-Z]) ===$/gm)].map((m) => m[1]);
+const fields = { plan: { unsupported: 0 }, review: { matched: [], decoys: [], unmatched: 0 }, diagnose: {} };
+const okGrades = (prompt, category) => JSON.stringify({ grades: blindOf(prompt).map((id) => ({ id, score: 7, why: 'w', ...fields[category] })) });
+const kernArms = (pick) => [{ id: 'kern', plugin: '.', dir: ROOT }, { id: 'control', plugin: null, dir: null }].filter((a) => !pick || pick.includes(a.id));
+const plainArm = (opts) => runOf(opts.pluginDirs.length ? [...started(opts.pluginDirs), resultEvent('done')] : [initOf([]), resultEvent('done')]);
+const driveH2H = ({ argv = ['--runs', '1'], tasks, arm = plainArm, grade = okGrades, tree = () => CLEAN, before = null, key = null, env = { PATH: process.env.PATH }, floorScan, parse } = {}) => {
+  const dir = mkdtempSync(join(tmpdir(), 'hm-'));
+  const snapshots = join(dir, 'snapshots'); const results = join(dir, 'results');
+  const committed = join(snapshots, 'h2h-sonnet-5-5-2026-10-22.json');
+  const raw = join(results, 'h2h-2026-10-22');
+  if (before !== null) { mkdirSync(snapshots, { recursive: true }); writeFileSync(committed, before); }
+  if (key !== null) { mkdirSync(raw, { recursive: true }); writeFileSync(join(raw, 'key.json'), typeof key === 'string' ? key : JSON.stringify(key)); }
+  const calls = []; const graderPrompts = []; const lines = []; const errors = [];
+  const byId = new Map(tasks.map((t) => [t.prompts[0], t]));
+  const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null);
+  const beside = (name) => read(join(raw, `snapshot-sonnet-5-5-${name}.json`));
+  const run = (opts) => {
+    calls.push(opts);
+    if (!opts.prompts[0].startsWith('You grade')) return arm(opts, calls.length, { raw, beside });
+    graderPrompts.push(opts.prompts[0]);
+    // A runaway re-ask would spend paid grader calls without end; a test stops at the fifth.
+    if (graderPrompts.length > 4 * tasks.length) throw new ClaudeRunError("stub grader: more grader calls than any test needs", true);
+    const t = tasks.find((x) => opts.prompts[0].includes(x.prompts[0]));
+    return runOf([resultEvent(grade(opts.prompts[0], t.category, byId))]);
+  };
+  let code; let thrown = null;
+  try {
+    code = h2hMain({ root: ROOT, argv, env, tasks, arms: kernArms, armIds: ['kern', 'control'], run, version: () => '9.9.9 (stand-in)', tree, snapshots, results,
+      ...(floorScan ? { floorScan } : {}), ...(parse ? { parse } : {}), log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY });
+  } catch (e) { thrown = e; }
+  return { code, thrown, calls, graderPrompts, lines, errors, raw, read, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null,
+    beside, done: () => { rmSync(dir, { recursive: true, force: true }); for (const t of tasks) if (t.dir.startsWith(tmpdir())) rmSync(t.dir, { recursive: true, force: true }); } };
+};
+
+test('Task 17a G1: a plan is graded from the files the run left, ignored .kern/ included, not from its first Write', () => {
+  // Lane G: kern wrote its plan to .kern/plans/, then edited it after plan-check and review; the grader saw the draft.
+  const t = synthTask('plan');
+  const arm = (opts) => {
+    if (!opts.pluginDirs.length) {
+      writeFileSync(join(opts.cwd, 'docs', 'plan.md'), 'control plan, final\n');
+      return runOf([initOf([]), use('Write', { file_path: join(opts.cwd, 'docs', 'plan.md'), content: 'control plan, first draft' }), resultEvent('done')]);
+    }
+    mkdirSync(join(opts.cwd, '.kern', 'plans'), { recursive: true });
+    writeFileSync(join(opts.cwd, '.kern', 'plans', 'p.md'), 'plan: names the second writer (edited after review)\n');
+    return runOf([...started(opts.pluginDirs), use('Write', { file_path: join(opts.cwd, '.kern', 'plans', 'p.md'), content: 'plan: draft' }),
+      use('Edit', { file_path: join(opts.cwd, '.kern', 'plans', 'p.md'), old_string: 'draft', new_string: 'names the second writer (edited after review)' }), resultEvent('done')]);
+  };
+  const r = driveH2H({ tasks: [t], arm });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    const [prompt] = r.graderPrompts;
+    const files = prompt.split('\n\nFiles written:\n').slice(1).map((s) => s.split('\n=== ')[0]);
+    assert.equal(files.length, 2, 'each arm has a files block');
+    assert.ok(files.some((f) => f.includes('--- .work/plans/p.md\nplan: names the second writer (edited after review)\n')), files.join('\n----\n'));
+    assert.ok(files.some((f) => f.includes('--- docs/plan.md\ncontrol plan, final\n')), files.join('\n----\n'));
+    assert.ok(!files.some((f) => /plan: draft|first draft/.test(f)), 'no Write input stands in for the final file');
+  } finally { r.done(); }
+});
+
+test('Task 17a G3: a filtered h2h run, an all-VOID one or one that stops never writes the committed snapshot, and key.json is merged', () => {
+  const [p1, p2, v1] = [synthTask('plan'), synthTask('plan'), synthTask('review', { labels: [] })];
+  const filtered = driveH2H({ argv: ['--category', 'plan', '--runs', '1'], tasks: [p1, p2, v1], before: 'the day\'s full run\n', key: { 'earlier:seed': { kern: 'arm-B', control: 'arm-A' } } });
+  try {
+    assert.equal(filtered.committed, 'the day\'s full run\n');
+    const s = filtered.beside('plan');
+    assert.deepEqual([s.complete, s.cases, s.kern, s.voided, s.results.length, s.gate.map((g) => g.status)], [true, [p1.id, p2.id], CLEAN, [], 4, ['PASS']]);
+    assert.deepEqual(s.arms, [{ id: 'kern', plugin: '.', commit: 'c0ffee' }, { id: 'control', plugin: null, commit: null }]);
+    const key = JSON.parse(readFileSync(join(filtered.raw, 'key.json'), 'utf8'));
+    assert.deepEqual(Object.keys(key), ['earlier:seed', `2026-10-22:${p1.id}:0`, `2026-10-22:${p2.id}:0`], 'the earlier key stays');
+    assert.match(filtered.lines.join('\n'), /a filtered run: no committed snapshot; this one is beside the transcripts: .*snapshot-sonnet-5-5-plan\.json/);
+  } finally { filtered.done(); }
+  const [p3, v2] = [synthTask('plan'), synthTask('review', { labels: [] })];
+  const full = driveH2H({ tasks: [p3, v2], before: 'yesterday\n' });
+  try {
+    assert.equal(full.code, 0, full.lines.join('\n'));
+    const s = JSON.parse(full.committed);
+    assert.deepEqual([s.complete, s.cases, s.kern, s.voided, s.results.length], [true, [p3.id, v2.id], CLEAN, [], 4]);
+  } finally { full.done(); }
+  // Every grade malformed (a plan grade with no unsupported count): every task-run is VOID.
+  const p4 = synthTask('plan');
+  const none = driveH2H({ tasks: [p4], grade: (prompt) => JSON.stringify({ grades: blindOf(prompt).map((id) => ({ id, score: 7 })) }), before: 'earlier\n' });
+  try {
+    assert.equal(none.committed, 'earlier\n');
+    const s = none.beside('all');
+    assert.deepEqual([s.complete, s.results, s.voided.map((v) => v.task)], [true, [], [p4.id]]);
+    assert.match(s.voided[0].reason, /has no unsupported count/);
+    assert.match(none.lines.join('\n'), /no task-run was graded: no committed snapshot, and any earlier one stays/);
+  } finally { none.done(); }
+  // A usage limit at the second task: the error stops the run; what was graded and its key are kept beside the runs.
+  const [p5, p6] = [synthTask('plan'), synthTask('plan')];
+  const stop = driveH2H({ tasks: [p5, p6], before: 'earlier\n', arm: (opts, n) => { if (n > 3) throw new ClaudeRunError('claude stopped at a usage limit: x', true); return plainArm(opts); } });
+  try {
+    assert.match(String(stop.thrown?.message), /usage limit/);
+    assert.equal(stop.committed, 'earlier\n');
+    const s = stop.beside('all');
+    assert.deepEqual([s.complete, s.cases, s.results.map((x) => x.task)], [false, [p5.id, p6.id], [p5.id, p5.id]]);
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(stop.raw, 'key.json'), 'utf8'))), [`2026-10-22:${p5.id}:0`]);
+  } finally { stop.done(); }
+});
+
+test('Task 17a G13: a git failure in one arm\'s workspace voids that task-run only, and the run goes on', () => {
+  const t = synthTask('plan');
+  // The first arm run leaves an index.lock behind, so `git add -A -N` fails in its workspace.
+  const arm = (opts, n) => { if (n === 1) writeFileSync(join(opts.cwd, '.git', 'index.lock'), ''); return plainArm(opts); };
+  const r = driveH2H({ argv: ['--runs', '2'], tasks: [t], arm });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    const s = JSON.parse(r.committed);
+    assert.deepEqual([s.voided.length, s.voided[0].run, s.results.map((x) => x.run)], [1, 0, [1, 1]]);
+    assert.match(s.voided[0].reason, /^(kern|control): fatal: Unable to create .*index\.lock/);
+  } finally { r.done(); }
+});
+
+test('Task 17a G9: heldout tests and floor-scan get childEnv, not the caller\'s environment, and a floor-scan error voids the task-run', () => {
+  const probe = mkdtempSync(join(tmpdir(), 'hp-'));
+  const scan = join(probe, 'floor-scan');
+  writeFileSync(scan, `env > "${probe}/scan.env"\nls -A "$HOME" | wc -l | tr -d ' ' > "${probe}/scan.home"\n[ -f "${probe}/break" ] && { echo 'floor-scan: bad input' >&2; exit 2; }\nexit 0\n`);
+  const t = synthTask('diagnose', { test: `env > "${probe}/heldout.env"` });
+  const arm = (opts) => { writeFileSync(join(opts.cwd, 'src', 'a.js'), 'export const a = 2;\n'); return plainArm(opts); };
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, KERN_P5_PROBE_TOKEN: 'secret', CLAUDE_CODE_SESSION_ID: 'caller-session' };
+  try {
+    const r = driveH2H({ tasks: [t], arm, env, floorScan: scan });
+    try {
+      assert.equal(JSON.parse(r.committed).voided.length, 0, r.lines.join('\n'));
+      for (const f of ['scan.env', 'heldout.env']) {
+        const seen = readFileSync(join(probe, f), 'utf8');
+        assert.match(seen, /^PATH=/m, f);
+        assert.doesNotMatch(seen, /KERN_P5_PROBE_TOKEN|CLAUDE_CODE_SESSION_ID/, `${f}: the caller's own variables stay out`);
+      }
+      // Fix round 1 (P5 review, Minor 2): floor-scan reads $HOME/.claude/kern.yml ratchets, so it gets an empty
+      // temp HOME, removed after, never the caller's.
+      const home = readFileSync(join(probe, 'scan.env'), 'utf8').match(/^HOME=(.*)$/m)[1];
+      assert.notEqual(home, process.env.HOME);
+      assert.ok(home.startsWith(tmpdir()) || home.startsWith(realpathSync(tmpdir())), home);
+      assert.equal(readFileSync(join(probe, 'scan.home'), 'utf8').trim(), '0', 'the HOME floor-scan saw was empty');
+      assert.ok(!existsSync(home), 'and it is removed after the scan');
+    } finally { r.done(); }
+    writeFileSync(join(probe, 'break'), '');
+    const t2 = synthTask('diagnose', { test: 'true' });
+    const broken = driveH2H({ tasks: [t2], arm, env, floorScan: scan });
+    try {
+      const s = broken.beside('all');
+      assert.deepEqual([s.results.length, s.voided.length], [0, 1]);
+      assert.match(s.voided[0].reason, /^(kern|control): floor-scan exited 2: floor-scan: bad input$/);
+    } finally { broken.done(); }
+  } finally { rmSync(probe, { recursive: true, force: true }); }
+});
+
+test('Task 17a G10: an h2h arm that did not load its plugin, or a non-kern arm that printed the kernel, voids the task-run', () => {
+  const t = synthTask('plan');
+  const r = driveH2H({ tasks: [t], arm: (opts) => runOf([initOf([]), resultEvent('done')]) });
+  try { assert.match(r.beside('all').voided[0].reason, /^kern: the plugin at .*\/kern is not in the run's init\.plugins/); } finally { r.done(); }
+  const t2 = synthTask('plan');
+  const leak = driveH2H({ tasks: [t2], arm: (opts) => runOf([...started(opts.pluginDirs), resultEvent('done')]) });
+  try { assert.match(leak.beside('all').voided[0].reason, /^control: kern was meant to be off, but its SessionStart printed the kernel$/); } finally { leak.done(); }
+});
+
+test('Task 17a G11: every h2h run refuses a dirty kern tree unless --allow-dirty, a --category or --task run too', () => {
+  // Fix round 1 (P5 review, Minor 1): the confirming h2h runs are --category runs, and their snapshots are the evidence.
+  const dirty = { commit: 'c0ffee', dirty: true, changes: ['?? skills/new/SKILL.md'] };
+  for (const argv of [() => ['--runs', '1'], () => ['--category', 'plan', '--runs', '1'], (p) => ['--task', p.id, '--runs', '1'], () => ['--arms', 'kern,control']]) {
+    const p = synthTask('plan');
+    const r = driveH2H({ argv: argv(p), tasks: [p], tree: () => dirty });
+    try {
+      assert.equal(r.code, 2, argv(p).join(' '));
+      assert.match(r.errors.join('\n'), /^h2h: the kern tree is not a clean commit .*--allow-dirty/);
+      assert.equal(r.calls.length, 0, 'nothing ran');
+    } finally { r.done(); }
+  }
+  const dry = driveH2H({ argv: ['--dry-run'], tasks: [synthTask('plan')], tree: () => dirty });
+  try { assert.equal(dry.code, 0, 'a dry run measures nothing, so it is never refused'); } finally { dry.done(); }
+  const ok = driveH2H({ argv: ['--runs', '1', '--allow-dirty'], tasks: [synthTask('plan')], tree: () => dirty });
+  try { assert.deepEqual(JSON.parse(ok.committed).kern, dirty); } finally { ok.done(); }
+});
+
+test('the runner gives the gate every task of the categories it ran, prints each verdict line and exits by gateExit', () => {
+  const [a, b] = [synthTask('plan'), synthTask('plan')];
+  const r = driveH2H({ argv: ['--task', a.id, '--runs', '1'], tasks: [a, b] });
+  try {
+    assert.equal(r.code, 3);
+    assert.ok(r.lines.includes(`INCOMPLETE plan: 1 of 2 tasks graded; no graded run: ${b.id}`), r.lines.join('\n'));
+  } finally { r.done(); }
+});
+
+test('each attempt carries the git facts read in its workspace before its run, and a review row keeps the grader\'s reply', () => {
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  // The arm commits during its run; the facts the grader gets are from before it.
+  const arm = (opts) => {
+    spawnSync('git', ['-C', opts.cwd, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', 'commit', '-q', '--allow-empty', '-m', 'during the run'], { encoding: 'utf8' });
+    return plainArm(opts);
+  };
+  const grade = (prompt) => JSON.stringify({ grades: blindOf(prompt).map((id) => ({ id, score: 6, matched: ['b1', 'decoy:d1'], decoys: [], extras: ['x1'], unmatched: 1, why: 'w' })) });
+  const r = driveH2H({ argv: ['--runs', '1'], tasks: [t], arm, grade });
+  try {
+    const [prompt] = r.graderPrompts;
+    assert.equal([...prompt.matchAll(/^Git facts: branch feat\/discounts; main branch main; HEAD \w+; 2 commits, newest first:$/gm)].length, 2, prompt.slice(0, 3000));
+    assert.doesNotMatch(prompt, /during the run/);
+    const rows = JSON.parse(r.committed).results;
+    assert.deepEqual(rows.map((x) => [x.decoys, x.unmatched, x.extras, x.falseAlarms, x.matched]), [[1, 1, 1, 2, ['b1']], [1, 1, 1, 2, ['b1']]]);
+    assert.ok(rows.every((x) => x.reply === grade(prompt)));
+    assert.ok(rows.every((x) => x.git.commits === 2));
+  } finally { r.done(); }
+});
+
+test('the head-to-head grader reads digest(events) with tool results, the diff and the files written', () => {
+  const t = synthTask('plan');
+  const r = driveH2H({ tasks: [t] });
+  try {
+    const [prompt] = r.graderPrompts;
+    for (const id of blindOf(prompt)) assert.ok(prompt.includes(`\n=== ${id} ===\n`));
+    assert.match(prompt, /\n\nDiff:\n\(none\)/);
+  } finally { r.done(); }
+});
+
+// Fix round 1 (P5 review, Important 1): a VOID throws away every arm session of the task-run, so a grade that fails
+// to parse or validate is asked for once more, with the error, before the task-run is voided.
+test('a grader reply that fails to parse or validate is re-asked once with the error, then the task-run is VOID', () => {
+  const bad = (prompt) => JSON.stringify({ grades: blindOf(prompt).map((id) => ({ id, score: 7 })) });
+  const fixed = (prompt, category) => (prompt.includes('could not be used') ? okGrades(prompt, category) : bad(prompt));
+  const t = synthTask('plan');
+  const r = driveH2H({ tasks: [t], grade: fixed });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.equal(r.graderPrompts.length, 2);
+    const [first, again] = r.graderPrompts;
+    assert.ok(again.startsWith(first), 'the same prompt, then the note');
+    assert.match(again.slice(first.length), /^\n\nA reply to this prompt could not be used: h2h grader: arm-[A-Z] has no unsupported count\. Reply again with JSON only/);
+    const s = JSON.parse(r.committed);
+    assert.deepEqual([s.voided, s.results.length], [[], 2]);
+    assert.ok(s.results.every((x) => /has no unsupported count/.test(x.regrade)), 'each row says it was re-asked, and why');
+  } finally { r.done(); }
+  const t2 = synthTask('plan');
+  const twice = driveH2H({ tasks: [t2], grade: bad });
+  try {
+    assert.equal(twice.graderPrompts.length, 2, 'one re-ask, no more');
+    const s = twice.beside('all');
+    assert.match(s.voided[0].reason, /^h2h grader: arm-[A-Z] has no unsupported count \(asked twice; first: h2h grader: arm-[A-Z] has no unsupported count\)$/);
+  } finally { twice.done(); }
+  const t3 = synthTask('plan');
+  const notJson = driveH2H({ tasks: [t3], grade: (prompt, category) => (prompt.includes('could not be used') ? okGrades(prompt, category) : 'I cannot grade these.') });
+  try { assert.equal(JSON.parse(notJson.committed).results.length, 2, 'a reply with no JSON is re-asked too'); } finally { notJson.done(); }
+  // Fix round 2 (P5 re-review, Minor C): the re-ask is bounded by a count, not by the first error's message.
+  const t4 = synthTask('plan');
+  const silent = driveH2H({ tasks: [t4], parse: () => { throw new Error(''); } });
+  try {
+    assert.equal(silent.thrown, null, String(silent.thrown));
+    assert.equal(silent.graderPrompts.length, 2, 'an error with no message is re-asked once, no more');
+    assert.match(silent.beside('all').voided[0].reason, /^h2h grader: the reply could not be used \(asked twice; first: h2h grader: the reply could not be used\)$/);
+  } finally { silent.done(); }
+});
+
+// Fix round 1 (P5 review, Minor 3): only a child process's failure (git, floor-scan) voids a task-run; any other
+// error is a harness fault, and it stops the run rather than turn every task-run into a VOID.
+// Fix round 2 (P5 re-review, Minor D): root reads a mode-000 file, so the fault never happens; skipped there.
+test('a harness fault in an arm\'s attempt stops the h2h run, and what was graded stays beside the runs', { skip: process.getuid?.() === 0 && 'root reads a mode-000 file' }, () => {
+  const t = synthTask('plan');
+  const arm = (opts) => {
+    mkdirSync(join(opts.cwd, '.kern'), { recursive: true });
+    writeFileSync(join(opts.cwd, '.kern', 'locked.md'), 'x\n');
+    chmodSync(join(opts.cwd, '.kern', 'locked.md'), 0o000);
+    return plainArm(opts);
+  };
+  const r = driveH2H({ tasks: [t], arm, before: 'earlier\n' });
+  try {
+    assert.equal(r.thrown?.code, 'EACCES', String(r.thrown));
+    assert.equal(r.committed, 'earlier\n');
+    assert.deepEqual([r.beside('all').complete, r.beside('all').voided], [false, []]);
+  } finally { r.done(); }
+});
+
+// Fix round 1 (P5 review, Minor 5): key.json is the only map from the day's blind ids to arms.
+test('a key.json that is not JSON stops the h2h run before anything runs, and is left as it was', () => {
+  const r = driveH2H({ tasks: [synthTask('plan')], key: '{"2026-10-22:plan/x:0": {"kern": "arm-' });
+  try {
+    assert.equal(r.code, 2);
+    assert.match(r.errors.join('\n'), /^h2h: .*key\.json is not JSON \(.*\); move it aside before a run$/);
+    assert.equal(r.calls.length, 0, 'nothing ran');
+    assert.equal(readFileSync(join(r.raw, 'key.json'), 'utf8'), '{"2026-10-22:plan/x:0": {"kern": "arm-');
+  } finally { r.done(); }
+});
+
+// Fix round 1 (P5 review, Minor 6): a SIGINT or SIGTERM skips every finally, so each task-run's grades and keys are
+// saved as it ends.
+test('h2h saves its progress and merges key.json after each task-run, so a killed run keeps what it graded', () => {
+  const [p1, p2] = [synthTask('plan'), synthTask('plan')];
+  let seen = null;
+  // At p2's first arm run, p1's task-run is graded: read what a kill at that moment would leave.
+  const arm = (opts, n, at) => {
+    if (opts.prompts[0] === p2.prompts[0] && !seen) seen = { snapshot: at.beside('all'), key: JSON.parse(readFileSync(join(at.raw, 'key.json'), 'utf8')) };
+    return plainArm(opts);
+  };
+  const r = driveH2H({ tasks: [p1, p2], arm, key: { 'earlier:seed': { kern: 'arm-A', control: 'arm-B' } } });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.deepEqual([seen.snapshot.complete, seen.snapshot.cases, seen.snapshot.results.map((x) => x.task)], [false, [p1.id, p2.id], [p1.id, p1.id]]);
+    assert.deepEqual(Object.keys(seen.key), ['earlier:seed', `2026-10-22:${p1.id}:0`]);
+    assert.equal(JSON.parse(r.committed).complete, true);
+    assert.equal(r.beside('all'), null, 'a full run removes its progress file once the committed snapshot is written');
+  } finally { r.done(); }
+  // A filtered run's progress file is its snapshot, complete at the end.
+  const p3 = synthTask('plan');
+  const f = driveH2H({ argv: ['--category', 'plan', '--runs', '1'], tasks: [p3] });
+  try { assert.equal(f.beside('plan').complete, true); } finally { f.done(); }
 });

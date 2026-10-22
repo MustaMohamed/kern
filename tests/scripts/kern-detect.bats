@@ -44,6 +44,32 @@ setup() {
   [ "${output%%	*}" = "pnpm run lint" ]
 }
 
+@test "bun runs scripts.test through bun run, not bun's own test runner" {
+  # Task 17a P10, D6: `bun test` runs bun's built-in runner and ignores scripts.test.
+  printf '{"name":"x","scripts":{"test":"vitest run","lint":"eslint ."}}' >package.json
+  for lock in bun.lock bun.lockb; do
+    rm -f bun.lock bun.lockb
+    touch "$lock"
+    run bash "$K/kern-detect" test.full
+    [ "$output" = "bun run test	package.json scripts.test" ] || { echo "$lock: $output"; false; }
+    run bash "$K/kern-detect" test.focused
+    [ "${output%%	*}" = "bun run test -- {file}" ] || { echo "$lock: $output"; false; }
+    run bash "$K/kern-detect" lint
+    [ "${output%%	*}" = "bun run lint" ] || { echo "$lock: $output"; false; }
+  done
+}
+
+@test "yarn runs scripts.test with yarn test" {
+  printf '{"name":"x","scripts":{"test":"jest","lint":"eslint ."}}' >package.json
+  touch yarn.lock
+  run bash "$K/kern-detect" test.full
+  [ "$output" = "yarn test	package.json scripts.test" ]
+  run bash "$K/kern-detect" test.focused
+  [ "${output%%	*}" = "yarn test -- {file}" ]
+  run bash "$K/kern-detect" lint
+  [ "${output%%	*}" = "yarn run lint" ]
+}
+
 @test "no runner at all exits 3 and names what it looked for" {
   run bash "$K/kern-detect" test.full
   [ "$status" -eq 3 ]

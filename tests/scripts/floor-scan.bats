@@ -128,6 +128,15 @@ count() { printf '%s\n' "$output" | grep -cE "$1" || true; }
   [ "$(count 'test-deleted')" -eq 0 ]
 }
 
+@test "a test file renamed to a non-test name is a deleted test" {
+  printf "test('foo', () => {\n  expect(1).toBe(1);\n});\n" > src/foo.test.js
+  git add src/foo.test.js && git commit --quiet -m foo
+  git mv src/foo.test.js src/foo.test.js.disabled
+  scan
+  [ "$status" -eq 1 ]
+  [ "$output" = $'src/foo.test.js:0\ttest-deleted\trenamed to src/foo.test.js.disabled' ]
+}
+
 @test "content lines that start with ++ or -- are content, not headers" {
   printf 'let i = 0;\n--i;\n' > src/b.js
   git add src/b.js && git commit --quiet -m b
@@ -162,6 +171,13 @@ count() { printf '%s\n' "$output" | grep -cE "$1" || true; }
   [[ "$stderr" == *"no diff --git header"* ]] || false
   run --separate-stderr bash "$KERN_ROOT/scripts/floor-scan" "$TMP/missing.diff"
   [ "$status" -eq 2 ]
+}
+
+@test "a CMakeLists.txt is code, not a doc: its TODO is unfinished-work" {
+  printf 'add_library(core core.c)\n# TODO: drop the old target\n' > CMakeLists.txt
+  scan
+  [ "$status" -eq 1 ]
+  [ "$output" = $'CMakeLists.txt:2\tunfinished-work\t# TODO: drop the old target' ]
 }
 
 @test "suppressions in a doc file are not hits" {

@@ -8,9 +8,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ATTRIBUTION, GRADERS, chainParts, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
-import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
-import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from '../scripts/lib/exec-run.mjs';
+import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, pluginProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
+import { KERNEL, init as initOf, result as resultOf, sessionStart as hookStart, started } from './helpers/eval-stub.mjs';
+import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, dateStamp, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from '../scripts/lib/exec-run.mjs';
 import { COPY_OMITS, pluginCopy } from '../scripts/lib/behave.mjs';
+import { UsageError as FlagError, parseArgs as parseFlags } from '../scripts/lib/args.mjs';
 
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
 const bash = (command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
@@ -61,6 +63,15 @@ test('commit: the git -C forms the skill prescribes pass, and -A or . is rejecte
   assert.deepEqual(outside.reasons, ['git commit -F did not name a message file under .kern/tmp']);
   const inline = GRADERS['commit-work-file']({ events: [bash('git -C /w/app commit -m "feat: x"')], git: oneCommit, branch: 'feat/sum' });
   assert.deepEqual(inline.reasons, ['git commit -F did not name a message file under .kern/tmp']);
+});
+
+// Task 17a G7: messageFiles read every Bash command, so a -F commit that failed (or a hook denied) and a -m
+// commit after it passed the -F check.
+test('Task 17a G7: commit -F counts only from a Bash call whose result is not an error', () => {
+  const failedThenInline = ran('c', ['git -C /w/app commit -F /w/app/.kern/tmp/msg.txt', false, 'fatal: could not read log file'], 'git -C /w/app commit -m "fix: sum"');
+  assert.deepEqual(GRADERS['commit-work-file']({ events: failedThenInline, git: oneCommit, branch: 'feat/sum' }).reasons, ['git commit -F did not name a message file under .kern/tmp']);
+  const retried = ran('c', ['git -C /w/app commit -F /w/app/.kern/tmp/msg.txt', false], 'git -C /w/app commit -F /w/app/.kern/tmp/msg.txt');
+  assert.equal(GRADERS['commit-work-file']({ events: retried, git: oneCommit, branch: 'feat/sum' }).pass, true, 'a -F commit that ran counts');
 });
 
 test('commit: a relative .kern/tmp message path is accepted', () => {
@@ -228,8 +239,9 @@ test('Task 16h fix M6: a run the timeout cuts off keeps the events it printed, a
   assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', timeoutMs: 1500, killGraceMs: 300, env: fakeClaude(stub) }), (e) => { err = e; return e instanceof ClaudeRunError && !e.fatal; });
   assert.equal(err.message, 'claude timed out after 1500 ms; the 2 events it printed are kept');
   assert.deepEqual(err.events.map((e) => e.type), ['system', 'assistant']);
-  for (const [runner, saved] of [['behave.mjs', /const kept = run \? run\.events : events;/], ['h2h.mjs', /const kept = run \? run\.events : events;/],
-    ['kernel-adherence.mjs', /problem = failure = e\.message; events = e\.events \?\? \[\];/], ['exec-eval.mjs', /save\(\{ reason: e\.message, events: e\.events, trace \}\)/]]) {
+  // behave, h2h and kernel-adherence run from their libs since Task 17a (behaveMain, h2hMain, adherenceMain).
+  for (const [runner, saved] of [['lib/behave.mjs', /const kept = r \? r\.events : events;/], ['lib/h2h.mjs', /const kept = got \? got\.events : events;/],
+    ['lib/adherence.mjs', /problem = failure = e\.message; events = e\.events \?\? \[\];/], ['exec-eval.mjs', /save\(\{ reason: e\.message, events: e\.events, trace \}\)/]]) {
     assert.match(readFileSync(join(REPO, 'scripts', runner), 'utf8'), saved, `${runner} saves a cut-off run's events`);
   }
 });
@@ -497,6 +509,32 @@ test('runProblem: only a clean exit with a success result may be graded', () => 
   assert.throws(() => runProblem(two), /needs the number of prompts sent/, 'a runner cannot skip the count');
 });
 
+// Task 17a G10: no run checked that the plugin under test loaded and its SessionStart ran, so a CLI change that
+// broke kern's hooks would have graded kern-off behaviour as kern's.
+test('Task 17a G10: a run that did not load the plugin it was given, or whose SessionStart failed, may not be graded', () => {
+  const dir = '/var/folders/x/p-1/kern';
+  const ok = [...started([dir]), resultOf()];
+  assert.equal(pluginProblem(ok, { plugins: [dir], kernel: 'on' }), '');
+  assert.equal(pluginProblem([hookStart(KERNEL), initOf([`/private${dir}`]), resultOf()], { plugins: [dir], kernel: 'on' }), '', '/var and /private/var are one folder');
+  assert.equal(pluginProblem([initOf([dir]), resultOf()], { plugins: [`/private${dir}`] }), '');
+  assert.match(pluginProblem([resultOf()], { plugins: [dir] }), /^no system\/init event, so the plugins the run loaded are unknown$/);
+  assert.match(pluginProblem([...started([]), resultOf()], { plugins: [dir] }), /^the plugin at \/var\/folders\/x\/p-1\/kern is not in the run's init\.plugins \(loaded: cc-plugin-telemetry\)$/);
+  assert.match(pluginProblem([...started([dir]), initOf([]), resultOf()], { plugins: [dir] }), /is not in the run's init\.plugins/, 'every init must list it');
+  assert.match(pluginProblem([hookStart('', 'error'), initOf([dir]), resultOf()], { plugins: [dir] }), /^a SessionStart hook failed: outcome error, exit 1$/);
+  assert.match(pluginProblem([hookStart(''), initOf([dir]), resultOf()], { plugins: [dir], kernel: 'on' }), /^kern's SessionStart printed no kernel \(no "# kern" header\)$/);
+  assert.equal(pluginProblem([hookStart(''), initOf([dir]), resultOf()], { plugins: [dir], kernel: 'off' }), '', 'kern off: kern is loaded and prints no kernel');
+  assert.match(pluginProblem(ok, { plugins: [dir], kernel: 'off' }), /^kern was meant to be off, but its SessionStart printed the kernel$/);
+  assert.equal(pluginProblem([initOf([]), resultOf()], { plugins: [], kernel: 'off' }), '', 'a control run loads no plugin and no kernel');
+  // gradeCase checks it when it is given the plugin, before any grader runs.
+  const c = { id: 'commit-work-file', branch: 'feat/sum' };
+  const run = { status: 0, badLines: 0, stderr: '', events: [...started([]), resultOf()] };
+  let graded = false;
+  const g = gradeCase({ c, run, ghLog: [], git: () => '', configDir: '/none', plugin: dir, graders: { 'commit-work-file': () => { graded = true; return { pass: true, reasons: [] }; } } });
+  assert.deepEqual([g.pass, g.invalid, graded], [false, true, false]);
+  assert.match(g.reasons[0], /is not in the run's init\.plugins/);
+  assert.equal(gradeCase({ c, run: { ...run, events: ok }, ghLog: [], git: () => '', configDir: '/none', plugin: dir, graders: { 'commit-work-file': () => ({ pass: true, reasons: [] }) } }).pass, true);
+});
+
 const result = (id, pass, invalid = false) => ({ id, pass, invalid, reasons: pass ? [] : ['why'] });
 // drive: runEval with an injected runner. An outcome of 'invalid' is an invalid case.
 const drive = ({ only = null, outcomes, readVersion = () => 'claude 9.9.9' }) => {
@@ -529,9 +567,10 @@ test('snapshot: a full run writes it with every result; a --case run writes none
 
 test('arguments: a --case with no value, a flag as its value or an unknown id is a usage error before any run', () => {
   const ids = ['a', 'b'];
-  assert.deepEqual(parseArgs(['--case', 'b'], ids), { only: 'b', dryRun: false });
-  assert.deepEqual(parseArgs(['--dry-run'], ids), { only: null, dryRun: true });
-  for (const bad of [['--case'], ['--case', '--dry-run'], ['--case', 'zzz'], ['--cas', 'a'], ['a']]) assert.throws(() => parseArgs(bad, ids), UsageError, bad.join(' '));
+  assert.deepEqual(parseArgs(['--case', 'b'], ids), { only: 'b', dryRun: false, allowDirty: false });
+  assert.deepEqual(parseArgs(['--dry-run'], ids), { only: null, dryRun: true, allowDirty: false });
+  assert.deepEqual(parseArgs(['--allow-dirty'], ids), { only: null, dryRun: false, allowDirty: true });
+  for (const bad of [['--case'], ['--case', '--dry-run'], ['--case', 'zzz'], ['--cas', 'a'], ['a'], ['--case=a'], ['--dryrun'], ['--case', 'a', '--case', 'b']]) assert.throws(() => parseArgs(bad, ids), UsageError, bad.join(' '));
   const eval_ = (...a) => spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/exec-eval.mjs', import.meta.url)), ...a], { encoding: 'utf8', env: { PATH: '/nonexistent' } });
   for (const a of [['--case'], ['--case', 'nope']]) {
     const r = eval_(...a);
@@ -539,6 +578,24 @@ test('arguments: a --case with no value, a flag as its value or an unknown id is
     assert.match(r.stderr, /usage: node scripts\/exec-eval\.mjs/);
     assert.equal(r.stdout, '', 'nothing ran');
   }
+});
+
+// Task 17a G4: behave, h2h and kernel-adherence read only `--name value` and ignored every other word, so
+// --dryrun, --case=x or a trailing --case widened into a paid run of every case. All four runners now share
+// one parser, each with its own flag table.
+test('Task 17a G4: the shared parser reads only the flags its table names, so a typo never widens a run', () => {
+  assert.equal(FlagError, UsageError, 'exec-run and the shared parser throw one error class');
+  const flags = { '--case': { key: 'only', value: 'a case id', choices: ['a', 'b'], noun: 'case' }, '--runs': { key: 'runs', value: 'count' }, '--model': { key: 'model', value: 'a model id' },
+    '--arms': { key: 'arms', value: 'arm ids, comma-separated', list: ['x', 'y'], noun: 'arm' }, '--dry-run': { key: 'dryRun' } };
+  assert.deepEqual(parseFlags(['--case', 'a', '--runs', '5', '--model', 'm', '--arms', 'y,x', '--dry-run'], flags), { only: 'a', runs: 5, model: 'm', arms: ['y', 'x'], dryRun: true });
+  assert.deepEqual(parseFlags([], flags), {});
+  for (const bad of [['--dryrun'], ['--case=a'], ['--cases', 'a'], ['--case'], ['--case', '--dry-run'], ['--case', 'zzz'], ['--runs', 'abc'], ['--runs', '0'], ['--runs', '1.5'], ['--runs', '-1'],
+    ['--runs', '03'], ['--runs'], ['--model'], ['a'], ['--dry-run', '--dry-run'], ['--case', 'a', '--case', 'b'], ['--arms', 'x,z'], ['--arms', '']]) {
+    assert.throws(() => parseFlags(bad, flags), UsageError, bad.join(' '));
+  }
+  assert.throws(() => parseFlags(['--runs', 'abc'], flags), /--runs needs a whole number of at least 1, not abc/);
+  assert.throws(() => parseFlags(['--case', 'zzz'], flags), /no case named zzz; cases: a, b/);
+  assert.throws(() => parseFlags(['--arms', 'x,z'], flags), /no arm named z; arms: x, y/);
 });
 
 test('finish-split-nine-files: negated replies fail, real offers pass', () => {
@@ -1243,7 +1300,8 @@ fs.writeFileSync(${JSON.stringify(join(dir, 'seen.json'))}, JSON.stringify({ arg
   git: has('.git'), evals: has('evals'), changelog: has('CHANGELOG.md'), skill: has('skills/finish-branch/SKILL.md') }));
 ${answer ? `let buf = '';
 process.stdin.on('data', (d) => { buf += d; for (let i; (i = buf.indexOf('\\n')) >= 0; buf = buf.slice(i + 1)) {
-  console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 's1' }));
+  console.log(JSON.stringify({ type: 'system', subtype: 'hook_response', hook_event: 'SessionStart', outcome: 'success', exit_code: 0, output: '# kern 0.0.0 (stand-in)' }));
+  console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 's1', plugins: [{ name: 'kern', path: plugin }] }));
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'stand-in' })); } });
 process.stdin.on('end', () => process.exit(0));` : 'setInterval(() => {}, 1000);'}
 `);
@@ -1269,6 +1327,25 @@ test('Task 16h fix M5: exec-eval runs claude with --plugin-dir at a temp copy wi
   assert.deepEqual([seen.git, seen.evals, seen.changelog, seen.skill], [false, false, false, true]);
   assert.equal(canon(seen.gh), canon(join(dirname(seen.cwd), 'bin', 'gh')), 'the gh stand-in beside the workspace');
   assert.ok(!existsSync(dirname(seen.plugin)) && !existsSync(dirname(seen.cwd)), 'the copy and the workspace are removed after the run');
+});
+
+// Task 17a G11: a full run writes the committed snapshot, so it refuses a kern tree that is not a clean commit
+// unless --allow-dirty, and the snapshot records the tree. The sandbox is no git checkout, so it reads as dirty.
+test('Task 17a G11: a full exec run refuses a kern tree that is not a clean commit unless --allow-dirty, and records it', () => {
+  const stub = recordingClaude(true);
+  const refused = spawnSync(process.execPath, [EXEC()], { env: stub.env, encoding: 'utf8', timeout: 120000 });
+  assert.equal(refused.status, 2, `${refused.stdout}${refused.stderr}`);
+  assert.match(refused.stderr, /^exec-eval: the kern tree is not a clean commit \(not a git checkout: .*\); commit first, or pass --allow-dirty/m);
+  assert.deepEqual([refused.stdout, stub.seen()], ['', null], 'nothing ran');
+  assert.equal(spawnSync(process.execPath, [EXEC(), '--case', 'finish-menu-first'], { env: stub.env, encoding: 'utf8', timeout: 120000 }).status, 1, 'a --case run writes no snapshot, so it runs');
+  const snap = join(sandbox(), 'evals', 'snapshots', `exec-${dateStamp()}.json`);
+  rmSync(snap, { force: true });
+  const allowed = spawnSync(process.execPath, [EXEC(), '--allow-dirty'], { env: stub.env, encoding: 'utf8', timeout: 300000 });
+  assert.match(allowed.stdout, /^snapshot: /m, `${allowed.stdout}${allowed.stderr}`);
+  const kern = JSON.parse(readFileSync(snap, 'utf8')).kern;
+  assert.deepEqual([kern.commit, kern.dirty], [null, true]);
+  assert.match(kern.problem, /^not a git checkout/);
+  assert.equal(snapshotBody({ model: 'm', claude: 'v', results: [], userSettings: false, tree: { commit: 'c0ffee', dirty: false, changes: [] } }).kern.commit, 'c0ffee');
 });
 
 const until = async (ok, ms) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise((d) => setTimeout(d, 50))) if (ok()) return true; return ok(); };
@@ -1411,7 +1488,8 @@ test('Task 16l: the trace passes stdin, argv and the environment to the hook, ke
   const s = traceSession();
   try {
     const hook = join(s.plugin, 'hooks', 'stand-in');
-    writeFileSync(hook, 'env | LC_ALL=C sort | grep -v "^KERN_EXEC_TRACE="; printf "argv:%s|" "$0" "$@"; cat; printf "err\\n\\n" >&2; exit 3\n');
+    // SHLVL is left out: under bash 5 (Linux CI's bash) the traced hook sees it one higher, as the trace says (Task 17a, F1).
+    writeFileSync(hook, 'env | LC_ALL=C sort | grep -v -e "^KERN_EXEC_TRACE=" -e "^SHLVL="; printf "argv:%s|" "$0" "$@"; cat; printf "err\\n\\n" >&2; exit 3\n');
     const text = 'line one\n{"session_id":"s"}';
     const env = { PATH: '/usr/bin:/bin', HOME: s.home, LC_ALL: 'C' };
     const run = (args, extra = {}) => spawnSync('bash', args, { input: text, cwd: s.ws, env: { ...env, ...extra }, encoding: 'utf8' });
@@ -1492,7 +1570,8 @@ let buf = '';
 process.stdin.on('data', (d) => { buf += d; for (let i; (i = buf.indexOf('\\n')) >= 0; buf = buf.slice(i + 1)) {
   const r = spawnSync(h.command, h.args.map((a) => a.split('\${CLAUDE_PLUGIN_ROOT}').join(plugin)), { input, env, encoding: 'utf8' });
   fs.writeFileSync(${JSON.stringify(join(dir, 'calls.json'))}, JSON.stringify({ input, args: h.args, plugin, data, cwd: process.cwd(), trace: process.env.KERN_EXEC_TRACE || null, stdout: r.stdout, stderr: r.stderr, status: r.status }));
-  fs.writeSync(1, JSON.stringify({ type: 'system', subtype: 'init', session_id: 's1' }) + '\\n');
+  fs.writeSync(1, JSON.stringify({ type: 'system', subtype: 'hook_response', hook_event: 'SessionStart', outcome: 'success', exit_code: 0, output: '# kern 0.0.0 (stand-in)' }) + '\\n');
+  fs.writeSync(1, JSON.stringify({ type: 'system', subtype: 'init', session_id: 's1', plugins: [{ name: 'kern', path: plugin }] }) + '\\n');
   ${end === 'kill' ? "process.kill(process.pid, 'SIGKILL');" : end === 'exit' ? 'process.exit(1);' : ''}
   fs.writeSync(1, JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'stand-in' }) + '\\n'); } });
 process.stdin.on('end', () => process.exit(0));

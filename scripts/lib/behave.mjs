@@ -6,10 +6,16 @@
 // Grader shape adapted from superpowers tests/claude-code (MIT; ideas only).
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, sep } from 'node:path';
-import { finalText, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
+import { dirname, join, relative, sep } from 'node:path';
+import { UsageError, parseArgs } from './args.mjs';
+import { COPY_OMITS, dirtyRefusal, treeRecord } from './run-record.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, finalText, pluginProblem, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
+
+// behaveFlags(ids): scripts/behave.mjs's flags for the shared parser (args.mjs), ids being the case ids.
+export const behaveFlags = (ids) => ({ '--case': { key: 'case', value: 'a case id', choices: ids, noun: 'case' }, '--runs': { key: 'runs', value: 'count' },
+  '--model': { key: 'model', value: 'a model id' }, '--grader-model': { key: 'grader', value: 'a model id' }, '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' } });
 
 // stage(root, files): one directory holding the fixture layers in order. A single layer is used in place;
 // several are copied into a new temp directory, which the caller removes.
@@ -274,19 +280,8 @@ export function behaveDigest(events, max = RECORD.max) {
   return `${LEGEND}\n${body || '(none)'}\n\nFinal reply:\n${reply.length > RECORD.reply ? `${first(reply, RECORD.reply)}[cut]` : reply}`;
 }
 
-// COPY_OMITS: what pluginCopy leaves out, so a run can read none of it.
-// - top: top-level names. The answer keys (evals, tests, docs) and repo internals, and the files that
-//   describe the graders or the cases: CHANGELOG.md, whose Unreleased lines name what each grader checks,
-//   .github's CI steps and .gitignore, which name the evals (Task 16h review, M3). .claude holds no plugin file,
-//   only local worktrees and settings, and an agent worktree there is a whole copy of the repo, evals included.
-// - paths: the eval runners, whose names tell a model it is being evaluated, and the repo's own eval and
-//   lint tooling (route-eval, seeded-diffs, lint-skills, ci-local and the libs only they use), which reads
-//   evals/ and states what a case needs. No hook, skill or kernel line runs any of it.
-export const COPY_OMITS = {
-  top: ['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers', 'CHANGELOG.md', '.github', '.gitignore', '.claude'],
-  paths: [...['h2h', 'behave', 'kernel-adherence', 'standing-cost', 'pilot', 'exec-eval', 'route-eval', 'seeded-diffs', 'lint-skills'].map((f) => `scripts/${f}.mjs`), 'scripts/ci-local',
-    ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive', 'reaper', 'lint-rules', 'kernel-rows', 'rank'].map((f) => `scripts/lib/${f}.mjs`)],
-};
+// COPY_OMITS, what pluginCopy leaves out, lives in run-record.mjs with the tree record; it is exported here too.
+export { COPY_OMITS };
 
 // pluginCopy(root): a copy of the plugin in <tmp>/<random>/kern without COPY_OMITS. The caller removes it
 // with rmSync(dirname(dir), { recursive: true, force: true }).
@@ -580,8 +575,10 @@ export function gradeRun(c, events, tree, grade) {
 // turn or budget cap, a non-zero exit, a timeout, or a result count that differs from opts.prompts.length
 // is an invalid run (M2a's runProblem), never a graded one; a fatal error (no claude at all) still stops
 // the runner. A run that threw comes back as { run: null, problem, events }, events being what it printed
-// before a timeout ([] otherwise), for the runner to save. run is runClaude, or a stub in tests.
-export function tryRun(opts, run = runClaude) {
+// before a timeout ([] otherwise), for the runner to save. run is runClaude, or a stub in tests. With
+// expect ({ plugins, kernel }, which run never sees), a run that did not load those plugins or print or
+// leave out the kernel as told is invalid too (pluginProblem, Task 17a G10).
+export function tryRun({ expect = null, ...opts }, run = runClaude) {
   let r;
   try {
     r = run(opts);
@@ -589,8 +586,108 @@ export function tryRun(opts, run = runClaude) {
     if (e.fatal) throw e;
     return { run: null, problem: e.message, events: e.events ?? [] };
   }
-  return { run: r, problem: runProblem(r, opts.prompts?.length) };
+  return { run: r, problem: runProblem(r, opts.prompts?.length) || (expect ? pluginProblem(r.events, expect) : '') };
 }
+
+// behaveMain({ root, argv, env, cases, run, version, tree, snapshots, results, log, error, now }): what
+// scripts/behave.mjs runs, its exit code returned, with every seam a test needs: the cases, the run (runClaude,
+// or a stub), the Claude Code version, the tree record and the snapshot and results dirs (Task 17a).
+// - Flags (behaveFlags) are read by the shared parser: any other word is a usage error (2) before anything runs.
+// - A full run (no --case) refuses a kern tree with uncommitted changes it would measure (dirtyRefusal), unless
+//   --allow-dirty; every snapshot records the tree as kern (treeRecord).
+// - The Claude Code version is read before the first case, so a failure there spends nothing.
+// - Each run must load the kern copy and print the kernel (tryRun's expect).
+// - Snapshots (G3): after each case, the progress so far goes beside the transcripts, as snapshot-<case|all>.json
+//   with complete false. Only a full run with at least one valid run writes the committed snapshot
+//   (<snapshots>/behave-<model>-<date>.json, complete true, every case id under cases), and then the progress file
+//   goes. A --case run, an all-invalid run or a run a fatal error stops leaves the committed snapshot as it was.
+export function behaveMain({ root, argv, env = process.env, cases: all = null, run = runClaude, version = claudeVersion, tree = treeRecord,
+  snapshots = join(root, 'evals', 'snapshots'), results: resultsDir = join(root, 'evals', 'results'), log = console.log, error = console.error, now = new Date() }) {
+  const usage = (msg) => { error(`behave: ${msg}\nusage: node scripts/behave.mjs [--case <id>] [--runs N] [--model <m>] [--grader-model <m>] [--allow-dirty] [--dry-run]`); return 2; };
+  const cases0 = all ?? loadCases(root);
+  let o;
+  try { o = parseArgs(argv, behaveFlags(cases0.map((c) => c.id))); } catch (e) { if (e instanceof UsageError) return usage(e.message); throw e; }
+  const MODEL = o.model ?? (env.KERN_EVAL_MODEL || 'claude-sonnet-5-5');
+  const GRADER = o.grader ?? 'claude-sonnet-5-5';
+  const RUNS = o.runs ?? 3;
+  const only = o.case ?? null;
+  const cases = cases0.filter((c) => !only || c.id === only);
+  if (o.dryRun) {
+    for (const c of cases) log(dryLine(c));
+    return 0;
+  }
+  const full = !only;
+  const kern = tree(root);
+  if (full && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
+  let claude;
+  try { claude = version(); } catch (e) { error(`behave: cannot read the claude version (${String(e.message).split('\n')[0]}); nothing ran`); return 1; }
+  const name = `behave-${MODEL.replace(/^claude-/, '')}-${now.toISOString().slice(0, 10)}`;
+  const committed = join(snapshots, `${name}.json`);
+  // Each run's events go to the results dir (gitignored), so a missed expectation can be read in the transcript.
+  const raw = join(resultsDir, name);
+  const partial = join(raw, `snapshot-${only || 'all'}.json`);
+  mkdirSync(raw, { recursive: true });
+  const results = [];
+  const save = (file, complete) => {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ model: MODEL, grader: GRADER, claude, isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS, kern, complete, cases: cases.map((c) => c.id), results }, null, 2) + '\n');
+  };
+  const plugin = pluginCopy(root);
+  const expect = { plugins: [plugin], kernel: 'on' };
+  try {
+    for (const c of cases) {
+      const runs = [];
+      for (let i = 0; i < RUNS; i++) {
+        const cwd = caseWorkspace(root, c);
+        // A case with a tree check (no-write) compares the workspace at the run's start and end; a tree git
+        // cannot read at either end makes the run invalid, and no model runs on one unread at the start.
+        const before = readsTree(c) ? readTree(cwd, 'start') : null;
+        if (before?.problem) { runs.push({ invalid: true, reason: before.problem, verdict: null, exit: null }); rmSync(dirname(cwd), { recursive: true, force: true }); continue; }
+        const { run: r, problem, events } = tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20, expect }, run);
+        const after = before ? readTree(cwd, 'end') : null;
+        const states = before ? { start: before.state, end: after.state } : undefined;
+        // A run cut off by the timeout keeps the events it printed.
+        const kept = r ? r.events : events;
+        if (kept.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
+        if (before) writeFileSync(join(raw, `${c.id}-${i}.tree.json`), JSON.stringify({ ...states, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
+        const gdir = mkdtempSync(join(tmpdir(), 'g-'));
+        let verdict = null; let invalid = !!problem || !!after?.problem; let reason = problem || after?.problem || '';
+        if (!invalid) {
+          try {
+            verdict = gradeRun(c, r.events, states, (ex, record) => {
+              const g = tryRun({ cwd: gdir, prompts: [graderPrompt(ex, record)], model: GRADER, maxTurns: 1 }, run);
+              if (g.problem) throw new Error(`grader: ${g.problem}`);
+              return finalText(g.run.events);
+            });
+          } catch (e) { if (e.fatal) throw e; invalid = true; reason = e.message; }
+        }
+        runs.push({ invalid, reason, verdict, exit: r ? r.status : null });
+        rmSync(dirname(cwd), { recursive: true, force: true }); rmSync(gdir, { recursive: true, force: true });
+      }
+      const cr = caseResult(runs);
+      results.push({ id: c.id, source: c.source, checks: c.checks ?? {}, ...cr, runs });
+      const failed = c.expectations.filter((_, k) => runs.some((x) => x.verdict && !x.verdict[k].pass));
+      save(partial, false);
+      log(`${cr.pass ? 'PASS' : 'FAIL'} ${c.id}: ${cr.passed}/${cr.valid}${cr.invalid ? ` (${cr.invalid} invalid: ${runs.filter((x) => x.invalid).map((x) => x.reason).join(' | ')})` : ''}${failed.length ? `; missed: ${failed.join(' | ')}` : ''}`);
+    }
+  } finally { rmSync(dirname(plugin), { recursive: true, force: true }); }
+  if (full && results.some((x) => x.valid > 0)) {
+    save(committed, true);
+    rmSync(partial, { force: true });
+    log(`snapshot: ${committed}`);
+  } else {
+    save(partial, true);
+    log(`${full ? 'no run was valid: no committed snapshot, and any earlier one stays' : '--case run: no committed snapshot'}; this one is beside the transcripts: ${partial}`);
+  }
+  return results.every((x) => x.pass) ? 0 : 1;
+}
+
+// dryLine(c): a case as the dry run lists it: its turns, layers, workspace shape, expectations and pressures.
+const dryLine = (c) => {
+  const shape = [c.origin && 'origin', c.branch && `branch ${c.branch}`, c.setup?.length && `${c.setup.length} setup command(s)`].filter(Boolean).join(', ');
+  const scripted = Object.keys(c.checks ?? {}).length;
+  return `${c.id}: ${c.prompts.length} turn(s) on ${c.files.join('+')}${shape ? ` (${shape})` : ''}, ${c.expectations.length} expectation(s)${scripted ? ` (${scripted} scripted)` : ''}${c.pressure.length ? `, pressure: ${c.pressure.join('+')}` : ''}`;
+};
 
 // caseResult(runs): a case passes when at least two thirds of its valid runs pass every expectation, and
 // no more than one run is invalid.
