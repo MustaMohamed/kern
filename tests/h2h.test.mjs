@@ -114,6 +114,23 @@ test('a review result row keeps its decoy and unmatched counts, its extras and t
   assert.ok(src.includes('for (const x of attempts) results.push(resultRow(t, r, x, grades[x.id], reply));'), 'the runner builds each row with resultRow');
 });
 
+test('an extra the grader misfiles under decoys is dropped before the decoys are counted', () => {
+  // Task 16o review, M3: the decoy count was the length of whatever list the grader returned, so an extra listed
+  // there, bare or as "extra:<id>", counted as a false alarm.
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  const git = { branch: 'feat/discounts', main: 'main', head: 'abc1234', commits: 2, recent: [] };
+  const x = { arm: 'kern', id: 'arm-A', e: { outOfArea: 0 }, heldout: null, git };
+  const g = { score: 8, matched: ['b6'], decoys: ['decoy:d3', 'extra:x1', 'x2', 'd1'], extras: ['extra:x1', 'x3'], unmatched: 1, why: 'w' };
+  const row = resultRow(t, 0, x, g, 'r');
+  assert.equal(row.decoys, 2, 'd3 and d1 count; x1 and x2 do not');
+  assert.equal(row.falseAlarms, 3);
+  assert.equal(row.extras, 3, 'x1, x2 and x3, each once');
+  // A decoy id is never dropped, and a task with no extra labels drops only an "extra:" entry.
+  assert.equal(resultRow(t, 0, x, { score: 5, decoys: ['d3', 'decoy:d2'] }, 'r').decoys, 2);
+  assert.equal(resultRow({ id: 'review/y', category: 'review', labels: [] }, 0, x, { score: 5, decoys: ['extra:x9', 'd3'] }, 'r').decoys, 1);
+  assert.equal(resultRow({ id: 'review/y', category: 'review' }, 0, x, { score: 5, extras: 'x1' }, 'r').extras, 0, 'an extras value that is not a list counts nothing');
+});
+
 test('the runner gives the gate every task of the categories it ran, prints each verdict line and exits by gateExit', () => {
   const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
   assert.ok(src.includes('const verdict = gate(results, touchedTasks(loadTasks(ROOT), tasks).map((t) => ({ id: t.id, category: t.category })));'), 'gate gets every task of each category the run touched');

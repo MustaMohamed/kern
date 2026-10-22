@@ -97,13 +97,23 @@ export function falseAlarms(category, e) {
 // reply for that task-run, so a split can be checked against what the grader wrote: the 2026-10-22 snapshot kept
 // only the sum, and the review diagnosis had to infer each split from `why` (Task 16o). The row holds no blind id,
 // since keys stay out of snapshots; the arm's entry in the reply is blindIds(arm ids, `<date>:<task>:<run>`)[arm].
+// An extra the grader lists under decoys, bare or as "extra:<id>", is dropped before the decoys are counted and
+// counts as an extra (Task 16o review, M3). An extras value that is not a list counts nothing.
 export function resultRow(t, run, x, g, reply) {
-  const e = { ...x.e, decoyHits: (g.decoys ?? []).length, unmatched: g.unmatched ?? 0, unsupported: g.unsupported ?? 0 };
+  const extraIds = new Set((t.labels ?? []).filter((l) => l.kind === 'extra').map((l) => l.id));
+  const isExtra = (d) => /^extra:/.test(String(d)) || extraIds.has(labelId(d));
+  const listed = Array.isArray(g.decoys) ? g.decoys : null;
+  const decoys = listed ? listed.filter((d) => !isExtra(d)) : g.decoys ?? [];
+  const extras = new Set([...(Array.isArray(g.extras) ? g.extras : []), ...(listed ?? []).filter(isExtra)].map(labelId));
+  const e = { ...x.e, decoyHits: decoys.length, unmatched: g.unmatched ?? 0, unsupported: g.unsupported ?? 0 };
   const score = t.category === 'diagnose' && !x.heldout ? 0 : g.score / 10;
   const row = { task: t.id, category: t.category, run, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, git: x.git, matched: g.matched ?? [], why: g.why ?? '' };
   if (t.category !== 'review') return row;
-  return { ...row, decoys: e.decoyHits, unmatched: e.unmatched, extras: (g.extras ?? []).length, reply };
+  return { ...row, decoys: e.decoyHits, unmatched: e.unmatched, extras: extras.size, reply };
 }
+
+// labelId(entry): a grader's label entry without its kind prefix, so "extra:x1" and "x1" name the same label.
+const labelId = (d) => String(d).replace(/^(?:bug|decoy|extra):/, '');
 
 // gate(results, tasks): per category, kern passes when its mean score is at least the strongest other arm's,
 // and its mean false alarms are at most that arm's. The control arm counts as an arm. tasks are the loaded
