@@ -4,7 +4,7 @@
 # any other passing commit asks, or is denied under autopilot. Options are read with G1's _g01_opts,
 # and the shape is checked with G1's _g01_filter and _g01_quiet_redirect and G2's _gh_literal and
 # _gh_file_ok: the dispatcher sources every guard before it calls any. G6 reads commits with
-# _g05_split and _g05_message.
+# _g05_split and _g05_message, and G2 a PR body file with _g05_attributed.
 
 # Option tables for _g01_opts, from `git commit -h` and `git add -h` (git 2.54); commit also takes
 # the hidden --allow-empty and --allow-empty-message.
@@ -292,15 +292,56 @@ EOT
   printf '%s\n' "${text//$_GW_NL/$'\n'}"
 }
 
+# _g05_attributed [body]: the text on stdin carries the attribution `commit.attribution: none` forbids.
+# Only two shapes count, so prose that names Claude passes (audit D12):
+# - Claude Code's footer line, in any paragraph: "Generated with [Claude Code](<url>)" or "Generated with
+#   Claude Code" (with or by), any case, after an emoji or any other non-letters;
+# - a trailer line (`Key: value` or `Key=value`, as git and `--trailer` read one) in the last paragraph:
+#   Co-Authored-By, Assisted-by or Generated-by naming Claude or Anthropic, or Claude-Session.
+# A commit's first paragraph is its title, which git never reads as trailers; with `body` (G2's PR body)
+# the first paragraph may be the last. Exit 0 when attribution is present, 1 when it is not, 2 when awk
+# gave no verdict.
+_g05_attributed() {
+  local r
+  r=$(env LC_ALL=C awk -v body="${1-}" '
+    { sub(/\r$/, ""); t = tolower($0) }
+    t ~ /^[ \t]*$/ { gap = 1; next }
+    {
+      if (gap || !p) { p++; m = 0; gap = 0 }
+      L[++m] = t
+      f = t; sub(/^[^a-z]*/, "", f); sub(/[ \t]+$/, "", f)
+      if (f ~ /^generated (with|by) [[]?claude code[]]?([(][^)]*[)])?[.]?$/) hit = 1
+    }
+    END {
+      if (p > 1 || body == "body")
+        for (k = 1; k <= m; k++) {
+          if (!match(L[k], /^[ \t]*[a-z0-9][a-z0-9-]*[ \t]*[:=]/)) continue
+          key = substr(L[k], 1, RLENGTH - 1); gsub(/[ \t]/, "", key); val = substr(L[k], RLENGTH + 1)
+          if (key ~ /^(co-authored-by|assisted-by|generated-by)$/ && val ~ /claude|anthropic/) hit = 1
+          if (key == "claude-session") hit = 1
+        }
+      print (hit ? "yes" : "no")
+    }')
+  case "$r" in
+    yes) return 0 ;;
+    no) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
 # _g05_problems DIR MESSAGE: one line per failed check; nothing when the message passes.
 _g05_problems() {
   local dir="$1" msg="$2" subject conv src idre branch id
   subject=$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')
-  if [ "$(settings_get commit.attribution none)" = none ] &&
-    printf '%s\n' "$msg" | grep -Eiq 'co-authored-by:.*(claude|anthropic)|generated (with|by) .*claude|claude-session:|claude\.ai/code|(co-authored-by|assisted-by|generated-by)[[:space:]]*[:=].*(claude|anthropic)'; then
-    # The fix rides in the reason: Claude Code's own attribution reminder asks for the trailer, and
-    # the model reads this text exactly when the commit fails. No ";": the caller joins lines with "; ".
-    echo "attribution trailer present (commit.attribution: none): remove the trailer and commit again"
+  if [ "$(settings_get commit.attribution none)" = none ]; then
+    printf '%s\n' "$msg" | _g05_attributed
+    case $? in
+      # The fix rides in the reason: Claude Code's own attribution reminder asks for the trailer, and
+      # the model reads this text exactly when the commit fails. No ";": the caller joins lines with "; ".
+      0) echo "attribution trailer or footer present (commit.attribution: none): remove those lines and commit again" ;;
+      1) ;;
+      *) echo "the attribution check could not run (retry the commit)" ;;
+    esac
   fi
   # Unset, the convention is the one kern-detect finds in git log; with none found, none is checked.
   if conv=$(settings_get commit.convention); then
