@@ -3,6 +3,13 @@
 import { toolUses, finalText } from './claude-run.mjs';
 
 const bash = (events) => toolUses(events).filter((u) => u.name === 'Bash').map((u) => String(u.input.command || ''));
+// ranBash(events): the Bash commands whose tool result was not an error, as ghCalls reads them: a call that
+// failed, or that a hook denied, did nothing (Task 17a, G7).
+const ranBash = (events) => {
+  const failed = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error === true).map((c) => c.tool_use_id)));
+  return events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []))
+    .filter((c) => c?.type === 'tool_use' && c.name === 'Bash' && !failed.has(c.id)).map((c) => String(c.input?.command || ''));
+};
 
 function check(list) {
   const reasons = list.filter(([ok]) => !ok).map(([, why]) => why);
@@ -409,7 +416,7 @@ export const GRADERS = {
   'commit-work-file': ({ events, git, branch }) => {
     const cmds = bash(events);
     return check([
-      [messageFiles(cmds).some((f) => /(^|\/)\.kern\/tmp\//.test(f)), 'git commit -F did not name a message file under .kern/tmp'],
+      [messageFiles(ranBash(events)).some((f) => /(^|\/)\.kern\/tmp\//.test(f)), 'git commit -F did not name a message file under .kern/tmp'],
       [!stagesAll(cmds), 'staged with git add -A or .'],
       [git('rev-list', '--count', `main..${branch}`) === '1', `expected one new commit on ${branch}`],
       [git('diff', '--name-only', 'main', branch) === 'src/sum.js', 'the commit holds files other than src/sum.js'],

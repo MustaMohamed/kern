@@ -5,10 +5,11 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { ISOLATION, PERMISSIONS, runProblem } from './claude-run.mjs';
+import { UsageError, parseArgs as parseFlags } from './args.mjs';
+import { ISOLATION, PERMISSIONS, pluginProblem, runProblem } from './claude-run.mjs';
 import { GRADERS, stubMissed } from './exec-grade.mjs';
 
-export class UsageError extends Error {}
+export { UsageError };
 
 // What a pass assumes about the host, recorded in every snapshot.
 export const ASSUMES = 'Bash is pre-approved (--allowedTools Bash), so Claude Code never asks: a pass shows what kern allows, asks and denies, not the prompts a user who has not allowed Bash would see (kern gives git add no autopilot allow, for one)';
@@ -53,10 +54,11 @@ export function userSettingsProblem(home, env) {
   return `${f} exists, and kern's hooks in the run would read it; move it aside, or set KERN_EXEC_ALLOW_USER_SETTINGS=1 to run with it (the snapshot records that)`;
 }
 
-// snapshotBody({ model, claude, results, userSettings }): what a full run's snapshot holds.
-export function snapshotBody({ model, claude, results, userSettings }) {
+// snapshotBody({ model, claude, results, userSettings, tree }): what a full run's snapshot holds; tree is the
+// kern tree it measured (treeRecord: HEAD, dirty and the changes; Task 17a G11), kept as kern.
+export function snapshotBody({ model, claude, results, userSettings, tree = null }) {
   return { model, claude, isolation: ISOLATION, permissions: PERMISSIONS, assumes: ASSUMES,
-    user_settings: userSettings ? 'a ~/.claude/kern.yml was present and read, allowed by KERN_EXEC_ALLOW_USER_SETTINGS=1' : 'none', results };
+    user_settings: userSettings ? 'a ~/.claude/kern.yml was present and read, allowed by KERN_EXEC_ALLOW_USER_SETTINGS=1' : 'none', kern: tree, results };
 }
 
 // dateStamp(date): the UTC day, YYYY-MM-DD, that names the snapshot file and the replies directory.
@@ -117,16 +119,17 @@ export function autopilotProblem(events, configDir, read = (f) => readFileSync(f
 // turns autopilot on (a local command, which prints its own result event), then the case's turn.
 export const casePrompts = (c) => [...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn];
 
-// gradeCase({ c, run, ghLog, git, configDir, graders, read }): a case's verdict. INVALID when the run
-// may not be graded (runProblem, which also wants one result event per prompt of casePrompts), when the
+// gradeCase({ c, run, ghLog, git, configDir, plugin, graders, read }): a case's verdict. INVALID when the run
+// may not be graded (runProblem, which also wants one result event per prompt of casePrompts), when, given
+// plugin (the kern copy's path), the run did not load it or print the kernel (pluginProblem), when the
 // gh stub missed a call, or, for a case that turns autopilot on, when kern's state for the run does not
 // read autopilot: on (the run did not test autopilot, whatever it did); else the case's grader decides,
 // and a grader that throws is INVALID too. An autopilot INVALID still runs the grader and keeps its
 // verdict after its own reason, each as `grader: <reason>` (`grader: pass` when it passed), so the run
 // says what it did as well as why it does not count.
-export function gradeCase({ c, run, ghLog, git, configDir, graders = GRADERS, read }) {
+export function gradeCase({ c, run, ghLog, git, configDir, plugin = null, graders = GRADERS, read }) {
   const invalid = (why) => ({ pass: false, invalid: true, reasons: [why] });
-  const problem = runProblem(run, casePrompts(c).length);
+  const problem = runProblem(run, casePrompts(c).length) || (plugin ? pluginProblem(run.events, { plugins: [plugin], kernel: 'on' }) : '');
   if (problem) return invalid(problem);
   const missed = stubMissed(run.events, ghLog);
   if (missed.length) return invalid(`the stub never logged \`gh ${missed[0]}\`: the Bash tool did not see the gh stand-in from evals/exec/bin first on PATH`);
@@ -138,21 +141,12 @@ export function gradeCase({ c, run, ghLog, git, configDir, graders = GRADERS, re
   return { pass: false, invalid: true, reasons: [off, ...graded] };
 }
 
-// parseArgs(args, ids): { only, dryRun }. A --case with no value or an id no case has is a usage
-// error: an unrecognised argument must never widen into a paid run of every case.
+// parseArgs(args, ids): { only, dryRun, allowDirty }, read by the runners' shared parser (args.mjs). A --case with
+// no value or an id no case has is a usage error, and so is any other word: an unrecognised argument must never
+// widen into a paid run of every case. --allow-dirty lets a full run measure a kern tree with uncommitted changes.
 export function parseArgs(args, ids) {
-  let only = null, dryRun = false;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--dry-run') dryRun = true;
-    else if (args[i] === '--case') {
-      const v = args[i + 1];
-      if (v === undefined || v.startsWith('--')) throw new UsageError('--case needs a case id');
-      if (!ids.includes(v)) throw new UsageError(`no case named ${v}; cases: ${ids.join(', ')}`);
-      only = v;
-      i += 1;
-    } else throw new UsageError(`unknown argument ${args[i]}`);
-  }
-  return { only, dryRun };
+  const o = parseFlags(args, { '--case': { key: 'only', value: 'a case id', choices: ids, noun: 'case' }, '--dry-run': { key: 'dryRun' }, '--allow-dirty': { key: 'allowDirty' } });
+  return { only: o.only ?? null, dryRun: !!o.dryRun, allowDirty: !!o.allowDirty };
 }
 
 // exitCode(results): 0 only when at least one case ran and every case that ran passed.

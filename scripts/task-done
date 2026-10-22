@@ -9,7 +9,7 @@
 # Usage: task-done LEDGER N WT TREE (--probe PATCH | --no-probe REASON) -- CMD...
 # Appends: Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok|skipped (REASON)> last=<line>
 # Exit 2 when a check fails (nothing written); 1 when the probe shows the test passes without the
-# change; 3 when the probe is inconclusive (its first line printed, nothing written); CMD's own code
+# change; 3 when the probe is inconclusive (its lines printed, nothing written); CMD's own code
 # when it fails (stderr then says "command exited <n>").
 # Adapted from superpowers executing-plans/scripts/task-done (MIT).
 set -euo pipefail
@@ -94,7 +94,8 @@ probe="skipped ($skip)"
 if [ -n "$patch" ]; then
   prc=0
   bash "$here/probe" --exclude-tests "$wt" "$patch" -- "$@" > "$logdir/task-$n.probe.log" 2>&1 || prc=$?
-  head -n 1 "$logdir/task-$n.probe.log"
+  # The verdict, then any lines probe adds (after ok, the reversed run's last lines: the evidence).
+  cat "$logdir/task-$n.probe.log"
   case "$prc" in
     0)
       probe=ok

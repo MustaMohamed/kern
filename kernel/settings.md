@@ -38,7 +38,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `typecheck` | detected | command | kern-detect, implement, prove-it |
 | `lint` | detected | command | kern-detect, prove-it |
 | `build` | detected | command | kern-detect, prove-it |
-| `verify.fast` | `typecheck` then `lint` | command | self-review, prove-it |
+| `verify.fast` | each of `typecheck` and `lint` that resolves; at least one | command | self-review, prove-it |
 | `verify.browser` | none: ask when a UI claim needs it | command | prove-it, diagnose, verify-app |
 | `generated_artifacts` | none | comma list of `trigger-glob=command` | implement, prove-it, self-review |
 | `ratchet.<metric>` | none | `<path>:<key>`, with `:max` appended when a higher value loosens the bar | floor-scan, self-review |

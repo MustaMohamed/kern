@@ -4,7 +4,7 @@ The Standards axis when a repo documents few or no standards: twelve code smells
 
 ## Rules
 
-- A smell is a labelled judgment call, such as "possible Feature Envy", in the `should-fix` class at most, never a blocker.
+- A smell is a labelled judgment call, such as "possible Feature Envy", in the `nit` class.
 - A `review.rules` file that endorses what a smell would flag wins: drop the smell.
 - Skip what lint, the formatter or the type checker already enforces.
 - Report a smell only on lines the diff adds or changes, with `path:line` and the fix.
