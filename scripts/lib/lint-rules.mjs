@@ -67,8 +67,9 @@ export function fixedLengthRepo(tmp) {
 // mounted at /kern otherwise also matched /kern:autopilot and the /kern of /kernel/ (Task 17a P15).
 export function replaceRoot(text, root, to) {
   const esc = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const name = '\\w.~:@+-';
-  return text.replace(new RegExp(`(?<![${name}/])${esc}(?=$|/|[.,:;!?]?(?:$|[^${name}/]))`, 'g'), () => to);
+  const before = '\\w.~@+\\-/';
+  const after = '\\w.~:@+\\-/';
+  return text.replace(new RegExp(`(?<![${before}])${esc}(?=$|/|[.,:;!?]?(?:$|[^${after}]))`, 'g'), () => to);
 }
 
 export function loadModel(root) {
