@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # hooks/lib/settings.sh and scripts/kern-get: layering, comments, quotes, worktrees, policies.
 
+bats_require_minimum_version 1.5.0
 load ../helpers/common
 
 setup() {
@@ -126,6 +127,14 @@ YML
   run bash "$KERN_ROOT/scripts/kern-get" branch.protected
   [ "$status" -eq 0 ]
   [ "$output" = "release	$M/.claude/kern.yml" ]
+  # From the linked worktree only core.worktree can name the checkout: an absolute one is taken as it
+  # is, and one naming a missing directory leaves no root.
+  git --git-dir="$R/.git/modules/mod" config core.worktree "$M"
+  [ "$(kern_main_root "$BATS_TEST_TMPDIR/modwt")" = "$M" ]
+  git --git-dir="$R/.git/modules/mod" config core.worktree "$BATS_TEST_TMPDIR/gone"
+  run kern_main_root "$BATS_TEST_TMPDIR/modwt"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
 }
 
 @test "in a --separate-git-dir checkout, kern-get reads its committed settings; its linked worktree has no main root" {

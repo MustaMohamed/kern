@@ -6,8 +6,9 @@
 # holds a .git entry or is a bare repository. In a submodule or a --separate-git-dir checkout that path is
 # the git dir instead: its core.worktree (set for a submodule, relative to the git dir) gives the root,
 # else the toplevel of DIR when DIR is not a linked worktree (its git dir holds no commondir file). Exit 2
-# when DIR is not in a repository, or is a linked worktree of a separate git dir, whose main checkout git
-# does not record.
+# when DIR is not in a repository, when it is a linked worktree of a separate git dir, whose main checkout
+# git does not record, or when the checkout cannot be found: a core.worktree naming a missing directory,
+# or DIR inside a separate git dir, which has no toplevel.
 kern_main_root() {
   local dir="${1:-${CWD:-$PWD}}" out first line wt gd
   out=$(git -C "$dir" worktree list --porcelain 2>/dev/null)

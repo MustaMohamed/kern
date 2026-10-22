@@ -865,10 +865,20 @@ cmd_head() {
     END { print out }'
 }
 
-# in_main_checkout DIR: exit 0 when DIR is inside the main worktree (not a linked worktree).
+# in_main_checkout DIR: exit 0 when DIR is inside the main worktree (not a linked worktree). A submodule
+# takes its superproject's answer: git gives each superproject worktree its own submodule git dir, so a
+# submodule in a linked worktree is a main worktree to git.
 in_main_checkout() {
-  local top main
-  top=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 1
+  local out top sup main
+  out=$(git -C "$1" rev-parse --show-toplevel --show-superproject-working-tree 2>/dev/null) || return 1
+  top=${out%%$'\n'*}
+  sup=""
+  case "$out" in *$'\n'?*) sup=${out#*$'\n'} ;; esac
+  [ -n "$top" ] || return 1
+  if [ -n "$sup" ]; then
+    in_main_checkout "$sup"
+    return
+  fi
   main=$(kern_main_root "$1") || return 1
   [ "$(cd "$top" && pwd -P)" = "$(cd "$main" && pwd -P)" ]
 }
