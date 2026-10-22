@@ -2,11 +2,38 @@
 # kern settings: layered flat `key: value` files resolved from the main worktree root.
 # Needs KERN_ROOT (plugin root). Uses KERN_MAIN when set, else resolves it from CWD (or PWD).
 
-# kern_main_root [dir]: the main worktree root (first `worktree` line of the porcelain list).
+# kern_main_root [dir]: the main worktree root: the first `worktree` path of the porcelain list when it
+# holds a .git entry or is a bare repository. In a submodule or a --separate-git-dir checkout that path is
+# the git dir instead: its core.worktree (set for a submodule, relative to the git dir) gives the root,
+# else the toplevel of DIR when DIR is not a linked worktree (its git dir holds no commondir file). Exit 2
+# when DIR is not in a repository, when it is a linked worktree of a separate git dir, whose main checkout
+# git does not record, or when the checkout cannot be found: a core.worktree naming a missing directory,
+# or DIR inside a separate git dir, which has no toplevel.
 kern_main_root() {
-  local dir="${1:-${CWD:-$PWD}}" line
-  line=$(git -C "$dir" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | head -n 1)
-  [ -n "$line" ] || return 2
+  local dir="${1:-${CWD:-$PWD}}" out first line wt gd
+  out=$(git -C "$dir" worktree list --porcelain 2>/dev/null)
+  case "$out" in 'worktree '?*) ;; *) return 2 ;; esac
+  first=${out%%$'\n\n'*}
+  line=${first%%$'\n'*}
+  line=${line#worktree }
+  case "$first" in
+    *$'\n'bare | *$'\n'bare$'\n'*) ;;
+    *)
+      if [ ! -e "$line/.git" ]; then
+        wt=$(git --git-dir="$line" config --get core.worktree 2>/dev/null) || wt=""
+        if [ -n "$wt" ]; then
+          case "$wt" in /*) ;; *) wt="$line/$wt" ;; esac
+          line=$(cd "$wt" 2>/dev/null && pwd -P) && [ -n "$line" ] || return 2
+        else
+          out=$(git -C "$dir" rev-parse --absolute-git-dir --show-toplevel 2>/dev/null) || return 2
+          case "$out" in /*$'\n'/*) ;; *) return 2 ;; esac
+          gd=${out%%$'\n'*}
+          line=${out#*$'\n'}
+          [ ! -f "$gd/commondir" ] || return 2
+        fi
+      fi
+      ;;
+  esac
   printf '%s\n' "$line"
 }
 
