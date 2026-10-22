@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # G9: in a diff's added lines, list commit ids the repo does not know and absolute words in added comments.
 # Usage: claim-check WT DIFF_FILE    Output: path:line<TAB>sha-unknown|absolute-claim<TAB>value. Exit 1 on hits.
+# Exit 2 on a usage error, input with no diff --git line, or an awk failure, so a check that did not run is not read as clean.
+# Doc files (floor-scan's is_doc) get the commit-id check only: a Markdown heading or bullet is not a comment.
 set -euo pipefail
 [ $# -eq 2 ] || { echo "usage: claim-check WT DIFF_FILE" >&2; exit 2; }
 wt=$1 diff=$2
 git -C "$wt" rev-parse --git-dir > /dev/null 2>&1 || { echo "claim-check: not a git worktree: $wt" >&2; exit 2; }
 [ -r "$diff" ] || { echo "claim-check: cannot read $diff" >&2; exit 2; }
+grep -q '^diff --git ' "$diff" 2> /dev/null || { echo "claim-check: $diff has no diff --git line; pass a git diff or a wt-diff package" >&2; exit 2; }
 
 candidates() {
-  awk '
+  env LC_ALL=C awk '
   /^diff --git / { inhunk = 0; next }
   !inhunk && /^\+\+\+ / { file = substr($0, 5); sub(/^b\//, "", file); next }
   /^@@ / { inhunk = 1; split($0, a, " "); nw = a[3]; sub(/^\+/, "", nw); sub(/,.*/, "", nw); newln = nw + 0; next }
@@ -28,7 +31,7 @@ candidates() {
       }
     }
     c = t; sub(/^[ \t]+/, "", c)
-    if (c ~ /^(\/\/|#|\/\*|\*|--|<!--|;)/) {
+    if (file !~ /\.(md|mdx|txt|rst|adoc)$/ && c ~ /^(\/\/|#|\/\*|\*|--|<!--|;)/) {
       lc = tolower(c)
       if (lc ~ /(^|[^a-z])(always|never|guaranteed|guarantees|impossible|cannot happen|can.t happen|no other|nothing else|only (caller|writer|place|path|way)|all (callers|writers|paths))([^a-z]|$)/) {
         if (length(c) > 120) c = substr(c, 1, 120)
@@ -43,6 +46,9 @@ candidates() {
   ' "$diff"
 }
 
+tmp=$(mktemp "${TMPDIR:-/tmp}/kern-claim.XXXXXX") || { echo "claim-check: cannot make a temp file" >&2; exit 2; }
+trap 'rm -f "$tmp"' EXIT
+candidates > "$tmp" || { echo "claim-check: awk failed reading $diff" >&2; exit 2; }
 hits=0
 while IFS=$'\t' read -r p ln kind val; do
   case "$kind" in
@@ -56,6 +62,6 @@ while IFS=$'\t' read -r p ln kind val; do
       hits=$((hits + 1))
       ;;
   esac
-done < <(candidates)
+done < "$tmp"
 if [ "$hits" -gt 0 ]; then exit 1; fi
 exit 0
