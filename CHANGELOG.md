@@ -4,6 +4,14 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- Eval runners refuse the default login (Task 17a P15): exec-eval, behave, h2h, kernel-adherence, pilot and standing-cost exit 2 before any real claude run when CLAUDE_CONFIG_DIR is unset, empty, or the default ~/.claude in any spelling (trailing slash, `~`, symlink), or while ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or CLAUDE_CODE_OAUTH_TOKEN is set (unless KERN_EVAL_ENV_AUTH=1). The refusal names `$HOME/.claude-kern-eval`, and names an auth variable without its value. runClaude, claudeVersion and the claude driver refuse the same way. Before, standing-cost, among others, ran on whatever login the shell had: on 2026-10-22 it ran 6 one-turn calls on the default login. `--dry-run` is unchanged.
+- CI and the test runner (Task 17a P15; audit F2, F3, F4, F5, F6, F13):
+  - **Triggers.** GitHub CI runs its Ubuntu jobs on every push. The macOS job runs on `workflow_dispatch` and every Monday at 06:00 UTC.
+  - **Guards.** Every job has a timeout. One concurrency group cancels an older run of the same event on the same ref. The actions are pinned by commit SHA.
+  - **Same commands.** Both OS jobs run their bats files with `tests/run-bats --jobs`. The Ubuntu shellcheck step checks `evals/exec/bin/gh` too. tests/ci-local.test.mjs fails when `scripts/ci-local` and the checks job differ.
+  - **run-bats.** It runs each file's bats under `bash -c`, since Ubuntu's dash broke nested bats. It refuses a mid-test `! cmd` line, which never fails a test, unless the line ends in `|| false`, `|| return`, `|| exit`, or such a `|| { ...; }`. It prints `# INFRA: fork failures in <file>` when a failed file ran out of processes. `--jobs` with no number runs min(6, cores - 1) files at a time.
+  - **Test hygiene.** `tests/hook-shape.sh` drops the caller's `CLAUDE_CONFIG_DIR`. The lint, route-eval and seeded-diff node tests remove their temp dirs. The two runClaude timeout tests' stand-ins write their pid files first, and the tests wait for them, so a loaded machine no longer fails them.
+- Lint rule 17 (Task 17a P15, from the P6 review) reads every bash script and bash library under `scripts/`, not only the scripts a hook names. Skills run those scripts through the bash on PATH, which is Homebrew bash 5.3 on macOS. task-done, plan-check and ledger-open now pin the C locale with `env LC_ALL=C`.
 - Kernel text (Task 17a P11; Opus audit B2, B3, B5, B13, C-M9, B-T1, F-K1, F-K2):
   - a question that changes nothing and fits no row is answered, reading what it needs, and only a non-trivial change with no row goes to plan;
   - only a policy key loosens an ask to auto;
