@@ -1,5 +1,7 @@
 # shellcheck shell=bash
 # G2 PR create: drafts only, no duplicate PR for a head, `gh pr ready` stays human under autopilot.
+# Any other gh command that is not on a closed read list, and that no other guard judges, asks, and is
+# denied under autopilot (_g02_write).
 # An allow approves the whole Bash call, so G2 allows a draft only in the shape _g02_proven accepts;
 # any other draft asks, or is denied under autopilot. The _gh_* helpers below are shared with G3 and
 # G4: the dispatcher sources every guard before it calls any. They use G1's _g01_filter and
@@ -29,6 +31,31 @@ _GH_CMDS=" auth browse codespace cs discussion gist issue org pr project release
 run workflow agent-task agent-tasks agent agents alias api attestation at completion config copilot \
 extension extensions ext gpg-key label licenses preview ruleset rs search secret ssh-key status variable \
 accessibility a11y actions environment exit-codes formatting mintty reference telemetry help version credits "
+# The closed read lists, as <group>/<verb> with _gh_canon's names: the verbs of each gh 2.100.0 command
+# group (`gh <group> --help`) that only print or open a browser, so they change nothing on GitHub and
+# write no file. <group>/* reads in every form. Left out: auth token (it prints a credential), clone and
+# download (they write files), and codespace ports (its forward and visibility verbs change the
+# codespace). extension browse is a terminal UI that only the user at the keys can drive.
+_G02_READS=" agent-task/list agent-task/view alias/list attestation/trusted-root attestation/verify \
+auth/status browse/* cache/list codespace/list codespace/logs codespace/view completion/* config/get \
+config/list discussion/list discussion/view extension/browse extension/list extension/search gist/list \
+gist/view gpg-key/list issue/list issue/status issue/view label/list licenses/* org/list pr/checks pr/diff \
+pr/list pr/status pr/view preview/prompter project/field-list project/item-list project/list project/view \
+release/list release/verify release/verify-asset release/view repo/gitignore repo/license repo/list \
+repo/read-dir repo/read-file repo/view ruleset/check ruleset/list ruleset/view run/list run/view run/watch \
+search/* secret/list skill/list skill/preview skill/search ssh-key/list status/* variable/get \
+variable/list workflow/list workflow/view accessibility/* a11y/* actions/* environment/* exit-codes/* \
+formatting/* mintty/* reference/* telemetry/* help/* version/* credits/* "
+# The gh commands another guard judges, which _g02_write leaves to it: G1 pr merge, and pr checkout,
+# which changes a checkout; G2's own pr create, pr ready, alias and extension verbs (_g02_own); G3 pr
+# review, pr comment and api; G14 the issue and label writes; G15 workflow run, the release writes
+# and run rerun. repo sync is split by its operand (_g02_write).
+_G02_OWNED=" pr/merge pr/checkout pr/create pr/ready alias/set alias/import alias/delete extension/exec \
+extension/install extension/upgrade pr/review pr/comment api/* issue/create issue/comment issue/edit \
+issue/close issue/reopen issue/transfer issue/lock issue/delete issue/develop issue/pin issue/unpin \
+issue/unlock label/create label/edit label/delete label/clone workflow/run release/create release/upload \
+release/edit release/delete release/delete-asset run/rerun "
+_GH_SYNC_OPTS="branch/b/v force/-/b source/s/v help/h/b"
 
 guard_g02() {
   [ "$TOOL" = Bash ] || return 0
@@ -43,6 +70,7 @@ guard_g02() {
       _gh_canon "$sub"
       sub=$_GH_SUB
       _g02_own "$sub"
+      _g02_write "$i" "$sub"
     fi
     case "$sub" in
       "pr create") _g02_create "$i" ;;
@@ -104,6 +132,37 @@ _g02_own() {
   vote ask G2 "$why; the user confirms it"
   [ "$AUTOPILOT" = 1 ] && vote deny G2 "$why (under autopilot)"
   return 0
+}
+
+# _g02_write IDX SUB: SUB (from _gh_canon), at IDX in _GH_RECS, is one of gh's own commands that
+# neither reads (_G02_READS) nor is another guard's (_G02_OWNED): it asks, and is denied under
+# autopilot (spec 8.1 D2). A group with verbs prints its help when it gets none, or -h or --help, as its
+# verb; copilot with no verb runs the Copilot CLI. Any other option word in the verb's place may hide the
+# verb gh runs (`gh repo --yes o/r delete` deletes), so it asks. gh repo sync with a repository operand
+# writes that repository on GitHub; without one it moves a local branch, which G1 judges.
+_g02_write() {
+  local g="${2%% *}" v=""
+  case "$2" in *" "*) v=${2#* } ;; esac
+  case "$_GH_CMDS" in *" $g "*) ;; *) return 0 ;; esac
+  case "$_G02_READS$_G02_OWNED" in *" $g/* "* | *" $g/$v "*) return 0 ;; esac
+  case "$v" in
+    -h | --help) return 0 ;;
+    "") [ "$g" = copilot ] || return 0 ;;
+  esac
+  if [ "$2" = "repo sync" ]; then
+    _g02_remote_sync "$1" || return 0
+  fi
+  vote ask G2 "gh $2 is not a gh read kern knows (view, list, status and the like); the user confirms it"
+  [ "$AUTOPILOT" = 1 ] && vote deny G2 "gh $2 under autopilot: only gh reads run unattended (D2)"
+  return 0
+}
+
+# _g02_remote_sync IDX: the gh repo sync record at IDX names a destination repository, and asks for
+# no help.
+_g02_remote_sync() {
+  local toks
+  toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_SYNC_OPTS")
+  [ "$(_gh_last "$toks" help)" != true ] && [ -n "$(_gh_pos "$toks")" ]
 }
 
 # _g02_hidden RECORD: a simple command whose head is neither git nor gh may still run gh (an unknown

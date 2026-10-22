@@ -781,3 +781,93 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   g1q "env -S 'A=1' git -C $W reset --hard"
   [ "$(decision_of "$output")" = none ]
 }
+
+@test "restore, checkout-index -f and read-tree -u or --reset in the main checkout ask, and are denied under autopilot" {
+  local W="$BATS_TEST_TMPDIR/wt" cmds=(
+    "git restore ." "git restore --source=HEAD~1 --staged --worktree ." "git restore -W README.md" "git restore -p ."
+    "git checkout-index -a -f" "git checkout-index -af" "git read-tree -u --reset HEAD" "git read-tree -m -u HEAD"
+    "git read-tree --reset HEAD"
+  )
+  expect ask "${cmds[@]}"
+  [[ "$output" == *"git read-tree --reset HEAD in the main checkout changes shared state (D3)"* ]] || false
+  set_autopilot on
+  expect deny "${cmds[@]}"
+  # The same in a linked worktree, and the forms that leave the working tree alone.
+  expect none "git -C $W restore ." "git -C $W checkout-index -a -f" "git -C $W read-tree -u --reset HEAD" \
+    "git restore --staged ." "git restore -S README.md" "git checkout-index -a" "git read-tree -n -u --reset HEAD"
+}
+
+@test "gh pr checkout and a local gh repo sync ask in the main checkout, and are denied under autopilot" {
+  local W="$BATS_TEST_TMPDIR/wt" cmds=(
+    "gh pr checkout 3" "gh pr co 3" "gh -R o/r pr checkout 3" "gh repo sync" "gh repo sync --force"
+    "gh repo sync -b main --source o/up"
+  )
+  expect ask "${cmds[@]}"
+  [[ "$output" == *"gh repo sync in the main checkout changes shared state (D3)"* ]] || false
+  expect ask "cd /tmp && gh pr checkout 3"
+  [[ "$output" == *"gh pr checkout after cd, --git-dir or --work-tree"* ]] || false
+  set_autopilot on
+  expect deny "${cmds[@]}"
+  # A repository operand syncs that repository on GitHub, which G2 judges; a linked worktree is the
+  # session's own checkout.
+  expect none "gh repo sync o/fork" "gh repo sync --help"
+  export CWD="$W"
+  expect none "${cmds[@]}"
+}
+
+@test "branch -f, -M or -C onto a protected branch, and update-ref of one, ask in any worktree, and are denied under autopilot" {
+  local W="$BATS_TEST_TMPDIR/wt" cmds=(
+    "git branch -f main HEAD~1" "git branch --force main feat" "git branch -M feat main" "git branch -m -f feat main"
+    "git branch -C feat main" "git branch -M main" "git -C $W branch -f main HEAD"
+    "git update-ref refs/heads/main HEAD~1" "git update-ref -d refs/heads/main" "git update-ref --stdin"
+    "git -C $W update-ref -m x refs/heads/main feat" "git update-ref HEAD feat"
+  )
+  expect ask "${cmds[@]}"
+  [[ "$output" == *"git update-ref HEAD rewrites protected branch main"* ]] || false
+  set_autopilot on
+  expect deny "${cmds[@]}"
+  set_autopilot off
+  expect none "git branch -f x HEAD" "git branch -M feat x" "git branch -C feat x" "git branch y" \
+    "git update-ref refs/heads/x HEAD" "git update-ref -d refs/heads/x" "git update-ref refs/remotes/origin/main HEAD" \
+    "git -C $W update-ref HEAD HEAD"
+}
+
+@test "stash clear and stash drop ask in any worktree, and are denied under autopilot: the stash is shared" {
+  local W="$BATS_TEST_TMPDIR/wt"
+  expect ask "git -C $W stash clear" "git -C $W stash drop" "git -C $W stash drop stash@{1}" "git stash clear"
+  [[ "$output" == *"git stash clear discards work"* ]] || false
+  set_autopilot on
+  expect deny "git -C $W stash clear" "git -C $W stash drop"
+  set_autopilot off
+  expect none "git -C $W stash list" "git -C $W stash show" "git -C $W stash pop" "git -C $W stash"
+}
+
+@test "a parse that fails asks in both modes: a failed split, an empty command, records with no end line" {
+  local real old=$PATH k="$BATS_TEST_TMPDIR/k"
+  real=$(command -v awk)
+  mkdir -p "$BATS_TEST_TMPDIR/awkbin"
+  # The awk program that splits a command into simple commands (_split_words) fails; every other runs.
+  printf '#!/bin/sh\ncase "$*" in *"function emit("*) exit 2 ;; esac\nexec %s "$@"\n' "$real" \
+    >"$BATS_TEST_TMPDIR/awkbin/awk"
+  chmod +x "$BATS_TEST_TMPDIR/awkbin/awk"
+  PATH="$BATS_TEST_TMPDIR/awkbin:$PATH"
+  g1 "git reset --hard HEAD~3"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"kern G0: kern could not parse the command"* ]] || false
+  set_autopilot on
+  g1 "git reset --hard HEAD~3"
+  [ "$(decision_of "$output")" = deny ]
+  set_autopilot off
+  PATH=$old
+  # An empty command is also what a substitution whose pipe could not be made gives.
+  run_guard "$(tool_payload Bash '"command":""')" g01
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"the Bash command came back empty"* ]] || false
+  # A git_words that stops before G1's end line, as a substitution that dies partway does.
+  mkdir -p "$k"
+  cp -R "$(kern_root)/hooks" "$k/hooks"
+  printf '%s\n' 'git_words() { printf "%s\n" "git status"; exit 0; }' >>"$k/hooks/lib/gitctx.sh"
+  run env KERN_GUARDS=g01 bash "$k/hooks/pre-tool-use" <<<"$(bash_payload "git status")"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"kern could not read the whole command"* ]] || false
+}
