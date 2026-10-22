@@ -6215,6 +6215,41 @@ The user's answers (2026-10-22):
 5. **Harness.** Each review result row stores its `decoys` and `unmatched` counts and the grader's raw reply, so a split can be checked.
 6. **Rerun.** Rerun the review category, 15 sessions plus 3 grader calls, after this task is reviewed, together with Task 16n's plan rerun, per the user's yes.
 
+### Task 16p: prove-it reads the change before it tests it, recall tags every thread, and a later prompt is reminded to route
+
+The 2026-10-22 runs, read against the stopping rule (diagnosis 5):
+
+**Behaviour blocks on two cases.** Each failed on a kern defect in two or more of three runs, in two measurements in a row.
+- **prove-it-2: 3 of 3 kern misses in each measurement.**
+  - Runs stop at the red test and never open the changed file. One reply said, "I haven't opened the file to confirm which".
+  - No reply uses "inferred" or "guess" for an unrun claim, although Task 16i added that sentence and the user answered "Yes, label it".
+- **recall-1: 3 of 3 and 2 of 3 kern misses.**
+  - Threads lines go out without their tag.
+  - The scope is not said before mining.
+- **recall-2 is not a kern defect.** The grader failed replies that do name finishing Task 3. Its fix is a scripted check, which needs no paid run.
+
+**Adherence fails on Sonnet's multi-diagnose: 0 of 3.**
+- The graded rate over four measurements is 5 of 10.
+- Every passing Sonnet re-read was a `Read` with `limit: 12`, which stops at the `## Steps` heading. `scripts/lib/adherence.mjs:86` ignores `limit`, so 0 of the 7 observable Sonnet runs actually read the steps.
+- Haiku re-reads the whole route: 5 of 6 runs, and 16 of 16 overall.
+
+The user's answers (2026-10-22): on the re-route, "Add the reminder"; on the confirming runs, "Yes, all of them".
+
+**Files:**
+- `skills/prove-it/SKILL.md`, `skills/recall/SKILL.md`, `hooks/prompt-submit`
+- `scripts/lib/adherence.mjs`, `scripts/lib/behave.mjs`, `evals/cases/recall.json` (the recall-2 check)
+- `tests/`, `docs/specs/`, `docs/plans/contract.md`, `CHANGELOG.md`
+
+1. **prove-it.** The diff or changed-file read, now step 6, moves before the test run. Step 7's label takes a fixed form: `inferred: <claim>`. This is the one structural change the stopping rule allows. prove-it is at 3,784 of 3,800 bytes, so trim to fit.
+2. **recall.** Every Threads line starts with its tag. An untagged note goes under Problems or Sources skipped. A `Scope: <window>, <topic>, <workspace>.` line is said right after the skill file is read, before any other tool call. recall is at 7,196 of 7,200 bytes, so trim to fit.
+3. **Reminder (the user's "Add the reminder").** On every prompt after a session's first, prompt-submit prints one short line, about 77 characters, that says to match the request against the routing table and read its route first. A session's first prompt is told apart by the state's existing `prompt_hashes`. The line prints before the headless exit at `hooks/prompt-submit:232`, so headless runs see it. A wrapped prompt (task-notification and the like) gets no reminder. If one full run still leaves Sonnet's multi-diagnose under two of three, the case becomes a known limit.
+4. **Adherence grader.** A route read counts only when it reaches the route's `## Steps`. A `Read` whose `limit` or `offset` stops before the steps is not a route read, and the same goes for a Bash read cut short with `head -n`.
+5. **recall-2.** A scripted check decides E1: the Next move names finishing Task 3.
+6. **Confirming runs (the user's "Yes, all of them").** Once Tasks 16n, 16o and 16p are merged:
+   - the head-to-head plan and review reruns;
+   - one full behaviour run;
+   - one full adherence run, on Sonnet and Haiku.
+
 Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
