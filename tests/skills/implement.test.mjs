@@ -54,6 +54,14 @@ test('the entry check is step 1 on its own, with a plain condition, and only def
   assertContains(SKILL, ['Stops at steps 1, 2, 3 and 8.']);
 });
 
+test('step 3 spells kern-detect\'s full path, since kern:implementer reads it under the subagent kernel', () => {
+  // 2026-10-22 Opus audit, C-M9: trim a36c751 left `kern-detect <key>` bare, which leans on the main kernel's
+  // `Scripts:` line; the subagent kernel has none, so a worker had to infer the path from kern-get beside it.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[3].includes('with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`, else `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect <key>`.'), s[3]);
+  assert.ok(s[3].includes('When both exit 3, ask the user; never guess a command.'), s[3]);
+});
+
 test('diagnose names implement\'s steps by their numbers', () => {
   // Task 16i split implement step 1, so each later step moved up one; diagnose cites two of them by number.
   const s = steps(readDoc(SKILL).body);
