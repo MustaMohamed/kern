@@ -292,34 +292,33 @@ EOT
   printf '%s\n' "${text//$_GW_NL/$'\n'}"
 }
 
-# _g05_attributed [body]: the text on stdin carries the attribution `commit.attribution: none` forbids.
-# Only two shapes count, so prose that names Claude passes (audit D12):
+# _g05_attributed: the text on stdin, a commit message or G2's PR body, carries the attribution
+# `commit.attribution: none` forbids. Only two shapes count, so prose that names Claude passes (audit D12):
 # - Claude Code's footer line, in any paragraph: "Generated with [Claude Code](<url>)" or "Generated with
 #   Claude Code" (with or by), any case, after an emoji or any other non-letters;
-# - a trailer line (`Key: value` or `Key=value`, as git and `--trailer` read one) in the last paragraph:
-#   Co-Authored-By, Assisted-by or Generated-by naming Claude or Anthropic, or Claude-Session.
-# A commit's first paragraph is its title, which git never reads as trailers; with `body` (G2's PR body)
-# the first paragraph may be the last. Exit 0 when attribution is present, 1 when it is not, 2 when awk
-# gave no verdict.
+# - a trailer line (`Key: value` or `Key=value`, as git and `--trailer` read one) in the last paragraph,
+#   the only one included: Co-Authored-By, Assisted-by or Generated-by naming Claude or Anthropic, or
+#   Claude-Session.
+# scripts/lib/exec-grade.mjs's `attributed` judges the same shapes. Exit 0 when attribution is present,
+# 1 when it is not, 2 when awk gave no verdict.
 _g05_attributed() {
   local r
-  r=$(env LC_ALL=C awk -v body="${1-}" '
+  r=$(env LC_ALL=C awk '
     { sub(/\r$/, ""); t = tolower($0) }
     t ~ /^[ \t]*$/ { gap = 1; next }
     {
-      if (gap || !p) { p++; m = 0; gap = 0 }
+      if (gap) { m = 0; gap = 0 }
       L[++m] = t
       f = t; sub(/^[^a-z]*/, "", f); sub(/[ \t]+$/, "", f)
       if (f ~ /^generated (with|by) [[]?claude code[]]?([(][^)]*[)])?[.]?$/) hit = 1
     }
     END {
-      if (p > 1 || body == "body")
-        for (k = 1; k <= m; k++) {
-          if (!match(L[k], /^[ \t]*[a-z0-9][a-z0-9-]*[ \t]*[:=]/)) continue
-          key = substr(L[k], 1, RLENGTH - 1); gsub(/[ \t]/, "", key); val = substr(L[k], RLENGTH + 1)
-          if (key ~ /^(co-authored-by|assisted-by|generated-by)$/ && val ~ /claude|anthropic/) hit = 1
-          if (key == "claude-session") hit = 1
-        }
+      for (k = 1; k <= m; k++) {
+        if (!match(L[k], /^[ \t]*[a-z0-9][a-z0-9-]*[ \t]*[:=]/)) continue
+        key = substr(L[k], 1, RLENGTH - 1); gsub(/[ \t]/, "", key); val = substr(L[k], RLENGTH + 1)
+        if (key ~ /^(co-authored-by|assisted-by|generated-by)$/ && val ~ /claude|anthropic/) hit = 1
+        if (key == "claude-session") hit = 1
+      }
       print (hit ? "yes" : "no")
     }')
   case "$r" in
@@ -329,20 +328,14 @@ _g05_attributed() {
   esac
 }
 
-# _g05_problems DIR MESSAGE: one line per failed check; nothing when the message passes.
+# _g05_problems DIR MESSAGE ATTR: one line per failed check; nothing when the message passes. ATTR is
+# _g05_attributed's exit for MESSAGE under commit.attribution: none (1 when the setting allows it).
 _g05_problems() {
   local dir="$1" msg="$2" subject conv src idre branch id
   subject=$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')
-  if [ "$(settings_get commit.attribution none)" = none ]; then
-    printf '%s\n' "$msg" | _g05_attributed
-    case $? in
-      # The fix rides in the reason: Claude Code's own attribution reminder asks for the trailer, and
-      # the model reads this text exactly when the commit fails. No ";": the caller joins lines with "; ".
-      0) echo "attribution trailer or footer present (commit.attribution: none): remove those lines and commit again" ;;
-      1) ;;
-      *) echo "the attribution check could not run (retry the commit)" ;;
-    esac
-  fi
+  # The fix rides in the reason: Claude Code's own attribution reminder asks for the trailer, and the
+  # model reads this text exactly when the commit fails. No ";": the caller joins lines with "; ".
+  [ "$3" = 0 ] && echo "attribution trailer or footer present (commit.attribution: none): remove those lines and commit again"
   # Unset, the convention is the one kern-detect finds in git log; with none found, none is checked.
   if conv=$(settings_get commit.convention); then
     src=""
@@ -440,7 +433,7 @@ EOT
 
 # _g05_commit IDX: the commit at IDX in _G05_RECS, just read by _g05_split.
 _g05_commit() {
-  local toks msg problems policy fix
+  local toks msg problems policy fix attr
   if ! _g05_ready; then
     vote ask G5 "kern could not load its option parser, so this commit cannot be checked"
     return 0
@@ -453,9 +446,19 @@ _g05_commit() {
     vote ask G5 "commit message cannot be read: write the message with -m '<text>' or -F <file in the repo>; a \$( ) message cannot be checked"
     return 0
   fi
-  problems=$(_g05_problems "$_G05_DIR" "$msg")
+  attr=1
+  if [ "$(settings_get commit.attribution none)" = none ]; then
+    printf '%s\n' "$msg" | _g05_attributed
+    attr=$?
+  fi
+  problems=$(_g05_problems "$_G05_DIR" "$msg" "$attr")
   if [ -n "$problems" ]; then
     vote deny G5 "$(printf '%s\n' "$problems" | paste -sd ';' - | sed 's/;/; /g')"
+    return 0
+  fi
+  # A check that gave no verdict is unread input: it fails closed (spec 8.4), as G2's body check does.
+  if [ "$attr" != 0 ] && [ "$attr" != 1 ]; then
+    fail_closed "G5 could not run its attribution check, so this commit message cannot be checked (retry the commit)"
     return 0
   fi
   policy=$(policy_for commit)

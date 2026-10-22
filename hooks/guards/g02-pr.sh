@@ -444,29 +444,27 @@ _g02_here() {
 # Code's footer or an attribution trailer (G5's _g05_attributed) is denied in both modes (audit D5).
 # FILE is read as gh reads it, relative to CWD, and only its first 262,144 bytes: GitHub takes a PR body
 # of at most 65,536 characters, at most 4 bytes each. A FILE that is `-` or not a regular file is left to
-# the shape check, which allows no such draft. Exit 1 when it voted.
+# the shape check, which allows no such draft. Exit 0 when FILE passes or is not read, 1 when G2 denied
+# it, 2 when the check could not run: _G02_BODY_WHY says why, and the caller fails closed after its
+# duplicate check, as G5 does for a commit message (spec 8.4).
 _g02_body() {
-  local f="$1" why
+  local f="$1"
   [ -n "$f" ] && [ "$f" != - ] || return 0
   [ "$(settings_get commit.attribution none)" = none ] || return 0
   case "$f" in /*) ;; *) f="$CWD/$f" ;; esac
   [ -f "$f" ] || return 0
-  if ! declare -F _g05_attributed >/dev/null; then
-    why="kern could not load G5's attribution check, so the PR body cannot be checked"
-  else
-    head -c 262144 2>/dev/null <"$f" | _g05_attributed body
-    case $? in
-      0)
-        vote deny G2 "the PR body file holds an attribution footer or trailer (commit.attribution: none): remove those lines"
-        return 1
-        ;;
-      1) return 0 ;;
-    esac
-    why="the PR body's attribution check could not run (retry the command)"
-  fi
-  vote ask G2 "$why"
-  [ "$AUTOPILOT" = 1 ] && vote deny G2 "$why (under autopilot)"
-  return 1
+  _G02_BODY_WHY="G2 could not load G5's attribution check, so the PR body file cannot be checked"
+  declare -F _g05_attributed >/dev/null || return 2
+  head -c 262144 2>/dev/null <"$f" | _g05_attributed
+  case $? in
+    0)
+      vote deny G2 "the PR body file holds an attribution footer or trailer (commit.attribution: none): remove those lines"
+      return 1
+      ;;
+    1) return 0 ;;
+  esac
+  _G02_BODY_WHY="G2 could not run G5's attribution check on the PR body file, so it cannot be checked (retry the command)"
+  return 2
 }
 
 # _g02_proven IDX TOKS FILE: _gh_proven, only _GH_CREATE_SAFE options, no argument, and a body FILE
@@ -478,7 +476,7 @@ _g02_proven() {
 }
 
 _g02_create() {
-  local toks head cur file states policy fix
+  local toks head cur file body states policy fix
   toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_CREATE_OPTS")
   [ "$(_gh_last "$toks" help)" = true ] && return 0
   # pflag keeps the last setting, so `--draft --draft=false` and `--title --draft` open a ready PR.
@@ -487,7 +485,9 @@ _g02_create() {
     return 0
   fi
   file=$(_gh_last "$toks" body-file) || file=""
-  _g02_body "$file" || return 0
+  _g02_body "$file"
+  body=$?
+  [ "$body" = 1 ] && return 0
   policy=$(policy_for pr)
   case "$policy" in
     deny)
@@ -516,7 +516,7 @@ _g02_create() {
       *OPEN*) vote deny G2 "a PR is already open for $cur; report it instead of opening another"; return 0 ;;
       *MERGED* | *CLOSED*) vote ask G2 "a merged or closed PR already exists for $cur"; return 0 ;;
     esac
-    if _g02_proven "$1" "$toks" "$file"; then
+    if [ "$body" = 0 ] && _g02_proven "$1" "$toks" "$file"; then
       if [ "$AUTOPILOT" = 1 ]; then
         vote allow G2 "autopilot: draft PR for $cur after dedup"
       elif [ "$policy" = auto ]; then
@@ -526,6 +526,12 @@ _g02_create() {
       fi
       return 0
     fi
+  fi
+  # A body check that could not run fails closed here, after the duplicate check, so an open PR for the
+  # head is still denied.
+  if [ "$body" = 2 ]; then
+    fail_closed "$_G02_BODY_WHY"
+    return 0
   fi
   # shellcheck disable=SC2016 # literal backticks
   fix='kern allows only `gh pr create --draft` alone, from the current branch, with --title, --base, --fill, --fill-first, --fill-verbose, --dry-run, --no-maintainer-edit, --body-file <file in the repo> or --head <current branch>'

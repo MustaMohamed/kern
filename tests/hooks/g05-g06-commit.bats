@@ -843,9 +843,10 @@ key AKIAABCDEFGHIJKLMNOP"
     expect allow g05 "git commit -F msg.txt" || return 1
   done
   # The footer in any paragraph, with or without its emoji and link; a trailer in the last paragraph,
-  # CRLF line ends too.
+  # the title's own paragraph when it is the only one, CRLF line ends too.
   for m in 'CDS-2465: x\n\nWhy.\n\n\360\237\244\226 Generated with [Claude Code](https://claude.com/claude-code)\n\nMore.\n' \
     'CDS-2465: x\n\nGenerated with Claude Code\n' \
+    'CDS-2465: x\nCo-Authored-By: Claude <noreply@anthropic.com>\n' \
     'CDS-2465: x\n\nWhy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n' \
     'CDS-2465: x\r\n\r\nWhy.\r\n\r\nCo-Authored-By: Claude <noreply@anthropic.com>\r\n' \
     'CDS-2465: x\n\nWhy.\n\nSigned-off-by: Jane <jane@example.com>\nClaude-Session: https://claude.ai/code/session_x\n'; do
@@ -858,14 +859,28 @@ key AKIAABCDEFGHIJKLMNOP"
   done
 }
 
-@test "G5: an attribution check that gives no verdict denies the commit, never passes it" {
+@test "G5: an attribution check that gives no verdict fails closed: ask, deny under autopilot, never allow" {
+  local why='kern G0: G5 could not run its attribution check, so this commit message cannot be checked (retry the commit)'
   printf 'CDS-2465: x\n\nWhy.\n' >"$R/msg.txt"
   read_fails awk '*claude-session*'
+  expect ask g05 "git commit -F msg.txt"
+  [[ "$output" == *"\"permissionDecisionReason\":\"needs user approval: $why\""* ]] || false
+  policy 'commit.policy: auto\n'
+  expect ask g05 "git commit -F msg.txt"
+  policy
+  set_autopilot on
   expect deny g05 "git commit -F msg.txt"
-  [[ "$output" == *'the attribution check could not run (retry the commit)'* ]] || false
+  [[ "$output" == *"\"permissionDecisionReason\":\"$why (autopilot: nobody to ask)\""* ]] || false
+  # Another failed check still denies.
+  printf 'swap\n' >"$R/msg.txt"
+  set_autopilot off
+  expect deny g05 "git commit -F msg.txt"
+  [[ "$output" == *"subject does not match commit.convention"* ]] || false
   [ "$(read_failures awk)" -ge 1 ]
   read_fails awk '*claude-session*' 0
+  printf 'CDS-2465: x\n\nWhy.\n' >"$R/msg.txt"
   expect ask g05 "git commit -F msg.txt"
+  [[ "$output" == *"commit (message checks pass)"* ]] || false
 }
 
 @test "G5: under autopilot a one-record commit whose -m holds a variable, braced or not, is denied: the word expands at run time (audit A-mut3)" {
