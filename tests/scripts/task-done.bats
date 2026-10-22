@@ -260,7 +260,7 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   review "$T1"
   # The test passes in WT; in the probe's fork, with the change reversed, it fails and writes into WT.
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$PKG.patch" -- \
-    sh -c "sh test/check_test.sh || { printf x > '$WT/probe-ran.txt'; exit 1; }"
+    sh -c "sh test/check_test.sh || { printf x > ../task-x/probe-ran.txt; exit 1; }"
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"the probe changed $WT"* ]] || false
   [ "$(grep -c '^Task 1: complete' "$L/ledger.md")" -eq 0 ]

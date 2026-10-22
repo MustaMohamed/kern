@@ -215,7 +215,8 @@ setup() {
     'error[E0432]: unresolved import `crate::gate`' 'error: could not compile `gate` (lib test) due to 1 previous error' \
     "undefined method 'positive?' for 5:Integer (NoMethodError)" 'uninitialized constant Gate' \
     "error: cannot find 'isPositive' in scope" "e: Gate.kt:3:5: Unresolved reference 'isPositive'." \
-    "gate.c:3:10: error: use of undeclared identifier 'is_positive'" 'open data/in.txt: no such file or directory'; do
+    "gate.c:3:10: error: use of undeclared identifier 'is_positive'" 'open data/in.txt: no such file or directory' \
+    'sh: 1: gate-tool: not found'; do
     run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-says.sh "$say"
     [ "$status" -eq 3 ] || { echo "$say: $status $output"; return 1; }
     [ "$output" = "probe: inconclusive (the test did not run without the guard: $say)" ] || { echo "$output"; return 1; }
@@ -228,6 +229,14 @@ setup() {
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
   [ "$output" = "probe: fail-then-pass ok" ]
   [ "$stderr" = "TypeError: expected a non-negative number" ]
+}
+
+# The shell's `: not found` is matched in its own case only, so an HTTP Not Found stays an assertion.
+@test "an HTTP Not Found in the reversed run is an assertion failure, not a missing command" {
+  printf 'sh check.sh -1 && { echo "AssertionError: expected 200, got 404: Not Found"; exit 1; }\nexit 0\n' > "$WT/test-http.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-http.sh
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: fail-then-pass ok" ]
 }
 
 # Audit 2026-10-22, D2: a comment-only change plus a golden file must not read as proven.
@@ -265,6 +274,14 @@ setup() {
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c "cd '$WT' && sh test-guard.sh"
   [ "$status" -eq 3 ] || { echo "$output"; return 1; }
   [ "$output" = "probe: inconclusive (the command names the worktree by its absolute path, so the fork would run the worktree)" ]
+  # WT followed by whitespace, a slash, or the end of the word; a double quote, in a script.
+  for cmd in "cd $WT && sh test-guard.sh" "sh $WT/test-guard.sh" "cd $WT"; do
+    run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c "$cmd"
+    [ "$status" -eq 3 ] || { echo "$cmd: $output"; return 1; }
+  done
+  printf 'cd "%s" && sh test-guard.sh\n' "$WT" > "$TMP/dq-run.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- bash "$TMP/dq-run.sh"
+  [ "$status" -eq 3 ] || { echo "$output"; return 1; }
   # WT named through a symlink: the script holds that path, not the physical one.
   ln -s "$WT" "$TMP/wt-link"
   printf 'cd %s && sh test-guard.sh\n' "$TMP/wt-link" > "$TMP/link-run.sh"
@@ -273,6 +290,17 @@ setup() {
   [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
   printf 'sh test-guard.sh\n' > "$TMP/rel-run.sh"
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- bash "$TMP/rel-run.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: fail-then-pass ok" ]
+}
+
+@test "a sibling worktree path that starts with the worktree's path does not count" {
+  mkdir -p "${WT}0" "$WT-b"
+  printf 'ls %s0 > /dev/null && sh test-guard.sh\n' "$WT" > "$TMP/sib-run.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- bash "$TMP/sib-run.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: fail-then-pass ok" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh -c "ls '$WT-b' > /dev/null && sh test-guard.sh"
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
   [ "$output" = "probe: fail-then-pass ok" ]
 }
