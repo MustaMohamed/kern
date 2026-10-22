@@ -62,27 +62,31 @@ autopilot_text() {
 
 KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy delete.policy message.policy messaging.policy"
 
-# settings_summary: the Project settings block, at most 600 chars. Its lines: `Main worktree: <path>` only
-# when the session's cwd is not the main worktree root (cwd names it otherwise), or that this is not a git
-# repository; the settings files; Overrides; ignored floor keys; Set:; unknown keys. Set: lists known keys
-# whose value differs from a literal default (a Default cell that is one `value` in kernel/settings.md),
-# policy keys first. `overrides.<job>: off` is no override: kern's route stays, and a project skill with
-# the job's name is not matched. Over 600, Overrides and Set: start at their shortest form (the full line
-# when it is shorter) and Unknown at none, and they take the room left in that order, so the Unknown list
-# is cut first and an unknown key never cuts an override; a whole entry at a time, so no character is
-# split. A cut Overrides line ends with `not shown: <job>, ...`, naming every job whose entry it cut, so the
-# model knows each job that has a project override; the names are kern's own job names, never a settings
-# value, so the mark stays short (119 chars of names for all 13 jobs), and the shortest form is the mark
-# alone. A cut Unknown list ends with `and N more` (`N not shown` when no entry fits; it drops its line
-# when that does not fit either), a cut Set: with the "more" note. The main worktree, settings files and
-# floor lines are never cut.
-# The 600 counts the plugin root in the note as {ROOT}, so the entries kept do not depend on where kern is
-# installed; the note prints the absolute path.
+# settings_summary: the Project settings block, at most 600 chars, with one known limit below. Its lines:
+# `Main worktree: <path>` only when the session's cwd is not the main worktree root (cwd names it
+# otherwise), or that this is not a git repository; the settings files; Overrides; ignored floor keys;
+# Set:; unknown keys. Set: lists known keys whose value differs from a literal default (a Default cell that
+# is one `value` in kernel/settings.md), policy keys first. `overrides.<job>: off` is no override: kern's
+# route stays, and a project skill with the job's name is not matched. Overrides lists the jobs an
+# `overrides.<job>` value names first, then the same-name matches. Over 600, Overrides and Set: start at
+# their shortest form (the full line when it is shorter) and Unknown at none, and they take the room left
+# in that order, so the Unknown list is cut first and an unknown key never cuts an override; a whole entry
+# at a time, first-fit, so no character is split. A cut Overrides line ends with `not shown: <job>, ...`,
+# naming every job whose entry it cut, so the model knows each job that has a project override; since the
+# set values come first, a cut job is a same-name one, whose skill is the job's name, unless a set value
+# is too long to fit. The names are kern's own job names, never a settings value, so the mark stays short
+# (about 150 chars for every job), and the shortest form is the mark alone. A cut Unknown list ends with
+# `and N more` (`N not shown` when no entry fits; it drops its line when that does not fit either), a cut
+# Set: with the "more" note. Known limit: the main worktree, settings files and floor lines are never cut,
+# so a cwd outside the root with a main path over about 92 chars can pass 600 when every other line is at
+# its shortest. The 600 counts the plugin root in the note as {ROOT}, so the entries kept do not depend on
+# where kern is installed; the note prints the absolute path.
 settings_summary() {
-  local out="" f files="" k v job name dir seen="" here root floor="" nl=$'\n' defaults unk ov="" pol="" oth=""
+  local out="" f files="" k v job name dir seen="" here root floor="" nl=$'\n' defaults pol="" oth=""
+  local ov_items set_items unk_items ov_set="" ov_same="" jobs_set="" jobs_same=""
   local ov_line="" floor_line="" set_line="" unk_line="" ov_full set_full unk_full ov_n set_n unk_n set_cut=""
   local ov_least set_least unk_least part items pre sep sep2 rest e body least n line full room kept tail
-  local ov_jobs="" left names
+  local ov_jobs left names
   local more=" ... (more: bash {ROOT}/scripts/kern-get <key>)"
   local ov_pre="${nl}Overrides (follow the project skill, say so in one line):" set_pre="${nl}Set:" unk_pre="${nl}Unknown keys, ignored:"
   if [ -z "${KERN_MAIN-}" ]; then
@@ -105,8 +109,8 @@ $(_settings_files)
 EOT
   out="${out}Settings files: ${files:-none; defaults apply}"
   # Unknown keys once each, floor keys left to their own line; `key value` for each literal default.
-  unk=$(settings_unknown_keys | env LC_ALL=C awk -F '\t' -v floor=" $KERN_FLOOR_KEYS " 'index(floor, " " $2 " ") == 0 && !s[$2]++ { print $2 }')
-  [ -z "$unk" ] || unk="$unk$nl"
+  unk_items=$(settings_unknown_keys | env LC_ALL=C awk -F '\t' -v floor=" $KERN_FLOOR_KEYS " 'index(floor, " " $2 " ") == 0 && !s[$2]++ { print $2 }')
+  [ -z "$unk_items" ] || unk_items="$unk_items$nl"
   defaults=$(sed -n 's/^| `\([^`]*\)` | `\([^`]*\)` |.*/\1 \2/p' "$KERN_ROOT/kernel/settings.md")
   while IFS= read -r f; do
     [ -f "$f" ] || continue
@@ -116,7 +120,7 @@ EOT
       seen="$seen $k"
       case " $KERN_FLOOR_KEYS " in *" $k "*) continue ;; esac
       case "$k" in overrides.*) continue ;; esac
-      case "$nl$unk" in *"$nl$k$nl"*) continue ;; esac
+      case "$nl$unk_items" in *"$nl$k$nl"*) continue ;; esac
       v=$(settings_get "$k") || continue
       case "$nl$defaults$nl" in *"$nl$k $v$nl"*) continue ;; esac
       case "$k" in
@@ -129,18 +133,21 @@ EOT
   done <<EOT
 $(_settings_files)
 EOT
+  set_items="$pol$oth"
   for dir in "$KERN_ROOT"/skills/*/; do
     job=$(basename "$dir")
     case "$job" in mode | autopilot | help) continue ;; esac
     name=$(settings_get "overrides.$job" '')
     case "$name" in off) continue ;; esac
-    if [ -z "$name" ] && [ -n "${KERN_MAIN-}" ]; then
+    if [ -n "$name" ]; then
+      ov_set="$ov_set$job -> project skill $name$nl" jobs_set="$jobs_set$job$nl"
+    elif [ -n "${KERN_MAIN-}" ]; then
       if [ -f "$KERN_MAIN/.claude/skills/$job/SKILL.md" ] || [ -f "$KERN_MAIN/.claude/commands/$job.md" ]; then
-        name="$job"
+        ov_same="$ov_same$job -> project skill $job$nl" jobs_same="$jobs_same$job$nl"
       fi
     fi
-    [ -z "$name" ] || ov="$ov$job -> project skill $name$nl" ov_jobs="$ov_jobs$job$nl"
   done
+  ov_items="$ov_set$ov_same" ov_jobs="$jobs_set$jobs_same"
   for k in $seen; do
     case " $KERN_FLOOR_KEYS " in *" $k "*) floor="${floor:+$floor, }$k" ;; esac
   done
@@ -148,9 +155,9 @@ EOT
   # Each list's full line, its entry count and its shortest form.
   for part in ov set unk; do
     case $part in
-      ov) items=$ov sep2="; " pre=$ov_pre ;;
-      set) items="$pol$oth" sep2="; " pre=$set_pre ;;
-      *) items=$unk sep2=", " pre=$unk_pre ;;
+      ov) items=$ov_items sep2="; " pre=$ov_pre ;;
+      set) items=$set_items sep2="; " pre=$set_pre ;;
+      *) items=$unk_items sep2=", " pre=$unk_pre ;;
     esac
     body="" sep=" " rest=$items n=0 least=""
     while [ -n "$rest" ]; do
@@ -181,9 +188,9 @@ EOT
     ov_line=$ov_least set_line=$set_least unk_line=""
     for part in ov set unk; do
       case $part in
-        ov) items=$ov sep2="; " pre=$ov_pre full=$ov_full n=$ov_n line=$ov_line least=$ov_least ;;
-        set) items="$pol$oth" sep2="; " pre=$set_pre full=$set_full n=$set_n line=$set_line least=$set_least ;;
-        *) items=$unk sep2=", " pre=$unk_pre full=$unk_full n=$unk_n line=$unk_line least=$unk_least ;;
+        ov) items=$ov_items sep2="; " pre=$ov_pre full=$ov_full n=$ov_n line=$ov_line least=$ov_least ;;
+        set) items=$set_items sep2="; " pre=$set_pre full=$set_full n=$set_n line=$set_line least=$set_least ;;
+        *) items=$unk_items sep2=", " pre=$unk_pre full=$unk_full n=$unk_n line=$unk_line least=$unk_least ;;
       esac
       [ "$n" -gt 0 ] || continue
       room=$((600 - ${#out} - ${#ov_line} - ${#floor_line} - ${#set_line} - ${#unk_line} + ${#line}))

@@ -221,6 +221,42 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   [ "$(printf '%s\n%s\n' "$shown" "$cut" | sort)" = "$(printf '%s\n' $jobs | sort)" ] || { echo "$line"; return 1; }
 }
 
+@test "an explicit override is kept ahead of same-name ones, so a cut job's skill is its own name" {
+  # Review Minor 1(a): a cut explicit override lost its skill name, which only kern-get could give back.
+  for job in commit define diagnose execute-plan finish-branch implement parallel-work plan prove-it recall self-review technical-writing; do
+    mkdir -p "$R/.claude/skills/$job"
+    printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
+  done
+  printf 'overrides.unslop: house-style-guide\nbase_branch: develop\n' >"$R/.claude/kern.local.yml"
+  start startup
+  summary
+  [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
+  line=$(printf '%s\n' "$summary" | grep '^Overrides ')
+  [[ "$line" == *"unslop -> project skill house-style-guide"* ]] || { echo "$line"; return 1; }
+  [[ "$line" == *"; not shown: "* ]] || { echo "$line"; return 1; }
+  cut=${line##*; not shown: }
+  [[ ", $cut, " != *", unslop, "* ]] || { echo "$line"; return 1; }
+}
+
+@test "a value against a default that is not one literal value still prints: pr.policy: ask" {
+  printf 'pr.policy: ask\n' >"$R/.claude/kern.local.yml"
+  start startup
+  has_line "Set: pr.policy=ask"
+}
+
+@test "review.post_policy orders as a policy key in Set:" {
+  printf 'base_branch: develop\nreview.post_policy: deny\n' >"$R/.claude/kern.local.yml"
+  start startup
+  has_line "Set: review.post_policy=deny; base_branch=develop"
+}
+
+@test "an unknown key set in two files is listed once" {
+  printf 'foo.bar: 1\n' >"$R/.claude/kern.local.yml"
+  printf 'foo.bar: 2\n' >"$R/.claude/kern.yml"
+  start startup
+  has_line "Unknown keys, ignored: foo.bar"
+}
+
 @test "Main worktree names the main root only when the session's cwd is elsewhere" {
   RP=$(cd "$R" && pwd -P)
   start startup

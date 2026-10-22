@@ -45,6 +45,6 @@ Validate without writing anything. Read each settings file that exists: `.claude
 - floor-action keys, which the hooks ignore. `kernel/settings.md` names the floor actions: merge, production deploy, data deletion, force-push to a shared branch, messaging people. The ignored keys are `merge.policy`, `deploy.policy`, `production.policy`, `force_push.policy`, `delete.policy`, `message.policy` and `messaging.policy`;
 - any other key that is not in the table, as unknown;
 - a value outside its row's Values column, when that column lists fixed words. The hooks read a misspelt policy value such as `atuo` as `ask`, so name the key and the words it takes;
-- `overrides.<job>` values that name a missing project skill;
+- `overrides.<job>` values, other than `off` (no override), that name a missing project skill;
 - settings files in a linked worktree, which `git worktree list` shows, that the main worktree root lacks;
 - missing exclude lines for `.claude/kern.local.yml` and the `work_dir` directory, `.kern` by default.

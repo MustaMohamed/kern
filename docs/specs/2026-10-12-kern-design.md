@@ -267,7 +267,7 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 | Modes | `mode.voice`, `mode.surface` | `normal`, `auto` | session-start, prompt-submit |
 | Learning | `lessons` | `.kern/lessons.md` | retro, correct |
 | Learning | `rule_bar` | 3 occurrences or 1 severe incident for prose; 2 for a mechanism | retro, correct |
-| Overrides | `overrides.<job>` (`off`: no override); `route.<name>` dropped in Task 17a P13 | None | kernel, all |
+| Overrides | `overrides.<job>` (`off`: no override) | None | kernel, all |
 | Stack | `stack` | Detected | architect, build-ui, implement |
 | Switch | `kern` | `on`; `off` disables kern in this project | all hooks |
 
