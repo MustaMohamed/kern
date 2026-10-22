@@ -1011,3 +1011,49 @@ words_are() {
   run branch_protected ""
   [ "$status" -eq 0 ]
 }
+
+# heredoc_cmd OPERATOR BODY: a stored push, then cat reading a here-doc that holds BODY.
+heredoc_cmd() {
+  printf '%s\n' "x='\$(git push --force origin main)'; cat $1" "$2" 'EOF'
+}
+
+@test "on G00's call an unquoted here-doc body that expands a stored string again is a \$KERN_UNREAD record" {
+  local b out
+  # zsh's (e) flag, in any flag group, and bash's @P transform expand the stored $( ) again and run it.
+  for b in '${(e)x}' '${(Le)x}' 'see ${(qe)x} here' '${x@P}' '${arr[@]@P}' '${${(e)x}}'; do
+    out=$(_GW_QB=1; git_words "$(heredoc_cmd '<<EOF' "$b")")
+    [[ "$out" == *'$KERN_UNREAD'* ]] || { echo "$b -> $out"; return 1; }
+    out=$(_GW_QB=1; git_words "$(heredoc_cmd '<<-EOF' "$b")")
+    [[ "$out" == *'$KERN_UNREAD'* ]] || { echo "<<- $b -> $out"; return 1; }
+    # Inside a $( ) the body is dropped the same way, and read the same way.
+    out=$(_GW_QB=1; git_words "echo \$($(heredoc_cmd '<<EOF' "$b")"$'\n'")")
+    [[ "$out" == *'$KERN_UNREAD'* ]] || { echo "\$( ) $b -> $out"; return 1; }
+    # A quoted delimiter keeps the body literal, and other guards' reads are unchanged.
+    for op in "<<'EOF'" '<<"EOF"' '<<\EOF'; do
+      out=$(_GW_QB=1; git_words "$(heredoc_cmd "$op" "$b")")
+      [[ "$out" != *'$KERN_UNREAD'* ]] || { echo "$op $b -> $out"; return 1; }
+    done
+    out=$(git_words "$(heredoc_cmd '<<EOF' "$b")")
+    [[ "$out" != *'$KERN_UNREAD'* ]] || { echo "not G00's call: $b -> $out"; return 1; }
+  done
+  # Expansions that do not evaluate their value again.
+  for b in '${x}' '${(U)x}' '${(L)x}' '${x@Q}' '$x@P' 'P}'; do
+    out=$(_GW_QB=1; git_words "$(heredoc_cmd '<<EOF' "$b")")
+    [[ "$out" != *'$KERN_UNREAD'* ]] || { echo "$b -> $out"; return 1; }
+  done
+}
+
+@test "under autopilot an unquoted here-doc body that expands a stored string again is denied" {
+  local esc
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  esc=$(heredoc_cmd '<<EOF' '${(e)x}' | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{ printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }')
+  set_autopilot on
+  run_guard "$(tool_payload Bash "\"command\":\"$esc\"")"
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  # G00 judges only under autopilot, as for the same expansion outside a here-doc.
+  set_autopilot off
+  run_guard "$(tool_payload Bash "\"command\":\"$esc\"")"
+  [ "$(decision_of "$output")" = none ] || { echo "$output"; return 1; }
+}

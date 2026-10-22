@@ -651,15 +651,33 @@ _split_words() {
     # $( ) or backtick, after a \036 byte, so git_words reads the command substitutions the shell expands
     # in it and never the body itself as a command. A quoted body is data and is skipped, except that on
     # G00s call (qb, from _GW_QB) one that holds a [ and a $( or backtick is emitted after a \035 byte,
-    # for G00 to scan for an array subscript the body may store for arithmetic. a is the position just
+    # for G00 to scan for an array subscript the body may store for arithmetic. On G00s call too, an
+    # unquoted body that expands a stored string again (hreev) adds a $KERN_UNREAD record, which G00
+    # denies: the $( ) that runs is in the stored value, where no record shows it. a is the position just
     # after the operator line, where the first body starts.
     function hbody(a,   h, s) {
       for (h = 1; h <= nh; h++) {
         s = substr(buf, a, off[last[h]] - a)
-        if (!hq[h]) { if (index(s, "$(") || index(s, "`")) emit("\036" s) }
+        if (!hq[h]) {
+          if (index(s, "$(") || index(s, "`")) emit("\036" s)
+          if (qb && hreev(s)) emit("$KERN_UNREAD")
+        }
         else if (qb && index(s, "[") && (index(s, "$(") || index(s, "`"))) emit("\035" s)
         a = off[last[h]] + length(L[last[h]]) + 1
       }
+    }
+    # hreev(s): the unquoted here-doc body s, whose quotes are literal text, holds a zsh flag group with
+    # the e flag (${(e)x}, ${(Le)x}) or a bash @P transform (${x@P}). Each expands the value again,
+    # running a $( ) stored in it. Any e among the flags counts, a delimited flag argument too, and a
+    # backslash before the $ is ignored, so no spelling of the e flag is missed.
+    function hreev(s,   i, j) {
+      if (index(s, "@P}")) return 1
+      while ((i = index(s, "${("))) {
+        s = substr(s, i + 3)
+        j = index(s, ")")
+        if (index(j ? substr(s, 1, j - 1) : s, "e")) return 1
+      }
+      return 0
     }
     # bodies(j): at the newline j, finds the closing line of each queued here-doc and clears the
     # queue. Returns the line number of the last closing line, or 0 when one is missing.
