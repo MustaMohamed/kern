@@ -350,3 +350,36 @@ These supersede the "Additions from the M2 plan" entries above where they differ
   - G5 denies on 0 with "attribution trailer or footer present (commit.attribution: none): remove those lines and commit again". G2's `_g02_body`, run in `_g02_create` after the draft check under `commit.attribution: none`, reads the last `--body-file` (relative to CWD, first 262,144 bytes) when it is a regular file and not `-`, and denies on 0 with "the PR body file holds an attribution footer or trailer (commit.attribution: none): remove those lines".
   - When the check gives no verdict, or `_g05_attributed` is not defined, the guard calls `fail_closed` (ask interactively, deny under autopilot, spec 8.4). G5 does so only when no other check failed; G2 does so after its duplicate check, which still denies an open PR.
   - commit step 5 resolves `commit.convention` with `kern-get`, else `kern-detect`, and states it; a G5 deny naming only attribution or `commit.convention` gets one rerun of the same `git commit -F`. push-and-pr.md's PR section holds the no-attribution sentence for either body.
+- **Fast eval rounds (M2b, after Task 17a).**
+  - `scripts/lib/pool.mjs`:
+    - `limiter(n)` → `{ run(fn, { priority }), close(err) }`. At most n fns run at once; a free slot goes to the highest priority, then to the earliest queued. A slot is handed on at setImmediate.
+    - `ordered(count, emit)` → `done(i, value)`, which emits in index order.
+  - `claude-run.runClaudeAsync(opts)`: runClaude's argv, guards, result and ClaudeRunErrors, on spawn. The two share `prepare` and `ended`.
+  - `args.LOOP_FLAGS`: `--jobs` (`jobs`, default 6), `--quick` (`quick`), `--changed <range>` (`changed`), `--regrade <dir>` (`regrade`), `--resume <dir>` (`resume`) and `--no-cache` (`noCache`).
+  - `args.loopProblem(o, { select })` gives the usage message for flags that do not go together. `select` maps each case-filter key to its flag.
+  - `scripts/lib/case-inputs.mjs` exports:
+    - `blobSha`;
+    - `treeSource(root, rev)` → `{ top, list, text }`;
+    - `skillClosure(src, skills)`;
+    - `caseInputs(src, { skills, entries, paths }, kernSrc)` → `{ hash, skills }`;
+    - `dirHash(dir, omit)`;
+    - `rangeSources(root, range)` → `{ before, after }`, taking `A..B`, `A...B` or a lone rev against the working tree;
+    - `changedCases(cases, partsOf, before, after)`.
+  - Each runner's case parts are `behave.caseParts(c)` (with `caseSkills(c)`), `adherence.adherenceParts(c)`, `exec-run.execParts(c)` and `h2h.taskParts(t)` (with `CATEGORY_SKILLS`). Each evals/behave case names its `skills`.
+  - `scripts/lib/eval-cache.mjs` exports:
+    - `unitKey(parts)`;
+    - `filesVersion(root, files, extra)`;
+    - `cacheGet(cache, key)` and `cachePut(cache, key, record, files)`;
+    - `writeRecord` and `readRecord` for `<dir>/<unit>.result.json`;
+    - `writeManifest` and `readManifest(dir, runner)` for `<dir>/run.json`, which holds `{ runner, date, started, resumed?, claude, kern, options }`;
+    - `unitStore({ raw, cache, from, noCache, resume, limit })` → `unit({ name, key, files, work, priority })`, whose record carries `how` (`resume`, `cache` or `ran`);
+    - `timeStamp(now)`, `reuseNote(units)` and `roundLine(units, ms, jobs)`.
+  - The cache is `evals/results/cache/<behave|adherence|h2h|exec>/<key[0:2]>/<key>/`.
+  - The seams `behaveMain`, `adherenceMain` and `h2hMain` return a promise of the exit code and take `cache`. `exec-run.runEval` is async and takes `jobs`, `limit`, `snapshot` (`committed`, `beside` or `none`), `mode` and `unit`. `exec-run.parseArgs` adds each loop flag given.
+  - `regradeExec({ dir, cases, log, now, graders })` and `saveWorkspace(dir, id, ws)` are exported; behave, adherence and h2h regrade inside their mains.
+  - Results dirs:
+    - a `--quick` or `--changed` run writes to `<name>-quick-<HHMMSS>` or `<name>-changed-<HHMMSS>`;
+    - a regrade writes `regrade-<HHMMSS>.json`;
+    - exec also keeps `<id>.gh.log`, `<id>.state` and `<id>.ws/`.
+  - Snapshot fields: `quick: true` and `changed: <range>` when given, and `cached: { from, at }` on each reused run, h2h row or exec result.
+  - Open for the user: whether a `--quick` round may run without the per-run ask under a daily cap. Until the user decides, every paid run, quick ones included, is asked for.
