@@ -124,7 +124,7 @@ test('prove-it-2, recall-1 and recall-2 share the export-in-progress workspace',
 
 // LEDGER_LINE: the line formats of skills/execute-plan/references/ledger-format.md that this ledger uses.
 const ID = '[0-9a-f]{40}';
-const LEDGER_LINE = new RegExp([`# kern ledger: /\\S+\\.md`, `Main: /\\S+ branch=\\S+ status=${ID}`, `Worktree: /\\S+ branch=\\S+ base-tree=${ID}`,
+const LEDGER_LINE = new RegExp([`# kern ledger: /\\S+\\.md`, `Plan: ${ID}`, `Main: /\\S+ branch=\\S+ head=${ID} status=${ID}`, `Worktree: /\\S+ branch=\\S+ base-tree=${ID}`,
   'Preflight: Task \\d+ x Task \\d+: [^:]+: .+', `Task \\d+: start tree=${ID} at=\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ`,
   `Task \\d+: review round=[123] tree=${ID} spec=(compliant|issues) quality=(approved|needs-fixes)`,
   `Task \\d+: complete tree=${ID} test=.+ exit=0 review=approved probe=(ok|skipped \\(.+\\)) last=.+`].map((x) => `^(?:${x})$`).join('|'));
@@ -140,7 +140,9 @@ test('export-in-progress: the approved three-task plan passes plan-check, and it
     const lines = ledger.trimEnd().split('\n');
     for (const l of lines) assert.match(l, LEDGER_LINE, `not a ledger line: ${l}`);
     assert.equal(lines[0], `# kern ledger: ${real}/.kern/plans/export.md`);
-    assert.match(lines[1], new RegExp(`^Main: ${esc(real)} branch=main status=`));
+    // ledger-open's header (Task 17a P7): the plan's hash binds the ledger to this plan text, and Main: holds HEAD.
+    assert.equal(lines[1], `Plan: ${git(ws, 'hash-object', '--no-filters', '--', join(real, '.kern', 'plans', 'export.md')).trim()}`);
+    assert.match(lines[2], new RegExp(`^Main: ${esc(real)} branch=main head=${git(ws, 'rev-parse', 'HEAD').trim()} status=`));
     assert.match(ledger, new RegExp(`^Worktree: ${esc(wt)} branch=kern/export base-tree=${ID}$`, 'm'));
     for (const n of [1, 2]) assert.match(ledger, new RegExp(`^Task ${n}: complete `, 'm'));
     assert.match(ledger, /^Task 3: start /m);
@@ -151,6 +153,10 @@ test('export-in-progress: the approved three-task plan passes plan-check, and it
     assert.equal(tree(/^Task 3: start tree=(\w+)/m), tree(/^Task 2: complete tree=(\w+)/m));
     assert.equal(tree(/^Task 1: start tree=(\w+)/m), tree(/base-tree=(\w+)/));
     for (const id of ledger.match(new RegExp(`(?<=tree=)${ID}`, 'g'))) assert.equal(git(ws, 'cat-file', '-t', id).trim(), 'tree');
+    // execute-plan step 1 reopens this ledger on resume, then step 13 checks the main checkout.
+    const open = kern(ws, 'ledger-open', '.kern/plans/export.md');
+    assert.equal(open.status, 0, open.stderr);
+    assert.equal(open.stdout, `${real}/.kern/ledgers/export\n`);
     const summary = kern(ws, 'ledger-open', '--summary', '.kern/ledgers/export');
     assert.equal(summary.status, 0, summary.stdout + summary.stderr);
     assert.match(summary.stdout, /^main: unchanged$/m);

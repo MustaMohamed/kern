@@ -35,7 +35,7 @@ test('execute-plan sections, steps, scripts and red flags', () => {
 
 test('ledger format and model table', () => {
   assertHeadings(LEDGER, ['# Ledger format', '## Lines', '## Resume rule', '## Tree ids']);
-  assertContains(LEDGER, ['# kern ledger: <plan path>', 'Main: <root> branch=<name> status=<hash>',
+  assertContains(LEDGER, ['# kern ledger: <plan path>', '| `Plan: <hash>` | `ledger-open` |', 'Main: <root> branch=<name> head=<sha> status=<hash>',
     'Task N: start tree=<id> at=<iso>', 'Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>',
     'Task N: minor (deferred): <text>', 'Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>',
     'parked: <question>; default: <choice>; why: <one line>']);

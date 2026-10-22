@@ -36,12 +36,15 @@ cp -R "$files/task-2/." "$wt/"
 t2=$(snap)
 cp -R "$files/task-3/." "$wt/"
 
-# The Main: line as ledger-open writes it: the main checkout, its branch and a hash of its status.
+# The header as ledger-open writes it: the Plan: line, the plan's blob hash, then the Main: line, the
+# main checkout, its branch, its HEAD and a hash of its status.
 main=$(git -C "$root" worktree list --porcelain | sed -n 's/^worktree //p' | head -n 1)
 st=$(git --no-optional-locks -C "$main" status --porcelain)
 hash=$({ [ -z "$st" ] || printf '%s\n' "$st"; } | git hash-object --stdin)
 branch=$(git -C "$main" symbolic-ref -q --short HEAD)
+head=$(git -C "$main" rev-parse -q --verify HEAD)
 plan="$(cd "$root/.kern/plans" && pwd -P)/export.md"
+planhash=$(git hash-object --no-filters -- "$plan")
 
 # at SECONDS: a UTC time as task-start prints it. GNU date takes -d @S, BSD date -r S.
 if date -u -d @0 +%s > /dev/null 2>&1; then
@@ -55,7 +58,8 @@ dir="$root/.kern/ledgers/export"
 mkdir -p "$dir/briefs" "$dir/reports" "$dir/reviews" "$dir/logs"
 cat > "$dir/ledger.md" << EOF
 # kern ledger: $plan
-Main: $main branch=$branch status=$hash
+Plan: $planhash
+Main: $main branch=$branch head=$head status=$hash
 Preflight: Task 1 x Task 2: test/export.test.js: run in order, Task 2 is blocked by Task 1
 Preflight: Task 1 x Task 3: test/export.test.js: run in order, Task 3 is blocked by Task 2
 Preflight: Task 2 x Task 3: test/export.test.js: run in order, Task 3 is blocked by Task 2

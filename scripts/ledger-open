@@ -2,25 +2,30 @@
 # Open the execute-plan ledger for an approved plan, or check a ledger at the end of a run.
 # Usage: ledger-open PLAN [DIR]    Prints the ledger dir. DIR defaults to WORK/ledgers/<plan slug>.
 #        ledger-open --summary DIR Prints the Decision, parked, deferred-minor and Preflight lines, then
-#                                  whether the main checkout's branch and status are as recorded.
+#                                  whether the main checkout's branch, HEAD and status are as recorded.
+# A new ledger's header is `# kern ledger: <plan>`, `Plan: <git hash-object of the plan>` and `Main:`.
 # Exit 2: the plan is not approved (status: approved and an approved: line with a date and the user's
 # quoted words), the plan, the file a symlinked plan names, or its spec: line is not a Markdown name
-# (G20 checks approvals only in Markdown files), or DIR holds another plan's ledger. Each refusal
-# writes nothing. --summary exits 1 when the main checkout changed.
+# (G20 checks approvals only in Markdown files), DIR holds another plan's ledger, or the plan's content
+# differs from its ledger's Plan: line. Each refusal writes nothing. --summary exits 1 when the main
+# checkout changed.
 # Ledger identity adapted from superpowers subagent-driven-development/scripts/sdd-workspace (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
 . "$here/../hooks/lib/settings.sh"
+# shellcheck source=/dev/null
+. "$here/lib/wt-common.sh"
 
-# main_state: "<main root> branch=<name> status=<hash of git status --porcelain>".
+# main_state: "<main root> branch=<name> head=<sha> status=<hash of git status --porcelain>".
 main_state() {
-  local m b st
+  local m b h st
   m=$(kern_main_root "$PWD") || { echo "ledger-open: not a git repository" >&2; exit 2; }
   b=$(git -C "$m" symbolic-ref -q --short HEAD 2> /dev/null) || b='(detached)'
+  h=$(git -C "$m" rev-parse -q --verify HEAD) || h='(unborn)'
   # Read first: a failing git status inside a pipe or printf argument would be hashed as empty input.
   st=$(git --no-optional-locks -C "$m" status --porcelain) || { echo "ledger-open: git status failed in $m" >&2; exit 2; }
-  printf '%s branch=%s status=%s\n' "$m" "$b" "$({ [ -z "$st" ] || printf '%s\n' "$st"; } | git hash-object --stdin)"
+  printf '%s branch=%s head=%s status=%s\n' "$m" "$b" "$h" "$({ [ -z "$st" ] || printf '%s\n' "$st"; } | git hash-object --stdin)"
 }
 
 # markdown NAME: exit 0 when NAME ends in .md or .markdown, in any case, as G20 reads a Markdown name.
@@ -86,6 +91,9 @@ else
   [ -n "$slug" ] || { echo "ledger-open: cannot make a ledger name from $plan" >&2; exit 2; }
   dir=$(bash "$here/kern-dir" "ledgers/$slug")
 fi
+# The plan's content binds the ledger, so a plan updated in place and approved again does not reuse the
+# complete lines of the tasks it had (audit C-I5). --no-filters hashes the bytes as they are.
+hash=$(git hash-object --no-filters -- "$plan") || { echo "ledger-open: cannot hash $plan" >&2; exit 2; }
 ledger="$dir/ledger.md"
 if [ -f "$ledger" ]; then
   head=$(head -n 1 "$ledger")
@@ -93,11 +101,27 @@ if [ -f "$ledger" ]; then
     echo "ledger-open: $ledger belongs to another plan (${head#\# kern ledger: }); leave it and pass another DIR" >&2
     exit 2
   fi
+  rec=$(sed -n '2s/^Plan: //p' "$ledger")
+  if [ -z "$rec" ]; then
+    echo "ledger-open: $ledger has no Plan: line, so it cannot show the plan is unchanged; pass another DIR" >&2
+    exit 2
+  fi
+  if [ "$rec" != "$hash" ]; then
+    echo "ledger-open: $ledger: the plan changed since this ledger opened; pass another DIR" >&2
+    exit 2
+  fi
 else
+  MAIN=$(kern_main_root "$PWD") || { echo "ledger-open: not a git repository" >&2; exit 2; }
+  export KERN_MAIN="$MAIN"
+  # wt-new adds worktree.dir to info/exclude. Done here first, so untracked worktrees already in that dir
+  # leave the recorded status, and the run does not end with a false "main: changed" (audit C-M3). A
+  # worktree.dir that cannot be read whole gives the readable layers' answer, as wt_include takes it.
+  wtd=$(wt_dir 2> /dev/null) || [ $? = 4 ]
+  [ ! -d "$wtd" ] || wt_exclude_dir "$wtd"
   # Assigned first: a failure inside $(...) as a printf argument would not stop the script.
   state=$(main_state)
   mkdir -p "$dir"
-  printf '# kern ledger: %s\nMain: %s\n' "$plan" "$state" > "$ledger"
+  printf '# kern ledger: %s\nPlan: %s\nMain: %s\n' "$plan" "$hash" "$state" > "$ledger"
 fi
 mkdir -p "$dir/briefs" "$dir/reports" "$dir/reviews" "$dir/logs"
 printf '%s\n' "$dir"

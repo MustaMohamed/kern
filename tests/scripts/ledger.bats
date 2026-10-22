@@ -96,9 +96,96 @@ approved_plan() {
   [ "$status" -eq 0 ]
   [ "$output" = "$REPO/.kern/ledgers/big-plan" ]
   [ "$(head -n 1 "$output/ledger.md")" = "# kern ledger: $TMP/Big Plan.md" ]
-  grep -q "^Main: $REPO branch=main status=[0-9a-f]\{40\}$" "$output/ledger.md"
+  [ "$(sed -n 2p "$output/ledger.md")" = "Plan: $(git hash-object --no-filters -- "$TMP/Big Plan.md")" ]
+  [ "$(sed -n 3p "$output/ledger.md")" = "Main: $REPO branch=main head=$(git rev-parse HEAD) status=$(git hash-object --stdin < /dev/null)" ]
+  [ "$(wc -l < "$output/ledger.md")" -eq 3 ]
   for d in briefs reports reviews logs; do [ -d "$output/$d" ]; done
   [ -z "$(git status --porcelain)" ]
+}
+
+# Audit C-I5: a plan updated in place and approved again met its old ledger, whose complete lines then
+# skipped changed or renumbered tasks.
+@test "ledger-open refuses a ledger opened for the plan before it changed, and writes nothing" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/a.md"
+  dir=$(bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l" 2> /dev/null)
+  printf 'Task 1: complete tree=x\n' >> "$dir/ledger.md"
+  before=$(cat "$dir/ledger.md")
+  printf '%s\n' '' '### Task 2: Two' >> "$TMP/a.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [ "$stderr" = "ledger-open: $TMP/l/ledger.md: the plan changed since this ledger opened; pass another DIR" ]
+  [ "$(cat "$dir/ledger.md")" = "$before" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l2"
+  [ "$status" -eq 0 ]
+  [ "$(sed -n 2p "$TMP/l2/ledger.md")" = "Plan: $(git hash-object --no-filters -- "$TMP/a.md")" ]
+}
+
+@test "ledger-open refuses a ledger with no Plan: line, which cannot show the plan is unchanged" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/a.md"
+  mkdir -p "$TMP/old"
+  printf '# kern ledger: %s\nMain: %s branch=main status=x\n' "$TMP/a.md" "$REPO" > "$TMP/old/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/old"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"$TMP/old/ledger.md has no Plan: line"*"pass another DIR"* ]] || false
+  [ "$(ls -A "$TMP/old")" = ledger.md ]
+}
+
+@test "the recorded plan hash follows a symlinked plan's content" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/real.md"
+  ln -s real.md "$TMP/link.md"
+  dir=$(bash "$KERN_ROOT/scripts/ledger-open" "$TMP/link.md" "$TMP/l" 2> /dev/null)
+  [ "$(sed -n 2p "$dir/ledger.md")" = "Plan: $(git hash-object --no-filters -- "$TMP/real.md")" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/link.md" "$TMP/l"
+  [ "$status" -eq 0 ]
+}
+
+# Audit C-M2: Main: held no HEAD, so a commit on the main checkout during the run read main: unchanged.
+@test "a commit on the main checkout reads main: changed" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/a.md"
+  dir=$(bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l" 2> /dev/null)
+  git commit --quiet --allow-empty -m second
+  [ -z "$(git status --porcelain)" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" --summary "$dir"
+  [ "$status" -eq 1 ]
+  [[ "${lines[0]}" == "main: changed; recorded $REPO branch=main head="*"; now $REPO branch=main head=$(git rev-parse HEAD) status="* ]] || false
+}
+
+# Audit C-M3: wt-new adds worktree.dir to info/exclude after Main: was recorded, so in a repo whose
+# worktree dir already held untracked worktrees the run ended with a false main: changed.
+@test "an untracked worktree dir gives no false main: changed once wt-new excludes it" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  mkdir -p .claude/worktrees/agent-x
+  printf 'f\n' > .claude/worktrees/agent-x/f
+  [ "$(git status --porcelain)" = '?? .claude/' ]
+  approved_plan "$TMP/a.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l"
+  [ "$status" -eq 0 ]
+  [ -z "$(git status --porcelain)" ]
+  grep -qxF '/.claude/worktrees/' .git/info/exclude
+  bash "$KERN_ROOT/scripts/wt-new" p --base main > /dev/null 2>&1
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" --summary "$TMP/l"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = 'main: unchanged' ]
+}
+
+@test "ledger-open leaves info/exclude alone when the worktree dir is absent or the plan is refused" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/a.md"
+  before=$(cat .git/info/exclude 2> /dev/null || true)
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l"
+  [ "$status" -eq 0 ]
+  [ "$(cat .git/info/exclude 2> /dev/null || true)" = "$before" ]
+  mkdir -p .claude/worktrees/agent-x
+  printf 'f\n' > .claude/worktrees/agent-x/f
+  approved_plan "$TMP/d.md" draft
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/d.md" "$TMP/fresh"
+  [ "$status" -eq 2 ]
+  [ "$(cat .git/info/exclude 2> /dev/null || true)" = "$before" ]
 }
 
 @test "ledger-open reuses its own ledger and refuses another plan's" {
