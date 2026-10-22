@@ -6263,3 +6263,24 @@ Fixes made inside a task, with their reason:
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
 - Task 7, after its review (five fix rounds, e522639 to 307d830): the kept pilot patch hid a backtick inside single quotes inside `$(( ))`, a regression the blind grader did not see. The rounds that followed found and closed older holes from 0.3.0, among them `echo "'$(cmd)'"`, `echo $(echo '(' $(cmd))`, `$[ '$(cmd)' ]` and a `case` inside `$( )`. Round 4 replaced the paren-counting end-finder with a quote-aware scanner that keeps a context stack, and turned the sweep into a fixed corpus table in `tests/hooks/gitctx.bats`.
 - Task 6, after pilot p2: `metrics()` also returns `asks`, the kern guard asks a hook recorded (a `hook_success` attachment whose `permissionDecision` is `ask`). `docs/pilot.md` said an approved ask leaves no trace; p2's kern session holds both of its G16 asks.
+
+### Task 17a: The Opus audit's fix packages, before Task 16's confirming run
+
+On 2026-10-22 the user ordered "a full review & audit cycle on all the past kerns code by opus with compare with sources". Seven read-only Opus lanes read kern at 0c2d9dc against the vendored sources. The consolidated record is `docs/research/opus-audit-2026-10-22.md`: 0 Critical, 30 Important (27 confirmed in the code, 3 plausible) and 78 Minor findings, grouped into 20 fix packages. Its section 3 holds each package's findings, files, fix sketch, tests and focused runs; it is this task's brief.
+
+The user's answers (2026-10-22):
+- Scope: "All P1-P14" before the confirming run. P15 (CI) lands before the release. P16 to P20 wait for M3.
+- The confirming run: "One run, one harness rerun". Release 0.4.0 when every gate passes. On a failure, fix only a harness defect and rerun once; any other failure is written down as a known limit.
+- gh writes (P3): "Ask, deny on autopilot". Any gh verb outside a closed read list asks interactively and is denied under autopilot.
+- wt-new (P8): "Stop and say so". A local base ahead of origin exits 2 with the count; `--plan` takes `--base <sha>`.
+- self-review (P10): "Smells are nits". `split` needs a blocking finding on a line the previous round asked to change.
+- `overrides.<job>: off` (P13): "No override". kern's route stays and same-name detection is off; `route.<name>` is dropped.
+- Kernel bytes (P11): "Cut and lock". Take the lossless cuts, keep the `Scripts:` line, and set rule 7's limit to the new measured standing cost.
+- Learning line (P11, finding B13): "Allow memory". The line covers CLAUDE.md, rules and skills, so auto-memory writes are allowed.
+- GitHub CI (P15): the user fixed the billing error. Ubuntu runs on every push; macOS runs on demand and weekly.
+
+**Order.** Packages that share no file run in parallel, each in its own worktree, at most four at once. P7 waits for P8, P9 for P3, P13 for P2 and P10, P14 for P2, P15 for P5. P11 runs after P12 and P13, so rule 7's locked limit measures the final kernel, settings block and per-prompt text.
+
+**Each package:** test first; run its focused files only; one Opus review; fix rounds; the full `scripts/ci-local` once, in its worktree, before the merge. CHANGELOG and contract lines are written at the merge.
+
+**Done when** P1 to P14 are merged and ci-local passes on main. Then Task 16's one confirming run, asked for first. P15 merges before Task 19.
