@@ -6156,6 +6156,29 @@ Two minors from Task 16l's last re-review belong here:
 
 Then re-run Task 16 Steps 2 to 5 on the user's yes.
 
+### Task 16n: A plan names its base's source, a review is skipped only by the user's word, and the head-to-head grader sees what every arm saw
+
+The 2026-10-22 head-to-head failed the plan gate: kern 0.82 score with 0.83 false alarms, superpowers 0.72 with 0.17. The rubric counts "claims about the repo that the fixture files do not support" (`graderPrompt`, scripts/lib/h2h.mjs). A read-only diagnosis found that 4 or 5 of kern's 5 false alarms were one line.
+- Every kern plan wrote `base: main; promotion: none` after `kern-detect base_branch` printed "not detectable". The fixtures have no remote.
+- That line, or a base SHA no command printed, was counted in 4 of 6 runs.
+- The claim is true: the harness creates the repo with `git init --initial-branch=main`. The model most likely read it from Claude Code's git status block, which the grader never sees.
+- Its source is `skills/plan/references/plan-template.md:9` and plan step 9, which, unlike steps 1 and 3, name no source.
+- kern also skipped its own plan review (step 11) in 3 of 6 runs, on its own judgement ("to save budget"). In one run that let a flawed failing-test step stay in the plan.
+- Only 2 of the 4 plan tasks were graded. rename-small and scope-split were voided by a TLS-interception outage, but the gate still printed a verdict.
+
+The user's answers, 2026-10-22: on the fix, "kern and grader"; on a gating review, "Only by my word"; on the rerun, "Yes, after the fix".
+
+**Files:**
+- `skills/plan/SKILL.md`, `skills/plan/references/plan-template.md`, and `kernel/kernel.md` or the skills with gating reviews (plan, define, execute-plan)
+- `scripts/lib/h2h.mjs`, `scripts/h2h.mjs`, `scripts/lib/lint-rules.mjs` (rule 7 limits, if the kernel changes)
+- `tests/`, `docs/specs/`, `docs/plans/contract.md`, `CHANGELOG.md`
+
+1. **Base source.** Plan step 9 takes `base_branch` from `kern-get`, else from `kern-detect`, and names the source. When both exit 3, it writes `base: <current branch> (current branch; not detected)` and says so in the step 12 summary. The base-and-head check names the base by that branch, never by a SHA no command printed. The template line becomes `base: <base branch> (<source>)`.
+2. **Reviews (the user's "Only by my word").** A gating review is skipped only when the user's own words skip it. kern's own judgement never skips one. This covers plan step 11, define's spec review and execute-plan's task and final reviews.
+3. **Grader (the user's "kern and grader").** The head-to-head runner records the git facts every arm's session saw (branch, commit count, remote or none). The grader prompt gives them, so a true claim matching them is not counted as unsupported. This applies to every category.
+4. **Gate completeness.** `gate()` reports a category with a task that has no graded run as incomplete, not as PASS or FAIL.
+5. **Rerun.** Rerun the plan category, 4 tasks x 5 arms x 3 runs (60 sessions plus 12 grader calls), once this task is reviewed, per the user's yes.
+
 Fixes made inside a task, with their reason:
 
 - Task 5, Step 0 (pilot p1): `metrics().wallSeconds` sums each typed turn instead of running from the first entry to the last, which counted the wait before the prompt and an idle `away_summary` (2bcecac). `hide(text, dirs, plugins)` collapses a plugin directory and any file path under it to `<plugin file>`, and `kern.local.yml` to `<settings>.yml`, because the first dry-run bundle named the kern arm through its plugin's layout (5e1969d). `kern_env` and `wt_test_env` unset `CLAUDE_CONFIG_DIR`, because with the pilot's eval config dir set `recall-sessions.bats` failed 22 tests and `aliases.bats` 14 (f4cefde). After the Task 5 review: review refuses a session with no typed prompt, and `standing-cost.mjs` refuses `--runs` below 1 and reports a spawn error. The review tests' fixture gives its two repos fixed commit dates: their base commits differed whenever they were made in different seconds, which failed about one run in 28 with `bad object`.
