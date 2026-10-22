@@ -4,7 +4,7 @@ recall reads four kinds of record. It never writes any of them.
 
 ## Transcripts
 
-`~/.claude/projects/<slug>/*.jsonl`, one file per session. `<slug>` is the workspace path with every UTF-16 code unit outside A-Z, a-z and 0-9 turned into `-` (`é` gives one `-`, an emoji two); a slug over 200 characters is cut to 200 and gets `-<hash>`. Sessions of kern worktrees live under sibling slugs `<slug>--claude-worktrees-<name>`. Skip the per-session child folders (`subagents/`, `tool-results/`, `workflows/`): they are not the user's chat. Order by modification time, never by name. Skip the `current` session: recall-sessions marks the one whose id is `CLAUDE_CODE_SESSION_ID`, the running session (in a subagent, its parent). With no `current` line, skip none.
+`~/.claude/projects/<slug>/*.jsonl`, one file per session. `<slug>` is the workspace path with every UTF-16 code unit outside A-Z, a-z and 0-9 turned into `-` (`é` gives one `-`, an emoji two); a slug over 200 characters is cut to 200 and gets `-<hash>`. Sessions of kern worktrees live under sibling slugs `<slug>--claude-worktrees-<name>`. Skip the per-session child folders (`subagents/`, `tool-results/`, `workflows/`): they are not the user's chat. Order by modification time, never by name. Skip the `current` session: recall-sessions marks the one whose id is `CLAUDE_CODE_SESSION_ID`, the running session (in a subagent, its parent). With no `current` line, skip none; a transcript holding only this request is this one.
 
 ## Prompt index
 

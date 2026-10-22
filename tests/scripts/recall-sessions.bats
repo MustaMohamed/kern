@@ -343,6 +343,43 @@ jslug() {
   [[ "${lines[0]}" == session$'\t'*$'\tlong\t'*$'\t'"$P/$s/long.jsonl" ]] || false
 }
 
+@test "a cut folder is kept when a later transcript's cwd is the path, though the first one's is not" {
+  R="$TMP/long/$(printf '%*s' $((210 - ${#TMP} - 6)) '' | tr ' ' d)"
+  mkdir -p "$R"
+  git init -q "$R"
+  s=$(jslug "$R" abc123)
+  mkdir -p "$P/$s"
+  # a.jsonl sorts first, and its session's cwd had moved to a subdirectory.
+  printf '{"type":"user","cwd":"%s/sub","sessionId":"a"}\n' "$R" > "$P/$s/a.jsonl"
+  printf '{"type":"user","cwd":"%s","sessionId":"b"}\n' "$R" > "$P/$s/b.jsonl"
+  cd "$R"
+  run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [[ "$output" == *$'\t'"$P/$s/a.jsonl"* ]] || false
+  [[ "$output" == *$'\t'"$P/$s/b.jsonl"* ]] || false
+}
+
+@test "a folder name of exactly 200 characters is taken whole, and one of 201 is cut" {
+  for n in 200 201; do
+    R="$TMP/b$n/$(printf '%*s' $((n - ${#TMP} - 6)) '' | tr ' ' d)"
+    [ "${#R}" -eq "$n" ]
+    mkdir -p "$R"
+    git init -q "$R"
+    s=$(jslug "$R" cut$n)
+    want=200
+    [ "$n" = 200 ] || want=207
+    [ "${#s}" -eq "$want" ]
+    mkdir -p "$P/$s"
+    printf '{"type":"user","cwd":"%s","sessionId":"s%s"}\n' "$R" "$n" > "$P/$s/s$n.jsonl"
+    cd "$R"
+    run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "${lines[0]##*$'\t'}" = "$P/$s/s$n.jsonl" ]
+  done
+}
+
 @test "a worktree.dir whose folder name passes 200 characters takes the cut folders whose cwd lies under it" {
   R="$TMP/lp/$(printf '%*s' $((190 - ${#TMP} - 4)) '' | tr ' ' d)"
   [ "${#R}" -eq 190 ]

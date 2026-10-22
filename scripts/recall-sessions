@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # List this project's Claude Code sessions for recall: the main worktree's transcripts and its kern
 # worktrees', newest first, inside a window; with --topic, also this project's prompts that name the
-# topic. Never reads another project's transcripts or prompts. Read-only.
+# topic. Never lists another project's transcripts or prompts (a cut folder's transcripts are read up to
+# their first `cwd` to tell whose it is). Read-only.
 # Usage: recall-sessions [--days N] [--topic TEXT]   (N is 1 or more; 7 by default)
 # Output: session<TAB><iso mtime><TAB><session id><TAB><bytes><TAB><path>, newest first. The session whose
 # id is CLAUDE_CODE_SESSION_ID, the one running now, prints `current` in place of `session` where it sorts
@@ -26,8 +27,8 @@
 # checkout kern_main_root finds stands in for it.
 # Slug: Claude Code (2.1.308) names a transcript folder after the path with every UTF-16 code unit outside
 # A-Za-z0-9 turned into -, so é or 中 gives one -, an emoji two. A name over 200 characters is cut to 200
-# and gets -<a hash of the path>; the hash is not computed here: of the <first 200>-* folders, the one
-# whose first transcript's "cwd" is the path is taken. NFD paths (accepted): Claude Code NFC-normalizes
+# and gets -<a hash of the path>; the hash is not computed here: a <first 200>-* folder is taken when one
+# of its transcripts has the path as its first "cwd". NFD paths (accepted): Claude Code NFC-normalizes
 # the path first and this script does not, so a path stored decomposed finds no folder.
 # Shared slug (accepted): a dot, underscore, space or dash alike become -; two paths differing only in
 # those share one transcript folder, and this lists both paths' sessions. Prompts are matched by exact
@@ -117,9 +118,9 @@ if [ -d "$wt_root" ]; then
 fi
 
 folders=''
-# long_folders SLUG PATH OP: of the folders named <first 200 of SLUG>-*, add each whose first transcript
-# with a "cwd" names PATH (OP =) or a path under the prefix PATH (OP ^). The path is compared as JSON
-# writes it, with \ and " escaped.
+# long_folders SLUG PATH OP: of the folders named <first 200 of SLUG>-*, add each holding a top-level
+# transcript whose first "cwd" names PATH (OP =) or a path under the prefix PATH (OP ^). The path is
+# compared as JSON writes it, with \ and " escaped.
 long_folders() {
   local d f r
   # An unmatched glob stays literal and fails the -d test.
@@ -140,7 +141,7 @@ long_folders() {
           else print "no"
           exit
         }' "$f") || die "cannot read $f"
-      [ -z "$r" ] || break
+      [ "$r" != yes ] || break
     done
     [ "$r" != yes ] || folders="$folders$d"$'\n'
   done

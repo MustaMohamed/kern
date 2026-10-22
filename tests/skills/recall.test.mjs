@@ -52,7 +52,7 @@ test('recall skips the session marked current and names how tracker is found', (
   assertOnce(SKILL, ['Skip the `current` session: it is this one',
     '(`tracker` from `kern-get tracker`, else `kern-detect tracker`; `workflow_records` unset is none; no tracker found is said once)']);
   assertOnce(REF, ['Skip the `current` session: recall-sessions marks the one whose id is `CLAUDE_CODE_SESSION_ID`',
-    'the running session (in a subagent, its parent)', 'With no `current` line, skip none.']);
+    'the running session (in a subagent, its parent)', 'With no `current` line, skip none; a transcript holding only this request is this one.']);
   for (const rel of [SKILL, REF]) assert.ok(!/usually (this one|the running session)/.test(readDoc(rel).raw), `${rel}: the newest session is not taken for the running one`);
 });
 
