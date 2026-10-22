@@ -5,7 +5,8 @@
 // Usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--task <category/id>] [--arms a,b]
 //        [--runs N] [--model <m>] [--grader-model <m>] [--dry-run]
 // Raw runs and key.json go to evals/results/h2h-<date>/ (gitignored); the unblinded scores and the gate
-// go to evals/snapshots/h2h-<model>-<date>.json (committed).
+// go to evals/snapshots/h2h-<model>-<date>.json (committed). Exit 0 when every category passes, 1 when one
+// fails, 3 when none fails but one is incomplete (a loaded task with no graded run), 2 when no task matched.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses, workspace } from './lib/claude-run.mjs';
 import { digest, pluginCopy, tryRun } from './lib/behave.mjs';
-import { armCopy, blindIds, falseAlarms, gate, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact } from './lib/h2h.mjs';
+import { armCopy, blindIds, falseAlarms, gate, gateExit, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, verdictLine } from './lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -100,10 +101,10 @@ for (const t of tasks) {
   for (const c of armCopies) rmSync(dirname(c), { recursive: true, force: true });
 }
 writeFileSync(join(raw, 'key.json'), JSON.stringify(key, null, 2) + '\n');
-const verdict = gate(results, [...new Set(tasks.map((t) => t.category))]);
-for (const v of verdict) console.log(`${v.pass ? 'PASS' : 'FAIL'} ${v.category}${v.reason ? `: ${v.reason}` : ''}`);
+const verdict = gate(results, tasks.map((t) => ({ id: t.id, category: t.category })));
+for (const v of verdict) console.log(verdictLine(v));
 const out = join(ROOT, 'evals', 'snapshots', `h2h-${MODEL.replace(/^claude-/, '')}-${date}.json`);
 writeFileSync(out, JSON.stringify({ model: MODEL, grader: GRADER, claude: claudeVersion(), isolation: ISOLATION, permissions: PERMISSIONS, runs: RUNS,
   arms: arms.map((a) => ({ id: a.id, plugin: a.plugin, commit: a.dir ? rev(a.srcDir ?? a.dir) : null })), gate: verdict, results }, null, 2) + '\n');
 console.log(`snapshot: ${out}`);
-process.exit(verdict.every((v) => v.pass) ? 0 : 1);
+process.exit(gateExit(verdict));

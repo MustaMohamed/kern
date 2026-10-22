@@ -78,23 +78,42 @@ export function falseAlarms(category, e) {
   return e.unsupported ?? 0;
 }
 
-// gate(results): per category, kern passes when its mean score is at least the strongest other arm's,
-// and its mean false alarms are at most that arm's. The control arm counts as an arm.
-export function gate(results, expected = []) {
+// gate(results, tasks): per category, kern passes when its mean score is at least the strongest other arm's,
+// and its mean false alarms are at most that arm's. The control arm counts as an arm. tasks are the loaded
+// tasks ({ id, category }): a category in which one has no graded run is INCOMPLETE, never PASS or FAIL,
+// since its verdict would rest on part of the category (2026-10-22: a plan verdict from 2 of 4 tasks, the
+// other two voided by an outage). status is PASS, FAIL or INCOMPLETE; pass is true only for PASS.
+export function gate(results, tasks = []) {
   const by = {};
   for (const r of results) ((by[r.category] ??= {})[r.arm] ??= []).push(r);
+  const want = {};
+  for (const t of tasks) (want[t.category] ??= []).push(t.id);
+  const graded = new Set(results.map((r) => r.task));
   const mean = (xs, k) => xs.reduce((s, x) => s + x[k], 0) / xs.length;
-  const missing = expected.filter((c) => !by[c]).map((category) => ({ category, pass: false, reason: 'no graded run' }));
-  return Object.entries(by).map(([category, arms]) => {
-    if (!arms.kern) return { category, pass: false, reason: 'no kern runs' };
+  const done = (category, v) => ({ category, status: v.pass ? 'PASS' : 'FAIL', ...v });
+  return [...new Set([...Object.keys(by), ...Object.keys(want)])].map((category) => {
+    const ids = want[category] ?? [];
+    const ungraded = ids.filter((id) => !graded.has(id));
+    if (ungraded.length) {
+      const n = ids.length - ungraded.length;
+      return { category, status: 'INCOMPLETE', pass: false, graded: n, tasks: ids.length, ungraded, reason: `${n} of ${ids.length} tasks graded; no graded run: ${ungraded.join(', ')}` };
+    }
+    const arms = by[category];
+    if (!arms.kern) return done(category, { pass: false, reason: 'no kern runs' });
     const others = Object.entries(arms).filter(([a]) => a !== 'kern').map(([arm, xs]) => ({ arm, score: mean(xs, 'score'), fa: mean(xs, 'falseAlarms') }));
     const best = others.sort((a, b) => b.score - a.score || a.fa - b.fa)[0];
     const kern = { score: mean(arms.kern, 'score'), fa: mean(arms.kern, 'falseAlarms') };
-    if (!best) return { category, pass: false, reason: 'no other arm ran', kern };
+    if (!best) return done(category, { pass: false, reason: 'no other arm ran', kern });
     const pass = kern.score >= best.score && kern.fa <= best.fa;
-    return { category, pass, kern, best, reason: pass ? '' : `kern ${kern.score.toFixed(2)} score, ${kern.fa.toFixed(2)} false alarms; ${best.arm} ${best.score.toFixed(2)}, ${best.fa.toFixed(2)}` };
-  }).concat(missing);
+    return done(category, { pass, kern, best, reason: pass ? '' : `kern ${kern.score.toFixed(2)} score, ${kern.fa.toFixed(2)} false alarms; ${best.arm} ${best.score.toFixed(2)}, ${best.fa.toFixed(2)}` });
+  });
 }
+
+// verdictLine(v): the line the runner prints for one category, such as `INCOMPLETE plan: 2 of 4 tasks graded; ...`.
+export const verdictLine = (v) => `${v.status} ${v.category}${v.reason ? `: ${v.reason}` : ''}`;
+
+// gateExit(verdict): the runner's exit code. 1 when a category failed, else 3 when one is incomplete, else 0.
+export const gateExit = (verdict) => (verdict.some((v) => v.status === 'FAIL') ? 1 : verdict.some((v) => v.status === 'INCOMPLETE') ? 3 : 0);
 
 export function graderPrompt(task, outputs) {
   return [

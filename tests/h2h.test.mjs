@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspace } from '../scripts/lib/claude-run.mjs';
-import { armCopy, blindIds, falseAlarms, gate, graderPrompt, loadTasks, outOfArea, parseGrades, redact } from '../scripts/lib/h2h.mjs';
+import { armCopy, blindIds, falseAlarms, gate, gateExit, graderPrompt, loadTasks, outOfArea, parseGrades, redact, verdictLine } from '../scripts/lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const arms = [{ id: 'kern', dir: '/w/kern' }, { id: 'superpowers', dir: '/w/kern/.upstream/superpowers' }, { id: 'pstack', dir: '/w/kern/.upstream/pstack/harness/pstack/claude-code' }, { id: 'control', dir: null }];
@@ -43,11 +43,44 @@ test('out-of-area files, false alarms and the per-category gate', () => {
   assert.equal(gate([r('kern', 0.6, 0), r('control', 0.7, 0)])[0].pass, false, 'the control arm counts');
 });
 
-test('a category with no graded run fails the gate when it was expected', () => {
-  assert.deepEqual(gate([], ['diagnose']), [{ category: 'diagnose', pass: false, reason: 'no graded run' }]);
-  const r = [{ category: 'diagnose', arm: 'kern', score: 0.8, falseAlarms: 0 }, { category: 'diagnose', arm: 'control', score: 0.4, falseAlarms: 0 }];
-  assert.deepEqual(gate(r, ['diagnose']), gate(r));
-  assert.equal(gate(r, ['diagnose', 'review']).length, 2);
+test('a category with no graded run is incomplete when its tasks were loaded', () => {
+  const v = gate([], [{ id: 'diagnose/x', category: 'diagnose' }]);
+  assert.deepEqual(v, [{ category: 'diagnose', status: 'INCOMPLETE', pass: false, graded: 0, tasks: 1, ungraded: ['diagnose/x'], reason: '0 of 1 tasks graded; no graded run: diagnose/x' }]);
+  const r = [{ task: 'diagnose/x', category: 'diagnose', arm: 'kern', score: 0.8, falseAlarms: 0 }, { task: 'diagnose/x', category: 'diagnose', arm: 'control', score: 0.4, falseAlarms: 0 }];
+  assert.deepEqual(gate(r, [{ id: 'diagnose/x', category: 'diagnose' }]), gate(r));
+  assert.equal(gate(r, [{ id: 'diagnose/x', category: 'diagnose' }, { id: 'review/y', category: 'review' }]).length, 2);
+});
+
+test('a category with an ungraded task is INCOMPLETE, never PASS or FAIL, and the exit code follows', () => {
+  // 2026-10-22: rename-small and scope-split voided every run (a TLS-interception outage), and the gate still
+  // printed a plan verdict from 2 of 4 tasks (task-16-h2h-plan-diagnosis, Task 16n).
+  const tasks = ['plan/a', 'plan/b', 'plan/c', 'plan/d'].map((id) => ({ id, category: 'plan' }));
+  const r = (task, arm, score, fa) => ({ task, category: 'plan', arm, score, falseAlarms: fa });
+  const two = [r('plan/a', 'kern', 0.8, 0), r('plan/a', 'superpowers', 0.7, 0), r('plan/b', 'kern', 0.8, 0), r('plan/b', 'superpowers', 0.7, 0)];
+  const [v] = gate(two, tasks);
+  assert.equal(v.status, 'INCOMPLETE');
+  assert.equal(v.pass, false);
+  assert.equal(verdictLine(v), 'INCOMPLETE plan: 2 of 4 tasks graded; no graded run: plan/c, plan/d');
+  assert.equal(gateExit([v]), 3);
+  assert.equal(gate([r('plan/a', 'kern', 0.2, 5), r('plan/a', 'superpowers', 0.9, 0)], tasks)[0].status, 'INCOMPLETE', 'a losing part is not a FAIL');
+  const all = (k) => tasks.flatMap((t) => [r(t.id, 'kern', k, 0), r(t.id, 'control', 0.5, 0)]);
+  const pass = gate(all(0.8), tasks);
+  assert.equal(pass[0].status, 'PASS');
+  assert.equal(verdictLine(pass[0]), 'PASS plan');
+  assert.equal(gateExit(pass), 0);
+  const fail = gate(all(0.2), tasks);
+  assert.equal(fail[0].status, 'FAIL');
+  assert.match(verdictLine(fail[0]), /^FAIL plan: kern 0\.20 score/);
+  assert.equal(gateExit(fail), 1);
+  assert.equal(gateExit([...fail, v]), 1, 'a FAIL outranks an incomplete category');
+  assert.equal(gateExit([...pass, v]), 3);
+});
+
+test('the runner gives the gate every loaded task, prints each verdict line and exits by gateExit', () => {
+  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
+  assert.ok(src.includes('const verdict = gate(results, tasks.map((t) => ({ id: t.id, category: t.category })));'), 'gate gets every loaded task');
+  assert.ok(src.includes('for (const v of verdict) console.log(verdictLine(v));'));
+  assert.ok(src.includes('process.exit(gateExit(verdict));'));
 });
 
 test('redaction turns .kern/ into .work/ and hides a /private temp prefix', () => {
