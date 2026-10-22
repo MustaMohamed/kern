@@ -7,8 +7,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECKS, RECORD, behaveDigest, caseResult, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
+import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseResult, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, stage, treeRecord, treeState, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
+import { parseArgs } from '../scripts/lib/args.mjs';
+import { guardedEnv, ran as runOf, result as resultEvent, started } from './helpers/eval-stub.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const ok = (n) => ({ invalid: false, verdict: Array.from({ length: n }, () => ({ pass: true })) });
@@ -229,6 +231,52 @@ test('the runner lists its cases in dry-run mode without calling claude', () => 
   assert.match(r.stdout, /^pressure-commit-unverified: 1 turn\(s\) on node-bug \(origin, branch fix-sum, 1 setup command\(s\)\), /m);
 });
 
+// Task 17a G4: every argument below once ran every case; each is now a usage error before anything runs. The
+// spawned runner gets a stand-in claude and keeps --dry-run, so a flag it failed to refuse still spends nothing.
+test('Task 17a G4: the behave runner refuses an unknown, valueless or repeated flag and a bad --runs before anything runs', () => {
+  const ids = loadCases(ROOT).map((c) => c.id);
+  assert.deepEqual(parseArgs(['--case', 'recall-1', '--runs', '2', '--model', 'm', '--grader-model', 'g', '--dry-run', '--allow-dirty'], behaveFlags(ids)),
+    { case: 'recall-1', runs: 2, model: 'm', grader: 'g', dryRun: true, allowDirty: true });
+  const env = guardedEnv();
+  for (const a of [['--dryrun'], ['--case=recall-1'], ['--cases', 'recall-1'], ['--case'], ['--case', 'nope'], ['--runs', 'abc'], ['--runs', '0'], ['--model'], ['recall-1'], ['--case', 'recall-1', '--case', 'recall-2']]) {
+    const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', ...a], { encoding: 'utf8', env });
+    assert.equal(r.status, 2, `${a.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /^behave: .*\nusage: node scripts\/behave\.mjs /m, a.join(' '));
+    assert.equal(r.stdout, '', `${a.join(' ')}: nothing ran`);
+  }
+});
+
+// Task 17a G11: no snapshot pinned the kern tree it measured, and the plugin copy takes uncommitted and untracked
+// files. treeRecord reads HEAD and the changes a run would measure: what pluginCopy copies, and the eval cases,
+// fixtures and harness the runner reads; not the snapshots and results the runners write, nor docs, tests or notes.
+test('Task 17a G11: treeRecord gives HEAD and the uncommitted changes a run measures, and only those', () => {
+  const d = mkdtempSync(join(tmpdir(), 'tree-'));
+  const put = (f, text = 'x\n') => { mkdirSync(dirname(join(d, f)), { recursive: true }); writeFileSync(join(d, f), text); };
+  const git = (...a) => spawnSync('git', ['-C', d, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { encoding: 'utf8' });
+  try {
+    for (const f of ['skills/a/SKILL.md', 'evals/cases/x.json', 'evals/snapshots/old.json', 'docs/d.md', 'tests/t.test.mjs', 'scripts/lib/h2h.mjs']) put(f);
+    git('init', '-q', '--initial-branch=main');
+    git('add', '.');
+    git('commit', '-qm', 'init');
+    const head = git('rev-parse', 'HEAD').stdout.trim();
+    assert.deepEqual(treeRecord(d), { commit: head, dirty: false, changes: [] });
+    for (const f of ['evals/snapshots/new.json', 'evals/results/r/x.jsonl', '.superpowers/notes.md', '.claude/worktrees/w/f', 'docs/d.md', 'tests/t.test.mjs', 'CHANGELOG.md']) put(f, 'changed\n');
+    git('-C', join(d, '.claude', 'worktrees', 'w'), 'init', '-q');
+    assert.deepEqual(treeRecord(d), { commit: head, dirty: false, changes: [] }, 'outputs, notes, docs and tests are not measured');
+    put('skills/a/SKILL.md', 'edited\n');
+    put('hooks/new-hook');
+    put('evals/cases/x.json', '{}\n');
+    put('scripts/lib/h2h.mjs', '// edited\n');
+    assert.deepEqual(treeRecord(d), { commit: head, dirty: true, changes: [' M evals/cases/x.json', ' M scripts/lib/h2h.mjs', ' M skills/a/SKILL.md', '?? hooks/new-hook'] });
+  } finally { rmSync(d, { recursive: true, force: true }); }
+  const none = mkdtempSync(join(tmpdir(), 'nogit-'));
+  try {
+    const r = treeRecord(none);
+    assert.deepEqual([r.commit, r.dirty, r.changes], [null, true, []]);
+    assert.match(r.problem, /^not a git checkout: /);
+  } finally { rmSync(none, { recursive: true, force: true }); }
+});
+
 const call = (name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } });
 
 test('the digest shows what a Write or Edit wrote, cut at 800 characters', () => {
@@ -401,13 +449,6 @@ test('no cut in the behaviour record splits a surrogate pair (review M5)', () =>
   assert.doesNotMatch(behaveDigest(ev), lone);
   const long = Array.from({ length: 300 }, (_, i) => [say(`${pair.repeat(60)} ${i}`), use(`t${i}`, 'Bash', { command: `echo ${i}` }), back(`t${i}`, pair.repeat(400))]).flat();
   assert.doesNotMatch(behaveDigest(long), lone);
-});
-
-test('the behaviour runner grades on that record; the head-to-head digest is unchanged', () => {
-  const src = readFileSync(join(ROOT, 'scripts', 'behave.mjs'), 'utf8');
-  // Task 16j: gradeRun gives the model behaveDigest(events) with the expectations no check decides (tested below).
-  assert.match(src, /gradeRun\(c, run\.events, tree, \(ex, record\) => \{\n\s+const g = tryRun\(\{ cwd: gdir, prompts: \[graderPrompt\(ex, record\)\]/);
-  assert.match(readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8'), /digest\(run\.events, 24000, \{ results: true \}\)/);
 });
 
 test('the plugin copy keeps the plugin and leaves out answer keys', () => {
@@ -665,7 +706,8 @@ test('treeState reads every worktree\'s HEAD and status with each listed file\'s
 test('readTree turns a git failure into a reason the run is invalid; only a case with a tree check reads the tree', () => {
   const d = mkdtempSync(join(tmpdir(), 'nogit-'));
   try {
-    assert.match(readTree(d, 'start').problem, /^git status at the run's start could not be read: .*not a git repository/i);
+    // Where the temp dir is on another mount (Linux CI), git stops at the filesystem boundary instead (Task 17a, F1).
+    assert.match(readTree(d, 'start').problem, /^git status at the run's start could not be read: .*(?:not a git repository|Stopping at filesystem boundary)/i);
     assert.equal(readTree(d, 'end').state, undefined);
   } finally { rmSync(d, { recursive: true, force: true }); }
   assert.equal(readsTree({ checks: { 3: 'no-write' } }), true);
@@ -673,11 +715,132 @@ test('readTree turns a git failure into a reason the run is invalid; only a case
   assert.equal(readsTree({}), false);
 });
 
+// The behave runner through its seam (Task 17a): behaveMain with a stub run, temp snapshot and results dirs and a
+// stated tree, so no test writes into the repo's evals/ and no claude runs. A stub arm run opens as a kern session
+// does (its SessionStart prints the kernel, its init lists the plugin dir); a grader call passes every expectation.
+const DAY = new Date('2026-10-22T12:00:00Z');
+const CLEAN = { commit: 'c0ffee', dirty: false, changes: [] };
+const stubCase = (id, extra = {}) => ({ id, source: 'test', files: ['node-bug'], prompts: [`fix it (${id})`], expectations: ['says it is done'], pressure: [], ...extra });
+const graderReply = (prompt) => {
+  const n = prompt.split('\nExpectations:\n')[1].split('\n\nRecord:')[0].split('\n').length;
+  return JSON.stringify({ results: Array.from({ length: n }, (_, i) => ({ n: i + 1, pass: true, evidence: 'the reply says so' })) });
+};
+const stubRun = (arm = (opts) => runOf([...started(opts.pluginDirs), resultEvent('done')])) => {
+  const calls = [];
+  const run = (opts) => {
+    calls.push(opts);
+    return opts.prompts[0].startsWith('You grade') ? runOf([resultEvent(graderReply(opts.prompts[0]))]) : arm(opts, calls.length);
+  };
+  return { run, calls };
+};
+const drive = ({ argv = ['--runs', '1'], cases = [stubCase('x-1'), stubCase('x-2')], run = stubRun().run, tree = CLEAN, before = null } = {}) => {
+  const dir = mkdtempSync(join(tmpdir(), 'bm-'));
+  const snapshots = join(dir, 'snapshots'); const results = join(dir, 'results');
+  const committed = join(snapshots, 'behave-sonnet-5-5-2026-10-22.json');
+  if (before !== null) { mkdirSync(snapshots, { recursive: true }); writeFileSync(committed, before); }
+  const lines = []; const errors = [];
+  let code; let thrown = null;
+  try { code = behaveMain({ root: ROOT, argv, env: {}, cases, run, version: () => '9.9.9 (stand-in)', tree: () => tree, snapshots, results, log: (l) => lines.push(l), error: (l) => errors.push(l), now: DAY }); }
+  catch (e) { thrown = e; }
+  const raw = join(results, 'behave-sonnet-5-5-2026-10-22');
+  const read = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null);
+  return { code, thrown, lines, errors, committed: existsSync(committed) ? readFileSync(committed, 'utf8') : null, raw, read, partial: (name) => read(join(raw, `snapshot-${name}.json`)), done: () => rmSync(dir, { recursive: true, force: true }) };
+};
+
+test('Task 17a G3: a --case run writes its snapshot beside the transcripts, never the committed one, and says which cases it ran', () => {
+  const r = drive({ argv: ['--case', 'x-2', '--runs', '1'], before: 'the day\'s full run\n' });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.equal(r.committed, 'the day\'s full run\n', 'the committed snapshot is untouched');
+    const s = r.partial('x-2');
+    assert.deepEqual([s.complete, s.cases, s.results.map((x) => x.id), s.kern, s.claude], [true, ['x-2'], ['x-2'], CLEAN, '9.9.9 (stand-in)']);
+    assert.match(r.lines.join('\n'), /--case run: no committed snapshot; this one is beside the transcripts: .*snapshot-x-2\.json/);
+  } finally { r.done(); }
+});
+
+test('Task 17a G3: a full run writes the committed snapshot once, complete, with every case, the tree and no partial file left', () => {
+  const r = drive({ before: 'yesterday\'s\n' });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    const s = JSON.parse(r.committed);
+    assert.deepEqual([s.complete, s.cases, s.results.map((x) => x.id), s.kern, s.runs], [true, ['x-1', 'x-2'], ['x-1', 'x-2'], CLEAN, 1]);
+    assert.equal(r.partial('all'), null, 'the progress file goes once the committed snapshot is written');
+    assert.match(r.lines.at(-1), /^snapshot: .*behave-sonnet-5-5-2026-10-22\.json$/);
+  } finally { r.done(); }
+});
+
+test('Task 17a G3: a full run in which no run was valid, or one a fatal error stops, leaves the committed snapshot alone', () => {
+  const none = drive({ run: stubRun(() => runOf([resultEvent('x')], 1)).run, before: 'earlier\n' });
+  try {
+    assert.equal(none.code, 1);
+    assert.equal(none.committed, 'earlier\n');
+    const s = none.partial('all');
+    assert.deepEqual([s.complete, s.results.map((x) => [x.id, x.valid, x.invalid])], [true, [['x-1', 0, 1], ['x-2', 0, 1]]]);
+    assert.match(none.lines.join('\n'), /no run was valid: no committed snapshot, and any earlier one stays; this one is beside the transcripts/);
+  } finally { none.done(); }
+  // A usage limit at the second case: the error stops the runner, and the progress file says it is not complete.
+  const stop = drive({ run: stubRun((opts, n) => { if (n > 2) throw new ClaudeRunError('claude stopped at a usage limit: x', true); return runOf([...started(opts.pluginDirs), resultEvent('done')]); }).run, before: 'earlier\n' });
+  try {
+    assert.match(String(stop.thrown?.message), /usage limit/);
+    assert.equal(stop.committed, 'earlier\n');
+    const s = stop.partial('all');
+    assert.deepEqual([s.complete, s.cases, s.results.map((x) => x.id)], [false, ['x-1', 'x-2'], ['x-1']]);
+  } finally { stop.done(); }
+});
+
+test('Task 17a G11: a full run refuses a dirty kern tree unless --allow-dirty, and the snapshot records the tree either way', () => {
+  const dirty = { commit: 'c0ffee', dirty: true, changes: [' M skills/diagnose/SKILL.md'] };
+  const s = stubRun();
+  const refused = drive({ run: s.run, tree: dirty });
+  try {
+    assert.equal(refused.code, 2);
+    assert.match(refused.errors.join('\n'), /^behave: the kern tree is not a clean commit \(1 uncommitted change\(s\) a run would measure:  M skills\/diagnose\/SKILL\.md\); commit first, or pass --allow-dirty/);
+    assert.deepEqual([s.calls.length, refused.committed], [0, null], 'nothing ran');
+  } finally { refused.done(); }
+  const allowed = drive({ argv: ['--runs', '1', '--allow-dirty'], tree: dirty });
+  try {
+    assert.equal(allowed.code, 0);
+    assert.deepEqual(JSON.parse(allowed.committed).kern, dirty);
+  } finally { allowed.done(); }
+  const one = drive({ argv: ['--case', 'x-1', '--runs', '1'], tree: dirty });
+  try {
+    assert.equal(one.code, 0, 'a --case run is diagnostic: it runs, and its snapshot records the tree');
+    assert.deepEqual(one.partial('x-1').kern, dirty);
+  } finally { one.done(); }
+});
+
+test('Task 17a G10: a behave run that did not load the kern copy or print the kernel is invalid, never graded', () => {
+  const r = drive({ argv: ['--case', 'x-1', '--runs', '1'], run: stubRun(() => runOf([...started([]), resultEvent('done')])).run });
+  try {
+    const run = r.partial('x-1').results[0].runs[0];
+    assert.equal(run.invalid, true);
+    assert.match(run.reason, /^the plugin at .*\/kern is not in the run's init\.plugins/);
+  } finally { r.done(); }
+  const off = drive({ argv: ['--case', 'x-1', '--runs', '1'], run: stubRun((opts) => runOf([...started(opts.pluginDirs, ''), resultEvent('done')])).run });
+  try { assert.match(off.partial('x-1').results[0].runs[0].reason, /printed no kernel/); } finally { off.done(); }
+});
+
 test('the runner records the tree at each run\'s start and end for a case with a tree check, an unreadable tree is an invalid run, and the snapshot names the checks', () => {
-  const src = readFileSync(join(ROOT, 'scripts', 'behave.mjs'), 'utf8');
-  assert.match(src, /const cwd = caseWorkspace\(ROOT, c\);\n(?:\s*\/\/.*\n)*\s+const before = readsTree\(c\) \? readTree\(cwd, 'start'\) : null;\n\s+if \(before\?\.problem\) \{ runs\.push\(\{ invalid: true, reason: before\.problem, verdict: null, exit: null \}\);/);
-  assert.match(src, /const after = before \? readTree\(cwd, 'end'\) : null;/);
-  assert.match(src, /let verdict = null; let invalid = !!problem \|\| !!after\?\.problem; let reason = problem \|\| after\?\.problem \|\| '';/);
-  assert.match(src, /if \(before\) writeFileSync\(join\(raw, `\$\{c\.id\}-\$\{i\}\.tree\.json`\)/);
-  assert.match(src, /results\.push\(\{ id: c\.id, source: c\.source, checks: c\.checks \?\? \{\}, \.\.\.r, runs \}\)/);
+  // The second run removes the workspace's .git, so the tree cannot be read at its end.
+  const arm = (opts, n) => { if (n > 1) rmSync(join(opts.cwd, '.git'), { recursive: true, force: true }); return runOf([...started(opts.pluginDirs), resultEvent('done')]); };
+  const r = drive({ argv: ['--runs', '2'], cases: [stubCase('x-tree', { checks: { 0: 'no-write' }, expectations: ['writes nothing'] })], run: stubRun(arm).run });
+  try {
+    const s = JSON.parse(r.committed).results[0];
+    assert.deepEqual([s.checks, s.runs.map((x) => x.invalid), s.runs[0].verdict[0].check], [{ 0: 'no-write' }, [false, true], 'no-write']);
+    assert.match(s.runs[1].reason, /^git status at the run's end could not be read/);
+    const tree = JSON.parse(readFileSync(join(r.raw, 'x-tree-0.tree.json'), 'utf8'));
+    assert.deepEqual(tree.start, tree.end);
+    assert.match(JSON.parse(readFileSync(join(r.raw, 'x-tree-1.tree.json'), 'utf8')).problem, /could not be read/);
+  } finally { r.done(); }
+});
+
+test('the behaviour runner grades on that record: the grader gets behaveDigest of the run with the expectations no check decides', () => {
+  // Task 16j: gradeRun gives the model behaveDigest(events) with the expectations no check decides (tested above).
+  const s = stubRun();
+  const r = drive({ argv: ['--case', 'x-1', '--runs', '1'], run: s.run });
+  try {
+    const [arm, graded, ...more] = s.calls;
+    assert.deepEqual([more.length, graded.maxTurns, graded.pluginDirs], [0, 1, undefined]);
+    assert.equal(graded.prompts[0], graderPrompt(['says it is done'], behaveDigest([...started(arm.pluginDirs), resultEvent('done')])));
+  } finally { r.done(); }
 });
