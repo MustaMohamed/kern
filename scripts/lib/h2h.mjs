@@ -91,6 +91,20 @@ export function falseAlarms(category, e) {
   return e.unsupported ?? 0;
 }
 
+// resultRow(task, run, attempt, grade, reply): one arm's row in the snapshot, from its attempt ({ arm, id, e,
+// heldout, git }) and its grade. gate reads score and falseAlarms. A review row also keeps the split behind
+// falseAlarms, decoys and unmatched as counts, the count of extras the grader set aside, and the grader's raw
+// reply for that task-run, so a split can be checked against what the grader wrote: the 2026-10-22 snapshot kept
+// only the sum, and the review diagnosis had to infer each split from `why` (Task 16o). The row holds no blind id,
+// since keys stay out of snapshots; the arm's entry in the reply is blindIds(arm ids, `<date>:<task>:<run>`)[arm].
+export function resultRow(t, run, x, g, reply) {
+  const e = { ...x.e, decoyHits: (g.decoys ?? []).length, unmatched: g.unmatched ?? 0, unsupported: g.unsupported ?? 0 };
+  const score = t.category === 'diagnose' && !x.heldout ? 0 : g.score / 10;
+  const row = { task: t.id, category: t.category, run, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, git: x.git, matched: g.matched ?? [], why: g.why ?? '' };
+  if (t.category !== 'review') return row;
+  return { ...row, decoys: e.decoyHits, unmatched: e.unmatched, extras: (g.extras ?? []).length, reply };
+}
+
 // gate(results, tasks): per category, kern passes when its mean score is at least the strongest other arm's,
 // and its mean false alarms are at most that arm's. The control arm counts as an arm. tasks are the loaded
 // tasks ({ id, category }): a category in which one has no graded run is INCOMPLETE, never PASS or FAIL,

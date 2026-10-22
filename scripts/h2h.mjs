@@ -5,7 +5,8 @@
 // Usage: node scripts/h2h.mjs [--category plan|diagnose|review] [--task <category/id>] [--arms a,b]
 //        [--runs N] [--model <m>] [--grader-model <m>] [--dry-run]
 // Raw runs and key.json go to evals/results/h2h-<date>/ (gitignored); the unblinded scores and the gate
-// go to evals/snapshots/h2h-<model>-<date>.json (committed). Exit 0 when every category passes, 1 when one
+// go to evals/snapshots/h2h-<model>-<date>.json (committed), each review row with its decoy and unmatched
+// counts and the grader's raw reply (resultRow). Exit 0 when every category passes, 1 when one
 // fails, 3 when none fails but one is incomplete (a loaded task with no graded run), 2 when no task matched.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,7 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ISOLATION, PERMISSIONS, claudeVersion, finalText, toolUses } from './lib/claude-run.mjs';
 import { digest, pluginCopy, tryRun } from './lib/behave.mjs';
-import { armCopy, blindIds, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, taskWorkspace, touchedTasks, verdictLine } from './lib/h2h.mjs';
+import { armCopy, blindIds, gate, gateExit, gitFacts, graderPrompt, loadArms, loadTasks, outOfArea, parseGrades, redact, resultRow, taskWorkspace, touchedTasks, verdictLine } from './lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const args = process.argv.slice(2);
@@ -87,14 +88,11 @@ for (const t of tasks) {
     rmSync(gdir, { recursive: true, force: true });
     if (graded.problem) { console.log(`VOID ${t.id} run ${r}: grader: ${graded.problem}`); continue; }
     let grades;
-    try { grades = parseGrades(finalText(graded.run.events), attempts.map((x) => x.id)); } catch (err) { console.log(`VOID ${t.id} run ${r}: ${err.message}`); continue; }
+    const reply = finalText(graded.run.events);
+    try { grades = parseGrades(reply, attempts.map((x) => x.id)); } catch (err) { console.log(`VOID ${t.id} run ${r}: ${err.message}`); continue; }
     key[seed] = ids;
-    for (const x of attempts) {
-      const g = grades[x.id];
-      const e = { ...x.e, decoyHits: (g.decoys ?? []).length, unmatched: g.unmatched ?? 0, unsupported: g.unsupported ?? 0 };
-      const score = t.category === 'diagnose' && !x.heldout ? 0 : g.score / 10;
-      results.push({ task: t.id, category: t.category, run: r, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, git: x.git, matched: g.matched ?? [], why: g.why ?? '' });
-    }
+    // A review row keeps the grader's raw reply and its decoy and unmatched counts (resultRow).
+    for (const x of attempts) results.push(resultRow(t, r, x, grades[x.id], reply));
   }
 }
 } finally {

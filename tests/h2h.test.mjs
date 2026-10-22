@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspace } from '../scripts/lib/claude-run.mjs';
-import { armCopy, blindIds, factsLine, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, taskWorkspace, touchedTasks, verdictLine } from '../scripts/lib/h2h.mjs';
+import { armCopy, blindIds, factsLine, falseAlarms, gate, gateExit, gitFacts, graderPrompt, loadTasks, outOfArea, parseGrades, redact, resultRow, taskWorkspace, touchedTasks, verdictLine } from '../scripts/lib/h2h.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const arms = [{ id: 'kern', dir: '/w/kern' }, { id: 'superpowers', dir: '/w/kern/.upstream/superpowers' }, { id: 'pstack', dir: '/w/kern/.upstream/pstack/harness/pstack/claude-code' }, { id: 'control', dir: null }];
@@ -88,6 +88,30 @@ test('a --task run gives the gate every task of its category, so one graded task
   const v = gate([r('kern', 0.9), r('superpowers', 0.5)], touched);
   assert.equal(verdictLine(v[0]), 'INCOMPLETE plan: 1 of 4 tasks graded; no graded run: plan/archive-invoices, plan/reminder-seam, plan/scope-split');
   assert.equal(gateExit(v), 3);
+});
+
+test('a review result row keeps its decoy and unmatched counts, its extras and the grader\'s raw reply, and the gate still reads it', () => {
+  // Task 16o: the 2026-10-22 snapshot kept only the sum, so the review diagnosis had to infer each split from `why`.
+  const reply = '{"grades":[{"id":"arm-A","score":8,"matched":["b1","b2"],"decoys":["decoy:d3"],"extras":["extra:x1","extra:x3"],"unmatched":2,"why":"w"},{"id":"arm-B","score":6,"why":"v"}]}';
+  const g = parseGrades(reply, ['arm-A', 'arm-B']);
+  const t = { id: 'review/invoice-branch', category: 'review' };
+  const git = { branch: 'feat/discounts', main: 'main', head: 'abc1234', commits: 2, recent: [] };
+  const a = resultRow(t, 1, { arm: 'kern', id: 'arm-A', e: { outOfArea: 0 }, heldout: null, git }, g['arm-A'], reply);
+  assert.deepEqual(a, { task: 'review/invoice-branch', category: 'review', run: 1, arm: 'kern', score: 0.8, falseAlarms: 3, heldout: null, git, matched: ['b1', 'b2'], why: 'w',
+    decoys: 1, unmatched: 2, extras: 2, reply });
+  assert.ok(!Object.values(a).includes('arm-A'), 'no blind id: keys stay out of snapshots');
+  assert.equal(a.falseAlarms, a.decoys + a.unmatched, 'the split adds up to the sum, and extras are in neither');
+  const b = resultRow(t, 1, { arm: 'control', id: 'arm-B', e: { outOfArea: 0 }, heldout: null, git }, g['arm-B'], reply);
+  assert.deepEqual([b.decoys, b.unmatched, b.extras, b.falseAlarms, b.matched], [0, 0, 0, 0, []]);
+  assert.equal(verdictLine(gate([a, b])[0]), 'FAIL review: kern 0.80 score, 3.00 false alarms; control 0.60, 0.00', 'the gate reads score and falseAlarms as before');
+  // Other categories keep their rows as they were: no reply, no split.
+  const p = resultRow({ id: 'plan/x', category: 'plan' }, 0, { arm: 'kern', id: 'arm-A', e: { outOfArea: 0 }, heldout: null, git }, { score: 7, unsupported: 1, why: 'u' }, '{}');
+  assert.deepEqual(p, { task: 'plan/x', category: 'plan', run: 0, arm: 'kern', score: 0.7, falseAlarms: 1, heldout: null, git, matched: [], why: 'u' });
+  const d = resultRow({ id: 'diagnose/x', category: 'diagnose' }, 0, { arm: 'kern', id: 'arm-A', e: { outOfArea: 1, floorHits: 1 }, heldout: false, git }, { score: 9 }, '{}');
+  assert.deepEqual([d.score, d.falseAlarms, 'reply' in d], [0, 2, false], 'a failed heldout run scores 0');
+  const src = readFileSync(join(ROOT, 'scripts', 'h2h.mjs'), 'utf8');
+  assert.ok(src.includes('const reply = finalText(graded.run.events);'), src);
+  assert.ok(src.includes('for (const x of attempts) results.push(resultRow(t, r, x, grades[x.id], reply));'), 'the runner builds each row with resultRow');
 });
 
 test('the runner gives the gate every task of the categories it ran, prints each verdict line and exits by gateExit', () => {
