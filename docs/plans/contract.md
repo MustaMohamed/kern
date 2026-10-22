@@ -165,7 +165,7 @@ G13, G14 and G15 (Task 13):
 | `wt-fork` | `wt-fork SRC_WT SLUG` | fork path (the state moves as a `diff-tree` patch, applied with `--whitespace=nowarn` so the user's `apply.whitespace` changes nothing) | 0; 3 apply failed; 2 `worktree.setup` failed or other error; on 3 and on a setup failure the fork is removed |
 | `wt-apply` | `wt-apply PATCH DST_WT` | `applied` (`git apply --whitespace=nowarn`, all or nothing) | 0; 3 conflict; 2 usage |
 | `wt-audit` | `wt-audit [--days N]` | `bucket<TAB>path<TAB>branch<TAB>evidence` per kern worktree; buckets `merged`, `open-pr`, `closed-pr`, `uncommitted`, `committed`, `empty`, `unknown` (a git call failed or the base ref did not resolve; evidence names which; never proposed for teardown) | 0; 2 usage |
-| `ledger-open` | `ledger-open PLAN [DIR]`; `ledger-open --summary DIR` | the ledger dir; with `--summary`, the `Decision:`, `parked:`, `Preflight:` and deferred-minor lines, then `main: unchanged` or `main: changed; ...` | 0; 2 plan not approved with the user's quoted words, or DIR holds another plan's ledger; `--summary` 1 when the main checkout changed |
+| `ledger-open` | `ledger-open PLAN [DIR]`; `ledger-open --summary DIR` | the ledger dir (a new ledger's header: `# kern ledger: <plan>`, `Plan: <hash>`, `Main: ...`); with `--summary`, the `Decision:`, `parked:`, `Preflight:` and deferred-minor lines, then `main: unchanged` or `main: changed; ...` | 0; 2 plan not approved with the user's quoted words, DIR holds another plan's ledger, or the plan's content differs from the ledger's `Plan:` line (or it has none), each refusal about an existing ledger also printing `rerun as: bash .../ledger-open PLAN DIR-<n>` for the first free DIR-<n> (Task 17a P7); `--summary` 1 when the main checkout's branch, HEAD or status changed |
 | `task-brief` | `task-brief PLAN N LEDGER_DIR` | brief path `LEDGER_DIR/briefs/task-N.md` | 0; 2 task not found |
 | `task-start` | `task-start LEDGER N TREE` | appends `Task N: start tree=<id> at=<iso>` | 0; 2 bad argument |
 | `task-review` | `task-review LEDGER N TREE ROUND SPEC QUALITY [--minor TEXT]...` | appends `Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>` and one `Task N: minor (deferred): <text>` per `--minor` | 0; 2 bad argument |
@@ -190,7 +190,8 @@ Skill scripts (run as `bash ${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/<name>
 The lines `ledger-open`, `task-start`, `task-review`, `task-done` and execute-plan write, verbatim as `skills/execute-plan/references/ledger-format.md` gives them:
 
 - `# kern ledger: <plan path>`
-- `Main: <root> branch=<name> status=<hash>`
+- `Plan: <hash>`
+- `Main: <root> branch=<name> head=<sha> status=<hash>`
 - `Worktree: <path> branch=<name> base-tree=<id>`
 - `Preflight: Task A x Task B: <shared file or interface>: <ruling>`
 - `Decision: <what>; why: <one line>; cost if wrong: <one line>`
