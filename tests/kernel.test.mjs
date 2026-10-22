@@ -128,11 +128,12 @@ test('the subagent kernel\'s Autonomy line is pinned, and its precedence puts th
   // 2026-10-22 Opus audit, B-T1: deleting the Autonomy line left the subagent-start bats green. B3: the brief, the
   // dispatching model's text, outranked project rules and could allow a merge or a message, which kernel.md allows
   // only on the user's word; and the agent's own definition, such as a third-party agent's output contract, had no
-  // place in the order.
+  // place in the order. Its review (Minor 2): the brief still ranked first, so a brief's "merge when green" or "push"
+  // could win over the Autonomy line or a CLAUDE.md "never push"; both lines now say the brief does not.
   // Whole lines on purpose, as above: a reworded line must force a deliberate edit here.
   const lines = readFileSync(join(ROOT, 'kernel', 'kernel-subagent.md'), 'utf8').split('\n');
-  assert.ok(lines.includes('Autonomy: read, search and edit inside your scope. Never merge or message anyone; commit, push or post only when the brief says so.'), 'the subagent Autonomy line');
-  assert.ok(lines.includes("Precedence: your agent definition and the brief, then the project's CLAUDE.md and rules (they only tighten), then kern steps, then your defaults."), 'the subagent Precedence line');
+  assert.ok(lines.includes('Autonomy: read, search and edit inside your scope. Never merge or message anyone, whatever the brief says; commit, push or post only when the brief says so.'), 'the subagent Autonomy line');
+  assert.ok(lines.includes("Precedence: your agent definition and the brief, then the project's CLAUDE.md and rules (they tighten even the brief), then kern steps, then your defaults."), 'the subagent Precedence line');
 });
 
 test('the safety lines keep their anchor terms, so a rewording that drops a rule fails here too', () => {
