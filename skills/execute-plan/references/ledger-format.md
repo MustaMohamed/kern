@@ -7,7 +7,8 @@ One ledger per plan at `WORK/ledgers/<plan-slug>/ledger.md`, append only, opened
 | Line | Written by | Meaning |
 |---|---|---|
 | `# kern ledger: <plan path>` | `ledger-open` | first line, once; another plan's ledger is refused |
-| `Main: <root> branch=<name> status=<hash>` | `ledger-open` | the main checkout's state, compared at the end by `ledger-open --summary` |
+| `Plan: <hash>` | `ledger-open` | the plan's blob id; a changed plan is refused |
+| `Main: <root> branch=<name> head=<sha> status=<hash>` | `ledger-open` | the main checkout's state, compared by `ledger-open --summary` |
 | `Worktree: <path> branch=<name> base-tree=<id>` | step 5 | the plan worktree and its starting tree |
 | `Preflight: Task A x Task B: <shared file or interface>: <ruling>` | step 2 | one per `plan-check --graph` overlap row |
 | `Decision: <what>; why: <one line>; cost if wrong: <one line>` | any step | a ruling: the user's answer to a stop, or a mechanical call made without the user |

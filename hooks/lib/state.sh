@@ -190,10 +190,14 @@ autopilot_on() {
 # 500 characters (the first 20 such lines). A line is lowercased, its blanks folded to one space and
 # trimmed, and a final run of . and ! dropped, so "Yes, approved!" and "yes,  approved" hash the same.
 # G20 hashes an approved: quote the same way and looks for it among the user's last prompt's hashes.
+# A line over 20,000 characters is skipped before any other work on it: macOS awk folds blanks in time
+# quadratic in the line's length, and one 3 MB pasted line took prompt-submit past its 10 s timeout. No
+# approved: line is that long.
 prompt_hashes() {
   env LC_ALL=C awk '
     BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i }
     {
+      if (length($0) > 20000) next
       s = tolower($0); gsub(/[ \t\r]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); sub(/[.!]+$/, "", s)
       if (s == "" || length(s) > 500 || ++n > 20) next
       h = 5381

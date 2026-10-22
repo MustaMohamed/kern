@@ -386,6 +386,14 @@ test('rule 16: a ledger line spelled `Task <N>` is looked up as `Task N`', () =>
   assert.deepEqual(run('Find a `Task <N>: complete tree=<id> ...` line.'), ['Task <N>: complete tree=<id> ...']);
 });
 
+test('rule 16: a `Plan:` ledger line needs its producer in the contract too', () => {
+  // Task 17a P7: ledger-open writes `Plan: <hash>` on line 2 of a new ledger; review of P7, Minor 1.
+  const run = (contract) => lint({ 'docs/plans/contract.md': contract, 'skills/c/SKILL.md': skill('c', manual(), '\n# c\n\n## Steps\n\n1. Read the `Plan: <hash>` line.\n') })
+    .filter((x) => x.rule === 16).map((x) => x.message.split(':').slice(0, 2).join(':'));
+  assert.deepEqual(run('- `Plan: <hash>`\n'), []);
+  assert.deepEqual(run('- `Main: <root>`\n'), ['Plan: <hash>']);
+});
+
 test('rule 16: silent without a contract file; agents, references, CRLF handled; fenced blocks are read', () => {
   const body = '\n# c\n\n## Steps\n\n1. Read WORK/drafts.\n';
   assert.deepEqual(rules(lint({ 'skills/c/SKILL.md': skill('c', manual(), body) })), []);
