@@ -69,10 +69,13 @@ fi
 # A command that names WT by its absolute path, as a word or inside a script it names, runs WT, not the fork.
 # names_wt [FILE]: a line of FILE (or stdin) holds WT, physical or as given, followed by a character
 # outside [A-Za-z0-9._-] or the line's end; a sibling path such as WT-b or WT.bak does not count.
+# FILE's #! first line is skipped: an in-tree venv's script names its own tree, so the fork's names the fork.
 wtl=$(cd "$wtarg" && pwd)
 names_wt() {
+  local file=0
+  [ $# -eq 0 ] || file=1
   # shellcheck disable=SC2016 # $0 is awk's, not the shell's
-  env P1="$wt" P2="$wtl" LC_ALL=C awk '
+  env P1="$wt" P2="$wtl" LC_ALL=C awk -v file="$file" '
     function at(s, p,   i, c) {
       while ((i = index(s, p)) > 0) {
         c = substr(s, i + length(p), 1)
@@ -81,6 +84,7 @@ names_wt() {
       }
       return 0
     }
+    file && FNR == 1 && /^#!/ { next }
     at($0, ENVIRON["P1"]) || at($0, ENVIRON["P2"]) { found = 1; exit }
     END { exit !found }' "$@"
 }
@@ -117,15 +121,20 @@ fi
 
 if [ -n "$mutate" ]; then
   # The write below follows symlinks, so FILE and each link it leads through must end inside the fork.
+  # The 20-link limit sits below the kernels' own (32 on macOS, 40 on Linux), so a test can reach it.
   mpath=$fork/$mfile hops=0
-  while [ -L "$mpath" ] && [ "$hops" -lt 40 ]; do
+  while [ -L "$mpath" ] && [ "$hops" -lt 20 ]; do
     link=$(readlink "$mpath")
     hops=$((hops + 1))
     case "$link" in /*) mpath=$link ;; *) mpath=${mpath%/*}/$link ;; esac
   done
+  if [ -L "$mpath" ]; then
+    echo "probe: inconclusive ($mfile: symlink chain does not end within 20 links)"
+    exit 3
+  fi
   mdir=$(cd -P "${mpath%/*}" 2> /dev/null && pwd -P) || mdir=''
   case "$mdir/" in "$fork"/*) inside=1 ;; *) inside=0 ;; esac
-  if [ -L "$mpath" ] || [ "$inside" = 0 ]; then
+  if [ "$inside" = 0 ]; then
     echo "probe: inconclusive ($mfile resolves through a symlink outside the fork)"
     exit 3
   fi
@@ -173,11 +182,16 @@ fi
 # Words that mean the test did not run, in any case. A missing name is the error a reversed patch gives
 # when it adds a function or export the test calls; a plain TypeError can be a real assertion, so it stays out.
 # The shell's ': not found' is matched in its own case, so an HTTP 'Not Found' stays an assertion.
+# A None or nil receiver is what a reversed None or nil guard gives, a real failure, so its lines drop out;
+# "'Gate' object has no attribute 'check'" is a missing name and stays.
 blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|command not found|Permission denied|ENOENT|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
 blocked="$blocked|is not a function|is not defined|NameError|has no attribute|cannot find (function|value|type)|unresolved import"
 blocked="$blocked|could not compile|NoMethodError|uninitialized constant|cannot find '.*' in scope|Unresolved reference|undeclared identifier"
-if grep -Eiq "$blocked" "$logs/without.log" || grep -q ': not found' "$logs/without.log"; then
-  echo "probe: inconclusive (the test did not run without the guard: $(grep -Eim1 "$blocked" "$logs/without.log" || grep -m1 ': not found' "$logs/without.log"))"
+receiver="'NoneType' object has no attribute|undefined method .* for nil([ :]|\$)|NilClass"
+{ grep -Ei "$blocked" "$logs/without.log" || true; grep ': not found' "$logs/without.log" || true; } |
+  { grep -Ev "$receiver" || true; } > "$logs/blocked"
+if [ -s "$logs/blocked" ]; then
+  echo "probe: inconclusive (the test did not run without the guard: $(head -n 1 "$logs/blocked"))"
   exit 3
 fi
 if [ -n "$mutate" ]; then

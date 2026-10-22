@@ -210,7 +210,8 @@ setup() {
   printf 'sh check.sh -1 && { printf "%%s\\n" "$1"; exit 1; }\nexit 0\n' > "$WT/test-says.sh"
   for say in 'No tests found, exiting with code 1' 'collected 0 items' 'Ran 0 tests in 0.000s' 'no tests ran in 0.01s' \
     'ReferenceError: isPositive is not defined' "undefined local variable or method 'x' for main (NameError)" \
-    "AttributeError: module 'm' has no attribute 'is_positive'" 'error[E0425]: cannot find function `is_positive` in this scope' \
+    "AttributeError: module 'm' has no attribute 'is_positive'" "AttributeError: 'Gate' object has no attribute 'check'" \
+    'error[E0425]: cannot find function `is_positive` in this scope' \
     'error[E0425]: cannot find value `limit` in this scope' 'error[E0412]: cannot find type `Gate` in this scope' \
     'error[E0432]: unresolved import `crate::gate`' 'error: could not compile `gate` (lib test) due to 1 previous error' \
     "undefined method 'positive?' for 5:Integer (NoMethodError)" 'uninitialized constant Gate' \
@@ -229,6 +230,23 @@ setup() {
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
   [ "$output" = "probe: fail-then-pass ok" ]
   [ "$stderr" = "TypeError: expected a non-negative number" ]
+}
+
+# A reversed None or nil guard fails on a None or nil receiver: a real failure, not a missing name.
+@test "a None or nil receiver in the reversed run is a real failure, not a missing name" {
+  printf 'sh check.sh -1 && { printf "%%s\\n" "$1"; exit 1; }\nexit 0\n' > "$WT/test-says.sh"
+  for say in "AttributeError: 'NoneType' object has no attribute 'get'" "undefined method 'get' for nil (NoMethodError)" \
+    "undefined method \`get' for nil:NilClass (NoMethodError)"; do
+    run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-says.sh "$say"
+    [ "$status" -eq 0 ] || { echo "$say: $status $output"; return 1; }
+    [ "$output" = "probe: fail-then-pass ok" ]
+    [ "$stderr" = "$say" ]
+  done
+  # The echoed line skips a None receiver and shows the missing name after it.
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-says.sh \
+    "$(printf "%s\n%s" "AttributeError: 'NoneType' object has no attribute 'get'" "AttributeError: 'Gate' object has no attribute 'check'")"
+  [ "$status" -eq 3 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: inconclusive (the test did not run without the guard: AttributeError: 'Gate' object has no attribute 'check')" ]
 }
 
 # The shell's `: not found` is matched in its own case only, so an HTTP Not Found stays an assertion.
@@ -296,6 +314,18 @@ setup() {
   [ "$output" = "probe: fail-then-pass ok" ]
 }
 
+@test "a #! first line that names the worktree does not count; a later line does" {
+  # An in-tree venv's script starts with #!<WT>/.venv/bin/python; the fork's copy names the fork.
+  printf '#!%s/.venv/bin/python\nsh check.sh -1 && exit 1\nexit 0\n' "$WT" > "$WT/run-tests"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh run-tests
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: fail-then-pass ok" ]
+  printf '#!/bin/sh\ncd %s && sh test-guard.sh\n' "$WT" > "$WT/run-cd"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh run-cd
+  [ "$status" -eq 3 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: inconclusive (run-cd names the worktree by its absolute path, so the fork would run the worktree)" ]
+}
+
 @test "a sibling worktree path that starts with the worktree's path does not count" {
   mkdir -p "${WT}0" "$WT-b"
   printf 'ls %s0 > /dev/null && sh test-guard.sh\n' "$WT" > "$TMP/sib-run.sh"
@@ -347,4 +377,20 @@ setup() {
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
   [ "$output" = 'probe: mutation caught ([ "$1" == bad ])' ]
   [ "$(cat "$WT/gate.sh")" = '[ "$1" != bad ]' ]
+}
+
+# Kernels stop at 32 (macOS) or 40 (Linux) links, so a chain probe stops following must stay shorter.
+@test "--mutate on a symlink chain longer than 20 links says the chain does not end" {
+  printf '[ "$1" != bad ]\n' > "$WT/gate.sh"
+  ln -s gate.sh "$WT/l0"
+  i=1
+  while [ "$i" -le 20 ]; do ln -s "l$((i - 1))" "$WT/l$i"; i=$((i + 1)); done
+  git -C "$WT" add gate.sh 'l*' && git -C "$WT" commit --quiet -m chain
+  printf 'bash gate.sh bad && exit 1\nbash gate.sh good || exit 1\nexit 0\n' > "$WT/test-gate.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate l20:1 "$WT" -- sh test-gate.sh
+  [ "$status" -eq 3 ] || { echo "$output"; return 1; }
+  [ "$output" = "probe: inconclusive (l20: symlink chain does not end within 20 links)" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate l19:1 "$WT" -- sh test-gate.sh
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = 'probe: mutation caught ([ "$1" == bad ])' ]
 }

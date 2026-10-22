@@ -91,6 +91,16 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
   [[ "$(tail -n 1 "$L/ledger.md")" == *" probe=ok last=guard holds" ]] || false
 }
 
+@test "--probe prints the probe's lines: ok, then the reversed run's last lines" {
+  printf 'sh check.sh -1 && { echo "guard missing: -1 accepted"; exit 1; }\necho guard holds\n' > "$WT/test/check_test.sh"
+  T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  P5=$(bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T0" "$T5" --out "$L/reviews/task-1d.diff" | head -n 1)
+  review "$T5"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T5" --probe "$P5.patch" -- sh test/check_test.sh
+  [ "$status" -eq 0 ] || { echo "$output $stderr"; return 1; }
+  [[ "$output" == *$'probe: fail-then-pass ok\nguard missing: -1 accepted\nledger: '* ]] || false
+}
+
 @test "--probe refuses a task whose test passes without the change" {
   printf 'echo always\n' > "$WT/test/check_test.sh"
   T2=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
