@@ -166,6 +166,12 @@ export const factsLine = (f) => {
   return [`Git facts: branch ${f.branch}; main branch ${f.main}; HEAD ${f.head}; ${count}`, ...f.recent.map((c) => `  ${c}`)].join('\n');
 };
 
+// EXTRA_RULE: how the review grader treats a label of kind "extra", a real issue the key accepts beyond the
+// seeded bugs. On 2026-10-22 every arm raised CSV escaping in 15 of 15 sessions and was charged a false alarm for
+// it; the user chose to list it, the missing exports/ directory and missing tests as extras after that run
+// (the user's "kern and key", an exception to the plan's rule that keys are fixed before any run).
+export const EXTRA_RULE = 'A label of kind "extra" is a real issue the key accepts beyond the seeded bugs. A finding that matches an extra counts neither as a match nor as a false alarm: list its id in "extras", never in "matched", "decoys" or "unmatched", and let it neither raise nor lower the score.';
+
 // graderPrompt(task, outputs): each output is { id, text, git }, git from gitFacts. Every arm's session was
 // shown those facts in Claude Code's git status context (the 2026-10-22 plan gate counted kern's true
 // `base: main` as unsupported), so the grader is told them and a claim that matches them is supported (the
@@ -175,9 +181,9 @@ export function graderPrompt(task, outputs) {
     `You grade ${outputs.length} anonymous attempts at the same ${task.category} task. You do not know which tool made which.`,
     'Score each attempt 0 to 10 on the rubric. Judge only what each attempt shows; a claim it does not support with a command and its output earns nothing.',
     "Each attempt's block opens with git facts read from its workspace before it started. Its session's git status showed it the branch, the main branch, HEAD's short SHA and the recent commits with their subjects, so a claim that matches those is supported, though no command printed it. It was not shown the remotes, so a claim about a remote still needs a command and its output. A claim that contradicts any fact is unsupported.",
-    ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, or "none".'] : []),
+    ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".', EXTRA_RULE] : []),
     ...(task.category === 'plan' ? ['Count the claims about the repo that neither the fixture files nor the git facts its session was shown support.'] : []),
-    'Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],"unmatched":1,"unsupported":0,"why":"..."}]}.',
+    `Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],${task.category === 'review' ? '"extras":["x1"],' : ''}"unmatched":1,"unsupported":0,"why":"..."}]}.`,
     '', 'Task given to each attempt:', task.prompts.join('\n---\n'), '', 'Rubric:', ...task.rubric.map((r, i) => `${i + 1}. ${r}`),
     ...(task.category === 'review' ? ['', 'Labels:', JSON.stringify(task.labels)] : []),
     ...outputs.map((o) => `\n=== ${o.id} ===\n${o.git ? `${factsLine(o.git)}\n` : ''}${o.text}`),

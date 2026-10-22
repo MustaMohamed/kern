@@ -223,10 +223,47 @@ for (const t of loadTasks(ROOT).filter((x) => x.category === 'review')) {
       }
       assert.equal(t.labels.filter((x) => x.kind === 'bug').length, 6);
       assert.equal(t.labels.filter((x) => x.kind === 'decoy').length, 3);
-      for (const x of t.labels) assert.ok((added[x.file] ?? []).some((l) => l.includes(x.match)), `${x.id}: "${x.match}" is not an added line of ${x.file}`);
+      assert.deepEqual(t.labels.map((x) => x.kind).filter((k) => !['bug', 'decoy', 'extra'].includes(k)), [], 'a label is a bug, a decoy or an extra');
+      for (const x of t.labels.filter((l) => l.kind !== 'extra')) assert.ok(x.match, `${x.id}: a bug or decoy names its line`);
+      // An extra that names a line sits on it too; one for an absence, such as a missing test, names none.
+      for (const x of t.labels.filter((l) => l.match)) assert.ok((added[x.file] ?? []).some((l) => l.includes(x.match)), `${x.id}: "${x.match}" is not an added line of ${x.file}`);
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 }
+
+test('the review key lists CSV escaping, the missing exports/ directory and missing tests as extras (the user\'s "kern and key")', () => {
+  // 2026-10-22: every arm raised CSV escaping in 15 of 15 sessions and each was charged a false alarm for it; the
+  // user chose to change the key after the run, breaking the plan's rule that keys are fixed before any run.
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  const extras = t.labels.filter((x) => x.kind === 'extra');
+  assert.deepEqual(extras.map((x) => [x.id, x.file ?? null, x.match ?? null]), [
+    ['x1', 'src/export.js', '${lines[i].sku},${lines[i].qty},${lines[i].unitPrice}'],
+    ['x2', 'src/export.js', 'writeFileSync(path, toCsv(lines));'],
+    ['x3', null, null],
+  ]);
+  assert.match(extras[0].what, /escap/);
+  assert.match(extras[1].what, /exports\//);
+  assert.match(extras[2].what, /toCsv/);
+  assert.match(extras[2].what, /getInvoice/);
+  assert.doesNotMatch(JSON.stringify(t.labels), /kern|superpowers|pocock|pstack|poteto|caveman|control/i, 'the key names no arm');
+});
+
+test('the review grader is told an extra counts neither as a match nor as a false alarm, and other categories are not', () => {
+  const rule = 'A label of kind "extra" is a real issue the key accepts beyond the seeded bugs. A finding that matches an extra counts neither as a match nor as a false alarm: list its id in "extras", never in "matched", "decoys" or "unmatched", and let it neither raise nor lower the score.';
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  const p = graderPrompt(t, [{ id: 'arm-A', text: 'x' }, { id: 'arm-B', text: 'y' }]);
+  assert.ok(p.includes('For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or "none".'), p);
+  assert.ok(p.includes(rule), p);
+  assert.ok(p.includes('"decoys":["d2"],"extras":["x1"],"unmatched":1'), 'the review reply example has extras');
+  assert.ok(p.includes('"kind":"extra"'), 'the grader reads the extras in the labels');
+  assert.doesNotMatch(p, /kern|superpowers|pocock|pstack|poteto|caveman|control/i);
+  // The plan and diagnose prompts are unchanged by it (Task 16n's plan rerun reads the plan prompt).
+  for (const category of ['plan', 'diagnose']) {
+    const q = graderPrompt({ category, prompts: ['p'], rubric: ['r'] }, [{ id: 'arm-A', text: 'x' }]);
+    assert.doesNotMatch(q, /extra/, category);
+    assert.ok(q.includes('Reply with JSON only: {"grades":[{"id":"arm-A","score":7,"matched":["b1"],"decoys":["d2"],"unmatched":1,"unsupported":0,"why":"..."}]}.'), category);
+  }
+});
 
 for (const t of loadTasks(ROOT).filter((x) => x.category === 'plan')) {
   test(`${t.id}: the spec and every trap file exist, and the rubric covers each trap`, () => {
