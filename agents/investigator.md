@@ -1,6 +1,6 @@
 ---
 name: investigator
-description: kern only. Read-only evidence gathering for define, plan and diagnose. Returns cited facts with confidence labels and never edits.
+description: kern only. Read-only evidence gathering with cited facts.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

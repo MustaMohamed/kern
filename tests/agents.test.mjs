@@ -2,10 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readDoc, assertFrontmatter, h2s, assertContains, assertMaxBytes } from './helpers/md.mjs';
 
+// Each description is "kern only." plus the role: every session carries the three as standing cost, and skills
+// dispatch the agents by name, so the longer wording carried nothing (2026-10-22 Opus audit; the user's "Cut and
+// lock"). The three went from 423 chars to 175.
+
 test('implementer frontmatter, sections and return contract', () => {
   assertFrontmatter('agents/implementer.md', {
     name: 'implementer',
-    description: 'kern only. Implements one task brief in a given worktree, test first, and reports status with evidence. Dispatched by execute-plan and parallel-work.',
+    description: 'kern only. Implements one task brief in a worktree, test first.',
     tools: 'Read, Edit, Write, Bash, Grep, Glob',
     model: 'sonnet',
   });
@@ -23,7 +27,7 @@ test('implementer frontmatter, sections and return contract', () => {
 test('task-reviewer frontmatter, sections and verdict lines', () => {
   assertFrontmatter('agents/task-reviewer.md', {
     name: 'task-reviewer',
-    description: "kern only. Read-only review of one task's diff package: a spec verdict, then a quality verdict, each with file:line. Dispatched by execute-plan.",
+    description: "kern only. Read-only review of one task's diff package.",
     tools: 'Read, Grep, Glob',
     model: 'sonnet',
   });
@@ -35,7 +39,7 @@ test('task-reviewer frontmatter, sections and verdict lines', () => {
 test('investigator frontmatter, sections, labels and no file writes', () => {
   const { data } = readDoc('agents/investigator.md');
   assert.equal(data.name, 'investigator');
-  assert.equal(data.description, 'kern only. Read-only evidence gathering for define, plan and diagnose. Returns cited facts with confidence labels and never edits.');
+  assert.equal(data.description, 'kern only. Read-only evidence gathering with cited facts.');
   assert.ok(['Read, Grep, Glob, Bash', 'Read, Grep, Glob'].includes(data.tools), `tools: ${data.tools}`);
   assert.equal(data.model, 'sonnet');
   assert.deepEqual(h2s(readDoc('agents/investigator.md').body), ['## Inputs', '## Rules', '## Method', '## Output']);

@@ -1,6 +1,6 @@
 ---
 name: task-reviewer
-description: "kern only. Read-only review of one task's diff package: a spec verdict, then a quality verdict, each with file:line. Dispatched by execute-plan."
+description: kern only. Read-only review of one task's diff package.
 tools: Read, Grep, Glob
 model: sonnet
 ---
