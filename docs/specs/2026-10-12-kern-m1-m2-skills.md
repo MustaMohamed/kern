@@ -823,7 +823,7 @@ Plugin agents appear as `kern:<name>`. Their descriptions sit in the Agent tool 
 ```yaml
 ---
 name: implementer
-description: kern only. Implements one task brief in a given worktree, test first, and reports status with evidence. Dispatched by execute-plan and parallel-work.
+description: kern only. Implements one task brief in a worktree, test first.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 ---
@@ -847,7 +847,7 @@ Size at most 3 KB (2.8 KB planned).
 ```yaml
 ---
 name: task-reviewer
-description: kern only. Read-only review of one task's diff package: a spec verdict, then a quality verdict, each with file:line. Dispatched by execute-plan.
+description: kern only. Read-only review of one task's diff package.
 tools: Read, Grep, Glob
 model: sonnet
 ---
@@ -872,7 +872,7 @@ Size at most 3 KB (2.7 KB planned).
 ```yaml
 ---
 name: investigator
-description: kern only. Read-only evidence gathering for define, plan and diagnose. Returns cited facts with confidence labels and never edits.
+description: kern only. Read-only evidence gathering with cited facts.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

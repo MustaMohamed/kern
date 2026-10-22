@@ -4,6 +4,15 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- Kernel text (Task 17a P11; Opus audit B2, B3, B5, B13, C-M9, B-T1, F-K1, F-K2):
+  - a question that changes nothing and fits no row is answered, reading what it needs, and only a non-trivial change with no row goes to plan;
+  - only a policy key loosens an ask to auto;
+  - the Learning ban covers CLAUDE.md, rules and skills, so Claude Code's auto memory may save lessons (the user's "Allow memory");
+  - the subagent kernel ranks the agent's own definition with the brief, project rules tighten even the brief, and no brief allows a merge or a message;
+  - the three agent descriptions are cut to "kern only." and the role;
+  - implement step 3 spells kern-detect's path;
+  - tests pin the safety lines whole, with anchor terms for the floor actions, `/kern:autopilot on` and the subagent's merge and message ban.
+  - Lint rule 7 is locked at the measured 5,966-char render and 6,055-char standing cost (the user's "Cut and lock"). It replaces the plugin root only as a whole path, so a checkout at /kern measures the same.
 - Guards, after the 2026-10-22 Opus audit (Task 17a P1: A9, A11, A13, F-G20b, F-H1):
   - G00, under autopilot, denies a Bash command whose expandable text holds a parameter expansion that re-evaluates its stored value and runs a `$( )` or backtick kept in it: a zsh flag group with an `e`, `P`, `%` or `%%` flag outside its delimited arguments (a `)` delimiter included), the bash `@P` transform, and bash `${!name}` indirection (including `${!name[N]}`, `${!name@P}`, `${!@}`, `${!*}`), but not the list forms, `${!}` or the special parameters `${!#}`/`${!-}`/`${!?}`/`${!$}`. The judging is one matcher, hooks/lib/reeval.awk, shared with git_words' here-doc check, so the two cannot drift. `g0_sqsub` and `g0_sqarr` also scan the content of an ANSI-C `- Settings block (Task 17a P13; Opus audit B1, B6, B7, B8):
   - `overrides.<job>: off` now means no override: kern's route for the job stays, and a project skill with the job's name is no longer matched (the user's "No override", 2026-10-22). Before, it rendered "project skill off". help's `check` no longer flags `off`.

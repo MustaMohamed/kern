@@ -334,3 +334,12 @@ These supersede the "Additions from the M2 plan" entries above where they differ
   - The block is at most 600 chars, the root in the "more" note counted as `{ROOT}`. Known limit: the main worktree, settings files and floor lines are never cut, so a cwd outside the root with a main path over about 92 chars can pass 600 when every other line is at its shortest.
   - Over 600: Overrides and `Set:` start at their shortest form, or at the full line when it is shorter, and Unknown starts with no line; they then take the room left in that order, a whole entry at a time, first-fit.
   - Marks for a cut line: Overrides ends with `; not shown: <job>, ...`, naming every job whose entry was cut (kern job names only, about 150 chars for every job), or reads `not shown: <job>, ...` with no entry kept; Unknown ends with `and N more`, reads `N not shown`, or is dropped; `Set:` ends with ` ... (more: bash <root>/scripts/kern-get <key>)`.
+- **Kernel text and rule 7 lock (M2b, Task 17a P11; supersedes the rule 7 numbers above).**
+  - Routing: "only a casual turn, or a question that changes nothing and fits no row, matches nothing: answer it, reading what you need" and "A non-trivial change with no match: plan."
+  - Autonomy: "Only a policy key loosens an ask to auto."
+  - Learning: "Never add a rule or lesson to CLAUDE.md, rules or skills on your own." The scope is the user's "Allow memory": CLAUDE.md (user or project), .claude/rules and skills. A self-added rule or lesson in AGENTS.md, in .claude/agents/*.md or in a kern settings file is outside the ban, and so is Claude Code's auto memory.
+  - Subagent: "Precedence: your agent definition and the brief, then the project's CLAUDE.md and rules (they tighten even the brief), then kern steps, then your defaults." and "Never merge or message anyone, whatever the brief says; commit, push or post only when the brief says so."
+  - Agent descriptions are "kern only." plus the role.
+  - tests/kernel.test.mjs pins every Autonomy line, Learning, the consent line, "Inconclusive is not a pass." and the subagent Autonomy and Precedence lines as whole lines; an anchor-term test backs the floor actions, `/kern:autopilot on` and the subagent's merge and message ban.
+  - Rule 7: render target 5,966 (warn) and standing-cost limit 6,055 (error), each the measured value. `replaceRoot` replaces the plugin root only at a path boundary.
+  - Adherence: `neg-codebase-question`, "What rate does tax() in src/tax.js apply, and which test checks it?", on node-bug + two-modules, with `route: null`.
