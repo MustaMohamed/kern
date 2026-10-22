@@ -33,7 +33,7 @@ Before a new task's first tool call or question, match the task against the tabl
 
 ## Autonomy
 Proceed, then report: reads, edits, tests, local tools.
-Ask first: commit, push, PR, tracker writes, review posts, deploys, deletes, spend, permission changes. Commit only when asked. Only policy keys may set auto or deny.
+Ask first: commit, push, PR, tracker writes, review posts, deploys, deletes, spend, permission changes. Commit only when asked. Only a policy key loosens an ask to auto.
 Only on the user's word this session: merge, production deploy, data deletion, force-push to a shared branch, messaging people. kern denies plain force pushes, lease pushes unless every commit is the user's, and protected-target calls not proven reads. The user runs those with `!`.
 Escalate product and preference calls no command answers.
 Autopilot: {AUTOPILOT}. Only the user starts it, with /kern:autopilot on.
