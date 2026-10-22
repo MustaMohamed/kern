@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, childEnv, claudeVersion } from './lib/claude-run.mjs';
+import { ISOLATION, NO_EVAL_CONFIG, childEnv, claudeVersion, evalConfigProblem } from './lib/claude-run.mjs';
 import { isMain } from './lib/is-main.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -25,9 +25,11 @@ export const inputTokens = (u) => {
 export const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
 function once(withKern) {
+  const env = childEnv(process.env);
+  if (evalConfigProblem(env)) throw new Error(`standing-cost: ${NO_EVAL_CONFIG}`);
   const cwd = mkdtempSync(join(tmpdir(), 'sc-'));
   const argv = ['-p', 'hello', '--output-format', 'json', '--model', MODEL, '--max-turns', '1', '--max-budget-usd', '1', ...ISOLATION, ...(withKern ? ['--plugin-dir', ROOT] : [])];
-  const r = spawnSync('claude', argv, { cwd, encoding: 'utf8', timeout: 180000, env: childEnv(process.env) });
+  const r = spawnSync('claude', argv, { cwd, encoding: 'utf8', timeout: 180000, env });
   rmSync(cwd, { recursive: true, force: true });
   if (r.status !== 0) throw new Error(`standing-cost: claude exited ${r.status}: ${r.error?.message ?? r.stderr.trim().split('\n').pop()}`);
   const j = JSON.parse(r.stdout);
@@ -39,6 +41,7 @@ function once(withKern) {
 if (isMain(import.meta.url)) {
   if (!Number.isInteger(RUNS) || RUNS < 1) { console.error('standing-cost: --runs needs a whole number of at least 1'); process.exit(2); }
   if (args.includes('--dry-run')) { console.log(`claude -p hello x ${RUNS} with --plugin-dir ${ROOT}, x ${RUNS} without; model ${MODEL}`); process.exit(0); }
+  if (evalConfigProblem(process.env)) { console.error(`standing-cost: ${NO_EVAL_CONFIG}`); process.exit(2); }
   const kern = []; const bare = [];
   for (let i = 0; i < RUNS; i++) { kern.push(once(true)); bare.push(once(false)); }
   const delta = median(kern) - median(bare);

@@ -13,7 +13,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, claudeVersion, finalText, runClaude } from './lib/claude-run.mjs';
+import { ISOLATION, NO_EVAL_CONFIG, claudeVersion, evalConfigProblem, finalText, runClaude } from './lib/claude-run.mjs';
 import { blindIds } from './lib/h2h.mjs';
 import { RULE, TELLS, attempt, decide, diffAgainst, hide, mergeRow, metrics, parseReview, readSession, reviewPrompt } from './lib/pilot.mjs';
 
@@ -62,6 +62,10 @@ if (cmd === 'metrics') {
     for (const o of outputs) console.log(`${o.id}: ${o.text.length} chars; ${o.m.stops} stops, ${o.m.tokens.total} tokens, ${o.m.wallSeconds} s, ${o.m.asks.length} guard ask(s), ${o.m.slipCandidates.length} slip candidate(s)`);
     console.log(`bundle: ${join(raw, `${id}.prompt.txt`)} (no model called)`);
     process.exit(0);
+  }
+  if (evalConfigProblem(process.env)) {
+    console.error(`pilot: ${NO_EVAL_CONFIG}`);
+    process.exit(2);
   }
   if (resolve(process.env.CLAUDE_CONFIG_DIR || '') !== join(homedir(), '.claude-kern-eval')) {
     console.error('pilot: a paid review runs only under CLAUDE_CONFIG_DIR=$HOME/.claude-kern-eval (the personal account); set CLAUDE_CONFIG_DIR and run it again');

@@ -24,6 +24,12 @@ export const INHERITED_NAMES = new Set(['PATH', 'HOME', 'USER', 'LOGNAME', 'SHEL
 const INHERITED_PREFIXES = ['LC_', 'KERN_EXEC_'];
 const inherited = (k) => INHERITED_NAMES.has(k) || INHERITED_PREFIXES.some((p) => k.startsWith(p));
 
+// The default login is never used for evals (P15: a standing-cost run used it on 2026-10-22). Every real
+// claude spawn needs CLAUDE_CONFIG_DIR, the eval account's config dir; a test's stand-in claude takes a temp one.
+export const NO_EVAL_CONFIG = "set CLAUDE_CONFIG_DIR to the eval account's config dir; the default login is never used for evals";
+// evalConfigProblem(env): NO_EVAL_CONFIG when env sets no CLAUDE_CONFIG_DIR, or an empty or blank one; else ''.
+export const evalConfigProblem = (env) => (String(env?.CLAUDE_CONFIG_DIR ?? '').trim() ? '' : NO_EVAL_CONFIG);
+
 // childEnv(parent, extra): the inherited variables of parent, then extra on top.
 export function childEnv(parent, extra = {}) {
   const env = {};
@@ -112,6 +118,8 @@ export const NO_BACKGROUND = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
 export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000,
   killGraceMs = 5000, maxBuffer = 64 * 1024 * 1024 }) {
   if (!model) throw new ClaudeRunError('runClaude needs a model', true);
+  const childEnvironment = childEnv(process.env, { ...env, ...(prompts.length > 1 ? NO_BACKGROUND : {}) });
+  if (evalConfigProblem(childEnvironment)) throw new ClaudeRunError(NO_EVAL_CONFIG, true);
   const root = realpathSync(tmpdir());
   let real;
   try { real = realpathSync(cwd); } catch (e) { throw new ClaudeRunError(`cwd ${cwd} is not usable: ${e.message}`, true); }
@@ -120,7 +128,7 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
     '--model', model, '--max-turns', String(maxTurns), '--max-budget-usd', String(maxBudgetUsd), ...PERMISSIONS, ...ISOLATION, ...pluginDirs.flatMap((d) => ['--plugin-dir', d])];
   // fd 3 carries the driver's one-line report of how claude ended.
   const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify({ prompts, graceMs: killGraceMs }), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
-    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnv(process.env, { ...env, ...(prompts.length > 1 ? NO_BACKGROUND : {}) }) });
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnvironment });
   // A run the timeout cut off is no result, but the events it printed go with the error, so a runner can save
   // them and a reader see how far it got (Task 16h review, M6).
   if (run.error?.code === 'ETIMEDOUT') {
@@ -241,4 +249,8 @@ export function runSummary(events) {
   };
 }
 
-export const claudeVersion = () => execFileSync('claude', ['--version'], { encoding: 'utf8', timeout: SETUP_TIMEOUT_MS }).trim();
+// claudeVersion(env): `claude --version` under env; it refuses as runClaude does when env sets no CLAUDE_CONFIG_DIR.
+export const claudeVersion = (env = process.env) => {
+  if (evalConfigProblem(env)) throw new ClaudeRunError(NO_EVAL_CONFIG, true);
+  return execFileSync('claude', ['--version'], { encoding: 'utf8', timeout: SETUP_TIMEOUT_MS, env }).trim();
+};

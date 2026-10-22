@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -229,6 +229,27 @@ test('review refuses a paid run outside the eval account, an unknown flag, and s
     const swapped = cli([...reviewFixture(mkdtempSync(join(dir, 'w-')), true), '--dry-run']);
     assert.equal(swapped.status, 2);
     assert.match(swapped.stderr, /outside its repo/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The default login is never used for evals (P15): with CLAUDE_CONFIG_DIR unset or empty, a stand-in claude
+// first on a PATH with no real claude is never called.
+test('review with no CLAUDE_CONFIG_DIR exits 2 with the eval-config message and calls no claude', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p-'));
+  try {
+    const a = reviewFixture(dir);
+    const bin = join(dir, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'claude'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${join(dir, 'calls')}'\nexit 0\n`);
+    chmodSync(join(bin, 'claude'), 0o755);
+    const base = { PATH: `${bin}:/usr/bin:/bin`, HOME: mkdtempSync(join(dir, 'h-')), TMPDIR: tmpdir() };
+    assert.equal(spawnSync('/bin/sh', ['-c', 'command -v claude'], { env: base, encoding: 'utf8' }).stdout.trim(), join(bin, 'claude'));
+    for (const env of [base, { ...base, CLAUDE_CONFIG_DIR: '' }]) {
+      const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'pilot.mjs'), ...a], { encoding: 'utf8', env });
+      assert.equal(r.status, 2, r.stderr);
+      assert.equal(r.stderr, "pilot: set CLAUDE_CONFIG_DIR to the eval account's config dir; the default login is never used for evals\n");
+    }
+    assert.equal(existsSync(join(dir, 'calls')), false, 'the stand-in claude never ran');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

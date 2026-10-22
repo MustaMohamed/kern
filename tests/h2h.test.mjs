@@ -487,7 +487,7 @@ const fields = { plan: { unsupported: 0 }, review: { matched: [], decoys: [], un
 const okGrades = (prompt, category) => JSON.stringify({ grades: blindOf(prompt).map((id) => ({ id, score: 7, why: 'w', ...fields[category] })) });
 const kernArms = (pick) => [{ id: 'kern', plugin: '.', dir: ROOT }, { id: 'control', plugin: null, dir: null }].filter((a) => !pick || pick.includes(a.id));
 const plainArm = (opts) => runOf(opts.pluginDirs.length ? [...started(opts.pluginDirs), resultEvent('done')] : [initOf([]), resultEvent('done')]);
-const driveH2H = ({ argv = ['--runs', '1'], tasks, arm = plainArm, grade = okGrades, tree = () => CLEAN, before = null, key = null, env = { PATH: process.env.PATH }, floorScan, parse } = {}) => {
+const driveH2H = ({ argv = ['--runs', '1'], tasks, arm = plainArm, grade = okGrades, tree = () => CLEAN, before = null, key = null, env = { PATH: process.env.PATH, CLAUDE_CONFIG_DIR: '/stand-in/eval-config' }, floorScan, parse } = {}) => {
   const dir = mkdtempSync(join(tmpdir(), 'hm-'));
   const snapshots = join(dir, 'snapshots'); const results = join(dir, 'results');
   const committed = join(snapshots, 'h2h-sonnet-5-5-2026-10-22.json');
@@ -601,7 +601,7 @@ test('Task 17a G9: heldout tests and floor-scan get childEnv, not the caller\'s 
   writeFileSync(scan, `env > "${probe}/scan.env"\nls -A "$HOME" | wc -l | tr -d ' ' > "${probe}/scan.home"\n[ -f "${probe}/break" ] && { echo 'floor-scan: bad input' >&2; exit 2; }\nexit 0\n`);
   const t = synthTask('diagnose', { test: `env > "${probe}/heldout.env"` });
   const arm = (opts) => { writeFileSync(join(opts.cwd, 'src', 'a.js'), 'export const a = 2;\n'); return plainArm(opts); };
-  const env = { PATH: process.env.PATH, HOME: process.env.HOME, KERN_P5_PROBE_TOKEN: 'secret', CLAUDE_CODE_SESSION_ID: 'caller-session' };
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, CLAUDE_CONFIG_DIR: '/stand-in/eval-config', KERN_P5_PROBE_TOKEN: 'secret', CLAUDE_CODE_SESSION_ID: 'caller-session' };
   try {
     const r = driveH2H({ tasks: [t], arm, env, floorScan: scan });
     try {

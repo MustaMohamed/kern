@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { UsageError, parseArgs } from './args.mjs';
 import { COPY_OMITS, dirtyRefusal, treeRecord } from './run-record.mjs';
-import { ISOLATION, PERMISSIONS, claudeVersion, finalText, pluginProblem, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
+import { ISOLATION, NO_EVAL_CONFIG, PERMISSIONS, claudeVersion, evalConfigProblem, finalText, pluginProblem, runClaude, runProblem, toolUses, workspace } from './claude-run.mjs';
 
 // behaveFlags(ids): scripts/behave.mjs's flags for the shared parser (args.mjs), ids being the case ids.
 export const behaveFlags = (ids) => ({ '--case': { key: 'case', value: 'a case id', choices: ids, noun: 'case' }, '--runs': { key: 'runs', value: 'count' },
@@ -616,6 +616,7 @@ export function behaveMain({ root, argv, env = process.env, cases: all = null, r
     for (const c of cases) log(dryLine(c));
     return 0;
   }
+  if (evalConfigProblem(env)) { error(`behave: ${NO_EVAL_CONFIG}`); return 2; }
   const full = !only;
   const kern = tree(root);
   if (full && !o.allowDirty && dirtyRefusal(kern)) return usage(dirtyRefusal(kern));
