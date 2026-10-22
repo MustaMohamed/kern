@@ -931,10 +931,30 @@ cmd_head() {
     END { print out }'
 }
 
-# in_main_checkout DIR: exit 0 when DIR is inside the main worktree (not a linked worktree).
+# in_main_checkout DIR: exit 0 when DIR is inside the main worktree (not a linked worktree). A repository
+# its superproject tracks as a gitlink (a submodule, or an embedded repository) takes the superproject's
+# answer: git gives each superproject worktree its own submodule git dir, so a submodule in a linked
+# worktree is a main worktree to git. A gitlink to a worktree of the same repository (git add -A stages a
+# linked worktree inside the main checkout so) shares its common dir, and keeps its own answer.
 in_main_checkout() {
-  local top main
-  top=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 1
+  local out top common sup scommon c1 c2 main
+  out=$(git -C "$1" rev-parse --show-toplevel --git-common-dir --show-superproject-working-tree 2>/dev/null) || return 1
+  case "$out" in ?*$'\n'?*) ;; *) return 1 ;; esac
+  top=${out%%$'\n'*}
+  out=${out#*$'\n'}
+  common=${out%%$'\n'*}
+  sup=""
+  case "$out" in *$'\n'?*) sup=${out#*$'\n'} ;; esac
+  if [ -n "$sup" ]; then
+    scommon=$(git -C "$sup" rev-parse --git-common-dir 2>/dev/null) && [ -n "$scommon" ] || return 1
+    case "$common" in /*) ;; *) common="$1/$common" ;; esac
+    case "$scommon" in /*) ;; *) scommon="$sup/$scommon" ;; esac
+    c1=$(cd "$common" 2>/dev/null && pwd -P) && c2=$(cd "$scommon" 2>/dev/null && pwd -P) || return 1
+    if [ "$c1" != "$c2" ]; then
+      in_main_checkout "$sup"
+      return
+    fi
+  fi
   main=$(kern_main_root "$1") || return 1
   [ "$(cd "$top" && pwd -P)" = "$(cd "$main" && pwd -P)" ]
 }

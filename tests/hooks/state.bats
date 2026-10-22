@@ -358,6 +358,19 @@ since: 2026-10-12T00:00:00Z'
   [ -z "$(printf '%s\n' "$output" | grep -v ':[0-9]*:[[:space:]]*#' | grep -v 'env LC_ALL=C ')" ] || { echo "$output"; return 1; }
 }
 
+# A line over 20,000 characters is skipped before any other work on it: folding its blanks is quadratic in
+# its length under macOS awk, and a 3 MB single-line paste timed prompt-submit out (audit 2026-10-22, B9).
+# No approved: line is that long, so the cut costs no quote, though a line padded past it no longer folds
+# down to one.
+@test "prompt_hashes skips a line over 20,000 characters, even one whose blanks fold it short" {
+  want=$(printf 'yes, approved\n' | prompt_hashes)
+  [ -n "$want" ]
+  # 19,987 blanks and the 13-character quote make a line of exactly 20,000 characters, which still hashes.
+  [ "$(printf '%*s%s\n' 19987 '' 'yes, approved' | prompt_hashes)" = "$want" ]
+  [ -z "$(printf '%*s%s\n' 19988 '' 'yes, approved' | prompt_hashes)" ]
+  [ "$(printf '%*s%s\nyes, approved\n' 19988 '' 'yes, approved' | prompt_hashes)" = "$want" ]
+}
+
 @test "state_file and a settings read survive many fresh bash 5.3 runs" {
   local found
   found=$(bash53) || skip "no bash 5.3 or later here"

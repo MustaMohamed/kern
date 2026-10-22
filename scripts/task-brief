@@ -8,9 +8,14 @@ plan=$1 n=$2 ledger_dir=$3
 [ -f "$plan" ] || { echo "task-brief: no such plan: $plan" >&2; exit 2; }
 case "$n" in ''|*[!0-9]*) echo "task-brief: N must be a number: $n" >&2; exit 2 ;; esac
 
-task=$(awk -v n="$n" '
-  /^[`][`][`]|^~~~/ { fence = !fence; if (intask) print; next }
-  fence { if (intask) print; next }
+here=$(cd "$(dirname "$0")" && pwd -P)
+# Code fences as plan-check reads them: both load scripts/lib/fence.awk. fence_mark keeps its state in
+# fence, fence_ch and fence_len, so a program's own names (the task program's n) stay its own.
+FENCE_AWK=$(cat "$here/lib/fence.awk") || { echo "task-brief: cannot read $here/lib/fence.awk" >&2; exit 2; }
+
+task=$(awk -v n="$n" "$FENCE_AWK"'
+  { fmark = fence_mark($0) }
+  fmark || fence { if (intask) print; next }
   /^#+[ \t]/ {
     match($0, /^#+/); lvl = RLENGTH
     if ($0 ~ /^#+[ \t]+Task[ \t]+[0-9]+/) {
@@ -23,9 +28,9 @@ task=$(awk -v n="$n" '
 ' "$plan")
 [ -n "$task" ] || { echo "task-brief: no heading 'Task $n' in $plan" >&2; exit 2; }
 
-constraints=$(awk '
-  /^[`][`][`]|^~~~/ { fence = !fence }
-  !fence && /^## / { gc = ($0 ~ /^## Global Constraints/) }
+constraints=$(awk "$FENCE_AWK"'
+  { fmark = fence_mark($0) }
+  !fmark && !fence && /^## / { gc = ($0 ~ /^## Global Constraints/) }
   gc { print }
 ' "$plan")
 
