@@ -439,19 +439,16 @@ reminders() { printf '%s\n' "$1" | grep -cxF "$REMINDER" || true; }
   [ "$output" = "$REMINDER" ]
 }
 
-@test "a later slash command prints one reminder between its expansion and its submit, either order" {
+@test "a later kern command gets no routing reminder; a later user slash command gets one" {
   submit "fix the bug"
   expand kern:finish-branch ""
   first=$output
   submit '/kern:finish-branch'
   [ "$(reminders "$first
-$output")" -eq 1 ]
-  submit '/kern:finish-branch'
-  first=$output
-  expand kern:finish-branch ""
-  [ "$(reminders "$first
-$output")" -eq 1 ]
+$output")" -eq 0 ]
   submit '<command-message>kern:diagnose</command-message>\n<command-name>/kern:diagnose</command-name>\n<command-args>the format bug</command-args>'
+  [ "$(reminders "$output")" -eq 0 ]
+  submit '/deploy staging'
   [ "$(reminders "$output")" -eq 1 ]
 }
 

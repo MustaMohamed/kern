@@ -196,6 +196,8 @@ else
   fi
   case "$TRIM" in
     "" | /mode | /mode[[:space:]]* | /autopilot | /autopilot[[:space:]]*) ROUTE=0 ;;
+    # A kern command loads its own skill, so it needs no routing reminder.
+    /kern:* | "<command-message>kern:"* | "<command-name>/kern:"*) ROUTE=0 ;;
   esac
   case "$TRIM" in
     "") ;;
