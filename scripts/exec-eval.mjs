@@ -34,6 +34,7 @@ import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaudeA
 import { pluginCopy } from './lib/behave.mjs';
 import { caseInputs, changedCases, rangeSources, treeSource } from './lib/case-inputs.mjs';
 import { filesVersion, readManifest, timeStamp, unitKey, unitStore, writeManifest } from './lib/eval-cache.mjs';
+import { limiter } from './lib/pool.mjs';
 import { dirtyRefusal, treeRecord } from './lib/run-record.mjs';
 import { reaper } from './lib/reaper.mjs';
 import { GRADERS } from './lib/exec-grade.mjs';
@@ -182,6 +183,7 @@ function writeSnapshot(results, claude, where) {
 }
 
 // Each case is a unit (eval-cache.mjs): a valid one whose key matches a cached one is reused, its files copied in.
+const limit = limiter(opts.jobs ?? 6);
 let claude = null;
 let store = null;
 let inputs = null;
@@ -190,7 +192,7 @@ const readVersion = () => {
   writeManifest(REPLIES, { runner: 'exec', date: DATE, started: manifest?.started ?? now.toISOString(), ...(manifest ? { resumed: [...(manifest.resumed ?? []), now.toISOString()] } : {}),
     claude, kern: tree, options: { model: MODEL, jobs: opts.jobs ?? 6, only: opts.only, quick: !!opts.quick, ...(opts.changed !== undefined ? { changed: opts.changed } : {}),
       allowDirty: !!opts.allowDirty, ids: cases.map((c) => c.id) } });
-  store = unitStore({ raw: REPLIES, cache: join(ROOT, 'evals', 'results', 'cache', 'exec'), from: basename(REPLIES), noCache: !!opts.noCache, resume: !!manifest });
+  store = unitStore({ raw: REPLIES, cache: join(ROOT, 'evals', 'results', 'cache', 'exec'), from: basename(REPLIES), noCache: !!opts.noCache, resume: !!manifest, limit });
   const src = treeSource(ROOT);
   inputs = new Map(cases.map((c) => [c.id, caseInputs(src, execParts(c)).hash]));
   return claude;
@@ -209,7 +211,7 @@ let exit;
 try {
   exit = await runEval({
     cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason),
-    saveEvents: (id, events) => writeEvents(REPLIES, id, events), saveTrace: (id, file) => writeTrace(REPLIES, id, file), log: console.log, jobs: opts.jobs ?? 6, unit,
+    saveEvents: (id, events) => writeEvents(REPLIES, id, events), saveTrace: (id, file) => writeTrace(REPLIES, id, file), log: console.log, jobs: opts.jobs ?? 6, limit, unit,
     snapshot: gating ? 'committed' : opts.only ? 'none' : 'beside', mode: opts.only ? '--case' : opts.quick ? '--quick' : '--changed',
     describe: (c) => `${c.id}: ${casePrompts(c).map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
   });

@@ -493,8 +493,8 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
     if (!taskFiles.has(t.id)) taskFiles.set(t.id, dirHash(t.dir, ['labels.json']));
     return taskFiles.get(t.id);
   };
-  const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest });
   const limit = limiter(JOBS);
+  const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest, limit });
   const units = [];
   let stop = null;
   const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
@@ -508,12 +508,12 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
       name: `${base}-${r}-${a.id}`, files: [['attempt.jsonl', `${base}-${r}-${ids[a.id]}.jsonl`]],
       key: unitKey({ runner: 'h2h', task: without(t, ['dir', ...GRADING_ONLY]), files: filesOf(t), arm: a.id, kern: a.id === 'kern' ? kernOf(t.category) : null,
         plugin: a.content ?? null, model: MODEL, code, claude, run: r }),
-      work: () => limit.run(async () => {
+      work: async () => {
         const x = await armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan });
         if (x.problem) return { valid: false, problem: x.problem };
         const { id: _, ...attempt } = x.attempt;
         return { valid: true, attempt };
-      }),
+      },
     })));
     units.push(...recs);
     const bad = recs.findIndex((x) => !x.valid);
@@ -522,10 +522,11 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
     const cached = new Map(recs.filter((x) => x.cached).map((x) => [x.attempt.arm, x.cached]));
     const g = await store.unit({ name: `${base}-${r}.grade`,
       key: unitKey({ runner: 'h2h-grade', seed, task: without(t, ['dir']), attempts: recs.map((x) => x.key), grader: graderVersion }),
-      work: () => limit.run(async () => {
+      // The grader call jumps the queue: its task-run's arm sessions are spent, and its grade ends the task-run.
+      priority: 1, work: async () => {
         const res = await gradeTaskRun(t, attempts);
         return res.problem ? { valid: false, problem: res.problem } : { valid: true, ids, reply: res.reply, regrade: res.regrade };
-      }, { priority: 1 }) });
+      } });
     if (!g.valid) return { void: g.problem };
     let grades;
     try { grades = parse(g.reply, attempts.map((x) => x.id), t); } catch (e) { return { void: e.message }; }

@@ -4,6 +4,22 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- Fast eval rounds (after Task 17a). exec-eval, behave, kernel-adherence and h2h share these flags, so a paid round no longer runs one session at a time:
+  - **Pool.** `--jobs N` runs N sessions at once (default 6) on `runClaudeAsync`, which keeps runClaude's guards and end rules. Results, log lines and snapshots keep case order. An h2h task-run runs its arms side by side, and its grader call jumps the queue. A fatal error stops new sessions; the running ones finish and save.
+  - **Quick and changed rounds.** `--quick` runs each case once. `--changed <range>` runs only the cases whose inputs changed in a git range (`A..B`, `A...B`, or a lone rev against the working tree). A case's inputs are:
+    - every plugin-copy file outside `skills/`;
+    - the frontmatter of every SKILL.md;
+    - the folders of the skills it routes to and of each skill those name;
+    - its fixtures and its own case entry.
+    Neither kind writes `evals/snapshots/`: each writes to its own results dir beside the transcripts. A quick run may measure a dirty tree. Each behave case now names its skills (`skills`).
+  - **Cache.** A unit whose key matches a valid cached result is reused, its transcripts copied in, unless `--no-cache`. A unit is a run, an exec case, or an h2h arm attempt or grade. The key holds the case's inputs and text, the model, the Claude Code version, the run's index and the grader version. The grader version is the runner's code and the grader model. An invalid unit is never cached. The cache lives in `evals/results/cache/<runner>/`.
+  - **Resume.** Each unit's record goes beside its transcripts, and `run.json` keeps the run's options. `--resume <dir>` reruns only the units with no valid result and finishes that run, its committed snapshot included for a gating run.
+  - **Regrade.** `--regrade <dir>` grades saved transcripts again with today's graders and scripted checks, and starts no session. Its result goes to `regrade-<HHMMSS>.json` beside them, never `evals/snapshots/`.
+    - **exec:** each case now also keeps its gh log, kern's state file and its final workspace and origin.
+    - **behave:** a model verdict is reused only for an expectation whose text is unchanged.
+    - **h2h:** each grader reply is read again with today's parseGrades, resultRow and gate.
+  - Every guard stays: the strict flags (and the flag pairs that do not go together), the refusal of a real run without the eval CLAUDE_CONFIG_DIR, the dirty-tree refusal for gating runs, the plugin-load VOID and grader validation. `tests/bench/eval-speed.mjs` times the runners against a stand-in claude that sleeps 1 to 20 s a session.
+
 - Attribution checks (Task 17a P9; audit D5, D11, D12, tests for A-mut3 and F-H6): G5 counts attribution only as a trailer in the last paragraph (Co-Authored-By, Assisted-by or Generated-by naming Claude or Anthropic, Claude-Session) or Claude Code's "Generated with Claude Code" footer line, so prose naming Claude passes. G2 applies the same check to a `gh pr create --body-file` under `commit.attribution: none`, and finish-branch's PR section states the rule for a `pr.template` body too. A missing verdict fails closed in both guards (ask; deny under autopilot), and the exec grader judges a PR body with the same rules. commit takes `commit.convention` from `kern-get`, else `kern-detect`, as G5 does, and a convention deny gets one retry that matches the named regex.
 - Eval runners refuse the default login (Task 17a P15): exec-eval, behave, h2h, kernel-adherence, pilot and standing-cost exit 2 before any real claude run when CLAUDE_CONFIG_DIR is unset, empty, or the default ~/.claude in any spelling (trailing slash, `~`, symlink), or while ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or CLAUDE_CODE_OAUTH_TOKEN is set (unless KERN_EVAL_ENV_AUTH=1). The refusal names `$HOME/.claude-kern-eval`, and names an auth variable without its value. runClaude, claudeVersion and the claude driver refuse the same way. Before, standing-cost, among others, ran on whatever login the shell had: on 2026-10-22 it ran 6 one-turn calls on the default login. `--dry-run` is unchanged.
 - CI and the test runner (Task 17a P15; audit F2, F3, F4, F5, F6, F13):

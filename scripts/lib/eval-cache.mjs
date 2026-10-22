@@ -74,20 +74,22 @@ export function readManifest(dir, runner) {
   return m;
 }
 
-// unitStore({ raw, cache, from, noCache, resume }): { unit({ name, key, files, work }) } for one run whose results dir
-// is raw. unit gives the unit's record, with how it was got: 'resume', 'cache' or 'ran'.
+// unitStore({ raw, cache, from, noCache, resume, limit }): { unit({ name, key, files, work, priority }) } for one run
+// whose results dir is raw. unit gives the unit's record, with how it was got: 'resume', 'cache' or 'ran'.
 // - resume (--resume): raw's own record for the unit, kept as it is when it is valid and has this key; a record
 //   whose key differs is stale, since the unit's inputs changed after it ran.
 // - Else, unless noCache, a cache entry under key: its record, marked cached ({ from, at } of the run that made
-//   it), and its files copied into raw.
-// - Else work(), which writes the unit's files into raw and returns its record ({ valid, ... }); seconds is added,
+//   it), and its files copied into raw, each replacing any file of that name there (a git object is read-only).
+// - Else work(), in a slot of limit (pool.mjs) at priority when limit is given, so only work that runs holds one. It
+//   writes the unit's files into raw and returns its record ({ valid, ... }); seconds, the time it ran, is added,
 //   and a valid record is cached with the files named in files, which must then be in raw: each a name, or a pair
 //   [name in the cache, name in raw] for a file whose name changes from run to run (h2h's blind ids). from names
 //   this run in the cache entries it writes.
-// Every record is written to raw as <name>.result.json with its key, so --resume and --regrade can read it.
-export function unitStore({ raw, cache, from, noCache = false, resume = false }) {
+// Every record is written to raw as <name>.result.json with its key, so --resume and --regrade can read it; one that
+// ran is written, and cached, before its slot is handed on.
+export function unitStore({ raw, cache, from, noCache = false, resume = false, limit = null }) {
   return {
-    async unit({ name, key, files = [], work }) {
+    async unit({ name, key, files = [], work, priority = 0 }) {
       const pairs = files.map((f) => (Array.isArray(f) ? f : [f, f]));
       if (resume) {
         const r = readRecord(raw, name);
@@ -96,19 +98,26 @@ export function unitStore({ raw, cache, from, noCache = false, resume = false })
       const hit = noCache ? null : cacheGet(cache, key);
       if (hit?.record?.valid) {
         const rawName = new Map(pairs);
-        for (const [n, p] of Object.entries(hit.files)) cpSync(p, join(raw, rawName.get(n) ?? n), { recursive: true, verbatimSymlinks: true });
+        for (const [n, p] of Object.entries(hit.files)) {
+          const to = join(raw, rawName.get(n) ?? n);
+          rmSync(to, { recursive: true, force: true });
+          cpSync(p, to, { recursive: true, verbatimSymlinks: true });
+        }
         const r = { ...hit.record, key };
         writeRecord(raw, name, r);
         return { ...r, how: 'cache' };
       }
-      const t0 = Date.now();
-      const r = { ...(await work()), key, seconds: Math.round((Date.now() - t0) / 100) / 10 };
-      writeRecord(raw, name, r);
-      if (r.valid) {
-        const kept = Object.fromEntries(pairs.filter(([, r]) => existsSync(join(raw, r))).map(([c, r]) => [c, join(raw, r)]));
-        cachePut(cache, key, { ...r, cached: { from, at: new Date().toISOString() } }, kept);
-      }
-      return { ...r, how: 'ran' };
+      const ran = async () => {
+        const t0 = Date.now();
+        const r = { ...(await work()), key, seconds: Math.round((Date.now() - t0) / 100) / 10 };
+        writeRecord(raw, name, r);
+        if (r.valid) {
+          const kept = Object.fromEntries(pairs.filter(([, f]) => existsSync(join(raw, f))).map(([c, f]) => [c, join(raw, f)]));
+          cachePut(cache, key, { ...r, cached: { from, at: new Date().toISOString() } }, kept);
+        }
+        return { ...r, how: 'ran' };
+      };
+      return limit ? limit.run(ran, { priority }) : ran();
     },
   };
 }

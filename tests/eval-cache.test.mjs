@@ -1,7 +1,7 @@
 // tests/eval-cache.test.mjs: the eval result cache, unit records and the run manifest (scripts/lib/eval-cache.mjs).
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { UsageError } from '../scripts/lib/args.mjs';
@@ -105,4 +105,22 @@ test('unitStore reuses a matching valid record from the resumed dir, then the ca
   assert.equal((await resumed.unit({ name: 'a-0', key: 'k-a2', files: [], work: work('a-0', true) })).how, 'ran', 'a record whose inputs changed since is stale');
   assert.deepEqual(ran, ['b-0', 'a-0']);
   assert.ok(typeof a.seconds === 'number');
+});
+
+test('a cache hit replaces a unit\'s files already in the results dir, read-only ones (git objects) included', async () => {
+  const raw = scratch();
+  const cache = join(scratch(), 'cache');
+  const ws = (body) => {
+    mkdirSync(join(raw, 'a.ws', '.git', 'objects', 'ac'), { recursive: true });
+    const f = join(raw, 'a.ws', '.git', 'objects', 'ac', 'obj');
+    if (existsSync(f)) chmodSync(f, 0o644);
+    writeFileSync(f, body);
+    chmodSync(f, 0o444);
+  };
+  ws('cached\n');
+  await unitStore({ raw, cache, from: 'exec-x' }).unit({ name: 'a', key: 'k', files: ['a.ws'], work: async () => ({ valid: true }) });
+  ws('a later run\'s\n');
+  const hit = await unitStore({ raw, cache, from: 'exec-y' }).unit({ name: 'a', key: 'k', files: ['a.ws'], work: async () => { throw new Error('ran'); } });
+  assert.equal(hit.how, 'cache');
+  assert.equal(readFileSync(join(raw, 'a.ws', '.git', 'objects', 'ac', 'obj'), 'utf8'), 'cached\n');
 });

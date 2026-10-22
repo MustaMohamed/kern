@@ -166,11 +166,11 @@ export const execParts = (c) => ({ skills: [...new Set(casePrompts(c).flatMap((p
 // exitCode(results): 0 only when at least one case ran and every case that ran passed.
 export const exitCode = (results) => (results.length > 0 && results.every((r) => r.pass) ? 0 : 1);
 
-// runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, log, jobs, snapshot, mode, unit }):
+// runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, log, jobs, limit, snapshot, mode, unit }):
 // reads the claude version first, so a failure there stops the run before any case is paid for; then runs the cases
-// in a pool (pool.mjs) of jobs at once (6 by default), each through unit(c, work) when given (the result cache and
-// --resume; unit's result may carry how it was got and cached, its provenance), and logs and keeps their results in
-// case order. The first fatal error stops new cases; running ones finish, and the error is thrown. snapshot says where
+// in a pool (pool.mjs): limit, or a limiter of jobs (6 by default). A case runs through unit(c, work) when unit is given
+// (the result cache and --resume, which takes a slot of limit for work; its result may carry how it was got and
+// cached, its provenance), else in a slot of its own; runEval logs and keeps the results in case order. The first fatal error stops new cases; running ones finish, and the error is thrown. snapshot says where
 // the results go: 'committed' (a full run: written only with at least one valid case, so an all-INVALID run never
 // replaces a same-day snapshot), 'beside' (a --quick or --changed run, mode naming it: always, beside the replies) or
 // 'none' (a --case run); writeSnapshot(results, version, snapshot) writes it. It returns the exit code for every
@@ -178,7 +178,7 @@ export const exitCode = (results) => (results.length > 0 && results.every((r) =>
 // saves the reply, then the events when saveEvents is given, then the hook trace file when saveTrace is; the last line
 // names the replies directory.
 export async function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, saveEvents, saveTrace, repliesDir, log, jobs = 6,
-  snapshot = only ? 'none' : 'committed', mode = '--case', unit = (c, work) => work() }) {
+  limit = limiter(jobs), snapshot = only ? 'none' : 'committed', mode = '--case', unit = (c, work) => limit.run(work) }) {
   const t0 = Date.now();
   if (dryRun) {
     for (const c of cases) log(describe(c));
@@ -191,7 +191,6 @@ export async function runEval({ cases, only, dryRun, runCase, describe, readVers
   }
   const results = [];
   const how = [];
-  const limit = limiter(jobs);
   let stop = null;
   const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
   const emit = ordered(cases.length, (k, r) => {
@@ -213,7 +212,7 @@ export async function runEval({ cases, only, dryRun, runCase, describe, readVers
       if (events && saveEvents) attempt(' events', () => saveEvents(c.id, events));
       if (trace && saveTrace) attempt(' trace', () => saveTrace(c.id, trace));
     };
-    return Promise.resolve(unit(c, () => limit.run(() => runCase(c, save)))).then((r) => emit(k, r)).catch(fail);
+    return Promise.resolve(unit(c, () => runCase(c, save))).then((r) => emit(k, r)).catch(fail);
   });
   await Promise.allSettled(jobsDone);
   if (stop) throw stop;

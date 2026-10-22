@@ -734,8 +734,8 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
   const src = treeSource(root);
   const graderVersion = filesVersion(root, BEHAVE_CODE, { grader: GRADER });
   const inputs = new Map(cases.map((c) => [c.id, caseInputs(src, caseParts(c)).hash]));
-  const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest });
   const limit = limiter(JOBS);
+  const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest, limit });
   const units = [];
   let stop = null;
   const fail = (e) => { if (!stop) { stop = e; limit.close(e); } throw e; };
@@ -751,7 +751,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
   const jobs = cases.map((c, k) => Promise.all(Array.from({ length: RUNS }, (_, i) => store.unit({
     name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.tree.json`],
     key: unitKey({ runner: 'behave', inputs: inputs.get(c.id), case: c, model: MODEL, grader: graderVersion, claude, run: i }),
-    work: () => limit.run(() => runUnit(c, i)),
+    work: () => runUnit(c, i),
   }))).then((recs) => emit(k, recs)).catch(fail));
   try {
     await Promise.allSettled(jobs);
