@@ -7,8 +7,9 @@
 # Exit 2: the plan is not approved (status: approved and an approved: line with a date and the user's
 # quoted words), the plan, the file a symlinked plan names, or its spec: line is not a Markdown name
 # (G20 checks approvals only in Markdown files), DIR holds another plan's ledger, or the plan's content
-# differs from its ledger's Plan: line. Each refusal writes nothing. --summary exits 1 when the main
-# checkout changed.
+# differs from its ledger's Plan: line. Each refusal writes nothing; one about an existing ledger also
+# prints `rerun as: bash .../ledger-open PLAN DIR-<n>`, the first free DIR-<n>. --summary exits 1 when the
+# main checkout changed.
 # Ledger identity adapted from superpowers subagent-driven-development/scripts/sdd-workspace (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -32,6 +33,30 @@ main_state() {
 markdown() {
   case "$1" in *.[Mm][Dd] | *.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]) return 0 ;; esac
   return 1
+}
+
+# free_dir: the first $dir-<n>, n from 2, that holds nothing and names no directory in worktree.dir. A
+# new DIR is also a new <plan-slug> for execute-plan, so wt-new's worktree path is free too (a branch
+# left from an earlier run of that slug is not checked; wt-new refuses it and says so).
+free_dir() {
+  local base=${dir%/} i=2 wtd=''
+  if MAIN=$(kern_main_root "$PWD" 2> /dev/null); then
+    export KERN_MAIN="$MAIN"
+    wtd=$(wt_dir 2> /dev/null) || [ $? = 4 ]
+  fi
+  while [ -e "$base-$i" ] || { [ -n "$wtd" ] && [ -e "$wtd/$(basename "$base")-$i" ]; }; do i=$((i + 1)); done
+  printf '%s\n' "$base-$i"
+}
+
+# refuse WHY: exit 2 on a ledger this plan cannot reuse, naming the command that opens a new one. execute-plan
+# passes no DIR, so the model needs the whole command to relay or run.
+refuse() {
+  local new
+  new=$(free_dir)
+  echo "ledger-open: $1" >&2
+  printf 'ledger-open: rerun as: bash %q %q %q\n' "$here/ledger-open" "$plan" "$new" >&2
+  echo "ledger-open: that ledger starts empty: the completed tasks and the worktree of $ledger are not carried over, and stay where they are" >&2
+  exit 2
 }
 
 if [ "${1-}" = --summary ]; then
@@ -97,19 +122,11 @@ hash=$(git hash-object --no-filters -- "$plan") || { echo "ledger-open: cannot h
 ledger="$dir/ledger.md"
 if [ -f "$ledger" ]; then
   head=$(head -n 1 "$ledger")
-  if [ "$head" != "# kern ledger: $plan" ]; then
-    echo "ledger-open: $ledger belongs to another plan (${head#\# kern ledger: }); leave it and pass another DIR" >&2
-    exit 2
-  fi
+  [ "$head" = "# kern ledger: $plan" ] ||
+    refuse "$ledger belongs to another plan (${head#\# kern ledger: }); leave it and pass another DIR"
   rec=$(sed -n '2s/^Plan: //p' "$ledger")
-  if [ -z "$rec" ]; then
-    echo "ledger-open: $ledger has no Plan: line, so it cannot show the plan is unchanged; pass another DIR" >&2
-    exit 2
-  fi
-  if [ "$rec" != "$hash" ]; then
-    echo "ledger-open: $ledger: the plan changed since this ledger opened; pass another DIR" >&2
-    exit 2
-  fi
+  [ -n "$rec" ] || refuse "$ledger has no Plan: line, so it cannot show the plan is unchanged; pass another DIR"
+  [ "$rec" = "$hash" ] || refuse "$ledger: the plan changed since this ledger opened; pass another DIR"
 else
   MAIN=$(kern_main_root "$PWD") || { echo "ledger-open: not a git repository" >&2; exit 2; }
   export KERN_MAIN="$MAIN"

@@ -115,11 +115,48 @@ approved_plan() {
   run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l"
   [ "$status" -eq 2 ]
   [ -z "$output" ]
-  [ "$stderr" = "ledger-open: $TMP/l/ledger.md: the plan changed since this ledger opened; pass another DIR" ]
+  [ "${stderr_lines[0]}" = "ledger-open: $TMP/l/ledger.md: the plan changed since this ledger opened; pass another DIR" ]
+  # Review of P7, Important 2: execute-plan passes no DIR, so the refusal names a free one and the command.
+  [ "${stderr_lines[1]}" = "ledger-open: rerun as: bash $KERN_ROOT/scripts/ledger-open $TMP/a.md $TMP/l-2" ]
+  [ "${stderr_lines[2]}" = "ledger-open: that ledger starts empty: the completed tasks and the worktree of $TMP/l/ledger.md are not carried over, and stay where they are" ]
+  [ "${#stderr_lines[@]}" -eq 3 ]
   [ "$(cat "$dir/ledger.md")" = "$before" ]
-  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l2"
+  [ ! -e "$TMP/l-2" ]
+  rerun=${stderr_lines[1]#ledger-open: rerun as: }
+  run --separate-stderr eval "$rerun"
   [ "$status" -eq 0 ]
-  [ "$(sed -n 2p "$TMP/l2/ledger.md")" = "Plan: $(git hash-object --no-filters -- "$TMP/a.md")" ]
+  [ "$output" = "$TMP/l-2" ]
+  [ "$(sed -n 2p "$TMP/l-2/ledger.md")" = "Plan: $(git hash-object --no-filters -- "$TMP/a.md")" ]
+  [ "$(wc -l < "$TMP/l-2/ledger.md")" -eq 3 ]
+}
+
+@test "a refusal names the first DIR-<n> that holds no ledger dir and no worktree of that name" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/a.md"; approved_plan "$TMP/b.md"
+  bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l" > /dev/null 2>&1
+  mkdir -p "$TMP/l-2" .claude/worktrees/l-3
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/b.md" "$TMP/l/"
+  [ "$status" -eq 2 ]
+  [[ "${stderr_lines[0]}" == *"belongs to another plan ($TMP/a.md)"* ]] || false
+  [ "${stderr_lines[1]}" = "ledger-open: rerun as: bash $KERN_ROOT/scripts/ledger-open $TMP/b.md $TMP/l-4" ]
+  [[ "${stderr_lines[2]}" == *"the completed tasks and the worktree of $TMP/l/"*"ledger.md are not carried over"* ]] || false
+  printf '%s\n' '' '### Task 2: Two' >> "$TMP/a.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/l"
+  [ "$status" -eq 2 ]
+  [ "${stderr_lines[1]}" = "ledger-open: rerun as: bash $KERN_ROOT/scripts/ledger-open $TMP/a.md $TMP/l-4" ]
+}
+
+@test "the rerun command quotes a plan path with a space" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  approved_plan "$TMP/Big Plan.md"
+  bash "$KERN_ROOT/scripts/ledger-open" "$TMP/Big Plan.md" "$TMP/l" > /dev/null 2>&1
+  printf '%s\n' '' '### Task 2: Two' >> "$TMP/Big Plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/Big Plan.md" "$TMP/l"
+  [ "$status" -eq 2 ]
+  rerun=${stderr_lines[1]#ledger-open: rerun as: }
+  run --separate-stderr eval "$rerun"
+  [ "$status" -eq 0 ]
+  [ "$(head -n 1 "$TMP/l-2/ledger.md")" = "# kern ledger: $TMP/Big Plan.md" ]
 }
 
 @test "ledger-open refuses a ledger with no Plan: line, which cannot show the plan is unchanged" {
@@ -129,7 +166,8 @@ approved_plan() {
   printf '# kern ledger: %s\nMain: %s branch=main status=x\n' "$TMP/a.md" "$REPO" > "$TMP/old/ledger.md"
   run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a.md" "$TMP/old"
   [ "$status" -eq 2 ]
-  [[ "$stderr" == *"$TMP/old/ledger.md has no Plan: line"*"pass another DIR"* ]] || false
+  [[ "${stderr_lines[0]}" == *"$TMP/old/ledger.md has no Plan: line"*"pass another DIR"* ]] || false
+  [ "${stderr_lines[1]}" = "ledger-open: rerun as: bash $KERN_ROOT/scripts/ledger-open $TMP/a.md $TMP/old-2" ]
   [ "$(ls -A "$TMP/old")" = ledger.md ]
 }
 
@@ -167,7 +205,9 @@ approved_plan() {
   [ "$status" -eq 0 ]
   [ -z "$(git status --porcelain)" ]
   grep -qxF '/.claude/worktrees/' .git/info/exclude
-  bash "$KERN_ROOT/scripts/wt-new" p --base main > /dev/null 2>&1
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" p --base main
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.claude/worktrees/p" ]
   run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" --summary "$TMP/l"
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = 'main: unchanged' ]
