@@ -50,7 +50,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `spec.source` | linked issue, PR body, `.kern/specs` | path or `issue` | prove-it, pr-review |
 | `commit.convention` | unset. G5 then uses the convention kern-detect finds in the last 30 `git log` subjects, and checks none when it finds none | extended regular expression for the subject. An explicit empty `commit.convention:` turns the convention check off | pre-tool-use G5, kern-detect, commit |
 | `commit.id_from_branch` | `[A-Z][A-Z0-9]+-[0-9]+` | extended regular expression | pre-tool-use G5, commit |
-| `commit.attribution` | `none` | `none`, `allowed`. Governs commit trailers and a PR body's attribution footer | pre-tool-use G5, commit, finish-branch, autopilot |
+| `commit.attribution` | `none` | `none`, `allowed`. Governs commit trailers and a PR body's attribution footer | pre-tool-use G2, G5, commit, finish-branch, autopilot |
 | `commit.policy` | `ask` | `ask`, `auto`, `deny` | pre-tool-use G5, commit |
 | `push.policy` | `ask` | `ask`, `auto`, `deny` | pre-tool-use G1, finish-branch |
 | `pr.policy` | `draft-after-approval`, read as `ask` | `ask`, `auto`, `deny`. PRs are always drafts | pre-tool-use G2, finish-branch |
