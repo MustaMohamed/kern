@@ -75,6 +75,7 @@ test('plan pins order, routing and stop rules', () => {
     'An unfinished plan for other work: stop and ask',
     'issue acceptance criteria alone are not approved (its bounded path records them as an approved short spec)',
     'Look for existing PRs with `gh pr list --search <id> --state all`; if gh fails',
+    'Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask.',
     'else stop and ask the user to confirm the scope or split',
     'Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel',
     'round 1 only',
@@ -137,5 +138,4 @@ test('an existing plan goes back to draft before it is updated, so its approval 
   // complete lines. ledger-open now refuses a ledger opened for other plan text; a draft needs a new yes.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[1].includes('A plan for this spec exists: set `status: draft`, then update it in place.'), s[1]);
-  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask.'), s[1]);
 });
