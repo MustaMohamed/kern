@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attributed, GRADERS, chainParts, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, pluginProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
-import { KERNEL, init as initOf, result as resultOf, sessionStart as hookStart, started } from './helpers/eval-stub.mjs';
+import { KERNEL, NO_AUTH, fakeClaude, init as initOf, result as resultOf, sessionStart as hookStart, started, turnClaude } from './helpers/eval-stub.mjs';
 import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, dateStamp, exitCode, gradeCase, kernStateFile, parseArgs, replyDate, runEval, sessionId, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from '../scripts/lib/exec-run.mjs';
 import { COPY_OMITS, pluginCopy } from '../scripts/lib/behave.mjs';
 import { UsageError as FlagError, parseArgs as parseFlags } from '../scripts/lib/args.mjs';
@@ -178,19 +178,6 @@ test('a gh call the transcript shows ran but the stub never logged makes the run
   assert.deepEqual(stubMissed(ran('t3', 'gh pr ready 8', true), []), [], 'a denied call never ran');
 });
 
-// A stand-in claude on PATH: never the real one, so these tests spend nothing. It comes with a
-// CLAUDE_CONFIG_DIR, which runClaude needs before it starts any claude, and blanks the auth variables
-// runClaude passes on, so one in the caller's shell neither refuses the run nor reaches the stand-in (P15).
-const NO_AUTH = { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: '', CLAUDE_CODE_OAUTH_TOKEN: '' };
-// By default it reads the one prompt first: a child that exits before reading it races the driver's stdin
-// write (EPIPE). drain: false makes that race the test. It reads one line, not to the end: stdin closes
-// only after the last prompt's result, so a child that waits for the end before answering never answers.
-function fakeClaude(body, { drain = true } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'fc-'));
-  writeFileSync(join(dir, 'claude'), `#!/bin/sh\n${drain ? 'read -r _\n' : ''}${body}\n`);
-  chmodSync(join(dir, 'claude'), 0o755);
-  return { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH };
-}
 const work = () => mkdtempSync(join(tmpdir(), 'wk-'));
 const attempt = (env, extra = {}) => () => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env, ...extra });
 
@@ -288,40 +275,6 @@ test('runClaude: a usage-limit reply from Claude Code stops the runner; it is ne
   const ok = attempt(fakeClaude(`echo '${real.replace(/'/g, "'\\''")}'; echo '{"type":"result","subtype":"success","result":"x"}'`))();
   assert.equal(ok.events.length, 2, 'a model that writes the words is not a limit');
 });
-
-// A stand-in claude that runs one turn per stdin line, as stream-json input does. It holds each turn
-// open for 0.3 s, and logs `early <k+1>` when prompt k+1 has reached it before it printed result k. It
-// logs `eof` when stdin closes. `stop` is JavaScript run when a turn opens, to make the child die or
-// exit early; n is the turn number.
-function turnClaude(stop = '') {
-  const dir = mkdtempSync(join(tmpdir(), 'tc-'));
-  writeFileSync(join(dir, 'claude'), `#!${process.execPath}
-const fs = require('fs');
-const log = (s) => fs.appendFileSync(__filename + '.log', s + '\\n');
-const out = (o) => fs.writeSync(1, JSON.stringify(o) + '\\n');
-let buf = '', n = 0, open = false;
-const queue = [];
-const next = () => {
-  if (open || !queue.length) return;
-  open = true; n += 1; queue.shift(); log('read ' + n);
-  ${stop}
-  setTimeout(() => {
-    if (queue.length) log('early ' + (n + 1));
-    out({ type: 'assistant', message: { content: [{ type: 'text', text: 'turn ' + n }] } });
-    out({ type: 'result', subtype: 'success', is_error: false, result: 'turn ' + n });
-    open = false; next();
-  }, 300);
-};
-process.stdin.on('data', (d) => {
-  buf += d;
-  for (let i; (i = buf.indexOf('\\n')) >= 0; buf = buf.slice(i + 1)) queue.push(buf.slice(0, i));
-  next();
-});
-process.stdin.on('end', () => log('eof'));
-`);
-  chmodSync(join(dir, 'claude'), 0o755);
-  return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
-}
 
 test('runClaude sends prompt k+1 only after result k, in one ordered stream, then closes stdin', () => {
   const stub = turnClaude();

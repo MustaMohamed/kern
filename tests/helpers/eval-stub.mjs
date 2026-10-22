@@ -44,3 +44,52 @@ export const result = (text = 'done') => ({ type: 'result', subtype: 'success', 
 export const ran = (events, status = 0) => ({ argv: [], events, badLines: 0, status, stderr: status ? 'failed' : '' });
 // started(dirs, kernel): the events a session opens with: kern's SessionStart (the kernel, or nothing) and init.
 export const started = (dirs, kernel = KERNEL) => [sessionStart(kernel), init(dirs)];
+
+// A stand-in claude on PATH: never the real one, so these tests spend nothing. It comes with a
+// CLAUDE_CONFIG_DIR, which runClaude needs before it starts any claude, and blanks the auth variables
+// runClaude passes on, so one in the caller's shell neither refuses the run nor reaches the stand-in (P15).
+export const NO_AUTH = { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: '', CLAUDE_CODE_OAUTH_TOKEN: '' };
+// By default it reads the one prompt first: a child that exits before reading it races the driver's stdin
+// write (EPIPE). drain: false makes that race the test. It reads one line, not to the end: stdin closes
+// only after the last prompt's result, so a child that waits for the end before answering never answers.
+export function fakeClaude(body, { drain = true } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'fc-'));
+  writeFileSync(join(dir, 'claude'), `#!/bin/sh\n${drain ? 'read -r _\n' : ''}${body}\n`);
+  chmodSync(join(dir, 'claude'), 0o755);
+  return { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH };
+}
+
+// A stand-in claude that runs one turn per stdin line, as stream-json input does. It holds each turn
+// open for 0.3 s, and logs `early <k+1>` when prompt k+1 has reached it before it printed result k. It
+// logs `eof` when stdin closes. `stop` is JavaScript run when a turn opens, to make the child die or
+// exit early; n is the turn number.
+export function turnClaude(stop = '') {
+  const dir = mkdtempSync(join(tmpdir(), 'tc-'));
+  writeFileSync(join(dir, 'claude'), `#!${process.execPath}
+const fs = require('fs');
+const log = (s) => fs.appendFileSync(__filename + '.log', s + '\\n');
+const out = (o) => fs.writeSync(1, JSON.stringify(o) + '\\n');
+let buf = '', n = 0, open = false;
+const queue = [];
+const next = () => {
+  if (open || !queue.length) return;
+  open = true; n += 1; queue.shift(); log('read ' + n);
+  ${stop}
+  setTimeout(() => {
+    if (queue.length) log('early ' + (n + 1));
+    out({ type: 'assistant', message: { content: [{ type: 'text', text: 'turn ' + n }] } });
+    out({ type: 'result', subtype: 'success', is_error: false, result: 'turn ' + n });
+    open = false; next();
+  }, 300);
+};
+process.stdin.on('data', (d) => {
+  buf += d;
+  for (let i; (i = buf.indexOf('\\n')) >= 0; buf = buf.slice(i + 1)) queue.push(buf.slice(0, i));
+  next();
+});
+process.stdin.on('end', () => log('eof'));
+`);
+  chmodSync(join(dir, 'claude'), 0o755);
+  return { env: { PATH: `${dir}:/usr/bin:/bin`, CLAUDE_CONFIG_DIR: join(dir, 'config'), ...NO_AUTH }, log: () => readFileSync(join(dir, 'claude.log'), 'utf8').split('\n').filter(Boolean) };
+}
+

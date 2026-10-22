@@ -1,6 +1,6 @@
 // Run Claude Code headless on a fixture project, isolated from the host: no user settings (so no user
 // plugins or hooks), no MCP servers, no saved session. Shared by exec-eval (M2a) and the M2b runners.
-import { spawnSync, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
@@ -141,6 +141,55 @@ export const NO_BACKGROUND = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
 // SIGKILL after killGraceMs. More than maxBuffer bytes on stdout or stderr cuts the run off the same way.
 export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000,
   killGraceMs = 5000, maxBuffer = 64 * 1024 * 1024 }) {
+  const { argv, childEnvironment } = prepare({ cwd, prompts, pluginDirs, model, maxTurns, maxBudgetUsd, env });
+  // fd 3 carries the driver's one-line report of how claude ended.
+  const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify({ prompts, graceMs: killGraceMs }), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnvironment });
+  return ended({ argv, stdout: run.stdout, stderr: run.stderr, report: run.output?.[3], timedOut: run.error?.code === 'ETIMEDOUT', overflow: run.error?.code === 'ENOBUFS',
+    error: run.error, status: run.status, signal: run.signal, timeoutMs, maxBuffer });
+}
+
+// runClaudeAsync: runClaude on spawn, not spawnSync, so the session pool (pool.mjs) runs several at once. Same
+// arguments, guards, result and errors (a promise that rejects with the ClaudeRunError runClaude throws): on
+// the timeout, or more than maxBuffer bytes on stdout or on stderr, the driver gets SIGTERM, as spawnSync
+// gives it, and stops claude's process group.
+export function runClaudeAsync({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000,
+  killGraceMs = 5000, maxBuffer = 64 * 1024 * 1024 }) {
+  return new Promise((resolve, reject) => {
+    const { argv, childEnvironment } = prepare({ cwd, prompts, pluginDirs, model, maxTurns, maxBudgetUsd, env });
+    const child = spawn(process.execPath, [DRIVER, ...argv], { cwd, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: childEnvironment });
+    const got = { stdout: [], stderr: [], report: [] };
+    const size = { stdout: 0, stderr: 0 };
+    let timedOut = false; let overflow = false; let error = null; let settled = false;
+    const stop = () => { try { child.kill('SIGTERM'); } catch { /* gone */ } };
+    for (const [name, stream] of [['stdout', child.stdout], ['stderr', child.stderr], ['report', child.stdio[3]]]) {
+      stream.on('data', (b) => {
+        if (name !== 'report' && (size[name] += b.length) > maxBuffer) { if (!overflow) { overflow = true; stop(); } return; }
+        got[name].push(b);
+      });
+    }
+    const timer = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
+    const finish = (status, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const text = (k) => Buffer.concat(got[k]).toString('utf8');
+      try {
+        resolve(ended({ argv, stdout: text('stdout'), stderr: text('stderr'), report: text('report'), timedOut, overflow, error, status, signal, timeoutMs, maxBuffer }));
+      } catch (e) { reject(e); }
+    };
+    // A driver that could not start has no pid, and may give no 'close'.
+    child.on('error', (e) => { error = e; if (child.pid === undefined) finish(null, null); });
+    child.on('close', finish);
+    child.stdin.on('error', () => {});
+    child.stdin.end(JSON.stringify({ prompts, graceMs: killGraceMs }));
+  });
+}
+
+// prepare(opts): runClaude's argv and the child's environment, after its guards: a model is given, the
+// environment may start a real claude (evalConfigProblem), and cwd is under the OS temp dir. A failed guard
+// throws a fatal ClaudeRunError.
+function prepare({ cwd, prompts, pluginDirs, model, maxTurns, maxBudgetUsd, env }) {
   if (!model) throw new ClaudeRunError('runClaude needs a model', true);
   const childEnvironment = childEnv(process.env, { ...env, ...(prompts.length > 1 ? NO_BACKGROUND : {}) });
   const why = evalConfigProblem(childEnvironment);
@@ -151,34 +200,38 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   if (!real.startsWith(root + sep)) throw new ClaudeRunError(`refusing to run in ${real}: not under ${root}`, true);
   const argv = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
     '--model', model, '--max-turns', String(maxTurns), '--max-budget-usd', String(maxBudgetUsd), ...PERMISSIONS, ...ISOLATION, ...pluginDirs.flatMap((d) => ['--plugin-dir', d])];
-  // fd 3 carries the driver's one-line report of how claude ended.
-  const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify({ prompts, graceMs: killGraceMs }), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
-    encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnvironment });
+  return { argv, childEnvironment };
+}
+
+// ended({ argv, stdout, stderr, report, timedOut, overflow, error, status, signal, timeoutMs, maxBuffer }): the
+// run's result from what the driver printed (report: its fd 3 line) and how it ended, or the ClaudeRunError
+// that says why there is none. status, signal and error are the driver's.
+function ended({ argv, stdout, stderr, report, timedOut, overflow, error, status, signal, timeoutMs, maxBuffer }) {
   // A run the timeout cut off is no result, but the events it printed go with the error, so a runner can save
   // them and a reader see how far it got (Task 16h review, M6).
-  if (run.error?.code === 'ETIMEDOUT') {
-    const { events } = parseEvents(run.stdout);
+  if (timedOut) {
+    const { events } = parseEvents(stdout);
     throw Object.assign(new ClaudeRunError(`claude timed out after ${timeoutMs} ms; the ${events.length} events it printed are kept`), { events });
   }
-  // ENOBUFS: spawnSync stopped the driver, which stopped claude, before either could report. Only this run
+  // ENOBUFS: the driver was stopped, and it stopped claude, before either could report. Only this run
   // printed that much, so it is not fatal.
-  if (run.error?.code === 'ENOBUFS') throw new ClaudeRunError(`claude printed more than ${maxBuffer} bytes to stdout or stderr, so the run was cut off`);
+  if (overflow) throw new ClaudeRunError(`claude printed more than ${maxBuffer} bytes to stdout or stderr, so the run was cut off`);
   let end = null;
-  try { end = JSON.parse(run.output?.[3] || 'null'); } catch { end = null; }
+  try { end = JSON.parse(report || 'null'); } catch { end = null; }
   if (end?.error?.code === 'ENOENT') throw new ClaudeRunError('claude is not on PATH', true);
   if (end?.error) throw new ClaudeRunError(`claude could not run: ${end.error.message}`, true);
   // No report: the driver itself failed, so every later run would too. An EPIPE from claude exiting
   // before it read a prompt is not this: the driver takes it and reports claude's own status or signal.
-  if (!end) throw new ClaudeRunError(`the claude driver failed: ${run.error?.message || `exit ${run.status ?? run.signal}`}: ${(run.stderr || '').trim().split('\n').pop() || 'no stderr'}`, true);
-  if (end.status === 126 || end.status === 127) throw new ClaudeRunError(`claude exited ${end.status}: ${(run.stderr || '').trim()}`, true);
+  if (!end) throw new ClaudeRunError(`the claude driver failed: ${error?.message || `exit ${status ?? signal}`}: ${(stderr || '').trim().split('\n').pop() || 'no stderr'}`, true);
+  if (end.status === 126 || end.status === 127) throw new ClaudeRunError(`claude exited ${end.status}: ${(stderr || '').trim()}`, true);
   if (end.status === null) throw new ClaudeRunError(`claude was killed by ${end.signal}`);
-  const { events, badLines } = parseEvents(run.stdout);
+  const { events, badLines } = parseEvents(stdout);
   // A usage or rate limit: Claude Code answers by itself (model "<synthetic>") and no model ran. Every
   // later run would get the same reply, so the caller stops instead of grading it as a failed case.
   const limit = events.find((e) => e?.type === 'assistant' && e.message?.model === '<synthetic>' &&
     /\blimit\b/i.test((e.message.content ?? []).map((c) => c?.text ?? '').join(' ')));
   if (limit) throw new ClaudeRunError(`claude stopped at a usage limit: ${limit.message.content.map((c) => c?.text ?? '').join(' ').trim()}`, true);
-  return { argv, events, badLines, status: end.status, stderr: run.stderr || '' };
+  return { argv, events, badLines, status: end.status, stderr: stderr || '' };
 }
 
 // countProblem(run, prompts): why the run's turns do not match the prompts sent, or '' when they do: each
