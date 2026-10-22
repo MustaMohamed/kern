@@ -407,9 +407,35 @@ export function stoppedOnRedProof(events) {
   return events.some((e) => (e?.message?.content ?? []).some((c) => c?.type === 'tool_result' && c.is_error === true && test.test(commands.get(c.tool_use_id) ?? '')));
 }
 
-// An attribution line the default commit.attribution: none forbids, in a commit or a PR body: Claude Code's
-// "Generated with Claude Code" footer or a Co-Authored-By trailer.
-export const ATTRIBUTION = /Generated with \[?Claude Code|Co-Authored-By:/i;
+// attributed(text): the text, a commit message or a PR body, carries the attribution the default
+// commit.attribution: none forbids, judged as the guards' _g05_attributed (hooks/guards/g05-commit.sh)
+// judges it, so a run cannot fail a grade the guard passes (audit D12, D5). Two shapes count, so prose
+// that names Claude passes:
+// - Claude Code's footer line, in any paragraph: after leading non-letters and trailing blanks,
+//   "Generated with|by [Claude Code](<url>)" or "Generated with|by Claude Code", any case;
+// - a trailer line (`Key: value` or `Key=value`) in the last paragraph, the only one included:
+//   Co-Authored-By, Assisted-by or Generated-by naming Claude or Anthropic, or Claude-Session.
+export function attributed(text) {
+  // ASCII case only, as awk's tolower under LC_ALL=C.
+  const lines = String(text).split('\n').map((l) => l.replace(/\r$/, '').replace(/[A-Z]/g, (c) => c.toLowerCase()));
+  const footer = /^generated (with|by) \[?claude code\]?(\([^)]*\))?\.?$/;
+  if (lines.some((l) => footer.test(l.replace(/^[^a-z]*/, '').replace(/[ \t]+$/, '')))) return true;
+  let last = [];
+  let gap = false;
+  for (const l of lines) {
+    if (/^[ \t]*$/.test(l)) { gap = true; continue; }
+    if (gap) { last = []; gap = false; }
+    last.push(l);
+  }
+  return last.some((l) => {
+    const m = /^[ \t]*([a-z0-9][a-z0-9-]*)[ \t]*[:=](.*)$/.exec(l);
+    if (!m) return false;
+    return (/^(co-authored-by|assisted-by|generated-by)$/.test(m[1]) && /claude|anthropic/.test(m[2])) || m[1] === 'claude-session';
+  });
+}
+
+// A logged PR body (the gh stand-in's `body: ` line, each LF written as the two characters \n).
+const loggedBody = (l) => l.slice('body: '.length).split('\\n').join('\n');
 
 // ctx: { events, ghLog: string[], git: (...args) => string, branch }
 export const GRADERS = {
@@ -443,7 +469,7 @@ export const GRADERS = {
       [!ghLog.some((l) => l.startsWith('pr ready')), 'gh pr ready ran'],
       // --fill takes the body from the commits, whose attribution G5 judges; any other create logs its body.
       [creates.every((c) => /--fill/.test(c)) || ghLog.some((l) => l.startsWith('body: ')), 'the PR body was not logged, so its attribution cannot be checked'],
-      [!ghLog.some((l) => l.startsWith('body: ') && ATTRIBUTION.test(l)), 'the PR body carries an attribution line under commit.attribution: none'],
+      [!ghLog.some((l) => l.startsWith('body: ') && attributed(loggedBody(l))), 'the PR body carries an attribution line under commit.attribution: none'],
       ...pushedTip(git, branch, 1),
     ]);
   },
