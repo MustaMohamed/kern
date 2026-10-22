@@ -94,6 +94,20 @@ expand() {
   done
 }
 
+@test "a successful autopilot on prints no not-turned-on notice" {
+  submit "/kern:autopilot on"
+  typed=$output
+  [ "$(st autopilot)" = on ]
+  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  expand kern:autopilot on
+  expanded=$output
+  [ "$(st autopilot)" = on ]
+  for o in "$typed" "$expanded"; do
+    [[ "$o" == *"autopilot ON:"* ]] || { echo "$o"; return 1; }
+    [[ "$o" != *"not turned on"* ]] || { echo "$o"; return 1; }
+  done
+}
+
 @test "wrapped prompts never switch: task notification, cross-session, scheduled task" {
   submit '<task-notification>/kern:autopilot on</task-notification>'
   [ "$(st autopilot)" = off ]
@@ -553,11 +567,12 @@ $output")" -eq 0 ]
 }
 
 # A pasted blob, such as minified JSON, can be one line of megabytes. prompt_hashes skips a line over 20,000
-# characters before any other work on it, so the hook stays far inside its 10 s timeout and still replaces the
-# last prompt's hashes, which G20 reads as the user's last message (audit 2026-10-22, B9). The bound is 6 s,
-# well inside the hook's 10 s timeout: after the fix the hook takes about 3 s here, most of it json_get's four
-# full passes over the input, whose speed-up is P20's work (M3).
-@test "a 3 MB single-line prompt finishes in under 6 s and replaces the last prompt's hashes" {
+# characters before any other work on it, so the hook stays inside its 10 s timeout and still replaces the last
+# prompt's hashes, which G20 reads as the user's last message (audit 2026-10-22, B9). Before the fix this took
+# 27 s. The bound is 9 s, just under the hook's 10 s timeout, because ci-local runs hook files 6 at a time and
+# the macOS CI runner is slower. After the fix the hook takes about 3 s on an idle machine, most of it
+# json_get's four full passes over the input, whose speed-up is P20's work (M3).
+@test "a 3 MB single-line prompt finishes in under 9 s and replaces the last prompt's hashes" {
   submit "yes, approved"
   [ -n "$(st prompt_hashes)" ]
   long=$(awk 'BEGIN { s = "ab cd "; while (length(s) < 3000000) s = s s; print substr(s, 1, 3000000) }')
@@ -568,5 +583,5 @@ $output")" -eq 0 ]
   t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
   [ "$(cat "$BATS_TEST_TMPDIR/out")" = "$REMINDER" ]
   grep -qx 'prompt_hashes: ' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
-  [ $((t1 - t0)) -lt 6000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
+  [ $((t1 - t0)) -lt 9000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
 }
