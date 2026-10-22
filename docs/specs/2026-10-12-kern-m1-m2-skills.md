@@ -103,9 +103,9 @@ Three files, later rows lose to earlier: `MAIN/.claude/kern.local.yml`, `MAIN/.c
 | `checklists` | existing data and consumers; authorization scope; persisted-shape change | none | define, plan |
 | `tracker`, `tracker.first` | detected / `false` | connected tracker MCP tools, remote host; else `none` | define, plan, recall |
 | `spec.source` | linked issue, PR body, `WORK/specs` | none | prove-it |
-| `commit.convention` | detected | inferred from `git log --format=%s -30` and stated; else ask | commit, G5 |
+| `commit.convention` | detected | the regex `kern-detect` finds in the last 30 subjects (`git log --format=%s -30`), stated; both `kern-get` and `kern-detect` exit 3: none is checked | commit, G5 |
 | `commit.id_from_branch` | `[A-Z][A-Z0-9]+-[0-9]+` | none | commit |
-| `commit.attribution` | `none` | none | commit, G5 |
+| `commit.attribution` | `none` | none | commit, finish-branch, G2, G5 |
 | `commit.policy`, `push.policy` | `ask` | none | commit, finish-branch, G1, G5 |
 | `pr.policy`, `pr.dedup` | `draft-after-approval`, `on` | none | finish-branch, G2 |
 | `pr.template` | detected | `.github/pull_request_template.md` | finish-branch |
