@@ -1025,7 +1025,7 @@ heredoc_cmd() {
   # again and run it.
   for b in '${(e)x}' '${(Le)x}' 'see ${(qe)x} here' '${x@P}' '${arr[@]@P}' '${${(e)x}}' '${(s:):e)x}' \
     '${(j:):e)x}' '${(j(,)e)x}' '${(l:5::):e)x}' '${(r[3][)][x]e)x}' '${(P)y}' '${(%)x}' '${(%%)x}' \
-    '${!y}' '${!y:-z}' '${!a[0]}' '${!1}'; do
+    '${!y}' '${!y:-z}' '${!a[0]}' '${!1}' '${!@}' '${!*}'; do
     out=$(_GW_QB=1; git_words "$(heredoc_cmd '<<EOF' "$b")")
     [[ "$out" == *'$KERN_UNREAD'* ]] || { echo "$b -> $out"; return 1; }
     out=$(_GW_QB=1; git_words "$(heredoc_cmd '<<-EOF' "$b")")
@@ -1042,9 +1042,10 @@ heredoc_cmd() {
     [[ "$out" != *'$KERN_UNREAD'* ]] || { echo "not G00's call: $b -> $out"; return 1; }
   done
   # Expansions that do not evaluate their value again: an e, P or % inside a delimited flag argument is
-  # the argument's text, and ${!name[@]}, ${!name[*]}, ${!prefix*} and ${!prefix@} list keys or names.
+  # the argument's text, ${!name[@]}, ${!name[*]}, ${!prefix*} and ${!prefix@} list keys or names, and
+  # ${!} (the last background pid), ${!#}, ${!-}, ${!?} and ${!$} read a special parameter's own value.
   for b in '${x}' '${(U)x}' '${(L)x}' '${x@Q}' '$x@P' 'P}' '${(s:e:)x}' '${(j:%P:)x}' '${(l:5::e::P:)x}' \
-    '${(j(e))x}' '${!a[@]}' '${!a[*]}' '${!pre*}' '${!pre@}'; do
+    '${(j(e))x}' '${!a[@]}' '${!a[*]}' '${!pre*}' '${!pre@}' 'pid ${!}' '${!#}' '${!-}' '${!?}' '${!$}'; do
     out=$(_GW_QB=1; git_words "$(heredoc_cmd '<<EOF' "$b")")
     [[ "$out" != *'$KERN_UNREAD'* ]] || { echo "$b -> $out"; return 1; }
   done

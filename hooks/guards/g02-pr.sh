@@ -149,7 +149,14 @@ _g02_write() {
   local g="${2%% *}" v=""
   case "$2" in *" "*) v=${2#* } ;; esac
   case "$_GH_CMDS" in *" $g "*) ;; *) return 0 ;; esac
-  case "$_G02_READS$_G02_OWNED" in *" $g/* "* | *" $g/$v "*) _g02_quiet "$1" "$2" && return 0 ;; esac
+  case "$_G02_READS$_G02_OWNED" in
+    *" $g/* "* | *" $g/$v "*)
+      _g02_quiet "$1" "$2" && return 0
+      vote ask G2 "$_G02_WHY; the user confirms it"
+      [ "$AUTOPILOT" = 1 ] && vote deny G2 "$_G02_WHY (under autopilot)"
+      return 0
+      ;;
+  esac
   case "$v" in
     -h | --help) return 0 ;;
     "") [ "$g" = copilot ] || return 0 ;;
@@ -165,7 +172,7 @@ _g02_write() {
 # _g02_quiet IDX SUB: a read on the lists, at IDX in _GH_RECS, keeps to a form that only reads: auth
 # status without -t or --show-token, which prints the token, and repo read-file without -o or --output,
 # which writes a file (over one with --clobber). A word gh rejects in either counts as such a form.
-# Every other SUB passes.
+# Every other SUB passes. On a failure _G02_WHY says what the form does.
 _g02_quiet() {
   local toks
   case "$2" in
@@ -173,10 +180,13 @@ _g02_quiet() {
     "repo read-file") toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_READ_FILE_OPTS") ;;
     *) return 0 ;;
   esac
+  _G02_WHY="gh $2 holds a word gh rejects, so kern cannot tell that it only reads"
   case $'\n'"$toks" in *$'\n?'*) return 1 ;; esac
   if [ "$2" = "auth status" ]; then
+    _G02_WHY="gh auth status with -t or --show-token prints the auth token"
     [ "$(_gh_last "$toks" show-token)" != true ]
   else
+    _G02_WHY="gh repo read-file with -o or --output writes a file"
     ! _gh_last "$toks" output >/dev/null
   fi
 }

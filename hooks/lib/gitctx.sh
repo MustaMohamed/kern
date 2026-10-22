@@ -685,14 +685,15 @@ _split_words() {
     }
     # hreev(s): the unquoted here-doc body s, whose quotes are literal text, holds an expansion that
     # evaluates its value again, so a $( ) stored in the value runs: a bash @P transform (${x@P}); a bash
-    # indirection (${!y}, whose name may hold a subscript), but not ${!y[@]}, ${!y[*]}, ${!pre*} or
-    # ${!pre@}, which list keys or names; or a zsh flag group holding e, P (its name may hold a
-    # subscript), or % (prompt expansion, which runs a $( ) under PROMPT_SUBST). The group is walked as
-    # zsh reads it: j s Z _ I g take one delimited argument, l and r up to three, each from its delimiter
-    # to the match ( ) [ ] { } < >, or the same character again, and a flag inside an argument is its
-    # text. A backslash before the $ is not read, so an escaped expansion counts too; an argument that
-    # never closes counts. g0_reeval in G00 judges command records the same way: the two copies stay in
-    # step until one shared matcher replaces them (P20, M3).
+    # indirection through a name or a positional parameter (${!y}, ${!1}, ${!@}, ${!*}: the value may
+    # hold a subscript), but not ${!y[@]}, ${!y[*]}, ${!pre*} or ${!pre@}, which list keys or names, nor
+    # ${!} and ${!#}, ${!-}, ${!?}, ${!$}, which read the value of a special parameter; or a zsh flag
+    # group holding e, P (its name may hold a subscript), or % (prompt expansion, which runs a $( ) under
+    # PROMPT_SUBST). The group is walked as zsh reads it: j s Z _ I g take one delimited argument, l and
+    # r up to three, each from its delimiter to the match ( ) [ ] { } < >, or the same character again,
+    # and a flag inside an argument is its text. A backslash before the $ is not read, so an escaped
+    # expansion counts too; an argument that never closes counts. g0_reeval in G00 judges command
+    # records; P1 is aligning it to this walk, and P20 (M3) replaces the two copies with one matcher.
     function hreev(s,   n, C, i, k, c, d, e, m, t) {
       if (index(s, "@P}")) return 1
       if (!index(s, "${")) return 0
@@ -701,6 +702,7 @@ _split_words() {
         if (C[i] != "$" || C[i + 1] != "{") continue
         if (C[i + 2] == "!") {
           for (k = i + 3; k <= n && C[k] ~ /[A-Za-z0-9_]/; k++) ;
+          if (k == i + 3 && C[k] != "@" && C[k] != "*") continue
           t = substr(s, k, 4)
           if (k > i + 3 && (t == "[@]}" || t == "[*]}" || substr(t, 1, 2) == "*}" || substr(t, 1, 2) == "@}")) continue
           return 1

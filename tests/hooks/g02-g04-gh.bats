@@ -778,10 +778,22 @@ gh_write() {
     set_autopilot off
     g "$c" g02
     [ "$(decision_of "$output")" = ask ] || { echo "$c -> $output"; return 1; }
+    # Each is on the read list, so the reason names what this form does, not the off-list rule.
+    [[ "$output" != *"is not a gh read kern knows"* ]] || { echo "$c -> $output"; return 1; }
     set_autopilot on
     g "$c" g02
     [ "$(decision_of "$output")" = deny ] || { echo "autopilot: $c -> $output"; return 1; }
   done
+  set_autopilot off
+  g "gh auth status -t" g02
+  [[ "$output" == *"gh auth status with -t or --show-token prints the auth token; the user confirms it"* ]] || false
+  g "gh repo read-file o/r x -o README.md" g02
+  [[ "$output" == *"gh repo read-file with -o or --output writes a file; the user confirms it"* ]] || false
+  g "gh repo read-file o/r x --bogus" g02
+  [[ "$output" == *"gh repo read-file holds a word gh rejects, so kern cannot tell that it only reads; the user confirms it"* ]] || false
+  set_autopilot on
+  g "gh auth status -t" g02
+  [[ "$output" == *"gh auth status with -t or --show-token prints the auth token (under autopilot)"* ]] || false
 }
 
 @test "G2: gh repo sync with a repository writes that repository on GitHub; without one G1 judges it" {
