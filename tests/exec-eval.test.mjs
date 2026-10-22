@@ -207,12 +207,21 @@ const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const gone = (pid) => { for (let i = 0; i < 60 && alive(pid); i++) pause(50); return !alive(pid); };
 const pids = (cwd, ...files) => files.map((f) => Number(readFileSync(join(cwd, f), 'utf8')));
+// waitForPids(cwd): under load a stand-in's pid files can land after runClaude returns, so wait up to 3 s for
+// claude.pid and sleep.pid; returns the ms waited.
+const waitForPids = (cwd) => {
+  const t0 = Date.now();
+  for (let i = 0; i < 60 && !['claude.pid', 'sleep.pid'].every((f) => existsSync(join(cwd, f))); i++) pause(50);
+  return Date.now() - t0;
+};
 const reap = (list) => { for (const pid of list) try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } };
 
 test('runClaude: a timeout stops claude itself, not only the driver that runs it, and leaves no process', () => {
   const cwd = work();
-  const stub = 'echo $$ > claude.pid; trap \'echo term > stopped.txt; kill $!; exit 143\' TERM; sleep 30 & echo $! > sleep.pid; wait $!';
-  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, env: fakeClaude(stub) }), /timed out/);
+  // The pid files come first and stdin is read after them, so a slow start under load still leaves them.
+  const stub = 'echo $$ > claude.pid; trap \'echo term > stopped.txt; kill $!; exit 143\' TERM; sleep 30 & echo $! > sleep.pid; read -r _; wait $!';
+  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, env: fakeClaude(stub, { drain: false }) }), /timed out/);
+  waitForPids(cwd);
   const left = pids(cwd, 'claude.pid', 'sleep.pid');
   try {
     for (let i = 0; i < 40 && !existsSync(join(cwd, 'stopped.txt')); i++) pause(50);
@@ -223,14 +232,12 @@ test('runClaude: a timeout stops claude itself, not only the driver that runs it
 
 test('runClaude: a claude that ignores SIGTERM after the timeout is killed after a short grace, with its process group', () => {
   const cwd = work();
-  const stub = "echo $$ > claude.pid; trap '' TERM; sleep 30 & echo $! > sleep.pid; wait $!";
+  // The pid files come first and stdin is read after them; the trap stays before the sleep, which inherits it.
+  const stub = "echo $$ > claude.pid; trap '' TERM; sleep 30 & echo $! > sleep.pid; read -r _; wait $!";
   const start = Date.now();
-  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, killGraceMs: 300, env: fakeClaude(stub) }), (e) => !e.fatal && /timed out/.test(e.message));
-  // Under load the stand-in's pid files can land after runClaude returns: wait up to 3 s for them, and leave
-  // that wait out of the time the run took.
-  const waitStart = Date.now();
-  for (let i = 0; i < 60 && !['claude.pid', 'sleep.pid'].every((f) => existsSync(join(cwd, f))); i++) pause(50);
-  const waited = Date.now() - waitStart;
+  assert.throws(() => runClaude({ cwd, prompts: ['hi'], model: 'm', timeoutMs: 500, killGraceMs: 300, env: fakeClaude(stub, { drain: false }) }), (e) => !e.fatal && /timed out/.test(e.message));
+  // The wait for the pid files is left out of the time the run took.
+  const waited = waitForPids(cwd);
   const left = pids(cwd, 'claude.pid', 'sleep.pid');
   try {
     assert.ok(left.every(gone), 'claude, which ignored SIGTERM, and the sleep it started are gone');
