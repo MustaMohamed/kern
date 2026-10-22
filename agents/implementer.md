@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: kern only. Implements one task brief in a given worktree, test first, and reports status with evidence. Dispatched by execute-plan and parallel-work.
+description: kern only. Implements one task brief in a worktree, test first.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 ---

@@ -380,6 +380,69 @@ g00_all() {
     "$(printf '%s\n' "x=\$(cat <<'H'" '[$(git push --force origin main)]' 'H' '); echo $((x))')"
 }
 
+@test "a parameter expansion that re-evaluates a stored string is denied under autopilot" {
+  # x='$(cmd)' stores the substitution as literal text. zsh's ${(e)x}, a flag group that holds e outside
+  # its delimited arguments (${(Le)x}, ${(j:):e)x}, and ${(j)e)e)x} where ) is the delimiter), zsh's (P)
+  # flag, bash 5.3's ${x@P}, and bash's indirection on a name holding a subscript (${!y}, ${!y[0]},
+  # ${!y[1]:-z}, ${!x@P}, ${!z@P}, ${!y@Q}, ${!y@U}, ${!a[0]}, ${!a[$i]}, ${!a[@]:-q}, ${!@}, ${!*}) all
+  # expand a stored value again and run cmd, as arithmetic runs a stored subscript; git_words reads the
+  # single quote as literal text (Opus audit A11, P3 review add-on and re-review, P1 review). zsh's (%)
+  # and (%%) flags run a stored command only under setopt promptsubst, which kern cannot see, so they
+  # count too. Each other form here was measured to run a stored command in zsh 5.9, bash 3.2 or bash
+  # 5.3. An ANSI-C $'\'' before the expansion does not hide it: inside $'...' a backslash escapes the next
+  # byte, so \' does not close the string (P1 review Minor 1). The matcher mirrors P3's here-doc matcher
+  # hreev. Outside autopilot no guard votes, an M3 limit.
+  local sub='$(git push --force origin main)'
+  local c
+  for c in "x='$sub'; echo \${(e)x}" "x='$sub'; echo \"\${(Le)x}\"" "x='$sub'; echo \${(j:):e)x}" \
+    "x='$sub'; echo \${(pj:x:e)x}" "x='$sub'; echo \${(j)e)e)x}" "x='$sub'; echo \${(s)e)e)x}" \
+    'echo ${(P)y}' 'echo ${(%)x}' 'echo ${(%%)x}' \
+    "x='$sub'; echo \${x@P}" 'echo ${!y}' 'echo ${!y:-z}' 'echo ${!1}' 'echo ${!y[0]}' \
+    'echo ${!y[1]:-z}' 'y=x; echo ${!x@P}' 'echo ${!z@P}' 'echo ${!y@Q}' 'echo ${!y@U}' \
+    'echo ${!a[0]}' 'echo ${!a[$i]}' 'echo ${!a[@]:-q}' 'echo ${!@}' 'echo ${!*}' \
+    "x='$sub'; echo \$'\\''\${(e)x}" "x='$sub'; echo \$'\\''\${x@P}"; do
+    set_autopilot on
+    gx "$c" ""
+    [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
+    [[ "$output" == *"G00: under autopilot kern denies what it cannot read: "*"re-evaluates a stored string"* ]] || { echo "on: $c -> $output"; return 1; }
+    set_autopilot off
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
+  done
+  # An e inside a delimited flag argument is not the eval flag; ${(L)x}, ${x@Q}, the bash list and
+  # array-key indirections, and a flag group in single quotes do not re-evaluate. ${!} and $! are the
+  # last background pid, a special parameter, not an indirection (P3 un-flags ${!} too).
+  set_autopilot on
+  for c in "x='$sub'; echo \${(s:e:)x}" "x='$sub'; echo \${(l:5::e:)x}" "x='$sub'; echo \${(L)x}" \
+    "x='$sub'; echo \${x@Q}" 'echo ${!a[@]}' 'echo ${!a[*]}' 'echo "${!pre@}"' 'echo ${!pre*}' \
+    'echo ${!}' 'echo $!' "echo '\${(e)x}' '\${x@P}' '\${!y}'" "echo \$'it\\'s \${(e)x}'"; do
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "an ANSI-C \$'...' string does not hide a single-quoted substitution from the arithmetic rules" {
+  # Two things. First, the text inside $'...' is stored literally and the arithmetic evaluates it, as a
+  # single-quoted span, so a stored array subscript in it is denied: y=$'a[$(cmd)]'; echo $((y)), the
+  # backtick form, let $'a[$(cmd)]' and a read of the ANSI-C word all run cmd in bash 3.2 and 5.3
+  # (P1 re-review Important 1). Second, $'\'' is one quote character (a backslash escapes the next byte
+  # and the string ends at the third quote), so the walk does not close early and read the next
+  # single-quoted span as unquoted; X=$'\'' y='a[$(cmd)]'; echo $((y)) and X=$'\'' let 'a[$(cmd)]' are
+  # still denied (P1 review Minor 1). Each form was measured to run cmd. Outside autopilot no guard votes.
+  local sub='$(git push --force origin main)'
+  local c
+  for c in "y=\$'a[$sub]'; echo \$((y))" "let \$'a[$sub]'" "let \$'a[\`git push --force origin main\`]'" \
+    "read -r x <<< \$'a[$sub]'" "X=\$'\\'' y='a[$sub]'; echo \$((y))" "X=\$'\\'' let 'a[$sub]'"; do
+    set_autopilot on
+    gx "$c" ""
+    [ "$(decision_of "$output")" = deny ] || { echo "on: $c -> $output"; return 1; }
+    [[ "$output" == *"G00: under autopilot kern denies what it cannot read: "* ]] || { echo "on: $c -> $output"; return 1; }
+    set_autopilot off
+    gx "$c" ""
+    [ "$(decision_of "$output")" = none ] || { echo "off: $c -> $output"; return 1; }
+  done
+}
+
 @test "a plain arithmetic builtin or a surfaced substitution is not denied by the builtin rule" {
   # The builtin-eval rule fires only on a hidden ($( ) or backtick in single quotes) construct, so a
   # plain let, read or [[ -eq ]], and a substitution git_words already surfaces (unquoted or in double

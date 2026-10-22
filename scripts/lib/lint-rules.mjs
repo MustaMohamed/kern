@@ -52,13 +52,25 @@ function scanMarkdown(text) {
 }
 const h2Lines = (scan) => scan.lines.filter((l) => /^## /.test(l)).map((l) => l.trimEnd());
 
-// Rule 7 renders the kernel in a repo whose real path has one fixed length: the settings block names the
-// main worktree and keeps to 600 chars, so a longer path drops a Set: entry, and the measurement would
-// move with the machine's temp dir.
+// Rule 7 renders the kernel in a repo whose real path has one fixed length. The settings block keeps to 600 chars
+// and named the main worktree, so a longer path dropped a Set: entry and the measurement moved with the machine's
+// temp dir. Since Task 17a P13 the block names it only when the cwd is not the main root, and rule 7 renders at
+// the root, so the path no longer reaches the render; the fixed length keeps any later path line from moving it.
 export const RULE7_REPO_LEN = 120;
 export function fixedLengthRepo(tmp) {
   const real = realpathSync(tmp);
   return join(real, 'r'.repeat(Math.max(1, RULE7_REPO_LEN - real.length - 1)));
+}
+
+// Replaces the plugin root only where it is a whole path. Before it: no path character. After it: a slash, the end,
+// ":/" (a PATH list), or a character that cannot continue a path name. A "." or ":" right after it ends it only when
+// such a character or the end comes next, as at the end of a sentence. A root mounted at /kern otherwise also matched
+// /kern:autopilot and the /kern of /kernel/ (Task 17a P15).
+export function replaceRoot(text, root, to) {
+  const esc = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const before = '\\w.~@+\\-/';
+  const after = '\\w.~:@+\\-/';
+  return text.replace(new RegExp(`(?<![${before}])${esc}(?=$|/|:/|[.:]?(?:$|[^${after}]))`, 'g'), () => to);
 }
 
 export function loadModel(root) {
@@ -245,7 +257,7 @@ export const RULES = [
       const hook = (name, payload) => run(name, payload).stdout || '';
       // The render names kern files by absolute path, every one under model.root: each becomes one typical
       // installed root, so the measurement does not move with the checkout path.
-      const norm = (s) => s.split(model.root).join('/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
+      const norm = (s) => replaceRoot(s, model.root, '/Users/someone/.claude/plugins/cache/kern/kern/0.1.0');
       // A render is the kernel only when it exits 0 and carries the header line that names the plugin root. "kern
       // did not load", or any other output, is not a kernel, and its length is not a measurement.
       const header = `In kern files read by path, \${CLAUDE_PLUGIN_ROOT} means ${model.root}.`;
@@ -265,8 +277,12 @@ export const RULES = [
       // Task 16n added to the skip-idiom sentence that only the user's word skips a review, never kern's own
       // judgement (the user's "Only by my word", 2026-10-22): 63 chars, so 5,819 and 6,323. Its review (M3) named a
       // skill's own rule beside the user's word, since self-review skips a lane by its stated rule: 22 chars, so 5,841
-      // and 6,345.
-      if (kernel.length > 5841) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 5,841`));
+      // and 6,345. On the Task 17a base, with P12 and P13 merged, they measured 5,872 (P13's full 600-char settings
+      // block) and 6,209. Task 17a P11 cut the three agent descriptions from 423 chars to 175 and added 76 to the
+      // kernel (audit B2, B5 and B13), so 5,948 and 6,037; its review (Important 1) kept a row question routing with
+      // "and fits no row": 18 chars, so 5,966 and 6,055. Both are locked at the measured value with no headroom (the
+      // user's "Cut and lock", 2026-10-22).
+      if (kernel.length > 5966) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 5,966`));
       if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
       // Standing cost (design goal 4): the kernel with no project settings, plus every auto skill and agent
       // description, the text every session carries.
@@ -275,7 +291,7 @@ export const RULES = [
       if (rendered(start) && !rendered(again)) out.push(err(7, 'hooks/session-start', `${failed(again)} with no project settings, so the standing cost was not measured`));
       const bare = norm(again.stdout || '');
       const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
-      if (bare.length + desc > 6345) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 6,345`));
+      if (bare.length + desc > 6055) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 6,055`));
       const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
       let ctx = '';
       try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }
