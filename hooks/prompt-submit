@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # kern UserPromptSubmit and UserPromptExpansion: applies mode and autopilot switches the user typed,
-# then prints the mode line and a short reminder when the session is outside the default preset.
+# then prints the mode line and a short reminder when the session is outside the default preset, and on
+# each prompt after a session's first a one-line routing reminder.
 # Plain stdout is added to Claude's context.
 # Homebrew bash 5.3.15 segfaults now and then when a subshell undoes a locale change, but only while
 # neither LANG nor LC_ALL is set (Task 16l). An unset LANG already means the C locale, and an LC_* still
@@ -44,6 +45,7 @@ CHANGED_VOICE=""
 CHANGED_SURFACE=""
 AP_TURNED_ON=0
 SCHEDULED=0
+ROUTE=0
 
 lower() { tr '[:upper:]' '[:lower:]'; }
 
@@ -183,11 +185,20 @@ else
     case "$TRIM" in "<scheduled-task"*) SCHEDULED=1 ;; esac
     TRIM=""
   else
+    # A later prompt: the state already holds an earlier prompt's hashes, which only this line below writes.
+    # state_reset (startup, /clear) writes none, so a session's first prompt finds none, and a resumed
+    # session's next prompt is a later one. A read that fails counts as a first prompt.
+    state_get "$SID" prompt_hashes >/dev/null 2>&1 && ROUTE=1
     # The user's own words, hashed line by line, so G20 can check an approved: quote against them. A
     # wrapped prompt is not the user's and records nothing; any other prompt, even an empty one,
     # replaces the last one's lines.
     state_set "$SID" "prompt_hashes=$(printf '%s\n' "$TRIM" | prompt_hashes)"
   fi
+  case "$TRIM" in
+    "" | /mode | /mode[[:space:]]* | /autopilot | /autopilot[[:space:]]*) ROUTE=0 ;;
+    # A kern command loads its own skill, so it needs no routing reminder.
+    /kern:* | "<command-message>kern:"* | "<command-name>/kern:"*) ROUTE=0 ;;
+  esac
   case "$TRIM" in
     "") ;;
     "<command-message>"* | "<command-name>"*)
@@ -206,6 +217,11 @@ else
 fi
 
 [ "$EVENT" = UserPromptExpansion ] && [ "$SHOW_LINE" = 0 ] && exit 0
+# The routing reminder (Task 16p, the user's "Add the reminder", 2026-10-22): the kernel's Routing rule
+# arrives once, at SessionStart, and a later prompt's new task sat a turn away from it. Only the
+# UserPromptSubmit run prints it, so a slash command's two runs print it once; a prompt that names or
+# switches a mode or autopilot gets none. It comes before the headless exit below: evals run headless.
+[ "$ROUTE" = 1 ] && [ "$SHOW_LINE" = 0 ] && printf '%s\n' 'kern: new request? Match it against the Routing table and Read its route first.'
 [ -n "$NOTICE" ] && printf '%s\n' "$NOTICE"
 case "$CHANGED_VOICE" in
   terse) cat "$KERN_ROOT/modes/terse.md" ;;
@@ -228,7 +244,7 @@ if [ "$SHOW_LINE" = 1 ] || [ -n "$CHANGED_VOICE$CHANGED_SURFACE" ]; then
   printf '%s\n' "$LINE"
   exit 0
 fi
-# Headless and scheduled runs get no reminder.
+# Headless and scheduled runs get no mode reminder.
 case "${CLAUDE_CODE_ENTRYPOINT-}" in sdk*) exit 0 ;; esac
 [ "$SCHEDULED" = 1 ] && exit 0
 case "$LINE" in

@@ -25,11 +25,23 @@ test('prove-it sections, steps, gate and red flags', () => {
   assertMaxBytes(SKILL, 3800);
 });
 
-test('a fix the reply proposes but did not run is labelled inferred', () => {
+test('a fix the reply proposes but did not run is labelled inferred, in a fixed form', () => {
   // 2026-10-20 prove-it-2 (task-16-diagnosis-2): 3 of 3 runs proposed a guard fix they had not run, unlabelled. The
   // user, asked whether such a fix is a claim kern must label, answered "Yes, label it (Recommended)", 2026-10-21.
+  // On 2026-10-21 and 2026-10-22 no prove-it-2 reply used a label word in 6 of 6 runs (task-16-diagnosis-5), so
+  // the label has one form a reply can show: `inferred: <claim>`.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[7].endsWith('or label it measured, inferred or guess. A fix you propose but did not run is labelled inferred.'), s[7]);
+  assert.equal(s[7], '7. State each claim with its evidence as `claim: command, result`, or write it as `inferred: <claim>` or `guess: <claim>`; a fix you did not run is `inferred: <fix>`.');
+});
+
+test('a subagent\'s diff is read before its test runs, and a failing test does not skip the read', () => {
+  // 2026-10-22 prove-it-2 (task-16-diagnosis-5): runs 0 and 1 stopped at the red test and never opened the changed
+  // file ("I haven't opened the file to confirm which"); the diff read was step 6, after the run.
+  const s = steps(readDoc(SKILL).body);
+  assert.equal(s[2], '2. For a subagent\'s "success", read its worktree diff with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>`, or the files it names, before you run its test; a failing test does not skip this.');
+  assert.ok(s[3].startsWith('3. Run the proving command fresh and in full on the tree that will be integrated'), s[3]);
+  assert.ok(s[5].startsWith('5. For a new guard or regression test, make the patch with `wt-diff` (it writes `<package>.patch` too) and run'), s[5]);
+  assert.ok(s[6].startsWith('6. For "requirements met"'), s[6]);
 });
 
 test('evidence reference', () => {

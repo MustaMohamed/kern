@@ -4,7 +4,8 @@
 // read <plugin root>/kernel/routes.md aside (a kern tree before Task 16d has that file; in a multi-turn
 // case, within the first task): the user relaxed the rule on 2026-10-18 from "the route is the first call".
 // The first todo list, and whether it holds the route's steps in order, is reported, not graded.
-// A bare skill name, or a skill file outside the plugin root, is not kern's route.
+// A bare skill name, or a skill file outside the plugin root, is not kern's route, and a read that stops
+// before the route's first step is not a read of it (Task 16p).
 // Pass rule adapted from superpowers tests/explicit-skill-requests/run-test.sh:103-118 (MIT).
 import { readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -55,6 +56,16 @@ export function readSteps(skillText) {
   return out;
 }
 
+// stepLine(skillText): the 1-based line of the first numbered line under `## Steps`, or null when the file has
+// no `## Steps` heading or no numbered line before the next `## ` heading.
+export function stepLine(skillText) {
+  const lines = skillText.split(/\r?\n/);
+  const start = lines.findIndex((l) => l.trim() === '## Steps');
+  if (start < 0) return null;
+  for (let i = start + 1; i < lines.length && !/^## /.test(lines[i]); i++) if (/^\d+\.\s+/.test(lines[i])) return i + 1;
+  return null;
+}
+
 export const normalize = (s) => s.toLowerCase()
   .replace(/^\s*skip:\s*/, '')
   .replace(/^\s*\d+[.)]\s*/, '')
@@ -85,6 +96,69 @@ const readOf = (u, path) => readsOf(u).includes(canon(path));
 // as kernel/context.md) under the plugin root, or calls the Skill tool with kern:<route>.
 export const routeCall = (u, route, root, routeFile = `skills/${route}/SKILL.md`) => readOf(u, `${root}/${routeFile}`) || (u.name === 'Skill' && u.input.skill === `kern:${route}`);
 export const routesCall = (u, root) => readOf(u, `${root}/kernel/routes.md`);
+// Line spans (Task 16p): [from, to], 1-based and inclusive, to Infinity for a read to the end of the file.
+// lineSpan(cmd, words, len): the span a head, tail or sed stage prints of its input, len lines long, from its
+// own words; a form it cannot measure (head -c, a sed script with a pattern, any other reader) prints it all.
+const WHOLE = [1, Infinity];
+const lineSpan = (cmd, words, len) => {
+  if (cmd === 'head' || cmd === 'tail') {
+    let n = '10';
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      if (w === '-n' || w === '--lines') n = words[++i] ?? '';
+      else if (/^-n./.test(w)) n = w.slice(2);
+      else if (w.startsWith('--lines=')) n = w.slice(8);
+      else if (/^-\d+$/.test(w) || (cmd === 'tail' && /^\+\d+$/.test(w))) n = w.replace(/^-/, '');
+      else if (w.startsWith('-')) return WHOLE;
+    }
+    if (!/^\+?\d+$/.test(n)) return WHOLE;
+    if (cmd === 'head') return n.startsWith('+') ? WHOLE : [1, Number(n)];
+    return n.startsWith('+') ? [Math.max(1, Number(n)), Infinity] : [Math.max(1, len - Number(n) + 1), Infinity];
+  }
+  if (cmd !== 'sed') return WHOLE;
+  const quiet = words.includes('-n');
+  const script = words.find((w, i) => !w.startsWith('-') && (i === 0 || words[i - 1] !== '-f'));
+  const p = quiet && script?.match(/^(\d+)(?:,(\d+|\$))?p$/);
+  if (p) return [Number(p[1]), p[2] === undefined ? Number(p[1]) : p[2] === '$' ? Infinity : Number(p[2])];
+  const q = !quiet && script?.match(/^(\d+)q$/);
+  return q ? [1, Number(q[1])] : WHOLE;
+};
+// readSpans(u, path, len): the spans of path, a file len lines long, that u shows the model. A Read covers
+// lines offset to offset+limit-1, offset 0 or none being line 1 (a Read with offset 9 prints from line 9:
+// evals/results/exec-2026-10-21-run1/finish-pr-older-head.events.jsonl). In Bash, each pipeline's reading
+// stage that names path gives the span its own words print, cut by each head, tail or sed stage after it.
+const PIPELINES = /&&|\|\||;|\n/;
+const readSpans = (u, path, len) => {
+  const want = canon(path);
+  if (u.name === 'Read') {
+    if (typeof u.input.file_path !== 'string' || canon(u.input.file_path) !== want) return [];
+    const from = Math.max(1, Number(u.input.offset) || 1);
+    return [[from, u.input.limit === undefined ? Infinity : from + Number(u.input.limit) - 1]];
+  }
+  if (u.name !== 'Bash' || typeof u.input.command !== 'string') return [];
+  return u.input.command.split(PIPELINES).flatMap((pipeline) => {
+    const stages = pipeline.split('|').map((seg) => ({ seg, words: readerWords(seg) }));
+    const at = stages.findIndex(({ words }) => words?.some((w) => w.startsWith('/') && canon(w) === want));
+    if (at < 0) return [];
+    let [from, to] = lineSpan(stages[at].seg.trim().split(/\s+/)[0], stages[at].words, len);
+    for (const { seg, words } of stages.slice(at + 1)) {
+      if (!words) continue;
+      const [a, b] = lineSpan(seg.trim().split(/\s+/)[0], words, Math.min(to, len) - from + 1);
+      [from, to] = [from + a - 1, Math.min(to, from + b - 1)];
+    }
+    return [[from, to]];
+  });
+};
+// stepsRead(u, path, text): null when u reads path to the first step of text (stepLine) or text places no
+// step, else the spans it read, which all miss that step.
+const stepsRead = (u, path, text) => {
+  const at = text ? stepLine(text) : null;
+  if (at === null || u.name === 'Skill') return null;
+  const len = text.split(/\r?\n/).length - (text.endsWith('\n') ? 1 : 0);
+  const spans = readSpans(u, path, len);
+  return spans.some(([from, to]) => from <= at && at <= to) ? null : { spans, at };
+};
+const spanText = ([from, to]) => `lines ${from} to ${to === Infinity ? 'the end' : to}`;
 // routesOnly: u reads routes.md and nothing else, so it is free before the route: a Read of it, or a Bash
 // call each of whose parts prints a file and names no file but routes.md (a filter after a pipe, such as
 // head -40, names none). A flag, a count (40, 1,80p) or a script with a comma or brace and no slash is not
@@ -109,14 +183,16 @@ function todoItems(uses) {
 
 const callText = (u) => `${u.name} ${u.input.file_path || u.input.command || u.input.skill || u.input.pattern || ''}`.trim();
 
-// grade(events, { route, routeFile, steps, root, kind, projectSkill }):
-// { pass, reasons, items, hops, before, todo, todoSteps, notes }. Once the route is read, hops is 1, or 2
-// when routes.md was read before it, and before counts the other calls before it (0 or 1 in a pass).
+// grade(events, { route, routeFile, steps, text, root, kind, projectSkill }):
+// { pass, reasons, items, hops, before, todo, todoSteps, notes }. text is the route file's text: given, a
+// Read or Bash read of the route counts only when it shows the route's first step (stepsRead); without it,
+// any read of the file counts. A Skill call to kern:<route> always counts. Once the route is read, hops is
+// 1, or 2 when routes.md was read before it, and before counts the other calls before it (0 or 1 in a pass).
 // todo says whether a todo list was opened, todoSteps whether it holds the route's steps in order, and
 // notes say what it lacks; none of the three gates. kind: positive (default), negative (no kern route at
 // all; with projectSkill, that project skill is used instead, and only the job's own kern route counts as
 // a hit) or multi-turn (positive, and the route is read again for the second task).
-export function grade(events, { route, routeFile, steps = [], root, kind = 'positive', projectSkill = null }) {
+export function grade(events, { route, routeFile, steps = [], text = null, root, kind = 'positive', projectSkill = null }) {
   const uses = toolUses(events);
   const work = uses.filter((u) => !TODO_TOOLS.has(u.name));
   const reasons = [];
@@ -132,7 +208,14 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
   }
   let hops = 0;
   let before = 0;
-  const hit = (u) => routeCall(u, route, root, routeFile);
+  // With the route file's text, a read of the route counts only when it reaches the first step (Task 16p).
+  const file = routeFile || `skills/${route}/SKILL.md`;
+  const shortOf = (u) => (routeCall(u, route, root, routeFile) ? stepsRead(u, `${root}/${file}`, text) : null);
+  const hit = (u) => routeCall(u, route, root, routeFile) && !shortOf(u);
+  const shortText = (uses) => {
+    const s = uses.map(shortOf).find(Boolean);
+    return s && `read ${file} only as ${s.spans.map(spanText).join(' and ')}, which miss its first step at line ${s.at}`;
+  };
   // The second task starts after the first prompt's result: runClaude sends each prompt as one user turn on
   // stdin, the second only after the first turn's result, and stream-json writes one result per turn
   // (evals/results/exec-2026-10-16/finish-pr-at-head.events.jsonl: two prompts, a result at line 6 and at
@@ -143,7 +226,7 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
   const first = kind === 'multi-turn' && turn >= 0 ? toolUses(events.slice(0, turn)).filter((u) => !TODO_TOOLS.has(u.name)) : work;
   const at = first.findIndex(hit);
   const early = at < 0 ? [] : first.slice(0, at).filter((u) => !routesOnly(u, root));
-  if (at < 0) reasons.push(`never read ${routeFile || `skills/${route}/SKILL.md`} under the plugin root, nor called kern:${route}${kind === 'multi-turn' ? ', in the first task' : ''}`);
+  if (at < 0) reasons.push(`${shortText(first) || `never read ${file} under the plugin root, nor called kern:${route}`}${kind === 'multi-turn' ? ', in the first task' : ''}`);
   else {
     hops = early.length < at ? 2 : 1;
     before = early.length;
@@ -160,7 +243,7 @@ export function grade(events, { route, routeFile, steps = [], root, kind = 'posi
   else if (missing.length) notes.push(`todo list does not hold the steps in order: ${missing.join('; ')}`);
   if (kind === 'multi-turn') {
     const second = turn < 0 ? [] : toolUses(events.slice(turn + 1)).filter((u) => !TODO_TOOLS.has(u.name));
-    if (!second.some(hit)) reasons.push('the second task did not read the route again');
+    if (!second.some(hit)) reasons.push(`the second task did not read the route again${shortText(second) ? `: it ${shortText(second)}` : ''}`);
   }
   return { pass: reasons.length === 0, reasons, items, hops, before, todo: items.length > 0, todoSteps: items.length > 0 && missing.length === 0, notes };
 }

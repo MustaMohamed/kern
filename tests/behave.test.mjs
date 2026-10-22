@@ -434,7 +434,7 @@ const state = (lines = [' M src/sum.js abc'], more = {}) => ({ worktrees: { '.':
 const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
-  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'git-or-gh-state', 'ledger-before-transcript', 'no-write', 'skipped-line']);
+  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-write', 'skipped-line']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
@@ -454,9 +454,37 @@ test('a case names scripted checks by expectation index, from the registry only'
 test('recall-1 and recall-2 script their mechanical expectations; the rest stay with the model', () => {
   const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
   assert.deepEqual(cases.get('recall-1').checks, { 1: 'git-or-gh-state', 3: 'no-write' });
-  assert.deepEqual(cases.get('recall-2').checks, { 0: 'ledger-before-transcript', 2: 'no-write' });
+  assert.deepEqual(cases.get('recall-2').checks, { 0: 'ledger-before-transcript', 1: 'next-move-task-3', 2: 'no-write' });
   const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', 'recall-1'], { encoding: 'utf8' });
   assert.match(r.stdout, /^recall-1: 1 turn\(s\) on .+, 4 expectation\(s\) \(2 scripted\)$/m);
+  const r2 = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', 'recall-2'], { encoding: 'utf8' });
+  assert.match(r2.stdout, /^recall-2: 1 turn\(s\) on .+, 3 expectation\(s\) \(3 scripted\)$/m);
+});
+
+// Task 16p item 5 (task-16-diagnosis-5, recall-2): the grader failed E1 on replies whose Next move fixes the
+// failing test and then closes Task 3, in three measurements, so a check decides it: the final reply's Next
+// move section names Task 3 before any other task.
+test('next-move-task-3 passes when the final reply\'s Next move section names Task 3 first', () => {
+  const check = CHECKS['next-move-task-3'];
+  const brief = (move, after = '**Sources skipped:** `gh` could not answer.') => `**Capsule**\n- Tasks 1 and 2 are complete.\n\n**Threads**\n- \`[in flight kern/export]\` Task 3 is not finished.\n\n${move}\n\n${after}`;
+  // The three 2026-10-22 replies (behave-sonnet-5-5-2026-10-22/recall-2-<i>.jsonl) as written, then other label forms.
+  for (const move of ['**Next move**\nFix the guard at `src/export.js:10`, re-run `npm test` to confirm `# fail 0`, then review Task 3 and record it complete in the ledger.',
+    '**Next move**\nRun the Task 3 review and record its completion in the ledger. That means running `npm test` in the worktree, then the task review, then writing the `Task 3: complete` line.',
+    '**Next move**\nFix the guard at `src/export.js:9`, rerun `npm test` for `# fail 0`, then close Task 3 in the ledger.',
+    '## Next move\n\nRe-run `npm test`, then close out Task 3.', 'Next move: finish Task 3 (the empty-list guard), then record it.', '- **Next move:** finish task 3.',
+    '**Next move**\n**Fix the guard** in `src/export.js`, then close Task 3.']) {
+    const v = check([...ran('cat .kern/ledgers/export/ledger.md'), ...reply(brief(move))], {});
+    assert.equal(v.pass, true, move);
+    assert.match(v.evidence, /^the final reply's Next move names Task 3: "/, move);
+  }
+  assert.deepEqual(check(reply(brief('**Next move**\nStart Task 4 once Task 3 is reviewed.')), {}),
+    { pass: false, evidence: 'the final reply\'s Next move names Task 4 before Task 3: "Start Task 4 once Task 3 is reviewed."' });
+  assert.deepEqual(check(reply(brief('**Next move**\nOpen a PR for `kern/export`.', '**Sources skipped:** none. Task 3 is still open.')), {}),
+    { pass: false, evidence: 'the final reply\'s Next move names no task: "Open a PR for `kern/export`."' });
+  assert.deepEqual(check(reply('Task 3 is in progress; finish it next.'), {}), { pass: false, evidence: 'the final reply has no Next move label' });
+  assert.deepEqual(check([say('**Next move**\nFinish Task 3.'), ...ran('ls'), ...reply('Done.')], {}), { pass: false, evidence: 'the final reply has no Next move label' }, 'only the final reply counts');
+  assert.equal(check([use('a', 'Agent', { description: 'x' }), sub('a', [{ type: 'text', text: '**Next move**\nFinish Task 3.' }]), ...reply('Nothing found.')], {}).pass, false, 'a subagent\'s text is not the reply');
+  assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
 });
 
 // Task 16j review, I1: recall step 3 runs `git rev-parse --git-common-dir` before any state check, so a check

@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readSteps, grade, rowPrompt, removeTemp, runFailure } from '../scripts/lib/adherence.mjs';
+import { readSteps, stepLine, grade, rowPrompt, removeTemp, runFailure } from '../scripts/lib/adherence.mjs';
 import { kernelRows, parseRow } from '../scripts/lib/kernel-rows.mjs';
 import { loadModel } from '../scripts/lib/lint-rules.mjs';
 import { stage } from '../scripts/lib/behave.mjs';
@@ -286,6 +286,73 @@ test('a Bash read of the route counts as reading it, as a Read call does, and /v
   assert.deepEqual(grade(ev(['Bash', { command: `cat ${K}/skills/define/SKILL.md` }]), { route: null, root: K, kind: 'negative' }).reasons, [`a kern route was read: Bash cat ${K}/skills/define/SKILL.md`]);
   assert.equal(grade(ev(['Bash', { command: `cat ${K}/skills/define/SKILL.md` }]), { route: null, root: K, kind: 'negative' }).pass, false);
   assert.equal(grade(ev(['Bash', { command: `cat ${K}/kernel/routes.md` }]), { route: null, root: K, kind: 'negative' }).pass, false);
+});
+
+// Task 16p item 4 (task-16-diagnosis-5, multi-diagnose): every Sonnet re-read that passed was a Read with
+// `limit: 12` of skills/diagnose/SKILL.md, whose line 12 is the `## Steps` heading, so the grader passed reads
+// that held no step. Given the route file's text, a read counts only when it covers the route's first step.
+test('stepLine gives the line of the first step under ## Steps, or null', () => {
+  assert.equal(stepLine(MD), 5);
+  assert.equal(stepLine('# x\n\n## Inputs\n\n1. not a step\n'), null);
+  assert.equal(stepLine('# x\n\n## Steps\n\nNo numbered line.\n\n## Inputs\n\n1. not a step\n'), null);
+  const diagnose = readFileSync(join(ROOT, 'skills', 'diagnose', 'SKILL.md'), 'utf8');
+  assert.equal(diagnose.split('\n')[stepLine(diagnose) - 1].slice(0, 9), '0. Defer:');
+});
+
+test('a Read whose limit or offset misses the first step is not a route read (Task 16p)', () => {
+  const opts = { route: 'diagnose', steps, root: K, text: MD };
+  const read = (input) => grade(ev(['Read', { file_path: route, ...input }]), opts);
+  // MD: line 3 is `## Steps`, line 5 is step 0. A Read covers lines offset to offset+limit-1 (offset 0 or none: line 1).
+  for (const input of [{ limit: 3 }, { limit: 4 }, { offset: 6 }, { offset: 6, limit: 5 }, { offset: 1, limit: 4 }]) {
+    const g = read(input);
+    assert.equal(g.pass, false, JSON.stringify(input));
+    assert.match(g.reasons[0], /^read skills\/diagnose\/SKILL\.md only as lines \d+ to (\d+|the end), which miss its first step at line 5$/, JSON.stringify(input));
+  }
+  for (const input of [{}, { limit: 5 }, { offset: 5, limit: 1 }, { offset: 0, limit: 5 }, { offset: 2 }, { limit: 2000 }]) assert.equal(read(input).pass, true, JSON.stringify(input));
+  // Without the route's text the grader cannot place the steps, so any read of the file counts, as before.
+  assert.equal(grade(ev(['Read', { file_path: route, limit: 3 }]), { route: 'diagnose', steps, root: K }).pass, true);
+  // A Skill call loads the whole skill.
+  assert.equal(grade(ev(['Skill', { skill: 'kern:diagnose' }]), opts).pass, true);
+});
+
+test('a Bash read cut short with head, tail or sed -n before the first step is not a route read (Task 16p)', () => {
+  const opts = { route: 'diagnose', steps, root: K, text: MD };
+  const misses = [`head -n 4 ${route}`, `head -4 ${route}`, `head -n4 ${route}`, `head --lines=4 ${route}`, `head ${K}/x.md; sed -n '1,4p' ${route}`,
+    `sed -n 6,12p ${route}`, `sed -n 4p ${route}`, `sed 4q ${route}`, `cat ${route} | head -n 4`, `cat ${route} 2>&1 | head -0`, `tail -n 3 ${route}`,
+    `tail -n +6 ${route}`, `sed -n '1,40p' ${route} | head -3`, `cat ${route} | tail -n 2`, `git status; head -n 2 ${route}`];
+  for (const command of misses) assert.equal(grade(ev(['Bash', { command }]), opts).pass, false, command);
+  const reaches = [`cat ${route}`, `head -n 5 ${route}`, `head -20 ${route}`, `sed -n '1,$p' ${route}`, `sed -n '5,9p' ${route}`, `sed -n 5p ${route}`,
+    `tail -n +5 ${route}`, `tail -n 20 ${route}`, `cat ${route} 2>&1 | head -40`, `head -n 4 ${route}; cat ${route}`, `sed -n '/Steps/,$p' ${route}`,
+    `nl ${route}`, `head -c 400 ${route}`, `cat ${route} | grep -n Defer`];
+  for (const command of reaches) assert.equal(grade(ev(['Bash', { command }]), opts).pass, true, command);
+  // A negative case still fails on any read of a kern route, however short.
+  assert.equal(grade(ev(['Read', { file_path: route, limit: 3 }]), { route: null, root: K, kind: 'negative' }).pass, false);
+  assert.equal(grade(ev(['Bash', { command: `head -n 2 ${route}` }]), { route: null, root: K, kind: 'negative' }).pass, false);
+});
+
+test('a multi-turn case needs the second task to read the route to its first step (Task 16p)', () => {
+  const opts = { route: 'diagnose', steps, root: K, kind: 'multi-turn', text: MD };
+  const done = [{ type: 'result', subtype: 'success' }];
+  const first = ev(['Read', { file_path: route }], todos(...steps));
+  const short = grade([...first, ...done, ...ev(['Read', { file_path: route, limit: 3 }], ['Bash', { command: 'cat src/format.js' }])], opts);
+  assert.equal(short.pass, false);
+  assert.deepEqual(short.reasons, ['the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 3, which miss its first step at line 5']);
+  assert.equal(grade([...first, ...done, ...ev(['Read', { file_path: route, limit: 3 }], ['Read', { file_path: route, offset: 4 }])], opts).pass, true);
+  assert.equal(grade([...ev(['Read', { file_path: route, limit: 3 }]), ...done, ...ev(['Read', { file_path: route }])], opts).pass, false, 'the first task needs it too');
+});
+
+test('the runner and the transcript mode give the grader the route file\'s text', () => {
+  const src = readFileSync(join(ROOT, 'scripts', 'kernel-adherence.mjs'), 'utf8');
+  assert.match(src, /grade\(run\.events, \{ route: c\.route, routeFile: c\.route_file, steps, text, root,/);
+  assert.match(src, /grade\(events, \{ route, routeFile: file, steps: readSteps\(text\), text, root \}\)/);
+  const dir = mkdtempSync(join(tmpdir(), 'k-'));
+  try {
+    const file = join(dir, 'run.jsonl');
+    writeFileSync(file, ev(['Read', { file_path: join(ROOT, 'skills', 'diagnose', 'SKILL.md'), limit: 12 }]).map((e) => JSON.stringify(e)).join('\n') + '\n');
+    const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'kernel-adherence.mjs'), '--transcript', file, '--route', 'diagnose'], { encoding: 'utf8' });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /^FAIL diagnose \(0 hops, 0 before, todo: false\): read skills\/diagnose\/SKILL\.md only as lines 1 to 12, which miss its first step at line 14$/m);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('--plugin names another kern tree in the dry run, and a one-case or other-plugin run is diagnostic', () => {

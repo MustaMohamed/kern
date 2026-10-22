@@ -397,3 +397,125 @@ commit_decision() {
   [ "$(st surface)" = html ]
   [[ "$output" != *"reset voice and surface"* ]] || false
 }
+
+# The routing reminder (Task 16p, task-16-diagnosis-5; the user's "Add the reminder", 2026-10-22). The kernel's
+# Routing rule arrives once, at SessionStart; on the 2026-10-22 multi-diagnose runs Sonnet read no route for its
+# second task in 3 of 3 runs. Each later prompt gets one line; a session's first prompt gets none.
+REMINDER='kern: new request? Match it against the Routing table and Read its route first.'
+
+# reminders TEXT: how many lines of TEXT are the reminder.
+reminders() { printf '%s\n' "$1" | grep -cxF "$REMINDER" || true; }
+
+@test "the routing reminder is one short line" {
+  [ "${#REMINDER}" -le 80 ]
+  grep -qF "$REMINDER" "$K/hooks/prompt-submit"
+}
+
+@test "a session's first prompt gets no routing reminder; the second gets one" {
+  submit "npm test fails on the sum test. Find out why and fix it."
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  submit "Invoice amounts print ten times too large. Find out why."
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REMINDER" ]
+  submit "and the README total too"
+  [ "$output" = "$REMINDER" ]
+}
+
+@test "a wrapped prompt gets no routing reminder, and does not count as the first prompt" {
+  submit '<task-notification>the tests finished</task-notification>'
+  [ -z "$output" ]
+  submit "fix the bug"
+  [ -z "$output" ]
+  submit '<task-notification>the tests finished</task-notification>'
+  [ -z "$output" ]
+  submit '<cross-session-message from=x>fix the other bug</cross-session-message>'
+  [ -z "$output" ]
+  submit '<agent-message from="a1b2">
+[Subagent hand-back] done
+</agent-message>'
+  [ -z "$output" ]
+  submit "now the format bug"
+  [ "$output" = "$REMINDER" ]
+}
+
+@test "a later kern command gets no routing reminder; a later user slash command gets one" {
+  submit "fix the bug"
+  expand kern:finish-branch ""
+  first=$output
+  submit '/kern:finish-branch'
+  [ "$(reminders "$first
+$output")" -eq 0 ]
+  submit '<command-message>kern:diagnose</command-message>\n<command-name>/kern:diagnose</command-name>\n<command-args>the format bug</command-args>'
+  [ "$(reminders "$output")" -eq 0 ]
+  submit '/deploy staging'
+  [ "$(reminders "$output")" -eq 1 ]
+}
+
+@test "a mode or autopilot command, or a switch phrase, gets no routing reminder" {
+  submit "fix the bug"
+  expand kern:mode terse
+  first=$output
+  submit '/kern:mode terse'
+  [ "$(reminders "$first
+$output")" -eq 0 ]
+  expand kern:autopilot status
+  first=$output
+  submit '/kern:autopilot status'
+  [ "$(reminders "$first
+$output")" -eq 0 ]
+  submit '<command-message>kern:mode</command-message>\n<command-name>/kern:mode</command-name>\n<command-args>normal</command-args>'
+  [ "$(reminders "$output")" -eq 0 ]
+  submit '/mode terse'
+  [ "$(reminders "$output")" -eq 0 ]
+  submit "go terse"
+  [ "$(st voice)" = terse ]
+  [ "$(reminders "$output")" -eq 0 ]
+  submit "back to normal"
+  [ "$(reminders "$output")" -eq 0 ]
+  submit "fix the next bug"
+  [ "$output" = "$REMINDER" ]
+}
+
+@test "a headless run prints the routing reminder, before the exit that skips the mode reminder" {
+  export CLAUDE_CODE_ENTRYPOINT=sdk-cli
+  submit "npm test fails on the sum test. Find out why and fix it."
+  [ -z "$output" ]
+  submit "Invoice amounts print ten times too large. Find out why."
+  [ "$output" = "$REMINDER" ]
+  printf 'voice: terse\nsurface: auto\nautopilot: off\nprompt_hashes: 1\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit "next one"
+  [ "$output" = "$REMINDER" ]
+}
+
+@test "the routing reminder comes with the mode reminder and the autopilot line, once" {
+  printf 'voice: terse\nsurface: auto\nautopilot: off\nprompt_hashes: 1\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit "fix the bug"
+  [ "$(reminders "$output")" -eq 1 ]
+  [[ "$output" == *"kern mode: voice=terse"* ]] || false
+  printf 'voice: normal\nsurface: auto\nautopilot: on\nsince: 2026-10-12T00:00:00Z\nprompt_hashes: 1\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit "next task"
+  [ "$(reminders "$output")" -eq 1 ]
+  [[ "$output" == *"autopilot ON:"* ]] || false
+}
+
+@test "a resumed session's next prompt is a later prompt; after /clear the first prompt gets none" {
+  submit "fix the bug"
+  run bash "$K/hooks/session-start" <<<"$(payload SessionStart '"source":"resume"')"
+  submit "and the next one"
+  [ "$output" = "$REMINDER" ]
+  run bash "$K/hooks/session-start" <<<"$(payload SessionStart '"source":"clear"')"
+  submit "a new start"
+  [ -z "$output" ]
+  submit "then this"
+  [ "$output" = "$REMINDER" ]
+}
+
+@test "a state read that fails prints no routing reminder" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit "fix the bug"
+  read_fails awk "$S"
+  submit "next task"
+  [ "$status" -eq 0 ]
+  [ "$(reminders "$output")" -eq 0 ]
+}

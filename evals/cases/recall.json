@@ -43,7 +43,7 @@
         "Names finishing Task 3 of the export plan as the next move",
         "Makes no Write, Edit, MultiEdit or NotebookEdit call and changes no file, ref or git config in the workspace"
       ],
-      "checks": { "0": "ledger-before-transcript", "2": "no-write" }
+      "checks": { "0": "ledger-before-transcript", "1": "next-move-task-3", "2": "no-write" }
     },
     {
       "id": 3,

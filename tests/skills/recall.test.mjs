@@ -66,7 +66,7 @@ test('recall dispatches a named agent, model and read-only commands', () => {
   assertOnce(SKILL, ['dispatch `kern:investigator` on model `model.miner`', 'the absolute paths from the `session` lines', 'a return budget of 15 lines per session',
     'It may run only read commands', '`grep -n` the topic first', '`wc -c` before reading', '`sed -n <first>,<last>p` with line numbers and p only',
     'If it reports a command the allowlist blocks, run that command yourself; never widen the guard',
-    'G18 denies `>` anywhere in a command, even inside quotes: search one side of the `>` or put `.` in its place; no redirection',
+    'G18 denies `>` anywhere in a command, even quoted: search one side of it or put `.` in its place',
     'When the answer hinges on what an agent actually did, read the full transcript region, not a grep line or summary']);
 });
 
@@ -78,9 +78,22 @@ test('recall keeps the load-bearing lines a sentence deletion would lose', () =>
     'Read kern\'s working files first', '`WORK` is that parent plus the folder name', 'Write the brief per the output contract below',
     '(a key unset: `tracker` is detected, `workflow_records` is none; no tracker found is said once)',
     'with a topic, `prompt` lines are its prompts that name it (`-` is an unknown session id)',
-    'Capsule: at most 5 bullets', 'Threads: one line each with exactly one tag', '| `work_dir` | `.kern` | ledgers, plans, specs |', '| `model.miner` | `haiku` | transcript miners |', 'Read-only, the same under autopilot', 'Problems: at most 5, the recurring ones', 'Next move: one concrete action', 'Sources skipped: one line naming each source that did not run, or omit',
+    'Capsule: at most 5 bullets','| `work_dir` | `.kern` | ledgers, plans, specs |', '| `model.miner` | `haiku` | transcript miners |', 'Read-only, the same under autopilot', 'Problems: at most 5, the recurring ones', 'Next move: one concrete action', 'Sources skipped: one line naming each source that did not run, or omit',
     'Chat only (a page only when kern\'s `visual` skill is installed and the brief is long; otherwise say once "visual pages not installed")',
     'Empty output with exit 0 is no sessions. A non-zero exit is a failed source', 'Transcripts are history. Check `gh` or `git` first']);
+});
+
+// Task 16p item 2 (task-16-diagnosis-5, recall-1): on 2026-10-21 and 2026-10-22, 5 of 6 recall-1 runs had a kern
+// miss: Threads lines with no tag (Sources-skipped and Problems material filed under Threads), and in one run no
+// scope said before mining. Each duty now has a fixed form at its decision point.
+test('recall says its Scope line right after the read, and every Threads line starts with its tag', () => {
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[2].startsWith('2. Right after reading this file, before any other tool call, say `Scope: <window>, <topic>, <workspace>.`: the window'), s[2]);
+  assertOnce(SKILL, ['- Threads: one line per thread, starting with its one tag, as `- [tag] <thread>`:',
+    'A line without a tag goes under Problems or Sources skipped.']);
+  const { body } = readDoc(SKILL);
+  const contract = body.slice(body.indexOf('## Output contract'), body.indexOf('## Inputs'));
+  assert.ok(contract.indexOf('- Threads:') < contract.indexOf('- Problems:'), 'Threads still come before Problems');
 });
 
 test('chat reference keeps the ketchup rules', () => {

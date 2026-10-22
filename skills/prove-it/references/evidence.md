@@ -17,9 +17,9 @@ Each claim needs its proving command run fresh, in full, on the tree that will b
 
 ## Labels
 
-- measured: you ran it this session and quote its output.
-- inferred: it follows from something measured; name what.
-- guess: neither; say what would make it measured.
+- measured, as `claim: command, result`: you ran it this session and quote its output.
+- inferred, as `inferred: <claim>`: it follows from something measured; name what. A fix you did not run is one.
+- guess, as `guess: <claim>`: neither; say what would make it measured.
 
 ## Inconclusive is a fail
 
