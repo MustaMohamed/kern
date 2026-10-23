@@ -138,15 +138,15 @@ export function readTree(cwd, when) {
 // and last bashTail with the cut marked (Task 16h: a listing or the first file a call printed comes first,
 // a test summary last; task-16-diagnosis-2, recall-2) and up to bashHeaders file-header lines from the cut
 // (Task 16j), any other tool's result to its first otherResult, and the final reply to its first reply. So a
-// record is at most about 48,400 characters (some 12,000 tokens). No cut splits a surrogate pair.
+// record is at most about 48,400 characters (some 12,000 tokens). No cut splits a surrogate pair. The head-to-head
+// digest cuts a Bash result and an Agent report the same way (h2hResult), so a change here changes both graders.
 export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashHead: 400, bashTail: 600, bashHeaders: 20, otherResult: 300, reply: 8000 };
 
 // digest(events, max, { results }): what the head-to-head grader sees, and the older record. No system
 // prompt, no skill text, so the grader judges behaviour, not the instructions. Tool calls one per line (a
 // Write's content or an Edit's new_string indented under its line, cut at 800 characters), then the final
 // reply; over max, only the tool-call section is cut. With { results: true } (the head-to-head grader)
-// each call is followed by its result: the last 600 characters of a Bash result (marked "(error)" when the
-// tool reported one), the first 300 of any other tool's.
+// each call is followed by its result (h2hResult).
 export function digest(events, max = 24000, { results = false } = {}) {
   const out = new Map();
   if (results) {
@@ -154,10 +154,7 @@ export function digest(events, max = 24000, { results = false } = {}) {
     for (const e of events) {
       for (const c of e?.message?.content ?? []) {
         if (c?.type === 'tool_use') names.set(c.id, c.name);
-        if (c?.type === 'tool_result') {
-          const t = resultText(c);
-          out.set(c.tool_use_id, names.get(c.tool_use_id) === 'Bash' ? `${c.is_error ? '(error) ' : ''}${t.length > 600 ? t.slice(-600) : t}` : t.slice(0, 300));
-        }
+        if (c?.type === 'tool_result') out.set(c.tool_use_id, h2hResult(names.get(c.tool_use_id), c));
       }
     }
   }
@@ -215,6 +212,38 @@ const ends = (s) => {
   }
   cut(to);
   return [...parts, tail].join('\n');
+};
+
+// HANDBACK: how Claude Code (2.1.309) opens the report a subagent hands back in an Agent result: a line at column
+// zero that starts so, then every line of the report indented two spaces, so no report line can pass for a frame
+// line; often a trailer at column zero after it, from an `agentId: ` line to `</usage>`, which can be a text block
+// of its own (plan--archive-invoices-0-arm-C.jsonl, 2026-10-23). That line is 474 characters long.
+const HANDBACK = '[Subagent hand-back] ';
+// handback(c): the report in Agent result c without that frame: the HANDBACK line and the trailer dropped, the
+// indent taken off every other line (a note above the frame stays, in order). null when c is not framed so: no
+// HANDBACK line, or a line before the trailer that is neither it nor indented two spaces.
+const handback = (c) => {
+  const text = typeof c.content === 'string' ? c.content : (c.content ?? []).filter((x) => typeof x?.text === 'string').map((x) => x.text).join('\n');
+  const all = text.trimEnd().split('\n');
+  const at = all.findIndex((l) => l.startsWith(HANDBACK));
+  if (at < 0) return null;
+  const end = all.findIndex((l, i) => i > at && l.startsWith('agentId: '));
+  const lines = end < 0 ? all : all.slice(0, end);
+  if (lines.some((l, i) => i !== at && !l.startsWith('  '))) return null;
+  return lines.filter((_, i) => i !== at).map((l) => l.slice(2)).join('\n').trim();
+};
+// h2hResult(name, c): what the head-to-head digest shows of tool result c, from a call to the tool named name (Task
+// 16q; task-16-confirming-diagnosis, sections 4 and 5). A Bash result is cut as the behaviour record cuts one (ends),
+// marked "(error)" when the tool reported one: its last 600 characters alone lost what a call printed first, such as
+// plan-check's `exit 0` before a cat. An Agent result is its report without the hand-back frame (handback), cut the
+// same way: the first 300 characters ended inside the frame, so no subagent's verdict reached the grader, and a
+// reviewer may put its verdict first (kern's plan review) or last (superpowers' code reviewer). Any other tool's
+// result, and an Agent result not framed so, is its first 300 characters.
+const h2hResult = (name, c) => {
+  const t = resultText(c);
+  if (name === 'Bash') return `${c.is_error ? '(error) ' : ''}${ends(t)}`;
+  const report = name === 'Agent' ? handback(c) : null;
+  return report === null ? t.slice(0, 300) : ends(report);
 };
 
 const LEGEND = 'Transcript (in order: "Assistant:" or "Subagent:" heads text, each line of it after "> "; "N. Tool:" is a tool call, '
