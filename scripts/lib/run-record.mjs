@@ -10,10 +10,10 @@ import { execFileSync } from 'node:child_process';
 //   only local worktrees and settings, and an agent worktree there is a whole copy of the repo, evals included.
 // - paths: the eval runners, whose names tell a model it is being evaluated, and the repo's own eval and
 //   lint tooling (route-eval, seeded-diffs, lint-skills, ci-local and the libs only they use), which reads
-//   evals/ and states what a case needs. No hook, skill or kernel line runs any of it.
+//   evals/ and states what a case needs, and eval-all, which starts every runner by name. No hook, skill or kernel line runs any of it.
 export const COPY_OMITS = {
   top: ['.git', '.upstream', 'node_modules', 'evals', 'tests', 'docs', '.superpowers', 'CHANGELOG.md', '.github', '.gitignore', '.claude'],
-  paths: [...['h2h', 'behave', 'kernel-adherence', 'standing-cost', 'pilot', 'exec-eval', 'route-eval', 'seeded-diffs', 'lint-skills'].map((f) => `scripts/${f}.mjs`), 'scripts/ci-local',
+  paths: [...['h2h', 'behave', 'kernel-adherence', 'standing-cost', 'pilot', 'exec-eval', 'route-eval', 'seeded-diffs', 'lint-skills'].map((f) => `scripts/${f}.mjs`), 'scripts/ci-local', 'scripts/eval-all',
     ...['h2h', 'behave', 'adherence', 'pilot', 'exec-grade', 'exec-run', 'claude-run', 'claude-drive', 'reaper', 'lint-rules', 'kernel-rows', 'rank', 'args', 'run-record', 'pool', 'case-inputs', 'eval-cache'].map((f) => `scripts/lib/${f}.mjs`)],
 };
 

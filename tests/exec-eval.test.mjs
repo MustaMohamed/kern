@@ -1262,7 +1262,7 @@ test('Task 16h: the plugin copy holds every file the exec cases run from kern, e
     // route-eval, seeded-diffs, lint-skills and their libs read evals/ and state what a case needs; no hook,
     // skill or kernel line runs them. NOTICE stays: its attribution lines name two adapted eval files and
     // say nothing about how a run is graded.
-    for (const p of ['CHANGELOG.md', '.github', '.gitignore', 'scripts/route-eval.mjs', 'scripts/seeded-diffs.mjs', 'scripts/lint-skills.mjs', 'scripts/ci-local',
+    for (const p of ['CHANGELOG.md', '.github', '.gitignore', 'scripts/route-eval.mjs', 'scripts/seeded-diffs.mjs', 'scripts/lint-skills.mjs', 'scripts/ci-local', 'scripts/eval-all',
       'scripts/lib/lint-rules.mjs', 'scripts/lib/kernel-rows.mjs', 'scripts/lib/rank.mjs']) assert.ok(!existsSync(join(d, p)), `${p} stays out`);
     const words = /\bgrader|evals\/|route-eval|seeded-diffs|kernel-adherence|exec-eval|\bh2h\b|behave\.mjs|adherence\.mjs|\bexpectations?\b/i;
     const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
