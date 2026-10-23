@@ -1,10 +1,10 @@
 # Claim checks
 
-Three scripts run in seconds and catch what reviewers miss; paste each run.
+Three scripts catch what reviewers miss; paste each run.
 
 ## floor-scan
 
-`floor-scan <package>` lists moves that lower the bar: suppressions, type escapes, skipped, focused or deleted tests, removed assertions, empty catches, stubs, debug prints, and a loosened threshold, `ratchet.<metric>`, typing, lint rule or CI step. Exit 1 means hits: each is fixed or justified in the report. Exit 2 means the input is not a diff: a failed check.
+`floor-scan <package>` lists moves that lower the bar: suppressions, type escapes, skipped, focused or deleted tests, removed assertions, empty catches, stubs, debug prints, and a loosened threshold, `ratchet.<metric>`, typing, lint rule or CI step. Exit 1 means hits: each is fixed or justified in the report. Only the user's typed yes this session justifies a `bar-lowered` hit; until one, or a revert committed with the work's files, `fix first`. Under autopilot, make that revert and write a `parked:` line. Exit 2 means the input is not a diff: a failed check.
 
 ## claim-check
 

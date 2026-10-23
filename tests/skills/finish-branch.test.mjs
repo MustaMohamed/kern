@@ -112,13 +112,24 @@ test('push-and-pr reference: dedup, push, PR', () => {
     'A subject with a backtick, or a `$` before `(`, is reworded for the title without them',
     '`pr.policy` meets G2 as `push.policy` meets G1', 'only this draft shape, for a branch with no PR', '`gh pr ready` is never run',
     'say the branch is pushed and stop', 'never retry another shape']);
+  // M2b Task 17 (P69 review, M1): a `pr.template` body still names a kept lowered bar, and autopilot's stale base,
+  // under Merge danger. The cap rose from 2,400 by the 41 bytes left after cutting the title rule's ": G2 cannot check
+  // those" (the spec's section 8 gives that reason).
+  const pr = section(readDoc(PUSH).body, '## PR');
+  const danger = 'A `pr.template` body still gets pr-body.md\'s Merge danger lines.';
+  assertOnce(PUSH, [danger]);
+  assert.ok(pr.indexOf('Write the body from `pr.template`, else `references/pr-body.md`') < pr.indexOf(danger) && pr.indexOf(danger) < pr.indexOf('gh pr create'), 'the clause sits with the body, before the gh command');
   assertNoSubstitution(PUSH);
-  assertMaxBytes(PUSH, 2400);
+  assertMaxBytes(PUSH, 2441);
 });
 
 test('PR body template', () => {
   assertHeadings(BODY, ['# PR body', '## Why', '## What changed', '## Scope', '## Tradeoffs', '## Merge danger', '## Verification']);
   assertContains(BODY, ['drop a section with nothing to say', 'about 40 lines', 'smallest useful view', 'Screenshots first']);
+  // M2b Task 17, coverage P69: a lowered bar self-review kept had no line in the body, so no reviewer saw it; only
+  // the user's typed yes keeps one (tests/skills/self-review.test.mjs).
+  const danger = section(readDoc(BODY).body, '## Merge danger');
+  assert.ok(danger.includes('Name each `bar-lowered` change self-review kept, with the user\'s yes for it.'), danger);
   assertMaxBytes(BODY, 2000);
 });
 

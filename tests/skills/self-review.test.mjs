@@ -1,7 +1,7 @@
 // tests/skills/self-review.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { readDoc, assertFrontmatter, h2s, steps, section, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/self-review/SKILL.md';
 const REF = 'skills/self-review/references';
@@ -22,8 +22,11 @@ test('self-review sections and steps', () => {
   assert.equal(s[0], DEFER);
   // Task 16q paid its bytes partly by naming `claim-check`, `probe --mutate`, `kern-detect` and `kern-dir tmp` bare, as
   // prove-it names `kern-detect` after `kern-get`: the main kernel's `Scripts:` line resolves a bare name, and only the
-  // main session reads this skill (the kernel row and finish-branch step 5; no agent does).
-  assertContains(SKILL, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/floor-scan <package>` and `claim-check <wt> <package>`', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests',
+  // main session reads this skill (the kernel row and finish-branch step 5; no agent does). M2b Task 17 named
+  // `floor-scan` (step 2) and `probe --exclude-tests` (step 7) bare the same way, after wt-diff's full path in step 1,
+  // to pay for step 9's `bar-lowered` clause (P69) and step 6's manifest trigger (AD11) within the 7,000-byte cap.
+  assertContains(SKILL, ['Run `floor-scan <package>` and `claim-check <wt> <package>`', 'For each new guard test: `probe --exclude-tests <wt> <package>.patch -- <test>`.',
+    '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <merge-base> --out <package>`',
     'For a new conditional, one `probe --mutate <file>:<line> <wt> -- <test>`', 'never the worktree', 'Skill tool with `code-review`', 'Never pass `--comment`', 'skip: built-in code-review not available',
     'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'open `references/blast-radius.md`', 'look where grep stops',
     'visual pages not installed', 'then the smell baseline (`references/smells.md`)']);
@@ -83,7 +86,7 @@ test('a self-review finding is a defect on a changed line, a nit is a small one,
     // Task 17a P10, D3: "a smell is a `nit`" (the user, 2026-10-22: "Smells are nits") is pinned in the test below
     // Task 16q narrowed `pre-existing` and the nit, and moved style into the Cleared clause (pinned in its test below).
     'the change did not cause goes under `pre-existing`;', 'a `nit` is a real defect too small to block',
-    'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename)', 'or a justified step 2 hit, each under Cleared with its check',
+    'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename)', 'or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes), each under Cleared with its check',
     // Fix round 1, M2: a missing test no finding covers stays in the report as its own line. Task 17a P10, D19: that
     // line goes under `Untested` and says it is not a finding (pinned in the test below).
     'a probably-fine guess', 'a first-round split idea.',
@@ -138,7 +141,9 @@ test('self-review references', () => {
     'blast-radius.md': [['# Blast radius', '## How sure are you', '## Writer sweep', '## Where grep stops', '## Risks and cleared'], 2600],
     'doubt-cycle.md': [['# Doubt cycle', '## When a decision is non-trivial', '## The fresh reviewer', '## Reconcile', '## Doubt theater', '## Stop after three'], 2400],
     'rounds.md': [['# Rounds and packages', '## Package names', '## Previous package', '## Since package'], 1400],
-    'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1700],
+    // M2b Task 17 raised claim-checks.md from 1,700 by the 180 bytes P69's `bar-lowered` rule needs, with its earlier
+    // yes (M3) and its committed revert (I3), after the lossless 19-byte cut of "run in seconds and" from the opening.
+    'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1880],
     'smells.md': [['# Smell baseline', '## Rules', '## Smells'], 2200],
   };
   assertContains(`${REF}/smells.md`, ['A `review.rules` file that endorses what a smell would flag wins',
@@ -186,7 +191,7 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
     // Fix round 1, Minor 2: a smell has no failure of its own, so its name stands in for one and it stays a nit
     // (the user, 2026-10-22: "Smells are nits"), never Cleared as style.
     'a `nit` is a real defect too small to block, naming how its line fails; a smell is a `nit`, its name the failure.',
-    'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename), churn, style or "unrelated" with no failure, or a justified step 2 hit, each under Cleared with its check, never `pre-existing`;',
+    'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename), churn, style or "unrelated" with no failure, or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes), each under Cleared with its check, never `pre-existing`;',
     'a probably-fine guess or a new export with no caller yet;']) assert.ok(nine.includes(s), `step 9 lacks: ${s}`);
   assert.ok(!nine.includes('style advice'), 'style with no failure goes under Cleared, not a bare not-findings item');
   // kern skipped the step 3 lane in 3 of 3 runs (tool calls Read, Bash, Bash) and, in run 0, every lane: "those
@@ -204,7 +209,7 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
   // Fix round 1, Important 1: a run that reads SKILL.md alone opens no reference, so step 6 says to open blast-radius.md,
   // as step 8 says for doubt-cycle.md (Task 16o fix round 1); the fact the change is safe because of is in there.
   const s = steps(body);
-  assert.ok(s[6].includes('gates behaviour on a property: open `references/blast-radius.md`; read every writer `rg` finds; look where grep stops.'), s[6]);
+  assert.ok(s[6].includes('gates behaviour on a property, or a manifest or lockfile changes: open `references/blast-radius.md`; read every writer `rg` finds; look where grep stops.'), s[6]);
   // Fix round 1, Minor 1: "lines 3 on" are wt-diff's output lines, not the package file's (scripts/wt-diff:4).
   assert.ok(s[1].includes('--out <package>`: `<package>.patch` sits beside it, output lines 3 on are the changed paths.'), s[1]);
   // Fix round 1, Minor 3: each new rule has a pilot line.
@@ -219,4 +224,55 @@ test('the skills spec names the finish-branch step that runs self-review', () =>
   const n = steps(readDoc('skills/finish-branch/SKILL.md').body).findIndex((l) => l.includes('skills/self-review/SKILL.md'));
   assert.equal(n, 5);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [`by \`finish-branch\` step ${n}, or typed \`/kern:self-review\`.`]);
+});
+
+test('the author never clears its own lowered bar: revert it, or fix first until the user types yes (coverage P69)', () => {
+  // M2b Task 17, coverage P69 (t17-lane-2): pstack countersigns a loosened gate "because the owner is the one who
+  // wants green" (poteto-mode/playbooks/autopilot-full.md:20). floor-scan finds the loosening as `bar-lowered`
+  // (tests/scripts/floor-scan.bats), but step 9 filed any justified step 2 hit under Cleared, so the author could
+  // clear its own lowered bar, reach `ready`, and finish-branch pushed under autopilot. The user's typed yes stands in
+  // for the countersign, since in kern only the user merges. Every other floor-scan class keeps "fixed or justified".
+  const nine = steps(readDoc(SKILL).body)[9];
+  assert.ok(nine.includes('or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes), each under Cleared with its check'), nine);
+  // A `bar-lowered` hit the user has not said yes to is unresolved, which `fix first` already names.
+  assert.ok(nine.includes('`fix first`: a failed or unrun check (step 2 or 7), an unresolved hit,'), nine);
+  const scan = section(readDoc(`${REF}/claim-checks.md`).body, '## floor-scan');
+  // Fix round 1, M3: a yes typed earlier in the session stands. I3: an unstaged revert left HEAD equal to the tree
+  // finish-branch step 4 proved, so the push shipped the lowered bar; the verdict now holds until the revert is
+  // committed, and a changed head is tested again before any push (branch-ops.md, Proven tree).
+  const rule = 'Only the user\'s typed yes this session justifies a `bar-lowered` hit; until one, or a revert committed with the work\'s files, `fix first`.';
+  const auto = 'Under autopilot, make that revert and write a `parked:` line.';
+  for (const s of ['Exit 1 means hits: each is fixed or justified in the report.', rule, auto]) assert.ok(scan.includes(s), `floor-scan section lacks: ${s}`);
+  assert.ok(scan.indexOf('each is fixed or justified') < scan.indexOf(rule), 'the exception follows the rule every other class keeps');
+  assert.ok(scan.indexOf(rule) < scan.indexOf(auto), '"that revert" is the committed one the rule names');
+  assertContains('skills/finish-branch/references/branch-ops.md', ['Push only the proven tree: `git rev-parse HEAD^{tree}` must equal the tree from finish-branch step 4']);
+  // The `parked:` line has the form self-review's Stops section and the execute-plan ledger (ledger-format.md) give;
+  // lint rule 16 holds a skill's backticked ledger forms to docs/plans/contract.md, so the short form is named.
+  assertContains(SKILL, ['Under autopilot a stop parks as `parked: <question>; default: <choice>; why: <one line>`']);
+  assertContains('skills/execute-plan/references/ledger-format.md', ['`parked: <question>; default: <choice>; why: <one line>`']);
+  assertContains('tests/skills/self-review.acceptance.md', ['The diff lowers a coverage threshold and the author justifies it: the `bar-lowered` hit is not under Cleared, and the verdict is `fix first` until the user types yes for it in chat or a revert is committed with the work\'s files.',
+    'A yes typed earlier in the session stands; with it, the hit is under Cleared and the PR body\'s Merge danger names the change.',
+    'Under autopilot, with no yes, the revert is committed with the work\'s files, a `parked:` line says so, and the pushed head holds the revert.',
+    'A justified `debug-print` hit still goes under Cleared.']);
+  // finish-branch's PR body names each kept one under Merge danger: pinned in tests/skills/finish-branch.test.mjs.
+});
+
+test('a manifest or lockfile change opens blast-radius, whose dependency bullet reviews it like code (coverage AD11)', () => {
+  // M2b Task 17, coverage AD11 (t17-lane-4): addy checks a new dependency (does the stack already cover it, its size,
+  // upkeep, known vulnerabilities and licence) and reviews an upgrade like code (its changelog, one dependency per
+  // change, the suite green before and after), code-review-and-quality/SKILL.md:281-300. kern had no counterpart. A
+  // version bump changes no symbol with callers outside its directory, so step 6 names the trigger.
+  assert.ok(steps(readDoc(SKILL).body)[6].startsWith('6. Blast radius, when a changed symbol has callers outside its directory or gates behaviour on a property, or a manifest or lockfile changes: open `references/blast-radius.md`;'));
+  // Step 6 says "look where grep stops", and a symbol search cannot show what a version bump changes.
+  const grep = section(readDoc(`${REF}/blast-radius.md`).body, '## Where grep stops');
+  for (const s of ['- A manifest or lockfile change (`package.json`, `go.mod`, `Cargo.lock` and the like): for a new dependency, check whether the stack already covers it, and its size, upkeep, known vulnerabilities and licence.',
+    'Review an upgrade like code: read its changelog, upgrade one dependency per change, and see the suite green before and after.',
+    // Fix round 1, I1: addy's points 4 and 5 and the thin-tests rule (code-review-and-quality/SKILL.md:298-300). The
+    // thin-tests finding is named an exception to step 9's `Untested` rule, so the two do not conflict.
+    'Read the lockfile diff, not just the manifest: one direct bump can pull in many indirect ones.', 'A hand-edited lockfile is a finding.',
+    'Thin tests around what the dependency does are the finding, not `Untested`: a green suite then proves nothing, so add a test first.',
+    'A check left undone goes under Risks.']) assert.ok(grep.includes(s), `Where grep stops lacks: ${s}`);
+  // Fix round 1, M5: a pilot line for the dependency review.
+  assertContains('tests/skills/self-review.acceptance.md', ['The diff bumps one dependency in `package.json` and its lockfile, and no changed symbol has callers outside its directory: step 6 opens `references/blast-radius.md`;',
+    'the report names the changelog it read, the lockfile diff it read and the suite runs before and after.', 'Thin tests around what the dependency does are a finding, not `Untested`.']);
 });
