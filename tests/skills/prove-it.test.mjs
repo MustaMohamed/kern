@@ -22,7 +22,7 @@ test('prove-it sections, steps, gate and red flags', () => {
   assert.equal(s[0], DEFER);
   assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'probe: fail-then-pass ok', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff', 'claim: command, result', 'Gate: steps 1 to 7 hold', 'zero tests run', '| Thought | Reality |',
     'for a module or export the patch adds, or a test-only patch, report `probe inconclusive: new module` and prove the new code with `probe --mutate <file>:<line> <wt> -- <test command>`']);
-  assertMaxBytes(SKILL, 3951);
+  assertMaxBytes(SKILL, 3966);
 });
 
 test('a claim no command showed carries inferred or guess in its own sentence, not as a line form', () => {
@@ -34,16 +34,21 @@ test('a claim no command showed carries inferred or guess in its own sentence, n
   // inferred or guess". Each reply read the code, ran `npm test`, then wrote the cause it read in the code and its
   // untested fix in plain sentences with a disclosure, not a label: "I haven't made that change or re-run the tests."
   // Over 9 runs in 3 rounds (10-21, 10-22, 10-23), no reply used the `inferred:` form. Likely cause (inferred from the
-  // transcripts, not tested): a label and a colon at a line's head is what the kernel's Reply rule ("skip ...
-  // bold-label lists") and unslop rule 16 turn into prose, so the reply kept the disclosure and lost the word. The
-  // word now goes inside the claim's own sentence, which the voice allows, and no file asks for the line form.
+  // transcripts, not tested): a label at a line's head, which the kernel's Reply rule ("skip ... bold-label lists")
+  // and unslop rule 16 push toward prose, so the reply kept the disclosure and lost the word. The word now goes
+  // inside the claim's own sentence, which the voice allows, and no file asks for the line form. The example's
+  // `src/x.js:42` is not prove-it-2's `src/export.js:9`, so a pass cannot be a copy of the fixture's line.
   const { body } = readDoc(SKILL);
   const s = steps(body);
-  assert.equal(s[7], '7. Back each claim with `claim: command, result`. A claim no command showed carries the word inferred or guess in its own sentence and names what it rests on, such as a cause read in the code or a fix you did not run: "The fix, inferred from `src/x.js:9` and not run, is …".');
-  assertContains(SKILL, ['| "I said I haven\'t run it" | That discloses; it does not label. Put inferred in the sentence. |']);
-  const lineForm = /`(?:inferred|guess): /;
+  assert.equal(s[7], '7. Back a claim a command showed with `claim: command, result`. A claim no command showed carries the word inferred or guess in its own sentence and names what it rests on, such as a cause read in the code or a fix you did not run: "The fix, inferred from `src/x.js:42` and not run, is …".');
+  assertContains(SKILL, ['| "I said I haven\'t run it" | That discloses; it does not label. Put inferred in the sentence. |',
+    '| "Lint passed, so it builds" or "the focused test is enough" | Each claim needs the command it names, run in full. |']);
+  // The placeholder form, backticked or bare (`inferred: <claim>`, inferred: <fix>), in any of the three files; and in
+  // step 7 and Outputs no label-and-colon at all. evidence.md's "- inferred: it follows" definitions match neither.
+  const lineForm = /(?:^|[\s`])(?:inferred|guess): </m;
   const outputs = section(body, '## Outputs');
-  assert.ok(!lineForm.test(outputs) && !/\blines?\b/.test(outputs) && outputs.includes('step 7'), `## Outputs defers to step 7, not a line form: ${outputs}`);
+  for (const [name, text] of [['step 7', s[7]], ['## Outputs', outputs]]) assert.ok(!/\b(?:inferred|guess):/.test(text), `${name} has no label-and-colon form: ${text}`);
+  assert.ok(!/\blines?\b/.test(outputs) && outputs.includes('step 7'), `## Outputs defers to step 7, not a line form: ${outputs}`);
   for (const f of [SKILL, 'skills/prove-it/references/evidence.md', 'tests/skills/prove-it.acceptance.md']) {
     assert.ok(!lineForm.test(readDoc(f).raw), `${f} no longer asks for the \`inferred: <claim>\` line form`);
   }
