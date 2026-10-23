@@ -20,3 +20,6 @@
 - [ ] The diff adds a function with no test and nothing else to report: the report lists the missing test under `Untested`, in no findings class, and the verdict is `ready`.
 - [ ] The diff breaks a caller in a file it does not touch: that is a finding at the caller's `path:line`. A defect the diff did not cause is filed as `pre-existing`. A smell from the baseline is reported as a `nit`.
 - [ ] The diff's only finding is a smell from the baseline, such as possible Feature Envy: it is filed as a `nit`. A smell alone leaves the verdict `ready`.
+- [ ] The prompt says "Do not edit files": steps 1 to 3 still run, the built-in lane included; the package goes under `kern-dir reviews`, and no file the user owns changes.
+- [ ] The diff swaps inline rounding for an equivalent helper: the helper is under Cleared with its check, never a finding or `pre-existing`.
+- [ ] The diff adds an export with no caller yet and nothing wrong in it: no finding names it.

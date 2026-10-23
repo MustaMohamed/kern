@@ -25,7 +25,7 @@ test('self-review sections and steps', () => {
   // main session reads this skill (the kernel row and finish-branch step 5; no agent does).
   assertContains(SKILL, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/floor-scan <package>` and `claim-check <wt> <package>`', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests',
     'For a new conditional, one `probe --mutate <file>:<line> <wt> -- <test>`', 'never the worktree', 'Skill tool with `code-review`', 'Never pass `--comment`', 'skip: built-in code-review not available',
-    'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'look where grep stops',
+    'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'open `references/blast-radius.md`', 'look where grep stops',
     'visual pages not installed', 'then the smell baseline (`references/smells.md`)']);
   assert.ok(!readDoc(SKILL).raw.includes('$(git'), 'no command substitution in a command the skill prescribes');
   assertMaxBytes(SKILL, 7000);
@@ -109,7 +109,7 @@ test('a smell or an uncovered missing test never blocks, and a later round split
   // Fix round 1, Important 1: the missing-test clause keeps its covered half, so a missing test a finding covers is
   // never filed as a finding of its own; the clause sits in the "Not findings:" list.
   const nine = steps(readDoc(SKILL).body)[9];
-  for (const s of ['a smell is a `nit`.', 'a missing test, one line under the finding it would catch, else under `Untested`, which the verdict ignores;'])
+  for (const s of ['a smell is a `nit`', 'a missing test, one line under the finding it would catch, else under `Untested`, which the verdict ignores;'])
     assert.ok(nine.includes(s), `step 9 lacks: ${s}`);
   assert.ok(!readDoc(SKILL).raw.includes('`should-fix` at most'), 'step 9 no longer files a smell as should-fix');
   assertContains(`${REF}/smells.md`, ['- A smell is a labelled judgment call, such as "possible Feature Envy", in the `nit` class.']);
@@ -183,7 +183,9 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
   const { body } = readDoc(SKILL);
   const nine = steps(body)[9];
   for (const s of ['Only a real defect the change did not cause goes under `pre-existing`;',
-    'a `nit` is a real defect too small to block, naming how its line fails; a smell is a `nit`.',
+    // Fix round 1, Minor 2: a smell has no failure of its own, so its name stands in for one and it stays a nit
+    // (the user, 2026-10-22: "Smells are nits"), never Cleared as style.
+    'a `nit` is a real defect too small to block, naming how its line fails; a smell is a `nit`, its name the failure.',
     'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename), churn, style or "unrelated" with no failure, or a justified step 2 hit, each under Cleared with its check, never `pre-existing`;',
     'a probably-fine guess or a new export with no caller yet;']) assert.ok(nine.includes(s), `step 9 lacks: ${s}`);
   assert.ok(!nine.includes('style advice'), 'style with no failure goes under Cleared, not a bare not-findings item');
@@ -199,6 +201,17 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
   // claim-checks.md, step 6's proof and lists in blast-radius.md.
   assertContains(`${REF}/claim-checks.md`, ['Exit 1 means hits: each is fixed or justified in the report.', 'Exit 1 means hits: each gets evidence, a rewrite, or removal.']);
   assertContains(`${REF}/blast-radius.md`, ['find the one or two facts the change is safe because of and prove them by running code', '- Risks: ', '- Cleared: ']);
+  // Fix round 1, Important 1: a run that reads SKILL.md alone opens no reference, so step 6 says to open blast-radius.md,
+  // as step 8 says for doubt-cycle.md (Task 16o fix round 1); the fact the change is safe because of is in there.
+  const s = steps(body);
+  assert.ok(s[6].includes('gates behaviour on a property: open `references/blast-radius.md`; read every writer `rg` finds; look where grep stops.'), s[6]);
+  // Fix round 1, Minor 1: "lines 3 on" are wt-diff's output lines, not the package file's (scripts/wt-diff:4).
+  assert.ok(s[1].includes('--out <package>`: `<package>.patch` sits beside it, output lines 3 on are the changed paths.'), s[1]);
+  // Fix round 1, Minor 3: each new rule has a pilot line.
+  assertContains('tests/skills/self-review.acceptance.md', [
+    'The prompt says "Do not edit files": steps 1 to 3 still run, the built-in lane included',
+    'The diff swaps inline rounding for an equivalent helper: the helper is under Cleared with its check, never a finding or `pre-existing`.',
+    'The diff adds an export with no caller yet and nothing wrong in it: no finding names it.']);
 });
 
 test('the skills spec names the finish-branch step that runs self-review', () => {
