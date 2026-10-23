@@ -36,7 +36,7 @@ test('finish-branch sections, steps and red flags', () => {
   const s = steps(body);
   assert.equal(s.length, 12);
   assert.equal(s[0], DEFER);
-  assert.equal(s[1], '1. Consent: the user typed `/kern:finish-branch` or asked to push or open a PR in this session, or autopilot is on. Otherwise stop.');
+  assert.equal(s[1], '1. Consent: the user typed `/kern:finish-branch` or asked for a push, PR, release, tag or version bump in this session, or autopilot is on. Otherwise stop. Asked to tag a merged release: `references/release.md`, section After the merge, instead of steps 2 to 11.');
   assertOnce(SKILL, ['A failure no step handles stops the run: report its output.',
     '`Worktree:` path', 'ls -t <dir>/*/ledger.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers`', 'Run `cd <wt>` as its own call', 'git rev-parse --path-format=absolute --git-dir --git-common-dir',
     '`git symbolic-ref -q --short HEAD` prints the branch; exit 1 means detached:',
@@ -62,7 +62,8 @@ test('finish-branch sections, steps and red flags', () => {
     '"Tests passed earlier this session"', 'Only a PR at this head stops.', 'Only the typed word `discard` deletes work.',
     'The remote moved, unless this run rebased. Investigate; never a plain force.']);
   assertNoSubstitution(SKILL);
-  assertMaxBytes(SKILL, 6400);
+  // 6,594 since M2b Task 17 (raised from 6,400): a release on request, the tag-only route and the release branch, coverage AD24.
+  assertMaxBytes(SKILL, 6594);
 });
 
 test('branch-ops reference: rebase and the proven-tree check', () => {
@@ -151,4 +152,118 @@ test('the PR body follows commit.attribution, a pr.template body too (coverage g
   assert.ok(pr.indexOf(rule) < pr.indexOf('gh pr create'), 'the rule comes before the gh command');
   assert.ok(!readDoc(BODY).raw.includes('attribution'), 'pr-body.md no longer holds the rule: only the no-template path read it there');
   assertContains('kernel/settings.md', ["Governs commit trailers and a PR body's attribution footer | pre-tool-use G2, G5, commit, finish-branch, autopilot |"]);
+});
+
+// Coverage AD24 (M2b Task 17, lane 4): addy's git-workflow-and-versioning versions anything with consumers by
+// semver, makes an annotated tag the version's source of truth and writes the changelog for humans. kern
+// cuts a release in finish-branch, where it already commits and pushes, and only when the user asks. Controller
+// ruling (Task 17, before review): the tag goes only on a commit already on the base branch, never on a branch
+// commit that a squash or rebase merge would replace, so the branch run stops at the release commit and a later
+// tag-only request tags the commit it finds on the base.
+const RELEASE = 'skills/finish-branch/references/release.md';
+
+test('release reference: the project tooling first, a confirmed semver bump, a changelog for humans, one release commit, and the wait for the merge (coverage AD24)', () => {
+  assertHeadings(RELEASE, ['# Release', '## On the branch', '## After the merge']);
+  assertOnce(RELEASE, [
+    // 1. The project's own tooling wins.
+    "the project's own release tooling wins: a release script, changesets, semantic-release, or a release section in CONTRIBUTING or the README.",
+    'Follow it, say which, and fill only its gaps; the confirm, the wait and the ask still hold.',
+    // 2. The bump, by semver from the base's last tag (a stale branch would read an older one), confirmed by the
+    // user; review M1 and M2: the first release has a number; review I2a, addy :284: unsure means breaking.
+    '`git describe --tags --abbrev=0 <baseref>` gives the last tag, `git log --oneline <tag>..HEAD` the changes.',
+    "No tag: a first release of every commit, numbered as the manifest says, else 0.1.0 or 1.0.0, the user's pick.",
+    'a breaking change is major, a new feature minor, fixes only patch; below 1.0.0 a breaking change bumps minor; unsure whether it breaks: it does.',
+    'State the bump with the change that sets it', 'the user confirms the number before anything is written',
+    // 3. The changelog, for humans; review I2b, addy :311: an Unreleased section becomes the entry; review M6,
+    // addy :299: all six groups.
+    'Changelog, for humans: one dated entry under the version', 'an Unreleased section becomes it.',
+    "Keep a Changelog's Added, Changed, Deprecated, Removed, Fixed, Security.",
+    'breaking changes first, each with its migration step', 'never a commit-log dump',
+    // 4. One release commit; review M6, addy :295: a version the tag sets stays as it is.
+    'the version in every manifest that carries one (a placeholder the tag sets stays), plus the changelog entry',
+    'one release commit', 'its subject naming the version',
+    // 5. The tag never lands on a branch commit.
+    'Wait: the release stops here, under any option.',
+    'Never tag a branch commit: a squash or rebase merge replaces it.',
+    "Report that the tag waits for the merge, with After the merge's commands filled in but for `<sha>`."]);
+  // The branch steps tag nothing and push nothing: no tag command, no tag push.
+  const branch = section(readDoc(RELEASE).body, '## On the branch');
+  for (const cmd of ['git tag', 'git push']) assert.ok(!branch.includes(cmd), `On the branch holds no ${cmd}`);
+  assert.ok(!/describe --tags --abbrev=0`/.test(branch), 'the describe reads the base, not the branch');
+  // A release needs the user's number and an asked push, so autopilot parks all of it.
+  assertOnce(RELEASE, ["Under autopilot none of this runs; it parks (why: the number and the tag push are the user's call)."]);
+  const at = ['1. Tooling:', '2. Bump:', '3. Changelog,', '4. Commit:', '5. Wait:'].map((n) => branch.indexOf(n));
+  assert.ok(at.every((i, k) => i >= 0 && (k === 0 || i > at[k - 1])), `branch steps in order: ${at}`);
+  assertNoSubstitution(RELEASE);
+  // 2,897 since review fix round 1 (raised from 2,400): the After the merge section and the review's fixes.
+  assertMaxBytes(RELEASE, 2897);
+});
+
+test('release reference, After the merge: a tag-only request finds the release commit on the base by its subject, tags that SHA and asks the push (coverage AD24)', () => {
+  const after = section(readDoc(RELEASE).body, '## After the merge');
+  const pins = ['For a request to tag a merged release, in place of finish-branch steps 2 to 11.',
+    // Review M4: tooling or CI that tags owns the tag.
+    'Tooling or CI that tags wins: say so and stop.',
+    // 1. The base, refreshed.
+    '`git fetch origin <base>`, `<baseref>` being `origin/<base>`; with no remote, local `<base>`.',
+    // 2. Found by subject, since a squash changes the SHA. Review I1: the oldest match, not the newest, since a later
+    // commit (a stacked squash body) can carry the same subject; review M7: the subject quoted for the shell.
+    'Find the release commit by its subject, since a squash changes the SHA:',
+    "the first line of `git log --reverse -F --grep='<subject>' --format=%H <baseref>`, each `'` in the subject as `'\\''`.",
+    // Review I1: the commit that set the version: it holds <x.y.z> and its parent does not.
+    'Each version file (manifests, else the changelog) must hold `<x.y.z>` at `<sha>` and not at `<sha>^`.',
+    'None found, or a mismatch: stop and report.',
+    // Review M5: commits after the release commit are outside the tag; say which.
+    'Name what the tag leaves out: `git log --oneline <sha>..<baseref>`.',
+    // 3. The annotated tag on that SHA: no checkout, no branch switch; the source of truth, never moved.
+    'git tag -a v<x.y.z> <sha> -m "<x.y.z>: <one line>"', 'never a lightweight tag', 'the line holds no `"`, `$` or backtick',
+    "The SHA needs no checkout: kern never switches the main checkout's branch.",
+    "The tag is the version's source of truth.", 'Never move or reuse a pushed tag; a bad release gets the next patch.',
+    // 4. The asked push, never --tags; G1 asks under auto too (probed from a worktree and the main checkout).
+    'pushing the tag publishes it, so it is asked like any push', '`git push origin v<x.y.z>` as its own call, never `--tags`.',
+    'G1 asks for it even under `push.policy: auto`: that prompt is the ask.',
+    // Review M3: with no remote there is no push; the tag stays local.
+    'Declined, or with no remote, the tag stays local: report it.', 'Rejected: the remote has that tag; stop and report, never force it.'];
+  for (const p of pins) assert.ok(after.includes(p), `After the merge must contain: ${p}`);
+  assertOnce(RELEASE, pins);
+  // `-1` limits before `--reverse` reverses, so it would give the newest match again (review I1).
+  assert.ok(!/git log -1\b/.test(after), 'no git log -1 in the find');
+  const at = ['1. Base:', '2. Find', '3. Tag:', '4. Push:'].map((n) => after.indexOf(n));
+  assert.ok(at.every((i, k) => i >= 0 && (k === 0 || i > at[k - 1])), `after-merge steps in order: ${at}`);
+});
+
+test('branch-ops reference: a release asked on a protected branch gets a release branch (review I3, coverage AD24)', () => {
+  assertHeadings(OPS, ['# Branch operations', '## Rebase', '## Proven tree', '## Release branch']);
+  const rb = section(readDoc(OPS).body, '## Release branch');
+  const pins = ['For a release asked on a protected branch, such as `<base>` (step 2 stops there): offer a release branch;',
+    'on yes run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new release`, `--base <sha>` of local `<base>` with no remote,',
+    'then `cd` to the path it prints, as its own call.',
+    // Self-review stops on an empty diff, so the release commit comes before step 2's run in the release branch.
+    'There cut the release commit per `release.md`, section On the branch, then run finish-branch from step 2: step 5 reviews that commit, and step 8 has no release left.'];
+  for (const p of pins) assert.ok(rb.includes(p), `Release branch must contain: ${p}`);
+  assertOnce(OPS, pins);
+  assertMaxBytes(OPS, 2400);
+});
+
+test('finish-branch: a release only when asked, after the commit; its tag only after the merge, by a tag-only request (coverage AD24)', () => {
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].includes('asked for a push, PR, release, tag or version bump in this session'), s[1]);
+  const route = 'Asked to tag a merged release: `references/release.md`, section After the merge, instead of steps 2 to 11.';
+  assert.ok(s[1].endsWith(`Otherwise stop. ${route}`), s[1]);
+  const rel = 'A release, if asked: `references/release.md`.';
+  // Review I3: a release of work already on the base would stop at step 2's protected branch with no way on.
+  const relBranch = 'A protected branch: stop; ask which worktree; for a release, offer a release branch per `references/branch-ops.md`.';
+  assertOnce(SKILL, [route, rel, relBranch]);
+  assert.ok(s[2].endsWith(relBranch), s[2]);
+  assert.ok(s[8].startsWith('8. Commit, for options 1 to 3:'), s[8]);
+  assert.ok(s[8].indexOf('steps 2 to 6 of') < s[8].indexOf(rel) && s[8].indexOf(rel) < s[8].indexOf('Option 1 ends with the short SHA.'), 'the release follows the commit, in step 8');
+  // No tag push in the branch run: step 10 pushes the branch only.
+  assert.equal(s[10], '10. Push, for options 2 and 3: `references/branch-ops.md`, section Proven tree, then `references/push-and-pr.md`, section Push.');
+  assert.ok(!/\btag\b/.test(s.slice(2).join('\n')), 'steps 2 to 11 name no tag');
+  // Review M9: the outputs name the release.
+  assert.equal(section(readDoc(SKILL).body, '## Outputs').trim(), 'A commit, push or draft PR, per the choice, or a release; a chat report: SHA, branch, PR URL, `<wt>`, the tag or its wait.');
+  assertContains('tests/skills/finish-branch.acceptance.md', ['Asked for a release: the bump is stated with the change that sets it',
+    'Asked to tag a merged release: the oldest commit on the base carrying the release subject',
+    'Asked for a release on the base branch itself: a release branch is offered']);
+  assertContains('skills/help/references/map.md', ["| `finish-branch` | slash | /kern:finish-branch; prove-it's gate for a push, PR or release | Verify, review, then commit, push, draft PR or keep; a release on request, tagged after the merge |"]);
 });
