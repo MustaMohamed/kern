@@ -226,6 +226,9 @@ export function graderPrompt(task, outputs) {
   return [
     `You grade ${outputs.length} anonymous attempts at the same ${task.category} task. You do not know which tool made which.`,
     'Score each attempt 0 to 10 on the rubric. Judge only what each attempt shows; a claim it does not support with a command and its output earns nothing.',
+    // Task 16q review, Important 1: the digest now shows subagent and forked-skill reports (behave.mjs h2hResult), which
+    // it cut before; their findings and claims are evidence, so the grading reads the same as before for every arm.
+    "A subagent's or skill's report shown under its call is evidence the attempt gathered, not its own output: grade findings and claims from the attempt's final reply (and, for a plan, its final files), and a finding the reply clears or rejects is not one.",
     "Each attempt's block opens with git facts read from its workspace before it started. Its session's git status showed it the branch, the main branch, HEAD's short SHA and the recent commits with their subjects, so a claim that matches those is supported, though no command printed it. It was not shown the remotes, so a claim about a remote still needs a command and its output. A claim that contradicts any fact is unsupported.",
     ...(task.category === 'review' ? ['For each finding, name the label id it matches: a bug id, "decoy:<id>" for a decoy, "extra:<id>" for an extra, or count it in "unmatched".', EXTRA_RULE] : []),
     ...(task.category === 'plan' ? ['Count the claims about the repo that neither the fixture files nor the git facts its session was shown support.'] : []),
