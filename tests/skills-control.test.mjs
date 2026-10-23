@@ -1,7 +1,7 @@
 // mode and autopilot: frontmatter verbatim from skills spec B1 and B2, steps that never write state.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
 
@@ -65,6 +65,30 @@ test('mode documents the switch phrases the hook accepts', () => {
   assert.match(body, /only when it stands alone on the prompt's first non-blank line/);
   assert.match(body, /a line over 200 characters never does\./);
   assert.match(body, /^- terse voice: .*"terse on", "terse voice", "terse mode on"/m);
+});
+
+// Claude Code replaces `$1`, `$2`... and `$ARGUMENTS` in a skill body with the invocation's arguments, so an awk
+// `$1` in a SKILL.md breaks once the skill takes one (Task 17 lane 4, SP54; superpowers 7.0.0 RELEASE-NOTES.md:41).
+// The frontmatter is not body, and a reference read by path is not substituted, so neither is checked.
+export function placeholders(raw) {
+  const text = raw.replace(/\r\n/g, '\n');
+  const { body } = parseFrontmatter(text);
+  const offset = text.slice(0, text.length - body.length).split('\n').length - 1;
+  return body.split('\n').flatMap((text, i) => (/\$(\d|ARGUMENTS)\b/.test(text) ? [{ line: offset + i + 1, text }] : []));
+}
+
+test('the placeholder matcher reads the body, fenced blocks included, and skips the frontmatter', () => {
+  const raw = '---\nname: x\nargument-hint: "$1"\n---\n\nRun `awk \'{print $1}\'` on it.\n```\necho "$ARGUMENTS"\n```\n`${CLAUDE_PLUGIN_ROOT}/scripts/kern-get`\n';
+  assert.deepEqual(placeholders(raw), [{ line: 6, text: "Run `awk '{print $1}'` on it." }, { line: 8, text: 'echo "$ARGUMENTS"' }]);
+});
+
+test('no SKILL.md body holds an argument placeholder', () => {
+  const dir = join(import.meta.dirname, '..', 'skills');
+  const hits = readdirSync(dir).filter((n) => existsSync(join(dir, n, 'SKILL.md'))).flatMap((n) => {
+    const rel = `skills/${n}/SKILL.md`;
+    return placeholders(readFileSync(join(dir, n, 'SKILL.md'), 'utf8')).map((h) => `${rel}:${h.line}: ${h.text}`);
+  });
+  assert.deepEqual(hits, [], `Claude Code substitutes these with the skill's arguments; write the shell without them:\n${hits.join('\n')}`);
 });
 
 test('autopilot commits and draft PRs follow commit.attribution (coverage gap 54)', () => {
