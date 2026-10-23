@@ -36,7 +36,7 @@ test('finish-branch sections, steps and red flags', () => {
   const s = steps(body);
   assert.equal(s.length, 12);
   assert.equal(s[0], DEFER);
-  assert.equal(s[1], '1. Consent: the user typed `/kern:finish-branch` or asked to push or open a PR in this session, or autopilot is on. Otherwise stop.');
+  assert.equal(s[1], '1. Consent: the user typed `/kern:finish-branch` or asked for a push, PR, release, tag or version bump in this session, or autopilot is on. Otherwise stop.');
   assertOnce(SKILL, ['A failure no step handles stops the run: report its output.',
     '`Worktree:` path', 'ls -t <dir>/*/ledger.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir ledgers`', 'Run `cd <wt>` as its own call', 'git rev-parse --path-format=absolute --git-dir --git-common-dir',
     '`git symbolic-ref -q --short HEAD` prints the branch; exit 1 means detached:',
@@ -62,7 +62,8 @@ test('finish-branch sections, steps and red flags', () => {
     '"Tests passed earlier this session"', 'Only a PR at this head stops.', 'Only the typed word `discard` deletes work.',
     'The remote moved, unless this run rebased. Investigate; never a plain force.']);
   assertNoSubstitution(SKILL);
-  assertMaxBytes(SKILL, 6400);
+  // 6,487 since M2b Task 17 (raised from 6,400): a release on request, coverage AD24.
+  assertMaxBytes(SKILL, 6487);
 });
 
 test('branch-ops reference: rebase and the proven-tree check', () => {
@@ -140,4 +141,53 @@ test('the PR body follows commit.attribution, a pr.template body too (coverage g
   assert.ok(pr.indexOf(rule) < pr.indexOf('gh pr create'), 'the rule comes before the gh command');
   assert.ok(!readDoc(BODY).raw.includes('attribution'), 'pr-body.md no longer holds the rule: only the no-template path read it there');
   assertContains('kernel/settings.md', ["Governs commit trailers and a PR body's attribution footer | pre-tool-use G2, G5, commit, finish-branch, autopilot |"]);
+});
+
+// Coverage AD24 (M2b Task 17, lane 4): addy's git-workflow-and-versioning versions anything with consumers by
+// semver, makes an annotated tag the version's source of truth and writes the changelog for humans. kern
+// cuts a release in finish-branch, where it already commits and pushes, and only when the user asks.
+const RELEASE = 'skills/finish-branch/references/release.md';
+
+test('release reference: the project tooling first, a confirmed semver bump, a changelog for humans, an annotated tag and its asked push (coverage AD24)', () => {
+  assertHeadings(RELEASE, ['# Release']);
+  assertOnce(RELEASE, ['only when the user asked for a release, a tag or a version bump in this session',
+    // 1. The project's own tooling wins.
+    "the project's own release tooling wins: a release script, changesets, semantic-release, or a release section in CONTRIBUTING or the README.",
+    'Follow it and say which',
+    // 2. The bump, by semver, confirmed by the user.
+    'git describe --tags --abbrev=0', 'none: this is the first release',
+    'a breaking change is major, a new feature minor, fixes only patch; below 1.0.0 a breaking change bumps minor',
+    'State the bump with the change that sets it', 'the user confirms the number before anything is written',
+    // 3. The changelog, for humans.
+    'Changelog, for humans: one dated entry under the version', "Keep a Changelog's Added, Changed, Fixed, Removed",
+    'breaking changes first, each with its migration step', 'never a commit-log dump',
+    // 4. One release commit.
+    'the version in every manifest that carries one, plus the changelog entry', 'one release commit',
+    // 5. The annotated tag, the version's source of truth, never moved.
+    'git tag -a v<x.y.z> -m "<x.y.z>: <one line>"', 'never a lightweight tag',
+    "The tag is the version's source of truth", 'Never move or reuse a pushed tag; a bad release gets the next patch.',
+    // 6. The tag push: asked like any push, after the branch push, never --tags; what G1 does with it.
+    'pushing the tag publishes it', 'after step 10\'s branch push', 'git push origin v<x.y.z>', 'never `--tags`',
+    'G1 asks for it under `push.policy: auto` too', 'denies it under `push.policy: deny` and under autopilot',
+    'A rejected tag push means the remote has that tag']);
+  // A release needs the user's number, so autopilot parks it, in finish-branch's parked form.
+  assertContains(RELEASE, ["Under autopilot no release is cut: it parks with no release (why: the number is the user's call), and the run goes on."]);
+  // The steps run in the brief's order: tooling, bump, changelog, commit, tag, push.
+  const raw = readDoc(RELEASE).raw;
+  const at = ['1. Tooling:', '2. Bump:', '3. Changelog,', '4. Commit:', '5. Tag:', '6. Push:'].map((n) => raw.indexOf(n));
+  assert.ok(at.every((i, k) => i > 0 && (k === 0 || i > at[k - 1])), `release steps in order: ${at}`);
+  assertNoSubstitution(RELEASE);
+  assertMaxBytes(RELEASE, 2400);
+});
+
+test('finish-branch: a release only when asked, after the commit and before the push, its tag pushed after the branch (coverage AD24)', () => {
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].includes('asked for a push, PR, release, tag or version bump in this session'), s[1]);
+  const rel = 'A release, only when asked: `references/release.md`.';
+  assertOnce(SKILL, [rel, ', then a release\'s tag push.']);
+  assert.ok(s[8].startsWith('8. Commit, for options 1 to 3:'), s[8]);
+  assert.ok(s[8].indexOf('steps 2 to 6 of') < s[8].indexOf(rel) && s[8].indexOf(rel) < s[8].indexOf('Option 1 ends with the short SHA.'), 'the release follows the commit, in step 8');
+  assert.ok(s[9].startsWith('9. Dedup, before any push or PR'), s[9]);
+  assert.ok(s[10].startsWith('10. Push, for options 2 and 3:') && s[10].endsWith('section Push, then a release\'s tag push.'), s[10]);
+  assertContains('tests/skills/finish-branch.acceptance.md', ['Asked for a release: the bump is stated with the change that sets it']);
 });

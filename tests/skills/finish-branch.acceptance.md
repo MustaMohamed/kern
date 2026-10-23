@@ -10,3 +10,4 @@
 - [ ] gh logged out: the push runs; no PR is opened, and the gh output is reported.
 - [ ] Typed `discard` in a worktree with untracked files: the listing names them and the ignored files; the plain remove is refused and the worktree stays.
 - [ ] A stale base on a branch already on origin: the rebase offer warns that the push becomes `git push --force-with-lease origin <branch>`; after a yes, G1 asks for that push.
+- [ ] Asked for a release: the bump is stated with the change that sets it and waits for the user's number; then one commit holds the version and the changelog entry, `git tag -a` tags it, and after the branch push G1 asks for `git push origin v<x.y.z>`, never `--tags`.

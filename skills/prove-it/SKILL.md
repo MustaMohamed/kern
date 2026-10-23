@@ -18,7 +18,7 @@ No claim of done, fixed, passing or verified without a fresh run on the real art
 6. For "requirements met", re-read the acceptance lines from `spec.source` and tick each against evidence.
 7. State each claim with its evidence as `claim: command, result`, or write it as `inferred: <claim>` or `guess: <claim>`; a fix you did not run is `inferred: <fix>`.
 
-Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words done, fixed, passing, verified. Then, unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step), for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`; for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`; and follow its steps.
+Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words done, fixed, passing, verified. Then, unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step), for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`; for a push, a PR or a release, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`; and follow its steps.
 
 ## Inputs
 

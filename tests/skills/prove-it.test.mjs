@@ -65,6 +65,7 @@ test('the M0 placeholder is gone', () => {
   for (const p of ['skills/hello', 'evals/cases/hello.json', 'evals/fixtures/hello']) assert.ok(!existsSync(join(ROOT, p)), `${p} removed`);
 });
 
-test('the gate hands a commit to commit and a push or PR to finish-branch', () => {
-  assertContains(SKILL, ['unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step)', 'for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'for a push or a PR, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`']);
+test('the gate hands a commit to commit and a push, a PR or a release to finish-branch', () => {
+  // Coverage AD24 (M2b Task 17): a release is a commit, a tag and a push, which finish-branch cuts.
+  assertContains(SKILL, ['unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step)', 'for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'for a push, a PR or a release, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`']);
 });
