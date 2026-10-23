@@ -52,7 +52,7 @@ Who may call or see what, and the check that scopes it.
 
 ## Rollout
 
-Base branch, promotion chain, flags, migration order (expand, migrate, contract). The rollback path at each stage; each migrate batch is safe to rerun and its partial failure shows; a test runs the old and the new path at each stage.
+Base branch, promotion chain, flags, migration order (expand, migrate, contract). The rollback path at each stage; each stage is safe to rerun and its partial failure shows; a test runs the old and the new path at each stage where both are live.
 
 ## Checklists
 
