@@ -6296,3 +6296,9 @@ Two packages, sharing no file, built in parallel in their own worktrees:
 **Exit rule.** Each package gets one Opus review and at most one fix round, then the full `scripts/ci-local` in its worktree and the merge. Then one fresh head-to-head run of plan and review together (`scripts/eval-all --only h2h-plan,h2h-review --no-cache`) on the personal eval account. Whatever it shows is final: a category that still fails is a known limit in the CHANGELOG evidence line and design spec section 14, and Task 17 follows. No other fix task is added.
 
 **Done when** Q1 and Q2 are merged, the rerun has run once, and its result is recorded.
+
+### Task 17r: Close the 8 rows the M2 re-audit found a source still beat
+
+Task 17's five Opus lanes (2026-10-23) found 8 M2 rows where a source is still stronger: Declined to judge under execute-plan (superpowers), C31 migration (caveman), P69 loosening a gate (pstack), SP54 and SP55 (superpowers), AD11 dependency review, AD24 release and versioning, AD47 tests on pasted or existing code (addy). The user's answer (2026-10-23): "Fix all 8 now", on the option "Also build AD24's release handling and AD47's routing change. AD47 needs a routing decision, a kernel text change (the kernel's size is locked) and a paid adherence run to prove it. This is bigger and slower."
+
+Four Opus packages on disjoint skill files (R1: execute-plan, define, diagnose, the `$1` test; R2: self-review and its PR-body lines; R3: finish-branch release, prove-it's handoff, commit's Unreleased line; R4: the kernel's implement row, implement step 5, route evals and adherence cases), and package A, the coverage assembly. Each had one Opus review and one fix round; the controller read each fix diff. One `scripts/ci-local` ran on the integrated tree before main moved. Rulings are in the m2b ledger. Then one paid adherence round, asked first, for the kernel change; whatever it shows is recorded.
