@@ -179,6 +179,18 @@ test('the grader is told to give every field, [] or 0 when there is nothing, and
   assert.ok(plan.includes(every) && !plan.includes(none), plan);
 });
 
+// Task 16q review, Important 1: the digest now shows a subagent's or forked skill's report (behave.mjs h2hResult), which
+// the grader never saw before, so it is told those reports are evidence and the attempt's own reply holds its findings.
+test('in every category the grader is told a subagent\'s or skill\'s report under its call is evidence, not the attempt\'s own output', () => {
+  const rule = "A subagent's or skill's report shown under its call is evidence the attempt gathered, not its own output: grade findings and claims from the attempt's final reply (and, for a plan, its final files), and a finding the reply clears or rejects is not one.";
+  for (const category of ['plan', 'diagnose', 'review']) {
+    const p = graderPrompt({ category, prompts: ['p'], rubric: ['r'], labels: [] }, [{ id: 'arm-A', text: 'x' }]).split('\n');
+    assert.match(p[1], /^Score each attempt 0 to 10 on the rubric\. Judge only what each attempt shows/, category);
+    assert.equal(p[2], rule, `${category}: the line after "Judge only what each attempt shows"`);
+    assert.equal(p.filter((l) => l === rule).length, 1, category);
+  }
+});
+
 // Fix round 1 (P5 review, Minor 4): the files block has a total cap as well as a per-file one.
 test('finalFiles cuts each file at perFile characters and the whole block at total, naming how many files it left out', () => {
   const d = workspace(join(ROOT, 'evals', 'h2h', 'plan', 'rename-small', 'repo'), { name: 'app' });

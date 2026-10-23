@@ -193,10 +193,10 @@ const prefixed = (text, p) => text.split('\n').map((l) => `${p}${l}`).join('\n')
 // optional closing ` ===`) or `==> <path> <==` (head or tail given several files), the path at most 200
 // characters (Task 16j review, M6), so a long line cannot fill the record.
 const HEADER = /^(?:=== \S{1,200}(?: ===)?|==> .{1,200} <==)$/;
-// ends(s, size): a Bash result, its first size.head and last size.tail characters around a marked cut when it is
-// longer than both (RECORD's bashHead and bashTail by default). The cut keeps each whole HEADER line in it, up to
-// RECORD.bashHeaders of them, in order, each run of cut text around them marked (Task 16j: on 2026-10-21 recall-2
-// run 0 printed the ledger third in a loop, and the cut held it).
+// ends(s, size): a Bash result or a subagent's report (h2hResult), its first size.head and last size.tail characters
+// around a marked cut when it is longer than both (RECORD's bashHead and bashTail by default). The cut keeps each
+// whole HEADER line in it, up to RECORD.bashHeaders of them, in order, each run of cut text around them marked
+// (Task 16j: on 2026-10-21 recall-2 run 0 printed the ledger third in a loop, and the cut held it).
 const ends = (s, size = { head: RECORD.bashHead, tail: RECORD.bashTail }) => {
   if (s.length <= size.head + size.tail) return s;
   const head = first(s, size.head), tail = last(s, size.tail);
@@ -263,8 +263,8 @@ const H2H = { head: 1000, tail: 1000 };
 // such as plan-check's `exit 0` before a cat. An Agent or forked Skill result is its report (report), cut the same
 // way: the first 300 characters ended inside an Agent result's hand-back frame, so no subagent's verdict reached the
 // grader, and inside a forked code review's first finding; a reviewer may put its verdict first (kern's plan review)
-// or last (superpowers' code reviewer). Any other tool's
-// result, and one with no report of a known shape, is its first 300 characters.
+// or last (superpowers' code reviewer). Any other tool's result, and one with no report of a known shape, is its
+// first 300 characters.
 const h2hResult = (name, c) => {
   const t = resultText(c);
   if (name === 'Bash') return `${c.is_error ? '(error) ' : ''}${ends(t, H2H)}`;
