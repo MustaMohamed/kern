@@ -1,0 +1,21 @@
+{
+  "model": "claude-sonnet-5-5",
+  "claude": "2.1.309 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "kern": [
+    19348,
+    19348,
+    19348
+  ],
+  "bare": [
+    17105,
+    17107,
+    17105
+  ],
+  "delta": 2243
+}

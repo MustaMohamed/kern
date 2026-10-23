@@ -17,7 +17,7 @@
   "runs": 3,
   "plugin": "/Users/musta/Code/projects/kern",
   "kern": {
-    "commit": "a50f8efe246cbbc3f6d7c6322d4312ad9eca50fc",
+    "commit": "155cbad17d54fa41450e3aa413d671b8aa7dc5ff",
     "dirty": false,
     "changes": []
   },
@@ -168,6 +168,18 @@
           "hops": 1,
           "before": 0,
           "todo": true,
+          "todoSteps": true,
+          "notes": [],
+          "reasons": [],
+          "problem": "claude exited 1: no stderr",
+          "exit": 1,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": true,
           "todoSteps": false,
           "notes": [
             "todo list does not hold the steps in order: step 0: \"Defer: if the kern settings block names an override for this\"; step 1: \"Gate and ledger: run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/led\"; step 2: \"Steps 2 and 3 run on every invocation, fresh or resumed, and\"; step 3: \"Read the plan and spec; one todo per task. A spec or scope c\"; step 4: \"In `delegate` mode a `wave` row's tasks may run together, ea\"; step 5: \"Once, make the plan worktree: `bash ${CLAUDE_PLUGIN_ROOT}/sc\"; step 6: \"Per task, in the plan worktree or a wave task's fork from `b\"; step 7: \"Status line (none: BLOCKED). DONE goes to review. DONE_WITH_\"; step 8: \"Review: take `tree-after` with `wt-snap`, then run `bash ${C\"; step 9: \"Fix loop for a spec issue or a Critical or Important finding\"; step 10: \"Close: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger\"; step 11: \"After a wave, each wave task has been closed in its fork thr\"; step 12: \"Final review (only the user's word skips it): `ledger-open -\"; step 13: \"Finish: report decisions with the cost if wrong, parked item\"; step 14: \"Propose teardown, do not run it: each fork with the `git wor\""
@@ -184,25 +196,11 @@
           "todo": true,
           "todoSteps": false,
           "notes": [
-            "todo list does not hold the steps in order: step 0: \"Defer: if the kern settings block names an override for this\"; step 1: \"Gate and ledger: run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/led\"; step 2: \"Steps 2 and 3 run on every invocation, fresh or resumed, and\"; step 3: \"Read the plan and spec; one todo per task. A spec or scope c\"; step 4: \"In `delegate` mode a `wave` row's tasks may run together, ea\"; step 5: \"Once, make the plan worktree: `bash ${CLAUDE_PLUGIN_ROOT}/sc\"; step 6: \"Per task, in the plan worktree or a wave task's fork from `b\"; step 7: \"Status line (none: BLOCKED). DONE goes to review. DONE_WITH_\"; step 8: \"Review: take `tree-after` with `wt-snap`, then run `bash ${C\"; step 9: \"Fix loop for a spec issue or a Critical or Important finding\"; step 10: \"Close: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger\"; step 11: \"After a wave, each wave task has been closed in its fork thr\"; step 12: \"Final review (only the user's word skips it): `ledger-open -\"; step 13: \"Finish: report decisions with the cost if wrong, parked item\"; step 14: \"Propose teardown, do not run it: each fork with the `git wor\""
+            "todo list does not hold the steps in order: step 1: \"Gate and ledger: run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/led\"; step 2: \"Steps 2 and 3 run on every invocation, fresh or resumed, and\"; step 4: \"In `delegate` mode a `wave` row's tasks may run together, ea\"; step 5: \"Once, make the plan worktree: `bash ${CLAUDE_PLUGIN_ROOT}/sc\"; step 6: \"Per task, in the plan worktree or a wave task's fork from `b\"; step 7: \"Status line (none: BLOCKED). DONE goes to review. DONE_WITH_\"; step 8: \"Review: take `tree-after` with `wt-snap`, then run `bash ${C\"; step 9: \"Fix loop for a spec issue or a Critical or Important finding\"; step 10: \"Close: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger\"; step 11: \"After a wave, each wave task has been closed in its fork thr\"; step 12: \"Final review (only the user's word skips it): `ledger-open -\"; step 14: \"Propose teardown, do not run it: each fork with the `git wor\""
           ],
           "reasons": [],
-          "problem": "",
-          "exit": 0,
-          "invalid": false
-        },
-        {
-          "pass": true,
-          "hops": 1,
-          "before": 0,
-          "todo": false,
-          "todoSteps": false,
-          "notes": [
-            "no todo list"
-          ],
-          "reasons": [],
-          "problem": "",
-          "exit": 0,
+          "problem": "claude exited 1: no stderr",
+          "exit": 1,
           "invalid": false
         }
       ]
@@ -303,10 +301,10 @@
           "pass": true,
           "hops": 1,
           "before": 0,
-          "todo": true,
+          "todo": false,
           "todoSteps": false,
           "notes": [
-            "todo list does not hold the steps in order: step 0: \"Defer: if the kern settings block names an override for this\"; step 1: \"Classify each unit independent, related or shared-state. Bui\"; step 2: \"Frame the run: the done predicate; partition or race (a race\"; step 3: \"Per writer: create its worktree with `bash ${CLAUDE_PLUGIN_R\"; step 4: \"Spawn every worker in one message, each with `run_in_backgro\"; step 6: \"Integrate one worker at a time. `bash ${CLAUDE_PLUGIN_ROOT}/\"; step 7: \"Report a table with columns `worker | verdict | files | evid\"; step 8: \"Teardown follows `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work\""
+            "no todo list"
           ],
           "reasons": [],
           "problem": "claude exited 1: no stderr",
@@ -329,10 +327,10 @@
           "pass": true,
           "hops": 1,
           "before": 0,
-          "todo": false,
+          "todo": true,
           "todoSteps": false,
           "notes": [
-            "no todo list"
+            "todo list does not hold the steps in order: step 0: \"Defer: if the kern settings block names an override for this\"; step 1: \"Stop the line. Save the exact symptom: the command, the inpu\"; step 2: \"Resolve `test.focused` and `test.full` as `implement` step 3\"; step 3: \"Reproduce the reported symptom with that loop, then minimise\"; step 4: \"Investigate: the full error, recent changes (`git log -S <sy\"; step 5: \"Write 3 to 5 ranked hypotheses, each with a prediction the l\"; step 6: \"Climb the failure ladder: revert whatever a refuted hypothes\"; step 7: \"Fix at the source by following `${CLAUDE_PLUGIN_ROOT}/skills\"; step 8: \"Verify: the minimised loop, then the original scenario, then\"; step 9: \"Clean up: `rg '\\[kern-dbg\\]'` finds nothing; propose the com\""
           ],
           "reasons": [],
           "problem": "",
@@ -363,8 +361,8 @@
             "todo list does not hold the steps in order: step 0: \"Defer: if the kern settings block names an override for this\"; step 1: \"Stop the line. Save the exact symptom: the command, the inpu\"; step 2: \"Resolve `test.focused` and `test.full` as `implement` step 3\"; step 3: \"Reproduce the reported symptom with that loop, then minimise\"; step 4: \"Investigate: the full error, recent changes (`git log -S <sy\"; step 5: \"Write 3 to 5 ranked hypotheses, each with a prediction the l\"; step 6: \"Climb the failure ladder: revert whatever a refuted hypothes\"; step 7: \"Fix at the source by following `${CLAUDE_PLUGIN_ROOT}/skills\"; step 8: \"Verify: the minimised loop, then the original scenario, then\"; step 9: \"Clean up: `rg '\\[kern-dbg\\]'` finds nothing; propose the com\""
           ],
           "reasons": [],
-          "problem": "claude exited 1: no stderr",
-          "exit": 1,
+          "problem": "",
+          "exit": 0,
           "invalid": false
         }
       ]
@@ -457,8 +455,8 @@
             "todo list does not hold the steps in order: step 0: \"Defer: if the kern settings block names an override for this\"; step 1: \"Scope. `<wt>` is the work's worktree, else the checkout root\"; step 2: \"Deterministic pass, pasting commands and output. Run `verify\"; step 3: \"Built-in lane: call the Skill tool with `code-review`, expli\"; step 4: \"Spec lane: the spec `spec.source` names, else this work's pl\"; step 5: \"Walk the `review.rules` files the diff touches, reading any \"; step 6: \"Blast radius, when a changed symbol has callers outside its \"; step 7: \"Probes, with `<package>.patch` and `<test>`: `test.focused` \"; step 8: \"Doubt cycle, for non-trivial decisions only: open `reference\"; step 9: \"Verdict. A finding is a defect on a changed line or at a cal\"; step 10: \"Propose lessons for `lessons` (unset: chat only); write them\""
           ],
           "reasons": [],
-          "problem": "",
-          "exit": 0,
+          "problem": "claude exited 1: no stderr",
+          "exit": 1,
           "invalid": false
         },
         {
@@ -721,10 +719,10 @@
           "pass": true,
           "hops": 1,
           "before": 0,
-          "todo": true,
+          "todo": false,
           "todoSteps": false,
           "notes": [
-            "todo list does not hold the steps in order: step 0: \"Defer: if the kern settings block names an override for this\"; step 1: \"Entry check, main session only: unless an approved spec or p\"; step 2: \"Pick where to edit. In a kern worktree, edit there. In the m\"; step 3: \"Resolve `test.focused`, `test.full`, `typecheck` and `lint` \"; step 4: \"Slice the work and list the seams; use the plan's seams when\"; step 5: \"For each slice, name the break in one sentence, write the te\"; step 6: \"Once, before the first production edit of the whole change (\"; step 7: \"Run the focused test, `typecheck` and `lint`; a command that\"; step 8: \"A file outside the approved list pauses the work: name it an\"; step 9: \"Check test quality with `references/test-design.md`. For one\"; step 10: \"No correct seam for a test: say so, and give the closest exe\"; step 11: \"Regenerate `generated_artifacts` for touched trigger paths, \"; step 12: \"Report the failing-before and passing-after output, the comm\""
+            "no todo list"
           ],
           "reasons": [],
           "problem": "",

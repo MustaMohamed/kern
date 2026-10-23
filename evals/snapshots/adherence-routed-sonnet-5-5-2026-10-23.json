@@ -17,7 +17,7 @@
   "runs": 3,
   "plugin": "/Users/musta/Code/projects/kern",
   "kern": {
-    "commit": "a50f8efe246cbbc3f6d7c6322d4312ad9eca50fc",
+    "commit": "155cbad17d54fa41450e3aa413d671b8aa7dc5ff",
     "dirty": false,
     "changes": []
   },
@@ -181,10 +181,10 @@
           "pass": true,
           "hops": 1,
           "before": 0,
-          "todo": false,
+          "todo": true,
           "todoSteps": false,
           "notes": [
-            "no todo list"
+            "todo list does not hold the steps in order: step 0: \"Defer: if the kern settings block names an override for this\"; step 1: \"Gate and ledger: run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/led\"; step 2: \"Steps 2 and 3 run on every invocation, fresh or resumed, and\"; step 3: \"Read the plan and spec; one todo per task. A spec or scope c\"; step 4: \"In `delegate` mode a `wave` row's tasks may run together, ea\"; step 5: \"Once, make the plan worktree: `bash ${CLAUDE_PLUGIN_ROOT}/sc\"; step 6: \"Per task, in the plan worktree or a wave task's fork from `b\"; step 7: \"Status line (none: BLOCKED). DONE goes to review. DONE_WITH_\"; step 8: \"Review: take `tree-after` with `wt-snap`, then run `bash ${C\"; step 9: \"Fix loop for a spec issue or a Critical or Important finding\"; step 10: \"Close: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger\"; step 11: \"After a wave, each wave task has been closed in its fork thr\"; step 12: \"Final review (only the user's word skips it): `ledger-open -\"; step 13: \"Finish: report decisions with the cost if wrong, parked item\"; step 14: \"Propose teardown, do not run it: each fork with the `git wor\""
           ],
           "reasons": [],
           "problem": "",
@@ -295,8 +295,8 @@
             "no todo list"
           ],
           "reasons": [],
-          "problem": "claude exited 1: no stderr",
-          "exit": 1,
+          "problem": "",
+          "exit": 0,
           "invalid": false
         },
         {
@@ -389,8 +389,8 @@
             "no todo list"
           ],
           "reasons": [],
-          "problem": "claude exited 1: no stderr",
-          "exit": 1,
+          "problem": "",
+          "exit": 0,
           "invalid": false
         },
         {
@@ -403,8 +403,8 @@
             "no todo list"
           ],
           "reasons": [],
-          "problem": "claude exited 1: no stderr",
-          "exit": 1,
+          "problem": "",
+          "exit": 0,
           "invalid": false
         },
         {
@@ -599,10 +599,10 @@
           "pass": true,
           "hops": 1,
           "before": 0,
-          "todo": false,
+          "todo": true,
           "todoSteps": false,
           "notes": [
-            "no todo list"
+            "todo list does not hold the steps in order: step 1: \"Write what the next phase needs to a file, not only to chat:\"; step 2: \"Hand bulk reads, logs and transcripts to a subagent and keep\"; step 3: \"If the context is filling, tell the user now, at this bounda\"; step 4: \"Never compact or clear in the middle of a phase on your own.\""
           ],
           "reasons": [],
           "problem": "",
@@ -991,14 +991,14 @@
       "id": "multi-diagnose",
       "kind": "multi-turn",
       "route": "diagnose",
-      "passed": 0,
+      "passed": 1,
       "valid": 3,
       "invalid": 0,
       "runs": 3,
       "pass": false,
       "detail": [
         {
-          "pass": false,
+          "pass": true,
           "hops": 1,
           "before": 0,
           "todo": false,
@@ -1006,25 +1006,7 @@
           "notes": [
             "no todo list"
           ],
-          "reasons": [
-            "the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 12, which miss its first step at line 14"
-          ],
-          "problem": "",
-          "exit": 0,
-          "invalid": false
-        },
-        {
-          "pass": false,
-          "hops": 1,
-          "before": 0,
-          "todo": false,
-          "todoSteps": false,
-          "notes": [
-            "no todo list"
-          ],
-          "reasons": [
-            "the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 12, which miss its first step at line 14"
-          ],
+          "reasons": [],
           "problem": "",
           "exit": 0,
           "invalid": false
@@ -1040,6 +1022,22 @@
           ],
           "reasons": [
             "the second task did not read the route again"
+          ],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": false,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [
+            "the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 5, which miss its first step at line 14"
           ],
           "problem": "",
           "exit": 0,
