@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Runs every paid eval runner at once, each with its own session pool, so a full gate takes as long as its
+# slowest runner. The runners are exec-eval, behave, kernel-adherence on Sonnet and on Haiku, and h2h plan and
+# review (the user, 2026-10-23: "I want all in parallel to finish faster").
+# Usage: scripts/eval-all [--jobs N] [--quick | --changed <range>] [--no-cache] [--only a,b] [--dry-run]
+# --jobs N goes to each runner (default 4; six runners, so up to 6N sessions at once). --quick, --changed,
+# --no-cache and --dry-run go to every runner. --only names the runners to start: exec, behave,
+# adherence-sonnet, adherence-haiku, h2h-plan, h2h-review. Each runner's output goes to
+# evals/results/eval-all-<UTC stamp>/<name>.log; the runners keep their own refusals (no eval CLAUDE_CONFIG_DIR,
+# a dirty tree for a gating run, a mistyped flag). Prints one line per runner when all have ended, and exits 0
+# only when every runner exited 0.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+cd "$root"
+jobs=4 only='' pass=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --jobs)
+      jobs=${2-}
+      case "$jobs" in '' | *[!0-9]* | 0) echo "eval-all: --jobs needs a positive number" >&2; exit 2 ;; esac
+      shift 2 ;;
+    --only) only=${2-}; [ -n "$only" ] || { echo "eval-all: --only needs a list" >&2; exit 2; }; shift 2 ;;
+    --changed) [ -n "${2-}" ] || { echo "eval-all: --changed needs a range" >&2; exit 2; }; pass+=("$1" "$2"); shift 2 ;;
+    --quick | --no-cache | --dry-run) pass+=("$1"); shift ;;
+    *) echo "eval-all: unknown argument $1" >&2
+       echo "usage: scripts/eval-all [--jobs N] [--quick | --changed <range>] [--no-cache] [--only a,b] [--dry-run]" >&2
+       exit 2 ;;
+  esac
+done
+names=(exec behave adherence-sonnet adherence-haiku h2h-plan h2h-review)
+args_for() {
+  case "$1" in
+    exec) echo "scripts/exec-eval.mjs" ;;
+    behave) echo "scripts/behave.mjs" ;;
+    adherence-sonnet) echo "scripts/kernel-adherence.mjs" ;;
+    adherence-haiku) echo "scripts/kernel-adherence.mjs --model claude-haiku-5-5" ;;
+    h2h-plan) echo "scripts/h2h.mjs --category plan" ;;
+    h2h-review) echo "scripts/h2h.mjs --category review" ;;
+  esac
+}
+chosen=()
+for n in "${names[@]}"; do
+  case ",$only," in ,, | *",$n,"*) chosen+=("$n") ;; esac
+done
+if [ -n "$only" ]; then
+  IFS=, read -r -a asked <<< "$only"
+  for a in "${asked[@]}"; do
+    case " ${names[*]} " in *" $a "*) ;; *) echo "eval-all: unknown runner $a (one of: ${names[*]})" >&2; exit 2 ;; esac
+  done
+fi
+# EVAL_ALL_OUT sets the logs dir (the tests point it at a temp dir).
+out=${EVAL_ALL_OUT:-"evals/results/eval-all-$(date -u +%Y%m%dT%H%M%SZ)"}
+mkdir -p "$out"
+pids=()
+for n in "${chosen[@]}"; do
+  # shellcheck disable=SC2046 # args_for prints words meant to split
+  node $(args_for "$n") --jobs "$jobs" ${pass[@]+"${pass[@]}"} > "$out/$n.log" 2>&1 &
+  pids+=("$!")
+  echo "eval-all: started $n (pid $!), log $out/$n.log"
+done
+status=0
+i=0
+for n in "${chosen[@]}"; do
+  rc=0
+  wait "${pids[$i]}" || rc=$?
+  i=$((i + 1))
+  [ "$rc" = 0 ] || status=1
+  printf 'eval-all: %-16s exit %s: %s passed, %s failed\n' "$n" "$rc" \
+    "$(grep -c '^PASS' "$out/$n.log" || true)" "$(grep -c '^FAIL' "$out/$n.log" || true)"
+done
+exit "$status"

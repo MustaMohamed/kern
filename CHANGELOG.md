@@ -4,6 +4,7 @@ All notable changes to kern. Format: Keep a Changelog. Versioning: semver, as de
 
 ## [Unreleased]
 
+- `scripts/eval-all` starts every paid eval runner at once (exec-eval, behave, kernel-adherence on Sonnet and Haiku, h2h plan and review), each with its own session pool (`--jobs N`, default 4), so a full gate takes as long as its slowest runner (the user, 2026-10-23: "I want all in parallel to finish faster"). It passes `--quick`, `--changed`, `--no-cache` and `--dry-run` to every runner, `--only` picks runners, and it prints one line per runner and exits 0 only when all did.
 - Fast eval rounds (after Task 17a). exec-eval, behave, kernel-adherence and h2h share these flags, so a paid round no longer runs one session at a time:
   - **Pool.** `--jobs N` runs N sessions at once (default 6) on `runClaudeAsync`, which keeps runClaude's guards and end rules. Results, log lines and snapshots keep case order. An h2h task-run runs its arms side by side, and its grader call jumps the queue. A fatal error stops new sessions; the running ones finish and save their records before the runner cleans up.
   - **Quick and changed rounds.** `--quick` runs each case once. `--changed <range>` runs only the cases whose inputs changed in a git range (`A..B`, `A...B`, or a lone rev against the working tree). A case's inputs are:
