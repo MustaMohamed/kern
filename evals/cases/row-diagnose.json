@@ -13,6 +13,10 @@
       {
         "prompt": "Users report a bug where totals are wrong",
         "top_k": 3
+      },
+      {
+        "prompt": "Bug: this returns the wrong total, fix it.\nfunction total(items) {\n  return items.reduce((sum, item) => sum - item.price, 0);\n}",
+        "top_k": 3
       }
     ],
     "negative": [

@@ -183,6 +183,19 @@ test('no case positives under a rank-1 floor is an error', () => {
   assert.ok(r.errors.includes('no case positives to rank, so the rank-1 floor cannot be checked'), JSON.stringify(r.errors));
 });
 
+test('AD47: a pasted bug with no word "test" ranks diagnose, and tests for existing code rank implement', () => {
+  // M2b Task 17 (t17-lane-4): no route-eval prompt pasted code or left out the word test. Each prompt below pastes a
+  // function, and evaluate() reports any positive outside its top_k.
+  const pasted = (f) => JSON.parse(readFileSync(join(ROOT, 'evals', 'cases', f), 'utf8')).trigger.positive.filter((p) => /\nfunction total\(items\) \{\n/.test(p.prompt));
+  const bug = pasted('row-diagnose.json');
+  assert.deepEqual(bug.map((p) => p.prompt.split('\n')[0]), ['Bug: this returns the wrong total, fix it.']);
+  assert.doesNotMatch(bug[0].prompt, /test/i);
+  const tests = pasted('row-implement.json');
+  assert.deepEqual(tests.map((p) => p.prompt.split('\n')[0]), ['Add unit tests for this function:', 'Cover this existing code with tests:']);
+  const errors = evaluate(ROOT, { minRank1: null }).errors;
+  for (const p of [...bug, ...tests]) assert.ok(!errors.some((e) => e.includes(p.prompt)), JSON.stringify(errors));
+});
+
 test('the model-graded negatives are pinned: flagging one more means editing this list', () => {
   assert.deepEqual(evaluate(ROOT, { minRank1: null }).modelGraded, [
     { owner: 'prove-it', prompt: 'Explain what fixed and passing mean in this commit message' },
