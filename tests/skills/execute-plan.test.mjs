@@ -79,7 +79,8 @@ export const PINS = {
     'Its first line is `<package>`, beside `<package>.patch`.', 'Exit 3 (empty): return the task to the implementer.', "Exit 4 names a file outside the task's Files: pause and ask",
     'on a yes append it to `briefs/task-N.files` with a `Decision:` line, on a no return the task to the implementer',
     '`kern:task-reviewer` on `model.reviewer` in mode `task`', 'do not pre-judge findings in the prompt',
-    "Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines.", 'Resolve every "cannot verify" item yourself; a real gap is a spec issue.',
+    "Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines.", 'Resolve every "cannot verify" item yourself and rule on each "Declined to judge" line',
+    'A real gap is a spec issue; add it to that `.txt` as a finding.',
     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <r> <compliant|issues> <approved|needs-fixes>`',
     'adding `--minor "<finding>"` for each Minor finding, which waits for step 12'],
   9: ['Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed.', "Round 2 resumes the implementer with the previous round's `.txt`",
@@ -100,7 +101,7 @@ export const PINS = {
     'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then `test.full` there; red: stop.'],
   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',
     "(the `Worktree:` line's base tree)", 'mode `whole-branch` on `model.final_review`', 'to triage which minors block', 'Re-grade findings by effect.',
-    'One fix subagent gets the complete findings list (`kern:implementer`, a step 6 brief), each fix red then green',
+    'One fix subagent gets the complete findings list, real gaps included (`kern:implementer`, a step 6 brief), each fix red then green',
     "one `re-review` on `model.final_review` of its diff from `final.diff`'s second line, packaged with an `--allow-file` per task", 'Residual findings go to the user in step 13.'],
   13: ['`ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report.', "No push or PR, no commit beyond step 10's"],
   14: ['Propose teardown, do not run it', '`${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md` allows', 'the plan worktree once committed'],
@@ -113,7 +114,7 @@ export const PINS = {
     "The other lines are appended with `printf '%s\\n' '<line>' >> <ledger>`", 'one holding the word approved goes in with the Edit tool',
     "Limit: no guard yet stops an Edit or Write that forges a script's line; that guard is deferred to M3.",
     'A task is done only when its `Task N: complete` line exists. Where a run resumes is in `resume.md`.',
-    "| any step | a ruling: the user's answer to a stop, or a mechanical call made without the user |"],
+    "| any step | a ruling: the user's answer to a stop, a mechanical call made without the user, or a \"Declined to judge\" ruling |"],
   resume: ['Read this when the ledger already holds lines past `Main:`, and after compaction.', 'Trust the ledger and the worktrees over memory.',
     'Steps 2 and 3 run again on every invocation and add only the lines the ledger lacks', 'plan-check and its `wave` rows come from this run',
     'a step 3 conflict with no `Decision:` line is asked again (under autopilot, parked once)', 'r is 1 plus its review lines.', 'The first case that holds, in this order:', '1. No `Worktree:` line: step 5.',
@@ -125,7 +126,7 @@ export const PINS = {
     'an r of 4 is past the cap, so stop with a split proposal', '`Task N: fix round=<r> tree=<id>`: resume that round', 'a fresh snapshot that differs from its tree is',
     "the round's `tree-after` once the implementer has stopped, and its `Status:` line routes it as above.",
     '- an approving review: step 10.', '4. Every task complete and applied: step 12.', "A wave task resumes in the fork its `Wave:` line names.", 'Never re-dispatch a completed task.',
-    "Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`. The next round gets that file.",
+    "Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`, with any real gap step 8 appended. The next round gets that file.",
     'is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.'],
 };
 
@@ -166,16 +167,24 @@ test('execute-plan rules on each "Declined to judge" line and reports it in step
   // (agents/task-reviewer.md), but no execute-plan step read it, so a behaviour the reviewer set aside was dropped
   // silently. superpowers' executor rules on each line and ledgers it (executing-plans/SKILL.md:260-264;
   // requesting-code-review/code-reviewer.md:43-48). Each ruling is a Decision: line, so ledger-open --summary lists
-  // it for the final review and step 13 after compaction; a real gap is a spec issue, so step 9's fix loop takes it.
+  // it for the final review and step 13 after compaction, whose "report decisions" carries it. A real gap is a spec
+  // issue, so step 9's fix loop takes it at any grade.
   const s = steps(readDoc(SKILL).body);
-  const rule = 'Rule on each "Declined to judge" line in a `Decision:` line: settled by spec or plan, a real gap (a spec issue), or the user\'s call.';
+  // Fix round 1, Important 1: the rule names re-reviews, so step 9's and step 12's re-reviews rule on their lines too.
+  const rule = 'Resolve every "cannot verify" item yourself and rule on each "Declined to judge" line of every review and re-review in a `Decision:` line: settled by spec or plan, the user\'s call at finish, or a real gap.';
   assert.ok(s[8].includes(rule), s[8]);
+  // Fix round 1, Important 2: a real gap reaches the fix round as a finding, in the .txt that rounds 2 and 3 and a
+  // resume read (resume.md's Fix loop memory), and in step 12's findings list.
+  const gap = 'A real gap is a spec issue; add it to that `.txt` as a finding.';
   // The ruling comes after the return is saved and before the verdicts are recorded, as a gap changes the spec verdict.
-  assert.ok(s[8].indexOf('reviews/task-N-r<r>.txt') < s[8].indexOf(rule) && s[8].indexOf(rule) < s[8].indexOf('scripts/task-review'), s[8]);
-  const final = 'Rule on its "Declined to judge" lines as step 8 does.';
-  assert.ok(s[12].includes(final), s[12]);
-  assert.ok(s[12].indexOf('whole-branch') < s[12].indexOf(final) && s[12].indexOf(final) < s[12].indexOf('One fix subagent'), s[12]);
-  assert.ok(s[13].startsWith('13. Finish: report decisions with the cost if wrong, "Declined to judge" ones too, parked items'), s[13]);
+  const at = ['reviews/task-N-r<r>.txt', rule, gap, 'scripts/task-review'].map((n) => s[8].indexOf(n));
+  assert.ok(at.every((i, k) => i >= 0 && (k === 0 || i > at[k - 1])), s[8]);
+  assert.ok(s[9].includes('dispatched, saved and recorded as step 8 does'), s[9]);
+  assert.ok(s[12].includes('One fix subagent gets the complete findings list, real gaps included'), s[12]);
+  assertContains(RESUME, ["Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`, with any real gap step 8 appended. The next round gets that file."]);
+  assert.ok(s[13].startsWith('13. Finish: report decisions with the cost if wrong, parked items'), s[13]);
+  // Fix round 1, Minor 2: the ledger format names this use of a Decision: line.
+  assertContains(LEDGER, ["| `Decision: <what>; why: <one line>; cost if wrong: <one line>` | any step | a ruling: the user's answer to a stop, a mechanical call made without the user, or a \"Declined to judge\" ruling |"]);
 });
 
 test('the task test command names no worktree path and has no cd, in step 10 and in the implementer agent', () => {

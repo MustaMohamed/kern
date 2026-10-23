@@ -20,4 +20,4 @@ A wave task resumes in the fork its `Wave:` line names. Never re-dispatch a comp
 
 ## Fix loop memory
 
-Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`. The next round gets that file. An implementer that cannot be reached (a new session, an agent that will not resume) is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.
+Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`, with any real gap step 8 appended. The next round gets that file. An implementer that cannot be reached (a new session, an agent that will not resume) is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.
