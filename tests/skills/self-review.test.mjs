@@ -20,8 +20,11 @@ test('self-review sections and steps', () => {
   const s = steps(body);
   assert.equal(s.length, 11);
   assert.equal(s[0], DEFER);
-  assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/floor-scan', '${CLAUDE_PLUGIN_ROOT}/scripts/claim-check', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests',
-    '${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate', 'never the worktree', 'Skill tool with `code-review`', 'Never pass `--comment`', 'skip: built-in code-review not available',
+  // Task 16q paid its bytes partly by naming `claim-check`, `probe --mutate`, `kern-detect` and `kern-dir tmp` bare, as
+  // prove-it names `kern-detect` after `kern-get`: the main kernel's `Scripts:` line resolves a bare name, and only the
+  // main session reads this skill (the kernel row and finish-branch step 5; no agent does).
+  assertContains(SKILL, ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/floor-scan <package>` and `claim-check <wt> <package>`', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests',
+    'For a new conditional, one `probe --mutate <file>:<line> <wt> -- <test>`', 'never the worktree', 'Skill tool with `code-review`', 'Never pass `--comment`', 'skip: built-in code-review not available',
     'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'look where grep stops',
     'visual pages not installed', 'then the smell baseline (`references/smells.md`)']);
   assert.ok(!readDoc(SKILL).raw.includes('$(git'), 'no command substitution in a command the skill prescribes');
@@ -36,7 +39,7 @@ test('self-review exits, order and dispatches', () => {
     '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <merge-base> --out <package>', '`<package>.patch` sits beside it', 'lines 3 on are the changed paths',
     'Exit 3 is an empty diff', 'nothing to review', 'any other non-zero exit stops and reports',
     // settings resolution
-    '${CLAUDE_PLUGIN_ROOT}/scripts/kern-get', '${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect', 'exit 3 takes the table default', 'never guess a command',
+    '${CLAUDE_PLUGIN_ROOT}/scripts/kern-get', '`typecheck` and `lint` then try `kern-detect <key>`', 'exit 3 takes the table default', 'never guess a command',
     '| `scope_threshold` | 4 files |', '| `base_branch`, `test.focused` | detected |',
     // deterministic exits
     'exit 1 from either is hits', 'any other non-zero exit, or a red `verify.fast` or test, is a failed check',
@@ -78,11 +81,12 @@ test('a self-review finding is a defect on a changed line, a nit is a small one,
   // Fix round 1, I1: the definition agrees with the `pre-existing` class, the smell baseline and step 6's callers.
   for (const s of ['9. Verdict. A finding is a defect on a changed line or at a caller or contract the change breaks: `path:line` and how it fails.',
     // Task 17a P10, D3: "a smell is a `nit`" (the user, 2026-10-22: "Smells are nits") is pinned in the test below
-    'A defect the change did not cause goes under `pre-existing`;', 'a `nit` is a real defect too small to block;',
-    'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename) or a justified step 2 hit, each under Cleared with its check;',
+    // Task 16q narrowed `pre-existing` and the nit, and moved style into the Cleared clause (pinned in its test below).
+    'the change did not cause goes under `pre-existing`;', 'a `nit` is a real defect too small to block',
+    'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename)', 'or a justified step 2 hit, each under Cleared with its check',
     // Fix round 1, M2: a missing test no finding covers stays in the report as its own line. Task 17a P10, D19: that
     // line goes under `Untested` and says it is not a finding (pinned in the test below).
-    'a probably-fine guess;', 'style advice;', 'a first-round split idea.',
+    'a probably-fine guess', 'a first-round split idea.',
     'List findings in `review.taxonomy` classes (ordered high to low)']) assert.ok(nine.includes(s), `step 9 lacks: ${s}`);
   assert.ok(nine.indexOf('A finding is a defect') < nine.indexOf('List findings in'), 'the definition comes before the findings are listed');
   assertContains(SKILL, ['| `review.taxonomy` | `blocker,should-fix,nit,pre-existing` |', 'the Declined to judge list, the Cleared and `Untested` lists, the verdict.']);
@@ -167,6 +171,34 @@ test('self-review text hygiene', () => {
     const { raw } = readDoc(f);
     assert.ok(!/[—–‘’“”]/.test(raw), `${f}: no long dashes or curly quotes`);
   }
+});
+
+test('a nit says how its line fails, an equivalent helper is never pre-existing, and a no-edit request skips no step', () => {
+  // Task 16q, from the 2026-10-23 head-to-head review (task-16-confirming-diagnosis, sections 3 and 6). The user,
+  // 2026-10-23: "the review skill gets stricter about what counts as a finding and stops skipping code review".
+  // Decoy d3, a test moved into `describe` and switched to `strictEqual` (the same check under node:assert/strict),
+  // was a nit as "churn unrelated to discounts" in 3 of 3 kern runs. Run 0 filed decoy d1, an equivalent rounding
+  // helper, as pre-existing ("It's the same behaviour as before, so I'd call it pre-existing"), and raised
+  // "`getInvoice` has no caller in the repo ... Sure: uncertain".
+  const { body } = readDoc(SKILL);
+  const nine = steps(body)[9];
+  for (const s of ['Only a real defect the change did not cause goes under `pre-existing`;',
+    'a `nit` is a real defect too small to block, naming how its line fails; a smell is a `nit`.',
+    'Not findings: a change that keeps behaviour (a moved test, an equivalent helper or rename), churn, style or "unrelated" with no failure, or a justified step 2 hit, each under Cleared with its check, never `pre-existing`;',
+    'a probably-fine guess or a new export with no caller yet;']) assert.ok(nine.includes(s), `step 9 lacks: ${s}`);
+  assert.ok(!nine.includes('style advice'), 'style with no failure goes under Cleared, not a bare not-findings item');
+  // kern skipped the step 3 lane in 3 of 3 runs (tool calls Read, Bash, Bash) and, in run 0, every lane: "those
+  // scripts write files, which you ruled out", after the prompt's "Do not edit files". wt-diff writes `<package>`
+  // where references/rounds.md names it, under `kern-dir reviews`; the step 3 lane passes no `--fix` and no
+  // `--comment`, so it writes nothing; only a skill's own rule or the user's word skips a review (Task 16n, kernel).
+  const intro = body.slice(0, body.indexOf('## Steps'));
+  assert.ok(intro.includes('A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user\'s files, and step 3 writes nothing; a request skips a lane only by naming it.'), intro);
+  assertContains(`${REF}/rounds.md`, ['`<reviews>` is the output of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir reviews`', "This run's `<package>` is `<reviews>/<slug>-<N+1>.diff`"]);
+  assert.ok(steps(body)[3].includes('Never pass `--comment` and never `--fix`.'), 'the step 3 lane writes nothing');
+  // The cuts that paid for these bytes left their duties where the steps point: step 2's hit handling in
+  // claim-checks.md, step 6's proof and lists in blast-radius.md.
+  assertContains(`${REF}/claim-checks.md`, ['Exit 1 means hits: each is fixed or justified in the report.', 'Exit 1 means hits: each gets evidence, a rewrite, or removal.']);
+  assertContains(`${REF}/blast-radius.md`, ['find the one or two facts the change is safe because of and prove them by running code', '- Risks: ', '- Cleared: ']);
 });
 
 test('the skills spec names the finish-branch step that runs self-review', () => {
