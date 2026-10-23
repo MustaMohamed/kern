@@ -502,7 +502,7 @@ disable-model-invocation: true
 ---
 ```
 
-**2. Purpose.** Write production code in slices, each proven by a test seen failing for the right reason. Reached by the kernel row "executing an agreed plan" for a single bounded change, by `execute-plan` inline mode, by `diagnose` step 7, and by the `implementer` agent, whose brief gives this file's absolute path.
+**2. Purpose.** Write production code in slices, each proven by a test seen failing for the right reason. Reached by the kernel row "One bounded change with an agreed design, or tests for existing code", by `execute-plan` inline mode, by `diagnose` step 7, and by the `implementer` agent, whose brief gives this file's absolute path. The SKILL.md leaves out the second sentence to stay within its 5,500 bytes (M2b Task 17, which routed tests for existing code here, coverage AD47).
 
 **3. Inputs.** `test.focused`, `test.full`, `typecheck`, `lint` (detected, source printed), `generated_artifacts`, `scope_threshold`, `branch.protected`. Project test obligations come from the project rules already in context.
 
@@ -512,7 +512,7 @@ disable-model-invocation: true
 2. Pick where to edit. In a kern worktree, edit there. In the main session, edit the current checkout only when its branch is a non-protected feature branch; otherwise propose `wt-new <slug>`, adding `--branch <name>` when `branch.pattern` holds `{id}`, and wait for one answer; `wt-new` exit 2: say why and ask. Never switch the main checkout's branch. Under autopilot, always use a worktree. [new; D3]
 3. Resolve `test.focused`, `test.full`, `typecheck` and `lint` with `kern-get <key>`, else `kern-detect <key>`. Print each command with its source. Unresolvable: ask for it; never guess a command. [AD test-driven-development:24-34]
 4. Slice the work and list the seams; use the plan's seams when it has them (`references/slicing.md`). [AD incremental-implementation:44-87; PO tdd:18-24]
-5. For each slice, name the break in one sentence, write the test, run it, and see RED for the expected reason: an assertion failure, not an import or syntax error. A test that already passes is a finding, not a RED. [SP test-driven-development:71-128; SP test-driven-development/writing-good-tests:20-30,65-79; BV implement: a test that already passes is a finding]
+5. For each slice, name the break in one sentence, write the test, run it, and see RED for the expected reason: an assertion failure, not an import or syntax error. A test that already passes is a finding, not a RED. Tests asked for on existing code pass at once: their RED is step 9's `probe --mutate` of the line each covers, with no production edit unless asked; one failing on the unchanged code is a bug report: stop and route to diagnose. [AD test-driven-development:3 (tests for existing code); SP test-driven-development:71-128; SP test-driven-development/writing-good-tests:20-30,65-79; BV implement: a test that already passes is a finding]
 6. Write the minimum code that turns it GREEN. [SP test-driven-development:130-166]
 7. Run the focused test and `typecheck`. Refactor only code you touched, and stay green. [SP test-driven-development:168-202]
 8. A file outside the approved list pauses the work: name it and ask. Findings outside scope go to a NOTICED BUT NOT TOUCHING list. [AD incremental-implementation:115-133]

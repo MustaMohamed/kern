@@ -73,6 +73,14 @@ test('a typed "in parallel" routes to parallel-work', () => {
   assertContains('kernel/kernel.md', ['Several matches: define and diagnose before build, then a typed "in parallel" builds through parallel-work.']);
 });
 
+test('tests for existing code route to implement, in the kernel and in the help map', () => {
+  // M2b Task 17, AD47 (t17-lane-4): addy's TDD skill fires on adding tests to a function, even pasted inline. In
+  // kern, "Add unit tests for this function" matched no row and fell to plan. The controller's ruling routes tests
+  // for existing code to implement, kern's test-first skill; plan is too heavy for tests on one function.
+  assertContains('kernel/kernel.md', ['| One bounded change with an agreed design, or tests for existing code | Read {KERN}/implement/SKILL.md |']);
+  assertContains('skills/help/references/map.md', ['Routed row "One bounded change with an agreed design, or tests for existing code"; /kern:implement']);
+});
+
 test('the user\'s word skips only what it names, and Evidence, the guards and the safety defaults still hold', () => {
   // 2026-10-20: four pressure cases told kern to skip a step, and Precedence put the user's word first without
   // saying how far it reaches (task-16-diagnosis X4; the user's "My word wins", 2026-10-20). The user's option kept

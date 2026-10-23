@@ -72,6 +72,21 @@ test('diagnose names implement\'s steps by their numbers', () => {
   assert.ok(s[9].includes('`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>`'), s[9]);
 });
 
+test('tests asked for on existing code pass at once: probe --mutate is their RED, a fail goes to diagnose, and no production edit unless asked', () => {
+  // M2b Task 17, AD47 (t17-lane-4): the kernel routes tests for existing code here, and step 5 called every test that
+  // already passes a finding, so tests asked for on working code had no RED (the controller's ruling).
+  const { raw, body } = readDoc(SKILL);
+  const s = steps(body);
+  assert.ok(s[5].includes("A test that already passes is a finding, not a RED. Tests asked for on existing code pass at once: their RED is step 9's `probe --mutate` of the line each covers, with no production edit unless asked; one failing on the unchanged code is a bug report: stop and route to diagnose."), s[5]);
+  assert.ok(s[9].includes('`bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate <file>:<line> <wt> -- <test command>`'), s[9]);
+  assertContains('skills/implement/references/test-design.md', ['For tests added to existing code, which pass at once, this check is their RED.']);
+  // The bytes were paid within the 5,500 cap: the "Reached from" sentence went, as plan's, define's and self-review's
+  // did, and step 9 names adversarial inputs without the list that test-design.md holds.
+  assert.ok(!raw.includes('Reached from'), 'no Reached from sentence');
+  assert.ok(s[9].includes('Add adversarial inputs.'), s[9]);
+  assertContains('skills/implement/references/test-design.md', ['Cover empty, zero, false, cleared, several elements, and the value a real caller sends.']);
+});
+
 test('implement references', () => {
   assertHeadings('skills/implement/references/test-design.md', ['# Test design', '## Name the break', '## Test the real thing', '## Mocks need a reason', '## Mutation check', '## Tautological tests', '## Adversarial inputs', '## Behaviour, not implementation']);
   assertContains('skills/implement/references/test-design.md', ['probe --mutate']);
