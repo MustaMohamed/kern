@@ -69,17 +69,18 @@ test('mode documents the switch phrases the hook accepts', () => {
 
 // Claude Code replaces `$1`, `$2`... and `$ARGUMENTS` in a skill body with the invocation's arguments, so an awk
 // `$1` in a SKILL.md breaks once the skill takes one (Task 17 lane 4, SP54; superpowers 7.0.0 RELEASE-NOTES.md:41).
-// The frontmatter is not body, and a reference read by path is not substituted, so neither is checked.
-export function placeholders(raw) {
+// The frontmatter is not body, and a reference read by path is not substituted, so neither is checked. `$10` and
+// `$1abc` count too: the brief's `\b` after one digit missed them (fix round 1, Minor 4).
+function placeholders(raw) {
   const text = raw.replace(/\r\n/g, '\n');
   const { body } = parseFrontmatter(text);
   const offset = text.slice(0, text.length - body.length).split('\n').length - 1;
-  return body.split('\n').flatMap((text, i) => (/\$(\d|ARGUMENTS)\b/.test(text) ? [{ line: offset + i + 1, text }] : []));
+  return body.split('\n').flatMap((line, i) => (/\$(\d+|ARGUMENTS)/.test(line) ? [{ line: offset + i + 1, text: line }] : []));
 }
 
 test('the placeholder matcher reads the body, fenced blocks included, and skips the frontmatter', () => {
-  const raw = '---\nname: x\nargument-hint: "$1"\n---\n\nRun `awk \'{print $1}\'` on it.\n```\necho "$ARGUMENTS"\n```\n`${CLAUDE_PLUGIN_ROOT}/scripts/kern-get`\n';
-  assert.deepEqual(placeholders(raw), [{ line: 6, text: "Run `awk '{print $1}'` on it." }, { line: 8, text: 'echo "$ARGUMENTS"' }]);
+  const raw = '---\nname: x\nargument-hint: "$1"\n---\n\nRun `awk \'{print $1}\'` on it.\n```\necho "$ARGUMENTS"\n```\n`${CLAUDE_PLUGIN_ROOT}/scripts/kern-get`\nawk \'{print $10}\'\n';
+  assert.deepEqual(placeholders(raw), [{ line: 6, text: "Run `awk '{print $1}'` on it." }, { line: 8, text: 'echo "$ARGUMENTS"' }, { line: 11, text: "awk '{print $10}'" }]);
 });
 
 test('no SKILL.md body holds an argument placeholder', () => {
