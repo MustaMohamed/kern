@@ -43,3 +43,11 @@ test('diagnose references', () => {
   }
   assertContains('skills/diagnose/references/forensics.md', ['not yet a diagnosis', 'strongest hypothesis']);
 });
+
+test('diagnose never prints a secret: step 1 redacts the symptom, and instrumentation shows a secret only as set or unset', () => {
+  // Task 17 lane 4 (SP55): superpowers 7.0.0 systematic-debugging/SKILL.md:91-95 prints only whether a secret is set.
+  // The boundary line includes the environment, so without this rule it would print a secret's value.
+  assert.ok(steps(readDoc(SKILL).body)[1].includes('Redact secrets'));
+  const line = readDoc('skills/diagnose/references/root-cause-tracing.md').raw.split('\n').find((l) => l.startsWith('- Include the value,')) ?? '';
+  assert.ok(line.endsWith('; a secret only as set or unset, never its value.'), line);
+});
