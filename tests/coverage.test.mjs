@@ -39,7 +39,7 @@ test('no gap homed in M2a or M2b is still open', () => {
 
 test('every gap homed in M2b has its own re-audit row', () => {
   const mechs = rows(section('M2 re-audit')).map((r) => r[0]);
-  for (const n of [10, 13, 35, 36, 37, 38, 39, 41, 42, 43, 45, 46, 47, 48, 49, 50, 51, 52]) {
+  for (const n of [10, 13, 35, 36, 37, 38, 39, 41, 42, 43, 45, 46, 47, 48, 49, 50, 51, 52, 54]) {
     assert.ok(mechs.some((m) => m.endsWith(`(gap ${n})`)), `no M2 re-audit row for gap ${n}`);
   }
 });
