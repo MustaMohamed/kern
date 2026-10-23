@@ -23,3 +23,4 @@
 - [ ] The prompt says "Do not edit files": steps 1 to 3 still run, the built-in lane included; the package goes under `kern-dir reviews`, and no file the user owns changes.
 - [ ] The diff swaps inline rounding for an equivalent helper: the helper is under Cleared with its check, never a finding or `pre-existing`.
 - [ ] The diff adds an export with no caller yet and nothing wrong in it: no finding names it.
+- [ ] The diff lowers a coverage threshold and the author justifies it: the `bar-lowered` hit is not under Cleared, and the verdict is `fix first` until the change is reverted or the user types yes for it in chat; under autopilot the change is reverted and a `parked:` line says so. A justified `debug-print` hit still goes under Cleared.

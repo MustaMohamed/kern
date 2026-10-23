@@ -20,7 +20,7 @@ Only the rejected alternatives a reviewer would otherwise ask about. Skip it whe
 
 ## Merge danger
 
-One-way or two-way door. The blast radius: data, consumers, deploy order. What breaks if this is wrong, and how to roll back.
+One-way or two-way door. The blast radius: data, consumers, deploy order. What breaks if this is wrong, and how to roll back. Name each `bar-lowered` change self-review kept, with the user's yes for it.
 
 ## Verification
 

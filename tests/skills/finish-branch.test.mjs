@@ -119,6 +119,10 @@ test('push-and-pr reference: dedup, push, PR', () => {
 test('PR body template', () => {
   assertHeadings(BODY, ['# PR body', '## Why', '## What changed', '## Scope', '## Tradeoffs', '## Merge danger', '## Verification']);
   assertContains(BODY, ['drop a section with nothing to say', 'about 40 lines', 'smallest useful view', 'Screenshots first']);
+  // M2b Task 17, coverage P69: a lowered bar self-review kept had no line in the body, so no reviewer saw it; only
+  // the user's typed yes keeps one (tests/skills/self-review.test.mjs).
+  const danger = section(readDoc(BODY).body, '## Merge danger');
+  assert.ok(danger.includes('Name each `bar-lowered` change self-review kept, with the user\'s yes for it.'), danger);
   assertMaxBytes(BODY, 2000);
 });
 

@@ -22,6 +22,8 @@ Grep every writer of a property the change gates on, in every package, and read 
 
 Read the source of a library you call, at its pinned version and with any local patch. Work out when things run (teardown, async ordering). Follow what a symbol search misses: an API's JSON, a DB column, a wire format, another language reading the same bytes, a feature flag, code three hops downstream.
 
+- A manifest or lockfile change (`package.json`, `go.mod`, `Cargo.lock` and the like): for a new dependency, check whether the stack already covers it, and its size, upkeep, known vulnerabilities and licence. Review an upgrade like code: read its changelog, upgrade one dependency per change, and see the suite green before and after. A check left undone goes under Risks.
+
 ## Risks and cleared
 
 - The one fact it is safe because of, the level it reached, and the proof, or "unproven".
