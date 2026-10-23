@@ -605,6 +605,13 @@ M2b's behaviour and exec gates, as the user set them on 2026-10-21 (plan Task 16
 - The user's "Scripted checks + one model": a mechanical expectation (a file read, a command run, a line said) is decided by code, and the rest by one model verdict per run, as before. There is no extra grader cost. Scripted today: recall-1's and recall-2's state check, ledger read and no-write expectations, the `Skipped:` line in four pressure cases, and the `Building:` line in pressure-define-skip-approval and workflow-define-fast-path. `docs/plans/contract.md` lists each one.
 - The user's "Known limit, report only": a duty still under two of three after its structural change is reported, not gating. This applies to the `Building:` line if it is still under two of three after Task 16k.
 
+M2b's confirming run (2026-10-22 and 2026-10-23, under plan Task 16 Step 6's exit rule and the user's "One run, one harness rerun") passed every gate except two head-to-head categories, plan and review. No failure was a harness defect, so there was no rerun. The known limits, each with its numbers in the CHANGELOG evidence line:
+- Head-to-head review fails: self-review reports lines whose behaviour the change keeps, and skips the code-review lane when the user says not to edit files.
+- Head-to-head plan fails: plan step 7 states the `scope_threshold` default with no source. The grader's digest also cuts some evidence, but that does not decide the gate.
+- define step 11's spec review is skipped in about half the workflow-define-spec runs.
+- The `Building:` line, and Sonnet's multi-diagnose second route read.
+The section's acceptance for M2b asks every head-to-head category to pass. Whether 0.4.0 ships with these limits is the user's decision at plan Task 19.
+
 Elsewhere in this spec, "M2" means M2a and M2b together. The first build is M0 to M2b (about 69 to 78 hours), with the pilot inside M2b. The full framework is about 114 to 143 hours.
 
 ## 15. Risks and spikes
