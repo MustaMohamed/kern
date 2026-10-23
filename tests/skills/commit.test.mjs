@@ -36,7 +36,8 @@ test('commit sections, steps and red flags', () => {
     'no files, no commit; a failed toplevel, protected branch or detached HEAD, no commit', 'a protected branch or a detached HEAD never commits']);
   assert.ok(!raw.includes('temp file'), 'the message file lives under WORK/tmp, which G5 accepts, not in a temp file');
   assert.ok(!raw.includes('$('), 'no command substitution in a prescribed command');
-  assertMaxBytes(SKILL, 5200);
+  // 5,328 since M2b Task 17 (raised from 5,200): the Unreleased changelog line, coverage AD24.
+  assertMaxBytes(SKILL, 5328);
 });
 
 test('commit ledger-tasks reference', () => {
@@ -69,4 +70,13 @@ test('commit resolves commit.convention as G5 does, with kern-get then kern-dete
 
 test('commit reads the branch with symbolic-ref, where exit 1 means a detached HEAD', () => {
   assert.ok(!readDoc(SKILL).raw.includes('--abbrev-ref'), 'no rev-parse --abbrev-ref');
+});
+
+test('a project with an Unreleased changelog section gets the change\'s line in the same commit, proposed, never unasked (coverage AD24)', () => {
+  // M2b Task 17 review I2b: addy git-workflow-and-versioning :311 writes the entry in the change that makes it, not
+  // reconstructed at release time; finish-branch's release turns that Unreleased section into the version's entry.
+  const s = steps(readDoc(SKILL).body);
+  const line = 'A changelog with an Unreleased section gets this change\'s line there, in the same commit, proposed with the files, never unasked.';
+  assert.ok(s[3].includes(`list the rest, unstaged. ${line}`), s[3]);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [line]);
 });
