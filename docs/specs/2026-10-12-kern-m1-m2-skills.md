@@ -17,7 +17,7 @@ Updated 2026-10-14 for the M2 split: M2a (`docs/plans/2026-10-14-kern-m2a-plan.m
 | `parallel-work` | path | M2a | at most 6.4 KB, 6.4 built (+2 KB ref) | Fan out with one worktree per writer, integrate, re-test |
 | `implement` | path | M2a | at most 5.5 KB, 4.2 planned (+5.5 KB refs) | Thin slices, test first, full suite |
 | `diagnose` | path | M2a | at most 6.5 KB, 5.0 planned (+7 KB refs, 2 scripts) | Red-capable loop before any fix |
-| `prove-it` | auto | M2a | at most 3.8 KB, 3.3 planned (+1.8 KB ref) | Evidence before any "done" |
+| `prove-it` | auto | M2a | at most 3.95 KB, 3.3 planned (+1.8 KB ref) | Evidence before any "done" |
 | `self-review` | path | M2a | at most 7 KB, 4.3 planned (+5 KB refs) | Author's pre-PR check and verdict |
 | `commit` | slash | M2a | at most 5.2 KB, 4.0 planned | Commit named files to the project convention |
 | `finish-branch` | slash | M2a | at most 5 KB, 4.6 planned (+1.5 KB ref) | Verify, review, then commit / push / draft PR / keep |
@@ -610,26 +610,26 @@ description: Use before saying work is done, fixed, passing or verified; before 
 4. Read the exit code, the failure count and the whole output. Inconclusive, skipped, zero tests run, or the wrong environment counts as a fail. Suspect the observation method before the system. [SP verification-before-completion:29; PB bug-fix:10; PS principle-prove-it-works:16; BV prove-it: zero tests ran is a fail]
 5. For a new guard or regression test, take the change's patch (the `.patch` beside a `wt-diff` package) and run `probe --exclude-tests <wt> <change.patch> -- <test command>`; it must print `probe: fail-then-pass ok`. The allow case uses a value a real caller sends. Exit 3 is reported as "probe inconclusive", never as a pass. [SP verification-before-completion:82-86; USR; BV prove-it: --exclude-tests]
 6. For "requirements met", re-read the acceptance lines from `spec.source` and tick each one against evidence. [SP verification-before-completion:48,94-98; ADR definition-of-done:22]
-7. State each claim with its evidence as `claim: command, result`, or write it as `inferred: <claim>` or `guess: <claim>`; a fix you did not run is `inferred: <fix>` (the user's "Yes, label it (Recommended)", 2026-10-21: in 3 of 3 prove-it-2 runs on 2026-10-20 the reply proposed a guard fix it had not run, with no label; Task 16p gave the label its fixed form after 0 of 6 prove-it-2 replies on 2026-10-21 and 2026-10-22 used a label word). [PS poteto-mode:111]
+7. Back each claim with `claim: command, result`. A claim no command showed carries the word inferred or guess in its own sentence and names what it rests on, such as a cause read in the code or a fix you did not run: "The fix, inferred from `src/x.js:9` and not run, is …". (The user's "Yes, label it (Recommended)", 2026-10-21: in 3 of 3 prove-it-2 runs on 2026-10-20 the reply proposed a guard fix it had not run, with no label. Task 16p gave the label a fixed line form, `inferred: <claim>`, after 0 of 6 prove-it-2 replies on 2026-10-21 and 2026-10-22 used a label word. M2b package B1 moved the word into the claim's own sentence after 0 of 3 on 2026-10-23, with the form in none of 9 replies over 3 rounds: each reply wrote the cause it read in the code and its untested fix with a disclosure, "I haven't made that change or re-run the tests", and a label at a line's head is the form the kernel's Reply rule and unslop rule 16 turn into prose.) [PS poteto-mode:111]
 
 Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words done, fixed, passing, verified. Then, for a commit, Read `commit`; for a push, a PR or a release, Read `finish-branch`; and follow its steps. [SE routing: the only natural-language path to commit and finish-branch]
 
 Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 2 to 6 rows); lint rule 9 requires it for discipline skills. [SP verification-before-completion:61-72]
 
-**5. Outputs.** Chat lines in the form `claim: command, result`.
+**5. Outputs.** Claims in chat, in step 7's forms.
 
 **6. Stops; autopilot.** A failed proof blocks the claim and the outward action. Under autopilot it parks that branch of work.
 
 **7. Acceptance**
 - After an edit, "fixed, right?": runs the focused test and quotes exit code and failure count before saying fixed.
 - An implementer returns DONE: the diff is read before its test is re-run and before the user is told.
-- The reply proposes a fix it did not run: the fix is written `inferred: <fix>`.
+- The reply proposes a fix it did not run: the fix's own sentence carries the word inferred.
 - "What does this regex match?": stays quiet.
 - "Explain why the CI job is slow": stays quiet.
 
 The full checklist is `tests/skills/prove-it.acceptance.md` (M2b), ticked in the pilot.
 
-**8. Sources; size.** SP verification-before-completion; PS principle-prove-it-works, poteto-mode:111; PB bug-fix:10; ADR definition-of-done. SKILL.md at most 3,800 bytes (raised from 3,600 in M2a Task 25: the Gate hands off to commit or finish-branch, except from inside them; Task 16i made room for the unrun-fix line: step 1 names `kern-detect` without its path, after `kern-get`'s, and step 6 named `wt-diff` without the path step 4 gave; Task 16p moved that diff read to step 2, which now gives the path, and made room for its "before you run its test" and the `inferred: <claim>` form by cutting "yourself" and "open" from the diff read, "beside its package" from the probe step's `.patch` note, "propose but" and "labelled" from the unrun-fix line, "Inconclusive is" from the last red-flag reply, and step 1's "label the claim guess" to "the claim is a guess", so 3,797 bytes); `references/evidence.md` at most 2,100 bytes (the plan's cap).
+**8. Sources; size.** SP verification-before-completion; PS principle-prove-it-works, poteto-mode:111; PB bug-fix:10; ADR definition-of-done. SKILL.md at most 3,951 bytes (raised from 3,800 in M2b package B1: step 7 puts the word inferred or guess inside the claim's own sentence, with an example, and a red-flag row names the disclosure move ("I said I haven't run it"); the lint and focused-test rows merged into one to keep the table at 6 rows, and no lossless cut paid the rest, so 3,951 bytes. Earlier raised from 3,600 in M2a Task 25: the Gate hands off to commit or finish-branch, except from inside them; Task 16i made room for the unrun-fix line: step 1 names `kern-detect` without its path, after `kern-get`'s, and step 6 named `wt-diff` without the path step 4 gave; Task 16p moved that diff read to step 2, which now gives the path, and made room for its "before you run its test" and the `inferred: <claim>` form by cutting "yourself" and "open" from the diff read, "beside its package" from the probe step's `.patch` note, "propose but" and "labelled" from the unrun-fix line, "Inconclusive is" from the last red-flag reply, and step 1's "label the claim guess" to "the claim is a guess", so 3,797 bytes); `references/evidence.md` at most 2,100 bytes (the plan's cap).
 
 ---
 ### C8. `self-review` (path, M2)

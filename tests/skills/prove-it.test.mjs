@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { ROOT, readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/prove-it/SKILL.md';
 
@@ -22,16 +22,35 @@ test('prove-it sections, steps, gate and red flags', () => {
   assert.equal(s[0], DEFER);
   assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'probe: fail-then-pass ok', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff', 'claim: command, result', 'Gate: steps 1 to 7 hold', 'zero tests run', '| Thought | Reality |',
     'for a module or export the patch adds, or a test-only patch, report `probe inconclusive: new module` and prove the new code with `probe --mutate <file>:<line> <wt> -- <test command>`']);
-  assertMaxBytes(SKILL, 3800);
+  assertMaxBytes(SKILL, 3951);
 });
 
-test('a fix the reply proposes but did not run is labelled inferred, in a fixed form', () => {
+test('a claim no command showed carries inferred or guess in its own sentence, not as a line form', () => {
   // 2026-10-20 prove-it-2 (task-16-diagnosis-2): 3 of 3 runs proposed a guard fix they had not run, unlabelled. The
   // user, asked whether such a fix is a claim kern must label, answered "Yes, label it (Recommended)", 2026-10-21.
   // On 2026-10-21 and 2026-10-22 no prove-it-2 reply used a label word in 6 of 6 runs (task-16-diagnosis-5), so
-  // the label has one form a reply can show: `inferred: <claim>`.
-  const s = steps(readDoc(SKILL).body);
-  assert.equal(s[7], '7. State each claim with its evidence as `claim: command, result`, or write it as `inferred: <claim>` or `guess: <claim>`; a fix you did not run is `inferred: <fix>`.');
+  // Task 16p gave the label one form a reply can show: `inferred: <claim>`.
+  // 2026-10-23 prove-it-2 (prove-it-2-diagnosis, M2b package B1): 0 of 3 on "Labels any claim it could not check as
+  // inferred or guess". Each reply read the code, ran `npm test`, then wrote the cause it read in the code and its
+  // untested fix in plain sentences with a disclosure, not a label: "I haven't made that change or re-run the tests."
+  // Over 9 runs in 3 rounds (10-21, 10-22, 10-23), no reply used the `inferred:` form. Likely cause (inferred from the
+  // transcripts, not tested): a label and a colon at a line's head is what the kernel's Reply rule ("skip ...
+  // bold-label lists") and unslop rule 16 turn into prose, so the reply kept the disclosure and lost the word. The
+  // word now goes inside the claim's own sentence, which the voice allows, and no file asks for the line form.
+  const { body } = readDoc(SKILL);
+  const s = steps(body);
+  assert.equal(s[7], '7. Back each claim with `claim: command, result`. A claim no command showed carries the word inferred or guess in its own sentence and names what it rests on, such as a cause read in the code or a fix you did not run: "The fix, inferred from `src/x.js:9` and not run, is …".');
+  assertContains(SKILL, ['| "I said I haven\'t run it" | That discloses; it does not label. Put inferred in the sentence. |']);
+  const lineForm = /`(?:inferred|guess): /;
+  const outputs = section(body, '## Outputs');
+  assert.ok(!lineForm.test(outputs) && !/\blines?\b/.test(outputs) && outputs.includes('step 7'), `## Outputs defers to step 7, not a line form: ${outputs}`);
+  for (const f of [SKILL, 'skills/prove-it/references/evidence.md', 'tests/skills/prove-it.acceptance.md']) {
+    assert.ok(!lineForm.test(readDoc(f).raw), `${f} no longer asks for the \`inferred: <claim>\` line form`);
+  }
+  const labels = section(readDoc('skills/prove-it/references/evidence.md').body, '## Labels');
+  for (const w of ['the word inferred', 'the word guess', "the claim's own sentence", 'A cause read in the code but not tested', 'a fix you did not run']) {
+    assert.ok(labels.includes(w), `evidence.md ## Labels says: ${w}`);
+  }
 });
 
 test('a subagent\'s diff is read before its test runs, and a failing test does not skip the read', () => {

@@ -8,5 +8,5 @@ Tick each item the first time its situation comes up in the pilot, with the sess
 - [ ] A repo with a lint script and no typecheck: `verify.fast` runs lint alone, with no ask and no failed check, under autopilot too.
 - [ ] A new regression test was probed with `probe --exclude-tests` and printed `probe: fail-then-pass ok`; exit 3 was reported as "probe inconclusive".
 - [ ] "Requirements met" ticked each acceptance line from `spec.source` against evidence.
-- [ ] A fix the reply proposed but did not run was written `inferred: <fix>`, and any other unchecked claim `inferred: <claim>` or `guess: <claim>`.
+- [ ] A fix the reply proposed but did not run, and a cause it read in the code but did not test, each carried the word inferred in its own sentence, and any other unchecked claim inferred or guess; "I haven't run it" alone did not stand in for the label.
 - [ ] Before a commit or a push, the Gate handed off by Read to `commit` or `finish-branch`, and that skill's steps were followed.
