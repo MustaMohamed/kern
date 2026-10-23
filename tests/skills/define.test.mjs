@@ -90,7 +90,9 @@ test('define references', () => {
     assertMaxBytes(`skills/define/references/${f}`, max);
   }
   assertContains('skills/define/references/spec-template.md', ['Copy from the first `---` line to the end', '- Always:', '- Ask first:', '- Never:', 'form: short', 'the highest seam that already exists and the fewest seams',
-    'Anti-goals: what would make it a failure even if it works', 'Prior art:', "`kern's call`", 'name what is left to the builder']);
+    'Anti-goals: what would make it a failure even if it works', 'Prior art:', "`kern's call`", 'name what is left to the builder',
+    // Task 17 lane 1 (C31): caveman 4.0.1 migration/SKILL.md:10-15 asks for these three before the build.
+    'The rollback path at each stage; each migrate batch is safe to rerun and its partial failure shows; a test runs the old and the new path at each stage.']);
 });
 
 test('define pins its approval rules', () => {
