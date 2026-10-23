@@ -30,7 +30,7 @@ test('execute-plan sections, steps, scripts and red flags', () => {
     'Batch small tasks', 'closed in its fork through steps 6 to 10', 'ledger-open --summary', 'One fix subagent gets the complete findings list',
     'main: unchanged', 'run them only on yes', '`<ledger>` below is `<ledger dir>/ledger.md`', 'briefs/task-N.brief.md', 'dispatch only on `brief-check: ok`',
     '--no-probe']);
-  assertMaxBytes(SKILL, 12400);
+  assertMaxBytes(SKILL, 12599);
 });
 
 test('ledger format and model table', () => {
@@ -159,6 +159,23 @@ test('execute-plan runs its task and final reviews in the foreground', () => {
   // and its serial delegate implementer, which step 7 waits on, runs in the foreground by model-selection.md's rule
   // (Task 16i review, M4).
   assert.ok(!s[6].includes('run_in_background'), s[6]);
+});
+
+test('execute-plan rules on each "Declined to judge" line and reports it in step 13', () => {
+  // Task 17 lanes 3 and 5: kern:task-reviewer writes a "Declined to judge" list in task and whole-branch mode
+  // (agents/task-reviewer.md), but no execute-plan step read it, so a behaviour the reviewer set aside was dropped
+  // silently. superpowers' executor rules on each line and ledgers it (executing-plans/SKILL.md:260-264;
+  // requesting-code-review/code-reviewer.md:43-48). Each ruling is a Decision: line, so ledger-open --summary lists
+  // it for the final review and step 13 after compaction; a real gap is a spec issue, so step 9's fix loop takes it.
+  const s = steps(readDoc(SKILL).body);
+  const rule = 'Rule on each "Declined to judge" line in a `Decision:` line: settled by spec or plan, a real gap (a spec issue), or the user\'s call.';
+  assert.ok(s[8].includes(rule), s[8]);
+  // The ruling comes after the return is saved and before the verdicts are recorded, as a gap changes the spec verdict.
+  assert.ok(s[8].indexOf('reviews/task-N-r<r>.txt') < s[8].indexOf(rule) && s[8].indexOf(rule) < s[8].indexOf('scripts/task-review'), s[8]);
+  const final = 'Rule on its "Declined to judge" lines as step 8 does.';
+  assert.ok(s[12].includes(final), s[12]);
+  assert.ok(s[12].indexOf('whole-branch') < s[12].indexOf(final) && s[12].indexOf(final) < s[12].indexOf('One fix subagent'), s[12]);
+  assert.ok(s[13].startsWith('13. Finish: report decisions with the cost if wrong, "Declined to judge" ones too, parked items'), s[13]);
 });
 
 test('the task test command names no worktree path and has no cd, in step 10 and in the implementer agent', () => {
