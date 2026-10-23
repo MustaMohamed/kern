@@ -168,7 +168,7 @@ The rule: before a new task's first tool call or question, match the task agains
 |---|---|
 | New behaviour and no agreed spec | define |
 | Agreed spec, more than one step | plan |
-| Executing an agreed plan; or one bounded change | execute-plan; implement |
+| Executing an agreed plan; or one bounded change, or tests for existing code (M2b Task 17, AD47) | execute-plan; implement |
 | Independent changes asked for in parallel | parallel-work |
 | Bug, failing test, unexpected output | diagnose |
 | About to say done, fixed or passing, commit, or open a PR | prove-it |

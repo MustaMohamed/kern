@@ -502,7 +502,7 @@ disable-model-invocation: true
 ---
 ```
 
-**2. Purpose.** Write production code in slices, each proven by a test seen failing for the right reason. Reached by the kernel row "executing an agreed plan" for a single bounded change, by `execute-plan` inline mode, by `diagnose` step 7, and by the `implementer` agent, whose brief gives this file's absolute path.
+**2. Purpose.** Write production code in slices, each proven by a test seen failing for the right reason. Reached by the kernel row "One bounded change with an agreed design, or tests for existing code", by `execute-plan` inline mode, by `diagnose` step 7, and by the `implementer` agent, whose brief gives this file's absolute path. The SKILL.md leaves out the second sentence to stay within its 5,500 bytes (M2b Task 17, which routed tests for existing code here, coverage AD47).
 
 **3. Inputs.** `test.focused`, `test.full`, `typecheck`, `lint` (detected, source printed), `generated_artifacts`, `scope_threshold`, `branch.protected`. Project test obligations come from the project rules already in context.
 
@@ -512,7 +512,7 @@ disable-model-invocation: true
 2. Pick where to edit. In a kern worktree, edit there. In the main session, edit the current checkout only when its branch is a non-protected feature branch; otherwise propose `wt-new <slug>`, adding `--branch <name>` when `branch.pattern` holds `{id}`, and wait for one answer; `wt-new` exit 2: say why and ask. Never switch the main checkout's branch. Under autopilot, always use a worktree. [new; D3]
 3. Resolve `test.focused`, `test.full`, `typecheck` and `lint` with `kern-get <key>`, else `kern-detect <key>`. Print each command with its source. Unresolvable: ask for it; never guess a command. [AD test-driven-development:24-34]
 4. Slice the work and list the seams; use the plan's seams when it has them (`references/slicing.md`). [AD incremental-implementation:44-87; PO tdd:18-24]
-5. For each slice, name the break in one sentence, write the test, run it, and see RED for the expected reason: an assertion failure, not an import or syntax error. A test that already passes is a finding, not a RED. [SP test-driven-development:71-128; SP test-driven-development/writing-good-tests:20-30,65-79; BV implement: a test that already passes is a finding]
+5. For each slice, name the break in one sentence, write the test, run it, and see RED for the expected reason: an assertion failure, not an import or syntax error. A test that already passes is a finding, not a RED. Tests asked for on existing code pass at once: their RED is step 9's `probe --mutate` of the line each covers (nothing to mutate: step 10's closest check). One that fails on the unchanged code stops the run: show the failure and ask whether it is a bug for diagnose or the behaviour to pin; never route there or edit production code unasked. [AD test-driven-development:3 (tests for existing code); SP test-driven-development:71-128; SP test-driven-development/writing-good-tests:20-30,65-79; BV implement: a test that already passes is a finding]
 6. Write the minimum code that turns it GREEN. [SP test-driven-development:130-166]
 7. Run the focused test and `typecheck`. Refactor only code you touched, and stay green. [SP test-driven-development:168-202]
 8. A file outside the approved list pauses the work: name it and ask. Findings outside scope go to a NOTICED BUT NOT TOUCHING list. [AD incremental-implementation:115-133]
@@ -525,11 +525,11 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 **5. Outputs.** Code and tests in the chosen tree; a chat report.
 
-**6. Stops; autopilot.** Stops at steps 1, 2, 3 and 8. Under autopilot the steps are the same; RED is never skipped; a D9 file parks the slice.
+**6. Stops; autopilot.** Stops at steps 1, 2, 3, 5 and 8. Under autopilot the steps are the same; RED is never skipped; a D9 file parks the slice.
 
 **7. Acceptance**
 - Approved bounded change: the transcript shows a red test run before the first production edit, then green, then the full suite.
-- A new test passes before any code change: reported as a finding and not used as RED.
+- A new test passes before any code change: reported as a finding and not used as RED, unless the tests were asked for on existing code. Then each one's RED is a caught `probe --mutate` of the line it covers, no production code changes, and one that fails on the unchanged code stops the run: the failure is shown with the question whether it is a bug for diagnose or the behaviour to pin.
 - The change needs a file outside the approved list: pauses and names it.
 - No test runner detectable: asks for the command; does not guess `npm test`.
 - "Quick and clear: rename the stored total field" reaching implement with no agreed design: following its `Building:` line and before any edit, says the change touches stored data and asks whether to keep the fast path.
@@ -538,7 +538,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/implement.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** SP test-driven-development (+ writing-good-tests); AD test-driven-development, incremental-implementation, git-workflow-and-versioning; PO tdd, diagnosing-bugs; PS tdd, principle-test-behavior-not-implementation. SKILL.md at most 5,500 bytes; `references/test-design.md` at most 5,000 bytes, `slicing.md` 1,800 (the plan's caps); stack references arrive in M5.
+**8. Sources; size.** SP test-driven-development (+ writing-good-tests); AD test-driven-development, incremental-implementation, git-workflow-and-versioning; PO tdd, diagnosing-bugs; PS tdd, principle-test-behavior-not-implementation. SKILL.md at most 5,554 bytes (raised from 5,500 in M2b Task 17: step 5's RED, nothing-to-mutate path and stop for tests asked for on existing code, after lossless cuts); `references/test-design.md` at most 5,000 bytes, `slicing.md` 1,800 (the plan's caps); stack references arrive in M5.
 
 ---
 

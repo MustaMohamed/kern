@@ -20,7 +20,9 @@ test('implement sections, steps and red flags', () => {
   assert.equal(s.length, 13);
   assert.equal(s[0], DEFER);
   assertContains(SKILL, ['RED for the expected reason', 'NOTICED BUT NOT TOUCHING', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-new', 'adding `--branch <name>` when `branch.pattern` holds `{id}`', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'never guess a command', 'Do not commit.', 'wt-snap', 'wt-diff', 'kern-get', 'kern-detect', 'probe: mutation caught']);
-  assertMaxBytes(SKILL, 5500);
+  // Raised from 5,500 in M2b Task 17 (R4 review I1, M5 to M7): step 5's RED, nothing-to-mutate path and stop for
+  // tests asked for on existing code, after lossless cuts.
+  assertMaxBytes(SKILL, 5554);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
@@ -51,7 +53,7 @@ test('the entry check is step 1 on its own, with a plain condition, and only def
   assert.match(s[2], /^2\. Pick where to edit\. In a kern worktree, edit there\./);
   assert.match(s[3], /^3\. Resolve `test\.focused`/);
   assert.ok(s[7].includes('a command that step 3 could not resolve was asked for there'), s[7]);
-  assertContains(SKILL, ['Stops at steps 1, 2, 3 and 8.']);
+  assertContains(SKILL, ['Stops at steps 1, 2, 3, 5 and 8.']);
 });
 
 test('step 3 spells kern-detect\'s full path, since kern:implementer reads it under the subagent kernel', () => {
@@ -70,6 +72,34 @@ test('diagnose names implement\'s steps by their numbers', () => {
   assert.match(s[3], /^3\. Resolve `test\.focused`, `test\.full`/);
   assert.ok(d[8].includes('Make the patch as `implement` step 9 does (`wt-diff <wt> <tree-before>`'), d[8]);
   assert.ok(s[9].includes('`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>`'), s[9]);
+});
+
+test('tests asked for on existing code pass at once: probe --mutate is their RED, and a fail stops the run to ask, with no production edit unasked', () => {
+  // M2b Task 17, AD47 (t17-lane-4): the kernel routes tests for existing code here, and step 5 called every test that
+  // already passes a finding, so tests asked for on working code had no RED (the controller's ruling).
+  const { raw, body } = readDoc(SKILL);
+  const s = steps(body);
+  assert.ok(s[5].includes("A test that already passes is a finding, not a RED. Tests asked for on existing code pass at once: their RED is step 9's `probe --mutate` of the line each covers (nothing to mutate: step 10's closest check)."), s[5]);
+  assert.ok(s[9].includes('`bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate <file>:<line> <wt> -- <test command>`'), s[9]);
+  assert.match(s[10], /^10\. No correct seam for a test: say so, and give the closest executable check with its output\.$/);
+  assertContains('skills/implement/references/test-design.md', ['For tests added to existing code, which pass at once, this check is their RED.']);
+  // R4 review I1 (the controller's ruling: the brief's "stop and route to diagnose" was wrong): a new test that fails
+  // on the unchanged code may hold a wrong expected value, or pin a quirk the user wants kept, and diagnose step 7
+  // fixes at the source without asking. So the run stops and asks; it never routes there or edits code unasked.
+  assert.ok(s[5].includes('One that fails on the unchanged code stops the run: show the failure and ask whether it is a bug for diagnose or the behaviour to pin; never route there or edit production code unasked.'), s[5]);
+  assert.doesNotMatch(s[5], /stop and route to diagnose/);
+  // R4 review M7: step 5's stop is in the Stops list. M5: the test-after red flag allows a mutation's RED.
+  assertContains(SKILL, ['Stops at steps 1, 2, 3, 5 and 8.', '| "I\'ll test after" | A test written after passes at once and proves nothing until a mutation turns it red. Watch it fail first. |']);
+  // R4 review M4: the acceptance check allows the tests-on-existing-code case.
+  assertContains('tests/skills/implement.acceptance.md', ['- [ ] A new test passes before any code change: it is reported as a finding and not used as RED, unless the tests were asked for on existing code. Then each one\'s RED is a caught `probe --mutate` of the line it covers, no production code changes, and one that fails on the unchanged code stops the run: the failure is shown with the question whether it is a bug for diagnose or the behaviour to pin.']);
+  // The bytes were paid within the 5,500 cap: the "Reached from" sentence went, as plan's, define's and self-review's
+  // did, and step 9 names adversarial inputs without the list that test-design.md holds.
+  assert.ok(!raw.includes('Reached from'), 'no Reached from sentence');
+  assert.ok(s[9].includes('Add adversarial inputs.'), s[9]);
+  assertContains('skills/implement/references/test-design.md', ['Cover empty, zero, false, cleared, several elements, and the value a real caller sends.']);
+  // Fix round 1 paid more bytes the same way: step 9 keeps where to point probe, and test-design.md says what it inverts.
+  assert.ok(s[9].includes('(`<file>` is relative to `<wt>`; point it at a line with a single condition)'), s[9]);
+  assertContains('skills/implement/references/test-design.md', ["it inverts one operator on that line, the first in probe's fixed order"]);
 });
 
 test('implement references', () => {

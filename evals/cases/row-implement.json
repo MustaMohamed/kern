@@ -13,6 +13,14 @@
       {
         "prompt": "Go ahead with the small change we designed",
         "top_k": 3
+      },
+      {
+        "prompt": "Add unit tests for this function:\nfunction total(items) {\n  return items.reduce((sum, item) => sum + item.price, 0);\n}",
+        "top_k": 3
+      },
+      {
+        "prompt": "Cover this existing code with tests:\nfunction total(items) {\n  return items.reduce((sum, item) => sum + item.price, 0);\n}",
+        "top_k": 3
       }
     ],
     "negative": [

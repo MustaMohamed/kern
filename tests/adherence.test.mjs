@@ -165,6 +165,8 @@ test('the runner lists its cases in dry-run mode without calling claude', () => 
   for (const id of ['row-diagnose', 'row-define', 'neg-casual', 'neg-kern-off', 'neg-project-skill', 'multi-diagnose']) assert.match(r.stdout, new RegExp(`^${id}: `, 'm'));
   assert.match(r.stdout, /^row-diagnose: positive diagnose on node-bug: "npm test fails on the sum test; fix it."$/m);
   assert.match(r.stdout, /^row-execute-plan: positive execute-plan on node-bug\+approved-spec\+approved-plan: /m);
+  assert.match(r.stdout, /^pasted-diagnose: positive diagnose on node-bug: "This returns the wrong total, fix it:\\n\\n```js\\n\/\/ src\/sum.js\\nexport const sum = \(a, b\) => a - b;\\n```\\n\\nsum\(2, 3\) gives -1, not 5."$/m);
+  assert.match(r.stdout, /^tests-implement: positive implement on node-bug\+sum-fixed: "Add unit tests for this function:\\n\\n```js\\n\/\/ src\/sum.js\\nexport const sum = \(a, b\) => a \+ b;\\n```"$/m);
 });
 
 test('every case names fixture layers that exist, the first one a project', () => {
@@ -175,10 +177,27 @@ test('every case names fixture layers that exist, the first one a project', () =
   }
 });
 
-test('a positive case takes its prompt from the first routing eval of its row', () => {
+test('a positive case takes its prompt from the first routing eval of its row, except the two that paste code', () => {
   const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
-  for (const c of cases.filter((x) => x.kind === 'positive')) assert.equal(c.prompts, undefined, `${c.id} carries its own prompt`);
+  const pasted = ['pasted-diagnose', 'tests-implement'];
+  for (const c of cases.filter((x) => x.kind === 'positive' && !pasted.includes(x.id))) assert.equal(c.prompts, undefined, `${c.id} carries its own prompt`);
   assert.equal(rowPrompt(ROOT, 'diagnose'), JSON.parse(readFileSync(join(ROOT, 'evals', 'cases', 'row-diagnose.json'), 'utf8')).evals[0].prompt);
+  // M2b Task 17, AD47 (t17-lane-4): addy's TDD skill fires on a pasted bug that never says "test", and on a request
+  // for tests on a function; no kern case pasted code. Each case pastes node-bug's sum. tests-implement layers
+  // sum-fixed, so the function it pastes has no bug: a buggy paste would make diagnose the route.
+  assert.deepEqual(cases.find((c) => c.id === 'pasted-diagnose'), {
+    id: 'pasted-diagnose', kind: 'positive', route: 'diagnose', files: ['node-bug'],
+    prompts: ['This returns the wrong total, fix it:\n\n```js\n// src/sum.js\nexport const sum = (a, b) => a - b;\n```\n\nsum(2, 3) gives -1, not 5.'],
+  });
+  assert.doesNotMatch(cases.find((c) => c.id === 'pasted-diagnose').prompts[0], /test/i);
+  assert.deepEqual(cases.find((c) => c.id === 'tests-implement'), {
+    id: 'tests-implement', kind: 'positive', route: 'implement', files: ['node-bug', 'sum-fixed'],
+    prompts: ['Add unit tests for this function:\n\n```js\n// src/sum.js\nexport const sum = (a, b) => a + b;\n```'],
+  });
+  for (const [id, file] of [['pasted-diagnose', 'node-bug'], ['tests-implement', 'sum-fixed']]) {
+    const code = cases.find((c) => c.id === id).prompts[0].match(/```js\n\/\/ src\/sum\.js\n([^\n]*\n)```/)[1];
+    assert.equal(readFileSync(join(ROOT, 'evals', 'fixtures', file, 'src', 'sum.js'), 'utf8'), code, `${id} pastes ${file}'s src/sum.js`);
+  }
 });
 
 test('the inline-rows variant is gone: since Task 16d the routed kernel holds every row itself', () => {

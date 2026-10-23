@@ -10,6 +10,8 @@
   {"id": "row-recall", "kind": "positive", "route": "recall", "files": ["node-bug", "recall-ledger"]},
   {"id": "row-technical-writing", "kind": "positive", "route": "technical-writing", "files": ["node-bug"], "origin": true, "branch": "fix-sum", "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"]},
   {"id": "row-context", "kind": "positive", "route": "context", "route_file": "kernel/context.md", "files": ["node-bug"]},
+  {"id": "pasted-diagnose", "kind": "positive", "route": "diagnose", "files": ["node-bug"], "prompts": ["This returns the wrong total, fix it:\n\n```js\n// src/sum.js\nexport const sum = (a, b) => a - b;\n```\n\nsum(2, 3) gives -1, not 5."]},
+  {"id": "tests-implement", "kind": "positive", "route": "implement", "files": ["node-bug", "sum-fixed"], "prompts": ["Add unit tests for this function:\n\n```js\n// src/sum.js\nexport const sum = (a, b) => a + b;\n```"]},
   {"id": "neg-casual", "kind": "negative", "route": null, "files": ["node-bug"], "prompts": ["What does git rebase --onto do, in one sentence?"]},
   {"id": "neg-codebase-question", "kind": "negative", "route": null, "files": ["node-bug", "two-modules"], "prompts": ["What rate does tax() in src/tax.js apply, and which test checks it?"]},
   {"id": "neg-opt-out", "kind": "negative", "route": null, "files": ["node-bug"], "prompts": ["Without any workflow or skill, just tell me what sum(2, 3) returns in src/sum.js."]},
