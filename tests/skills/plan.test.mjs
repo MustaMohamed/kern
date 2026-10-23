@@ -117,6 +117,22 @@ test('the base names its source, an undetected base is the current branch and is
   assert.ok(tpl.includes('add a regression check that runs the same scenario on base and head, naming the base by branch, never by a SHA no command printed'), 'the template check names the base by branch');
 });
 
+test('the scope limit names its source wherever the plan or the reply states it, and a default is never "your limit"', () => {
+  // 2026-10-23 head-to-head, plan category (task-16-confirming-diagnosis, sections 4 and 6): in 3 of 11 kern task-runs
+  // the grader counted "your limit is 4", "against a threshold of 4" and "over the 4-file PR limit" as unsupported.
+  // `kern-get scope_threshold` had printed nothing, and the 4 came from the Inputs table, which the grader never sees.
+  // Steps 3 and 9 name a verify command's and the base's source (Task 16n); step 7 named none (Task 16q).
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. Wherever the plan or reply states the limit, write `scope_threshold: <n> (kern-get)` when `kern-get scope_threshold` prints a value, else `scope_threshold: 4 (kern default; not set)`, never "your limit" for a default.'), s[7]);
+  // The default the step writes is the Inputs table's.
+  assertContains(SKILL, ['| `scope_threshold` | 4 files | PR size gate |']);
+  // The cuts that paid for these bytes left their text where the steps point: step 3's verify keys in the Inputs
+  // table, step 8's Interfaces and Acceptance forms in task-template.md, step 9's header fields in plan-template.md.
+  assertContains(SKILL, ['| `test.*`, `typecheck`, `lint`, `build` | detected, source printed | task verify commands |']);
+  assertContains('skills/plan/references/task-template.md', ['- Consumes: names and signatures', '- Produces: names, parameters and return types', 'as a leading list of numbers or ranges']);
+  assertContains('skills/plan/references/plan-template.md', ['**Goal:**', '\nspec: ', '\nissue: ', '\nbase: <base branch> (<source>); promotion: <branch chain, or none>\n']);
+});
+
 test('only the user\'s word skips the plan review', () => {
   // 2026-10-22 head-to-head: kern skipped step 11's review in 3 of 6 plan runs, "to save budget" or because "the plan
   // is small"; in one the reviewer's catch, a RED step that runs a real fetch, stayed in the plan. The user's answer:
