@@ -6284,3 +6284,15 @@ The user's answers (2026-10-22):
 **Each package:** test first; run its focused files only; one Opus review; fix rounds; the full `scripts/ci-local` once, in its worktree, before the merge. CHANGELOG and contract lines are written at the merge.
 
 **Done when** P1 to P14 are merged and ci-local passes on main. Then Task 16's one confirming run, asked for first. P15 merges before Task 19.
+
+### Task 16q: One fix round for the head-to-head failures, the user's choice
+
+The confirming run (Task 16, commit 2c44c56) failed the head-to-head plan and review categories on kern defects. The Opus diagnosis, `task-16-confirming-diagnosis.md` in the plan workspace, gives the causes. On 2026-10-23 the user answered "Fix round first" to: "Should 0.4.0 ship with them listed as known limits, or should I do one fix round and rerun them first?" The option read: "One fix round: the plan skill says where its file limit comes from, the review skill gets stricter about what counts as a finding and stops skipping code review, and I fix the grader bug that hides evidence. Then one paid rerun of both comparisons, about 20 minutes, and whatever it shows is final."
+
+Two packages, sharing no file, built in parallel in their own worktrees:
+- **Q1, kern text.** plan step 7 names `scope_threshold`'s source, as steps 3 and 9 name theirs: `scope_threshold: 4 (kern default; not set)`, never "your limit". self-review step 9: a `nit` says how its line fails, and churn, style or "unrelated" with no failure goes under Cleared; an equivalent helper is Cleared, never `pre-existing`. self-review step 3 and step 1: the code-review lane writes nothing, and kern's own package under `kern-dir tmp` is not an edit to the user's files, so a "do not edit files" request skips no lane.
+- **Q2, the head-to-head grader's digest.** A Bash result keeps its head and its tail, as the behave record does. An Agent result drops Claude Code's subagent hand-back frame before its cut, so a reviewer's verdict reaches the grader.
+
+**Exit rule.** Each package gets one Opus review and at most one fix round, then the full `scripts/ci-local` in its worktree and the merge. Then one fresh head-to-head run of plan and review together (`scripts/eval-all --only h2h-plan,h2h-review --no-cache`) on the personal eval account. Whatever it shows is final: a category that still fails is a known limit in the CHANGELOG evidence line and design spec section 14, and Task 17 follows. No other fix task is added.
+
+**Done when** Q1 and Q2 are merged, the rerun has run once, and its result is recorded.
