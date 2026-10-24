@@ -122,9 +122,15 @@ test('the scope limit names its source wherever the plan or the reply states it,
   // the grader counted "your limit is 4", "against a threshold of 4" and "over the 4-file PR limit" as unsupported.
   // `kern-get scope_threshold` had printed nothing, and the 4 came from the Inputs table, which the grader never sees.
   // Steps 3 and 9 name a verify command's and the base's source (Task 16n); step 7 named none (Task 16q).
+  // M2b bfix2 S2 (bfix2-lane-C): Task 16q's `scope_threshold: 4 (kern default; not set)` still drew 2 counts in each
+  // of rounds 155cbad and cd4808a, all in scope-split, each citing a `kern-get scope_threshold` that printed nothing.
+  // `kern-get KEY DEFAULT` prints `<value><TAB><source>` with exit 0, `4<TAB>default` when unset, so the 4 and its
+  // source come from command output the grader sees.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. Wherever the plan or reply states the limit, write `scope_threshold: <n> (kern-get)` when `kern-get scope_threshold` prints a value, else `scope_threshold: 4 (kern default; not set)`, never "your limit" for a default.'), s[7]);
-  // The default the step writes is the Inputs table's.
+  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. Read the limit with `kern-get scope_threshold 4`, which prints its value and source; wherever the plan or reply states it, write `scope_threshold: <value> (<source>)`, never "your limit".'), s[7]);
+  assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');
+  assert.ok(!s[7].includes('(kern-get)'), 'the old source label is gone');
+  // The default the step passes is the Inputs table's.
   assertContains(SKILL, ['| `scope_threshold` | 4 files | PR size gate |']);
   // The cuts that paid for these bytes left their text where the steps point: step 3's verify keys in the Inputs
   // table, step 8's Interfaces and Acceptance forms in task-template.md, step 9's header fields in plan-template.md.
