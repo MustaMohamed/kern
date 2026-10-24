@@ -5,7 +5,8 @@
 #                                     wave<TAB>N<TAB>tasks; tasks in one wave share no file or service
 #        plan-check --files PLAN N    Task N's Files paths, one per line, line ranges removed; a path
 #                                     ending in /** or /* is printed as its directory with a trailing /
-# A file with "### Task N:" headings is a plan; any other file is a spec.
+# A file with "### Task N:" headings is a plan; any other file is a spec. A clean spec with status: draft and
+# no form: short also prints one next: line naming define step 11's spec review, still exit 0.
 # Plan checks: frontmatter; Global Constraints, Review Focus and File map; per task Files, Interfaces
 # (Consumes, Produces), Blocked by, Acceptance and a Run:/Expected: pair; tasks numbered from 1; a task
 # blocked only by earlier tasks; tasks sharing a file or a shared_services entry ordered by Blocked by;
@@ -162,7 +163,10 @@ END {
     else need = "## Problem|## Intent|## Constraints|## Assumptions|## Success criteria|## Acceptance criteria|## Decisions|## Compatibility|## Authorization|## Rollout|## Checklists|## Test seams|## Not doing|## Open questions"
     k = split(need, hs, "|")
     for (i = 1; i <= k; i++) if (!(hs[i] in h2)) problem(1, "missing section " hs[i])
-    exit bad ? 1 : 0
+    if (bad) exit 1
+    # A clean draft full-form spec: define step 11 comes next. Runs that skipped it stopped right after this result.
+    if (st == "draft" && fm["form"] != "short") print "next: define step 11" sq "s spec review (one fresh reviewer subagent), unless it ran for this draft; before you ask for the yes. Only the user naming that review skips it."
+    exit 0
   }
   # A plan.
   st = fm["status"]

@@ -1,7 +1,10 @@
 // tests/skills/implement.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { ROOT, readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { CHECKS } from '../../scripts/lib/behave.mjs';
 
 const SKILL = 'skills/implement/SKILL.md';
 
@@ -32,7 +35,9 @@ test('implement runs define step 1\'s checks for a task with no agreed design, a
   const s = steps(readDoc(SKILL).body);
   // Task 16i review, I1: workflow-define-fast-path adds a double(n) export, and the skills spec expects the fast path
   // for it, so a new export is not a public API change; only a contract callers outside the repo depend on is.
-  assert.ok(s[1].includes('A change to an existing public API (not a new export), stored data or authorization: say so, and ask whether to keep the fast path'), s[1]);
+  // M2b bfix2 S2 (bfix2-lane-A, Fix 2): on 2026-10-24 workflow-define-fast-path-stored-data run 1 said the kernel's
+  // line at turn start, read the exemption as covering the ask too, and renamed the field with no question (0 of 3).
+  assert.ok(s[1].includes('A change to an existing public API (not a new export), stored data or authorization: say so, and ask whether to keep the fast path, even if that line was said;'), s[1]);
   assert.ok(s[2].includes('`wt-new` exit 2: say why and ask'), s[2]);
 });
 
@@ -48,12 +53,22 @@ test('the entry check is step 1 on its own, with a plain condition, and only the
   // M2b bfix K (bfix-lane-3 S1, the user's "Kernel turn-start line", 2026-10-24): at the route read the line was said
   // in 0 of 18 graded runs. The kernel says it before any tool call for a build the user calls quick or whose approval
   // they waive; step 1 points to it, and says it on entering for any other task with no approved design.
+  // M2b bfix2 S2 (bfix2-lane-A, Fix 2): pointing to "the kernel's `Building:` line" lost the form. On 2026-10-24
+  // workflow-define-fast-path run 1 said the line before the edit with "Commands:" in place of "My choices:", so
+  // step 1 spells the kernel's form again.
   const s = steps(readDoc(SKILL).body);
-  assert.match(s[1], /^1\. Entry check, main session only: unless an approved spec or plan covers this change, it fixes a cause diagnose found, or its `Building:` line was said, say the kernel's `Building:` line now; restate a choice your reads change before the first edit\. /);
+  assert.match(s[1], /^1\. Entry check, main session only: unless an approved spec or plan covers this change, it fixes a cause diagnose found, or its `Building:` line was said, say `Building: <what>\. My choices: <each>\.` now; restate a choice your reads change before the first edit\. /);
+  assert.ok(!s[1].includes("the kernel's `Building:` line"), 'the pointer with no form is gone');
   assert.ok(!s[1].includes('after your reads'), 'the old placement is gone');
   assert.ok(!s[1].includes('right after you read this file'), 'the step carries no anchor of its own');
   assertContains('kernel/kernel.md', ['say `Building: <what>. My choices: <each>.`']);
-  assert.ok(s[1].indexOf('`Building:` line now') < s[1].indexOf('A change to an existing public API'), 'the public API, stored data and authorization ask follows the line');
+  // The step's form is the kernel's, and filled in as a run says it, behave's building-line check finds it.
+  const form = s[1].match(/say `(Building: [^`]+)` now/)[1];
+  assert.equal(form, readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8').match(/say `(Building: [^`]+)`/)[1]);
+  const said = form.replace('<what>', '`double(n)` in `src/sum.js`').replace('<each>', 'edit in place');
+  const events = [{ type: 'assistant', message: { content: [{ type: 'text', text: said }, { type: 'tool_use', id: 'e', name: 'Edit', input: { file_path: 'src/sum.js' } }] } }];
+  assert.equal(CHECKS['building-line'](events, {}).pass, true, said);
+  assert.ok(s[1].indexOf('My choices: <each>.` now') < s[1].indexOf('A change to an existing public API'), 'the public API, stored data and authorization ask follows the line');
   assert.ok(!s[1].includes('wt-new'), 'where to edit is not in the entry check');
   assert.match(s[2], /^2\. Pick where to edit\. In a kern worktree, edit there\./);
   assert.match(s[3], /^3\. Resolve `test\.focused`/);

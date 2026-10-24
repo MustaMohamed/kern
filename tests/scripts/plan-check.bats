@@ -121,6 +121,56 @@ says() { printf '%s\n' "$output" | grep -qF -- "$1" || { echo "missing: $1"; ech
   [ "$status" -eq 0 ]
 }
 
+# M2b bfix2 S2 (bfix2-lane-A, Fix 3): in all 7 workflow-define-spec runs since 2026-10-20 that skipped define step 11's
+# review, plan-check was the run's last tool call before it stopped; in all 8 that ran it, plan-check ran before the
+# Agent call and again after the review's fixes. So a clean draft full-form spec gets the next step in that result.
+NEXT="next: define step 11's spec review (one fresh reviewer subagent), unless it ran for this draft; before you ask for the yes. Only the user naming that review skips it."
+full_spec() { # full_spec STATUS APPROVED: a full-form spec with every section the full form needs
+  printf '%s\n' '---' "status: $1" 'form: full' 'date: 2026-10-24' "approved: $2" 'issue: none' '---' '' \
+    '## Problem' '' 'A gap.' '' '## Intent' '## Constraints' '' '- Always: x' '- Ask first: y' '- Never: z' '' '## Assumptions' \
+    '## Success criteria' '## Acceptance criteria' '' '1. a' '' '## Decisions' '## Compatibility' '## Authorization' '## Rollout' \
+    '## Checklists' '## Test seams' '## Not doing' '## Open questions'
+}
+
+@test "a clean draft full-form spec exits 0 with one next: line for define step 11's review" {
+  full_spec draft '(unset until an explicit yes)' > full.md
+  pc full.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "$NEXT" ]
+  [ -z "$stderr" ]
+  # plan-check checks a spec with no form: line as the full form, so it is one here too.
+  grep -v '^form: ' full.md > noform.md
+  pc noform.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "$NEXT" ]
+}
+
+@test "an approved spec, a short-form spec, a parked draft and a plan print no next: line" {
+  full_spec approved '2026-10-24, "yes"' > ok.md
+  pc ok.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  printf '%s\n' '---' 'status: draft' 'form: short' '---' '## Problem' '## Constraints' '- Always: x' '## Acceptance criteria' '1. a' '## Test seams' > short.md
+  pc short.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  full_spec 'draft (parked under autopilot)' '(unset until an explicit yes)' > parked.md
+  pc parked.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  sed 's/^status: approved$/status: draft/' plan.md > draft-plan.md
+  pc draft-plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a draft full-form spec with a problem prints only the problem and exits 1" {
+  full_spec draft '(unset until an explicit yes)' | grep -v '^## Rollout$' > bad.md
+  pc bad.md
+  [ "$status" -eq 1 ]
+  [ "$output" = "bad.md:1: missing section ## Rollout" ]
+}
+
 @test "usage errors exit 2" {
   pc
   [ "$status" -eq 2 ]
