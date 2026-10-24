@@ -349,16 +349,16 @@ for (const t of loadTasks(ROOT).filter((x) => x.category === 'diagnose')) {
 // hit no arm could avoid. Each prompt now states what held-out asserts; a fix that meets it passes held-out and
 // scans clean.
 // attemptOf(t, { files, diff }): t's workspace after an attempt that applies diff (lines) or writes files, with
-// held-out copied in: { heldout: t.test passed, hits: floor-scan's path:line and class for diff, run as h2h runs it:
-// from the workspace, with an empty HOME }.
+// held-out copied in: { heldout: t.test passed, hits: floor-scan's path:line and class }. The hits are for the diff
+// h2h builds after the attempt (`git add -A -N`, then `git diff HEAD`), scanned from the workspace with an empty HOME.
 function attemptOf(t, { files = {}, diff = [] }) {
-  const d = workspace(join(t.dir, 'repo'), { name: t.project || 'app', branch: t.branch || '', setup: t.setup || [] });
+  const d = taskWorkspace(t);
   const home = mkdtempSync(join(tmpdir(), 'fh-'));
   try {
     let hits = [];
     if (diff.length) {
-      writeFileSync(join(dirname(d), 'change.diff'), `${diff.join('\n')}\n`);
-      const ap = sh(d, 'git apply ../change.diff');
+      writeFileSync(join(dirname(d), 'fix.diff'), `${diff.join('\n')}\n`);
+      const ap = sh(d, 'git apply ../fix.diff && git add -A -N && git diff HEAD > ../change.diff');
       assert.equal(ap.status, 0, ap.stderr);
       const scan = spawnSync('bash', [join(ROOT, 'scripts', 'floor-scan'), join(dirname(d), 'change.diff')], { cwd: d, encoding: 'utf8', env: { ...env, HOME: home } });
       assert.ok(scan.status === 0 || scan.status === 1, scan.stderr);
