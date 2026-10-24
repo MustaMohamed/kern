@@ -109,6 +109,28 @@ test('recall says its Scope line right after the read, and every Threads line st
   assert.ok(contract.indexOf('- Threads:') < contract.indexOf('- Problems:'), 'Threads still come before Problems');
 });
 
+// M2b bfix R (bfix-lane-2, recall-1): since Task 16p, 3 of 12 recall-1 and recall-2 runs put a test result, a
+// report's claim or a note on a tag under Threads, untagged or with a tag off the list. The scripted thread-tags
+// check reads the list from the Threads line: every backticked span on it that starts with `[` is one tag, each
+// once, in this order.
+const TAGS = ['[merged #N]', '[open PR #N]', '[in flight <branch>]', '[verified, uncommitted]', '[reverted #N]',
+  '[blocked, <why>]', '[parked]', '[planned, not started]', '[unverified, <source> unavailable]'];
+test('recall keeps one tag list a script can read, and names what is not a thread', () => {
+  const lines = readDoc(SKILL).body.split('\n').filter((l) => l.startsWith('- Threads:'));
+  assert.equal(lines.length, 1, 'one Threads line');
+  assert.deepEqual([...lines[0].matchAll(/`(\[[^`]*\])`/g)].map((m) => m[1]), TAGS);
+  assertOnce(SKILL, ['A test result, a report\'s claim or a note on a tag is not a thread. A line without a tag goes under Problems or Sources skipped.']);
+});
+
+// M2b bfix R (bfix-lane-2, recall-4): since 2026-10-22, 4 of 9 recall-4 runs ran recall-sessions, most to check
+// that the named session exists, before pointing to `claude --resume`. Step 1 runs no command, and a Red flags
+// row answers that thought.
+test('recall points one named session to claude --resume and runs no command', () => {
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].startsWith('1. Route. One named prior session: point to `claude --resume` and stop, running no command. A full state capsule'), s[1]);
+  assertOnce(SKILL, ['| "I\'ll check the session exists first" | Step 1 runs no command. |']);
+});
+
 test('chat reference keeps the ketchup rules', () => {
   const CHAT = 'skills/recall/references/chat.md';
   assertHeadings(CHAT, ['# recall chat', '## Scope', '## Gather', '## Reply']);
