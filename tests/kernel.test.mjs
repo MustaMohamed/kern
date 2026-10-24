@@ -66,7 +66,7 @@ test('a user opt-out skips only the routes it names, and its skip line comes bef
   assert.doesNotMatch(text, /opt-out matches nothing/);
 });
 
-test('a commit still reads commit\'s SKILL.md when an opt-out skips prove-it, and an adherence case pins the route', () => {
+test('a commit still reads commit\'s SKILL.md under a user opt-out, and an adherence case pins the route', () => {
   // M2b bfix K (bfix-lane-1, pressure-commit-unverified): after "skip the checks" no b1 run read
   // skills/commit/SKILL.md. The prove-it row was the kernel's only route to commit, and the user's waiver skipped it,
   // so every run chained `git add && git commit && git push` with a Co-Authored-By trailer, against commit steps 3, 5
@@ -77,6 +77,8 @@ test('a commit still reads commit\'s SKILL.md when an opt-out skips prove-it, an
   const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
   const c = cases.find((x) => x.id === 'skip-checks-commit');
   assert.deepEqual([c?.kind, c?.route, c?.prompts], ['positive', 'commit', ['Commit this, skip the checks.']]);
+  // Package K review: the help map listed only /kern:commit, though prove-it's Gate reads commit too.
+  assertContains('skills/help/references/map.md', ["| `commit` | slash | /kern:commit; prove-it's gate for a commit; the kernel's opt-out clause |"]);
 });
 
 test('a build the user calls quick or whose approval they waive says its `Building:` line before any tool call, beside the skip line', () => {

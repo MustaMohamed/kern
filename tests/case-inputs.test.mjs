@@ -3,9 +3,10 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { blobSha, caseInputs, changedCases, dirHash, rangeSources, skillClosure, skillHashes, touchedSkills, treeSource } from '../scripts/lib/case-inputs.mjs';
 
 const made = [];
@@ -150,6 +151,19 @@ test('skillClosure follows a skill that routes to another by its bare name, as d
   const root = repo();
   write(root, { 'skills/define/SKILL.md': skill('define', 'A quick change: route to implement. An agreed spec routes to `plan`.'), 'skills/implement/SKILL.md': skill('implement', 'Build it.') });
   assert.deepEqual(skillClosure(treeSource(root), ['define']), ['define', 'implement', 'plan']);
+});
+
+test('define\'s own files name implement in a form the closure sees, not only through plan', () => {
+  // M2b bfix K review, Minor 5: define step 1 ends "Then Read implement's SKILL.md.", which matches no closure
+  // pattern (skills/<n>/, kern:<n>, "route(s|d) to <n>"). Only step 9's "The kernel then routes to implement." names
+  // implement directly; plan's step 1 names it too, so the real closure would keep implement if step 9 lost it. Here
+  // define's real folder sits beside a stub of every other kern skill, so implement must come from define itself.
+  const top = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const root = repo();
+  rmSync(join(root, 'skills'), { recursive: true, force: true });
+  cpSync(join(top, 'skills', 'define'), join(root, 'skills', 'define'), { recursive: true });
+  write(root, Object.fromEntries(readdirSync(join(top, 'skills')).filter((n) => n !== 'define').map((n) => [`skills/${n}/SKILL.md`, skill(n)])));
+  assert.ok(skillClosure(treeSource(root), ['define']).includes('implement'), JSON.stringify(skillClosure(treeSource(root), ['define'])));
 });
 
 test('touchedSkills names each kern skill a run\'s tool calls read or called, and skillHashes gives each skill\'s hash', () => {
