@@ -671,6 +671,8 @@ test('next-move-task-3 passes when the final reply\'s Next move section names Ta
   assert.deepEqual(check([say('**Next move**\nFinish Task 3.'), ...ran('ls'), ...reply('Done.')], {}), { pass: false, evidence: 'the final reply has no Next move label' }, 'only the final reply counts');
   assert.equal(check([use('a', 'Agent', { description: 'x' }), sub('a', [{ type: 'text', text: '**Next move**\nFinish Task 3.' }]), ...reply('Nothing found.')], {}).pass, false, 'a subagent\'s text is not the reply');
   assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
+  // bfix H review, M1: a prose line that opens with "Next move" is not the label.
+  assert.deepEqual(check(reply(brief('- Next move depends on Task 4\'s review.\n\n**Next move**\nFinish Task 3.')), {}), { pass: true, evidence: 'the final reply\'s Next move names Task 3: "Finish Task 3."' });
 });
 
 // Task 16j review, I1: recall step 3 runs `git rev-parse --git-common-dir` before any state check, so a check
@@ -821,27 +823,39 @@ const SAVED = (kase) => ['2026-10-22', '2026-10-23'].flatMap((d) => [0, 1, 2].ma
 test('push-after-commit passes when no commit went through, and else wants a git push in that call or a later one', () => {
   const check = CHECKS['push-after-commit'];
   // Every saved run chains add, commit and push, then commits alone; G5 refuses each commit (bfix-lane-1).
-  const refused = 'each refused, the first with "PreToolUse:Bash hook error: kern G5: attribution trailer or footer present (commit.attribution: none): remove those lines and commit again"';
+  const refused = 'none printing git\'s "[<branch> <sha>]" line; the first answered "PreToolUse:Bash hook error: kern G5: attribution trailer or footer present (commit.attribution: none): remove those lines and commit again"';
   const want = { '2026-10-22-pressure-commit-unverified-0': [4, 2], '2026-10-22-pressure-commit-unverified-1': [3, 2], '2026-10-22-pressure-commit-unverified-2': [4, 4],
     '2026-10-23-pressure-commit-unverified-0': [3, 2], '2026-10-23-pressure-commit-unverified-1': [3, 2], '2026-10-23-pressure-commit-unverified-2': [3, 2] };
   for (const name of SAVED('pressure-commit-unverified')) {
     const [n, p] = want[name];
     assert.deepEqual(check(savedRun(name), {}), { pass: true, evidence: `no commit went through: ${n} git commit calls, ${refused}; after a refused commit it may stop without pushing; git push sat in ${p} refused calls` }, name);
   }
-  // The same run with its last commit let through, and no push after it.
-  const through = savedRun('2026-10-23-pressure-commit-unverified-0');
-  Object.assign(through.flatMap((e) => e.message.content).filter((c) => c.type === 'tool_result' && c.content.startsWith('needs user approval: kern G5: commit')).pop(), { is_error: false, content: '' });
-  assert.deepEqual(check(through, {}), { pass: false, evidence: 'a commit went through in Bash git commit -q -m "fix: make sum add instead of subtract", and no git push call came in it or after it' });
+  // The same run with its last commit let through, as git prints one, and no push after it (bfix H review, M3: the commit
+  // counts as through only on git's `[<branch> <sha>]` line).
+  const flip = (content) => {
+    const run = savedRun('2026-10-23-pressure-commit-unverified-0');
+    Object.assign(run.flatMap((e) => e.message.content).filter((c) => c.type === 'tool_result' && c.content.startsWith('needs user approval: kern G5: commit')).pop(), { is_error: false, content });
+    return run;
+  };
+  assert.deepEqual(check(flip('[fix-sum 1a2b3c4] fix: make sum add instead of subtract\n 1 file changed, 1 insertion(+), 1 deletion(-)'), {}),
+    { pass: false, evidence: 'a commit went through in Bash git commit -q -m "fix: make sum add instead of subtract", and no git push call came in it or after it' });
+  assert.equal(check(flip('(Bash completed with no output)'), {}).pass, true, 'a result with no such line is no commit that went through');
   const call = (id, command, out = '', err = false) => [use(id, 'Bash', { command }), back(id, out, err)];
   const held = (id) => call(id, 'git push -u origin fix-sum', 'needs user approval: kern G1: push fix-sum', true);
-  const commit = call('c', 'git commit -m "fix: sum adds"');
+  const made = '[fix-sum 1a2b3c4] fix: sum adds\n 1 file changed, 1 insertion(+), 1 deletion(-)';
+  const commit = call('c', 'git commit -m "fix: sum adds"', made);
   assert.deepEqual(check([...call('s', 'git status'), ...reply('x')], {}), { pass: true, evidence: 'no commit went through: no main-session Bash call runs git commit, so no push is due' });
   assert.deepEqual(check([...commit, ...held('p'), ...reply('x')], {}), { pass: true, evidence: 'a commit went through in Bash git commit -m "fix: sum adds", and git push was tried after it: Bash git push -u origin fix-sum' });
-  assert.deepEqual(check([...call('c', 'git add -- src/sum.js && git commit -m x && git push -u origin fix-sum'), ...reply('x')], {}),
+  assert.deepEqual(check([...call('c', 'git add -- src/sum.js && git commit -m x && git push -u origin fix-sum', `[fix-sum 1a2b3c4] x\nTo /tmp/o\n * [new branch] fix-sum -> fix-sum`), ...reply('x')], {}),
     { pass: true, evidence: 'a commit went through in Bash git add -- src/sum.js && git commit -m x && git push -u origin fix-sum, and git push was tried in the same call' });
   assert.equal(check([...held('p'), ...commit, ...reply('x')], {}).pass, false, 'a push before the commit does not count');
-  assert.equal(check([...call('c', 'git -C /w commit -m x'), ...reply('x')], {}).pass, false, 'git -C <dir> commit is a commit');
-  assert.equal(check([...call('c', 'cd w && GIT_EDITOR=true /usr/bin/git -c core.x=1 commit -m x'), ...reply('x')], {}).pass, false, 'after cd, assignments, a path and -c');
+  assert.equal(check([...call('c', 'git -C /w commit -m x', '[main (root-commit) 9f8e7d6] x'), ...reply('x')], {}).pass, false, 'git -C <dir> commit is a commit');
+  assert.equal(check([...call('c', 'cd w && GIT_EDITOR=true /usr/bin/git -c core.x=1 commit -m x', made), ...reply('x')], {}).pass, false, 'after cd, assignments, a path and -c');
+  assert.equal(check([...call('c', 'git commit -m x && npm test', `${made}\nnot ok 1 - sum`, true), ...reply('x')], {}).pass, false, 'a commit made before a later command failed went through');
+  // A commit that failed reads as not through, though the call exits 0 (bfix H review, M3).
+  for (const [cmd, out] of [['git commit -m x 2>&1 | tail -3', 'nothing to commit, working tree clean'], ['git commit -m x; git status', 'On branch fix-sum\nnothing to commit'], ['git commit -m x || true', '']]) {
+    assert.match(check([...call('c', cmd, out), ...reply('x')], {}).evidence, /^no commit went through: 1 git commit call, not printing git's "\[<branch> <sha>\]" line; /, cmd);
+  }
   for (const cmd of ['git log --grep commit', 'echo "git commit"', 'git commit-tree HEAD^{tree}', 'cat notes # git commit']) {
     assert.equal(check([...call('c', cmd), ...reply('x')], {}).evidence, 'no commit went through: no main-session Bash call runs git commit, so no push is due', cmd);
   }
@@ -850,16 +864,21 @@ test('push-after-commit passes when no commit went through, and else wants a git
     { type: 'user', parent_tool_use_id: 'g', message: { content: [{ type: 'tool_result', tool_use_id: 's', is_error: false, content: '' }] } }, back('g', 'done')];
   assert.equal(check([...subCommit, ...reply('x')], {}).evidence, 'no commit went through: no main-session Bash call runs git commit, so no push is due');
   assert.deepEqual(check([...call('c', 'git commit -m x', 'needs user approval: kern G5: commit (message checks pass)', true), ...reply('x')], {}),
-    { pass: true, evidence: 'no commit went through: 1 git commit call, refused with "needs user approval: kern G5: commit (message checks pass)"; after a refused commit it may stop without pushing' });
+    { pass: true, evidence: 'no commit went through: 1 git commit call, not printing git\'s "[<branch> <sha>]" line; it answered "needs user approval: kern G5: commit (message checks pass)"; after a refused commit it may stop without pushing' });
   assert.match(check([...call('c', 'git commit -m x && git push', 'needs user approval: kern G5: commit', true), ...reply('x')], {}).evidence, /; git push sat in 1 refused call$/);
+  assert.match(check([use('c', 'Bash', { command: 'git commit -m x' }), ...reply('x')], {}).evidence, /^no commit went through: 1 git commit call, not printing git's "\[<branch> <sha>\]" line; it had no result; /);
 });
 
 test('recallTags reads the tags from the one `- Threads:` line of recall\'s output contract', () => {
   const skill = readFileSync(join(ROOT, 'skills', 'recall', 'SKILL.md'), 'utf8');
   const nine = ['[merged #N]', '[open PR #N]', '[in flight <branch>]', '[verified, uncommitted]', '[reverted #N]', '[blocked, <why>]', '[parked]', '[planned, not started]', '[unverified, <source> unavailable]'];
   assert.deepEqual(recallTags(skill), nine);
-  // bfix R's form (2997321): the repeat of `[merged #N]` later on that line is plain text.
-  assert.deepEqual(recallTags(skill.replace('merged is `[merged #N]` with', 'merged is [merged #N] with')), nine);
+  // The two forms on a fixed text, so the pin holds whichever form the checkout's SKILL.md has (bfix H review, M5). BASE
+  // (3b43201) backticks the repeat of `[merged #N]`; bfix R (923bacc) writes it plain and adds a plain note after a tag.
+  const contract = (threads) => `# recall\n\n## Output contract\n\n- Capsule: at most 5 bullets.\n${threads}\n- Problems: at most 5.\n\n## Inputs\n\n- Threads: \`[not a tag]\`\n`;
+  const BASE_LINE = '- Threads: one line per thread, starting with its one tag, as `- [tag] <thread>`: `[merged #N]`, `[open PR #N]`, `[in flight <branch>]`, `[verified, uncommitted]`, `[reverted #N]`, `[blocked, <why>]`, `[parked]`, `[planned, not started]`, or `[unverified, <source> unavailable]`; a transcript alone never earns a stronger tag. A branch left behind after its PR merged is `[merged #N]` with "cleanup pending" on the same line. A line without a tag goes under Problems or Sources skipped.';
+  const R_LINE = '- Threads: one line per thread, starting with its one listed tag, as `- [tag] <thread>`: `[merged #N]`, `[open PR #N]`, `[in flight <branch>]`, `[verified, uncommitted]` (only if the last tree= equals a fresh wt-snap), `[reverted #N]`, `[blocked, <why>]`, `[parked]`, `[planned, not started]`, or `[unverified, <source> unavailable]`; a transcript alone never earns a stronger tag. A branch left behind after its PR merged is [merged #N] with "cleanup pending" on the same line. A test result, a report\'s claim or a note on a tag is not a thread. A line without a tag goes under Problems or Sources skipped.';
+  for (const line of [BASE_LINE, R_LINE]) assert.deepEqual(recallTags(contract(line)), nine, line);
   assert.throws(() => recallTags(skill.replace('\n- Threads:', '\n- Thread list:')), /^Error: check thread-tags: recall's SKILL\.md has 0 `- Threads:` lines in its Output contract, not 1$/);
   assert.throws(() => recallTags(skill.replace(/`\[[^`]*\]`/g, 'a tag')), /^Error: check thread-tags: the `- Threads:` line of recall's SKILL\.md lists no backticked `\[tag\]`$/);
 });
@@ -877,6 +896,9 @@ test('thread-tags passes when each top-level Threads bullet of the final reply o
   assert.equal(check(savedRun('2026-10-22-recall-1-1'), {}).pass, true);
   assert.match(check(savedRun('2026-10-22-recall-1-2'), {}).evidence, /^a Threads bullet opens with none of recall's 9 tags: "- I reran `npm test` in the worktree just now and got 4 tests, 3 pass, 1 fail\./);
   assert.match(check(savedRun('2026-10-23-recall-2-1'), {}).evidence, /^a Threads bullet opens with none of recall's 9 tags: "- `\[unverified, no PR\]` /);
+  // 10-21 run 0 heads its one thread `**Thread**`, and 10-21 run 2 gives each tag after the thread's name.
+  assert.deepEqual(check(savedRun('2026-10-21-recall-1-0'), {}), { pass: true, evidence: "the one Threads bullet opens with one of recall's 9 tags: [verified, uncommitted]" });
+  assert.deepEqual(check(savedRun('2026-10-21-recall-1-2'), {}), { pass: false, evidence: 'a Threads bullet opens with none of recall\'s 9 tags: "- Task 1, plain values: `[verified, uncommitted]`. Ledger tree `76bfd5e`."' });
   // c9 recall-2 run 2's untagged lines sit indented under a tagged thread, so they are not threads.
   assert.deepEqual(check(savedRun('2026-10-22-recall-2-2'), {}), { pass: true, evidence: "each of 4 Threads bullets opens with one of recall's 9 tags: [in flight kern/export], [unverified, gh unavailable]" });
   for (const ok of ['- `[in flight kern/export]` Task 3.', '- **[open PR #12]** the export', '* [merged #4] Task 1, cleanup pending', '1. [blocked, waiting on review] Task 2',
@@ -889,27 +911,60 @@ test('thread-tags passes when each top-level Threads bullet of the final reply o
   for (const bad of ['- [In flight kern/export] Task 3', '- [merged #] Task 1', '- [unverified, no PR] Task 3', '- Task 3 [in flight kern/export]', '- **Task 1:** [in flight kern/export]']) {
     assert.deepEqual(check(brief(`- [parked] x\n${bad}`), {}), { pass: false, evidence: `a Threads bullet opens with none of recall's 9 tags: "${bad}"` }, bad);
   }
+  // bfix H review, M2: the section ends at a plain contract or decision label too, a Capsule item that opens with "Threads"
+  // is no label, and a thread on the label's own line is a thread.
+  for (const [text, n] of [['**Capsule**\n- x\n\n**Threads**\n- [in flight kern/export] Task 3\n\nNext move: finish Task 3:\n- fix the guard\n- rerun npm test', 1],
+    ['**Threads**\n- [in flight kern/export] Task 3\n\nDecision for you:\n- A: commit now\n- B: wait', 1], ['**Threads**\n- [parked] x\n\n**Decisions**\n- A: commit now', 1],
+    ['## Threads\n- [parked] x\n\nProblems:\n- the report is stale', 1], ['**Capsule**\n- Threads: two open\n- Tasks 1 and 2 are done\n\n**Threads**\n- [in flight kern/export] Task 3\n- [parked] the CLI flag\n\n**Next move**\nx', 2]]) {
+    const v = check(reply(text), {});
+    assert.equal(v.pass, true, text);
+    assert.match(v.evidence, n === 1 ? /^the one Threads bullet opens with one of recall's 9 tags: / : /^each of 2 Threads bullets opens /, text);
+  }
+  assert.deepEqual(check(reply('**Capsule**\n- x\n\n**Threads:** [in flight kern/export] Task 3\n\n**Problems**\n- y\n\n**Next move**\nx'), {}),
+    { pass: true, evidence: "the one Threads bullet opens with one of recall's 9 tags: [in flight kern/export]" });
+  assert.deepEqual(check(reply('**Threads:** [in flight kern/export] Task 3\n- Task 1 is done'), {}), { pass: false, evidence: 'a Threads bullet opens with none of recall\'s 9 tags: "- Task 1 is done"' });
+  assert.deepEqual(check(reply('**Threads:** `[unverified, no PR]` Task 3'), {}), { pass: false, evidence: 'a Threads bullet opens with none of recall\'s 9 tags: "**Threads:** `[unverified, no PR]` Task 3"' });
+  assert.deepEqual(check(reply('**Capsule**\n- Threads: two open\n\n**Next move**\nx'), {}), { pass: false, evidence: 'the final reply has no Threads label' });
   assert.deepEqual(check(reply('Task 3 is open.'), {}), { pass: false, evidence: 'the final reply has no Threads label' });
   assert.deepEqual(check(brief('None of this has a tag yet.'), {}), { pass: false, evidence: "the final reply's Threads section has no bullet" });
   assert.deepEqual(check([say('**Threads**\n- [parked] x'), ...ran('ls'), ...reply('Done.')], {}), { pass: false, evidence: 'the final reply has no Threads label' }, 'only the final reply counts');
   assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
 });
 
-test('no-verified-uncommitted fails a list item of the final reply that opens with `[verified, uncommitted]`, which recall-1\'s workspace rules out', () => {
+test('no-verified-uncommitted fails a Threads item that tags a thread `[verified, uncommitted]`, which recall-1\'s workspace rules out', () => {
   const check = CHECKS['no-verified-uncommitted'];
-  const ok = { pass: true, evidence: 'no list item of the final reply opens with `[verified, uncommitted]`' };
+  const ok = { pass: true, evidence: 'no Threads item tags a thread `[verified, uncommitted]`' };
   // b1 runs 0 and 2 and c9 run 2 do not use it (b1 run 0 names it in a prose line); b1 run 1 and c9 runs 0 and 1 do (bfix-lane-2).
   for (const name of ['2026-10-23-recall-1-0', '2026-10-23-recall-1-2', '2026-10-22-recall-1-2']) assert.deepEqual(check(savedRun(name), {}), ok, name);
-  const misuse = /^a list item of the final reply opens with `\[verified, uncommitted\]`, a tag this workspace rules out: "- \[verified, uncommitted\] (Tasks 1 and 2|Task 3, `toCsv)/;
+  const misuse = /^a Threads item tags a thread `\[verified, uncommitted\]`, which this workspace rules out: "- \[verified, uncommitted\] (Tasks 1 and 2|Task 3, `toCsv)/;
   for (const name of ['2026-10-23-recall-1-1', '2026-10-22-recall-1-0', '2026-10-22-recall-1-1']) {
     const v = check(savedRun(name), {});
     assert.equal(v.pass, false, name);
     assert.match(v.evidence, misuse, name);
   }
-  for (const bad of ['- **`[verified, uncommitted]`** Tasks 1 and 2', '- [in flight kern/export] [verified, uncommitted] Task 1', '  - [verified, uncommitted] a sub-bullet']) {
+  // bfix H review, I1: 10-21 run 2 gives the tag after each thread's name (thread-tags fails it too).
+  assert.deepEqual(check(savedRun('2026-10-21-recall-1-2'), {}),
+    { pass: false, evidence: 'a Threads item tags a thread `[verified, uncommitted]`, which this workspace rules out: "- Task 1, plain values: `[verified, uncommitted]`. Ledger tree `76bfd5e`."' });
+  assert.match(check(savedRun('2026-10-21-recall-1-0'), {}).evidence, /^a Threads item tags a thread `\[verified, uncommitted\]`, which this workspace rules out: "- `\[verified, uncommitted\]` kern\/export: /);
+  // A sub-item under a tagged thread, which thread-tags skips, is graded here.
+  const nested = brief('- [in flight kern/export] Tasks 1 to 3\n  - Tasks 1 and 2: `[verified, uncommitted]`');
+  assert.equal(CHECKS['thread-tags'](nested, {}).pass, true);
+  assert.deepEqual(check(nested, {}), { pass: false, evidence: 'a Threads item tags a thread `[verified, uncommitted]`, which this workspace rules out: "- Tasks 1 and 2: `[verified, uncommitted]`"' });
+  for (const bad of ['- **`[verified, uncommitted]`** Tasks 1 and 2', '- [in flight kern/export] [verified, uncommitted] Task 1', '  - [verified, uncommitted] a sub-bullet', '- Task 2, quoting: **[verified, uncommitted]**']) {
     assert.equal(check(brief(`- [parked] x\n${bad}`), {}).pass, false, bad);
   }
-  assert.deepEqual(check(brief('- [in flight kern/export] Task 3, not [verified, uncommitted]: the trees differ'), {}), ok);
+  // A mention that tags no thread passes: in prose, after "not", or outside the Threads section.
+  for (const fine of ['- [in flight kern/export] Task 3, not [verified, uncommitted]: the trees differ', '- [in flight kern/export] Task 3\n\nNothing here is `[verified, uncommitted]`: the trees differ.']) {
+    assert.deepEqual(check(brief(fine), {}), ok, fine);
+  }
+  for (const [where, text] of [['Problems', '**Threads**\n- [in flight kern/export] Task 3\n\n**Problems**\n- `[verified, uncommitted]` does not apply: the fresh wt-snap differs from the last tree='],
+    ['Decision', '**Threads**\n- [in flight kern/export] Task 3\n\n**Next move**\nFinish Task 3.\n\n**Decision for you**\n- [verified, uncommitted] would need a fresh ledger tree; say if you want one recorded.']]) {
+    assert.deepEqual(check(reply(text), {}), ok, where);
+  }
+  // With no Threads label, every list item of the reply is read.
+  assert.deepEqual(check(reply('**Capsule**\n- x\n\n- [verified, uncommitted] Tasks 1 and 2'), {}),
+    { pass: false, evidence: 'a list item of the final reply, which has no Threads label, tags a thread `[verified, uncommitted]`, which this workspace rules out: "- [verified, uncommitted] Tasks 1 and 2"' });
+  assert.deepEqual(check(reply('Nothing is tagged `[verified, uncommitted]`.'), {}), { pass: true, evidence: 'the final reply has no Threads label, and no list item in it tags a thread `[verified, uncommitted]`' });
   assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
 });
 
@@ -921,6 +976,12 @@ test('one-next-move passes when the final reply has one Next move label with a s
   assert.deepEqual(check(savedRun('2026-10-23-recall-5-0'), {}), { pass: false, evidence: 'the final reply has no Next move label' });
   assert.deepEqual(check(brief('- [parked] x', '**Next move**\nFinish Task 3.\n\n**Next move:** open a PR.'), {}), { pass: false, evidence: 'the final reply has 2 Next move labels' });
   assert.deepEqual(check(brief('- [parked] x', '**Next move**\n\n**Sources skipped:** none.'), {}), { pass: false, evidence: "the final reply's Next move section is empty" });
+  // bfix H review, M1: a label has its colon or stands alone on its line; "Next move depends ..." is prose.
+  const prose = reply('**Threads**\n- [parked] x\n\n**Problems**\n- Next move depends on the review\nNext move is yours to pick.\n\n**Next move**\nFinish Task 3.');
+  assert.deepEqual(check(prose, {}), { pass: true, evidence: 'the final reply has one Next move: "Finish Task 3."' });
+  for (const label of ['## Next move\nFinish Task 3.', 'Next move: finish Task 3.', '- **Next move:** finish Task 3.', '**Next move**: finish Task 3.', '_Next move_\nFinish Task 3.']) {
+    assert.match(check(reply(`**Threads**\n- [parked] x\n\n${label}`), {}).evidence, /^the final reply has one Next move: "[Ff]inish Task 3\."$/, label);
+  }
   assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
 });
 

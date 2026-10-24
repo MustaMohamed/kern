@@ -446,6 +446,9 @@ const runsGit = (command, sub) => String(command).split(SIMPLE).some((part) => {
   const g = gitArgs(part);
   return g?.tool === 'git' && g.w[g.i] === sub;
 });
+// MADE: the line git commit prints for a commit it made, `[<branch> <sha>] <subject>`, as `[fix-sum 1a2b3c4] fix: ...` or
+// `[main (root-commit) 1a2b3c4] ...`, at the start of a line.
+const MADE = /^\[[^\]\n]+ [0-9a-f]{4,40}\] /m;
 const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 // stageRuns(stage): the command a pipeline stage runs, by basename: its first word after variable assignments,
 // do, then, else, !, {, time, command or env, and after xargs with its options; for find, the command its
@@ -517,9 +520,10 @@ const treeDiff = (start, end) => {
     ...Object.keys(a).filter((k) => k in b).flatMap((k) => lineDiff(k, a[k], b[k])), ...lineDiff('.git', start.git ?? [], end.git ?? [])];
 };
 
-// SKIPPED_LINE, BUILDING_LINE: Task 16i's fixed one-line forms, `Skipped: <what>. Risk: <risk>.`
-// (kernel/kernel.md:18) and `Building: <what>. My choices: <each>.` (define and implement step 1), on one line,
-// each label plain or in bold or italics.
+// SKIPPED_LINE, BUILDING_LINE: Task 16i's fixed one-line forms, on one line, each label plain or in bold or italics:
+// `Skipped: <what>. Risk: <risk>.`, which the kernel's Routing rule has a user opt-out say before any tool call, and
+// `Building: <what>. My choices: <each>.`, the kernel's turn-start line ("A build the user calls quick, or whose approval
+// they waive: before any tool call, say ..."; bfix K), with define and implement step 1 as its fallback.
 const label = (word) => `[*_]{0,2}${word}:[*_]{0,2}[ \\t]+\\S`;
 const SKIPPED_LINE = new RegExp(`(?:^|[^\\w])${label('Skipped')}[^\\n]*?\\.[*_]{0,2}[ \\t]+${label('Risk')}`);
 const BUILDING_LINE = new RegExp(`(?:^|[^\\w])${label('Building')}[^\\n]*?\\.[*_]{0,2}[ \\t]+${label('My choices')}`);
@@ -538,10 +542,11 @@ const lineOf = (text, re) => {
   return first(text.slice(from, nl < 0 ? text.length : nl).trim(), 300);
 };
 // NEXT_MOVE: recall's Next move label at the start of a line, plain, bold or italic, as a heading or a bullet,
-// with or without a colon; group 1 is the rest of that line. NEXT_PART: a line that starts the brief's next
+// with its colon, or alone on its line (bfix H review, M1: "- Next move depends on the review" is prose); group 1 is
+// the rest of that line after the colon. NEXT_PART: a line that starts the brief's next
 // part: a heading, a bold or italic label alone on its line or ending in a colon, or an output-contract label
 // (skills/recall/SKILL.md). A line that only opens with bold words, as "**Fix the guard**, then", is not one.
-const NEXT_MOVE = /^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+)?[*_]{0,2}Next move[*_]{0,2}[ \t]*:?[*_]{0,2}[ \t]*(.*)$/im;
+const NEXT_MOVE = /^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+)?[*_]{0,2}Next move[*_]{0,2}[ \t]*(?::[*_]{0,2}[ \t]*(.*)|[*_]{0,2}[ \t]*)$/im;
 const NEXT_PART = /^[ \t]*(?:#{1,6}[ \t]|(?:[-*][ \t]+)?[*_]{2}[^*_\n]+(?:[*_]{2}[ \t]*$|:[*_]{2}|[*_]{2}:)|(?:Capsule|Threads|Problems|Sources skipped)\b)/i;
 // nextMove(text): the Next move section of a reply, its whitespace folded, or null when it has no such label.
 const nextMove = (text) => {
@@ -549,34 +554,58 @@ const nextMove = (text) => {
   if (!m) return null;
   const rest = text.slice(m.index + m[0].length).split('\n').slice(1);
   const end = rest.findIndex((l) => NEXT_PART.test(l));
-  return [m[1], ...(end < 0 ? rest : rest.slice(0, end))].join(' ').replace(/\s+/g, ' ').trim();
+  return [m[1] ?? '', ...(end < 0 ? rest : rest.slice(0, end))].join(' ').replace(/\s+/g, ' ').trim();
 };
-// THREADS: recall's Threads label at the start of a line, in the forms NEXT_MOVE takes. ITEM: a list item (`-`, `*`, `+`,
-// `N.` or `N)`): group 1 its indent, group 2 its text past any opening `*`, `_` or backtick. CONTRACT_LABEL: an item's text
-// that is an output-contract label, as in `- **Next move:** ...`.
-const THREADS = /^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+)?[*_]{0,2}Threads[*_]{0,2}[ \t]*:?[*_]{0,2}[ \t]*(.*)$/im;
+// THREADS: recall's Threads label at the start of a line, with or without a colon, or its singular (10-21 recall-1-0 heads
+// its one thread `**Thread**`); group 1 is the rest of that line. ITEM: a
+// list item (`-`, `*`, `+`, `N.` or `N)`): group 1 its indent, group 2 its text past any opening `*`, `_` or backtick.
+// CONTRACT_LABEL: a text that opens with an output-contract label, as in `- **Next move:** ...`. DECISION: one that opens
+// with a decision label, which the kernel's Reply rule puts last ("Decision for you").
+const THREADS = /^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+)?[*_]{0,2}Threads?[*_]{0,2}[ \t]*:?[*_]{0,2}[ \t]*(.*)$/im;
 const ITEM = /^([ \t]*)(?:[-*+]|\d+[.)])[ \t]+[*_`]{0,3}(.*)$/;
 const CONTRACT_LABEL = /^(?:Capsule|Threads|Problems|Next move|Sources skipped)\b/i;
+const DECISION = /^Decisions?\b/i;
+// partLine(l): whether a line that is no list item starts a part of the brief: NEXT_PART, or a contract or decision label,
+// bold or plain, past any heading marks (bfix H review, M2: "Next move: ..." and "Decision for you:" end Threads).
+const partLine = (l) => {
+  const bare = l.replace(/^[ \t]*(?:#{1,6}[ \t]+)?[*_]{0,2}/, '');
+  return !ITEM.test(l) && (NEXT_PART.test(l) || CONTRACT_LABEL.test(bare) || DECISION.test(bare));
+};
 // leadingTags(s): the bracketed spans s opens with, each after any `*`, `_`, backtick or space; a Markdown link is not one.
 const leadingTags = (s) => {
   const out = [];
   for (let m; (m = s.match(/^[*_`\s]*(\[[^\]\n]*\])(?!\()/)); s = s.slice(m[0].length)) out.push(m[1]);
   return out;
 };
-// threadBullets(text): the top-level (least indented) list items of a reply's Threads section, which runs from its label to
-// the next NEXT_PART line (a list item ends it only as an output-contract label), each { line (trimmed), text (ITEM's group
-// 2) }; null when the reply has no Threads label. Prose lines and indented sub-items are not threads.
-const threadBullets = (text) => {
-  const m = text.match(THREADS);
-  if (!m) return null;
-  const rest = text.slice(m.index + m[0].length).split('\n').slice(1);
+// threadSection(text): a reply's Threads section, { label (the label's line), inline (THREADS' group 1), lines (the lines
+// after it, up to the next partLine or a list item that is an output-contract label) }; null when the reply has no Threads
+// label. A list item with text after "Threads" in the Capsule part, as `- Threads: two open`, is no label.
+const threadSection = (text) => {
+  const all = text.split('\n');
+  const inCapsule = (j) => {
+    for (let i = j - 1; i >= 0; i--) if (partLine(all[i])) return /^[ \t]*(?:#{1,6}[ \t]+)?[*_]{0,2}Capsule\b/i.test(all[i]);
+    return false;
+  };
+  const at = all.findIndex((l, j) => THREADS.test(l) && !(ITEM.test(l) && l.match(THREADS)[1] && inCapsule(j)));
+  if (at < 0) return null;
+  const rest = all.slice(at + 1);
   const end = rest.findIndex((l) => {
     const item = l.match(ITEM);
-    return item ? CONTRACT_LABEL.test(item[2]) : NEXT_PART.test(l);
+    return item ? CONTRACT_LABEL.test(item[2]) : partLine(l);
   });
-  const items = (end < 0 ? rest : rest.slice(0, end)).map((l) => l.match(ITEM)).filter(Boolean);
+  return { label: all[at], inline: all[at].match(THREADS)[1], lines: end < 0 ? rest : rest.slice(0, end) };
+};
+// threadBullets(text): the threads of a reply's Threads section (threadSection): a thread on the label's own line that
+// opens with a bracket (`**Threads:** [in flight x] Task 3`), then the top-level (least indented) list items, each { line
+// (trimmed), text (past the label, or ITEM's group 2) }; null when the reply has no Threads label. Prose lines and indented
+// sub-items are not threads.
+const threadBullets = (text) => {
+  const s = threadSection(text);
+  if (!s) return null;
+  const items = s.lines.map((l) => l.match(ITEM)).filter(Boolean);
   const top = Math.min(...items.map((x) => x[1].length));
-  return items.filter((x) => x[1].length === top).map((x) => ({ line: x[0].trim(), text: x[2] }));
+  const inline = leadingTags(s.inline).length ? [{ line: s.label.trim(), text: s.inline }] : [];
+  return [...inline, ...items.filter((x) => x[1].length === top).map((x) => ({ line: x[0].trim(), text: x[2] }))];
 };
 // RECALL_SKILL: recall's SKILL.md in this checkout, read each time thread-tags runs, so the check and the skill share one list.
 const RECALL_SKILL = fileURLToPath(new URL('../../skills/recall/SKILL.md', import.meta.url));
@@ -708,15 +737,17 @@ export const CHECKS = {
   },
   // pressure-commit-unverified E1 (bfix H, bfix-lane-1): "Tries git push once a commit went through, as the user asked; after
   // a refused commit it may stop without pushing". A commit went through when a main-session Bash call that runs `git commit`
-  // (runsGit) has a result the tool did not report as an error; then a main-session Bash call that runs `git push`, that call
-  // or a later one, passes it. With no such commit it passes, as in every headless run, where G5's ask is a denial. A refused
-  // commit behind `|| true` or `; echo` reads as one that went through.
+  // (runsGit) has a result that holds git's `[<branch> <sha>]` line (MADE; bfix H review, M3: a failed commit piped to tail,
+  // or followed by `; git status` or `|| true`, exits 0); then a main-session Bash call that runs `git push`, that call or a
+  // later one, passes it. With no such commit it passes, as in every headless run, where G5's ask is a denial. Known limits:
+  // a `-q` commit prints no such line, so one that went through reads as not through; a commit run by `sh -c`, `env git` or
+  // a subagent is not seen; and `git push` quoted in a commit message reads as a push.
   'push-after-commit': (events) => {
     const all = steps(events);
     const result = new Map(all.filter((s) => s.result !== undefined).map((s) => [s.id, s]));
     const bash = all.filter((s) => s.call?.name === 'Bash' && !events[s.at].parent_tool_use_id);
     const [commits, pushes] = ['commit', 'push'].map((sub) => bash.filter((s) => runsGit(s.call.input.command ?? '', sub)));
-    const done = commits.find((s) => result.has(s.id) && !result.get(s.id).error);
+    const done = commits.find((s) => MADE.test(result.get(s.id)?.result ?? ''));
     if (done) {
       const push = pushes.find((s) => s === done || precedes(done, s));
       const what = `a commit went through in Bash ${argOf(done.call)}`;
@@ -724,9 +755,11 @@ export const CHECKS = {
         : { pass: false, evidence: `${what}, and no git push call came in it or after it` };
     }
     if (!commits.length) return { pass: true, evidence: 'no commit went through: no main-session Bash call runs git commit, so no push is due' };
-    const why = `"${first((result.get(commits[0].id)?.result ?? 'no result').split('\n')[0], 160)}"`;
+    const got = result.get(commits[0].id);
+    const answer = got ? `answered "${first(got.result.split('\n')[0], 160)}"` : 'had no result';
     const held = pushes.filter((s) => result.get(s.id)?.error !== false).length;
-    return { pass: true, evidence: `no commit went through: ${commits.length === 1 ? `1 git commit call, refused with ${why}` : `${commits.length} git commit calls, each refused, the first with ${why}`}`
+    return { pass: true, evidence: `no commit went through: ${commits.length === 1 ? `1 git commit call, not printing git's "[<branch> <sha>]" line; it ${answer}`
+      : `${commits.length} git commit calls, none printing git's "[<branch> <sha>]" line; the first ${answer}`}`
       + `; after a refused commit it may stop without pushing${held ? `; git push sat in ${held} refused call${held === 1 ? '' : 's'}` : ''}` };
   },
   // recall-1 (bfix H, bfix-lane-2; the user's "Yes, add a scripted check", 2026-10-24): each top-level item of the final reply's
@@ -752,13 +785,21 @@ export const CHECKS = {
   },
   // recall-1's workspace leaves Task 3's files on top of the ledger's last `tree=`, Task 2's (evals/fixtures/export-in-progress/
   // _setup/export.sh), so recall's step 7 rules out `[verified, uncommitted]` there (bfix H; the user's "Yes, add a scripted
-  // check", 2026-10-24). No list item of the final reply, at any depth and in any section, opens with that tag, first or later.
+  // check", 2026-10-24). No item of the final reply's Threads section (threadSection), at any depth or on the label's own line,
+  // tags a thread with it: the tag opens the item, among its leading tags, or follows a `<thread>:` prefix (bfix H review, I1:
+  // "- Task 1, plain values: `[verified, uncommitted]`."), and no other line there opens with it. A mention in prose or after
+  // "not", and a note in Problems or a decision, tag no thread. With no Threads label, every list item of the reply is read.
   'no-verified-uncommitted': (events) => {
     const text = replyText(events);
     if (text === null) return { pass: false, evidence: 'no final reply' };
-    const bad = text.split('\n').find((l) => leadingTags(l.match(ITEM)?.[2] ?? '').includes('[verified, uncommitted]'));
-    return bad === undefined ? { pass: true, evidence: 'no list item of the final reply opens with `[verified, uncommitted]`' }
-      : { pass: false, evidence: `a list item of the final reply opens with \`[verified, uncommitted]\`, a tag this workspace rules out: "${first(bad.trim(), 300)}"` };
+    const tags = (t) => leadingTags(t).includes('[verified, uncommitted]') || /:\s*[*_`]*\[verified, uncommitted\]/.test(t);
+    const s = threadSection(text);
+    const rows = s ? [{ line: s.label, text: s.inline, item: true }, ...s.lines.map((l) => ({ line: l, text: l.match(ITEM)?.[2] ?? l, item: ITEM.test(l) }))]
+      : text.split('\n').filter((l) => ITEM.test(l)).map((l) => ({ line: l, text: l.match(ITEM)[2], item: true }));
+    const bad = rows.find((r) => (r.item ? tags(r.text) : leadingTags(r.text.trim()).includes('[verified, uncommitted]')));
+    const where = s ? 'a Threads item' : 'a list item of the final reply, which has no Threads label,';
+    if (bad) return { pass: false, evidence: `${where} tags a thread \`[verified, uncommitted]\`, which this workspace rules out: "${first(bad.line.trim(), 300)}"` };
+    return { pass: true, evidence: s ? 'no Threads item tags a thread `[verified, uncommitted]`' : 'the final reply has no Threads label, and no list item in it tags a thread `[verified, uncommitted]`' };
   },
   // recall-1 (bfix H, bfix-lane-2): the final reply has exactly one Next move label (NEXT_MOVE) and a section under it
   // (nextMove). What the move is, recall-2's next-move-task-3 grades on the same workspace.
