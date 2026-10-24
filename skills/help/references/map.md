@@ -17,7 +17,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | `parallel-work` | path | Routed row "Independent changes asked for in parallel"; execute-plan and diagnose; /kern:parallel-work | One worktree per writer, integrate, re-test |
 | `execute-plan` | path | Routed row "Executing an agreed plan"; /kern:execute-plan | Run a plan with a ledger and two-verdict review |
 | `self-review` | path | Routed row "Review requested on your own diff, no PR yet"; /kern:self-review | Author's check before a PR |
-| `commit` | slash | /kern:commit | One commit of named files, or one per reviewed task, per the project's convention |
+| `commit` | slash | /kern:commit; prove-it's gate for a commit; the kernel's opt-out clause | One commit of named files, or one per reviewed task, per the project's convention |
 | `finish-branch` | slash | /kern:finish-branch; prove-it's gate for a push, PR or release | Verify, review, then commit, push, draft PR or keep; a release on request, tagged after the merge |
 | `recall` | auto | Its description; routed row "Starting or resuming after a gap" | Rebuild state across sessions; recall chat for this thread |
 

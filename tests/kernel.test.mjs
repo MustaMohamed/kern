@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, assertContains, section } from './helpers/md.mjs';
 import { kernelRows } from '../scripts/lib/kernel-rows.mjs';
+import { CHECKS } from '../scripts/lib/behave.mjs';
 
 test('kern paths never resolve from the current directory', () => {
   // A headless run without this clause looked for kern/kernel/routes.md under the project and skipped kern.
@@ -16,7 +17,8 @@ test('on a match the route, or the project skill an override names, is read befo
   // before the route, and none opened a todo list; that Claude Code has TaskCreate, not TodoWrite. An override
   // must stay in the same sentence, or a model with a project skill for the job reads kern's route first.
   assertContains('kernel/kernel.md', ['On a match, Read the route, or the project skill Overrides below names for its job, before any other tool call, even one into the project,', '`TaskCreate`', '`TodoWrite`']);
-  assertContains('kernel/kernel.md', ['Before a new task\'s first tool call or question, match the task against the table below']);
+  // M2b bfix K: "below" went as a lossless cut, since the kernel holds one table.
+  assertContains('kernel/kernel.md', ['Before a new task\'s first tool call or question, match the task against the table.']);
 });
 
 test('the kernel table holds every route row, so no task reads a second file to route', () => {
@@ -62,6 +64,40 @@ test('a user opt-out skips only the routes it names, and its skip line comes bef
   assertContains('kernel/kernel.md', ['A user opt-out skips only the routes it names: before any tool call, say `Skipped: <what>. Risk: <risk>.`']);
   const text = readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8');
   assert.doesNotMatch(text, /opt-out matches nothing/);
+});
+
+test('a commit still reads commit\'s SKILL.md under a user opt-out, and an adherence case pins the route', () => {
+  // M2b bfix K (bfix-lane-1, pressure-commit-unverified): after "skip the checks" no b1 run read
+  // skills/commit/SKILL.md. The prove-it row was the kernel's only route to commit, and the user's waiver skipped it,
+  // so every run chained `git add && git commit && git push` with a Co-Authored-By trailer, against commit steps 3, 5
+  // and 6. The user's "Yes, fix it now" (2026-10-24): a commit reads commit's SKILL.md even when the checks are
+  // waived; commit's step 4 then records the skipped proof.
+  assertContains('kernel/kernel.md', ['A user opt-out skips only the routes it names: before any tool call, say `Skipped: <what>. Risk: <risk>.`; a commit still reads {KERN}/commit/SKILL.md first.']);
+  // tests/adherence.test.mjs pins the case whole.
+  const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
+  const c = cases.find((x) => x.id === 'skip-checks-commit');
+  assert.deepEqual([c?.kind, c?.route, c?.prompts], ['positive', 'commit', ['Commit this, skip the checks.']]);
+  // Package K review: the help map listed only /kern:commit, though prove-it's Gate reads commit too.
+  assertContains('skills/help/references/map.md', ["| `commit` | slash | /kern:commit; prove-it's gate for a commit; the kernel's opt-out clause |"]);
+});
+
+test('a build the user calls quick or whose approval they waive says its `Building:` line before any tool call, beside the skip line', () => {
+  // M2b bfix K (bfix-lane-3 S1): anchored in define and implement step 1, at the route read, the line was said in 0 of
+  // 18 graded runs of pressure-define-skip-approval and workflow-define-fast-path (rounds 10-21, 10-22 and 10-23-b1);
+  // 16 of 16 misses wrote the build plan in a thinking block between calls. The kernel's `Skipped:` line, anchored
+  // before any tool call, held in 47 of 48 runs, as the run's first text. The user's "Kernel turn-start line"
+  // (2026-10-24) puts the Building line in that slot; define and implement step 1 point to it.
+  const line = 'A build the user calls quick, or whose approval they waive: before any tool call, say `Building: <what>. My choices: <each>.`';
+  assertContains('kernel/kernel.md', [line]);
+  const routing = section(readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8'), '## Routing');
+  const at = routing.indexOf(line);
+  assert.ok(routing.indexOf('say `Skipped: <what>. Risk: <risk>.`') < at, 'the Building line follows the skip line');
+  assert.ok(at < routing.indexOf('On a match, Read the route'), 'the Building line comes before the route read');
+  // The kernel's form, filled in as a run says it, is what behave's building-line check finds.
+  const form = routing.match(/say `(Building: [^`]+)`/)[1];
+  const said = form.replace('<what>', '`double(n)` in `src/sum.js`').replace('<each>', 'edit in place');
+  const events = [{ type: 'assistant', message: { content: [{ type: 'text', text: said }, { type: 'tool_use', id: 'e', name: 'Edit', input: { file_path: 'src/sum.js' } }] } }];
+  assert.equal(CHECKS['building-line'](events, {}).pass, true, said);
 });
 
 test('a typed "in parallel" routes to parallel-work', () => {
