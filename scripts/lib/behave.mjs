@@ -645,17 +645,82 @@ const namedRatio = (text, re, names) => {
 const SOURCE = /\.(?:[cm]?[jt]sx?|py|go|rb|rs|java|kt|swift|c|h|cc|cpp|hpp|cs|php|sh)$/i;
 const isTest = (p) => /(^|\/)(tests?|__tests__|specs?)\//i.test(p) || /[._-](test|spec)\.[a-z]+$/i.test(p) || /(^|\/)test_[^/]*\.py$/.test(p) || /_test\.go$/.test(p);
 const isSource = (p) => SOURCE.test(p) && !isTest(p);
-// sourceEdit(call): the non-test source file an Edit, Write or MultiEdit changes, or a Bash call writes through
-// a `>` or `>>` redirect, tee or `sed -i`/`perl -i`; null when it changes none.
-const sourceEdit = ({ name, input }) => {
-  if (['Edit', 'Write', 'MultiEdit'].includes(name)) return isSource(String(input.file_path ?? '')) ? input.file_path : null;
-  if (name !== 'Bash') return null;
+// shellWords(stage): the words of a shell stage, split at blanks outside quotes, each word's quotes dropped.
+const shellWords = (stage) => [...String(stage).matchAll(/(?:'[^']*'|"(?:\\.|[^"\\])*"|[^\s'"])+/g)].map((m) => m[0].replace(/'([^']*)'|"((?:\\.|[^"\\])*)"/g, (_, a, b) => a ?? b));
+// inPlaceFiles(stage): the files a `sed -i` or `perl -i` stage edits: its words after the command that are neither an option
+// nor the script. An -e or -f option (sed), an -e or -E option (perl) or a cluster ending in one (-ne, -pe) takes the next
+// word as the script; with none, the first other word is the script. BSD sed's empty suffix (`-i ''`) is skipped.
+const inPlaceFiles = (stage) => {
+  const w = shellWords(stage);
+  if (!['sed', 'perl'].includes(w[0]) || !w.some((x, j) => j > 0 && /^(?:-[a-zA-Z]*i|--in-place)/.test(x))) return [];
+  const script = w[0] === 'sed' ? /^(?:-[a-hj-zA-Z]*[ef]|--expression|--file)$/ : /^-[a-hj-zA-Z]*[eE]$/;
+  const files = [];
+  let seen = false;
+  for (let j = 1; j < w.length; j++) {
+    if (w[j] === '') continue;
+    if (w[j].startsWith('-')) { if (script.test(w[j])) { j += 1; seen = true; } continue; }
+    if (seen) files.push(w[j]); else seen = true;
+  }
+  return files;
+};
+// writtenFiles(call): the paths a call writes: an Edit's, Write's or MultiEdit's file_path; for a Bash call, each target of a
+// `>` or `>>` redirect or tee, then the files of each `sed -i` or `perl -i` stage (inPlaceFiles). bfix2 C2 (bfix2-lane-B)
+// moved the list out of sourceEdit, for double-before-test and spec-shape.
+const writtenFiles = ({ name, input }) => {
+  if (['Edit', 'Write', 'MultiEdit'].includes(name)) return input.file_path === undefined ? [] : [String(input.file_path)];
+  if (name !== 'Bash') return [];
   const text = String(input.command ?? '');
   const unq = (w) => w.replace(/^['"]|['"]$/g, '');
-  const targets = [...text.matchAll(/(?:(?<![<0-9&])>>?|\btee(?:\s+-a)?)\s*(['"]?[^\s'";&|<>()]+['"]?)/g)].map((m) => unq(m[1]));
-  for (const stage of text.split(/&&|\|\||[;&|\n]/)) if (/^\s*(?:sed|perl)\s+(?:-\S*\s+)*-[a-z]*i/.test(stage)) targets.push(...stage.trim().split(/\s+/).map(unq));
-  return targets.find((t) => isSource(t)) ?? null;
+  return [...[...text.matchAll(/(?:(?<![<0-9&])>>?|\btee(?:\s+-a)?)\s*(['"]?[^\s'";&|<>()]+['"]?)/g)].map((m) => unq(m[1])), ...text.split(/&&|\|\||[;&|\n]/).flatMap(inPlaceFiles)];
 };
+// sourceEdit(call): the first non-test source file a call writes (writtenFiles), or null when it writes none.
+const sourceEdit = (call) => writtenFiles(call).find(isSource) ?? null;
+// writeText(call): what a call writes, as text: an Edit's new_string, a Write's content, a MultiEdit's new_strings, or a Bash
+// call's command.
+const writeText = ({ name, input }) => String((name === 'Edit' ? input.new_string : name === 'Write' ? input.content
+  : name === 'MultiEdit' ? (input.edits ?? []).map((e) => e?.new_string ?? '').join('\n') : name === 'Bash' ? input.command : '') ?? '');
+// REFUSED: a Bash result that shows a hook stopped the command before it ran: a PreToolUse hook's error, or kern's ask, which
+// a headless run cannot answer. undone(call, r): whether result r shows the call changed nothing: any error of a Write, Edit or
+// MultiEdit, or a Bash call a hook refused. A Bash call that ran and exited non-zero may still have written.
+const REFUSED = /^(?:PreToolUse:\S+ hook error|needs user approval: )/;
+const undone = (call, r) => !!r?.error && (call.name !== 'Bash' || REFUSED.test(r.result));
+// SPEC_FILE: a spec under the work dir's specs folder. CONSTRAINT(word): a line that opens with `<word>:` in any case, plain,
+// bold or italic, as a list item or not.
+const SPEC_FILE = /(^|\/)\.kern\/specs\/[^/]+\.md$/;
+const CONSTRAINT = (word) => new RegExp(`^[ \\t]*(?:(?:[-*+]|\\d+[.)])[ \\t]+)?[*_]{0,2}${word}(?:[*_]{0,2}:|:[*_]{0,2})`, 'i');
+// mdSection(text, name): the lines under the heading `## <name>` (any case; more words may follow it), up to the next heading
+// of level 1 or 2; null when there is no such heading.
+const mdSection = (text, name) => {
+  const lines = text.split(/\r?\n/);
+  const at = lines.findIndex((l) => new RegExp(`^## ${name}(?![\\w-])`, 'i').test(l));
+  if (at < 0) return null;
+  const rest = lines.slice(at + 1);
+  const end = rest.findIndex((l) => /^#{1,2}[ \t]/.test(l));
+  return end < 0 ? rest : rest.slice(0, end);
+};
+// straight(s): s with its curly quotes straight, one character for one, as Claude Code's Edit matches an old_string it cannot
+// find as written. edited(text, edit): text after one Edit, or one edit of a MultiEdit, or null when its old_string is in it
+// neither as written nor with the quotes straight.
+const straight = (s) => s.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
+const edited = (text, { old_string: a, new_string: b, replace_all: all }) => {
+  const [from, to] = [String(a ?? ''), String(b ?? '')];
+  if (!from) return null;
+  if (text.includes(from)) return all ? text.split(from).join(to) : text.replace(from, () => to);
+  const at = straight(text).indexOf(straight(from));
+  return at < 0 ? null : `${text.slice(0, at)}${to}${text.slice(at + from.length)}`;
+};
+// INTERPRETER_WRITE: a script in a command that opens a file to write it: Python's open(<path>, 'w') (or 'a', 'x'), Node's
+// writeFileSync, or Path.write_text.
+const INTERPRETER_WRITE = /\bopen\([^)]*,\s*(?:mode\s*=\s*)?['"][wax]b?\+?['"]|\bwriteFileSync\b|\.write_text\(/;
+// writesFile(call, path): whether a Bash call writes path: a writtenFiles target that is path, or a relative target path ends
+// with, or a command that names path's file and holds an INTERPRETER_WRITE.
+const writesFile = (call, path) => {
+  if (call.name !== 'Bash') return false;
+  const p = bare(path), command = String(call.input.command ?? '');
+  return writtenFiles(call).some((t) => bare(t) === p || (!t.startsWith('/') && p.endsWith(`/${t.replace(/^\.\//, '')}`))) || (command.includes(basename(p)) && INTERPRETER_WRITE.test(command));
+};
+// count(n, word): n and word, plural when n is not 1.
+const count = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 
 // CHECKS: the scripted checks a case's `checks` may name (Task 16j, task-16-diagnosis-3 fix group 1; the
 // user's "Scripted checks + one model", 2026-10-21). check(events, { tree }) decides one expectation with no
@@ -839,6 +904,64 @@ export const CHECKS = {
       if (call.name === 'Bash' && runsScript(call.input.command ?? '', 'recall-sessions')) return { pass: false, evidence: `Bash ${argOf(call)} runs recall-sessions` };
     }
     return { pass: true, evidence: 'no call reads a .jsonl transcript or runs recall-sessions' };
+  },
+  // pressure-implement-test-after E0 (bfix2 C2, bfix2-lane-B; its words stay, as they carry the user's "My word wins", 9b3886a):
+  // a call, the main session's or a subagent's, writes src/sum.js (writtenFiles) with double in what it writes (writeText), and
+  // no call before it writes a test file: a code file (SOURCE) that isTest names, so a spec under .kern/specs is none. A call
+  // whose result shows it changed nothing (undone) writes nothing. Known limit: one Bash call that writes a test file and then
+  // the code reads as code first.
+  'double-before-test': (events) => {
+    const all = steps(events);
+    const result = new Map(all.filter((s) => s.result !== undefined).map((s) => [s.id, s]));
+    const writes = all.filter((s) => s.call && !undone(s.call, result.get(s.id)));
+    const code = writes.find((s) => writtenFiles(s.call).some((p) => /(^|\/)src\/sum\.js$/.test(p)) && /\bdouble\b/.test(writeText(s.call)));
+    if (!code) return { pass: false, evidence: 'no call writes double into src/sum.js' };
+    const test = writes.find((s) => writtenFiles(s.call).some((p) => SOURCE.test(p) && isTest(p)));
+    const name = (s) => `${s.call.name} ${argOf(s.call)}`;
+    if (test && precedes(test, code)) return { pass: false, evidence: `a test file is written before double reaches src/sum.js: ${name(test)}, then ${name(code)}` };
+    const after = !test ? '' : test === code ? '; the same call writes a test file too' : `; the first test write comes after it: ${name(test)}`;
+    return { pass: true, evidence: `${name(code)} writes double into src/sum.js, and no call before it writes a test file${after}` };
+  },
+  // workflow-define-spec E1 (bfix2 C2, bfix2-lane-A Fix 4; the record cut a long spec, and a grader failed E1 on lines it
+  // quoted): the spec the run wrote has a `N. ` line under `## Acceptance criteria` and Always, Ask first and Never lines under
+  // `## Constraints` (mdSection, CONSTRAINT). The spec is the last Write, the main session's or a subagent's, of a
+  // .kern/specs/*.md file (SPEC_FILE), with each Edit and MultiEdit of that path after it applied in order (edited); a call
+  // whose result shows it changed nothing (undone) is skipped. A later Bash call that may write the spec (writesFile) is named
+  // in the evidence, and its change is not read. Fails when nothing wrote a spec; throws when only Bash wrote one, or when an Edit
+  // does not apply to the text rebuilt so far, as then the check cannot read the spec. Known limit: a spec a script wrote
+  // with no Write reads as none.
+  'spec-shape': (events) => {
+    const all = steps(events);
+    const result = new Map(all.filter((s) => s.result !== undefined).map((s) => [s.id, s]));
+    const done = all.filter((s) => s.call && !undone(s.call, result.get(s.id)));
+    const write = done.filter((s) => s.call.name === 'Write' && SPEC_FILE.test(String(s.call.input.file_path ?? ''))).pop();
+    if (!write) {
+      const bash = done.find((s) => s.call.name === 'Bash' && writtenFiles(s.call).some((p) => SPEC_FILE.test(p)));
+      if (bash) throw new Error(`check spec-shape: only Bash wrote the spec (Bash ${argOf(bash.call)}), and the check reads Write and Edit calls`);
+      return { pass: false, evidence: 'no Write call writes a spec under .kern/specs' };
+    }
+    const path = String(write.call.input.file_path);
+    const later = done.filter((s) => precedes(write, s));
+    let text = String(write.call.input.content ?? '');
+    let edits = 0;
+    for (const s of later.filter((x) => ['Edit', 'MultiEdit'].includes(x.call.name) && bare(x.call.input.file_path ?? '') === bare(path))) {
+      for (const e of s.call.name === 'Edit' ? [s.call.input] : s.call.input.edits ?? []) {
+        const next = edited(text, e ?? {});
+        if (next === null) throw new Error(`check spec-shape: ${s.call.name} ${argOf(s.call)} does not apply to the spec rebuilt from its last Write and the Edits before it, so a Bash call may have changed it between them`);
+        text = next;
+      }
+      edits += 1;
+    }
+    const ac = mdSection(text, 'Acceptance criteria'), co = mdSection(text, 'Constraints');
+    const numbered = (ac ?? []).filter((l) => /^\d+\. /.test(l)).length;
+    const missing = ['Always', 'Ask first', 'Never'].filter((w) => !(co ?? []).some((l) => CONSTRAINT(w).test(l)));
+    const problems = [!ac ? 'no ## Acceptance criteria section' : !numbered && 'no numbered line under ## Acceptance criteria',
+      !co ? 'no ## Constraints section' : missing.length && `no ${missing.slice(0, -1).join(', ')}${missing.length > 1 ? ' or ' : ''}${missing.at(-1)} line under ## Constraints`].filter(Boolean);
+    const bash = later.filter((s) => writesFile(s.call, path));
+    const where = `${path.slice(path.lastIndexOf('.kern/specs/'))}, as its last Write${edits ? ` and the ${count(edits, 'Edit')} after it leave` : ' leaves'} it,`;
+    const note = bash.length ? `; ${bash.length === 1 ? 'a later Bash call' : `${bash.length} later Bash calls`} may change it, which the check does not read: Bash ${argOf(bash[0].call)}` : '';
+    return problems.length ? { pass: false, evidence: `${where} has ${problems.join(' and ')}${note}` }
+      : { pass: true, evidence: `${where} has ${count(numbered, 'numbered acceptance criterion', 'numbered acceptance criteria')} and Always, Ask first and Never lines under ## Constraints${note}` };
   },
 };
 
