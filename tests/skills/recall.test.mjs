@@ -33,7 +33,7 @@ test('recall sections, steps and the source lines it keeps', () => {
     'Adjacent work stays out unless it blocks this', 'cut detail before threads', 'claim the mining inherited']);
   assert.ok(!readDoc(SKILL).raw.includes('history.jsonl'), 'recall finds prompts through recall-sessions, which filters by project');
   assert.ok(!readDoc(SKILL).raw.includes('$('), 'no command substitution in a command the skill prescribes');
-  assertMaxBytes(SKILL, 7200);
+  assertMaxBytes(SKILL, 7241);
 });
 
 // Audit E4: WORK is kern-root's main root plus work_dir, as kern-dir and autopilot find it. The parent of
@@ -102,11 +102,42 @@ test('recall keeps the load-bearing lines a sentence deletion would lose', () =>
 test('recall says its Scope line right after the read, and every Threads line starts with its tag', () => {
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[2].startsWith('2. Right after reading this file, before any other tool call, say `Scope: <window>, <topic>, <workspace>.`: the window'), s[2]);
-  assertOnce(SKILL, ['- Threads: one line per thread, starting with its one tag, as `- [tag] <thread>`:',
+  assertOnce(SKILL, ['- Threads: one line per thread, starting with its one listed tag, as `- [tag] <thread>`:',
     'A line without a tag goes under Problems or Sources skipped.']);
   const { body } = readDoc(SKILL);
   const contract = body.slice(body.indexOf('## Output contract'), body.indexOf('## Inputs'));
   assert.ok(contract.indexOf('- Threads:') < contract.indexOf('- Problems:'), 'Threads still come before Problems');
+});
+
+// M2b bfix R (bfix-lane-2, recall-1): since Task 16p, of 12 recall-1 and recall-2 runs, 2 put a test result or a
+// report's claim untagged under Threads, and 1 (b1 recall-2-1) used `[unverified, no PR]`, a tag off the list; a
+// prose note on a tag (b1 recall-1-0) sat there too. So the tag is "listed", and the scripted thread-tags check
+// reads the list from the Threads line: every backticked span on it that starts with `[` is one tag, each once,
+// in this order.
+const TAGS = ['[merged #N]', '[open PR #N]', '[in flight <branch>]', '[verified, uncommitted]', '[reverted #N]',
+  '[blocked, <why>]', '[parked]', '[planned, not started]', '[unverified, <source> unavailable]'];
+test('recall keeps one tag list a script can read, and names what is not a thread', () => {
+  const lines = readDoc(SKILL).body.split('\n').filter((l) => l.startsWith('- Threads:'));
+  assert.equal(lines.length, 1, 'one Threads line');
+  assert.deepEqual([...lines[0].matchAll(/`(\[[^`]*\])`/g)].map((m) => m[1]), TAGS);
+  assertOnce(SKILL, ['A test result, a report\'s claim or a note on a tag is not a thread. A line without a tag goes under Problems or Sources skipped.']);
+});
+
+// M2b bfix R follow-up (bfix-lane-2, recall-1 fix 3; task-16-confirming-diagnosis section 6 item 4): 4 of 9
+// recall-1 runs since Task 16p tagged Task 3's work `[verified, uncommitted]`, though its last `tree=` differs
+// from the fresh wt-snap, and the behaviour check now fails that. The condition sits beside the tag, unbackticked
+// so the tag list keeps one backticked span per tag.
+test('recall gives [verified, uncommitted] its condition on the Threads line', () => {
+  assertOnce(SKILL, ['`[verified, uncommitted]` (only if the last tree= equals a fresh wt-snap), `[reverted #N]`']);
+});
+
+// M2b bfix R (bfix-lane-2, recall-4): since 2026-10-22, 4 of 9 recall-4 runs ran recall-sessions, most to check
+// that the named session exists, before pointing to `claude --resume`. Step 1 makes no tool call, so no Read,
+// Glob or Grep either, and a Red flags row answers that thought.
+test('recall points one named session to claude --resume and makes no tool call', () => {
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].startsWith('1. Route. One named prior session: point to `claude --resume` and stop, making no tool call. A full state capsule'), s[1]);
+  assertOnce(SKILL, ['| "I\'ll check the session exists first" | Step 1 makes no tool call. |']);
 });
 
 test('chat reference keeps the ketchup rules', () => {
