@@ -10,7 +10,7 @@ Rebuild the current state from kern's working files, transcripts and live state,
 ## Steps
 
 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
-1. Route. One named prior session: point to `claude --resume` and stop, running no command. A full state capsule already in the prompt: skip the mining. `recall chat`: go to step 9.
+1. Route. One named prior session: point to `claude --resume` and stop, making no tool call. A full state capsule already in the prompt: skip the mining. `recall chat`: go to step 9.
 2. Right after reading this file, before any other tool call, say `Scope: <window>, <topic>, <workspace>.`: the window (7 days unless stated; never turn "all" into "recent"), the topic, and the workspace (never another project's transcripts unasked). Adjacent work stays out unless it blocks this.
 3. Read kern's working files first. Find `WORK` with two separate commands, never `kern-dir`, which creates folders and edits `.git/info/exclude`: it is line 1 of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root`, a `/`, then the text before the tab in `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern`. A missing `WORK`, or a failed `kern-root`, is not an error: say there are no kern working files. Else read `WORK/ledgers/*/ledger.md` (incomplete tasks and `parked:` lines) and the status lines of `WORK/plans/*` and `WORK/specs/*`. List kern worktrees with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit`; a non-zero exit, or a worktree in the `unknown` bucket, goes in Sources skipped with its evidence, never as clean. Memory files are context, never state.
 4. Find the sessions with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions --days <n>`, adding `--topic <topic>` only when a topic was named (an empty topic is a usage error). `session` lines are this project's transcripts, its worktrees' included, newest first; with a topic, `prompt` lines are its prompts that name it (`-` is an unknown session id). Skip the `current` session: it is this one (`references/transcripts.md`). Exit 1 (a record could not be read) or 2 never means there were no sessions: quote its message, name transcripts in Sources skipped, tag nothing from transcripts, and go on with live state (exit 2 outside a git repository: no live state either, say so and stop).
@@ -23,7 +23,7 @@ Rebuild the current state from kern's working files, transcripts and live state,
 ## Output contract
 
 - Capsule: at most 5 bullets on what this work is and where it stands.
-- Threads: one line per thread, starting with its one tag, as `- [tag] <thread>`: `[merged #N]`, `[open PR #N]`, `[in flight <branch>]`, `[verified, uncommitted]` (only if its last tree= equals a fresh wt-snap), `[reverted #N]`, `[blocked, <why>]`, `[parked]`, `[planned, not started]`, or `[unverified, <source> unavailable]`; a transcript alone never earns a stronger tag. A branch left behind after its PR merged is [merged #N] with "cleanup pending" on the same line. A test result, a report's claim or a note on a tag is not a thread. A line without a tag goes under Problems or Sources skipped.
+- Threads: one line per thread, starting with its one listed tag, as `- [tag] <thread>`: `[merged #N]`, `[open PR #N]`, `[in flight <branch>]`, `[verified, uncommitted]` (only if the last tree= equals a fresh wt-snap), `[reverted #N]`, `[blocked, <why>]`, `[parked]`, `[planned, not started]`, or `[unverified, <source> unavailable]`; a transcript alone never earns a stronger tag. A branch left behind after its PR merged is [merged #N] with "cleanup pending" on the same line. A test result, a report's claim or a note on a tag is not a thread. A line without a tag goes under Problems or Sources skipped.
 - Problems: at most 5, the recurring ones.
 - Next move: one concrete action. An incomplete ledger task is the next move when one exists.
 - Sources skipped: one line naming each source that did not run, or omit.
@@ -54,5 +54,5 @@ Read-only, the same under autopilot; `wt-snap` is the one exception named above.
 | "The transcript says it merged" | Transcripts are history. Check `gh` or `git` first. |
 | "recall-sessions printed nothing, so no work" | Empty output with exit 0 is no sessions. A non-zero exit is a failed source. |
 | "I'll read the whole transcript here" | Slice, measure, delegate. |
-| "I'll check the session exists first" | Step 1 runs no command. |
+| "I'll check the session exists first" | Step 1 makes no tool call. |
 | "My work on X means everything this week" | Keep the topic. |
