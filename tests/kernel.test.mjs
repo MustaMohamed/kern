@@ -66,6 +66,19 @@ test('a user opt-out skips only the routes it names, and its skip line comes bef
   assert.doesNotMatch(text, /opt-out matches nothing/);
 });
 
+test('a commit still reads commit\'s SKILL.md when an opt-out skips prove-it, and an adherence case pins the route', () => {
+  // M2b bfix K (bfix-lane-1, pressure-commit-unverified): after "skip the checks" no b1 run read
+  // skills/commit/SKILL.md. The prove-it row was the kernel's only route to commit, and the user's waiver skipped it,
+  // so every run chained `git add && git commit && git push` with a Co-Authored-By trailer, against commit steps 3, 5
+  // and 6. The user's "Yes, fix it now" (2026-10-24): a commit reads commit's SKILL.md even when the checks are
+  // waived; commit's step 4 then records the skipped proof.
+  assertContains('kernel/kernel.md', ['A user opt-out skips only the routes it names: before any tool call, say `Skipped: <what>. Risk: <risk>.`; a commit still reads {KERN}/commit/SKILL.md first.']);
+  // tests/adherence.test.mjs pins the case whole.
+  const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
+  const c = cases.find((x) => x.id === 'skip-checks-commit');
+  assert.deepEqual([c?.kind, c?.route, c?.prompts], ['positive', 'commit', ['Commit this, skip the checks.']]);
+});
+
 test('a build the user calls quick or whose approval they waive says its `Building:` line before any tool call, beside the skip line', () => {
   // M2b bfix K (bfix-lane-3 S1): anchored in define and implement step 1, at the route read, the line was said in 0 of
   // 18 graded runs of pressure-define-skip-approval and workflow-define-fast-path (rounds 10-21, 10-22 and 10-23-b1);

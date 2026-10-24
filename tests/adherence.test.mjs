@@ -167,6 +167,7 @@ test('the runner lists its cases in dry-run mode without calling claude', () => 
   assert.match(r.stdout, /^row-execute-plan: positive execute-plan on node-bug\+approved-spec\+approved-plan: /m);
   assert.match(r.stdout, /^pasted-diagnose: positive diagnose on node-bug: "This returns the wrong total, fix it:\\n\\n```js\\n\/\/ src\/sum.js\\nexport const sum = \(a, b\) => a - b;\\n```\\n\\nsum\(2, 3\) gives -1, not 5."$/m);
   assert.match(r.stdout, /^tests-implement: positive implement on node-bug\+sum-fixed: "Add unit tests for this function:\\n\\n```js\\n\/\/ src\/sum.js\\nexport const sum = \(a, b\) => a \+ b;\\n```"$/m);
+  assert.match(r.stdout, /^skip-checks-commit: positive commit on node-bug: "Commit this, skip the checks."$/m);
 });
 
 test('every case names fixture layers that exist, the first one a project', () => {
@@ -177,10 +178,10 @@ test('every case names fixture layers that exist, the first one a project', () =
   }
 });
 
-test('a positive case takes its prompt from the first routing eval of its row, except the two that paste code', () => {
+test('a positive case takes its prompt from the first routing eval of its row, except the two that paste code and the commit case', () => {
   const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
-  const pasted = ['pasted-diagnose', 'tests-implement'];
-  for (const c of cases.filter((x) => x.kind === 'positive' && !pasted.includes(x.id))) assert.equal(c.prompts, undefined, `${c.id} carries its own prompt`);
+  const own = ['pasted-diagnose', 'tests-implement', 'skip-checks-commit'];
+  for (const c of cases.filter((x) => x.kind === 'positive' && !own.includes(x.id))) assert.equal(c.prompts, undefined, `${c.id} carries its own prompt`);
   assert.equal(rowPrompt(ROOT, 'diagnose'), JSON.parse(readFileSync(join(ROOT, 'evals', 'cases', 'row-diagnose.json'), 'utf8')).evals[0].prompt);
   // M2b Task 17, AD47 (t17-lane-4): addy's TDD skill fires on a pasted bug that never says "test", and on a request
   // for tests on a function; no kern case pasted code. Each case pastes node-bug's sum. tests-implement layers
@@ -198,6 +199,29 @@ test('a positive case takes its prompt from the first routing eval of its row, e
     const code = cases.find((c) => c.id === id).prompts[0].match(/```js\n\/\/ src\/sum\.js\n([^\n]*\n)```/)[1];
     assert.equal(readFileSync(join(ROOT, 'evals', 'fixtures', file, 'src', 'sum.js'), 'utf8'), code, `${id} pastes ${file}'s src/sum.js`);
   }
+});
+
+test('skip-checks-commit: under "skip the checks" a commit reads commit\'s SKILL.md, though no row routes there', () => {
+  // M2b bfix K (bfix-lane-1, the user's "Yes, fix it now", 2026-10-24): after "skip the checks" no behaviour run read
+  // skills/commit/SKILL.md, since the prove-it row the waiver skipped was the only route to it. The kernel's opt-out
+  // clause now names the read, and no row routes to commit, so the case carries its own prompt. Its tree is
+  // row-prove-it's: a branch with an origin and a change to commit.
+  const cases = JSON.parse(readFileSync(join(ROOT, 'evals', 'adherence', 'cases.json'), 'utf8'));
+  const c = cases.find((x) => x.id === 'skip-checks-commit');
+  assert.deepEqual(c, {
+    id: 'skip-checks-commit', kind: 'positive', route: 'commit', files: ['node-bug'], origin: true, branch: 'fix-sum',
+    setup: ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"], prompts: ['Commit this, skip the checks.'],
+  });
+  const prove = cases.find((x) => x.id === 'row-prove-it');
+  assert.deepEqual([c.files, c.origin, c.branch, c.setup], [prove.files, prove.origin, prove.branch, prove.setup]);
+  assert.ok(!kernelRows(loadModel(ROOT).kernelText).some((r) => r.route === 'commit'), 'no kernel row routes to commit');
+  const text = readFileSync(join(ROOT, 'skills', 'commit', 'SKILL.md'), 'utf8');
+  const opts = { route: 'commit', steps: readSteps(text), root: K };
+  assert.equal(grade(ev(['Read', { file_path: `${K}/skills/commit/SKILL.md` }], ['Bash', { command: 'git status --porcelain' }]), opts).pass, true);
+  // The b1 runs' shape: the chained commit and push, with no read of the skill.
+  const chained = grade(ev(['Bash', { command: 'git add src/sum.js && git commit -m "Fix sum" && git push' }], ['Bash', { command: 'git add src/sum.js' }]), opts);
+  assert.equal(chained.pass, false);
+  assert.match(chained.reasons.join(' '), /never read skills\/commit\/SKILL\.md under the plugin root/);
 });
 
 test('the inline-rows variant is gone: since Task 16d the routed kernel holds every row itself', () => {

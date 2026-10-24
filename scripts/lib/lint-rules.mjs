@@ -283,8 +283,10 @@ export const RULES = [
       // "and fits no row": 18 chars, so 5,966 and 6,055. Both are locked at the measured value with no headroom (the
       // user's "Cut and lock", 2026-10-22). M2b bfix K put the `Building:` line before any tool call, beside the skip
       // line (bfix-lane-3 S1, the user's "Kernel turn-start line", 2026-10-24): 126 chars, less a lossless cut of 6
-      // ("below" after "the table"), so 6,086 and 6,175, locked again at the measured values.
-      if (kernel.length > 6086) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 6,086`));
+      // ("below" after "the table"), so 6,086 and 6,175, locked again at the measured values. It then kept a commit's
+      // read of commit's SKILL.md when an opt-out skips prove-it (bfix-lane-1, the user's "Yes, fix it now",
+      // 2026-10-24): 105 rendered chars, the path absolute, so 6,191 and 6,280.
+      if (kernel.length > 6191) out.push(warn(7, 'kernel/kernel.md', `rendered kernel ${kernel.length} chars with the longest fixture settings, target 6,191`));
       if (kernel.length + terse > 9000) out.push(err(7, 'kernel/kernel.md', `rendered kernel plus terse rules ${kernel.length + terse} chars, limit 9,000`));
       // Standing cost (design goal 4): the kernel with no project settings, plus every auto skill and agent
       // description, the text every session carries.
@@ -293,7 +295,7 @@ export const RULES = [
       if (rendered(start) && !rendered(again)) out.push(err(7, 'hooks/session-start', `${failed(again)} with no project settings, so the standing cost was not measured`));
       const bare = norm(again.stdout || '');
       const desc = [...model.skills.filter((s) => !s.error && s.tier === 'auto'), ...model.agents.filter((a) => !a.error)].reduce((n, d) => n + (d.data.description || '').length, 0);
-      if (bare.length + desc > 6175) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 6,175`));
+      if (bare.length + desc > 6280) out.push(err(7, 'kernel/kernel.md', `standing cost ${bare.length + desc} chars (kernel with no settings ${bare.length}, auto and agent descriptions ${desc}), limit 6,280`));
       const sub = hook('subagent-start', { session_id: 'lint', cwd: repo, hook_event_name: 'SubagentStart', agent_id: 'a', agent_type: 'Explore' });
       let ctx = '';
       try { ctx = norm(JSON.parse(sub).hookSpecificOutput.additionalContext); } catch { out.push(err(7, 'hooks/subagent-start', 'output is not SubagentStart JSON')); }
