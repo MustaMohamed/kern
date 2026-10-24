@@ -117,7 +117,7 @@ test('the base names its source, an undetected base is the current branch and is
   assert.ok(tpl.includes('add a regression check that runs the same scenario on base and head, naming the base by branch, never by a SHA no command printed'), 'the template check names the base by branch');
 });
 
-test('the scope limit is read at step 1, stated only at a split or stop with its source, and a default is never "your limit"', () => {
+test('the scope limit is read at step 1, stated only at a scope split or stop with its source, and a default is never "your limit"', () => {
   // 2026-10-23 head-to-head, plan category (task-16-confirming-diagnosis, sections 4 and 6): in 3 of 11 kern task-runs
   // the grader counted "your limit is 4", "against a threshold of 4" and "over the 4-file PR limit" as unsupported.
   // `kern-get scope_threshold` had printed nothing, and the 4 came from the Inputs table, which the grader never sees.
@@ -126,12 +126,13 @@ test('the scope limit is read at step 1, stated only at a split or stop with its
   // of rounds 155cbad and cd4808a, all in scope-split, each citing a `kern-get scope_threshold` that printed nothing.
   // `kern-get KEY DEFAULT` prints `<value><TAB><source>` with exit 0, `4<TAB>default` when unset, so the 4 and its
   // source come from command output the grader sees.
-  // M2b bfix3 P3 (bfix3-lane-P, Q4): runs gather every `kern-get` key into one loop at their first lookups, and
-  // the loop dropped step 7's `4` in 3 of 9 bfix2 plan runs. Step 1 now reads the limit with the first lookups, and
-  // step 7 states it only where a split or stop needs it, so "under `scope_threshold` (default 4)" goes.
+  // M2b bfix3 P3 (bfix3-lane-P, Q4): runs gather every `kern-get` key into one loop at their first lookups. The loop
+  // dropped step 7's `4` in 7 of 9 bfix2 plan runs, and 3 never ran the defaulted call. Step 1 now reads the limit with
+  // the first lookups, and step 7 states it only where a scope split or stop needs it, so "under `scope_threshold`
+  // (default 4)" goes. "Scope" keeps step 12's "Stop the turn" from reading as such a stop (P3 review, Minor 1).
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Read the limit now with `kern-get scope_threshold 4`.'), s[1]);
-  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. State the limit only at a split or stop, as `scope_threshold: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
+  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. State the limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
   assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');
   assert.ok(!s[7].includes('(kern-get)'), 'the old source label is gone');
   assert.ok(!s[7].includes('wherever the plan or reply states it'), 'the limit is no longer stated wherever the plan or reply goes');
