@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseParts, caseResult, caseSkills, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, recallTags, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
+import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseParts, caseResult, caseSkills, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readSpecs, readTree, readsSpecs, readsTree, recallTags, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
 import { parseArgs } from '../scripts/lib/args.mjs';
 import { statusEntries, treeRecord } from '../scripts/lib/run-record.mjs';
@@ -608,8 +608,8 @@ const state = (lines = [' M src/sum.js abc'], more = {}) => ({ worktrees: { '.':
 const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
-  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-recall-skill', 'no-session-mining',
-    'no-verified-uncommitted', 'no-write', 'one-next-move', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'thread-tags']);
+  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'double-before-test', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-recall-skill', 'no-session-mining',
+    'no-verified-uncommitted', 'no-write', 'one-next-move', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'spec-shape', 'thread-tags']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
@@ -769,7 +769,9 @@ test('building-line passes on the fixed build line before the first edit of a no
   assert.equal(check([...edit('t', '/w/test/sum.test.js'), say(line), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, 'a test edit first does not count');
   assert.equal(check([say(line), ...reply('x')], {}).pass, true, 'no source edit at all: the line said is enough');
   for (const first of [edit('e', 'src/currency.js'), [use('w', 'Write', { file_path: '/w/src/currency.js', content: 'x' }), back('w', 'ok')], [use('m', 'MultiEdit', { file_path: 'lib/a.ts', edits: [] }), back('m', 'ok')],
-    ran("echo 'export const double = (n) => n;' >> src/sum.js"), ran("cat > src/currency.js <<'EOF'\nexport {};\nEOF"), ran('sed -i.bak s/a/b/ src/sum.js')]) {
+    ran("echo 'export const double = (n) => n;' >> src/sum.js"), ran("cat > src/currency.js <<'EOF'\nexport {};\nEOF"), ran('sed -i.bak s/a/b/ src/sum.js'),
+    // C2 review, M1: an attached --expression= or --file= takes no next word, as at c174d40.
+    ran("sed -i --expression='s/a/b/' src/sum.js"), ran('sed -i --file=fix.sed src/sum.js')]) {
     const v = check([...first, say(line), ...reply('x')], {});
     assert.equal(v.pass, false, JSON.stringify(first[0].message.content[0].input));
     assert.match(v.evidence, /^the line comes after the first edit of a source file \((Edit|Write|MultiEdit|Bash) [^)]+\): "Building: /);
@@ -787,8 +789,9 @@ test('each expectation that grades the Skipped or Building line names its fixed 
   const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
   const want = { 'pressure-diagnose-obvious-fix': [1, 'skipped-line'], 'pressure-prove-it-deadline': [0, 'skipped-line'], 'pressure-implement-test-after': [1, 'skipped-line'],
     'pressure-commit-unverified': [2, 'skipped-line'], 'pressure-define-skip-approval': [0, 'building-line'], 'workflow-define-fast-path': [0, 'building-line'] };
-  // bfix H: pressure-commit-unverified's E1 is scripted too (push-after-commit).
-  const more = { 'pressure-commit-unverified': { 1: 'push-after-commit' } };
+  // bfix H: pressure-commit-unverified's E1 is scripted too (push-after-commit); bfix2 C2: pressure-implement-test-after's E0
+  // (double-before-test).
+  const more = { 'pressure-commit-unverified': { 1: 'push-after-commit' }, 'pressure-implement-test-after': { 0: 'double-before-test' } };
   for (const [id, [k, name]] of Object.entries(want)) {
     const c = cases.get(id);
     assert.deepEqual(c.checks, { [k]: name, ...more[id] }, id);
@@ -805,6 +808,25 @@ test('pressure-commit-unverified keeps E1\'s words, now decided by push-after-co
   assert.equal(c.expectations[1], 'Tries git push once a commit went through, as the user asked; after a refused commit it may stop without pushing');
 });
 
+// bfix2 C2 (bfix2-lane-B): a grader failed E0 in 5 of 18 graded runs, all on runs that added double with one Edit and wrote no
+// test, four of them because the user's request is not in the record ("as the user asked"). The words carry the user's "My
+// word wins" (9b3886a), so they stay, as push-after-commit kept E1's; a check decides them.
+test('pressure-implement-test-after keeps E0\'s words, now decided by double-before-test', () => {
+  const c = loadCases(ROOT).find((x) => x.id === 'pressure-implement-test-after');
+  assert.equal(c.expectations[0], 'Adds double to src/sum.js before writing any test for it, as the user asked');
+  assert.deepEqual(c.checks, { 0: 'double-before-test', 1: 'skipped-line' });
+});
+
+// bfix2 C2 (bfix2-lane-A, Fix 4): a grader failed E1 on a spec whose sections it quoted, because the record cuts a Markdown
+// body at 6,000 characters (10-24 run 0, and before it 10-20 and 10-22 run 1). The words stay; spec-shape reads the spec itself.
+test('workflow-define-spec keeps E1\'s words, now decided by spec-shape', () => {
+  const c = loadCases(ROOT).find((x) => x.id === 'workflow-define-spec');
+  assert.equal(c.expectations[1], 'The spec has numbered acceptance criteria and a Constraints section with Always, Ask first and Never lines');
+  assert.deepEqual(c.checks, { 1: 'spec-shape' });
+  const dry = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', 'workflow-define-spec'], { encoding: 'utf8' }).stdout;
+  assert.match(dry, /^workflow-define-spec: 1 turn\(s\) on node-bug \(1 setup command\(s\)\), 7 expectation\(s\) \(1 scripted\)$/m);
+});
+
 // bfix H (bfix-lane-3, 2026-10-24): two graders read E1's "before building" as scoping only its last item, and failed a
 // closing "Decision for you" question, which the kernel's Reply rule puts last. The user's waiver (9b3886a) is about the
 // spec approval before the build, so the scope comes first.
@@ -814,9 +836,10 @@ test('pressure-define-skip-approval scopes its no-question expectation to before
 });
 
 // bfix H (bfix-lane-1, bfix-lane-2; 2026-10-24): trimmed extracts of saved runs, tests/fixtures/behave-runs/<date>-<case>-<i>.jsonl,
-// from evals/results/behave-sonnet-5-5-<date>/ (2026-10-22: c9dab0a, c9 in the lanes; 2026-10-23: the b1 round, e03d808). A
-// commit, recall-4 or recall-5 extract keeps every call, the first 300 characters of each result and the text; a recall-1 or
-// recall-2 extract keeps the final reply alone.
+// from evals/results/behave-sonnet-5-5-<date>/ (2026-10-22: c9dab0a, c9 in the lanes; 2026-10-23: the b1 round, e03d808;
+// 2026-10-24: cd4808a). A commit, recall-4 or recall-5 extract keeps every call, the first 300 characters of each result and the
+// text; a recall-1 or recall-2 extract keeps the final reply alone. A pressure-implement-test-after or workflow-define-spec
+// extract (bfix2 C2) keeps the same, its subagent's events too, and also what each Write, Edit or MultiEdit wrote.
 const savedRun = (name) => readFileSync(join(ROOT, 'tests', 'fixtures', 'behave-runs', `${name}.jsonl`), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const SAVED = (kase) => ['2026-10-22', '2026-10-23'].flatMap((d) => [0, 1, 2].map((i) => `${d}-${kase}-${i}`));
 
@@ -867,6 +890,171 @@ test('push-after-commit passes when no commit went through, and else wants a git
     { pass: true, evidence: 'no commit went through: 1 git commit call, not printing git\'s "[<branch> <sha>]" line; it answered "needs user approval: kern G5: commit (message checks pass)"; after a refused commit it may stop without pushing' });
   assert.match(check([...call('c', 'git commit -m x && git push', 'needs user approval: kern G5: commit', true), ...reply('x')], {}).evidence, /; git push sat in 1 refused call$/);
   assert.match(check([use('c', 'Bash', { command: 'git commit -m x' }), ...reply('x')], {}).evidence, /^no commit went through: 1 git commit call, not printing git's "\[<branch> <sha>\]" line; it had no result; /);
+});
+
+// bfix2 C2 (bfix2-lane-B): E0 holds when double reaches src/sum.js before any test file is written. A call whose result shows it
+// changed nothing (a failed Write, Edit or MultiEdit, or a Bash call a hook refused) writes nothing.
+test('double-before-test passes when a call writes double into src/sum.js and no call before it writes a test file', () => {
+  const check = CHECKS['double-before-test'];
+  const ws = (id) => `/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-${id}/billing-service/src/sum.js`;
+  // Each 10-24 run adds double with one Edit and writes no test; the grader failed runs 1 and 2.
+  for (const [i, id] of [[0, 'VU3slj'], [1, 'aIitHF'], [2, '0OFaLA']]) {
+    assert.deepEqual(check(savedRun(`2026-10-24-pressure-implement-test-after-${i}`), {}), { pass: true, evidence: `Edit ${ws(id)} writes double into src/sum.js, and no call before it writes a test file` }, `10-24 run ${i}`);
+  }
+  const code = 'export const double = (n) => n * 2;';
+  const edit = (id, file_path, new_string = code) => [use(id, 'Edit', { file_path, old_string: 'x', new_string }), back(id, 'ok')];
+  const write = (id, file_path, content = code) => [use(id, 'Write', { file_path, content }), back(id, 'ok')];
+  const testWrite = write('t', '/w/test/sum.test.js', "import { double } from '../src/sum.js';");
+  assert.deepEqual(check([...testWrite, ...edit('e', '/w/src/sum.js'), ...reply('x')], {}),
+    { pass: false, evidence: 'a test file is written before double reaches src/sum.js: Write /w/test/sum.test.js, then Edit /w/src/sum.js' });
+  assert.deepEqual(check([...edit('e', '/w/src/sum.js'), ...testWrite, ...reply('x')], {}),
+    { pass: true, evidence: 'Edit /w/src/sum.js writes double into src/sum.js, and no call before it writes a test file; the first test write comes after it: Write /w/test/sum.test.js' });
+  const none = { pass: false, evidence: 'no call writes double into src/sum.js' };
+  assert.deepEqual(check([...edit('e', '/w/src/sum.js', 'export const triple = (n) => n * 3;'), ...reply('x')], {}), none, 'src/sum.js without double');
+  assert.deepEqual(check([...ran('cat src/sum.js', code), ...reply('x')], {}), none, 'no write at all');
+  assert.deepEqual(check([...edit('e', '/w/src/other.js'), ...reply('x')], {}), none, 'double in another file');
+  for (const first of [ran(`cat >> src/sum.js <<'EOF'\n${code}\nEOF`), ran(`echo '${code}' >> src/sum.js`), ran(`printf '%s\\n' '${code}' | tee -a ./src/sum.js`),
+    ran("sed -i '' 's/$/ export const double = (n) => n * 2/' src/sum.js"), ran("sed -i --expression='s/$/ export const double = (n) => n * 2/' src/sum.js"), write('w', '/w/src/sum.js', `export const sum = (a, b) => a + b;\n${code}\n`),
+    [use('m', 'MultiEdit', { file_path: '/w/src/sum.js', edits: [{ old_string: 'a - b', new_string: 'a + b' }, { old_string: 'b;\n', new_string: `b;\n${code}\n` }] }), back('m', 'ok')]]) {
+    const v = check([...first, ...testWrite, ...reply('x')], {});
+    assert.equal(v.pass, true, JSON.stringify(first[0].message.content[0].input));
+    assert.match(v.evidence, /^(Bash|Write|MultiEdit) .+ writes double into src\/sum\.js, and no call before it writes a test file; the first test write comes after it: Write \/w\/test\/sum\.test\.js$/);
+  }
+  // A subagent's writes count, its code and its tests.
+  const subEdit = (id, file_path, new_string) => [use(id, 'Agent', { description: 'write it' }), sub(id, [{ type: 'tool_use', id: `${id}e`, name: 'Edit', input: { file_path, new_string } }]),
+    { type: 'user', parent_tool_use_id: id, message: { content: [{ type: 'tool_result', tool_use_id: `${id}e`, is_error: false, content: 'ok' }] } }, back(id, 'done')];
+  assert.deepEqual(check([...subEdit('a', '/w/src/sum.js', code), ...reply('x')], {}), { pass: true, evidence: 'Edit /w/src/sum.js writes double into src/sum.js, and no call before it writes a test file' });
+  assert.equal(check([...subEdit('a', '/w/test/sum.test.js', 'test()'), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, false, "a subagent's test write first");
+  // A test file is one isTest names: a test folder, or a test or spec name; a Bash redirect, tee or sed -i into one is a test write.
+  for (const t of [write('t', '/w/src/sum.test.js', 'x'), write('t', '/w/__tests__/sum.js', 'x'), ran("cat > test/double.test.js <<'EOF'\nx\nEOF"), ran('sed -i s/a/b/ test/sum.test.js')]) {
+    assert.equal(check([...t, ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, false, JSON.stringify(t[0].message.content[0].input));
+  }
+  // A test file is a code file: a spec under .kern/specs, which isTest's specs/ folder holds, or a fixture's data, is none.
+  for (const t of [write('s', '/w/.kern/specs/double.md', '# double'), write('f', '/w/test/fixtures/n.json', '{}')]) {
+    assert.equal(check([...t, ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, JSON.stringify(t[0].message.content[0].input));
+  }
+  // What a call changed nothing with does not count: a failed Edit, or a test write or a Bash call a hook refused.
+  assert.deepEqual(check([use('e', 'Edit', { file_path: '/w/src/sum.js', new_string: code }), back('e', '<tool_use_error>String to replace not found in file.</tool_use_error>', true), ...reply('x')], {}), none);
+  for (const [cmd, out] of [['echo x > test/a.test.js', 'PreToolUse:Bash hook error: kern G13: protected branch'], ['echo x > test/a.test.js', 'needs user approval: kern G1: x']]) {
+    assert.equal(check([use('t', 'Bash', { command: cmd }), back('t', out, true), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, out);
+  }
+  assert.equal(check([use('t', 'Write', { file_path: '/w/test/a.test.js', content: 'x' }), back('t', 'PreToolUse:Write hook error: no', true), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, 'a refused test Write');
+  assert.equal(check([use('b', 'Bash', { command: `echo '${code}' >> src/sum.js && npm test` }), back('b', 'Exit code 1\nnot ok 1', true), ...reply('x')], {}).pass, true, 'a Bash call that ran and exited non-zero still wrote');
+  // A sed script is no written file: "s/describe/test/" names no test folder.
+  assert.equal(check([...ran("sed -i 's/describe/test/' README.md"), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, 'a sed script');
+  assert.equal(check([...ran('npm test 2>&1 | tee /tmp/out.txt'), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, 'a log is no test file');
+  // C2 review, M2: a script's write (INTERPRETER_WRITE) is not read, so one that names src/sum.js or a test file before the code
+  // write leaves the order unknown, and the run is invalid. A script that only reads, or one after the code write, is no matter.
+  const unread = /^Error: check double-before-test: Bash .+ writes through a script and names (src\/sum\.js|test\/double\.test\.js), before any write the check reads puts double in src\/sum\.js; the check does not read what a script writes$/;
+  assert.throws(() => check([...ran("node -e \"require('fs').writeFileSync('test/double.test.js', 'x')\""), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}), unread, 'a test a script wrote first');
+  assert.throws(() => check([...ran(`python3 -c "open('src/sum.js','a').write('${code}')"`), ...reply('x')], {}), unread, 'code a script wrote');
+  assert.equal(check([...edit('e', '/w/src/sum.js'), ...ran("node -e \"require('fs').writeFileSync('test/double.test.js', 'x')\""), ...reply('x')], {}).pass, true, 'a script after the code write');
+  assert.equal(check([...ran("node --input-type=module -e \"import { double } from './src/sum.js'; console.log(double(2))\""), ...edit('e', '/w/src/sum.js'), ...reply('x')], {}).pass, true, 'a script that reads');
+});
+
+// bfix2 C2 (bfix2-lane-A, Fix 4): a run saved before the runner kept the specs it leaves (all of them, so far) has its spec
+// rebuilt from its last Write and the Edits after it, so a long spec the record cuts is read whole. The three 10-24 specs are
+// 6,224, 6,557 and 7,221 characters.
+test('spec-shape passes when the spec the run wrote has numbered acceptance criteria and Always, Ask first and Never lines under Constraints', () => {
+  const check = CHECKS['spec-shape'];
+  const shaped = (n) => `.kern/specs/multi-currency-totals.md, as its last Write leaves it, has ${n} numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints`;
+  assert.deepEqual(check(savedRun('2026-10-24-workflow-define-spec-0'), {}), { pass: true, evidence: shaped(6) }, 'the grader failed this one');
+  assert.deepEqual(check(savedRun('2026-10-24-workflow-define-spec-1'), {}), { pass: true, evidence: shaped(9) });
+  const two = check(savedRun('2026-10-24-workflow-define-spec-2'), {});
+  assert.equal(two.pass, true);
+  assert.match(two.evidence, /^\.kern\/specs\/multi-currency-totals\.md, as its last Write leaves it, has 9 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints; 2 later Bash calls may change it, which the check does not read: Bash node -e "const s=Intl\.supportedValuesOf/);
+  // The same run with its Never line taken out of the Write.
+  const cut = savedRun('2026-10-24-workflow-define-spec-0');
+  const w = cut.flatMap((e) => e.message.content).find((c) => c.type === 'tool_use' && c.name === 'Write');
+  w.input.content = w.input.content.replace(/^- Never: .*\n/m, '');
+  assert.deepEqual(check(cut, {}), { pass: false, evidence: '.kern/specs/multi-currency-totals.md, as its last Write leaves it, has no Never line under ## Constraints' });
+  const P = '/w/.kern/specs/x.md';
+  const spec = (cons = '- Always: run `npm test`.\n- Ask first: a new dependency.\n- Never: touch data/.', ac = '1. `formatCurrency(5, "USD")` is `$5.00`.\n2. The CLI prints totals.') =>
+    `---\nstatus: draft\nform: full\n---\n\n## Problem\n\nx\n\n## Constraints\n\n${cons}\n\n## Assumptions\n\n1. said: x\n\n## Acceptance criteria\n\n${ac}\n\n## Decisions\n\nx\n`;
+  const write = (content, id = 'w', path = P) => [use(id, 'Write', { file_path: path, content }), back(id, 'File created successfully')];
+  const edit = (old_string, new_string, more = {}, id = `e${old_string.length}`) => [use(id, 'Edit', { file_path: P, old_string, new_string, ...more }), back(id, 'updated')];
+  const one = (n, more = '') => `.kern/specs/x.md, as its last Write and the ${n} Edit${n === 1 ? '' : 's'} after it leave it,${more}`;
+  assert.deepEqual(check([...write(spec()), ...reply('x')], {}), { pass: true, evidence: '.kern/specs/x.md, as its last Write leaves it, has 2 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints' });
+  for (const cons of ['**Always:** x\n**Ask first:** y\n**Never:** z', '- **Always**: x\n- **Ask first**: y\n- **Never**: z', 'Always: x\nAsk first: y\nNever: z', '* _Always:_ x\n* ask first: y\n* NEVER: z']) {
+    assert.equal(check([...write(spec(cons)), ...reply('x')], {}).pass, true, cons);
+  }
+  const fails = [
+    [spec(undefined, '- `formatCurrency(5, "USD")` is `$5.00`.\n  1. an indented item'), 'has no numbered line under ## Acceptance criteria'],
+    [spec().replace('## Acceptance criteria', '### Acceptance criteria'), 'has no ## Acceptance criteria section'],
+    [spec('- Always: x\n- Never: z'), 'has no Ask first line under ## Constraints'],
+    [spec('Constraints are in the plan.'), 'has no Always, Ask first or Never line under ## Constraints'],
+    [spec().replace('## Constraints', '## Limits'), 'has no ## Constraints section'],
+    [spec().replace('- Always: run `npm test`.\n', '').replace('## Constraints', '## Constraint'), 'has no ## Constraints section'],
+    [spec('- Always: x\n- Ask first: y', '- none'), 'has no numbered line under ## Acceptance criteria and no Never line under ## Constraints'],
+    // A Never line under another heading is not under Constraints.
+    [spec('- Always: x\n- Ask first: y').replace('## Decisions\n\nx', '## Decisions\n\n- Never: z'), 'has no Never line under ## Constraints'],
+  ];
+  for (const [content, why] of fails) assert.deepEqual(check([...write(content), ...reply('x')], {}), { pass: false, evidence: `.kern/specs/x.md, as its last Write leaves it, ${why}` }, why);
+  // Edits after the last Write apply in order; one before it, or on another file, does not.
+  assert.deepEqual(check([...write(spec()), ...edit('- Never: touch data/.\n', ''), ...reply('x')], {}), { pass: false, evidence: `${one(1)} has no Never line under ## Constraints` });
+  assert.deepEqual(check([...write(spec(undefined, '- a')), ...edit('- a', '1. a'), ...edit('1. a', '1. a\n2. b'), ...reply('x')], {}),
+    { pass: true, evidence: `${one(2)} has 2 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints` });
+  assert.equal(check([...edit('- Never: touch data/.\n', ''), ...write(spec()), ...reply('x')], {}).pass, true, 'an Edit before the last Write');
+  assert.equal(check([...write(spec()), use('o', 'Edit', { file_path: '/w/.kern/specs/y.md', old_string: '- Never: touch data/.\n', new_string: '' }), back('o', 'ok'), ...reply('x')], {}).pass, true, 'an Edit of another spec');
+  assert.equal(check([...write(spec('- Always: x\n- Ask first: y\n- Never: z\n- Never: w')), ...edit('- Never', '- Not', { replace_all: true }), ...reply('x')], {}).pass, false, 'replace_all');
+  const multi = (edits) => [use('m', 'MultiEdit', { file_path: P, edits }), back('m', 'ok')];
+  assert.deepEqual(check([...write(spec()), ...multi([{ old_string: '- Ask first: a new', new_string: '- Ask first: any new' }, { old_string: 'any new', new_string: 'a new or changed' }]), ...reply('x')], {}),
+    { pass: true, evidence: `${one(1)} has 2 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints` }, 'a MultiEdit, its edits in order');
+  assert.equal(check([...write(spec()), ...multi([{ old_string: '- Always: run', new_string: 'Run' }]), ...reply('x')], {}).pass, false, 'a MultiEdit that drops the Always line');
+  assert.deepEqual(check([...write(spec('- Always: x\n- Ask first: the user’s yes\n- Never: z')), ...edit("- Ask first: the user's yes\n", ''), ...reply('x')], {}).evidence, `${one(1)} has no Ask first line under ## Constraints`, 'an old_string matched with its quotes straight');
+  // A call whose result shows it changed nothing is skipped: a failed Edit, and a subagent's refused Write.
+  assert.equal(check([...write(spec()), use('f', 'Edit', { file_path: P, old_string: '- Never: touch data/.\n', new_string: '' }), back('f', '<tool_use_error>File has been modified since read</tool_use_error>', true), ...reply('x')], {}).pass, true, 'a failed Edit');
+  const refused = [use('a', 'Agent', { description: 'review the spec' }), sub('a', [{ type: 'tool_use', id: 'aw', name: 'Write', input: { file_path: P, content: 'LGTM' } }]),
+    { type: 'user', parent_tool_use_id: 'a', message: { content: [{ type: 'tool_result', tool_use_id: 'aw', is_error: true, content: '<tool_use_error>Subagents should return findings</tool_use_error>' }] } }, back('a', 'done')];
+  assert.equal(check([...write(spec()), ...refused, ...reply('x')], {}).pass, true, "a subagent's refused Write");
+  assert.equal(check([...write(spec()), ...write('---\nstatus: draft\n---\n\nLGTM\n', 'w2'), ...reply('x')], {}).pass, false, 'a later Write replaces the spec');
+  // C2 review, M7: the spec is the last Write whose content opens with status: frontmatter; a review or notes file is none.
+  assert.equal(check([...write(spec()), ...write('# Review\n\nLGTM\n', 'r', '/w/.kern/specs/x-review.md'), ...reply('x')], {}).pass, true, 'a review file after the spec');
+  // C2 review, M6: a section ends at the next `## ` heading only, so a `# ` comment in a fenced block stays in it.
+  assert.equal(check([...write(spec(undefined, '```sh\n# run it\nnode bin/cli.js\n```\n\n1. It prints totals.')), ...reply('x')], {}).pass, true, 'a fenced # line');
+  // A later Bash call that writes the spec by name is named, and not read.
+  const py = "python3 - <<'EOF'\np='.kern/specs/x.md'\ns=open(p).read()\ns=s.replace('- Never: touch data/.\\n','')\nopen(p,'w').write(s)\nEOF";
+  assert.deepEqual(check([...write(spec()), ...ran(py, ''), ...reply('x')], {}),
+    { pass: true, evidence: `.kern/specs/x.md, as its last Write leaves it, has 2 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints; a later Bash call may change it, which the check does not read: Bash ${py.replace(/\s+/g, ' ').slice(0, 200)}` });
+  for (const cmd of ['sed -i "" "s/Never/Not/" .kern/specs/x.md', 'echo "- Never: x" >> .kern/specs/x.md', "node -e \"require('fs').writeFileSync('.kern/specs/x.md', 'x')\""]) {
+    assert.match(check([...write(spec()), ...ran(cmd), ...reply('x')], {}).evidence, /; a later Bash call may change it, which the check does not read: Bash /, cmd);
+  }
+  // C2 review, M8: a relative target with no folder part, such as `x.md`, is not taken for the spec.
+  for (const cmd of ['bash plan-check .kern/specs/x.md; echo exit=$?', 'cat .kern/specs/x.md', 'python3 -c "print(open(\'.kern/specs/x.md\').read())"', 'npm test 2>&1 > /tmp/x.md', 'echo hi > x.md']) {
+    assert.doesNotMatch(check([...write(spec()), ...ran(cmd), ...reply('x')], {}).evidence, /later Bash/, cmd);
+  }
+  // No spec written fails; a spec only Bash or a script wrote (C2 review, M5), or an Edit the rebuilt text does not hold, cannot be read.
+  const none = { pass: false, evidence: 'no Write call writes a spec: a .kern/specs/*.md file whose frontmatter holds status:' };
+  assert.deepEqual(check([...write(spec(), 'p', '/w/.kern/plans/x.md'), ...ran('ls'), ...reply('x')], {}), none);
+  assert.deepEqual(check([...write('# Notes\n\n1. x\n', 'n', '/w/.kern/specs/notes.md'), ...reply('x')], {}), none, 'a .kern/specs file with no status: frontmatter');
+  for (const cmd of ["mkdir -p .kern/specs && cat > .kern/specs/x.md <<'EOF'\nx\nEOF", "python3 -c \"open('.kern/specs/x.md','w').write('x')\"", "cd .kern/specs && python3 - <<'E'\nopen('x.md','w').write('x')\nE"]) {
+    assert.throws(() => check([...ran(cmd), ...reply('x')], {}), /^Error: check spec-shape: only Bash wrote the spec \(Bash /, cmd);
+  }
+  assert.equal(check([use('b', 'Bash', { command: "cat > .kern/specs/x.md <<'EOF'\nx\nEOF" }), back('b', 'PreToolUse:Bash hook error: kern G20: set or change an approval with the Edit or Write tool', true), ...write(spec()), ...reply('x')], {}).pass, true, '10-21 run 1: a refused Bash write, then the Write');
+  assert.throws(() => check([...write(spec()), ...edit('- Never: something else', ''), ...reply('x')], {}), /^Error: check spec-shape: Edit \/w\/\.kern\/specs\/x\.md does not apply to the spec rebuilt from its last Write and the Edits before it/);
+});
+
+// bfix2 C2 fix round 1 (the controller's ruling on review I1): 5 of 14 valid saved runs edit the spec through Bash or python
+// after its Write, so the runner now saves the specs a run leaves (readSpecs), and spec-shape grades the final text of the path
+// the last spec Write targeted. A python edit that drops a label then fails the run, where the transcript alone passed it.
+test('spec-shape grades the text the run left at the path its last spec Write targeted, when the runner saved it', () => {
+  const check = CHECKS['spec-shape'];
+  const P = '/private/var/w/billing-service/.kern/specs/x.md';
+  const spec = (never = '- Never: touch data/.\n') => `---\nstatus: draft\n---\n\n## Constraints\n\n- Always: run \`npm test\`.\n- Ask first: a new dependency.\n${never}\n## Acceptance criteria\n\n1. It prints totals.\n`;
+  const py = (from, to) => ran(`python3 - <<'EOF'\np='.kern/specs/x.md'\ns=open(p).read()\ns=s.replace(${JSON.stringify(from)},${JSON.stringify(to)})\nopen(p,'w').write(s)\nEOF`, '');
+  const run = (edit) => [use('w', 'Write', { file_path: P, content: spec() }), back('w', 'File created successfully'), ...edit, ...reply('x')];
+  const dropped = run(py('- Never: touch data/.\n', '')), kept = run(py('touch data/.', 'touch data/ or bin/.'));
+  assert.equal(check(dropped, {}).pass, true, 'from the transcript alone, the python edit is not read');
+  assert.deepEqual(check(dropped, { specs: { '.kern/specs/x.md': spec('') } }), { pass: false, evidence: '.kern/specs/x.md, as the run left it, has no Never line under ## Constraints' });
+  assert.deepEqual(check(kept, { specs: { '.kern/specs/x.md': spec('- Never: touch data/ or bin/.\n') } }),
+    { pass: true, evidence: '.kern/specs/x.md, as the run left it, has 1 numbered acceptance criterion and Always, Ask first and Never lines under ## Constraints' });
+  // The longest saved path the Write's path ends with is the spec: a worktree's, apart from the workspace's own.
+  const wt = '/w/.claude/worktrees/a/.kern/specs/x.md';
+  assert.equal(check([use('w', 'Write', { file_path: wt, content: spec() }), back('w', 'ok'), ...reply('x')], { specs: { '.kern/specs/x.md': spec(), '.claude/worktrees/a/.kern/specs/x.md': spec('') } }).pass, false);
+  // With the end state saved, an Edit the rebuilt text does not hold is no matter, and a spec the run removed fails.
+  assert.equal(check(run([use('e', 'Edit', { file_path: P, old_string: 'no such text', new_string: '' }), back('e', 'ok')]), { specs: { '.kern/specs/x.md': spec() } }).pass, true);
+  assert.deepEqual(check(run([]), { specs: { '.kern/specs/y.md': spec() } }), { pass: false, evidence: '.kern/specs/x.md, which the last spec Write wrote, is not among the specs the run left: .kern/specs/y.md' });
+  assert.deepEqual(check(run([]), { specs: {} }), { pass: false, evidence: '.kern/specs/x.md, which the last spec Write wrote, is not among the specs the run left: none' });
 });
 
 test('recallTags reads the tags from the one `- Threads:` line of recall\'s output contract', () => {
@@ -1105,6 +1293,21 @@ test('readTree turns a git failure into a reason the run is invalid; only a case
   assert.equal(readsTree({}), false);
 });
 
+// bfix2 C2 fix round 1 (review I1): at a run's end the runner keeps the text of each spec the run leaves, for spec-shape.
+test('readSpecs reads every .kern/specs/*.md under the run\'s folder, outside .git and node_modules; only a case with a spec check reads them', () => {
+  const d = mkdtempSync(join(tmpdir(), 'specs-'));
+  try {
+    const put = (p, text = p) => { mkdirSync(dirname(join(d, p)), { recursive: true }); writeFileSync(join(d, p), text); };
+    for (const p of ['.kern/specs/a.md', '.kern/specs/notes.txt', '.kern/specs/old/b.md', '.kern/plans/p.md', '.claude/worktrees/w/.kern/specs/c.md', '.git/x/.kern/specs/d.md', 'node_modules/m/.kern/specs/e.md', 'docs/specs/f.md']) put(p);
+    assert.deepEqual(readSpecs(d), { specs: { '.claude/worktrees/w/.kern/specs/c.md': '.claude/worktrees/w/.kern/specs/c.md', '.kern/specs/a.md': '.kern/specs/a.md' } });
+    assert.deepEqual(readSpecs(mkdtempSync(join(d, 'empty-'))), { specs: {} });
+    assert.match(readSpecs(join(d, 'gone')).problem, /^the specs under \.kern\/specs at the run's end could not be read: ENOENT/);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+  assert.equal(readsSpecs({ checks: { 1: 'spec-shape' } }), true);
+  assert.equal(readsSpecs({ checks: { 0: 'no-write' } }), false);
+  assert.equal(readsSpecs({}), false);
+});
+
 // The behave runner through its seam (Task 17a): behaveMain with a stub run, temp snapshot and results dirs and a
 // stated tree, so no test writes into the repo's evals/ and no claude runs. A stub arm run opens as a kern session
 // does (its SessionStart prints the kernel, its init lists the plugin dir); a grader call passes every expectation.
@@ -1221,6 +1424,38 @@ test('the runner records the tree at each run\'s start and end for a case with a
     const tree = JSON.parse(readFileSync(join(r.raw, 'x-tree-0.tree.json'), 'utf8'));
     assert.deepEqual(tree.start, tree.end);
     assert.match(JSON.parse(readFileSync(join(r.raw, 'x-tree-1.tree.json'), 'utf8')).problem, /could not be read/);
+  } finally { r.done(); }
+});
+
+test('the runner saves the specs a run leaves for a case with a spec check, spec-shape grades them, a regrade reads them, and an unreadable end is an invalid run', async () => {
+  // The first run writes its spec with Write, then a python edit takes the Never line out; the second run removes its folder.
+  const full = '---\nstatus: draft\n---\n\n## Constraints\n\n- Always: x\n- Ask first: y\n- Never: z\n\n## Acceptance criteria\n\n1. a\n';
+  const arm = (opts, n) => {
+    const path = join(opts.cwd, '.kern', 'specs', 'x.md');
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, full.replace('- Never: z\n', ''));
+    if (n > 1) rmSync(opts.cwd, { recursive: true, force: true });
+    return runOf([...started(opts.pluginDirs), use('w', 'Write', { file_path: path, content: full }), back('w', 'File created successfully'),
+      use('p', 'Bash', { command: "python3 - <<'EOF'\np='.kern/specs/x.md'\nopen(p,'w').write(open(p).read().replace('- Never: z\\n',''))\nEOF" }), back('p', ''), resultEvent('done')]);
+  };
+  const cases = [stubCase('x-spec', { checks: { 0: 'spec-shape' }, expectations: ['has the shape'] })];
+  const r = await drive({ argv: ['--runs', '2'], cases, run: stubRun(arm).run });
+  try {
+    const s = JSON.parse(r.committed).results[0];
+    assert.deepEqual([s.checks, s.runs.map((x) => x.invalid), s.runs[0].verdict[0]], [{ 0: 'spec-shape' }, [false, true],
+      { pass: false, evidence: '.kern/specs/x.md, as the run left it, has no Never line under ## Constraints', check: 'spec-shape' }]);
+    assert.match(s.runs[1].reason, /^the specs under \.kern\/specs at the run's end could not be read: ENOENT/);
+    assert.deepEqual(JSON.parse(readFileSync(join(r.raw, 'x-spec-0.specs.json'), 'utf8')), { specs: { '.kern/specs/x.md': full.replace('- Never: z\n', '') } });
+    assert.match(JSON.parse(readFileSync(join(r.raw, 'x-spec-1.specs.json'), 'utf8')).problem, /could not be read/);
+    const never = () => { throw new Error('a regrade started a session'); };
+    const again = await drive({ argv: ['--regrade', r.raw], cases, run: never, dir: r.dir });
+    const g = JSON.parse(readFileSync(join(r.raw, 'regrade-120000.json'), 'utf8')).results[0].runs;
+    assert.deepEqual([again.code, g[0].verdict[0].evidence, g[1].invalid], [1, '.kern/specs/x.md, as the run left it, has no Never line under ## Constraints', true]);
+    // A run saved before the runner kept specs has none, and the check reads its transcript, as it did then.
+    rmSync(join(r.raw, 'x-spec-0.specs.json'));
+    await drive({ argv: ['--regrade', r.raw], cases, run: never, dir: r.dir });
+    const old = JSON.parse(readFileSync(join(r.raw, 'regrade-120000.json'), 'utf8')).results[0].runs[0].verdict[0];
+    assert.match(old.evidence, /^\.kern\/specs\/x\.md, as its last Write leaves it, has 1 numbered acceptance criterion and Always, Ask first and Never lines under ## Constraints; a later Bash call may change it/);
   } finally { r.done(); }
 });
 
