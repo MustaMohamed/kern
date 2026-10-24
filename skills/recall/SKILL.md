@@ -23,7 +23,7 @@ Rebuild the current state from kern's working files, transcripts and live state,
 ## Output contract
 
 - Capsule: at most 5 bullets on what this work is and where it stands.
-- Threads: one line per thread, starting with its one tag, as `- [tag] <thread>`: `[merged #N]`, `[open PR #N]`, `[in flight <branch>]`, `[verified, uncommitted]`, `[reverted #N]`, `[blocked, <why>]`, `[parked]`, `[planned, not started]`, or `[unverified, <source> unavailable]`; a transcript alone never earns a stronger tag. A branch left behind after its PR merged is [merged #N] with "cleanup pending" on the same line. A test result, a report's claim or a note on a tag is not a thread. A line without a tag goes under Problems or Sources skipped.
+- Threads: one line per thread, starting with its one tag, as `- [tag] <thread>`: `[merged #N]`, `[open PR #N]`, `[in flight <branch>]`, `[verified, uncommitted]` (only if its last tree= equals a fresh wt-snap), `[reverted #N]`, `[blocked, <why>]`, `[parked]`, `[planned, not started]`, or `[unverified, <source> unavailable]`; a transcript alone never earns a stronger tag. A branch left behind after its PR merged is [merged #N] with "cleanup pending" on the same line. A test result, a report's claim or a note on a tag is not a thread. A line without a tag goes under Problems or Sources skipped.
 - Problems: at most 5, the recurring ones.
 - Next move: one concrete action. An incomplete ledger task is the next move when one exists.
 - Sources skipped: one line naming each source that did not run, or omit.

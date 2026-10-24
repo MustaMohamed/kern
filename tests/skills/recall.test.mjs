@@ -33,7 +33,7 @@ test('recall sections, steps and the source lines it keeps', () => {
     'Adjacent work stays out unless it blocks this', 'cut detail before threads', 'claim the mining inherited']);
   assert.ok(!readDoc(SKILL).raw.includes('history.jsonl'), 'recall finds prompts through recall-sessions, which filters by project');
   assert.ok(!readDoc(SKILL).raw.includes('$('), 'no command substitution in a command the skill prescribes');
-  assertMaxBytes(SKILL, 7200);
+  assertMaxBytes(SKILL, 7230);
 });
 
 // Audit E4: WORK is kern-root's main root plus work_dir, as kern-dir and autopilot find it. The parent of
@@ -120,6 +120,14 @@ test('recall keeps one tag list a script can read, and names what is not a threa
   assert.equal(lines.length, 1, 'one Threads line');
   assert.deepEqual([...lines[0].matchAll(/`(\[[^`]*\])`/g)].map((m) => m[1]), TAGS);
   assertOnce(SKILL, ['A test result, a report\'s claim or a note on a tag is not a thread. A line without a tag goes under Problems or Sources skipped.']);
+});
+
+// M2b bfix R follow-up (bfix-lane-2, recall-1 fix 3; task-16-confirming-diagnosis section 6 item 4): 4 of 9
+// recall-1 runs since Task 16p tagged Task 3's work `[verified, uncommitted]`, though its last `tree=` differs
+// from the fresh wt-snap, and the behaviour check now fails that. The condition sits beside the tag, unbackticked
+// so the tag list keeps one backticked span per tag.
+test('recall gives [verified, uncommitted] its condition on the Threads line', () => {
+  assertOnce(SKILL, ['`[verified, uncommitted]` (only if its last tree= equals a fresh wt-snap), `[reverted #N]`']);
 });
 
 // M2b bfix R (bfix-lane-2, recall-4): since 2026-10-22, 4 of 9 recall-4 runs ran recall-sessions, most to check
