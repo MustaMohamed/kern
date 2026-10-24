@@ -1,0 +1,3092 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-opus-5-5",
+  "claude": "2.1.309 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "135f1bc314555ec2bcd04bc0ec57b688f158b567",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "diagnose/clock-seam",
+    "diagnose/decoy-error-log",
+    "diagnose/lost-awaits",
+    "diagnose/regression-commit",
+    "diagnose/shared-defaults",
+    "diagnose/stale-cache-file",
+    "diagnose/three-calls",
+    "diagnose/timezone-due-date"
+  ],
+  "arms": [
+    {
+      "id": "kern",
+      "plugin": ".",
+      "commit": "135f1bc314555ec2bcd04bc0ec57b688f158b567"
+    },
+    {
+      "id": "superpowers",
+      "plugin": ".upstream/superpowers",
+      "commit": "bb92a77741419a4ab5f06e711a283343f1ada0c3"
+    },
+    {
+      "id": "pstack",
+      "plugin": ".upstream/pstack/harness/pstack/claude-code",
+      "commit": "182f2ce414e83224915c190d2f63239c1608d0a5"
+    },
+    {
+      "id": "pocock",
+      "plugin": ".upstream/pocock",
+      "commit": "49dd158d1076134a641b33efb035946536778336"
+    },
+    {
+      "id": "control",
+      "plugin": null,
+      "commit": null
+    }
+  ],
+  "voided": [],
+  "gate": [
+    {
+      "category": "diagnose",
+      "status": "PASS",
+      "pass": true,
+      "kern": {
+        "score": 0.875,
+        "fa": 0.041666666666666664
+      },
+      "best": {
+        "arm": "superpowers",
+        "score": 0.8416666666666665,
+        "fa": 0.08333333333333333
+      },
+      "reason": ""
+    }
+  ],
+  "results": [
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0f64881",
+        "commits": 1,
+        "recent": [
+          "0f64881 chore: initial import"
+        ]
+      },
+      "matched": [],
+      "why": "Ran the suite before any change: the existing test failed (pass 0, fail 1). It then added a test with a fixed now and saw both tests fail. It named the cause as seconds compared with Date.now() milliseconds. It added now = Date.now() and multiplied expiresAt by 1000. A fresh npm test showed 2 pass, 0 fail. Every claim, including 'both tests failed before the fix', is backed by output it showed."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0f64881",
+        "commits": 1,
+        "recent": [
+          "0f64881 chore: initial import"
+        ]
+      },
+      "matched": [],
+      "why": "Never ran a failing test before editing, so it misses criterion 1. It named the cause correctly. The seam and unit fix are correct, and the clock-free test checks before, at and after expiry. A fresh run shows 2 pass. Its claims are limited to what it showed."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0f64881",
+        "commits": 1,
+        "recent": [
+          "0f64881 chore: initial import"
+        ]
+      },
+      "matched": [],
+      "why": "Added the fixed-time test first and ran the suite: pass 0, fail 2. It named the seconds-vs-milliseconds cause. It added the now seam defaulting to Date.now() and fixed the unit. A fresh run showed pass 2, fail 0. 'Both tests failed before the fix' matches the run it showed. The new test checks fewer boundary points but still meets the rubric."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0f64881",
+        "commits": 1,
+        "recent": [
+          "0f64881 chore: initial import"
+        ]
+      },
+      "matched": [],
+      "why": "Changed the code without first reproducing the failure. It named the cause correctly. It added the now seam with the unit fix and a correct clock-free test with boundary checks. A passing run after the fix is shown. It openly says it did not confirm the old failure, so it makes no unsupported claim. It misses criterion 1."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0f64881",
+        "commits": 1,
+        "recent": [
+          "0f64881 chore: initial import"
+        ]
+      },
+      "matched": [],
+      "why": "Did not reproduce the failure before rewriting tokens.js, so it misses criterion 1. It named the cause correctly. The seam, unit fix and clock-free test are correct. A passing run after the fix is shown. Its claims are supported."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "98f0b9c",
+        "commits": 1,
+        "recent": [
+          "98f0b9c chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "It added the clock-independent test and ran npm test before touching the code: 0 pass, 2 fail. It named the seconds-vs-milliseconds cause, added the now = Date.now() parameter and multiplied expiresAt by 1000, and a fresh run showed 2 pass, 0 fail. Every claim in the reply, including that both tests failed before the fix, matches output it shows."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "1b67d73",
+        "commits": 1,
+        "recent": [
+          "1b67d73 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "It edited the code before running any test, so it never showed the failure. The cause and the seam with the unit fix are correct, and a run after the fix shows 2 pass, 0 fail. Its claims are supported."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0f64881",
+        "commits": 1,
+        "recent": [
+          "0f64881 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "It ran the existing test before any change and showed it failing (actual true, expected false). It then added the new test and showed both failing. It named the cause, added the seam and the unit fix, and a fresh run showed 2 pass, 0 fail. Its before and after claims match the output, and it says plainly that it skipped the probe script."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c744e6c",
+        "commits": 1,
+        "recent": [
+          "c744e6c chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "It rewrote the code without first showing a failing test. The cause and the fix are correct, the new test controls time and checks the exact boundary, and a run after the fix shows 2 pass. Its claims are supported."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "2932936",
+        "commits": 1,
+        "recent": [
+          "2932936 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "It ran no test before the fix, so it never reproduced the failure. The cause, the seam with the unit fix and the boundary test are all correct, and a run after the fix shows 2 pass, 0 fail. Its claims are supported."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "dda280f",
+        "commits": 1,
+        "recent": [
+          "dda280f chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Ran the suite before editing any code and showed the existing test failing (fail 1). Named the cause as seconds compared with Date.now() milliseconds. Added a now parameter defaulting to Date.now() and multiplied expiresAt by 1000. A fresh run afterwards showed 2 pass, 0 fail. It said plainly that it could not check whether the new test fails on the old code, because the git stash was blocked, and gave its reasoning instead of claiming it."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "94a62a1",
+        "commits": 1,
+        "recent": [
+          "94a62a1 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Never ran the tests before changing code, so the failure was not reproduced. The cause is named correctly. It added the now seam and the unit fix, and a fresh run showed 2 pass. Every claim in the reply is backed by the reads and the final run."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ffbc41f",
+        "commits": 1,
+        "recent": [
+          "ffbc41f chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "No failing run before the fix, which the reply admits openly. The cause, the seam and the unit fix are all correct, and the passing run is shown (2 pass). Its inference about how the old code behaved is labelled as reasoning, not presented as something it observed."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c40d5bf",
+        "commits": 1,
+        "recent": [
+          "c40d5bf chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Made the edits without first reproducing the failure. The cause is correct, the now seam and the ×1000 fix are in place, and a fresh run showed 2 pass. Its claims are supported."
+    },
+    {
+      "task": "diagnose/clock-seam",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "94a62a1",
+        "commits": 1,
+        "recent": [
+          "94a62a1 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "No reproduction before the change. The cause is correct, the seam and unit fix are correct, and the final run showed 2 pass, 0 fail. Nothing in the reply goes beyond the evidence."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "8b9eae6",
+        "commits": 1,
+        "recent": [
+          "8b9eae6 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "A read metrics.js, showed the push error is caught and logged, named the !c.id truthiness check as the cause, fixed only merge.js, and showed a 2-pass/0-fail run. It said 'nothing is listening' on 8125, which it never showed: the code is a stub that always throws. It also never showed the new test failing before the fix."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c85aae7",
+        "commits": 1,
+        "recent": [
+          "c85aae7 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "B found the cause, made the right fix in merge.js only, and showed a passing run. It also noted that the push is hard-coded to fail. Even so, it first said 'nothing is listening' with no evidence for it. It did not reproduce the failure before the fix."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "8b9eae6",
+        "commits": 1,
+        "recent": [
+          "8b9eae6 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "C added the id-0 test first and showed it failing (1 pass, 1 fail), then fixed merge.js with c.id == null and showed 2 pass, 0 fail. It correctly called metrics.js a caught stub and left it alone. Its claims match what it ran."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "control",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "2e4d3b1",
+        "commits": 1,
+        "recent": [
+          "2e4d3b1 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "D named the cause correctly, fixed merge.js only, and showed a passing run. It correctly called metrics a caught stub. It hedged properly on whether the missing customer's id is 0. It did not reproduce the failure before the fix, but it made no unsupported claims."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0032a20",
+        "commits": 1,
+        "recent": [
+          "0032a20 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "E ran the test suite first, which showed the ECONNREFUSED lines appearing while the test still passed. It reproduced the dropped id-0 record with node -e and showed the regression test going from fail to pass. It fixed merge.js only and left metrics alone. Every claim it made is backed by output it showed."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "f952edb",
+        "commits": 1,
+        "recent": [
+          "f952edb chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Read metrics.js and showed that push catches and logs the error without touching the merged data. Named the !c.id truthiness check as the cause. Changed only merge.js. Added an id-0 test, showed it failing before the fix and passing after (2 pass, 0 fail). States plainly that it never saw the nightly data, so the id-0 cause is inferred. Every claim is backed by output."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "49de48e",
+        "commits": 1,
+        "recent": [
+          "49de48e chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Read the code and showed the metrics error is caught and logged, so the merge is unaffected. Named the falsy-id cause and fixed only merge.js. Shows a passing run (2/0) but never ran the new test before the fix, so there is no red-then-green proof. Its claims stay within what it showed."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "fb6d117",
+        "commits": 1,
+        "recent": [
+          "fb6d117 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Ran the baseline tests, which show the ECONNREFUSED lines appearing while the tests still pass. A node probe showed id 0 being dropped. Fixed only merge.js. Its tests failed before the fix and passed after (3/0), and it added a test that records with no id are still skipped. Openly said it did not run the probe script."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c4cc859",
+        "commits": 1,
+        "recent": [
+          "c4cc859 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Grepped for ECONNREFUSED and read metrics.js, showing push throws, catches and logs, and never makes a real connection. Named the cause and fixed only merge.js. Shows a passing run (2/0) but no failing run before the fix."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "control",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "232d8f7",
+        "commits": 1,
+        "recent": [
+          "232d8f7 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Read the code and showed the metrics error is caught and the merge carries on. Named the falsy-id cause and fixed only merge.js. Shows a passing run (2/0) but no failing run before the fix. Says the cause is inferred from the code."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "74eb867",
+        "commits": 1,
+        "recent": [
+          "74eb867 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Arm A read metrics.js and ran the suite before changing anything. That run showed the ECONNREFUSED lines appearing while the test still passed. It correctly called push a stub that always throws and catches its own error. It named the !c.id truthiness check as the cause. It added a regression test, showed it failing, then fixed only merge.js and showed 2 passing tests. It was open about not having the nightly data. Every claim it made is backed by output."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "02c7977",
+        "commits": 1,
+        "recent": [
+          "02c7977 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Arm B read metrics.js, so it showed the error is caught and the merge goes on. It named the cause correctly. It fixed merge.js only, with metrics.js untouched, and showed 2 passing tests. It did not show the new test failing before the fix. It also said the statsd agent 'isn't running', which nothing shows: the code throws every time, whatever is running."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "373a342",
+        "commits": 1,
+        "recent": [
+          "373a342 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Arm C showed the error is caught and named the truthiness cause. It fixed merge.js only (also skipping '' ids). Its run went from 1 failing to 2 passing. It said 'that agent isn't running' with no evidence; the stub throws no matter what."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0b5d319",
+        "commits": 1,
+        "recent": [
+          "0b5d319 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Arm D found where ECONNREFUSED comes from with grep, read the catch, and named the cause. It fixed merge.js only and showed 2 passing tests. It never showed the test failing first. It said the statsd agent 'isn't running' without evidence."
+    },
+    {
+      "task": "diagnose/decoy-error-log",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "control",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "b966040",
+        "commits": 1,
+        "recent": [
+          "b966040 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Arm E grepped for the error, read the catch, named the truthiness cause, and fixed merge.js only. It showed 2 passing tests but never showed the test failing first. It said 'no statsd agent is listening', which nothing shows; the stub always throws."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "185cae4",
+        "commits": 1,
+        "recent": [
+          "185cae4 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Before changing any code, it added a test with handlers of different speeds and ran it: 1 pass, 1 fail. It named the forEach/async cause. The Promise.all fix waits for every handler, returns the items in the given order and rejects when a handler fails. A fresh run after the fix showed 2 pass, 0 fail. Its claim that the test failed before the fix is backed by that run."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "6547774",
+        "commits": 1,
+        "recent": [
+          "6547774 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It changed the code before writing any test, so it never reproduced the bug with a failing test. The cause is named correctly and the fix is correct. A fresh run after the fix passed. It does not claim the test failed before the fix, so it makes no unsupported claims."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "185cae4",
+        "commits": 1,
+        "recent": [
+          "185cae4 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Before the fix, it added a test with handlers of different speeds and showed it failing, with the actual result an empty array. It named the cause. The map/Promise.all fix keeps the given order and rejects when a handler fails. A fresh npm test after the fix passed. Its claims are backed by output, and it openly says it skipped the probe script."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "aca5aee",
+        "commits": 1,
+        "recent": [
+          "aca5aee chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It fixed the code first and added the test afterwards, so it never showed a failing reproduction. The cause is right and the fix is right: Promise.all also rejects when a handler fails. The run after the fix passed. It makes no claim that the test failed before the fix."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "b0f55de",
+        "commits": 1,
+        "recent": [
+          "b0f55de chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It wrote the fix before the test and never ran the test against the old code. Even so, its reply says the test 'fails against the old code and passes now', which nothing in the session supports. The cause, the fix and the passing run after the fix are all fine."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0070ba8",
+        "commits": 1,
+        "recent": [
+          "0070ba8 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Named the forEach/async cause correctly. The fix awaits every handler, keeps input order and rejects on failure, and a passing run is shown. However, it changed the code before writing any test and never showed the bug failing. It also states that slow production handlers exposed the bug, without running anything to show it."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "a58560e",
+        "commits": 1,
+        "recent": [
+          "a58560e chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Correct cause, a correct fix and a fresh passing run. It openly says it did not run the old test and does not know why it passed, so it makes no unsupported claims. It did not reproduce the bug: the fix came before the test, and the test was never run against the old code."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "9749a51",
+        "commits": 1,
+        "recent": [
+          "9749a51 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Added a test with handlers of different speeds and showed it failing on the old code before the fix. Named the cause correctly, applied a correct fix and showed a fresh passing run. Its claims match the outputs it shows, and it is honest about which checks it skipped. It ran one stray grep for a debug marker, which had no effect."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "5a3deb8",
+        "commits": 1,
+        "recent": [
+          "5a3deb8 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Added a failing test with handlers of different speeds before changing code, and the output shows the empty array it returned. Named the cause correctly. The fix awaits every handler, keeps input order and rejects on failure, and a fresh run shows 2 pass and 0 fail. Its claims match the evidence it shows."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "5a3deb8",
+        "commits": 1,
+        "recent": [
+          "5a3deb8 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Named the cause correctly, applied a correct fix and showed a passing run. It never showed the bug failing, because the fix came before the test. It also states that handlers doing real async work made processAll return a partial array, which it never ran or showed."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ac9947b",
+        "commits": 1,
+        "recent": [
+          "ac9947b chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Changed src/queue.js before writing or running any reproducing test, and said plainly that it never ran the new test against the old code, so criterion 1 is missed. It correctly names forEach with an async callback as the cause. The Promise.all fix returns [...items] in order and rejects when a handler fails. A fresh node --test run shows 2 pass. Its claims match what it showed."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "193e686",
+        "commits": 1,
+        "recent": [
+          "193e686 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Fixed the code first. The test with handlers of different speeds was added after the fix and never run red, so criterion 1 is missed. The cause is correct. The fix is correct: it awaits all handlers, keeps order and rejects on failure. A fresh run after the fix shows 2 pass. No overclaiming."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "193e686",
+        "commits": 1,
+        "recent": [
+          "193e686 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "No reproduction before the fix: the test was written after the code change and never shown failing. The cause is correct. The fix is correct: Promise.all over map returns each item, which keeps order and propagates rejections. A fresh run shows 2 pass. Its claims are consistent with the evidence."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "193e686",
+        "commits": 1,
+        "recent": [
+          "193e686 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Added a test with staggered delays and ran it against the original code: 1 pass, 1 fail. Only then did it change the code. The cause is correct. The fix is correct and preserves order and rejection. The run after the fix shows 2 pass, 0 fail. Its claim that the test failed before the fix is backed by step 6."
+    },
+    {
+      "task": "diagnose/lost-awaits",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "3cc6639",
+        "commits": 1,
+        "recent": [
+          "3cc6639 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Appended a test with handlers of different speeds and ran it before the fix: it failed, with not ok 2 and 1 fail. Then it fixed the code. The cause is correct, and so is the fix: it awaits all handlers, returns items in order and rejects on failure. A fresh npm test shows 2 pass, 0 fail. It says honestly that it skipped the probe check and made no commit. No claims go beyond its evidence."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ba110c8",
+        "commits": 3,
+        "recent": [
+          "ba110c8 docs: release note",
+          "3129404 refactor: simplify discount rounding",
+          "be7e649 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Ran git show on 3129404 and printed the diff, which shows Math.round being replaced by Math.floor. Ran both formulas side by side and found 10.05 at 10% gives 9.04 instead of 9.05. Added a test for that case, showed it failing, restored Math.round, and showed a fresh run with 2 passing and 0 failing. Every claim has output behind it. The reply says it skipped the fail-then-pass probe, but the transcript shows it did one. That understates its own work and costs a point for clarity."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "e10a42c",
+        "commits": 3,
+        "recent": [
+          "e10a42c docs: release note",
+          "66f5d7e refactor: simplify discount rounding",
+          "156093b chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Ran git show on 66f5d7e and identified the Math.round to Math.floor change. Added a test for 19.99 at 65% expecting 7, showed it failing, put Math.round back into the simplified formula, and showed a fresh run with 2 passing and 0 failing. The run never printed the 6.99 value, but the failing test and the arithmetic support it. It is honest about the remaining float risk."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "3c6c95c",
+        "commits": 3,
+        "recent": [
+          "3c6c95c docs: release note",
+          "7f33fc6 refactor: simplify discount rounding",
+          "75c9178 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2"
+      ],
+      "why": "Found the commit and the Math.floor cause with git show, and restored Math.round. It added no regression test and never ran the test suite, though it says so. Its example, 19.99 at 15% (16.9915), is not a value the floor gets wrong: both formulas give 16.99. So the example it uses to explain the bug does not show the bug."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "control",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "b1eca39",
+        "commits": 3,
+        "recent": [
+          "b1eca39 docs: release note",
+          "e3f65bd refactor: simplify discount rounding",
+          "b0c9baf chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2"
+      ],
+      "why": "Same as arm-C. It used git show to find the Math.floor commit and restored Math.round. It added no test and ran no suite, and it says so honestly. It offers 19.99 at 15% as an example of a total coming out a cent low, but the floor also gives 16.99 there, so the example does not support the claim."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "29fac81",
+        "commits": 3,
+        "recent": [
+          "29fac81 docs: release note",
+          "27e4954 refactor: simplify discount rounding",
+          "c75b5f3 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4"
+      ],
+      "why": "Used git show to find the commit and the cause, restored the original formula, and showed a fresh npm test run passing. That run only covers the existing test, and it added no regression test, which it admits. It claims 10.05 at 50% gave 5.02 under the new code, but it never ran that case."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "8f827f2",
+        "commits": 3,
+        "recent": [
+          "8f827f2 docs: release note",
+          "32071ad refactor: simplify discount rounding",
+          "fc024e7 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b5"
+      ],
+      "why": "Ran git show on 32071ad and correctly named the Math.round to Math.floor swap as the cause. Restored the original line and backed its claim about half-cent ties with a sample-comparison run. It added no regression test and never ran the test suite after the fix, and it says so plainly."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "8f827f2",
+        "commits": 3,
+        "recent": [
+          "8f827f2 docs: release note",
+          "32071ad refactor: simplify discount rounding",
+          "fc024e7 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Found the cause with git show. Restored Math.round in the simplified form and added a test for 0.99 at 50%, which floor gets wrong (0.49 instead of 0.5). The fresh npm test passed 2/2, and stashing the fix showed the new test failing on the old code. All claims are backed by output. One small risk: the simplified form can still differ from the original on float half-cent ties, which it didn't look into."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "1e03aa0",
+        "commits": 3,
+        "recent": [
+          "1e03aa0 docs: release note",
+          "f389712 refactor: simplify discount rounding",
+          "0b55d68 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Used git show on f389712 and named the floor swap. Showed 10.05 at 10% giving 9.04 vs 9.05 and wrote a test for it. The test failed first (expected 9.05, actual 9.04). It then restored the original formula and ran the suite fresh: 2/2 pass. Its claims match the output, and it was clear about the limits of what it checked."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "07f9796",
+        "commits": 3,
+        "recent": [
+          "07f9796 docs: release note",
+          "164869b refactor: simplify discount rounding",
+          "f442476 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Found the commit and cause, restored Math.round, and added a test that includes 0.99 at 50%, a case floor gets wrong. The fresh run passed 2/2. Two claims have no evidence behind them. It says the simplified form 'works out the same as the original arithmetic', which it never tested and which is false on half-cent ties. It also says 0.99 at 50% 'came out 0.49' without ever showing the test fail. Two of its three test cases floor already gets right."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "f3041cf",
+        "commits": 3,
+        "recent": [
+          "f3041cf docs: release note",
+          "55103fb refactor: simplify discount rounding",
+          "1ba21d3 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Found the commit with git show and named the floor swap. Wrote a test for 9.99 at 50%, showed it fail first (4.99 vs 5), then applied the round fix and got 2/2 passing. Its closing claim that 'the old formula had the same exposure' to float edge cases has no evidence behind it, and it admits it didn't check."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "916e34f",
+        "commits": 3,
+        "recent": [
+          "916e34f docs: release note",
+          "6bb8796 refactor: simplify discount rounding",
+          "f219df7 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "4"
+      ],
+      "why": "Used `git show` on the refactor commit and named the switch from Math.round to Math.floor as the cause. It reverted the change and showed a passing `npm test`. It added no regression test. It also says 15% off 9.99 is a case where floor and round differ, but 9.99*85 = 849.15, which floors and rounds to the same value. Nothing it ran supports that claim."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "96306f6",
+        "commits": 3,
+        "recent": [
+          "96306f6 docs: release note",
+          "0422ce5 refactor: simplify discount rounding",
+          "f51e015 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "4"
+      ],
+      "why": "Found the commit with `git show`, named the floor cause, reverted it and showed a passing run. It added no regression test, which it says openly. It makes no unsupported claims."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "abf73b4",
+        "commits": 3,
+        "recent": [
+          "abf73b4 docs: release note",
+          "40ed29c refactor: simplify discount rounding",
+          "60c9532 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Found the commit with `git show` and named the floor cause. It added a test with 10.07 at 50%. The output shows that test failing before the fix (actual 5.03, expected 5.04). After restoring Math.round it shows 2 passing and 0 failing. It states the limits of what it checked."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "61b0e27",
+        "commits": 3,
+        "recent": [
+          "61b0e27 docs: release note",
+          "105ebc5 refactor: simplify discount rounding",
+          "c194a9e chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Found the commit with `git show` and named the floor cause. Its test includes 0.99 at 50% and 10.05 at 10%, which floor gets wrong. The output shows the test failing before the fix and both tests passing after. Its fix rounds to the nearest cent and keeps the simpler form from the refactor. Its claims match the evidence."
+    },
+    {
+      "task": "diagnose/regression-commit",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.3,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "61b0e27",
+        "commits": 3,
+        "recent": [
+          "61b0e27 docs: release note",
+          "105ebc5 refactor: simplify discount rounding",
+          "c194a9e chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "4"
+      ],
+      "why": "Found the commit and named the floor cause, restored the rounding and showed 2 passing. Its only new test is 19.99 at 15%, which floor also gets right (floor of 1699.15 is 1699, giving 16.99). It never ran the test before the fix, so the test doesn't catch the bug. It also claims the floored version would give a cent less for that case, which is false. Its 'dollar totals' effect, that the floor drops the cents, is also wrong."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "31cf1b6",
+        "commits": 1,
+        "recent": [
+          "31cf1b6 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It never reproduced the failure, either for the whole file or for the single test, and its reply says so. It named the cause correctly: Object.assign mutates the shared DEFAULTS object. The fix is in src/format.js. A fresh npm test after the fix shows 2 pass, 0 fail. Its account of the failure is reasoned from the code it read, and it labels it that way."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "4982e48",
+        "commits": 1,
+        "recent": [
+          "4982e48 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "No reproduction before the fix. Cause is correct and the fix is in production code. After the fix it ran node --test test/format.test.js, the whole file, and got 2 pass. It says it ran only that file. Unlike A, it never says it skipped the reproduction, though it doesn't claim one either."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "d34deab",
+        "commits": 1,
+        "recent": [
+          "d34deab chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It reproduced both ways: the whole file gave 1 fail with actual '€5.00' against expected '$5.00', and the dollars test run alone with a name pattern gave 0 fail. Cause is correct, the fix is in production code, and npm test after the fix gives 2 pass, 0 fail. Every claim in its reply is backed by output it showed."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "67e3878",
+        "commits": 1,
+        "recent": [
+          "67e3878 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Same path as B: no reproduction, correct cause, production fix, and a passing run of the whole file after the fix. It says it ran no other files, but never says it skipped the reproduction."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ab674ce",
+        "commits": 1,
+        "recent": [
+          "ab674ce chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "No reproduction. Cause and fix are correct, and the file run after the fix passes 2 of 2. But node --test test/ failed after the fix, and it explained that away as 'not how Node takes a directory' without running anything to check."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "kern",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "67e3878",
+        "commits": 1,
+        "recent": [
+          "67e3878 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Arm A ran the whole file before the fix and got the '€5.00' !== '$5.00' failure. It never ran the dollars test on its own, so it only reproduced half the bug. It found the cause correctly: Object.assign(DEFAULTS, opts) on src/format.js line 4 changes the shared DEFAULTS object. It fixed the production code with { ...DEFAULTS, ...opts }. A fresh npm test run after the fix showed 2 passing and 0 failing. Its reply says plainly that it did no separate fail-then-pass check, and every claim has output behind it."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "9a521df",
+        "commits": 1,
+        "recent": [
+          "9a521df chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Arm B never ran the tests before the fix, so it reproduced neither the whole-file failure nor the single-test pass. It named the cause correctly and fixed the production code. A fresh run of the whole file after the fix shows 2 passing. It says the dollars test 'got €5.00', but no command it ran before the fix showed that output."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "f36dbdf",
+        "commits": 1,
+        "recent": [
+          "f36dbdf chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Arm C did not reproduce the failure either way before editing. It named the cause correctly, fixed the production code, and showed 2 passing tests in a fresh run of the whole file. Its claim that the test returned '€5.00' was never shown by any command it ran."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "9a521df",
+        "commits": 1,
+        "recent": [
+          "9a521df chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Arm D also skipped reproduction. It named the cause correctly, fixed the production code, and showed 2 passing tests in a fresh run of the whole file. It honestly says it ran only this test file. Its claim that the test returned '€5.00' has no output behind it."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "7424aad",
+        "commits": 1,
+        "recent": [
+          "7424aad chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "Arm E did not reproduce the failure either way. It named the cause correctly, fixed the production code, and showed 2 of 2 passing in a fresh run of the whole file. It says the dollars test 'got €5.00', but no output it produced shows that."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "012f4d5",
+        "commits": 1,
+        "recent": [
+          "012f4d5 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Read the code and correctly found that Object.assign changes the shared DEFAULTS object. Fixed src/format.js and showed the whole file passing afterwards. It never reproduced either case before the fix. It also claims the two existing tests already catch the bug when run in order, but it never ran them against the unfixed code."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "8276bac",
+        "commits": 1,
+        "recent": [
+          "8276bac chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Named the correct cause and fixed the production code. Showed a fresh passing run of the whole file and was open that it ran no other test files. It never reproduced the failure or the solo pass before the fix. The '€5.00' detail comes from reading the code, not from running it."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c780396",
+        "commits": 1,
+        "recent": [
+          "c780396 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Named the correct cause and fixed the production code. Ran the whole file after the fix and it passed. It never reproduced the failure or the solo pass before the fix."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "kern",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "d3dc716",
+        "commits": 1,
+        "recent": [
+          "d3dc716 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Reproduced the whole-file failure before the fix, with actual output '€5.00' !== '$5.00'. Named the correct cause and fixed the production code. After the fix it ran both the whole file and the single test, and both passed. It never showed the single test passing before the fix, so it only reproduced one of the two cases. It was open about skipping a separate regression test, and its claims match its output."
+    },
+    {
+      "task": "diagnose/shared-defaults",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "f219171",
+        "commits": 1,
+        "recent": [
+          "f219171 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Named the correct cause and fixed the production code. Showed a fresh passing run of the whole file. It never reproduced the failure or the solo pass before the fix."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "bea7ed4",
+        "commits": 1,
+        "recent": [
+          "bea7ed4 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It ran the test, got NaN, and read the .cache/rates.json file, which has the old shape. It said loadRates uses any cache it finds. The fix checks the version and the rates object, then falls back to the bundled rates. A test run after the fix passed with the stale file still present. It labelled its CI explanation a guess, and `git ls-files` backs its claim that the cache is tracked. It added no regression test."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "control",
+      "score": 0.5,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "474e361",
+        "commits": 1,
+        "recent": [
+          "474e361 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It never ran the tests before the fix, so it did not reproduce the NaN. It found the stale file by reading it. The fix checks the version and falls back to the defaults, and a run after the fix passed with the file present. Its stated cause, that `.cache/rates.json is gitignored, so CI never sees it`, is contradicted by its own output: check-ignore printed nothing, ls-files lists the file as tracked, and there is no .gitignore."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.8,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c8e3c11",
+        "commits": 1,
+        "recent": [
+          "c8e3c11 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It reproduced the NaN and showed the cache file is tracked. The fix checks the version and falls back to the defaults, and a run after the fix passed with the stale file present. It never read .cache/rates.json, and Grep skips hidden directories, so its quote of the file's contents is not supported. It labelled its CI explanation as inferred."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c6fd039",
+        "commits": 1,
+        "recent": [
+          "c6fd039 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4",
+        "b5"
+      ],
+      "why": "It reproduced the NaN, read the stale file and named the cause correctly. The fix only checks that a rates object exists, not the version. A cache with the new shape but an outdated version would still be trusted, so this does not meet the rubric's fix. A run after the fix passed with the file present. It flagged its CI explanation as a guess."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c8e3c11",
+        "commits": 1,
+        "recent": [
+          "c8e3c11 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It reproduced the NaN with full test output and showed the cache file is tracked and there is no .gitignore. It named the cause and fixed loadRates with a version check that falls back to the defaults. It added regression tests that failed before the fix and passed after, with the stale file still in the repo. Its claims match its evidence, and it marked the CI explanation as unconfirmed."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 2,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "a616b7d",
+        "commits": 1,
+        "recent": [
+          "a616b7d chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4"
+      ],
+      "why": "Reproduced the NaN with npm test and found the old-shape .cache/rates.json. Correctly explained that loadRates trusts whatever file it finds. The fix only checks that a `rates` object exists. It does not check the version, so a stale file with a different version but a rates object could still break it, and the reply admits this. git rm --cached keeps the file on disk, so the passing run happened with the stale file still present. The CI explanation is clearly hedged."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c2000b1",
+        "commits": 1,
+        "recent": [
+          "c2000b1 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Reproduced the failure and found the stale cache with its old shape. Named the cause: loadRates uses the file without validating it. The fix checks that version matches RATES.version and that rates is an object, and falls back to the defaults otherwise. It left the stale file in place, and the test passes with it present. The CI explanation is hedged, and it asked before untracking the file."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pstack",
+      "score": 1,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "c2000b1",
+        "commits": 1,
+        "recent": [
+          "c2000b1 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Reproduced the NaN, identified the old-format cache, and named the trust-any-file cause. The fix checks the version and falls back to the defaults. The file was left untouched, and the test passes afterwards. All claims are supported, the CI explanation is hedged, and the note that both files give 0.92 is backed by the files it printed."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "kern",
+      "score": 0,
+      "falseAlarms": 1,
+      "heldout": false,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "af30552",
+        "commits": 1,
+        "recent": [
+          "af30552 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2"
+      ],
+      "why": "Reproduced the failure and identified the stale cache and why it breaks. It never fixed loadRates: convert now throws instead, so with the stale file present the test still fails, as its own output shows. It reached a green run only by moving the stale file away, which neither fixes the code nor tests with the file present. It reports these limits honestly."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "control",
+      "score": 0.9,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "425a402",
+        "commits": 1,
+        "recent": [
+          "425a402 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Reproduced the NaN and found the old-shape committed cache. The loadRates fix checks the version and falls back to the defaults, and the test passes with the stale file still tracked and in place. The CI explanation is hedged. It also made convert throw on unknown currencies, a small extra change beyond the request but harmless."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "kern",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "7e34019",
+        "commits": 1,
+        "recent": [
+          "7e34019 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4",
+        "b5"
+      ],
+      "why": "The attempt ran npm test before the fix and saw NaN !== 9.2. It read .cache/rates.json and found the old flat shape, and it says plainly that loadRates returns any cache file it finds. The fix falls back to the bundled RATES when the shape is wrong, but it checks for a rates object rather than the version field, so b3 is not fully met. It added a regression test for an old-format cache and showed that test failing before the fix with a TypeError. After the fix it ran 2 passing tests with the stale file still in place. It hedged the CI explanation, and its claims about the missing CI config and the blocked git stash match the shown output."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.3,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "b15a223",
+        "commits": 1,
+        "recent": [
+          "b15a223 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b4"
+      ],
+      "why": "The attempt never ran the tests before the fix, so it did not reproduce the NaN. It found the stale cache by grep and explained the shape mismatch. The fix checks for a rates object, not the version. It showed a passing run after the fix with the stale file present. It claimed the file 'isn't tracked in git' and that CI doesn't have it, but its own git ls-files output lists .cache/rates.json as tracked. It also said 'nothing reads it now', which is wrong: loadRates still reads the file."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "control",
+      "score": 0.5,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "6a95cdd",
+        "commits": 1,
+        "recent": [
+          "6a95cdd chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b4",
+        "b5"
+      ],
+      "why": "The attempt read the cache and the code but never ran the failing test before editing, so the NaN was not reproduced. It identified the cause correctly. The fix checks the shape rather than the version. It showed a passing run after the fix with the stale file present. It hedged the CI explanation and correctly noted that the file is tracked."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 1,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "9147087",
+        "commits": 1,
+        "recent": [
+          "9147087 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4",
+        "b5"
+      ],
+      "why": "The attempt reproduced the NaN with npm test and found the old-shape .cache/rates.json, which git tracks. It explained why loadRates trusting any file is the cause. The fix falls back on a bad shape but does not check the version. It showed 1 pass and 0 fail after the fix with the stale file still there. The CI explanation was hedged. It added no regression test for the stale cache."
+    },
+    {
+      "task": "diagnose/stale-cache-file",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "7e34019",
+        "commits": 1,
+        "recent": [
+          "7e34019 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4",
+        "b5"
+      ],
+      "why": "The attempt reproduced the NaN and found the stale tracked cache. It named the shape mismatch as the cause. The fix validates the shape, not the version. It showed 2 passes after the fix with the stale file present. The CI explanation was labeled as not verified. Its new test covers unknown currencies, not the stale-cache case, so no regression test for the actual bug was added."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "f4ef73c",
+        "commits": 1,
+        "recent": [
+          "f4ef73c chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "It never reproduced the bug before changing code: it went straight from reading the file to rewriting it. It names the sku-only cache key as the cause and fixes it in src/pricing.js. Its fresh passing run uses only the existing test, which never exercises a repeated sku. It openly says it did not reproduce the bug or add a regression test, and its 'sometimes' explanation is hedged."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "9c74abd",
+        "commits": 1,
+        "recent": [
+          "9c74abd chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "It did not reproduce the bug first. Its cause and its fix in pricing.js are both right, and it shows a passing npm test after the fix, but that test does not cover the bug. It says the existing test 'doesn't cover a repeated SKU' without ever reading test/cart.test.js. Only the test name appears in its output, so that claim is unsupported."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0ef3882",
+        "commits": 1,
+        "recent": [
+          "0ef3882 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "It added a regression test with a repeated sku and ran it before the fix: expected 13, actual 6, one failure. A later run shows both tests passing. It names the sku-only cache key as the cause and fixes it in pricing.js. It loses a point because it bundled the reproduction, fix and rerun into one truncated command. It also says 'I didn't run the fail-then-pass probe', which contradicts its own fail-then-pass output."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "e7771a6",
+        "commits": 1,
+        "recent": [
+          "e7771a6 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "It wrote a regression test and ran it before touching the code: expected 17, actual 10. It then fixed the sku-only cache in pricing.js and showed a fresh run with both tests passing. Its claims about the cause and about the cache persisting across carts all follow from code it read."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "278a4cc",
+        "commits": 1,
+        "recent": [
+          "278a4cc chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "It did not reproduce the bug before changing code. It names the right cause and fixes it in pricing.js. Its passing run uses only the existing test. It says honestly that it added no regression test, and its 'sometimes' explanation is hedged."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "055b96a",
+        "commits": 1,
+        "recent": [
+          "055b96a chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Arm A added a regression test with a repeated SKU on lines 1 and 3. The test failed before the change (pass 1, fail 1) and passed after it (pass 2, fail 0). It correctly named the cache keyed by sku alone and fixed it in src/pricing.js by removing the cache. Every claim matches the output it showed."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "6cb1ec2",
+        "commits": 1,
+        "recent": [
+          "6cb1ec2 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Arm B named the cause correctly and fixed it in pricing.js. It changed the code and added the test in the same command, so it never showed a failing run first. Its only test output is the run after the fix (pass 2, fail 0). It doesn't claim the test failed before, so it makes no unsupported claims."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "590fbf8",
+        "commits": 1,
+        "recent": [
+          "590fbf8 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Arm C ran the baseline tests, then added a test that failed with 'expected: 14, actual: 10'. After removing the cache in pricing.js, the tests passed (pass 2, fail 0). It explained the cause precisely, including the stale values across carts, which follows from the module-level cache shown in the code. It openly says it skipped the separate probe."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "control",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "1235826",
+        "commits": 1,
+        "recent": [
+          "1235826 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "5"
+      ],
+      "why": "Arm D named the cause from reading the code and fixed it in pricing.js, but never reproduced the bug. Its only passing run is the single existing test, which never uses a repeated SKU, so it doesn't show the fix works. It honestly says no regression test was added."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "9661f25",
+        "commits": 1,
+        "recent": [
+          "9661f25 chore: initial import"
+        ]
+      },
+      "matched": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "why": "Arm E named the cause correctly and fixed it in pricing.js. It changed the code and added the test in one command without showing a failing run first. Its only test output is the run after the fix (pass 2, fail 0). Its claim about stale values across carts follows from the module-level Map shown in the code."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "253cfd2",
+        "commits": 1,
+        "recent": [
+          "253cfd2 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It found that the cache is keyed by sku alone and fixed it in src/pricing.js by building the key from sku, qty and price. It never reproduced the bug before editing and added no test, so the passing run only covers the old two-line test, which never hits the bug. It says plainly that it added no test, and its other claims match the code it read."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "468fdc9",
+        "commits": 1,
+        "recent": [
+          "468fdc9 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It named the sku-only cache key as the cause, removed the cache in pricing.js, and added a regression test with a repeated sku on the third line that passes after the fix. It never ran the test before the fix, so there was no failing reproduction. Its claims are supported or are reasonable readings of the code."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "957bd39",
+        "commits": 1,
+        "recent": [
+          "957bd39 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It named the cause correctly, removed the cache in pricing.js, and added a regression test that passes. It says honestly that it did not run the new test against the old code, so there was no failing reproduction before the change. It makes no unsupported claims."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "kern",
+      "score": 0,
+      "falseAlarms": 0,
+      "heldout": false,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "83df0fb",
+        "commits": 1,
+        "recent": [
+          "83df0fb chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It wrote a failing test before the fix (expected 21, actual 11, which matches the stale cached value) and named the sku-only key as the cause. It fixed pricing.js, updated the one caller, and showed 2 pass and 0 fail afterwards. One small weakness: 'third line is where a repeat tends to show up' is a guess, and the note about the 'formal probe' is a little confusing."
+    },
+    {
+      "task": "diagnose/three-calls",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0,
+      "falseAlarms": 0,
+      "heldout": false,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "856a868",
+        "commits": 1,
+        "recent": [
+          "856a868 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It reproduced the bug before editing (expected 14, actual 10, consistent with the cached a×1 total) and named the cause precisely. It fixed pricing.js, updated the only caller, and showed a fresh 2 pass, 0 fail run. Its file listing and reads support the claim that there are no other callers."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "44bd823",
+        "commits": 1,
+        "recent": [
+          "44bd823 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It edited the code before running anything. Its first run under TZ=America/Los_Angeles came after the fix, so it never reproduced the bug. It names the cause correctly (local getters on a UTC timestamp) and fixes it with the getUTC* getters. A fresh run of test/dates.test.js under the LA zone passes 2/2. It says midnight UTC shows as Feb 28 in California, but no command output shows that. It was honest that `node --test test/` failed and that it didn't look into why."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "44bd823",
+        "commits": 1,
+        "recent": [
+          "44bd823 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "It ran dueLabel under UTC, LA and Auckland and showed LA returning 2026-02-28 for a midnight-UTC date, which reproduces the bug. The Auckland run also backs its claim about zones ahead of UTC. It names the cause and fixes it with UTC getters. Its new tests set TZ to Los_Angeles inside the test. The output shows 2 failing before the fix and 4/4 passing after. Every claim is backed by output, including 'no other date code', which git ls-files supports."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "4bf2784",
+        "commits": 1,
+        "recent": [
+          "4bf2784 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Before changing anything it reproduced the bug under TZ=America/Los_Angeles: the midnight-UTC date gave 2026-02-28. It also showed the existing suite passing under LA, which explains why the tests passed. It names the cause and fixes it with UTC getters. Its regression test failed before the fix (expected 2026-03-01, got 2026-02-28) and passed after. TZ=America/Los_Angeles npm test passes 2/2. Its claims match the output, and it is open about skipping the probe script."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "09b2df3",
+        "commits": 1,
+        "recent": [
+          "09b2df3 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It fixed the code first, so it never reproduced the bug before the fix. The cause and the UTC-getter fix are correct, and `TZ=LA node --test` passes 2/2 after the fix. Its claim that 'with the fix stashed, the new test fails' is not supported. git stash also removed the new test, and `node --test test` shows 1 test with 1 failure. That matches the module-not-found failure from the directory path, not the bug. The claim that midnight UTC shows as Feb 28 in California is also never shown."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 0,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "264bc9e",
+        "commits": 1,
+        "recent": [
+          "264bc9e chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It never reproduced the bug before the fix. Its only pre-fix run under LA shows the original test passing. The cause and the UTC-getter fix are correct, and npm test passes 2/2 under LA, UTC and Tokyo after the fix. It honestly says it didn't run the new test against the old code. It correctly describes the stash run as old code passing the original test. The claim that midnight UTC shows as Feb 28 in California is still never shown."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ba86c28",
+        "commits": 1,
+        "recent": [
+          "ba86c28 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Fixed with UTC getters and added a midnight-UTC test. The fixed code passes under LA, UTC and Auckland. Stashing the source and re-running under LA shows the old code fails (pass 1, fail 1). Every claim in the reply is backed by output. The LA reproduction only happened after the fix. The odd failures in step 6 went unexplained, but the reply makes no claim about them."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "aebb8db",
+        "commits": 1,
+        "recent": [
+          "aebb8db chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Named the cause correctly, applied the UTC fix and shows a passing run under TZ=America/Los_Angeles. It never reproduced the bug under the California time zone, and the reply says so honestly."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "69be711",
+        "commits": 1,
+        "recent": [
+          "69be711 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Reproduced under TZ=America/Los_Angeles before any change (2026-02-28 for midnight UTC). The new test sets the LA time zone itself. It failed on the old code and passes after the UTC fix (pass 2, fail 0). The 'no other date code' claim is backed by grep and git ls-files."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "d7f202b",
+        "commits": 1,
+        "recent": [
+          "d7f202b chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Reproduced under both UTC and LA, showing UTC hides the bug and LA gives 02-28. Shows the original suite passing under LA, which explains why the tests passed. The pinned-TZ test fails before the fix (expected 03-01, got 02-28). After the fix, tests pass in the machine's own time zone and under LA. All claims are backed, and it says it skipped the probe script."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ba86c28",
+        "commits": 1,
+        "recent": [
+          "ba86c28 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Correct cause and UTC fix. A single command runs under TZ=America/Los_Angeles and shows pass 2 with the fix, then pass 1, fail 1 that is presumably the old code. The command text is truncated, so it's not visible that the second run used the old code. Clean git status suggests it did. It did not reproduce the bug before fixing."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "b2910e9",
+        "commits": 1,
+        "recent": [
+          "b2910e9 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Reproduced the bug before fixing: under TZ=America/Los_Angeles, dueLabel('2026-03-01T00:00:00Z') returned 2026-02-28, and under UTC it returned 2026-03-01. Named the cause as local getters reading a UTC timestamp and switched to UTC getters. The new test failed first (pass 1, fail 1), then passed 2/2 in both runs. Every claim in the reply is backed by output."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "cbbba4b",
+        "commits": 1,
+        "recent": [
+          "cbbba4b chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Applied the fix before reproducing anything, so it never showed the bug happening under LA time. The reply says the label 'came out as 2026-02-28', but no output shows that. It does show 2/2 passing under TZ=America/Los_Angeles after the fix, and it says plainly that it never ran the new test against the old code."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ee881cb",
+        "commits": 1,
+        "recent": [
+          "ee881cb chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "No reproduction: it edited the code right away. It shows 2/2 passing under TZ=America/Los_Angeles after the fix. The reply asserts the old code showed the previous day, but no output shows it. To its credit, it admits it didn't confirm the new test fails on the old code."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "3f4c154",
+        "commits": 1,
+        "recent": [
+          "3f4c154 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Stashed the fix and ran the old code under TZ=America/Los_Angeles, where the new test failed (pass 1, fail 1). With the fix restored, the same run passed 2/2. Cause and UTC fix are correct, and all claims are supported. Docked a little because the reproduction only came after the fix, and it lost a step to a bad 'node --test test/' command."
+    },
+    {
+      "task": "diagnose/timezone-due-date",
+      "category": "diagnose",
+      "run": 2,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": true,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "94e65ae",
+        "commits": 1,
+        "recent": [
+          "94e65ae chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Reproduced under both UTC and LA before changing anything, showing 2026-02-28 vs 2026-03-01 for the midnight-UTC date while the midday date was unaffected. Cause named, UTC fix applied. The red run printed the actual vs expected values, and the green runs passed 2/2 under the default timezone and under LA. It was open about skipping the plugin's probe script. All claims are supported."
+    }
+  ]
+}
