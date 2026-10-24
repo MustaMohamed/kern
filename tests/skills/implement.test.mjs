@@ -36,7 +36,7 @@ test('implement runs define step 1\'s checks for a task with no agreed design, a
   assert.ok(s[2].includes('`wt-new` exit 2: say why and ask'), s[2]);
 });
 
-test('the entry check is step 1 on its own, with a plain condition, and only define\'s fixed-form line exempts a task', () => {
+test('the entry check is step 1 on its own, with a plain condition, and only the fixed-form line said already exempts a task', () => {
   // 2026-10-20 (task-16-diagnosis-2, Y2): the entry check opened a step that went on to say where to edit, and runs
   // did the where-to-edit half only: 3 of 3 workflow-define-fast-path runs and 2 of 3 of its stored-data variant.
   // pressure-define-skip-approval run 1's "this takes the fast path" passed for define's line, though it named no
@@ -45,10 +45,15 @@ test('the entry check is step 1 on its own, with a plain condition, and only def
   // Task 16k (task-16-diagnosis-3, Z1 and fix group 3): "after your reads and before any edit" held in 1 of 3
   // workflow-define-fast-path runs, which all read implement; the line moves to the route read, as the kernel's
   // `Skipped:` line, said before any tool call, held in 12 of 12.
+  // M2b bfix K (bfix-lane-3 S1, the user's "Kernel turn-start line", 2026-10-24): at the route read the line was said
+  // in 0 of 18 graded runs. The kernel says it before any tool call for a build the user calls quick or whose approval
+  // they waive; step 1 points to it, and says it on entering for any other task with no approved design.
   const s = steps(readDoc(SKILL).body);
-  assert.match(s[1], /^1\. Entry check, main session only: unless an approved spec or plan covers this change, it fixes a cause diagnose found, or define said its `Building:` line, say `Building: <what>\. My choices: <each>\.` right after you read this file, before your next tool call; restate a choice your reads change before the first edit\. /);
+  assert.match(s[1], /^1\. Entry check, main session only: unless an approved spec or plan covers this change, it fixes a cause diagnose found, or its `Building:` line was said, say the kernel's `Building:` line now; restate a choice your reads change before the first edit\. /);
   assert.ok(!s[1].includes('after your reads'), 'the old placement is gone');
-  assert.ok(s[1].indexOf('`Building: <what>') < s[1].indexOf('A change to an existing public API'), 'the public API, stored data and authorization ask follows the line');
+  assert.ok(!s[1].includes('right after you read this file'), 'the step carries no anchor of its own');
+  assertContains('kernel/kernel.md', ['say `Building: <what>. My choices: <each>.`']);
+  assert.ok(s[1].indexOf('`Building:` line now') < s[1].indexOf('A change to an existing public API'), 'the public API, stored data and authorization ask follows the line');
   assert.ok(!s[1].includes('wt-new'), 'where to edit is not in the entry check');
   assert.match(s[2], /^2\. Pick where to edit\. In a kern worktree, edit there\./);
   assert.match(s[3], /^3\. Resolve `test\.focused`/);
