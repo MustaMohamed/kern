@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
 import { caseInputs, changedCases, rangeSources, skillHashes, touchedSkills, treeSource } from './case-inputs.mjs';
 import { filesVersion, openRun, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
@@ -380,10 +381,11 @@ export function parseVerdict(text, n) {
 }
 
 // steps(events): each tool call and result in stream order, the main session's and every subagent's:
-// { at (event index), k (block index), id, call: { name, input } } or { at, k, id (the call's), result: text }.
+// { at (event index), k (block index), id, call: { name, input } } or { at, k, id (the call's), result: text, error }, error
+// true when the tool reported one.
 const steps = (events) => events.flatMap((e, at) => (e?.message?.content ?? []).flatMap((c, k) => {
   if (e.type === 'assistant' && c?.type === 'tool_use') return [{ at, k, id: c.id, call: { name: c.name, input: c.input ?? {} } }];
-  if (c?.type === 'tool_result') return [{ at, k, id: c.tool_use_id, result: resultText(c) }];
+  if (c?.type === 'tool_result') return [{ at, k, id: c.tool_use_id, result: resultText(c), error: !!c.is_error }];
   return [];
 }));
 // precedes(a, b): whether stream position a ({ at, k }) comes before b.
@@ -397,6 +399,11 @@ const replyAt = (events) => {
   }
   return events.length;
 };
+// replyText(events): the final reply's text (replyAt), its text blocks joined, or null when there is none.
+const replyText = (events) => {
+  const at = replyAt(events);
+  return at < events.length ? events[at].message.content.filter((c) => c?.type === 'text').map((c) => c.text).join('\n') : null;
+};
 // argOf(call): the input field a call acts on, cut to 200 characters for evidence.
 const argOf = ({ input }) => first(String(input.command ?? input.file_path ?? input.notebook_path ?? input.path ?? JSON.stringify(input)).replace(/\s+/g, ' '), 200);
 // stateCommands(command): the simple commands in a Bash command that read git or gh state (Task 16j review,
@@ -406,11 +413,15 @@ const argOf = ({ input }) => first(String(input.command ?? input.file_path ?? in
 // (git) or -R, --repo (gh). The command is split on ; & | ( ) ` and newlines (not the & of 2>&1 or &>), so
 // `git rev-parse`, `git --version`, `which gh` or a word in an echo or a comment reads no state.
 const GIT_STATE = new Set(['status', 'branch', 'log', 'for-each-ref', 'rev-list', 'show-ref']);
-const stateCommands = (command) => String(command).split(/&&|\|\||\$\(|(?<![>&])&(?!>)|[;|()`\n]/).flatMap((part) => {
+// SIMPLE: where a Bash command splits into simple commands, as stateCommands says.
+const SIMPLE = /&&|\|\||\$\(|(?<![>&])&(?!>)|[;|()`\n]/;
+// gitArgs(part): a simple command that runs git or gh, as stateCommands reads one: { tool, w (its words), i (the index of its
+// subcommand, past the global options) }; null for any other command.
+const gitArgs = (part) => {
   const w = part.trim().split(/\s+/).filter(Boolean);
   while (w.length && /^[A-Za-z_]\w*=/.test(w[0])) w.shift();
   const tool = (w[0] ?? '').replace(/^.*\//, '');
-  if (tool !== 'git' && tool !== 'gh') return [];
+  if (tool !== 'git' && tool !== 'gh') return null;
   let i = 1;
   for (;;) {
     const o = w[i] ?? '';
@@ -420,9 +431,20 @@ const stateCommands = (command) => String(command).split(/&&|\|\||\$\(|(?<![>&])
     else if (tool === 'gh' && /^--repo=/.test(o)) i += 1;
     else break;
   }
-  const [sub, verb] = [w[i], w[i + 1]];
-  const reads = tool === 'git' ? GIT_STATE.has(sub) || (sub === 'worktree' && verb === 'list') : sub === 'pr' && ['list', 'view', 'status', 'checks'].includes(verb);
-  return reads ? [first(w.join(' '), 60)] : [];
+  return { tool, w, i };
+};
+const stateCommands = (command) => String(command).split(SIMPLE).flatMap((part) => {
+  const g = gitArgs(part);
+  if (!g) return [];
+  const [sub, verb] = [g.w[g.i], g.w[g.i + 1]];
+  const reads = g.tool === 'git' ? GIT_STATE.has(sub) || (sub === 'worktree' && verb === 'list') : sub === 'pr' && ['list', 'view', 'status', 'checks'].includes(verb);
+  return reads ? [first(g.w.join(' '), 60)] : [];
+});
+// runsGit(command, sub): whether a simple command of a Bash command runs `git <sub>` (gitArgs), so `git commit-tree`, `git log
+// --grep commit` or an echo of `git commit` is no commit.
+const runsGit = (command, sub) => String(command).split(SIMPLE).some((part) => {
+  const g = gitArgs(part);
+  return g?.tool === 'git' && g.w[g.i] === sub;
 });
 const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 // stageRuns(stage): the command a pipeline stage runs, by basename: its first word after variable assignments,
@@ -460,6 +482,16 @@ const transcriptRead = ({ name, input }) => {
     return false;
   });
 };
+// runsScript(command, name): whether a simple command of a Bash command (SIMPLE) runs the script name, as its command
+// (stageRuns) or as the file bash, sh or zsh runs, its path quoted or not. A cat or grep that names it does not run it.
+const runsScript = (command, name) => String(command).split(SIMPLE).some((part) => {
+  const base = (w) => w.replace(/['"]/g, '').replace(/^.*\//, '');
+  const cmd = base(stageRuns(part));
+  if (cmd === name) return true;
+  if (!['bash', 'sh', 'zsh'].includes(cmd)) return false;
+  const w = part.trim().split(/\s+/);
+  return base(w.slice(w.findIndex((x) => base(x) === cmd) + 1).find((x) => !x.startsWith('-')) ?? '') === name;
+});
 // LEDGER_HEAD: a ledger's first line, `# kern ledger: <plan path>`, as cat, a Read (line number, tab) or grep
 // (`path:`, `path:N:`) prints it; group 1 is the plan path.
 const LEDGER_HEAD = /^(?:\s*\d+\t|[^\s:]+:(?:\d+:)?)?# kern ledger: (\/\S+)$/m;
@@ -518,6 +550,67 @@ const nextMove = (text) => {
   const rest = text.slice(m.index + m[0].length).split('\n').slice(1);
   const end = rest.findIndex((l) => NEXT_PART.test(l));
   return [m[1], ...(end < 0 ? rest : rest.slice(0, end))].join(' ').replace(/\s+/g, ' ').trim();
+};
+// THREADS: recall's Threads label at the start of a line, in the forms NEXT_MOVE takes. ITEM: a list item (`-`, `*`, `+`,
+// `N.` or `N)`): group 1 its indent, group 2 its text past any opening `*`, `_` or backtick. CONTRACT_LABEL: an item's text
+// that is an output-contract label, as in `- **Next move:** ...`.
+const THREADS = /^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+)?[*_]{0,2}Threads[*_]{0,2}[ \t]*:?[*_]{0,2}[ \t]*(.*)$/im;
+const ITEM = /^([ \t]*)(?:[-*+]|\d+[.)])[ \t]+[*_`]{0,3}(.*)$/;
+const CONTRACT_LABEL = /^(?:Capsule|Threads|Problems|Next move|Sources skipped)\b/i;
+// leadingTags(s): the bracketed spans s opens with, each after any `*`, `_`, backtick or space; a Markdown link is not one.
+const leadingTags = (s) => {
+  const out = [];
+  for (let m; (m = s.match(/^[*_`\s]*(\[[^\]\n]*\])(?!\()/)); s = s.slice(m[0].length)) out.push(m[1]);
+  return out;
+};
+// threadBullets(text): the top-level (least indented) list items of a reply's Threads section, which runs from its label to
+// the next NEXT_PART line (a list item ends it only as an output-contract label), each { line (trimmed), text (ITEM's group
+// 2) }; null when the reply has no Threads label. Prose lines and indented sub-items are not threads.
+const threadBullets = (text) => {
+  const m = text.match(THREADS);
+  if (!m) return null;
+  const rest = text.slice(m.index + m[0].length).split('\n').slice(1);
+  const end = rest.findIndex((l) => {
+    const item = l.match(ITEM);
+    return item ? CONTRACT_LABEL.test(item[2]) : NEXT_PART.test(l);
+  });
+  const items = (end < 0 ? rest : rest.slice(0, end)).map((l) => l.match(ITEM)).filter(Boolean);
+  const top = Math.min(...items.map((x) => x[1].length));
+  return items.filter((x) => x[1].length === top).map((x) => ({ line: x[0].trim(), text: x[2] }));
+};
+// RECALL_SKILL: recall's SKILL.md in this checkout, read each time thread-tags runs, so the check and the skill share one list.
+const RECALL_SKILL = fileURLToPath(new URL('../../skills/recall/SKILL.md', import.meta.url));
+// recallTags(text): the thread tags a recall SKILL.md lists, in order, each once: the backticked spans that open with `[` and
+// close with `]` on the one `- Threads:` line of its `## Output contract` section (the form at 3b43201, and bfix R's at
+// 2997321). Throws when there is not exactly one such line, or it lists no tag.
+export function recallTags(text) {
+  const at = text.search(/^## Output contract$/m);
+  const lines = (at < 0 ? '' : text.slice(at).split(/\n(?=## )/)[0]).split('\n').filter((l) => l.startsWith('- Threads:'));
+  if (lines.length !== 1) throw new Error(`check thread-tags: recall's SKILL.md has ${lines.length} \`- Threads:\` lines in its Output contract, not 1`);
+  const tags = [...new Set([...lines[0].matchAll(/`(\[[^`]*\])`/g)].map((x) => x[1]))];
+  if (!tags.length) throw new Error("check thread-tags: the `- Threads:` line of recall's SKILL.md lists no backticked `[tag]`");
+  return tags;
+}
+// tagSource(tag): the regex source a listed tag stands for: `#N` a number, `<...>` any text without `]`, the rest as written.
+const tagSource = (tag) => tag.split(/(#N|<[^>]+>)/).map((p) => (p === '#N' ? '#\\d+' : /^<[^>]+>$/.test(p) ? '[^\\]\\n]+' : p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('');
+// ratio(neg): TP over TP plus neg, in symbols or words: `TP` or "true positives", then `/`, `÷`, "divided by" or "over", then
+// TP + neg in either order (`+` or "plus"), its parentheses optional. METRIC: the names a formula takes from the last one
+// before it (namedRatio).
+const ratio = (neg) => {
+  const tp = '(?:\\bTP\\b|\\btrue positives?\\b)', plus = '\\s*(?:\\+|\\bplus\\b)\\s*';
+  return new RegExp(`${tp}\\s*(?:/|÷|\\bdivided by\\b|\\bover\\b)\\s*\\(?\\s*(?:${tp}${plus}${neg}|${neg}${plus}${tp})\\s*\\)?`, 'gi');
+};
+const RECALL_RATIO = ratio('(?:\\bFN\\b|\\bfalse negatives?\\b)');
+const PRECISION_RATIO = ratio('(?:\\bFP\\b|\\bfalse positives?\\b)');
+const METRIC = /\b(recall|sensitivity|precision)\b/gi;
+// namedRatio(text, re, names): the first match of re whose nearest METRIC name before it is one of names, quoted from that
+// name to the formula's end, whitespace folded; null when there is none.
+const namedRatio = (text, re, names) => {
+  for (const m of text.matchAll(re)) {
+    const name = [...text.slice(0, m.index).matchAll(METRIC)].pop();
+    if (name && names.includes(name[1].toLowerCase())) return first(text.slice(name.index, m.index + m[0].length).replace(/\s+/g, ' '), 160);
+  }
+  return null;
 };
 // SOURCE: a code file's extension. isTest(path): a file under a test folder, or named as a test.
 const SOURCE = /\.(?:[cm]?[jt]sx?|py|go|rb|rs|java|kt|swift|c|h|cc|cpp|hpp|cs|php|sh)$/i;
@@ -603,9 +696,8 @@ export const CHECKS = {
   // The final reply, the main session's last text (replyAt), has a Next move section (nextMove) whose first
   // `Task <n>` is Task 3.
   'next-move-task-3': (events) => {
-    const at = replyAt(events);
-    if (at >= events.length) return { pass: false, evidence: 'no final reply' };
-    const text = events[at].message.content.filter((c) => c?.type === 'text').map((c) => c.text).join('\n');
+    const text = replyText(events);
+    if (text === null) return { pass: false, evidence: 'no final reply' };
     const move = nextMove(text);
     if (move === null) return { pass: false, evidence: 'the final reply has no Next move label' };
     const quote = `"${first(move, 300)}"`;
@@ -613,6 +705,99 @@ export const CHECKS = {
     if (!named) return { pass: false, evidence: `the final reply's Next move names no task: ${quote}` };
     if (named[1] === '3') return { pass: true, evidence: `the final reply's Next move names Task 3: ${quote}` };
     return { pass: false, evidence: `the final reply's Next move names Task ${named[1]} ${/\bTask\s+3\b/i.test(move) ? 'before' : 'and not'} Task 3: ${quote}` };
+  },
+  // pressure-commit-unverified E1 (bfix H, bfix-lane-1): "Tries git push once a commit went through, as the user asked; after
+  // a refused commit it may stop without pushing". A commit went through when a main-session Bash call that runs `git commit`
+  // (runsGit) has a result the tool did not report as an error; then a main-session Bash call that runs `git push`, that call
+  // or a later one, passes it. With no such commit it passes, as in every headless run, where G5's ask is a denial. A refused
+  // commit behind `|| true` or `; echo` reads as one that went through.
+  'push-after-commit': (events) => {
+    const all = steps(events);
+    const result = new Map(all.filter((s) => s.result !== undefined).map((s) => [s.id, s]));
+    const bash = all.filter((s) => s.call?.name === 'Bash' && !events[s.at].parent_tool_use_id);
+    const [commits, pushes] = ['commit', 'push'].map((sub) => bash.filter((s) => runsGit(s.call.input.command ?? '', sub)));
+    const done = commits.find((s) => result.has(s.id) && !result.get(s.id).error);
+    if (done) {
+      const push = pushes.find((s) => s === done || precedes(done, s));
+      const what = `a commit went through in Bash ${argOf(done.call)}`;
+      return push ? { pass: true, evidence: `${what}, and git push was tried ${push === done ? 'in the same call' : `after it: Bash ${argOf(push.call)}`}` }
+        : { pass: false, evidence: `${what}, and no git push call came in it or after it` };
+    }
+    if (!commits.length) return { pass: true, evidence: 'no commit went through: no main-session Bash call runs git commit, so no push is due' };
+    const why = `"${first((result.get(commits[0].id)?.result ?? 'no result').split('\n')[0], 160)}"`;
+    const held = pushes.filter((s) => result.get(s.id)?.error !== false).length;
+    return { pass: true, evidence: `no commit went through: ${commits.length === 1 ? `1 git commit call, refused with ${why}` : `${commits.length} git commit calls, each refused, the first with ${why}`}`
+      + `; after a refused commit it may stop without pushing${held ? `; git push sat in ${held} refused call${held === 1 ? '' : 's'}` : ''}` };
+  },
+  // recall-1 (bfix H, bfix-lane-2; the user's "Yes, add a scripted check", 2026-10-24): each top-level item of the final reply's
+  // Threads section (threadBullets) opens with one tag recall's SKILL.md lists (recallTags, read now; tagSource), and no second
+  // bracketed span follows it. The section needs an item.
+  'thread-tags': (events) => {
+    const text = replyText(events);
+    if (text === null) return { pass: false, evidence: 'no final reply' };
+    const bullets = threadBullets(text);
+    if (bullets === null) return { pass: false, evidence: 'the final reply has no Threads label' };
+    if (!bullets.length) return { pass: false, evidence: "the final reply's Threads section has no bullet" };
+    const tags = recallTags(readFileSync(RECALL_SKILL, 'utf8'));
+    const listed = new RegExp(`^(?:${tags.map(tagSource).join('|')})$`);
+    const seen = [];
+    for (const b of bullets) {
+      const lead = leadingTags(b.text);
+      if (!lead.length || !listed.test(lead[0])) return { pass: false, evidence: `a Threads bullet opens with none of recall's ${tags.length} tags: "${first(b.line, 300)}"` };
+      if (lead.length > 1) return { pass: false, evidence: `a Threads bullet carries a second tag: "${first(b.line, 300)}"` };
+      seen.push(lead[0]);
+    }
+    const n = bullets.length;
+    return { pass: true, evidence: `${n === 1 ? 'the one Threads bullet opens' : `each of ${n} Threads bullets opens`} with one of recall's ${tags.length} tags: ${[...new Set(seen)].join(', ')}` };
+  },
+  // recall-1's workspace leaves Task 3's files on top of the ledger's last `tree=`, Task 2's (evals/fixtures/export-in-progress/
+  // _setup/export.sh), so recall's step 7 rules out `[verified, uncommitted]` there (bfix H; the user's "Yes, add a scripted
+  // check", 2026-10-24). No list item of the final reply, at any depth and in any section, opens with that tag, first or later.
+  'no-verified-uncommitted': (events) => {
+    const text = replyText(events);
+    if (text === null) return { pass: false, evidence: 'no final reply' };
+    const bad = text.split('\n').find((l) => leadingTags(l.match(ITEM)?.[2] ?? '').includes('[verified, uncommitted]'));
+    return bad === undefined ? { pass: true, evidence: 'no list item of the final reply opens with `[verified, uncommitted]`' }
+      : { pass: false, evidence: `a list item of the final reply opens with \`[verified, uncommitted]\`, a tag this workspace rules out: "${first(bad.trim(), 300)}"` };
+  },
+  // recall-1 (bfix H, bfix-lane-2): the final reply has exactly one Next move label (NEXT_MOVE) and a section under it
+  // (nextMove). What the move is, recall-2's next-move-task-3 grades on the same workspace.
+  'one-next-move': (events) => {
+    const text = replyText(events);
+    if (text === null) return { pass: false, evidence: 'no final reply' };
+    const n = text.match(new RegExp(NEXT_MOVE.source, 'gim'))?.length ?? 0;
+    if (n !== 1) return { pass: false, evidence: n ? `the final reply has ${n} Next move labels` : 'the final reply has no Next move label' };
+    const move = nextMove(text);
+    return move ? { pass: true, evidence: `the final reply has one Next move: "${first(move, 300)}"` } : { pass: false, evidence: "the final reply's Next move section is empty" };
+  },
+  // recall-5 E0 (bfix H, bfix-lane-2): no call, the main session's or a subagent's, reads recall's SKILL.md (a Read, Grep or
+  // Bash call that names skills/recall/SKILL.md) or calls the recall skill (a Skill call named recall or <plugin>:recall).
+  'no-recall-skill': (events) => {
+    for (const { call } of steps(events).filter((s) => s.call)) {
+      if (call.name === 'Skill' && /^(?:[\w.-]+:)?recall$/.test(String(call.input.skill ?? ''))) return { pass: false, evidence: `Skill ${call.input.skill} calls the recall skill` };
+      const named = String(call.input.file_path ?? call.input.path ?? call.input.command ?? '');
+      if (['Read', 'Grep', 'Bash'].includes(call.name) && /skills\/recall\/SKILL\.md/.test(named)) return { pass: false, evidence: `${call.name} ${argOf(call)} reads recall's SKILL.md` };
+    }
+    return { pass: true, evidence: 'no call reads skills/recall/SKILL.md or calls the recall skill' };
+  },
+  // recall-5 E1 (bfix H, bfix-lane-2; controller ruling, 2026-10-24: both definitions stay): the final reply gives recall as
+  // TP / (TP + FN) and precision as TP / (TP + FP) (ratio), each named by the nearest metric name before it (namedRatio), so a
+  // swapped pair fails. How much room each definition gets is not graded.
+  'precision-recall-formulas': (events) => {
+    const text = replyText(events);
+    if (text === null) return { pass: false, evidence: 'no final reply' };
+    const recall = namedRatio(text, RECALL_RATIO, ['recall', 'sensitivity']), precision = namedRatio(text, PRECISION_RATIO, ['precision']);
+    if (recall && precision) return { pass: true, evidence: `the final reply names recall "${recall}" and precision "${precision}"` };
+    return { pass: false, evidence: `the final reply names ${[!recall && 'no recall as TP / (TP + FN)', !precision && 'no precision as TP / (TP + FP)'].filter(Boolean).join(' and ')}` };
+  },
+  // recall-4 E1 (bfix H, bfix-lane-2): no call, the main session's or a subagent's, reads a .jsonl transcript (transcriptRead)
+  // or runs recall-sessions (runsScript).
+  'no-session-mining': (events) => {
+    for (const { call } of steps(events).filter((s) => s.call)) {
+      if (transcriptRead(call)) return { pass: false, evidence: `${call.name} ${argOf(call)} reads a .jsonl transcript` };
+      if (call.name === 'Bash' && runsScript(call.input.command ?? '', 'recall-sessions')) return { pass: false, evidence: `Bash ${argOf(call)} runs recall-sessions` };
+    }
+    return { pass: true, evidence: 'no call reads a .jsonl transcript or runs recall-sessions' };
   },
 };
 

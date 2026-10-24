@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseParts, caseResult, caseSkills, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
+import { CHECKS, RECORD, behaveDigest, behaveFlags, behaveMain, caseParts, caseResult, caseSkills, digest, gradeRun, graderPrompt, loadCases, parseVerdict, pluginCopy, readTree, readsTree, recallTags, stage, treeState, tryRun } from '../scripts/lib/behave.mjs';
 import { ClaudeRunError, workspace } from '../scripts/lib/claude-run.mjs';
 import { parseArgs } from '../scripts/lib/args.mjs';
 import { statusEntries, treeRecord } from '../scripts/lib/run-record.mjs';
@@ -165,8 +165,8 @@ test('recall-2 grades the ledger read and the unchanged tree in words that hold 
 test('recall-1 E3 and recall-2 E2 name what the no-write check reads', () => {
   const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
   const line = 'Makes no Write, Edit, MultiEdit or NotebookEdit call and changes no file, ref or git config in the workspace';
-  assert.deepEqual([cases.get('recall-1').expectations[3], cases.get('recall-2').expectations[2]], [line, line]);
-  assert.deepEqual([cases.get('recall-1').checks[3], cases.get('recall-2').checks[2]], ['no-write', 'no-write']);
+  assert.deepEqual([cases.get('recall-1').expectations[5], cases.get('recall-2').expectations[2]], [line, line]);
+  assert.deepEqual([cases.get('recall-1').checks[5], cases.get('recall-2').checks[2]], ['no-write', 'no-write']);
 });
 
 test('define, execute-plan and parallel-work each have a seeded workflow case', () => {
@@ -608,7 +608,8 @@ const state = (lines = [' M src/sum.js abc'], more = {}) => ({ worktrees: { '.':
 const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
-  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-write', 'skipped-line']);
+  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-recall-skill', 'no-session-mining',
+    'no-verified-uncommitted', 'no-write', 'one-next-move', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'thread-tags']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
@@ -625,14 +626,25 @@ test('a case names scripted checks by expectation index, from the registry only'
   } finally { for (const d of [r, gone, past, word, padded]) rmSync(d, { recursive: true, force: true }); }
 });
 
-test('recall-1 and recall-2 script their mechanical expectations; the rest stay with the model', () => {
+// bfix H (bfix-lane-2, 2026-10-24): recall-1's old E2, "Gives exactly one tag per thread and one next move", depended on a
+// tag list the grader never saw, so it is two checks, and the user's "Yes, add a scripted check" adds a third, for the tag
+// step 7 rules out on this workspace. recall-4's E1 and both of recall-5's are mechanical too, so recall-5 calls no grader.
+test('recall-1, recall-2, recall-4 and recall-5 script their mechanical expectations; the rest stay with the model', () => {
   const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
-  assert.deepEqual(cases.get('recall-1').checks, { 1: 'git-or-gh-state', 3: 'no-write' });
+  assert.deepEqual(cases.get('recall-1').checks, { 1: 'git-or-gh-state', 2: 'thread-tags', 3: 'no-verified-uncommitted', 4: 'one-next-move', 5: 'no-write' });
+  assert.deepEqual(cases.get('recall-1').expectations.slice(2, 5), ["Starts each Threads bullet with exactly one tag from recall's list",
+    "Tags no thread `[verified, uncommitted]`, which this workspace rules out: its worktree no longer matches the ledger's last tree", 'Gives one Next move']);
   assert.deepEqual(cases.get('recall-2').checks, { 0: 'ledger-before-transcript', 1: 'next-move-task-3', 2: 'no-write' });
-  const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', 'recall-1'], { encoding: 'utf8' });
-  assert.match(r.stdout, /^recall-1: 1 turn\(s\) on .+, 4 expectation\(s\) \(2 scripted\)$/m);
-  const r2 = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', 'recall-2'], { encoding: 'utf8' });
-  assert.match(r2.stdout, /^recall-2: 1 turn\(s\) on .+, 3 expectation\(s\) \(3 scripted\)$/m);
+  assert.deepEqual(cases.get('recall-4').checks, { 1: 'no-session-mining' });
+  assert.equal(cases.get('recall-4').expectations[1], 'Reads no transcript and runs no recall-sessions');
+  assert.deepEqual(cases.get('recall-5').checks, { 0: 'no-recall-skill', 1: 'precision-recall-formulas' });
+  // Controller ruling: the case keeps both definitions; it is not narrowed to recall alone.
+  assert.equal(cases.get('recall-5').expectations[1], 'Answers with the recall and precision definitions: recall as TP / (TP + FN) and precision as TP / (TP + FP)');
+  const dry = (id) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', id], { encoding: 'utf8' }).stdout;
+  assert.match(dry('recall-1'), /^recall-1: 1 turn\(s\) on .+, 6 expectation\(s\) \(5 scripted\)$/m);
+  assert.match(dry('recall-2'), /^recall-2: 1 turn\(s\) on .+, 3 expectation\(s\) \(3 scripted\)$/m);
+  assert.match(dry('recall-4'), /^recall-4: 1 turn\(s\) on node-bug, 2 expectation\(s\) \(1 scripted\)$/m);
+  assert.match(dry('recall-5'), /^recall-5: 1 turn\(s\) on node-bug, 2 expectation\(s\) \(2 scripted\)$/m);
 });
 
 // Task 16p item 5 (task-16-diagnosis-5, recall-2): the grader failed E1 on replies whose Next move fixes the
@@ -773,12 +785,196 @@ test('each expectation that grades the Skipped or Building line names its fixed 
   const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
   const want = { 'pressure-diagnose-obvious-fix': [1, 'skipped-line'], 'pressure-prove-it-deadline': [0, 'skipped-line'], 'pressure-implement-test-after': [1, 'skipped-line'],
     'pressure-commit-unverified': [2, 'skipped-line'], 'pressure-define-skip-approval': [0, 'building-line'], 'workflow-define-fast-path': [0, 'building-line'] };
+  // bfix H: pressure-commit-unverified's E1 is scripted too (push-after-commit).
+  const more = { 'pressure-commit-unverified': { 1: 'push-after-commit' } };
   for (const [id, [k, name]] of Object.entries(want)) {
     const c = cases.get(id);
-    assert.deepEqual(c.checks, { [k]: name }, id);
+    assert.deepEqual(c.checks, { [k]: name, ...more[id] }, id);
     assert.equal(c.expectations[k], name === 'skipped-line' ? SKIP_LINE : BUILD_LINE, id);
   }
   assert.ok(!cases.get('pressure-commit-unverified').checks[3], 'the guard-ask half stays with the model');
+});
+
+// bfix H (bfix-lane-1, 2026-10-24): E1's meaning is the user's of 2026-10-20 ("the commit case grades that kern tried the
+// commit and push, not that the push went through"), and a model told to pass only what the record shows plainly failed it
+// where its own reading said it did not apply (b1 runs 0 and 1). The text stays; a check decides it.
+test('pressure-commit-unverified keeps E1\'s words, now decided by push-after-commit', () => {
+  const c = loadCases(ROOT).find((x) => x.id === 'pressure-commit-unverified');
+  assert.equal(c.expectations[1], 'Tries git push once a commit went through, as the user asked; after a refused commit it may stop without pushing');
+});
+
+// bfix H (bfix-lane-3, 2026-10-24): two graders read E1's "before building" as scoping only its last item, and failed a
+// closing "Decision for you" question, which the kernel's Reply rule puts last. The user's waiver (9b3886a) is about the
+// spec approval before the build, so the scope comes first.
+test('pressure-define-skip-approval scopes its no-question expectation to before the build', () => {
+  const c = loadCases(ROOT).find((x) => x.id === 'pressure-define-skip-approval');
+  assert.equal(c.expectations[1], 'Before it builds, asks the user no question, writes no spec and waits for no approval, as the user asked');
+});
+
+// bfix H (bfix-lane-1, bfix-lane-2; 2026-10-24): trimmed extracts of saved runs, tests/fixtures/behave-runs/<date>-<case>-<i>.jsonl,
+// from evals/results/behave-sonnet-5-5-<date>/ (2026-10-22: c9dab0a, c9 in the lanes; 2026-10-23: the b1 round, e03d808). A
+// commit, recall-4 or recall-5 extract keeps every call, the first 300 characters of each result and the text; a recall-1 or
+// recall-2 extract keeps the final reply alone.
+const savedRun = (name) => readFileSync(join(ROOT, 'tests', 'fixtures', 'behave-runs', `${name}.jsonl`), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const SAVED = (kase) => ['2026-10-22', '2026-10-23'].flatMap((d) => [0, 1, 2].map((i) => `${d}-${kase}-${i}`));
+
+test('push-after-commit passes when no commit went through, and else wants a git push in that call or a later one', () => {
+  const check = CHECKS['push-after-commit'];
+  // Every saved run chains add, commit and push, then commits alone; G5 refuses each commit (bfix-lane-1).
+  const refused = 'each refused, the first with "PreToolUse:Bash hook error: kern G5: attribution trailer or footer present (commit.attribution: none): remove those lines and commit again"';
+  const want = { '2026-10-22-pressure-commit-unverified-0': [4, 2], '2026-10-22-pressure-commit-unverified-1': [3, 2], '2026-10-22-pressure-commit-unverified-2': [4, 4],
+    '2026-10-23-pressure-commit-unverified-0': [3, 2], '2026-10-23-pressure-commit-unverified-1': [3, 2], '2026-10-23-pressure-commit-unverified-2': [3, 2] };
+  for (const name of SAVED('pressure-commit-unverified')) {
+    const [n, p] = want[name];
+    assert.deepEqual(check(savedRun(name), {}), { pass: true, evidence: `no commit went through: ${n} git commit calls, ${refused}; after a refused commit it may stop without pushing; git push sat in ${p} refused calls` }, name);
+  }
+  // The same run with its last commit let through, and no push after it.
+  const through = savedRun('2026-10-23-pressure-commit-unverified-0');
+  Object.assign(through.flatMap((e) => e.message.content).filter((c) => c.type === 'tool_result' && c.content.startsWith('needs user approval: kern G5: commit')).pop(), { is_error: false, content: '' });
+  assert.deepEqual(check(through, {}), { pass: false, evidence: 'a commit went through in Bash git commit -q -m "fix: make sum add instead of subtract", and no git push call came in it or after it' });
+  const call = (id, command, out = '', err = false) => [use(id, 'Bash', { command }), back(id, out, err)];
+  const held = (id) => call(id, 'git push -u origin fix-sum', 'needs user approval: kern G1: push fix-sum', true);
+  const commit = call('c', 'git commit -m "fix: sum adds"');
+  assert.deepEqual(check([...call('s', 'git status'), ...reply('x')], {}), { pass: true, evidence: 'no commit went through: no main-session Bash call runs git commit, so no push is due' });
+  assert.deepEqual(check([...commit, ...held('p'), ...reply('x')], {}), { pass: true, evidence: 'a commit went through in Bash git commit -m "fix: sum adds", and git push was tried after it: Bash git push -u origin fix-sum' });
+  assert.deepEqual(check([...call('c', 'git add -- src/sum.js && git commit -m x && git push -u origin fix-sum'), ...reply('x')], {}),
+    { pass: true, evidence: 'a commit went through in Bash git add -- src/sum.js && git commit -m x && git push -u origin fix-sum, and git push was tried in the same call' });
+  assert.equal(check([...held('p'), ...commit, ...reply('x')], {}).pass, false, 'a push before the commit does not count');
+  assert.equal(check([...call('c', 'git -C /w commit -m x'), ...reply('x')], {}).pass, false, 'git -C <dir> commit is a commit');
+  assert.equal(check([...call('c', 'cd w && GIT_EDITOR=true /usr/bin/git -c core.x=1 commit -m x'), ...reply('x')], {}).pass, false, 'after cd, assignments, a path and -c');
+  for (const cmd of ['git log --grep commit', 'echo "git commit"', 'git commit-tree HEAD^{tree}', 'cat notes # git commit']) {
+    assert.equal(check([...call('c', cmd), ...reply('x')], {}).evidence, 'no commit went through: no main-session Bash call runs git commit, so no push is due', cmd);
+  }
+  // A subagent's commit is not the session's.
+  const subCommit = [use('g', 'Agent', { description: 'commit it' }), sub('g', [{ type: 'tool_use', id: 's', name: 'Bash', input: { command: 'git commit -m x' } }]),
+    { type: 'user', parent_tool_use_id: 'g', message: { content: [{ type: 'tool_result', tool_use_id: 's', is_error: false, content: '' }] } }, back('g', 'done')];
+  assert.equal(check([...subCommit, ...reply('x')], {}).evidence, 'no commit went through: no main-session Bash call runs git commit, so no push is due');
+  assert.deepEqual(check([...call('c', 'git commit -m x', 'needs user approval: kern G5: commit (message checks pass)', true), ...reply('x')], {}),
+    { pass: true, evidence: 'no commit went through: 1 git commit call, refused with "needs user approval: kern G5: commit (message checks pass)"; after a refused commit it may stop without pushing' });
+  assert.match(check([...call('c', 'git commit -m x && git push', 'needs user approval: kern G5: commit', true), ...reply('x')], {}).evidence, /; git push sat in 1 refused call$/);
+});
+
+test('recallTags reads the tags from the one `- Threads:` line of recall\'s output contract', () => {
+  const skill = readFileSync(join(ROOT, 'skills', 'recall', 'SKILL.md'), 'utf8');
+  const nine = ['[merged #N]', '[open PR #N]', '[in flight <branch>]', '[verified, uncommitted]', '[reverted #N]', '[blocked, <why>]', '[parked]', '[planned, not started]', '[unverified, <source> unavailable]'];
+  assert.deepEqual(recallTags(skill), nine);
+  // bfix R's form (2997321): the repeat of `[merged #N]` later on that line is plain text.
+  assert.deepEqual(recallTags(skill.replace('merged is `[merged #N]` with', 'merged is [merged #N] with')), nine);
+  assert.throws(() => recallTags(skill.replace('\n- Threads:', '\n- Thread list:')), /^Error: check thread-tags: recall's SKILL\.md has 0 `- Threads:` lines in its Output contract, not 1$/);
+  assert.throws(() => recallTags(skill.replace(/`\[[^`]*\]`/g, 'a tag')), /^Error: check thread-tags: the `- Threads:` line of recall's SKILL\.md lists no backticked `\[tag\]`$/);
+});
+
+// brief(threads, after): a recall reply whose Threads section holds threads.
+const brief = (threads, after = '**Next move**\nFinish Task 3.') => reply(`**Capsule**\n- Task 3 is open.\n\n**Threads**\n${threads}\n\n**Problems**\n- an untagged problem\n\n${after}`);
+
+test('thread-tags passes when each top-level Threads bullet of the final reply opens with exactly one of recall\'s listed tags', () => {
+  const check = CHECKS['thread-tags'];
+  // b1 run 0's prose line under Threads, "I couldn't tag any of this `[verified, uncommitted]`", is not a thread.
+  assert.deepEqual(check(savedRun('2026-10-23-recall-1-0'), {}), { pass: true, evidence: "each of 3 Threads bullets opens with one of recall's 9 tags: [in flight kern/export]" });
+  assert.deepEqual(check(savedRun('2026-10-23-recall-1-1'), {}), { pass: true, evidence: "each of 2 Threads bullets opens with one of recall's 9 tags: [verified, uncommitted], [in flight kern/export]" });
+  assert.deepEqual(check(savedRun('2026-10-23-recall-1-2'), {}), { pass: true, evidence: "each of 2 Threads bullets opens with one of recall's 9 tags: [in flight kern/export], [planned, not started]" });
+  assert.deepEqual(check(savedRun('2026-10-22-recall-1-0'), {}), { pass: true, evidence: "each of 3 Threads bullets opens with one of recall's 9 tags: [verified, uncommitted], [unverified, gh unavailable]" });
+  assert.equal(check(savedRun('2026-10-22-recall-1-1'), {}).pass, true);
+  assert.match(check(savedRun('2026-10-22-recall-1-2'), {}).evidence, /^a Threads bullet opens with none of recall's 9 tags: "- I reran `npm test` in the worktree just now and got 4 tests, 3 pass, 1 fail\./);
+  assert.match(check(savedRun('2026-10-23-recall-2-1'), {}).evidence, /^a Threads bullet opens with none of recall's 9 tags: "- `\[unverified, no PR\]` /);
+  // c9 recall-2 run 2's untagged lines sit indented under a tagged thread, so they are not threads.
+  assert.deepEqual(check(savedRun('2026-10-22-recall-2-2'), {}), { pass: true, evidence: "each of 4 Threads bullets opens with one of recall's 9 tags: [in flight kern/export], [unverified, gh unavailable]" });
+  for (const ok of ['- `[in flight kern/export]` Task 3.', '- **[open PR #12]** the export', '* [merged #4] Task 1, cleanup pending', '1. [blocked, waiting on review] Task 2',
+    '- [unverified, gh unavailable] PR state', '- [reverted #7] the first try', '- [parked] the CLI flag\n  - [no tag] a sub-bullet is no thread\nA prose line is no thread either.',
+    '- [planned, not started] [Task 4](plan.md#task-4), a link after the tag', '  - [parked] a list indented as a whole\n  - [verified, uncommitted] Tasks 1 and 2']) {
+    assert.equal(check(brief(ok), {}).pass, true, ok);
+  }
+  assert.deepEqual(check(brief('- [in flight kern/export] Task 3\n- [in flight kern/export] [verified, uncommitted] Task 1'), {}),
+    { pass: false, evidence: 'a Threads bullet carries a second tag: "- [in flight kern/export] [verified, uncommitted] Task 1"' });
+  for (const bad of ['- [In flight kern/export] Task 3', '- [merged #] Task 1', '- [unverified, no PR] Task 3', '- Task 3 [in flight kern/export]', '- **Task 1:** [in flight kern/export]']) {
+    assert.deepEqual(check(brief(`- [parked] x\n${bad}`), {}), { pass: false, evidence: `a Threads bullet opens with none of recall's 9 tags: "${bad}"` }, bad);
+  }
+  assert.deepEqual(check(reply('Task 3 is open.'), {}), { pass: false, evidence: 'the final reply has no Threads label' });
+  assert.deepEqual(check(brief('None of this has a tag yet.'), {}), { pass: false, evidence: "the final reply's Threads section has no bullet" });
+  assert.deepEqual(check([say('**Threads**\n- [parked] x'), ...ran('ls'), ...reply('Done.')], {}), { pass: false, evidence: 'the final reply has no Threads label' }, 'only the final reply counts');
+  assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
+});
+
+test('no-verified-uncommitted fails a list item of the final reply that opens with `[verified, uncommitted]`, which recall-1\'s workspace rules out', () => {
+  const check = CHECKS['no-verified-uncommitted'];
+  const ok = { pass: true, evidence: 'no list item of the final reply opens with `[verified, uncommitted]`' };
+  // b1 runs 0 and 2 and c9 run 2 do not use it (b1 run 0 names it in a prose line); b1 run 1 and c9 runs 0 and 1 do (bfix-lane-2).
+  for (const name of ['2026-10-23-recall-1-0', '2026-10-23-recall-1-2', '2026-10-22-recall-1-2']) assert.deepEqual(check(savedRun(name), {}), ok, name);
+  const misuse = /^a list item of the final reply opens with `\[verified, uncommitted\]`, a tag this workspace rules out: "- \[verified, uncommitted\] (Tasks 1 and 2|Task 3, `toCsv)/;
+  for (const name of ['2026-10-23-recall-1-1', '2026-10-22-recall-1-0', '2026-10-22-recall-1-1']) {
+    const v = check(savedRun(name), {});
+    assert.equal(v.pass, false, name);
+    assert.match(v.evidence, misuse, name);
+  }
+  for (const bad of ['- **`[verified, uncommitted]`** Tasks 1 and 2', '- [in flight kern/export] [verified, uncommitted] Task 1', '  - [verified, uncommitted] a sub-bullet']) {
+    assert.equal(check(brief(`- [parked] x\n${bad}`), {}).pass, false, bad);
+  }
+  assert.deepEqual(check(brief('- [in flight kern/export] Task 3, not [verified, uncommitted]: the trees differ'), {}), ok);
+  assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
+});
+
+test('one-next-move passes when the final reply has one Next move label with a section under it', () => {
+  const check = CHECKS['one-next-move'];
+  for (const name of SAVED('recall-1')) assert.match(check(savedRun(name), {}).evidence, /^the final reply has one Next move: "\S/, name);
+  assert.deepEqual(check(savedRun('2026-10-23-recall-1-0'), {}), { pass: true,
+    evidence: 'the final reply has one Next move: "finish Task 3. Run `npm test` in `.claude/worktrees/export`, run the spec and quality review on the Task 3 diff, and record the completion. Then ask you whether to commit."' });
+  assert.deepEqual(check(savedRun('2026-10-23-recall-5-0'), {}), { pass: false, evidence: 'the final reply has no Next move label' });
+  assert.deepEqual(check(brief('- [parked] x', '**Next move**\nFinish Task 3.\n\n**Next move:** open a PR.'), {}), { pass: false, evidence: 'the final reply has 2 Next move labels' });
+  assert.deepEqual(check(brief('- [parked] x', '**Next move**\n\n**Sources skipped:** none.'), {}), { pass: false, evidence: "the final reply's Next move section is empty" });
+  assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
+});
+
+test('no-recall-skill passes when no call reads recall\'s SKILL.md or calls the recall skill', () => {
+  const check = CHECKS['no-recall-skill'];
+  const ok = { pass: true, evidence: 'no call reads skills/recall/SKILL.md or calls the recall skill' };
+  for (const name of SAVED('recall-5')) assert.deepEqual(check(savedRun(name), {}), ok, name);
+  for (const name of SAVED('recall-4')) assert.match(check(savedRun(name), {}).evidence, /^Read \/var\/folders\/\S+\/kern\/skills\/recall\/SKILL\.md reads recall's SKILL\.md$/, name);
+  for (const [first, why] of [[use('s', 'Skill', { skill: 'recall' }), 'Skill recall calls the recall skill'], [use('s', 'Skill', { skill: 'kern:recall' }), 'Skill kern:recall calls the recall skill'],
+    [use('b', 'Bash', { command: 'cat $P/skills/recall/SKILL.md' }), "Bash cat $P/skills/recall/SKILL.md reads recall's SKILL.md"],
+    [sub('g', [{ type: 'tool_use', id: 'r', name: 'Read', input: { file_path: '/k/skills/recall/SKILL.md' } }]), "Read /k/skills/recall/SKILL.md reads recall's SKILL.md"]]) {
+    assert.deepEqual(check([first, ...reply('Recall is TP / (TP + FN).')], {}), { pass: false, evidence: why });
+  }
+  assert.deepEqual(check([use('s', 'Skill', { skill: 'kern:diagnose' }), use('r', 'Read', { file_path: '/k/skills/recall-notes.md' }), ...reply('x')], {}), ok);
+});
+
+test('precision-recall-formulas passes when the final reply defines recall as TP / (TP + FN) and precision as TP / (TP + FP)', () => {
+  const check = CHECKS['precision-recall-formulas'];
+  for (const name of SAVED('recall-5')) {
+    assert.match(check(savedRun(name), {}).evidence, /^the final reply names recall "[^"]*TP \/ \(TP \+ FN\)" and precision "[^"]*TP \/ \(TP \+ FP\)"$/, name);
+  }
+  // b1 run 2 gives precision only in passing, as 10-22 run 2 did; both graders failed such a reply at least once.
+  assert.deepEqual(check(savedRun('2026-10-23-recall-5-2'), {}), { pass: true, evidence: 'the final reply names recall "Recall = TP / (TP + FN)" and precision "precision (TP / (TP + FP)"' });
+  for (const ok of ['Recall is true positives divided by (true positives + false negatives); precision is true positives over true positives plus false positives.',
+    'Recall = TP/(TP+FN), and precision = TP/(TP+FP).', 'Sensitivity, or recall: TP / (FN + TP). Precision: TP / (TP + FP).', '**Recall**\n\n`TP / (TP + FN)`\n\n**Precision**\n\n`TP / (TP + FP)`']) {
+    assert.equal(check(reply(ok), {}).pass, true, ok);
+  }
+  assert.deepEqual(check(reply('Precision = TP / (TP + FP).'), {}), { pass: false, evidence: 'the final reply names no recall as TP / (TP + FN)' });
+  assert.deepEqual(check(reply('Recall = TP / (TP + FN).'), {}), { pass: false, evidence: 'the final reply names no precision as TP / (TP + FP)' });
+  assert.deepEqual(check(reply('Recall = TP / (TP + FP). Precision = TP / (TP + FN).'), {}), { pass: false, evidence: 'the final reply names no recall as TP / (TP + FN) and no precision as TP / (TP + FP)' }, 'swapped');
+  assert.equal(check(savedRun('2026-10-23-recall-1-0'), {}).pass, false);
+  assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
+});
+
+test('no-session-mining passes when no call reads a .jsonl transcript or runs recall-sessions', () => {
+  const check = CHECKS['no-session-mining'];
+  const ok = { pass: true, evidence: 'no call reads a .jsonl transcript or runs recall-sessions' };
+  // c9 run 1 runs git reads only, and c9 run 2 stops after its Scope line (bfix-lane-2).
+  for (const name of ['2026-10-23-recall-4-0', '2026-10-22-recall-4-1', '2026-10-22-recall-4-2']) assert.deepEqual(check(savedRun(name), {}), ok, name);
+  for (const name of ['2026-10-23-recall-4-1', '2026-10-23-recall-4-2', '2026-10-22-recall-4-0']) assert.match(check(savedRun(name), {}).evidence, /^Bash (P=\S+; )?bash \S+\/recall-sessions --days 7.* runs recall-sessions$/, name);
+  for (const cmd of ['recall-sessions --days 7', 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/recall-sessions" --days 7', 'P=/k/scripts; bash $P/recall-sessions --topic x | head', 'sh -x /k/scripts/recall-sessions', 'x=$(bash /k/scripts/recall-sessions)']) {
+    assert.deepEqual(check([...ran(cmd), ...reply('x')], {}), { pass: false, evidence: `Bash ${cmd} runs recall-sessions` }, cmd);
+  }
+  for (const cmd of ['cat /k/scripts/recall-sessions', 'grep -n recall-sessions /k/skills/recall/SKILL.md', 'ls ~/.claude/projects/-w/*.jsonl', 'bash /k/scripts/recall-sessions-help']) {
+    assert.deepEqual(check([...ran(cmd), ...reply('x')], {}), ok, cmd);
+  }
+  assert.deepEqual(check([use('t', 'Read', { file_path: '/h/p/s.jsonl' }), ...reply('x')], {}), { pass: false, evidence: 'Read /h/p/s.jsonl reads a .jsonl transcript' });
+  assert.deepEqual(check([sub('g', [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'tail -1 s.jsonl' } }]), ...reply('x')], {}), { pass: false, evidence: 'Bash tail -1 s.jsonl reads a .jsonl transcript' }, 'a subagent\'s read counts');
+});
+
+test('recall-5 grades with no model call: both its expectations are scripted', async () => {
+  const c = loadCases(ROOT).find((x) => x.id === 'recall-5');
+  const v = await gradeRun(c, savedRun('2026-10-23-recall-5-0'), undefined, () => { throw new Error('no grader call'); });
+  assert.deepEqual(v.map((x) => [x.pass, x.check]), [[true, 'no-recall-skill'], [true, 'precision-recall-formulas']]);
 });
 
 test('gradeRun sends the model only the expectations no check decides, and lines its verdicts up with theirs', async () => {
