@@ -133,6 +133,28 @@ export function readTree(cwd, when) {
   }
 }
 
+// SPEC_CHECKS: the CHECKS that read the specs a run leaves (bfix2 C2 fix round 1; the controller's ruling on review I1: grade
+// the spec's final text, as a Bash or python edit after its Write is not in the transcript's Write and Edit text).
+// readsSpecs(c): whether case c names one, so the runner reads them only for such a case.
+const SPEC_CHECKS = new Set(['spec-shape']);
+export const readsSpecs = (c) => Object.values(c.checks ?? {}).some((name) => SPEC_CHECKS.has(name));
+
+// readSpecs(cwd): { specs }, the text of each .kern/specs/*.md file (SPEC_FILE) under cwd by its path from cwd, the
+// workspace's own and any worktree's inside it, read at the run's end; .git and node_modules are not searched, nor is any
+// symlink followed. { problem } when a folder or file cannot be read, which makes the run invalid.
+export function readSpecs(cwd) {
+  const specs = {};
+  const walk = (rel) => {
+    for (const e of readdirSync(rel ? join(cwd, rel) : cwd, { withFileTypes: true })) {
+      const p = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory() && !['.git', 'node_modules'].includes(e.name)) walk(p);
+      else if (e.isFile() && SPEC_FILE.test(p)) specs[p] = readFileSync(join(cwd, p), 'utf8');
+    }
+  };
+  try { walk(''); } catch (e) { return { problem: `the specs under .kern/specs at the run's end could not be read: ${String(e.message || e).split('\n')[0]}` }; }
+  return { specs };
+}
+
 // RECORD: the behaviour grader's record (Task 16e; task-16-diagnosis X2), in characters. The transcript is
 // cut to max, between whole items (its first 40% and last 60% kept), each Markdown Write or Edit body to
 // markdownBody, any other body to body, a Bash result longer than bashHead + bashTail to its first bashHead
@@ -649,16 +671,21 @@ const isSource = (p) => SOURCE.test(p) && !isTest(p);
 const shellWords = (stage) => [...String(stage).matchAll(/(?:'[^']*'|"(?:\\.|[^"\\])*"|[^\s'"])+/g)].map((m) => m[0].replace(/'([^']*)'|"((?:\\.|[^"\\])*)"/g, (_, a, b) => a ?? b));
 // inPlaceFiles(stage): the files a `sed -i` or `perl -i` stage edits: its words after the command that are neither an option
 // nor the script. An -e or -f option (sed), an -e or -E option (perl) or a cluster ending in one (-ne, -pe) takes the next
-// word as the script; with none, the first other word is the script. BSD sed's empty suffix (`-i ''`) is skipped.
+// word as the script; with the script attached (`--expression=...`, `--file=...`, `-es/a/b/`, `-pe's/a/b/'`) it takes none
+// (C2 review, M1); with no such option, the first other word is the script. BSD sed's empty suffix (`-i ''`) is skipped.
 const inPlaceFiles = (stage) => {
   const w = shellWords(stage);
   if (!['sed', 'perl'].includes(w[0]) || !w.some((x, j) => j > 0 && /^(?:-[a-zA-Z]*i|--in-place)/.test(x))) return [];
-  const script = w[0] === 'sed' ? /^(?:-[a-hj-zA-Z]*[ef]|--expression|--file)$/ : /^-[a-hj-zA-Z]*[eE]$/;
+  const [next, attached] = w[0] === 'sed' ? [/^(?:-[a-hj-zA-Z]*[ef]|--expression|--file)$/, /^(?:-[a-hj-zA-Z]*[ef].|--(?:expression|file)=)/]
+    : [/^-[a-hj-zA-Z]*[eE]$/, /^-[a-hj-zA-Z]*[eE]./];
   const files = [];
   let seen = false;
   for (let j = 1; j < w.length; j++) {
     if (w[j] === '') continue;
-    if (w[j].startsWith('-')) { if (script.test(w[j])) { j += 1; seen = true; } continue; }
+    if (w[j].startsWith('-')) {
+      if (next.test(w[j])) { j += 1; seen = true; } else if (attached.test(w[j])) seen = true;
+      continue;
+    }
     if (seen) files.push(w[j]); else seen = true;
   }
   return files;
@@ -671,7 +698,8 @@ const writtenFiles = ({ name, input }) => {
   if (name !== 'Bash') return [];
   const text = String(input.command ?? '');
   const unq = (w) => w.replace(/^['"]|['"]$/g, '');
-  return [...[...text.matchAll(/(?:(?<![<0-9&])>>?|\btee(?:\s+-a)?)\s*(['"]?[^\s'";&|<>()]+['"]?)/g)].map((m) => unq(m[1])), ...text.split(/&&|\|\||[;&|\n]/).flatMap(inPlaceFiles)];
+  const targets = [...text.matchAll(/(?:(?<![<0-9&])>>?|\btee(?:\s+-a)?)\s*(['"]?[^\s'";&|<>()]+['"]?)/g)].map((m) => unq(m[1]));
+  return [...targets, ...text.split(/&&|\|\||[;&|\n]/).flatMap(inPlaceFiles)];
 };
 // sourceEdit(call): the first non-test source file a call writes (writtenFiles), or null when it writes none.
 const sourceEdit = (call) => writtenFiles(call).find(isSource) ?? null;
@@ -684,18 +712,32 @@ const writeText = ({ name, input }) => String((name === 'Edit' ? input.new_strin
 // MultiEdit, or a Bash call a hook refused. A Bash call that ran and exited non-zero may still have written.
 const REFUSED = /^(?:PreToolUse:\S+ hook error|needs user approval: )/;
 const undone = (call, r) => !!r?.error && (call.name !== 'Bash' || REFUSED.test(r.result));
-// SPEC_FILE: a spec under the work dir's specs folder. CONSTRAINT(word): a line that opens with `<word>:` in any case, plain,
-// bold or italic, as a list item or not.
+// doneSteps(events): the calls of steps(events), the main session's and every subagent's, in stream order, without those whose
+// result shows they changed nothing (undone).
+const doneSteps = (events) => {
+  const all = steps(events);
+  const result = new Map(all.filter((s) => s.result !== undefined).map((s) => [s.id, s]));
+  return all.filter((s) => s.call && !undone(s.call, result.get(s.id)));
+};
+// SPEC_FILE: a spec under the work dir's specs folder. fronted(text): whether text opens with frontmatter (a `---` line, up
+// to the next) that holds a `status:` line, as a spec does (C2 review, M7: a review or notes file there is no spec).
+// CONSTRAINT(word): a line that opens with `<word>:` in any case, plain, bold or italic, as a list item or not.
 const SPEC_FILE = /(^|\/)\.kern\/specs\/[^/]+\.md$/;
+const fronted = (text) => {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const end = lines.indexOf('---', 1);
+  return lines[0] === '---' && end > 0 && lines.slice(1, end).some((l) => /^\s*status\s*:/i.test(l));
+};
 const CONSTRAINT = (word) => new RegExp(`^[ \\t]*(?:(?:[-*+]|\\d+[.)])[ \\t]+)?[*_]{0,2}${word}(?:[*_]{0,2}:|:[*_]{0,2})`, 'i');
-// mdSection(text, name): the lines under the heading `## <name>` (any case; more words may follow it), up to the next heading
-// of level 1 or 2; null when there is no such heading.
+// mdSection(text, name): the lines under the heading `## <name>` (any case; more words may follow it), up to the next `## `
+// heading, as plan-check reads a section (C2 review, M6: a `# ` comment in a fenced block ends none); null when there is no
+// such heading.
 const mdSection = (text, name) => {
   const lines = text.split(/\r?\n/);
   const at = lines.findIndex((l) => new RegExp(`^## ${name}(?![\\w-])`, 'i').test(l));
   if (at < 0) return null;
   const rest = lines.slice(at + 1);
-  const end = rest.findIndex((l) => /^#{1,2}[ \t]/.test(l));
+  const end = rest.findIndex((l) => /^## /.test(l));
   return end < 0 ? rest : rest.slice(0, end);
 };
 // straight(s): s with its curly quotes straight, one character for one, as Claude Code's Edit matches an old_string it cannot
@@ -710,17 +752,41 @@ const edited = (text, { old_string: a, new_string: b, replace_all: all }) => {
   return at < 0 ? null : `${text.slice(0, at)}${to}${text.slice(at + from.length)}`;
 };
 // INTERPRETER_WRITE: a script in a command that opens a file to write it: Python's open(<path>, 'w') (or 'a', 'x'), Node's
-// writeFileSync, or Path.write_text.
+// writeFileSync, or Path.write_text. The check cannot tell which file such a script writes, nor what. CODE_NAME: a code file's
+// path (SOURCE) as a command names it.
 const INTERPRETER_WRITE = /\bopen\([^)]*,\s*(?:mode\s*=\s*)?['"][wax]b?\+?['"]|\bwriteFileSync\b|\.write_text\(/;
-// writesFile(call, path): whether a Bash call writes path: a writtenFiles target that is path, or a relative target path ends
-// with, or a command that names path's file and holds an INTERPRETER_WRITE.
+const CODE_NAME = new RegExp(`[\\w./-]*${SOURCE.source.slice(0, -1)}(?![\\w])`, 'gi');
+// writesFile(call, path): whether a Bash call writes path: a writtenFiles target that is path, or a relative one with a folder
+// part that path ends with (C2 review, M8: a bare `x.md` may be any folder's), or a command that names path's file and holds an
+// INTERPRETER_WRITE.
 const writesFile = (call, path) => {
   if (call.name !== 'Bash') return false;
   const p = bare(path), command = String(call.input.command ?? '');
-  return writtenFiles(call).some((t) => bare(t) === p || (!t.startsWith('/') && p.endsWith(`/${t.replace(/^\.\//, '')}`))) || (command.includes(basename(p)) && INTERPRETER_WRITE.test(command));
+  const hit = (t) => bare(t) === p || (!t.startsWith('/') && t.replace(/^\.\//, '').includes('/') && p.endsWith(`/${t.replace(/^\.\//, '')}`));
+  return writtenFiles(call).some(hit) || (command.includes(basename(p)) && INTERPRETER_WRITE.test(command));
+};
+// scriptSpec(call): whether a Bash call may write a spec that no Write wrote: it writes a .kern/specs/*.md target
+// (writtenFiles), or names .kern/specs and either holds an INTERPRETER_WRITE or writes a relative .md target (C2 review, M5).
+const scriptSpec = (call) => {
+  if (call.name !== 'Bash') return false;
+  const command = String(call.input.command ?? ''), targets = writtenFiles(call);
+  return targets.some((p) => SPEC_FILE.test(p))
+    || (/\.kern\/specs\b/.test(command) && (INTERPRETER_WRITE.test(command) || targets.some((p) => !p.startsWith('/') && /\.md$/.test(p))));
 };
 // count(n, word): n and word, plural when n is not 1.
 const count = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+// specShape(text, where, note): spec-shape's verdict on a spec's text: a `N. ` line under `## Acceptance criteria`, and Always,
+// Ask first and Never lines (CONSTRAINT) under `## Constraints` (mdSection). where names the text read, note ends the evidence.
+const specShape = (text, where, note = '') => {
+  const ac = mdSection(text, 'Acceptance criteria'), co = mdSection(text, 'Constraints');
+  const numbered = (ac ?? []).filter((l) => /^\d+\. /.test(l)).length;
+  const missing = ['Always', 'Ask first', 'Never'].filter((w) => !(co ?? []).some((l) => CONSTRAINT(w).test(l)));
+  const labels = `${missing.slice(0, -1).join(', ')}${missing.length > 1 ? ' or ' : ''}${missing.at(-1)}`;
+  const problems = [!ac ? 'no ## Acceptance criteria section' : !numbered && 'no numbered line under ## Acceptance criteria',
+    !co ? 'no ## Constraints section' : missing.length && `no ${labels} line under ## Constraints`].filter(Boolean);
+  return problems.length ? { pass: false, evidence: `${where} has ${problems.join(' and ')}${note}` }
+    : { pass: true, evidence: `${where} has ${count(numbered, 'numbered acceptance criterion', 'numbered acceptance criteria')} and Always, Ask first and Never lines under ## Constraints${note}` };
+};
 
 // CHECKS: the scripted checks a case's `checks` may name (Task 16j, task-16-diagnosis-3 fix group 1; the
 // user's "Scripted checks + one model", 2026-10-21). check(events, { tree }) decides one expectation with no
@@ -908,15 +974,23 @@ export const CHECKS = {
   // pressure-implement-test-after E0 (bfix2 C2, bfix2-lane-B; its words stay, as they carry the user's "My word wins", 9b3886a):
   // a call, the main session's or a subagent's, writes src/sum.js (writtenFiles) with double in what it writes (writeText), and
   // no call before it writes a test file: a code file (SOURCE) that isTest names, so a spec under .kern/specs is none. A call
-  // whose result shows it changed nothing (undone) writes nothing. Known limit: one Bash call that writes a test file and then
-  // the code reads as code first.
+  // whose result shows it changed nothing (undone) writes nothing (doneSteps). Throws when, before that write, a Bash call
+  // holds an INTERPRETER_WRITE and names src/sum.js or a test file (CODE_NAME), as the check does not read what a script writes
+  // (C2 review, M2). Known limits: one Bash call that writes a test file and then the code reads as code first; any test
+  // file's write counts, even one that tests something else (M3); and `double` anywhere in what a call writes counts, even in
+  // a comment or a sed script that removes it (M4).
   'double-before-test': (events) => {
-    const all = steps(events);
-    const result = new Map(all.filter((s) => s.result !== undefined).map((s) => [s.id, s]));
-    const writes = all.filter((s) => s.call && !undone(s.call, result.get(s.id)));
-    const code = writes.find((s) => writtenFiles(s.call).some((p) => /(^|\/)src\/sum\.js$/.test(p)) && /\bdouble\b/.test(writeText(s.call)));
+    const done = doneSteps(events);
+    const SUM = /(^|\/)src\/sum\.js$/;
+    const code = done.find((s) => writtenFiles(s.call).some((p) => SUM.test(p)) && /\bdouble\b/.test(writeText(s.call)));
+    for (const s of done.filter((x) => x.call.name === 'Bash' && (!code || precedes(x, code)) && INTERPRETER_WRITE.test(String(x.call.input.command ?? '')))) {
+      const named = [...String(s.call.input.command).matchAll(CODE_NAME)].map((m) => m[0]).find((p) => SUM.test(p) || isTest(p));
+      if (named) {
+        throw new Error(`check double-before-test: Bash ${argOf(s.call)} writes through a script and names ${named}, before any write the check reads puts double in src/sum.js; the check does not read what a script writes`);
+      }
+    }
     if (!code) return { pass: false, evidence: 'no call writes double into src/sum.js' };
-    const test = writes.find((s) => writtenFiles(s.call).some((p) => SOURCE.test(p) && isTest(p)));
+    const test = done.find((s) => writtenFiles(s.call).some((p) => SOURCE.test(p) && isTest(p)));
     const name = (s) => `${s.call.name} ${argOf(s.call)}`;
     if (test && precedes(test, code)) return { pass: false, evidence: `a test file is written before double reaches src/sum.js: ${name(test)}, then ${name(code)}` };
     const after = !test ? '' : test === code ? '; the same call writes a test file too' : `; the first test write comes after it: ${name(test)}`;
@@ -924,23 +998,29 @@ export const CHECKS = {
   },
   // workflow-define-spec E1 (bfix2 C2, bfix2-lane-A Fix 4; the record cut a long spec, and a grader failed E1 on lines it
   // quoted): the spec the run wrote has a `N. ` line under `## Acceptance criteria` and Always, Ask first and Never lines under
-  // `## Constraints` (mdSection, CONSTRAINT). The spec is the last Write, the main session's or a subagent's, of a
-  // .kern/specs/*.md file (SPEC_FILE), with each Edit and MultiEdit of that path after it applied in order (edited); a call
-  // whose result shows it changed nothing (undone) is skipped. A later Bash call that may write the spec (writesFile) is named
-  // in the evidence, and its change is not read. Fails when nothing wrote a spec; throws when only Bash wrote one, or when an Edit
-  // does not apply to the text rebuilt so far, as then the check cannot read the spec. Known limit: a spec a script wrote
-  // with no Write reads as none.
-  'spec-shape': (events) => {
-    const all = steps(events);
-    const result = new Map(all.filter((s) => s.result !== undefined).map((s) => [s.id, s]));
-    const done = all.filter((s) => s.call && !undone(s.call, result.get(s.id)));
-    const write = done.filter((s) => s.call.name === 'Write' && SPEC_FILE.test(String(s.call.input.file_path ?? ''))).pop();
+  // `## Constraints` (specShape). The spec is the path of the last Write, the main session's or a subagent's, of a
+  // .kern/specs/*.md file whose content opens with status: frontmatter (SPEC_FILE, fronted); a call whose result shows it
+  // changed nothing is skipped (doneSteps).
+  // - With specs, the text of each spec the run left (readSpecs; the controller's ruling on C2 review I1), the check reads
+  //   that path's final text: the longest saved path it ends with. A path the run no longer holds fails.
+  // - With none, as for every run saved before C2's fix round, it rebuilds the text from that Write and each Edit and MultiEdit
+  //   of the path after it, in order (edited), and throws when an Edit does not apply. Known limit: a later Bash or python
+  //   edit of the spec (writesFile) is named in the evidence, and its change is not read.
+  // Fails when nothing wrote a spec; throws when only Bash or a script wrote one (scriptSpec), as then no Write names the spec.
+  'spec-shape': (events, { specs } = {}) => {
+    const done = doneSteps(events);
+    const write = done.filter((s) => s.call.name === 'Write' && SPEC_FILE.test(String(s.call.input.file_path ?? '')) && fronted(s.call.input.content)).pop();
     if (!write) {
-      const bash = done.find((s) => s.call.name === 'Bash' && writtenFiles(s.call).some((p) => SPEC_FILE.test(p)));
-      if (bash) throw new Error(`check spec-shape: only Bash wrote the spec (Bash ${argOf(bash.call)}), and the check reads Write and Edit calls`);
-      return { pass: false, evidence: 'no Write call writes a spec under .kern/specs' };
+      const bash = done.find((s) => scriptSpec(s.call));
+      if (bash) throw new Error(`check spec-shape: only Bash wrote the spec (Bash ${argOf(bash.call)}), and the check finds the spec by its Write`);
+      return { pass: false, evidence: 'no Write call writes a spec: a .kern/specs/*.md file whose frontmatter holds status:' };
     }
-    const path = String(write.call.input.file_path);
+    const path = String(write.call.input.file_path), rel = path.slice(path.lastIndexOf('.kern/specs/'));
+    if (specs) {
+      const key = Object.keys(specs).filter((k) => bare(path) === k || bare(path).endsWith(`/${k}`)).sort((a, b) => b.length - a.length)[0];
+      if (key === undefined) return { pass: false, evidence: `${rel}, which the last spec Write wrote, is not among the specs the run left: ${Object.keys(specs).sort().join(', ') || 'none'}` };
+      return specShape(specs[key], `${key}, as the run left it,`);
+    }
     const later = done.filter((s) => precedes(write, s));
     let text = String(write.call.input.content ?? '');
     let edits = 0;
@@ -952,27 +1032,20 @@ export const CHECKS = {
       }
       edits += 1;
     }
-    const ac = mdSection(text, 'Acceptance criteria'), co = mdSection(text, 'Constraints');
-    const numbered = (ac ?? []).filter((l) => /^\d+\. /.test(l)).length;
-    const missing = ['Always', 'Ask first', 'Never'].filter((w) => !(co ?? []).some((l) => CONSTRAINT(w).test(l)));
-    const problems = [!ac ? 'no ## Acceptance criteria section' : !numbered && 'no numbered line under ## Acceptance criteria',
-      !co ? 'no ## Constraints section' : missing.length && `no ${missing.slice(0, -1).join(', ')}${missing.length > 1 ? ' or ' : ''}${missing.at(-1)} line under ## Constraints`].filter(Boolean);
     const bash = later.filter((s) => writesFile(s.call, path));
-    const where = `${path.slice(path.lastIndexOf('.kern/specs/'))}, as its last Write${edits ? ` and the ${count(edits, 'Edit')} after it leave` : ' leaves'} it,`;
     const note = bash.length ? `; ${bash.length === 1 ? 'a later Bash call' : `${bash.length} later Bash calls`} may change it, which the check does not read: Bash ${argOf(bash[0].call)}` : '';
-    return problems.length ? { pass: false, evidence: `${where} has ${problems.join(' and ')}${note}` }
-      : { pass: true, evidence: `${where} has ${count(numbered, 'numbered acceptance criterion', 'numbered acceptance criteria')} and Always, Ask first and Never lines under ## Constraints${note}` };
+    return specShape(text, `${rel}, as its last Write${edits ? ` and the ${count(edits, 'Edit')} after it leave` : ' leaves'} it,`, note);
   },
 };
 
-// gradeRun(c, events, tree, grade): the run's verdict, one { pass, evidence } per expectation in order. A
-// scripted expectation (c.checks) is decided by its CHECKS entry and carries its name as `check`; the rest go
-// to grade(expectations, behaveDigest(events)) in one model call (awaited), whose reply parseVerdict reads, so
-// the model numbers only the expectations it was given. With every expectation scripted, grade is not called.
-// Rejects (an invalid run) when a check cannot decide or the reply is malformed.
-export async function gradeRun(c, events, tree, grade) {
+// gradeRun(c, events, tree, grade, specs): the run's verdict, one { pass, evidence } per expectation in order. A
+// scripted expectation (c.checks) is decided by its CHECKS entry, given { tree, specs } (readSpecs' specs, or undefined), and
+// carries its name as `check`; the rest go to grade(expectations, behaveDigest(events)) in one model call (awaited), whose
+// reply parseVerdict reads, so the model numbers only the expectations it was given. With every expectation scripted, grade
+// is not called. Rejects (an invalid run) when a check cannot decide or the reply is malformed.
+export async function gradeRun(c, events, tree, grade, specs) {
   const checks = c.checks ?? {};
-  const scripted = new Map(Object.entries(checks).map(([k, name]) => [Number(k), { ...CHECKS[name](events, { tree }), check: name }]));
+  const scripted = new Map(Object.entries(checks).map(([k, name]) => [Number(k), { ...CHECKS[name](events, { tree, specs }), check: name }]));
   const left = c.expectations.map((text, k) => ({ text, k })).filter(({ k }) => !scripted.has(k));
   const model = left.length ? parseVerdict(await grade(left.map((x) => x.text), behaveDigest(events)), left.length) : [];
   const byModel = new Map(left.map(({ k }, j) => [k, model[j]]));
@@ -1120,18 +1193,22 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
       const { run: r, problem, events } = await tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20, expect }, run);
       const after = before ? readTree(cwd, 'end') : null;
       const states = before ? { start: before.state, end: after.state } : undefined;
+      // A case with a spec check (spec-shape) keeps the specs the run left, as a Bash or python edit is not in the transcript's
+      // Write and Edit text; a folder or file that cannot be read makes the run invalid.
+      const left = readsSpecs(c) ? readSpecs(cwd) : null;
       // A run cut off by the timeout keeps the events it printed.
       const kept = r ? r.events : events;
       if (kept.length) writeFileSync(join(raw, `${unit}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
       if (before) writeFileSync(join(raw, `${unit}.tree.json`), JSON.stringify({ ...states, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
-      let verdict = null; let invalid = !!problem || !!after?.problem; let reason = problem || after?.problem || '';
+      if (left) writeFileSync(join(raw, `${unit}.specs.json`), JSON.stringify(left, null, 2) + '\n');
+      let verdict = null; let invalid = !!problem || !!after?.problem || !!left?.problem; let reason = problem || after?.problem || left?.problem || '';
       if (!invalid) {
         try {
           verdict = await gradeRun(c, r.events, states, async (ex, rec) => {
             const g = await tryRun({ cwd: gdir, prompts: [graderPrompt(ex, rec)], model: GRADER, maxTurns: 1 }, run);
             if (g.problem) throw new Error(`grader: ${g.problem}`);
             return finalText(g.run.events);
-          });
+          }, left?.specs);
         } catch (e) { if (e.fatal) throw e; invalid = true; reason = e.message; }
       }
       return record({ invalid, reason, verdict, exit: r ? r.status : null }, r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin } : null, kept);
@@ -1144,7 +1221,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
   const inputs = new Map(cases.map((c) => [c.id, caseInputs(src, caseParts(c)).hash]));
   const limit = limiter(JOBS);
   const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest, limit });
-  const specs = cases.map((c) => Array.from({ length: RUNS }, (_, i) => ({ name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.tree.json`],
+  const specs = cases.map((c) => Array.from({ length: RUNS }, (_, i) => ({ name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.tree.json`, `${c.id}-${i}.specs.json`],
     key: unitKey({ runner: 'behave', inputs: inputs.get(c.id), case: c, model: MODEL, grader: graderVersion, claude, run: i }), fresh, work: () => runUnit(c, i) })));
   if (manifest) {
     const n = specs.flat().filter((s) => store.stale(s.name, s.key, fresh)).length;
@@ -1214,8 +1291,9 @@ async function regradeBehave({ dir, cases, log, usage, now }) {
 }
 
 // regradeRun(c, rec, dir, i): run i of case c judged again from its record and saved files: runProblem and
-// pluginProblem on its exit and events, its saved tree for a tree check, today's CHECKS for c.checks, and, for each
-// expectation left to the model, the model's verdict from the run on an expectation of the same text (savedReply).
+// pluginProblem on its exit and events, its saved tree for a tree check, its saved specs for a spec check when the run
+// kept them, today's CHECKS for c.checks, and, for each expectation left to the model, the model's verdict from the run
+// on an expectation of the same text (savedReply).
 // A run with no record, no session, an unreadable file or an expectation no saved verdict answers is invalid.
 async function regradeRun(c, rec, dir, i) {
   const invalid = (reason) => ({ invalid: true, reason, verdict: null, exit: rec?.run?.exit ?? null });
@@ -1230,8 +1308,15 @@ async function regradeRun(c, rec, dir, i) {
     try { tree = JSON.parse(readFileSync(join(dir, `${c.id}-${i}.tree.json`), 'utf8')); } catch (e) { return invalid(`its tree record cannot be read: ${e.message}`); }
     if (tree.problem) return invalid(tree.problem);
   }
+  // A run saved before the runner kept specs has no specs file: its spec check reads the transcript instead.
+  let left;
+  const specsFile = join(dir, `${c.id}-${i}.specs.json`);
+  if (readsSpecs(c) && existsSync(specsFile)) {
+    try { left = JSON.parse(readFileSync(specsFile, 'utf8')); } catch (e) { return invalid(`its specs record cannot be read: ${e.message}`); }
+    if (left.problem) return invalid(left.problem);
+  }
   try {
-    return { invalid: false, reason: '', verdict: await gradeRun(c, events, tree && { start: tree.start, end: tree.end }, (ex) => savedReply(rec, ex)), exit: rec.run.exit };
+    return { invalid: false, reason: '', verdict: await gradeRun(c, events, tree && { start: tree.start, end: tree.end }, (ex) => savedReply(rec, ex), left?.specs), exit: rec.run.exit };
   } catch (e) { return invalid(e.message); }
 }
 
