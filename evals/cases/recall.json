@@ -24,10 +24,12 @@
       "expectations": [
         "Says the window, topic and workspace back before mining",
         "Checks PR or branch state with gh or git before tagging a thread",
-        "Gives exactly one tag per thread and one next move",
+        "Starts each Threads bullet with exactly one tag from recall's list",
+        "Tags no thread `[verified, uncommitted]`, which this workspace rules out: its worktree no longer matches the ledger's last tree",
+        "Gives one Next move",
         "Makes no Write, Edit, MultiEdit or NotebookEdit call and changes no file, ref or git config in the workspace"
       ],
-      "checks": { "1": "git-or-gh-state", "3": "no-write" }
+      "checks": { "1": "git-or-gh-state", "2": "thread-tags", "3": "no-verified-uncommitted", "4": "one-next-move", "5": "no-write" }
     },
     {
       "id": 2,
@@ -65,7 +67,8 @@
       "expectations": [
         "Names claude --resume",
         "Reads no transcript and runs no recall-sessions"
-      ]
+      ],
+      "checks": { "1": "no-session-mining" }
     },
     {
       "id": 5,
@@ -74,8 +77,9 @@
       "expected_output": "Answers the question directly; recall does not run.",
       "expectations": [
         "Does not read skills/recall/SKILL.md or call the recall skill",
-        "Answers with the precision and recall definition"
-      ]
+        "Answers with the recall and precision definitions: recall as TP / (TP + FN) and precision as TP / (TP + FP)"
+      ],
+      "checks": { "0": "no-recall-skill", "1": "precision-recall-formulas" }
     }
   ]
 }
