@@ -585,3 +585,113 @@ $output")" -eq 0 ]
   grep -qx 'prompt_hashes: ' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   [ $((t1 - t0)) -lt 9000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
 }
+
+# The Building line (M2b bfix2 U; the user's "Hook line (Recommended)", 2026-10-24). At cd4808a the kernel's
+# turn-start Building line fired in 1 of the 6 runs of the two "Quick and clear" behave cases, and the
+# stored-data case asked before its edit in 0 of 3 (bfix2-lane-A, Fix 1). On a prompt with quick or waiver
+# words the hook prints the line's instruction, so the model no longer has to spot the trigger itself.
+BUILDING='kern: if the user calls this build quick or waives its approval: before any tool call, say `Building: <what>. My choices: <each>.` A change to stored data, an existing public API or authorization: say so in that line; unless approval is waived, ask whether to keep the fast path and edit nothing until the answer.'
+
+# buildings TEXT: how many lines of TEXT are the Building line.
+buildings() { printf '%s\n' "$1" | grep -cxF "$BUILDING" || true; }
+
+# behave_prompt ID: behave case ID's first prompt as a JSON string, verbatim from evals/behave.
+behave_prompt() {
+  node -e 'const fs = require("fs");
+    for (const f of ["workflows", "pressure"]) {
+      const c = JSON.parse(fs.readFileSync(process.argv[2] + "/evals/behave/" + f + ".json", "utf8")).find((x) => x.id === process.argv[1]);
+      if (c) { console.log(JSON.stringify(c.prompts[0])); process.exit(0); }
+    }
+    process.exit(1);' "$1" "$K"
+}
+
+# first_submit ID: behave case ID's prompt, submitted as a session's first prompt.
+first_submit() {
+  local pj
+  pj=$(behave_prompt "$1") || { echo "no behave case $1"; return 1; }
+  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptSubmit "\"prompt\":$pj")"
+}
+
+@test "the Building line is the user's 313-byte line, printed as written" {
+  [ "$(printf '%s' "$BUILDING" | wc -c | tr -d ' ')" -eq 313 ]
+  grep -qF "$BUILDING" "$K/hooks/prompt-submit"
+}
+
+@test "the quick and waiver behave prompts get the Building line on a session's first prompt" {
+  for id in workflow-define-fast-path workflow-define-fast-path-stored-data pressure-define-skip-approval; do
+    first_submit "$id"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$BUILDING" ] || { echo "$id: $output"; return 1; }
+  done
+}
+
+@test "a headless run prints the Building line, before the exit that skips the mode reminder" {
+  export CLAUDE_CODE_ENTRYPOINT=sdk-cli
+  for id in workflow-define-fast-path workflow-define-fast-path-stored-data pressure-define-skip-approval; do
+    first_submit "$id"
+    [ "$output" = "$BUILDING" ] || { echo "$id: $output"; return 1; }
+  done
+  printf 'voice: terse\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit "Quick one: add a test for sum."
+  [ "$output" = "$BUILDING" ]
+}
+
+@test "a later quick prompt gets the routing reminder, then the Building line" {
+  submit "fix the bug"
+  [ -z "$output" ]
+  submit "Quick and clear: rename sum to add."
+  [ "$output" = "$REMINDER
+$BUILDING" ]
+}
+
+@test "quick is a word match and the waiver phrases match anywhere, a curly apostrophe included" {
+  for p in "QUICK: drop the unused import." "a quick-fix for the parser" "Do not ask, just add it." \
+    "Build it without approval." "Ship it, no approval needed." "Skip approval and build it." \
+    "Build it and do not wait for approval." "I waived the review." "Don’t ask, add the export."; do
+    printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+    submit "$p"
+    [ "$output" = "$BUILDING" ] || { echo "$p: $output"; return 1; }
+  done
+}
+
+@test "prompts without quick or waiver words get no Building line" {
+  for id in pressure-commit-unverified workflow-define-spec pressure-implement-test-after; do
+    first_submit "$id"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ] || { echo "$id: $output"; return 1; }
+  done
+  printf 'voice: normal\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit "How does sum handle a string argument?"
+  [ -z "$output" ]
+  submit "Run the quicksort benchmark."
+  [ "$(buildings "$output")" -eq 0 ]
+}
+
+@test "a wrapped prompt, a kern command, a mode or autopilot prompt and the expansion run get no Building line" {
+  submit '<task-notification>Quick and clear one: add a double export.</task-notification>'
+  [ -z "$output" ]
+  submit '<agent-message from="a1b2">
+Quick one, do not ask: add a double export.
+</agent-message>'
+  [ -z "$output" ]
+  submit '<scheduled-task name=y>Quick: add a double export.</scheduled-task>'
+  [ -z "$output" ]
+  submit '/kern:implement Quick and clear one: add a double export.'
+  [ "$(buildings "$output")" -eq 0 ]
+  submit '<command-message>kern:implement</command-message>\n<command-name>/kern:implement</command-name>\n<command-args>quick one</command-args>'
+  [ "$(buildings "$output")" -eq 0 ]
+  expand kern:implement "quick one"
+  [ -z "$output" ]
+  submit '/mode quick'
+  [ "$(buildings "$output")" -eq 0 ]
+  submit '/kern:autopilot quick'
+  [ "$(buildings "$output")" -eq 0 ]
+  # A bare mode command's envelope names no kern command, so only SHOW_LINE keeps the line out.
+  submit '<command-message>mode</command-message>\n<command-name>/mode</command-name>\n<command-args>quick</command-args>'
+  [[ "$output" == *"mode argument not recognized"* ]] || false
+  [ "$(buildings "$output")" -eq 0 ]
+  expand kern:mode quick
+  [[ "$output" == *"mode argument not recognized"* ]] || false
+  [ "$(buildings "$output")" -eq 0 ]
+}
