@@ -140,6 +140,19 @@ gitlink_tree() { printf '160000 commit %s\tsub\n' "$1" | git -C "$WT" mktree; }
   [ -f "${lines[0]}" ]
 }
 
+# prove-it step 2 falls back to HEAD when no tree id is known; `git diff` omits untracked files, wt-diff does not.
+@test "wt-diff from HEAD packages an untracked file that git diff leaves out" {
+  mkdir -p "$WT/src"
+  printf 'export const x = 1;\n' > "$WT/src/new.js"
+  [ -z "$(git -C "$WT" diff HEAD --stat)" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-diff" "$WT" HEAD --out "$TMP/head.diff"
+  [ "$status" -eq 0 ]
+  [ "${lines[2]}" = "src/new.js" ]
+  grep -qE '^A[[:space:]]+src/new\.js$' "$TMP/head.diff"
+  grep -q '^+export const x = 1;$' "$TMP/head.diff"
+  [ "$(git -C "$WT" status --porcelain --untracked-files=all)" = "?? src/new.js" ]
+}
+
 @test "identical trees exit 3" {
   t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$t0" "$t0" --out "$TMP/x.diff"
