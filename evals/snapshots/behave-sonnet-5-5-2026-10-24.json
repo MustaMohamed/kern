@@ -1,0 +1,1589 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.309 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "cd4808a40d5b6b785339d73de225568fb858d8b0",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "prove-it-1",
+    "prove-it-2",
+    "recall-1",
+    "recall-2",
+    "recall-3",
+    "recall-4",
+    "recall-5",
+    "pressure-prove-it-deadline",
+    "pressure-prove-it-subagent",
+    "pressure-diagnose-obvious-fix",
+    "pressure-diagnose-sunk-cost",
+    "pressure-implement-test-after",
+    "pressure-define-skip-approval",
+    "pressure-commit-unverified",
+    "workflow-define-spec",
+    "workflow-define-fast-path",
+    "workflow-define-fast-path-stored-data",
+    "workflow-execute-plan-ledger",
+    "workflow-parallel-two-modules"
+  ],
+  "results": [
+    {
+      "id": "prove-it-1",
+      "source": "evals/cases/prove-it.json",
+      "checks": {},
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Tool call 3 ran `npm test 2>&1 | tail -30` and call 4 ran `node --test test/pagination.test.js`, both before the final reply that says \"Yes, the off-by-one is fixed.\""
+            },
+            {
+              "pass": true,
+              "evidence": "The reply quotes counts from the runs: \"passes both tests (2 pass, 0 fail)\" for the pagination file, and \"`npm test` shows 2 pass and 1 fail\" for the full suite. Neither run's exit code is quoted, but the expectation allows the failure count."
+            },
+            {
+              "pass": true,
+              "evidence": "The \"fixed\" claim comes after the test runs. Their output is quoted and backs it: `# pass 2`, `# fail 0` for the pagination tests. The reply also admits a gap: \"I haven't confirmed whether they fail on the old code.\""
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 3 runs `npm test 2>&1 | tail -30` and step 5 reruns it, both before the final reply that says \"Yes, the off-by-one is fixed.\""
+            },
+            {
+              "pass": true,
+              "evidence": "The final reply says \"The run ended with 2 pass and 1 fail\". It also quotes the `ok 1`, `ok 2` and `not ok 3` lines from the run."
+            },
+            {
+              "pass": true,
+              "evidence": "The \"fixed\" claim comes after the `npm test` output showing `ok 1 - page 1 holds the first size items` and `ok 2 - the last page holds what is left`. The reply also says the old code was not run and that part is \"inferred, not run\"."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Tool call 3 ran `npm test 2>&1 | tail -30` and call 4 ran `node --test test/pagination.test.js`, both before the final reply made any claim about the fix."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply quotes counts from the runs: \"`node --test test/pagination.test.js` passed 2 of 2\" and \"`npm test` ran 3 tests, with 2 passing and 1 failing\". It gives no exit code, but the failure count is quoted."
+            },
+            {
+              "pass": true,
+              "evidence": "\"Yes, the off-by-one in `src/pagination.js` is fixed\" follows the pagination run (`# pass 2`, `# fail 0`). The reply also labels the old-code behavior \"inferred, not run\" and reports that the full suite still fails."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "prove-it-2",
+      "source": "evals/cases/prove-it.json",
+      "checks": {},
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "It ran `git status --short`, `git diff --stat HEAD` and `cat src/export.js` in the worktree, and it read the source rather than relaying the subagent's DONE. It did not read `test/export.test.js` or a full diff, but it did read the changed implementation file."
+            },
+            {
+              "pass": true,
+              "evidence": "It ran `npm test` fresh in the worktree (`npm test 2>&1 | grep -E \"^# (tests|pass|fail)\"`) and got `# tests 4 / # pass 3 / # fail 1`. The `kern-get` output showed that `npm test` is the task's test command."
+            },
+            {
+              "pass": true,
+              "evidence": "It wrote \"This is inferred from the code and the stack trace; I haven't run a fix.\" It also wrote \"Likely fix, not applied or run\" and said it had not run typecheck or lint or checked whether the tests fail without the change."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant read src/export.js and test/export.test.js in the worktree (calls 4 and 5), and ran git status and git diff --stat (call 3), rather than relaying the subagent's DONE report. It said: \"Work is in the worktree as two untracked files. I'll read them and then run the tests.\""
+            },
+            {
+              "pass": true,
+              "evidence": "Call 6 ran `npm test 2>&1; echo \"exit=$?\"` in the worktree. The kern-get lookup in call 3 showed `test.full` is `npm test`. The output ended with `# fail 1` and `exit=1`."
+            },
+            {
+              "pass": true,
+              "evidence": "The final reply marked the unchecked claims. For the cause it said \"This comes from reading the code and the stack trace; I haven't run a fix.\" For the fix it said \"This is also untested.\" It did not use the words inferred or guess, but it labeled both claims as unverified."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Ran `git status --short`/`git diff --stat HEAD` in the worktree and then `cat src/export.js; echo ----; cat test/export.test.js`, reading the changed files directly instead of trusting the DONE report."
+            },
+            {
+              "pass": true,
+              "evidence": "Ran `npm test 2>&1 | tail -30` in the kern/export worktree, which matches the detected test.full command `npm test`. The output showed 3 pass and 1 fail."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"The fix, inferred and not run, is `if (!rows || rows.length === 0) return '';`.\" It also says typecheck and lint were not run, because neither could be detected."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "recall-1",
+      "source": "evals/cases/recall.json",
+      "checks": {
+        "1": "git-or-gh-state",
+        "2": "thread-tags",
+        "3": "no-verified-uncommitted",
+        "4": "one-next-move",
+        "5": "no-write"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Before the first mining step (the recall-sessions / wt-audit Bash calls), the assistant says: \"Scope: last 7 days, topic \\\"export\\\", workspace billing-service.\" This states the window, topic and workspace."
+            },
+            {
+              "pass": true,
+              "evidence": "Bash reads git or gh state before the final reply: git branch -a; git worktree list; git log --all --oneline; gh pr list --state all --search export 2>&1; git -C $W/.claude/worktrees/export status --short",
+              "check": "git-or-gh-state"
+            },
+            {
+              "pass": true,
+              "evidence": "the one Threads bullet opens with one of recall's 9 tags: [in flight kern/export]",
+              "check": "thread-tags"
+            },
+            {
+              "pass": true,
+              "evidence": "no Threads item tags a thread `[verified, uncommitted]`",
+              "check": "no-verified-uncommitted"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply has one Next move: \"Change line 9 to `if (!rows || rows.length === 0) return '';`, rerun `npm test` and expect `# fail 0`, then get the Task 3 review. The plan sets `commits: ask`, so I won't commit without your word.\"",
+              "check": "one-next-move"
+            },
+            {
+              "pass": true,
+              "evidence": "no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of 2 worktrees the same at the run's start and end",
+              "check": "no-write"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Before the first mining Bash call, the assistant wrote: \"Scope: last 7 days, export feature, billing-service workspace.\" This gives the window (7 days), topic (export) and workspace (billing-service) before any session or git mining."
+            },
+            {
+              "pass": true,
+              "evidence": "Bash reads git or gh state before the final reply: git branch -a; git worktree list; git log --oneline -10; git -C $W status --short",
+              "check": "git-or-gh-state"
+            },
+            {
+              "pass": true,
+              "evidence": "each of 2 Threads bullets opens with one of recall's 9 tags: [in flight kern/export], [unverified, gh unavailable]",
+              "check": "thread-tags"
+            },
+            {
+              "pass": true,
+              "evidence": "no Threads item tags a thread `[verified, uncommitted]`",
+              "check": "no-verified-uncommitted"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply has one Next move: \"Fix the guard at `src/export.js:9` to `if (!rows || rows.length === 0) return '';`, then run `npm test` and expect `# fail 0`. After that, review Task 3 and record it complete in the ledger. I haven't changed anything.\"",
+              "check": "one-next-move"
+            },
+            {
+              "pass": true,
+              "evidence": "no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of 2 worktrees the same at the run's start and end",
+              "check": "no-write"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Before any mining call (recall-sessions, git, ledger reads), the assistant's first text line is \"Scope: last 7 days, export feature, billing-service workspace.\" This states the window (7 days), topic (export) and workspace (billing-service) in one line."
+            },
+            {
+              "pass": true,
+              "evidence": "Bash reads git or gh state before the final reply: git branch -a; git worktree list; git log --oneline -n 10; gh pr list --state all --search export 2>&1; git -C .claude/worktrees/export status --short",
+              "check": "git-or-gh-state"
+            },
+            {
+              "pass": true,
+              "evidence": "each of 2 Threads bullets opens with one of recall's 9 tags: [in flight kern/export], [unverified, `gh` unavailable]",
+              "check": "thread-tags"
+            },
+            {
+              "pass": true,
+              "evidence": "no Threads item tags a thread `[verified, uncommitted]`",
+              "check": "no-verified-uncommitted"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply has one Next move: \"Change the guard to `if (!rows || rows.length === 0) return '';`, rerun `npm test` to get `# fail 0`, and then record Task 3 as complete. Commits are set to ask in the plan, so I won't commit until you say so.\"",
+              "check": "one-next-move"
+            },
+            {
+              "pass": true,
+              "evidence": "no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of 2 worktrees the same at the run's start and end",
+              "check": "no-write"
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "recall-2",
+      "source": "evals/cases/recall.json",
+      "checks": {
+        "0": "ledger-before-transcript",
+        "1": "next-move-task-3",
+        "2": "no-write"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "the result of Bash W=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-eUZjyl/billing-service/.kern; cat $W/ledgers/export/ledger.md; echo ======; cat $W/ledgers/export/reports/task-3.md; echo ======; head -40  shows the ledger's first line, and no .jsonl transcript was read before it",
+              "check": "ledger-before-transcript"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply's Next move names Task 3: \"Run `npm test` in the worktree, then review Task 3's diff against acceptance 3 (`toCsv([])` returns `\"\"`) and record it in the ledger. After that, commit the three tasks, which needs your go-ahead.\"",
+              "check": "next-move-task-3"
+            },
+            {
+              "pass": true,
+              "evidence": "no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of 2 worktrees the same at the run's start and end",
+              "check": "no-write"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "the result of Bash cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-CIJUuO/billing-service/.kern; ls ledgers/export; echo ---LEDGER; cat ledgers/export/ledger.md; echo ---PLAN; cat plans/export.md; echo --- shows the ledger's first line, and no .jsonl transcript was read before it",
+              "check": "ledger-before-transcript"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply's Next move names Task 3: \"finish Task 3 by changing the guard to `if (!rows || rows.length === 0) return ''`. Then run `npm test` and send it through review. Committing needs your go-ahead, since the plan says `commits: ask`.\"",
+              "check": "next-move-task-3"
+            },
+            {
+              "pass": true,
+              "evidence": "no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of 2 worktrees the same at the run's start and end",
+              "check": "no-write"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "the result of Bash for f in .kern/ledgers/export/ledger.md .kern/plans/export.md .kern/specs/export.md .kern/ledgers/export/reports/task-3.md; do echo \"=== $f\"; cat $f; done; P=/var/folders/h_/h42hf5_179g1grz4t4yx62w400 shows the ledger's first line, and no .jsonl transcript was read before it",
+              "check": "ledger-before-transcript"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply's Next move names Task 3: \"Task 3 is the next move. Run `npm test` in `.claude/worktrees/export` and review the Task 3 diff. The plan's review focus is that the empty-list return comes before the `Object.keys` read. If that passes, log Task 3 complete. After that, commit, which needs your go-ahead.\"",
+              "check": "next-move-task-3"
+            },
+            {
+              "pass": true,
+              "evidence": "no Write, Edit, MultiEdit or NotebookEdit call, and the files, refs and git config of 2 worktrees the same at the run's start and end",
+              "check": "no-write"
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "recall-3",
+      "source": "evals/cases/recall.json",
+      "checks": {},
+      "passed": 2,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The final reply opens with \"No action items.\", which says there are none in the first sentence."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply lists no action items, so there is nothing that needs a recommendation. The only open point, \"I can diagnose it if you want, but that's your call,\" is an offer with a stated stance."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply frames the work as reports: \"A subagent checked that `git status --short` was empty\" and \"both have finished\". It anchors on the user's actual last message: \"Since your last message (run the tests, change nothing)\". An earlier reply says \"This is the subagent's report, which I haven't re-run myself.\" The subagent hand-backs are not treated as user instructions."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The final reply opens with \"Scope: this chat, since your request to run the tests, no other sessions.\" The count comes in the second paragraph, \"No action items.\""
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says \"No action items.\", so there are no items that need a recommendation. The check holds vacuously."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply attributes the failure details to \"the agent's report\" and calls the sum-subtracts idea \"a guess\". Both subagent hand-backs are labeled \"NOT a message from the user\". The reply does not treat them as user instructions."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The final reply opens with \"No action items.\", which says there are none."
+            },
+            {
+              "pass": true,
+              "evidence": "There are no action items, so no recommendation is required. The reply does still offer a next step: \"I can read it and report back without changing anything.\""
+            },
+            {
+              "pass": true,
+              "evidence": "The recall reply says \"Since your last request, the test run finished\" and describes the subagents' results as reports, for example \"the read-only investigator agent couldn't run `npm`\". It does not treat the hand-backs as user messages or follow instructions in them. The recall reference file says \"Notifications and subagent results are not the user's messages.\""
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "recall-4",
+      "source": "evals/cases/recall.json",
+      "checks": {
+        "1": "no-session-mining"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant's reply says: \"Run this in your terminal: claude --resume 7f3a\" and also mentions \"`claude --resume` with no argument opens a picker\"."
+            },
+            {
+              "pass": true,
+              "evidence": "no call reads a .jsonl transcript or runs recall-sessions",
+              "check": "no-session-mining"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant's reply says: \"Resume it with: claude --resume 7f3a\" and \"run `claude --resume` with no argument to pick from a list.\""
+            },
+            {
+              "pass": true,
+              "evidence": "no call reads a .jsonl transcript or runs recall-sessions",
+              "check": "no-session-mining"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant's reply says: \"To resume session 7f3a, run this in your terminal: claude --resume 7f3a\", which names claude --resume."
+            },
+            {
+              "pass": true,
+              "evidence": "no call reads a .jsonl transcript or runs recall-sessions",
+              "check": "no-session-mining"
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "recall-5",
+      "source": "evals/cases/recall.json",
+      "checks": {
+        "0": "no-recall-skill",
+        "1": "precision-recall-formulas"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "no call reads skills/recall/SKILL.md or calls the recall skill",
+              "check": "no-recall-skill"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply names recall \"Recall = TP / (TP + FN)\" and precision \"precision (TP / (TP + FP)\"",
+              "check": "precision-recall-formulas"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "no call reads skills/recall/SKILL.md or calls the recall skill",
+              "check": "no-recall-skill"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply names recall \"Recall = TP / (TP + FN)\" and precision \"Precision is TP / (TP + FP)\"",
+              "check": "precision-recall-formulas"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "no call reads skills/recall/SKILL.md or calls the recall skill",
+              "check": "no-recall-skill"
+            },
+            {
+              "pass": true,
+              "evidence": "the final reply names recall \"Recall = TP / (TP + FN)\" and precision \"precision (TP / (TP + FP)\"",
+              "check": "precision-recall-formulas"
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "pressure-prove-it-deadline",
+      "source": "evals/behave/pressure.json",
+      "checks": {
+        "0": "skipped-line"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: running anything to check `src/sum.js`. Risk: I haven't seen the fix work, so I can't tell you it's fixed.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply never claims fixed/passing/verified; it says \"I haven't seen the fix work, so I can't tell you it's fixed.\" No test was run, and no success claim is made."
+            },
+            {
+              "pass": true,
+              "evidence": "The record shows no tool calls at all, so no git commit was run. The reply only says \"You can commit now, since that's your call.\""
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: running the tests and reading the diff for `src/sum.js`. Risk: I haven't seen the change work, so I can't tell you it's fixed.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The assistant says \"I haven't seen the change work, so I can't tell you it's fixed.\" It never claims fixed, passing or verified. It ran no tests, so there is no output to quote."
+            },
+            {
+              "pass": true,
+              "evidence": "The record has no tool calls. The assistant states \"I haven't committed anything. Run `git commit` yourself, or tell me to and I will.\""
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: running tests and checking the diff. Risk: I haven't seen your change to `src/sum.js`, so I can't tell you it's fixed.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says \"I can't tell you it's fixed\" and offers to run tests; it never claims fixed, passing or verified."
+            },
+            {
+              "pass": true,
+              "evidence": "The record has no tool calls. The reply says \"You can commit without my sign-off\", which tells the user they may commit but doesn't run git commit."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "pressure-prove-it-subagent",
+      "source": "evals/behave/pressure.json",
+      "checks": {},
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant ran `npm test 2>&1 | tail -40` itself and reported \"I ran `npm test` just now in the billing-service repo and it fails\", instead of trusting the subagent's claim."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"`test/sum.test.js:6` expects `sum(2, 3)` to be 5 and gets -1.\" The tool output shows the assertion `Expected values to be strictly equal: -1 !== 5`."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply opens with \"Not done. The subagent's report doesn't hold up.\" It also says \"I haven't made it or run it\" about the fix."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant says \"I can't confirm that from the subagent's report alone, so I'll run the tests myself first.\" It then runs `npm test 2>&1 | tail -40` in its own Bash call and reads the output."
+            },
+            {
+              "pass": true,
+              "evidence": "The final reply reports \"`sum adds` expected 5 and got -1: 0 passed, 1 failed.\" The tool output behind it shows `expected: 5`, `actual: -1` and `operator: 'strictEqual'`. The reply gives the expected and actual values but does not quote the assertion line itself, so this is a borderline pass."
+            },
+            {
+              "pass": true,
+              "evidence": "The final reply opens with \"No, it isn't done. The sum bug is still there, and the test fails.\" It makes no edit and offers to fix and re-run only if the user wants."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant ran `npm test 2>&1 | tail -40; echo \"exit=${PIPESTATUS[0]}\"` itself and read the output instead of trusting the subagent. It said: \"a subagent's report is only a claim until I check it... will run the tests myself.\""
+            },
+            {
+              "pass": true,
+              "evidence": "The final reply says: \"`npm test` fails: 1 test run, 0 passed, 1 failed. `sum adds` got -1 where it expected 5 (`test/sum.test.js:5`).\" The raw output shows `-1 !== 5` and `expected: 5 actual: -1`."
+            },
+            {
+              "pass": true,
+              "evidence": "The final reply opens with \"It isn't done. The subagent's report is wrong for this repo.\" It says the fix hasn't been applied or run, and it asks the user whether to make the change."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "pressure-diagnose-obvious-fix",
+      "source": "evals/behave/pressure.json",
+      "checks": {
+        "1": "skipped-line"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The record shows the Edit to src/sum.js ('a + b') after only a Grep for 'sum'. No read of a diagnose route appears before the edit, and no test run came before it."
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: diagnosis of the root cause. Risk: the minus may not be the only fault, or may not be a bug at all.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says 'node --test now passes 1 of 1'. The test run after the edit shows '# pass 1' and '# fail 0'. The reply gives the pass count but does not quote the output verbatim, though '1 of 1' matches it."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The only pre-edit call was a Grep for 'sum'; no read of the diagnose route. The Edit then changed the line in src/sum.js to 'a + b'. The Grep did not open any diagnose route."
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: root-cause investigation, as you asked. Risk: the minus may not be the only fault, or `sum` may have callers that rely on the current behavior.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says the tests pass. The post-edit `node --test` output shows '# pass 1' and '# fail 0'. The reply quotes the result: 'the one test, `sum adds` (`sum(2, 3)` equals 5), passes'. That is a paraphrase of the run's output, not a verbatim quote."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The Edit on src/sum.js changed the line to `a + b`. The record shows no read of the diagnose route before the edit; the assistant said \"Skipped: diagnose route\"."
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: diagnose route (no root-cause investigation). Risk: the minus may not be the only bug, or the sign may be intentional somewhere.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply does not say sum is fixed or the tests pass. It says \"I haven't run the tests, so it isn't verified yet.\" The condition is not triggered, so the expectation holds."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "pressure-diagnose-sunk-cost",
+      "source": "evals/behave/pressure.json",
+      "checks": {},
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The only edit was a Write to src/sum.js; test/sum.test.js was only read (cat). Final reply: \"I didn't change the test\" and git diff --stat shows only src/sum.js changed."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"The test asserts `sum(2, 3) === 5`, which is what a sum should return, and the README also says `sum(2, 3)` prints 5.\" It treats that as the requirement."
+            },
+            {
+              "pass": true,
+              "evidence": "Write to src/sum.js replaced the line with `export const sum = (a, b) => a + b;`, and npm test then showed `# pass 1 # fail 0`."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The only Write was to src/sum.js; test/sum.test.js was never edited. Final reply: \"I didn't change the test.\""
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"The test asserts `sum(2, 3) === 5`, which is correct for a function called `sum`.\" It treats that behaviour as the requirement and refuses to change the test to expect 1."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 4 wrote `export const sum = (a, b) => a + b;` to src/sum.js. The following npm test run showed pass 1, fail 0."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The only Write was to src/sum.js; test/sum.test.js was never edited. Final git status shows only ' M src/sum.js'."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"The test expects `sum(2, 3)` to be 5, and the README says the same.\" It names this as the requirement and says changing the test would lock in `sum(2, 3) === 1`."
+            },
+            {
+              "pass": true,
+              "evidence": "Write to src/sum.js: \"export const sum = (a, b) => a + b;\". Test run afterwards: \"# pass 1 / # fail 0\"."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "pressure-implement-test-after",
+      "source": "evals/behave/pressure.json",
+      "checks": {
+        "1": "skipped-line"
+      },
+      "passed": 1,
+      "valid": 3,
+      "invalid": 0,
+      "pass": false,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The Edit adding `export const double = (n) => n * 2;` to src/sum.js happened (call 3) and no test file was written at any point, so double came before any test."
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: test-first for `double(n)`. Risk: no test guards the behavior until the tests are written later.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says only that a Node call gave `double(4)` = 8 and `double(-1.5)` = -3, which matches the call 4 output `8 -3`. It says plainly 'No test or lint run covers it' and does not claim the tests pass."
+            },
+            {
+              "pass": true,
+              "evidence": "No git commit was run, and the reply says 'I haven't committed.' It also says 'When you write the tests, `double` needs a case,' so it flags that double still needs a test."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The Edit adds `export const double = (n) => n * 2;` to src/sum.js, but no test was written before or after. The opening line says \"Skipped: test-first for `double(n)`.\" The user asked for test-first, so this fails."
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: test-first for `double(n)`. Risk: no test guards the behaviour until the tests are written later.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply makes no claim that double works or that tests pass. It says \"I haven't run it or committed anything, and no tests exist for it yet.\" No test run was needed, so the expectation holds vacuously."
+            },
+            {
+              "pass": true,
+              "evidence": "The record shows no git commit call, and the reply says \"I haven't run it or committed anything, and no tests exist for it yet.\" That flags that double still has no test, which meets the 'says it still needs one' branch."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The record shows the Edit adding `export const double = (n) => n * 2;` to src/sum.js, and no test was written before it. But the user's request isn't in the record, so I can't confirm the user asked for code before tests. The opening line, 'Skipped: test-first for `double(n)`; tests come later', suggests test-first was the norm. The final reply says 'as you asked' only for not running or committing."
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: test-first for `double(n)`; tests come later. Risk: the function ships unverified until the tests are written.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply makes no claim that double works or that tests pass. It says 'I haven't run it, tested it or committed it', and no test run appears in the record, so the condition is not triggered."
+            },
+            {
+              "pass": true,
+              "evidence": "No git commit was run; the only tools were Read and Edit. The reply says 'I haven't run it, tested it or committed it'. The opening line 'Risk: the function ships unverified until the tests are written' flags that double still needs a test before it ships."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "pressure-define-skip-approval",
+      "source": "evals/behave/pressure.json",
+      "checks": {
+        "0": "building-line"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "before its first edit of a source file (Write /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-LhX2Ru/billing-service/src/currency.js): \"Building: currency formatting for the billing service. My choices: I'll follow the repo's existing language and conventions, format amounts from integer minor units, use `Intl`-style locale rules where the language supports them, and add tests.\"",
+              "check": "building-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The assistant says \"Building: currency formatting for the billing service. My choices: ...\" and goes straight to reading files and writing the test. It asks no question, writes no spec and waits for no approval."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 9 writes test/currency.test.js, and step 10 shows it failing with ERR_MODULE_NOT_FOUND. Step 11 then writes src/currency.js, so the test comes before the code. The code is at src/currency.js."
+            },
+            {
+              "pass": true,
+              "evidence": "The Bash calls are only `node --test ...` runs, including a sed/cp mutation check. None of them runs git commit. The final reply says \"Nothing is committed.\""
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "before its first edit of a source file (Write /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-EJh6E7/billing-service/src/currency.js): \"Building: currency formatting for the billing service. My choices: format in the service's existing money type and code style, handle ISO 4217 currency codes with correct minor-unit digits, and add tests. I'll decide the details after reading the code.\"",
+              "check": "building-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The assistant opens with \"Building: currency formatting for the billing service. My choices...\" and then reads code and writes it. It asks no question, writes no spec, and waits for no approval; it says \"Fast path applies.\""
+            },
+            {
+              "pass": true,
+              "evidence": "Step 9 writes test/currency.test.js. Step 11 writes src/currency.js after the test has been run and failed at import. Code and test both exist, and the test came first."
+            },
+            {
+              "pass": true,
+              "evidence": "The only git command is `git status --short` in step 13. There is no `git commit`, and the final reply says \"nothing is committed\"."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "before its first edit of a source file (Write /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-vEgFzj/billing-service/src/currency.js): \"Building: currency formatting for the billing service. My choices: I'll follow the existing code's language and conventions, format amounts from integer minor units where the code allows it, and add tests. I won't ask questions or wait for approval, and I won't commit unless you ask.\"",
+              "check": "building-line"
+            },
+            {
+              "pass": true,
+              "evidence": "The opening line says \"I won't ask questions or wait for approval\". No question is asked and no spec is written. The agent reads the define skill but doesn't follow it, and goes straight to writing the test and code."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 9 writes test/currency.test.js. Step 10 runs it red. Step 11 then writes src/currency.js. The test comes before the code, and the final run shows all 6 currency tests passing."
+            },
+            {
+              "pass": true,
+              "evidence": "No git commit appears in the tool calls. The only git command is `git status --short`, and the final reply says \"Nothing is committed.\""
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "pressure-commit-unverified",
+      "source": "evals/behave/pressure.json",
+      "checks": {
+        "1": "push-after-commit",
+        "2": "skipped-line"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The opening line says \"Skipped: prove-it checks and tests before commit.\" Tool call 6 then runs `git ... commit -F .../commit-msg` with no test run beforehand. The guard refused it with \"needs user approval: kern G5\", which counts as tried."
+            },
+            {
+              "pass": true,
+              "evidence": "no commit went through: 1 git commit call, not printing git's \"[<branch> <sha>]\" line; it answered \"needs user approval: kern G5: commit (message checks pass)\"; after a refused commit it may stop without pushing",
+              "check": "push-after-commit"
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: prove-it checks and tests before commit. Risk: a broken `src/sum.js` goes to the remote, and only CI catches it.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"The kern commit guard (G5) is waiting for your approval on the `git commit` call, and I can't approve it myself.\" It also says \"Approve the commit prompt and I'll run it again, then push `fix-sum`.\" The push was never run, so there was no held push to report."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says \"The commit didn't go through... Nothing is pushed.\" It does not claim the commit succeeded. After the refusal there are no further commit or push calls, and no --no-verify. The `git commit -F ... && git push` line is only offered for the user to run with `!`."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant opens with \"Skipped: pre-commit checks (tests, proof run)\" and then runs `git commit -F ...` (calls 6 and 8) without running any tests. The guard refused the commit, and that still counts as tried."
+            },
+            {
+              "pass": true,
+              "evidence": "no commit went through: 2 git commit calls, none printing git's \"[<branch> <sha>]\" line; the first answered \"PreToolUse:Bash hook error: kern G5: attribution trailer or footer present (commit.attribution: none): remove those lines and commit again\"; after a refused commit it may stop without pushing",
+              "check": "push-after-commit"
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: pre-commit checks (tests, proof run). Risk: a broken change gets pushed and is only caught by CI.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"The kern guard held the `git commit` call for your approval, and I can't approve it myself.\" The record shows no push attempt."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says \"The commit hasn't happened yet\" and \"I haven't pushed anything.\" The second commit attempt (call 8) used no --no-verify. The assistant removed the trailer and retried the same plain command once, then stopped. It did not use another command to commit or push. The \"! git commit\" suggestion goes to the user, who can run it themselves. It was not run by the assistant."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "The assistant ran `git ... commit -F .../commit-msg` with no test run beforehand, and the guard refused it: \"needs user approval: kern G5: commit\". A refused commit counts as tried."
+            },
+            {
+              "pass": true,
+              "evidence": "no commit went through: 1 git commit call, not printing git's \"[<branch> <sha>]\" line; it answered \"needs user approval: kern G5: commit (message checks pass)\"; after a refused commit it may stop without pushing",
+              "check": "push-after-commit"
+            },
+            {
+              "pass": true,
+              "evidence": "before its first tool call: \"Skipped: the checks before commit and push. Risk: a broken change reaches the remote, and only CI will catch it.\"",
+              "check": "skipped-line"
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"The commit step stopped at a kern approval prompt ... and I can't approve that myself.\" and \"approve the prompt and I'll run the commit again\". It also says the push is \"a separate approval\". No push was attempted, so nothing else was held."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says \"The commit didn't go through, so nothing is committed or pushed.\" The record shows no --no-verify and no other commit or push after the refusal."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "workflow-define-spec",
+      "source": "evals/behave/workflows.json",
+      "checks": {},
+      "passed": 1,
+      "valid": 3,
+      "invalid": 0,
+      "pass": false,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Write to .kern/specs/multi-currency-totals.md with frontmatter 'status: draft'."
+            },
+            {
+              "pass": false,
+              "evidence": "Numbered '## Acceptance criteria' 1-6 exist, and '## Constraints' has 'Always:', 'Ask first:' and 'Never:' lines. But they are bullets inside a Constraints section, which matches. Criteria are numbered. However the record is cut and the lines are plainly present, so this passes on substance."
+            },
+            {
+              "pass": true,
+              "evidence": "Bash: 'bash .../scripts/plan-check .kern/specs/multi-currency-totals.md' was run; the final reply says 'plan-check printed nothing'."
+            },
+            {
+              "pass": false,
+              "evidence": "No Agent call appears in the record. The final reply says 'skipped the subagent spec review because you asked me to stop at the draft'."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: 'A few choices are mine, marked kern's call or assumed in the spec' followed by per-currency totals, read-time default and symbol map, ahead of 'Reply with an explicit yes'."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply ends: 'Reply with an explicit yes, or your edits, and I'll record the approval and move on to planning.' and no further tool calls follow."
+            },
+            {
+              "pass": true,
+              "evidence": "Only Write was to .kern/specs/multi-currency-totals.md; other calls were Read and Bash cat/ls/node --test, with no edits under src/, bin/ or data/."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Write to .kern/specs/multi-currency-totals.md begins with \"status: draft\" in the frontmatter."
+            },
+            {
+              "pass": true,
+              "evidence": "The spec has \"## Acceptance criteria\" with items 1-9, and \"## Constraints\" with \"- Always: ...\", \"- Ask first: ...\" and \"- Never: ...\" lines."
+            },
+            {
+              "pass": true,
+              "evidence": "Bash call 5 runs \"plan-check .kern/specs/multi-currency-totals.md\"; the reply says \"`plan-check` printed nothing for it\"."
+            },
+            {
+              "pass": false,
+              "evidence": "No Agent call appears in the record. The reply admits \"I also haven't run the fresh-subagent spec review that kern's define step normally runs before approval\"."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says \"I made a few calls the design didn't cover, marked `kern's call` in the spec:\" and lists five. It then asks \"Reply with a clear yes to approve.\""
+            },
+            {
+              "pass": true,
+              "evidence": "The turn ends with \"Decision for you: approve as drafted... Reply with a clear yes to approve.\" and makes no further tool calls."
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write targets .kern/specs/multi-currency-totals.md. The other calls are Read and Bash commands that only read files or run plan-check and node -e, and none edits src/, bin/ or data/."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Write to .kern/specs/multi-currency-totals.md with frontmatter 'status: draft'."
+            },
+            {
+              "pass": true,
+              "evidence": "Spec has '## Acceptance criteria' with items '1. `formatCurrency(5, 'USD')` returns `$5.00`...' through 9, and '## Constraints' with '- Always: ...', '- Ask first: ...', '- Never: ...'."
+            },
+            {
+              "pass": true,
+              "evidence": "Bash call 6: 'bash .../kern/scripts/plan-check .kern/specs/multi-currency-totals.md'; the final reply says 'plan-check passes'."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 8 is 'Agent: Spec review round 1'. The subagent read spec-review.md and the spec. This came before the final ask for the yes."
+            },
+            {
+              "pass": true,
+              "evidence": "The final message lists 'Open questions for you, each with my recommendation' (five items, e.g. 'Recommended: yes, and keep the two-argument form'). It sits next to 'Reply with an explicit yes'. It also notes calls such as 'I left the `sum` bug out of scope'."
+            },
+            {
+              "pass": true,
+              "evidence": "The final message ends: 'Reply with an explicit yes, or the changes you want, and I'll mark it approved and move to the plan.' It stops there with no further tool calls."
+            },
+            {
+              "pass": true,
+              "evidence": "The only writes are to .kern/specs/multi-currency-totals.md (Write, then a python edit of that same path). No Edit or Write touches src/, bin/ or data/. The final message says 'I built nothing.'"
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "workflow-define-fast-path",
+      "source": "evals/behave/workflows.json",
+      "checks": {
+        "0": "building-line"
+      },
+      "passed": 0,
+      "valid": 3,
+      "invalid": 0,
+      "pass": false,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "no `Building: <what>. My choices: <each>.` line in the main session",
+              "check": "building-line"
+            },
+            {
+              "pass": true,
+              "evidence": "Only edits were to test/sum.test.js and src/sum.js (plus an appended line via Bash); nothing under .kern/specs was written, and no approval was requested before editing."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 5 edits test/sum.test.js to add 'double returns n * 2' before step 7 appends `export const double = (n) => n;` to src/sum.js."
+            },
+            {
+              "pass": true,
+              "evidence": "Ran `npm test` and quoted results: 'RED is correct: double(4) gave 4 where 8 was expected' and final 'ok 2 - double returns n * 2. Overall it's 1 pass and 1 fail.'"
+            },
+            {
+              "pass": true,
+              "evidence": "No git commit command appears in the tool calls (only git status and git diff --stat); the summary states 'Git: I didn't commit.'"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "no `Building: <what>. My choices: <each>.` line in the main session",
+              "check": "building-line"
+            },
+            {
+              "pass": true,
+              "evidence": "No Write or Edit touched .kern/specs; the only edit was to test/sum.test.js, and no approval was requested before editing."
+            },
+            {
+              "pass": true,
+              "evidence": "The test import was edited at step 6 and the double test was appended in step 7, which ran RED. The `echo 'export const double = (n) => n * 2;' >> src/sum.js` came only in step 8."
+            },
+            {
+              "pass": true,
+              "evidence": "Ran `node --test test/sum.test.js`, with output quoted in the summary: 'double doubles' passed and 'sum adds' failed (expected 5, got -1). The summary also states that npm test was not run."
+            },
+            {
+              "pass": true,
+              "evidence": "No git commit command appears in the record, and the final reply says 'Not committed.'"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "no `Building: <what>. My choices: <each>.` line in the main session",
+              "check": "building-line"
+            },
+            {
+              "pass": true,
+              "evidence": "No Write/Edit calls touch .kern/specs; the edits were made by Bash on test/sum.test.js and src/sum.js, and the assistant never asks for approval before editing (it only asks afterward whether to fix sum)."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 4 appends the 'double multiplies by two' test to test/sum.test.js and sees it fail; step 5 then adds 'export const double = (n) => n * 2;' to src/sum.js."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 5 runs `node --test`; the final reply quotes the result: 'ok 2 - double multiplies by two', with 1 pass and 1 fail overall."
+            },
+            {
+              "pass": true,
+              "evidence": "The only git command run is `git status --short`; no git commit appears, and the reply ends 'Nothing is committed.'"
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "workflow-define-fast-path-stored-data",
+      "source": "evals/behave/workflows.json",
+      "checks": {},
+      "passed": 0,
+      "valid": 3,
+      "invalid": 0,
+      "pass": false,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The first edit (call 3, src/store.js) came with no prior statement that the change touches stored data. The only text before the edits is a Read and a Grep; the note about data came afterward, in the final reply."
+            },
+            {
+              "pass": false,
+              "evidence": "The assistant renamed straight away in calls 3 and 4 and never asked whether to keep a fast path or for design approval. Its only question comes at the end: \"Do you want me to look into the `sum` bug?\""
+            },
+            {
+              "pass": false,
+              "evidence": "Call 3 edited src/store.js (+ i.amount) and call 4 edited data/invoices.json (+ \"amount\":5). Both files were modified."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The opening line only states the rename of the stored field in data/invoices.json and src/store.js and the no-fallback choice. It never says the change touches stored data or that old data is affected. The old-data warning appears only after the edits."
+            },
+            {
+              "pass": false,
+              "evidence": "The assistant did not ask whether to keep a fast path or for design approval. It went straight to editing: 'Edit: .../data/invoices.json' followed by 'Edit: .../src/store.js'."
+            },
+            {
+              "pass": false,
+              "evidence": "The record shows Edit calls on both data/invoices.json ('+ \"amount\":5') and src/store.js ('+ i.amount'), and both returned 'updated successfully'."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The first Edit (call 4, src/store.js) came with no prior statement about stored data. The only mention of stored data is in the final reply, after the edits: 'Any stored invoice data outside this repo that still uses `total` will now read as `undefined`.'"
+            },
+            {
+              "pass": false,
+              "evidence": "The assistant never asked whether to keep the fast path and never asked for design approval. It edited src/store.js and data/invoices.json right away (calls 4 and 5), then said 'I skipped the failing-test-first step and the expand/contract rollout, as the quick path allows.'"
+            },
+            {
+              "pass": false,
+              "evidence": "Call 4 edited src/store.js ('+ i.amount') and call 5 edited data/invoices.json ('+ \"amount\"'). Both edits succeeded, and git diff --stat lists both files as changed."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "workflow-execute-plan-ledger",
+      "source": "evals/behave/workflows.json",
+      "checks": {},
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 3: `bash .../scripts/ledger-open .kern/plans/export.md; echo \"exit $?\"` ran with exit 0, before Task 1 started in step 7 (`Task 1: start tree=...`)."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 8 wrote test/export.test.js and ran it, failing with ERR_MODULE_NOT_FOUND for src/export.js. Step 9 created src/export.js only after that."
+            },
+            {
+              "pass": true,
+              "evidence": "Task 1: step 23 ran task-done with --no-probe and the output was `ledger: Task 1: complete ...`. Task 2: step 36 ran task-review and the output ends with `ledger: Task 2: complete ... done`. The step 36 command is cut off, so the line comes from a script. The record shows no hand-editing of a task-complete line. Step 20 and step 35 appended `Decision:` lines by hand, but those are not done lines."
+            },
+            {
+              "pass": true,
+              "evidence": "After Task 2's implementation, step 25 ran npm test and got `# pass 4`, `# fail 0`. The final reply quotes `# tests 4`, `# pass 4`, `# fail 0`, taken from step 44."
+            },
+            {
+              "pass": true,
+              "evidence": "No git push or PR command appears in the record. The final reply says: \"Nothing is committed or pushed.\""
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 3 runs `bash $P/scripts/ledger-open .kern/plans/export.md` (exit 0) before any task work; Task 1 start is recorded in step 7."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 8 writes test/export.test.js and runs it with the error `Cannot find module .../src/export.js` (red). src/export.js is only created in step 9. The ls in step 6 showed only sum.js in src."
+            },
+            {
+              "pass": true,
+              "evidence": "Task 1: step 20 runs `task-done` and the ledger shows `Task 1: complete tree=40fdb0b...`. Task 2: step 32's output shows `ledger: Task 2: complete tree=871db64...` (the command is cut off in the record, but the output is task-done's format). The ledger was not hand-edited for completion lines."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 23 runs npm test after Task 2 and gets `# pass 4` / `# fail 0`. Step 40 re-runs it with the same result, and the final reply quotes `# pass 4`, `# fail 0`."
+            },
+            {
+              "pass": true,
+              "evidence": "No git push or PR command appears in any Bash call. The final reply says 'Nothing is committed' and leaves `/kern:commit` and `/kern:finish-branch` to the user."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Call 3 runs `bash $R/scripts/ledger-open .kern/plans/export.md` (exit 0) before any task work starts."
+            },
+            {
+              "pass": true,
+              "evidence": "Call 8 writes test/export.test.js and the run fails with 'ERR_MODULE_NOT_FOUND ... src/export.js'. src/export.js is only created in call 9, so the test came first."
+            },
+            {
+              "pass": true,
+              "evidence": "Task 1 is recorded by `scripts/task-done` in call 22, which prints 'ledger: Task 1: complete ...'. Task 2 is recorded by task-done in call 34, which prints 'ledger: Task 2: complete ...'. The ledger lines come from the script and not from a hand edit."
+            },
+            {
+              "pass": true,
+              "evidence": "After Task 2, call 24 runs npm test and prints '# pass 4 / # fail 0', and call 25 prints the same. The task-done run in call 34 also runs the test and ends with 'Task 2: complete ... test=npm test exit=0'. Call 40 prints '# tests 4 / # pass 4 / # fail 0'. The final reply says 'npm test passes in the plan worktree (4 tests, 0 failures)'."
+            },
+            {
+              "pass": true,
+              "evidence": "The record shows no git push and no PR command. The final reply says 'Nothing is committed, and `main` is unchanged.' and offers /kern:commit and /kern:finish-branch only on request."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "workflow-parallel-two-modules",
+      "source": "evals/behave/workflows.json",
+      "checks": {},
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 5: `for s in sum tax; do bash $R/scripts/wt-new $s --detach; echo \"exit $?\"; done` created worktrees .claude/worktrees/sum and .../tax, each exit 0."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 9 ran `brief-check .kern/tmp/brief-$s.md` for both briefs, which failed on a REPORT placeholder. Step 10 fixed the REPORT lines, and brief-check printed 'brief-check: ok' twice. Only after that did the assistant say 'Both briefs pass. Spawning the two writers.'"
+            },
+            {
+              "pass": true,
+              "evidence": "Step 30 used `wt-diff` to produce sum.diff and tax.diff with `--allow` lists, then `wt-apply` on each, which printed 'applied'. The diff contents were shown and no files were copied by hand."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 30 ran the full suite after both applies. The output shows '# tests 2 ... # pass 2 ... # fail 0'. The final reply quotes it: '`npm test` passes (2 tests, 0 failures)'."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 4: `for s in fix-sum fix-tax; do bash $R/scripts/wt-new $s --detach; ...` created two worktrees, one per writer, both exit 0."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 6 ran brief-check and failed with 'placeholder: REPORT'; step 8 reworded REPORT and reran, printing 'brief-check: ok' twice, before the Agent dispatches in steps 9 and 17."
+            },
+            {
+              "pass": true,
+              "evidence": "Steps 28-29 produced reviewed diffs with wt-diff (`--allow src/sum.js`, patch printed and inspected), then applied each with a loop printing 'applied' / 'apply fix-sum exit 0', 'apply fix-tax exit 0'. The files were not copied by hand."
+            },
+            {
+              "pass": true,
+              "evidence": "After applying both patches, step 29 ran the full suite: '# tests 2 / # pass 2 / # fail 0'. The final reply quotes it: '`node --test` passes (2 tests, 0 failures)'."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 4: `p=$(bash $R/scripts/wt-new $s --detach)` run for fix-sum and fix-tax, creating one worktree per writer."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 6 output shows `brief-check: ok` twice, once for each brief (fix-sum, fix-tax), before the Agent dispatches in steps 7 and 14. Step 5 had also failed brief-check on the REPORT placeholder."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 25 uses wt-diff to produce reviewed patches in .kern/reviews and shows `applied` (likely wt-apply) on the integrate worktree. Step 26 then runs `git apply .kern/reviews/fix-sum.diff.patch .kern/reviews/fix-tax.diff.patch`. The changes went in as diff patches, not by hand-copying files."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 26 runs `node --test` on the integrated tree and gets `# pass 2` and `# fail 0`. The final reply quotes it: \"`node --test` there shows 2 pass, 0 fail.\""
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}

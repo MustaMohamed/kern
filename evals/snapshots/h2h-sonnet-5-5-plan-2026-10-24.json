@@ -1,0 +1,1526 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-opus-5-5",
+  "claude": "2.1.309 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "cd4808a40d5b6b785339d73de225568fb858d8b0",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "plan/archive-invoices",
+    "plan/reminder-seam",
+    "plan/rename-small",
+    "plan/scope-split"
+  ],
+  "arms": [
+    {
+      "id": "kern",
+      "plugin": ".",
+      "commit": "cd4808a40d5b6b785339d73de225568fb858d8b0"
+    },
+    {
+      "id": "superpowers",
+      "plugin": ".upstream/superpowers",
+      "commit": "bb92a77741419a4ab5f06e711a283343f1ada0c3"
+    },
+    {
+      "id": "pstack",
+      "plugin": ".upstream/pstack/harness/pstack/claude-code",
+      "commit": "182f2ce414e83224915c190d2f63239c1608d0a5"
+    },
+    {
+      "id": "pocock",
+      "plugin": ".upstream/pocock",
+      "commit": "49dd158d1076134a641b33efb035946536778336"
+    },
+    {
+      "id": "control",
+      "plugin": null,
+      "commit": null
+    }
+  ],
+  "voided": [],
+  "gate": [
+    {
+      "category": "plan",
+      "status": "FAIL",
+      "pass": false,
+      "kern": {
+        "score": 0.8000000000000002,
+        "fa": 0.25
+      },
+      "best": {
+        "arm": "pocock",
+        "score": 0.6416666666666666,
+        "fa": 0.16666666666666666
+      },
+      "reason": "kern 0.80 score, 0.25 false alarms; pocock 0.64, 0.17"
+    }
+  ],
+  "results": [
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 0,
+      "arm": "kern",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "9a7223b",
+        "commits": 1,
+        "recent": [
+          "9a7223b chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Every task names its files and starts with a failing test plus a run command and its expected output. The migration test runs both up and down on node:sqlite, which the attempt checked was available. sync-payments rewriting paid_at is listed as a review focus, and a test pins the behaviour that archived rows stay archived. The cleanup conflict is raised with options, but the attempt recommends option A and builds Task 4 on it, so it did choose. It ran plan-check and an outside review, and the claims it makes are backed by its command output."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 0,
+      "arm": "control",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "cfe0613",
+        "commits": 1,
+        "recent": [
+          "cfe0613 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b3",
+        "b5"
+      ],
+      "why": "Names sync-payments as a writer of paid_at and asks the user about it. The migration has a down step and an up-then-down test. The cleanup fix is the attempt's own recommendation, with the user asked only to confirm, so it chose. Tests come in a separate step at the end, not as a failing test first in each task. No plan file was written; the plan exists only in the reply."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.6,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "aeb1ade",
+        "commits": 1,
+        "recent": [
+          "aeb1ade chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b5"
+      ],
+      "why": "Step 5 waits on the user's decision about cleanup and lists the alternatives, so the plan does not lock in a choice. The down step has an up/down/up test. The sync-payments risk is raised. Tests are grouped at the end, not given test-first per task. It says the archive job 'is not scheduled before sync-payments, so the order is not critical', which nothing in the repo supports."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "aeb1ade",
+        "commits": 1,
+        "recent": [
+          "aeb1ade chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b5"
+      ],
+      "why": "Raises re-payment by markPaid and syncPayments as an open question. The plan already contains the cleanup fix, so it chose. The down step is only tested if an in-memory SQLite happens to be available. Tests are grouped at the end, not test-first per task."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "9a7223b",
+        "commits": 1,
+        "recent": [
+          "9a7223b chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b3",
+        "b5"
+      ],
+      "why": "Tasks 1 to 4 are test-first and name their files, but Task 5 (scheduling) names no concrete file and has no test. The migration test only checks the file's text for a down section; it never runs the down. Task 4 already applies the cleanup fix, so the attempt chose. syncPayments shows up in the review focus and in the scheduling order."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "8995535",
+        "commits": 1,
+        "recent": [
+          "8995535 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b3",
+        "b5"
+      ],
+      "why": "Names syncPayments and markPaid as writers that rewrite paid_at on archived rows, and asks the user whether a late payment should un-archive. The migration has a down step plus an up/down/up check. Tasks 2-4 list their files and start with a failing test. Task 1 does not start with a failing test, and Task 5 has neither files nor a test, so b4 is missed. The cleanup conflict is put to the user only as 'please confirm' after the plan already adopts the guard in Task 4; no alternative is offered, so b2 is missed. No invented requirements. Extra points raised: no scheduler, DB engine for DROP COLUMN."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 1,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "82b161f",
+        "commits": 1,
+        "recent": [
+          "82b161f chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3"
+      ],
+      "why": "Covers sync-payments and markPaid overwriting paid_at as its own step. The cleanup conflict is raised as an open issue with alternatives (add the guard or amend the spec), and step 5 waits for the user's answer. The migration has a down, a test that both sections exist, and an up/down/up check. Steps do not each name files with a failing test first; tests are one block at the end. It adds things the spec does not state: 'run after sync-payments' ordering and an optional index. Extra points: scheduler, SQL dialect."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "5785043",
+        "commits": 1,
+        "recent": [
+          "5785043 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b3",
+        "b5"
+      ],
+      "why": "Lists sync-payments and markPaid rewriting paid_at as an edge case with a proposed handling. The migration has a down, and step 6 checks that it applies and reverts. The cleanup issue is settled with its own fix and the user is only asked to approve; no alternative is given. 'Tests first' is one step, not per-task files with failing tests. Extra points: DB engine, scheduler."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 1,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "cfe0613",
+        "commits": 1,
+        "recent": [
+          "cfe0613 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Every task names exact files, starts with a failing test and gives the run command. The migration task tests both the up and down text. The cleanup conflict goes to the user with two options and their trade-offs, and Task 3 is blocked until they answer. It does still mark one option as recommended and plans around it. syncPayments is recorded as an accepted, untested risk, which is the thinnest handling of the second writer among the arms. Its plan-check and reviewer outputs back up its claims. Extra points: scheduler gap, production DB."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "98af753",
+        "commits": 1,
+        "recent": [
+          "98af753 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b3",
+        "b5"
+      ],
+      "why": "Raises sync-payments overwriting paid_at on archived invoices as an open question. The migration has a down, and there is a test that up then down returns the schema to 001. The cleanup fix is chosen and only needs a go-ahead, with no alternatives. Tests sit in a separate step instead of per-task failing tests with files. Extra points: DB engine and migration runner, whether void invoices should be archived."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 2,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "fdf400c",
+        "commits": 1,
+        "recent": [
+          "fdf400c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Names syncPayments as a second writer of paid_at in Review Focus, with a pinned test that archived_at survives a later paid_at rewrite, and an open question about the settledAt format. Raises cleanup vs criterion 4 as Open question 1. It recommends a fix but blocks Task 3 and Task 4 until the user answers. The migration task has a down section and a failing test that checks the up and down text. Every task names its files and starts with a failing test, with Run/Expected pairs. Its claims are backed by command output (no remotes, no scheduler, no SQL engine)."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.5,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "21d6383",
+        "commits": 1,
+        "recent": [
+          "21d6383 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b5"
+      ],
+      "why": "Flags the re-payment edge case through sync-payments and markPaid as a question, and raises the cleanup conflict as a question with a default that waits for confirmation. The migration has a down step, and a migration test is planned as up/down/up, or as a check that both sections exist. Tests are a single step at the end, not a failing test first in each task. It claims a void invoice has no paid_at and so is never matched, which nothing in the repo supports."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 2,
+      "arm": "control",
+      "score": 0.5,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "4991388",
+        "commits": 1,
+        "recent": [
+          "4991388 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b5"
+      ],
+      "why": "Notes that syncPayments can rewrite paid_at on an archived row, and gives the cleanup conflict as options for the user to choose, with one preferred. The migration has a down and an up/down/up test. It is not test-first per task, and step 3 leaves the file open ('src/invoices.js or new src/archive.js'). It says timestamps are stored as ISO strings, but sync-payments writes settledAt unchecked, so that is unsupported."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.7,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "21d6383",
+        "commits": 1,
+        "recent": [
+          "21d6383 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Each task names its files and starts with a failing test, and the migration test checks both ADD COLUMN and DROP COLUMN. Covers the sync-payments re-payment case. On cleanup it already chose: Task 3 applies the fix without waiting for an answer, and confirmation is only asked for afterwards, so the cleanup item does not count."
+    },
+    {
+      "task": "plan/archive-invoices",
+      "category": "plan",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "6af1497",
+        "commits": 1,
+        "recent": [
+          "6af1497 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b5"
+      ],
+      "why": "Raises the re-payment case through markPaid and syncPayments as a decision, and leaves the cleanup conflict for the user to confirm. The migration has a down, and verification runs up/down/up on a scratch DB, though the test list has no migration test. Tests are grouped at the end, not a failing test first in each task. It is honest about what the fake DB can't check."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "a4e5375",
+        "commits": 1,
+        "recent": [
+          "a4e5375 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3"
+      ],
+      "why": "Task 1 adds the injectable now/send seam and pins overdue behaviour with a test before the due-soon feature. It plans a dueSoonSent flag and flags its in-memory storage. Two problems: Task 1 Step 2 expects the failing test to attempt the real fetch to mail.internal, so a test run can send real email. Task 2 also wraps each send in try/catch and continues, which changes today's overdue failure behaviour. It flags this, but it is still a requirement the spec does not state and it cuts against AC4."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 0,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ca3ad96",
+        "commits": 1,
+        "recent": [
+          "ca3ad96 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "The prefactor Task 1 adds now/send and a characterization test of overdue behaviour (AC4) before any feature task. Task 3 plans the dueSoonSent record, sets it only after a successful send, and lists the per-invoice choice as an open question. A globalThis.fetch guard means even failing runs can't send mail. The extra tests (paid invoice, unparsable dueAt) stay inside the spec's implications. Its claims match the commands it ran."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 0,
+      "arm": "control",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "5d9fe01",
+        "commits": 1,
+        "recent": [
+          "5d9fe01 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4",
+        "b5"
+      ],
+      "why": "The refactor that adds the now/send seam is step 1. The dueSoonSentAt record is planned, and persistence and same-day scope are raised as questions. Every test uses a fake send, and nothing is invented. But tests are written in step 3, after both the refactor and the feature, so no test pins today's overdue behaviour before the change."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ebdc627",
+        "commits": 1,
+        "recent": [
+          "ebdc627 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4",
+        "b5"
+      ],
+      "why": "The seam refactor comes first. The sent-record is planned as a module Set, with dueSoonSentAt offered as an alternative and storage raised as a question. Tests use a fake send. Overdue behaviour is kept as today, and nothing is invented. As in C, the tests come after the feature step, so no overdue characterization test runs before the change."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ea2056c",
+        "commits": 1,
+        "recent": [
+          "ea2056c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It wrote no plan file and gave the plan in the reply. The seam refactor is step 1, and step 1 says the overdue test pins existing behaviour first. The dueSoonSentAt record is planned, and tests use a fake send. But it makes defaultSend throw when !res.ok, a requirement the spec does not state. That silently changes today's overdue path, which AC4 says must keep working as today."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "1030bb8",
+        "commits": 1,
+        "recent": [
+          "1030bb8 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b4",
+        "b5"
+      ],
+      "why": "The plan puts a fake send and a fixed now in place so tests never touch the network, and it plans the dueSoonSentAt marker for AC3. The seam work and the due-soon feature are in the same step, so there is no separate prefactor task. All tests come after the implementation, so nothing pins today's overdue behaviour before the change. The failed-send retry edge case goes a little beyond the spec, but it does not add a new requirement."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "14e9b79",
+        "commits": 1,
+        "recent": [
+          "14e9b79 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Step 1 is a behaviour-preserving refactor that adds send and now, plus an overdue test that pins AC4 before any feature work. AC3's marker is planned, and its in-memory lifetime is raised as a question. Tests use a fake send. The reply admits that step 4 contains a muddled next-day sentence, which costs some clarity."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 1,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "67b4104",
+        "commits": 1,
+        "recent": [
+          "67b4104 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Task 1 is a prefactor that injects now and send and adds a characterization test of overdue behaviour, with a fetch stub so no real email can go out. The reviewer caught a real-fetch risk and the attempt fixed it. Task 2 plans dueSoonSentOn for AC3. The plan's frontmatter says 'detached HEAD', which contradicts the session's git facts (on branch main)."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "dda851d",
+        "commits": 1,
+        "recent": [
+          "dda851d chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3"
+      ],
+      "why": "Task 1 is a prefactor with an overdue test that comes before the feature tasks, and AC3's marker is planned. Task 1 step 2 expects the real fetch to mail.internal to be attempted, and the stub is only conditional, so a test could send real email. It also invents requirements the spec does not state: invalid dueAt must not throw, try/catch with console.error, and a failed send must not skip the other invoices."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 1,
+      "arm": "control",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "cb93006",
+        "commits": 1,
+        "recent": [
+          "cb93006 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b4"
+      ],
+      "why": "Step 1 is a refactor that adds the now and send seams before the due-soon branch is added. AC3's flag is planned, and tests use a fake send. Every test is written after both code changes, so overdue behaviour is not pinned before the change. It also invents a non-2xx-as-failure rule for the default send."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "3eb39ef",
+        "commits": 1,
+        "recent": [
+          "3eb39ef chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3"
+      ],
+      "why": "Task 1 is a behaviour-preserving prefactor that injects { now, send }. It pins today's overdue behaviour with a test before the change. dueSoonSentOn is planned explicitly. Misses b4: Task 1 Step 2 runs the new overdue test against the unrefactored code, which still calls the real fetch to mail.internal. The plan itself says this step expects a 'fetch error'. Misses b5: it adds requirements the spec does not state, such as invalid or missing dueAt causing no exception and failed-send retry."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "b4f088f",
+        "commits": 1,
+        "recent": [
+          "b4f088f chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Tests come first, including one that pins today's repeating overdue send. The refactor that adds the clock and mailer seam comes before the due-soon branch. dueSoonSentAt is planned, and its in-memory limit is raised as an open question. A fake send plus a throwing fetch stub means no real email. Misses b5: it invents a res.ok check, retry-on-failure behaviour and a resetInvoices export."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "46f1370",
+        "commits": 1,
+        "recent": [
+          "46f1370 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b4"
+      ],
+      "why": "remindersSent is planned and its persistence limit is raised. A fake send and fetch stub keep tests off the network. Misses b1: there is no separate prefactor, and the seam is folded into the same step as the due-soon branch, after the invoices helpers. Misses b3: tests are written after implementation (step 3). Misses b5: it adds retry-on-failure and new helpers to invoices.js."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 2,
+      "arm": "control",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "e3d281c",
+        "commits": 1,
+        "recent": [
+          "e3d281c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b4"
+      ],
+      "why": "lastReminder is planned, and the tests inject a fake send. Misses b1: the seam is not a separate prefactor task, and the loop rewrite adds due-soon in the same pass. Misses b3: tests come last (step 4), after the change. Misses b5: it adds a failed-send retry test."
+    },
+    {
+      "task": "plan/reminder-seam",
+      "category": "plan",
+      "run": 2,
+      "arm": "kern",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "5600bb4",
+        "commits": 1,
+        "recent": [
+          "5600bb4 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "dueSoonSentAt is planned, and the once-per-invoice reading is raised as an open question. The overdue test is in Task 1 Step 1, before implementation. Tests stub globalThis.fetch, so no real email. Misses b1: there is no mailer seam (it stubs the global fetch instead), and now is added inside the feature task, not in a prefactor. Misses b5: it adds failed-send retry. The 'no git remotes found' claim is backed by command output."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 0,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "f9044ba",
+        "commits": 1,
+        "recent": [
+          "f9044ba chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Correctly decides that a two-file rename needs no plan. Its grep backs the file list: src/total.js has 1 occurrence and test/total.test.js has 2. It names npm test plus a re-grep as the verify step. It adds no alias, migration or extra requirement. Its claim that the plan skill says to skip comes from the skill file it read. It is concise and asks before changing code."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 0,
+      "arm": "control",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "274502d",
+        "commits": 1,
+        "recent": [
+          "274502d chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Writes a short single-plan document of four steps, which is proportionate. It names both files with line numbers, npm test, and a grep check. It explicitly ties 'no alias' to criterion 1. Its scope claims (no README, no exports/main in package.json) are backed by its glob, its reads and its grep. The commit and external-consumer risk notes are minor extras, not invented requirements. Writing a plan file at all is slightly heavier than needed."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "a57b1f3",
+        "commits": 1,
+        "recent": [
+          "a57b1f3 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "A compact four-step plan that names both files, npm test, and a grep check. It refuses an alias, citing the spec. Its out-of-scope section explicitly excludes new tests and behaviour changes. 'Expect 1 test passing' matches the test file it read. 'Checked the whole repo' rests on its glob and reading every file. The commit and risk notes are minor extras."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0e1d0ac",
+        "commits": 1,
+        "recent": [
+          "0e1d0ac chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "Gives an inline plan without creating a file, which is proportionate. It names both files with lines, npm test, and grep. It keeps no alias, per criterion 1. Its claims of no index.js, no re-export, no main/exports and no README are backed by its glob and its package.json read. The rollback and commit steps are small extras but add no requirements."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "1164b02",
+        "commits": 1,
+        "recent": [
+          "1164b02 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b2",
+        "b3"
+      ],
+      "why": "Names both files and npm test, and keeps no alias. It is one task, but wrapped in a heavyweight template with execution-mode options, so the proportion is poor. It invents requirements the spec does not state: new tests for an empty invoice and for 'calcTotal is gone', plus a test-first failing step. Its grep expectation is also self-inconsistent: the added test lines would contain calcTotal more than once."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 1,
+      "arm": "control",
+      "score": 0.8,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "595263f",
+        "commits": 1,
+        "recent": [
+          "595263f chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "The plan is short: one rename across two files, naming src/total.js, test/total.test.js and npm test, with no alias and no added requirements. But the plan file says 'A repo-wide search found no other references', and the attempt never ran a search; it only globbed and read the files. Its final reply admits this, so the false claim survives only in the plan file."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 1,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "7a57dbd",
+        "commits": 1,
+        "recent": [
+          "7a57dbd chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It ran a grep, said a plan isn't needed for a two-file rename, and gave one bounded change: update the test, rename the export, run npm test. It added no alias and no extra requirements, and its reference claims are backed by the grep."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.8,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "bd1ec58",
+        "commits": 1,
+        "recent": [
+          "bd1ec58 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "The plan is small and correct: it names both files and npm test, and it explicitly keeps no alias. The plan file claims 'A grep of the repo shows' even though no grep ran; the glob and file reads support the conclusion, but not the claimed method. The 'one commit' and commit-message notes are minor process extras."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "bd1ec58",
+        "commits": 1,
+        "recent": [
+          "bd1ec58 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4"
+      ],
+      "why": "It ran a grep and wrote a compact plan with line-level references, both files, npm test and no shim. It does add a delivery requirement the spec doesn't ask for ('one commit on a branch off main'), but that is minor."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "877e46c",
+        "commits": 1,
+        "recent": [
+          "877e46c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3"
+      ],
+      "why": "It writes one task and names both files and npm test, with no alias. But it invents requirements the spec doesn't state: new tests for the empty-array case and for calcTotal being unexported, plus a commit step. It also adds an execution-approach question, which inflates a one-line rename."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "955ccd2",
+        "commits": 1,
+        "recent": [
+          "955ccd2 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "It read every repo file and wrote a short plan that amounts to one task: rename in src/total.js, update test/total.test.js, then verify with npm test and a grep. It says no alias, in line with the spec, and flags the file rename as out of scope. Its repo claims (no README, no exports/main) are backed by the Glob and the package.json read. Writing a plan file for a two-file change is a bit more than needed, but acceptable."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 2,
+      "arm": "control",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ccf5225",
+        "commits": 1,
+        "recent": [
+          "ccf5225 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "It grepped for calcTotal and wrote a compact plan naming both files with line numbers and npm test. It adds no alias and no behaviour change, and is honest that it cannot see consumers outside the repo. The plan is proportionate and invents nothing."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 2,
+      "arm": "kern",
+      "score": 1,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "e0daa5f",
+        "commits": 1,
+        "recent": [
+          "e0daa5f chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "It said outright that a two-file rename doesn't need a plan and wrote no file. It still gave the steps: both files, test first, npm test, and a grep check. It offers to write a plan if asked and adds nothing beyond the spec. This is the best proportion."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.8,
+      "falseAlarms": 2,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "076867e",
+        "commits": 1,
+        "recent": [
+          "076867e chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "why": "The plan is correct and proportionate, names both files and npm test, and adds no alias. It has two unsupported claims. It calls the package 'private', but package.json has no private field. It says 'a grep of the repo shows', but the attempt never ran a grep (it used Glob and Read)."
+    },
+    {
+      "task": "plan/rename-small",
+      "category": "plan",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "eca6305",
+        "commits": 1,
+        "recent": [
+          "eca6305 chore: initial import"
+        ]
+      },
+      "matched": [
+        "1",
+        "2",
+        "3"
+      ],
+      "why": "It wrote one task naming both files and npm test, with no alias. But it adds a new test, invoiceTotal([]) === 0, plus a 'Review Focus' item for it. The spec asks for neither, so this invents a requirement. The plan also uses heavy skill boilerplate, an execution-mode prompt and a type-annotation interface, which is a lot of ceremony for a one-line rename."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ed7d524",
+        "commits": 1,
+        "recent": [
+          "ed7d524 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b3",
+        "b4"
+      ],
+      "why": "Wrote a full plan in which every task names its files and starts with a failing test. It raises the xlsx dependency as an open question and blocks Task 3 until it is answered. It does not split the role rename and the export into separate PRs or ask about scope; it uses one plan with four commits. It drops clerk from canView at once instead of accepting both values first; it only asks about this. It invents requirements: 405/404 handling, a server.js handler design and frozen-object checks."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.3,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "46e869c",
+        "commits": 1,
+        "recent": [
+          "46e869c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b3"
+      ],
+      "why": "Raises the xlsx dependency as a question and recommends exceljs only if approved. There is no PR split or scope question, and clerk is dropped immediately with no accept-both phase. Steps are described as test-first, but several do not name their files (the normalizeUser location and the handler file) and give no failing-test step. It invents requirements: a 403 gate, Content-Disposition, and a names.js constants file."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.3,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "79b1528",
+        "commits": 1,
+        "recent": [
+          "79b1528 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b3",
+        "b5"
+      ],
+      "why": "Asks about the dependency and makes it a decision for the user. It mostly keeps to the spec, adding only the xlsx content type, which the spec implies. Normalizing inside canView means clerk stays accepted forever; there is no migrate-then-drop. Tests sit in a separate section rather than as a failing test first in each task. There is no PR split or scope confirmation."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 0,
+      "arm": "kern",
+      "score": 0.5,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "ed7d524",
+        "commits": 1,
+        "recent": [
+          "ed7d524 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b5"
+      ],
+      "why": "Asks for scope confirmation before planning and proposes an expand/migrate/contract order that drops clerk only after the stored-role mapping is in place. Raises the xlsx dependency as a question and invents no requirements. However, it never wrote the plan the task asked for, so there are no tasks with files and failing tests. The claim that scope_threshold defaults to 4 is not supported by any output it shows; the get command printed only exit 3."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 0,
+      "arm": "control",
+      "score": 0.3,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "26d805c",
+        "commits": 1,
+        "recent": [
+          "26d805c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b3"
+      ],
+      "why": "Raises the xlsx dependency as a question with options. Clerk is replaced outright, and accepting both is offered only if the user asks; there is no migration sequence. Tests are listed separately instead of a failing test first in each task. There is no PR split. It invents requirements: a 403 for unauthorized users, a Content-Disposition header, and moving the check into a shared module."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "09e1c97",
+        "commits": 1,
+        "recent": [
+          "09e1c97 chore: initial import"
+        ]
+      },
+      "matched": [
+        "3"
+      ],
+      "why": "Wrote a plan whose repo findings match the files it read. It raises the xlsx dependency as a question before choosing (exceljs vs hand-rolled). It keeps the role rename and the export in one plan and never asks about splitting them into separate PRs. The stored-role change is a read-time mapping only: there is no accept-both phase followed by dropping clerk, and the plan explicitly rules out a migration. Tasks name files and list tests, but no step writes a failing test first. It adds an unrequested Content-Disposition header, though it does ask about the canView gate instead of assuming it."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 1,
+      "arm": "kern",
+      "score": 0.3,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0dd394c",
+        "commits": 1,
+        "recent": [
+          "0dd394c chore: initial import"
+        ]
+      },
+      "matched": [
+        "3"
+      ],
+      "why": "Wrote no plan. It stopped to ask questions, and the xlsx dependency question is raised properly. It mentions possibly splitting PRs only because of a file-count threshold, not to separate the rename from the export, so I don't count that as meeting criterion 1. There is no accept-both-then-drop sequence, and no tasks with files or failing tests. It proposes a shared isStaff refactor the spec doesn't ask for. Its claim that the plugin defaults to 4 files per PR is not shown in any output."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.5,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "6ad2727",
+        "commits": 1,
+        "recent": [
+          "6ad2727 chore: initial import"
+        ]
+      },
+      "matched": [
+        "3"
+      ],
+      "why": "Its repo findings are supported by the files it read. It raises the dependency question before choosing. Step 1 writes tests first for the role checks, but later steps don't follow failing-test-first and some don't name their test files. The work stays in one plan with no PR split and no scope question. The stored role is replaced, not accepted alongside clerk and then dropped. By default it gates the endpoint with canView and adds Content-Disposition, neither of which the spec states, though it flags the gate."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.6,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "dff2048",
+        "commits": 1,
+        "recent": [
+          "dff2048 chore: initial import"
+        ]
+      },
+      "matched": [
+        "3",
+        "4"
+      ],
+      "why": "The most executable plan. Every task names exact files and test files, and each starts with a failing test and its run command. It raises the xlsx dependency as an open question that blocks Task 4. It has separate commits but doesn't split the rename and the export into separate PRs or ask about scope. The role switch is a direct replacement, with no accept-both phase followed by dropping clerk. It invents a 405 response for non-GET requests and an immutability requirement, neither of which is in the spec."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 1,
+      "arm": "control",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "5665eaa",
+        "commits": 1,
+        "recent": [
+          "5665eaa chore: initial import"
+        ]
+      },
+      "matched": [
+        "3"
+      ],
+      "why": "Its findings are supported. It raises the dependency question with options before choosing. It orders the rename before the export but doesn't split them into separate PRs or ask about scope. Normalizing inside canView effectively accepts both values, but there is no migration and no later step that drops clerk, so criterion 2 is not met. Tasks only partly name their files, and there is no failing-test-first step. It adds an unrequested Content-Disposition header."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.3,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "690e03c",
+        "commits": 1,
+        "recent": [
+          "690e03c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b3"
+      ],
+      "why": "Asks before adding exceljs, so it meets the dependency criterion. It does not split the rename and the export into separate PRs, and it does not ask the user to confirm scope. It maps clerk on read and says 'don't migrate', with no phase that accepts both values before dropping clerk. Tests are a single step at the end, not a failing test first in each task. It adds a Content-Disposition header and permission gating that the spec does not ask for."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 2,
+      "arm": "kern",
+      "score": 0.8,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "e586f50",
+        "commits": 1,
+        "recent": [
+          "e586f50 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "why": "Splits the role rename into PRs of at most 4 files, kept apart from the normalizer and export tasks. Raises the xlsx library as an open question before choosing one. Every task lists exact files and starts with a failing test plus the command to run it. It notes that the spec asks for no role check on the route, so it adds none. It warns that stored clerks break once the rename lands, but it plans no phase that accepts both values and only then drops clerk. Its repo claims are backed by commands: the remote check, plan-check and git status."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.3,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "311f3bf",
+        "commits": 1,
+        "recent": [
+          "311f3bf chore: initial import"
+        ]
+      },
+      "matched": [
+        "b3"
+      ],
+      "why": "Asks about the dependency and offers a hand-rolled writer as the alternative. It asks whether to drop clerk or accept both, but plans no migration sequence. There is no PR split and no scope question. Steps do not start with failing tests. It adds canView gating and a Content-Disposition header the spec does not require."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.5,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "0d36b3f",
+        "commits": 1,
+        "recent": [
+          "0d36b3f chore: initial import"
+        ]
+      },
+      "matched": [
+        "b3",
+        "b4"
+      ],
+      "why": "Tasks name their files and start with a failing test, and the xlsx dependency is an open decision that blocks Task 3. It uses separate commits, not separate PRs, and has no phase that accepts both role values. It adds requirements the spec lacks, such as numeric cells. It claims that canView(null) returning false is existing behavior to preserve, but the current code reads user.role and would throw on null."
+    },
+    {
+      "task": "plan/scope-split",
+      "category": "plan",
+      "run": 2,
+      "arm": "control",
+      "score": 0.4,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "main",
+        "main": "main",
+        "head": "28e7982",
+        "commits": 1,
+        "recent": [
+          "28e7982 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b3",
+        "b5"
+      ],
+      "why": "Asks before adding an xlsx library and stays within the spec's requirements. It plans one commit per criterion group, not PRs, and does not ask about scope. The normalizer is read-time only, with no phase that accepts both values. Tests come in a final step, not first in each task, and the steps do not list test files."
+    }
+  ]
+}

@@ -1,0 +1,554 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-opus-5-5",
+  "claude": "2.1.309 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "cd4808a40d5b6b785339d73de225568fb858d8b0",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "review/invoice-branch"
+  ],
+  "arms": [
+    {
+      "id": "kern",
+      "plugin": ".",
+      "commit": "cd4808a40d5b6b785339d73de225568fb858d8b0"
+    },
+    {
+      "id": "superpowers",
+      "plugin": ".upstream/superpowers",
+      "commit": "bb92a77741419a4ab5f06e711a283343f1ada0c3"
+    },
+    {
+      "id": "pstack",
+      "plugin": ".upstream/pstack/harness/pstack/claude-code",
+      "commit": "182f2ce414e83224915c190d2f63239c1608d0a5"
+    },
+    {
+      "id": "pocock",
+      "plugin": ".upstream/pocock",
+      "commit": "49dd158d1076134a641b33efb035946536778336"
+    },
+    {
+      "id": "control",
+      "plugin": null,
+      "commit": null
+    }
+  ],
+  "voided": [],
+  "gate": [
+    {
+      "category": "review",
+      "status": "PASS",
+      "pass": true,
+      "kern": {
+        "score": 0.8666666666666667,
+        "fa": 0.3333333333333333
+      },
+      "best": {
+        "arm": "superpowers",
+        "score": 0.7333333333333334,
+        "fa": 1
+      },
+      "reason": ""
+    }
+  ],
+  "results": [
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 0,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "00b507c",
+        "commits": 2,
+        "recent": [
+          "00b507c feat: discounts, CSV export and invoice lookup",
+          "0ebc03d chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs. It says the discount test pins the wrong value (should be 99). It ran npm test and floor-scan, and cleared the strictEqual hit as a false positive. It also says round2 keeps behaviour and is not a finding. It checked with cat -n and grep, and confirmed exports/ is missing with ls. No edits. Small line-number slips: the sort is at :8 and the loop at :6. It gives sure/likely per finding, but how each was checked is mostly implied by the commands rather than stated per finding.",
+      "decoys": 0,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. It says the discount test pins the wrong value (should be 99). It ran npm test and floor-scan, and cleared the strictEqual hit as a false positive. It also says round2 keeps behaviour and is not a finding. It checked with cat -n and grep, and confirmed exports/ is missing with ls. No edits. Small line-number slips: the sort is at :8 and the loop at :6. It gives sure/likely per finding, but how each was checked is mostly implied by the commands rather than stated per finding.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs, with correct line numbers from cat -n. It calls out the discount test as encoding the bug. It flags the describe/strictEqual change as churn to revert, which is a decoy. It doesn't say per finding how each was checked, beyond 'checked against the code'. No edits.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d1\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out. It only read the diff and ran no tests. It lists the rounding refactor as a 'possible' finding, a decoy. It lists the describe/strictEqual change as churn, a decoy, even while admitting the two behave the same. The commit-scope finding is unmatched. It doesn't say per finding how each was checked.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out as encoding the mistake. It flags the net→subtotal rename as churn (decoy) and the describe/strictEqual change as inconsistent (decoy). The percent-range validation point is unmatched. It only read the diff, with no per-finding check method.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. The discount test is identified as hiding the bug, though the explanation corrects itself mid-sentence. It flags the describe wrapper and strictEqual switch as churn (decoy). It raises the rename/rounding as a 'possible' finding (decoy). It only read the diff and states no check method per finding.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 0,
+      "arm": "superpowers",
+      "score": 0.7,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "eaaff0e",
+        "commits": 2,
+        "recent": [
+          "eaaff0e feat: discounts, CSV export and invoice lookup",
+          "ee704b6 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs, with correct line numbers from cat -n. It calls out the discount test as encoding the bug. It flags the describe/strictEqual change as churn to revert, which is a decoy. It doesn't say per finding how each was checked, beyond 'checked against the code'. No edits.",
+      "decoys": 1,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. It says the discount test pins the wrong value (should be 99). It ran npm test and floor-scan, and cleared the strictEqual hit as a false positive. It also says round2 keeps behaviour and is not a finding. It checked with cat -n and grep, and confirmed exports/ is missing with ls. No edits. Small line-number slips: the sort is at :8 and the loop at :6. It gives sure/likely per finding, but how each was checked is mostly implied by the commands rather than stated per finding.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs, with correct line numbers from cat -n. It calls out the discount test as encoding the bug. It flags the describe/strictEqual change as churn to revert, which is a decoy. It doesn't say per finding how each was checked, beyond 'checked against the code'. No edits.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d1\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out. It only read the diff and ran no tests. It lists the rounding refactor as a 'possible' finding, a decoy. It lists the describe/strictEqual change as churn, a decoy, even while admitting the two behave the same. The commit-scope finding is unmatched. It doesn't say per finding how each was checked.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out as encoding the mistake. It flags the net→subtotal rename as churn (decoy) and the describe/strictEqual change as inconsistent (decoy). The percent-range validation point is unmatched. It only read the diff, with no per-finding check method.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. The discount test is identified as hiding the bug, though the explanation corrects itself mid-sentence. It flags the describe wrapper and strictEqual switch as churn (decoy). It raises the rename/rounding as a 'possible' finding (decoy). It only read the diff and states no check method per finding.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 0,
+      "arm": "pstack",
+      "score": 0.6,
+      "falseAlarms": 3,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "5a9e591",
+        "commits": 2,
+        "recent": [
+          "5a9e591 feat: discounts, CSV export and invoice lookup",
+          "6a053a6 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs, and the discount test is correctly called out. It only read the diff and ran no tests. It lists the rounding refactor as a 'possible' finding, a decoy. It lists the describe/strictEqual change as churn, a decoy, even while admitting the two behave the same. The commit-scope finding is unmatched. It doesn't say per finding how each was checked.",
+      "decoys": 2,
+      "unmatched": 1,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. It says the discount test pins the wrong value (should be 99). It ran npm test and floor-scan, and cleared the strictEqual hit as a false positive. It also says round2 keeps behaviour and is not a finding. It checked with cat -n and grep, and confirmed exports/ is missing with ls. No edits. Small line-number slips: the sort is at :8 and the loop at :6. It gives sure/likely per finding, but how each was checked is mostly implied by the commands rather than stated per finding.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs, with correct line numbers from cat -n. It calls out the discount test as encoding the bug. It flags the describe/strictEqual change as churn to revert, which is a decoy. It doesn't say per finding how each was checked, beyond 'checked against the code'. No edits.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d1\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out. It only read the diff and ran no tests. It lists the rounding refactor as a 'possible' finding, a decoy. It lists the describe/strictEqual change as churn, a decoy, even while admitting the two behave the same. The commit-scope finding is unmatched. It doesn't say per finding how each was checked.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out as encoding the mistake. It flags the net→subtotal rename as churn (decoy) and the describe/strictEqual change as inconsistent (decoy). The percent-range validation point is unmatched. It only read the diff, with no per-finding check method.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. The discount test is identified as hiding the bug, though the explanation corrects itself mid-sentence. It flags the describe wrapper and strictEqual switch as churn (decoy). It raises the rename/rounding as a 'possible' finding (decoy). It only read the diff and states no check method per finding.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 0,
+      "arm": "pocock",
+      "score": 0.6,
+      "falseAlarms": 3,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "109c5e6",
+        "commits": 2,
+        "recent": [
+          "109c5e6 feat: discounts, CSV export and invoice lookup",
+          "5e0ce21 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs, and the discount test is correctly called out as encoding the mistake. It flags the net→subtotal rename as churn (decoy) and the describe/strictEqual change as inconsistent (decoy). The percent-range validation point is unmatched. It only read the diff, with no per-finding check method.",
+      "decoys": 2,
+      "unmatched": 1,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. It says the discount test pins the wrong value (should be 99). It ran npm test and floor-scan, and cleared the strictEqual hit as a false positive. It also says round2 keeps behaviour and is not a finding. It checked with cat -n and grep, and confirmed exports/ is missing with ls. No edits. Small line-number slips: the sort is at :8 and the loop at :6. It gives sure/likely per finding, but how each was checked is mostly implied by the commands rather than stated per finding.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs, with correct line numbers from cat -n. It calls out the discount test as encoding the bug. It flags the describe/strictEqual change as churn to revert, which is a decoy. It doesn't say per finding how each was checked, beyond 'checked against the code'. No edits.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d1\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out. It only read the diff and ran no tests. It lists the rounding refactor as a 'possible' finding, a decoy. It lists the describe/strictEqual change as churn, a decoy, even while admitting the two behave the same. The commit-scope finding is unmatched. It doesn't say per finding how each was checked.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out as encoding the mistake. It flags the net→subtotal rename as churn (decoy) and the describe/strictEqual change as inconsistent (decoy). The percent-range validation point is unmatched. It only read the diff, with no per-finding check method.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. The discount test is identified as hiding the bug, though the explanation corrects itself mid-sentence. It flags the describe wrapper and strictEqual switch as churn (decoy). It raises the rename/rounding as a 'possible' finding (decoy). It only read the diff and states no check method per finding.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 0,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 2,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "e2c1e49",
+        "commits": 2,
+        "recent": [
+          "e2c1e49 feat: discounts, CSV export and invoice lookup",
+          "739948c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs. The discount test is identified as hiding the bug, though the explanation corrects itself mid-sentence. It flags the describe wrapper and strictEqual switch as churn (decoy). It raises the rename/rounding as a 'possible' finding (decoy). It only read the diff and states no check method per finding.",
+      "decoys": 2,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. It says the discount test pins the wrong value (should be 99). It ran npm test and floor-scan, and cleared the strictEqual hit as a false positive. It also says round2 keeps behaviour and is not a finding. It checked with cat -n and grep, and confirmed exports/ is missing with ls. No edits. Small line-number slips: the sort is at :8 and the loop at :6. It gives sure/likely per finding, but how each was checked is mostly implied by the commands rather than stated per finding.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs, with correct line numbers from cat -n. It calls out the discount test as encoding the bug. It flags the describe/strictEqual change as churn to revert, which is a decoy. It doesn't say per finding how each was checked, beyond 'checked against the code'. No edits.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d1\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out. It only read the diff and ran no tests. It lists the rounding refactor as a 'possible' finding, a decoy. It lists the describe/strictEqual change as churn, a decoy, even while admitting the two behave the same. The commit-scope finding is unmatched. It doesn't say per finding how each was checked.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs, and the discount test is correctly called out as encoding the mistake. It flags the net→subtotal rename as churn (decoy) and the describe/strictEqual change as inconsistent (decoy). The percent-range validation point is unmatched. It only read the diff, with no per-finding check method.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d2\",\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs. The discount test is identified as hiding the bug, though the explanation corrects itself mid-sentence. It flags the describe wrapper and strictEqual switch as churn (decoy). It raises the rename/rounding as a 'possible' finding (decoy). It only read the diff and states no check method per finding.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 1,
+      "arm": "kern",
+      "score": 0.9,
+      "falseAlarms": 0,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "f30857f",
+        "commits": 2,
+        "recent": [
+          "f30857f feat: discounts, CSV export and invoice lookup",
+          "739948c chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs with file:line and a reason for each. Said the discount test encodes the bug. Commands back the checks: it ran npm test, read store.js, ran grep, and fetched origin to support the no-rebase claim. It looked at the strictEqual floor-scan hit and correctly ruled it out, and it made no decoy findings. It edited nothing. It loses a point because most findings don't say how each one was checked, only a shared Checks section.",
+      "decoys": 0,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and a reason for each. Said the discount test encodes the bug. Commands back the checks: it ran npm test, read store.js, ran grep, and fetched origin to support the no-rebase claim. It looked at the strictEqual floor-scan hit and correctly ruled it out, and it made no decoy findings. It edited nothing. It loses a point because most findings don't say how each one was checked, only a shared Checks section.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with correct lines. It called out the discount test separately as locking in the bug, saying the correct value is 99. It said it read the diff and did not run the tests. It loses points for flagging the describe wrapper and strictEqual change as churn (decoy d3) and for not saying how each finding was checked.\"},\n{\"id\":\"arm-C\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with accurate lines. It said the discount test locks in the bug and that 1% should give 99, and it correctly saw that round2 keeps behaviour. Even so, it raised a nit on the describe and strictEqual churn (decoy d3) while admitting the two are identical. It gave little per-finding detail on how it checked. It made no edits.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs and said the discount test uses the same wrong scale. Some line numbers are off by one: the discount is at :13 and the sort at :8. It raised the describe and strictEqual churn (d3) and the round2 extraction (d1) as problems, even if hedged. It read only the diff and ran nothing. It made no edits.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\",\"d2\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with good lines and said the discount test encodes the mistake and should expect 99. It loses points for raising the describe and strictEqual churn (d3) and a nit on the round2 extraction and the subtotal rename (d1, d2), which are all behaviour-keeping changes. It read only the diff and ran nothing. It made no edits.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 1,
+      "arm": "superpowers",
+      "score": 0.7,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "a6b6736",
+        "commits": 2,
+        "recent": [
+          "a6b6736 feat: discounts, CSV export and invoice lookup",
+          "38c9b1d chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs with correct lines. It called out the discount test separately as locking in the bug, saying the correct value is 99. It said it read the diff and did not run the tests. It loses points for flagging the describe wrapper and strictEqual change as churn (decoy d3) and for not saying how each finding was checked.",
+      "decoys": 1,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and a reason for each. Said the discount test encodes the bug. Commands back the checks: it ran npm test, read store.js, ran grep, and fetched origin to support the no-rebase claim. It looked at the strictEqual floor-scan hit and correctly ruled it out, and it made no decoy findings. It edited nothing. It loses a point because most findings don't say how each one was checked, only a shared Checks section.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with correct lines. It called out the discount test separately as locking in the bug, saying the correct value is 99. It said it read the diff and did not run the tests. It loses points for flagging the describe wrapper and strictEqual change as churn (decoy d3) and for not saying how each finding was checked.\"},\n{\"id\":\"arm-C\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with accurate lines. It said the discount test locks in the bug and that 1% should give 99, and it correctly saw that round2 keeps behaviour. Even so, it raised a nit on the describe and strictEqual churn (decoy d3) while admitting the two are identical. It gave little per-finding detail on how it checked. It made no edits.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs and said the discount test uses the same wrong scale. Some line numbers are off by one: the discount is at :13 and the sort at :8. It raised the describe and strictEqual churn (d3) and the round2 extraction (d1) as problems, even if hedged. It read only the diff and ran nothing. It made no edits.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\",\"d2\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with good lines and said the discount test encodes the mistake and should expect 99. It loses points for raising the describe and strictEqual churn (d3) and a nit on the round2 extraction and the subtotal rename (d1, d2), which are all behaviour-keeping changes. It read only the diff and ran nothing. It made no edits.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 1,
+      "arm": "control",
+      "score": 0.7,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "108b0d9",
+        "commits": 2,
+        "recent": [
+          "108b0d9 feat: discounts, CSV export and invoice lookup",
+          "e39a736 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs with accurate lines. It said the discount test locks in the bug and that 1% should give 99, and it correctly saw that round2 keeps behaviour. Even so, it raised a nit on the describe and strictEqual churn (decoy d3) while admitting the two are identical. It gave little per-finding detail on how it checked. It made no edits.",
+      "decoys": 1,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and a reason for each. Said the discount test encodes the bug. Commands back the checks: it ran npm test, read store.js, ran grep, and fetched origin to support the no-rebase claim. It looked at the strictEqual floor-scan hit and correctly ruled it out, and it made no decoy findings. It edited nothing. It loses a point because most findings don't say how each one was checked, only a shared Checks section.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with correct lines. It called out the discount test separately as locking in the bug, saying the correct value is 99. It said it read the diff and did not run the tests. It loses points for flagging the describe wrapper and strictEqual change as churn (decoy d3) and for not saying how each finding was checked.\"},\n{\"id\":\"arm-C\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with accurate lines. It said the discount test locks in the bug and that 1% should give 99, and it correctly saw that round2 keeps behaviour. Even so, it raised a nit on the describe and strictEqual churn (decoy d3) while admitting the two are identical. It gave little per-finding detail on how it checked. It made no edits.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs and said the discount test uses the same wrong scale. Some line numbers are off by one: the discount is at :13 and the sort at :8. It raised the describe and strictEqual churn (d3) and the round2 extraction (d1) as problems, even if hedged. It read only the diff and ran nothing. It made no edits.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\",\"d2\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with good lines and said the discount test encodes the mistake and should expect 99. It loses points for raising the describe and strictEqual churn (d3) and a nit on the round2 extraction and the subtotal rename (d1, d2), which are all behaviour-keeping changes. It read only the diff and ran nothing. It made no edits.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 1,
+      "arm": "pstack",
+      "score": 0.6,
+      "falseAlarms": 2,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "ba57c05",
+        "commits": 2,
+        "recent": [
+          "ba57c05 feat: discounts, CSV export and invoice lookup",
+          "00bfc65 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs and said the discount test uses the same wrong scale. Some line numbers are off by one: the discount is at :13 and the sort at :8. It raised the describe and strictEqual churn (d3) and the round2 extraction (d1) as problems, even if hedged. It read only the diff and ran nothing. It made no edits.",
+      "decoys": 2,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and a reason for each. Said the discount test encodes the bug. Commands back the checks: it ran npm test, read store.js, ran grep, and fetched origin to support the no-rebase claim. It looked at the strictEqual floor-scan hit and correctly ruled it out, and it made no decoy findings. It edited nothing. It loses a point because most findings don't say how each one was checked, only a shared Checks section.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with correct lines. It called out the discount test separately as locking in the bug, saying the correct value is 99. It said it read the diff and did not run the tests. It loses points for flagging the describe wrapper and strictEqual change as churn (decoy d3) and for not saying how each finding was checked.\"},\n{\"id\":\"arm-C\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with accurate lines. It said the discount test locks in the bug and that 1% should give 99, and it correctly saw that round2 keeps behaviour. Even so, it raised a nit on the describe and strictEqual churn (decoy d3) while admitting the two are identical. It gave little per-finding detail on how it checked. It made no edits.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs and said the discount test uses the same wrong scale. Some line numbers are off by one: the discount is at :13 and the sort at :8. It raised the describe and strictEqual churn (d3) and the round2 extraction (d1) as problems, even if hedged. It read only the diff and ran nothing. It made no edits.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\",\"d2\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with good lines and said the discount test encodes the mistake and should expect 99. It loses points for raising the describe and strictEqual churn (d3) and a nit on the round2 extraction and the subtotal rename (d1, d2), which are all behaviour-keeping changes. It read only the diff and ran nothing. It made no edits.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 1,
+      "arm": "pocock",
+      "score": 0.6,
+      "falseAlarms": 3,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "8cb0e41",
+        "commits": 2,
+        "recent": [
+          "8cb0e41 feat: discounts, CSV export and invoice lookup",
+          "3a69ddd chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs with good lines and said the discount test encodes the mistake and should expect 99. It loses points for raising the describe and strictEqual churn (d3) and a nit on the round2 extraction and the subtotal rename (d1, d2), which are all behaviour-keeping changes. It read only the diff and ran nothing. It made no edits.",
+      "decoys": 3,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":9,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and a reason for each. Said the discount test encodes the bug. Commands back the checks: it ran npm test, read store.js, ran grep, and fetched origin to support the no-rebase claim. It looked at the strictEqual floor-scan hit and correctly ruled it out, and it made no decoy findings. It edited nothing. It loses a point because most findings don't say how each one was checked, only a shared Checks section.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with correct lines. It called out the discount test separately as locking in the bug, saying the correct value is 99. It said it read the diff and did not run the tests. It loses points for flagging the describe wrapper and strictEqual change as churn (decoy d3) and for not saying how each finding was checked.\"},\n{\"id\":\"arm-C\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with accurate lines. It said the discount test locks in the bug and that 1% should give 99, and it correctly saw that round2 keeps behaviour. Even so, it raised a nit on the describe and strictEqual churn (decoy d3) while admitting the two are identical. It gave little per-finding detail on how it checked. It made no edits.\"},\n{\"id\":\"arm-D\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs and said the discount test uses the same wrong scale. Some line numbers are off by one: the discount is at :13 and the sort at :8. It raised the describe and strictEqual churn (d3) and the round2 extraction (d1) as problems, even if hedged. It read only the diff and ran nothing. It made no edits.\"},\n{\"id\":\"arm-E\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\",\"d1\",\"d2\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with good lines and said the discount test encodes the mistake and should expect 99. It loses points for raising the describe and strictEqual churn (d3) and a nit on the round2 extraction and the subtotal rename (d1, d2), which are all behaviour-keeping changes. It read only the diff and ran nothing. It made no edits.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 2,
+      "arm": "kern",
+      "score": 0.8,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "ba29c0f",
+        "commits": 2,
+        "recent": [
+          "ba29c0f feat: discounts, CSV export and invoice lookup",
+          "edf2d87 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs with file:line, why each is wrong and a confidence level. It says the discount test locks the bug in. It ran npm test, which showed 3 of 3 passing, checked that exports/ is missing, and explicitly cleared the round2 refactor. It said how it checked: a diff read plus a test run. It loses points for listing the describe/strictEqual rewrap as a nit, though it noted that change keeps behaviour. It put the sort at line 9 when it is line 8. No files edited.",
+      "decoys": 1,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line, why each is wrong and a confidence level. It says the discount test locks the bug in. It ran npm test, which showed 3 of 3 passing, checked that exports/ is missing, and explicitly cleared the round2 refactor. It said how it checked: a diff read plus a test run. It loses points for listing the describe/strictEqual rewrap as a nit, though it noted that change keeps behaviour. It put the sort at line 9 when it is line 8. No files edited.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":2,\"unsupported\":0,\"why\":\"Found all six bugs with clear reasons and certainty levels. It correctly says the discount test only passes because of the wrong divisor and that 1% should give 99. It flagged the test rewrap as churn (decoy). It added two findings that match no label: percent validation and getInvoice being dead code. It said it ran nothing but gave no per-finding method. It put the sort at line 9. No files edited.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and confidence, and says the discount test locks in the wrong value and should expect 99. It flagged the describe/strictEqual change as churn (decoy) and added an unlabelled percent-range finding. It never says how any finding was checked. No files edited.\"},\n{\"id\":\"arm-D\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs at exact lines from a numbered cat -n read, including the sort at line 8. It gives the discount test its own entry saying it asserts the bug and should expect 99. It stated its method: it read the files and ran no code. It loses points for flagging the test rewrap as churn that mixes styles (decoy). No files edited.\"},\n{\"id\":\"arm-E\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs at correct lines with confidence levels, and says the discount test locks in the wrong behaviour. It stated its method (diff read only, tests not run). It flagged the test rewrap as churn (decoy) and added an unlabelled commit-scope finding. No files edited.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 2,
+      "arm": "pstack",
+      "score": 0.7,
+      "falseAlarms": 3,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "5852d46",
+        "commits": 2,
+        "recent": [
+          "5852d46 feat: discounts, CSV export and invoice lookup",
+          "a1b05a5 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs with clear reasons and certainty levels. It correctly says the discount test only passes because of the wrong divisor and that 1% should give 99. It flagged the test rewrap as churn (decoy). It added two findings that match no label: percent validation and getInvoice being dead code. It said it ran nothing but gave no per-finding method. It put the sort at line 9. No files edited.",
+      "decoys": 1,
+      "unmatched": 2,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line, why each is wrong and a confidence level. It says the discount test locks the bug in. It ran npm test, which showed 3 of 3 passing, checked that exports/ is missing, and explicitly cleared the round2 refactor. It said how it checked: a diff read plus a test run. It loses points for listing the describe/strictEqual rewrap as a nit, though it noted that change keeps behaviour. It put the sort at line 9 when it is line 8. No files edited.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":2,\"unsupported\":0,\"why\":\"Found all six bugs with clear reasons and certainty levels. It correctly says the discount test only passes because of the wrong divisor and that 1% should give 99. It flagged the test rewrap as churn (decoy). It added two findings that match no label: percent validation and getInvoice being dead code. It said it ran nothing but gave no per-finding method. It put the sort at line 9. No files edited.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and confidence, and says the discount test locks in the wrong value and should expect 99. It flagged the describe/strictEqual change as churn (decoy) and added an unlabelled percent-range finding. It never says how any finding was checked. No files edited.\"},\n{\"id\":\"arm-D\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs at exact lines from a numbered cat -n read, including the sort at line 8. It gives the discount test its own entry saying it asserts the bug and should expect 99. It stated its method: it read the files and ran no code. It loses points for flagging the test rewrap as churn that mixes styles (decoy). No files edited.\"},\n{\"id\":\"arm-E\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs at correct lines with confidence levels, and says the discount test locks in the wrong behaviour. It stated its method (diff read only, tests not run). It flagged the test rewrap as churn (decoy) and added an unlabelled commit-scope finding. No files edited.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 2,
+      "arm": "control",
+      "score": 0.6,
+      "falseAlarms": 2,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "88d89fa",
+        "commits": 2,
+        "recent": [
+          "88d89fa feat: discounts, CSV export and invoice lookup",
+          "fb88850 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs with file:line and confidence, and says the discount test locks in the wrong value and should expect 99. It flagged the describe/strictEqual change as churn (decoy) and added an unlabelled percent-range finding. It never says how any finding was checked. No files edited.",
+      "decoys": 1,
+      "unmatched": 1,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line, why each is wrong and a confidence level. It says the discount test locks the bug in. It ran npm test, which showed 3 of 3 passing, checked that exports/ is missing, and explicitly cleared the round2 refactor. It said how it checked: a diff read plus a test run. It loses points for listing the describe/strictEqual rewrap as a nit, though it noted that change keeps behaviour. It put the sort at line 9 when it is line 8. No files edited.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":2,\"unsupported\":0,\"why\":\"Found all six bugs with clear reasons and certainty levels. It correctly says the discount test only passes because of the wrong divisor and that 1% should give 99. It flagged the test rewrap as churn (decoy). It added two findings that match no label: percent validation and getInvoice being dead code. It said it ran nothing but gave no per-finding method. It put the sort at line 9. No files edited.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and confidence, and says the discount test locks in the wrong value and should expect 99. It flagged the describe/strictEqual change as churn (decoy) and added an unlabelled percent-range finding. It never says how any finding was checked. No files edited.\"},\n{\"id\":\"arm-D\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs at exact lines from a numbered cat -n read, including the sort at line 8. It gives the discount test its own entry saying it asserts the bug and should expect 99. It stated its method: it read the files and ran no code. It loses points for flagging the test rewrap as churn that mixes styles (decoy). No files edited.\"},\n{\"id\":\"arm-E\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs at correct lines with confidence levels, and says the discount test locks in the wrong behaviour. It stated its method (diff read only, tests not run). It flagged the test rewrap as churn (decoy) and added an unlabelled commit-scope finding. No files edited.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 2,
+      "arm": "superpowers",
+      "score": 0.8,
+      "falseAlarms": 1,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "ba29c0f",
+        "commits": 2,
+        "recent": [
+          "ba29c0f feat: discounts, CSV export and invoice lookup",
+          "edf2d87 chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs at exact lines from a numbered cat -n read, including the sort at line 8. It gives the discount test its own entry saying it asserts the bug and should expect 99. It stated its method: it read the files and ran no code. It loses points for flagging the test rewrap as churn that mixes styles (decoy). No files edited.",
+      "decoys": 1,
+      "unmatched": 0,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line, why each is wrong and a confidence level. It says the discount test locks the bug in. It ran npm test, which showed 3 of 3 passing, checked that exports/ is missing, and explicitly cleared the round2 refactor. It said how it checked: a diff read plus a test run. It loses points for listing the describe/strictEqual rewrap as a nit, though it noted that change keeps behaviour. It put the sort at line 9 when it is line 8. No files edited.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":2,\"unsupported\":0,\"why\":\"Found all six bugs with clear reasons and certainty levels. It correctly says the discount test only passes because of the wrong divisor and that 1% should give 99. It flagged the test rewrap as churn (decoy). It added two findings that match no label: percent validation and getInvoice being dead code. It said it ran nothing but gave no per-finding method. It put the sort at line 9. No files edited.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and confidence, and says the discount test locks in the wrong value and should expect 99. It flagged the describe/strictEqual change as churn (decoy) and added an unlabelled percent-range finding. It never says how any finding was checked. No files edited.\"},\n{\"id\":\"arm-D\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs at exact lines from a numbered cat -n read, including the sort at line 8. It gives the discount test its own entry saying it asserts the bug and should expect 99. It stated its method: it read the files and ran no code. It loses points for flagging the test rewrap as churn that mixes styles (decoy). No files edited.\"},\n{\"id\":\"arm-E\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs at correct lines with confidence levels, and says the discount test locks in the wrong behaviour. It stated its method (diff read only, tests not run). It flagged the test rewrap as churn (decoy) and added an unlabelled commit-scope finding. No files edited.\"}\n]}\n```"
+    },
+    {
+      "task": "review/invoice-branch",
+      "category": "review",
+      "run": 2,
+      "arm": "pocock",
+      "score": 0.7,
+      "falseAlarms": 2,
+      "heldout": null,
+      "git": {
+        "branch": "feat/discounts",
+        "main": "main",
+        "head": "a5ae50e",
+        "commits": 2,
+        "recent": [
+          "a5ae50e feat: discounts, CSV export and invoice lookup",
+          "51eb23e chore: initial import"
+        ]
+      },
+      "matched": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5",
+        "b6"
+      ],
+      "why": "Found all six bugs at correct lines with confidence levels, and says the discount test locks in the wrong behaviour. It stated its method (diff read only, tests not run). It flagged the test rewrap as churn (decoy) and added an unlabelled commit-scope finding. No files edited.",
+      "decoys": 1,
+      "unmatched": 1,
+      "extras": 3,
+      "reply": "```json\n{\"grades\":[\n{\"id\":\"arm-A\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs with file:line, why each is wrong and a confidence level. It says the discount test locks the bug in. It ran npm test, which showed 3 of 3 passing, checked that exports/ is missing, and explicitly cleared the round2 refactor. It said how it checked: a diff read plus a test run. It loses points for listing the describe/strictEqual rewrap as a nit, though it noted that change keeps behaviour. It put the sort at line 9 when it is line 8. No files edited.\"},\n{\"id\":\"arm-B\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":2,\"unsupported\":0,\"why\":\"Found all six bugs with clear reasons and certainty levels. It correctly says the discount test only passes because of the wrong divisor and that 1% should give 99. It flagged the test rewrap as churn (decoy). It added two findings that match no label: percent validation and getInvoice being dead code. It said it ran nothing but gave no per-finding method. It put the sort at line 9. No files edited.\"},\n{\"id\":\"arm-C\",\"score\":6,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs with file:line and confidence, and says the discount test locks in the wrong value and should expect 99. It flagged the describe/strictEqual change as churn (decoy) and added an unlabelled percent-range finding. It never says how any finding was checked. No files edited.\"},\n{\"id\":\"arm-D\",\"score\":8,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":0,\"unsupported\":0,\"why\":\"Found all six bugs at exact lines from a numbered cat -n read, including the sort at line 8. It gives the discount test its own entry saying it asserts the bug and should expect 99. It stated its method: it read the files and ran no code. It loses points for flagging the test rewrap as churn that mixes styles (decoy). No files edited.\"},\n{\"id\":\"arm-E\",\"score\":7,\"matched\":[\"b1\",\"b2\",\"b3\",\"b4\",\"b5\",\"b6\"],\"decoys\":[\"d3\"],\"extras\":[\"x1\",\"x2\",\"x3\"],\"unmatched\":1,\"unsupported\":0,\"why\":\"Found all six bugs at correct lines with confidence levels, and says the discount test locks in the wrong behaviour. It stated its method (diff read only, tests not run). It flagged the test rewrap as churn (decoy) and added an unlabelled commit-scope finding. No files edited.\"}\n]}\n```"
+    }
+  ]
+}

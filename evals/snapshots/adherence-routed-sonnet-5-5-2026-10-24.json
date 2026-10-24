@@ -1,0 +1,1106 @@
+{
+  "model": "claude-sonnet-5-5",
+  "claude": "2.1.309 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "variant": "routed",
+  "runs": 3,
+  "plugin": "/Users/musta/Code/projects/kern",
+  "kern": {
+    "commit": "cd4808a40d5b6b785339d73de225568fb858d8b0",
+    "dirty": false,
+    "changes": []
+  },
+  "gating": true,
+  "complete": true,
+  "cases": [
+    "row-define",
+    "row-plan",
+    "row-execute-plan",
+    "row-implement",
+    "row-parallel-work",
+    "row-diagnose",
+    "row-prove-it",
+    "row-self-review",
+    "row-recall",
+    "row-technical-writing",
+    "row-context",
+    "pasted-diagnose",
+    "tests-implement",
+    "skip-checks-commit",
+    "neg-casual",
+    "neg-codebase-question",
+    "neg-opt-out",
+    "neg-kern-off",
+    "neg-project-skill",
+    "multi-diagnose"
+  ],
+  "results": [
+    {
+      "id": "row-define",
+      "kind": "positive",
+      "route": "define",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-plan",
+      "kind": "positive",
+      "route": "plan",
+      "passed": 2,
+      "valid": 2,
+      "invalid": 1,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": false,
+          "hops": 0,
+          "before": 0,
+          "todo": null,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [
+            "claude exited 1: no stderr"
+          ],
+          "problem": "claude exited 1: no stderr",
+          "exit": 1,
+          "invalid": true
+        }
+      ]
+    },
+    {
+      "id": "row-execute-plan",
+      "kind": "positive",
+      "route": "execute-plan",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-implement",
+      "kind": "positive",
+      "route": "implement",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-parallel-work",
+      "kind": "positive",
+      "route": "parallel-work",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "the run ended with error_max_turns (is_error)",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-diagnose",
+      "kind": "positive",
+      "route": "diagnose",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-prove-it",
+      "kind": "positive",
+      "route": "prove-it",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "claude exited 1: no stderr",
+          "exit": 1,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "claude exited 1: no stderr",
+          "exit": 1,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-self-review",
+      "kind": "positive",
+      "route": "self-review",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-recall",
+      "kind": "positive",
+      "route": "recall",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-technical-writing",
+      "kind": "positive",
+      "route": "technical-writing",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "row-context",
+      "kind": "positive",
+      "route": "context",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "pasted-diagnose",
+      "kind": "positive",
+      "route": "diagnose",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "tests-implement",
+      "kind": "positive",
+      "route": "implement",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "skip-checks-commit",
+      "kind": "positive",
+      "route": "commit",
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "neg-casual",
+      "kind": "negative",
+      "route": null,
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "neg-codebase-question",
+      "kind": "negative",
+      "route": null,
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "neg-opt-out",
+      "kind": "negative",
+      "route": null,
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "neg-kern-off",
+      "kind": "negative",
+      "route": null,
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "neg-project-skill",
+      "kind": "negative",
+      "route": null,
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": true,
+      "detail": [
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": true,
+          "hops": 0,
+          "before": 0,
+          "todo": false,
+          "todoSteps": null,
+          "notes": [],
+          "reasons": [],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    },
+    {
+      "id": "multi-diagnose",
+      "kind": "multi-turn",
+      "route": "diagnose",
+      "passed": 0,
+      "valid": 3,
+      "invalid": 0,
+      "runs": 3,
+      "pass": false,
+      "detail": [
+        {
+          "pass": false,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [
+            "the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 5, which miss its first step at line 14"
+          ],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": false,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [
+            "the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 12, which miss its first step at line 14"
+          ],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        },
+        {
+          "pass": false,
+          "hops": 1,
+          "before": 0,
+          "todo": false,
+          "todoSteps": false,
+          "notes": [
+            "no todo list"
+          ],
+          "reasons": [
+            "the second task did not read the route again"
+          ],
+          "problem": "",
+          "exit": 0,
+          "invalid": false
+        }
+      ]
+    }
+  ]
+}
