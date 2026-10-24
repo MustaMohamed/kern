@@ -2,7 +2,7 @@
   "category": "diagnose",
   "project": "auth-service",
   "prompts": [
-    "Every token is rejected as expired, even ones issued a minute ago. Find out why and fix it. The test must not depend on the real clock."
+    "Every token is rejected as expired, even ones issued a minute ago. Find out why and fix it. Keep the existing test. Add one that does not depend on the real clock: isExpired takes the current time as an optional second argument, now, in milliseconds."
   ],
   "test": "node --test",
   "visible": "fail",

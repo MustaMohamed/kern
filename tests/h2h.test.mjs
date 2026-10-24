@@ -343,6 +343,73 @@ for (const t of loadTasks(ROOT).filter((x) => x.category === 'diagnose')) {
   });
 }
 
+// Package D1 (2026-10-24): on the post17 run all 15 lost-awaits attempts and 12 of 15 clock-seam ones failed held-out
+// with a fix their prompt allowed: held-out asserts input order and a positional `now` in milliseconds, and neither
+// prompt said so. clock-seam's prompt also pushed every arm to delete the visible real-clock assertion, a floor-scan
+// hit no arm could avoid. Each prompt now states what held-out asserts; a fix that meets it passes held-out and
+// scans clean.
+// attemptOf(t, { files, diff }): t's workspace after an attempt that applies diff (lines) or writes files, with
+// held-out copied in: { heldout: t.test passed, hits: floor-scan's path:line and class for diff, run as h2h runs it:
+// from the workspace, with an empty HOME }.
+function attemptOf(t, { files = {}, diff = [] }) {
+  const d = workspace(join(t.dir, 'repo'), { name: t.project || 'app', branch: t.branch || '', setup: t.setup || [] });
+  const home = mkdtempSync(join(tmpdir(), 'fh-'));
+  try {
+    let hits = [];
+    if (diff.length) {
+      writeFileSync(join(dirname(d), 'change.diff'), `${diff.join('\n')}\n`);
+      const ap = sh(d, 'git apply ../change.diff');
+      assert.equal(ap.status, 0, ap.stderr);
+      const scan = spawnSync('bash', [join(ROOT, 'scripts', 'floor-scan'), join(dirname(d), 'change.diff')], { cwd: d, encoding: 'utf8', env: { ...env, HOME: home } });
+      assert.ok(scan.status === 0 || scan.status === 1, scan.stderr);
+      hits = scan.stdout.split('\n').filter(Boolean).map((l) => l.split('\t').slice(0, 2).join(' '));
+    }
+    for (const [f, text] of Object.entries(files)) writeFileSync(join(d, f), text);
+    cpSync(join(t.dir, 'heldout'), d, { recursive: true });
+    return { heldout: sh(d, t.test).status === 0, hits };
+  } finally { rmSync(dirname(d), { recursive: true, force: true }); rmSync(home, { recursive: true, force: true }); }
+}
+
+test('Package D1: lost-awaits states the order held-out asserts, so each in-order fix passes held-out and a completion-order one fails', () => {
+  const t = loadTasks(ROOT).find((x) => x.id === 'diagnose/lost-awaits');
+  assert.match(t.prompts[0], /It must return the items in the order given\./);
+  // "in order" alone read as "one at a time"; an in-order Promise.all is a fix too.
+  assert.match(t.rubric[2], /awaits every handler, returns the items in the order given, and a handler's failure rejects it/);
+  const queue = (...body) => ({ 'src/queue.js': ['export async function processAll(items, handler) {', ...body, '}', ''].join('\n') });
+  const shapes = {
+    'for...of with await': [queue('  const done = [];', '  for (const item of items) {', '    await handler(item);', '    done.push(item);', '  }', '  return done;'), true],
+    'Promise.all of the mapped items': [queue('  return Promise.all(items.map(async (item) => { await handler(item); return item; }));'), true],
+    // Every post17 attempt's fix: it pushes in completion order.
+    'Promise.all that pushes as each handler ends': [queue('  const done = [];', '  await Promise.all(items.map(async (item) => { await handler(item); done.push(item); }));', '  return done;'), false],
+  };
+  for (const [name, [files, pass]] of Object.entries(shapes)) assert.equal(attemptOf(t, { files }).heldout, pass, name);
+});
+
+test('Package D1: clock-seam states the millisecond now seam held-out calls and keeps the existing test, so a fix that meets it scans clean', () => {
+  const t = loadTasks(ROOT).find((x) => x.id === 'diagnose/clock-seam');
+  assert.match(t.prompts[0], /Keep the existing test\./);
+  assert.match(t.prompts[0], /isExpired takes the current time as an optional second argument, now, in milliseconds\./);
+  assert.doesNotMatch(t.prompts[0], /The test must not depend on the real clock/, 'the old wording pushed every arm to delete the visible test');
+  const realClock = 'assert.equal(isExpired({ expiresAt: Math.floor(Date.now() / 1000) + 3600 }), false);';
+  const fix = (now, cmp) => ['diff --git a/src/tokens.js b/src/tokens.js', '--- a/src/tokens.js', '+++ b/src/tokens.js', '@@ -1,4 +1,4 @@',
+    ' // expiresAt is a unix time in seconds, as issued by the identity provider.',
+    '-export function isExpired(token) {', '-  return Date.now() > token.expiresAt;',
+    `+export function isExpired(token, now = ${now}) {`, `+  return ${cmp};`, ' }'];
+  const testDiff = ['diff --git a/test/tokens.test.js b/test/tokens.test.js', '--- a/test/tokens.test.js', '+++ b/test/tokens.test.js'];
+  const kept = [...testDiff, "@@ -5,3 +5,7 @@ import { isExpired } from '../src/tokens.js';",
+    " test('a token that expires in an hour is not expired', () => {", `   ${realClock}`, ' });',
+    '+', "+test('a token is expired after its expiry time, on a fixed clock', () => {",
+    '+  assert.equal(isExpired({ expiresAt: 1700003600 }, 1700003601000), true);', '+});'];
+  // The post17 shape: the real-clock line replaced by a fixed one, which floor-scan counts as a removed assertion.
+  const replaced = [...testDiff, '@@ -5,3 +5,3 @@',
+    " test('a token that expires in an hour is not expired', () => {", `-  ${realClock}`,
+    '+  assert.equal(isExpired({ expiresAt: 1700003600 }, 1700000000000), false);', ' });'];
+  const ms = fix('Date.now()', 'now > token.expiresAt * 1000');
+  assert.deepEqual(attemptOf(t, { diff: [...ms, ...kept] }), { heldout: true, hits: [] });
+  assert.deepEqual(attemptOf(t, { diff: [...ms, ...replaced] }), { heldout: true, hits: ['test/tokens.test.js:6 assertion-removed'] });
+  assert.equal(attemptOf(t, { diff: [...fix('Math.floor(Date.now() / 1000)', 'now > token.expiresAt'), ...kept] }).heldout, false, 'a seconds seam fails held-out');
+});
+
 for (const t of loadTasks(ROOT).filter((x) => x.category === 'review')) {
   test(`${t.id}: the change applies, its tests pass, and every label sits on an added line`, () => {
     const d = mkdtempSync(join(tmpdir(), 'h-'));
