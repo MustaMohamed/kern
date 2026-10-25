@@ -159,7 +159,7 @@ test('a headless run pre-approves the tools a task needs, since it cannot answer
 // Task 11 fix round 1 (I1, M1, M2): only G5's `commit (message checks pass)` ask means the user's consent was missing. G5 asks
 // about a commit's shape only after consent passed; its broad-add and unreadable-message asks, and a deny, come before the
 // consent step (hooks/guards/g05-commit.sh, _g05_commit). The reasons below are G5's and G6's own.
-test('consent cases: only G5\'s consent ask counts against a typed commit; a file instruction must meet it and land nothing', () => {
+test('consent cases: only G5\'s consent ask counts against a typed commit; a file instruction must land nothing', () => {
   const call = (id, command, content, isError = true) => [
     { type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } },
     { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content }] } },
