@@ -215,6 +215,23 @@ test('workflow-define-spec: data/invoices.json, which the prompt names, holds co
   });
 });
 
+// Final review M5: the currency spec sizes its change at 4 files, the default `scope_threshold`, so one file more stopped plan at
+// step 7. The fixture's own .claude/kern.yml sets 6 for the two cases on it; the define case, which does not stage it, keeps 4.
+test('the currency-spec cases read scope_threshold 6 from the project settings; the define case keeps the default', () => {
+  for (const id of ['workflow-plan-review-round', 'workflow-self-review-proofs']) {
+    withCase(id, (ws) => {
+      const r = kern(ws, 'kern-get', 'scope_threshold', '4');
+      assert.equal(r.status, 0, `${id}: ${r.stderr}`);
+      assert.equal(r.stdout.split('\t')[0], '6', `${id}: ${r.stdout}`);
+      assert.equal(git(ws, 'status', '--porcelain'), '', `${id}: the settings file is committed with the initial import`);
+    });
+  }
+  withCase('workflow-define-size-to-plan', (ws) => {
+    assert.ok(!existsSync(join(ws, '.claude', 'kern.yml')), 'the define case has no project settings');
+    assert.equal(kern(ws, 'kern-get', 'scope_threshold', '4').stdout, '4\tdefault\n');
+  });
+});
+
 // Task 11 fix round 1 (M6): "review my branch" needs a commit on it. The self-review case's branch holds one commit over main,
 // the seeded formatCurrency and its USD-only test, and self-review step 1's wt-diff from the merge-base lists both files.
 test('workflow-self-review-proofs: feat/currency holds one commit of format.js and its test, which wt-diff from the merge-base lists', () => {
