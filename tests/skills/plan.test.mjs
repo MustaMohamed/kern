@@ -24,7 +24,8 @@ test('plan sections and steps', () => {
     '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check', 'gets a spike first', 'prefactor', 'expand, migrate in batches, then contract', "spec's Constraints section",
     'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed',
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
-  assertMaxBytes(SKILL, 6500);
+  // 6,600 since the pilot fix plan's Task 5 (raised from 6,500): step 1 reads pr.max_lines, step 9 writes the Size line.
+  assertMaxBytes(SKILL, 6600);
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
@@ -35,7 +36,8 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   assertContains('skills/plan/references/task-template.md', ['**Files:**', '**Interfaces:**', 'Consumes:', 'Produces:', '**Blocked by:**', '**Acceptance:**', 'Run it to verify it fails', 'Expected:', '`plan-check` fails a task']);
   assertMaxBytes('skills/plan/references/task-template.md', 2200);
   assertHeadings('skills/plan/references/plan-review.md', ['# Plan reviewer brief', '## What to check', '## Calibration', '## Output']);
-  assertMaxBytes('skills/plan/references/plan-review.md', 1400);
+  // 1,450 since the pilot fix plan's Task 5 (raised from 1,400): the States, Size, Non-goals and spike checks.
+  assertMaxBytes('skills/plan/references/plan-review.md', 1450);
 });
 
 test('plan pins its approval, lookup and autopilot rules', () => {
@@ -131,14 +133,14 @@ test('the scope limit is read at step 1, stated only at a scope split or stop wi
   // the first lookups, and step 7 states it only where a scope split or stop needs it, so "under `scope_threshold`
   // (default 4)" goes. "Scope" keeps step 12's "Stop the turn" from reading as such a stop (P3 review, Minor 1).
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Read the limit now with `kern-get scope_threshold 4`.'), s[1]);
+  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Read the limits now with `kern-get scope_threshold 4` and `kern-get pr.max_lines 300`.'), s[1]);
   assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. State the limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
   assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');
   assert.ok(!s[7].includes('(kern-get)'), 'the old source label is gone');
   assert.ok(!s[7].includes('wherever the plan or reply states it'), 'the limit is no longer stated wherever the plan or reply goes');
   assert.ok(!s[7].includes('Read the limit with'), 'step 7 no longer runs the lookup; step 1 does');
   // The default the step passes is the Inputs table's.
-  assertContains(SKILL, ['| `scope_threshold` | 4 files | PR size gate |']);
+  assertContains(SKILL, ['| `scope_threshold`, `pr.max_lines` | 4 files; 300 lines | PR size gate |']);
   // The cuts that paid for these bytes left their text where the steps point: step 3's verify keys in the Inputs
   // table, step 8's Interfaces and Acceptance forms in task-template.md, step 9's header fields in plan-template.md.
   assertContains(SKILL, ['| `test.*`, `typecheck`, `lint`, `build` | detected, source printed | task verify commands |']);
@@ -176,4 +178,13 @@ test('an existing plan goes back to draft before it is updated, so its approval 
   // complete lines. ledger-open now refuses a ledger opened for other plan text; a draft needs a new yes.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[1].includes('A plan for this spec exists: set `status: draft`, then update it in place.'), s[1]);
+});
+
+test('the plan header states its size against both limits, and the review checks states, size and non-goals', () => {
+  // Pilot fix plan Task 5 (MA-254): the picker cells below the fold were a state no plan step read.
+  assertContains('skills/plan/references/plan-template.md', ['**Size:** <n> files and about <n> changed lines (the spec\'s measure), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`.']);
+  assertContains('skills/plan/references/plan-review.md', ["- States: each acceptance line's `States:` reached and checked by a step", '- Size: the Size line over `scope_threshold` or `pr.max_lines`',
+    "- Non-goals: a task that builds what the spec's Never or Not doing lines exclude.", 'a spike first.']);
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[9].includes('Review Focus, the Size line against step 1\'s limits, `execution:` empty'), s[9]);
 });

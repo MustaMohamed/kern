@@ -16,6 +16,8 @@ commits: ask
 
 **Architecture:** two or three sentences.
 
+**Size:** <n> files and about <n> changed lines (the spec's measure), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`. Over either: the split step 7 asks for, or the user's word for one PR.
+
 ## Global Constraints
 
 The spec's Constraints lines (Always, Ask first, Never), verbatim, then one line each for other exact values the spec fixes. Every task's brief includes this section.
