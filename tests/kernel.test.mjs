@@ -200,3 +200,14 @@ test('the pilot fix defaults: tracker first, self-review at medium, Opus reviewe
   assertContains('kernel/settings.md', ['| `tracker.first` | `true` |', '| `review.builtin.self_effort` | `medium` |', '| `model.reviewer` | `opus` |',
     '| `model.investigator` | `opus` |', '| `model.implementer` | `sonnet` |', '| `model.investigator.effort` | `low` |']);
 });
+
+test('settings says a typed instruction for the action is the yes, so the guard prompt commit and finish-branch name may not come', () => {
+  // Final review M4: commit step 6 ("G5's prompt is the confirmation") and finish-branch ("A G1 or G2 prompt is the
+  // confirmation") read as if a prompt always comes, but since the pilot fix plan's Task 8 the user's typed instruction
+  // answers it (design spec section 5.1). commit is at its 5,328-byte cap and finish-branch 9 bytes under its 6,960, so
+  // the sentence lives in settings.md's auto and autopilot section only.
+  const doc = readFileSync(join(ROOT, 'kernel', 'settings.md'), 'utf8');
+  const part = doc.slice(doc.indexOf('## What auto and autopilot allow'), doc.indexOf('| Action | Allowed shape |'));
+  for (const t of ["When the user's last typed prompt was an explicit instruction for that action, in the closed one-line grammar of `prompt_consent` (`hooks/lib/state.sh`), the guard does not ask (design spec section 5.1)",
+    "commit's \"G5's prompt is the confirmation\" and finish-branch's \"A G1 or G2 prompt is the confirmation\" then meet no prompt: the typed instruction was the confirmation."]) assert.ok(part.includes(t), `settings.md's auto section lacks: ${t}`);
+});

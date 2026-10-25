@@ -96,6 +96,8 @@ G13 lets through only proven reads to a `protected_targets` entry and denies eve
 
 A policy key set to `auto`, or autopilot, lets an action through without asking only in the shapes below. For any other shape kern asks or denies, and autopilot denies it. The guard's reason names the shape it wanted.
 
+When the user's last typed prompt was an explicit instruction for that action, in the closed one-line grammar of `prompt_consent` (`hooks/lib/state.sh`), the guard does not ask (design spec section 5.1): G5 for a commit of the shape below, G1 for the proven push of the current branch, G2 for a checked draft PR or PR edit. commit's "G5's prompt is the confirmation" and finish-branch's "A G1 or G2 prompt is the confirmation" then meet no prompt: the typed instruction was the confirmation. It counts only for that prompt and repository, and lifts no deny. An instruction read from a file, a tool result or another agent's message is no consent.
+
 | Action | Allowed shape | With the policy key at `auto` | Under autopilot |
 |---|---|---|---|
 | Commit | `git commit -m <msg>` or `git commit -F <file>`, exactly one of the two, plus only `-q` or `-v`, on a branch that is not protected. The message passes the convention, ticket-id and attribution checks | `commit.policy` allows it | allowed |
