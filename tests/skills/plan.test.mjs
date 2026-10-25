@@ -186,7 +186,8 @@ test('an existing plan goes back to draft before it is updated, so its approval 
 
 test('the plan header states its size against both limits, and the review checks states, size and non-goals', () => {
   // Pilot fix plan Task 5 (MA-254): the picker cells below the fold were a state no plan step read.
-  assertContains('skills/plan/references/plan-template.md', ['**Size:** <n> files and about <n> changed lines (the spec\'s measure), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`.']);
+  // Final review I1: no h2h plan spec has `## Size`, so the header names a fallback, an estimate from the file map.
+  assertContains('skills/plan/references/plan-template.md', ['**Size:** <n> files and about <n> changed lines (the spec\'s `## Size` measure; with none, an estimate from the file map, stated as an estimate), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`.']);
   assertContains('skills/plan/references/plan-review.md', ["- States: each acceptance line's `States:` reached and checked by a step", '- Size: the Size line over `scope_threshold` or `pr.max_lines`',
     "- Non-goals: a task that builds what the spec's Never or Not doing lines exclude.", 'a spike first.']);
   const s = steps(readDoc(SKILL).body);

@@ -16,7 +16,7 @@ commits: ask
 
 **Architecture:** two or three sentences.
 
-**Size:** <n> files and about <n> changed lines (the spec's measure), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`. Over either: the split step 7 asks for, or the user's word for one PR.
+**Size:** <n> files and about <n> changed lines (the spec's `## Size` measure; with none, an estimate from the file map, stated as an estimate), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`. Over either: the split step 7 asks for, or the user's word for one PR.
 
 ## Global Constraints
 
