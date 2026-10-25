@@ -507,7 +507,7 @@ _g16_redirects() {
 # back each one held earlier in the command, as popd does. A variable that holds a path is not read
 # (accepted limit).
 _g16_bash() {
-  local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m sd_f cc_f
+  local cmd t seg words w head inplace seg_s seg_k last nop dd skip anydir reads creads msg m sd_f cc_f sd_tilde hm hv hr hn
   local state=0 settings=0 cc=0 into=0 in_sd=0 dk=1 sd_seen=0 cc_seen=0 cdir mixed all=0
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
@@ -559,6 +559,28 @@ _g16_bash() {
   _G16_SD=${_G16_LO[0]} _G16_SID=${_G16_LO[1]} _G16_HOME=${_G16_LO[2]} cdir=${_G16_LO[3]}
   _G16_CCD=${_G16_LO[4]} _G16_CCP=${_G16_LO[5]} cmd=${_G16_LO[6]}
   _G16_DATA=${_G16_SD%/sessions}
+  # A here-doc body is data to the shell, but an interpreter that reads it (python3 -, node -) runs it as
+  # code, which can write any path it names. When the text names the sessions dir, as written or under ~,
+  # more often than the shell's own view of it does (git_words, which drops the bodies no shell reads), a
+  # body names it: denied as a state write, unless the command holds no | and every body is data to cat,
+  # tee, git or gh (_g16_inert), as a commit message or a PR body is. A path code builds at run time is
+  # not seen.
+  case "$cmd" in
+    *'<<'*)
+      sd_tilde=$_G16_SD
+      case "$_G16_SD" in "$_G16_HOME"/*) sd_tilde="~${_G16_SD#"$_G16_HOME"}" ;; esac
+      for hm in "$_G16_SD" "$sd_tilde"; do
+        case "$cmd" in *"$hm"*) ;; *) continue ;; esac
+        hv=$(set -o pipefail; git_words "$cmd") || { vote deny G16 "$_G16_UNREAD_CMD"; return 0; }
+        hr=${cmd//"$hm"/}
+        hn=${hv//"$hm"/}
+        [ $(((${#cmd} - ${#hr}) / ${#hm})) -gt $(((${#hv} - ${#hn}) / ${#hm})) ] || continue
+        case "$cmd" in *'|'*) ;; *) _g16_inert "$hv" "$cmd" '^(cat|tee|git|gh)$' && continue ;; esac
+        vote deny G16 "$_G16_STATE_CMD"
+        return 0
+      done
+      ;;
+  esac
   _G16_INCC=0
   while IFS= read -r seg; do
     [ -n "$seg" ] || continue
@@ -771,7 +793,7 @@ _g16_glob() {
 # interpreter code that builds a hook path, a script written to disk and then run by name, and any
 # other spelling-level evasion beyond the forms above.
 _g16_hooks() {
-  local cmd t hit=0 failed=0 unread=0 nl=$'\n'
+  local cmd t mode hit=0 failed=0 unread=0 nl=$'\n'
   local -a readings
   cmd=$(ti_get command) || return 0
   _g16_fold "$cmd"
@@ -788,14 +810,29 @@ _g16_hooks() {
       readings[1]=${t//\\$nl/}
       ;;
   esac
+  # Reading 3: the shell's own view (_g16_shell_view), without the bodies of here-docs that no shell
+  # reads. When every body is interpreter code, the view's records get every rule and the readings
+  # above only the literal ones, so code in a `python3 - <<EOF` body that holds a glob or a paren before
+  # a slash is not read as a path the shell expands, while a hook path or a state function the body
+  # names still asks. A glob that interpreter code expands is code that builds a path (accepted limit).
+  mode=full
+  _g16_shell_view "$_G16_F" && mode=literal
   for t in "${readings[@]}"; do
-    _g16_hooks_read "$t"
+    _g16_hooks_read "$t" "$mode"
     case $? in
       0) hit=1 ;;
       2) failed=1 ;;
       3) unread=1 ;;
     esac
   done
+  if [ "$mode" = literal ]; then
+    _g16_hooks_read "$_G16_SV" full
+    case $? in
+      0) hit=1 ;;
+      2) failed=1 ;;
+      3) unread=1 ;;
+    esac
+  fi
   # A reading whose quotes tr could not take out was not read at all (Opus audit A13).
   [ "$unread" = 0 ] || vote deny G16 "$_G16_UNREAD_HOOKS"
   if [ "$hit" = 1 ]; then
@@ -806,11 +843,12 @@ _g16_hooks() {
   return 0
 }
 
-# _g16_hooks_read TEXT: exit 0 when one reading of a command, TEXT, names kern's hook code or a state
-# function (see _g16_hooks), 1 when it does not, 2 when awk could not read it, 3 when tr could not take
-# its quotes out.
+# _g16_hooks_read TEXT [MODE]: exit 0 when one reading of a command, TEXT, names kern's hook code or a
+# state function (see _g16_hooks), 1 when it does not, 2 when awk could not read it, 3 when tr could not
+# take its quotes out. MODE literal matches only the text rule (_G16_HOOK_AWK's hit); full, the default,
+# also reads each word.
 _g16_hooks_read() {
-  local t r w d c last names f ctx=0 inside hit=0
+  local t r w d c last names f ctx=0 inside hit=0 mode=${2:-full}
   # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one _g16_tr
   # pass and only when the text holds one.
   t=${1//\$\'/}
@@ -832,6 +870,10 @@ _g16_hooks_read() {
     esac
   fi
   r=$(printf '%s\n' "$t" | env LC_ALL=C awk "$_G16_HOOK_AWK") || return 2
+  if [ "$mode" = literal ]; then
+    [ "${r%%"$nl"*}" = hit ]
+    return
+  fi
   names=$_G16_HOOK_NAMES
   for f in "$KERN_ROOT"/hooks/lib/*.sh "$KERN_ROOT"/hooks/guards/*.sh; do
     [ -e "$f" ] && names="$names ${f##*/}"
@@ -874,6 +916,41 @@ _g16_hooks_read() {
 $r
 EOT
   [ "$hit" = 1 ]
+}
+
+# _g16_shell_view CMD: sets _G16_SV to CMD's simple commands as git_words splits them, one per line,
+# which leaves out the body of each here-doc that no shell reads as its script. Exit 0 only when every
+# body is code for an interpreter that runs no shell (python, node, ruby, perl or php; _g16_inert).
+# Exit 1, with no view to use, when CMD holds no <<, when git_words fails or prints a $KERN_UNREAD
+# record, or when _g16_inert fails: a cat body could be piped to a shell, so cat bodies keep every rule.
+_g16_shell_view() {
+  case "$1" in *'<<'*) ;; *) return 1 ;; esac
+  _G16_SV=$(set -o pipefail; git_words "$1") || return 1
+  # shellcheck disable=SC2016 # the literal record git_words prints
+  case "$_G16_SV" in *'$KERN_UNREAD'*) return 1 ;; esac
+  _g16_inert "$_G16_SV" "$1" '^(python[0-9.]*|node|nodejs|ruby|perl|php)$'
+}
+
+# _g16_inert VIEW CMD HEADS: exit 0 when no here-doc body in CMD reaches a shell, so each body is data
+# or code for the command that reads it. VIEW is git_words' records of CMD. It needs all of these: every
+# record that holds << has a head, after NAME=value words, quotes and its path, that matches the awk
+# regex HEADS in any case; no line of CMD that holds << also holds |; no record's head starts with $ or
+# holds a backtick ($SHELL -c "$x"); and no record holds a word, by name or path, that is a shell or
+# runs one: sh, bash, zsh, dash, ksh, mksh, yash, fish, csh, tcsh, busybox, eval, source or .
+_g16_inert() {
+  printf '%s\n' "$2" | env LC_ALL=C awk 'index($0, "<<") && index($0, "|") { exit 1 }' || return 1
+  # shellcheck disable=SC2016 # awk text
+  printf '%s\n' "$1" | HEADS=$3 env LC_ALL=C awk '{
+      for (i = 1; i <= NF && $i ~ /^[A-Za-z_][A-Za-z0-9_]*=/; i++) ;
+      h = $i
+      if (h ~ /^\$/ || index(h, "`")) exit 1
+      h = tolower(h); gsub(/["\047\\]/, "", h); sub(/^.*\//, "", h)
+      if (index($0, "<<") && h !~ ENVIRON["HEADS"]) exit 1
+      for (j = 1; j <= NF; j++) {
+        w = tolower($j); gsub(/["\047\\]/, "", w); sub(/^.*\//, "", w)
+        if (w ~ /^(sh|bash|zsh|dash|ksh|mksh|yash|fish|csh|tcsh|busybox|eval|source|\.)$/) exit 1
+      }
+    }'
 }
 
 # _g16_relay: a scheduled or relayed prompt whose text, after leading whitespace, opens with a mode

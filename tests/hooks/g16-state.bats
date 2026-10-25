@@ -966,3 +966,39 @@ EOF
   expect_hook "sed -i '' s/x/y/ $K/hooks/guards/g20-approval.sh" 'sed -i s/x/y/ hooks/guards/g01-git.sh' \
     "cp /tmp/g.sh $K/hooks/guards/g20-approval.sh" 'cd hooks/guards && sed -i s/x/y/ g20-approval.sh'
 }
+
+@test "an interpreter here-doc that edits source files gets no vote: its body is code, not shell words" {
+  # Pilot fix plan Task 9 (MA-254): three python3 - here-doc edits in a worktree asked, because the body words
+  # ed('src/constants/theme.ts',[( and s.index('/**') read as globs after a slash.
+  expect_cmd none "$(printf '%s\n' "python3 - <<'EOF'" 'def ed(p,pairs):' '    s=open(p).read()' \
+      '    for a,b in pairs: s=s.replace(a,b,1)' "    open(p,'w').write(s)" \
+      "ed('src/constants/theme.ts',[('  pillLabel: 1,','  cellLabel: 1,')])" 'EOF' 'npx prettier --write src/')" \
+    "$(printf '%s\n' "python3 - <<'EOF'" "s=open('src/a.ts').read()" "i=s.index('/**')" "open('src/a.ts','w').write(s[:i])" 'EOF')" \
+    "$(printf '%s\n' "node - <<'EOF'" "const f=require('fs');f.writeFileSync('src/b.js',f.readFileSync('src/b.js','utf8').replace(/a(b)*/,'c'))" 'EOF')"
+}
+
+@test "a here-doc body that names a hook or a state function, or that a shell could read, still asks; under autopilot it is denied" {
+  # shellcheck disable=SC2016 # literal $( ), $SHELL and $x
+  expect_hook "$(printf '%s\n' "python3 - <<'EOF'" "open('hooks/prompt-submit','a').write('x')" 'EOF')" \
+    "$(printf '%s\n' "python3 - <<'EOF'" "import os; os.system('state_set test-session autopilot=on')" 'EOF')" \
+    "$(printf '%s\n' 'python3 - <<EOF' 'print("$(ls h*/prompt-submit)")' 'EOF')" \
+    "$(printf '%s\n' 'cat <<EOF | sh' 'bash h*/prompt-submit < j.json' 'EOF')" \
+    "$(printf '%s\n' "cat <<'EOF' | \$SHELL" 'bash h*/prompt-submit < j.json' 'EOF')" \
+    "$(printf '%s\n' "(cat <<'EOF'" 'bash h*/prompt-submit < j.json' 'EOF' ') | parallel')" \
+    "$(printf '%s\n' "x=\$(cat <<'EOF'" 'bash h*/prompt-submit < j.json' 'EOF' ')' '$SHELL -c "$x"')" \
+    "$(printf '%s\n' "python3 - <<'EOF' | sh" "print('bash h*/prompt-submit')" 'EOF')"
+}
+
+@test "a here-doc that writes the session state is denied, by an interpreter or through a shell; a commit message naming it is not" {
+  # shellcheck disable=SC2016 # literal $SHELL and $x
+  expect_cmd deny "$(printf '%s\n' "python3 - <<'EOF'" "open('$S/t1.state','w').write('autopilot: on')" 'EOF')" \
+    "$(printf '%s\n' "node - <<'EOF'" "require('fs').writeFileSync('$S/t1.state','autopilot: on')" 'EOF')" \
+    "$(printf '%s\n' "cat <<'EOF' | sh" "echo on > $S/t1.state" 'EOF')" \
+    "$(printf '%s\n' "x=\$(cat <<'EOF'" "echo on > $S/t1.state" 'EOF' ')' '$SHELL -c "$x"')"
+  export CLAUDE_PLUGIN_DATA="$HOME/data"
+  mkdir -p "$HOME/data/sessions"
+  expect_cmd deny "$(printf '%s\n' "python3 - <<'EOF'" "open('$HOME/data/sessions/t1.state','w').write('x')" 'EOF')" \
+    "$(printf '%s\n' "python3 - <<'EOF'" "open('~/data/sessions/t1.state','w').write('x')" 'EOF')"
+  expect_cmd none "$(printf '%s\n' "git commit -F - <<'EOF'" "fix: G16 guards $HOME/data/sessions/t1.state" 'EOF')" \
+    "$(printf '%s\n' "cat <<'EOF'" "$HOME/data/sessions/t1.state" 'EOF' "cat $HOME/data/sessions/t1.state")"
+}
