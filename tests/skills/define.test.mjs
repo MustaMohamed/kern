@@ -32,7 +32,8 @@ test('define sections, steps, the standing gate and red flags', () => {
   assert.match(s[6], /^6\. Size it now/, 'step 6 sizes, after the restate');
   // 6,900 since the pilot fix plan's Task 4 (raised from 6,500): step 2's tracker read, step 6's files and lines,
   // step 9's route to plan.
-  assertMaxBytes(SKILL, 6900);
+  // 6,950 since the pilot-fix test round's fix (2026-10-25): step 9's line estimate and "whatever `scope_threshold` allows".
+  assertMaxBytes(SKILL, 6950);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -128,7 +129,9 @@ test('define reads the ticket by default, sizes in files and lines, and sends a 
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[2].includes('`none`, set or answered: read no tracker and offer no draft. Else, unless `tracker.first: false`, read the issue, its comments, its parent and its epic before the spec; their rules bind it.'), s[2]);
   assert.ok(s[6].includes('First count the files and the changed lines from your reads, tests included, and say both'), s[6]);
-  assert.ok(s[9].includes("Over 2 files or several independent concerns: Read plan's SKILL.md, whose step 2 decides; else the kernel routes to implement."), s[9]);
+  assert.ok(s[9].includes("Over 2 files, whatever `scope_threshold` allows, or several independent concerns: the next step is plan; Read plan's SKILL.md, whose step 2 decides; else the kernel routes to implement."), s[9]);
+  // Paid round 2026-10-25: a 3-file design went to implement as "under the 4-file limit", and no design gave a line estimate before the yes.
+  assert.ok(s[9].includes('give an in-chat design (approach, files and a changed-line estimate, tests,'), s[9]);
   assertContains(SKILL, ['| `tracker`, `tracker.first` | detected, `true` | issue |']);
   assertContains('skills/define/references/spec-template.md', ['keep only Problem, Size, Constraints, Acceptance criteria and Test seams',
     'Over 2 files, or more than one concern: plan.', 'Then `States:` and each state its proof must show', '`Handles:` and the stable names a check reads']);

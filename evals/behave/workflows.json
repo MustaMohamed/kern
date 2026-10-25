@@ -44,7 +44,7 @@
       "Runs the full test suite after integration and quotes the result" ] },
   { "id": "workflow-define-size-to-plan", "skills": ["define"], "files": ["node-bug", "sum-fixed"], "max_turns": 40,
     "prompts": ["Skip the questions; the design below is decided. Currency totals for the billing service: formatCurrency(amount, code) in a new src/format.js returns the amount with two decimals and the symbol ($ for USD, € for EUR); bin/cli.js takes the code as a third argument, default USD, and writes the total with it; test/format.test.js covers both codes. Design it and ask me for the yes; build nothing yet.",
-      "yes, approved. Write the spec, then stop: name the next step and do not start it."],
+      "yes, approved. Write the spec, name the next step, and end the turn there."],
     "expectations": [
       "Before asking for the yes, states the size: the files the change touches and an estimate of its changed lines",
       "After the yes, writes a spec under .kern/specs whose Size section names the files and a changed-line estimate",

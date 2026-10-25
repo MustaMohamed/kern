@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # self-review
 
-Find what your diff breaks beyond itself and run every cheap check before a PR. A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user's files, and step 3 writes nothing; a request skips a lane only by naming it.
+Find what your diff breaks beyond itself and run every cheap check before a PR. A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user's files, and step 3 writes nothing; a request skips a lane only by naming it, and a small diff skips none.
 
 ## Steps
 
@@ -38,7 +38,7 @@ Resolve each key with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`; exit 
 
 ## Outputs
 
-A chat report: the deterministic output, findings under Standards and Spec, the Declined to judge list, the Cleared and `Untested` lists, the verdict. A findings page when kern's `visual` skill is installed, else say once "visual pages not installed".
+A chat report: the deterministic output, findings under Standards and Spec, each ending in its ruling (`fix`, `ticket` or `reject: <citation>`), the Declined to judge list, the Cleared and `Untested` lists, the verdict. A findings page when kern's `visual` skill is installed, else say once "visual pages not installed".
 
 ## Stops and autopilot
 

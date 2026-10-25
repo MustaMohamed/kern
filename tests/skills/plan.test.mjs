@@ -63,6 +63,9 @@ test('plan pins its approval, lookup and autopilot rules', () => {
     'wt-new <slug> --detach',
   ]);
   assertContains('skills/plan/references/task-template.md', ['as a leading list of numbers or ranges such as `1, 3-4`', 'plan-check parses only that list']);
+  // Paid round 2026-10-25: two of three plans tested both code paths but never named the states `code given` and `no code`.
+  assertContains('skills/plan/references/task-template.md', ["with the spec's exact values, naming each `States:` state it proves by that name"]);
+  assertContains('skills/plan/references/plan-review.md', ["`States:` reached and checked by a step that names it"]);
   assertContains('skills/plan/references/plan-review.md', ['`Verdict: approve | revise`', 'Round 1 only', 'a transcript, not a decision', 'Proportion: a plan several times longer than its spec']);
   assertContains('skills/plan/references/task-template.md', ['a code block only for an algorithm they do not determine', "with the spec's exact values", 'a plan longer than the code it describes has written the code instead', 'Proportion: compare the plan with the spec', 'no step that leaves a decision open']);
   assert.doesNotMatch(readDoc('skills/plan/references/task-template.md').raw, /the real code/, 'a code step records decisions, not the whole body');

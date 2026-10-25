@@ -35,7 +35,8 @@ test('self-review sections and steps', () => {
   // and the ruling per finding.
   // 7,900 since Task 6 fix round 1 (I1): the spec found before proof-check, and its not-run line for a spec with no numbered lines.
   // 7,950 since Task 6 fix round 2 (I1): step 9's `fix first` exempts the proof-check not-run line.
-  assertMaxBytes(SKILL, 7950);
+  // 8,050 since the pilot-fix test round's fix (2026-10-25): "a small diff skips none" and the ruling on each finding in Outputs.
+  assertMaxBytes(SKILL, 8050);
 });
 
 test('self-review exits, order and dispatches', () => {
@@ -205,7 +206,9 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
   // where references/rounds.md names it, under `kern-dir reviews`; the step 3 lane passes no `--fix` and no
   // `--comment`, so it writes nothing; only a skill's own rule or the user's word skips a review (Task 16n, kernel).
   const intro = body.slice(0, body.indexOf('## Steps'));
-  assert.ok(intro.includes('A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user\'s files, and step 3 writes nothing; a request skips a lane only by naming it.'), intro);
+  assert.ok(intro.includes('A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user\'s files, and step 3 writes nothing; a request skips a lane only by naming it, and a small diff skips none.'), intro);
+  // Paid round 2026-10-25: two of three runs skipped proof-check because "the diff is 10 lines", and no run gave each finding its ruling.
+  assert.ok(section(body, '## Outputs').includes('findings under Standards and Spec, each ending in its ruling (`fix`, `ticket` or `reject: <citation>`)'));
   assertContains(`${REF}/rounds.md`, ['`<reviews>` is the output of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir reviews`', "This run's `<package>` is `<reviews>/<slug>-<N+1>.diff`"]);
   assert.ok(steps(body)[3].includes('Never pass `--comment` and never `--fix`.'), 'the step 3 lane writes nothing');
   // The cuts that paid for these bytes left their duties where the steps point: step 2's hit handling in
