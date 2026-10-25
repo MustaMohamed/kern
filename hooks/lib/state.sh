@@ -248,6 +248,11 @@ prompt_consent() {
 # consent_for SID AGENT ACTION: exit 0 only when AGENT is empty (the main session, never a subagent) and
 # the session state's consent line names ACTION. Only prompt-submit writes that line, from the user's last
 # prompt (prompt_consent), and every wrapped prompt clears it. A read that fails is no consent.
+# G16 asks before a CronCreate, ScheduleWakeup or SendMessage whose text reads as consent. Known limits,
+# each needing a hook field Claude Code does not record today: RemoteTrigger's nested body is not checked
+# for consent text (a remote run starts its own session); the desktop app's MCP session tools, which
+# start a session or send it a message, reach no kern guard, the same gap /kern:autopilot has; and a
+# subagent call that carries no agent_type counts as the main session.
 consent_for() {
   local c
   [ -z "$2" ] || return 1

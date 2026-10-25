@@ -1,5 +1,6 @@
 # shellcheck shell=bash
 # G16 mode state: Claude cannot write kern's session state or schedule a prompt that switches it,
+# the user confirms a scheduled or relayed prompt that reads as their consent to a commit, push or PR,
 # and the user confirms every write to a kern settings file or to Claude Code's own settings (in a
 # .claude directory, or $CLAUDE_CONFIG_DIR/settings.json when that is set), every Write, Edit or
 # NotebookEdit whose target resolves under kern's hooks/ directory, and every command that names kern's
@@ -878,9 +879,10 @@ EOT
 # _g16_relay: a scheduled or relayed prompt whose text, after leading whitespace, opens with a mode
 # or autopilot command. A mention later in the text passes. RemoteTrigger keeps its routine prompt
 # inside a nested body and a remote run starts its own session with it, so any mention there counts.
-# The text is lower-cased by _g16_tr; when tr did not run, the call is denied (Opus audit A13).
+# The text is lower-cased by _g16_tr; when tr did not run, the call is denied (Opus audit A13). Each
+# prompt or message, as written, is also read for the user's consent (_g16_consent).
 _g16_relay() {
-  local k t
+  local k t raw
   if [ "$TOOL" = RemoteTrigger ]; then
     _g16_tr lower "$TOOL_INPUT" || { vote deny G16 "the $TOOL $_G16_UNREAD_IN"; return 0; }
     case "${_G16_LO[0]}" in
@@ -890,6 +892,7 @@ _g16_relay() {
   fi
   for k in prompt message; do
     t=$(ti_get "$k") || continue
+    raw=$t
     _g16_tr lower "$t" || { vote deny G16 "the $TOOL $_G16_UNREAD_IN"; return 0; }
     t=${_G16_LO[0]}
     t="${t#"${t%%[![:space:]]*}"}"
@@ -899,7 +902,29 @@ _g16_relay() {
         return 0
         ;;
     esac
+    _g16_consent "$raw"
   done
+}
+
+# _g16_consent TEXT: a CronCreate, ScheduleWakeup or SendMessage prompt or message TEXT that
+# prompt_consent reads as the user's consent to an outward action asks, and is denied under autopilot.
+# Should it fire as a prompt Claude Code does not wrap, prompt-submit would record that consent and G5,
+# G1 or G2 would skip their ask. prompt_consent lower-cases on its own, so TEXT is the text as written.
+# A prompt_consent that fails counts as consent.
+_g16_consent() {
+  local acts why
+  if ! acts=$(printf '%s\n' "$1" | prompt_consent); then
+    why="G16 could not check whether the $TOOL text reads as the user's consent to a commit, push or PR (retry the call)"
+  elif [ -n "$acts" ]; then
+    why="$TOOL carries a prompt that reads as the user's consent to ${acts// /, }; when it fires, G5, G1 or G2 would skip their ask"
+  else
+    return 0
+  fi
+  if [ "$AUTOPILOT" = 1 ]; then
+    vote deny G16 "$why"
+  else
+    vote ask G16 "$why"
+  fi
 }
 
 # _g16_skill: a Skill call to the mode or autopilot skill. The name is lower-cased by _g16_tr; when
