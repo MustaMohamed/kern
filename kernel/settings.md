@@ -32,7 +32,8 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `shared_services` | none: migrations and DB-backed tests overlap | comma list | plan, execute-plan, parallel-work |
 | `parallel.max` | `3` | integer | parallel-work |
 | `scope_threshold` | `4` | files per change before a pause | define, plan, implement, self-review, finish-branch |
-| `pr.max_lines` | `300` | changed lines before a split is proposed | finish-branch |
+| `pr.max_lines` | `300` | changed lines before a split is proposed: insertions plus deletions from `git diff --shortstat`, tests included, or `pr.size_command`'s count | finish-branch |
+| `pr.size_command` | none | command run in the worktree; `{base}` stands for the merge base and `{tree}` for the proven tree; the last number it prints is the line count | finish-branch, help |
 | `test.focused` | detected | command. `{file}` stands for the test path. Where a file cannot be targeted, use `{dir}` for go or `{name}` for cargo | kern-detect, implement, diagnose, prove-it |
 | `test.full` | detected | command | kern-detect, implement, prove-it, finish-branch |
 | `typecheck` | detected | command | kern-detect, implement, prove-it |

@@ -17,7 +17,7 @@ Integrate finished work the user's way. A failure no step handles stops the run:
 3. Base: `<base>` is `base_branch`. `git remote get-url origin` failing means no remote: `<baseref>` is local `<base>`. Else `<baseref>` is `origin/<base>` after `git fetch origin <base>`; if that fails, report "base not refreshed" and ask to use the last fetched one. `git rev-list --left-right --count <baseref>...HEAD` prints behind, then ahead; behind above 0 is stale: offer a rebase per `references/branch-ops.md`.
 4. Prove `test.full` here by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`, then record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Red, or `wt-snap` failing: stop.
 5. Read `${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md` and run it on `<wt>`. Comment hygiene: `skip: no-comments ships in M3`. `fix first`, `split` or no verdict: stop with its report. `rebase first`: handle it as step 3's stale base. `ready`: go on.
-6. Size gate: `git merge-base HEAD <baseref>`, then `git diff --shortstat <merge-base> <tree>` (step 4's tree, so untracked files count). Always run it, even after self-review listed the files: `pr.max_lines` reads its line count. Files changed above `scope_threshold`, or insertions plus deletions above `pr.max_lines`: propose a split alone, no menu before it is answered; stop on yes, go on on no.
+6. Size gate: `git merge-base HEAD <baseref>`, then `git diff --shortstat <merge-base> <tree>` (step 4's tree, so untracked files count). Always run it, even after self-review listed the files: `pr.max_lines` reads its line count. The count is insertions plus deletions in every changed file, tests included; with `pr.size_command` set, run it in `<wt>` with `{base}` as `<merge-base>` and `{tree}` as `<tree>`, and the last number it prints is the count instead (it fails or prints none: say so, keep the shortstat count). Name the count you compare, as `lines: <n> (<measure>)`. Files changed above `scope_threshold`, or a count above `pr.max_lines`: propose a split alone, no menu before it is answered; stop on yes, go on on no.
 7. Show the menu, then wait: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is. Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`. Option 4: report the branch and `<wt>`; stop. Discard only on the typed word `discard`, per `references/discard.md`.
 8. Commit, for options 1 to 3: nothing to commit when `git status --porcelain` prints nothing; else run steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md` on `<wt>`; its stops stop this skill, and its proof is its own, apart from step 4's. Then offer a rebase step 3 put off. A release, if asked: `references/release.md`. Option 1 ends with the short SHA.
 9. Dedup, before any push or PR: `references/push-and-pr.md`, section Dedup.
@@ -32,7 +32,7 @@ Each key: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>` (exit 3: the defau
 |---|---|
 | `base_branch`, `branch.pattern`, `test.full`, `pr.template`, `commit.convention`, `tracker` | detected |
 | `branch.protected`, `deploy.envs` | base plus deploy branches; none |
-| `scope_threshold`, `pr.max_lines` | 4 files; 300 lines |
+| `scope_threshold`, `pr.max_lines`, `pr.size_command` | 4 files; 300 lines; none |
 | `push.policy`, `pr.policy`, `pr.dedup` | `ask`; `draft-after-approval`, read as `ask`; `on` |
 
 ## Outputs

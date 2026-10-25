@@ -45,7 +45,7 @@ test('finish-branch sections, steps and red flags', () => {
     'behind above 0 is stale: offer a rebase per `references/branch-ops.md`.',
     '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'Red, or `wt-snap` failing: stop.',
     '${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md', 'skip: no-comments ships in M3', '`fix first`, `split` or no verdict: stop', '`rebase first`: handle it as step 3\'s stale base', '`ready`: go on.',
-    'git diff --shortstat <merge-base> <tree>', 'untracked files count', 'insertions plus deletions above `pr.max_lines`', 'propose a split alone, no menu before it is answered; stop on yes, go on on no.',
+    'git diff --shortstat <merge-base> <tree>', 'untracked files count', 'or a count above `pr.max_lines`', 'propose a split alone, no menu before it is answered; stop on yes, go on on no.',
     '1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is', 'Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`',
     'typed word `discard`, per `references/discard.md`',
     'nothing to commit', 'steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'its stops stop this skill', 'its proof is its own, apart from step 4\'s',
@@ -63,7 +63,8 @@ test('finish-branch sections, steps and red flags', () => {
     'The remote moved, unless this run rebased. Investigate; never a plain force.']);
   assertNoSubstitution(SKILL);
   // 6,594 since M2b Task 17 (raised from 6,400): a release on request, the tag-only route and the release branch, coverage AD24.
-  assertMaxBytes(SKILL, 6594);
+  // 6,960 since the pilot fix plan's Task 2: the size gate's measure and pr.size_command.
+  assertMaxBytes(SKILL, 6960);
 });
 
 test('branch-ops reference: rebase and the proven-tree check', () => {
@@ -266,4 +267,14 @@ test('finish-branch: a release only when asked, after the commit; its tag only a
     'Asked to tag a merged release: the oldest commit on the base carrying the release subject',
     'Asked for a release on the base branch itself: a release branch is offered']);
   assertContains('skills/help/references/map.md', ["| `finish-branch` | slash | /kern:finish-branch; prove-it's gate for a push, PR or release | Verify, review, then commit, push, draft PR or keep; a release on request, tagged after the merge |"]);
+});
+
+test('finish-branch: the size gate names its measure, and pr.size_command replaces the shortstat count', () => {
+  // Pilot fix plan Task 2 (MA-254): kern counted 641 insertions plus deletions with tests against the project's 317
+  // added lines outside tests, and said neither measure.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[6].includes('The count is insertions plus deletions in every changed file, tests included; with `pr.size_command` set, run it in `<wt>` with `{base}` as `<merge-base>` and `{tree}` as `<tree>`'), s[6]);
+  assert.ok(s[6].includes('(it fails or prints none: say so, keep the shortstat count). Name the count you compare, as `lines: <n> (<measure>)`.'), s[6]);
+  assertContains(SKILL, ['| `scope_threshold`, `pr.max_lines`, `pr.size_command` | 4 files; 300 lines; none |']);
+  assertContains('kernel/settings.md', ['| `pr.size_command` | none |', 'insertions plus deletions from `git diff --shortstat`, tests included']);
 });
