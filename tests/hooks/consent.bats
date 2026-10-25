@@ -29,6 +29,10 @@ decide() {
   run_guard "$(payload PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"}$extra")"
   decision_of "$output"
 }
+# expand NAME ARGS PROMPT_ID: one UserPromptExpansion run of prompt-submit for the typed /NAME ARGS.
+expand() {
+  bash "$(kern_root)/hooks/prompt-submit" <<<"$(payload UserPromptExpansion "\"expansion_type\":\"slash_command\",\"command_name\":\"$1\",\"command_args\":\"$2\",\"command_source\":\"plugin\",\"prompt\":\"/$1 $2\",\"prompt_id\":\"$3\"")" >/dev/null
+}
 # decide_with CMD FIELDS: as decide, with FIELDS (such as ,"prompt_id":"p1") added to the PreToolUse input.
 decide_with() {
   run_guard "$(payload PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"}$2")"
@@ -153,6 +157,40 @@ decide_with() {
   submit "commit" 'p1 x'
   [ -z "$(st consent_prompt)" ]
   [ "$(decide_with "git commit -m 'fix: sum adds'" ',"prompt_id":"p1 x"')" = ask ]
+}
+
+@test "an expansion with no submit before it clears consent; one that follows its own submit keeps it" {
+  # A typed command can fire UserPromptExpansion alone (exec trace of 2026-10-24: /kern:autopilot on).
+  submit "commit" p1
+  expand kern:finish-branch "" p2
+  [ -z "$(st consent)" ]
+  [ "$(decide "git commit -m 'fix: sum adds'")" = ask ]
+  submit "commit" p3
+  expand kern:finish-branch "" ""
+  [ -z "$(st consent)" ]
+  # A submit and its expansion share a prompt_id, so /kern:commit keeps the consent its submit gave.
+  submit "/kern:commit src/sum.js" p4
+  expand kern:commit src/sum.js p4
+  [ "$(st consent)" = commit ]
+  [ "$(decide_with "git commit -m 'fix: sum adds'" ',"prompt_id":"p4"')" = allow ]
+}
+
+@test "consent_key is git's blob id of the root; an empty root or a failed hash gives no consent" {
+  . "$(kern_root)/hooks/lib/settings.sh"
+  . "$(kern_root)/hooks/lib/state.sh"
+  local main
+  main=$(kern_main_root "$R")
+  [ "$(consent_key "$main")" = "$(printf '%s' "$main" | git -C "$main" hash-object --stdin)" ]
+  run consent_key ""
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+  submit "commit"
+  [ "$(st consent_repo)" = "$(consent_key "$main")" ]
+  read_fails git '*hash-object*'
+  submit "commit" p2
+  [ "$(read_failures git)" -ge 1 ]
+  [ -z "$(st consent_repo)" ]
+  [ "$(decide "git commit -m 'fix: sum adds'")" = ask ]
 }
 
 @test "consent typed in one repository allows nothing in another" {

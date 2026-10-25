@@ -733,8 +733,10 @@ EOT
 }
 
 # _g01_upstream_remote DIR CUR REMOTE: REMOTE is the one a push on the user's consent may go to: CUR's
-# configured upstream remote (branch.CUR.remote), or origin when CUR has none. A remote Claude added
-# keeps the ask. A config read that fails is no match.
+# configured upstream remote (branch.CUR.remote), or origin when CUR has none. A push to any other
+# remote keeps the ask. This trusts the repository's remote and branch.CUR.remote config, which no
+# guard protects: `git remote add`, `git remote set-url origin` and `git config branch.CUR.remote` get
+# no vote. The ask this replaces never showed the URL either. A config read that fails is no match.
 _g01_upstream_remote() {
   local up
   up=$(git -C "$1" config --get "branch.$2.remote" 2>/dev/null)

@@ -251,11 +251,16 @@ prompt_consent() {
     }'
 }
 
-# consent_key PATH: a checksum of PATH, cksum's CRC and byte count joined by a dash, so the state names a
-# repository without its blanks. Exit 1, printing nothing, for an empty PATH.
+# consent_key PATH: git's blob id of the text PATH (`git hash-object --stdin`, as scripts/ledger-open
+# hashes), so the state names a repository without its blanks. git runs in PATH, the main worktree, so
+# both hooks hash a root in that repository's own object format. Exit 1, printing nothing, for an empty
+# PATH, a hash that fails or one that is not hex (a substitution whose pipe could not be made).
 consent_key() {
+  local h
   [ -n "$1" ] || return 1
-  printf '%s' "$1" | cksum | env LC_ALL=C awk 'NR == 1 && NF >= 2 { print $1 "-" $2 }'
+  h=$(printf '%s' "$1" | git -C "$1" hash-object --stdin 2>/dev/null) || return 1
+  case "$h" in "" | *[!0123456789abcdef]*) return 1 ;; esac
+  printf '%s\n' "$h"
 }
 
 # consent_for SID AGENT ACTION: exit 0 only when all of these hold:
@@ -264,7 +269,8 @@ consent_key() {
 # - its consent_prompt is set and, when the call carries a prompt_id (KERN_PROMPT_ID), equals it;
 # - its consent_repo is consent_key of KERN_MAIN, the call's main worktree, and neither is empty.
 # Only prompt-submit writes these lines, from the user's last prompt (prompt_consent). Each prompt clears
-# consent as its run starts, and a wrapped prompt leaves it clear. A read that fails is no consent.
+# consent as its run starts; a UserPromptExpansion run keeps it only when its prompt_id is consent_prompt,
+# the submit it follows. A wrapped prompt leaves it clear. A read that fails is no consent.
 # G16 asks before a CronCreate, ScheduleWakeup or SendMessage whose text reads as consent. A host that
 # passes untrusted text as the prompt (claude -p, the SDK) gives that text the user's authority, for
 # consent as for /kern:autopilot. Known limits: RemoteTrigger's nested body is not checked for consent
@@ -272,7 +278,9 @@ consent_key() {
 # session or send it a message, reach the PreToolUse hook (its matcher takes mcp__.*), but no guard reads
 # them: a choice, which leaves the same gap for /kern:autopilot. A subagent call that carries neither
 # agent_type nor agent_id counts as the main session. A message typed while Claude works may not fire
-# UserPromptSubmit, so it may not clear consent; Esc stops a push.
+# UserPromptSubmit, so it may not clear consent; Esc stops a push. G1's push consent trusts the
+# repository's remote and branch.<cur>.remote config, which no guard protects; the ask it replaces
+# never showed the URL either.
 consent_for() {
   local c p r k
   [ -z "$2" ] || return 1

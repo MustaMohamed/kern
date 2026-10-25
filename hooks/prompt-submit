@@ -35,10 +35,16 @@ EVENT=$(json_get hook_event_name) || EVENT=UserPromptSubmit
 SID=$(json_get session_id) || exit 0
 # A new prompt clears the consent the last one gave (G1, G2, G5) before anything below can stop this run:
 # kern off for this cwd, a timeout, a crash. The write at the end of the prompt branch sets it again. A
-# slash command's UserPromptExpansion run is the same prompt and leaves it. A clear that fails changes
-# nothing else; consent_for also binds consent to the prompt's prompt_id and to the repository.
-if [ "$EVENT" != UserPromptExpansion ] && KERN_SF=$(state_file "$SID" 2>/dev/null) && [ -f "$KERN_SF" ]; then
-  state_set "$SID" "consent=" 2>/dev/null
+# slash command's UserPromptExpansion run follows its UserPromptSubmit run with the same prompt_id, so it
+# keeps the consent stored with that id. An expansion with any other prompt_id, or none, clears it: a
+# typed command can fire UserPromptExpansion alone (the exec trace of 2026-10-24 has `/kern:autopilot on`
+# with no submit). A clear that fails changes nothing else; consent_for also binds consent to the
+# prompt's prompt_id and to the repository.
+if KERN_SF=$(state_file "$SID" 2>/dev/null) && [ -f "$KERN_SF" ]; then
+  KERN_EPID=""
+  [ "$EVENT" = UserPromptExpansion ] && { KERN_EPID=$(json_get prompt_id) || KERN_EPID=""; }
+  [ -n "$KERN_EPID" ] && [ "$(state_get "$SID" consent_prompt 2>/dev/null)" = "$KERN_EPID" ] ||
+    state_set "$SID" "consent=" 2>/dev/null
 fi
 CWD=$(json_get cwd) || CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
