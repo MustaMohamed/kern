@@ -32,8 +32,9 @@ start() { run bash "$K/hooks/session-start" <<<"$(payload SessionStart "\"source
 # The rule 7 target for the rendered kernel, measured after Task 16d put every route row in the kernel and
 # Task 16g added the Precedence skip line, the parallel-work row and the "in parallel" clause, and Task 16i the
 # skip line in the Routing opt-out clause. M2b bfix K moved it to rule 7's relocked target: the `Building:` line
-# and the commit clause put the no-settings render with git's hardening line at 5,757.
-TARGET=6191
+# and the commit clause put the no-settings render with git's hardening line at 5,757. The pilot fix plan's
+# Task 4 relocked rule 7 at 6,207 (`scripts/lib/lint-rules.mjs`), and final review M7 moved this target with it.
+TARGET=6207
 
 @test "the rendered kernel stays within the rule 7 target with no settings" {
   start startup
