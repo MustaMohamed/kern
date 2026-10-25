@@ -36,7 +36,8 @@ test('self-review sections and steps', () => {
   // 7,900 since Task 6 fix round 1 (I1): the spec found before proof-check, and its not-run line for a spec with no numbered lines.
   // 7,950 since Task 6 fix round 2 (I1): step 9's `fix first` exempts the proof-check not-run line.
   // 8,050 since the pilot-fix test round's fix (2026-10-25): "a small diff skips none" and the ruling on each finding in Outputs.
-  assertMaxBytes(SKILL, 8050);
+  // 8,250 since its proofs fix: "or a blocker already found, skips nothing" and step 9's pasted-output gate.
+  assertMaxBytes(SKILL, 8250);
 });
 
 test('self-review exits, order and dispatches', () => {
@@ -87,7 +88,7 @@ test('a self-review finding is a defect on a changed line, a nit is a small one,
   // (task-16-h2h-review-diagnosis). The user kept the nit class, limited to real defects ("Keep, but limited").
   const nine = steps(readDoc(SKILL).body)[9];
   // Fix round 1, I1: the definition agrees with the `pre-existing` class, the smell baseline and step 6's callers.
-  for (const s of ['9. Verdict. A finding is a defect on a changed line or at a caller or contract the change breaks: `path:line` and how it fails.',
+  for (const s of ['A finding is a defect on a changed line or at a caller or contract the change breaks: `path:line` and how it fails.',
     // Task 17a P10, D3: "a smell is a `nit`" (the user, 2026-10-22: "Smells are nits") is pinned in the test below
     // Task 16q narrowed `pre-existing` and the nit, and moved style into the Cleared clause (pinned in its test below).
     'the change did not cause goes under `pre-existing`;', 'a `nit` is a real defect too small to block',
@@ -206,7 +207,10 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
   // where references/rounds.md names it, under `kern-dir reviews`; the step 3 lane passes no `--fix` and no
   // `--comment`, so it writes nothing; only a skill's own rule or the user's word skips a review (Task 16n, kernel).
   const intro = body.slice(0, body.indexOf('## Steps'));
-  assert.ok(intro.includes('A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user\'s files, and step 3 writes nothing; a request skips a lane only by naming it, and a small diff skips none.'), intro);
+  assert.ok(intro.includes('A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user\'s files, and step 3 writes nothing. Only a request that names a check or lane skips it. A small diff, or a blocker already found, skips nothing: the fix round needs every failed check and unproven line.'), intro);
+  // Rerun after 5d6e8be: still 0 of 3 ran proof-check. Two said the diff was small enough to read; one, that the
+  // blockers already decided the verdict, so the skipped checks only listed as unfinished. Step 9 now waits for them.
+  assert.ok(steps(body)[9].startsWith('9. Verdict, once each step 2 command has its output pasted; run any missing one first.'), steps(body)[9].slice(0, 120));
   // Paid round 2026-10-25: two of three runs skipped proof-check because "the diff is 10 lines", and no run gave each finding its ruling.
   assert.ok(section(body, '## Outputs').includes('findings under Standards and Spec, each ending in its ruling (`fix`, `ticket` or `reject: <citation>`)'));
   assertContains(`${REF}/rounds.md`, ['`<reviews>` is the output of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir reviews`', "This run's `<package>` is `<reviews>/<slug>-<N+1>.diff`"]);
