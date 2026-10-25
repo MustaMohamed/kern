@@ -25,7 +25,8 @@ test('plan sections and steps', () => {
     'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed',
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
   // 6,600 since the pilot fix plan's Task 5 (raised from 6,500): step 1 reads pr.max_lines, step 9 writes the Size line.
-  assertMaxBytes(SKILL, 6600);
+  // 6,700 since the pilot fix plan's Task 5 fix round: step 7 acts on pr.max_lines and states a limit in chat only.
+  assertMaxBytes(SKILL, 6700);
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
@@ -119,7 +120,7 @@ test('the base names its source, an undetected base is the current branch and is
   assert.ok(tpl.includes('add a regression check that runs the same scenario on base and head, naming the base by branch, never by a SHA no command printed'), 'the template check names the base by branch');
 });
 
-test('the scope limit is read at step 1, stated only at a scope split or stop with its source, and a default is never "your limit"', () => {
+test('the limits are read at step 1, stated in chat only at a scope split or stop with their source, and a default is never "your limit"', () => {
   // 2026-10-23 head-to-head, plan category (task-16-confirming-diagnosis, sections 4 and 6): in 3 of 11 kern task-runs
   // the grader counted "your limit is 4", "against a threshold of 4" and "over the 4-file PR limit" as unsupported.
   // `kern-get scope_threshold` had printed nothing, and the 4 came from the Inputs table, which the grader never sees.
@@ -132,9 +133,12 @@ test('the scope limit is read at step 1, stated only at a scope split or stop wi
   // dropped step 7's `4` in 7 of 9 bfix2 plan runs, and 3 never ran the defaulted call. Step 1 now reads the limit with
   // the first lookups, and step 7 states it only where a scope split or stop needs it, so "under `scope_threshold`
   // (default 4)" goes. "Scope" keeps step 12's "Stop the turn" from reading as such a stop (P3 review, Minor 1).
+  // Pilot fix plan Task 5 fix round (group B review, Important 1 and 2): the header's Size line states both limits in
+  // every plan, so step 7's rule covers chat only, and step 7 splits over `pr.max_lines` as well as `scope_threshold`.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Read the limits now with `kern-get scope_threshold 4` and `kern-get pr.max_lines 300`.'), s[1]);
-  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. State the limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
+  assert.ok(s[7].includes('One PR is one change, within `scope_threshold` files and `pr.max_lines` lines, else stop'), s[7]);
+  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. In chat, state a limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` or `pr.max_lines: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
   assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');
   assert.ok(!s[7].includes('(kern-get)'), 'the old source label is gone');
   assert.ok(!s[7].includes('wherever the plan or reply states it'), 'the limit is no longer stated wherever the plan or reply goes');
