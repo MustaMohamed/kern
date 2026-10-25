@@ -1037,11 +1037,19 @@ EOF
 }
 
 @test "a cat here-doc substitution whose body names the sessions dir is data only to git or gh; to perl, tee or env it is denied" {
-  # The word "$(cat" is exempt only in a record whose head is git or gh. tee would write to the path the body
-  # names; perl -e runs the body; env "$0" -c runs the variable that holds it. Test 15 is the git commit form.
+  # The word "$(cat" is exempt only in a record whose head is git or gh, as a message option's value. tee would
+  # write to the path the body names; perl -e runs the body; env "$0" -c runs the variable that holds it.
+  # Test 15 is the git commit form.
   # shellcheck disable=SC2016 # literal $( ), $0 and $x
   expect_cmd deny "$(printf '%s\n' "perl -e \"\$(cat <<'EOF'" "open(F, '>', '$S/t1.state'); print F 'on';" 'EOF' ')"')" \
     "$(printf '%s\n' "tee \"\$(cat <<'EOF'" "$S/t1.state" 'EOF' ')"')" \
     "$(printf '%s\n' "x=\$(cat <<'EOF'" "echo on > $S/t1.state" 'EOF' ')' 'env "$0" -c "$x"')"
   expect_cmd none "$(printf '%s\n' "gh pr create --title t --body \"\$(cat <<'EOF'" "G16 guards $S/t1.state" 'EOF' ')"')"
+}
+
+@test "a cat here-doc substitution of git or gh that is not a message option's value is denied when its body names the sessions dir" {
+  # git -c takes the body as config, and git runs core.pager through a shell; gh alias set --shell stores it as
+  # a shell alias. Only -m or --message (git) and -b, --body, -t or --title (gh) make the word "$(cat" data.
+  expect_cmd deny "$(printf '%s\n' "git -c \"\$(cat <<'EOF'" "core.pager=echo on > $S/t1.state" 'EOF' ')" log')" \
+    "$(printf '%s\n' "gh alias set --shell x \"\$(cat <<'EOF'" "echo on > $S/t1.state" 'EOF' ')"')"
 }

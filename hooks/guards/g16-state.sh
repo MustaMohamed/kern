@@ -564,9 +564,11 @@ _g16_bash() {
   # more often than the shell's own view of it does (git_words, which drops the bodies no shell reads), a
   # body names it: denied as a state write, unless the command holds no | and every body is data to cat,
   # tee, git or gh (_g16_inert), as a `git commit -F - <<'EOF'` message is. A body passed as
-  # "$(cat <<'EOF' ...)" is data only to git or gh (git commit -m, gh pr create --body): the word "$(cat"
-  # is exempt in a record whose head is git or gh. To any other command, tee included (it would write to
-  # the path the body names), it is denied, as is any other word that holds a $. Not seen (accepted
+  # "$(cat <<'EOF' ...)" is data only as a message option's value (git commit -m, gh pr create --body):
+  # the word "$(cat" is exempt in a git or gh record when the word before it is git's -m or --message, or
+  # gh's -b, --body, -t or --title. Anywhere else, git -c included (git runs core.pager through a shell),
+  # and to any other command, tee included (it would write to the path the body names), it is denied, as
+  # is any other word that holds a $. Not seen (accepted
   # limits): a path code builds at run time, and a script file a body writes that a later record runs by
   # path.
   case "$cmd" in
@@ -950,8 +952,10 @@ _g16_shell_view() {
 # 4. No word of any record holds a $ or a backtick once quotes and backslashes are out (xargs -I{} "$0",
 #    env "$SHELL", awk '{system($0)}'). A $( ) in an unquoted body is a record of its own, its inner
 #    command, so this rule does not read it. The one exemption: a word that strips to exactly $(cat, in a
-#    record whose head matches the awk regex EXEMPT (git or gh in the state-write check, so
-#    git commit -m "$(cat <<'EOF' ...)" stays data). An empty EXEMPT exempts nothing.
+#    record whose head matches the awk regex EXEMPT (git or gh in the state-write check), when the word
+#    just before it, stripped, is a message option: -m or --message for git, -b, --body, -t or --title for
+#    gh. So git commit -m "$(cat <<'EOF' ...)" stays data, and git -c "$(cat <<'EOF' ...)" does not. An
+#    empty EXEMPT exempts nothing.
 # 5. Every << in CMD opens a here-doc with a quoted delimiter: after the <<, an optional - and blanks, the
 #    word starts with ' or ", or with a \ that is not the last character of its line. A <<< here-string is
 #    skipped. Any other run of <, and a << with no such word after it (an unquoted delimiter, whose body
@@ -982,9 +986,14 @@ _g16_inert() {
       if (h ~ /^\$/ || index(h, "`") || index(h, "*") || index(h, "?") || index(h, "[")) exit 1
       h = tolower(h); sub(/^.*\//, "", h)
       if (index($0, "<<") && h !~ ENVIRON["HEADS"]) exit 1
+      pw = ""
       for (j = 1; j <= NF; j++) {
         w = $j; gsub(/["\047\\]/, "", w)
-        if ((index(w, "$") || index(w, "`")) && !(w == "$(cat" && ENVIRON["EXEMPT"] != "" && h ~ ENVIRON["EXEMPT"])) exit 1
+        if (index(w, "$") || index(w, "`")) {
+          mo = (h == "git" && pw ~ /^(-m|--message)$/) || (h == "gh" && pw ~ /^(-b|--body|-t|--title)$/)
+          if (!(w == "$(cat" && ENVIRON["EXEMPT"] != "" && h ~ ENVIRON["EXEMPT"] && mo)) exit 1
+        }
+        pw = w
         w = tolower(w); sub(/^.*\//, "", w)
         if (w ~ /^(sh|bash|zsh|dash|ksh|mksh|yash|fish|csh|tcsh|busybox|eval|source|\.)$/) exit 1
       }
