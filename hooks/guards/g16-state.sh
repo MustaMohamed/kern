@@ -910,16 +910,19 @@ _g16_relay() {
 # prompt_consent reads as the user's consent to an outward action asks, and is denied under autopilot.
 # Should it fire as a prompt Claude Code does not wrap, prompt-submit would record that consent and G5,
 # G1 or G2 would skip their ask. prompt_consent lower-cases on its own, so TEXT is the text as written.
-# A prompt_consent that fails counts as consent.
+# The read ends with a sentinel line, as _g16_tr's does: a prompt_consent that fails, or a substitution
+# whose pipe could not be made (status 0, no output), leaves it out and counts as consent.
 _g16_consent() {
-  local acts why
-  if ! acts=$(printf '%s\n' "$1" | prompt_consent); then
-    why="G16 could not check whether the $TOOL text reads as the user's consent to a commit, push or PR (retry the call)"
-  elif [ -n "$acts" ]; then
-    why="$TOOL carries a prompt that reads as the user's consent to ${acts// /, }; when it fires, G5, G1 or G2 would skip their ask"
-  else
-    return 0
-  fi
+  local out acts why end=.g16-end. nl=$'\n'
+  out=$(printf '%s\n' "$1" | prompt_consent && printf '%s\n' "$end")
+  case "$out" in
+    "$end") return 0 ;;
+    *"$nl$end")
+      acts=${out%"$nl$end"}
+      why="$TOOL carries a prompt that reads as the user's consent to ${acts// /, }; when it fires, G5, G1 or G2 would skip their ask"
+      ;;
+    *) why="G16 could not check whether the $TOOL text reads as the user's consent to a commit, push or PR (retry the call)" ;;
+  esac
   if [ "$AUTOPILOT" = 1 ]; then
     vote deny G16 "$why"
   else

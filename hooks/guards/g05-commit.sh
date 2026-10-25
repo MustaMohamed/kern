@@ -480,7 +480,7 @@ _g05_commit() {
   esac
   # The user's last typed prompt asked for this commit (consent_for): it is the yes this ask would get, for
   # the shape _g05_proven accepts only.
-  if [ "$AUTOPILOT" != 1 ] && [ "$policy" != auto ] && ! consent_for "${SID-}" "${AGENT-}" commit; then
+  if [ "$AUTOPILOT" != 1 ] && [ "$policy" != auto ] && ! consent_for "${SID-}" "${AGENT-}${AGENT_ID-}" commit; then
     vote ask G5 "commit (message checks pass)"
     return 0
   fi

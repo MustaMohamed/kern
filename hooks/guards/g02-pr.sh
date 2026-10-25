@@ -22,7 +22,8 @@ _GH_READY_OPTS="undo/-/b repo/R/v help/h/b"
 _GH_EDIT_OPTS="add-assignee/-/v add-label/-/v add-project/-/v add-reviewer/-/v attach/-/v base/B/v body/b/v \
 body-file/F/v milestone/m/v remove-assignee/-/v remove-label/-/v remove-milestone/-/b remove-project/-/v \
 remove-reviewer/-/v title/t/v repo/R/v help/h/b"
-# The options a consented edit may carry: a new title, and a body from a file G2 can check.
+# The options a consented edit may carry: a new title, and a body from a file G2 can check. Which of
+# them a call may carry depends on the consent (_g02_edit_ok).
 _GH_EDIT_SAFE="title body-file"
 # gh 2.100.0's command groups (`gh help`) and their aliases (`gh help <group>`) that ask when gh runs
 # behind another command (_g02_hidden): all but browse, search and status, which only read or open a
@@ -531,7 +532,7 @@ _g02_create() {
         vote allow G2 "autopilot: draft PR for $cur after dedup"
       elif [ "$policy" = auto ]; then
         vote allow G2 "pr.policy auto: draft PR for $cur"
-      elif consent_for "${SID-}" "${AGENT-}" pr; then
+      elif consent_for "${SID-}" "${AGENT-}${AGENT_ID-}" pr; then
         vote allow G2 "draft PR for $cur: the user's last prompt asked for it"
       else
         vote ask G2 "open a draft PR for $cur"
@@ -552,19 +553,28 @@ _g02_create() {
 }
 
 # _g02_edit_ok IDX: `gh pr edit` at IDX in _GH_RECS may be allowed: not under autopilot (D2), the user's
-# last typed prompt asked to update the PR (consent_for pr-edit), pr.policy is not deny, and the call is
-# _gh_proven with only _GH_EDIT_SAFE options, no argument (the current branch's PR) and a --body-file
-# that passes _gh_file_ok and _g02_body. Anything else falls back to _g02_write's ask.
+# last typed prompt asked to update the PR, pr.policy is not deny, and the call is _gh_proven with no
+# argument (the current branch's PR), at least one of --title and --body-file, and only the options the
+# consent names: both for pr-edit ("update the PR"), --title for pr-title, --body-file for pr-body. A
+# --body-file must pass _gh_file_ok and _g02_body. G2 checks no title for attribution, on create or here.
+# Anything else falls back to _g02_write's ask.
 _g02_edit_ok() {
-  local toks file
+  local toks file safe="" who="${AGENT-}${AGENT_ID-}"
   [ "$AUTOPILOT" != 1 ] || return 1
-  consent_for "${SID-}" "${AGENT-}" pr-edit || return 1
+  consent_for "${SID-}" "$who" pr-edit && safe=$_GH_EDIT_SAFE
+  consent_for "${SID-}" "$who" pr-title && safe="$safe title"
+  consent_for "${SID-}" "$who" pr-body && safe="$safe body-file"
+  [ -n "$safe" ] || return 1
   case "$(policy_for pr)" in ask | auto) ;; *) return 1 ;; esac
   toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_EDIT_OPTS")
-  _gh_proven "$1" "$toks" && _gh_only "$toks" "$_GH_EDIT_SAFE" || return 1
+  _gh_proven "$1" "$toks" && _gh_only "$toks" "$safe" || return 1
   [ -z "$(_gh_pos "$toks")" ] || return 1
-  file=$(_gh_last "$toks" body-file) || file=""
-  [ -z "$file" ] || _gh_file_ok "$file" || return 1
+  if file=$(_gh_last "$toks" body-file); then
+    _gh_file_ok "$file" || return 1
+  else
+    file=""
+    _gh_last "$toks" title >/dev/null || return 1
+  fi
   _g02_body "$file"
 }
 

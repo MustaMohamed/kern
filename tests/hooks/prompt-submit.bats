@@ -368,10 +368,11 @@ run_prompt() {
 @test "a prompt whose hashes cannot be merged into the state leaves the state whole" {
   S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   set_autopilot on
-  # The awk that merges the prompt's hashes into the state.
+  # The awk that merges a write into the state: the consent clear as the run starts, then the prompt's
+  # hashes, each tried twice.
   read_fails awk 'keys=*'
   submit "next task"
-  [ "$(read_failures awk)" -eq 2 ]
+  [ "$(read_failures awk)" -eq 4 ]
   [ "$status" -eq 0 ]
   [ "$(st autopilot)" = on ]
   [ "$(st since)" = 2026-10-12T00:00:00Z ]

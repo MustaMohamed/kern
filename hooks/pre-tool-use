@@ -61,7 +61,7 @@ need settings.sh settings_get settings_unread_why settings_source settings_keys 
 need settings.sh policy_for kern_enabled list_has
 need state.sh state_dir _state_path state_file state_get state_set _state_put now_iso default_voice state_reset
 need state.sh state_ensure autopilot_denied_by autopilot_on
-need state.sh prompt_hashes prompt_consent consent_for
+need state.sh prompt_hashes prompt_consent consent_key consent_for
 need decide.sh vote fail_closed emit_decision
 need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words cmd_mod cmd_plain git_sub cmd_head in_main_checkout
 need gitctx.sh current_branch base_branch_name branch_protected push_targets with_timeout gh_sub word_value word_has
@@ -98,6 +98,12 @@ fi
 TOOL_INPUT=$(json_get_raw tool_input) || case $? in 1) TOOL_INPUT="{}" ;; *) unparseable tool_input ;; esac
 # shellcheck disable=SC2034 # read by guard files
 AGENT=$(json_get agent_type) || case $? in 1) AGENT="" ;; *) unparseable agent_type ;; esac
+# A subagent's call carries agent_id as well; consent_for reads either as a subagent (G1, G2, G5).
+# shellcheck disable=SC2034 # read by the guard files
+AGENT_ID=$(json_get agent_id) || case $? in 1) AGENT_ID="" ;; *) unparseable agent_id ;; esac
+# The prompt this call's turn started from, which consent_for matches to the prompt that gave consent.
+# shellcheck disable=SC2034 # read by consent_for
+KERN_PROMPT_ID=$(json_get prompt_id) || case $? in 1) KERN_PROMPT_ID="" ;; *) unparseable prompt_id ;; esac
 # Monitor runs a shell command from the same `command` key, so every guard reads it as Bash.
 [ "$TOOL" = Monitor ] && TOOL=Bash
 kern_enabled || exit 0

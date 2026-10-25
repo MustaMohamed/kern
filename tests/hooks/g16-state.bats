@@ -285,6 +285,20 @@ expect_cmd() {
   [ "$(read_failures awk)" -ge 1 ]
 }
 
+@test "when the consent read's pipe cannot be made, a relayed prompt asks" {
+  # A substitution whose pipe cannot be made gives status 0 and no output; the read's sentinel line tells
+  # that from text that reads as no consent.
+  local f got
+  for f in json settings state decide; do . "$(kern_root)/hooks/lib/$f.sh"; done
+  . "$(kern_root)/hooks/guards/g16-state.sh"
+  TOOL=CronCreate AUTOPILOT=0
+  got=$(_g16_consent "check CI"; printf '%s' "${_KERN_VOTE:-none}")
+  [ "$got" = none ]
+  got=$(pipe_fails 1 _g16_consent "check CI" 2>/dev/null; printf '%s|%s' "$_KERN_VOTE" "$_KERN_R_ASK")
+  [ -e "$BATS_TEST_TMPDIR/pipe-failed" ]
+  [[ "$got" == "ask|G16: G16 could not check whether the CronCreate text reads as the user's consent"* ]] || false
+}
+
 @test "a Skill call to the mode or autopilot skill is denied; other skills pass" {
   for s in kern:autopilot kern:mode autopilot mode KERN:MODE; do
     run_guard "$(tool_payload Skill "\"skill\":\"$s\",\"args\":\"on\"")" g16

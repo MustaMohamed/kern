@@ -208,15 +208,17 @@ prompt_hashes() {
 }
 
 # prompt_consent: reads the user's prompt on stdin and prints the outward actions it is an explicit
-# instruction for, from commit, push, pr and pr-edit, space-separated, or nothing. Only a prompt of one
-# non-blank line of at most 200 characters counts. Lowercased, its blanks folded and a final run of . or !
-# dropped, the line must be `/kern:commit` (with any arguments), or a list of action phrases joined by
-# `and`, `then`, `,` or `&`, with only `please`, `ok`, `okay`, `yes`, `now`, `go ahead and` or `and`
-# before it and `please` or `now` after it. The phrases: `commit`, `commit it`, `commit this`, `commit the
-# changes` (commit); `push`, `push it`, `push the branch` (push); `open`, `create`, `raise` or `make`, then
-# an optional `a` or `the`, an optional `draft`, then `pr` or `pull request`, and `draft pr` (pr and push);
-# `update` or `edit`, then `the pr` or `the pull request`, then an optional `body`, `description` or `title`
-# (pr-edit). Any other word, a question mark, a digit alone or a second line gives nothing.
+# instruction for, from commit, push, pr, pr-edit, pr-title and pr-body, space-separated, or nothing.
+# Only a prompt of one non-blank line of at most 200 characters counts. Lowercased, its blanks folded and
+# a final run of . or ! dropped, the line must be `/kern:commit` (with any arguments), or a list of action
+# phrases joined by `and`, `then`, `,` or `&`, with only `please`, `ok`, `okay`, `yes`, `now`, `go ahead
+# and` or `and` before it and `please` or `now` after it. The phrases: `commit`, `commit it`, `commit
+# this`, `commit the changes` (commit); `push`, `push it`, `push the branch` (push); `open`, `create`,
+# `raise` or `make`, then an optional `a` or `the`, an optional `draft`, then `pr` or `pull request`, and
+# `draft pr` (pr and push); `update` or `edit`, then `the pr` or `the pull request` (pr-edit: a new title
+# and a body file), with `body` or `description` after it (pr-body: a body file only), or with `title`
+# after it (pr-title: a title only). Any other word, a question mark, a digit alone or a second line
+# gives nothing.
 prompt_consent() {
   env LC_ALL=C awk '
     NF { if (++n > 1) bad = 1; line = $0 }
@@ -233,7 +235,9 @@ prompt_consent() {
         if (p ~ /^commit( it| this| the changes)?$/) a["commit"] = 1
         else if (p ~ /^push( it| the branch)?$/) a["push"] = 1
         else if (p ~ /^((open|create|raise|make)( a| the)?( draft)? (pr|pull request)|draft pr)$/) { a["pr"] = 1; a["push"] = 1 }
-        else if (p ~ /^(update|edit) the (pr|pull request)( body| description| title)?$/) a["pr-edit"] = 1
+        else if (p ~ /^(update|edit) the (pr|pull request)$/) a["pr-edit"] = 1
+        else if (p ~ /^(update|edit) the (pr|pull request) title$/) a["pr-title"] = 1
+        else if (p ~ /^(update|edit) the (pr|pull request) (body|description)$/) a["pr-body"] = 1
         else exit 0
       }
       out = ""
@@ -241,22 +245,44 @@ prompt_consent() {
       if ("push" in a) out = out (out == "" ? "" : " ") "push"
       if ("pr" in a) out = out " pr"
       if ("pr-edit" in a) out = out (out == "" ? "" : " ") "pr-edit"
+      if ("pr-title" in a) out = out (out == "" ? "" : " ") "pr-title"
+      if ("pr-body" in a) out = out (out == "" ? "" : " ") "pr-body"
       if (out != "") print out
     }'
 }
 
-# consent_for SID AGENT ACTION: exit 0 only when AGENT is empty (the main session, never a subagent) and
-# the session state's consent line names ACTION. Only prompt-submit writes that line, from the user's last
-# prompt (prompt_consent), and every wrapped prompt clears it. A read that fails is no consent.
-# G16 asks before a CronCreate, ScheduleWakeup or SendMessage whose text reads as consent. Known limits,
-# each needing a hook field Claude Code does not record today: RemoteTrigger's nested body is not checked
-# for consent text (a remote run starts its own session); the desktop app's MCP session tools, which
-# start a session or send it a message, reach no kern guard, the same gap /kern:autopilot has; and a
-# subagent call that carries no agent_type counts as the main session.
+# consent_key PATH: a checksum of PATH, cksum's CRC and byte count joined by a dash, so the state names a
+# repository without its blanks. Exit 1, printing nothing, for an empty PATH.
+consent_key() {
+  [ -n "$1" ] || return 1
+  printf '%s' "$1" | cksum | env LC_ALL=C awk 'NR == 1 && NF >= 2 { print $1 "-" $2 }'
+}
+
+# consent_for SID AGENT ACTION: exit 0 only when all of these hold:
+# - AGENT, the call's agent_type and agent_id joined, is empty: the main session, never a subagent;
+# - the session state's consent line names ACTION;
+# - its consent_prompt is set and, when the call carries a prompt_id (KERN_PROMPT_ID), equals it;
+# - its consent_repo is consent_key of KERN_MAIN, the call's main worktree, and neither is empty.
+# Only prompt-submit writes these lines, from the user's last prompt (prompt_consent). Each prompt clears
+# consent as its run starts, and a wrapped prompt leaves it clear. A read that fails is no consent.
+# G16 asks before a CronCreate, ScheduleWakeup or SendMessage whose text reads as consent. A host that
+# passes untrusted text as the prompt (claude -p, the SDK) gives that text the user's authority, for
+# consent as for /kern:autopilot. Known limits: RemoteTrigger's nested body is not checked for consent
+# text, since a remote run starts its own session. The desktop app's MCP session tools, which start a
+# session or send it a message, reach the PreToolUse hook (its matcher takes mcp__.*), but no guard reads
+# them: a choice, which leaves the same gap for /kern:autopilot. A subagent call that carries neither
+# agent_type nor agent_id counts as the main session. A message typed while Claude works may not fire
+# UserPromptSubmit, so it may not clear consent; Esc stops a push.
 consent_for() {
-  local c
+  local c p r k
   [ -z "$2" ] || return 1
+  [ -n "${KERN_MAIN-}" ] || return 1
   c=$(state_get "$1" consent 2>/dev/null) || return 1
-  case " $c " in *" $3 "*) return 0 ;; esac
-  return 1
+  case " $c " in *" $3 "*) ;; *) return 1 ;; esac
+  p=$(state_get "$1" consent_prompt 2>/dev/null) || return 1
+  [ -n "$p" ] || return 1
+  [ -z "${KERN_PROMPT_ID-}" ] || [ "$KERN_PROMPT_ID" = "$p" ] || return 1
+  r=$(state_get "$1" consent_repo 2>/dev/null) || return 1
+  k=$(consent_key "$KERN_MAIN") || return 1
+  [ -n "$r" ] && [ "$r" = "$k" ]
 }

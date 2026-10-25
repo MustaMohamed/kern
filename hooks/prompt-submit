@@ -33,6 +33,13 @@ KERN_RSQUO=$(printf '\342\200\231')
 KERN_INPUT=$(cat)
 EVENT=$(json_get hook_event_name) || EVENT=UserPromptSubmit
 SID=$(json_get session_id) || exit 0
+# A new prompt clears the consent the last one gave (G1, G2, G5) before anything below can stop this run:
+# kern off for this cwd, a timeout, a crash. The write at the end of the prompt branch sets it again. A
+# slash command's UserPromptExpansion run is the same prompt and leaves it. A clear that fails changes
+# nothing else; consent_for also binds consent to the prompt's prompt_id and to the repository.
+if [ "$EVENT" != UserPromptExpansion ] && KERN_SF=$(state_file "$SID" 2>/dev/null) && [ -f "$KERN_SF" ]; then
+  state_set "$SID" "consent=" 2>/dev/null
+fi
 CWD=$(json_get cwd) || CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
 export CWD KERN_MAIN
@@ -200,7 +207,8 @@ else
   if wrapped "$TRIM"; then
     case "$TRIM" in "<scheduled-task"*) SCHEDULED=1 ;; esac
     TRIM=""
-    # A wrapped prompt is not the user's: it clears the consent the last typed prompt gave (G1, G2, G5).
+    # A wrapped prompt is not the user's: it keeps the last typed prompt's hashes and clears the consent
+    # that prompt gave (G1, G2, G5), again in case the clear as this run started did not write.
     state_set "$SID" "consent="
   else
     # A later prompt: the state already holds an earlier prompt's hashes, which only this line below writes.
@@ -209,9 +217,14 @@ else
     state_get "$SID" prompt_hashes >/dev/null 2>&1 && ROUTE=1
     # The user's own words, hashed line by line, so G20 can check an approved: quote against them, and the
     # outward actions the prompt is an explicit instruction for, which G1, G2 and G5 take as the consent
-    # they would ask for (prompt_consent). A wrapped prompt is not the user's and records neither; any
-    # other prompt, even an empty one, replaces both.
-    state_set "$SID" "prompt_hashes=$(printf '%s\n' "$TRIM" | prompt_hashes)" "consent=$(printf '%s\n' "$TRIM" | prompt_consent)"
+    # they would ask for (prompt_consent). Consent goes with the prompt's prompt_id (only letters, digits
+    # and dashes; anything else is stored empty) and a checksum of the repository it was typed in, which
+    # consent_for matches. Any prompt that is not wrapped, even an empty one, replaces all of them; a
+    # wrapped prompt keeps the hashes and leaves consent clear.
+    KERN_PID=$(json_get prompt_id) || KERN_PID=""
+    case "$KERN_PID" in *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-]*) KERN_PID="" ;; esac
+    state_set "$SID" "prompt_hashes=$(printf '%s\n' "$TRIM" | prompt_hashes)" "consent=$(printf '%s\n' "$TRIM" | prompt_consent)" \
+      "consent_prompt=$KERN_PID" "consent_repo=$(consent_key "$KERN_MAIN")"
   fi
   case "$TRIM" in
     "" | /mode | /mode[[:space:]]* | /autopilot | /autopilot[[:space:]]*) ROUTE=0 ;;

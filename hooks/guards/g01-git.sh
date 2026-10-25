@@ -732,6 +732,20 @@ EOT
   return 0
 }
 
+# _g01_upstream_remote DIR CUR REMOTE: REMOTE is the one a push on the user's consent may go to: CUR's
+# configured upstream remote (branch.CUR.remote), or origin when CUR has none. A remote Claude added
+# keeps the ask. A config read that fails is no match.
+_g01_upstream_remote() {
+  local up
+  up=$(git -C "$1" config --get "branch.$2.remote" 2>/dev/null)
+  case $? in
+    0) ;;
+    1) up=origin ;;
+    *) return 1 ;;
+  esac
+  [ -n "$up" ] && [ "$3" = "$up" ]
+}
+
 # _g01_push DIR PLAIN WORDS...: force first, then push.policy deny, remote delete, an unknown
 # directory, protected targets and lease pushes; an allow needs _g01_proven. _G01_CROSS is 1 when DIR
 # (where -C leads) is not in this session's repository, as G5's _G05_CROSS: branch_protected and
@@ -867,7 +881,7 @@ EOT
       vote allow G1 "autopilot push of the current branch $cur"
     elif [ "$policy" = auto ]; then
       vote allow G1 "push.policy auto: push $cur"
-    elif consent_for "${SID-}" "${AGENT-}" push; then
+    elif consent_for "${SID-}" "${AGENT-}${AGENT_ID-}" push && _g01_upstream_remote "$dir" "$cur" "$remote"; then
       vote allow G1 "push $cur: the user's last prompt asked for it"
     else
       vote ask G1 "push $cur"
