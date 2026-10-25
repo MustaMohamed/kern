@@ -18,6 +18,12 @@ help/h/b"
 # the body from elsewhere, open an editor or a browser, or name another repo.
 _GH_CREATE_SAFE="title body-file base head draft fill fill-first fill-verbose dry-run no-maintainer-edit"
 _GH_READY_OPTS="undo/-/b repo/R/v help/h/b"
+# gh 2.103.1 `gh pr edit --help`, with the inherited -R and -h.
+_GH_EDIT_OPTS="add-assignee/-/v add-label/-/v add-project/-/v add-reviewer/-/v attach/-/v base/B/v body/b/v \
+body-file/F/v milestone/m/v remove-assignee/-/v remove-label/-/v remove-milestone/-/b remove-project/-/v \
+remove-reviewer/-/v title/t/v repo/R/v help/h/b"
+# The options a consented edit may carry: a new title, and a body from a file G2 can check.
+_GH_EDIT_SAFE="title body-file"
 # gh 2.100.0's command groups (`gh help`) and their aliases (`gh help <group>`) that ask when gh runs
 # behind another command (_g02_hidden): all but browse, search and status, which only read or open a
 # browser. help and version are not listed there either.
@@ -164,6 +170,10 @@ _g02_write() {
   esac
   if [ "$2" = "repo sync" ]; then
     _g02_remote_sync "$1" || return 0
+  fi
+  if [ "$2" = "pr edit" ] && _g02_edit_ok "$1"; then
+    vote allow G2 "gh pr edit of this branch's PR: the user's last prompt asked for it"
+    return 0
   fi
   vote ask G2 "gh $2 is not a gh read kern knows (view, list, status and the like); the user confirms it"
   [ "$AUTOPILOT" = 1 ] && vote deny G2 "gh $2 under autopilot: only gh reads run unattended (D2)"
@@ -521,6 +531,8 @@ _g02_create() {
         vote allow G2 "autopilot: draft PR for $cur after dedup"
       elif [ "$policy" = auto ]; then
         vote allow G2 "pr.policy auto: draft PR for $cur"
+      elif consent_for "${SID-}" "${AGENT-}" pr; then
+        vote allow G2 "draft PR for $cur: the user's last prompt asked for it"
       else
         vote ask G2 "open a draft PR for $cur"
       fi
@@ -537,6 +549,23 @@ _g02_create() {
   fix='kern allows only `gh pr create --draft` alone, from the current branch, with --title, --base, --fill, --fill-first, --fill-verbose, --dry-run, --no-maintainer-edit, --body-file <file in the repo> or --head <current branch>'
   vote ask G2 "draft PR in a shape kern cannot check; $fix"
   [ "$AUTOPILOT" = 1 ] && vote deny G2 "draft PR of an unchecked shape under autopilot; $fix"
+}
+
+# _g02_edit_ok IDX: `gh pr edit` at IDX in _GH_RECS may be allowed: not under autopilot (D2), the user's
+# last typed prompt asked to update the PR (consent_for pr-edit), pr.policy is not deny, and the call is
+# _gh_proven with only _GH_EDIT_SAFE options, no argument (the current branch's PR) and a --body-file
+# that passes _gh_file_ok and _g02_body. Anything else falls back to _g02_write's ask.
+_g02_edit_ok() {
+  local toks file
+  [ "$AUTOPILOT" != 1 ] || return 1
+  consent_for "${SID-}" "${AGENT-}" pr-edit || return 1
+  case "$(policy_for pr)" in ask | auto) ;; *) return 1 ;; esac
+  toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_EDIT_OPTS")
+  _gh_proven "$1" "$toks" && _gh_only "$toks" "$_GH_EDIT_SAFE" || return 1
+  [ -z "$(_gh_pos "$toks")" ] || return 1
+  file=$(_gh_last "$toks" body-file) || file=""
+  [ -z "$file" ] || _gh_file_ok "$file" || return 1
+  _g02_body "$file"
 }
 
 _g02_ready() {

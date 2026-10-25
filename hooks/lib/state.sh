@@ -206,3 +206,52 @@ prompt_hashes() {
     }
     END { print out }'
 }
+
+# prompt_consent: reads the user's prompt on stdin and prints the outward actions it is an explicit
+# instruction for, from commit, push, pr and pr-edit, space-separated, or nothing. Only a prompt of one
+# non-blank line of at most 200 characters counts. Lowercased, its blanks folded and a final run of . or !
+# dropped, the line must be `/kern:commit` (with any arguments), or a list of action phrases joined by
+# `and`, `then`, `,` or `&`, with only `please`, `ok`, `okay`, `yes`, `now`, `go ahead and` or `and`
+# before it and `please` or `now` after it. The phrases: `commit`, `commit it`, `commit this`, `commit the
+# changes` (commit); `push`, `push it`, `push the branch` (push); `open`, `create`, `raise` or `make`, then
+# an optional `a` or `the`, an optional `draft`, then `pr` or `pull request`, and `draft pr` (pr and push);
+# `update` or `edit`, then `the pr` or `the pull request`, then an optional `body`, `description` or `title`
+# (pr-edit). Any other word, a question mark, a digit alone or a second line gives nothing.
+prompt_consent() {
+  env LC_ALL=C awk '
+    NF { if (++n > 1) bad = 1; line = $0 }
+    END {
+      if (bad || n != 1 || length(line) > 200) exit 0
+      s = tolower(line); gsub(/[ \t\r]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); sub(/[.!]+$/, "", s)
+      if (s ~ /^\/kern:commit( |$)/) { print "commit"; exit 0 }
+      while (sub(/^(please|ok|okay|yes|now|go ahead and|and),? /, "", s)) ;
+      while (sub(/,? (please|now)$/, "", s)) ;
+      gsub(/ ?(,|&) ?/, " and ", s); gsub(/ then /, " and ", s); gsub(/( and)+ /, " and ", s)
+      k = split(s, part, / and /)
+      for (i = 1; i <= k; i++) {
+        p = part[i]
+        if (p ~ /^commit( it| this| the changes)?$/) a["commit"] = 1
+        else if (p ~ /^push( it| the branch)?$/) a["push"] = 1
+        else if (p ~ /^((open|create|raise|make)( a| the)?( draft)? (pr|pull request)|draft pr)$/) { a["pr"] = 1; a["push"] = 1 }
+        else if (p ~ /^(update|edit) the (pr|pull request)( body| description| title)?$/) a["pr-edit"] = 1
+        else exit 0
+      }
+      out = ""
+      if ("commit" in a) out = "commit"
+      if ("push" in a) out = out (out == "" ? "" : " ") "push"
+      if ("pr" in a) out = out " pr"
+      if ("pr-edit" in a) out = out (out == "" ? "" : " ") "pr-edit"
+      if (out != "") print out
+    }'
+}
+
+# consent_for SID AGENT ACTION: exit 0 only when AGENT is empty (the main session, never a subagent) and
+# the session state's consent line names ACTION. Only prompt-submit writes that line, from the user's last
+# prompt (prompt_consent), and every wrapped prompt clears it. A read that fails is no consent.
+consent_for() {
+  local c
+  [ -z "$2" ] || return 1
+  c=$(state_get "$1" consent 2>/dev/null) || return 1
+  case " $c " in *" $3 "*) return 0 ;; esac
+  return 1
+}

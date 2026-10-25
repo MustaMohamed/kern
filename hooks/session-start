@@ -56,7 +56,7 @@ need settings.sh settings_get settings_unread_why settings_source settings_keys 
 need settings.sh policy_for kern_enabled list_has
 need state.sh state_dir _state_path state_file state_get state_set _state_put now_iso default_voice state_reset
 need state.sh state_ensure autopilot_denied_by autopilot_on
-need state.sh prompt_hashes
+need state.sh prompt_hashes prompt_consent consent_for
 need render.sh render_template kern_version mode_line autopilot_text settings_summary
 
 # git_note: one line when git is older than 2.31, the first git that reads the GIT_CONFIG_* pairs

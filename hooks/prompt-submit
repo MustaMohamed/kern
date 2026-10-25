@@ -200,15 +200,18 @@ else
   if wrapped "$TRIM"; then
     case "$TRIM" in "<scheduled-task"*) SCHEDULED=1 ;; esac
     TRIM=""
+    # A wrapped prompt is not the user's: it clears the consent the last typed prompt gave (G1, G2, G5).
+    state_set "$SID" "consent="
   else
     # A later prompt: the state already holds an earlier prompt's hashes, which only this line below writes.
     # state_reset (startup, /clear) writes none, so a session's first prompt finds none, and a resumed
     # session's next prompt is a later one. A read that fails counts as a first prompt.
     state_get "$SID" prompt_hashes >/dev/null 2>&1 && ROUTE=1
-    # The user's own words, hashed line by line, so G20 can check an approved: quote against them. A
-    # wrapped prompt is not the user's and records nothing; any other prompt, even an empty one,
-    # replaces the last one's lines.
-    state_set "$SID" "prompt_hashes=$(printf '%s\n' "$TRIM" | prompt_hashes)"
+    # The user's own words, hashed line by line, so G20 can check an approved: quote against them, and the
+    # outward actions the prompt is an explicit instruction for, which G1, G2 and G5 take as the consent
+    # they would ask for (prompt_consent). A wrapped prompt is not the user's and records neither; any
+    # other prompt, even an empty one, replaces both.
+    state_set "$SID" "prompt_hashes=$(printf '%s\n' "$TRIM" | prompt_hashes)" "consent=$(printf '%s\n' "$TRIM" | prompt_consent)"
   fi
   case "$TRIM" in
     "" | /mode | /mode[[:space:]]* | /autopilot | /autopilot[[:space:]]*) ROUTE=0 ;;

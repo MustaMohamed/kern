@@ -867,6 +867,8 @@ EOT
       vote allow G1 "autopilot push of the current branch $cur"
     elif [ "$policy" = auto ]; then
       vote allow G1 "push.policy auto: push $cur"
+    elif consent_for "${SID-}" "${AGENT-}" push; then
+      vote allow G1 "push $cur: the user's last prompt asked for it"
     else
       vote ask G1 "push $cur"
     fi

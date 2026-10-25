@@ -61,7 +61,7 @@ need settings.sh settings_get settings_unread_why settings_source settings_keys 
 need settings.sh policy_for kern_enabled list_has
 need state.sh state_dir _state_path state_file state_get state_set _state_put now_iso default_voice state_reset
 need state.sh state_ensure autopilot_denied_by autopilot_on
-need state.sh prompt_hashes
+need state.sh prompt_hashes prompt_consent consent_for
 need decide.sh vote fail_closed emit_decision
 need gitctx.sh git_words _subst_bodies _split_words _shell_words _cmd_words cmd_mod cmd_plain git_sub cmd_head in_main_checkout
 need gitctx.sh current_branch base_branch_name branch_protected push_targets with_timeout gh_sub word_value word_has

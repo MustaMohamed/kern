@@ -478,15 +478,19 @@ _g05_commit() {
       return 0
       ;;
   esac
-  if [ "$AUTOPILOT" != 1 ] && [ "$policy" != auto ]; then
+  # The user's last typed prompt asked for this commit (consent_for): it is the yes this ask would get, for
+  # the shape _g05_proven accepts only.
+  if [ "$AUTOPILOT" != 1 ] && [ "$policy" != auto ] && ! consent_for "${SID-}" "${AGENT-}" commit; then
     vote ask G5 "commit (message checks pass)"
     return 0
   fi
   if _g05_proven "$1" "$toks"; then
     if [ "$AUTOPILOT" = 1 ]; then
       vote allow G5 "autopilot commit: message checks pass"
-    else
+    elif [ "$policy" = auto ]; then
       vote allow G5 "commit.policy auto: message checks pass"
+    else
+      vote allow G5 "commit: the user's last prompt asked for it; message checks pass"
     fi
     return 0
   fi
