@@ -1,0 +1,133 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.310 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "09cada4e90bcb8d9421b5603fd28ad24563c58ff",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "workflow-self-review-proofs"
+  ],
+  "results": [
+    {
+      "id": "workflow-self-review-proofs",
+      "source": "evals/behave/workflows.json",
+      "checks": {},
+      "passed": 2,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 9 ran `bash .../scripts/proof-check .kern/specs/currency.md .kern/reviews/feat-currency-1.proofs.md`, and the proofs file was written in step 8."
+            },
+            {
+              "pass": true,
+              "evidence": "proof-check output: `unproven: 2 -`, `unproven: 3 code given`, `unproven: 3 no code`. The reply repeats this: `Unproven: line 2, line 3 code given, line 3 no code`."
+            },
+            {
+              "pass": true,
+              "evidence": "Finding 1: `src/format.js:3` doesn't throw for an unknown currency, which spec line 2 requires. `formatCurrency(5,'XYZ')` returns `\"?5.00\"`. Ruling: `fix`."
+            },
+            {
+              "pass": true,
+              "evidence": "All four findings end in `Ruling: fix`. Each is a fix ruling with no cited-line rejection and no ticket."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply opens with `**Verdict: fix first.**` and never says ready or mergeable. The unproven lines and the unset test.focused are both reported as blocking."
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write went to `.kern/reviews/feat-currency-1.proofs.md`. No Edit or Write touched src/, bin/ or test/. The reply says `I changed no source file.`"
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The final reply says: \"`proof-check` was not run. I did not write the proofs file, and a skipped check counts as failed.\" No proof-check call appears in the tool calls."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply reports \"Criterion 3 is not implemented... Running `node bin/cli.js 2 3 EUR` wrote `5` to total.txt, where the spec wants `€5.00`\". It also lists \"Tests are missing for two of the three criteria\" and \"The `EUR` case and the default-to-USD path\" as untested. These are states with no proof."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply says: \"Criterion 2 is violated. `src/format.js:3` has `SYMBOLS[code] ?? '?'`. `formatCurrency(5, 'XYZ')` returned `?5.00`... The spec requires a throw with the message `unknown currency XYZ`... Ruling: fix.\""
+            },
+            {
+              "pass": false,
+              "evidence": "The three blockers each end in \"Ruling: fix\". The \"Should-fix\" item (default currency untested) has no ruling line. The unknown-code CLI handling is listed under \"Declined to judge\" rather than given fix, reject or ticket."
+            },
+            {
+              "pass": true,
+              "evidence": "The reply opens with \"**Verdict: fix first.**\" and never says ready or that the branch can merge. It says the branch \"doesn't match the approved spec\"."
+            },
+            {
+              "pass": true,
+              "evidence": "The tool calls are Read and Bash only, with no Write or Edit. The Bash commands create .kern/reviews, and one runs `rm -f total.txt`. None edit src/, bin/ or test/. The reply says \"I changed no source file.\""
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 10 Write created feat-currency-1.diff.proofs.md; step 11: `bash .../proof-check .kern/specs/currency.md .kern/reviews/feat-currency-1.diff.proofs.md; echo proof-check=$?` returned `unproven: 3 no code`."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"`proof-check` against the spec: exit 1. Output was `no evidence: …proofs.md:7` and `unproven: 3 no code`.\" The proofs file also lists criterion 3 (the cli lines) and criterion 2 as `none`."
+            },
+            {
+              "pass": true,
+              "evidence": "Blocker 2: \"`src/format.js:3` returns `?5.00` for an unknown code instead of throwing (criterion 2)... The spec requires an error with the message `unknown currency XYZ`... Ruling: fix.\""
+            },
+            {
+              "pass": true,
+              "evidence": "Each finding has a ruling: both blockers \"Ruling: fix\", should-fix \"Ruling: fix\", negative/non-number amount nit \"Ruling: ticket\", and the default-code nit \"Ruling: reject, since the spec puts the default in the CLI.\" The reject cites no spec line, but fix and ticket rulings are present for the rest."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply opens \"**Verdict: fix first.** The branch does not meet the approved spec.\" It never says ready or mergeable, and it lists the unproven line 3 and the unmet criteria as blockers."
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write was to .kern/reviews/feat-currency-1.diff.proofs.md. No Edit calls appear, and the final reply says \"I changed no source file.\" The subagent only used Read."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}
