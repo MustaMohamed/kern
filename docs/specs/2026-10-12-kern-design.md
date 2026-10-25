@@ -137,7 +137,7 @@ kern/
 
 | Hook | Matcher | Emits | Budget |
 |---|---|---|---|
-| SessionStart | `startup\|clear\|compact` | Rendered kernel, active mode rules, settings summary | Target 6,191 chars (measured after M2b bfix K); lint error at 9,000; Claude Code's cap is 10,000 |
+| SessionStart | `startup\|clear\|compact` | Rendered kernel, active mode rules, settings summary | Target 6,207 chars (measured after the pilot fix plan's Task 4); lint error at 9,000; Claude Code's cap is 10,000 |
 | SubagentStart | all | Subagent kernel and the active voice, injected once at launch | 1,200 chars (Claude Code's cap is 10,000) |
 | UserPromptSubmit | each prompt after a session's first | The routing reminder (section 4.3) | 112 chars per later prompt; none on a first prompt, so the standing cost is unchanged |
 | UserPromptSubmit | each prompt with quick or waiver words, a session's first included | The Building line (section 4.3; M2b bfix2 U, the user's "Hook line (Recommended)", 2026-10-24) | 313 chars, only on a matching prompt; no kernel or skill bytes, and the standing-cost session's one-word prompt does not match |
@@ -159,7 +159,7 @@ Rendering fills `{VERSION}` from `plugin.json`, `{ROOT}` with the absolute plugi
 | Settings summary | 600 | Resolved keys that differ from defaults |
 | Total | 3,960 | |
 
-The chars above are the design split. Since Task 16d put every row in the kernel and renders kern paths absolute, lint rule 7's measurement is the gate: 5,315 chars with no settings and 5,756 with the longest fixture settings, the plugin root counted as a 52-character installed path. Task 16g added 389 chars to both: the Precedence line on how far the user's skip reaches and which safety defaults it leaves standing (section 5.1), the parallel-work row, and the several-matches clause that sends a typed "in parallel" through parallel-work after define and diagnose. Task 16i added 89: the Routing opt-out clause that skips only the routes the user named and carries the skip line (section 4.3). Task 16n added 63: the skip-idiom sentence says only the user's word skips a review, never kern's own judgement (section 4.3), so 5,378 and 5,819; its review fixes added 22 by naming a skill's own rule beside the user's word, so 5,400 and 5,841. Rule 7's comment in `scripts/lib/lint-rules.mjs` holds the later steps. M2b bfix K added the `Building:` line (126 chars) and the commit clause (105 rendered chars), less a lossless cut of 6, so rule 7 locks 6,191 chars with the longest fixture settings and a standing cost of 6,280.
+The chars above are the design split. Since Task 16d put every row in the kernel and renders kern paths absolute, lint rule 7's measurement is the gate: 5,315 chars with no settings and 5,756 with the longest fixture settings, the plugin root counted as a 52-character installed path. Task 16g added 389 chars to both: the Precedence line on how far the user's skip reaches and which safety defaults it leaves standing (section 5.1), the parallel-work row, and the several-matches clause that sends a typed "in parallel" through parallel-work after define and diagnose. Task 16i added 89: the Routing opt-out clause that skips only the routes the user named and carries the skip line (section 4.3). Task 16n added 63: the skip-idiom sentence says only the user's word skips a review, never kern's own judgement (section 4.3), so 5,378 and 5,819; its review fixes added 22 by naming a skill's own rule beside the user's word, so 5,400 and 5,841. Rule 7's comment in `scripts/lib/lint-rules.mjs` holds the later steps. M2b bfix K added the `Building:` line (126 chars) and the commit clause (105 rendered chars), less a lossless cut of 6, so rule 7 locked 6,191 chars with the longest fixture settings and a standing cost of 6,280. The pilot fix plan's Task 4 added 16 to both, "of 1 or 2 files" in the implement row, so define's route to plan and the kernel agree; rule 7 locks 6,207 and 6,296 (the user's yes to that plan's open question 1).
 
 ### 4.3 Routing table
 
@@ -169,7 +169,7 @@ The rule: before a new task's first tool call or question, match the task agains
 |---|---|
 | New behaviour and no agreed spec | define |
 | Agreed spec, more than one step | plan |
-| Executing an agreed plan; or one bounded change, or tests for existing code (M2b Task 17, AD47) | execute-plan; implement |
+| Executing an agreed plan; or one bounded change of 1 or 2 files, or tests for existing code (M2b Task 17, AD47; pilot fix plan Task 4) | execute-plan; implement |
 | Independent changes asked for in parallel | parallel-work |
 | Bug, failing test, unexpected output | diagnose |
 | About to say done, fixed or passing, commit, or open a PR | prove-it |
@@ -203,7 +203,7 @@ Highest first:
 
 When the user's own message in this session says to skip a kern step, kern skips that step and says in one line what it skipped and what that risks. A skip or an opt-out reaches only what the user named: "No need to investigate" skips the diagnose route, but a "fixed" claim still needs fresh output. For an opt-out of a route, the line comes before any tool call as `Skipped: <what>. Risk: <risk>.`, from the Routing clause that decides the skip (section 4.3). The Evidence rule (no done, fixed or passing claim without a command run this session and its output), the guards and the section 8.1 defaults still hold. The guards hold D1 to D3, D8 and D12 on their own; the kernel's Precedence line names the two that only text holds, D11 (new behaviour ships with tests) and D7 (stored shapes change by expand/contract). So "skip the test-first ceremony" still leaves new behaviour to ship with tests, "don't ask me questions, just rename the stored field" still changes the stored shape by expand/contract, and "skip the checks" still reads commit's SKILL.md and meets G5's ask on the commit (section 4.3). An explicit waiver of questions or approval leaves D5's build choices to kern, said in one line as its own (D-4). User decision 2026-10-20, asked "When your own message tells kern to skip one of its steps, which should win?": "My word wins (Recommended)". The kernel's Precedence section says so in one line.
 
-Loosening a safety default (section 8.1) requires a settings key, so hooks and skills always agree. There is one mechanism: per-action policy keys (`commit.policy`, `push.policy`, `pr.policy`, `tracker.policy`, `review.post_policy`), each `ask` (default), `auto` (proceed without asking) or `deny`. Floor actions have no key. A skill that finds prose loosening with no matching key reports it and keeps the default. The floor never loosens: merge, production deploy, data deletion, force-push to a shared branch, messaging people.
+Loosening a safety default (section 8.1) requires a settings key, so hooks and skills always agree. There is one mechanism: per-action policy keys (`commit.policy`, `push.policy`, `pr.policy`, `tracker.policy`, `review.post_policy`), each `ask` (default), `auto` (proceed without asking) or `deny`. One thing besides a key stands in for a yes: the user's own last typed prompt, when it is an explicit instruction for that action, a commit, a push, a draft PR or a PR edit, in the closed grammar of `prompt_consent` (section 8.3; the pilot fix plan, the user's "All generic fixes", 2026-10-25). It answers the ask of a proven call of that action in the main session, for that prompt and repository only, and lifts no deny. Floor actions have no key. A skill that finds prose loosening with no matching key reports it and keeps the default. The floor never loosens: merge, production deploy, data deletion, force-push to a shared branch, messaging people.
 
 ### 5.2 Files
 
@@ -250,22 +250,26 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 | Review | `review.rules` | Project prose | pr-review |
 | Review | `review.sensitive_paths` | Auth, permission, migration and secret-handling paths by name pattern | pr-review |
 | Review | `review.builtin` | `on` | self-review, pr-review |
+| Review | `review.builtin.self_effort` | `medium` (`low` until the pilot fix plan: low found 0 issues on MA-254, medium 8) | self-review |
 | Review | `review.builtin.effort` | `high` | pr-review |
 | Review | `review.builtin.delta_effort` | `medium` | pr-review |
 | Review | `review.builtin.max_findings` | `15` | pr-review |
 | Review | `review.builtin.security` | `off` | pr-review |
 | Review | `security.rules` | Project prose | pr-review |
-| Tracking | `tracker` | `none` | define, plan, triage, G14 |
-| Tracking | `tracker.first` | `false` | define, plan |
+| Tracking | `tracker` | Detected (`kern-detect tracker`); asked once when nothing is detected | define, plan, triage, G14 |
+| Tracking | `tracker.first` | `true`: define reads the issue, its comments, its parent and its epic before the spec; with `tracker: none` it reads nothing and offers no draft | define, plan |
 | Tracking | `spec.source` | `.kern/specs/` | define, plan, pr-review |
 | Risk | `autopilot` | `allowed` | autopilot, G1 to G18 |
 | Risk | `tracker.policy` | `ask` | define, plan, triage, G14 |
 | Risk | `review.post_policy` | `ask` | pr-review, take-feedback, G3 |
-| Risk | `scope_threshold` | Unset; any file outside the approved list pauses | execute-plan, implement |
+| Risk | `scope_threshold` | `4` files per change; any file outside the approved list pauses | define, plan, execute-plan, implement, self-review, finish-branch |
+| Risk | `pr.max_lines` | `300` changed lines: insertions plus deletions from `git diff --shortstat`, tests included | plan, finish-branch, help |
+| Risk | `pr.size_command` | None; a command, run in the worktree with `{base}` and `{tree}` filled in, whose last printed number replaces that count | finish-branch, help |
 | Risk | `protected_targets` | Unset | G13 |
 | Risk | `deploy.envs`, `deploy.proof` | Unset | ship-check, G15 |
 | Risk | `never_commit` | Unset | G6 |
 | Modes | `mode.voice`, `mode.surface` | `normal`, `auto` | session-start, prompt-submit |
+| Models | `model.implementer`, `model.reviewer`, `model.final_review`, `model.investigator`, `model.miner` | `sonnet`, `opus`, `opus`, `opus`, `haiku` (reviewer and investigator `sonnet` until the user's "Both Opus", 2026-10-25) | define, plan, execute-plan, parallel-work, self-review, diagnose, recall |
 | Learning | `lessons` | `.kern/lessons.md` | retro, correct |
 | Learning | `rule_bar` | 3 occurrences or 1 severe incident for prose; 2 for a mechanism | retro, correct |
 | Overrides | `overrides.<job>` (`off`: no override) | None | kernel, all |
@@ -409,18 +413,18 @@ Active only when both hold: settings allow it (`autopilot: allowed`, the default
 
 | Guard | Default | Interactive | Autopilot |
 |---|---|---|---|
-| G1 git safety | on | In the main checkout, or after `cd`, `--git-dir` or `--work-tree`, switch, checkout, rebase, bisect, pull, `reset --hard`, `--merge` or `--keep`, stash and clean ask. Merge, `gh pr merge`, `branch -D`, `worktree remove --force` and remote branch deletes ask. Push asks, a push to a protected branch included. `push.policy: auto` allows only `git push [-u] <remote> <current-branch>` to an unprotected branch, as the whole call, and `push.policy: deny` denies every push. A plain force push, meaning `--force`, `-f`, a `+` refspec or `--mirror`, is denied. `--force-with-lease` asks when every commit on the pushed branches is the user's, and is denied otherwise. A git alias or extension, and a git write command behind a wrapper, ask | Every ask becomes a deny. Allowed: `git push [-u] <remote> <current-branch>` to an unprotected branch, and `git push --force-with-lease <remote> <current-branch>` to an unprotected branch, only with `rebase.push: autopilot` and only when every commit on it is the user's |
-| G2 PR create | on | Non-draft or duplicate PRs denied; under `commit.attribution: none`, a `--body-file` holding Claude Code's footer or an attribution trailer denied; otherwise ask | Draft allowed after dedup; non-draft, an attributed body file and `gh pr ready` denied |
+| G1 git safety | on | In the main checkout, or after `cd`, `--git-dir` or `--work-tree`, switch, checkout, rebase, bisect, pull, `reset --hard`, `--merge` or `--keep`, stash and clean ask. Merge, `gh pr merge`, `branch -D`, `worktree remove --force` and remote branch deletes ask. Push asks, a push to a protected branch included, unless the user's last typed prompt is an instruction to push (section 5.1): then `git push [-u] <remote> <current-branch>` to an unprotected branch, as the whole call, is allowed when `<remote>` is the branch's upstream remote (`branch.<cur>.remote`), or `origin` when it has none. `push.policy: auto` allows only `git push [-u] <remote> <current-branch>` to an unprotected branch, as the whole call, and `push.policy: deny` denies every push. A plain force push, meaning `--force`, `-f`, a `+` refspec or `--mirror`, is denied. `--force-with-lease` asks when every commit on the pushed branches is the user's, and is denied otherwise. A git alias or extension, and a git write command behind a wrapper, ask | Every ask becomes a deny. Allowed: `git push [-u] <remote> <current-branch>` to an unprotected branch, and `git push --force-with-lease <remote> <current-branch>` to an unprotected branch, only with `rebase.push: autopilot` and only when every commit on it is the user's |
+| G2 PR create | on | Non-draft or duplicate PRs denied; under `commit.attribution: none`, a `--body-file` holding Claude Code's footer or an attribution trailer denied; a draft of the checked shape, and `gh pr edit` of the current branch's PR with only the options the prompt's phrase names ("update the PR title": `--title`; "update the PR body" or "description": a checked `--body-file`; "update the PR": either or both), allowed when the user's last typed prompt is an instruction for that action (section 5.1); otherwise ask | Draft allowed after dedup; `gh pr edit` denied; non-draft, an attributed body file and `gh pr ready` denied |
 | G3 review posting | on | Self-approval and comments without a taxonomy label denied; posting asks; a Skill call to `code-review` whose raw input contains `--comment` asks; `--fix` in the main checkout asks | All posting denied, including `code-review --comment` |
 | G4 untrusted text | on | Shell-interpolated comment bodies denied; a body file is required | Same |
-| G5 commit | on | Commit asks; message checked against `commit.convention`; attribution trailers denied; `git add -A` asks | Commit allowed when checks pass; `git add -A` and failing messages denied |
+| G5 commit | on | Commit asks, unless the user's last typed prompt is an instruction to commit and the commit has the shape autopilot allows (section 5.1); message checked against `commit.convention`; attribution trailers denied; `git add -A` asks | Commit allowed when checks pass; `git add -A` and failing messages denied |
 | G6 secrets | on | Staged changes scanned on commit and push (gitleaks when present, else a redacted grep); `never_commit` paths denied | Same |
 | G7 floor guard | opt-in | At turn end, advisory: new suppressions, skipped or deleted tests, removed asserts, empty catch, debug prints | On, and blocks ending the turn until resolved |
 | G9 to G12 | by skills | Claim checks, fail-then-pass probe, verdict validity by patch-id, CI flake classes | Same |
 | G13 protected targets | when set | G13 denies every call that names a `protected_targets` entry unless it proves the call reads. ssh, autossh and plink must run a remote command whose every segment is on a closed read list. `ssh -N` tunnels and `ssh -O` control commands are exempt. A SQL client must run statements G13 proves read-only one by one. scp and rsync may copy only from a target, and sftp may run only read verbs. It denies curl, wget, nc, telnet and the other network clients when they name a target. G13 never votes allow | Same |
 | G14 tracker and chat writes | on | Write calls from tracker or chat MCP servers ask, and so do gh issue and label writes. `tracker.policy: auto` allows only the Linear and Notion MCP tools on G14's closed list, with their arguments checked, and gh issue and label writes of a proven shape in this repo. It never covers GitHub MCP writes, deletes or other trackers' MCP writes. Chat messages always ask. `tracker.policy: deny` denies tracker writes | Denied |
 | G15 deploy and publish | on | Workflow runs, releases, publishes, terraform, kubectl, helm and pushes to deploy branches ask | Denied |
-| G16 mode state | on | Tool writes under the kern session-state directory denied; writes to the kern settings files ask | Same; settings writes denied |
+| G16 mode state | on | Tool writes under the kern session-state directory denied, and so is a here-doc body that names that directory, unless no shell can reach any body: no `\|` in the command, every delimiter quoted, cat, tee, git or gh reading each here-doc, no command named by a `$`, a backtick or a glob, no word holding a `$` or a backtick (a `"$(cat <<'EOF'` git or gh message value excepted) and no shell named; under the same rules with python, node, ruby, perl or php reading each here-doc, the hook-code check reads an interpreter's here-doc body (`python3 -`, `node -`) for literal hook paths and state functions only, not as shell words; a CronCreate, ScheduleWakeup or SendMessage whose prompt or message reads as the user's consent asks, and is denied under autopilot; writes to the kern settings files ask | Same; settings writes denied |
 | G17 gh stack | on | `merge` denied (it merges the whole stack without prompting in a non-interactive session; the user runs it). `rebase`, `sync` and navigation denied in the main checkout, allowed in the stack worktree. `sync` and `push` ask. `submit` asks and must use `--auto` without `--open`. `link` and `unstack` ask. `modify` needs a terminal and is denied | `merge`, `link`, `unstack`, `modify` and `submit --open` denied. `sync` and `push` allowed with `rebase.push: autopilot`. `submit --auto` allowed after dedup |
 | G18 read-only agents | on | For kern's read-only agents (investigator), Bash commands outside a read-only allowlist (git log, show, blame, diff, grep, ls, cat) are denied. Matches `agent_type` `kern:investigator`, which Claude Code passes to hooks for a subagent's tool calls. If the value differs in practice, the investigator loses Bash and the controller collects history for it | Same |
 | G19 local deletes | on (M3) | `rm`, `rmdir`, `unlink` and `find -delete` inside the current worktree or kern's scratch directories pass; any other delete asks | Deletes outside those paths denied |
@@ -462,7 +466,7 @@ G8, an edit-time typecheck, was dropped: projects keep their own hooks, which mu
 | Build | perf | slash | M5 | Measure, keep or revert, explain the number | AD, PS |
 | Build | refactor | slash | M5 | Pin the contract, subtract first | PS, AD |
 | Verify | prove-it | auto | M2 | Evidence before any "done" | SP, PS, AD |
-| Verify | self-review | path | M2 | Blast radius, floor guard, built-in code-review at low effort, fresh-context doubt pass | PS, AD |
+| Verify | self-review | path | M2 | Blast radius, floor guard, built-in code-review at medium effort, one proof per acceptance line and state (`proof-check`), a caller path per bug and a ruling per finding, fresh-context doubt pass | PS, AD |
 | Verify | pr-review | slash | M3 | Four parallel lanes, merged and verified | SP, PS, PO, AD, Claude Code built-in |
 | Verify | take-feedback | path | M3 | Review comments, CI, rebases, stacks | SP, PS |
 | Verify | verify-app | slash | M5 | The project's browser or runtime check | PS, AD |
@@ -539,7 +543,7 @@ Rules: work the lowest unmerged PR first; fix in the lowest branch that owns the
 4. Referenced files exist.
 5. Skill-tool references name auto skills; Read paths resolve.
 6. Every kernel route resolves and opens with `## Steps`; every user-reachable skill is in `help`'s map.
-7. Rendered kernel at most 6,191 chars (warn) and 9,000 (error) with the longest fixture settings; standing cost (the kernel with no settings plus every auto skill and agent description) at most 6,280 (both the measured values, locked by Task 17a P11 and relocked by M2b bfix K); subagent kernel at most 1,200.
+7. Rendered kernel at most 6,207 chars (warn) and 9,000 (error) with the longest fixture settings; standing cost (the kernel with no settings plus every auto skill and agent description) at most 6,296 (both the measured values, locked by Task 17a P11 and relocked by M2b bfix K and the pilot fix plan's Task 4); subagent kernel at most 1,200.
 8. No machine paths or personal names in shipped files.
 9. Required sections per skill type.
 10. Exemptions recorded with a reason.
