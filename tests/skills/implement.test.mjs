@@ -25,7 +25,8 @@ test('implement sections, steps and red flags', () => {
   assertContains(SKILL, ['RED for the expected reason', 'NOTICED BUT NOT TOUCHING', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-new', 'adding `--branch <name>` when `branch.pattern` holds `{id}`', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --mutate', '${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'never guess a command', 'Do not commit.', 'wt-snap', 'wt-diff', 'kern-get', 'kern-detect', 'probe: mutation caught']);
   // Raised from 5,500 in M2b Task 17 (R4 review I1, M5 to M7): step 5's RED, nothing-to-mutate path and stop for
   // tests asked for on existing code, after lossless cuts.
-  assertMaxBytes(SKILL, 5554);
+  // 5,650 since the pilot fix plan's Task 7: step 8's spec update.
+  assertMaxBytes(SKILL, 5650);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
@@ -128,4 +129,10 @@ test('implement references', () => {
   assertMaxBytes('skills/implement/references/test-design.md', 5000);
   assertHeadings('skills/implement/references/slicing.md', ['# Slicing', '## Vertical slices', '## Seams', '## Scope discipline']);
   assertMaxBytes('skills/implement/references/slicing.md', 1800);
+});
+
+test('a build that departs from an acceptance line edits the spec in the same step', () => {
+  // Pilot fix plan Task 7 (MA-254): three acceptance lines described the first commit and were never updated.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[8].includes('A build that departs from a spec acceptance line: edit that line in the same step, and name it in the report.'), s[8]);
 });
