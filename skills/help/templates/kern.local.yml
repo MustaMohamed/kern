@@ -44,6 +44,8 @@
 # deploy.envs: production
 # never_commit: *.db, .env*
 # scope_threshold: 4
+# pr.max_lines: 300
+# pr.size_command: scripts/pr-size {base} {tree}
 
 # Modes
 # mode.voice: normal

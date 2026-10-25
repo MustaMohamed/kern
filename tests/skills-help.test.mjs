@@ -73,3 +73,11 @@ test('help allows only the exact git commands it prescribes, so no wildcard can 
   // The only wildcard over git is check-ignore -q, whose options only read; no other git entry ends in *.
   assert.deepEqual(git.filter((t) => t.endsWith('*)')), ['Bash(git check-ignore -q *)']);
 });
+
+test('setup never derives scope_threshold from a line cap, and names the measure pr.max_lines counts', () => {
+  // Pilot fix plan Task 3 (MA-254): setup recommended 12 files after saying the project's file count is uncapped.
+  assert.ok(body.includes("`scope_threshold` counts files; `pr.max_lines` counts insertions plus deletions from `git diff --shortstat`, tests included. Never derive one from the other, or from a project's own line cap."));
+  assert.ok(body.includes('offer `pr.size_command`, a command whose last printed number is that count.'));
+  const tpl = readFileSync(join(dir, 'templates', 'kern.local.yml'), 'utf8');
+  assert.ok(tpl.includes('# tracker.first: true\n') && tpl.includes('# pr.max_lines: 300\n') && tpl.includes('# pr.size_command: scripts/pr-size {base} {tree}\n'));
+});
