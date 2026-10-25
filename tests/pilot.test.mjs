@@ -59,6 +59,18 @@ test('a headless session prompt counts as the typed turn, and a task notificatio
   assert.equal(m.wallSeconds, 9);
 });
 
+test('a scheduled turn starts a wall-time segment and is no stop; its skill text sits inside it', () => {
+  // MA-257 (pilot fix plan, Task 10): a session a scheduled task drove read 742 s, the time after the user's one
+  // typed prompt, against 1,795 s of turns.
+  const trigger = { type: 'user', timestamp: at(0), turnOrigin: 'scheduled', origin: { kind: 'task-notification', subkind: 'scheduled-trigger' }, message: { role: 'user', content: '<scheduled-task name="prep">' } };
+  const skillText = { type: 'user', timestamp: at(1), isMeta: true, message: { role: 'user', content: 'Base directory for this skill: /x' } };
+  const m = metrics([trigger, skillText, asst('m1', 5, bash('ls')), asst('m2', 20, { type: 'text', text: 'Prepared.' }), human(40, 'check slot 4'), asst('m3', 45, { type: 'text', text: 'Done.' })]);
+  assert.equal(m.wallSeconds, 25);
+  assert.equal(m.turns, 1);
+  assert.equal(m.scheduled, 1);
+  assert.equal(m.stops, 0);
+});
+
 test('in a headless session a tool-result user entry and a task notification are not typed turns', () => {
   // Next to a turnOrigin: 'sdk' prompt, the only typed turn is that prompt: a tool result (type user,
   // but a tool_result with no human or sdk origin) and a task notification add no stop.

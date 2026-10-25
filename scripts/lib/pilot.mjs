@@ -30,6 +30,11 @@ export function readSession(path) {
 // says sdk, which the session file gives only the prompt. Task notifications, peer messages and tool
 // results are not the user's turns.
 const typed = (e) => e?.type === 'user' && !e.isSidechain && (e.origin?.kind === 'human' || e.turnOrigin === 'human' || e.turnOrigin === 'sdk');
+// A turn a scheduled task started (/schedule, /loop, a cron trigger): turnOrigin says scheduled, or origin says a
+// scheduled-trigger task notification. The skill text it loads arrives as the next user entries (isMeta, no origin),
+// inside its turn. It is the session's own working time, though no one typed it, so it starts a wall-time segment;
+// it is not a stop.
+const scheduled = (e) => e?.type === 'user' && !e.isSidechain && (e.turnOrigin === 'scheduled' || e.origin?.subkind === 'scheduled-trigger');
 
 // Calls that leave the machine or cannot be undone: each is a slip unless the user said yes to it in that
 // session, which only the user can confirm, so these are candidates.
@@ -50,9 +55,11 @@ const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) 
 // hook's recorded output (a hook_success attachment whose permissionDecision is "ask"); whether the user
 // approved it does not, so the user's log still says that. A stop is a typed turn after the first, or an
 // AskUserQuestion call in the main session, whose answer is also the user's. Wall time is the arm's working
-// time: from each typed prompt to the last call, result or reply before the next one. The wait before the
-// first prompt, the user's time between turns and the entries an idle session writes (an away summary) do
-// not count; a wait inside a turn, for an AskUserQuestion answer or a permission prompt, does.
+// time: from each typed prompt or scheduled turn to the last call, result or reply before the next one, so an
+// unattended session that a scheduled task drives is timed too (pilot fix plan, Task 10: 742 s against the
+// 1,795 s its turns took). scheduled counts those turns. The wait before the first prompt, the user's time
+// between turns and the entries an idle session writes (an away summary) do not count; a wait inside a turn,
+// for an AskUserQuestion answer or a permission prompt, does.
 export function metrics(entries, { root = null } = {}) {
   const tokens = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0 };
   const seen = new Set();
@@ -75,13 +82,14 @@ export function metrics(entries, { root = null } = {}) {
   let start = null;
   let last = null;
   for (const e of work) {
-    if (typed(e)) {
+    if (typed(e) || scheduled(e)) {
       if (start !== null) wall += last - start;
       start = last = at(e);
     } else if (start !== null) last = at(e);
   }
   if (start !== null) wall += last - start;
   const turns = entries.filter(typed).length;
+  const scheduledTurns = entries.filter(scheduled).length;
   const guards = [];
   for (const e of entries) {
     if (e?.type !== 'user' || !Array.isArray(e.message?.content)) continue;
@@ -113,7 +121,7 @@ export function metrics(entries, { root = null } = {}) {
       if (!r.startsWith(resolve(root) + sep) && !r.startsWith(tmp + sep)) slips.push(`${u.name} outside the worktree: ${p}`);
     }
   }
-  return { turns, stops: Math.max(turns - 1, 0) + questions, toolCalls: uses.length, guards, asks, slipCandidates: slips,
+  return { turns, scheduled: scheduledTurns, stops: Math.max(turns - 1, 0) + questions, toolCalls: uses.length, guards, asks, slipCandidates: slips,
     tokens: { ...tokens, total: tokens.input + tokens.cacheCreation + tokens.cacheRead + tokens.output },
     wallSeconds: Math.round(wall / 1000) };
 }
