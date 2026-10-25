@@ -119,3 +119,20 @@ SPEC
   [ "${lines[4]}" = "unproven: 1 add" ]
   [ "${lines[7]}" = "unproven: 3 -" ]
 }
+
+@test "a backticked placeholder such as not run, skipped, pending or unproven proves nothing" {
+  # Final review M2: `` `not run` `` had a backticked span, so it counted as evidence.
+  proofs '| 1 | add | `not run` |' '| 1 | edit | `Skipped`. |' '| 2 | rows reached by scrolling | `pending` |' '| 3 | - | `unproven` |'
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" spec.md proofs.md
+  [ "$status" -eq 1 ]
+  [ "${#lines[@]}" -eq 8 ]
+  [ "${lines[0]}" = "no evidence: proofs.md:3" ]
+  [ "${lines[1]}" = "no evidence: proofs.md:4" ]
+  [ "${lines[2]}" = "no evidence: proofs.md:5" ]
+  [ "${lines[3]}" = "no evidence: proofs.md:6" ]
+  # A command that names a placeholder word is still evidence.
+  proofs '| 1 | add | `npm test -- not run`: 2 passed |' '| 1 | edit | `./edit.png` |' '| 2 | rows reached by scrolling | `npm test -- pending`: 1 passed |' '| 3 | - | `npm test`: 12 passed |'
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" spec.md proofs.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

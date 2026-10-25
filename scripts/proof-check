@@ -6,8 +6,8 @@
 # `States:` in that text, up to `Handles:` or its end; a line that names none has the one state `-`, and a
 # `States:` with no backticked span exits 2. PROOFS is a Markdown table of `| Line | State | Evidence |` rows;
 # the header and divider rows are skipped, a state is compared without backticks and in any case, and
-# evidence with no backticked span, or that is empty, `-`, `none`, `todo`, `tbd` or `n/a` once its backticks
-# and a trailing `.` are dropped, proves nothing. A backticked evidence span that starts with /, ./ or ../
+# evidence with no backticked span, or that is empty, `-`, `none`, `todo`, `tbd`, `n/a`, `not run`, `skipped`,
+# `pending` or `unproven` once its backticks and a trailing `.` are dropped, proves nothing. A backticked evidence span that starts with /, ./ or ../
 # and holds no blank is a file, resolved from the current directory, and must exist.
 # Output, one line each: `unproven: <N> <state>`, `no evidence: PROOFS:<row>`, `missing file: PROOFS:<row>:
 # <path>`, `unknown: PROOFS:<row>: line <N> state <state>`. Exit 0 when every line and state has a proof
@@ -69,7 +69,7 @@ rows=$(NEED=$need env LC_ALL=C awk '
     if (ln !~ /^[0-9]+$/) next
     gsub(/`/, "", st); st = trim(st); if (st == "") st = "-"
     e = tolower(ev); gsub(/`/, "", e); e = trim(e); sub(/\.$/, "", e); e = trim(e)
-    kind = !((ln "\t" st) in want) ? "unknown" : (ev !~ /`[^`]+`/ || e == "" || e ~ /^(-|none|todo|tbd|n\/a)$/) ? "empty" : "ok"
+    kind = !((ln "\t" st) in want) ? "unknown" : (ev !~ /`[^`]+`/ || e == "" || e ~ /^(-|none|todo|tbd|n\/a|not run|skipped|pending|unproven)$/) ? "empty" : "ok"
     out = NR "\t" kind "\t" ln "\t" st
     s = ev
     while (kind == "ok" && match(s, /`[^`]+`/)) {
