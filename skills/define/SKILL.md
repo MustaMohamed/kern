@@ -31,11 +31,11 @@ Standing gate on every path: no code, scaffold, install, migration or branch bef
 
 | Key | Default | Use |
 |---|---|---|
-| `tracker`, `tracker.first` | detected, `false` | issue |
+| `tracker`, `tracker.first` | detected, `true` | issue |
 | `scope_threshold` | 4 files | size |
 | `checklists` | existing data and consumers; authorization scope; persisted-shape change | lines |
 | `base_branch` | detected | gap check |
-| `model.investigator`, `model.reviewer` | `sonnet` | explore; review |
+| `model.investigator`, `model.reviewer` | `opus` | explore; review |
 
 A project's own spec system (`docs/specs`) wins, but its spec still carries kern's `status` and `approved` lines, which G20 and plan read.
 

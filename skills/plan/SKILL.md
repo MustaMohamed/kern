@@ -34,8 +34,8 @@ Produce a plan a zero-context executor can run, with PR boundaries inside the sc
 | `scope_threshold` | 4 files | PR size gate |
 | `test.*`, `typecheck`, `lint`, `build` | detected, source printed | task verify commands |
 | `checklists`, `shared_services` | see define; none | extra lines; ordering |
-| `tracker`, `tracker.first` | detected, `false` | issue ids and sub-issue drafts |
-| `model.investigator`, `model.reviewer` | `sonnet` | grounding; review |
+| `tracker`, `tracker.first` | detected, `true` | issue ids and sub-issue drafts |
+| `model.investigator`, `model.reviewer` | `opus` | grounding; review |
 
 ## Outputs
 

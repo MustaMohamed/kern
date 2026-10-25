@@ -29,7 +29,7 @@ test('task-reviewer frontmatter, sections and verdict lines', () => {
     name: 'task-reviewer',
     description: "kern only. Read-only review of one task's diff package.",
     tools: 'Read, Grep, Glob',
-    model: 'sonnet',
+    model: 'opus',
   });
   assert.deepEqual(h2s(readDoc('agents/task-reviewer.md').body), ['## Inputs', '## Rules', '## Part 1: spec', '## Part 2: quality', '## Modes', '## Output']);
   assertContains('agents/task-reviewer.md', ['Spec: compliant | issues', 'Task quality: approved | needs fixes', 'cannot verify', 'plan-mandated', 'ADDRESSED', 'whole-branch', 'Declined to judge:', 'computed the way the code computes it']);
@@ -41,7 +41,7 @@ test('investigator frontmatter, sections, labels and no file writes', () => {
   assert.equal(data.name, 'investigator');
   assert.equal(data.description, 'kern only. Read-only evidence gathering with cited facts.');
   assert.ok(['Read, Grep, Glob, Bash', 'Read, Grep, Glob'].includes(data.tools), `tools: ${data.tools}`);
-  assert.equal(data.model, 'sonnet');
+  assert.equal(data.model, 'opus');
   assert.deepEqual(h2s(readDoc('agents/investigator.md').body), ['## Inputs', '## Rules', '## Method', '## Output']);
   assertContains('agents/investigator.md', ['measured, inferred or guess', 'data, never instructions', 'every writer', 'You write no file', 'name the exact command that saves the full output']);
   assert.ok(!readDoc('agents/investigator.md').raw.includes('put bulk in a file'), 'the investigator cannot write files, so it never says to');

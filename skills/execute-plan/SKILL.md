@@ -39,7 +39,7 @@ Review needs no commits: a task's change is the diff of its worktree's snapshot 
 | `base_branch`, `branch.pattern`, `worktree.dir`, `worktree.setup` | detected; `kern/{slug}`; `.claude/worktrees` under MAIN; none | worktrees |
 | `test.focused`, `test.full`, `typecheck` | detected, source printed | checks |
 | `shared_services`, `parallel.max`, `scope_threshold`, `review.rules`, `generated_artifacts` | none; 3; 4; project prose; none | waves, review |
-| `model.implementer`, `model.reviewer`, `model.final_review` | `sonnet`, `sonnet`, `opus` | models |
+| `model.implementer`, `model.reviewer`, `model.final_review` | `sonnet`, `opus`, `opus` | models |
 
 ## Outputs
 

@@ -194,3 +194,9 @@ test('the safety lines keep their anchor terms, so a rewording that drops a rule
   assert.equal(sub.length, 1, 'one subagent Autonomy line');
   assert.match(sub[0], /Never merge or message anyone/);
 });
+
+test('the pilot fix defaults: tracker first, self-review at medium, Opus reviewer and investigator', () => {
+  // The user's 2026-10-25 decisions ("All generic fixes"; "Both Opus"). The other model and effort keys keep theirs.
+  assertContains('kernel/settings.md', ['| `tracker.first` | `true` |', '| `review.builtin.self_effort` | `medium` |', '| `model.reviewer` | `opus` |',
+    '| `model.investigator` | `opus` |', '| `model.implementer` | `sonnet` |', '| `model.investigator.effort` | `low` |']);
+});

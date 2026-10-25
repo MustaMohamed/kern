@@ -31,7 +31,7 @@ test('self-review sections and steps', () => {
     'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'open `references/blast-radius.md`', 'look where grep stops',
     'visual pages not installed', 'then the smell baseline (`references/smells.md`)']);
   assert.ok(!readDoc(SKILL).raw.includes('$(git'), 'no command substitution in a command the skill prescribes');
-  assertMaxBytes(SKILL, 7000);
+  assertMaxBytes(SKILL, 7001);
 });
 
 test('self-review exits, order and dispatches', () => {

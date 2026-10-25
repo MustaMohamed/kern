@@ -28,7 +28,7 @@ Run independent units at once, never two writers in one tree. Reached by its ker
 | `worktree.dir`, `worktree.setup` | `.claude/worktrees` under MAIN; none | location; setup |
 | `shared_services` | none | serialization |
 | `parallel.max` | 3 | workers at once |
-| `model.implementer`, `model.investigator` | `sonnet`, `sonnet` | worker models |
+| `model.implementer`, `model.investigator` | `sonnet`, `opus` | worker models |
 
 ## Outputs
 

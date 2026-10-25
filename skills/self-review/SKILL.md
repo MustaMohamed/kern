@@ -33,8 +33,8 @@ Resolve each key with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`; exit 
 | `verify.fast` | each of `typecheck` and `lint` that resolves; at least one |
 | `review.rules` | CLAUDE.md, `.claude/rules/**`, CONTRIBUTING.md |
 | `review.taxonomy` | `blocker,should-fix,nit,pre-existing` |
-| `review.builtin`, `review.builtin.self_effort`, `review.builtin.max_findings` | `on`, `low`, `15` |
-| `spec.source`, `model.reviewer` | linked issue, PR body, `WORK/specs`; `sonnet` |
+| `review.builtin`, `review.builtin.self_effort`, `review.builtin.max_findings` | `on`, `medium`, `15` |
+| `spec.source`, `model.reviewer` | linked issue, PR body, `WORK/specs`; `opus` |
 
 ## Outputs
 

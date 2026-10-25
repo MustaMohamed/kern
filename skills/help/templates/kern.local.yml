@@ -28,7 +28,7 @@
 
 # Tracking
 # tracker: linear
-# tracker.first: false
+# tracker.first: true
 # tracker.policy: ask
 
 # Review

@@ -44,7 +44,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `ratchet.<metric>` | none | `<path>:<key>`, with `:max` appended when a higher value loosens the bar | floor-scan, self-review |
 | `checklists` | existing data and consumers, authorization scope, persisted-shape change | comma list | define, plan |
 | `tracker` | detected | `none`, `github`, `gitlab`, `linear`, `jira`, or another name | kern-detect, define, plan, recall, triage |
-| `tracker.first` | `false` | `true`, `false` | define, plan |
+| `tracker.first` | `true` | `true`, `false` | define, plan |
 | `tracker.policy` | `ask` | `ask`, `auto`, `deny` | pre-tool-use G14 |
 | `mcp.write_servers` | none | comma list of extra MCP server names treated as trackers | pre-tool-use G14 |
 | `spec.source` | linked issue, PR body, `.kern/specs` | path or `issue` | prove-it, pr-review |
@@ -67,7 +67,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `review.rounds` | `fanout-first-then-single` | `fanout-first-then-single`, `single` | pr-review |
 | `review.sensitive_paths` | auth, permission, migration and secret paths by name | comma list of globs | pr-review |
 | `review.builtin` | `on` | `on`, `off` | self-review, pr-review |
-| `review.builtin.self_effort` | `low` | `low`, `medium`, `high` | self-review |
+| `review.builtin.self_effort` | `medium` | `low`, `medium`, `high` | self-review |
 | `review.builtin.effort` | `high` | `low`, `medium`, `high`, `xhigh`, `max` | pr-review |
 | `review.builtin.delta_effort` | `medium` | as above | pr-review |
 | `review.builtin.max_findings` | `15` | integer or `all` | self-review, pr-review |
@@ -76,9 +76,9 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `lessons` | none: proposals stay in chat | path | self-review, retro, correct |
 | `rule_bar` | 3 occurrences or 1 severe incident, 2 for a mechanism | text | retro, correct |
 | `model.implementer` | `sonnet` | model alias | execute-plan, parallel-work |
-| `model.reviewer` | `sonnet` | model alias | define, execute-plan |
+| `model.reviewer` | `opus` | model alias | define, execute-plan |
 | `model.final_review` | `opus` | model alias | execute-plan |
-| `model.investigator` | `sonnet` | model alias | define, plan, diagnose |
+| `model.investigator` | `opus` | model alias | define, plan, diagnose |
 | `model.miner` | `haiku` | model alias | recall |
 | `model.implementer.effort` | `low` batched, `medium` normal, `high` cross-module or round 3 | `low`, `medium`, `high`, `xhigh`, `max` | execute-plan, parallel-work |
 | `model.reviewer.effort` | `medium` | as above | define, plan, execute-plan, self-review |

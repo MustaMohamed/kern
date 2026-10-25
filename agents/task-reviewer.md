@@ -2,7 +2,7 @@
 name: task-reviewer
 description: kern only. Read-only review of one task's diff package.
 tools: Read, Grep, Glob
-model: sonnet
+model: opus
 ---
 
 # kern task reviewer

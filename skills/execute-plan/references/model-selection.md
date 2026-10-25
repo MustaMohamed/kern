@@ -9,9 +9,9 @@ Every dispatch names its model and its effort. A `model.<role>` setting override
 | Implementer, batched mechanical edits | `model.implementer` | `haiku` | `low` | the edit needs judgment |
 | Implementer, normal task | `model.implementer` | `sonnet` | `medium` | cross-module work, or a round-3 fix |
 | Implementer, cross-module or round 3 | `model.implementer` | `opus` | `high` | never higher |
-| Task reviewer | `model.reviewer` | `sonnet` | `medium` | not raised |
+| Task reviewer | `model.reviewer` | `opus` | `medium` | not raised |
 | Final whole-branch review | `model.final_review` | `opus` | `high` | not raised |
-| Investigator | `model.investigator` | `sonnet` | `low` | not raised |
+| Investigator | `model.investigator` | `opus` | `low` | not raised |
 | Transcript miner | `model.miner` | `haiku` | `low` | not raised |
 
 ## Rules

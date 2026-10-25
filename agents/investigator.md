@@ -2,7 +2,7 @@
 name: investigator
 description: kern only. Read-only evidence gathering with cited facts.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: opus
 ---
 
 # kern investigator
