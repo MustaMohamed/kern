@@ -1,6 +1,6 @@
 # Spec template
 
-Copy from the first `---` line to the end into `WORK/specs/<slug>.md`. Complete every section, or write `none` and why. Decisions name modules and contracts, not file paths; paths belong in the plan. A bounded change uses the short form: set `form: short` and keep only Problem, Constraints, Acceptance criteria and Test seams. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` checks the sections for either form. To approve, one Edit replaces the lines from `status: draft` through `approved:` with `status: approved` and `approved: <date>, "<one whole line of the user's yes>"`.
+Copy from the first `---` line to the end into `WORK/specs/<slug>.md`. Complete every section, or write `none` and why. Decisions name modules and contracts, not file paths; paths belong in the plan. A bounded change uses the short form: set `form: short` and keep only Problem, Size, Constraints, Acceptance criteria and Test seams. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` checks the sections for either form. To approve, one Edit replaces the lines from `status: draft` through `approved:` with `status: approved` and `approved: <date>, "<one whole line of the user's yes>"`.
 
 ---
 status: draft
@@ -13,6 +13,10 @@ issue: (tracker id, or none)
 ## Problem
 
 What is wrong or missing today, for whom, with evidence.
+
+## Size
+
+Files: the count, then each path. Lines: about how many change, insertions plus deletions with tests, as `git diff --shortstat` counts (or `pr.size_command`'s measure, named). Concerns: each independent one in a few words. Over 2 files, or more than one concern: plan.
 
 ## Intent
 
@@ -36,7 +40,7 @@ How the user will judge it, measurable where possible.
 
 ## Acceptance criteria
 
-1. One observable, testable line per criterion.
+1. One observable, testable line per criterion. Then `States:` and each state its proof must show, backticked (for a UI: each screen state, add and edit, rows reached by scrolling), and `Handles:` and the stable names a check reads (a test id, a route, a command). One state: leave out `States:`.
 
 ## Decisions
 

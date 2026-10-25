@@ -10,7 +10,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | `technical-writing` | path | Kernel row "Prose others read", or `/kern:technical-writing` | Docs, PR bodies, issues and commit messages |
 | `unslop` | slash | The kernel's Reply rule, technical-writing step 5, or `/kern:unslop` | Rules for prose others read |
 | `prove-it` | auto | Its description; routed row "About to say done, fixed or passing, commit, or open a PR" | Evidence before any done, fixed or passing |
-| `implement` | path | Routed row "One bounded change with an agreed design, or tests for existing code"; /kern:implement | Thin slices, test first, full suite |
+| `implement` | path | Routed row "One bounded change of 1 or 2 files with an agreed design, or tests for existing code"; /kern:implement | Thin slices, test first, full suite |
 | `diagnose` | path | Routed row "Bug, failing test, unexpected output"; /kern:diagnose | Root cause before any fix |
 | `define` | path | Routed row "New behaviour and no agreed spec"; /kern:define | Clarify, size and approve before code; a quick, clear task or an approval waiver goes straight to implement |
 | `plan` | path | Routed row "Agreed spec, more than one step"; /kern:plan | Approved spec to ordered, checked tasks |

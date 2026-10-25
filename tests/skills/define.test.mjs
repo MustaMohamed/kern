@@ -30,7 +30,9 @@ test('define sections, steps, the standing gate and red flags', () => {
   assert.match(s[1], /^1\. Fast path: /, 'the fast path is step 1');
   assert.match(s[5], /^5\. Restate /, 'step 5 restates');
   assert.match(s[6], /^6\. Size it now/, 'step 6 sizes, after the restate');
-  assertMaxBytes(SKILL, 6500);
+  // 6,900 since the pilot fix plan's Task 4 (raised from 6,500): step 2's tracker read, step 6's files and lines,
+  // step 9's route to plan.
+  assertMaxBytes(SKILL, 6900);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -86,7 +88,8 @@ test('the spec reviewer is its own step, and an approved design does not skip it
 
 test('define references', () => {
   const refs = {
-    'spec-template.md': [['# Spec template', '## Problem', '## Intent', '## Constraints', '## Assumptions', '## Success criteria', '## Acceptance criteria', '## Decisions', '## Compatibility', '## Authorization', '## Rollout', '## Checklists', '## Test seams', '## Not doing', '## Open questions'], 3000],
+    // spec-template.md: 3,100 since the pilot fix plan's Task 4 (raised from 3,000): the Size section, States and Handles.
+    'spec-template.md': [['# Spec template', '## Problem', '## Size', '## Intent', '## Constraints', '## Assumptions', '## Success criteria', '## Acceptance criteria', '## Decisions', '## Compatibility', '## Authorization', '## Rollout', '## Checklists', '## Test seams', '## Not doing', '## Open questions'], 3100],
     'interview.md': [['# Interview', '## Skip offer and build choices', '## Hypothesis and confidence', '## One question at a time', '## Want versus should-want', '## Restate and confirm', '## When to step back'], 3200],
     'spec-review.md': [['# Spec reviewer brief', '## What to check', '## Builder questions', '## Calibration', '## Output'], 1600],
     'handover.md': [['# Handover', '## Sort', '## Hand over'], 1200],
@@ -117,4 +120,17 @@ test('define pins its approval rules', () => {
   assertContains('skills/define/references/spec-review.md', ['`Verdict: approve | revise`', 'Approve unless a gap would mislead planning',
     'a wrong guess changes what gets built', '`Builder questions: nothing important left`']);
   assertContains('skills/define/references/capability-map.md', ['approved before any module spec']);
+});
+
+test('define reads the ticket by default, sizes in files and lines, and sends a multi-file change to plan', () => {
+  // Pilot fix plan Task 4 (MA-254): the issue review caught the wrong invariant-pass file, a missing epic rule and a
+  // size of ~332 lines against ~136. tracker.first now defaults to true; `none` reads nothing and drafts nothing.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[2].includes('`none`, set or answered: read no tracker and offer no draft. Else, unless `tracker.first: false`, read the issue, its comments, its parent and its epic before the spec; their rules bind it.'), s[2]);
+  assert.ok(s[6].includes('First count the files and the changed lines from your reads, tests included, and say both'), s[6]);
+  assert.ok(s[9].includes("Over 2 files or several independent concerns: Read plan's SKILL.md, whose step 2 decides; else the kernel routes to implement."), s[9]);
+  assertContains(SKILL, ['| `tracker`, `tracker.first` | detected, `true` | issue |']);
+  assertContains('skills/define/references/spec-template.md', ['keep only Problem, Size, Constraints, Acceptance criteria and Test seams',
+    'Over 2 files, or more than one concern: plan.', 'Then `States:` and each state its proof must show', '`Handles:` and the stable names a check reads']);
+  assertContains('skills/define/references/spec-review.md', ['- Size and states: `## Size` matches the files the spec implies']);
 });

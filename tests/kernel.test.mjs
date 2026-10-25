@@ -113,8 +113,8 @@ test('tests for existing code route to implement, in the kernel and in the help 
   // M2b Task 17, AD47 (t17-lane-4): addy's TDD skill fires on adding tests to a function, even pasted inline. In
   // kern, "Add unit tests for this function" matched no row and fell to plan. The controller's ruling routes tests
   // for existing code to implement, kern's test-first skill; plan is too heavy for tests on one function.
-  assertContains('kernel/kernel.md', ['| One bounded change with an agreed design, or tests for existing code | Read {KERN}/implement/SKILL.md |']);
-  assertContains('skills/help/references/map.md', ['Routed row "One bounded change with an agreed design, or tests for existing code"; /kern:implement']);
+  assertContains('kernel/kernel.md', ['| One bounded change of 1 or 2 files with an agreed design, or tests for existing code | Read {KERN}/implement/SKILL.md |']);
+  assertContains('skills/help/references/map.md', ['Routed row "One bounded change of 1 or 2 files with an agreed design, or tests for existing code"; /kern:implement']);
 });
 
 test('the user\'s word skips only what it names, and Evidence, the guards and the safety defaults still hold', () => {

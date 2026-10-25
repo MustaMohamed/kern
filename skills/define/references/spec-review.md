@@ -11,6 +11,7 @@ You review one spec as a fresh reader. You receive the spec path and the restate
 - Constraints: each Always, Ask first and Never line can be checked by a command or a diff.
 - Missing Compatibility (stored shape, every writer, the regression test) or Authorization content.
 - Unrequested features.
+- Size and states: `## Size` matches the files the spec implies; each acceptance line with several cases names its `States:` and `Handles:`.
 
 ## Builder questions
 

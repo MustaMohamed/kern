@@ -22,7 +22,7 @@ Before a new task's first tool call or question, match the task against the tabl
 | New behaviour and no agreed spec | Read {KERN}/define/SKILL.md |
 | Agreed spec, more than one step | Read {KERN}/plan/SKILL.md |
 | Executing an agreed plan | Read {KERN}/execute-plan/SKILL.md |
-| One bounded change with an agreed design, or tests for existing code | Read {KERN}/implement/SKILL.md |
+| One bounded change of 1 or 2 files with an agreed design, or tests for existing code | Read {KERN}/implement/SKILL.md |
 | Independent changes asked for in parallel | Read {KERN}/parallel-work/SKILL.md |
 | Bug, failing test, unexpected output | Read {KERN}/diagnose/SKILL.md |
 | About to say done, fixed or passing, commit, or open a PR | Read {KERN}/prove-it/SKILL.md |
