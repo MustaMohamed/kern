@@ -31,7 +31,9 @@ test('self-review sections and steps', () => {
     'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'open `references/blast-radius.md`', 'look where grep stops',
     'visual pages not installed', 'then the smell baseline (`references/smells.md`)']);
   assert.ok(!readDoc(SKILL).raw.includes('$(git'), 'no command substitution in a command the skill prescribes');
-  assertMaxBytes(SKILL, 7001);
+  // 7,650 since the pilot fix plan's Task 6 (raised from 7,001): proof-check, the shared-piece read, the caller path
+  // and the ruling per finding.
+  assertMaxBytes(SKILL, 7650);
 });
 
 test('self-review exits, order and dispatches', () => {
@@ -145,6 +147,7 @@ test('self-review references', () => {
     // yes (M3) and its committed revert (I3), after the lossless 19-byte cut of "run in seconds and" from the opening.
     'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1880],
     'smells.md': [['# Smell baseline', '## Rules', '## Smells'], 2200],
+    'proofs.md': [['# Proofs', '## Table', '## Evidence', '## Gaps'], 1200],
   };
   assertContains(`${REF}/smells.md`, ['A `review.rules` file that endorses what a smell would flag wins',
     'Skip what lint, the formatter or the type checker already enforces', ...['Mysterious Name', 'Duplicated Code', 'Feature Envy', 'Data Clumps', 'Primitive Obsession',
@@ -275,4 +278,16 @@ test('a manifest or lockfile change opens blast-radius, whose dependency bullet 
   // Fix round 1, M5: a pilot line for the dependency review.
   assertContains('tests/skills/self-review.acceptance.md', ['The diff bumps one dependency in `package.json` and its lockfile, and no changed symbol has callers outside its directory: step 6 opens `references/blast-radius.md`;',
     'the report names the changelog it read, the lockfile diff it read and the suite runs before and after.', 'Thin tests around what the dependency does are a finding, not `Untested`.']);
+});
+
+test('self-review proves each acceptance state, reads every reader of moved code, and rules on each finding', () => {
+  // Pilot fix plan Task 6 (MA-254): a duplicate of the shared piece stayed in a second reader; a "Notes not locked"
+  // fix had no caller that passes `locked`; no finding had a ruling.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[2].includes('With a spec (step 4), write `<package>.proofs.md` per `references/proofs.md` and run `proof-check <spec> <package>.proofs.md`: any non-zero exit is a failed check.'), s[2]);
+  assert.ok(s[6].includes('look where grep stops. Code moved into a shared piece: read every other reader of the old code; a copy left behind is a finding.'), s[6]);
+  assert.ok(s[9].includes('A bug counts only with a caller path that reaches it, as `path:line` steps; none: Cleared as unreachable.'), s[9]);
+  assert.ok(s[9].includes("Rule each finding: `fix` inside the spec's Never and Not doing lines, else `ticket` (offered, never filed), or `reject: <citation>`."), s[9]);
+  assert.ok(s[9].includes('A finding with no ruling gives `fix first`. After fixes, a later round (`references/rounds.md`) re-checks the fix diff.'), s[9]);
+  assertContains(`${REF}/proofs.md`, ['`proof-check <spec> <proofs>`', '| Line | State | Evidence |', 'A path must exist.', 'never file a proof for a state it does not show']);
 });

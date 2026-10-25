@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# One proof per acceptance line and per state it names: matches a proofs table to a spec's acceptance lines.
+# Usage: proof-check SPEC PROOFS
+# SPEC's acceptance lines are the `N. ` lines under `## Acceptance criteria`; a line's states are the
+# backticked spans after `States:` on it, up to `Handles:` or the line's end; a line that names none has the
+# one state `-`. PROOFS is a Markdown table of `| Line | State | Evidence |` rows; the header and divider rows
+# are skipped, a state is compared without backticks and in any case, and evidence that is empty, `-`, `none`,
+# `todo`, `tbd` or `n/a` proves nothing. A backticked evidence span that starts with /, ./ or ../ and holds no
+# blank is a file, resolved from the current directory, and must exist.
+# Output, one line each: `unproven: <N> <state>`, `no evidence: PROOFS:<row>`, `missing file: PROOFS:<row>:
+# <path>`, `unknown: PROOFS:<row>: line <N> state <state>`. Exit 0 when every line and state has a proof
+# and no row fails; 1 otherwise; 2 on a usage error, an unreadable file, a SPEC with no numbered acceptance
+# line, or an awk failure, so a check that did not run is not read as clean.
+set -euo pipefail
+[ $# -eq 2 ] || { echo "usage: proof-check SPEC PROOFS" >&2; exit 2; }
+spec=$1 proofs=$2
+[ -r "$spec" ] || { echo "proof-check: cannot read $spec" >&2; exit 2; }
+[ -r "$proofs" ] || { echo "proof-check: cannot read $proofs" >&2; exit 2; }
+
+# need: one `N<TAB>state` line per acceptance line and state, states lower-cased.
+need=$(env LC_ALL=C awk '
+  /^## / { inac = ($0 ~ /^## Acceptance criteria[[:space:]]*$/); next }
+  inac && /^[0-9]+\. / {
+    n = $0; sub(/\..*/, "", n)
+    s = $0; k = 0
+    if (match(s, /States:/)) {
+      s = substr(s, RSTART + 7)
+      if (match(s, /Handles:/)) s = substr(s, 1, RSTART - 1)
+      while (match(s, /`[^`]+`/)) {
+        st = tolower(substr(s, RSTART + 1, RLENGTH - 2)); gsub(/^[ \t]+|[ \t]+$/, "", st)
+        if (st != "") { print n "\t" st; k++ }
+        s = substr(s, RSTART + RLENGTH)
+      }
+    }
+    if (!k) print n "\t-"
+  }' "$spec") || { echo "proof-check: awk failed on $spec" >&2; exit 2; }
+[ -n "$need" ] || { echo "proof-check: $spec has no numbered line under ## Acceptance criteria" >&2; exit 2; }
+
+# rows: one `<row><TAB><kind><TAB><line><TAB><state>[<TAB><path>...]` line per table row with a line number,
+# kind ok, unknown or empty. The paths are the evidence spans that name a file; the shell checks them,
+# so no text from PROOFS reaches a command line.
+rows=$(NEED=$need env LC_ALL=C awk '
+  BEGIN { n = split(ENVIRON["NEED"], r, "\n"); for (i = 1; i <= n; i++) want[r[i]] = 1 }
+  function trim(x) { gsub(/^[ \t]+|[ \t]+$/, "", x); return x }
+  /^[ \t]*\|/ {
+    if (split($0, c, "|") < 5) next
+    ln = trim(c[2]); st = tolower(trim(c[3])); ev = trim(c[4])
+    if (ln !~ /^[0-9]+$/) next
+    gsub(/`/, "", st); st = trim(st); if (st == "") st = "-"
+    e = tolower(ev); gsub(/`/, "", e); e = trim(e)
+    kind = !((ln "\t" st) in want) ? "unknown" : (e == "" || e ~ /^(-|none|todo|tbd|n\/a)$/) ? "empty" : "ok"
+    out = NR "\t" kind "\t" ln "\t" st
+    s = ev
+    while (kind == "ok" && match(s, /`[^`]+`/)) {
+      p = substr(s, RSTART + 1, RLENGTH - 2); s = substr(s, RSTART + RLENGTH)
+      if (p ~ /^(\/|\.\/|\.\.\/)[^ \t]*$/) out = out "\t" p
+    }
+    print out
+  }' "$proofs") || { echo "proof-check: awk failed on $proofs" >&2; exit 2; }
+
+bad=0 proven=""
+while IFS=$'\t' read -r row kind ln st paths; do
+  [ -n "$row" ] || continue
+  case "$kind" in
+    unknown) echo "unknown: $proofs:$row: line $ln state $st"; bad=1; continue ;;
+    empty) echo "no evidence: $proofs:$row"; bad=1; continue ;;
+  esac
+  ok=1
+  if [ -n "$paths" ]; then
+    IFS=$'\t' read -r -a list <<<"$paths"
+    for p in "${list[@]}"; do
+      [ -f "$p" ] || { echo "missing file: $proofs:$row: $p"; bad=1; ok=0; }
+    done
+  fi
+  [ "$ok" = 1 ] && proven="$proven$ln"$'\t'"$st"$'\n'
+done <<<"$rows"
+while IFS= read -r k; do
+  [ -n "$k" ] || continue
+  grep -Fxq -- "$k" <<<"$proven" || { echo "unproven: ${k%%$'\t'*} ${k#*$'\t'}"; bad=1; }
+done <<<"$need"
+exit "$bad"
