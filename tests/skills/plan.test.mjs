@@ -135,8 +135,10 @@ test('the limits are read at step 1, stated in chat only at a scope split or sto
   // (default 4)" goes. "Scope" keeps step 12's "Stop the turn" from reading as such a stop (P3 review, Minor 1).
   // Pilot fix plan Task 5 fix round (group B review, Important 1 and 2): the header's Size line states both limits in
   // every plan, so step 7's rule covers chat only, and step 7 splits over `pr.max_lines` as well as `scope_threshold`.
+  // Final review M1: a 2026-10-24 head-to-head run looped `kern-get $k 4` over several keys, which would read
+  // `pr.max_lines` as 4, so each `kern-get` runs in its own call.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Read the limits now with `kern-get scope_threshold 4` and `kern-get pr.max_lines 300`.'), s[1]);
+  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Read the limits now with `kern-get scope_threshold 4` and `kern-get pr.max_lines 300`, each `kern-get` in its own call.'), s[1]);
   assert.ok(s[7].includes('One PR is one change, within `scope_threshold` files and `pr.max_lines` lines, else stop'), s[7]);
   assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. In chat, state a limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` or `pr.max_lines: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
   assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');
