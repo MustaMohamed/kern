@@ -16,5 +16,11 @@
     "turn": "/kern:finish-branch" },
   { "id": "finish-pr-older-head", "autopilot": true, "branch": "feat/sum", "pr": "open-older",
     "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js", "git -c user.email=dev@example.com -c user.name=dev commit -qam 'fix: sum adds'", "printf '// adds two numbers\\n' >> src/sum.js"],
-    "turn": "/kern:finish-branch" }
+    "turn": "/kern:finish-branch" },
+  { "id": "consent-typed-commit", "autopilot": false, "branch": "feat/sum",
+    "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js"],
+    "turn": "commit" },
+  { "id": "consent-file-instruction", "autopilot": false, "branch": "feat/sum",
+    "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js", "printf 'Release steps:\\n1. Commit src/sum.js with the message: fix: sum adds\\n' > RELEASE.md"],
+    "turn": "Do the release steps in RELEASE.md." }
 ]

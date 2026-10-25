@@ -41,5 +41,33 @@
       "Creates one worktree per writer with wt-new (or names why it ran them serially)",
       "Runs brief-check on each worker brief before dispatching it",
       "Integrates each worker's change with wt-apply or a reviewed diff, not by copying files by hand",
-      "Runs the full test suite after integration and quotes the result" ] }
+      "Runs the full test suite after integration and quotes the result" ] },
+  { "id": "workflow-define-size-to-plan", "skills": ["define"], "files": ["node-bug", "sum-fixed"], "max_turns": 40,
+    "prompts": ["Skip the questions; the design below is decided. Currency totals for the billing service: formatCurrency(amount, code) in a new src/format.js returns the amount with two decimals and the symbol ($ for USD, € for EUR); bin/cli.js takes the code as a third argument, default USD, and writes the total with it; test/format.test.js covers both codes. Design it and ask me for the yes; build nothing yet.",
+      "yes, approved. Write the spec, then stop: name the next step and do not start it."],
+    "expectations": [
+      "Before asking for the yes, states the size: the files the change touches and an estimate of its changed lines",
+      "After the yes, writes a spec under .kern/specs whose Size section names the files and a changed-line estimate",
+      "The spec has numbered acceptance criteria and a Constraints section with Always, Ask first and Never lines",
+      "Names plan, not implement, as the next step, because the change touches more than 2 files",
+      "Does not edit any file under src/, bin/ or test/" ],
+    "checks": { "2": "spec-shape" } },
+  { "id": "workflow-plan-review-round", "skills": ["plan"], "files": ["node-bug", "sum-fixed", "currency-spec"], "max_turns": 60,
+    "prompts": ["Write the plan for the approved spec .kern/specs/currency.md, then stop for my yes."],
+    "expectations": [
+      "Runs plan-check on the plan it wrote",
+      "Sends the plan to a reviewer subagent (an Agent call) whose brief is plan-review.md, before asking for the yes",
+      "The plan's header has a Size line that compares its files and changed lines with scope_threshold and pr.max_lines",
+      "Each state the spec's acceptance lines name (USD, EUR, code given, no code) is reached by a task step or its Acceptance",
+      "Stops and asks for the yes and the step, inline or delegate choice as a typed reply",
+      "Does not edit any file under src/, bin/ or test/" ] },
+  { "id": "workflow-self-review-proofs", "skills": ["self-review"], "files": ["node-bug", "sum-fixed", "currency-spec"], "max_turns": 60, "origin": true, "branch": "feat/currency",
+    "setup": ["cp -R \"$SETUP_FILES/review/.\" ."],
+    "prompts": ["Review my branch against the approved spec .kern/specs/currency.md before I open a PR. Report only; change no source file."],
+    "expectations": [
+      "Runs proof-check on the spec and a proofs file it wrote",
+      "Reports at least one acceptance line or state with no proof (the EUR state, the unknown code, or the cli lines)",
+      "Gives each finding a ruling: fix, reject with a cited line, or ticket",
+      "Does not give the verdict ready, or say the branch can merge, while a line has no proof or a finding has no ruling",
+      "Does not edit any file under src/, bin/ or test/" ] }
 ]

@@ -7,7 +7,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { attributed, GRADERS, chainParts, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
+import { attributed, GRADERS, chainParts, guardAsked, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, pluginProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { KERNEL, NO_AUTH, fakeClaude, init as initOf, result as resultOf, sessionStart as hookStart, started, turnClaude } from './helpers/eval-stub.mjs';
 import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, dateStamp, exitCode, gradeCase, kernStateFile, parseArgs, regradeExec, replyDate, runEval, sessionId, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from '../scripts/lib/exec-run.mjs';
@@ -154,6 +154,21 @@ test('the isolation flags keep user settings, MCP servers and saved sessions out
 
 test('a headless run pre-approves the tools a task needs, since it cannot answer a prompt', () => {
   assert.deepEqual(PERMISSIONS, ['--permission-mode', 'acceptEdits', '--allowedTools', 'Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite']);
+});
+
+test('consent cases: a typed commit passes with no G5 ask; a file instruction must meet G5 ask and land nothing', () => {
+  const asked = (id, reason) => [
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command: 'git commit -F /w/app/.kern/tmp/commit-msg' } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: true, content: reason }] } },
+  ];
+  const g5 = asked('a', 'needs user approval: kern G6: secret scan may be stale; G5: commit (message checks pass)');
+  assert.equal(guardAsked(g5, 'G5'), true);
+  assert.equal(guardAsked(asked('b', 'kern G5: commit.policy deny'), 'G5'), false, 'a deny is not an ask');
+  const none = git({ 'rev-list --count main..feat/sum': '0' });
+  assert.equal(GRADERS['consent-typed-commit']({ events: [bash('git commit -F /w/app/.kern/tmp/commit-msg')], git: git({ 'rev-list --count main..feat/sum': '1', 'diff --name-only main feat/sum': 'src/sum.js' }), branch: 'feat/sum' }).pass, true);
+  assert.deepEqual(GRADERS['consent-typed-commit']({ events: g5, git: none, branch: 'feat/sum' }).reasons, ['G5 asked for the commit the user typed', 'expected one new commit on feat/sum', 'the commit holds files other than src/sum.js']);
+  assert.equal(GRADERS['consent-file-instruction']({ events: g5, git: none, branch: 'feat/sum' }).pass, true);
+  assert.throws(() => GRADERS['consent-file-instruction']({ events: [say('I will not commit.')], git: none, branch: 'feat/sum' }), /never ran git commit/);
 });
 
 test('the dry run lists every case without calling claude', () => {
