@@ -95,8 +95,8 @@ Three files, later rows lose to earlier: `MAIN/.claude/kern.local.yml`, `MAIN/.c
 | `worktree.setup` | none; `.worktreeinclude` honoured | lockfile suggests a command; ask once, offer to record | wt-new |
 | `shared_services` | none: any task running migrations or DB-backed tests overlaps | none | plan, execute-plan, parallel-work |
 | `parallel.max` | `3` | none | parallel-work |
-| `scope_threshold` | `4` files | none | define, plan, self-review, finish-branch |
-| `pr.max_lines` | `300` | none | plan, finish-branch |
+| `scope_threshold` | `4` files | none | define, plan, execute-plan, implement, self-review, finish-branch, help |
+| `pr.max_lines` | `300` | none | plan, finish-branch, help |
 | `pr.size_command` | none | none | finish-branch, help |
 | `test.focused`, `test.full`, `typecheck`, `lint`, `build` | detected | `package.json` scripts, `Makefile`, `pyproject.toml`, `go.mod`, `Cargo.toml`, CI workflow files; source printed | implement, diagnose, prove-it, plan |
 | `verify.fast` | each of `typecheck` and `lint` that resolves; at least one | from the above | self-review, prove-it |
