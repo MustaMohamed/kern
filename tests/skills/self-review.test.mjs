@@ -34,7 +34,8 @@ test('self-review sections and steps', () => {
   // 7,650 since the pilot fix plan's Task 6 (raised from 7,001): proof-check, the shared-piece read, the caller path
   // and the ruling per finding.
   // 7,900 since Task 6 fix round 1 (I1): the spec found before proof-check, and its not-run line for a spec with no numbered lines.
-  assertMaxBytes(SKILL, 7900);
+  // 7,950 since Task 6 fix round 2 (I1): step 9's `fix first` exempts the proof-check not-run line.
+  assertMaxBytes(SKILL, 7950);
 });
 
 test('self-review exits, order and dispatches', () => {
@@ -68,7 +69,7 @@ test('self-review exits, order and dispatches', () => {
     // Task 16o: the later-round split rule is in references/rounds.md (pinned below). Task 17a P10: "a first round
     // never splits" went to fit the cap; rounds.md says it ("`split` cannot apply", pinned below), and step 1 reads it.
     '`split`: a later round, as `references/rounds.md` says.',
-    '`fix first`: a failed or unrun check (step 2 or 7), an unresolved hit, or a finding in the first two classes', "(the spec lane's Critical and Important count)",
+    '`fix first`: a failed or unrun check (step 2 or 7; not the `proof-check: not run` line), an unresolved hit, or a finding in the first two classes', "(the spec lane's Critical and Important count)",
     // Task 17a P10: the restated `rev-parse <baseref>` test went to pay for D19; a diff that names a path already
     // means `<baseref>` differs from `<merge-base>`.
     '`rebase first`: `git -C <wt> diff --name-only <merge-base> <baseref>` names a path the package also changed',
@@ -146,7 +147,8 @@ test('self-review references', () => {
     'rounds.md': [['# Rounds and packages', '## Package names', '## Previous package', '## Since package'], 1400],
     // M2b Task 17 raised claim-checks.md from 1,700 by the 180 bytes P69's `bar-lowered` rule needs, with its earlier
     // yes (M3) and its committed revert (I3), after the lossless 19-byte cut of "run in seconds and" from the opening.
-    'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1880],
+    // 1,939 since Task 6 fix round 2 (I1): the 59 bytes of the proof-check not-run exception.
+    'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1939],
     'smells.md': [['# Smell baseline', '## Rules', '## Smells'], 2200],
     'proofs.md': [['# Proofs', '## Table', '## Evidence', '## Gaps'], 1200],
   };
@@ -239,7 +241,7 @@ test('the author never clears its own lowered bar: revert it, or fix first until
   const nine = steps(readDoc(SKILL).body)[9];
   assert.ok(nine.includes('or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes), each under Cleared with its check'), nine);
   // A `bar-lowered` hit the user has not said yes to is unresolved, which `fix first` already names.
-  assert.ok(nine.includes('`fix first`: a failed or unrun check (step 2 or 7), an unresolved hit,'), nine);
+  assert.ok(nine.includes('`fix first`: a failed or unrun check (step 2 or 7; not the `proof-check: not run` line), an unresolved hit,'), nine);
   const scan = section(readDoc(`${REF}/claim-checks.md`).body, '## floor-scan');
   // Fix round 1, M3: a yes typed earlier in the session stands. I3: an unstaged revert left HEAD equal to the tree
   // finish-branch step 4 proved, so the push shipped the lowered bar; the verdict now holds until the revert is
@@ -292,6 +294,11 @@ test('self-review proves each acceptance state, reads every reader of moved code
   for (const t of [find, run, 'For any other spec, check the table by reading, and print `proof-check: not run (<source> has no numbered acceptance lines)`.',
     'A skipped check counts as failed (`references/claim-checks.md`); that printed line is the one exception.']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
   assert.ok(s[2].indexOf(find) < s[2].indexOf(run), 'the spec is found before proof-check runs');
+  // Fix round 2, I1: step 9 still gave `fix first` for an unrun step 2 check, so the not-run line still blocked an
+  // issue, PR or plan spec. Step 9 and the reference's skipped-check rule name the same one exception.
+  assert.ok(s[9].includes('`fix first`: a failed or unrun check (step 2 or 7; not the `proof-check: not run` line),'), s[9]);
+  const skipped = section(readDoc(`${REF}/claim-checks.md`).body, '## A skipped check is a failed check');
+  assert.ok(skipped.includes("The one exception is step 2's `proof-check: not run` line."), skipped);
   assert.ok(s[6].includes('look where grep stops. Code moved into a shared piece: read every other reader of the old code; a copy left behind is a finding.'), s[6]);
   assert.ok(s[9].includes('A bug counts only with a caller path that reaches it, as `path:line` steps; none: Cleared as unreachable.'), s[9]);
   assert.ok(s[9].includes("Rule each finding: `fix` inside the spec's Never and Not doing lines, else `ticket` (offered, never filed), or `reject: <citation>`."), s[9]);
