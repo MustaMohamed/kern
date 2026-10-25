@@ -1,0 +1,138 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.310 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "5d6e8be91d9d1a3948193b575f8f1583d833e854",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "workflow-plan-review-round"
+  ],
+  "results": [
+    {
+      "id": "workflow-plan-review-round",
+      "source": "evals/behave/workflows.json",
+      "checks": {
+        "3": "plan-states"
+      },
+      "passed": 2,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 21: `bash .../scripts/plan-check .kern/plans/currency.md; echo \"exit $?\"` returned `exit 0`, run right after the plan was written in step 20."
+            },
+            {
+              "pass": true,
+              "evidence": "Step 22 is an Agent call (\"Review currency plan\") whose first action is reading `plan-review.md`. It ran before the final message that asks for the yes. The brief was not shown, but the subagent read plan-review.md."
+            },
+            {
+              "pass": true,
+              "evidence": "The plan header has this line: \"**Size:** 4 files and about 60 changed lines ..., against `scope_threshold: 6 (.claude/kern.yml)` and `pr.max_lines: 300 (default)`. Within both: one PR.\""
+            },
+            {
+              "pass": true,
+              "evidence": ".kern/plans/currency.md: a task step names each state .kern/specs/currency.md lists after States: (USD, EUR, code given, no code)",
+              "check": "plan-states"
+            },
+            {
+              "pass": true,
+              "evidence": "The final message ends: \"Reply with a yes and one of these: `step` ... `inline` ... `delegate` ...\" and the turn stops there. It asks for a typed reply and does not proceed."
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write and Edit calls were to `.kern/plans/currency.md`. No file under src/, bin/ or test/ was edited. The subagent's Bash step 27 only tried a temp-directory experiment, and it was blocked."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Call 11: `bash .../scripts/plan-check .kern/plans/currency.md; echo \"exit $?\"` ran on the plan it wrote, and call 13 re-ran it with exit 0."
+            },
+            {
+              "pass": true,
+              "evidence": "Call 14: Agent \"Review currency plan\" read plan-review.md (its first step) and the plan and spec. This came before the final message that asks for the yes."
+            },
+            {
+              "pass": true,
+              "evidence": "The plan's header has: \"**Size:** 4 files and about 60 changed lines (the spec's `## Size` measure), against `scope_threshold: 6 (.claude/kern.yml)` and `pr.max_lines: 300 (default)`.\""
+            },
+            {
+              "pass": true,
+              "evidence": ".kern/plans/currency.md: a task step names each state .kern/specs/currency.md lists after States: (USD, EUR, code given, no code)",
+              "check": "plan-states"
+            },
+            {
+              "pass": true,
+              "evidence": "The final message ends with: \"Execution mode: reply \\\"yes\\\" plus `step`, `inline` or `delegate`. I recommend `inline`...\" It then stops and waits for a typed reply."
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write and Edit calls (7, 8, 9, 10, 12) target .kern/plans/currency.md. No file under src/, bin/ or test/ was edited."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Step 10: `bash .../scripts/plan-check .kern/plans/currency.md; echo \"exit $?\"` => `exit 0`, run right after the plan was written (step 9)."
+            },
+            {
+              "pass": false,
+              "evidence": "Step 12 is an Agent call 'Review currency plan'. The reviewer did read plan-review.md, but only because its own Bash `cat` of the file (step 13) failed on the later `===SPEC` part. The parent's step 11 Read of plan-review.md and the Agent prompt are not shown in the record. The record does not plainly show that the brief was plan-review.md. The review did come before the ask for the yes."
+            },
+            {
+              "pass": true,
+              "evidence": "Plan header: `**Size:** 4 files and about 60 changed lines (the spec's `## Size` measure), against `scope_threshold: 6 (.claude/kern.yml)` and `pr.max_lines: 300 (default)`. One PR.`"
+            },
+            {
+              "pass": true,
+              "evidence": ".kern/plans/currency.md: a task step names each state .kern/specs/currency.md lists after States: (USD, EUR, code given, no code)",
+              "check": "plan-states"
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply ends: `Your decision: reply yes, plus how to run it: `step` ..., `inline` ..., or `delegate` ...`. It stops there and waits for a typed reply."
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write and Edit calls (steps 9 and 16) target `.kern/plans/currency.md`. No file under src/, bin/ or test/ is edited."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}

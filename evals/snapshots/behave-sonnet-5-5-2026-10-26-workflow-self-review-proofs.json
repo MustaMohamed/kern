@@ -1,0 +1,133 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.310 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "5d6e8be91d9d1a3948193b575f8f1583d833e854",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "workflow-self-review-proofs"
+  ],
+  "results": [
+    {
+      "id": "workflow-self-review-proofs",
+      "source": "evals/behave/workflows.json",
+      "checks": {},
+      "passed": 0,
+      "valid": 3,
+      "invalid": 0,
+      "pass": false,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The final reply says: \"I did not run `floor-scan`, `claim-check`, `proof-check`...\". The tool calls show no proof-check run and no proofs file written."
+            },
+            {
+              "pass": false,
+              "evidence": "proof-check was never run. The reply does list uncovered items: no EUR assertion, no XYZ throw test, and no cli.test.js. But these come from reading the diff, not from a proof-check report of lines or states with no proof."
+            },
+            {
+              "pass": true,
+              "evidence": "Finding 1: \"`src/format.js:3`: unknown currency returns `?5.00` instead of throwing (criterion 2)... The ruling on each is `fix`\". It names the file, the `?` return, the spec's throw requirement, and a fix ruling. The criterion is cited as criterion 2, where the expectation says acceptance line 2."
+            },
+            {
+              "pass": true,
+              "evidence": "\"All of these are blockers. The ruling on each is `fix`, since none touches the spec's Never line\". All four findings are given the fix ruling."
+            },
+            {
+              "pass": true,
+              "evidence": "The verdict is \"**Verdict: fix first.**\" It does not say ready or mergeable. The branch is described as unfinished, and every finding has a fix ruling."
+            },
+            {
+              "pass": true,
+              "evidence": "The only tool calls are Read and Bash: git diff, cat, ls, npm test, kern-get. No Write or Edit appears. The reply says \"I changed no source files\"."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "The final reply lists \"`proof-check` and the proofs file\" under \"Not run\". No proof-check call and no proofs file write appear in the tool calls."
+            },
+            {
+              "pass": true,
+              "evidence": "The report says: \"The EUR case from criterion 1 has no test, and neither does the unknown-code throw from criterion 2.\" It also says the CLI test \"doesn't exist\". These are acceptance lines with no proof, though they were found by reading, not by proof-check."
+            },
+            {
+              "pass": true,
+              "evidence": "The table row reads: \"`src/format.js:3` | Criterion 2 is not implemented. `SYMBOLS[code] ?? '?'` ... `formatCurrency(5, 'XYZ')` returns `?5.00` instead of throwing `unknown currency XYZ`.\" Its ruling is \"fix\"."
+            },
+            {
+              "pass": true,
+              "evidence": "Every row in the findings table has a Ruling cell reading \"fix\": the cli.js blocker, the format.js blocker, the format.test.js should-fix and the missing cli.test.js should-fix."
+            },
+            {
+              "pass": true,
+              "evidence": "The verdict is \"fix first\", not ready, and the reply does not say the branch can merge. Every finding has a ruling, and the unrun checks are flagged as unfinished."
+            },
+            {
+              "pass": true,
+              "evidence": "The tool calls are all Read and Bash commands that only read files, run tests or write under .kern/reviews. No Edit or Write touches src/, bin/ or test/. The reply says \"I changed no source file.\""
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": false,
+              "evidence": "No proof-check run and no proofs file written. The tools used were Read and Bash (git diff, npm test, node -e). The reply says 'I did not write a review package or findings page.'"
+            },
+            {
+              "pass": true,
+              "evidence": "The reply reports 'Untested: the EUR path, the throw path, and the CLI with and without a code.' and 'There is no test/cli.test.js, so criterion 3 has no test.' These are states with no proof, though found by reading rather than by proof-check."
+            },
+            {
+              "pass": true,
+              "evidence": "Finding 2: '`src/format.js:3` falls back to `'?'` for an unknown code. I ran `formatCurrency(5, 'XYZ')` and it returned `?5.00` instead of throwing `unknown currency XYZ`... Ruling: fix.'"
+            },
+            {
+              "pass": true,
+              "evidence": "Each of the three findings ends with 'Ruling: fix.' None is left without a ruling."
+            },
+            {
+              "pass": true,
+              "evidence": "The verdict is 'Verdict: fix first.' It never says ready or that the branch can merge, and every finding has a ruling."
+            },
+            {
+              "pass": true,
+              "evidence": "The only tools used were Read and Bash. The Bash calls were git diff, cat, npm test, git fetch and node -e, and none wrote files. The reply says 'I changed no files.'"
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}

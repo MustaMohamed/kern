@@ -1,0 +1,104 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.310 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "5d6e8be91d9d1a3948193b575f8f1583d833e854",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "workflow-define-size-to-plan"
+  ],
+  "results": [
+    {
+      "id": "workflow-define-size-to-plan",
+      "source": "evals/behave/workflows.json",
+      "checks": {
+        "2": "spec-shape"
+      },
+      "passed": 2,
+      "valid": 2,
+      "invalid": 1,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Before asking 'Do I have your yes to build it?', the assistant wrote 'The size is 3 files and about 25 lines, as one PR.' and listed the three files (test/format.test.js, src/format.js, bin/cli.js)."
+            },
+            {
+              "pass": true,
+              "evidence": "The Write to .kern/specs/currency-totals.md includes '## Size\\n\\nFiles: 3, `src/format.js` (new), `bin/cli.js`, `test/format.test.js` (new). Lines: about 25 changed, tests included.'"
+            },
+            {
+              "pass": true,
+              "evidence": ".kern/specs/currency-totals.md, as the run left it, has 4 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints",
+              "check": "spec-shape"
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: 'The next step is **plan**. The change touches 3 files, which is over the 2-file limit for going straight to implementation...'"
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write was to .kern/specs/currency-totals.md; no Edit or Write touched src/, bin/ or test/. Other calls were Read, Bash reads/checks, and ToolSearch."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Before asking 'Can I build this as written?', the assistant lists 3 files (`src/format.js` new, `bin/cli.js`, `test/format.test.js` new). It gives no changed-line estimate in that message; the estimate 'about 40 changed' appears only later in the spec. The size is stated by file count and file list but not by lines."
+            },
+            {
+              "pass": true,
+              "evidence": "Wrote .kern/specs/currency-totals.md with '## Size\\n\\nFiles: 3 (`src/format.js` new, `bin/cli.js`, `test/format.test.js` new). Lines: about 40 changed, insertions plus deletions with tests.'"
+            },
+            {
+              "pass": true,
+              "evidence": ".kern/specs/currency-totals.md, as the run left it, has 5 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints",
+              "check": "spec-shape"
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: 'The next step is plan. It touches 3 files, which is more than 2, so plan's step 2 decides...' and the spec says 'Over 2 files: plan.'"
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write was to .kern/specs/currency-totals.md; no Edit or Write touched src/, bin/ or test/. The other calls were reads and bash that only read files."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": true,
+          "reason": "Unexpected non-whitespace character after JSON at position 763 (line 3 column 1)",
+          "verdict": null,
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}
