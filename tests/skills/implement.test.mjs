@@ -26,7 +26,8 @@ test('implement sections, steps and red flags', () => {
   // Raised from 5,500 in M2b Task 17 (R4 review I1, M5 to M7): step 5's RED, nothing-to-mutate path and stop for
   // tests asked for on existing code, after lossless cuts.
   // 5,650 since the pilot fix plan's Task 7: step 8's spec update.
-  assertMaxBytes(SKILL, 5650);
+  // 5,800 since Task 7 fix round 1 (I4): step 8 proposes the new line and asks, and parks under autopilot.
+  assertMaxBytes(SKILL, 5800);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
@@ -131,8 +132,12 @@ test('implement references', () => {
   assertMaxBytes('skills/implement/references/slicing.md', 1800);
 });
 
-test('a build that departs from an acceptance line edits the spec in the same step', () => {
+test('a build that departs from an acceptance line proposes the new text and asks before any spec edit', () => {
   // Pilot fix plan Task 7 (MA-254): three acceptance lines described the first commit and were never updated.
+  // Fix round 1, I4: "edit that line in the same step" changed an approved spec with no yes from the user, and
+  // self-review then checked the build against the rewritten line.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[8].includes('A build that departs from a spec acceptance line: edit that line in the same step, and name it in the report.'), s[8]);
+  for (const t of ["A build that departs from an approved spec's acceptance line: name the line and the proposed new text, and ask; never edit the spec on your own.",
+    'Edit it only on the user\'s yes, keeping its `States:` and `Handles:` form. Under autopilot, write a `parked:` line instead.']) assert.ok(s[8].includes(t), `step 8 lacks: ${t}`);
+  assert.ok(!s[8].includes('in the same step'), s[8]);
 });
