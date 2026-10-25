@@ -304,4 +304,8 @@ test('self-review proves each acceptance state, reads every reader of moved code
   assert.ok(s[9].includes("Rule each finding: `fix` inside the spec's Never and Not doing lines, else `ticket` (offered, never filed), or `reject: <citation>`."), s[9]);
   assert.ok(s[9].includes('A finding with no ruling gives `fix first`. After fixes, a later round (`references/rounds.md`) re-checks the fix diff.'), s[9]);
   assertContains(`${REF}/proofs.md`, ['`proof-check <spec> <proofs>`', '| Line | State | Evidence |', 'A path must exist.', 'never file a proof for a state it does not show']);
+  // Final review M3: "one row per line and state" read as a `-` row for each line too, which proof-check flags as
+  // `unknown` on a line that names states.
+  assertContains(`${REF}/proofs.md`, ['then one row per state a line names, or one `-` row for a line with no `States:`.']);
+  assert.ok(!readDoc(`${REF}/proofs.md`).body.includes('one row per line and state'), 'the old row rule is gone');
 });

@@ -4,7 +4,7 @@ One proof per acceptance line, and per state the line names after `States:`. `pr
 
 ## Table
 
-`<package>.proofs.md` holds one Markdown table: a `| Line | State | Evidence |` header, a divider, then one row per line and state. Line is the acceptance number. State is one of the line's backticked states, or `-` for a line that names none.
+`<package>.proofs.md` holds one Markdown table: a `| Line | State | Evidence |` header, a divider, then one row per state a line names, or one `-` row for a line with no `States:`. Line is the acceptance number. State is one of the line's backticked states; a `-` row on a line that names states is `unknown`.
 
 ## Evidence
 
