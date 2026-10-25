@@ -1002,3 +1002,46 @@ EOF
   expect_cmd none "$(printf '%s\n' "git commit -F - <<'EOF'" "fix: G16 guards $HOME/data/sessions/t1.state" 'EOF')" \
     "$(printf '%s\n' "cat <<'EOF'" "$HOME/data/sessions/t1.state" 'EOF' "cat $HOME/data/sessions/t1.state")"
 }
+
+# Task 9 fix round 1: an interpreter here-doc whose output or body could still reach a shell is not inert
+# (_g16_inert), so each body's literal glob gets every rule again. The MA-254 shapes are the no-vote test above.
+
+@test "an interpreter here-doc in a brace group piped on a later line to a command a variable names keeps every rule" {
+  # Rules 1, 2 and 4: a | on any line; a head that is $0 once its quotes are out.
+  # shellcheck disable=SC2016 # literal $0
+  expect_hook "$(printf '%s\n' "{ python3 - <<'EOF'" "print('bash h*/prompt-submit')" 'EOF' '} | "$0"')"
+}
+
+@test "an interpreter here-doc whose output a globbed shell head runs, after a semicolon, keeps every rule" {
+  # Rule 3: a head that holds a glob (/bin/[s]h) once its quotes are out; rule 4 also reads "$x".
+  # shellcheck disable=SC2016 # literal $( ) and $x
+  expect_hook "$(printf '%s\n' "python3 - <<'EOF' > j.sh; x=\$(cat j.sh); /bin/[s]h -c \"\$x\"" "print('bash h*/prompt-submit')" 'EOF')" \
+    "$(printf '%s\n' "python3 - <<'EOF' > j.sh; /bin/[s]h j.sh" "print('bash h*/prompt-submit')" 'EOF')"
+}
+
+@test "an interpreter here-doc whose continued line pipes to xargs and a command a variable names keeps every rule" {
+  # Rules 1 and 4: the | sits on the line the backslash continues, and "$0" is a word of the xargs record.
+  # shellcheck disable=SC2016 # literal $0
+  expect_hook "$(printf '%s\n' "python3 - <<'EOF' \\" '  | xargs -I{} "$0" -c {}' "print('bash h*/prompt-submit')" 'EOF')"
+}
+
+@test "an interpreter here-doc with an unquoted delimiter keeps every rule, since the shell expands its body" {
+  # Rule 5: every here-doc needs a quoted delimiter, with or without the -.
+  expect_hook "$(printf '%s\n' 'python3 - <<EOF' "print('bash h*/prompt-submit')" 'EOF')" \
+    "$(printf '%s\n' 'python3 - <<-EOF' "print('bash h*/prompt-submit')" 'EOF')"
+}
+
+@test "an interpreter here-doc whose body holds a pipe keeps every rule" {
+  # Rule 1: a | anywhere in the command, body lines included.
+  expect_hook "$(printf '%s\n' "python3 - <<'EOF'" "import os; os.system('ls | bash h*/prompt-submit')" 'EOF')"
+}
+
+@test "a cat here-doc substitution whose body names the sessions dir is data only to git or gh; to perl, tee or env it is denied" {
+  # The word "$(cat" is exempt only in a record whose head is git or gh. tee would write to the path the body
+  # names; perl -e runs the body; env "$0" -c runs the variable that holds it. Test 15 is the git commit form.
+  # shellcheck disable=SC2016 # literal $( ), $0 and $x
+  expect_cmd deny "$(printf '%s\n' "perl -e \"\$(cat <<'EOF'" "open(F, '>', '$S/t1.state'); print F 'on';" 'EOF' ')"')" \
+    "$(printf '%s\n' "tee \"\$(cat <<'EOF'" "$S/t1.state" 'EOF' ')"')" \
+    "$(printf '%s\n' "x=\$(cat <<'EOF'" "echo on > $S/t1.state" 'EOF' ')' 'env "$0" -c "$x"')"
+  expect_cmd none "$(printf '%s\n' "gh pr create --title t --body \"\$(cat <<'EOF'" "G16 guards $S/t1.state" 'EOF' ')"')"
+}

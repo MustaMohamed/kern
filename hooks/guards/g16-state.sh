@@ -563,8 +563,12 @@ _g16_bash() {
   # code, which can write any path it names. When the text names the sessions dir, as written or under ~,
   # more often than the shell's own view of it does (git_words, which drops the bodies no shell reads), a
   # body names it: denied as a state write, unless the command holds no | and every body is data to cat,
-  # tee, git or gh (_g16_inert), as a commit message or a PR body is. A path code builds at run time is
-  # not seen.
+  # tee, git or gh (_g16_inert), as a `git commit -F - <<'EOF'` message is. A body passed as
+  # "$(cat <<'EOF' ...)" is data only to git or gh (git commit -m, gh pr create --body): the word "$(cat"
+  # is exempt in a record whose head is git or gh. To any other command, tee included (it would write to
+  # the path the body names), it is denied, as is any other word that holds a $. Not seen (accepted
+  # limits): a path code builds at run time, and a script file a body writes that a later record runs by
+  # path.
   case "$cmd" in
     *'<<'*)
       sd_tilde=$_G16_SD
@@ -575,7 +579,7 @@ _g16_bash() {
         hr=${cmd//"$hm"/}
         hn=${hv//"$hm"/}
         [ $(((${#cmd} - ${#hr}) / ${#hm})) -gt $(((${#hv} - ${#hn}) / ${#hm})) ] || continue
-        case "$cmd" in *'|'*) ;; *) _g16_inert "$hv" "$cmd" '^(cat|tee|git|gh)$' && continue ;; esac
+        case "$cmd" in *'|'*) ;; *) _g16_inert "$hv" "$cmd" '^(cat|tee|git|gh)$' '^(git|gh)$' && continue ;; esac
         vote deny G16 "$_G16_STATE_CMD"
         return 0
       done
@@ -814,7 +818,9 @@ _g16_hooks() {
   # reads. When every body is interpreter code, the view's records get every rule and the readings
   # above only the literal ones, so code in a `python3 - <<EOF` body that holds a glob or a paren before
   # a slash is not read as a path the shell expands, while a hook path or a state function the body
-  # names still asks. A glob that interpreter code expands is code that builds a path (accepted limit).
+  # names still asks. Accepted limits: a glob that interpreter code expands is code that builds a path,
+  # and a script file a body writes that a later record runs by path is interpreter code that builds a
+  # command at run time.
   mode=full
   _g16_shell_view "$_G16_F" && mode=literal
   for t in "${readings[@]}"; do
@@ -848,7 +854,7 @@ _g16_hooks() {
 # take its quotes out. MODE literal matches only the text rule (_G16_HOOK_AWK's hit); full, the default,
 # also reads each word.
 _g16_hooks_read() {
-  local t r w d c last names f ctx=0 inside hit=0 mode=${2:-full}
+  local t r w d c last names f ctx=0 inside hit=0 mode=${2:-full} nl=$'\n'
   # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one _g16_tr
   # pass and only when the text holds one.
   t=${1//\$\'/}
@@ -919,35 +925,67 @@ EOT
 }
 
 # _g16_shell_view CMD: sets _G16_SV to CMD's simple commands as git_words splits them, one per line,
-# which leaves out the body of each here-doc that no shell reads as its script. Exit 0 only when every
-# body is code for an interpreter that runs no shell (python, node, ruby, perl or php; _g16_inert).
-# Exit 1, with no view to use, when CMD holds no <<, when git_words fails or prints a $KERN_UNREAD
-# record, or when _g16_inert fails: a cat body could be piped to a shell, so cat bodies keep every rule.
+# which leaves out the body of each here-doc that no shell reads as its script. Exit 0 only when
+# _g16_inert passes CMD with the heads python (python[0-9.]*), node, nodejs, ruby, perl and php: every
+# here-doc is read by one of them and has a quoted delimiter, CMD holds no |, and no record runs a shell or
+# a command that a $, a backtick or a glob names. Exit 1, with no view to use, when CMD holds no <<, when
+# git_words fails or prints a $KERN_UNREAD record, or when _g16_inert fails; every reading then gets every
+# rule, as before Task 9. A cat body could be piped to a shell, so cat bodies keep every rule.
 _g16_shell_view() {
   case "$1" in *'<<'*) ;; *) return 1 ;; esac
   _G16_SV=$(set -o pipefail; git_words "$1") || return 1
   # shellcheck disable=SC2016 # the literal record git_words prints
   case "$_G16_SV" in *'$KERN_UNREAD'*) return 1 ;; esac
-  _g16_inert "$_G16_SV" "$1" '^(python[0-9.]*|node|nodejs|ruby|perl|php)$'
+  _g16_inert "$_G16_SV" "$1" '^(python[0-9.]*|node|nodejs|ruby|perl|php)$' ''
 }
 
-# _g16_inert VIEW CMD HEADS: exit 0 when no here-doc body in CMD reaches a shell, so each body is data
-# or code for the command that reads it. VIEW is git_words' records of CMD. It needs all of these: every
-# record that holds << has a head, after NAME=value words, quotes and its path, that matches the awk
-# regex HEADS in any case; no line of CMD that holds << also holds |; no record's head starts with $ or
-# holds a backtick ($SHELL -c "$x"); and no record holds a word, by name or path, that is a shell or
-# runs one: sh, bash, zsh, dash, ksh, mksh, yash, fish, csh, tcsh, busybox, eval, source or .
+# _g16_inert VIEW CMD HEADS EXEMPT: exit 0 when no here-doc body in CMD, and no output of the command
+# that reads it, can reach a shell, so each body is data or code for that command. VIEW is git_words'
+# records of CMD. Any rule that fails gives exit 1 (fail closed; Task 9 fix round 1). It needs all of these:
+# 1. CMD holds no |, on any line, body lines included: the view keeps no pipe. A body that holds one (a
+#    regex alternation, a bitwise or) keeps every rule.
+# 2. Each record's head, after NAME=value words and once quotes and backslashes are out, does not start
+#    with $ and holds no backtick ("$0", "$SHELL", "${x}").
+# 3. That head holds no *, ? or [ (/bin/[s]h, /bin/s?).
+# 4. No word of any record holds a $ or a backtick once quotes and backslashes are out (xargs -I{} "$0",
+#    env "$SHELL", awk '{system($0)}'). A $( ) in an unquoted body is a record of its own, its inner
+#    command, so this rule does not read it. The one exemption: a word that strips to exactly $(cat, in a
+#    record whose head matches the awk regex EXEMPT (git or gh in the state-write check, so
+#    git commit -m "$(cat <<'EOF' ...)" stays data). An empty EXEMPT exempts nothing.
+# 5. Every << in CMD opens a here-doc with a quoted delimiter: after the <<, an optional - and blanks, the
+#    word starts with ' or ", or with a \ that is not the last character of its line. A <<< here-string is
+#    skipped. Any other run of <, and a << with no such word after it (an unquoted delimiter, whose body
+#    the shell expands; a bit shift in a body), fails.
+# And, as before: every record that holds << has a head whose last path part matches the awk regex HEADS
+# in any case, and no word of any record, by name or path, is a shell or runs one: sh, bash, zsh, dash,
+# ksh, mksh, yash, fish, csh, tcsh, busybox, eval, source or .
 _g16_inert() {
-  printf '%s\n' "$2" | env LC_ALL=C awk 'index($0, "<<") && index($0, "|") { exit 1 }' || return 1
+  case "$2" in *'|'*) return 1 ;; esac
+  printf '%s\n' "$2" | env LC_ALL=C awk '{
+      s = $0; n = length(s); i = 1
+      while (i <= n) {
+        if (substr(s, i, 1) != "<") { i++; continue }
+        for (j = i; j <= n && substr(s, j, 1) == "<"; j++) ;
+        if (j - i == 1 || j - i == 3) { i = j; continue }
+        if (j - i != 2) exit 1
+        if (substr(s, j, 1) == "-") j++
+        while (j <= n && (substr(s, j, 1) == " " || substr(s, j, 1) == "\t")) j++
+        c = substr(s, j, 1)
+        if (!(c == "\047" || c == "\"" || (c == "\\" && j < n))) exit 1
+        i = j + 1
+      }
+    }' || return 1
   # shellcheck disable=SC2016 # awk text
-  printf '%s\n' "$1" | HEADS=$3 env LC_ALL=C awk '{
+  printf '%s\n' "$1" | HEADS=$3 EXEMPT=${4-} env LC_ALL=C awk '{
       for (i = 1; i <= NF && $i ~ /^[A-Za-z_][A-Za-z0-9_]*=/; i++) ;
-      h = $i
-      if (h ~ /^\$/ || index(h, "`")) exit 1
-      h = tolower(h); gsub(/["\047\\]/, "", h); sub(/^.*\//, "", h)
+      h = $i; gsub(/["\047\\]/, "", h)
+      if (h ~ /^\$/ || index(h, "`") || index(h, "*") || index(h, "?") || index(h, "[")) exit 1
+      h = tolower(h); sub(/^.*\//, "", h)
       if (index($0, "<<") && h !~ ENVIRON["HEADS"]) exit 1
       for (j = 1; j <= NF; j++) {
-        w = tolower($j); gsub(/["\047\\]/, "", w); sub(/^.*\//, "", w)
+        w = $j; gsub(/["\047\\]/, "", w)
+        if ((index(w, "$") || index(w, "`")) && !(w == "$(cat" && ENVIRON["EXEMPT"] != "" && h ~ ENVIRON["EXEMPT"])) exit 1
+        w = tolower(w); sub(/^.*\//, "", w)
         if (w ~ /^(sh|bash|zsh|dash|ksh|mksh|yash|fish|csh|tcsh|busybox|eval|source|\.)$/) exit 1
       }
     }'
