@@ -33,7 +33,8 @@ test('self-review sections and steps', () => {
   assert.ok(!readDoc(SKILL).raw.includes('$(git'), 'no command substitution in a command the skill prescribes');
   // 7,650 since the pilot fix plan's Task 6 (raised from 7,001): proof-check, the shared-piece read, the caller path
   // and the ruling per finding.
-  assertMaxBytes(SKILL, 7650);
+  // 7,900 since Task 6 fix round 1 (I1): the spec found before proof-check, and its not-run line for a spec with no numbered lines.
+  assertMaxBytes(SKILL, 7900);
 });
 
 test('self-review exits, order and dispatches', () => {
@@ -284,7 +285,13 @@ test('self-review proves each acceptance state, reads every reader of moved code
   // Pilot fix plan Task 6 (MA-254): a duplicate of the shared piece stayed in a second reader; a "Notes not locked"
   // fix had no caller that passes `locked`; no finding had a ruling.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[2].includes('With a spec (step 4), write `<package>.proofs.md` per `references/proofs.md` and run `proof-check <spec> <package>.proofs.md`: any non-zero exit is a failed check.'), s[2]);
+  // Fix round 1, I1: a linked issue, PR text or a plan has no numbered acceptance lines, so proof-check exited 2 and
+  // the verdict was `fix first`; and step 4 wrote tracker or PR text under `kern-dir tmp` only after step 2 ran.
+  const find = 'Find the spec now, as step 4 says. With one, write `<package>.proofs.md` per `references/proofs.md`.';
+  const run = 'Run `proof-check <spec> <package>.proofs.md` only on a spec with numbered lines under `## Acceptance criteria`: any non-zero exit is a failed check.';
+  for (const t of [find, run, 'For any other spec, check the table by reading, and print `proof-check: not run (<source> has no numbered acceptance lines)`.',
+    'A skipped check counts as failed (`references/claim-checks.md`); that printed line is the one exception.']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
+  assert.ok(s[2].indexOf(find) < s[2].indexOf(run), 'the spec is found before proof-check runs');
   assert.ok(s[6].includes('look where grep stops. Code moved into a shared piece: read every other reader of the old code; a copy left behind is a finding.'), s[6]);
   assert.ok(s[9].includes('A bug counts only with a caller path that reaches it, as `path:line` steps; none: Cleared as unreachable.'), s[9]);
   assert.ok(s[9].includes("Rule each finding: `fix` inside the spec's Never and Not doing lines, else `ticket` (offered, never filed), or `reject: <citation>`."), s[9]);

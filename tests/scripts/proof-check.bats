@@ -66,3 +66,56 @@ proofs() {
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"no numbered line under ## Acceptance criteria"* ]] || false
 }
+
+@test "States on a continuation line of a numbered line counts, up to the next numbered or blank line" {
+  # Task 6 fix round 1, I2: a States: the parser could not read collapsed to the one state `-`.
+  cat > cont.md <<'SPEC'
+## Acceptance criteria
+
+1. The form saves a transaction.
+   States: `add`, `edit`. Handles: `testID=save`.
+2. Rows show their label.
+### Notes
+States: `not an acceptance line`.
+
+## Test seams
+SPEC
+  proofs '| 1 | - | `npm test`: 3 passed |' '| 2 | - | `npm test`: 3 passed |'
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" cont.md proofs.md
+  [ "$status" -eq 1 ]
+  [ "${#lines[@]}" -eq 3 ]
+  [ "${lines[0]}" = "unknown: proofs.md:3: line 1 state -" ]
+  [ "${lines[1]}" = "unproven: 1 add" ]
+  [ "${lines[2]}" = "unproven: 1 edit" ]
+  proofs '| 1 | add | `./add.png` |' '| 1 | edit | `./edit.png` |' '| 2 | - | `npm test`: 3 passed |'
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" cont.md proofs.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a States: with no backticked state exits 2 and names the line, on a numbered line or its continuation" {
+  # Task 6 fix round 1, I2: `States: add, edit.` passed with a single `| 1 | - |` row.
+  proofs '| 1 | - | `npm test`: 3 passed |' '| 2 | - | `npm test`: 3 passed |'
+  printf '## Acceptance criteria\n\n1. The form saves. States: add, edit.\n' > bare.md
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" bare.md proofs.md
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [ "$stderr" = "proof-check: bare.md:3: line 1 has States: with no backticked state" ]
+  printf '## Acceptance criteria\n\n1. The form saves.\n2. Rows show their label.\n   States: rows reached by scrolling.\n' > bare2.md
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" bare2.md proofs.md
+  [ "$status" -eq 2 ]
+  [ "$stderr" = "proof-check: bare2.md:5: line 2 has States: with no backticked state" ]
+}
+
+@test "evidence with no backticked span, or a placeholder with a trailing dot, proves nothing" {
+  # Task 6 fix round 1, I3: the placeholder list matched whole cells only, so these each passed.
+  proofs '| 1 | add | looks fine |' '| 1 | edit | None. |' '| 2 | rows reached by scrolling | not run |' '| 3 | - | `none`. |'
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" spec.md proofs.md
+  [ "$status" -eq 1 ]
+  [ "${lines[0]}" = "no evidence: proofs.md:3" ]
+  [ "${lines[1]}" = "no evidence: proofs.md:4" ]
+  [ "${lines[2]}" = "no evidence: proofs.md:5" ]
+  [ "${lines[3]}" = "no evidence: proofs.md:6" ]
+  [ "${lines[4]}" = "unproven: 1 add" ]
+  [ "${lines[7]}" = "unproven: 3 -" ]
+}

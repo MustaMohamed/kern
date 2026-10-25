@@ -1,28 +1,33 @@
 #!/usr/bin/env bash
 # One proof per acceptance line and per state it names: matches a proofs table to a spec's acceptance lines.
 # Usage: proof-check SPEC PROOFS
-# SPEC's acceptance lines are the `N. ` lines under `## Acceptance criteria`; a line's states are the
-# backticked spans after `States:` on it, up to `Handles:` or the line's end; a line that names none has the
-# one state `-`. PROOFS is a Markdown table of `| Line | State | Evidence |` rows; the header and divider rows
-# are skipped, a state is compared without backticks and in any case, and evidence that is empty, `-`, `none`,
-# `todo`, `tbd` or `n/a` proves nothing. A backticked evidence span that starts with /, ./ or ../ and holds no
-# blank is a file, resolved from the current directory, and must exist.
+# SPEC's acceptance lines are the `N. ` lines under `## Acceptance criteria`, each with its continuation
+# lines up to the next numbered line, blank line or `#` heading; a line's states are the backticked spans after
+# `States:` in that text, up to `Handles:` or its end; a line that names none has the one state `-`, and a
+# `States:` with no backticked span exits 2. PROOFS is a Markdown table of `| Line | State | Evidence |` rows;
+# the header and divider rows are skipped, a state is compared without backticks and in any case, and
+# evidence with no backticked span, or that is empty, `-`, `none`, `todo`, `tbd` or `n/a` once its backticks
+# and a trailing `.` are dropped, proves nothing. A backticked evidence span that starts with /, ./ or ../
+# and holds no blank is a file, resolved from the current directory, and must exist.
 # Output, one line each: `unproven: <N> <state>`, `no evidence: PROOFS:<row>`, `missing file: PROOFS:<row>:
 # <path>`, `unknown: PROOFS:<row>: line <N> state <state>`. Exit 0 when every line and state has a proof
 # and no row fails; 1 otherwise; 2 on a usage error, an unreadable file, a SPEC with no numbered acceptance
-# line, or an awk failure, so a check that did not run is not read as clean.
+# line, a `States:` with no backticked state (`proof-check: SPEC:<line>: line <N> has States: with no
+# backticked state`), or an awk failure, so a check that did not run is not read as clean.
 set -euo pipefail
 [ $# -eq 2 ] || { echo "usage: proof-check SPEC PROOFS" >&2; exit 2; }
 spec=$1 proofs=$2
 [ -r "$spec" ] || { echo "proof-check: cannot read $spec" >&2; exit 2; }
 [ -r "$proofs" ] || { echo "proof-check: cannot read $proofs" >&2; exit 2; }
 
-# need: one `N<TAB>state` line per acceptance line and state, states lower-cased.
+# need: one `N<TAB>state` line per acceptance line and state, states lower-cased. item is the numbered line
+# joined with its continuation lines; at is the file line that holds its first `States:`. Exit 3 names a
+# `States:` with no backticked state on stderr.
+rc=0
 need=$(env LC_ALL=C awk '
-  /^## / { inac = ($0 ~ /^## Acceptance criteria[[:space:]]*$/); next }
-  inac && /^[0-9]+\. / {
-    n = $0; sub(/\..*/, "", n)
-    s = $0; k = 0
+  function flush(   s, k, st) {
+    if (item == "") return
+    s = item; k = 0; item = ""
     if (match(s, /States:/)) {
       s = substr(s, RSTART + 7)
       if (match(s, /Handles:/)) s = substr(s, 1, RSTART - 1)
@@ -31,9 +36,25 @@ need=$(env LC_ALL=C awk '
         if (st != "") { print n "\t" st; k++ }
         s = substr(s, RSTART + RLENGTH)
       }
+      if (!k) {
+        printf "proof-check: %s:%d: line %s has States: with no backticked state\n", FILENAME, at, n > "/dev/stderr"
+        failed = 1; exit 3
+      }
     }
     if (!k) print n "\t-"
-  }' "$spec") || { echo "proof-check: awk failed on $spec" >&2; exit 2; }
+  }
+  /^## / { flush(); inac = ($0 ~ /^## Acceptance criteria[[:space:]]*$/); next }
+  /^#+[ \t]/ { flush() }
+  !inac { next }
+  /^[0-9]+\. / { flush(); item = $0; n = $0; sub(/\..*/, "", n); at = ($0 ~ /States:/) ? FNR : 0; next }
+  /^[[:space:]]*$/ { flush(); next }
+  item != "" { item = item " " $0; if (!at && /States:/) at = FNR }
+  END { if (!failed) flush() }' "$spec") || rc=$?
+case "$rc" in
+  0) ;;
+  3) exit 2 ;;
+  *) echo "proof-check: awk failed on $spec" >&2; exit 2 ;;
+esac
 [ -n "$need" ] || { echo "proof-check: $spec has no numbered line under ## Acceptance criteria" >&2; exit 2; }
 
 # rows: one `<row><TAB><kind><TAB><line><TAB><state>[<TAB><path>...]` line per table row with a line number,
@@ -47,8 +68,8 @@ rows=$(NEED=$need env LC_ALL=C awk '
     ln = trim(c[2]); st = tolower(trim(c[3])); ev = trim(c[4])
     if (ln !~ /^[0-9]+$/) next
     gsub(/`/, "", st); st = trim(st); if (st == "") st = "-"
-    e = tolower(ev); gsub(/`/, "", e); e = trim(e)
-    kind = !((ln "\t" st) in want) ? "unknown" : (e == "" || e ~ /^(-|none|todo|tbd|n\/a)$/) ? "empty" : "ok"
+    e = tolower(ev); gsub(/`/, "", e); e = trim(e); sub(/\.$/, "", e); e = trim(e)
+    kind = !((ln "\t" st) in want) ? "unknown" : (ev !~ /`[^`]+`/ || e == "" || e ~ /^(-|none|todo|tbd|n\/a)$/) ? "empty" : "ok"
     out = NR "\t" kind "\t" ln "\t" st
     s = ev
     while (kind == "ok" && match(s, /`[^`]+`/)) {
