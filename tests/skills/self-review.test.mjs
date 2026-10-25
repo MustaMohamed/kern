@@ -294,6 +294,9 @@ test('self-review proves each acceptance state, reads every reader of moved code
   for (const t of [find, run, 'For any other spec, check the table by reading, and print `proof-check: not run (<source> has no numbered acceptance lines)`.',
     'A skipped check counts as failed (`references/claim-checks.md`); that printed line is the one exception.']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
   assert.ok(s[2].indexOf(find) < s[2].indexOf(run), 'the spec is found before proof-check runs');
+  // Final review M6: with no spec, step 2 said nothing, so the proof-check that never ran read as an unrun check and gave
+  // `fix first`. "Skip" would sit beside "A skipped check counts as failed", so the step says no proofs are due.
+  assert.ok(s[2].includes(`${find} No spec: no proofs are due. Run`), s[2]);
   // Fix round 2, I1: step 9 still gave `fix first` for an unrun step 2 check, so the not-run line still blocked an
   // issue, PR or plan spec. Step 9 and the reference's skipped-check rule name the same one exception.
   assert.ok(s[9].includes('`fix first`: a failed or unrun check (step 2 or 7; not the `proof-check: not run` line),'), s[9]);
