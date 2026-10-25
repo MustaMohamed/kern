@@ -133,25 +133,27 @@ export function readTree(cwd, when) {
   }
 }
 
-// SPEC_CHECKS: the CHECKS that read the specs a run leaves (bfix2 C2 fix round 1; the controller's ruling on review I1: grade
-// the spec's final text, as a Bash or python edit after its Write is not in the transcript's Write and Edit text).
-// readsSpecs(c): whether case c names one, so the runner reads them only for such a case.
-const SPEC_CHECKS = new Set(['spec-shape']);
+// SPEC_CHECKS: the CHECKS that read the specs and plans a run leaves (bfix2 C2 fix round 1; the controller's ruling on review
+// I1: grade the spec's final text, as a Bash or python edit after its Write is not in the transcript's Write and Edit text;
+// Task 11 fix round 1, I2: the digest cuts a long plan Write). readsSpecs(c): whether case c names one, so the runner reads
+// them only for such a case.
+const SPEC_CHECKS = new Set(['spec-shape', 'plan-states']);
 export const readsSpecs = (c) => Object.values(c.checks ?? {}).some((name) => SPEC_CHECKS.has(name));
 
-// readSpecs(cwd): { specs }, the text of each .kern/specs/*.md file (SPEC_FILE) under cwd by its path from cwd, the
-// workspace's own and any worktree's inside it, read at the run's end; .git and node_modules are not searched, nor is any
-// symlink followed. { problem } when a folder or file cannot be read, which makes the run invalid.
+// readSpecs(cwd): { specs }, the text of each .kern/specs/*.md file (SPEC_FILE) and each .kern/plans/*.md file (PLAN_FILE)
+// under cwd by its path from cwd, the workspace's own and any worktree's inside it, read at the run's end; .git and
+// node_modules are not searched, nor is any symlink followed. { problem } when a folder or file cannot be read, which makes the
+// run invalid.
 export function readSpecs(cwd) {
   const specs = {};
   const walk = (rel) => {
     for (const e of readdirSync(rel ? join(cwd, rel) : cwd, { withFileTypes: true })) {
       const p = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory() && !['.git', 'node_modules'].includes(e.name)) walk(p);
-      else if (e.isFile() && SPEC_FILE.test(p)) specs[p] = readFileSync(join(cwd, p), 'utf8');
+      else if (e.isFile() && (SPEC_FILE.test(p) || PLAN_FILE.test(p))) specs[p] = readFileSync(join(cwd, p), 'utf8');
     }
   };
-  try { walk(''); } catch (e) { return { problem: `the specs under .kern/specs at the run's end could not be read: ${String(e.message || e).split('\n')[0]}` }; }
+  try { walk(''); } catch (e) { return { problem: `the specs and plans under .kern at the run's end could not be read: ${String(e.message || e).split('\n')[0]}` }; }
   return { specs };
 }
 
@@ -723,6 +725,8 @@ const doneSteps = (events) => {
 // to the next) that holds a `status:` line, as a spec does (C2 review, M7: a review or notes file there is no spec).
 // CONSTRAINT(word): a line that opens with `<word>:` in any case, plain, bold or italic, as a list item or not.
 const SPEC_FILE = /(^|\/)\.kern\/specs\/[^/]+\.md$/;
+// PLAN_FILE: a plan under the work dir's plans folder.
+const PLAN_FILE = /(^|\/)\.kern\/plans\/[^/]+\.md$/;
 const fronted = (text) => {
   const lines = String(text ?? '').split(/\r?\n/);
   const end = lines.indexOf('---', 1);
@@ -786,6 +790,78 @@ const specShape = (text, where, note = '') => {
     !co ? 'no ## Constraints section' : missing.length && `no ${labels} line under ## Constraints`].filter(Boolean);
   return problems.length ? { pass: false, evidence: `${where} has ${problems.join(' and ')}${note}` }
     : { pass: true, evidence: `${where} has ${count(numbered, 'numbered acceptance criterion', 'numbered acceptance criteria')} and Always, Ask first and Never lines under ## Constraints${note}` };
+};
+
+// specStates(text): the states a spec's acceptance lines name, as scripts/proof-check reads them: each `N. ` line under
+// `## Acceptance criteria` with its continuation lines up to the next numbered line, blank line or heading, and the
+// backticked spans after `States:` in it, up to `Handles:`. [{ line, state }], in order.
+const specStates = (text) => {
+  const out = [];
+  let item = null;
+  const flush = () => {
+    if (item && item.text.includes('States:')) {
+      const after = item.text.slice(item.text.indexOf('States:') + 'States:'.length);
+      const s = after.includes('Handles:') ? after.slice(0, after.indexOf('Handles:')) : after;
+      for (const m of s.matchAll(/`([^`]+)`/g)) if (m[1].trim()) out.push({ line: item.n, state: m[1].trim() });
+    }
+    item = null;
+  };
+  for (const l of mdSection(text, 'Acceptance criteria') ?? []) {
+    const numbered = /^(\d+)\. /.exec(l);
+    if (/^#+[ \t]/.test(l) || /^\s*$/.test(l) || numbered) flush();
+    if (numbered) item = { n: Number(numbered[1]), text: l };
+    else if (item) item.text += ` ${l}`;
+  }
+  flush();
+  return out;
+};
+// planSteps(text): the text of each step of each task in a plan: under a `### Task` heading, up to the next heading, a list
+// item with a checkbox or a line that opens with `Step <n>` (STEP, as task-template.md writes them), with the lines after it up
+// to the next step, a bold `**Field:**` line at the margin (FIELD: Files, Acceptance, Blocked by and the rest) or a heading.
+// Lines inside a fenced block end nothing.
+const STEP = /^\s*(?:(?:[-*+]|\d+[.)])\s+\[[ xX]\]|(?:(?:[-*+]|\d+[.)])\s+)?[*_]{0,2}Step\s+\d)/;
+const FIELD = /^(?:[-*+]\s+)?\*\*[^*\n]+:\*\*/;
+const planSteps = (text) => {
+  const steps = [];
+  let inTask = false, step = null, fenced = false;
+  const end = () => { if (step !== null) steps.push(step); step = null; };
+  for (const l of text.split(/\r?\n/)) {
+    const fence = /^\s*(?:```|~~~)/.test(l);
+    if (fence) fenced = !fenced;
+    const live = !fence && !fenced;
+    if (live && /^#{1,6}[ \t]/.test(l)) { end(); inTask = /^#{2,4}[ \t]+Task\b/i.test(l); continue; }
+    if (live && inTask && STEP.test(l)) { end(); step = l; continue; }
+    if (live && FIELD.test(l)) { end(); continue; }
+    if (step !== null) step += `\n${l}`;
+  }
+  end();
+  return steps;
+};
+// namesState(text, state): text holds state as whole words, in any case, its blanks matching any run of blanks.
+const namesState = (text, state) => new RegExp(`(?<![\\p{L}\\p{N}_])${state.split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')}(?![\\p{L}\\p{N}_])`, 'iu').test(text);
+// frontValue(text, key): the value of a `key:` line in text's frontmatter, its quotes or backticks dropped; null when none.
+const frontValue = (text, key) => {
+  const lines = String(text).split(/\r?\n/);
+  const end = lines.indexOf('---', 1);
+  const line = lines[0] === '---' && end > 0 ? lines.slice(1, end).find((l) => new RegExp(`^\\s*${key}\\s*:`, 'i').test(l)) : undefined;
+  return line === undefined ? null : line.replace(/^[^:]*:\s*/, '').trim().replace(/^[`'"]|[`'"]$/g, '');
+};
+// either(items): the items joined as a list that ends with `or`.
+const either = (items) => `${items.slice(0, -1).join(', ')}${items.length > 1 ? ' or ' : ''}${items.at(-1)}`;
+// planStates(path, specs): plan-states' verdict on the plan at path among the saved specs: the spec its `spec:` line names (by
+// file name; else the run's only spec), and whether a task step (planSteps) names each state that spec lists (specStates).
+// Throws when the spec is not among them or lists no state, as the check then cannot decide.
+const planStates = (path, specs) => {
+  const named = frontValue(specs[path], 'spec');
+  const keys = Object.keys(specs).filter((k) => SPEC_FILE.test(k));
+  const key = (named && keys.filter((k) => basename(k) === basename(named)).sort((a, b) => a.length - b.length)[0]) ?? (keys.length === 1 ? keys[0] : undefined);
+  if (key === undefined) throw new Error(`check plan-states: ${path} names spec ${named ?? '(none)'}, which the run did not leave`);
+  const states = specStates(specs[key]);
+  if (!states.length) throw new Error(`check plan-states: ${key} lists no state after States: in its acceptance lines`);
+  const steps = planSteps(specs[path]);
+  const missing = states.filter(({ state }) => !steps.some((s) => namesState(s, state)));
+  return missing.length ? { pass: false, evidence: `${path}: no task step names ${either(missing.map(({ line, state }) => `\`${state}\` (line ${line})`))}, which ${key} lists after States:` }
+    : { pass: true, evidence: `${path}: a task step names each state ${key} lists after States: (${states.map((s) => s.state).join(', ')})` };
 };
 
 // CHECKS: the scripted checks a case's `checks` may name (Task 16j, task-16-diagnosis-3 fix group 1; the
@@ -1018,7 +1094,7 @@ export const CHECKS = {
     const path = String(write.call.input.file_path), rel = path.slice(path.lastIndexOf('.kern/specs/'));
     if (specs) {
       const key = Object.keys(specs).filter((k) => bare(path) === k || bare(path).endsWith(`/${k}`)).sort((a, b) => b.length - a.length)[0];
-      if (key === undefined) return { pass: false, evidence: `${rel}, which the last spec Write wrote, is not among the specs the run left: ${Object.keys(specs).sort().join(', ') || 'none'}` };
+      if (key === undefined) return { pass: false, evidence: `${rel}, which the last spec Write wrote, is not among the specs the run left: ${Object.keys(specs).filter((k) => SPEC_FILE.test(k)).sort().join(', ') || 'none'}` };
       return specShape(specs[key], `${key}, as the run left it,`);
     }
     const later = done.filter((s) => precedes(write, s));
@@ -1035,6 +1111,16 @@ export const CHECKS = {
     const bash = later.filter((s) => writesFile(s.call, path));
     const note = bash.length ? `; ${bash.length === 1 ? 'a later Bash call' : `${bash.length} later Bash calls`} may change it, which the check does not read: Bash ${argOf(bash[0].call)}` : '';
     return specShape(text, `${rel}, as its last Write${edits ? ` and the ${count(edits, 'Edit')} after it leave` : ' leaves'} it,`, note);
+  },
+  // Each state the plan's spec lists after `States:` is named by a task step of each .kern/plans/*.md the run left (planStates;
+  // Task 11 fix round 1, I2: the digest cuts a long plan Write, so the model grader may not see its steps). Fails when the run
+  // left no plan; throws when the runner saved no specs and plans (a run saved before it did), or planStates cannot decide.
+  'plan-states': (events, { specs } = {}) => {
+    if (!specs) throw new Error("check plan-states: the run's specs and plans were not saved, and the check reads the plan the run left");
+    const plans = Object.keys(specs).filter((k) => PLAN_FILE.test(k)).sort();
+    if (!plans.length) return { pass: false, evidence: 'the run left no plan under .kern/plans' };
+    const verdicts = plans.map((p) => planStates(p, specs));
+    return { pass: verdicts.every((v) => v.pass), evidence: verdicts.map((v) => v.evidence).join('; ') };
   },
 };
 

@@ -609,7 +609,7 @@ const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
   assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'double-before-test', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-recall-skill', 'no-session-mining',
-    'no-verified-uncommitted', 'no-write', 'one-next-move', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'spec-shape', 'thread-tags']);
+    'no-verified-uncommitted', 'no-write', 'one-next-move', 'plan-states', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'spec-shape', 'thread-tags']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
@@ -1055,6 +1055,37 @@ test('spec-shape grades the text the run left at the path its last spec Write ta
   assert.equal(check(run([use('e', 'Edit', { file_path: P, old_string: 'no such text', new_string: '' }), back('e', 'ok')]), { specs: { '.kern/specs/x.md': spec() } }).pass, true);
   assert.deepEqual(check(run([]), { specs: { '.kern/specs/y.md': spec() } }), { pass: false, evidence: '.kern/specs/x.md, which the last spec Write wrote, is not among the specs the run left: .kern/specs/y.md' });
   assert.deepEqual(check(run([]), { specs: {} }), { pass: false, evidence: '.kern/specs/x.md, which the last spec Write wrote, is not among the specs the run left: none' });
+  assert.deepEqual(check(run([]), { specs: { '.kern/plans/x.md': spec() } }), { pass: false, evidence: '.kern/specs/x.md, which the last spec Write wrote, is not among the specs the run left: none' }, 'a plan is no spec');
+});
+
+// Task 11 fix round 1 (I2): the digest cuts a Markdown Write at RECORD.markdownBody (6000 characters) and plan Writes have run
+// to 7,729, so the grader may not see a plan's states. plan-states reads the plan the run left and the spec its `spec:` names,
+// and passes only when a task step names each state the spec's acceptance lines list after `States:`, as proof-check reads them.
+// A bare Acceptance list, an Acceptance line, or prose outside a task step names none.
+test('plan-states passes only when a task step of the plan the run left names each state its spec lists', () => {
+  const check = CHECKS['plan-states'];
+  const spec = readFileSync(join(ROOT, 'evals', 'fixtures', 'currency-spec', '_kern', 'specs', 'currency.md'), 'utf8');
+  const fence = '```';
+  const plan = (task2, focus = '') => ['---', 'status: draft', 'spec: /w/billing-service/.kern/specs/currency.md', '---', '',
+    '**Size:** 4 files and about 60 changed lines, against `scope_threshold: 4 (default)` and `pr.max_lines: 300 (default)`.', '',
+    '## Review Focus', '', focus, '', '### Task 1: formatCurrency', '', '**Acceptance:** 1, 2', '',
+    '- [ ] Step 1: Write the failing test `formats both codes`:', fence + 'js', '# a line in a block is no heading',
+    "assert.equal(formatCurrency(5, 'USD'), '$5.00');", "assert.equal(formatCurrency(5, 'EUR'), '€5.00');", fence,
+    '- [ ] Step 2: Run it to verify it fails. Run: `npm test`. Expected: `formatCurrency` is not exported.', '',
+    '### Task 2: the cli writes the total with its code', '', ...task2, ''].join('\n');
+  const left = (p) => ({ '.kern/specs/currency.md': spec, '.kern/plans/currency.md': p });
+  const named = ['**Acceptance:** 3', '', '- [ ] Step 1: Write the failing tests, one for the code given state (`node bin/cli.js 2 3 EUR` writes `€5.00`)',
+    '  and one for no code (`node bin/cli.js 2 3` writes `$5.00`).', '- [ ] Step 2: Run: `npm test`. Expected: both fail.'];
+  assert.deepEqual(check([], { specs: left(plan(named)) }),
+    { pass: true, evidence: '.kern/plans/currency.md: a task step names each state .kern/specs/currency.md lists after States: (USD, EUR, code given, no code)' });
+  const missing = { pass: false, evidence: '.kern/plans/currency.md: no task step names `code given` (line 3) or `no code` (line 3), which .kern/specs/currency.md lists after States:' };
+  const bare = ['**Acceptance:** 3', '', '- [ ] Step 1: Write the failing test for `bin/cli.js`.', '- [ ] Step 2: Run: `npm test`. Expected: it fails.'];
+  assert.deepEqual(check([], { specs: left(plan(bare)) }), missing, 'a bare Acceptance list names no state');
+  assert.deepEqual(check([], { specs: left(plan(['**Acceptance:** 3 (code given, no code)', '', ...bare.slice(2)])) }), missing, 'an Acceptance line is no step');
+  assert.deepEqual(check([], { specs: left(plan(bare, '- The code given and no code paths of bin/cli.js (Task 2).')) }), missing, 'prose outside a task step');
+  assert.deepEqual(check([], { specs: { '.kern/specs/currency.md': spec } }), { pass: false, evidence: 'the run left no plan under .kern/plans' });
+  assert.throws(() => check([], {}), /^Error: check plan-states: the run's specs and plans were not saved/);
+  assert.throws(() => check([], { specs: { '.kern/plans/currency.md': plan(named) } }), /^Error: check plan-states: \.kern\/plans\/currency\.md names spec \/w\/billing-service\/\.kern\/specs\/currency\.md, which the run did not leave/);
 });
 
 test('recallTags reads the tags from the one `- Threads:` line of recall\'s output contract', () => {
@@ -1294,16 +1325,18 @@ test('readTree turns a git failure into a reason the run is invalid; only a case
 });
 
 // bfix2 C2 fix round 1 (review I1): at a run's end the runner keeps the text of each spec the run leaves, for spec-shape.
-test('readSpecs reads every .kern/specs/*.md under the run\'s folder, outside .git and node_modules; only a case with a spec check reads them', () => {
+// Task 11 fix round 1 (I2): and of each plan, for plan-states.
+test('readSpecs reads every .kern/specs/*.md and .kern/plans/*.md under the run\'s folder, outside .git and node_modules; only a case with a spec or plan check reads them', () => {
   const d = mkdtempSync(join(tmpdir(), 'specs-'));
   try {
     const put = (p, text = p) => { mkdirSync(dirname(join(d, p)), { recursive: true }); writeFileSync(join(d, p), text); };
-    for (const p of ['.kern/specs/a.md', '.kern/specs/notes.txt', '.kern/specs/old/b.md', '.kern/plans/p.md', '.claude/worktrees/w/.kern/specs/c.md', '.git/x/.kern/specs/d.md', 'node_modules/m/.kern/specs/e.md', 'docs/specs/f.md']) put(p);
-    assert.deepEqual(readSpecs(d), { specs: { '.claude/worktrees/w/.kern/specs/c.md': '.claude/worktrees/w/.kern/specs/c.md', '.kern/specs/a.md': '.kern/specs/a.md' } });
+    for (const p of ['.kern/specs/a.md', '.kern/specs/notes.txt', '.kern/specs/old/b.md', '.kern/plans/p.md', '.kern/plans/old/q.md', '.kern/ledgers/x/ledger.md', '.claude/worktrees/w/.kern/specs/c.md', '.git/x/.kern/specs/d.md', 'node_modules/m/.kern/specs/e.md', 'docs/specs/f.md']) put(p);
+    assert.deepEqual(readSpecs(d), { specs: { '.claude/worktrees/w/.kern/specs/c.md': '.claude/worktrees/w/.kern/specs/c.md', '.kern/plans/p.md': '.kern/plans/p.md', '.kern/specs/a.md': '.kern/specs/a.md' } });
     assert.deepEqual(readSpecs(mkdtempSync(join(d, 'empty-'))), { specs: {} });
-    assert.match(readSpecs(join(d, 'gone')).problem, /^the specs under \.kern\/specs at the run's end could not be read: ENOENT/);
+    assert.match(readSpecs(join(d, 'gone')).problem, /^the specs and plans under \.kern at the run's end could not be read: ENOENT/);
   } finally { rmSync(d, { recursive: true, force: true }); }
   assert.equal(readsSpecs({ checks: { 1: 'spec-shape' } }), true);
+  assert.equal(readsSpecs({ checks: { 3: 'plan-states' } }), true);
   assert.equal(readsSpecs({ checks: { 0: 'no-write' } }), false);
   assert.equal(readsSpecs({}), false);
 });
@@ -1444,7 +1477,7 @@ test('the runner saves the specs a run leaves for a case with a spec check, spec
     const s = JSON.parse(r.committed).results[0];
     assert.deepEqual([s.checks, s.runs.map((x) => x.invalid), s.runs[0].verdict[0]], [{ 0: 'spec-shape' }, [false, true],
       { pass: false, evidence: '.kern/specs/x.md, as the run left it, has no Never line under ## Constraints', check: 'spec-shape' }]);
-    assert.match(s.runs[1].reason, /^the specs under \.kern\/specs at the run's end could not be read: ENOENT/);
+    assert.match(s.runs[1].reason, /^the specs and plans under \.kern at the run's end could not be read: ENOENT/);
     assert.deepEqual(JSON.parse(readFileSync(join(r.raw, 'x-spec-0.specs.json'), 'utf8')), { specs: { '.kern/specs/x.md': full.replace('- Never: z\n', '') } });
     assert.match(JSON.parse(readFileSync(join(r.raw, 'x-spec-1.specs.json'), 'utf8')).problem, /could not be read/);
     const never = () => { throw new Error('a regrade started a session'); };

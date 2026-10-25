@@ -214,3 +214,26 @@ test('workflow-define-spec: data/invoices.json, which the prompt names, holds co
     assert.equal(git(ws, 'status', '--porcelain'), '');
   });
 });
+
+// Task 11 fix round 1 (M6): "review my branch" needs a commit on it. The self-review case's branch holds one commit over main,
+// the seeded formatCurrency and its USD-only test, and self-review step 1's wt-diff from the merge-base lists both files.
+test('workflow-self-review-proofs: feat/currency holds one commit of format.js and its test, which wt-diff from the merge-base lists', () => {
+  withCase('workflow-self-review-proofs', (ws) => {
+    assert.equal(git(ws, 'rev-list', '--count', 'main..feat/currency').trim(), '1');
+    assert.equal(git(ws, 'log', '-1', '--format=%B').trim(), 'feat: format currency totals');
+    assert.equal(git(ws, 'status', '--porcelain'), '');
+    const base = git(ws, 'merge-base', 'HEAD', 'origin/main').trim();
+    const out = join(mkdtempSync(join(tmpdir(), 'pkg-')), 'review.diff');
+    try {
+      const d = kern(ws, 'wt-diff', ws, base, '--out', out);
+      assert.equal(d.status, 0, d.stderr);
+      assert.deepEqual(d.stdout.trim().split('\n').slice(2), ['src/format.js', 'test/format.test.js']);
+    } finally { rmSync(dirname(out), { recursive: true, force: true }); }
+    // The seeded defect: an unknown code gives `?` where the spec's line 2 says formatCurrency throws.
+    assert.match(readFileSync(join(ws, '.kern', 'specs', 'currency.md'), 'utf8'), /^2\. `formatCurrency\(5, 'XYZ'\)` throws /m);
+    const r = sh(ws, 'node --input-type=module -e "$1"', "import { formatCurrency } from './src/format.js'; console.log(formatCurrency(5, 'XYZ'));");
+    assert.equal(r.stdout, '?5.00\n', r.stderr);
+    const t = sh(ws, 'node --test');
+    assert.equal(t.status, 0, t.stdout);
+  });
+});
