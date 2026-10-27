@@ -51,8 +51,9 @@ test('ledger format and model table', () => {
   assertContains(LEDGER, ['# kern ledger: <plan path>', '| `Plan: <hash>` | `ledger-open` |', 'Main: <root> branch=<name> head=<sha> status=<hash>',
     'Task N: start tree=<id> at=<iso>', 'Task N: review round=<r> tree=<id> spec=<compliant or issues> quality=<approved or needs-fixes>',
     'Task N: minor (deferred): <text>', 'Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok or skipped (reason)> last=<line>',
-    'parked: <question>; default: <choice>; why: <one line>']);
-  assertMaxBytes(LEDGER, 2600);
+    'parked: <question>; default: <choice>; why: <one line>', 'a `task-review ... approved` call included: append it in a call of its own.']);
+  // 2,750 since pilot fix plan 2's Task 9 (raised from 2,600): append in a call of its own beside a task-review approved call.
+  assertMaxBytes(LEDGER, 2750);
   assertHeadings('skills/execute-plan/references/model-selection.md', ['# Model selection', '## Table', '## Rules']);
   assertMaxBytes('skills/execute-plan/references/model-selection.md', 1600);
   assertHeadings(RESUME, ['# Resume', '## Where to continue', '## Fix loop memory']);

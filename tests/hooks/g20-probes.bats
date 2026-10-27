@@ -552,3 +552,25 @@ c1_agree() {
   deny
   [[ "$output" == *"set status and approved: in one edit"* ]] || false
 }
+
+@test "review and ledger text that holds approved stays denied in a shell write from a variable or beside a task-review call; a literal path, a call of its own and the Write tool pass" {
+  # Pilot fix plan 2, Task 9 (MA-254 round 2, events 12 and 13). Narrowing the first deny to a literal last path part is
+  # unsafe under zsh: MULTIOS writes a split redirect word ($=D/x.txt) to every file it names.
+  mkdir -p "$R/.kern/ledgers/x/reviews"
+  printf '# kern ledger\n' > "$R/.kern/ledgers/x/ledger.md"
+  b "LD=$R/.kern/ledgers/x
+cat > \$LD/reviews/task-1-r1.txt <<'EOF'
+Task quality: approved
+EOF"
+  deny
+  b "LD=$R/.kern/ledgers/x; printf '%s\n' 'Decision: a; why: b; cost if wrong: c' >> \$LD/ledger.md; bash task-review \$LD/ledger.md 1 abc 1 compliant approved"
+  deny
+  b "cat > $R/.kern/ledgers/x/reviews/task-1-r1.txt <<'EOF'
+Task quality: approved
+EOF"
+  none
+  b "printf '%s\n' 'Decision: a; why: b; cost if wrong: c' >> $R/.kern/ledgers/x/ledger.md"
+  none
+  write "$R/.kern/ledgers/x/reviews/task-1-r2.txt" 'Task quality: approved'
+  none
+}

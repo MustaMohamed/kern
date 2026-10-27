@@ -21,7 +21,7 @@ One ledger per plan at `WORK/ledgers/<plan-slug>/ledger.md`, append only, opened
 | `Applied: Task N patch=<path>` | step 11 | a worker's patch integrated |
 | `parked: <question>; default: <choice>; why: <one line>` | autopilot | a judgment call parked |
 
-Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand. A batch of tasks shares one brief, package and review, and the scripts still write each task's lines. The other lines are appended with `printf '%s\n' '<line>' >> <ledger>`; one holding the word approved goes in with the Edit tool, as G20 denies that shell write to a Markdown file. Limit: no guard yet stops an Edit or Write that forges a script's line; that guard is deferred to M3.
+Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand. A batch of tasks shares one brief, package and review, and the scripts still write each task's lines. The other lines are appended with `printf '%s\n' '<line>' >> <ledger>`; one holding the word approved goes in with the Edit tool, as G20 denies that shell write to a Markdown file. So does a line appended in a command that holds the word anywhere else, a `task-review ... approved` call included: append it in a call of its own. Limit: no guard yet stops an Edit or Write that forges a script's line; that guard is deferred to M3.
 
 ## Resume rule
 

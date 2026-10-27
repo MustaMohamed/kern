@@ -282,6 +282,10 @@ _g20_abs() {
 }
 
 # _g20_target WORD: WORD is a file a simple command writes.
+# With approved in the command, a write to a destination built at run time is denied whatever its last
+# part: zsh's MULTIOS writes a split redirect word ($=x, or with shwordsplit) to each file it names, so
+# x/notes.txt can also reach a spec. kern writes review and ledger text with the Write tool or in a call
+# of its own (pilot fix plan 2).
 _g20_target() {
   local w="$1"
   [ -n "$w" ] && [ -z "$_G20_WHY" ] || return 0
