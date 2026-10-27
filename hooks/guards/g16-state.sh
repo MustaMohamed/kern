@@ -41,6 +41,11 @@ _G16_KELVIN=$'\342\204\252'
 # -fls), a $ or a backtick anywhere, or any other command (an interpreter, xargs, a shell, a writer)
 # keeps the pattern read, since it, or a file it is handed, could reach the pattern as code. A redirect
 # of the list to a file is not an actor; a command on another line that is not a read-only filter is.
+# A filter is an actor too when it runs, reads or writes what the list names, so the pattern stays read
+# for: any long option on a filter (sort --compress-program and --output, rg --pre and wc --files0-from
+# run or read the names), sort -o alone or in a bundle such as -uo, a uniq second operand (its output
+# file), and an assignment before any head (NAME=value can change what a filter runs). Pagers (less,
+# more) are not filters: they take a preprocessor from the environment.
 # shellcheck disable=SC2016 # awk text
 _G16_HOOK_AWK='
 BEGIN {
@@ -50,7 +55,7 @@ BEGIN {
   hit = hit "|hooks/guards/[^/ \t\r;|&<>()]*[.]sh"
   hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset|state_ensure)([^" a "_]|$)"
   dir = "(^|[^" a "._-])hooks" e
-  filt = "^(cat|tac|nl|head|tail|less|more|grep|egrep|fgrep|rg|sort|uniq|wc|cut|tr|column|cmp|comm|rev|fold)$"
+  filt = "^(cat|tac|nl|head|tail|grep|egrep|fgrep|rg|sort|uniq|wc|cut|tr|column|cmp|comm|rev|fold)$"
 }
 { $0 = tolower($0) }
 $0 ~ hit { print "hit"; found = 1; exit }
@@ -76,11 +81,23 @@ END {
   for (k = 1; k <= m && fp; k++) {
     p = split(seg[k], sw, /[ \t\r]+/)
     j = 1
-    while (j <= p && (sw[j] == "" || sw[j] ~ /^[a-z_][a-z0-9_]*=/)) j++
+    while (j <= p && sw[j] == "") j++
     if (j > p) continue
+    # An assignment before a head can change what a filter runs.
+    if (sw[j] ~ /^[a-z_][a-z0-9_]*=/) { fp = 0; break }
     hd = sw[j]; sub(/^.*\//, "", hd)
-    if (hd == "find") sawfind = 1
-    else if (hd !~ filt) fp = 0
+    if (hd == "find") { sawfind = 1; continue }
+    if (hd !~ filt) { fp = 0; break }
+    # A filter that runs, reads or writes what the list names: any long option, sort -o (alone or in a
+    # bundle), or a uniq second operand, its output file. - is an operand.
+    ops = 0
+    for (q = j + 1; q <= p; q++) {
+      if (sw[q] == "") continue
+      if (sw[q] ~ /^--/) fp = 0
+      else if (hd == "sort" && sw[q] ~ /^-[a-z0-9]*o/) fp = 0
+      else if (sw[q] == "-" || sw[q] !~ /^-/) ops++
+    }
+    if (hd == "uniq" && ops > 1) fp = 0
   }
   if (!sawfind) fp = 0
   words = ""

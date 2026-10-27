@@ -1068,6 +1068,12 @@ EOF
   # find that feeds an interpreter, or writes its list for xargs, reads the pattern and asks.
   expect_hook 'find /x/hooks -name prompt-submit | python3' \
     "$(printf '%s\n' 'find /x/hooks -name prompt-submit > list' 'xargs rg x < list')"
+  # A filter that runs or reads what the list names, or writes it out, is an actor too: a long option (sort
+  # --compress-program or --output, rg --pre, wc --files0-from), sort -o, a uniq output operand, an assignment
+  # prefix before any head, and a pager, which takes a preprocessor from the environment.
+  expect_hook 'find /x/hooks -name prompt-submit | wc --files0-from=-' 'find /x/hooks -name prompt-submit | sort -uo out' \
+    'find /x/hooks -name prompt-submit | uniq - out' 'find /x/hooks -name prompt-submit | LC_ALL=C sort' \
+    'find /x/hooks -name prompt-submit | less'
 }
 
 @test "a script cat writes to a file that only an interpreter runs gets no vote; a file a shell or a path runs still asks" {
