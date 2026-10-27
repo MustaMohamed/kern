@@ -49,7 +49,7 @@ test('finish-branch sections, steps and red flags', () => {
     '1 `commit`; 2 `commit and push`; 3 `commit, push and open a draft PR`; 4 `keep`.',
     'Ask for the reply in those words: G5, G1 and G2 read them as this prompt\'s consent, while a digit gives none',
     'Then report each review that ran and its result',
-    'run `gh pr checks <n>` once, with no wait: report its output, or why it could not run.', 'Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`',
+    'run `gh pr checks <n>` (`<n>`: the PR number from its URL) once, with no wait: report its output, or why it could not run.', 'Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`',
     'typed word `discard`, per `references/discard.md`',
     'nothing to commit', 'steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'its stops stop this skill', 'its proof is its own, apart from step 4\'s',
     'offer a rebase step 3 put off', 'Option 1 ends with the short SHA.',
@@ -64,14 +64,15 @@ test('finish-branch sections, steps and red flags', () => {
     '`fix first`, `split` and a failed or unrunnable proven-tree check included',
     '"Tests passed earlier this session"', 'Only a PR at this head stops.', 'Only the typed word `discard` deletes work.',
     'The remote moved, unless this run rebased. Investigate; never a plain force.',
-    "whose what opens with size and that quotes the user's one-PR answer settles it: name that answer and both counts, and go on.",
+    "whose what opens with size and that quotes the user's one-PR answer settles it: name that answer, the ledger's count and this step's count, and go on.",
     'Never `git add` to count, not even `-N`.']);
   assertNoSubstitution(SKILL);
   // 6,594 since M2b Task 17 (raised from 6,400): a release on request, the tag-only route and the release branch, coverage AD24.
   // 6,960 since the pilot fix plan's Task 2: the size gate's measure and pr.size_command.
   // 7,200 since pilot fix plan 2's Task 1: step 6 takes execute-plan's ledger answer and never stages to count.
   // 7,650 since pilot fix plan 2's Task 2: step 7's replies in words, step 11's reviews and PR checks.
-  assertMaxBytes(SKILL, 7650);
+  // 7,700 since group A fix round 1: step 6 names the ledger's count and this step's count, and step 11 says where `<n>` comes from.
+  assertMaxBytes(SKILL, 7700);
 });
 
 test('branch-ops reference: rebase and the proven-tree check', () => {

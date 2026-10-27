@@ -10,7 +10,7 @@ A verification task shows that the plan's change reaches the states its spec nam
 
 ## Review
 
-`wt-diff` exits 3 by design: record that line and go on. Dispatch `kern:task-reviewer` in mode `evidence` with the brief, the report and the evidence directory, saved and recorded as step 8 says. At most two rounds, the review and one fix round: each round repeats the whole gathering. A state still unproven after round 2: stop and ask, naming each one; never start a third round.
+`wt-diff` exits 3 by design: say so in the review prompt and go on. Dispatch `kern:task-reviewer` in mode `evidence` with the brief, the report and the evidence directory, saved and recorded as step 8 says. At most two rounds, the review and one fix round: each round repeats the whole gathering. A state still unproven after round 2: stop and ask, naming each one; never start a third round.
 
 ## Close
 

@@ -35,12 +35,14 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // and asks at the first breach; MA-254 round 2 had the count at 22:40 and asked at 00:24, with the user gone.
   // 13,850 since its Task 3: steps 6 and 8 send a verification task to references/verification.md, and step 8 saves a review
   // with the Write tool.
-  assertMaxBytes(SKILL, 13850);
+  // 13,900 since group A fix round 1: step 10 records the user's size answer quoted, which finish-branch step 6 reads,
+  // names the `git diff -w --shortstat` count and scopes "never `git add`" to the count; step 8 merges exit 3 and its exception.
+  assertMaxBytes(SKILL, 13900);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
   assertMaxBytes('skills/execute-plan/references/verification.md', 1250);
   assertContains('skills/execute-plan/references/verification.md', ['Its Files modify nothing.', 'a value with no stored output proves nothing',
     'mode `evidence`', 'At most two rounds, the review and one fix round', 'A state still unproven after round 2: stop and ask, naming each one; never start a third round.',
-    '--no-probe "verification task: no code"']);
+    '--no-probe "verification task: no code"', '`wt-diff` exits 3 by design: say so in the review prompt and go on.']);
   assertContains(SKILL, ["| `pr.max_lines`, `pr.size_command` | 300 lines; none | step 10's size |"]);
 });
 
@@ -87,14 +89,14 @@ export const PINS = {
   7: ['Status line (none: BLOCKED).', 'DONE_WITH_CONCERNS: read the concerns, then review.', 'NEEDS_CONTEXT: answer from the plan or spec, else ask the user, then resume the implementer.',
     'go one model tier up (a `Decision:` line)', 'a task that must be split: stop with a split proposal'],
   8: ['take `tree-after` with `wt-snap`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`',
-    'Its first line is `<package>`, beside `<package>.patch`.', 'Exit 3 (empty): return the task to the implementer.', "Exit 4 names a file outside the task's Files: pause and ask",
+    'Its first line is `<package>`, beside `<package>.patch`.', "Exit 3 (empty): return the task to the implementer, unless it is a verification task, whose diff is empty by design: review it as `references/verification.md` says.", "Exit 4 names a file outside the task's Files: pause and ask",
     'on a yes append it to `briefs/task-N.files` with a `Decision:` line, on a no return the task to the implementer',
     '`kern:task-reviewer` on `model.reviewer` in mode `task`', 'do not pre-judge findings in the prompt',
     "Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines.", 'Resolve every "cannot verify" item yourself and rule on each "Declined to judge" line',
     'A real gap is a spec issue; add it to that `.txt` as a finding.',
     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <r> <compliant|issues> <approved|needs-fixes>`',
     'adding `--minor "<finding>"` for each Minor finding, which waits for step 12',
-    "A verification task's diff is empty by design: review it as `references/verification.md` says.", 'Use the Write tool: G20 may deny a shell write of text that holds approved.'],
+    'Use the Write tool: G20 may deny a shell write of text that holds approved.'],
   9: ['Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed.', "Round 2 resumes the implementer with the previous round's `.txt`",
     "(SendMessage to its agent id, or `references/resume.md`'s fallback; inline and step: fix it yourself)",
     'round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief, the report and that file',
@@ -110,8 +112,9 @@ export const PINS = {
     'Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask.',
     'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11).",
     'Then size the plan worktree (a wave: after step 11): `git -C <plan-wt> diff --shortstat <base-tree> <tree>`',
-    'so untracked files count; never `git add`, not even `-N`.', "unless the plan's Size line was over that limit: stop and ask `split` or one PR",
-    'naming `lines: <n> (<measure>)`, the `-w` count, the limit and its source.', 'Record the answer in a `Decision:` line whose what opens with size; `split` ends the run.'],
+    'so untracked files count; never `git add` to count, not even `-N`.', "unless the plan's Size line was over that limit: stop and ask `split` or one PR",
+    'naming `lines: <n> (<measure>)`, the `git diff -w --shortstat` count, the limit and its source.',
+    "Record the user's answer, quoted, in a `Decision:` line whose what opens with size; `split` ends the run."],
   11: ["Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`",
     'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then `test.full` there; red: stop.'],
   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',

@@ -33,7 +33,8 @@ test('task-reviewer frontmatter, sections and verdict lines', () => {
   });
   assert.deepEqual(h2s(readDoc('agents/task-reviewer.md').body), ['## Inputs', '## Rules', '## Part 1: spec', '## Part 2: quality', '## Modes', '## Output']);
   assertContains('agents/task-reviewer.md', ['Spec: compliant | issues', 'Task quality: approved | needs fixes', 'cannot verify', 'plan-mandated', 'ADDRESSED', 'whole-branch', 'Declined to judge:', 'computed the way the code computes it',
-    '`evidence`: a verification task, with no diff.', 'never redo the work']);
+    '`evidence`: a verification task, with no diff.', 'never redo the work',
+    "a value with no stored output, or a file that does not show the row's state, makes the verdict `Spec: issues`, never a Minor finding."]);
   assertMaxBytes('agents/task-reviewer.md', 5000);
 });
 
