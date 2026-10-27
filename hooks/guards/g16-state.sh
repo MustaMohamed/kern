@@ -35,7 +35,7 @@ _G16_KELVIN=$'\342\204\252'
 # Otherwise prints `ctx` when a line names a hooks directory (else `-`), then each word, split at
 # blanks, CR, ; | & < > ) and =. A word right after a find pattern test (-name, -path and the like) is
 # left out only when find is the command head and every other simple command of the whole command is a
-# read-only filter (cat, head, tail, grep, sort, uniq, wc, cut and the like): then nothing acts on what
+# read-only filter, one of the closed list filt in BEGIN: then nothing acts on what
 # find finds, so a find pattern only picks paths to print, the reach of the accepted limit find $K -name
 # prompt-submit. A find action (-exec, -execdir, -ok, -okdir, -delete, -fprint, -fprint0, -fprintf or
 # -fls), a $ or a backtick anywhere, or any other command (an interpreter, xargs, a shell, a writer)
