@@ -142,7 +142,9 @@ if [ -n "$mutate" ]; then
     echo "probe: inconclusive ($mfile resolves through a symlink outside the fork)"
     exit 3
   fi
-  # Invert the first operator found on the line, in this order; a word must stand alone.
+  # Invert the first operator found on the line, in this order; a word must stand alone. With none, drop
+  # the first negation: a ! not before = and not after a name character or a closing bracket, so
+  # if (!ok) becomes if (ok) while x!.y and != stay.
   if ! awk -v ln="$mline" '
     function word(s, w,   i, b, a) {
       i = index(s, w); if (!i) return 0
@@ -155,6 +157,12 @@ if [ -n "$mutate" ]; then
       for (k = 1; k <= n; k++) {
         i = (op[k] ~ /^[a-z]+$/) ? word($0, op[k]) : index($0, op[k])
         if (i) { $0 = substr($0, 1, i - 1) to[k] substr($0, i + length(op[k])); done = 1; print > "/dev/stderr"; break }
+      }
+      for (i = 1; !done && i <= length($0); i++) {
+        if (substr($0, i, 1) != "!") continue
+        a = substr($0, i + 1, 1); b = (i == 1) ? "" : substr($0, i - 1, 1)
+        if (a == "=" || a == "" || b ~ /[A-Za-z0-9_)\]}]/) continue
+        $0 = substr($0, 1, i - 1) substr($0, i + 1); done = 1; print > "/dev/stderr"
       }
     }
     { print }

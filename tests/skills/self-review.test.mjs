@@ -37,7 +37,8 @@ test('self-review sections and steps', () => {
   // 7,950 since Task 6 fix round 2 (I1): step 9's `fix first` exempts the proof-check not-run line.
   // 8,050 since the pilot-fix test round's fix (2026-10-25): "a small diff skips none" and the ruling on each finding in Outputs.
   // 8,250 since its proofs fix: "or a blocker already found, skips nothing" and step 9's pasted-output gate.
-  assertMaxBytes(SKILL, 8250);
+  // 8,500 since pilot fix plan 2's Task 5: step 6 searches readers for moved literals, step 7 makes no fork of its own.
+  assertMaxBytes(SKILL, 8500);
 });
 
 test('self-review exits, order and dispatches', () => {
@@ -144,13 +145,14 @@ test('self-review runs its checks in the worktree, and verify.fast defaults to e
 
 test('self-review references', () => {
   const refs = {
-    'blast-radius.md': [['# Blast radius', '## How sure are you', '## Writer sweep', '## Where grep stops', '## Risks and cleared'], 2600],
+    // pilot fix plan 2's Task 5: blast-radius.md 2,600 to 2,900 (moved literals), claim-checks.md 1,939 to 2,000 (probe drops a lone !).
+    'blast-radius.md': [['# Blast radius', '## How sure are you', '## Writer sweep', '## Where grep stops', '## Risks and cleared'], 2900],
     'doubt-cycle.md': [['# Doubt cycle', '## When a decision is non-trivial', '## The fresh reviewer', '## Reconcile', '## Doubt theater', '## Stop after three'], 2400],
     'rounds.md': [['# Rounds and packages', '## Package names', '## Previous package', '## Since package'], 1400],
     // M2b Task 17 raised claim-checks.md from 1,700 by the 180 bytes P69's `bar-lowered` rule needs, with its earlier
     // yes (M3) and its committed revert (I3), after the lossless 19-byte cut of "run in seconds and" from the opening.
     // 1,939 since Task 6 fix round 2 (I1): the 59 bytes of the proof-check not-run exception.
-    'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 1939],
+    'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 2000],
     'smells.md': [['# Smell baseline', '## Rules', '## Smells'], 2200],
     'proofs.md': [['# Proofs', '## Table', '## Evidence', '## Gaps'], 1200],
   };
@@ -318,4 +320,15 @@ test('self-review proves each acceptance state, reads every reader of moved code
   // `unknown` on a line that names states.
   assertContains(`${REF}/proofs.md`, ['then one row per state a line names, or one `-` row for a line with no `States:`.']);
   assert.ok(!readDoc(`${REF}/proofs.md`).body.includes('one row per line and state'), 'the old row rule is gone');
+});
+
+test('a reader that repeats moved literals is a copy, and probe drops a lone ! in a fork of its own', () => {
+  // Pilot fix plan 2 Task 5: round 2 cleared a loading skeleton that "copies none of the tab code" while it repeated the
+  // shared piece's class lists and style strings. `probe --mutate` found no operator in `if (!wraps)`, and kern then
+  // made a fork by hand and left it with a full node_modules.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[6].includes("Search them for the moved elements' class lists, style values and literal props (`references/blast-radius.md`)."), s[6]);
+  assert.ok(s[7].includes('Never mutate in a fork you make yourself: probe makes and removes its own'), s[7]);
+  assert.ok(section(readDoc(`${REF}/blast-radius.md`).body, '## Where grep stops').includes('is a copy and a finding, even when it imports nothing from the piece.'));
+  assertContains(`${REF}/claim-checks.md`, ['or drops a `!` when it has none, in a throwaway fork']);
 });

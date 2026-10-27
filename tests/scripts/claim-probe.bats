@@ -422,3 +422,23 @@ setup() {
     [ "$output" = "probe: inconclusive ($m is a symlink that does not resolve to a file: a loop, a dangling link or a directory)" ]
   done
 }
+
+@test "--mutate: a negation with no other operator is dropped, and the test catches it" {
+  printf '[ ! "$1" = bad ]\n' > "$WT/gate.sh"
+  printf 'bash gate.sh bad && exit 1\nbash gate.sh good || exit 1\nexit 0\n' > "$WT/test-gate.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.sh:1 "$WT" -- sh test-gate.sh
+  [ "$status" -eq 0 ]
+  [ "$output" = 'probe: mutation caught ([  "$1" = bad ])' ]
+  [ "$(cat "$WT/gate.sh")" = '[ ! "$1" = bad ]' ]
+}
+
+@test "--mutate: an operator on the line wins over a negation, and a ! after a name or before = is never dropped" {
+  printf 'if (!ok && x) f()\n' > "$WT/a.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate a.js:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" == "probe: mutation survived (if (!ok || x) f())"* ]] || false
+  printf 'y = x!.z\n' > "$WT/b.ts"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate b.ts:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 3 ]
+  [ "$output" = "probe: inconclusive (no condition to invert on b.ts:1)" ]
+}
