@@ -432,7 +432,7 @@ setup() {
   [ "$(cat "$WT/gate.sh")" = '[ ! "$1" = bad ]' ]
 }
 
-@test "--mutate: an operator on the line wins over a negation, and a ! after a name or before = is never dropped" {
+@test "--mutate: an operator on the line wins over a negation, and a ! after a name or beside another ! is never dropped" {
   printf 'if (!ok && x) f()\n' > "$WT/a.js"
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate a.js:1 "$WT" -- sh test-always.sh
   [ "$status" -eq 1 ]
@@ -441,4 +441,13 @@ setup() {
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate b.ts:1 "$WT" -- sh test-always.sh
   [ "$status" -eq 3 ]
   [ "$output" = "probe: inconclusive (no condition to invert on b.ts:1)" ]
+  # Group B review I1: dropping one ! of a double bang breaks the build, and a broken build read as "mutation caught".
+  printf 'if (a!!.isEmpty()) return\n' > "$WT/c.kt"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate c.kt:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 3 ]
+  [ "$output" = "probe: inconclusive (no condition to invert on c.kt:1)" ]
+  printf 'let n = xs !! 0\n' > "$WT/d.hs"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate d.hs:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 3 ]
+  [ "$output" = "probe: inconclusive (no condition to invert on d.hs:1)" ]
 }

@@ -9,7 +9,8 @@
 # evidence with no backticked span, or that is empty, `-`, `none`, `todo`, `tbd`, `n/a`, `not run`, `skipped`,
 # `pending` or `unproven` once its backticks and a trailing `.` are dropped, proves nothing. A backticked evidence span that starts with /, ./ or ../
 # and holds no blank is a file, resolved from the current directory, and must exist. An evidence cell that
-# holds `degraded:`, in any case, marks evidence taken on another or a degraded state:
+# holds `degraded:`, in any case, outside its backticked spans and not inside another word, or at the start
+# of a backticked span, marks evidence taken on another or a degraded state:
 # `degraded: PROOFS:<row>: line <N> state <state>`, and the state stays unproven.
 # Output, one line each: `unproven: <N> <state>`, `no evidence: PROOFS:<row>`, `missing file: PROOFS:<row>:
 # <path>`, `unknown: PROOFS:<row>: line <N> state <state>`, `degraded: PROOFS:<row>: line <N> state <state>`.
@@ -72,7 +73,8 @@ rows=$(NEED=$need env LC_ALL=C awk '
     if (ln !~ /^[0-9]+$/) next
     gsub(/`/, "", st); st = trim(st); if (st == "") st = "-"
     e = tolower(ev); gsub(/`/, "", e); e = trim(e); sub(/\.$/, "", e); e = trim(e)
-    kind = !((ln "\t" st) in want) ? "unknown" : (ev !~ /`[^`]+`/ || e == "" || e ~ /^(-|none|todo|tbd|n\/a|not run|skipped|pending|unproven)$/) ? "empty" : (e ~ /(^|[^a-z])degraded:/) ? "degraded" : "ok"
+    d = tolower(ev); deg = (d ~ /`[ \t]*degraded:/); gsub(/`[^`]*`/, "", d); deg = deg || (d ~ /(^|[^a-z])degraded:/)
+    kind = !((ln "\t" st) in want) ? "unknown" : (ev !~ /`[^`]+`/ || e == "" || e ~ /^(-|none|todo|tbd|n\/a|not run|skipped|pending|unproven)$/) ? "empty" : deg ? "degraded" : "ok"
     out = NR "\t" kind "\t" ln "\t" st
     s = ev
     while (kind == "ok" && match(s, /`[^`]+`/)) {

@@ -144,4 +144,16 @@ SPEC
   [ "${lines[0]}" = "degraded: proofs.md:4: line 1 state edit" ]
   [ "${lines[1]}" = "unproven: 1 edit" ]
   [ "${#lines[@]}" -eq 2 ]
+  # Group B review Minor 1: the word inside a backticked command, or as part of another word, marks nothing.
+  proofs '| 1 | add | `./add.png` |' '| 1 | edit | `npm test -- degraded`: 3 passed |' '| 2 | rows reached by scrolling | `npm test -- rows`: 3 passed, nondegraded: yes |' '| 3 | - | `npm test`: 12 passed |'
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" spec.md proofs.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  # proofs.md shows the marker in backticks, so a marker copied with them still fails.
+  proofs '| 1 | add | `./add.png` `Degraded: the form drew empty` |' '| 1 | edit | `./edit.png` |' '| 2 | rows reached by scrolling | `npm test -- rows`: 3 passed |' '| 3 | - | `npm test`: 12 passed |'
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" spec.md proofs.md
+  [ "$status" -eq 1 ]
+  [ "${lines[0]}" = "degraded: proofs.md:3: line 1 state add" ]
+  [ "${lines[1]}" = "unproven: 1 add" ]
+  [ "${#lines[@]}" -eq 2 ]
 }
