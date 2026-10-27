@@ -37,11 +37,16 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // with the Write tool.
   // 13,900 since group A fix round 1: step 10 records the user's size answer quoted, which finish-branch step 6 reads,
   // names the `git diff -w --shortstat` count and scopes "never `git add`" to the count; step 8 merges exit 3 and its exception.
-  assertMaxBytes(SKILL, 13900);
+  // 14,150 since the final review of pilot fix plan 2: step 10's size `Decision:` line carries `lines: <n> (<measure>)`
+  // and the `-w` count (so finish-branch step 6 reads them), anchors the ask in the ledger, and writes the line from the
+  // Size line's one-PR word when that was already over the limit; step 9 points a verification task's fix round to its two-round cap.
+  assertMaxBytes(SKILL, 14150);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
-  assertMaxBytes('skills/execute-plan/references/verification.md', 1250);
+  // 1,350 since the final review of pilot fix plan 2: round 2's review is `evidence` too, on the new report, not re-review.
+  assertMaxBytes('skills/execute-plan/references/verification.md', 1350);
   assertContains('skills/execute-plan/references/verification.md', ['Its Files modify nothing.', 'a value with no stored output proves nothing',
-    'mode `evidence`', 'At most two rounds, the review and one fix round', 'A state still unproven after round 2: stop and ask, naming each one; never start a third round.',
+    'mode `evidence`', 'At most two rounds, the review and one fix round', "Round 2's review is `evidence` too, on the new report, not `re-review`.",
+    'A state still unproven after round 2: stop and ask, naming each one; never start a third round.',
     '--no-probe "verification task: no code"', '`wt-diff` exits 3 by design: say so in the review prompt and go on.']);
   assertContains(SKILL, ["| `pr.max_lines`, `pr.size_command` | 300 lines; none | step 10's size |"]);
 });
@@ -98,7 +103,8 @@ export const PINS = {
     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <r> <compliant|issues> <approved|needs-fixes>`',
     'adding `--minor "<finding>"` for each Minor finding, which waits for step 12',
     'Use the Write tool: G20 may deny a shell write of text that holds approved.'],
-  9: ['Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed.', "Round 2 resumes the implementer with the previous round's `.txt`",
+  9: ['a verification task: `references/verification.md` (its two-round cap)',
+    'Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed.', "Round 2 resumes the implementer with the previous round's `.txt`",
     "(SendMessage to its agent id, or `references/resume.md`'s fallback; inline and step: fix it yourself)",
     'round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief, the report and that file',
     "Each round packages its fix diff with `wt-diff` from the round's tree to a new `tree-after`", '`--out <ledger dir>/reviews/task-N-fix<r>-<tree7>.diff`, same `--allow-file` and exits',
@@ -113,9 +119,11 @@ export const PINS = {
     'Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask.',
     'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11).",
     'Then size the plan worktree (a wave: after step 11): `git -C <plan-wt> diff --shortstat <base-tree> <tree>`',
-    'so untracked files count; never `git add` to count, not even `-N`.', "unless the plan's Size line was over that limit: stop and ask `split` or one PR",
-    'naming `lines: <n> (<measure>)`, the `git diff -w --shortstat` count, the limit and its source.',
-    "Record the user's answer, quoted, in a `Decision:` line whose what opens with size; `split` ends the run."],
+    'so untracked files count; never `git add` to count, not even `-N`.',
+    'With no size `Decision:` line in the ledger yet:', "and the plan's Size line was not already over that limit, stop and ask `split` or one PR",
+    'naming `lines: <n> (<measure>)`, the `git diff -w --shortstat` count, the limit and its source',
+    'when the Size line was already over it, take its one-PR word with no ask',
+    'Either way record the word, quoted, with `lines: <n> (<measure>)` and the `-w` count, in a `Decision:` line whose what opens with size; `split` ends the run.'],
   11: ["Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`",
     'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then `test.full` there; red: stop.'],
   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',

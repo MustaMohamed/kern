@@ -34,10 +34,13 @@ _G16_KELVIN=$'\342\204\252'
 # counts only when the character after it cannot go on a file name, so pre-tool-use.bats does not.
 # Otherwise prints `ctx` when a line names a hooks directory (else `-`), then each word, split at
 # blanks, CR, ; | & < > ) and =. A word right after a find pattern test (-name, -path and the like) is
-# left out on a line that runs find and nothing that acts on what it finds: no -exec, -execdir, -ok,
-# -okdir, -delete, -fprint, -fprint0, -fprintf or -fls, no xargs, parallel or shell word, and no $ or
-# backtick. Such a pattern only picks paths to print, the reach of the accepted limit find $K -name
-# prompt-submit. `.` is not read as a shell there: it is find's usual start path.
+# left out only when find is the command head and every other simple command of the whole command is a
+# read-only filter (cat, head, tail, grep, sort, uniq, wc, cut and the like): then nothing acts on what
+# find finds, so a find pattern only picks paths to print, the reach of the accepted limit find $K -name
+# prompt-submit. A find action (-exec, -execdir, -ok, -okdir, -delete, -fprint, -fprint0, -fprintf or
+# -fls), a $ or a backtick anywhere, or any other command (an interpreter, xargs, a shell, a writer)
+# keeps the pattern read, since it, or a file it is handed, could reach the pattern as code. A redirect
+# of the list to a file is not an actor; a command on another line that is not a read-only filter is.
 # shellcheck disable=SC2016 # awk text
 _G16_HOOK_AWK='
 BEGIN {
@@ -47,28 +50,50 @@ BEGIN {
   hit = hit "|hooks/guards/[^/ \t\r;|&<>()]*[.]sh"
   hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset|state_ensure)([^" a "_]|$)"
   dir = "(^|[^" a "._-])hooks" e
+  filt = "^(cat|tac|nl|head|tail|less|more|grep|egrep|fgrep|rg|sort|uniq|wc|cut|tr|column|cmp|comm|rev|fold)$"
 }
 { $0 = tolower($0) }
 $0 ~ hit { print "hit"; found = 1; exit }
 $0 ~ dir { ctx = 1 }
-{
-  n = split($0, w, /[ \t\r;|&<>)=]+/)
-  # fp: the line runs find and nothing that acts on what it finds, so a find pattern only picks paths
-  # to print (see _g16_hooks).
-  fp = 0
-  for (i = 1; i <= n; i++) { b = w[i]; sub(/^.*\//, "", b); if (b == "find") fp = 1 }
-  for (i = 1; i <= n && fp; i++) {
-    b = w[i]; sub(/^.*\//, "", b)
-    if (w[i] ~ /^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/ || index(w[i], "$") || index(w[i], "`")) fp = 0
-    if (b ~ /^(xargs|parallel|sh|bash|zsh|dash|ksh|mksh|yash|fish|csh|tcsh|busybox|eval|source)$/) fp = 0
+{ cmd[nc++] = $0 }
+END {
+  if (found) exit
+  # fp: the whole command runs find as a head and every other simple command is a read-only filter, so
+  # a find pattern operand only picks a path to print (see the comment above and _g16_hooks).
+  C = ""
+  for (k = 0; k < nc; k++) C = C (k ? "\n" : "") cmd[k]
+  fp = 1
+  if (index(C, "$") || index(C, "`")) fp = 0
+  if (C ~ /(^|[^a-z0-9_-])-(exec|execdir|ok|okdir|delete|fprint0|fprintf|fprint|fls)([^a-z0-9_-]|$)/) fp = 0
+  # Drop redirect operators and their targets, so find x > list is find with no actor. Then split into
+  # simple commands on the real separators and read each command head.
+  T = C
+  gsub(/[0-9]*>&[0-9]*-?/, " ", T)
+  gsub(/[0-9]*>>?[ \t]*[^ \t\n|;&()<>]*/, " ", T)
+  gsub(/<+[ \t]*[^ \t\n|;&()<>]*/, " ", T)
+  m = split(T, seg, /[|;&\n()]+/)
+  sawfind = 0
+  for (k = 1; k <= m && fp; k++) {
+    p = split(seg[k], sw, /[ \t\r]+/)
+    j = 1
+    while (j <= p && (sw[j] == "" || sw[j] ~ /^[a-z_][a-z0-9_]*=/)) j++
+    if (j > p) continue
+    hd = sw[j]; sub(/^.*\//, "", hd)
+    if (hd == "find") sawfind = 1
+    else if (hd !~ filt) fp = 0
   }
-  for (i = 1; i <= n; i++) {
-    if (w[i] == "") continue
-    if (fp && i > 1 && w[i - 1] ~ /^-(name|iname|path|ipath|wholename|iwholename|regex|iregex|lname|ilname)$/) continue
-    words = words w[i] "\n"
+  if (!sawfind) fp = 0
+  words = ""
+  for (k = 0; k < nc; k++) {
+    n = split(cmd[k], w, /[ \t\r;|&<>)=]+/)
+    for (i = 1; i <= n; i++) {
+      if (w[i] == "") continue
+      if (fp && i > 1 && w[i - 1] ~ /^-(name|iname|path|ipath|wholename|iwholename|regex|iregex|lname|ilname)$/) continue
+      words = words w[i] "\n"
+    }
   }
-}
-END { if (!found) printf "%s\n%s", (ctx ? "ctx" : "-"), words }'
+  printf "%s\n%s", (ctx ? "ctx" : "-"), words
+}'
 
 guard_g16() {
   case "$TOOL" in

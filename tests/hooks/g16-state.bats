@@ -1063,6 +1063,11 @@ EOF
   expect_hook 'find / -path "*/h*/*" -exec bash {} \;' 'find / -path "*/h*/*" -execdir cat {} +' 'find / -path "*/h*/*" -delete' \
     'find / -path "*/h*/*" -fprint /tmp/x' 'find / -path "*/h*/*" | xargs bash' 'find / -path "*/h*/prompt-submit" | sh' \
     'bash $(find / -path "*/h*/prompt-submit")' 'find / -path "*/hooks/prompt-submit"' 'cat /x/*/h*/prompt-submit; find . -name "*.ts"'
+  # Since the final review of pilot fix plan 2: the skip held when every actor off a closed list was absent, wider
+  # than its comment. Now it holds only when find is the head and every other command is a read-only filter, so a
+  # find that feeds an interpreter, or writes its list for xargs, reads the pattern and asks.
+  expect_hook 'find /x/hooks -name prompt-submit | python3' \
+    "$(printf '%s\n' 'find /x/hooks -name prompt-submit > list' 'xargs rg x < list')"
 }
 
 @test "a script cat writes to a file that only an interpreter runs gets no vote; a file a shell or a path runs still asks" {
