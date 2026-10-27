@@ -154,7 +154,8 @@ test('self-review references', () => {
     // 1,939 since Task 6 fix round 2 (I1): the 59 bytes of the proof-check not-run exception.
     'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 2000],
     'smells.md': [['# Smell baseline', '## Rules', '## Smells'], 2200],
-    'proofs.md': [['# Proofs', '## Table', '## Evidence', '## Gaps'], 1200],
+    // proofs.md 1,200 to 1,350 since pilot fix plan 2's Task 6: the degraded: marker.
+    'proofs.md': [['# Proofs', '## Table', '## Evidence', '## Gaps'], 1350],
   };
   assertContains(`${REF}/smells.md`, ['A `review.rules` file that endorses what a smell would flag wins',
     'Skip what lint, the formatter or the type checker already enforces', ...['Mysterious Name', 'Duplicated Code', 'Feature Envy', 'Data Clumps', 'Primitive Obsession',
@@ -315,7 +316,8 @@ test('self-review proves each acceptance state, reads every reader of moved code
   assert.ok(s[9].includes('A bug counts only with a caller path that reaches it, as `path:line` steps; none: Cleared as unreachable.'), s[9]);
   assert.ok(s[9].includes("Rule each finding: `fix` inside the spec's Never and Not doing lines, else `ticket` (offered, never filed), or `reject: <citation>`."), s[9]);
   assert.ok(s[9].includes('A finding with no ruling gives `fix first`. After fixes, a later round (`references/rounds.md`) re-checks the fix diff.'), s[9]);
-  assertContains(`${REF}/proofs.md`, ['`proof-check <spec> <proofs>`', '| Line | State | Evidence |', 'A path must exist.', 'never file a proof for a state it does not show']);
+  assertContains(`${REF}/proofs.md`, ['`proof-check <spec> <proofs>`', '| Line | State | Evidence |', 'A path must exist.', 'never file a proof for a state it does not show',
+    'is written `degraded: <what differs>`, and proof-check fails it.']);
   // Final review M3: "one row per line and state" read as a `-` row for each line too, which proof-check flags as
   // `unknown` on a line that names states.
   assertContains(`${REF}/proofs.md`, ['then one row per state a line names, or one `-` row for a line with no `States:`.']);

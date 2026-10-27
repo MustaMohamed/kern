@@ -8,7 +8,7 @@ One proof per acceptance line, and per state the line names after `States:`. `pr
 
 ## Evidence
 
-Evidence is what this session ran and saw: a command in backticks and its result (`npm test -- form`: 12 passed), or the path of a file it wrote, such as a screenshot of that state, in backticks and starting with `/`, `./` or `../`. A path must exist. A claim, `none` or an empty cell proves nothing. A screenshot shows the state it is filed under: the edit form for `edit`, the rows after the scroll for rows reached by scrolling.
+Evidence is what this session ran and saw: a command in backticks and its result (`npm test -- form`: 12 passed), or the path of a file it wrote, such as a screenshot of that state, in backticks and starting with `/`, `./` or `../`. A path must exist. A claim, `none` or an empty cell proves nothing. A screenshot shows the state it is filed under: the edit form for `edit`, the rows after the scroll for rows reached by scrolling. Evidence taken on another or a degraded state (an empty form, a fallback, the add form for `edit`) is written `degraded: <what differs>`, and proof-check fails it.
 
 ## Gaps
 

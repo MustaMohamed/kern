@@ -8,9 +8,12 @@
 # the header and divider rows are skipped, a state is compared without backticks and in any case, and
 # evidence with no backticked span, or that is empty, `-`, `none`, `todo`, `tbd`, `n/a`, `not run`, `skipped`,
 # `pending` or `unproven` once its backticks and a trailing `.` are dropped, proves nothing. A backticked evidence span that starts with /, ./ or ../
-# and holds no blank is a file, resolved from the current directory, and must exist.
+# and holds no blank is a file, resolved from the current directory, and must exist. An evidence cell that
+# holds `degraded:`, in any case, marks evidence taken on another or a degraded state:
+# `degraded: PROOFS:<row>: line <N> state <state>`, and the state stays unproven.
 # Output, one line each: `unproven: <N> <state>`, `no evidence: PROOFS:<row>`, `missing file: PROOFS:<row>:
-# <path>`, `unknown: PROOFS:<row>: line <N> state <state>`. Exit 0 when every line and state has a proof
+# <path>`, `unknown: PROOFS:<row>: line <N> state <state>`, `degraded: PROOFS:<row>: line <N> state <state>`.
+# Exit 0 when every line and state has a proof
 # and no row fails; 1 otherwise; 2 on a usage error, an unreadable file, a SPEC with no numbered acceptance
 # line, a `States:` with no backticked state (`proof-check: SPEC:<line>: line <N> has States: with no
 # backticked state`), or an awk failure, so a check that did not run is not read as clean.
@@ -58,7 +61,7 @@ esac
 [ -n "$need" ] || { echo "proof-check: $spec has no numbered line under ## Acceptance criteria" >&2; exit 2; }
 
 # rows: one `<row><TAB><kind><TAB><line><TAB><state>[<TAB><path>...]` line per table row with a line number,
-# kind ok, unknown or empty. The paths are the evidence spans that name a file; the shell checks them,
+# kind ok, unknown, empty or degraded. The paths are the evidence spans that name a file; the shell checks them,
 # so no text from PROOFS reaches a command line.
 rows=$(NEED=$need env LC_ALL=C awk '
   BEGIN { n = split(ENVIRON["NEED"], r, "\n"); for (i = 1; i <= n; i++) want[r[i]] = 1 }
@@ -69,7 +72,7 @@ rows=$(NEED=$need env LC_ALL=C awk '
     if (ln !~ /^[0-9]+$/) next
     gsub(/`/, "", st); st = trim(st); if (st == "") st = "-"
     e = tolower(ev); gsub(/`/, "", e); e = trim(e); sub(/\.$/, "", e); e = trim(e)
-    kind = !((ln "\t" st) in want) ? "unknown" : (ev !~ /`[^`]+`/ || e == "" || e ~ /^(-|none|todo|tbd|n\/a|not run|skipped|pending|unproven)$/) ? "empty" : "ok"
+    kind = !((ln "\t" st) in want) ? "unknown" : (ev !~ /`[^`]+`/ || e == "" || e ~ /^(-|none|todo|tbd|n\/a|not run|skipped|pending|unproven)$/) ? "empty" : (e ~ /(^|[^a-z])degraded:/) ? "degraded" : "ok"
     out = NR "\t" kind "\t" ln "\t" st
     s = ev
     while (kind == "ok" && match(s, /`[^`]+`/)) {
@@ -85,6 +88,7 @@ while IFS=$'\t' read -r row kind ln st paths; do
   case "$kind" in
     unknown) echo "unknown: $proofs:$row: line $ln state $st"; bad=1; continue ;;
     empty) echo "no evidence: $proofs:$row"; bad=1; continue ;;
+    degraded) echo "degraded: $proofs:$row: line $ln state $st"; bad=1; continue ;;
   esac
   ok=1
   if [ -n "$paths" ]; then

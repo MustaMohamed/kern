@@ -136,3 +136,12 @@ SPEC
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "evidence marked degraded: fails and leaves its state unproven" {
+  proofs '| 1 | add | `./add.png` |' '| 1 | edit | `./edit.png` Degraded: the form drew empty |' '| 2 | rows reached by scrolling | `npm test -- rows`: 3 passed, not degraded |' '| 3 | - | `npm test`: 12 passed |'
+  run --separate-stderr bash "$KERN_ROOT/scripts/proof-check" spec.md proofs.md
+  [ "$status" -eq 1 ]
+  [ "${lines[0]}" = "degraded: proofs.md:4: line 1 state edit" ]
+  [ "${lines[1]}" = "unproven: 1 edit" ]
+  [ "${#lines[@]}" -eq 2 ]
+}
