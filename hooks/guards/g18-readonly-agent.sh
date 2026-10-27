@@ -43,7 +43,16 @@ EOF
 $words
 EOF
       ;;
-    grep | ls | cat | head | tail | wc | cut | tr | nl | stat | du | pwd | echo | printf | basename | dirname | realpath | cd | true | test | jq | column | cmp | diff | comm) ;;
+    grep | ls | cat | head | tail | wc | cut | tr | nl | stat | du | pwd | echo | basename | dirname | realpath | cd | true | test | jq | column | cmp | diff | comm) ;;
+    printf)
+      # printf -v NAME assigns a variable at run time, which neither G18 reading follows, so no option.
+      while IFS= read -r w; do
+        n=$((n + 1))
+        case "$n:$w" in 2:-*) return 1 ;; esac
+      done <<EOF
+$words
+EOF
+      ;;
     file)
       # -C writes a .mgc file, also inside a cluster such as -bC; file reads --co as --compile. -z and -Z
       # run decompression programs; --u is a prefix only of --uncompress and --uncompress-noreport.
@@ -139,7 +148,8 @@ _g18_expands() {
 # _g18_assign RECORD: exit 0 when RECORD is only NAME=VALUE with a one-letter NAME and a plain VALUE
 # (letters, digits and _ . / : @ + -, in one pair of quotes or none); sets _G18_N and _G18_V. No shell and
 # no allowlisted command reads a one-letter variable from its environment, while IFS, PATH, GIT_* or
-# RIPGREP_CONFIG_PATH would change what runs, so any longer name stays denied.
+# RIPGREP_CONFIG_PATH would change what runs, so any longer name stays denied. printf with an option is
+# denied (g18_allowed): printf -v assigns a variable at run time, which these readings do not follow.
 _g18_assign() {
   local r=$1
   r=${r#"${r%%[![:space:]]*}"}
