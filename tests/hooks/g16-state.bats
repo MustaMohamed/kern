@@ -1053,3 +1053,29 @@ EOF
   expect_cmd deny "$(printf '%s\n' "git -c \"\$(cat <<'EOF'" "core.pager=echo on > $S/t1.state" 'EOF' ')" log')" \
     "$(printf '%s\n' "gh alias set --shell x \"\$(cat <<'EOF'" "echo on > $S/t1.state" 'EOF' ')"')"
 }
+
+@test "a find whose patterns only pick paths to print gets no vote; a find that acts on what it finds, or names a hook, still asks" {
+  # Pilot fix plan 2 (MA-254 round 2, event 10): -not -path "*/node_modules/*" read as a glob for a hooks path
+  # (_g16_hooks_read: a * directory part matches hooks, and a * last part matches every hook name).
+  expect_cmd none 'find / -name "*.db" -path "*seed*" -not -path "*/node_modules/*" 2>/dev/null | head' \
+    'find . -path "*/dist/*" -prune -o -name "*.ts" -print | wc -l'
+  # shellcheck disable=SC2016 # a literal $( )
+  expect_hook 'find / -path "*/h*/*" -exec bash {} \;' 'find / -path "*/h*/*" -execdir cat {} +' 'find / -path "*/h*/*" -delete' \
+    'find / -path "*/h*/*" -fprint /tmp/x' 'find / -path "*/h*/*" | xargs bash' 'find / -path "*/h*/prompt-submit" | sh' \
+    'bash $(find / -path "*/h*/prompt-submit")' 'find / -path "*/hooks/prompt-submit"' 'cat /x/*/h*/prompt-submit; find . -name "*.ts"'
+}
+
+@test "a script cat writes to a file that only an interpreter runs gets no vote; a file a shell or a path runs still asks" {
+  # Pilot fix plan 2 (MA-254 round 2, event 11): cat > cellfit.py <<'E' ... E, then python3 cellfit.py | cut. Its body's
+  # f'{tag}/{name}_p{n}.png' read as a brace group after a paren directory part, and the pipe failed _g16_inert's rule 1.
+  B="im=Image.open(f'{tag}/{name}_p{n}.png')"
+  expect_cmd none "$(printf '%s\n' "cd /tmp/w && cat > cellfit.py <<'E'" "$B" 'E' 'python3 cellfit.py head:a:0 | cut -c1-210')" \
+    "$(printf '%s\n' "cat >> d/x.py <<'E'" "$B" 'E' 'python3 d/x.py && echo done')"
+  expect_hook "$(printf '%s\n' "cat > x.sh <<'E'" "$B" 'E' 'bash x.sh')" "$(printf '%s\n' "cat > x.sh <<'E'" "$B" 'E' './x.sh')" \
+    "$(printf '%s\n' "cat > x.py <<'E'" "$B" 'E' 'chmod +x x.py; ./x.py')" "$(printf '%s\n' "cat > x.py <<'E'" "$B" 'E' 'cp x.py /tmp/y; sh /tmp/y')" \
+    "$(printf '%s\n' "cat > x.py <<'E'" "$B" 'E' 'python3 x.py | xargs -I{} {}')" "$(printf '%s\n' "cat > x.py <<'E'" "$B" 'E' 'python3 x.py > o.sh; ./o.sh')" \
+    "$(printf '%s\n' "cat > x.py <<'E'" "$B" 'E' 'python3 x.py | sort --compress-program=sh')" "$(printf '%s\n' "cat > x.py <<E" "$B" 'E' 'python3 x.py')" \
+    "$(printf '%s\n' "cat <<'E' | sh" "$B" 'E')" "$(printf '%s\n' "cat > x.py > y.sh <<'E'" "$B" 'E' 'python3 x.py; sh y.sh')" \
+    "$(printf '%s\n' "cat > x.py <<'E'" "open('/k/hooks/prompt-submit').read()" 'E' 'python3 x.py')" \
+    "$(printf '%s\n' "cat > x.py <<'E'" "$B" 'E' 'python3 x.py; cat /x/h*/prompt-submit')"
+}

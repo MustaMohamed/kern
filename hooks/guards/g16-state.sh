@@ -33,7 +33,11 @@ _G16_KELVIN=$'\342\204\252'
 # a word; a hook
 # counts only when the character after it cannot go on a file name, so pre-tool-use.bats does not.
 # Otherwise prints `ctx` when a line names a hooks directory (else `-`), then each word, split at
-# blanks, CR, ; | & < > ) and =.
+# blanks, CR, ; | & < > ) and =. A word right after a find pattern test (-name, -path and the like) is
+# left out on a line that runs find and nothing that acts on what it finds: no -exec, -execdir, -ok,
+# -okdir, -delete, -fprint, -fprint0, -fprintf or -fls, no xargs, parallel or shell word, and no $ or
+# backtick. Such a pattern only picks paths to print, the reach of the accepted limit find $K -name
+# prompt-submit. `.` is not read as a shell there: it is find's usual start path.
 # shellcheck disable=SC2016 # awk text
 _G16_HOOK_AWK='
 BEGIN {
@@ -47,7 +51,23 @@ BEGIN {
 { $0 = tolower($0) }
 $0 ~ hit { print "hit"; found = 1; exit }
 $0 ~ dir { ctx = 1 }
-{ n = split($0, w, /[ \t\r;|&<>)=]+/); for (i = 1; i <= n; i++) if (w[i] != "") words = words w[i] "\n" }
+{
+  n = split($0, w, /[ \t\r;|&<>)=]+/)
+  # fp: the line runs find and nothing that acts on what it finds, so a find pattern only picks paths
+  # to print (see _g16_hooks).
+  fp = 0
+  for (i = 1; i <= n; i++) { b = w[i]; sub(/^.*\//, "", b); if (b == "find") fp = 1 }
+  for (i = 1; i <= n && fp; i++) {
+    b = w[i]; sub(/^.*\//, "", b)
+    if (w[i] ~ /^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/ || index(w[i], "$") || index(w[i], "`")) fp = 0
+    if (b ~ /^(xargs|parallel|sh|bash|zsh|dash|ksh|mksh|yash|fish|csh|tcsh|busybox|eval|source)$/) fp = 0
+  }
+  for (i = 1; i <= n; i++) {
+    if (w[i] == "") continue
+    if (fp && i > 1 && w[i - 1] ~ /^-(name|iname|path|ipath|wholename|iwholename|regex|iregex|lname|ilname)$/) continue
+    words = words w[i] "\n"
+  }
+}
 END { if (!found) printf "%s\n%s", (ctx ? "ctx" : "-"), words }'
 
 guard_g16() {
@@ -932,20 +952,69 @@ EOT
 # here-doc is read by one of them and has a quoted delimiter, CMD holds no |, and no record runs a shell or
 # a command that a $, a backtick or a glob names. Exit 1, with no view to use, when CMD holds no <<, when
 # git_words fails or prints a $KERN_UNREAD record, or when _g16_inert fails; every reading then gets every
-# rule, as before Task 9. A cat body could be piped to a shell, so cat bodies keep every rule.
+# rule, as before Task 9. A cat body could be piped to a shell, so a cat body keeps every rule unless
+# _g16_cat_file passes: cat writes it to a file that only an interpreter runs.
 _g16_shell_view() {
   case "$1" in *'<<'*) ;; *) return 1 ;; esac
   _G16_SV=$(set -o pipefail; git_words "$1") || return 1
   # shellcheck disable=SC2016 # the literal record git_words prints
   case "$_G16_SV" in *'$KERN_UNREAD'*) return 1 ;; esac
-  _g16_inert "$_G16_SV" "$1" '^(python[0-9.]*|node|nodejs|ruby|perl|php)$' ''
+  _g16_inert "$_G16_SV" "$1" '^(python[0-9.]*|node|nodejs|ruby|perl|php)$' '' || _g16_cat_file "$_G16_SV" "$1"
 }
 
-# _g16_inert VIEW CMD HEADS EXEMPT: exit 0 when no here-doc body in CMD, and no output of the command
+# _g16_cat_file VIEW CMD: exit 0 when every here-doc in CMD is a script that cat writes to a file for an
+# interpreter to run. It needs all of these: each record of VIEW that holds << is cat (any path, no
+# NAME=value before it) with one here-doc and one > or >> to a file named by letters, digits and _ . / -,
+# and nothing else; each other record whose head is python (python[0-9.]*), node, nodejs, ruby, perl or
+# php may name that file; every other record has the head cd, cut, head, tail, grep, wc, uniq, tr, nl,
+# column, ls, echo, printf, true or mkdir and names no such file (by path or last path part); and
+# _g16_inert holds with cat among its heads, except its rule 1. A pipe can then feed only a filter or an
+# interpreter, so rule 1 is not needed. A file a non-interpreter record names (./x.sh, chmod, cp, mv)
+# keeps every rule.
+_g16_cat_file() {
+  _g16_inert "$1" "$2" '^(cat|python[0-9.]*|node|nodejs|ruby|perl|php)$' '' pipes || return 1
+  printf '%s\n' "$1" | env LC_ALL=C awk '
+    { rec[NR] = $0 }
+    END {
+      nf = 0
+      for (r = 1; r <= NR; r++) {
+        $0 = rec[r]
+        if (!index($0, "<<")) continue
+        h = tolower($1); sub(/^.*\//, "", h)
+        if (h != "cat") exit 1
+        f = ""; hd = 0
+        for (j = 2; j <= NF; j++) {
+          if ($j ~ /^<<-?$/) { j++; hd++; continue }
+          if ($j ~ /^<<-?./) { hd++; continue }
+          if ($j ~ /^>>?$/) { if (f != "") exit 1; j++; f = $j; continue }
+          if ($j ~ /^>>?[^>&|]/) { if (f != "") exit 1; f = $j; sub(/^>>?/, "", f); continue }
+          exit 1
+        }
+        if (hd != 1 || f !~ /^[A-Za-z0-9_.\/-]+$/) exit 1
+        cat[r] = 1; file[++nf] = f
+      }
+      if (!nf) exit 1
+      for (r = 1; r <= NR; r++) {
+        if (r in cat) continue
+        $0 = rec[r]
+        for (i = 1; i <= NF && $i ~ /^[A-Za-z_][A-Za-z0-9_]*=/; i++) ;
+        h = tolower($i); gsub(/["\047\\]/, "", h); sub(/^.*\//, "", h)
+        if (h ~ /^(python[0-9.]*|node|nodejs|ruby|perl|php)$/) continue
+        if (h !~ /^(cd|cut|head|tail|grep|wc|uniq|tr|nl|column|ls|echo|printf|true|mkdir)$/) exit 1
+        for (j = i; j <= NF; j++) {
+          w = $j; gsub(/["\047\\]/, "", w); b = w; sub(/^.*\//, "", b)
+          for (k = 1; k <= nf; k++) { fb = file[k]; sub(/^.*\//, "", fb); if (w == file[k] || b == fb) exit 1 }
+        }
+      }
+    }'
+}
+
+# _g16_inert VIEW CMD HEADS EXEMPT [pipes]: exit 0 when no here-doc body in CMD, and no output of the command
 # that reads it, can reach a shell, so each body is data or code for that command. VIEW is git_words'
 # records of CMD. Any rule that fails gives exit 1 (fail closed; Task 9 fix round 1). It needs all of these:
 # 1. CMD holds no |, on any line, body lines included: the view keeps no pipe. A body that holds one (a
 #    regex alternation, a bitwise or) keeps every rule.
+#    Rule 1 is skipped when the fifth argument is pipes (_g16_cat_file).
 # 2. Each record's head, after NAME=value words and once quotes and backslashes are out, does not start
 #    with $ and holds no backtick ("$0", "$SHELL", "${x}").
 # 3. That head holds no *, ? or [ (/bin/[s]h, /bin/s?).
@@ -964,7 +1033,7 @@ _g16_shell_view() {
 # in any case, and no word of any record, by name or path, is a shell or runs one: sh, bash, zsh, dash,
 # ksh, mksh, yash, fish, csh, tcsh, busybox, eval, source or .
 _g16_inert() {
-  case "$2" in *'|'*) return 1 ;; esac
+  case "$2" in *'|'*) [ "${5-}" = pipes ] || return 1 ;; esac
   printf '%s\n' "$2" | env LC_ALL=C awk '{
       s = $0; n = length(s); i = 1
       while (i <= n) {
