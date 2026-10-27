@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { attributed, GRADERS, chainParts, guardAsked, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
 import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, pluginProblem, runClaude, runProblem, runSummary } from '../scripts/lib/claude-run.mjs';
 import { KERNEL, NO_AUTH, fakeClaude, init as initOf, result as resultOf, sessionStart as hookStart, started, turnClaude } from './helpers/eval-stub.mjs';
-import { UsageError, autopilotProblem, caseEnv, claudeConfigDir, dateStamp, exitCode, gradeCase, kernStateFile, parseArgs, regradeExec, replyDate, runEval, sessionId, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from '../scripts/lib/exec-run.mjs';
+import { UsageError, autopilotProblem, caseEnv, casePrompts,claudeConfigDir, dateStamp, exitCode, gradeCase, kernStateFile, parseArgs, regradeExec, replyDate, runEval, sessionId, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from '../scripts/lib/exec-run.mjs';
 import { COPY_OMITS, pluginCopy } from '../scripts/lib/behave.mjs';
 import { UsageError as FlagError, parseArgs as parseFlags } from '../scripts/lib/args.mjs';
 
@@ -32,7 +32,7 @@ const ran = (prefix, ...cmds) => cmds.flatMap((c, i) => {
 // GATE: a green proof, then finish-branch step 6's size gate. REVIEWED: steps 4 and 5 (wt-snap, a self-review package).
 const GATE = ran('g', 'cd /w/app && npm test', 'git merge-base HEAD origin/main', 'git diff --shortstat 1a2b 3c4d');
 const REVIEWED = ran('v', 'bash /k/scripts/wt-snap /w/app', 'bash /k/scripts/wt-diff /w/app 1a2b --out /w/app/.kern/tmp/review/feat-sum');
-const MENU = 'Pick one: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is.';
+const MENU = 'Reply with one: 1 `commit`; 2 `commit and push`; 3 `commit, push and open a draft PR`; 4 `keep`.';
 // The split case's final reply from exec-eval rerun 3: a split offered as a choice, the menu only promised.
 const RECORDED = [
   'Self-review verdict is `ready`, but the size gate stops the run, so nothing is committed or pushed yet.',
@@ -116,7 +116,7 @@ test('gitCalls drops -C and -c, reads past && and ;, and ignores other commands'
 });
 
 test('finish-branch: the menu comes before any push or PR', () => {
-  const menu = say('Pick one: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is.');
+  const menu = say('Reply with one: 1 `commit`; 2 `commit and push`; 3 `commit, push and open a draft PR`; 4 `keep`.');
   assert.equal(GRADERS['finish-menu-first']({ events: [...REVIEWED, menu], ghLog: [] }).pass, true);
   assert.equal(GRADERS['finish-menu-first']({ events: [...REVIEWED, bash('git push -u origin feat/sum'), menu], ghLog: [] }).pass, false);
   assert.equal(GRADERS['finish-menu-first']({ events: [...REVIEWED, bash('git -C /w/app push -u origin feat/sum'), menu], ghLog: [] }).pass, false, 'a -C push counts');
@@ -229,7 +229,7 @@ test('consent cases: only G5\'s consent ask counts against a typed commit; a fil
 test('the dry run lists every case without calling claude', () => {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/exec-eval.mjs', import.meta.url)), '--dry-run'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  for (const id of ['commit-work-file', 'finish-menu-first', 'finish-split-nine-files', 'finish-autopilot-draft', 'finish-pr-at-head', 'finish-pr-older-head']) assert.match(r.stdout, new RegExp(`^${id}: `, 'm'));
+  for (const id of ['commit-work-file', 'finish-menu-first', 'finish-menu-consent', 'finish-split-nine-files', 'finish-autopilot-draft', 'finish-pr-at-head', 'finish-pr-older-head']) assert.match(r.stdout, new RegExp(`^${id}: `, 'm'));
   assert.match(r.stdout, /^finish-autopilot-draft: "\/kern:autopilot on" then "\/kern:finish-branch" on branch feat\/sum$/m);
 });
 
@@ -1983,4 +1983,18 @@ test('exec-eval --resume runs on the model its run.json names, not on today\'s K
   assert.match(again.stdout, /^INVALID commit-work-file/m, `${again.stdout}${again.stderr}`);
   const argv = stub.seen().argv;
   assert.equal(argv[argv.indexOf('--model') + 1], 'claude-model-a');
+});
+
+test('finish-menu-consent: two turns; the menu in words, then no guard ask, one commit pushed and one draft PR (pilot fix plan 2, Task 10)', () => {
+  assert.deepEqual(casePrompts({ autopilot: false, turns: ['/kern:finish-branch', 'commit, push and open a draft PR'] }), ['/kern:finish-branch', 'commit, push and open a draft PR']);
+  assert.deepEqual(casePrompts({ autopilot: false, turn: 'commit' }), ['commit']);
+  const menu = { type: 'result', subtype: 'success', result: 'Reply with one: 1 `commit`; 2 `commit and push`; 3 `commit, push and open a draft PR`; 4 `keep`.' };
+  const done = { type: 'result', subtype: 'success', result: 'Draft PR: file:///o/pull/8' };
+  const pushed = git({ 'ls-remote origin refs/heads/feat/sum': 'abc\trefs/heads/feat/sum', 'rev-parse feat/sum': 'abc', 'rev-list --count main..feat/sum': '1', 'status --porcelain': '' });
+  const grade = (events, ghLog = ['pr create --draft --title fix --body-file b.md'], g = pushed) => GRADERS['finish-menu-consent']({ events, ghLog, git: g, branch: 'feat/sum' });
+  assert.equal(grade([menu, done]).pass, true);
+  assert.equal(grade([done, done]).pass, false, 'no menu in the first reply');
+  assert.equal(grade([menu, done], []).pass, false, 'no draft PR');
+  const asked = { type: 'user', message: { content: [{ type: 'tool_result', is_error: true, content: 'needs user approval: kern G5: commit (message checks pass)' }] } };
+  assert.equal(grade([menu, asked, done]).pass, false, 'G5 asked');
 });

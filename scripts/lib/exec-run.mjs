@@ -119,8 +119,9 @@ export function autopilotProblem(events, configDir, read = (f) => readFileSync(f
 }
 
 // casePrompts(c): the prompts a case sends, each its own turn: `/kern:autopilot on` first when the case
-// turns autopilot on (a local command, which prints its own result event), then the case's turn.
-export const casePrompts = (c) => [...(c.autopilot ? ['/kern:autopilot on'] : []), c.turn];
+// turns autopilot on (a local command, which prints its own result event), then the case's turns: its
+// `turns` list when it has one (pilot fix plan 2, Task 10), else its one `turn`.
+export const casePrompts = (c) => [...(c.autopilot ? ['/kern:autopilot on'] : []), ...(c.turns ?? [c.turn])];
 
 // gradeCase({ c, run, ghLog, git, configDir, plugin, graders, read }): a case's verdict. INVALID when the run
 // may not be graded (runProblem, which also wants one result event per prompt of casePrompts), when, given

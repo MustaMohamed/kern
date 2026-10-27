@@ -44,6 +44,7 @@ case "$1 $2" in
   "pr view") url=$(pr_url 7) || exit 1; printf '{"number":7,"state":"OPEN","url":"%s"}\n' "$url" ;;
   "api user") echo dev ;;
   "auth status") echo "Logged in to example.invalid account dev" ;;
+  "pr checks") echo "no checks reported on the '$(git branch --show-current 2>/dev/null)' branch"; exit 1 ;;
   *) echo "gh stub: unhandled call: $*" >&2; exit 1 ;;
 esac
 exit 0

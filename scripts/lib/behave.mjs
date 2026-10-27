@@ -1122,6 +1122,12 @@ export const CHECKS = {
     const verdicts = plans.map((p) => planStates(p, specs));
     return { pass: verdicts.every((v) => v.pass), evidence: verdicts.map((v) => v.evidence).join('; ') };
   },
+  // workflow-execute-plan-size-breach (pilot fix plan 2, Task 10; MA-254 round 2's `git add -N .` raised a G5 ask and broke a
+  // commit's lint-staged backup): no Bash call, the main session's or a subagent's, runs git add (runsGit), -N included.
+  'no-git-add': (events) => {
+    const adds = steps(events).filter((s) => s.call?.name === 'Bash' && runsGit(s.call.input.command ?? '', 'add'));
+    return adds.length ? { pass: false, evidence: `git add ran: Bash ${argOf(adds[0].call)}` } : { pass: true, evidence: 'no Bash call runs git add' };
+  },
 };
 
 // gradeRun(c, events, tree, grade, specs): the run's verdict, one { pass, evidence } per expectation in order. A

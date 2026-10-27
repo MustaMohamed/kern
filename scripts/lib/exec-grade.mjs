@@ -352,6 +352,8 @@ export function reviewRan(events) {
 }
 // The menu: its four options, numbered, in order.
 const MENU = /\b1\b[^]*?\bcommit\b[^]*?\b2\b[^]*?\bpush\b[^]*?\b3\b[^]*?\bdraft (pr|pull request)\b[^]*?\b4\b[^]*?\bkeep\b/i;
+// replies(events): the text of each result event, one per prompt turn, in order.
+const replies = (events) => events.filter((e) => e?.type === 'result' && typeof e.result === 'string').map((e) => e.result);
 // pushedTip(git, branch, commits): origin holds the branch at its last commit, the branch holds exactly
 // that many commits over main, and src/sum.js has nothing left uncommitted. A stale ref on origin, or a
 // push of a branch with nothing committed, fails.
@@ -482,6 +484,21 @@ export const GRADERS = {
     [reviewRan(events), 'steps 4 and 5 did not run: no wt-snap call and self-review package (wt-diff --out) that succeeded'],
     [MENU.test(finalText(events)), 'the reply does not show the menu (1 commit, 2 commit and push, 3 draft PR, 4 keep)'],
   ]),
+  // finish-menu-consent (pilot fix plan 2, Task 10; MA-254 round 2 asked 8 times after the user's "One"): the first reply shows
+  // the menu with option 3 in words, and the typed option 3 is G5's, G1's and G2's consent: the commit, the push and one
+  // draft PR land with no consent ask.
+  'finish-menu-consent': ({ events, ghLog, git, branch }) => {
+    const first = replies(events)[0] ?? '';
+    const creates = ghLog.filter((l) => l.startsWith('pr create'));
+    return check([
+      [MENU.test(first) && /commit, push and open a draft PR/i.test(first), 'the first reply does not show the menu with option 3 as "commit, push and open a draft PR"'],
+      [!guardAsked(events, 'G5', CONSENT_ASK), 'G5 asked for the commit the user typed'],
+      [!guardAsked(events, 'G1'), 'G1 asked for the push the user typed'],
+      [!guardAsked(events, 'G2'), 'G2 asked for the PR the user typed'],
+      [creates.length === 1 && /--draft/.test(creates[0]), 'not exactly one draft PR'],
+      ...pushedTip(git, branch, 1),
+    ]);
+  },
   'finish-split-nine-files': ({ events, ghLog, git, branch }) => check([
     [!stoppedOnRedProof(events), 'the proof step went red, so the run never reached the size gate'],
     [stoppedOnRedProof(events) || sizeGateRan(events, git), 'the size gate never ran: no git diff --shortstat, --stat or --numstat over two revisions after a green test command'],

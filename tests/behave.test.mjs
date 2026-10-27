@@ -608,7 +608,7 @@ const state = (lines = [' M src/sum.js abc'], more = {}) => ({ worktrees: { '.':
 const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
-  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'double-before-test', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-recall-skill', 'no-session-mining',
+  assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'double-before-test', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-git-add', 'no-recall-skill', 'no-session-mining',
     'no-verified-uncommitted', 'no-write', 'one-next-move', 'plan-states', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'spec-shape', 'thread-tags']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
@@ -1696,4 +1696,14 @@ test('a cached run is reused only while every kern skill it read is unchanged, a
     assert.match(resumed.lines[0], /^--resume: 2 run\(s\) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, so they are not kept$/);
     first.done();
   } finally { rmSync(dirname(root), { recursive: true, force: true }); }
+});
+
+test('no-git-add fails on any git add, -N included, and passes with none (pilot fix plan 2, Task 10)', () => {
+  const check = CHECKS['no-git-add'];
+  assert.equal(check([...ran('git -C /w/app diff --shortstat 1a2b 3c4d', ' 2 files changed, 14 insertions(+)'), ...reply('Split or one PR?')]).pass, true);
+  assert.equal(check([...ran('git -C /w/app add -N . ; git -C /w/app diff --shortstat'), ...reply('x')]).pass, false);
+  assert.equal(check([...ran('cd /w/app && git add src/export.js'), ...reply('x')]).pass, false);
+  const c = loadCases(ROOT).find((x) => x.id === 'workflow-execute-plan-size-breach');
+  assert.deepEqual(c.checks, { 2: 'no-git-add' });
+  assert.deepEqual(c.setup, ["mkdir -p .claude && printf 'pr.max_lines: 10\\n' > .claude/kern.local.yml"]);
 });

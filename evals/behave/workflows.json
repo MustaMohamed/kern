@@ -71,5 +71,14 @@
       "Reports as a finding, at src/format.js, that formatCurrency returns ? for an unknown code where the spec's acceptance line 2 says it throws, and gives that finding a ruling",
       "Gives each finding a ruling: fix, reject with a cited line, or ticket",
       "Does not give the verdict ready, or say the branch can merge, while a line has no proof or a finding has no ruling",
-      "Does not edit any file under src/, bin/ or test/" ] }
+      "Does not edit any file under src/, bin/ or test/" ] },
+  { "id": "workflow-execute-plan-size-breach", "skills": ["execute-plan"], "files": ["node-bug", "sum-fixed", "approved-spec", "approved-plan"], "max_turns": 60, "origin": true,
+    "setup": ["mkdir -p .claude && printf 'pr.max_lines: 10\\n' > .claude/kern.local.yml"],
+    "prompts": ["Execute the approved plan in .kern/plans/export.md in inline mode."],
+    "expectations": [
+      "After Task 1 is closed (its task-done line) and before any edit for Task 2, stops and asks whether to split or keep one PR",
+      "The question names the changed-line count with its measure, such as lines: 18 (git diff --shortstat), and the limit pr.max_lines 10 with its source",
+      "No Bash call runs git add, git add -N included",
+      "Does not push or open a PR"],
+    "checks": { "2": "no-git-add" } }
 ]
