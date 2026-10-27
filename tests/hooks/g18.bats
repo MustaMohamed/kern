@@ -121,3 +121,36 @@ denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output"
 @test "the dispatcher lists g18 among the guards it expects" {
   grep -q '^KERN_GUARD_IDS=".* g18[ "]' "$KERN_ROOT/hooks/pre-tool-use"
 }
+
+@test "a one-letter variable set once to a plain path is read as that path" {
+  # Pilot fix plan 2, Task 7 (MA-254 round 2, events 14 and 15): T=src/...; cat -n $T/... was denied for the assignment.
+  for cmd in 'T=src/a; cat -n $T/a.txt' 'T=src; grep -n foo ${T}/a.txt | head -5' "f='/tmp/x.txt'; grep -n foo \$f" \
+    'cd src; T=src/a; cat -n $T/b.txt; git grep -n foo' 'T=src && C=docs; cat $T/a.txt $C/b.md'; do
+    hook kern:investigator "$cmd"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ] || { echo "unexpected vote for: $cmd"; false; }
+  done
+}
+
+@test "a brace list of file names and an escaped backtick in double quotes pass" {
+  # Events 16 and 17: grep -n -o "...[^']*" .../{a,b}.md, and rg -n -o "...[^'\`]*" with the backtick escaped.
+  bt='rg -n -o \"foo[^'"'"'\\`]*\" a.md'
+  for cmd in 'grep -n -o foo src/{a,b}.md' 'rg -n foo docs/{x,y}.md | head' 'ls {src,docs}' "$bt" 'git log -1 HEAD@{1}'; do
+    hook kern:investigator "$cmd"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ] || { echo "unexpected vote for: $cmd"; false; }
+  done
+}
+
+@test "variables, brace lists and backticks that could hide an option or run code are still denied" {
+  for cmd in 'IFS=/; cat -n a.txt' 'PATH=/tmp; cat a.txt' 'T=$HOME; cat $T/a.txt' 'T=-o; sort $T out.txt a.txt' \
+    'T=a.txt || T=-o; sort $T out.txt' 'T=a.txt cat $T' "T='a b'; cat \$T" 'T=*.txt; cat $T' 'sort $T out.txt; T=-o' \
+    'T=a; sort ${T:--o} out.txt' 'T=a; sort $Tx out.txt' \
+    '{cat,a.txt}' 'rg -n foo x{,--pre=sh}' 'rg -n foo -{-pre=sh,x}' 'rg -n foo \"-\"{-pre=sh,x}' 'sed -n {1w/tmp/x,p} a.txt' 'cat a{1..3}.txt' 'cat {a,{b,c}}.txt' \
+    'cat \"$(id)\"' 'rg -n \"foo`id`\" a.md' 'T=src; for x in a b; do cat $T/$x; done' \
+    'test -f /etc/passwd || T=1p; sed -n $T w/tmp/x a.txt' 'T=1p | sed -n $T w/tmp/x a.txt' 'T=1p & sed -n $T w/tmp/x a.txt' \
+    '( T=1p ); sed -n $T w/tmp/x a.txt'; do
+    hook kern:investigator "$cmd"
+    denied || { echo "not denied: $cmd"; false; }
+  done
+}
