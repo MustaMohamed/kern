@@ -1,6 +1,6 @@
 # Spec template
 
-Copy from the first `---` line to the end into `WORK/specs/<slug>.md`. Complete every section, or write `none` and why. Decisions name modules and contracts, not file paths; paths belong in the plan. A bounded change uses the short form: set `form: short` and keep only Problem, Size, Constraints, Acceptance criteria and Test seams. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` checks the sections for either form. To approve, one Edit replaces the lines from `status: draft` through `approved:` with `status: approved` and `approved: <date>, "<one whole line of the user's yes>"`.
+Copy from the first `---` line to the end into `WORK/specs/<slug>.md`. Complete every section, or write `none` and why. Decisions name modules and contracts, not file paths; paths belong in the plan. A bounded change uses the short form: set `form: short` and keep only Problem, Size, Constraints, Acceptance criteria, Test seams and Not doing. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` checks the sections for either form. To approve, one Edit replaces the lines from `status: draft` through `approved:` with `status: approved` and `approved: <date>, "<one whole line of the user's yes>"`.
 
 ---
 status: draft
@@ -16,7 +16,7 @@ What is wrong or missing today, for whom, with evidence.
 
 ## Size
 
-Files: the count, then each path. Lines: about how many change, insertions plus deletions with tests, as `git diff --shortstat` counts (or `pr.size_command`'s measure, named). Concerns: each independent one in a few words. Over 2 files, or more than one concern: plan.
+Files: the count, then each path. Lines: about how many change, insertions plus deletions with tests, as `git diff --shortstat` counts (or `pr.size_command`'s measure, named). A re-indented or re-wrapped file counts every line it moves; give its `git diff -w` count beside it. A size the ticket states in another measure is named next to this one, each with its measure. Concerns: each independent one in a few words. Over 2 files, or more than one concern: plan.
 
 ## Intent
 
@@ -67,5 +67,7 @@ One line per extra `checklists` item.
 Where tests attach: public functions, handlers, CLI entries, components. Prefer the highest seam that already exists and the fewest seams, and confirm the list with the user.
 
 ## Not doing
+
+The ticket's Out of scope lines, each with any ticket it names, then what else this change leaves alone; `none` when nothing.
 
 ## Open questions

@@ -11,7 +11,7 @@ You review one plan as a fresh reader. You receive the plan path, the spec path 
 - A step that leaves a decision open (a file, a name, a value, a command), or a code body the signature and the test already fix: a transcript, not a decision.
 - Proportion: a plan several times longer than its spec, or mostly code blocks.
 - States: each acceptance line's `States:` reached and checked by a step that names it; a state no step reads (rows past the fold, the edit form) is a finding.
-- Size: the Size line over `scope_threshold` or `pr.max_lines` with no split or user's word.
+- Size: the Size line over `scope_threshold` or `pr.max_lines` with no split or user's word. Check its line estimate in the gate's own measure against the file map, re-indented lines included; a ticket's size in another measure does not stand in for it.
 - Non-goals: a task that builds what the spec's Never or Not doing lines exclude.
 - A fact no read settled (a library's behaviour, what a screen shows): a spike first.
 

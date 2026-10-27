@@ -33,7 +33,8 @@ test('define sections, steps, the standing gate and red flags', () => {
   // 6,900 since the pilot fix plan's Task 4 (raised from 6,500): step 2's tracker read, step 6's files and lines,
   // step 9's route to plan.
   // 6,950 since the pilot-fix test round's fix (2026-10-25): step 9's line estimate and "whatever `scope_threshold` allows".
-  assertMaxBytes(SKILL, 6950);
+  // 7,000 since pilot fix plan 2's Task 4: step 6 counts a re-indented file's moved lines.
+  assertMaxBytes(SKILL, 7000);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -90,7 +91,8 @@ test('the spec reviewer is its own step, and an approved design does not skip it
 test('define references', () => {
   const refs = {
     // spec-template.md: 3,100 since the pilot fix plan's Task 4 (raised from 3,000): the Size section, States and Handles.
-    'spec-template.md': [['# Spec template', '## Problem', '## Size', '## Intent', '## Constraints', '## Assumptions', '## Success criteria', '## Acceptance criteria', '## Decisions', '## Compatibility', '## Authorization', '## Rollout', '## Checklists', '## Test seams', '## Not doing', '## Open questions'], 3100],
+    // 3,450 since pilot fix plan 2's Task 4: the re-indent and ticket-measure sentences, and the short form's Not doing.
+    'spec-template.md': [['# Spec template', '## Problem', '## Size', '## Intent', '## Constraints', '## Assumptions', '## Success criteria', '## Acceptance criteria', '## Decisions', '## Compatibility', '## Authorization', '## Rollout', '## Checklists', '## Test seams', '## Not doing', '## Open questions'], 3450],
     'interview.md': [['# Interview', '## Skip offer and build choices', '## Hypothesis and confidence', '## One question at a time', '## Want versus should-want', '## Restate and confirm', '## When to step back'], 3200],
     'spec-review.md': [['# Spec reviewer brief', '## What to check', '## Builder questions', '## Calibration', '## Output'], 1600],
     'handover.md': [['# Handover', '## Sort', '## Hand over'], 1200],
@@ -128,12 +130,16 @@ test('define reads the ticket by default, sizes in files and lines, and sends a 
   // size of ~332 lines against ~136. tracker.first now defaults to true; `none` reads nothing and drafts nothing.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[2].includes('`none`, set or answered: read no tracker and offer no draft. Else, unless `tracker.first: false`, read the issue, its comments, its parent and its epic before the spec; their rules bind it.'), s[2]);
-  assert.ok(s[6].includes('First count the files and the changed lines from your reads, tests included, and say both'), s[6]);
+  assert.ok(s[6].includes("First count the files and the changed lines from your reads, tests included, a re-indented file's moved lines too, and say both"), s[6]);
   assert.ok(s[9].includes("Over 2 files, whatever `scope_threshold` allows, or several independent concerns: the next step is plan; Read plan's SKILL.md, whose step 2 decides; else the kernel routes to implement."), s[9]);
   // Paid round 2026-10-25: a 3-file design went to implement as "under the 4-file limit", and no design gave a line estimate before the yes.
   assert.ok(s[9].includes('give an in-chat design (approach, files and a changed-line estimate, tests,'), s[9]);
   assertContains(SKILL, ['| `tracker`, `tracker.first` | detected, `true` | issue |']);
-  assertContains('skills/define/references/spec-template.md', ['keep only Problem, Size, Constraints, Acceptance criteria and Test seams',
+  // Pilot fix plan 2 Task 4: one file's re-indent made 396 changed lines, 58 ignoring whitespace, against a ticket's
+  // 332 in another measure; the ticket's Out of scope items reached only chat, so the plan review had no Not doing.
+  assertContains('skills/define/references/spec-template.md', ['keep only Problem, Size, Constraints, Acceptance criteria, Test seams and Not doing',
+    'A re-indented or re-wrapped file counts every line it moves; give its `git diff -w` count beside it.',
+    'A size the ticket states in another measure is named next to this one, each with its measure.', "The ticket's Out of scope lines, each with any ticket it names",
     'Over 2 files, or more than one concern: plan.', 'Then `States:` and each state its proof must show', '`Handles:` and the stable names a check reads']);
   assertContains('skills/define/references/spec-review.md', ['- Size and states: `## Size` matches the files the spec implies']);
 });

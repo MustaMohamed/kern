@@ -38,7 +38,9 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   assertMaxBytes('skills/plan/references/task-template.md', 2200);
   assertHeadings('skills/plan/references/plan-review.md', ['# Plan reviewer brief', '## What to check', '## Calibration', '## Output']);
   // 1,450 since the pilot fix plan's Task 5 (raised from 1,400): the States, Size, Non-goals and spike checks.
-  assertMaxBytes('skills/plan/references/plan-review.md', 1450);
+  // 1,600 since pilot fix plan 2's Task 4: the Size check reads the gate's own measure, re-indented lines included.
+  assertMaxBytes('skills/plan/references/plan-review.md', 1600);
+  assertContains('skills/plan/references/plan-review.md', ["Check its line estimate in the gate's own measure against the file map, re-indented lines included"]);
 });
 
 test('plan pins its approval, lookup and autopilot rules', () => {
