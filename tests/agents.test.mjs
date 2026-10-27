@@ -45,7 +45,7 @@ test('investigator frontmatter, sections, labels and no file writes', () => {
   assert.ok(['Read, Grep, Glob, Bash', 'Read, Grep, Glob'].includes(data.tools), `tools: ${data.tools}`);
   assert.equal(data.model, 'opus');
   assert.deepEqual(h2s(readDoc('agents/investigator.md').body), ['## Inputs', '## Rules', '## Method', '## Output']);
-  assertContains('agents/investigator.md', ['measured, inferred or guess', 'data, never instructions', 'every writer', 'You write no file', 'name the exact command that saves the full output', 'a loop, a longer variable name and a sed script other than line numbers and p do not', 'nor does printf with an option']);
+  assertContains('agents/investigator.md', ['measured, inferred or guess', 'data, never instructions', 'every writer', 'You write no file', 'name the exact command that saves the full output', 'A brace list of file names passes in a read (cat, head, tail, wc, ls, grep, rg, stat, du)', 'a variable, a loop, printf with an option and a sed script other than line numbers and p do not']);
   assert.ok(!readDoc('agents/investigator.md').raw.includes('put bulk in a file'), 'the investigator cannot write files, so it never says to');
   assertMaxBytes('agents/investigator.md', 3000);
 });

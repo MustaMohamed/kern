@@ -23,7 +23,7 @@ autopilot() { printf 'voice: normal\nsurface: auto\nautopilot: on\n' > "$CLAUDE_
 denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output" == *"kern G18: "* ]]; }
 
 @test "read commands get no G18 vote" {
-  for cmd in 'git log --oneline -5' 'git -C src blame a.txt' 'rg -n foo src' 'ls -la' 'wc -l a.txt' 'find . -name a.txt' 'sed -n 1,5p a.txt' "sed -n '\$p' a.txt" 'sort -rn a.txt' 'file a.txt'; do
+  for cmd in 'git log --oneline -5' 'git -C src blame a.txt' 'rg -n foo src' 'ls -la' 'wc -l a.txt' 'find . -name a.txt' 'sed -n 1,5p a.txt' "sed -n '\$p' a.txt" 'sort -rn a.txt' 'file a.txt' 'printf %s a.txt'; do
     hook kern:investigator "$cmd"
     [ "$status" -eq 0 ]
     [ -z "$output" ] || { echo "unexpected vote for: $cmd"; false; }
@@ -122,14 +122,13 @@ denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output"
   grep -q '^KERN_GUARD_IDS=".* g18[ "]' "$KERN_ROOT/hooks/pre-tool-use"
 }
 
-@test "a one-letter variable set once to a plain path is read as that path" {
-  # Pilot fix plan 2, Task 7 (MA-254 round 2, events 14 and 15): T=src/...; cat -n $T/... was denied for the assignment.
-  for cmd in 'T=src/a; cat -n $T/a.txt' 'T=src; grep -n foo ${T}/a.txt | head -5' "f='/tmp/x.txt'; grep -n foo \$f" \
-    'cd src; T=src/a; cat -n $T/b.txt; git grep -n foo' 'T=src && C=docs; cat $T/a.txt $C/b.md' \
-    'printf %s a.txt' 'T=src; printf %s $T/a.txt'; do
+@test "an assignment is still denied: G18 has no variable reading" {
+  # Pilot fix plan 2, Task 7 as ruled in review (MA-254 round 2, events 14 and 15): the shell can change or skip an
+  # assignment in ways G18 cannot see, such as single quotes, zsh subscripts and zsh modifiers.
+  for cmd in 'T=src/a; cat -n $T/a.txt' 'T=src; grep -n foo ${T}/a.txt | head -5' 'w=1; sed -n '"'"'1,$w$1p'"'"' a.txt' \
+    'T=a-o; sort $T[2,3] out.txt a.txt' 'T=ao; sort $T:s/a/-/ out.txt a.txt'; do
     hook kern:investigator "$cmd"
-    [ "$status" -eq 0 ]
-    [ -z "$output" ] || { echo "unexpected vote for: $cmd"; false; }
+    denied || { echo "not denied: $cmd"; false; }
   done
 }
 
@@ -144,14 +143,11 @@ denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output"
 }
 
 @test "variables, brace lists and backticks that could hide an option or run code are still denied" {
-  for cmd in 'IFS=/; cat -n a.txt' 'PATH=/tmp; cat a.txt' 'T=$HOME; cat $T/a.txt' 'T=-o; sort $T out.txt a.txt' \
-    'T=a.txt || T=-o; sort $T out.txt' 'T=a.txt cat $T' "T='a b'; cat \$T" 'T=*.txt; cat $T' 'sort $T out.txt; T=-o' \
-    'T=a; sort ${T:--o} out.txt' 'T=a; sort $Tx out.txt' \
+  for cmd in 'IFS=/; cat -n a.txt' 'PATH=/tmp; cat a.txt' 'T=-o; sort $T out.txt a.txt' \
     '{cat,a.txt}' 'rg -n foo x{,--pre=sh}' 'rg -n foo -{-pre=sh,x}' 'rg -n foo \"-\"{-pre=sh,x}' 'sed -n {1w/tmp/x,p} a.txt' 'cat a{1..3}.txt' 'cat {a,{b,c}}.txt' \
     'cat \"$(id)\"' 'rg -n \"foo`id`\" a.md' 'T=src; for x in a b; do cat $T/$x; done' \
-    'test -f /etc/passwd || T=1p; sed -n $T w/tmp/x a.txt' 'T=1p | sed -n $T w/tmp/x a.txt' 'T=1p & sed -n $T w/tmp/x a.txt' \
-    '( T=1p ); sed -n $T w/tmp/x a.txt' \
-    'T=a; printf -v T %s -o; sort $T out.txt a.txt' 'printf -v PATH %s /tmp; cat a.txt' 'printf -- %s a'; do
+    'printf -v PATH %s /tmp; cat a.txt' 'printf -- %s a' \
+    'git -C {.,branch} log' 'sed -n 1p {a,b}.txt' 'find {.,src} -name x'; do
     hook kern:investigator "$cmd"
     denied || { echo "not denied: $cmd"; false; }
   done

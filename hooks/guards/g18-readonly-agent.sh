@@ -45,7 +45,7 @@ EOF
       ;;
     grep | ls | cat | head | tail | wc | cut | tr | nl | stat | du | pwd | echo | basename | dirname | realpath | cd | true | test | jq | column | cmp | diff | comm) ;;
     printf)
-      # printf -v NAME assigns a variable at run time, which neither G18 reading follows, so no option.
+      # printf -v NAME assigns a variable at run time, which G18 cannot follow, so printf takes no option.
       while IFS= read -r w; do
         n=$((n + 1))
         case "$n:$w" in 2:-*) return 1 ;; esac
@@ -105,13 +105,16 @@ EOF
 # _g18_expands TEXT: exit 0 when the shell may turn TEXT into words it does not show: a $ or a
 # backtick outside single quotes ($_, ${x:--o}, $'-o'), or a brace expansion ({-o,out.txt}). A brace
 # pair after @ with no comma or .. inside, such as git's HEAD@{1} or @{u}, does not expand. One brace
-# list of file names in a word passes (list below): the shell makes only file-name words of it.
+# list of file names in a word passes (list below) only when the record's first word is cat, head, tail,
+# wc, ls, grep, rg, stat or du: each takes extra words only as more operands to read. Other commands'
+# words are positional, so git -C {.,branch} log runs git -C . branch log; they keep the plain rule.
 _g18_expands() {
   printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
-    # list W K: 1 when word W, the Kth, is not the first, does not start with -, holds one { before one },
-    # and the group holds a comma, no .., and items of name characters, none empty or starting with -.
+    # list W K: 1 when the record is a read (rd), and word W, the Kth, is not the first, does not start
+    # with -, holds one { before one }, and the group holds a comma, no .., and items of name characters,
+    # none empty or starting with -.
     function list(w, k,   g, a, m, i) {
-      if (k == 1 || substr(w, 1, 1) == "-") return 0
+      if (!rd || k == 1 || substr(w, 1, 1) == "-") return 0
       if (gsub(/[{]/, "{", w) != 1 || gsub(/[}]/, "}", w) != 1) return 0
       g = substr(w, index(w, "{") + 1); if (!index(g, "}")) return 0
       g = substr(g, 1, index(g, "}") - 1)
@@ -135,89 +138,30 @@ _g18_expands() {
         s = s c
       }
       gsub(/@[{][^,.{}]*[}]/, "@", s)
-      m = split(s, W, /[[:space:]]+/); k = 0
+      m = split(s, W, /[[:space:]]+/); k = 0; rd = 0
       for (i = 1; i <= m; i++) {
         if (W[i] == "") continue
         k++
+        if (k == 1) rd = W[i] ~ /^(cat|head|tail|wc|ls|grep|rg|stat|du)$/
         if (index(W[i], "{") && !list(W[i], k)) exit 0
       }
       exit 1
     }'
 }
 
-# _g18_assign RECORD: exit 0 when RECORD is only NAME=VALUE with a one-letter NAME and a plain VALUE
-# (letters, digits and _ . / : @ + -, in one pair of quotes or none); sets _G18_N and _G18_V. No shell and
-# no allowlisted command reads a one-letter variable from its environment, while IFS, PATH, GIT_* or
-# RIPGREP_CONFIG_PATH would change what runs, so any longer name stays denied. printf with an option is
-# denied (g18_allowed): printf -v assigns a variable at run time, which these readings do not follow.
-_g18_assign() {
-  local r=$1
-  r=${r#"${r%%[![:space:]]*}"}
-  r=${r%"${r##*[![:space:]]}"}
-  case "$r" in [A-Za-z]=*) ;; *) return 1 ;; esac
-  _G18_N=${r%%=*}
-  _G18_V=${r#?=}
-  case "$_G18_V" in
-    \'*\') _G18_V=${_G18_V#\'} && _G18_V=${_G18_V%\'} ;;
-    \"*\") _G18_V=${_G18_V#\"} && _G18_V=${_G18_V%\"} ;;
-  esac
-  case "$_G18_V" in '' | *[!A-Za-z0-9_./:@+-]*) return 1 ;; esac
-  return 0
-}
-
-# _g18_subst TEXT NAME VALUE: TEXT with each $NAME and ${NAME} replaced by VALUE, so G18 judges the words
-# the shell would run. $NAMEx names another variable and stays, and any $ left is denied as before.
-_g18_subst() {
-  printf '%s' "$1" | N=$2 V=$3 env LC_ALL=C awk '
-    { buf = buf (NR > 1 ? "\n" : "") $0 }
-    END {
-      n = ENVIRON["N"]; v = ENVIRON["V"]; out = ""
-      while ((i = index(buf, "$")) > 0) {
-        out = out substr(buf, 1, i - 1); buf = substr(buf, i + 1)
-        if (substr(buf, 1, 3) == "{" n "}") { out = out v; buf = substr(buf, 4); continue }
-        if (substr(buf, 1, 1) == n && substr(buf, 2, 1) !~ /[A-Za-z0-9_]/) { out = out v; buf = substr(buf, 2); continue }
-        out = out "$"
-      }
-      printf "%s", out buf
-    }'
-}
-
+# G18 has no variable reading: an assignment record is an unknown record and is denied, since the shell
+# can change or skip an assignment in ways G18 cannot see.
 guard_g18() {
   [ "$TOOL" = "Bash" ] || return 0
   [ -n "${AGENT:-}" ] || return 0
   case " $G18_AGENTS " in *" $AGENT "*) ;; *) return 0 ;; esac
-  local cmd line bare seen=' ' asg='' n v nl=$'\n'
+  local cmd line
   if ! cmd=$(ti_get command); then
     vote deny G18 "read-only agent: the Bash input has no command"
     return 0
   fi
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    # A one-letter variable set once to a plain value is read as that value in the records after it.
-    # One set twice is denied: after || or in a branch, G18 cannot tell which value a later record reads.
-    if _g18_assign "$line"; then
-      case "$seen" in
-        *" $_G18_N "*)
-          vote deny G18 "$AGENT is read-only; $_G18_N is set twice in one command, so G18 cannot tell which value a later command reads. Set each variable once."
-          return 0
-          ;;
-      esac
-      seen="$seen$_G18_N "
-      asg="$asg$_G18_N=$_G18_V$nl"
-      continue
-    fi
-    bare=$line
-    while IFS='=' read -r n v; do
-      [ -n "$n" ] && line=$(_g18_subst "$line" "$n" "$v") && bare=$(_g18_subst "$bare" "$n" "")
-    done <<EOF
-$asg
-EOF
-    # The assignment may not reach this record (after ||, in a pipeline, in the background, a subshell or
-    # a branch), so the record must also pass with each variable empty.
-    if [ "$bare" != "$line" ] && ! g18_allowed "$bare"; then
-      vote deny G18 "$AGENT is read-only; with a variable unset, as it may be when this command runs, '${bare%%[[:space:]]*}' with these arguments is not on its allowlist. Write the value out."
-      return 0
-    fi
     if ! g18_allowed "$line"; then
       vote deny G18 "$AGENT is read-only; '${line%%[[:space:]]*}' with these arguments is not on its allowlist (git log, show, blame, diff, grep, ls-files; rg, grep, ls, cat, head, tail, wc; find without -exec or -delete; sed -n with line numbers). Ask the controller to run it."
       return 0
