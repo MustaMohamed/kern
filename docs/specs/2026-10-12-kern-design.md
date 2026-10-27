@@ -263,8 +263,8 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 | Risk | `tracker.policy` | `ask` | define, plan, triage, G14 |
 | Risk | `review.post_policy` | `ask` | pr-review, take-feedback, G3 |
 | Risk | `scope_threshold` | `4` files per change; any file outside the approved list pauses | define, plan, execute-plan, implement, self-review, finish-branch, help |
-| Risk | `pr.max_lines` | `300` changed lines: insertions plus deletions from `git diff --shortstat`, tests included | plan, finish-branch, help |
-| Risk | `pr.size_command` | None; a command, run in the worktree with `{base}` and `{tree}` filled in, whose last printed number replaces that count | finish-branch, help |
+| Risk | `pr.max_lines` | `300` changed lines: insertions plus deletions from `git diff --shortstat`, tests included | plan, execute-plan, finish-branch, help |
+| Risk | `pr.size_command` | None; a command, run in the worktree with `{base}` and `{tree}` filled in, whose last printed number replaces that count | execute-plan, finish-branch, help |
 | Risk | `protected_targets` | Unset | G13 |
 | Risk | `deploy.envs`, `deploy.proof` | Unset | ship-check, G15 |
 | Risk | `never_commit` | Unset | G6 |

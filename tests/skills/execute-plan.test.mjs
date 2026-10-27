@@ -30,7 +30,10 @@ test('execute-plan sections, steps, scripts and red flags', () => {
     'Batch small tasks', 'closed in its fork through steps 6 to 10', 'ledger-open --summary', 'One fix subagent gets the complete findings list',
     'main: unchanged', 'run them only on yes', '`<ledger>` below is `<ledger dir>/ledger.md`', 'briefs/task-N.brief.md', 'dispatch only on `brief-check: ok`',
     '--no-probe']);
-  assertMaxBytes(SKILL, 12599);
+  // 13,550 since pilot fix plan 2's Task 1 (raised from 12,599): step 10 sizes the plan worktree after each closed task
+  // and asks at the first breach; MA-254 round 2 had the count at 22:40 and asked at 00:24, with the user gone.
+  assertMaxBytes(SKILL, 13550);
+  assertContains(SKILL, ["| `pr.max_lines`, `pr.size_command` | 300 lines; none | step 10's size |"]);
 });
 
 test('ledger format and model table', () => {
@@ -96,7 +99,10 @@ export const PINS = {
     'A refusal writes nothing and says why.', '`command exited <n>` or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round',
     '(after round 3: the split proposal)', '`command exited 126` or `127`: stop.',
     'Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask.',
-    'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11)."],
+    'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11).",
+    'Then size the plan worktree (a wave: after step 11): `git -C <plan-wt> diff --shortstat <base-tree> <tree>`',
+    'so untracked files count; never `git add`, not even `-N`.', "unless the plan's Size line was over that limit: stop and ask `split` or one PR",
+    'naming `lines: <n> (<measure>)`, the `-w` count, the limit and its source.', 'Record the answer in a `Decision:` line whose what opens with size; `split` ends the run.'],
   11: ["Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`",
     'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then `test.full` there; red: stop.'],
   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',
@@ -108,7 +114,8 @@ export const PINS = {
   stops: ['Ask at each stop as a typed reply in chat, never through AskUserQuestion.', 'on per the latest kern signal', 'a turn with no mode line changes nothing',
     'When on, steps 1 and 2 and a failed `wt-new` still end the run.', 'parked: <question>; default: <choice>; why: <one line>', 'a red baseline goes on, naming red-before tests',
     'a stopped task stays open with every task blocked by it, and disjoint tasks continue', 'One commit per closed task when its checks pass, through `/kern:commit`',
-    'G5 allows only `git commit -m` or `-F <file>` on an unprotected branch', 'Without autopilot `commits: ask` holds: no commit.', 'teardown never runs'],
+    'G5 allows only `git commit -m` or `-F <file>` on an unprotected branch', 'Without autopilot `commits: ask` holds: no commit.', 'teardown never runs',
+    "the size stop takes one PR, why: a split is the user's scope call and a draft can be closed"],
   ledger: ['Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand.',
     "A batch of tasks shares one brief, package and review, and the scripts still write each task's lines.",
     "The other lines are appended with `printf '%s\\n' '<line>' >> <ledger>`", 'one holding the word approved goes in with the Edit tool',

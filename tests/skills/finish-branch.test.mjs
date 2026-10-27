@@ -60,11 +60,14 @@ test('finish-branch sections, steps and red flags', () => {
     'The size gate: go on', 'Dedup: per its section.', 'Stray untracked files can park the finish at commit\'s "no files, no commit" default.',
     '`fix first`, `split` and a failed or unrunnable proven-tree check included',
     '"Tests passed earlier this session"', 'Only a PR at this head stops.', 'Only the typed word `discard` deletes work.',
-    'The remote moved, unless this run rebased. Investigate; never a plain force.']);
+    'The remote moved, unless this run rebased. Investigate; never a plain force.',
+    "whose what opens with size and that quotes the user's one-PR answer settles it: name that answer and both counts, and go on.",
+    'Never `git add` to count, not even `-N`.']);
   assertNoSubstitution(SKILL);
   // 6,594 since M2b Task 17 (raised from 6,400): a release on request, the tag-only route and the release branch, coverage AD24.
   // 6,960 since the pilot fix plan's Task 2: the size gate's measure and pr.size_command.
-  assertMaxBytes(SKILL, 6960);
+  // 7,200 since pilot fix plan 2's Task 1: step 6 takes execute-plan's ledger answer and never stages to count.
+  assertMaxBytes(SKILL, 7200);
 });
 
 test('branch-ops reference: rebase and the proven-tree check', () => {
@@ -277,4 +280,5 @@ test('finish-branch: the size gate names its measure, and pr.size_command replac
   assert.ok(s[6].includes('(it fails or prints none: say so, keep the shortstat count). Name the count you compare, as `lines: <n> (<measure>)`.'), s[6]);
   assertContains(SKILL, ['| `scope_threshold`, `pr.max_lines`, `pr.size_command` | 4 files; 300 lines; none |']);
   assertContains('kernel/settings.md', ['| `pr.size_command` | none |', 'insertions plus deletions from `git diff --shortstat`, tests included']);
+  assertContains('kernel/settings.md', ['tests included, or `pr.size_command`\'s count | plan, execute-plan, finish-branch, help |', '| execute-plan, finish-branch, help |']);
 });
