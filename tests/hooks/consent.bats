@@ -240,3 +240,20 @@ decide_with() {
   [ "$(decide "gh pr edit")" = ask ]
   [ "$(decide "gh pr edit --body-file missing.md")" = ask ]
 }
+
+@test "each reply finish-branch's menu asks for is that option's consent; a digit or a size answer is none" {
+  # Pilot fix plan 2, Task 2 (MA-254 round 2): the user's "One" gave no consent, and 8 asks followed.
+  . "$(kern_root)/hooks/lib/settings.sh"
+  . "$(kern_root)/hooks/lib/state.sh"
+  c() { printf '%s\n' "$1" | prompt_consent; }
+  menu=$(grep '^7\. Show the menu' "$(kern_root)/skills/finish-branch/SKILL.md")
+  for r in 'commit' 'commit and push' 'commit, push and open a draft PR' 'keep'; do
+    [[ "$menu" == *"\`$r\`"* ]] || { echo "the menu lacks the reply: $r"; return 1; }
+  done
+  [ "$(c 'commit')" = "commit" ]
+  [ "$(c 'commit and push')" = "commit push" ]
+  [ "$(c 'commit, push and open a draft PR')" = "commit push pr" ]
+  for p in 1 2 3 4 keep One 'one PR' split; do
+    [ -z "$(c "$p")" ] || { echo "consent from: $p"; return 1; }
+  done
+}

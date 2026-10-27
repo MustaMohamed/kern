@@ -26,7 +26,7 @@ test('finish-branch frontmatter', () => {
     name: 'finish-branch',
     description: 'Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep.',
     'disable-model-invocation': 'true',
-    'allowed-tools': 'Bash(git rev-parse *), Bash(git symbolic-ref -q --short HEAD), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)',
+    'allowed-tools': 'Bash(git rev-parse *), Bash(git symbolic-ref -q --short HEAD), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(gh pr checks *)',
   });
 });
 
@@ -46,7 +46,10 @@ test('finish-branch sections, steps and red flags', () => {
     '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'Red, or `wt-snap` failing: stop.',
     '${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md', 'skip: no-comments ships in M3', '`fix first`, `split` or no verdict: stop', '`rebase first`: handle it as step 3\'s stale base', '`ready`: go on.',
     'git diff --shortstat <merge-base> <tree>', 'untracked files count', 'or a count above `pr.max_lines`', 'propose a split alone, no menu before it is answered; stop on yes, go on on no.',
-    '1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is', 'Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`',
+    '1 `commit`; 2 `commit and push`; 3 `commit, push and open a draft PR`; 4 `keep`.',
+    'Ask for the reply in those words: G5, G1 and G2 read them as this prompt\'s consent, while a digit gives none',
+    'Then report each review that ran and its result',
+    'run `gh pr checks <n>` once, with no wait: report its output, or why it could not run.', 'Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`',
     'typed word `discard`, per `references/discard.md`',
     'nothing to commit', 'steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'its stops stop this skill', 'its proof is its own, apart from step 4\'s',
     'offer a rebase step 3 put off', 'Option 1 ends with the short SHA.',
@@ -67,7 +70,8 @@ test('finish-branch sections, steps and red flags', () => {
   // 6,594 since M2b Task 17 (raised from 6,400): a release on request, the tag-only route and the release branch, coverage AD24.
   // 6,960 since the pilot fix plan's Task 2: the size gate's measure and pr.size_command.
   // 7,200 since pilot fix plan 2's Task 1: step 6 takes execute-plan's ledger answer and never stages to count.
-  assertMaxBytes(SKILL, 7200);
+  // 7,650 since pilot fix plan 2's Task 2: step 7's replies in words, step 11's reviews and PR checks.
+  assertMaxBytes(SKILL, 7650);
 });
 
 test('branch-ops reference: rebase and the proven-tree check', () => {
@@ -265,7 +269,7 @@ test('finish-branch: a release only when asked, after the commit; its tag only a
   assert.equal(s[10], '10. Push, for options 2 and 3: `references/branch-ops.md`, section Proven tree, then `references/push-and-pr.md`, section Push.');
   assert.ok(!/\btag\b/.test(s.slice(2).join('\n')), 'steps 2 to 11 name no tag');
   // Review M9: the outputs name the release.
-  assert.equal(section(readDoc(SKILL).body, '## Outputs').trim(), 'A commit, push or draft PR, per the choice, or a release; a chat report: SHA, branch, PR URL, `<wt>`, the tag or its wait.');
+  assert.equal(section(readDoc(SKILL).body, '## Outputs').trim(), 'A commit, push or draft PR, per the choice, or a release; a chat report: SHA, branch, PR URL, the reviews that ran, the PR checks, `<wt>`, the tag or its wait.');
   assertContains('tests/skills/finish-branch.acceptance.md', ['Asked for a release: the bump is stated with the change that sets it',
     'Asked to tag a merged release: the oldest commit on the base carrying the release subject',
     'Asked for a release on the base branch itself: a release branch is offered']);

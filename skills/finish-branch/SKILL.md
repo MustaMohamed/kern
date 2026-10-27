@@ -2,7 +2,7 @@
 name: finish-branch
 description: "Finish a branch: verify, self-review, check base and size, then offer commit, push, draft PR or keep."
 disable-model-invocation: true
-allowed-tools: Bash(git rev-parse *), Bash(git symbolic-ref -q --short HEAD), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *)
+allowed-tools: Bash(git rev-parse *), Bash(git symbolic-ref -q --short HEAD), Bash(gh pr list *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(gh pr checks *)
 ---
 
 # finish-branch
@@ -18,11 +18,11 @@ Integrate finished work the user's way. A failure no step handles stops the run:
 4. Prove `test.full` here by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`, then record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`. Red, or `wt-snap` failing: stop.
 5. Read `${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md` and run it on `<wt>`. Comment hygiene: `skip: no-comments ships in M3`. `fix first`, `split` or no verdict: stop with its report. `rebase first`: handle it as step 3's stale base. `ready`: go on.
 6. Size gate: `git merge-base HEAD <baseref>`, then `git diff --shortstat <merge-base> <tree>` (step 4's tree, so untracked files count). Always run it, even after self-review listed the files: `pr.max_lines` reads its line count. The count is insertions plus deletions in every changed file, tests included; with `pr.size_command` set, run it in `<wt>` with `{base}` as `<merge-base>` and `{tree}` as `<tree>`, and the last number it prints is the count instead (it fails or prints none: say so, keep the shortstat count). Name the count you compare, as `lines: <n> (<measure>)`. Files changed above `scope_threshold`, or a count above `pr.max_lines`: propose a split alone, no menu before it is answered; stop on yes, go on on no. A `Decision:` line in the work's ledger whose what opens with size and that quotes the user's one-PR answer settles it: name that answer and both counts, and go on. Never `git add` to count, not even `-N`.
-7. Show the menu, then wait: 1 commit; 2 commit and push; 3 commit, push and open a draft PR; 4 keep as is. Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`. Option 4: report the branch and `<wt>`; stop. Discard only on the typed word `discard`, per `references/discard.md`.
+7. Show the menu, then wait: 1 `commit`; 2 `commit and push`; 3 `commit, push and open a draft PR`; 4 `keep`. Ask for the reply in those words: G5, G1 and G2 read them as this prompt's consent, while a digit gives none, so each commit, push and PR would ask. Leave out 2 and 3 with no remote or `push.policy: deny`, and 3 with `pr.policy: deny`. Option 4: report the branch and `<wt>`; stop. Discard only on the typed word `discard`, per `references/discard.md`.
 8. Commit, for options 1 to 3: nothing to commit when `git status --porcelain` prints nothing; else run steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md` on `<wt>`; its stops stop this skill, and its proof is its own, apart from step 4's. Then offer a rebase step 3 put off. A release, if asked: `references/release.md`. Option 1 ends with the short SHA.
 9. Dedup, before any push or PR: `references/push-and-pr.md`, section Dedup.
 10. Push, for options 2 and 3: `references/branch-ops.md`, section Proven tree, then `references/push-and-pr.md`, section Push.
-11. Draft PR, for option 3: `references/push-and-pr.md`, section PR. Report the URL; the worktree stays.
+11. Draft PR, for option 3: `references/push-and-pr.md`, section PR. Report the URL; the worktree stays. Then report each review that ran and its result (self-review's verdict and lanes; from the work's ledger, the task and whole-branch reviews), and run `gh pr checks <n>` once, with no wait: report its output, or why it could not run.
 
 ## Inputs
 
@@ -37,7 +37,7 @@ Each key: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>` (exit 3: the defau
 
 ## Outputs
 
-A commit, push or draft PR, per the choice, or a release; a chat report: SHA, branch, PR URL, `<wt>`, the tag or its wait.
+A commit, push or draft PR, per the choice, or a release; a chat report: SHA, branch, PR URL, the reviews that ran, the PR checks, `<wt>`, the tag or its wait.
 
 ## Stops and autopilot
 
