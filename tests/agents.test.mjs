@@ -32,7 +32,8 @@ test('task-reviewer frontmatter, sections and verdict lines', () => {
     model: 'opus',
   });
   assert.deepEqual(h2s(readDoc('agents/task-reviewer.md').body), ['## Inputs', '## Rules', '## Part 1: spec', '## Part 2: quality', '## Modes', '## Output']);
-  assertContains('agents/task-reviewer.md', ['Spec: compliant | issues', 'Task quality: approved | needs fixes', 'cannot verify', 'plan-mandated', 'ADDRESSED', 'whole-branch', 'Declined to judge:', 'computed the way the code computes it']);
+  assertContains('agents/task-reviewer.md', ['Spec: compliant | issues', 'Task quality: approved | needs fixes', 'cannot verify', 'plan-mandated', 'ADDRESSED', 'whole-branch', 'Declined to judge:', 'computed the way the code computes it',
+    '`evidence`: a verification task, with no diff.', 'never redo the work']);
   assertMaxBytes('agents/task-reviewer.md', 5000);
 });
 

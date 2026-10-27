@@ -20,6 +20,7 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   const { body } = readDoc(SKILL);
   assert.deepEqual(h2s(body), ['## Steps', '## Inputs', '## Outputs', '## Stops and autopilot', '## Red flags']);
   const s = steps(body);
+  assert.ok(s[6].includes('A verification task, one whose Files modify nothing and whose steps gather evidence, follows `references/verification.md` in every mode.'), s[6]);
   assert.equal(s.length, 15);
   assert.equal(s[0], DEFER);
   for (const script of ['ledger-open', 'plan-check', 'wt-new', 'wt-fork', 'wt-snap', 'wt-diff', 'wt-apply', 'task-start', 'task-brief', 'brief-check', 'task-review', 'task-done']) {
@@ -32,7 +33,14 @@ test('execute-plan sections, steps, scripts and red flags', () => {
     '--no-probe']);
   // 13,550 since pilot fix plan 2's Task 1 (raised from 12,599): step 10 sizes the plan worktree after each closed task
   // and asks at the first breach; MA-254 round 2 had the count at 22:40 and asked at 00:24, with the user gone.
-  assertMaxBytes(SKILL, 13550);
+  // 13,850 since its Task 3: steps 6 and 8 send a verification task to references/verification.md, and step 8 saves a review
+  // with the Write tool.
+  assertMaxBytes(SKILL, 13850);
+  assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
+  assertMaxBytes('skills/execute-plan/references/verification.md', 1250);
+  assertContains('skills/execute-plan/references/verification.md', ['Its Files modify nothing.', 'a value with no stored output proves nothing',
+    'mode `evidence`', 'At most two rounds, the review and one fix round', 'A state still unproven after round 2: stop and ask, naming each one; never start a third round.',
+    '--no-probe "verification task: no code"']);
   assertContains(SKILL, ["| `pr.max_lines`, `pr.size_command` | 300 lines; none | step 10's size |"]);
 });
 
@@ -85,7 +93,8 @@ export const PINS = {
     "Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines.", 'Resolve every "cannot verify" item yourself and rule on each "Declined to judge" line',
     'A real gap is a spec issue; add it to that `.txt` as a finding.',
     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-review <ledger> <N> <tree-after> <r> <compliant|issues> <approved|needs-fixes>`',
-    'adding `--minor "<finding>"` for each Minor finding, which waits for step 12'],
+    'adding `--minor "<finding>"` for each Minor finding, which waits for step 12',
+    "A verification task's diff is empty by design: review it as `references/verification.md` says.", 'Use the Write tool: G20 may deny a shell write of text that holds approved.'],
   9: ['Before rounds 2 and 3 write `Task N: fix round=<r> tree=<id>`, the tree just reviewed.', "Round 2 resumes the implementer with the previous round's `.txt`",
     "(SendMessage to its agent id, or `references/resume.md`'s fallback; inline and step: fix it yourself)",
     'round 3 dispatches a fresh `kern:implementer` one tier up with a step 6 brief, the report and that file',

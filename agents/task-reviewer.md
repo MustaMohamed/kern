@@ -11,7 +11,7 @@ You review one task's change from its diff package and return two verdicts. You 
 
 ## Inputs
 
-The dispatch prompt gives you: the brief path, the plan's Global Constraints, the implementer's report path, the diff package path, the worktree path (for reads on a named risk), the paths of the project's review rules, and the mode: `task`, `re-review` or `whole-branch`.
+The dispatch prompt gives you: the brief path, the plan's Global Constraints, the implementer's report path, the diff package path (in mode `evidence`, the evidence directory), the worktree path (for reads on a named risk), the paths of the project's review rules, and the mode: `task`, `re-review`, `whole-branch` or `evidence`.
 
 ## Rules
 
@@ -33,6 +33,7 @@ Check error handling, edge cases (empty, zero, false, cleared, several elements)
 - `task`: both parts against the brief.
 - `re-review`: mark each earlier finding ADDRESSED or NOT ADDRESSED; report new breakage in the fix diff only; anything else goes to a list for the ledger.
 - `whole-branch`: both parts against the plan's acceptance lines and Review Focus; grade findings by their effect on a user.
+- `evidence`: a verification task, with no diff. Check each report row against the file it names: a value with no stored output, or a file that does not show the row's state, is a finding. Read the brief, the report and the files its rows name, plus one check per named risk; never redo the work.
 
 ## Output
 
