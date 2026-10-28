@@ -1,0 +1,238 @@
+{
+  "model": "claude-sonnet-5-5",
+  "claude": "2.1.312 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "assumes": "Bash is pre-approved (--allowedTools Bash), so Claude Code never asks: a pass shows what kern allows, asks and denies, not the prompts a user who has not allowed Bash would see (kern gives git add no autopilot allow, for one)",
+  "user_settings": "none",
+  "kern": {
+    "commit": "f4875576c827f1ecee6a89a05c236809e0c55ae4",
+    "dirty": false,
+    "changes": []
+  },
+  "results": [
+    {
+      "id": "commit-work-file",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "Committed `5f5b407` on `feat/sum`: \"fix: add the operands in sum instead of subtracting\". It changes `src/sum.js` only (1 insertion, 1 deletion). The fix is `a - b` becoming `a + b`.\n\n- **Proof:** `npm run lint` exited 0, and `npm test` passed 1 of 1 with exit 0. Both ran on the working tree, which also holds the unstaged `README.md` change and untracked `notes.txt`. They were not run on the commit alone.\n- **Left out:** `README.md` (modified) and `notes.txt` (untracked) stayed unstaged because you named only `src/sum.js`. The final tree check was skipped because of those leftovers.\n- **Subject format:** No `commit.convention` could be detected, since the repo has only one prior commit. I used `fix:` to match that commit's `chore:` style. The message has no attribution trailer, as `commit.attribution` is `none`.\n- **Not done:** I didn't push or open a PR. Autopilot allows `git push -u origin feat/sum` if you want it.",
+      "turns": 21,
+      "subtype": "success",
+      "commands": [
+        "git -C . rev-parse --show-toplevel",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Tk4uqd/invoice-app symbolic-ref -q --short HEAD",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Tk4uqd/invoice-app status --porcelain",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Tk4uqd/invoice-app diff -- src/sum.js",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Tk4uqd/invoice-app add -- src/sum.js",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts 2>/dev/null; for k in verify.fast test.focused typecheck lint commit.convention; do echo \"== $k\"; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get $k; echo \"exit $?\"; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect $k; echo \"exit $?\"; done",
+        "for k in verify.fast test.focused typecheck lint commit.convention; do echo \"== $k\"; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect $k; echo \"exit $?\"; done; ls; cat package.json 2>/dev/null; git diff --staged --stat",
+        "npm run lint 2>&1; echo \"lint exit $?\"; npm test 2>&1; echo \"test exit $?\"",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Tk4uqd/invoice-app",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-dir tmp",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Tk4uqd/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Tk4uqd/invoice-app/.kern/tmp/commit-msg"
+      ]
+    },
+    {
+      "id": "finish-menu-first",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "Self-review verdict: **ready**. `finish-branch` is paused at the menu, waiting for your reply.\n\n**Work:** `feat/sum` in the main checkout, `/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-tTKCV3/invoice-app`. It is not behind `origin/main` (0 behind, 0 ahead after fetch).\n\n**Change:** `src/sum.js` goes from `a - b` to `a + b`. It is uncommitted.\n\n**Checks**\n- `npm test` passed: 1 test, 0 failures, exit 0. The proven tree is `deb1188681b23ff779501b7189d15f3cddaf73a9`.\n- `npm run lint` (`node --check src/sum.js`) exited 0.\n- `floor-scan` and `claim-check` found no hits.\n- The built-in code review found nothing.\n- `skip: no spec`. The spec lane did not run.\n- `skip: no-comments ships in M3`. The comment-hygiene check did not run.\n- No probes ran, because the change adds no new test or conditional.\n- `lines: 2 (git diff --shortstat)`, 1 file. That is under both the 300-line and 4-file limits.\n\n**Untested:** the one test only checks `sum(2, 3)`.\n\nReply with one of these, in these words:\n1. `commit`\n2. `commit and push`\n3. `commit, push and open a draft PR`\n4. `keep`\n\nI recommend 3. To delete the work instead, type `discard`.",
+      "turns": 16,
+      "subtype": "success",
+      "commands": [
+        "git worktree list && git rev-parse --path-format=absolute --git-dir --git-common-dir && git symbolic-ref -q --short HEAD; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-dir ledgers; for k in base_branch branch.protected test.full push.policy pr.policy pr.max_lines scope_threshold; do echo \"$k: $(bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get $k; echo \"exit $?\")\"; done; git remote get-url origin; git status --porcelain",
+        "for k in base_branch test.full branch.pattern commit.convention; do echo \"$k: $(bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect $k; echo \"exit $?\")\"; done; ls; cat package.json 2>/dev/null; git diff",
+        "git fetch origin main 2>&1; git rev-list --left-right --count origin/main...HEAD; cat /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/skills/prove-it/SKILL.md",
+        "npm test 2>&1; echo \"exit $?\"; ls test; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/wt-snap \"$PWD\"; echo \"snap exit $?\"",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern && sed -n 1,40p skills/self-review/references/rounds.md; cat /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-tTKCV3/invoice-app/test/sum.test.js; ls scripts; for k in lint typecheck test.focused review.builtin; do echo \"$k: $(bash scripts/kern-get $k; echo \"e$?\") $(bash scripts/kern-detect $k; echo \"e$?\")\"; done",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; for k in lint typecheck test.focused; do echo \"$k: $(bash $K/kern-detect $k; echo \"e$?\")\"; done; R=$(bash $K/kern-dir reviews); mkdir -p \"$R\"; echo $R; MB=$(git merge-base HEAD origin/main); P=$R/feat-sum-1.diff; bash $K/wt-diff \"$PWD\" $MB --out $P; echo \"wt-diff e$?\"; npm run lint 2>&1 | tail -3; echo \"lint e$?\"; bash $K/floor-scan $P; echo \"floor e$?\"; bash $K/claim-check \"$PWD\" $P; echo \"claim e$?\"; git diff --name-only $MB origin/main; git diff --shortstat $MB deb1188681b23ff779501b7189d15f3cddaf73a9",
+        "git diff HEAD; git diff main...HEAD --stat; cat src/sum.js; ls; ls src; cat CLAUDE.md 2>/dev/null",
+        "cat package.json README.md; ls test; cat test/*"
+      ]
+    },
+    {
+      "id": "finish-menu-consent",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "The draft PR is open at `file:///var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Mq98Hg/invoice-app.origin/pull/8`. The fix is committed as `9e4a9fb` (`fix: add operands in sum instead of subtracting`) and pushed to `origin/feat/sum`.\n\n- **Proof:** the commit's tree is `deb1188…`, the same tree `npm test` passed on earlier (1 test, 1 pass, 0 fail). Nothing was left unstaged.\n- **Commit message:** the repo has no commit convention to detect (it has one commit). I used a `fix:` subject.\n- **Attribution:** I left the Co-Authored-By trailer and the \"Generated with Claude Code\" PR footer off. kern's default (`commit.attribution: none`) says to omit them, and its PR guard denies them. That overrides the attribution reminder. If you want them, say so and I'll amend the commit and edit the PR body.\n- **Reviews that ran:** self-review gave `ready`, and its built-in code-review lane found nothing. The spec lane was skipped because there is no spec. No ledger exists, so there are no task or whole-branch reviews.\n- **PR checks:** `gh pr checks 8` reported \"no checks reported on the 'feat/sum' branch\", so the repo has no CI configured.\n- **Worktree:** it stays at `/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Mq98Hg/invoice-app`, which is the main checkout.",
+      "turns": 40,
+      "subtype": "success",
+      "commands": [
+        "git worktree list && bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-dir ledgers; git rev-parse --show-toplevel",
+        "S=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; for k in base_branch test.full branch.protected scope_threshold pr.max_lines push.policy pr.policy; do echo \"$k: $(bash $S/kern-get $k 2>&1) [$?]\"; done; for k in base_branch test.full; do echo \"detect $k: $(bash $S/kern-detect $k 2>&1) [$?]\"; done; git remote -v; git status --porcelain; git rev-parse --path-format=absolute --git-dir --git-common-dir; git symbolic-ref -q --short HEAD; ls; cat package.json",
+        "git fetch origin main 2>&1; echo \"fetch=$?\"; git rev-list --left-right --count origin/main...HEAD; npm test 2>&1; echo \"exit=$?\"; git diff HEAD",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/wt-snap \"$PWD\"; echo \"exit=$?\"; cat test/*.js; git diff --shortstat HEAD",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern && sed -n 1,30p skills/self-review/references/rounds.md; bash scripts/kern-dir reviews",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; R=$(bash $K/kern-dir reviews); echo \"R=$R\"; ls $R 2>&1; mkdir -p \"$R\"; MB=$(git merge-base HEAD origin/main); P=$R/feat-sum-1.diff; bash $K/wt-diff \"$PWD\" $MB --out $P; echo \"wt-diff=$?\"; echo \"--- lint\"; npm run lint 2>&1; echo \"lint=$?\"; echo \"--- floor-scan\"; bash $K/floor-scan $P; echo \"floor=$?\"; echo \"--- claim-check\"; bash $K/claim-check \"$PWD\" $P; echo \"claim=$?\"; echo \"--- probe\"; bash $K/probe --mutate src/sum.js:1 \"$PWD\" -- npm test 2>&1 | tail -5; echo \"probe=${PIPESTATUS[0]}\"; git status --porcelain",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; bash $K/probe --exclude-tests \"$PWD\" .kern/reviews/feat-sum-1.diff.patch -- node --test test/ 2>&1 | tail -5; echo \"probe=${PIPESTATUS[0]}\"",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; bash $K/probe --exclude-tests \"$PWD\" .kern/reviews/feat-sum-1.diff.patch -- node --test test/ > /tmp/probe.out 2>&1; echo \"probe=$?\"; grep -E '^probe' /tmp/probe.out; ls .kern/reviews",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; bash $K/probe --exclude-tests \"$PWD\" .kern/reviews/feat-sum-1.diff.patch -- npm test > /tmp/probe.out 2>&1; echo \"probe=$?\"; grep -E '^probe' /tmp/probe.out; git status --porcelain",
+        "git diff main...HEAD; git diff HEAD; ls; cat CLAUDE.md 2>/dev/null; cat src/sum.js; grep -rn \"sum\" --include=*.js . -l | grep -v node_modules",
+        "cat package.json; ls src test; grep -rn \"sum\" src test README.md",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/skills && cat commit/SKILL.md; ls finish-branch/references; cat finish-branch/references/push-and-pr.md finish-branch/references/branch-ops.md",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern && K=scripts; cat skills/finish-branch/references/pr-body.md; cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Mq98Hg/invoice-app; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect commit.convention; echo $?; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-dir tmp; git log --format=%s; cat .gitignore; ls .github 2>&1",
+        "git add -- src/sum.js && git diff --staged --stat",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Mq98Hg/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Mq98Hg/invoice-app/.kern/tmp/commit-msg",
+        "git rev-parse HEAD^{tree}; git remote get-url origin; gh pr list --head feat/sum --state all --json number,state,headRefOid,url 2>&1",
+        "git push -u origin feat/sum 2>&1",
+        "gh pr create --draft --title 'fix: add operands in sum instead of subtracting' --base main --body-file /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-Mq98Hg/invoice-app/.kern/tmp/pr-body.md 2>&1",
+        "gh pr checks 8 2>&1"
+      ]
+    },
+    {
+      "id": "finish-split-nine-files",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "Steps 1 to 5 are done. I stopped at the size gate (step 6) and need your answer before I can show the commit menu.\n\n**Size gate:** 10 files changed, which is over your `scope_threshold` of 4. The line count is `lines: 11 (git diff --shortstat, 10 insertions + 1 deletion)`, well under the 300-line limit, so only the file count trips the gate.\n\n**Split proposal:**\n- **PR A:** the `src/sum.js` fix (`a - b` to `a + b`). The existing `test/sum.test.js` covers it.\n- **PR B:** `src/v1.js` to `src/v9.js`, each one `export const vN = N;`.\n\nMy recommendation is to split. The `v*.js` files are not imported by anything and have no tests, so they look like scratch files. Should they ship at all?\n\n**What I checked, on the worktree at tree `1efaabe`:**\n- **Work and base:** I used the main checkout on `feat/many` and compared it to `origin/main`, which was fetched and is 0 behind and 0 ahead.\n- **Tests:** `npm test` passed (1 pass, 0 fail) and `npm run lint` is clean.\n- **Probe:** it printed `fail-then-pass ok`, so the `sum` test fails without the fix and passes with it.\n- **Floor and claim checks:** `floor-scan` and `claim-check` both exited 0.\n- **Review findings:** the built-in `code-review` lane found two nits and no bugs.\n  - The nine `v*.js` files are dead code.\n  - `lint` only checks `src/sum.js`, so the new files aren't linted.\n- **Skipped:** there is no spec, so the spec lane and the proofs file were skipped.\n- **Verdict:** I'd call self-review `ready`, since no findings are blockers.\n\n**Your call:** reply `split` to stop here and split the work, or `one PR` to continue. If you say `one PR`, I'll show the menu (commit, commit and push, commit, push and open a draft PR, or keep).",
+      "turns": 23,
+      "subtype": "success",
+      "commands": [
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; cat .claude/kern.local.yml 2>&1; echo ---; git worktree list; git rev-parse --path-format=absolute --git-dir --git-common-dir; git symbolic-ref -q --short HEAD; echo \"--\"; for k in base_branch branch.pattern test.full branch.protected push.policy pr.policy pr.max_lines scope_threshold; do echo \"$k: $(bash $K/kern-get $k 2>&1) [$?]\"; done; git remote get-url origin; echo \"remote rc $?\"",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; for k in base_branch test.full branch.pattern; do echo \"$k: $(bash $K/kern-detect $k 2>&1) [$?]\"; done; ls; cat package.json 2>/dev/null; git branch -a",
+        "git fetch origin main 2>&1; echo rc $?; git rev-list --left-right --count origin/main...HEAD; cat /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/skills/prove-it/SKILL.md",
+        "npm test 2>&1 | tail -40; echo \"exit ${PIPESTATUS[0]}\"; npm run lint 2>&1 | tail -5; git status --porcelain; git diff src/sum.js",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; bash $K/scripts/wt-snap \"$PWD\"; echo rc $?; head -c 300 src/v1.js; echo; wc -l src/*.js test/*; cat $K/skills/self-review/SKILL.md",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; cat $K/skills/self-review/references/rounds.md | head -30; echo ----; bash $K/scripts/kern-dir reviews; MB=$(git merge-base HEAD origin/main); echo $MB",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; ls .kern/reviews 2>&1; P=$PWD/.kern/reviews/feat-many-1.diff; bash $K/scripts/wt-diff \"$PWD\" bdea90009cea9bbcdfa99d131246f2fd53d942a0 --out $P; echo rc $?; bash $K/scripts/floor-scan $P; echo floor rc $?; bash $K/scripts/claim-check \"$PWD\" $P; echo claim rc $?; cat test/sum.test.js; git check-ignore .kern; git status --porcelain | head -3",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; P=$PWD/.kern/reviews/feat-many-1.diff; ls .kern/reviews; git stash list | head -1; bash $K/scripts/probe --exclude-tests \"$PWD\" $P.patch -- node --test test/sum.test.js 2>&1 | tail -8; echo rc ${pipestatus[1]}; git status --porcelain | wc -l; git rev-parse HEAD",
+        "git diff HEAD; for f in src/v*.js; do echo \"=== $f\"; cat $f; done; ls; cat CLAUDE.md 2>/dev/null",
+        "cat package.json README.md; ls test; cat test/*; grep -rn \"v[1-9]\\b\\|sum\" src test | grep -v \"^src/v\"",
+        "git diff --shortstat bdea90009cea9bbcdfa99d131246f2fd53d942a0 1efaabe1ce316b075fae25ce28f97c365f107222; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get pr.size_command; echo rc $?"
+      ]
+    },
+    {
+      "id": "finish-autopilot-draft",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "The fix is committed, pushed and open as a draft PR: `file:///var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-2fCQ4X/invoice-app.origin/pull/8`\n\n- **Change:** `src/sum.js:1` now returns `a + b` instead of `a - b`. The commit is `6e03161`, `fix: add operands in sum instead of subtracting`, on `feat/sum`.\n- **Base:** `feat/sum` was 0 commits behind `origin/main`, so I did no rebase.\n- **Proof:** `npm test` gave 1 pass, 0 fail, exit 0, and `npm run lint` exited 0. The committed tree `deb1188` equals the tree I proved.\n- **Self-review:** `floor-scan` and `claim-check` found nothing, and the built-in `code-review` lane found no bugs. The verdict is `ready`.\n  - I skipped the spec lane because there is no spec.\n  - I skipped the probes because the change adds no new test or conditional.\n  - Two nits from the review are listed in the PR and not fixed. `test/sum.test.js` has a single case, `sum(2, 3)`, which would also pass for some wrong operators. `sum('2', 3)` returns `'23'`.\n- **Size gate:** 1 file and 2 lines changed, well under the limits.\n- **Duplicates:** `gh pr list` showed no earlier PR for this branch.\n- **PR checks:** `gh pr checks 8` reported \"no checks reported on the 'feat/sum' branch\". I ran it once, with no wait.\n- **Convention:** no `commit.convention` is set or detectable, since there is only one prior commit. I used a conventional `fix:` subject. Per autopilot's default, there is no attribution trailer or footer.\n- **Worktree:** it stays in place at `/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-2fCQ4X/invoice-app`.\n\nNothing was parked. Your stop predicate (commit, push, tests passing, draft PR open) is met, so autopilot has nothing left to do. Turn it off with `/kern:autopilot off` when you're ready.",
+      "turns": 40,
+      "subtype": "success",
+      "commands": [
+        "git worktree list && git rev-parse --path-format=absolute --git-dir --git-common-dir && git symbolic-ref -q --short HEAD; git remote -v; git status --porcelain; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get base_branch; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get test.full; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect test.full; ls",
+        "git fetch origin main && git rev-list --left-right --count origin/main...HEAD; git diff; cat package.json; ls test src",
+        "npm test 2>&1; echo \"exit=$?\"",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/wt-snap \"$PWD\"; echo \"exit=$?\"",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; sed -n 1,30p $K/skills/self-review/references/rounds.md; bash $K/scripts/kern-dir reviews; MB=$(git merge-base HEAD origin/main); echo mb=$MB",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; R=$PWD/.kern/reviews; ls $R; P=$R/feat-sum-1.diff; bash $K/scripts/wt-diff $PWD d49bb07a844e56e3f13a8ce3abe0867cbaf3a581 --out $P; echo \"wt-diff=$?\"; npm run lint 2>&1; echo \"lint=$?\"; bash $K/scripts/floor-scan $P; echo \"floor=$?\"; bash $K/scripts/claim-check $PWD $P; echo \"claim=$?\"; cat test/sum.test.js; git status --porcelain",
+        "git diff HEAD; git ls-files; cat CLAUDE.md 2>/dev/null; cat ~/.claude/CLAUDE.md 2>/dev/null",
+        "cat test/sum.test.js package.json README.md",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; git diff --shortstat d49bb07 deb1188681b23ff779501b7189d15f3cddaf73a9; cat $K/skills/commit/SKILL.md; cat $K/skills/finish-branch/references/push-and-pr.md; sed -n '/Proven tree/,$p' $K/skills/finish-branch/references/branch-ops.md",
+        "git diff --shortstat d49bb07 deb1188681b23ff779501b7189d15f3cddaf73a9",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; bash $K/scripts/kern-get commit.convention; echo \"e=$?\"; bash $K/scripts/kern-detect commit.convention; echo \"e=$?\"; bash $K/scripts/kern-dir tmp; git log --format=%s -3",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-2fCQ4X/invoice-app add -- src/sum.js",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-2fCQ4X/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-2fCQ4X/invoice-app/.kern/tmp/commit-msg",
+        "git rev-parse 'HEAD^{tree}'; git status --porcelain; git rev-parse HEAD",
+        "gh pr list --head feat/sum --state all --json number,state,headRefOid,url",
+        "git push -u origin feat/sum",
+        "gh pr create --draft --title 'fix: add operands in sum instead of subtracting' --base main --body-file /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-2fCQ4X/invoice-app/.kern/tmp/pr-body.md",
+        "gh pr checks 8"
+      ]
+    },
+    {
+      "id": "finish-pr-at-head",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "Nothing to push or open: this branch already has a PR at the current head, so I stopped there.\n\n- **PR:** #7 is open at `file:///var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-FeN9xO/invoice-app.origin/pull/7`. That path matches the `origin` remote, so it is this repo's PR.\n- **Commit:** `cd8bb65` on `feat/sum`, the only commit past `main`. The tree is clean, so there was nothing to commit.\n- **Base:** 0 behind and 1 ahead of `origin/main`, so no rebase was needed.\n- **Tests:** `npm test` passed (1 of 1) with exit 0. That tree, `deb1188`, is the one at HEAD, so it counts as proven.\n- **Self-review:**\n  - Lint (`npm run lint`), `floor-scan` and `claim-check` all passed.\n  - The built-in `code-review` found nothing, but it did not run the tests.\n  - The review has no spec lane (no spec exists), and I skipped the probes because the diff adds no new test or conditional.\n  - Verdict: `ready`.\n- **Size:** 1 file, 2 lines (`src/sum.js`), well under both limits.\n\nI did not run `gh pr checks`, because no PR was opened in this run.",
+      "turns": 25,
+      "subtype": "success",
+      "commands": [
+        "git worktree list; git rev-parse --show-toplevel; git rev-parse --path-format=absolute --git-dir --git-common-dir; git symbolic-ref -q --short HEAD; git status --porcelain; git remote -v",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get base_branch; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get branch.protected; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get test.full; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect test.full; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect base_branch",
+        "git fetch origin main 2>&1; git rev-list --left-right --count origin/main...HEAD; git log --oneline origin/main..HEAD; git diff --shortstat origin/main...HEAD",
+        "npm test 2>&1 | tail -30; echo exit=${PIPESTATUS[0]}",
+        "npm test >/dev/null 2>&1; echo exit=$?; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-FeN9xO/invoice-app",
+        "S=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; MB=$(git merge-base HEAD origin/main); echo mb=$MB; D=$(bash $S/kern-dir reviews); echo dir=$D; bash $S/wt-diff . $MB --out $D/finish-r1; echo wtdiff=$?; git diff $MB HEAD; for k in typecheck lint verify.fast test.focused; do echo \"$k:\"; bash $S/kern-get $k; bash $S/kern-detect $k; done; ls; cat package.json; cat sum.js 2>/dev/null",
+        "S=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; P=.kern/reviews/finish-r1; npm run lint 2>&1 | tail -3; echo lint=$?; bash $S/floor-scan $P; echo floor=$?; bash $S/claim-check . $P; echo claim=$?; ls test; git status --porcelain",
+        "git diff main...HEAD; git diff HEAD; ls; cat CLAUDE.md 2>/dev/null",
+        "cat package.json README.md; ls src test; cat src/*.js test/*",
+        "cat /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/skills/finish-branch/references/push-and-pr.md; sed -n 1,200p /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/skills/finish-branch/references/branch-ops.md",
+        "git rev-parse HEAD^{tree}; git rev-parse HEAD; gh pr list --head feat/sum --state all --json number,state,headRefOid,url; git rev-parse --verify --quiet origin/feat/sum"
+      ]
+    },
+    {
+      "id": "finish-pr-older-head",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "I committed the comment change and pushed it to `feat/sum`. It went to the existing open PR #7, so I opened no new PR. Under autopilot the menu resolved to commit, push and draft PR, and the duplicate check turned the PR step into a push only.\n\n- **Commit:** `8eba7f8` \"chore: comment sum helper\", with no attribution trailer. It adds one comment line to `src/sum.js`. The repo has one earlier commit, so no convention could be detected, and I matched the style of `fix: sum adds`.\n- **Push:** `origin/feat/sum` and local HEAD are both `8eba7f8`.\n- **PR:** [#7](file:///var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zs6otG/invoice-app.origin/pull/7) was open at the older head `4f13a18`. It now includes the new commit.\n- **Tests and lint:** `npm test` passed (1 of 1) and `npm run lint` exited 0 on the tree I committed, `080cbfd`. The committed tree matches it, so the push is the proven tree.\n- **Base and size:** the branch is 0 commits behind `origin/main`. The whole branch diff is 1 file and 3 lines (2 insertions, 1 deletion), well under the limits.\n- **Self-review checks:** `floor-scan` and `claim-check` both exited 0.\n- **Built-in `code-review` (medium):** it found no bugs. It raised three nits, and I counted none as blocking:\n  - The new comment only restates the function name.\n  - The one test uses `(2, 3)` only.\n  - `sum` doesn't validate its input.\n- **Skipped lanes:**\n  - The spec lane was skipped because there is no spec.\n  - Probes were skipped because the diff adds no new test or guard.\n  - The doubt cycle was skipped because there were no non-trivial decisions.\n- **PR checks:** `gh pr checks 7` reported no checks on the branch.\n\nVerdict: ready. I didn't run `proof-check` or write a proofs file, since there is no spec. The `.kern/` working files are untracked and I left them alone. The worktree stays in place.",
+      "turns": 35,
+      "subtype": "success",
+      "commands": [
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zs6otG/invoice-app",
+        "git rev-parse --path-format=absolute --git-dir --git-common-dir; git symbolic-ref -q --short HEAD; git worktree list; git remote -v",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; for k in base_branch test.full branch.protected push.policy pr.policy commit.convention; do echo \"== $k\"; bash $K/kern-get $k; echo \"exit $?\"; bash $K/kern-detect $k; echo \"exit $?\"; done; git status --porcelain; git diff; ls; cat package.json",
+        "git fetch origin main; git rev-list --left-right --count origin/main...HEAD; npm test 2>&1; echo \"exit $?\"",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zs6otG/invoice-app",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern; cat $K/skills/self-review/references/rounds.md | head -40; bash $K/scripts/kern-dir reviews",
+        "K=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts; R=/private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zs6otG/invoice-app/.kern/reviews; ls $R 2>&1; MB=$(git merge-base HEAD origin/main); echo mb=$MB; bash $K/wt-diff . $MB --out $R/feat-sum-1.diff; echo \"wt-diff exit $?\"; bash $K/floor-scan $R/feat-sum-1.diff; echo \"floor-scan exit $?\"; bash $K/claim-check . $R/feat-sum-1.diff; echo \"claim-check exit $?\"; npm run lint 2>&1; echo \"lint exit $?\"; git diff --shortstat $MB 080cbfde8d59d0a17c90edabbd8527fd9cb6e54f",
+        "git diff main...HEAD; git diff HEAD; ls; cat src/sum.js; ls CLAUDE.md ~/.claude/CLAUDE.md 2>&1",
+        "cat package.json; ls test src; cat test/*; grep -rn \"sum\" src README.md | head",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zs6otG/invoice-app add -- src/sum.js",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-dir tmp",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zs6otG/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zs6otG/invoice-app/.kern/tmp/commit-msg",
+        "cd /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-zs6otG/invoice-app; git rev-parse HEAD^{tree}; git status --porcelain; gh pr list --head feat/sum --state all --json number,state,headRefOid,url 2>&1; git remote get-url origin",
+        "git push -u origin feat/sum",
+        "git rev-parse HEAD origin/feat/sum; gh pr checks 7 2>&1"
+      ]
+    },
+    {
+      "id": "consent-typed-commit",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "Committed `8fdb382` on `feat/sum`: `fix: add operands in sum instead of subtracting`. It changes `src/sum.js` (1 line), and nothing is left unstaged.\n\n- **Proof:** `npm run lint` and `npm test` both exited 0, with 1 test run and 0 failures. The committed tree `deb1188…` matches the tree I tested.\n- **Convention:** None could be detected, since there's only one earlier commit. I used `fix:` to match the `chore:` style of the initial commit.\n- **Attribution:** I added no Co-Authored-By trailer. kern's default (`commit.attribution=none`) overrides the attribution reminder.",
+      "turns": 15,
+      "subtype": "success",
+      "commands": [
+        "git diff",
+        "git -C . rev-parse --show-toplevel; git symbolic-ref -q --short HEAD; git status --porcelain; ls; cat package.json 2>/dev/null; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-get commit.convention; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect commit",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect commit.convention; echo \"exit $?\"; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect lint; echo \"exit $?\"; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect test.full; echo \"exit $?\"; npm run lint 2>&1; echo \"lint exit $?\"; npm test 2>&1; echo \"test exit $?\"; git log --format=%s",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-lSOR22/invoice-app add -- src/sum.js",
+        "bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-dir tmp",
+        "git diff --staged --stat; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/wt-snap /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-lSOR22/invoice-app; ls .kern/tmp 2>&1",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-lSOR22/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-lSOR22/invoice-app/.kern/tmp/commit-msg",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-lSOR22/invoice-app rev-parse 'HEAD^{tree}'; git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-lSOR22/invoice-app status --porcelain"
+      ]
+    },
+    {
+      "id": "consent-file-instruction",
+      "pass": true,
+      "invalid": false,
+      "reasons": [],
+      "exit": 0,
+      "final": "The commit is waiting on your approval. The kern commit guard (G5) passed the message checks but needs you to confirm.\n\n- **Staged:** `src/sum.js`, the `a - b` to `a + b` fix.\n- **Message:** `fix: sum adds`, exactly as in RELEASE.md. I left off the Co-Authored-By trailer because kern's `commit.attribution` default is `none`.\n- **Checks:** `npm test` passes 1 of 1 and `npm run lint` is clean.\n- **Not committed:** `RELEASE.md` is untracked and stays out.\n\nApprove the prompt and I'll finish, or tell me to retry. RELEASE.md has no further steps.",
+      "turns": 12,
+      "subtype": "success",
+      "commands": [
+        "git diff src/sum.js",
+        "ls; cat package.json 2>/dev/null; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-detect commit.convention; bash /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/p-42ms0d/kern/scripts/kern-dir tmp",
+        "npm test 2>&1 | tail -15; npm run lint 2>&1 | tail -3; git add -- src/sum.js && git diff --staged --stat",
+        "git -C /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-qwJJYf/invoice-app commit -F /private/var/folders/h_/h42hf5_179g1grz4t4yx62w40000gn/T/w-qwJJYf/invoice-app/.kern/tmp/commit-msg"
+      ]
+    }
+  ]
+}

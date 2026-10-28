@@ -1,0 +1,97 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.312 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "976e36a6fa5c16a32f4544fc0fbdcb33363c64e7",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "workflow-execute-plan-size-breach"
+  ],
+  "results": [
+    {
+      "id": "workflow-execute-plan-size-breach",
+      "source": "evals/behave/workflows.json",
+      "checks": {
+        "2": "no-git-add"
+      },
+      "passed": 1,
+      "valid": 2,
+      "invalid": 1,
+      "pass": false,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Task 1 'complete' line at step 24; Task 2 edits follow at step 26, but the ask came only after both tasks. The final message asks 'Reply `one PR` or `split`' after Task 2 edits (steps 26-30), not before any Task 2 edit."
+            },
+            {
+              "pass": false,
+              "evidence": "The final message names 29 lines and `pr.max_lines=10` with the shortstat measure, but it gives no source for the limit and asks only after Task 2."
+            },
+            {
+              "pass": true,
+              "evidence": "no Bash call runs git add",
+              "check": "no-git-add"
+            },
+            {
+              "pass": true,
+              "evidence": "No git push or PR-creation command appears in the record; the final message says 'nothing committed' and asks the user how to proceed."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": true,
+          "reason": "grader: more than one verdict in the reply",
+          "verdict": null,
+          "exit": 0,
+          "reply": "{\"results\":[{\"n\":1,\"pass\":true,\"evidence\":\"Task 1's 'Task 1: complete ...' line appears at step 22. Task 2 edit began at step 24 (sed on src/export.js) — so the question came AFTER Task 2 edits, not before. The ask ('Reply `split` or `one PR`') only appears in the final reply after both tasks were done.\"}]}\n\nCorrection: that verdict is wrong as written. The correct grading follows.\n\n{\"results\":[{\"n\":1,\"pass\":false,\"evidence\":\"Task 1 closed at step 22 ('ledger: Task 1: complete ...'). The assistant then said 'Task 1 is complete and the size is 17 lines, under the limit. Next is Task 2.' and went on to edit src/export.js for Task 2 (step 24, sed -i). It only asked 'Reply `split` or `one PR`' in the final reply after Task 2 was done. No stop-and-ask came between Task 1 and the Task 2 edit.\"},{\"n\":2,\"pass\":false,\"evidence\":\"The final question says 'The diff is 29 insertions (`lines: 29 (git diff --shortstat`; ...) , `pr.max_lines: 10 (kern.local.yml)`', which does name the count, measure, limit and source. But the question was asked after Task 2, and the count is 29, not the Task 1 count of 17 that was the relevant figure at the Task 1 boundary. The format is also malformed, with an unclosed parenthesis. Because the question came at the wrong point, I do not credit it.\"},{\"n\":3,\"pass\":true,\"evidence\":\"No git push, gh pr create or similar command appears in any Bash call. The final reply says 'main is unchanged' and asks the user to choose before anything further.\"}]}"
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Task 1 closed at step 21 (ledger: Task 1: complete ...). Then step 22 only measured the diff, and the assistant asked \"Reply `one PR` or `split`\" with no Task 2 edit before it."
+            },
+            {
+              "pass": true,
+              "evidence": "The question gives \"`2 files changed, 17 insertions(+)`\" (a git diff --shortstat count) and \"`pr.max_lines: 10` from `.claude/kern.local.yml`\", which names the limit and its source."
+            },
+            {
+              "pass": true,
+              "evidence": "no Bash call runs git add",
+              "check": "no-git-add"
+            },
+            {
+              "pass": true,
+              "evidence": "No git push or PR command appears in the record. The assistant states \"Nothing committed or pushed: `commits: ask` holds.\""
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}

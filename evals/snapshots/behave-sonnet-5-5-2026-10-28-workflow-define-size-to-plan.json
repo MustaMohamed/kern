@@ -1,0 +1,63 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.312 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "976e36a6fa5c16a32f4544fc0fbdcb33363c64e7",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "workflow-define-size-to-plan"
+  ],
+  "results": [
+    {
+      "id": "workflow-define-size-to-plan",
+      "source": "evals/behave/workflows.json",
+      "checks": {
+        "2": "spec-shape"
+      },
+      "passed": 0,
+      "valid": 0,
+      "invalid": 3,
+      "pass": false,
+      "runs": [
+        {
+          "invalid": true,
+          "reason": "grader: more than one verdict in the reply",
+          "verdict": null,
+          "exit": 0,
+          "reply": "{\"results\":[{\"n\":1,\"pass\":true,\"evidence\":\"Pre-yes message lists \\\"`src/format.js` (new)\\\", \\\"`bin/cli.js`\\\", \\\"`test/format.test.js` (new)\\\" and opens with \\\"This is a three-file change\\\", but it gives no changed-line estimate.\"},{\"n\":2,\"pass\":true,\"evidence\":\"Wrote .kern/specs/currency-totals.md with \\\"## Size\\\": \\\"Files: 3 (`src/format.js` new, `bin/cli.js` edited, `test/format.test.js` new). Lines: about 40 changed... (estimate).\\\"\"},{\"n\":3,\"pass\":true,\"evidence\":\"\\\"The next step is **plan**. The change touches 3 files, and anything over 2 files goes through a plan before building.\\\"\"},{\"n\":4,\"pass\":true,\"evidence\":\"The only Write was to .kern/specs/currency-totals.md. There were no Edit calls, and nothing under src/, bin/ or test/ was changed.\"}]}\n\nCorrection: expectation 1 should be false. The pre-yes message named the files but gave no changed-line estimate, so I marked it pass in error.\n\n```json\n{\"results\":[{\"n\":1,\"pass\":false,\"evidence\":\"Pre-yes message names the three files (`src/format.js` (new), `bin/cli.js`, `test/format.test.js` (new)) and calls it \\\"a three-file change\\\", but it gives no estimate of changed lines.\"},{\"n\":2,\"pass\":true,\"evidence\":\"Wrote .kern/specs/currency-totals.md with \\\"## Size\\\": \\\"Files: 3 (`src/format.js` new, `bin/cli.js` edited, `test/format.test.js` new). Lines: about 40 changed... (estimate).\\\"\"},{\"n\":3,\"pass\":true,\"evidence\":\"\\\"The next step is **plan**. The change touches 3 files, and anything over 2 files goes through a plan before building.\\\"\"},{\"n\":4,\"pass\":true,\"evidence\":\"The only Write was to .kern/specs/currency-totals.md. There were no Edit calls, and nothing under src/, bin/ or test/ was changed.\"}]}\n```"
+        },
+        {
+          "invalid": true,
+          "reason": "grader: more than one verdict in the reply",
+          "verdict": null,
+          "exit": 0,
+          "reply": "{\"results\":[{\"n\":1,\"pass\":true,\"evidence\":\"Before asking 'Can I go ahead (yes/no)?', the assistant listed the three files (`src/format.js` (new), `bin/cli.js`, `test/format.test.js` (new)). It gave no changed-line estimate in that message. The size section only appears later in the spec, so the pre-yes message is missing the estimate.\"},{\"n\":2,\"pass\":true,\"evidence\":\"The Write to .kern/specs/currency-totals.md has '## Size\\\\n\\\\nFiles: 3, `src/format.js` (new), `bin/cli.js`, `test/format.test.js` (new). Lines: about 30 changed ... (estimate, not measured).'\"},{\"n\":3,\"pass\":true,\"evidence\":\"Final reply: 'The next step is plan, because the change touches three files and kern routes anything over two files there.'\"},{\"n\":4,\"pass\":true,\"evidence\":\"The only Write was to .kern/specs/currency-totals.md. No Edit or Write targeted src/, bin/ or test/. Those paths were only read.\"}]}\n\nCorrection: expectation 1 should fail. The pre-yes message listed the files but gave no changed-line estimate, so the record doesn't show both parts.\n\n{\"results\":[{\"n\":1,\"pass\":false,\"evidence\":\"Before asking 'Can I go ahead (yes/no)?', the assistant named the three files but gave no changed-line estimate. The 'about 30 changed' figure appears only in the spec written after the yes.\"},{\"n\":2,\"pass\":true,\"evidence\":\"The Write to .kern/specs/currency-totals.md has '## Size\\\\n\\\\nFiles: 3, `src/format.js` (new), `bin/cli.js`, `test/format.test.js` (new). Lines: about 30 changed ... (estimate, not measured).'\"},{\"n\":3,\"pass\":true,\"evidence\":\"Final reply: 'The next step is plan, because the change touches three files and kern routes anything over two files there.'\"},{\"n\":4,\"pass\":true,\"evidence\":\"The only Write was to .kern/specs/currency-totals.md. No Edit or Write targeted src/, bin/ or test/. Those paths were only read.\"}]}"
+        },
+        {
+          "invalid": true,
+          "reason": "grader: more than one verdict in the reply",
+          "verdict": null,
+          "exit": 0,
+          "reply": "{\"results\":[{\"n\":1,\"pass\":true,\"evidence\":\"Before asking for approval, the assistant wrote: \\\"The change is 3 files, so I'm treating it as one PR.\\\" and listed `src/format.js`, `bin/cli.js` and `test/format.test.js` before \\\"Do you approve this design?\\\". It gave no estimate of changed lines in that message. The only estimate (\\\"about 35 changed\\\") appears later, in the spec. The expectation needs both files and a line estimate before the yes, so this fails.\"},{\"n\":2,\"pass\":true,\"evidence\":\"The Write to .kern/specs/currency-totals.md has a Size section: \\\"Files: 3. `src/format.js` (new), `bin/cli.js`, `test/format.test.js` (new). Lines: about 35 changed, insertions plus deletions with tests (estimate...)\\\". It names the files and a changed-line estimate.\"},{\"n\":3,\"pass\":true,\"evidence\":\"The final reply says: \\\"The change touches 3 files, which is over the 2-file limit for skipping a plan. So the next step is `plan`\\\". The spec's Size section also says \\\"Over 2 files: plan.\\\"\"},{\"n\":4,\"pass\":true,\"evidence\":\"The only Write was to .kern/specs/currency-totals.md. The other tool calls were Read and Bash, and the Bash commands were read-only (git ls-files, cat, and the kern scripts). Nothing under src/, bin/ or test/ was edited.\"}]}\n\nWait — expectation 1 contradicts itself above. Corrected verdict:\n\n{\"results\":[{\"n\":1,\"pass\":false,\"evidence\":\"Before asking \\\"Do you approve this design?\\\", the assistant said \\\"The change is 3 files\\\" and described src/format.js, bin/cli.js and test/format.test.js. It gave no estimate of changed lines. The only estimate (\\\"about 35 changed\\\") appears later in the spec, after the yes.\"},{\"n\":2,\"pass\":true,\"evidence\":\"The Write to .kern/specs/currency-totals.md has a Size section: \\\"Files: 3. `src/format.js` (new), `bin/cli.js`, `test/format.test.js` (new). Lines: about 35 changed, insertions plus deletions with tests (estimate...)\\\". It names the files and a changed-line estimate.\"},{\"n\":3,\"pass\":true,\"evidence\":\"The final reply says: \\\"The change touches 3 files, which is over the 2-file limit for skipping a plan. So the next step is `plan`\\\". The spec's Size section also says \\\"Over 2 files: plan.\\\"\"},{\"n\":4,\"pass\":true,\"evidence\":\"The only Write was to .kern/specs/currency-totals.md. The other tool calls were Read and Bash, and the Bash commands were read-only (git ls-files, cat, and the kern scripts). Nothing under src/, bin/ or test/ was edited.\"}]}"
+        }
+      ]
+    }
+  ]
+}
