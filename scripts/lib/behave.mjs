@@ -388,34 +388,37 @@ export function graderPrompt(expectations, dig) {
   ].join('\n');
 }
 
-// verdictObject(text): the reply's verdict object as { json, rest }, from the first `{"results":` (else the first
-// `{`) to its matching brace, braces inside strings skipped; null with no `{`, and { json: null } when it never closes.
-const verdictObject = (text) => {
-  const s = String(text);
-  let at = s.search(/\{\s*"results"\s*:/);
-  if (at < 0) at = s.indexOf('{');
-  if (at < 0) return null;
-  let depth = 0; let str = false; let esc = false;
-  for (let i = at; i < s.length; i++) {
-    const ch = s[i];
-    if (str) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') str = false; }
-    else if (ch === '"') str = true;
-    else if (ch === '{') depth++;
-    else if (ch === '}' && --depth === 0) return { json: s.slice(at, i + 1), rest: s.slice(i + 1) };
+// jsonObjects(text): each top-level `{...}` in the reply, in order, from a `{` to its matching brace, braces inside
+// strings skipped; one that never closes ends the list with { text, open: true }.
+const jsonObjects = (text) => {
+  const s = String(text); const out = [];
+  for (let at = s.indexOf('{'); at >= 0; at = s.indexOf('{', at)) {
+    let depth = 0; let str = false; let esc = false; let end = -1;
+    for (let i = at; i < s.length && end < 0; i++) {
+      const ch = s[i];
+      if (str) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') str = false; }
+      else if (ch === '"') str = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) end = i;
+    }
+    if (end < 0) { out.push({ text: s.slice(at), open: true }); return out; }
+    out.push({ text: s.slice(at, end + 1), open: false });
+    at = end + 1;
   }
-  return { json: null, rest: '' };
+  return out;
 };
 
 // parseVerdict(text, n): [{ pass, evidence }] of length n, or throws. A malformed grader reply is an
 // invalid run, never a pass, and so is a verdict with blank evidence (addy 0.6.13 scripts/run-evals.js:476-480,
-// MIT; ideas only): an unexplained verdict is not a scored result. Prose around the one verdict object is not read
-// (the pilot fix plan 2 test round: 4 replies added a note after it); a second verdict makes the reply invalid.
+// MIT; ideas only): an unexplained verdict is not a scored result. The last `{"results":` object is the verdict,
+// prose around it skipped: in the pilot fix plan 2 test round the grader corrected itself in 7 replies, writing a
+// verdict, then "Correction:" and a second one. A last verdict that never closes is invalid, never the earlier one.
 export function parseVerdict(text, n) {
-  const o = verdictObject(text);
-  if (!o) throw new Error('grader: no JSON object in the reply');
-  if (o.json === null) throw new Error('grader: no complete JSON object in the reply');
-  if (/\{\s*"results"\s*:/.test(o.rest)) throw new Error('grader: more than one verdict in the reply');
-  const r = JSON.parse(o.json).results;
+  const objs = jsonObjects(text);
+  if (!objs.length) throw new Error('grader: no JSON object in the reply');
+  const o = objs.filter((x) => /^\{\s*"results"\s*:/.test(x.text)).at(-1) ?? objs.find((x) => !x.open) ?? objs[0];
+  if (o.open || objs.at(-1).open) throw new Error('grader: no complete JSON object in the reply');
+  const r = JSON.parse(o.text).results;
   if (!Array.isArray(r) || r.length !== n) throw new Error(`grader: expected ${n} results, got ${Array.isArray(r) ? r.length : 'none'}`);
   return r.map((x, i) => {
     if (x?.n !== i + 1) throw new Error(`grader: result ${i + 1} has n ${x?.n}`);

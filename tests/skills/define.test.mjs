@@ -133,7 +133,7 @@ test('define reads the ticket by default, sizes in files and lines, and sends a 
   assert.ok(s[6].includes("First count the files and the changed lines from your reads, tests included, a re-indented file's moved lines too, and say both"), s[6]);
   assert.ok(s[9].includes("Over 2 files, whatever `scope_threshold` allows, or several independent concerns: the next step is plan; Read plan's SKILL.md, whose step 2 decides; else the kernel routes to implement."), s[9]);
   // Paid round 2026-10-25: a 3-file design went to implement as "under the 4-file limit", and no design gave a line estimate before the yes.
-  assert.ok(s[9].includes('give an in-chat design (approach, files and a changed-line estimate, tests,'), s[9]);
+  assert.ok(s[9].includes('give an in-chat design (approach, a line `Size: <n> files, about <m> changed lines`, tests,'), s[9]);
   assertContains(SKILL, ['| `tracker`, `tracker.first` | detected, `true` | issue |']);
   // Pilot fix plan 2 Task 4: one file's re-indent made 396 changed lines, 58 ignoring whitespace, against a ticket's
   // 332 in another measure; the ticket's Out of scope items reached only chat, so the plan review had no Not doing.

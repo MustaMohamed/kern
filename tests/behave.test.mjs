@@ -190,14 +190,16 @@ test('a grader reply that is not one JSON verdict per expectation is invalid, ne
   assert.throws(() => parseVerdict('{"results":[{"n":1,"pass":true,"evidence":"a"},{"n":1,"pass":true,"evidence":"b"}]}', 2), /result 2 has n 1/);
 });
 
-// The pilot fix plan 2 test round: 4 of 69 grader replies held a complete verdict on line 1, then prose on line 3
-// whose own brace the greedy match took in, so JSON.parse failed "after JSON at position 928 (line 3 column 1)".
-test('a grader reply is read up to the end of its one verdict object; a second verdict or a cut-off one is invalid', () => {
+// The pilot fix plan 2 test round: the grader corrected itself in 7 replies, a verdict, then "Correction:" and a second
+// verdict; the greedy match took both in, so JSON.parse failed "after JSON at position 928 (line 3 column 1)".
+test('a grader reply is read as its last verdict object, prose around it skipped; a verdict that never closes is invalid', () => {
   const v = '{"results":[{"n":1,"pass":true,"evidence":"it ran `f({a})` and printed \\"}\\""}]}';
   const want = [{ pass: true, evidence: 'it ran `f({a})` and printed "}"' }];
   assert.deepEqual(parseVerdict(`${v}\n\nNote: expectation 1 reads {x} loosely; the record is cut.`, 1), want);
   assert.deepEqual(parseVerdict(`Here is the verdict {as asked}:\n${v}`, 1), want, 'prose before it, braces included, is not the verdict');
-  assert.throws(() => parseVerdict(`${v}\n\n{"results":[{"n":1,"pass":false,"evidence":"x"}]}`, 1), /^Error: grader: more than one verdict in the reply$/);
+  const fixed = '{"results":[{"n":1,"pass":false,"evidence":"no estimate before the yes"}]}';
+  assert.deepEqual(parseVerdict(`${v}\n\nCorrection: expectation 1 should fail.\n\n\`\`\`json\n${fixed}\n\`\`\``, 1), [{ pass: false, evidence: 'no estimate before the yes' }], 'the correction is the answer');
+  assert.throws(() => parseVerdict(`${v}\n\nCorrection:\n{"results":[{"n":1,"pass":false`, 1), /^Error: grader: no complete JSON object in the reply$/, 'a correction cut off is not the first verdict');
   assert.throws(() => parseVerdict('{"results":[{"n":1,"pass":true,"evidence":"x"}', 1), /^Error: grader: no complete JSON object in the reply$/);
 });
 

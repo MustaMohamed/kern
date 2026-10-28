@@ -110,3 +110,13 @@ last=$(grep -v '^[[:space:]]*$' "$log" | tail -n 1 | env LC_ALL=C tr -d '\000-\0
 line="Task $n: complete tree=$tree test=$cmd exit=0 review=approved probe=$probe last=$last"
 printf '%s\n' "$line" >> "$ledger"
 echo "ledger: $line"
+
+# A task closed in the plan worktree (the ledger's Worktree: path) sizes it now, so execute-plan step 10's size
+# check runs after every such task; a wave task's fork is sized by step 10 after step 11. The task is closed
+# either way, so size-check's exit 4 (over a limit) or 2 does not change this exit.
+plan_wt=$(grep '^Worktree: ' "$ledger" | tail -n 1 || true)
+plan_wt=${plan_wt#Worktree: }
+plan_wt=${plan_wt% branch=*}
+if [ -n "$plan_wt" ] && [ "$(cd "$plan_wt" 2> /dev/null && pwd -P)" = "$wt" ]; then
+  bash "$here/size-check" "$ledger" || true
+fi

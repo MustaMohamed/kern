@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Size an execute-plan run's plan worktree against the size limits, for execute-plan step 10. Reads the ledger's
+# last `Worktree: <path> branch=<name> base-tree=<id>` line, snapshots <path> with wt-snap (so untracked files
+# count and nothing is staged), and counts `git diff --shortstat` and `git diff -w --shortstat` from base-tree to
+# that tree, insertions plus deletions. Prints
+#   size: lines: <n> (git diff --shortstat), -w: <m>, files: <f>; pr.max_lines: <v> (<source>); scope_threshold: <v> (<source>)
+# then, with pr.size_command set, `size: pr.size_command is set: step 10 counts the lines with it` (the line
+# count is then not judged here), and one of `size: decided: <the ledger's last size Decision: line>`,
+# `size: over <keys>: stop for execute-plan step 10's size decision before the next task` or
+# `size: within the limits`. Exit 0 within the limits or decided, 4 over a limit with no size Decision: line,
+# 2 when it cannot count (no Worktree: line, no worktree, a git failure, a limit that is not a number).
+# Usage: size-check LEDGER
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+[ $# -eq 1 ] || { echo "usage: size-check LEDGER" >&2; exit 2; }
+ledger=$1
+[ -f "$ledger" ] && [ -r "$ledger" ] || { echo "size-check: no readable ledger at $ledger" >&2; exit 2; }
+wline=$(grep '^Worktree: ' "$ledger" | tail -n 1 || true)
+[ -n "$wline" ] || { echo "size-check: the ledger has no Worktree: line, so there is no plan worktree to size" >&2; exit 2; }
+base=${wline##* base-tree=}
+wt=${wline#Worktree: }
+wt=${wt% branch=*}
+case "$base" in '' | *[!0123456789abcdef]*) echo "size-check: the Worktree: line's base-tree is not a full object id: $base" >&2; exit 2 ;; esac
+[ "${#base}" -eq 40 ] || [ "${#base}" -eq 64 ] ||
+  { echo "size-check: the Worktree: line's base-tree is not a full object id: $base" >&2; exit 2; }
+[ -d "$wt" ] || { echo "size-check: no plan worktree at $wt" >&2; exit 2; }
+tree=$(bash "$here/wt-snap" "$wt") || { echo "size-check: cannot snapshot $wt" >&2; exit 2; }
+
+# count [-w]: "<files> <insertions plus deletions>" from base-tree to the snapshot.
+count() {
+  local stat
+  stat=$(git -C "$wt" diff --shortstat "$@" "$base" "$tree") || { echo "size-check: git diff --shortstat failed in $wt" >&2; exit 2; }
+  printf '%s\n' "$stat" | awk '{ f = $1; for (i = 2; i <= NF; i++) if ($i ~ /^(insertion|deletion)/) l += $(i - 1) } END { print f + 0, l + 0 }'
+}
+c=$(count) || exit 2
+read -r files lines <<< "$c"
+c=$(count -w) || exit 2
+read -r _ wlines <<< "$c"
+
+# limit KEY DEFAULT: "<value>\t<source>" from kern-get, run in the plan worktree so the main checkout's settings apply.
+limit() {
+  local got
+  got=$(cd "$wt" && bash "$here/kern-get" "$1" "$2") || { echo "size-check: kern-get $1 failed" >&2; exit 2; }
+  case "${got%%	*}" in '' | *[!0-9]*) echo "size-check: $1 is not a number: ${got%%	*}" >&2; exit 2 ;; esac
+  printf '%s\n' "$got"
+}
+ml=$(limit pr.max_lines 300)
+st=$(limit scope_threshold 4)
+printf 'size: lines: %s (git diff --shortstat), -w: %s, files: %s; pr.max_lines: %s (%s); scope_threshold: %s (%s)\n' \
+  "$lines" "$wlines" "$files" "${ml%%	*}" "${ml#*	}" "${st%%	*}" "${st#*	}"
+
+counter=yes
+(cd "$wt" && bash "$here/kern-get" pr.size_command > /dev/null 2>&1) || counter=''
+[ -z "$counter" ] || echo "size: pr.size_command is set: step 10 counts the lines with it"
+
+decided=$(grep -E '^Decision: [Ss]ize' "$ledger" | tail -n 1 || true)
+if [ -n "$decided" ]; then
+  printf 'size: decided: %s\n' "$decided"
+  exit 0
+fi
+over=''
+[ -n "$counter" ] || [ "$lines" -le "${ml%%	*}" ] || over=pr.max_lines
+[ "$files" -le "${st%%	*}" ] || over="${over:+$over and }scope_threshold"
+if [ -n "$over" ]; then
+  echo "size: over $over: stop for execute-plan step 10's size decision before the next task"
+  exit 4
+fi
+echo "size: within the limits"
