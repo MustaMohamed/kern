@@ -190,6 +190,18 @@ test('a grader reply that is not one JSON verdict per expectation is invalid, ne
   assert.throws(() => parseVerdict('{"results":[{"n":1,"pass":true,"evidence":"a"},{"n":1,"pass":true,"evidence":"b"}]}', 2), /result 2 has n 1/);
 });
 
+// The pilot fix plan 2 test round: 4 of 69 grader replies held a complete verdict on line 1, then prose on line 3
+// whose own brace the greedy match took in, so JSON.parse failed "after JSON at position 928 (line 3 column 1)".
+test('a grader reply is read up to the end of its one verdict object; a second verdict or a cut-off one is invalid', () => {
+  const v = '{"results":[{"n":1,"pass":true,"evidence":"it ran `f({a})` and printed \\"}\\""}]}';
+  const want = [{ pass: true, evidence: 'it ran `f({a})` and printed "}"' }];
+  assert.deepEqual(parseVerdict(`${v}\n\nNote: expectation 1 reads {x} loosely; the record is cut.`, 1), want);
+  assert.deepEqual(parseVerdict(`Here is the verdict {as asked}:\n${v}`, 1), want, 'prose before it, braces included, is not the verdict');
+  assert.throws(() => parseVerdict(`${v}\n\n{"results":[{"n":1,"pass":false,"evidence":"x"}]}`, 1), /^Error: grader: more than one verdict in the reply$/);
+  assert.throws(() => parseVerdict('{"results":[{"n":1,"pass":true,"evidence":"x"}', 1), /^Error: grader: no complete JSON object in the reply$/);
+});
+
+
 test('a verdict with blank evidence is an invalid run, said apart from bad JSON (coverage gap 41)', () => {
   assert.throws(() => parseVerdict('{"results":[{"n":1,"pass":true,"evidence":"  "}]}', 1), /^Error: grader: blank evidence for expectation 1$/);
   assert.throws(() => parseVerdict('{"results":[{"n":1,"pass":false}]}', 1), /blank evidence for expectation 1/);
@@ -1444,6 +1456,18 @@ test('Task 17a G10: a behave run that did not load the kern copy or print the ke
   } finally { r.done(); }
   const off = await drive({ argv: ['--case', 'x-1', '--runs', '1'], run: stubRun((opts) => runOf([...started(opts.pluginDirs, ''), resultEvent('done')])).run });
   try { assert.match(off.partial('x-1').results[0].runs[0].reason, /printed no kernel/); } finally { off.done(); }
+});
+
+test('a run the grader reply makes invalid keeps that reply in its record; a graded run keeps none', async () => {
+  const arm = (opts) => runOf([...started(opts.pluginDirs), resultEvent('done')]);
+  const prose = (opts) => (opts.prompts[0].startsWith('You grade') ? runOf([resultEvent('I cannot grade this record.')]) : arm(opts));
+  const bad = await drive({ argv: ['--case', 'x-1', '--runs', '1'], run: prose });
+  try {
+    const run = bad.partial('x-1').results[0].runs[0];
+    assert.deepEqual([run.invalid, run.reason, run.reply], [true, 'grader: no JSON object in the reply', 'I cannot grade this record.']);
+  } finally { bad.done(); }
+  const good = await drive({ argv: ['--case', 'x-1', '--runs', '1'] });
+  try { assert.equal('reply' in good.partial('x-1').results[0].runs[0], false); } finally { good.done(); }
 });
 
 test('the runner records the tree at each run\'s start and end for a case with a tree check, an unreadable tree is an invalid run, and the snapshot names the checks', async () => {

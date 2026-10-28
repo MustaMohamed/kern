@@ -121,7 +121,7 @@ export const PINS = {
     'Then size the plan worktree (a wave: after step 11): `git -C <plan-wt> diff --shortstat <base-tree> <tree>`',
     'so untracked files count; never `git add` to count, not even `-N`.',
     'With no size `Decision:` line in the ledger yet:', "and the plan's Size line was not already over that limit, stop and ask `split` or one PR",
-    'naming `lines: <n> (<measure>)`, the `git diff -w --shortstat` count, the limit and its source',
+    'writing `lines: <n> (<measure>)`, the `git diff -w --shortstat` count and `<key>: <value> (<source>)`',
     'when the Size line was already over it, take its one-PR word with no ask',
     'Either way record the word, quoted, with `lines: <n> (<measure>)` and the `-w` count, in a `Decision:` line whose what opens with size; `split` ends the run.'],
   11: ["Apply each worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`",

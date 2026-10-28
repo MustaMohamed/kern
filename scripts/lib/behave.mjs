@@ -388,13 +388,34 @@ export function graderPrompt(expectations, dig) {
   ].join('\n');
 }
 
+// verdictObject(text): the reply's verdict object as { json, rest }, from the first `{"results":` (else the first
+// `{`) to its matching brace, braces inside strings skipped; null with no `{`, and { json: null } when it never closes.
+const verdictObject = (text) => {
+  const s = String(text);
+  let at = s.search(/\{\s*"results"\s*:/);
+  if (at < 0) at = s.indexOf('{');
+  if (at < 0) return null;
+  let depth = 0; let str = false; let esc = false;
+  for (let i = at; i < s.length; i++) {
+    const ch = s[i];
+    if (str) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') str = false; }
+    else if (ch === '"') str = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) return { json: s.slice(at, i + 1), rest: s.slice(i + 1) };
+  }
+  return { json: null, rest: '' };
+};
+
 // parseVerdict(text, n): [{ pass, evidence }] of length n, or throws. A malformed grader reply is an
 // invalid run, never a pass, and so is a verdict with blank evidence (addy 0.6.13 scripts/run-evals.js:476-480,
-// MIT; ideas only): an unexplained verdict is not a scored result.
+// MIT; ideas only): an unexplained verdict is not a scored result. Prose around the one verdict object is not read
+// (the pilot fix plan 2 test round: 4 replies added a note after it); a second verdict makes the reply invalid.
 export function parseVerdict(text, n) {
-  const m = String(text).match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('grader: no JSON object in the reply');
-  const r = JSON.parse(m[0]).results;
+  const o = verdictObject(text);
+  if (!o) throw new Error('grader: no JSON object in the reply');
+  if (o.json === null) throw new Error('grader: no complete JSON object in the reply');
+  if (/\{\s*"results"\s*:/.test(o.rest)) throw new Error('grader: more than one verdict in the reply');
+  const r = JSON.parse(o.json).results;
   if (!Array.isArray(r) || r.length !== n) throw new Error(`grader: expected ${n} results, got ${Array.isArray(r) ? r.length : 'none'}`);
   return r.map((x, i) => {
     if (x?.n !== i + 1) throw new Error(`grader: result ${i + 1} has n ${x?.n}`);
@@ -1294,16 +1315,20 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
       if (before) writeFileSync(join(raw, `${unit}.tree.json`), JSON.stringify({ ...states, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
       if (left) writeFileSync(join(raw, `${unit}.specs.json`), JSON.stringify(left, null, 2) + '\n');
       let verdict = null; let invalid = !!problem || !!after?.problem || !!left?.problem; let reason = problem || after?.problem || left?.problem || '';
+      // A run the grader's reply makes invalid keeps that reply, cut at RECORD.reply, so its shape can be read later.
+      let reply = null;
       if (!invalid) {
         try {
           verdict = await gradeRun(c, r.events, states, async (ex, rec) => {
             const g = await tryRun({ cwd: gdir, prompts: [graderPrompt(ex, rec)], model: GRADER, maxTurns: 1 }, run);
             if (g.problem) throw new Error(`grader: ${g.problem}`);
-            return finalText(g.run.events);
+            reply = finalText(g.run.events);
+            return reply;
           }, left?.specs);
         } catch (e) { if (e.fatal) throw e; invalid = true; reason = e.message; }
       }
-      return record({ invalid, reason, verdict, exit: r ? r.status : null }, r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin } : null, kept);
+      const keptReply = invalid && reply !== null ? { reply: reply.slice(0, RECORD.reply) } : {};
+      return record({ invalid, reason, verdict, exit: r ? r.status : null, ...keptReply }, r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin } : null, kept);
     } finally { rmSync(dirname(cwd), { recursive: true, force: true }); rmSync(gdir, { recursive: true, force: true }); }
   };
   const src = treeSource(root);
