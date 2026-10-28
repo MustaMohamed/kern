@@ -1,0 +1,126 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.312 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "c781e7aa13636c5d0fcc03ae78a5bdd786732a05",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "workflow-define-size-to-plan"
+  ],
+  "results": [
+    {
+      "id": "workflow-define-size-to-plan",
+      "source": "evals/behave/workflows.json",
+      "checks": {
+        "2": "spec-shape"
+      },
+      "passed": 2,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Before the yes request: \"This is 3 files and well under 300 lines.\" and it lists the three files (src/format.js new, bin/cli.js edit, test/format.test.js new). The line estimate is only an upper bound, not a point estimate."
+            },
+            {
+              "pass": true,
+              "evidence": "Wrote .kern/specs/currency-totals.md with \"## Size\n\nFiles: 3 (`src/format.js` new, `bin/cli.js` edited, `test/format.test.js` new). Lines: about 35 insertions and 2 deletions\"."
+            },
+            {
+              "pass": true,
+              "evidence": ".kern/specs/currency-totals.md, as the run left it, has 5 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints",
+              "check": "spec-shape"
+            },
+            {
+              "pass": false,
+              "evidence": "Final reply says \"**Next step:** the plan skill\" and that the change touches 3 files, which matches the requirement. But it hedges: \"I expect it to decide that on its own, and the build would then go through implement\", and \"I haven't read either skill, so that routing is my guess.\" It also cites the 1–2 file rule loosely and never plainly states that plan comes next rather than implement. It also earlier said \"I'll skip the formal plan file because the change is small\", which contradicts the stated rule."
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write was to .kern/specs/currency-totals.md. No Edit or Write touched src/, bin/ or test/; those were only read."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Before the yes, the assistant said: \"This is 3 files and about 25 lines, under the default PR limits of 4 files and 300 lines,\" and then listed the three files (src/format.js, bin/cli.js, test/format.test.js)."
+            },
+            {
+              "pass": true,
+              "evidence": "The Write to .kern/specs/currency-totals.md has a Size section: \"Files: 3. `src/format.js` (new), `bin/cli.js`, `test/format.test.js` (new). Lines: about 35 changed...\""
+            },
+            {
+              "pass": true,
+              "evidence": ".kern/specs/currency-totals.md, as the run left it, has 3 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints",
+              "check": "spec-shape"
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"**Next step: plan.** The change touches more than 2 files, so the plan skill applies.\""
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write was to .kern/specs/currency-totals.md. The other calls were Reads and Bash that only read files or ran plan-check. Nothing under src/, bin/ or test/ was edited."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Before asking 'Do I have your yes to build this?', the assistant lists 'Three files, one PR, well under the size limits' and names src/format.js, bin/cli.js and test/format.test.js. It gives no changed-line estimate, though; 'well under the size limits' is not a number. Judged strictly this is partial, but the files part is plain."
+            },
+            {
+              "pass": true,
+              "evidence": "The spec's Size section reads: 'Files: 3. `src/format.js` (new), `bin/cli.js` (edit), `test/format.test.js` (new). Lines: about 35 changed, insertions plus deletions with tests.' It was written to .kern/specs/currency-totals.md after the yes."
+            },
+            {
+              "pass": true,
+              "evidence": ".kern/specs/currency-totals.md, as the run left it, has 5 numbered acceptance criteria and Always, Ask first and Never lines under ## Constraints",
+              "check": "spec-shape"
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: '**Next step:** plan. The change touches 3 files, which is over 2, so define routes it there.'"
+            },
+            {
+              "pass": true,
+              "evidence": "The only Write targets .kern/specs/currency-totals.md. No Edit calls appear, and nothing under src/, bin/ or test/ was modified. The final reply says 'No code has been written.'"
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}
