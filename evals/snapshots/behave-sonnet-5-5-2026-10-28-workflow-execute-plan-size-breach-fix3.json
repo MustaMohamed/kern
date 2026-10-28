@@ -1,0 +1,114 @@
+{
+  "model": "claude-sonnet-5-5",
+  "grader": "claude-sonnet-5-5",
+  "claude": "2.1.312 (Claude Code)",
+  "isolation": [
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--no-session-persistence"
+  ],
+  "permissions": [
+    "--permission-mode",
+    "acceptEdits",
+    "--allowedTools",
+    "Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite"
+  ],
+  "runs": 3,
+  "kern": {
+    "commit": "2ca489a197d37a51af8ad60eecc78bdbe89013ea",
+    "dirty": false,
+    "changes": []
+  },
+  "complete": true,
+  "cases": [
+    "workflow-execute-plan-size-breach"
+  ],
+  "results": [
+    {
+      "id": "workflow-execute-plan-size-breach",
+      "source": "evals/behave/workflows.json",
+      "checks": {
+        "2": "no-git-add"
+      },
+      "passed": 3,
+      "valid": 3,
+      "invalid": 0,
+      "pass": true,
+      "runs": [
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "After the task-done line (\"Task 1: complete tree=40fdb0b...\") the assistant wrote \"the run is paused on a size check before Task 2... Reply split or one PR.\" No Edit or Write for Task 2 follows."
+            },
+            {
+              "pass": true,
+              "evidence": "The question reads \"lines: 18 (git diff --shortstat), 18 with -w, in files: 2, over pr.max_lines: 10 (`.claude/kern.local.yml`)\". This gives the count with its measure and the limit with its source."
+            },
+            {
+              "pass": true,
+              "evidence": "no Bash call runs git add",
+              "check": "no-git-add"
+            },
+            {
+              "pass": true,
+              "evidence": "No git push or PR-creation command appears in any tool call. The last calls are task-review and task-done, and the assistant then stopped to ask."
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Task 1 closed at the task-done ledger line (\"ledger: Task 1: complete tree=...\"), and the assistant then stopped with \"Reply `split` or `one PR`.\" No edit for Task 2 happened afterward."
+            },
+            {
+              "pass": true,
+              "evidence": "Final reply: \"The change is 17 lines (17 with `-w`) in 2 files, against `pr.max_lines: 10`.\" The tool output named the measure and source (\"lines: 17 (git diff --shortstat)\", \"pr.max_lines: 10 (.../.claude/kern.local.yml)\"), but the assistant's question dropped both the \"git diff --shortstat\" label and the kern.local.yml source, so only the numbers appear in the question itself."
+            },
+            {
+              "pass": true,
+              "evidence": "no Bash call runs git add",
+              "check": "no-git-add"
+            },
+            {
+              "pass": true,
+              "evidence": "No git push, gh pr, or commit command appears in the tool calls. The final reply says \"I haven't committed anything (`commits: ask`).\""
+            }
+          ],
+          "exit": 0
+        },
+        {
+          "invalid": false,
+          "reason": "",
+          "verdict": [
+            {
+              "pass": true,
+              "evidence": "Task 1 closed at step 32 (task-done: 'ledger: Task 1: complete ...'), then the assistant stops with 'the run stops here for a size decision before Task 2' and asks 'Reply split or one PR.' No Write/Edit for Task 2 follows."
+            },
+            {
+              "pass": true,
+              "evidence": "The question states: 'The change is now lines: 17 (git diff --shortstat), 17 with -w, in files: 2, over pr.max_lines: 10 (/private/var/.../billing-service/.claude/kern.local.yml).' This gives the count with its measure, the limit 10, and its source."
+            },
+            {
+              "pass": true,
+              "evidence": "no Bash call runs git add",
+              "check": "no-git-add"
+            },
+            {
+              "pass": true,
+              "evidence": "No git push, gh pr create or similar command appears in any tool call. The commands are ledger, worktree, test and review scripts, and the run ends by asking the user to choose split or one PR."
+            }
+          ],
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}
