@@ -37,6 +37,8 @@ write_lines() { local i; for i in $(seq 1 "$2"); do printf 'line %s\n' "$i"; don
   [ "$status" -eq 4 ]
   [[ "${lines[0]}" == "size: lines: 17 (git diff --shortstat), -w: 17, files: 1; pr.max_lines: 10 ("*"kern.local.yml); scope_threshold: 4 (default)" ]] || false
   [ "${lines[1]}" = "size: over pr.max_lines: stop for execute-plan step 10's size decision before the next task" ]
+  # The question step 10 asks word for word: in the test round's rerun 2 of 3 runs left out the measure or the source.
+  [[ "${lines[2]}" == "size: ask: The change is now lines: 17 (git diff --shortstat), 17 with -w, in files: 1, over pr.max_lines: 10 ("*"kern.local.yml). Reply split or one PR." ]] || false
 }
 
 @test "size-check over scope_threshold, and over both" {
@@ -44,10 +46,12 @@ write_lines() { local i; for i in $(seq 1 "$2"); do printf 'line %s\n' "$i"; don
   run --separate-stderr bash "$KERN_ROOT/scripts/size-check" "$L/ledger.md"
   [ "$status" -eq 4 ]
   [ "${lines[1]}" = "size: over scope_threshold: stop for execute-plan step 10's size decision before the next task" ]
+  [ "${lines[2]}" = "size: ask: The change is now lines: 5 (git diff --shortstat), 5 with -w, in files: 5, over scope_threshold: 4 (default). Reply split or one PR." ]
   printf 'pr.max_lines: 2\n' > "$REPO/.claude/kern.local.yml"
   run --separate-stderr bash "$KERN_ROOT/scripts/size-check" "$L/ledger.md"
   [ "$status" -eq 4 ]
   [ "${lines[1]}" = "size: over pr.max_lines and scope_threshold: stop for execute-plan step 10's size decision before the next task" ]
+  [[ "${lines[2]}" == "size: ask: The change is now lines: 5 (git diff --shortstat), 5 with -w, in files: 5, over pr.max_lines: 2 ("*"kern.local.yml) and scope_threshold: 4 (default). Reply split or one PR." ]] || false
 }
 
 @test "a size Decision: line in the ledger settles it: exit 0 and the line" {
@@ -94,8 +98,9 @@ write_lines() { local i; for i in $(seq 1 "$2"); do printf 'line %s\n' "$i"; don
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "docs only" -- true
   [ "$status" -eq 0 ]
   [ "$(grep -c '^Task 1: complete' "$L/ledger.md")" -eq 1 ]
-  [[ "${lines[${#lines[@]}-2]}" == "size: lines: 17 (git diff --shortstat), -w: 17, files: 1;"* ]] || false
-  [ "${lines[${#lines[@]}-1]}" = "size: over pr.max_lines: stop for execute-plan step 10's size decision before the next task" ]
+  [[ "${lines[${#lines[@]}-3]}" == "size: lines: 17 (git diff --shortstat), -w: 17, files: 1;"* ]] || false
+  [ "${lines[${#lines[@]}-2]}" = "size: over pr.max_lines: stop for execute-plan step 10's size decision before the next task" ]
+  [[ "${lines[${#lines[@]}-1]}" == "size: ask: The change is now lines: 17 (git diff --shortstat), 17 with -w,"* ]] || false
 }
 
 @test "task-done in a wave task's fork does not size: step 10 sizes after step 11" {

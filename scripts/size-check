@@ -6,8 +6,9 @@
 #   size: lines: <n> (git diff --shortstat), -w: <m>, files: <f>; pr.max_lines: <v> (<source>); scope_threshold: <v> (<source>)
 # then, with pr.size_command set, `size: pr.size_command is set: step 10 counts the lines with it` (the line
 # count is then not judged here), and one of `size: decided: <the ledger's last size Decision: line>`,
-# `size: over <keys>: stop for execute-plan step 10's size decision before the next task` or
-# `size: within the limits`. Exit 0 within the limits or decided, 4 over a limit with no size Decision: line,
+# `size: over <keys>: stop for execute-plan step 10's size decision before the next task` and the question step 10
+# asks word for word, `size: ask: The change is now lines: <n> (git diff --shortstat), <m> with -w, in files: <f>,
+# over <key>: <v> (<source>)[ and <key>: <v> (<source>)]. Reply split or one PR.`, or `size: within the limits`. Exit 0 within the limits or decided, 4 over a limit with no size Decision: line,
 # 2 when it cannot count (no Worktree: line, no worktree, a git failure, a limit that is not a number).
 # Usage: size-check LEDGER
 set -euo pipefail
@@ -58,11 +59,16 @@ if [ -n "$decided" ]; then
   printf 'size: decided: %s\n' "$decided"
   exit 0
 fi
-over=''
-[ -n "$counter" ] || [ "$lines" -le "${ml%%	*}" ] || over=pr.max_lines
-[ "$files" -le "${st%%	*}" ] || over="${over:+$over and }scope_threshold"
+over='' limits=''
+if [ -z "$counter" ] && [ "$lines" -gt "${ml%%	*}" ]; then
+  over=pr.max_lines limits="pr.max_lines: ${ml%%	*} (${ml#*	})"
+fi
+if [ "$files" -gt "${st%%	*}" ]; then
+  over="${over:+$over and }scope_threshold" limits="${limits:+$limits and }scope_threshold: ${st%%	*} (${st#*	})"
+fi
 if [ -n "$over" ]; then
   echo "size: over $over: stop for execute-plan step 10's size decision before the next task"
+  echo "size: ask: The change is now lines: $lines (git diff --shortstat), $wlines with -w, in files: $files, over $limits. Reply split or one PR."
   exit 4
 fi
 echo "size: within the limits"
