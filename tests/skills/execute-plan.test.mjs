@@ -40,7 +40,9 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // 14,150 since the final review of pilot fix plan 2: step 10's size `Decision:` line carries `lines: <n> (<measure>)`
   // and the `-w` count (so finish-branch step 6 reads them), anchors the ask in the ledger, and writes the line from the
   // Size line's one-PR word when that was already over the limit; step 9 points a verification task's fix round to its two-round cap.
-  assertMaxBytes(SKILL, 14150);
+  // 14,525 since M3 part 1 Task 8: steps 5, 8 and 10 keep a run going, and the section separates a stop from a judgment
+  // call and says how a go ends, after word cuts.
+  assertMaxBytes(SKILL, 14525);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
   // 1,350 since the final review of pilot fix plan 2: round 2's review is `evidence` too, on the new report, not re-review.
   assertMaxBytes('skills/execute-plan/references/verification.md', 1350);
@@ -80,7 +82,7 @@ export const PINS = {
   4: ['at most `parallel.max`', 'unless parallel-work step 1 finds an overlap', 'spawn them in one message as `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/SKILL.md` step 4 does',
     'Others run serially, in task order.', 'Batch small tasks of one shape (the same one-line edit across files) into one dispatch and one review over their joined Files lists'],
   5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --plan <plan>`', "(`<plan-slug>`: the ledger dir's name)",
-    'adding `--branch <name>` when `branch.pattern` holds `{id}`', 'Exit 2: say why and ask.', 'both exit 3: ask', 'a red baseline goes to the user',
+    "adding `--branch <name>` when `branch.pattern` holds `{id}` (the plan's `issue:`, with quotes and a leading `#` removed).", 'Exit 2: say why and ask.', 'both exit 3: ask', 'a red baseline goes to the user',
     'Then write `Worktree: <path> branch=<name> base-tree=<id>`, the id from `wt-snap`.'],
   6: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork <plan-wt> <plan-slug>-task-<N>` (exit 2 or 3: say why and ask)',
     'run `plan-check --files <plan> <N> > <ledger dir>/briefs/task-N.files`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-brief <plan> <N> <ledger dir>`',
@@ -97,6 +99,7 @@ export const PINS = {
   8: ['take `tree-after` with `wt-snap`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`',
     'Its first line is `<package>`, beside `<package>.patch`.', "Exit 3 (empty): return the task to the implementer, unless it is a verification task, whose diff is empty by design: review it as `references/verification.md` says.", "Exit 4 names a file outside the task's Files: pause and ask",
     'on a yes append it to `briefs/task-N.files` with a `Decision:` line, on a no return the task to the implementer',
+    'Under autopilot, paths that came from a `generated_artifacts` command are a yes, then rerun `wt-diff`; any other path is a no.',
     '`kern:task-reviewer` on `model.reviewer` in mode `task`', 'do not pre-judge findings in the prompt',
     "Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines.", 'Resolve every "cannot verify" item yourself and rule on each "Declined to judge" line',
     'A real gap is a spec issue; add it to that `.txt` as a finding.',
@@ -111,12 +114,13 @@ export const PINS = {
     'gets a `re-review` with that file, dispatched, saved and recorded as step 8 does',
     "Still open after round 3, or a re-review finds a bug in an earlier round's fix: stop and escalate with a split proposal", 'there is no fourth round.'],
   10: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/task-done <ledger> <N> <wt> <tree-after> --probe <package>.patch -- <task test command>`',
-    'or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe', 'One command, no shell: a compound `Run:` goes in a `kern-dir tmp` script, passed as `-- bash <path>`.',
+    'or `--no-probe "<why>"` in place of `--probe` for a task with no test to probe (docs or config paths, an empty diff).', 'One command, no shell: a compound `Run:` goes in a `kern-dir tmp` script, passed as `-- bash <path>`.',
     'After fix rounds, remake `<package>` from `tree-before`.',
     'only when an approved review saw this tree, the command passes, and the test fails with the change reversed (`probe=ok`) or `--no-probe` gave a reason.',
     'A refusal writes nothing and says why.', '`command exited <n>` or exit 1 (the test passes with the change reversed): return the task to the implementer as the next round',
     '(after round 3: the split proposal)', '`command exited 126` or `127`: stop.',
     'Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask.',
+    'Under autopilot, exit 3 with no allowed `--no-probe` reason is a required check that cannot run.',
     'Exit 2: a changed or unapproved tree, review it; a probe error, stop.', "Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11).",
     "Then task-done's `size:` lines size the plan worktree (a wave: after step 11, `bash ${CLAUDE_PLUGIN_ROOT}/scripts/size-check <ledger>`)",
     'so untracked files count; never `git add` to count, not even `-N`.',
@@ -130,12 +134,13 @@ export const PINS = {
     "(the `Worktree:` line's base tree)", 'mode `whole-branch` on `model.final_review`', 'to triage which minors block', 'Re-grade findings by effect.',
     'One fix subagent gets the complete findings list, real gaps included (`kern:implementer`, a step 6 brief), each fix red then green',
     "one `re-review` on `model.final_review` of its diff from `final.diff`'s second line, packaged with an `--allow-file` per task", 'Residual findings go to the user in step 13.'],
-  13: ['`ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report.', "No push or PR, no commit beyond step 10's"],
+  13: ['`ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report.', "No push or PR, no commit beyond step 10's (autopilot: below)"],
   14: ['Propose teardown, do not run it', '`${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md` allows', 'the plan worktree once committed'],
   stops: ['Ask at each stop as a typed reply in chat, never through AskUserQuestion.', 'on per the latest kern signal', 'a turn with no mode line changes nothing',
-    'When on, steps 1 and 2 and a failed `wt-new` still end the run.', 'parked: <question>; default: <choice>; why: <one line>', 'a red baseline goes on, naming red-before tests',
-    'a stopped task stays open with every task blocked by it, and disjoint tasks continue', 'One commit per closed task when its checks pass, through `/kern:commit`',
-    'G5 allows only `git commit -m` or `-F <file>` on an unprotected branch', 'Without autopilot `commits: ask` holds: no commit.', 'teardown never runs',
+    'When on, steps 1 and 2 and a failed `wt-new` still end the run.', 'A later judgment call parks as `parked: <question>; default: <choice>; why: <one line>` in the ledger and takes its default (', 'a red baseline goes on, naming red-before tests',
+    'Any other stop waits for a typed reply, with the data and a recommendation: a stopped task stays open with every task blocked by it, and disjoint tasks continue',
+    'Without autopilot `commits: ask` holds: no commit.',
+    'Push and a draft PR only through finish-branch, which a go runs after step 13.', "A task still open at step 13 means push, report, and no PR, its files committed under commit's no-PR end rule; teardown never runs.",
     "the size stop takes one PR, why: a split is the user's scope call and a draft can be closed"],
   ledger: ['Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand.',
     "A batch of tasks shares one brief, package and review, and the scripts still write each task's lines.",
@@ -295,4 +300,32 @@ test('every dispatch passes a model and an effort', () => {
   assertContains('kernel/kernel.md', ["Agent calls pass their role's model and effort: {KERN}/execute-plan/references/model-selection.md."]);
   for (const role of ['implementer', 'reviewer', 'final_review', 'investigator', 'miner']) assertContains('kernel/settings.md', [`| \`model.${role}.effort\` |`]);
   assertContains('skills/execute-plan/SKILL.md', ['Under autopilot, end the report with a catch-up per `${CLAUDE_PLUGIN_ROOT}/skills/recall/references/chat.md`.']);
+});
+
+test('under autopilot a stop waits, a judgment call parks, and a generated file or a dead probe does not end a task unseen', () => {
+  // M3 part 1 Task 8. The pilot's run stops came from step 8's exit 4 on generated files and from step 10's exit 3.
+  // Task 6's review: this route said a later stop parks, and run.md says a stop waits for a typed reply.
+  const { body } = readDoc(SKILL);
+  const s = steps(body);
+  const auto = section(body, '## Stops and autopilot');
+  assert.ok(!auto.includes('A later stop parks'), auto);
+  assert.ok(auto.indexOf('A later judgment call parks') < auto.indexOf('Any other stop waits'), auto);
+  // The autopilot rule follows the plain one in each step, so without autopilot exit 4 still asks and exit 3 still stops.
+  assert.ok(s[8].indexOf('pause and ask') < s[8].indexOf('Under autopilot, paths that came from'), s[8]);
+  assert.ok(s[10].indexOf('else stop and ask.') < s[10].indexOf('Under autopilot, exit 3'), s[10]);
+  assertContains('skills/autopilot/references/run.md', ['| A required check that cannot run |', 'the run pushes its branch, stops with the report and opens no PR.']);
+  assertContains('skills/finish-branch/SKILL.md', ['on a required check that cannot run, the run commits, pushes its branch, reports and opens no PR.']);
+  // Step 13's own "No push or PR" holds without autopilot; the section says what a go does.
+  assert.ok(s[13].includes("No push or PR, no commit beyond step 10's (autopilot: below); offer `/kern:commit` and `/kern:finish-branch`."), s[13]);
+  // Task 7 review: finish-branch's end path commits past a red proof, and an open task's end follows the same rule.
+  assertContains('skills/commit/SKILL.md', ["execute-plan's task still open at step 13), a red or unrunnable step 4 proof is no stop"]);
+  // Step 10 commits each closed task, so the section does not say it again.
+  assert.ok(s[10].includes("Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6"), s[10]);
+});
+
+test('step 5 builds {id} from a quoted issue value', () => {
+  // M3 part 1 Task 5 review: a bare `#` opens a YAML comment, so a plan quotes it (`issue: "#853"`), and the quotes
+  // and the `#` must not reach a branch name.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[5].includes('`{id}` (the plan\'s `issue:`, with quotes and a leading `#` removed)'), s[5]);
 });

@@ -1,7 +1,7 @@
 // tests/skills/commit.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readDoc, assertFrontmatter, assertHeadings, h2s, steps, DEFER, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { readDoc, assertFrontmatter, assertHeadings, h2s, steps, section, DEFER, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/commit/SKILL.md';
 const REF = 'skills/commit/references/ledger-tasks.md';
@@ -30,7 +30,7 @@ test('commit sections, steps and red flags', () => {
     'leave out and name any `never_commit` path', 'a mismatch means it is not what was proven: say so.',
     'those before the last are not proven alone, and the report says so',
     'kern-dir` exits 2', '`wt-snap` fails', 'G5 denies or asks and the user declines', '`git add` or `git commit` fails', 'never `--no-verify`',
-    'No kern guard allows `git add`: under autopilot it runs unprompted only where the user\'s permission settings allow it, else its prompt is a stop.',
+    'Under autopilot `git add -- <paths>` runs unprompted.',
     'an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`', "else the kernel's \"Autopilot:\" line",
     'parked: <question>; default: <choice>; why: <one line>', 'never through AskUserQuestion',
     'no files, no commit; a failed toplevel, protected branch or detached HEAD, no commit', 'a protected branch or a detached HEAD never commits']);
@@ -38,7 +38,8 @@ test('commit sections, steps and red flags', () => {
   assert.ok(!raw.includes('$('), 'no command substitution in a prescribed command');
   // 5,328 since M2b Task 17 (raised from 5,200): the Unreleased changelog line, coverage AD24.
   // 5,370 since M3 part 1 Task 6: the pointer line to the run rules, after lossless cuts.
-  assertMaxBytes(SKILL, 5370);
+  // 5,620 since its Task 8: the no-PR end's proof rule and the line that a stop waits, after a shorter `git add` sentence.
+  assertMaxBytes(SKILL, 5620);
 });
 
 test('commit ledger-tasks reference', () => {
@@ -80,4 +81,20 @@ test('a project with an Unreleased changelog section gets the change\'s line in 
   const line = 'A changelog with an Unreleased section gets this change\'s line there, in the same commit, proposed with the files, never unasked.';
   assert.ok(s[3].includes(`list the rest, unstaged. ${line}`), s[3]);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [line]);
+});
+
+test('under autopilot a commit stop waits for a typed reply, and only a judgment call with a default parks', () => {
+  // M3 part 1 Task 8, from Task 6's review: this route said each stop parks, and run.md says a stop waits.
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  assert.ok(auto.includes('never a retry with a looser message. A judgment call parks as `parked: <question>; default: <choice>; why: <one line>` committing nothing on that path'), auto);
+  assert.ok(auto.includes('Ledger-task defaults: the reference. Any other stop waits for a typed reply, with the data and a recommendation.'), auto);
+  assert.ok(!auto.includes('each stop parks'), auto);
+  // Task 12's vote allows it, so a prompt no one answers no longer stops a run here.
+  assert.ok(!auto.includes('No kern guard allows `git add`'), auto);
+  // Task 7 review: finish-branch's end path commits, pushes, reports each red or unrun check as `fail` and opens no PR,
+  // so a red proof there is no stop. The body says so; on every other path step 4 still stops.
+  assert.ok(auto.includes("On a run's no-PR end (finish-branch's third fix round still `fix first`, a required check that cannot run, execute-plan's task still open at step 13), a red or unrunnable step 4 proof is no stop, and the message body names the red check. Elsewhere step 4 stops."), auto);
+  assert.ok(auto.includes('Stops: steps 1 to 4,'), auto);
+  // A failed `git add` or `git commit` still reports what it printed.
+  assert.ok(auto.includes('`git add` or `git commit` fails: report its output; never `--no-verify`, never another command shape.'), auto);
 });

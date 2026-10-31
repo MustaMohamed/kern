@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { ROOT, readDoc, assertFrontmatter, h2s, steps, section, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 import { CHECKS } from '../../scripts/lib/behave.mjs';
 
 const SKILL = 'skills/implement/SKILL.md';
@@ -27,7 +27,9 @@ test('implement sections, steps and red flags', () => {
   // tests asked for on existing code, after lossless cuts.
   // 5,650 since the pilot fix plan's Task 7: step 8's spec update.
   // 5,800 since Task 7 fix round 1 (I4): step 8 proposes the new line and asks, and parks under autopilot.
-  assertMaxBytes(SKILL, 5800);
+  // 6,060 since M3 part 1 Task 8: autopilot's rules for steps 1, 3 and 5, a go's way to finish-branch and the stop and
+  // park line, after word cuts.
+  assertMaxBytes(SKILL, 6060);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
@@ -140,4 +142,29 @@ test('a build that departs from an acceptance line proposes the new text and ask
   for (const t of ["A build that departs from an approved spec's acceptance line: name the line and the proposed new text, and ask; never edit the spec on your own.",
     'Edit it only on the user\'s yes, keeping its `States:` and `Handles:` form. Under autopilot, write a `parked:` line instead.']) assert.ok(s[8].includes(t), `step 8 lacks: ${t}`);
   assert.ok(!s[8].includes('in the same step'), s[8]);
+});
+
+test('under autopilot implement keeps running: only a stop on the run rules waits', () => {
+  // M3 part 1 Task 8: the pilot's run stops came from implement's asks. Step 1's ask has no one to answer it, so it
+  // says the line and goes on, and only the change no approved spec covers stops. Task 6 review: run.md says a stop
+  // waits for a typed reply, so only a judgment call that takes a default gets a `parked:` line.
+  const { body } = readDoc(SKILL);
+  const s = steps(body);
+  const auto = section(body, '## Stops and autopilot');
+  assert.ok(s[1].includes('ask nothing. Under autopilot, say the line and go on; such a change no approved spec covers is the design-choice stop in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`.'), s[1]);
+  // `lint` and `typecheck` go unresolved in a project with neither, so only a required one is the stop.
+  assert.ok(s[3].endsWith('never guess a command. Under autopilot, a required one is a required check that cannot run.'), s[3]);
+  assert.ok(s[5].endsWith('edit production code unasked. Under autopilot, it parks the slice with a `parked:` line.'), s[5]);
+  assert.ok(auto.includes('a file outside the approved list parks the slice. A judgment call that takes a default gets a `parked:` line; any other stop waits for a typed reply, with the data and a recommendation.'), auto);
+  assertContains('skills/autopilot/references/run.md', ['| A design choice that changes what gets built |', '| A required check that cannot run |', 'then waits for a typed reply']);
+});
+
+test('a go that routed straight to implement goes on to finish-branch, and no caller of implement does', () => {
+  // M3 part 1 Task 5 review: a bounded spec of 1 or 2 files takes the kernel's implement row with no plan, and step 12
+  // ended the run at "Do not commit." with no draft PR. execute-plan and diagnose read this file mid-run and have
+  // steps of their own after it, and kern:implementer never commits, so only the kernel's row goes on.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[12].endsWith("Do not commit. From the kernel's row under a go, follow `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md` on `<wt>`."), s[12]);
+  assertContains('skills/finish-branch/SKILL.md', ['or autopilot is on. Otherwise stop.', 'the menu resolves to option 3']);
+  assertContains('kernel/kernel.md', ['| One bounded change of 1 or 2 files with an agreed design, or tests for existing code | Read {KERN}/implement/SKILL.md |']);
 });
