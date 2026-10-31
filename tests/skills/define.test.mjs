@@ -34,8 +34,8 @@ test('define sections, steps, the standing gate and red flags', () => {
   // step 9's route to plan.
   // 6,950 since the pilot-fix test round's fix (2026-10-25): step 9's line estimate and "whatever `scope_threshold` allows".
   // 7,000 since pilot fix plan 2's Task 4: step 6 counts a re-indented file's moved lines.
-  // 7,600 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
-  assertMaxBytes(SKILL, 7600);
+  // 7,750 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
+  assertMaxBytes(SKILL, 7750);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -155,6 +155,10 @@ test('under a go define runs to an approved spec, and with no go it parks', () =
   const go = lines.find((l) => l.startsWith('Under a go (`/kern:autopilot go <id>` for this ticket)'));
   assert.ok(go, 'a go has its own paragraph');
   assert.ok(go.includes('with no stop: each question takes its default with a `parked:` line'), go);
+  // A go ends in a draft PR and a spike ends in an answer, so a go never sizes a spike.
+  assert.ok(go.includes('size it bounded or architectural, never a spike, and run that path'), go);
+  // One go covers one draft PR, as with a plan over scope_threshold.
+  assert.ok(go.includes('A capability-map ticket writes no map: its first slice is the spec; the report lists the rest, each needing its own go.'), go);
   // A bare references/run.md would not resolve from a project repo.
   assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
   // Both paths reach an approved spec, so plan has one to read. The architectural path keeps its checks first.
