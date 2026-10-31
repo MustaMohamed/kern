@@ -95,8 +95,12 @@ test('under autopilot a `fix first` verdict starts a bounded fix round, and a ru
   assert.ok(!auto.includes('After the third round'), auto);
   assert.ok(!auto.includes('unrunnable proven-tree'), auto);
   // Fix round 1, I1: the push gate's own text names the end path, so a reader who follows step 10 there does not stop.
+  // Fix round 2: wt-new exits non-zero when `worktree.setup` fails, so a check that cannot run lands on the other no-push
+  // line. One sentence after both covers a red check and one that cannot run.
   const tree = section(readDoc(OPS).body, '## Proven tree');
-  assert.ok(tree.includes("Red: no push. finish-branch's end path reports `fail` and pushes."), tree);
+  const end = "On finish-branch's end path neither no push holds: report `fail`, push.";
+  assert.ok(tree.includes(`Red: no push. ${end}`), tree);
+  assert.ok(tree.indexOf('Any other non-zero exit, or a refused remove: report its output and ask; no push.') < tree.indexOf(end), tree);
   assert.ok(steps(readDoc(SKILL).body)[5].includes('`fix first`, `split` or no verdict: stop with its report (autopilot: below).'));
   assertContains('skills/autopilot/references/run.md', ['| `split` from a finding on a line the last round changed |']);
 });
@@ -111,7 +115,7 @@ test('under autopilot a stop waits for a typed reply, and only a judgment call t
 
 test('branch-ops reference: rebase and the proven-tree check', () => {
   assertHeadings(OPS, ['# Branch operations', '## Rebase', '## Proven tree']);
-  assertOnce(OPS, ['Under autopilot only the check runs, without its teardown; its removal of an earlier run\'s check path is not a teardown.',
+  assertOnce(OPS, ['Under autopilot only the Proven tree check runs, without its teardown; its removal of an earlier run\'s check path is not a teardown.',
     'If `git rev-parse --verify --quiet origin/<branch>` prints a SHA, the branch is published', 'warn that a rebase rewrites published commits and needs the lease push in `push-and-pr.md`',
     'offer it only if `git log --format=%ae <baseref>..HEAD origin/<branch>` prints only `git config user.email`; else G1 denies that push, so go on stale.',
     'Run `git rebase <baseref>` only on yes; on no, go on.', 'git refuses a rebase over uncommitted changes: offer it again after step 8\'s commit; refused again, go on.',
@@ -124,7 +128,8 @@ test('branch-ops reference: rebase and the proven-tree check', () => {
     'then `cd <wt>`', 'Red: no push.', 'If wt-new said `worktree.setup` is unset, a red may be the environment: check that before blaming the commit',
     'Then propose plain `git worktree remove <check>`, never `--force`, and run it on yes; a refusal keeps it, reported.']);
   assertNoSubstitution(OPS);
-  assertMaxBytes(OPS, 2400);
+  // 2,450 since M3 part 1's Task 7 fix round 2: the end path passes both of the Proven tree check's no-push lines.
+  assertMaxBytes(OPS, 2450);
 });
 
 test('discard reference', () => {
@@ -285,7 +290,7 @@ test('branch-ops reference: a release asked on a protected branch gets a release
     'There cut the release commit per `release.md`, section On the branch, then run finish-branch from step 2: step 5 reviews that commit, and step 8 has no release left.'];
   for (const p of pins) assert.ok(rb.includes(p), `Release branch must contain: ${p}`);
   assertOnce(OPS, pins);
-  assertMaxBytes(OPS, 2400);
+  assertMaxBytes(OPS, 2450);
 });
 
 test('finish-branch: a release only when asked, after the commit; its tag only after the merge, by a tag-only request (coverage AD24)', () => {

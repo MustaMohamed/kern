@@ -1,6 +1,6 @@
 # Branch operations
 
-Under autopilot only the check runs, without its teardown; its removal of an earlier run's check path is not a teardown.
+Under autopilot only the Proven tree check runs, without its teardown; its removal of an earlier run's check path is not a teardown.
 
 ## Rebase
 
@@ -8,7 +8,7 @@ For a stale base (step 3) or a `rebase first` verdict (step 5). If `git rev-pars
 
 ## Proven tree
 
-Push only the proven tree: `git rev-parse HEAD^{tree}` must equal the tree from finish-branch step 4; commit's own proof is separate. If not, run `git rev-parse HEAD`, then `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>-check-<sha7> --detach --base <HEAD sha>` (`<slug>`: `<wt>`'s base name; `<sha7>`: the SHA's first 7 characters). Exit 2 with `path exists` means an earlier run left that check: run plain `git worktree remove <path>`, under autopilot too, then wt-new again. Any other non-zero exit, or a refused remove: report its output and ask; no push. Else `cd` to the path it prints, run `test.full`, then `cd <wt>`, each its own call. Red: no push. finish-branch's end path reports `fail` and pushes. If wt-new said `worktree.setup` is unset, a red may be the environment: check that before blaming the commit; else name what the commit left out (`git status --porcelain`). Then propose plain `git worktree remove <check>`, never `--force`, and run it on yes; a refusal keeps it, reported.
+Push only the proven tree: `git rev-parse HEAD^{tree}` must equal the tree from finish-branch step 4; commit's own proof is separate. If not, run `git rev-parse HEAD`, then `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>-check-<sha7> --detach --base <HEAD sha>` (`<slug>`: `<wt>`'s base name; `<sha7>`: the SHA's first 7 characters). Exit 2 with `path exists` means an earlier run left that check: run plain `git worktree remove <path>`, under autopilot too, then wt-new again. Any other non-zero exit, or a refused remove: report its output and ask; no push. Else `cd` to the path it prints, run `test.full`, then `cd <wt>`, each its own call. Red: no push. On finish-branch's end path neither no push holds: report `fail`, push. If wt-new said `worktree.setup` is unset, a red may be the environment: check that before blaming the commit; else name what the commit left out (`git status --porcelain`). Then propose plain `git worktree remove <check>`, never `--force`, and run it on yes; a refusal keeps it, reported.
 
 ## Release branch
 

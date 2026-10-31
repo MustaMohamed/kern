@@ -129,7 +129,8 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   const fix = section(RUN, '## Fix rounds');
   for (const s of ['A `fix first` verdict starts a fix round in place of ending the run, up to 3 per self-review.',
     'Each round fixes the findings and runs self-review again in full, including the checks the last round skipped.',
-    'After the third, the run pushes its branch, stops with the report and opens no PR.', 'No verdict also stops.',
+    // Task 7 fix round 2: "After the third" read as a push and stop even when the third round comes back `ready`.
+    'When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR.', 'No verdict also stops.',
     'One go covers one draft PR.']) assert.ok(fix.includes(s), s);
   assert.deepEqual(fix.split('\n').filter((l) => l.startsWith('|')).slice(2), [
     '| `split` from a finding on a line the last round changed | The fixes are not converging: stop with the report |',
