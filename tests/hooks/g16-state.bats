@@ -1090,3 +1090,130 @@ EOF
     "$(printf '%s\n' "cat > x.py <<'E'" "open('/k/hooks/prompt-submit').read()" 'E' 'python3 x.py')" \
     "$(printf '%s\n' "cat > x.py <<'E'" "$B" 'E' 'python3 x.py; cat /x/h*/prompt-submit')"
 }
+
+# project_hooks: a project with a hooks folder and no kern code.
+project_hooks() {
+  mkdir -p "$R/src/hooks/lib"
+  : >"$R/src/hooks/useForm.ts"
+  : >"$R/src/hooks/lib/util.sh"
+}
+
+@test "a read in a project that merely has a hooks folder gets no vote" {
+  # M3 part 1 Task 9: the commands the plan names, which the pilot's noise came from.
+  project_hooks
+  # shellcheck disable=SC2016 # a literal $f
+  expect_cmd none "find . -name '*.ts' -not -path '*/node_modules/*' 2>/dev/null | head -5" \
+    "find . \\( -name '*.ts' -o -name '*.tsx' \\) | head -5 | head -2" 'f=src/hooks/useForm.ts; cat $f' \
+    'git grep -n useFormState -- src' 'cat src/hooks/useFormState.ts'
+}
+
+@test "a hooks folder outside KERN_ROOT is not hook code: its paths, globs and variables get no vote" {
+  project_hooks
+  # shellcheck disable=SC2016 # literal $f and $x
+  expect_cmd none 'cat src/hooks/*' 'ls src/hooks/$x' 'wc -l src/hooks/{useForm,useTable}.ts' "cat $R/src/hooks/*" \
+    'cat src/hooks/lib/util.sh' 'bash src/hooks/lib/util.sh' 'for f in src/hooks/*.ts; do wc -l "$f"; done' \
+    'cd src/hooks; cat useForm.ts' 'ls ./src/hooks/'
+}
+
+@test "a variable that resolves under KERN_ROOT/hooks and is then run still asks; under autopilot it is denied" {
+  K=$(kern_root)
+  project_hooks
+  # shellcheck disable=SC2016 # literal $d, $f and $x
+  expect_hook "f=$K/hooks/not-a-hook; bash \$f" "d=$K/hooks; bash \$d/\$x" "f=$K/hooks/guards/\$x; . \$f" \
+    "cat src/hooks/useForm.ts; f=$K/hooks/not-a-hook; bash \$f"
+}
+
+@test "a hooks path that a cd moves, a symlink into kern or a missing folder keeps the hook vote" {
+  K=$(kern_root)
+  project_hooks
+  mkdir -p "$R/hooks/lib" "$R/src/app"
+  ln -s "$K/hooks" "$R/src/hooks/k"
+  ln -s "$K" "$R/kern"
+  # shellcheck disable=SC2016 # a literal $x
+  expect_hook "cd $K && bash hooks/\$x" "pushd $K; bash hooks/\$x" "chdir $K; bash hooks/\$x" "(cd $K; bash hooks/\$x)" \
+    "git -C $K log hooks/\$x" \
+    'bash src/hooks/k/$x' 'cat src/hooks/k/*' 'bash src/hooks/../../kern/hooks/$x' 'cat src/nope/hooks/$x' 'cat src/app/hooks/$x' \
+    'bash $CLAUDE_PLUGIN_ROOT/hooks/$x' \
+    "$(printf '%s\n' "python3 - <<'EOF'" "import os; os.chdir('$K')" "p='hooks/lib/state.sh'" 'EOF')"
+  set_autopilot off
+  # shellcheck disable=SC2016 # a literal $x
+  expect_cmd none 'bash hooks/$x'
+}
+
+@test "a copy of kern's hooks outside KERN_ROOT asks when it could run; a read-only command gets no vote" {
+  C="$BATS_TEST_TMPDIR/copy"
+  mkdir -p "$C/hooks/lib"
+  : >"$C/hooks/prompt-submit"
+  : >"$C/hooks/lib/state.sh"
+  # shellcheck disable=SC2016 # a literal $x
+  expect_hook "bash $C/hooks/\$x" "bash $C/hooks/p*" "bash $C/hooks/prompt-submit" ". $C/hooks/lib/state.sh" \
+    "cat $C/hooks/prompt-submit | sh"
+  set_autopilot off
+  expect_cmd none "cat $C/hooks/prompt-submit" "grep -n x $C/hooks/lib/state.sh | head -5" "wc -l $C/hooks/lib/state.sh"
+}
+
+@test "inside a hooks folder outside KERN_ROOT a variable gets no vote; inside kern's hooks directory it asks" {
+  K=$(kern_root)
+  project_hooks
+  CWD="$R/src/hooks"
+  # shellcheck disable=SC2016 # literal $f and $x
+  expect_cmd none 'cat $x' 'for f in *.ts; do wc -l $f; done'
+  # shellcheck disable=SC2016 # literal $C and $x
+  expect_hook 'bash prompt-submit' 'bash pr*' 'bash $C/h*/$x'
+  CWD="$K/hooks"
+  # shellcheck disable=SC2016 # a literal $x
+  expect_hook 'cat $x' "cat 'prompt-submit'"
+}
+
+@test "a quoted glob or regex given only to read-only commands goes out before the path test" {
+  project_hooks
+  expect_cmd none "find . \\( -name '*.ts' -o -name '*.tsx' \\) -not -path '*/node_modules/*' | head -5 | head -2" \
+    "cd src && find . -name '*.ts' -not -path '*/node_modules/*' | head" \
+    "ls src; find . -path '*/dist/*' -prune -o -name '*.ts' -print" \
+    "grep -rnE '^/api/(users|teams)/.*\$' src | head" "rg '^/api/.*\$' src" 'grep -rn "^/api/.*" src' \
+    "grep -E '*/x|y/*' README.md | sort | uniq -c" "grep -E '^(ok|not ok)/*' README.md | head" \
+    "/usr/bin/grep -E '*/*' README.md"
+}
+
+@test "a quoted glob stays read when a shell could read it, or when it is a redirect target; a comment or here-doc keeps it" {
+  K=$(kern_root)
+  local nl=$'\n'
+  expect_hook "bash -c 'bash */prompt-submit'" "eval 'bash */prompt-submit'" "find . -path '*/h*/*' | xargs bash" \
+    "cat '*/*' | sh" "rg --pre '*/*' x" "sort -o '*/*' x" "uniq - '*/*'" "cat x > '$K/hooks/pr*'" "cat \"*/\$x/*\"" \
+    "./cat '*/*'" "rg '--pre=*/*' x" "cat \"*/*" "cat '*/*' '" "find . -path '*/*' -ex''ec cat {} \\;" \
+    "cat x # '${nl}bash */prompt-submit # '" "cat <<'E'${nl}cat '${nl}E${nl}bash */prompt-submit # '" \
+    "cat '*/*'${nl}bash */prompt-submit"
+}
+
+@test "a quoted hook path or hook name is no pattern: it stays read as at any other spelling" {
+  K=$(kern_root)
+  mkdir -p "$BATS_TEST_TMPDIR/a b/hooks"
+  expect_hook "grep -n x 'hooks/prompt-submit'" "grep 'hooks/prompt-submit\$' README.md" "cat '$BATS_TEST_TMPDIR/a b/hooks/prompt-submit'" \
+    "grep 'state_set|x' README.md" "cat '$K/hooks/lib/state.sh' | head -3"
+}
+
+@test "a hooks directory above KERN_ROOT stays kern's" {
+  T="$BATS_TEST_TMPDIR/hooks"
+  mkdir -p "$T/kern"
+  cp -R "$(kern_root)/hooks" "$(kern_root)/kernel" "$T/kern/"
+  run env KERN_GUARDS=g16 bash "$T/kern/hooks/pre-tool-use" <<<"$(bash_payload "find $T -type f -exec bash {} \\;")"
+  [ "$(decision_of "$output")" = ask ]
+}
+
+@test "when awk cannot run a pass that takes words out, every rule reads the whole text" {
+  project_hooks
+  read_fails awk 'pass=*'
+  expect_hook 'cat src/hooks/*' "cat '*/*'"
+  [ "$(read_failures awk)" -gt 0 ]
+}
+
+@test "when a pass that takes words out prints nothing, every rule reads the whole text" {
+  local real
+  real=$(command -v awk)
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/bash\ncase "$*" in *pass=*) exit 0 ;; esac\nexec %s "$@"\n' "$real" >"$BATS_TEST_TMPDIR/bin/awk"
+  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  project_hooks
+  expect_hook 'cat src/hooks/*' "cat '*/*'"
+}
