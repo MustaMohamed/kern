@@ -260,6 +260,30 @@ d=a; cat <<EOF2\n$d\nEOF2
 EOF
 }
 
+@test "a longer variable name is denied with the advice to use one letter" {
+  while IFS= read -r cmd; do
+    hook kern:investigator "$cmd"
+    denied || { echo "not denied: $cmd"; false; }
+    [[ "$output" == *"use a one-letter name"* ]] || { echo "no advice: $cmd"; false; }
+  done <<'EOF'
+file=a; cat $file
+file=a.ts; cat a.ts
+file=$(ls); cat \"$file\"
+for file in a b; do cat \"$file\"; done
+d=a; file=b; cat ${file}
+d=a; cat $file
+EOF
+  while IFS= read -r cmd; do
+    hook kern:investigator "$cmd"
+    denied || { echo "not denied: $cmd"; false; }
+    [[ "$output" != *"use a one-letter name"* ]] || { echo "wrong advice: $cmd"; false; }
+  done <<'EOF'
+rm a
+for f in a b; do rm \"$f\"; done
+f=$(ls); sort $f out.txt
+EOF
+}
+
 @test "an assignment of a read-only substitution is read as an unknown word" {
   each_no_vote <<'EOF'
 f=\"$(git rev-parse --short HEAD)\"; echo $f

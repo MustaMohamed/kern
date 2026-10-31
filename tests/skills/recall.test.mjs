@@ -80,7 +80,7 @@ test('recall dispatches a named agent, model and read-only commands', () => {
   assertOnce(SKILL, ['dispatch `kern:investigator` on model `model.miner`', 'the absolute paths from the `session` lines', 'a return budget of 15 lines per session',
     'It may run only read commands', '`grep -n` the topic first', '`wc -c` before reading', '`sed -n <first>,<last>p` with line numbers and p only',
     'If it reports a command the allowlist blocks, run that command yourself; never widen the guard',
-    'G18 denies `>` anywhere in a command, even quoted: search one side of it or put `.` in its place',
+    'G18 denies a `>` outside quotes, so quote a pattern that holds one',
     'When the answer hinges on what an agent actually did, read the full transcript region, not a grep line or summary']);
 });
 

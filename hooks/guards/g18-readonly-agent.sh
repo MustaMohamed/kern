@@ -168,14 +168,16 @@ _g18_expands() {
 }
 
 # _g18_read CMD: the simple commands of CMD, one per line, with its loops and variables read out, for
-# _g18_denied to judge; exit 1 when G18 cannot read all of it. A for over literal words becomes its body
-# once per word. A variable becomes its value, in every quote the shell expands it in: a plain literal, or
-# $G18_ANY for a $( ) alone, whose commands take the assignment's place. Only one-letter names: no shell
-# and no allowlisted command reads one from its environment, while IFS, PATH, GIT_* or zsh's path would
-# change what runs. An assignment counts only at the top level, first or after ; or a newline, and ending
-# in ;, a newline or &&: anywhere else the shell may skip or lose it, and the value G18 judged would not be
-# the one that runs. A nested loop or substitution stops the read, and so does any other expansion, a
-# group, a subshell, a here-doc or a comment.
+# _g18_denied to judge; exit 1 when G18 cannot read all of it, and 3 when a longer variable name is why.
+# A for over literal words becomes its body once per word. A variable becomes its value, in every quote
+# the shell expands it in: a plain literal, or $G18_ANY for a $( ) alone, whose commands take the
+# assignment's place. Only one-letter names, and that is what makes an assignment safe: no shell and no
+# allowlisted command reads one, while a longer name can change what runs. IFS, PATH and GIT_* do, and so
+# do zsh's lowercase path and fpath, tied to PATH and FPATH, so case does not mark them and no list of such
+# names stays complete. An assignment counts only at the top level, first or after ; or a newline, and
+# ending in ;, a newline or &&: anywhere else the shell may skip or lose it, and the value G18 judged would
+# not be the one that runs. A nested loop or substitution stops the read, and so does any other expansion,
+# a group, a subshell, a here-doc or a comment.
 _g18_read() {
   printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v any="$G18_ANY" '
     function gap(i) { while (i <= n && (C[i] == " " || C[i] == "\t")) i++; return i }
@@ -196,9 +198,10 @@ _g18_read() {
       b = v == "{"
       i += 1 + b
       v = C[i]
+      if (v ~ /[A-Za-z_]/ && C[i + 1] ~ /[A-Za-z0-9_]/) exit 3
       if (!(v in V)) exit 1
       if (b) { if (C[++i] != "}") exit 1 }
-      else if (C[i + 1] ~ /[A-Za-z0-9_:[]/) exit 1
+      else if (C[i + 1] ~ /[:[]/) exit 1
       W = W V[v]; P = P V[v]; R = 1
       return i
     }
@@ -239,6 +242,7 @@ _g18_read() {
     # after its done.
     function loop(i,   v, m, k, L, b) {
       i = word(gap(i)); v = P
+      if (!Q && v ~ /^[A-Za-z_][A-Za-z0-9_]+$/) exit 3
       if (Q || v !~ /^[A-Za-z]$/) exit 1
       i = word(gap(i))
       if (Q || P != "in") exit 1
@@ -266,6 +270,7 @@ _g18_read() {
         if (ctx == 2 && C[i] == ")") return i
         if (C[i] == ";" || C[i] == "\n") { lead = 1; i++; continue }
         if (C[i] == "&" || C[i] == "|") { lead = 0; i += C[i + 1] == C[i] ? 2 : 1; continue }
+        if (substr(buf, i) ~ /^[A-Za-z_][A-Za-z0-9_]+[+]?=/) exit 3
         if (C[i] ~ /[A-Za-z]/ && C[i + 1] == "=") {
           if (ctx || !lead) exit 1
           i = gap(bind(C[i], i + 2))
@@ -308,11 +313,15 @@ EOF
 
 # _g18_denies CMD: exit 0 when G18 denies CMD, with the command it names in _G18_LINE. A command with a
 # loop or a variable is judged as _g18_read reads it, so a body or a value that is not allowed alone is
-# denied here too; one it cannot read is denied.
+# denied here too; one it cannot read is denied, with _G18_LONG 1 when a longer variable name is why.
 _g18_denies() {
   local text
+  _G18_LONG=0
   _g18_denied "$1" || return 1
-  text=$(_g18_read "$1") || return 0
+  text=$(_g18_read "$1") || {
+    [ "$?" != 3 ] || _G18_LONG=1
+    return 0
+  }
   _g18_denied "$text"
 }
 
@@ -320,12 +329,13 @@ guard_g18() {
   [ "$TOOL" = "Bash" ] || return 0
   [ -n "${AGENT:-}" ] || return 0
   case " $G18_AGENTS " in *" $AGENT "*) ;; *) return 0 ;; esac
-  local cmd
+  local cmd next="Ask the controller to run it."
   if ! cmd=$(ti_get command); then
     vote deny G18 "read-only agent: the Bash input has no command"
     return 0
   fi
   if _g18_denies "$cmd"; then
-    vote deny G18 "$AGENT is read-only; '${_G18_LINE%%[[:space:]]*}' with these arguments is not on its allowlist (git log, show, blame, diff, grep, ls-files, status; rg, grep, ls, cat, head, tail, wc; find without -exec or -delete; sed -n with line numbers; a for over literal words; a one-letter variable set first to a plain value or a read-only \$( )). Ask the controller to run it."
+    [ "$_G18_LONG" = 0 ] || next="G18 reads only one-letter variable names: use a one-letter name and retry."
+    vote deny G18 "$AGENT is read-only; '${_G18_LINE%%[[:space:]]*}' with these arguments is not on its allowlist (git log, show, blame, diff, grep, ls-files, status; rg, grep, ls, cat, head, tail, wc; find without -exec or -delete; sed -n with line numbers; a for over literal words; a one-letter variable set first to a plain value or a read-only \$( )). $next"
   fi
 }
