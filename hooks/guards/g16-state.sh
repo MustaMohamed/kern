@@ -6,8 +6,8 @@
 # NotebookEdit whose target resolves under kern's hooks/ directory, and every command that names kern's
 # hook code (a hook entry file, a .sh file under hooks/lib/ or hooks/guards/) or a state function,
 # which could forge the user's prompt or turn a guard off. A path in a hooks directory outside KERN_ROOT
-# does not count when the command only reads, or when it is an existing file or a glob that no hook
-# name can match (_g16_foreign).
+# does not count when the command only reads, or, in a command that spells no hook code or substitution,
+# when it is a regular file or a glob that no hook name can match (_g16_foreign).
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; and any other spelling of a hook path than the ones _g16_hooks reads
@@ -52,10 +52,13 @@ _G16_WZ=$'\035'
 # file), and an assignment before any head (NAME=value can change what a filter runs). Pagers (less,
 # more) are not filters: they take a preprocessor from the environment.
 # ansi is 1 when the text held $'...', whose escapes can hide a $ or a leading dash from ro. ro also
-# refuses <>, and a redirect before a head, since either can hide the head once the quotes are out.
+# refuses <>, and a redirect before a head, since either can hide the head once the quotes are out; &>
+# after a word is not before a head.
 # pass=quoted runs quoted on the text as written, for _g16_hooks_read; pass=paths marks words for
-# _g16_paths_out and prints whether the command only reads: ro, with no redirect but to /dev/null.
-# Neither is a reading: each only prepares words for the rules to skip.
+# _g16_paths_out and prints whether the command only reads: ro, with no redirect but to /dev/null or a
+# file descriptor. It prints nothing, so the text stays whole, for a command that does not read and
+# matches hit or holds $(, ${ or a backtick: no word of such a command can be judged on its own.
+# Neither pass is a reading: each only prepares words for the rules to skip.
 # quoted prints the text with each quoted glob or regex (and each \( and \)) as the word _, when ro then
 # reads the whole command as read-only, so a shell reads none of them and each is a pattern or a file
 # name with a literal * in it. Otherwise it prints the text as it came. It leaves a word that is not
@@ -65,11 +68,13 @@ _G16_WZ=$'\035'
 # shell's; a here-doc body is the same, so _g16_hooks_read does not call it on text that holds <<.
 # shellcheck disable=SC2016 # awk text
 _G16_HOOK_AWK='
-function ro(C,    ok, T, m, seg, k, p, sw, j, hd, ops, q) {
+function ro(C,    ok, U, T, m, seg, k, p, sw, j, hd, ops, q) {
   ok = 1
   sawfind = 0
   if (ansi || index(C, "$") || index(C, "`") || index(C, "<>")) ok = 0
-  if (C ~ /(^|[|;&(\n])[ \t]*[0-9]*[<>]/) ok = 0
+  U = C
+  gsub(/[^|;&(\n \t][ \t]*&>/, "x ", U)
+  if (U ~ /(^|[|;&(\n])[ \t]*[0-9]*[<>]/) ok = 0
   if (C ~ /(^|[^a-z0-9_-])-(exec|execdir|ok|okdir|delete|fprint0|fprintf|fprint|fls)([^a-z0-9_-]|$)/) ok = 0
   # Drop redirect operators and their targets, so find x > list is find with no actor. Then split into
   # simple commands on the real separators and read each command head.
@@ -182,9 +187,11 @@ END {
   for (k = 0; k < nc; k++) C = C (k ? "\n" : "") cmd[k]
   if (pass == "paths") {
     T = C
-    gsub(/[0-9]*>&([0-9]+|-)/, " ", T)
+    gsub(/[0-9]*>&([0-9]+|-)([ \t\r\n|;&()]|$)/, " ", T)
     gsub(/[0-9]*>>?[ \t]*\/dev\/null([ \t\r\n|;&()]|$)/, " ", T)
-    print (ro(C) && !index(T, ">")) " " (moved + 0)
+    r = ro(C) && !index(T, ">")
+    if (!r && (C ~ hit || index(C, "$(") || index(C, "${") || index(C, "`"))) exit
+    print r " " (moved + 0)
     for (k = 0; k < nc; k++) print out[k]
     exit
   }
@@ -1018,11 +1025,14 @@ _g16_hooks() {
 # - cd -P puts the directory outside KERN_ROOT, and KERN_ROOT outside it, in any case.
 # Then RO 1 clears it. Otherwise the directory must hold no file named in NAMES, since a copy of kern
 # runs as kern on the same plugin data, which also keeps a hook's own name. And the last part, in any
-# case, must be an existing regular file, or a glob with no $, backtick or { that _g16_glob says cannot
-# match NAMES, so that a hook name, a variable or a directory stays in any command that is not a read.
-# Such a word names a file, or a set of files, that are no hooks of kern's as the disk stands; a command
-# that rewrites one and then runs it runs a script of its own. With cwd, WORD is the session's
-# directory, which stays a directory, so the last part is not read.
+# case, must be a regular file that is no symlink, or a glob with no $, backtick or { that _g16_glob
+# says cannot match NAMES, so that a hook name, a variable or a directory stays in any command that is
+# not a read. That is a test of a name and of the disk as the guard runs, and no more: the command may
+# change the file before it uses it, and a directory change the text does not spell can point a relative
+# word at another file. The awk's paths pass keeps the whole text of a command that matches hit or holds
+# a substitution, so a word cleared here never spells a hook, or a .sh file under hooks/lib or
+# hooks/guards. With cwd, WORD is the session's directory, which stays a directory, so the last part is
+# not read.
 _g16_foreign() {
   local w=${1%/} l d p r k bad=0 n
   l=${w##*/}
@@ -1060,7 +1070,7 @@ _g16_foreign() {
   case "$l" in
     *[\$\`\{]*) bad=1 ;;
     *[\*\?\[]*) if _g16_glob "$4" "$l"; then bad=1; fi ;;
-    *) [ -f "$p" ] || bad=1 ;;
+    *) [ -f "$p" ] && [ ! -L "$p" ] || bad=1 ;;
   esac
   shopt -u nocasematch
   [ "$bad" = 0 ]
@@ -1070,8 +1080,8 @@ _g16_foreign() {
 # _g16_foreign clears, so every rule then judges the command as if they were not there. In a command
 # that is not a read, one word that stays keeps them all: a command that acts on a hooks directory that
 # may be kern's can carry the others into it. Text that holds << stays whole: an interpreter reads a
-# body's paths from a directory no word shows. When awk does not run, it stays whole too, and every
-# rule reads it.
+# body's paths from a directory no word shows. When awk does not run, or prints nothing (see
+# _G16_HOOK_AWK), it stays whole too, and every rule reads it.
 _g16_paths_out() {
   local m rest flags ro moved w kept="" nl=$'\n'
   _G16_OUT=$1

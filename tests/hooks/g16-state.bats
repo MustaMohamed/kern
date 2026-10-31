@@ -1111,7 +1111,7 @@ project_hooks() {
   project_hooks
   # shellcheck disable=SC2016 # literal $f and $x
   expect_cmd none 'cat src/hooks/*' 'wc -l src/hooks/{useForm,useTable}.ts' "cat $R/src/hooks/*" \
-    'cat src/hooks/lib/util.sh' 'bash src/hooks/lib/util.sh' 'for f in src/hooks/*.ts; do wc -l "$f"; done' \
+    'cat src/hooks/lib/util.sh' 'for f in src/hooks/*.ts; do wc -l "$f"; done' \
     'cd src/hooks; cat useForm.ts' 'ls ./src/hooks/' 'node src/hooks/useForm.ts' 'cp src/hooks/*.ts /tmp/x/' \
     'x=1; cat src/hooks/useForm.ts'
 }
@@ -1265,4 +1265,47 @@ project_hooks() {
 
 @test "a redirect before the head does not hide a shell from the quoted glob check" {
   expect_hook ">'a cat' bash -c 'bash */prompt-submit'" "<>x bash -c 'bash */prompt-submit'" "sort <>x -o '*/*' y"
+}
+
+# M3 part 1 Task 9, fix round 2.
+@test "a command that is not a read and spells hook code or a substitution keeps its foreign hooks paths" {
+  K=$(kern_root)
+  F="$BATS_TEST_TMPDIR/far"
+  mkdir -p "$F/hooks"
+  : >"$F/hooks/useForm.ts"
+  project_hooks
+  # shellcheck disable=SC2016 # literal $( ), ${ }, backticks and $f
+  expect_hook 'bash src/hooks/lib/util.sh' 'bash src/hooks/lib/UTIL.SH' 'cat src/hooks/useForm.ts $(cat x)' \
+    'cat src/hooks/useForm.ts ${x}' 'cat src/hooks/useForm.ts `cat x`' \
+    "f=$F/hooks/useForm.ts; cp -R $K/. $F/; bash \${f%/*}/prompt-submit"
+}
+
+@test "a symlink in a foreign hooks folder is no regular file" {
+  K=$(kern_root)
+  project_hooks
+  ln -s "$K/hooks/prompt-submit" "$R/src/hooks/lnk"
+  # shellcheck disable=SC2016 # a literal $f
+  expect_hook 'f=src/hooks/lnk; bash $f'
+}
+
+@test "a redirect to a file whose name starts with a digit is not a closed descriptor" {
+  C="$BATS_TEST_TMPDIR/copy"
+  mkdir -p "$C/hooks"
+  : >"$C/hooks/prompt-submit"
+  expect_hook "cat $C/hooks/prompt-submit >&2x"
+  set_autopilot off
+  expect_cmd none "cat $C/hooks/prompt-submit >&2" "grep x $C/hooks/prompt-submit 2>&1 | head"
+}
+
+@test "&> after a command is not a redirect before a head; before a head it is" {
+  expect_cmd none "find . -path '*/hooks/*' &>/dev/null"
+  expect_hook "&>'a cat' bash -c 'bash */prompt-submit'" "2>/dev/null find . -path '*/hooks/*'"
+}
+
+@test "a hooks word that a bare hook name leans on stays when a directory change moves it or a here-doc holds it" {
+  K=$(kern_root)
+  project_hooks
+  mkdir -p "$R/hooks"
+  expect_hook "cd $K; cd hooks; cat prompt-submit" "git -C $K log src/hooks/useForm.ts prompt-submit" \
+    "$(printf '%s\n' "bash <<'EOF'" 'cat prompt-submit src/hooks/useForm.ts' 'EOF')"
 }
