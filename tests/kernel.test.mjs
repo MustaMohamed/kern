@@ -12,6 +12,11 @@ test('kern paths never resolve from the current directory', () => {
   assertContains('kernel/kernel.md', ['Settings and working files resolve from the main worktree root, never the current directory.']);
 });
 
+test('precedence says skill, since an override may name a user or plugin skill', () => {
+  assertContains('kernel/kernel.md', ["2. A skill for the same job, under Overrides below, replaces kern's."]);
+  assertContains('kernel/settings.md', ['comes first, then a skill that owns the job, then project rules']);
+});
+
 test('on a match the route, or the project skill an override names, is read before any other tool call, and the todo list is named by its tool', () => {
   // 2026-10-18, Claude Code 2.1.302: 11 of 12 headless runs read routes.md, then nearly all made a project call
   // before the route, and none opened a todo list; that Claude Code has TaskCreate, not TodoWrite. An override

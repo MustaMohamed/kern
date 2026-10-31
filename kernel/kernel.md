@@ -6,7 +6,7 @@ Scripts: bash {ROOT}/scripts/<name>. Settings and working files resolve from the
 ## Precedence
 Highest first:
 1. The user's word this session.
-2. A project skill for the same job, under Overrides below, replaces kern's.
+2. A skill for the same job, under Overrides below, replaces kern's.
 3. Project rules in CLAUDE.md, .claude/rules and memory only tighten.
 4. Settings below.
 5. kern steps.

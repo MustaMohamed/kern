@@ -198,7 +198,7 @@ YML
   printf 'overrides.commit: my-commit\noverrides.define: superpowers:brainstorming\n' >"$R/.claude/kern.local.yml"
   run settings_summary
   [ "$status" -eq 0 ]
-  [[ "$output" == *"commit -> skill my-commit"* ]] || false
+  [[ "$output" == *"Overrides (follow the skill, say so in one line): commit -> skill my-commit"* ]] || false
   [[ "$output" == *"define -> skill superpowers:brainstorming"* ]] || false
   [[ "$output" != *"project skill my-commit"* ]] || false
 }
