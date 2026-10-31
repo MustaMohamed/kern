@@ -183,13 +183,13 @@ My call. Each step ends with its focused suites green; full `ci-local` runs once
 4. Guard noise and the other run-stopping items.
 5. Correctness items.
 6. Cost and speed items.
-7. A paid check run, then the real round.
+7. A paid check run. The real round waits for the end of M3.
 
 ## Proof
 
 Autopilot gets eval coverage that a run with a go reaches a draft PR, a run hits each stop, and a reworded block stays blocked. The plan names the cases.
 
-Part 1 ends with a real round: "after finishing real projects run round, measure the results and I can decide, like what we did in money app and cds". The user picks the tickets. 3 tasks in each of MoneyApp and cds, as in the pilot, with at least one code-changing ticket in cds, which the pilot lacked (my call). Each project runs setup's conflict step first.
+Part 1 ends with the paid check run. The real round comes after all of M3, on the user's word: "Make the real rounds after finishing m3 completely". Its measure stands: "after finishing real projects run round, measure the results and I can decide, like what we did in money app and cds". The user picks the tickets. 3 tasks in each of MoneyApp and cds, as in the pilot, with at least one code-changing ticket in cds, which the pilot lacked (my call). Each project runs setup's conflict step first.
 
 | Measure | Source |
 |---|---|
