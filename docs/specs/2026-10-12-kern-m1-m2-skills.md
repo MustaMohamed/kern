@@ -214,7 +214,7 @@ allowed-tools: Read
 2. Any settings layer with `autopilot: denied`: state stays off; inject "autopilot denied by <file>". [approved]
 3. `off`, or a prompt-initial "stop autopilot", turns it off. Turning off is always allowed. [CV caveman-parse.js:250-260 durable off]
 4. State `autopilot: on`, `since: <iso time>`. Reset on `startup` and `clear`; kept on `compact` and `resume`. [approved]
-5. While on, each prompt carries: "autopilot ON: commit on a non-protected branch with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or $( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly, commands spelled out: no wrapper, no cd, no run-time-built name, no unparseable shell script, no code piped to a shell, no gh alias; git add in its own call, before the commit; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls." [M1 close: names the shapes the guards prove]
+5. While on, each prompt carries: "autopilot ON: commit on a non-protected branch with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or $( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly, commands spelled out: no wrapper, no cd, no run-time-built name, no unparseable shell script, no code piped to a shell, no gh alias; git add in its own call, before the commit; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls not on the stop list." [M1 close: names the shapes the guards prove]
 6. The dispatcher reads `autopilot_on` (settings allowed and state on) once and applies it to every guard. G16 protects the state. [approved]
 
 **4. Steps**
@@ -223,7 +223,7 @@ allowed-tools: Read
 3. `on` refused by settings: name the file and key. Do not suggest changing it unless asked.
 4. `status`, or no argument: on or off, since when, settings source, `rebase.push` value.
 5. `off`: confirm; list `parked:` lines from `WORK/ledgers/*/ledger.md` written since `since`. [new]
-6. `go <ticket>` recorded: read `references/run.md`, then take the ticket to a draft PR. Any other hook line about the go: quote it and start nothing.
+6. `go <ticket>` recorded: read `references/run.md`, then take the ticket to a draft PR. No such line, or any other hook line about the go: no go, so quote what the hook said, if anything, and start nothing.
 
 **5. Outputs.** Chat only.
 

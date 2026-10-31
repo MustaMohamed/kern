@@ -52,7 +52,8 @@ test('autopilot documents the go: its step, its reach and what a refused go does
   const go = body.split('\n6. `go <ticket>`')[1].split('\n\n')[0];
   assert.match(go, /`kern: go recorded for <ticket>`/);
   assert.ok(go.includes('Read `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`'), go);
-  assert.match(go, /Any other hook line about the go means no go: quote it and start nothing\./);
+  assert.match(go, /No such line, or any other hook line about the go, means no go: quote what the hook said, if anything, and start nothing\./);
+  assert.match(go, /The run ends at the draft PR or at a stop under that file's rules, so ask for no stop predicate\./);
   assert.ok(body.includes('3. `on` or `go <ticket>`, and the hook reported "autopilot denied by <file>"'), 'a denied go names the file');
   const who = body.split('## Who can turn it on\n')[1];
   for (const s of ["A go counts as the user's yes for that ticket's spec and plan and nothing else.", 'A second ticket needs a second go.',
@@ -65,6 +66,11 @@ test('autopilot says what may follow an allowed shape, in the words settings.md 
   assert.ok(body.includes(rule), 'the skill holds the rule');
   assert.ok(readFileSync(join(import.meta.dirname, '..', 'kernel', 'settings.md'), 'utf8').includes(rule), 'settings.md holds the same words');
   assert.ok(body.includes('\n4. `status`, or no argument:'), 'a bare /kern:autopilot reports status, as the hook treats it');
+});
+
+test('autopilot parks only the judgment calls run.md does not stop for', () => {
+  const { body } = read('autopilot');
+  assert.ok(body.includes('Park each judgment call `references/run.md` does not stop for, with the default chosen, and continue the work that does not depend on it.'));
 });
 
 test('the map names the go', () => {
@@ -94,6 +100,7 @@ test('run.md holds the stop list row by row, with the stop the plan adds', () =>
 test('run.md says what each stop means and what a stop does', () => {
   const stops = section(RUN, '## The stop list');
   for (const s of ['A run stops only on this list.',
+    "This list loosens nothing else: the stops in this file, a route's run-ending failures, a red required check and the user's stop predicate still stop a run, and the kernel's floor holds, so a floor action is skipped and reported.",
     'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. Work that does not depend on the answer may finish first.',
     "Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.",
     "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
@@ -135,7 +142,8 @@ test('run.md lists every report field, the jobs another skill ran among them', (
 });
 
 test('run.md sends long output to a file under kern-dir tmp and reads its tail', () => {
-  assert.ok(section(RUN, '## Long output').includes('Long output goes to a file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints, and the run reads its tail.'));
+  // An allowed git or gh shape may only redirect to /dev/null or copy a descriptor, so its output stays out of the rule.
+  assert.ok(section(RUN, '## Long output').includes('Long output from a command that is not an allowed git or gh shape goes to a file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints, and the run reads its tail.'));
 });
 
 test('each route under autopilot points at run.md from its own section', () => {

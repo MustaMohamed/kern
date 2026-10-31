@@ -65,6 +65,7 @@ expand() {
   expand kern:autopilot on
   submit "next task"
   [[ "$output" == *"autopilot ON: commit on a non-protected branch with exactly one -m '<msg>' or -F <file> in the repo,"* ]] || false
+  [[ "$output" == *"; park judgment calls not on the stop list."* ]] || false
   [[ "$output" == *"no run-time-built name, no unparseable shell script, no code piped to a shell, no gh alias;"* ]] || false
   [[ "$output" != *"no shell script or code"* ]] || false
 }

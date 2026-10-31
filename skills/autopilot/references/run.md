@@ -18,6 +18,8 @@ These rules cover kern's routes only. A job an `overrides.<job>` key leaves to a
 
 A run stops only on this list. At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. Work that does not depend on the answer may finish first.
 
+This list loosens nothing else: the stops in this file, a route's run-ending failures, a red required check and the user's stop predicate still stop a run, and the kernel's floor holds, so a floor action is skipped and reported.
+
 Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.
 
 A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.
@@ -56,4 +58,4 @@ Every run ends with one report: the ticket and PR, each stop, each block and the
 
 ## Long output
 
-Long output goes to a file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints, and the run reads its tail.
+Long output from a command that is not an allowed git or gh shape goes to a file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints, and the run reads its tail.
