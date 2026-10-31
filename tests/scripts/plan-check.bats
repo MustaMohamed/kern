@@ -277,7 +277,7 @@ slice_spec() {
   [ -z "$output" ]
 }
 
-@test "a plan that drops an acceptance line fails with no ## Later slices, and for a line left out of it" {
+@test "a line still under the acceptance heading fails when no task covers it, whatever else the spec holds" {
   sed -i.bak '/^### Task 2:/,$d' plan.md
   pc plan.md
   [ "$status" -eq 1 ]

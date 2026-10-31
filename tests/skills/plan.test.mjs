@@ -26,8 +26,8 @@ test('plan sections and steps', () => {
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
   // 6,600 since the pilot fix plan's Task 5 (raised from 6,500): step 1 reads pr.max_lines, step 9 writes the Size line.
   // 6,700 since the pilot fix plan's Task 5 fix round: step 7 acts on pr.max_lines and states a limit in chat only.
-  // 7,850 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
-  assertMaxBytes(SKILL, 7850);
+  // 7,900 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
+  assertMaxBytes(SKILL, 7900);
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
@@ -41,7 +41,8 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   // 1,450 since the pilot fix plan's Task 5 (raised from 1,400): the States, Size, Non-goals and spike checks.
   // 1,600 since pilot fix plan 2's Task 4: the Size check reads the gate's own measure, re-indented lines included.
   // 1,650 since that task's review fix: the gate's measure is named, `git diff --shortstat` or `pr.size_command`.
-  assertMaxBytes('skills/plan/references/plan-review.md', 1650);
+  // 1,900 since M3 part 1 Task 5: a spec with `## Later slices` must show its overrun.
+  assertMaxBytes('skills/plan/references/plan-review.md', 1900);
   assertContains('skills/plan/references/plan-review.md', ["Check its line estimate in the gate's own measure (`git diff --shortstat`, or `pr.size_command` when set) against the file map, re-indented lines included"]);
 });
 
@@ -95,7 +96,7 @@ test('plan pins order, routing and stop rules', () => {
     'A yes with a change request: make it, show it, ask again',
     'A reply that is no explicit yes or names no choice: ask again',
     '`tracker`, `tracker.first`',
-    'Under autopilot a step 1 stop parks: give the `parked:` line in the reply and create no plan file',
+    'Under autopilot with no go a step 1 stop parks: give the `parked:` line in the reply and create no plan file',
     'the split, never a plan over `scope_threshold`',
     'Draft tracker sub-issues only on request',
     'execute-plan runs only an approved plan',
@@ -225,7 +226,9 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
   assert.ok(go.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
   assert.ok(go.includes('run the same plan-check again'), go);
   // One go covers one draft PR. plan-check fails a plan that leaves a spec line uncovered, so the split is in the spec.
-  assert.ok(go.includes('A plan over `scope_threshold` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan, then plan-check runs.'), go);
+  assert.ok(go.includes('A plan over `scope_threshold` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan giving the whole ticket\'s files and lines against the limit, then plan-check runs.'), go);
+  // Nobody confirms the split under a go, and a moved line leaves proof-check and self-review's spec lane, so a reviewer checks the overrun.
+  assertContains('skills/plan/references/plan-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size` or the plan\'s `Decision:` line. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
   assert.ok(go.includes('The report lists the later slices, each needing its own go.'), go);
   // With no go the plan stays a draft.
   assert.ok(lines.some((l) => l.includes('When on with no go, every stop parks') && l.includes('write the plan with `status: draft`')), 'parking is the no-go path');

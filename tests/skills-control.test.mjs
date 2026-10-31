@@ -127,6 +127,12 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   ]);
 });
 
+test('run.md gives define\'s first slice the default of a plan over scope_threshold', () => {
+  // The table's row names only a plan, so a strict reading would stop a run at define's split.
+  const rounds = section(RUN, '## Fix rounds');
+  assert.ok(rounds.includes('each needs its own go |\n\ndefine\'s first slice takes the same default.\n'), 'the sentence follows the table');
+});
+
 test('run.md lists every report field, the jobs another skill ran among them', () => {
   const report = section(RUN, '## The run report');
   for (const s of ['the ticket and PR', 'each stop', 'each block and the route taken', 'each decision with its why', 'each skipped step', 'each check with its result',

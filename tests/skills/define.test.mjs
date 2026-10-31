@@ -34,8 +34,8 @@ test('define sections, steps, the standing gate and red flags', () => {
   // step 9's route to plan.
   // 6,950 since the pilot-fix test round's fix (2026-10-25): step 9's line estimate and "whatever `scope_threshold` allows".
   // 7,000 since pilot fix plan 2's Task 4: step 6 counts a re-indented file's moved lines.
-  // 8,000 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
-  assertMaxBytes(SKILL, 8000);
+  // 8,100 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
+  assertMaxBytes(SKILL, 8100);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -95,7 +95,8 @@ test('define references', () => {
     // 3,450 since pilot fix plan 2's Task 4: the re-indent and ticket-measure sentences, and the short form's Not doing.
     'spec-template.md': [['# Spec template', '## Problem', '## Size', '## Intent', '## Constraints', '## Assumptions', '## Success criteria', '## Acceptance criteria', '## Decisions', '## Compatibility', '## Authorization', '## Rollout', '## Checklists', '## Test seams', '## Not doing', '## Open questions'], 3450],
     'interview.md': [['# Interview', '## Skip offer and build choices', '## Hypothesis and confidence', '## One question at a time', '## Want versus should-want', '## Restate and confirm', '## When to step back'], 3200],
-    'spec-review.md': [['# Spec reviewer brief', '## What to check', '## Builder questions', '## Calibration', '## Output'], 1600],
+    // spec-review.md: 1,800 since M3 part 1 Task 5: a spec with `## Later slices` must show its overrun.
+    'spec-review.md': [['# Spec reviewer brief', '## What to check', '## Builder questions', '## Calibration', '## Output'], 1800],
     'handover.md': [['# Handover', '## Sort', '## Hand over'], 1200],
     'capability-map.md': [['# Capability map', '## When to split', '## Map format', '## Approval'], 1200],
   };
@@ -162,7 +163,10 @@ test('under a go define runs to an approved spec, and with no go it parks', () =
   assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
   // One go covers one draft PR. The split is in the spec, so plan-check and proof-check count the slice unchanged.
   assert.ok(go.includes('A capability-map ticket writes no map.'), go);
-  assert.ok(go.includes('That ticket, or a size over `scope_threshold`, specs its first slice: numbered lines under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go.'), go);
+  assert.ok(go.includes('That ticket, or a size over `scope_threshold`, specs its first slice: `## Size` gives the whole ticket\'s files and lines against the limit, numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go.'), go);
+  // Nobody confirms the split under a go, and a moved line leaves proof-check and self-review's spec lane, so a reviewer checks the overrun.
+  assertContains('skills/define/references/spec-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size`. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
+  assertContains('skills/define/references/spec-template.md', ['A split adds an optional `## Later slices`.']);
   // Both paths reach an approved spec, so plan has one to read. The architectural path keeps its checks.
   assert.ok(go.includes("Bounded: step 9's one write, so plan has an approved spec to read."), go);
   assert.ok(go.includes("Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again."), go);
