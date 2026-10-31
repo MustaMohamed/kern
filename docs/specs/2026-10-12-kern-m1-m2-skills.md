@@ -724,7 +724,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/commit.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** AD git-workflow-and-versioning; ADC build.md; SP finishing-a-development-branch; MM-ship 8 and G5. SKILL.md at most 5,358 bytes (raised from 4,200 in M2a Task 24: per-task staging needs its package path, overlap and worktree rules; raised from 5,200 in M2b Task 17: the Unreleased changelog line in step 3, coverage AD24; raised from 5,328 in M3 part 1 Task 6: the pointer line to the run rules); `references/ledger-tasks.md` at most 2,000 bytes.
+**8. Sources; size.** AD git-workflow-and-versioning; ADC build.md; SP finishing-a-development-branch; MM-ship 8 and G5. SKILL.md at most 5,370 bytes (raised from 4,200 in M2a Task 24: per-task staging needs its package path, overlap and worktree rules; raised from 5,200 in M2b Task 17: the Unreleased changelog line in step 3, coverage AD24; raised from 5,328 in M3 part 1 Task 6: the pointer line to the run rules); `references/ledger-tasks.md` at most 2,000 bytes.
 
 ---
 
@@ -740,7 +740,7 @@ allowed-tools: Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLU
 ---
 ```
 
-**2. Purpose.** Integrate finished work the user's way, with a fresh base and a reviewer-ready draft PR. Slash: every step ends in an outward choice.
+**2. Purpose.** Integrate finished work the user's way, with a fresh base and a reviewer-ready draft PR. Slash: every step ends in an outward choice. The SKILL.md leaves the first sentence's opening clause out to make room for the pointer to the run rules (M3 part 1 Task 6).
 
 **3. Inputs.** `base_branch`, `branch.protected`, `test.full`, `scope_threshold`, `pr.max_lines` (300), `pr.size_command` (none), `push.policy`, `pr.policy` (`draft-after-approval`), `pr.template` (detected), `pr.dedup` (`on`), `deploy.envs`, `tracker`.
 

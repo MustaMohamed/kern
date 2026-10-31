@@ -39,9 +39,9 @@ Code and tests in the chosen tree; a chat report. `wt-diff` writes a review pack
 
 ## Stops and autopilot
 
-Stops at steps 1, 2, 3, 5 and 8. Under autopilot the steps are the same, RED is never skipped, and a file outside the approved list parks the slice with a `parked:` line.
+Stops at steps 1, 2, 3, 5 and 8. Under autopilot the steps are the same, RED is never skipped, and a file outside the approved list parks the slice.
 
-Under autopilot, stops, unblocking and the run report follow skills/autopilot/references/run.md.
+Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.
 
 ## Red flags
 

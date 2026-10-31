@@ -139,7 +139,7 @@ test('run.md sends long output to a file under kern-dir tmp and reads its tail',
 });
 
 test('each route under autopilot points at run.md from its own section', () => {
-  const pointer = 'Under autopilot, stops, unblocking and the run report follow skills/autopilot/references/run.md.';
+  const pointer = 'Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.';
   for (const name of ['implement', 'execute-plan', 'self-review', 'finish-branch', 'commit', 'diagnose']) {
     const { body } = read(name);
     assert.ok((section(body, '## Stops and autopilot') ?? '').split('\n').includes(pointer), name);

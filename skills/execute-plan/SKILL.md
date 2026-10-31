@@ -48,7 +48,7 @@ Review needs no commits: a task's change is the diff of its worktree's snapshot 
 
 Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on, steps 1 and 2 and a failed `wt-new` still end the run. A later stop parks as `parked: <question>; default: <choice>; why: <one line>` in the ledger: a question takes its default (the plan's text; a red baseline goes on, naming red-before tests; the size stop takes one PR, why: a split is the user's scope call and a draft can be closed), a stopped task stays open with every task blocked by it, and disjoint tasks continue. One commit per closed task when its checks pass, through `/kern:commit`; G5 allows only `git commit -m` or `-F <file>` on an unprotected branch. Without autopilot `commits: ask` holds: no commit. Push and a draft PR only through finish-branch; teardown never runs. Isolation, serialization, expand and contract, read-only production, the round cap, tests and secrets do not loosen.
 
-Under autopilot, stops, unblocking and the run report follow skills/autopilot/references/run.md.
+Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.
 
 ## Red flags
 
@@ -59,4 +59,4 @@ Under autopilot, stops, unblocking and the run report follow skills/autopilot/re
 | "One more round will converge" | Past round 3 the failure is structural. Stop with a split proposal. |
 | "The fix was small, skip the re-review" | task-done refuses a tree no review approved. Re-review every fix. |
 | "This finding is wrong, I'll drop it" | Argue it in the re-review. At the cap, the split proposal names it. |
-| "Ledger bookkeeping is overhead" | The ledger is what survives compaction. Write each line as it happens. |
+| "Ledger bookkeeping is overhead" | The ledger survives compaction. Write each line as it happens. |

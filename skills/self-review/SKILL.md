@@ -44,4 +44,4 @@ A chat report: the deterministic output, findings under Standards and Spec, each
 
 Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Under autopilot a stop parks as `parked: <question>; default: <choice>; why: <one line>`: a failed fetch (origin exists) goes on with the last fetched ref; an unresolved command leaves its check failed and named. A missing base and any `wt-diff` non-zero exit end the run; lessons are not written.
 
-Under autopilot, stops, unblocking and the run report follow skills/autopilot/references/run.md.
+Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.
