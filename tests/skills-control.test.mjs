@@ -164,12 +164,15 @@ test('run.md keeps a go\'s main thread small, and one read of a route file does 
   assert.ok(main, 'the section exists');
   assert.ok(main.includes('Under a go, tasks run in subagents; bulk reads go to investigators; a route file is read once'), main);
   assert.ok(main.includes(', and again only after compaction.'), main);
+  // Fix round 1, M1: an investigator's summary does not stand in for a read a step names.
+  assert.ok(main.includes("A step's named read stays in the main thread."), main);
 });
 
 test('run.md stays within its byte cap', () => {
   // 6,100 since M3 part 1 Task 15, its first cap: the main-thread rule, and define's and plan's go rules behind a pointer.
-  assertMaxBytes('skills/autopilot/references/run.md', 6100);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,100 bytes (M3 part 1 Task 15']);
+  // 6,130 since its fix round 1: a step's named read stays in the main thread.
+  assertMaxBytes('skills/autopilot/references/run.md', 6130);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,130 bytes (6,100 until M3 part 1 Task 15 fix round 1']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {

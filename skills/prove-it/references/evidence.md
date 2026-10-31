@@ -1,6 +1,6 @@
 # Evidence by claim
 
-Each claim needs its proving command run fresh, in full, on the tree that will be integrated. A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay. `<id>` is from `wt-snap` before that run; the citing step's `wt-snap` must match it. A subagent's report is no such run.
+Each claim needs its proving command run fresh, in full, on the tree that will be integrated. A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay. `<id>` is from `wt-snap` before that run; the citing step's `wt-snap` must match it. The main session saves that run's output as `test-full-<id>.log` under `kern-dir tmp`; a citing step writes `skip: test.full, passed on <id>: <log>, <summary line>`. No log, or no passing summary line in it: rerun. A subagent's report is no such run.
 
 ## Claim table
 
@@ -25,4 +25,4 @@ Each claim needs its proving command run fresh, in full, on the tree that will b
 
 Skipped tests, zero tests ran, a run in the wrong environment, a timeout, a probe that could not run, and output you did not read all count as a failed proof. Suspect the observation method (wrong directory, cached build, wrong target) before the system.
 
-A failed emulator walk resumes from the failed step, at most 2 reruns of a step, then it is a required check that cannot run.
+A failed emulator walk resumes from the failed step only on the same tree, at most 2 reruns of a step. A fix moves the tree, so the walk reruns whole from a clean app. Past 2 reruns, a real failure is red and takes a fix round; only a walk that cannot run is a required check that cannot run.

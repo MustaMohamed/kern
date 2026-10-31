@@ -40,19 +40,25 @@ test('self-review sections and steps', () => {
   // 8,500 since pilot fix plan 2's Task 5: step 6 searches readers for moved literals, step 7 makes no fork of its own.
   // 8,550 since that task's review fix: step 6 names every other reader, step 7 names the lone ! drop.
   // 8,750 since M3 part 1's Task 15: step 4's lane stands down for a whole-branch review that passed on this exact tree, in checkable words.
-  assertMaxBytes(SKILL, 8750);
+  // 8,965 since its fix round 1: the skip names the final review's files and base tree and the spec it took.
+  assertMaxBytes(SKILL, 8965);
 });
 
 test('the spec lane stands down only for a whole-branch review that passed on this exact tree', () => {
   // M3 part 1 Task 15: the design's "Whole-branch review twice on one tree". After a fix the tree differs, so the lane runs.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[4].includes('When a whole-branch review passed on this exact tree, `skip: spec lane, whole-branch review passed on <tree>`'), s[4]);
-  // What "this exact tree" and "passed" mean, in words a run can check.
-  assert.ok(s[4].includes("`<tree>` is step 1's second output line and that review's `<package>.tree`, and its return says `Spec: compliant` and `Task quality: approved`."), s[4]);
-  // The tree comes from the script, the verdicts from the reviewer's own lines, and execute-plan saves the return.
+  // Fix round 1, I1: every part of "this exact tree" and "passed" is a file or a tree a run can read. A base other than the
+  // plan's makes a different package, and step 12's fix round moves the tree off final.diff.tree, so either way the lane runs.
+  for (const n of ['In the ledger whose `Worktree:` path is `<wt>`, that needs', "`<ledger dir>/reviews/final.diff.tree` to hold step 1's second output line,",
+    '`<ledger dir>/reviews/final.txt` to say `Spec given: <this spec>`, `Spec: compliant` and `Task quality: approved`,',
+    "and the line's base tree to equal `git -C <wt> rev-parse <merge-base>^{tree}`.", 'Any mismatch: the lane runs.']) assert.ok(s[4].includes(n), n);
+  assert.ok(!s[4].includes('that review\'s `<package>.tree`'), s[4]);
+  // The tree comes from the script, the verdicts from the reviewer's own lines, and execute-plan saves the return under its spec.
   assertContains('scripts/wt-diff', ['# Prints: package path, TO_TREE, then one changed path per line.', '<package>.tree, which holds TO_TREE']);
   assertContains('agents/task-reviewer.md', ['Spec: compliant | issues', 'Task quality: approved | needs fixes']);
-  assert.ok(steps(readDoc('skills/execute-plan/SKILL.md').body)[12].includes('Save its return as `<ledger dir>/reviews/final.txt`'));
+  const e12 = steps(readDoc('skills/execute-plan/SKILL.md').body)[12];
+  assert.ok(e12.includes('--out <ledger dir>/reviews/final.diff') && e12.includes('Save its return as `<ledger dir>/reviews/final.txt`') && e12.includes('`Spec given: <path or none>`'), e12);
   // A skip line never turns a failed check green, and a later round still runs every step on its new tree.
   assertContains(SKILL, ['A lane skip line is reported and does not change the verdict.', 'runs every step, the checks the last skipped included']);
 });

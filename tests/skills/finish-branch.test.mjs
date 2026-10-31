@@ -137,10 +137,22 @@ test('one passed test.full stands for its exact tree, in each step that would ru
   assert.ok(imp.indexOf('take `<id>` with `wt-snap <wt>`') >= 0, imp);
   const agent = readDoc('agents/implementer.md').body.split('\n').find((l) => l.startsWith('4. Method:')) ?? '';
   assert.ok(agent.includes(`run the full suite once at the end. ${rule}`), agent);
-  assertContains('agents/implementer.md', ['the full-suite command, its tree `<id>` and its summary line;']);
+  // Fix round 1, I2: `<id>` in the report field had no reader, and a subagent's report is no such run.
+  assertContains('agents/implementer.md', ['the full-suite command and its summary line;']);
   // The red flag and prove-it's rule still hold: a run proves only the tree it ran on, and a report is a claim.
   assertContains(SKILL, ['| "Tests passed earlier this session" | A run proves only the tree it ran on.']);
   assertContains('skills/prove-it/references/evidence.md', ['`<id>` is from `wt-snap` before that run; the citing step\'s `wt-snap` must match it.', "A subagent's report is no such run."]);
+});
+
+test('a cited test.full has a log a reader can check, and without it the run happens again', () => {
+  // M3 part 1 Task 15 fix round 1, I2: the skip rested on memory. The log is the record, with no new ledger line.
+  const e = readDoc('skills/prove-it/references/evidence.md').raw;
+  for (const n of ["The main session saves that run's output as `test-full-<id>.log` under `kern-dir tmp`;", 'a citing step writes `skip: test.full, passed on <id>: <log>, <summary line>`.',
+    'No log, or no passing summary line in it: rerun.']) assert.ok(e.includes(n), n);
+  // execute-plan saves its run by a pointer, and finish-branch step 4 reaches the rule through prove-it, whose step 3 names the file.
+  assert.ok(steps(readDoc('skills/execute-plan/SKILL.md').body)[11].includes('Save its output as `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/references/evidence.md` says.'));
+  assert.ok(steps(readDoc(SKILL).body)[4].includes('by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`'));
+  assert.ok(steps(readDoc('skills/prove-it/SKILL.md').body)[3].includes('`references/evidence.md` says when a passed `test.full` stands.'));
 });
 
 test('under autopilot a stop waits for a typed reply, and only a judgment call that takes a default parks', () => {

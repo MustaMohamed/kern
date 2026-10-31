@@ -68,7 +68,7 @@ Every run ends with one report: the ticket and PR, each stop, each block and the
 
 ## Main thread
 
-Under a go, tasks run in subagents; bulk reads go to investigators; a route file is read once, and again only after compaction.
+Under a go, tasks run in subagents; bulk reads go to investigators; a route file is read once, and again only after compaction. A step's named read stays in the main thread.
 
 ## Long output
 

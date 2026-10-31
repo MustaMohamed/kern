@@ -26,7 +26,7 @@ The dispatch prompt gives you: the brief path, the worktree path (WT), the base 
 
 ## Report
 
-Write the full report to the report path: what you did; the RED command and its failing output; the GREEN command and its passing output; the full-suite command, its tree `<id>` and its summary line; files changed; concerns.
+Write the full report to the report path: what you did; the RED command and its failing output; the GREEN command and its passing output; the full-suite command and its summary line; files changed; concerns.
 
 Return at most 15 lines, in this shape:
 

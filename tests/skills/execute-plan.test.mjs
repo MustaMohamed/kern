@@ -45,7 +45,9 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // stop from a judgment call and says how a go and an open task end, and a refused path counts as a review, after word cuts.
   // 15,700 since M3 part 1's Task 15: step 1 names ledger-open's working-file refusal, step 10 task-done's timeout and a refused
   // `--no-probe`, step 11 the one-run rule, step 12 the saved return, after the dead parameter's words and `size-check`'s path went.
-  assertMaxBytes(SKILL, 15700);
+  // 16,150 since its fix round 1: step 10's timeout rule and task-start line, step 11's saved log, step 12's spec, rules and asks,
+  // after a word trim.
+  assertMaxBytes(SKILL, 16150);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
   // 1,350 since the final review of pilot fix plan 2: round 2's review is `evidence` too, on the new report, not re-review.
   assertMaxBytes('skills/execute-plan/references/verification.md', 1350);
@@ -128,8 +130,8 @@ export const PINS = {
     '(after round 3: the split proposal)', '`command exited 126` or `127`: stop.',
     'Exit 3, an inconclusive probe: rerun with `--no-probe "probe inconclusive: <reason>"` only for a new module or export, or a patch of test files only; else stop and ask.',
     'Under autopilot, exit 3 with no allowed `--no-probe` reason is a required check that cannot run.',
-    'Exit 2: a changed or unapproved tree, review it; a refused `--no-probe` (a path outside docs and config, no start line, no could-not-judge record): rerun with `--probe`; a probe error, stop.',
-    "`task-done` gets a Bash timeout of three times the test's time, capped at the tool's 10 minutes; a longer run goes in the background.",
+    'Exit 2: a changed or unapproved tree, review it; a refused `--no-probe` (a path outside docs and config, no could-not-judge record): rerun with `--probe`; no start line: run `task-start` with `tree-before`, then rerun; a probe error, stop.',
+    "`task-done`'s Bash timeout is the tool's default or five times the test's time plus setup, whichever is longer, capped at the tool's 10 minutes. Longer, or cut off once: the Bash tool's background mode, never `&`; wait for its notification, then read its exit and the ledger.",
     "Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6 (a wave task: after step 11).",
     "Then task-done's `size:` lines size the plan worktree (a wave: after step 11, `size-check <ledger>`)",
     'so untracked files count; never `git add` to count, not even `-N`.',
@@ -138,11 +140,11 @@ export const PINS = {
     'when the Size line was already over it, take its one-PR word with no ask',
     'Either way record the word, quoted, with `lines: <n> (<measure>)` and the `-w` count, in a `Decision:` line whose what opens with size; `split` ends the run.'],
   11: ["apply each closed worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt> --tree <complete line's tree>`",
-    'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then take `<id>` with `wt-snap` and run `test.full` there; red: stop.',
+    'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then take `<id>` with `wt-snap` and run `test.full` there; red: stop. Save its output as `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/references/evidence.md` says.',
     'A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay.'],
   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',
     "(the `Worktree:` line's base tree)", 'mode `whole-branch` on `model.final_review`', 'to triage which minors block', 'Re-grade findings by effect.',
-    'Save its return as `<ledger dir>/reviews/final.txt` with the Write tool.',
+    'Save its return as `<ledger dir>/reviews/final.txt` with the Write tool, opening `Spec given: <path or none>`.',
     'One fix subagent gets the complete findings list, real gaps included (`kern:implementer`, a step 6 brief), each fix red then green',
     "one `re-review` on `model.final_review` of its diff from `final.diff`'s second line, packaged with an `--allow-file` per task", 'Residual findings go to the user in step 13.'],
   13: ['`ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report.', "No push or PR, no commit beyond step 10's (autopilot: below)"],
@@ -201,6 +203,17 @@ test('execute-plan keeps one review flow, with the dead Agent parameter gone fro
   assert.ok(s[9].includes('gets a `re-review` with that file, dispatched, saved and recorded as step 8 does'), s[9]);
   assert.ok(s[12].includes('dispatch `kern:task-reviewer` in mode `whole-branch` on `model.final_review` with the package'), s[12]);
   assert.ok(s[12].includes('packaged with an `--allow-file` per task, dispatched as the whole-branch review is.'), s[12]);
+});
+
+test('the final review is the same proof as self-review\'s spec lane, so one can stand for the other', () => {
+  // M3 part 1 Task 15 fix round 1, I1: this review never saw acceptance text, `States:`, `Handles:` or Not doing lines, and got no
+  // `review.rules`, while self-review's lane skipped on its word. It now takes what the lane takes and asks what the lane asks.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[12].includes("with the package, the plan, that list, the plan's `spec:` file, if any, and the `review.rules` files, to triage which minors block and ask what is missing, partial, unasked or wrong, quoting spec lines."), s[12]);
+  const lane = steps(readDoc('skills/self-review/SKILL.md').body)[4];
+  assert.ok(lane.includes('the `review.rules` files') && lane.includes('Ask what is missing, partial, unasked or wrong, quoting spec lines.'), lane);
+  const mode = readDoc('agents/task-reviewer.md').body.split('\n').find((l) => l.startsWith('- `whole-branch`:')) ?? '';
+  assert.ok(mode.includes('Given a spec, also ask what is missing, partial, unasked or wrong, quoting spec lines.'), mode);
 });
 
 test('execute-plan rules on each "Declined to judge" line and reports it in step 13', () => {
@@ -338,15 +351,21 @@ test('step 10 names task-done\'s refusals of --no-probe, so none is an unnamed e
   const at = ['Exit 2: a changed or unapproved tree, review it;', 'a refused `--no-probe`', 'a probe error, stop.'].map((t) => s[10].indexOf(t));
   assert.ok(at[0] >= 0 && at[0] < at[1] && at[1] < at[2], s[10]);
   // The probe stays the path: a refused skip reruns it, and exit 3 keeps its own stop.
-  assert.ok(s[10].includes('rerun with `--probe`; a probe error, stop.'), s[10]);
+  assert.ok(s[10].includes('rerun with `--probe`;'), s[10]);
+  // Fix round 1, M3: no start line takes the script's own action, on the step 6 tree: `tree-after` would shrink the change to nothing.
+  assertContains('scripts/task-done', ['so --no-probe cannot see what it changed; run task-start']);
+  assert.ok(s[10].includes('no start line: run `task-start` with `tree-before`, then rerun;'), s[10]);
+  assert.ok(!s[10].match(/\(a path outside[^)]*no start line/), s[10]);
   assert.ok(s[10].includes('Under autopilot, exit 3 with no allowed `--no-probe` reason is a required check that cannot run.'), s[10]);
 });
 
 test('task-done\'s Bash timeout covers the test, the probe and its fork', () => {
   // M3 part 1 Task 15: the design's "`task-done` runs a test up to four times", and a call the tool cut off left no
   // complete line. A longer run does not lose a check: it only moves to the background.
+  // Fix round 1, I4: three times sat at the normal run count, and a 5 s test fell under the tool's default.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[10].includes("`task-done` gets a Bash timeout of three times the test's time, capped at the tool's 10 minutes; a longer run goes in the background."), s[10]);
+  assert.ok(s[10].includes("`task-done`'s Bash timeout is the tool's default or five times the test's time plus setup, whichever is longer, capped at the tool's 10 minutes. Longer, or cut off once: the Bash tool's background mode, never `&`; wait for its notification, then read its exit and the ledger."), s[10]);
+  assert.ok(!s[10].includes('three times'), s[10]);
 });
 
 test('a resumed fix round goes to step 9, and to step 8 only after a refused round', () => {
