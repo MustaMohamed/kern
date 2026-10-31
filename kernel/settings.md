@@ -17,7 +17,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 |---|---|---|---|
 | `kern` | `on` | `on`, `off`. `off` turns off routing and guards in this project | session-start, subagent-start, prompt-submit, pre-tool-use |
 | `kern_repo` | none | path to the kern clone, in the user file only | help |
-| `work_dir` | `.kern` | relative directory at the main worktree root | kern-dir, pre-tool-use G2, G3, G5 and G14, all skills |
+| `work_dir` | `.kern` | relative directory at the main worktree root | kern-dir, pre-tool-use G2, G3, G5, G14 and G21, all skills |
 | `mode.voice` | `normal` | `normal`, `terse` | session-start, prompt-submit, subagent-start |
 | `mode.voice.headless` | `normal` | `normal`, `terse`. The voice a headless session (`claude -p`, the Agent SDK) starts in, in place of `mode.voice` | session-start, prompt-submit, subagent-start |
 | `mode.surface` | `auto` | `chat`, `auto`, `html` | session-start, prompt-submit |
@@ -61,7 +61,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `stack.tool` | detected | `gh-stack`, `git`, `none` | take-feedback, finish-branch |
 | `protected_targets` | none | comma list. Each entry is an exact host, matched in any case, also as user@host or in a URL. An entry may also be a host:port, where localhost, 127.0.0.1 and ::1 count as one host, or an sqlite file path. List every ssh alias and each SSH tunnel's local host:port | pre-tool-use G13, diagnose |
 | `evidence_agents` | none | comma list of project agents for read-only data | diagnose |
-| `never_commit` | none | comma list of path globs | pre-tool-use G6, commit |
+| `never_commit` | none | comma list of path globs | pre-tool-use G5 and G6, commit |
 | `review.rules` | CLAUDE.md, `.claude/rules/**`, CONTRIBUTING.md | comma list of paths | self-review, execute-plan, pr-review |
 | `review.taxonomy` | `blocker,should-fix,nit,pre-existing` | comma list of labels | pre-tool-use G3, self-review, pr-review |
 | `review.post_policy` | `ask` | `ask`, `auto`, `deny` | pre-tool-use G3 |
@@ -101,6 +101,7 @@ When the user's last typed prompt was an explicit instruction for that action, i
 | Action | Allowed shape | With the policy key at `auto` | Under autopilot |
 |---|---|---|---|
 | Commit | `git commit -m <msg>` or `git commit -F <file>`, exactly one of the two, plus only `-q` or `-v`, on a branch that is not protected. The message passes the convention, ticket-id and attribution checks | `commit.policy` allows it | allowed |
+| Stage | `git add` or `git stage` of named files, with only `-v`, on a branch that is not protected. `git -C <dir>` may come first when `<dir>` is in this repository. Each path is relative, with no `..` part, not a directory, and not on `never_commit` | no key, and kern casts no vote | allowed |
 | Push | `git push [-u] <remote> <current-branch>` to a branch that is not protected. The remote is one `git remote` lists, with no push URL and no URL rewrite | `push.policy` allows it | allowed |
 | Lease push | `git push --force-with-lease <remote> <current-branch>` to a branch that is not protected, when every commit on it past the base branch is the user's | never allowed. It asks or denies | allowed only with `rebase.push: autopilot` |
 | Draft PR | `gh pr create --draft` from the current branch, with `--title`, `--base`, `--fill`, `--fill-first`, `--fill-verbose`, `--dry-run`, `--no-maintainer-edit`, `--body-file <file>` or `--head` naming the current branch, after the duplicate check finds no PR for the branch | `pr.policy` allows it | allowed |
@@ -118,5 +119,7 @@ Each allowed git or gh shape is the whole Bash call. Nothing runs before it: no 
 A `<file>` is a regular file, not a symlink, inside the main worktree and outside `.git`. It is under `work_dir`, or git does not ignore it.
 
 The other guards still vote, and the strictest vote wins. G6 denies a commit or push that holds a possible secret or a `never_commit` path. G3 denies a review body that does not open with a `review.taxonomy` label, and an approval of the user's own PR.
+
+G21 judges local deletes in both modes: `rm`, `rmdir`, `unlink`, `shred`, their GNU names and `find -delete`. Every target inside the command's worktree, `.git` and its top aside, or in a scratch directory (`$TMPDIR`, `/tmp`, `/private/tmp`, `WORK/tmp`) passes with no vote. Any other target, or one kern cannot resolve, asks, and autopilot denies it. Another worktree is outside, and so is a directory that holds one, unless that is the main checkout around this worktree. A link or move in the same command needs its own call.
 
 `tracker.policy: auto` never covers a delete or another tracker's MCP writes. Chat messages always ask. Merge, deploys and the other floor actions have no allowed shape.

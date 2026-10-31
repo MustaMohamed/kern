@@ -388,6 +388,84 @@ CDS-2465 in the body'"
   done
 }
 
+@test "autopilot allows git add of named files" {
+  policy 'never_commit: .env, secrets/*, src/*.pem\n'
+  mkdir -p "$R/src/lib"
+  set_autopilot on
+  local c
+  for c in "git add -- src/a.ts" "git add src/a.ts README.md" "git stage -- a.txt" "git add -v -- a.txt" \
+    "git add -- ./src/a.ts" "git -C src add -- a.ts" "git add -- src/a.ts 2>&1 | tail -3"; do
+    expect allow "" "$c" || return 1
+  done
+  [[ "$output" == *'"permissionDecision":"allow"'* ]] || false
+  # Outside autopilot G5 stays silent.
+  set_autopilot off
+  expect none g05 "git add -- src/a.ts"
+}
+
+@test "autopilot gives git add -A, a never_commit path and a protected branch no allow, as today" {
+  policy 'never_commit: .env, secrets/*, src/*.pem\n'
+  mkdir -p "$R/src/lib"
+  set_autopilot on
+  local c
+  expect deny g05 "git add -A"
+  expect deny g05 "git add ."
+  for c in "git add -- .env" "git add -- src/a.ts deep/.env" "git add -- secrets/a.txt" "git add -- ./secrets/a.txt" \
+    "git -C src add -- key.pem"; do
+    expect none g05 "$c" || return 1
+  done
+  git -C "$R" switch -q main
+  expect none g05 "git add -- src/a.ts"
+  git -C "$R" switch -q --detach
+  expect none g05 "git add -- src/a.ts"
+}
+
+@test "autopilot matches never_commit in any case before it allows git add" {
+  policy 'never_commit: .env, Secrets/*\n'
+  set_autopilot on
+  local c
+  for c in "git add -- DEEP/.ENV" "git add -- SECRETS/a.txt" "git add -- secrets/a.txt"; do
+    expect none g05 "$c" || return 1
+  done
+}
+
+@test "autopilot allows git -C <toplevel> add of named files, as commit runs it" {
+  policy 'never_commit: .env\n'
+  mkdir -p "$R/src"
+  set_autopilot on
+  expect allow "" "git -C $R add -- src/a.ts README.md"
+  expect allow "" "git -C '$R' add -- src/a.ts"
+  expect none g05 "git -C $R add -- .env"
+  expect deny g05 "git -C $R add -A"
+  # From the main checkout, into a linked worktree on its own branch.
+  local W="$BATS_TEST_TMPDIR/wt" other="$BATS_TEST_TMPDIR/other"
+  git -C "$R" worktree add -q "$W" -b CDS-2465/other
+  mkdir -p "$W/src"
+  expect allow "" "git -C $W add -- src/a.ts"
+  expect allow "" "git -C $W/src add -- a.ts"
+  # The branch that counts is the one at -C: here a protected one.
+  git -C "$R" switch -q main
+  export CWD="$W"
+  expect none g05 "git -C $R add -- src/a.ts"
+  # Another repository is out.
+  export CWD="$R"
+  git -C "$R" switch -q CDS-2465/replace-minio
+  make_repo "$other"
+  git -C "$other" switch -q -c feat
+  expect none g05 "git -C $other add -- a.txt"
+}
+
+@test "autopilot allows git add only as a whole call of named files" {
+  mkdir -p "$R/src/lib"
+  set_autopilot on
+  local c
+  for c in "git add -- src/lib" "git add -f -- a.txt" "git add -N -- a.txt" "git add -p -- a.txt" "git add" \
+    "git add -- $R/a.txt" "git add -- src/../a.txt" "git add -- a.txt && ls" "ls && git add -- a.txt" \
+    "X=1 git add -- a.txt" "git -c x=y add -- a.txt" "git add -- a.txt > log" "command git add -- a.txt"; do
+    expect none g05 "$c" || return 1
+  done
+}
+
 @test "G5: broad staging chained into a commit is never allowed" {
   never_allowed \
     "git add -A && git commit -m 'CDS-2465: x'" \

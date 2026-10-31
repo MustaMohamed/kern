@@ -224,6 +224,38 @@ without_lib() {
   [[ "$out" == *'"needs user approval: kern G0: hook library gitctx.sh did not load; reinstall kern"'* ]] || { echo "$out"; return 1; }
 }
 
+# all_guards CMD: every guard on CMD, which may hold double quotes.
+all_guards() {
+  run_guard "$(bash_payload "$(printf '%s' "$1" | sed 's/"/\\"/g')")"
+}
+
+@test "\${!v} over literal names: no vote" {
+  set_autopilot on
+  all_guards 'for v in A B; do echo "${!v}"; done'
+  [ "$(decision_of "$output")" = none ] || { echo "$output"; return 1; }
+  all_guards 'for v in A B; do echo "$v=${!v}"; done'
+  [ "$(decision_of "$output")" = none ] || { echo "$output"; return 1; }
+}
+
+@test "\${!v} stays denied unless the loop's list and body prove it" {
+  set_autopilot on
+  local c
+  for c in 'echo "${!v}"' 'for v in "$@"; do echo "${!v}"; done' 'for v in A $x; do echo "${!v}"; done' \
+    'for v in A[0]; do echo "${!v}"; done' 'for v in A B; do echo "${!w}"; done' \
+    'for v in A B; do :; done; echo "${!v}"' 'for v in A B; do :; echo "${!v}"; done' \
+    'for v in A B; do echo "${!v[0]}"; done' 'for v in A B; do echo "${!v:-x}"; done'; do
+    all_guards "$c"
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+    [[ "$output" == *'kern G00: '* ]] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "a broken PATH still finds kern's library" {
+  out=$(env PATH=/nonexistent /bin/bash "$K/hooks/pre-tool-use" 2>/dev/null <<<"$(bash_payload "git push --force origin main")")
+  [[ "$out" != *"reinstall kern"* ]] || { echo "$out"; return 1; }
+  [ "$(decision_of "$out")" != ask ] || [[ "$out" != *"G0:"* ]] || { echo "$out"; return 1; }
+}
+
 @test "the dispatcher's list of guard ids names every guard file" {
   ids=$(sed -n 's/^KERN_GUARD_IDS="\(.*\)"$/\1/p' "$K/hooks/pre-tool-use")
   files=$(cd "$K/hooks/guards" && for f in g*.sh; do printf '%s ' "${f%%-*}"; done)

@@ -201,6 +201,22 @@ gh_log() {
   expect deny "$C"
 }
 
+@test "gh pr create after cd names the fix" {
+  g "cd $R && $C" g02
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *"run cd <wt> as its own call"* ]] || false
+  g "pushd $R && $C" g02
+  [[ "$output" == *"run cd <wt> as its own call"* ]] || false
+  set_autopilot on
+  g "cd $R && $C" g02
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"run cd <wt> as its own call"* ]] || false
+  # Only a cd brings the line: any other unproven shape keeps its reason.
+  g "ls && $C" g02
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" != *"as its own call"* ]] || false
+}
+
 @test "G2: the duplicate check never reads another repo or head; -R, GH_REPO, cd and --head are unproven" {
   gh_log
   set_autopilot on
