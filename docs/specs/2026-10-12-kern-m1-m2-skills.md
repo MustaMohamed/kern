@@ -132,7 +132,7 @@ Every route file's first H2 is `## Steps`. The kernel copies the steps verbatim 
 
 ### A8. Autopilot as skills see it
 
-On only when no settings layer says `autopilot: denied` and the session state says `autopilot: on`, which only the hook writes from a typed `/kern:autopilot on`. The UserPromptSubmit hook injects `kern mode: voice=<v> surface=<s> autopilot=<on|off>` each prompt. Under autopilot: anything that would ask is denied; judgment calls are parked as a `parked:` ledger line with the default chosen, and disjoint work continues; approval is never inferred; merge, deploy, review posting and tracker writes stay human.
+On only when no settings layer says `autopilot: denied` and the session state says `autopilot: on`, which only the hook writes from a typed `/kern:autopilot on`. The UserPromptSubmit hook injects `kern mode: voice=<v> surface=<s> autopilot=<on|off>` each prompt, then ` go=<id>` while autopilot is on and the state holds a go. Under autopilot: anything that would ask is denied; judgment calls are parked as a `parked:` ledger line with the default chosen, and disjoint work continues; approval is never inferred; merge, deploy, review posting and tracker writes stay human.
 
 ### A9. Visual pages before M4
 

@@ -39,13 +39,19 @@ kern_version() {
   KERN_INPUT=$(cat "$KERN_ROOT/.claude-plugin/plugin.json" 2>/dev/null) json_get version || printf 'unknown'
 }
 
-# mode_line SID: `kern mode: voice=<v> surface=<s> autopilot=<on|off>`.
+# mode_line SID: `kern mode: voice=<v> surface=<s> autopilot=<on|off>`, then ` go=<id>` while the state
+# holds a go and autopilot is on, the only time G20 takes one. A skill reads the go from this line.
 mode_line() {
-  local v s a
+  local v s a g=''
   v=$(state_get "$1" voice 2>/dev/null) || v=$(default_voice)
   s=$(state_get "$1" surface 2>/dev/null) || s=$(settings_get mode.surface auto)
-  if autopilot_on "$1"; then a=on; else a=off; fi
-  printf 'kern mode: voice=%s surface=%s autopilot=%s\n' "$v" "$s" "$a"
+  if autopilot_on "$1"; then
+    a=on
+    g=$(state_get "$1" go 2>/dev/null) || g=''
+  else
+    a=off
+  fi
+  printf 'kern mode: voice=%s surface=%s autopilot=%s%s\n' "$v" "$s" "$a" "${g:+ go=$g}"
 }
 
 # autopilot_text SID: `off`, `ON since <iso>`, or `off (denied by <file>)`.

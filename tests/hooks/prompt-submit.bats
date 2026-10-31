@@ -584,6 +584,42 @@ expand_go() {
   [[ "$said" == *"reset voice and surface to their defaults"* ]] || false
 }
 
+# mode: the kern mode: line of the last run's output.
+mode() { printf '%s\n' "$output" | grep '^kern mode:'; }
+
+@test "the mode line names a go only while it stands" {
+  submit '/kern:autopilot on'
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=on' ]
+  submit '/kern:autopilot go ma-254'
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=on go=MA-254' ]
+  submit 'look at the tests'
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=on go=MA-254' ]
+  # G2 ends the go at the draft PR with an empty value, and autopilot stays on.
+  printf 'go: \n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  submit 'look at the tests'
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=on' ]
+}
+
+@test "autopilot off drops the go from the mode line" {
+  submit '/kern:autopilot go MA-254'
+  submit '/kern:autopilot off'
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=off' ]
+}
+
+@test "a refused go shows no go in the mode line" {
+  submit '/kern:autopilot go not-a-ticket'
+  [ "$(st go)" = "" ]
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=off' ]
+}
+
+@test "a go in the state under a denied autopilot shows no go, as G20 would not take it" {
+  printf 'autopilot: on\ngo: MA-254\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  mkdir -p "$R/.claude"
+  printf 'autopilot: denied\n' >"$R/.claude/kern.local.yml"
+  submit '/kern:autopilot status'
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=off' ]
+}
+
 @test "a second go replaces the first and keeps since" {
   submit "/kern:autopilot go MA-1"
   sed 's/^since: .*/since: 2026-10-12T00:00:00Z/' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state" >"$BATS_TEST_TMPDIR/s"
