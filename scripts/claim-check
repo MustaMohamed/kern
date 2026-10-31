@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 # G9: in a diff's added lines, list commit ids the repo does not know and absolute words in added comments.
-# Usage: claim-check WT DIFF_FILE    Output: path:line<TAB>sha-unknown|absolute-claim<TAB>value. Exit 1 on hits.
+# Usage: claim-check WT DIFF_FILE [--spec SPEC --proofs FILE]    Output: path:line<TAB>sha-unknown|absolute-claim<TAB>value. Exit 1 on hits.
 # Exit 2 on a usage error, input with no diff --git line, or an awk failure, so a check that did not run is not read as clean.
 # Doc files (floor-scan's is_doc) get the commit-id check only: a Markdown heading or bullet is not a comment.
+# With --spec, proof-check SPEC FILE runs after that pass and its lines follow the hits: its exit 1 is a hit, and any
+# exit but 0 or 1 is exit 2 here. A missing FILE prints `no proofs file: FILE` and is a hit. A SPEC with no numbered
+# acceptance line prints `proof-check: n/a (SPEC has no numbered acceptance lines)`: there is nothing to match.
 set -euo pipefail
-[ $# -eq 2 ] || { echo "usage: claim-check WT DIFF_FILE" >&2; exit 2; }
+usage() { echo "usage: claim-check WT DIFF_FILE [--spec SPEC --proofs FILE]" >&2; exit 2; }
+spec="" proofs=""
+case $# in
+  2) ;;
+  6)
+    if [ "$3" != --spec ] || [ "$5" != --proofs ]; then usage; fi
+    spec=$4 proofs=$6
+    if [ ! -f "$spec" ] || [ ! -r "$spec" ]; then echo "claim-check: cannot read $spec" >&2; exit 2; fi
+    ;;
+  *) usage ;;
+esac
 wt=$1 diff=$2
+here=$(cd "$(dirname "$0")" && pwd -P)
 git -C "$wt" rev-parse --git-dir > /dev/null 2>&1 || { echo "claim-check: not a git worktree: $wt" >&2; exit 2; }
 [ -r "$diff" ] || { echo "claim-check: cannot read $diff" >&2; exit 2; }
 grep -q '^diff --git ' "$diff" 2> /dev/null || { echo "claim-check: $diff has no diff --git line; pass a git diff or a wt-diff package" >&2; exit 2; }
@@ -63,5 +77,25 @@ while IFS=$'\t' read -r p ln kind val; do
       ;;
   esac
 done < "$tmp"
-if [ "$hits" -gt 0 ]; then exit 1; fi
-exit 0
+found=0
+if [ "$hits" -gt 0 ]; then found=1; fi
+[ -n "$spec" ] || exit "$found"
+
+# proof-check keeps the rule for a numbered acceptance line: with no proofs file it reads an empty table, so its exit 2
+# with this message still names a spec with none, and any other exit 2 stays a check that did not run.
+table=$proofs
+if [ ! -f "$table" ] || [ ! -r "$table" ]; then table=/dev/null; fi
+rc=0
+out=$(bash "$here/proof-check" "$spec" "$table" 2> "$tmp") || rc=$?
+if [ "$rc" -eq 2 ] && [ "$(cat "$tmp")" = "proof-check: $spec has no numbered line under ## Acceptance criteria" ]; then
+  echo "proof-check: n/a ($spec has no numbered acceptance lines)"
+  exit "$found"
+fi
+case "$rc" in
+  0) ;;
+  1) found=1 ;;
+  *) cat "$tmp" >&2; exit 2 ;;
+esac
+if [ "$table" = /dev/null ]; then echo "no proofs file: $proofs"; found=1; fi
+[ -z "$out" ] || printf '%s\n' "$out"
+exit "$found"

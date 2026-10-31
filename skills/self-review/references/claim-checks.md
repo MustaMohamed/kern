@@ -8,7 +8,7 @@ Three scripts catch what reviewers miss; paste each run.
 
 ## claim-check
 
-`claim-check <wt> <package>` lists commit ids in added lines the repo does not know, and added comments with absolute words (always, never, impossible, only caller). Exit 1 means hits: each gets evidence, a rewrite, or removal. Any other non-zero exit is a failed check.
+`claim-check <wt> <package>` lists commit ids in added lines the repo does not know, and added comments with absolute words. Exit 1 means hits: each gets evidence, a rewrite, or removal. With `--spec` it then runs `proof-check`: its lines, or no proofs file, exit 1 and fail the check. `proof-check: n/a`: the spec has no numbered acceptance lines.
 
 ## probe
 
@@ -16,4 +16,4 @@ Three scripts catch what reviewers miss; paste each run.
 
 ## A skipped check is a failed check
 
-A check that did not run, timed out, or ran on the wrong tree is reported as failed, with the reason. The one exception is step 2's `proof-check: not run` line.
+A check that did not run, timed out, or ran on the wrong tree is reported as failed, with the reason.

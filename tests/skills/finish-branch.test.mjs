@@ -43,7 +43,7 @@ test('finish-branch sections, steps and red flags', () => {
     'git switch -c <name>', 'in the main checkout, stop: kern never switches its branch', 'A protected branch: stop',
     'git remote get-url origin', 'git fetch origin <base>', '"base not refreshed"', 'git rev-list --left-right --count <baseref>...HEAD',
     'behind above 0 is stale: offer a rebase per `references/branch-ops.md`.',
-    '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'Red, or `wt-snap` failing: stop.',
+    '${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`', 'Red, or `wt-snap` failing: stop (a red under autopilot: below).',
     '${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md', 'skip: no-comments ships in M3', '`fix first`, `split` or no verdict: stop', '`rebase first`: handle it as step 3\'s stale base', '`ready`: go on.',
     'git diff --shortstat <merge-base> <tree>', 'untracked files count', 'or a count above `pr.max_lines`', 'propose a split alone, no menu before it is answered; stop on yes, go on on no.',
     '1 `commit`; 2 `commit and push`; 3 `commit, push and open a draft PR`; 4 `keep`.',
@@ -60,8 +60,8 @@ test('finish-branch sections, steps and red flags', () => {
     'every kern ask is a denial', 'nothing is rebased or discarded, no teardown runs but the stale-check removal in `references/branch-ops.md`',
     'the menu resolves to option 3, or the highest option step 7 left: commit, then the dedup check, then the push and PR',
     'parked: <question>; default: <choice>; why: <one line>', 'a stale base or `rebase first`: no rebase; go on', 'A failed fetch: the last fetched ref.',
-    'The size gate: go on', 'Dedup: per its section.', 'Stray untracked files can park the finish at commit\'s "no files, no commit" default.',
-    '`fix first`, `split` and a failed or unrunnable proven-tree check included',
+    'The size gate or a `split` on size alone: go on, Scope giving the size', 'Dedup: per its section.', 'Stray untracked files can park the finish at commit\'s "no files, no commit" default.',
+    'Any other stop waits for a typed reply. Off the end path below, a failed proven-tree check means no push.',
     '"Tests passed earlier this session"', 'Only a PR at this head stops.', 'Only the typed word `discard` deletes work.',
     'The remote moved, unless this run rebased. Investigate; never a plain force.',
     "whose what opens with size and that quotes the user's one-PR answer settles it: name that answer, the ledger's count and this step's count, and go on.",
@@ -72,12 +72,50 @@ test('finish-branch sections, steps and red flags', () => {
   // 7,200 since pilot fix plan 2's Task 1: step 6 takes execute-plan's ledger answer and never stages to count.
   // 7,650 since pilot fix plan 2's Task 2: step 7's replies in words, step 11's reviews and PR checks.
   // 7,700 since group A fix round 1: step 6 names the ledger's count and this step's count, and step 11 says where `<n>` comes from.
-  assertMaxBytes(SKILL, 7700);
+  // 8,100 since M3 part 1's Task 7: the bounded fix round and how it ends.
+  // 8,450 since its fix round 1: a red step 4 takes a fix round, and the end path names the gates it passes.
+  assertMaxBytes(SKILL, 8450);
+});
+
+test('under autopilot a `fix first` verdict starts a bounded fix round, and a run past the bound pushes and opens no PR', () => {
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  // Fix round 1, I2: run.md stops on a required check "still red after its fix rounds", so a red step 4 takes rounds too.
+  for (const s of ['Under autopilot a red step 4, first pass or in a round, counts as `fix first`.',
+    // Fix round 1, M4: a size `split` that hides a `fix first` is not a `split` on size alone.
+    '`fix first`, or a size `split` that also reports it, starts a fix round, up to 3:',
+    // A fix changes the tree, and step 6 sizes step 4's tree, so a round proves it again before the review.
+    'fix the findings, then rerun step 4 and self-review in full.',
+    // The first row of run.md's split table. The size row is a default, so it sits with the other defaults.
+    'A `split` from a finding on a line the last round changed stops, and so does no verdict.',
+    // Fix round 1, I1: the user's "Push allowed, and should Stop, PR should at least have a tested or verified the
+    // changes". A red proof stopped commit and the Proven tree check, so the design's push never happened.
+    'The end path is a third round still `fix first`, or a required check that cannot run: the run commits its work, pushes its branch, reports each red or unrun check as `fail`, opens no PR and stops.',
+    "A red or unrunnable proof stops neither commit's step 4 nor the Proven tree check there: the path claims nothing.",
+    'A typed reply that says to open the PR opens it.']) assert.ok(auto.includes(s), s);
+  assert.ok(!auto.includes('After the third round'), auto);
+  assert.ok(!auto.includes('unrunnable proven-tree'), auto);
+  // Fix round 1, I1: the push gate's own text names the end path, so a reader who follows step 10 there does not stop.
+  // Fix round 2: wt-new exits non-zero when `worktree.setup` fails, so a check that cannot run lands on the other no-push
+  // line. One sentence after both covers a red check and one that cannot run.
+  const tree = section(readDoc(OPS).body, '## Proven tree');
+  const end = "On finish-branch's end path neither no push holds: report `fail`, push.";
+  assert.ok(tree.includes(`Red: no push. ${end}`), tree);
+  assert.ok(tree.indexOf('Any other non-zero exit, or a refused remove: report its output and ask; no push.') < tree.indexOf(end), tree);
+  assert.ok(steps(readDoc(SKILL).body)[5].includes('`fix first`, `split` or no verdict: stop with its report (autopilot: below).'));
+  assertContains('skills/autopilot/references/run.md', ['| `split` from a finding on a line the last round changed |']);
+});
+
+test('under autopilot a stop waits for a typed reply, and only a judgment call that takes a default parks', () => {
+  // Task 6 review: this route said a stop parks and run.md says a stop waits.
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  assert.ok(auto.includes('A judgment call parks as `parked: <question>; default: <choice>; why: <one line>`.'), auto);
+  assert.ok(!auto.includes('A stop parks'), auto);
+  assert.ok(!auto.includes('ends the run'), auto);
 });
 
 test('branch-ops reference: rebase and the proven-tree check', () => {
   assertHeadings(OPS, ['# Branch operations', '## Rebase', '## Proven tree']);
-  assertOnce(OPS, ['Under autopilot only the check runs, without its teardown; its removal of an earlier run\'s check path is not a teardown.',
+  assertOnce(OPS, ['Under autopilot only the Proven tree check runs, without its teardown; its removal of an earlier run\'s check path is not a teardown.',
     'If `git rev-parse --verify --quiet origin/<branch>` prints a SHA, the branch is published', 'warn that a rebase rewrites published commits and needs the lease push in `push-and-pr.md`',
     'offer it only if `git log --format=%ae <baseref>..HEAD origin/<branch>` prints only `git config user.email`; else G1 denies that push, so go on stale.',
     'Run `git rebase <baseref>` only on yes; on no, go on.', 'git refuses a rebase over uncommitted changes: offer it again after step 8\'s commit; refused again, go on.',
@@ -90,7 +128,8 @@ test('branch-ops reference: rebase and the proven-tree check', () => {
     'then `cd <wt>`', 'Red: no push.', 'If wt-new said `worktree.setup` is unset, a red may be the environment: check that before blaming the commit',
     'Then propose plain `git worktree remove <check>`, never `--force`, and run it on yes; a refusal keeps it, reported.']);
   assertNoSubstitution(OPS);
-  assertMaxBytes(OPS, 2400);
+  // 2,450 since M3 part 1's Task 7 fix round 2: the end path passes both of the Proven tree check's no-push lines.
+  assertMaxBytes(OPS, 2450);
 });
 
 test('discard reference', () => {
@@ -251,7 +290,7 @@ test('branch-ops reference: a release asked on a protected branch gets a release
     'There cut the release commit per `release.md`, section On the branch, then run finish-branch from step 2: step 5 reviews that commit, and step 8 has no release left.'];
   for (const p of pins) assert.ok(rb.includes(p), `Release branch must contain: ${p}`);
   assertOnce(OPS, pins);
-  assertMaxBytes(OPS, 2400);
+  assertMaxBytes(OPS, 2450);
 });
 
 test('finish-branch: a release only when asked, after the commit; its tag only after the merge, by a tag-only request (coverage AD24)', () => {

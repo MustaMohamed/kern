@@ -66,7 +66,7 @@
     "setup": ["cp -R \"$SETUP_FILES/review/.\" .", "git add -- src/format.js test/format.test.js && git -c user.email=dev@example.com -c user.name=dev commit -qm 'feat: format currency totals'"],
     "prompts": ["Review my branch against the approved spec .kern/specs/currency.md before I open a PR. Report only; change no source file."],
     "expectations": [
-      "Runs proof-check on the spec and a proofs file it wrote",
+      "Runs claim-check with --spec and --proofs, or proof-check, on the spec and a proofs file it wrote",
       "Reports at least one acceptance line or state with no proof (the EUR state, the unknown code, or the cli lines)",
       "Reports as a finding, at src/format.js, that formatCurrency returns ? for an unknown code where the spec's acceptance line 2 says it throws, and gives that finding a ruling",
       "Gives each finding a ruling: fix, reject with a cited line, or ticket",

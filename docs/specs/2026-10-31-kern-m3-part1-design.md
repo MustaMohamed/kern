@@ -131,7 +131,7 @@ A route is distinct only if it is a different action. The same target and effect
 
 ## Fix rounds
 
-A `fix first` verdict starts a fix round in place of ending the run (my call on the limit: 3 per self-review). Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. After the third, the run pushes its branch, stops with the report and opens no PR (my call on the push). No verdict also stops.
+A `fix first` verdict starts a fix round in place of ending the run (my call on the limit: 3 per self-review). Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR (my call on the push). No verdict also stops.
 
 One go covers one draft PR. All three rules below are my call.
 

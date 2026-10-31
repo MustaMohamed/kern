@@ -18,7 +18,7 @@ These rules cover kern's routes only. A job an `overrides.<job>` key leaves to a
 
 A run stops only on this list. At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. Work that does not depend on the answer may finish first.
 
-This list loosens nothing else: the stops in this file, a route's run-ending failures, a red required check and the user's stop predicate still stop a run, and the kernel's floor holds, so a floor action is skipped and reported.
+This list loosens nothing else: the stops in this file, a route's run-ending failures, a required check still red after its fix rounds and the user's stop predicate still stop a run. The kernel's Autonomy line still holds: an action it keeps for the user's word that this list does not name, such as a force-push to a shared branch, is skipped and reported.
 
 Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.
 
@@ -42,7 +42,7 @@ A route is distinct only if it is a different action. The same target and effect
 
 ## Fix rounds
 
-A `fix first` verdict starts a fix round in place of ending the run, up to 3 per self-review. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. After the third, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
+A `fix first` verdict starts a fix round in place of ending the run, up to 3 per self-review. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
 
 One go covers one draft PR.
 
