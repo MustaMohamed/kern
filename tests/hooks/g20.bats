@@ -710,8 +710,8 @@ EOF"
     run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/$f\",\"content\":\"Task quality: approved\\n\"")" g20
     no_vote
   done
-  cp "$SPEC" "$R/.kern/tmp/draft.md"
-  edit '## Problem' '## Problem\nThe size was approved.' false "$R/.kern/tmp/draft.md"
+  printf '## Problem\n' > "$R/.kern/tmp/note.md"
+  edit '## Problem' '## Problem\nThe size was approved.' false "$R/.kern/tmp/note.md"
   no_vote
 }
 
@@ -733,32 +733,61 @@ EOF"
   for f in .kern/ledgers/x/ledger.md .kern/reviews/p.md .kern/tmp/p.md; do
     sh_cmd "echo 'status: approved' > $f"
     denied
-    sh_cmd "echo 'status: \"approved\"' >> $f"
-    denied
-    sh_cmd "echo \"'Status' : 'Approved'\" >> $f"
-    denied
-    sh_cmd "echo 'status:approved' >> $f"
-    denied
   done
 }
 
-@test "a here-doc that approves a working file is denied" {
+@test "the word status alone in a working file gets no vote" {
   working_dirs
-  sh_cmd "cat > .kern/tmp/p.md <<'EOF'
----
-status: approved
-approved: 2026-10-14, yes
----
+  sh_cmd "printf 'Status: done\n' > .kern/reviews/p.md"
+  no_vote
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/reviews/q.md\",\"content\":\"Status: done\\n\"")" g20
+  no_vote
+}
+
+@test "both words apart in a working file's text are denied" {
+  working_dirs
+  sh_cmd "printf 'status of the size: approved by the lead\n' > .kern/tmp/p.md"
+  denied
+  [[ "$output" == *'both status and approved'* ]] || false
+}
+
+@test "both words in upper case in a working file's text are denied" {
+  working_dirs
+  sh_cmd "printf 'STATUS: DONE. APPROVED.\n' >> .kern/reviews/p.md"
+  denied
+}
+
+@test "both words in a here-doc into a working file are denied" {
+  working_dirs
+  sh_cmd "cat > .kern/reviews/task-3.md <<'EOF'
+Status: done
+Task quality: approved
 EOF"
   denied
 }
 
-@test "a printf that carries an approval in one word is denied" {
+@test "a printf with newlines that approves a working file is denied" {
   working_dirs
   sh_cmd "printf '---\nstatus: approved\napproved: 2026-10-14\n---\n' > .kern/tmp/p.md"
   denied
-  sh_cmd "printf 'status:\tapproved\n' > .kern/tmp/p.md"
+}
+
+@test "a Write or Edit that leaves both words in a working file's text is denied" {
+  working_dirs
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/reviews/p.md\",\"content\":\"Status: done\\nTask quality: approved\\n\"")" g20
   denied
+  [[ "$output" == *'both status and approved'* ]] || false
+  printf 'Status: done\n' > "$R/.kern/reviews/q.md"
+  edit 'done' 'approved' false "$R/.kern/reviews/q.md"
+  denied
+  edit 'not in the file' 'approved' false "$R/.kern/reviews/q.md"
+  denied
+}
+
+@test "both words in a spec's body are not a working file's matter" {
+  say 'yes'
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/specs/n.md\",\"content\":\"Status: done\\nTask quality: approved\\n\"")" g20
+  no_vote
 }
 
 @test "an approval written after a cd into a working directory is denied" {
@@ -777,13 +806,6 @@ EOF"
   sh_cmd "printf 'status: approved\n' > .kern/tmp/dir/x.md"
   denied
   write_to "$R/.kern/tmp/link.md"
-  denied
-}
-
-@test "when the check for an approval cannot run, a working file is judged" {
-  working_dirs
-  read_fails grep '*status*'
-  sh_cmd "printf 'approved\n' > .kern/tmp/p.md"
   denied
 }
 
@@ -884,6 +906,35 @@ EOF" "find .kern/tmp -name p.md -exec sed -i '' 's/draft/approved/' .kern/tmp/p.
   done
 }
 
+@test "BSD sed's -I is an in-place edit" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  sh_cmd "sed -I '' 's/draft/approved/' .kern/tmp/p.md"
+  denied
+  sh_cmd "sed -I.bak 's/draft/approved/' .kern/specs/export.md"
+  denied
+}
+
+@test "gsed and busybox sed are text editors" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  for c in "gsed -i 's/draft/approved/' .kern/tmp/p.md" "busybox sed -i 's/draft/approved/' .kern/tmp/p.md"; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'text editor'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "ed -q takes no value, so the file after it is read" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  sh_cmd "ed -q .kern/tmp/p.md <<'EOF'
+s/draft/approved/
+w
+EOF"
+  denied
+}
+
 @test "a text editor that writes a working file through a redirect or a pipe in a command that holds approved is denied" {
   working_dirs
   for c in "sed 's/draft/approved/' .kern/specs/export.md > .kern/tmp/p.md" \
@@ -915,7 +966,8 @@ EOF" "find .kern/tmp -name p.md -exec sed -i '' 's/draft/approved/' .kern/tmp/p.
   for c in 'cp notes.txt .kern/tmp/p.md' 'cp notes.md .kern/tmp/' 'mv notes.txt .kern/reviews/p.md' \
     'cat notes.txt > .kern/tmp/p.md' 'cat notes.txt >> .kern/ledgers/x/ledger.md' 'tee .kern/tmp/p.md < notes.txt' \
     'ln -s ../../notes.txt .kern/tmp/p.md' 'install notes.txt .kern/tmp/p.md' 'dd if=notes.txt of=.kern/tmp/p.md' \
-    'cat notes.txt | tee .kern/tmp/p.md' 'printf %s "$(cat notes.txt)" > .kern/tmp/p.md'; do
+    'cat notes.txt | tee .kern/tmp/p.md' 'printf %s "$(cat notes.txt)" > .kern/tmp/p.md' \
+    'printf %s `cat notes.txt` > .kern/tmp/p.md'; do
     sh_cmd "$c"
     denied
     [[ "$output" == *'holds a status: approved line'* ]] || { echo "$c: $output"; return 1; }
@@ -923,6 +975,55 @@ EOF" "find .kern/tmp -name p.md -exec sed -i '' 's/draft/approved/' .kern/tmp/p.
   approved_spec 'yes'
   sh_cmd 'cat .kern/specs/export.md > .kern/tmp/copy.md'
   denied
+}
+
+@test "a copy through a compound redirect into a working file is denied" {
+  working_dirs
+  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '---' > "$R/notes.txt"
+  for c in '{ cat notes.txt; } > .kern/tmp/p.md' '(cat notes.txt) > .kern/tmp/p.md' \
+    'for f in 1; do cat notes.txt; done > .kern/tmp/p.md' 'if true; then cat notes.txt; fi > .kern/tmp/p.md' \
+    'exec > .kern/tmp/p.md; cat notes.txt'; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'holds a status: approved line'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "a substitution in an unquoted here-doc body joins the copy" {
+  working_dirs
+  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '---' > "$R/notes.txt"
+  sh_cmd 'cat > .kern/tmp/p.md <<EOF
+$(cat notes.txt)
+EOF'
+  denied
+}
+
+@test "a pipe beside a working write joins them" {
+  working_dirs
+  approved_spec 'yes'
+  sh_cmd "grep -c Problem .kern/specs/export.md | wc -l; printf 'x\n' > .kern/tmp/n.md"
+  denied
+}
+
+@test "a || beside a working write joins nothing" {
+  working_dirs
+  approved_spec 'yes'
+  sh_cmd "grep -c Problem .kern/specs/export.md || true; printf 'x\n' > .kern/tmp/n.md"
+  no_vote
+}
+
+@test "a proofs table beside a read of an approved spec gets no vote" {
+  working_dirs
+  approved_spec 'yes'
+  sh_cmd "cat > .kern/reviews/p.proofs.md <<'EOF'
+| Line | State |
+|---|---|
+| 3 | \$(proved) |
+EOF
+bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
+  no_vote
+  sh_cmd "printf '| 3 | \$(proved) |\n' > .kern/reviews/p.proofs.md; bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
+  no_vote
 }
 
 @test "a copy into a working file from a file with no approval gets no vote" {

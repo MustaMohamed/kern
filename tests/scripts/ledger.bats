@@ -526,6 +526,25 @@ opened() {
   refused .kern/tmp/p.md "$REPO/.kern/tmp"
 }
 
+@test "ledger-open finds the repository below a ceiling the environment sets" {
+  work_repo
+  approved_plan .kern/tmp/p.md
+  export GIT_CEILING_DIRECTORIES="$REPO"
+  cd .kern/tmp
+  refused p.md "$REPO/.kern/tmp"
+}
+
+@test "ledger-open reads frontmatter in the C locale, as G20 does" {
+  work_repo
+  printf -- '---\nstatus:\342\200\203approved\nspec: none\napproved: 2026-10-14, "yes"\nexecution: delegate\ncommits: ask\n---\n' > .kern/plans/u.md
+  printf -- '---\nstatus: approved\nspec:\342\200\203none\napproved: 2026-10-14, "yes"\n---\n' > .kern/plans/v.md
+  printf -- '---\nstatus: approved\nspec: none\342\200\203\napproved: 2026-10-14, "yes"\n---\n' > .kern/plans/w.md
+  export LC_ALL=en_US.UTF-8
+  refused .kern/plans/u.md 'execute-plan runs only an approved plan'
+  refused .kern/plans/v.md 'is not a Markdown file'
+  refused .kern/plans/w.md 'is not a Markdown file'
+}
+
 @test "ledger-open refuses a plan past 8 symlinks" {
   work_repo
   approved_plan .kern/plans/p.md

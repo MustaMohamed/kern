@@ -16,14 +16,14 @@
 # shell write that reaches a hook file without naming its path is not seen (G16's accepted limits).
 # Under autopilot only a go approves, for its ticket (_g20_go), in place of the checks on the user's
 # last message. G20 never votes allow. A file under WORK/ledgers, WORK/reviews or WORK/tmp is a working
-# file (_g20_working): a shell write to one may hold the word approved, but not an approval. A command
-# whose text sets status: to approved, a text editor in a command that holds approved, a copy from a file
-# that holds a status: approved line, and a Write or Edit whose frontmatter sets it are judged there as
-# anywhere, and a shell copy from a working file to any other Markdown file is judged as a copy from any
-# file is. ledger-open runs only a plan with a Markdown name that is not a working file and has no
-# working file as its spec, and G20, ledger-open and plan-check read frontmatter with one reader
-# (scripts/lib/frontmatter.awk), so an approval ledger-open accepts passed through G20, within the
-# accepted limits below.
+# file (_g20_working). One call may put the word status or the word approved in one, but not both: text
+# that holds both, in any case and anywhere in a command or in the file after a Write or Edit, is denied
+# (_g20_both). So is a text editor in a command that holds approved, and a copy from a file that holds a
+# status: approved line. A frontmatter approval by Write or Edit is judged there as anywhere, and a shell
+# copy from a working file to any other Markdown file is judged as a copy from any file is. ledger-open
+# runs only a plan with a Markdown name that is not a working file and has no working file as its spec,
+# and G20, ledger-open and plan-check read frontmatter with one reader (scripts/lib/frontmatter.awk), so
+# an approval ledger-open accepts passed through G20, within the accepted limits below.
 #
 # Accepted limits:
 # - "The user's last message" is the last prompt prompt-submit does not read as wrapped. A prompt
@@ -41,12 +41,15 @@
 #   time, a recursive directory copy, git checkout or apply, a hard link) is not seen.
 # - A working file's path is read as it stands before the call, so a symlink that the same command puts
 #   in place of a working directory is not seen.
-# - A shell write to a working file is judged by the command's text, and by the text editors it runs and
-#   the files it names in the same simple command, or anywhere in a command that a pipe or a substitution
-#   joins. An approval hidden or built at run time, or read from a file by a simple command not joined to
-#   the write, is not seen there, and ledger-open refuses a working file only while it is under a working
-#   directory.
-# - A repository made inside a working directory has its own work dir, so ledger-open run from inside it
+# - A shell write to a working file is judged one call at a time, by the call's text, and by the text
+#   editors it runs and the files it names in the same simple command, or anywhere in a command that a
+#   pipe, a substitution, a group, a subshell, a loop, an if, a case or an exec joins. Not seen there: a
+#   status line split across two Bash calls, a word built at run time so the text holds neither word, a
+#   file read by a simple command not joined to the write, and a recursive copy. ledger-open refuses a
+#   working file only while it is under a working directory.
+# - A pipe anywhere in a command joins all of it, so a working write beside a pipe that carries nothing
+#   to it is judged with it, as it was before working files were exempt. Splitting the call ends that.
+# - A repository nested in a working directory has its own work dir, so ledger-open run from inside it
 #   does not count the outer one's.
 _G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess | no | nope | not yet | wait | stop | don't | do not "
 # A quote approves only when its words hold one of _G20_YES and none of _G20_HOLD, and it does not end in
@@ -69,10 +72,7 @@ _G20_FM_FILE="$KERN_ROOT/scripts/lib/frontmatter.awk"
 # comment after it.
 _G20_STATUS_RE="^[[:space:]]*[\"']?status[\"']?[[:space:]]*:[[:space:]]*[\"']?approved[\"']?[[:space:]]*(#.*)?\$"
 
-# A command that sets status: to approved, read from its text with quotes and backslashes gone
-# (_g20_bash). It has no line anchors, as a printf's \n puts lines inside one word, and t stands for a
-# \t.
-_G20_SETS_RE="status[[:space:]t]*:[[:space:]t]*approved"
+_G20_BOTH="the text holds both status and approved, which a working file may not, as it can read as an approval; reword it to hold one of them"
 
 # _G20_EDIT_AWK: prints the text it reads after replacing ENVIRON G20_OLD with G20_NEW: the first
 # match, or every match when G20_ALL is true. Line ends are read as Claude Code's Edit reads them: CRLF
@@ -207,6 +207,19 @@ _g20_working() {
   done
 }
 
+# _g20_both TEXT: exit 0 when TEXT holds both status and approved, anywhere and in any case.
+_g20_both() {
+  case "$1" in *[Ss][Tt][Aa][Tt][Uu][Ss]*) ;; *) return 1 ;; esac
+  case "$1" in *[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd]*) return 0 ;; esac
+  return 1
+}
+
+# _g20_mixed PATH TEXT: denies when PATH is a working file and TEXT, what it holds after the call, holds
+# both words. A body line can become frontmatter by a shell edit that names neither word.
+_g20_mixed() {
+  if _g20_both "$2" && _g20_working "$1"; then vote deny G20 "$_G20_BOTH"; fi
+}
+
 # _g20_fm NAME: sets _G20_FM to the frontmatter of the text on stdin (NAME's), read by the shared
 # reader; an unclosed block counts to its end. Fails closed, and returns 1, when the reader cannot run.
 _g20_fm() {
@@ -247,7 +260,8 @@ _g20_file() {
     else
       text=$(ti_get new_string && printf x) || return 0
     fi
-    _g20_fm "$base" <<< "${text%x}" || return 0
+    post=${text%x}
+    _g20_fm "$base" <<< "$post" || return 0
   else
     new=$(ti_get new_string && printf x) || return 0
     new=${new%x}
@@ -264,7 +278,9 @@ _g20_file() {
         # Edit that writes a status or approved: line could approve unseen, so it fails closed.
         if printf '%s\n' "$new" | env LC_ALL=C grep -Eiq "^[[:space:]]*[\"']?(status|approved)[\"']?[[:space:]]*:"; then
           vote deny G20 "old_string is not in $base as G20 reads it, so it cannot judge an Edit that writes a status or approved: line; read the file and edit it again"
+          return 0
         fi
+        _g20_mixed "$p" "$(cat "$p" 2> /dev/null)$new"
         return 0
         ;;
       *)
@@ -274,7 +290,10 @@ _g20_file() {
     esac
   fi
   after=$_G20_FM
-  _g20_approved "$after" || return 0
+  if ! _g20_approved "$after"; then
+    _g20_mixed "$p" "$post"
+    return 0
+  fi
   lines=$(_g20_lines "$after")
   # An approved file whose approved: lines stay the same is not being approved now.
   if _g20_approved "$before" && [ "$(_g20_lines "$before")" = "$lines" ]; then return 0; fi
@@ -339,7 +358,7 @@ _g20_file() {
 }
 
 # A shell command that writes a Markdown file could set or change an approval without the quote check. A
-# working file counts only when the command's text sets status: to approved; _g20_seg1 also judges a
+# working file counts only when the command's text holds both words; _g20_seg1 also judges a
 # text editor or a copy in the simple command that writes one. _g20_bash reads each simple command
 # (git_words) and denies when one writes a file that counts (a redirect; an operand of sed -i, perl -i,
 # awk or gawk -i inplace, ed, ex, vi, vim, tee, truncate or sponge; dd of=; the destination of cp, mv,
@@ -352,8 +371,8 @@ _g20_file() {
 # script run by name, or a word built at run time, is not seen (accepted limit).
 #
 # State for one command: _G20_W is 1 when the command holds approved (quotes and backslashes taken out,
-# any case), _G20_M when it names a Markdown file, _G20_S when it sets status: to approved or that could
-# not be read, _G20_JOIN when a pipe or a substitution may carry text between its simple commands.
+# any case), _G20_M when it names a Markdown file, _G20_S when it holds status too, _G20_JOIN
+# when text may pass between its simple commands (_g20_joined).
 # _G20_DIRS holds each directory the command may be in, one per line, _G20_SEEN each one it was in, and
 # _G20_DIR the one _g20_seg1 judges from; it follows cd. _G20_OVER is 1 once the set is past its cap.
 # _G20_REC is the simple command _g20_seg reads. _G20_WRITES is 1 once a simple command writes a
@@ -400,10 +419,10 @@ _g20_target() {
   fi
   _g20_abs "$w"
   _g20_md "$w" || _g20_mdfile "$_G20_P" || return 0
-  # A working file is exempt from the word approved, never from an approval. A word built at run time
-  # may name any file, so only a literal path is a working file.
-  if [ "$_G20_S" = 0 ] && ! _g20_dyn "$w" && _g20_working "$_G20_P"; then
-    _G20_WW=1
+  # A working file may hold one of the two words, not both. A word built at run time may name any file,
+  # so only a literal path is a working file.
+  if ! _g20_dyn "$w" && _g20_working "$_G20_P"; then
+    if [ "$_G20_S" = 1 ]; then _G20_WHY=$_G20_BOTH; else _G20_WW=1; fi
     return 0
   fi
   if [ "${_G20_OVER:-0}" = 1 ]; then
@@ -441,9 +460,9 @@ _g20_inline() {
 
 # _g20_ops CODE VALUE REST SOFT LONG LCODE WORD...: reads the options and operands of sed, perl or awk.
 # Sets _G20_OPS (count _G20_N) to the operands, _G20_CODE to 1 when an option gave the script or
-# program, and _G20_I to 1 when an option cluster holds i or a word is --in-place. In a cluster such as
-# -nE or -pi.bak, a letter in CODE gives the script and a letter in VALUE takes a value, each from the
-# rest of the cluster or else the next word; a letter in REST takes the rest of the cluster only; a
+# program, and _G20_I to 1 when an option cluster holds i or a letter in SOFT, or a word is --in-place.
+# In a cluster such as -nE or -pi.bak, a letter in CODE gives the script and a letter in VALUE takes a
+# value, each from the rest of the cluster or else the next word; a letter in REST takes the rest of the cluster only; a
 # letter in SOFT does the same, and at the end of the cluster takes the next word when it is empty or
 # starts with a dot (BSD sed -i ''). LONG lists the long options that take the next word, as " --x ";
 # LCODE those of them that give the script, in either form.
@@ -485,6 +504,7 @@ _g20_ops() {
           case "$rest" in *"$c"*) break ;; esac
           case "$soft" in
             *"$c"*)
+              _G20_I=1
               [ "$k" -lt "${#w}" ] || skip=s
               break
               ;;
@@ -600,12 +620,14 @@ _g20_cmd() {
       fi
       ;;
     popd) _G20_REL=1; _G20_STAY=1; _G20_BACK=1 ;;
-    sed | perl)
+    busybox) _g20_cmd "$@" ;;
+    sed | gsed | perl)
       _G20_ED=1
-      if [ "$head" = sed ]; then
-        _g20_ops ef l '' i "--expression --file --line-length" "--expression --file" "$@"
-      else
+      if [ "$head" = perl ]; then
         _g20_ops eE '' iIMm0lxCdD '' '' '' "$@"
+      else
+        # -I is BSD sed's in-place flag; perl's is an include path.
+        _g20_ops ef l '' iI "--expression --file --line-length" "--expression --file" "$@"
       fi
       if [ "$_G20_I" = 0 ]; then
         if [ "$head" = perl ] && [ "$_G20_W$_G20_M" = 11 ] && _g20_inline "$@"; then
@@ -656,7 +678,7 @@ _g20_cmd() {
         case "$head:$w" in
           truncate:-s | truncate:-r | truncate:--size | truncate:--reference | ed:-p | \
             [evn]*:-c | [evn]*:-S | [evn]*:--cmd | [evn]*:-u | [evn]*:-U | [evn]*:-i | [evn]*:-T | [evn]*:-w | \
-            [evn]*:-W | [evn]*:-t | [evn]*:-q) skip=1 ;;
+            [evn]*:-W | [evn]*:-t) skip=1 ;;
           *:-* | *:+*) ;;
           *) _g20_target "$w" ;;
         esac
@@ -869,8 +891,35 @@ _g20_seg1() {
   done
 }
 
+# _g20_joined COMMAND RECORDS: exit 0 when text may pass between COMMAND's simple commands (RECORDS, from
+# git_words), so one that writes a working file is judged with the others. _split_words leaves out quoted
+# here-doc bodies and keeps quoted words whole, so a | or a ( in those does not count:
+# - A substitution, live in a word or in an unquoted body, makes git_words differ from _split_words.
+# - A pipe or a paren splits a record only where it is an operator, so replacing them changes the records
+#   only there. || joins nothing.
+# - A redirect on a group, a subshell, a loop, an if or a case is a record that starts with it, or with
+#   the word that closes the compound; exec's lasts for the rest of the command.
+_g20_joined() {
+  local c s rec w
+  case "$1" in
+    *'|'* | *'('* | *'`'*)
+      s=$(_split_words "$1")
+      [ "${s%$'\n\t.'}" = "$2" ] || return 0
+      c=${1//||/;}
+      [ "$(_split_words "$c" | env LC_ALL=C tr '|()' '___')" = "$(_split_words "${c//[|()]/_}")" ] || return 0
+      ;;
+  esac
+  while IFS= read -r rec; do
+    w=${rec%%[[:space:]\<\>]*}
+    case "$w" in '' | '&' | [0123456789] | [0123456789][0123456789] | 'done' | 'fi' | 'esac' | exec) return 0 ;; esac
+  done <<RECORDS
+$2
+RECORDS
+  return 1
+}
+
 _g20_bash() {
-  local cmd t seg s
+  local cmd t seg s recs
   cmd=$(ti_get command) || return 0
   t=$cmd
   case "$t" in *[\"\'\\]*) t=$(printf '%s' "$t" | env LC_ALL=C tr -d "\"'\\\\") ;; esac
@@ -880,12 +929,10 @@ _g20_bash() {
   case "$t" in *.[Mm][Dd]* | *.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]*) _G20_M=1 ;; esac
   [ "$_G20_W$_G20_M" != 00 ] || return 0
   _G20_S=0
-  if [ "$_G20_W" = 1 ]; then
-    printf '%s\n' "$t" | env LC_ALL=C grep -Eiq "$_G20_SETS_RE"
-    [ "$?" = 1 ] || _G20_S=1
-  fi
+  if _g20_both "$t"; then _G20_S=1; fi
+  recs=$(git_words "$cmd")
   _G20_JOIN=0
-  case "$t" in *'|'* | *'$('* | *'`'* | *'<('* | *'>('*) _G20_JOIN=1 ;; esac
+  if _g20_joined "$cmd" "$recs"; then _G20_JOIN=1; fi
   _G20_WW=0
   _G20_ED=0
   _G20_COPY=()
@@ -900,7 +947,7 @@ _g20_bash() {
     _g20_seg "$seg"
     [ -z "$_G20_WHY" ] || break
   done <<CMD
-$(git_words "$cmd")
+$recs
 CMD
   # A command that writes a Markdown file and also names a file holding a status: approved line, in its
   # frontmatter or not, can copy an approval in (cp, cat, tee or tail from a prepared file). A working

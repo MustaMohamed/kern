@@ -16,7 +16,7 @@
 # Ledger identity adapted from superpowers subagent-driven-development/scripts/sdd-workspace (MIT).
 set -euo pipefail
 # The repository is the one the paths are in, not one the environment names.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_CEILING_DIRECTORIES
 here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
 . "$here/../hooks/lib/settings.sh"
@@ -158,8 +158,8 @@ for name in "$plan" "$real"; do
 done
 work=$(work_of "$PWD") || exit 2
 refuse_working "$plan" "$plan"
-# The frontmatter as G20 reads it (scripts/lib/frontmatter.awk), so an approval G20 never saw cannot
-# open a ledger.
+# The frontmatter as G20 reads it (scripts/lib/frontmatter.awk), in the C locale as G20 reads it, so an
+# approval G20 never saw cannot open a ledger.
 rc=0
 fm=$(env LC_ALL=C awk -v fm_print=1 -f "$here/lib/frontmatter.awk" "$plan") || rc=$?
 case "$rc" in
@@ -167,7 +167,7 @@ case "$rc" in
   3) echo "ledger-open: $plan: frontmatter not closed" >&2; exit 2 ;;
   *) echo "ledger-open: could not read the frontmatter of $plan" >&2; exit 2 ;;
 esac
-spec=$(printf '%s\n' "$fm" | sed -n 's/^spec:[[:space:]]*//p' | head -n 1 | sed 's/[[:space:]]*$//')
+spec=$(printf '%s\n' "$fm" | env LC_ALL=C sed -n 's/^spec:[[:space:]]*//p' | head -n 1 | env LC_ALL=C sed 's/[[:space:]]*$//')
 case "$spec" in
   '' | none) ;;
   *)
@@ -181,8 +181,8 @@ case "$spec" in
     done
     ;;
 esac
-status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
-approved=$(printf '%s\n' "$fm" | sed -n 's/^approved:[[:space:]]*//p' | head -n 1)
+status=$(printf '%s\n' "$fm" | env LC_ALL=C sed -n 's/^status:[[:space:]]*//p' | head -n 1)
+approved=$(printf '%s\n' "$fm" | env LC_ALL=C sed -n 's/^approved:[[:space:]]*//p' | head -n 1)
 [ "$status" = approved ] || { echo "ledger-open: $plan has status: ${status:-none}; execute-plan runs only an approved plan" >&2; exit 2; }
 printf '%s' "$approved" | grep -Eq '[0-9]{4}-[0-9]{2}-[0-9]{2}.*"[^"]+"' ||
   { echo "ledger-open: $plan has no approved: line with a date and the user's quoted words" >&2; exit 2; }
