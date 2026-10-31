@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # G10, fail-then-pass. Patch mode: CMD passes in WT; on a throwaway fork with PATCH reversed, CMD fails.
 # Mutate mode: CMD passes in WT; on a fork with one condition inverted at FILE:LINE, CMD fails.
-# Usage: probe [--exclude-tests] WT PATCH -- CMD...
-#        probe --mutate FILE:LINE WT -- CMD...
+# Usage: probe [--with-passed] [--exclude-tests] WT PATCH -- CMD...
+#        probe [--with-passed] --mutate FILE:LINE WT -- CMD...
+# --with-passed skips the run in WT, for a caller that has just run CMD on this same tree (task-done). The
+# fork's runs stay. The fork shares WT's setup (wt-fork --share-setup); a CMD that fails on a shared fork
+# gets one more fork with worktree.setup run, and that fork gives the verdict.
 # --exclude-tests reverses only the non-test files of PATCH, so a test the patch adds stays in the fork,
 # with its test data, fixtures, snapshots and golden files (is_probe_keep); without it, a PATCH that
 # touches one is inconclusive. A command word that names a path in WT must still exist in the fork, and a
@@ -12,8 +15,9 @@
 # The fork is always removed.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
-usage() { echo "usage: probe [--exclude-tests] WT PATCH -- CMD... | probe --mutate FILE:LINE WT -- CMD..." >&2; exit 2; }
-excl=0 mutate='' patch=''
+usage() { echo "usage: probe [--with-passed] [--exclude-tests] WT PATCH -- CMD... | probe [--with-passed] --mutate FILE:LINE WT -- CMD..." >&2; exit 2; }
+excl=0 mutate='' patch='' passed=0
+if [ "${1-}" = --with-passed ]; then passed=1; shift; fi
 case "${1-}" in
   --exclude-tests) excl=1; shift ;;
   --mutate) [ $# -ge 2 ] || usage; mutate=$2; shift 2 ;;
@@ -104,20 +108,33 @@ for a in "$@"; do
   fi
 done
 
-if ! (cd "$wt" && "$@") > "$logs/with.log" 2>&1; then
+if [ "$passed" = 0 ] && ! (cd "$wt" && "$@") > "$logs/with.log" 2>&1; then
   echo "probe: inconclusive (the command fails with the guard in place)"
   tail -n 5 "$logs/with.log"
   exit 3
 fi
 
 slug="probe-$$-$RANDOM"
-if ! fork=$(cd "$wt" && bash "$here/wt-fork" "$wt" "$slug" 2> "$logs/fork.err"); then
-  fork=''
-  echo "probe: inconclusive (could not fork: $(tail -n 1 "$logs/fork.err"))"
-  exit 3
-fi
+# make_fork [--share-setup]: fork stays as it was on a failure, so cleanup still removes an earlier fork.
+make_fork() {
+  local made
+  if ! made=$(cd "$wt" && bash "$here/wt-fork" "$wt" "$slug" "$@" 2> "$logs/fork.err"); then
+    echo "probe: inconclusive (could not fork: $(tail -n 1 "$logs/fork.err"))"
+    exit 3
+  fi
+  fork=$made
+}
+make_fork --share-setup
 
-if ! (cd "$fork" && "$@") > "$logs/control.log" 2>&1; then
+control=0
+(cd "$fork" && "$@") > "$logs/control.log" 2>&1 || control=$?
+if [ "$control" != 0 ] && [ "$(cat "$(git -C "$fork" rev-parse --path-format=absolute --git-dir)/kern-setup-done")" = 'setup: shared' ]; then
+  git -C "$wt" worktree remove --force "$fork" > /dev/null 2>&1 || true
+  make_fork
+  control=0
+  (cd "$fork" && "$@") > "$logs/control.log" 2>&1 || control=$?
+fi
+if [ "$control" != 0 ]; then
   echo "probe: inconclusive (the command fails in the fork before any change is reversed; missing ignored files or setup?)"
   tail -n 5 "$logs/control.log" >&2
   exit 3
@@ -146,12 +163,35 @@ if [ -n "$mutate" ]; then
   # the first negation: a ! not before = and not after a name character or a closing bracket, so
   # if (!ok) becomes if (ok) while x!.y and != stay. A ! beside another ! is never dropped, so a!!.b,
   # xs !! 0 and !!x are inconclusive, not a broken build read as caught. A lone ! after punctuation
-  # inside a string, a regex or a shebang can still be dropped.
+  # inside a string, a regex or a shebang can still be dropped. With no ! on the line, a bare condition is
+  # wrapped in !( ): the whole of if (COND), else the name, call or index before a ? with a blank on each
+  # side, so a?.b and a ?? b stay. A loop stays out: its inverse can run for ever.
   if ! awk -v ln="$mline" '
     function word(s, w,   i, b, a) {
       i = index(s, w); if (!i) return 0
       b = (i == 1) ? "" : substr(s, i - 1, 1); a = substr(s, i + length(w), 1)
       return (b !~ /[A-Za-z0-9_]/ && a !~ /[A-Za-z0-9_]/) ? i : 0
+    }
+    # negate(s, from, upto): s with the text between the two positions wrapped in !( ).
+    function negate(s, from, upto) { return substr(s, 1, from - 1) "!(" substr(s, from, upto - from + 1) ")" substr(s, upto + 1) }
+    # closer(s, open): the position of the ) that closes the ( at open, or 0.
+    function closer(s, open,   i, c, d) {
+      for (i = open; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == "(") d++
+        else if (c == ")" && --d == 0) return i
+      }
+      return 0
+    }
+    # operand(s, upto): where the name, call or index that ends at upto starts; upto + 1 for none.
+    function operand(s, upto,   i, c, d) {
+      for (i = upto; i >= 1; i--) {
+        c = substr(s, i, 1)
+        if (c == ")" || c == "]") d++
+        else if (d > 0 && (c == "(" || c == "[")) d--
+        else if (d == 0 && c !~ /[A-Za-z0-9_$.]/) break
+      }
+      return (d > 0) ? upto + 1 : i + 1
     }
     NR == ln {
       n = split("===,!==,==,!=,<=,>=,&&,||, < , > ,true,false", op, ",")
@@ -166,6 +206,15 @@ if [ -n "$mutate" ]; then
         # a == "=" is defensive: the operator loop already took a line with !=.
         if (a == "=" || a == "" || a == "!" || b ~ /[]A-Za-z0-9_)}!]/) continue
         $0 = substr($0, 1, i - 1) substr($0, i + 1); done = 1; print > "/dev/stderr"
+      }
+      if (!done && !index($0, "!")) {
+        i = word($0, "if")
+        if (i) {
+          for (i += 2; substr($0, i, 1) == " "; i++) continue
+          if (substr($0, i, 1) == "(" && (a = closer($0, i)) > i + 1) { $0 = negate($0, i + 1, a - 1); done = 1 }
+        }
+        if (!done && (a = index($0, " ? ")) > 1 && (i = operand($0, a - 1)) < a) { $0 = negate($0, i, a - 1); done = 1 }
+        if (done) print > "/dev/stderr"
       }
     }
     { print }

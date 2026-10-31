@@ -161,3 +161,103 @@ setup() {
   [ ! -e "$REPO/.claude/worktrees/task-13" ]
   ! git worktree list | grep -q task-13
 }
+
+@test "wt-fork --share-setup links the closed list, runs no setup and writes the marker" {
+  mkdir -p .claude
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > .claude/kern.local.yml
+  mkdir -p "$SRC/node_modules/pkg" "$SRC/.venv" "$SRC/dist"
+  printf 'lib\n' > "$SRC/node_modules/pkg/index.js"
+  printf 'out\n' > "$SRC/dist/app.js"
+  printf '.venv/\ndist/\n' >> "$(git -C "$SRC" rev-parse --git-path info/exclude)"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-20 --share-setup
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+  fork=$output
+  [ ! -e "$TMP/setups" ]
+  [ "$(cd "$fork/node_modules" && pwd -P)" = "$(cd "$SRC/node_modules" && pwd -P)" ]
+  [ "$(cd "$fork/.venv" && pwd -P)" = "$(cd "$SRC/.venv" && pwd -P)" ]
+  [ ! -e "$fork/dist" ]
+  [ "$(cat "$(git -C "$fork" rev-parse --path-format=absolute --git-dir)/kern-setup-done")" = "setup: shared" ]
+  bash "$KERN_ROOT/scripts/wt-check" "$fork" origin/main
+  # Removing the fork removes the links, never what they point at.
+  git worktree remove --force "$fork"
+  [ -f "$SRC/node_modules/pkg/index.js" ]
+}
+
+@test "--share-setup with nothing to share runs worktree.setup" {
+  mkdir -p .claude
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > .claude/kern.local.yml
+  mkdir -p "$SRC/dist"
+  printf 'out\n' > "$SRC/dist/app.js"
+  printf 'dist/\n' >> "$(git -C "$SRC" rev-parse --git-path info/exclude)"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-21 --share-setup
+  [ "$status" -eq 0 ]
+  fork=$output
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  [ ! -e "$fork/dist" ]
+  [ "$(cat "$(git -C "$fork" rev-parse --path-format=absolute --git-dir)/kern-setup-done")" = "setup: printf x >> $TMP/setups" ]
+}
+
+@test "--share-setup links only what is git-ignored, and a fork's own path stays" {
+  mkdir -p .claude
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > .claude/kern.local.yml
+  # vendor is not ignored, so it moves with the state as a real directory; an empty .venv does not move at all.
+  mkdir -p "$SRC/vendor" "$SRC/node_modules" "$SRC/.venv"
+  printf 'dep\n' > "$SRC/vendor/dep.txt"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-22 --share-setup
+  [ "$status" -eq 0 ]
+  fork=$output
+  [ ! -L "$fork/vendor" ]
+  [ "$(cat "$fork/vendor/dep.txt")" = dep ]
+  [ ! -e "$fork/.venv" ]
+  [ -L "$fork/node_modules" ]
+  [ ! -e "$TMP/setups" ]
+}
+
+@test "without --share-setup a fork links nothing, and any other third argument exits 2" {
+  mkdir -p "$SRC/node_modules"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-23
+  [ "$status" -eq 0 ]
+  [ ! -e "$output/node_modules" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-24 --share
+  [ "$status" -eq 2 ]
+  [ ! -e "$REPO/.claude/worktrees/task-24" ]
+}
+
+@test "wt-diff writes TO_TREE to <package>.tree, and wt-apply --tree needs it to match" {
+  fork=$(bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-25 2> /dev/null)
+  t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$fork")
+  printf 'from worker\n' > "$fork/w.txt"
+  out=$(bash "$KERN_ROOT/scripts/wt-diff" "$fork" "$t0" --out "$TMP/t.diff")
+  pkg=$(printf '%s\n' "$out" | sed -n 1p)
+  to=$(printf '%s\n' "$out" | sed -n 2p)
+  [ "$(cat "$pkg.tree")" = "$to" ]
+  before=$(bash "$KERN_ROOT/scripts/wt-snap" "$SRC")
+  # Another tree.
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-apply" "$pkg.patch" "$SRC" --tree "$t0"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"$t0"* ]] || false
+  [ "$(bash "$KERN_ROOT/scripts/wt-snap" "$SRC")" = "$before" ]
+  # No record of the tree.
+  mv "$pkg.tree" "$TMP/kept"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-apply" "$pkg.patch" "$SRC" --tree "$to"
+  [ "$status" -eq 2 ]
+  [ "$(bash "$KERN_ROOT/scripts/wt-snap" "$SRC")" = "$before" ]
+  mv "$TMP/kept" "$pkg.tree"
+  # A matching tree.
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-apply" "$pkg.patch" "$SRC" --tree "$to"
+  [ "$status" -eq 0 ]
+  [ "$output" = "applied" ]
+  [ "$(cat "$SRC/w.txt")" = "from worker" ]
+}
+
+@test "wt-apply refuses --tree with no value and any other extra argument" {
+  fork=$(bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-26 2> /dev/null)
+  t0=$(bash "$KERN_ROOT/scripts/wt-snap" "$fork")
+  printf 'from worker\n' > "$fork/w.txt"
+  pkg=$(bash "$KERN_ROOT/scripts/wt-diff" "$fork" "$t0" --out "$TMP/u.diff" | head -n 1)
+  for args in "--tree" "--tree $t0 extra" "--to $t0"; do
+    run --separate-stderr bash "$KERN_ROOT/scripts/wt-apply" "$pkg.patch" "$SRC" $args
+    [ "$status" -eq 2 ] || { echo "accepted: $args"; false; }
+  done
+  [ ! -e "$SRC/w.txt" ]
+}

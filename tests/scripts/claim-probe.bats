@@ -451,3 +451,143 @@ setup() {
   [ "$status" -eq 3 ]
   [ "$output" = "probe: inconclusive (no condition to invert on d.hs:1)" ]
 }
+
+@test "probe --mutate takes a bare condition" {
+  printf 'if (wraps) {\n}\n' > "$WT/a.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate a.js:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 1 ]
+  [ "$output" = 'probe: mutation survived (if (!(wraps)) {)' ]
+  printf 'const x = wraps ? a : b;\n' > "$WT/b.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate b.js:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 1 ]
+  [ "$output" = 'probe: mutation survived (const x = !(wraps) ? a : b;)' ]
+  # The whole of a call or an index, brackets balanced.
+  printf 'if (seen(a, f(b))) {\n' > "$WT/c.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate c.js:1 "$WT" -- sh test-always.sh
+  [ "$output" = 'probe: mutation survived (if (!(seen(a, f(b)))) {)' ]
+  printf 'return s.get(k)[0] ? 1 : 2;\n' > "$WT/d.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate d.js:1 "$WT" -- sh test-always.sh
+  [ "$output" = 'probe: mutation survived (return !(s.get(k)[0]) ? 1 : 2;)' ]
+  # An optional chain, a nullish default, a name ending in if, and a loop stay out.
+  for line in 'const x = a?.b ?? c;' 'notif (wraps) {' 'while (wraps) {'; do
+    printf '%s\n' "$line" > "$WT/e.js"
+    run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate e.js:1 "$WT" -- sh test-always.sh
+    [ "$status" -eq 3 ] || { echo "not inconclusive: $line"; false; }
+    [ "$output" = "probe: inconclusive (no condition to invert on e.js:1)" ]
+  done
+  # A condition that runs on to the next line has no closing bracket here.
+  printf 'if (wraps\n' > "$WT/f.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate f.js:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 3 ]
+}
+
+@test "--mutate: a negated bare condition reads as code, and the test catches it" {
+  printf 'const wraps = process.argv[2];\nif (wraps) {\n  process.exit(0);\n}\nprocess.exit(1);\n' > "$WT/a.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate a.js:2 "$WT" -- node a.js on
+  [ "$status" -eq 0 ]
+  [ "$output" = 'probe: mutation caught (if (!(wraps)) {)' ]
+  printf 'const wraps = process.argv[2];\nprocess.exit(wraps ? 0 : 1);\n' > "$WT/b.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate b.js:2 "$WT" -- node b.js on
+  [ "$status" -eq 0 ]
+  [ "$output" = 'probe: mutation caught (process.exit(!(wraps) ? 0 : 1);)' ]
+}
+
+@test "--mutate: a line with a ! it may not drop stays inconclusive, bare condition or not" {
+  printf 'if (!!wraps) {\n' > "$WT/a.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate a.js:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 3 ]
+  printf 'const x = a!.b ? c : d;\n' > "$WT/b.ts"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate b.ts:1 "$WT" -- sh test-always.sh
+  [ "$status" -eq 3 ]
+}
+
+@test "--with-passed skips the run on WT; the control and reversed runs stay" {
+  export KERN_COUNT="$TMP/count"
+  printf 'printf x >> "$KERN_COUNT"\nsh check.sh -1 && exit 1\nexit 0\n' > "$WT/test-count.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-count.sh
+  [ "$status" -eq 0 ]
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 3 ]
+  rm "$KERN_COUNT"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --with-passed "$WT" "$TMP/guard.patch" -- sh test-count.sh
+  [ "$status" -eq 0 ]
+  [ "$output" = "probe: fail-then-pass ok" ]
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 2 ]
+  rm "$KERN_COUNT"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --with-passed --exclude-tests "$WT" "$TMP/guard.patch" -- sh test-count.sh
+  [ "$status" -eq 0 ]
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 2 ]
+  rm "$KERN_COUNT"
+  printf '[ "$1" != bad ]\n' > "$WT/gate.sh"
+  printf 'printf x >> "$KERN_COUNT"\nbash gate.sh bad && exit 1\nexit 0\n' > "$WT/test-gate.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --with-passed --mutate gate.sh:1 "$WT" -- sh test-gate.sh
+  [ "$status" -eq 0 ]
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 2 ]
+}
+
+@test "--with-passed still takes a red control as inconclusive, never as a pass" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --with-passed "$WT" "$TMP/guard.patch" -- sh test-red.sh
+  [ "$status" -eq 3 ]
+  [[ "${lines[0]}" == "probe: inconclusive (the command fails in the fork"* ]] || false
+}
+
+@test "probe shares the fork's setup: worktree.setup does not run" {
+  mkdir -p "$REPO/.claude" "$WT/node_modules"
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-guard.sh
+  [ "$status" -eq 0 ]
+  [ ! -e "$TMP/setups" ]
+  [ -d "$WT/node_modules" ]
+}
+
+@test "a failed control retries with setup, and the probe's verdict is the retry's" {
+  export KERN_COUNT="$TMP/count"
+  mkdir -p "$REPO/.claude" "$WT/node_modules"
+  printf 'worktree.setup: touch built.log; printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+  touch "$WT/built.log"
+  printf 'printf x >> "$KERN_COUNT"\n[ -f built.log ] || exit 1\nsh check.sh -1 && exit 1\nexit 0\n' > "$WT/test-built.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-built.sh
+  [ "$status" -eq 0 ] || { echo "$output $stderr"; false; }
+  [ "$output" = "probe: fail-then-pass ok" ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  # WT, the shared control, the control with setup, the reversed run.
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 4 ]
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+  [ -d "$WT/node_modules" ]
+  # The retry's fork is the one --mutate edits.
+  rm "$TMP/setups"
+  printf '[ "$1" != bad ]\n' > "$WT/gate.sh"
+  printf '[ -f built.log ] || exit 1\nbash gate.sh bad && exit 1\nexit 0\n' > "$WT/test-gate.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.sh:1 "$WT" -- sh test-gate.sh
+  [ "$status" -eq 0 ]
+  [ "$output" = 'probe: mutation caught ([ "$1" == bad ])' ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+}
+
+@test "a control that also fails with setup stays inconclusive" {
+  mkdir -p "$REPO/.claude" "$WT/node_modules"
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+  touch "$WT/only-here.log"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- test -f only-here.log
+  [ "$status" -eq 3 ]
+  [[ "${lines[0]}" == "probe: inconclusive (the command fails in the fork before any change is reversed"* ]] || false
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+}
+
+@test "a failed control with nothing shared does not retry" {
+  mkdir -p "$REPO/.claude"
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+  touch "$WT/only-here.log"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- test -f only-here.log
+  [ "$status" -eq 3 ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+}
+
+@test "--mutate does not write through a shared directory" {
+  mkdir -p "$WT/node_modules/pkg"
+  printf 'if (wraps) {\n' > "$WT/node_modules/pkg/index.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate node_modules/pkg/index.js:1 "$WT" -- sh test-guard.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"resolves through a symlink outside the fork"* ]] || false
+  [ "$(cat "$WT/node_modules/pkg/index.js")" = 'if (wraps) {' ]
+}

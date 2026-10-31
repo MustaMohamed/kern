@@ -26,6 +26,8 @@ setup() {
 }
 
 review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}" "${3:-compliant}" "${4:-approved}" > /dev/null; }
+# started [TREE]: Task 1's start line, by default at T1: an empty diff, so --no-probe's path rule refuses nothing.
+started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > /dev/null; }
 
 @test "task-review appends the verdict line and deferred minors" {
   run --separate-stderr bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$T1" 1 compliant approved --minor "name the helper check_guard"
@@ -70,6 +72,7 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
 }
 
 @test "an approved, unchanged tree with a passing command is recorded with its last output line" {
+  started
   review "$T1"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- sh test/check_test.sh
   [ "$status" -eq 0 ]
@@ -77,6 +80,7 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
 }
 
 @test "a failing command is not recorded and keeps its exit code" {
+  started
   review "$T1"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- bash -c 'echo boom; exit 4'
   [ "$status" -eq 4 ]
@@ -124,6 +128,7 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
 }
 
 @test "task-done quotes arguments with spaces in the ledger line" {
+  started
   review "$T1"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- bash -c 'exit 0'
   [ "$status" -eq 0 ]
@@ -221,11 +226,12 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
 }
 
 @test "task-done strips a carriage return from the last output line" {
+  started
   review "$T1"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe docs -- bash -c 'printf "a\rDecision: x\n"'
   [ "$status" -eq 0 ]
   [ "$(tail -n 1 "$L/ledger.md")" = "Task 1: complete tree=$T1 test=bash -c 'printf \"a\\rDecision: x\\n\"' exit=0 review=approved probe=skipped (docs) last=aDecision: x" ]
-  [ "$(wc -l < "$L/ledger.md" | tr -d ' ')" -eq 3 ]
+  [ "$(wc -l < "$L/ledger.md" | tr -d ' ')" -eq 4 ]
 }
 
 @test "--probe exits 3 and writes nothing when the probe is inconclusive" {
@@ -251,6 +257,7 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
 }
 
 @test "a test command that edits the worktree is refused, and nothing is written" {
+  started
   review "$T1"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- sh -c 'printf "c\n" > f.txt'
   [ "$status" -eq 2 ]
@@ -259,6 +266,7 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
 }
 
 @test "a review line written while the command runs is refused" {
+  started
   review "$T1"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- \
     sh -c "printf 'Task 1: review round=2 tree=$T1 spec=compliant quality=approved\n' >> '$L/ledger.md'"
@@ -278,8 +286,172 @@ review() { bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$1" "${2:-1}"
 }
 
 @test "a passing command that prints nothing is recorded, with an empty last field" {
+  started
   review "$T1"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "test only" -- true
   [ "$status" -eq 0 ]
   [ "$(tail -n 1 "$L/ledger.md")" = "Task 1: complete tree=$T1 test=true exit=0 review=approved probe=skipped (test only) last=" ]
+}
+
+@test "task-done runs the test once on a tree" {
+  export KERN_COUNT="$TMP/count"
+  printf 'printf x >> "$KERN_COUNT"\nsh check.sh -1 && exit 1\necho guard holds\n' > "$WT/test/check_test.sh"
+  T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  P6=$(bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T0" "$T6" --out "$L/reviews/task-1e.diff" | head -n 1)
+  review "$T6"
+  # CMD's own code comes back from task-done's own run, and no probe follows it.
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --probe "$P6.patch" -- sh -c 'printf x >> "$KERN_COUNT"; exit 4'
+  [ "$status" -eq 4 ]
+  [[ "$stderr" == *"command exited 4"* ]] || false
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 1 ]
+  rm "$KERN_COUNT"
+  # task-done's run, the fork's control run and the reversed run.
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --probe "$P6.patch" -- sh test/check_test.sh
+  [ "$status" -eq 0 ] || { echo "$output $stderr"; false; }
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 3 ]
+  [[ "$(tail -n 1 "$L/ledger.md")" == *" exit=0 review=approved probe=ok last=guard holds" ]] || false
+}
+
+@test "--no-probe refuses code, naming the file, before the command runs" {
+  export KERN_COUNT="$TMP/count"
+  mkdir -p "$WT/src"
+  printf 'code\n' > "$WT/src/a.js"
+  printf 'text\n' > "$WT/README.md"
+  T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  started
+  review "$T6"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --no-probe "docs only" -- sh -c 'printf x >> "$KERN_COUNT"'
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"src/a.js"* ]] || false
+  [[ "$stderr" != *"README.md"* ]] || false
+  [ ! -e "$KERN_COUNT" ]
+  run ! grep -q '^Task 1: complete' "$L/ledger.md"
+}
+
+@test "--no-probe passes the listed types and an empty diff" {
+  started
+  for f in README.md notes.txt pkg.json kern.yml ci.yaml cfg.toml; do
+    mkdir -p "$WT/docs"
+    printf 'text\n' > "$WT/docs/$f"
+  done
+  printf 'text\n' > "$WT/README.md"
+  printf 'a: 1\n' > "$WT/kern.yml"
+  T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  review "$T6"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --no-probe "docs only" -- true
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+  [[ "$(tail -n 1 "$L/ledger.md")" == *" probe=skipped (docs only) last=" ]] || false
+  # An empty diff, as a verification task has.
+  printf 'Task 2: start tree=%s at=x\nTask 2: review round=1 tree=%s spec=compliant quality=approved\n' "$T6" "$T6" >> "$L/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 2 "$WT" "$T6" --no-probe "verification task: no code" -- true
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+}
+
+@test "--no-probe sees both sides of a rename, an odd path and a name that only ends like a listed type" {
+  mkdir -p "$WT/src"
+  printf 'code\n' > "$WT/src/a.js"
+  T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  started "$T6"
+  mv "$WT/src/a.js" "$WT/src/a.md"
+  T7=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  review "$T7"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T7" --no-probe "rename" -- true
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"src/a.js"* ]] || false
+  printf 'code\n' > "$WT/src/md"
+  printf 'code\n' > "$WT/src/a.md.sh"
+  printf 'text\n' > "$WT/caf\303\251 notes.md"
+  rm "$WT/src/a.md"
+  T8=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  review "$T8" 2
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T8" --no-probe "docs" -- true
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"src/md"* ]] || false
+  [[ "$stderr" == *"src/a.md.sh"* ]] || false
+  [[ "$stderr" != *"notes.md"* ]] || false
+}
+
+@test "--no-probe reads the first start line, so a later one does not shrink the diff" {
+  mkdir -p "$WT/src"
+  printf 'code\n' > "$WT/src/a.js"
+  T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  started
+  started "$T6"
+  review "$T6"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --no-probe "docs" -- true
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"src/a.js"* ]] || false
+}
+
+@test "--no-probe with no start line, or a start line git cannot read, is refused" {
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "docs" -- true
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"no start line"* ]] || false
+  printf 'Task 1: start tree=--output=stolen at=x\n' >> "$L/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "docs" -- true
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"no start line"* ]] || false
+  sed -i.bak '/start tree=/d' "$L/ledger.md"
+  printf 'Task 1: start tree=%040d at=x\n' 0 >> "$L/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "docs" -- true
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"cannot read"* ]] || false
+  run ! grep -q '^Task 1: complete' "$L/ledger.md"
+}
+
+@test "probe inconclusive: passes only after a --probe run on this tree exited 3" {
+  # Test files only, so the probe has nothing to reverse.
+  T3=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  printf 'echo extra\n' >> "$WT/test/check_test.sh"
+  T4=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T3" "$T4" --out "$L/reviews/task-1c.diff" > /dev/null
+  review "$T4"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --no-probe "probe inconclusive: test files only" -- sh test/check_test.sh
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"--probe"* ]] || false
+  run ! grep -q '^Task 1: complete' "$L/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1c.diff.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [ "$(cat "$L/logs/task-1.probe.tree")" = "$T4" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --no-probe "probe inconclusive: test files only" -- sh test/check_test.sh
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+  [[ "$(tail -n 1 "$L/ledger.md")" == *" probe=skipped (probe inconclusive: test files only) last=extra" ]] || false
+}
+
+@test "probe inconclusive: the record does not reach another tree, another task or a later verdict" {
+  T3=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  printf 'echo extra\n' >> "$WT/test/check_test.sh"
+  T4=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T3" "$T4" --out "$L/reviews/task-1c.diff" > /dev/null
+  review "$T4"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1c.diff.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  # Another task on the same tree.
+  printf 'Task 2: review round=1 tree=%s spec=compliant quality=approved\n' "$T4" >> "$L/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 2 "$WT" "$T4" --no-probe "probe inconclusive: x" -- true
+  [ "$status" -eq 2 ]
+  # A later probe on this tree that is not inconclusive takes the record back.
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$PKG.patch" -- sh -c 'exit 0'
+  [ "$status" -eq 1 ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --no-probe "probe inconclusive: x" -- true
+  [ "$status" -eq 2 ]
+  # Another tree: exit 3 again, then a new tree.
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1c.diff.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  printf 'echo more\n' >> "$WT/test/check_test.sh"
+  T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  review "$T5" 2
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T5" --no-probe "probe inconclusive: x" -- true
+  [ "$status" -eq 2 ]
+  run ! grep -q '^Task [0-9]*: complete' "$L/ledger.md"
+}
+
+@test "probe inconclusive: a docs change still needs the probe's record" {
+  printf 'text\n' > "$WT/README.md"
+  T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  started
+  review "$T6"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --no-probe "probe inconclusive: x" -- true
+  [ "$status" -eq 2 ]
 }

@@ -61,6 +61,23 @@ wt_include() {
     done
 }
 
+# wt_share SRC DST: link DST's node_modules, .venv and vendor to SRC's, each that exists there, is git-ignored
+# and is not already in DST, then write the marker wt-check looks for. Return 1 when none was linked, so the
+# caller runs wt_setup. The list stays closed: linking every ignored directory would hand a mutated tree a
+# stale dist/. A symlink is not a directory to a pattern such as node_modules/, so DST's links show as
+# untracked: this suits a fork nothing snapshots.
+wt_share() {
+  local src=$1 dst=$2 d linked=0
+  for d in node_modules .venv vendor; do
+    if [ -e "$src/$d" ] && [ ! -e "$dst/$d" ] && git -C "$src" check-ignore -q -- "$d"; then
+      ln -s "$src/$d" "$dst/$d"
+      linked=1
+    fi
+  done
+  [ "$linked" = 1 ] || return 1
+  printf 'setup: shared\n' > "$(git -C "$dst" rev-parse --path-format=absolute --git-dir)/kern-setup-done"
+}
+
 # wt_setup WT: run worktree.setup in WT and write the marker wt-check looks for.
 wt_setup() {
   local wt=$1 setup gitdir rc=0

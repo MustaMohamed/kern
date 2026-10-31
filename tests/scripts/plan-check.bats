@@ -309,3 +309,28 @@ full_spec() { # full_spec STATUS APPROVED: a full-form spec with every section t
   [ "$status" -eq 1 ]
   says "plan.md:$((n + 1)): fence not closed"
 }
+
+@test "plan-check refuses a glob in Files" {
+  sed -i.bak 's#^- Create: `src/parse.js:1-20`$#- Create: `src/*.js`#' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says 'plan.md:'
+  says 'Task 1: Files entry src/*.js is a glob'
+  sed -i.bak 's#^- Create: `src/\*\.js`$#- Create: `src/**/parse.js`#' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says 'Task 1: Files entry src/**/parse.js is a glob'
+  sed -i.bak 's#^- Create: `src/\*\*/parse.js`$#- Create: `src/parse?.js`#' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says 'Task 1: Files entry src/parse?.js is a glob'
+}
+
+@test "plan-check takes a path, a line range, a directory form and a bracketed route segment" {
+  for entry in 'src/a.js' 'src/a.js:3-9' 'src/*' 'src/**' 'app/[id]/page.tsx'; do
+    cp plan.md "plan-$$.md"
+    sed -i.bak "s#^- Create: \`src/parse.js:1-20\`\$#- Create: \`$entry\`#" "plan-$$.md"
+    pc "plan-$$.md"
+    [ "$status" -eq 0 ] || { echo "refused: $entry: $output"; false; }
+  done
+}
