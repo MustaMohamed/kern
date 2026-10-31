@@ -447,7 +447,7 @@ opened() {
 @test "ledger-open takes a plan and spec in their own directories" {
   work_repo
   mkdir -p docs/specs docs/tmp
-  for s in WORK/specs/s.md .kern/specs/s.md docs/specs/s.md ../specs/s.md docs/tmp/s.md WORK/plans/../specs/s.md; do
+  for s in WORK/specs/s.md .kern/specs/s.md docs/specs/s.md ../specs/s.md docs/tmp/s.md "$REPO/.kern/specs/s.md"; do
     spec_plan .kern/plans/p.md "$s"
     opened .kern/plans/p.md
   done
@@ -494,6 +494,14 @@ opened() {
   mkdir .kern/tmp/sub
   ln -s ../tmp/sub .kern/plans/dir
   refused .kern/plans/dir/../p.md "$REPO/.kern/tmp"
+}
+
+@test "ledger-open reads a spec: with a leading / in each place plan-check looks" {
+  work_repo
+  spec_plan .kern/plans/p.md /.kern/reviews/s.md
+  refused .kern/plans/p.md "$REPO/.kern/reviews"
+  spec_plan .kern/plans/p.md /../tmp/s.md
+  refused .kern/plans/p.md "$REPO/.kern/tmp"
 }
 
 @test "ledger-open refuses a spec: that holds .. after a directory that does not exist" {

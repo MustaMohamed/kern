@@ -869,12 +869,78 @@ EOF"
   done
 }
 
+@test "an in-place edit of a working file in a command that holds approved is denied" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  for c in "sed -i '' 's/draft/approved/' .kern/tmp/p.md" "sed -i.bak -e 's/draft/approved/' .kern/tmp/p.md" \
+    "perl -pi -e 's/draft/approved/' .kern/tmp/p.md" "gawk -i inplace '{ sub(/draft/, \"approved\") } 1' .kern/tmp/p.md" \
+    "vim -c '%s/draft/approved/' -c wq .kern/tmp/p.md" "ed -s .kern/tmp/p.md <<'EOF'
+s/draft/approved/
+w
+EOF" "find .kern/tmp -name p.md -exec sed -i '' 's/draft/approved/' .kern/tmp/p.md ';'"; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'text editor'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "a text editor that writes a working file through a redirect or a pipe in a command that holds approved is denied" {
+  working_dirs
+  for c in "sed 's/draft/approved/' .kern/specs/export.md > .kern/tmp/p.md" \
+    "awk '{ sub(/draft/, \"approved\") } 1' .kern/specs/export.md > .kern/tmp/p.md" \
+    "sed 's/draft/approved/' .kern/specs/export.md | tee .kern/tmp/p.md"; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'text editor'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "a text editor gets no vote on a working file when no command text holds approved" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  sh_cmd "sed -i '' 's/Problem/Issue/' .kern/tmp/p.md"
+  no_vote
+}
+
+@test "a text editor in its own simple command does not touch a working file's note" {
+  working_dirs
+  sh_cmd "sed -n 1p README.md; printf 'approved\n' >> .kern/ledgers/x/ledger.md"
+  no_vote
+}
+
+@test "a copy into a working file from a file that holds an approval is denied" {
+  working_dirs
+  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '---' > "$R/notes.txt"
+  cp "$R/notes.txt" "$R/notes.md"
+  for c in 'cp notes.txt .kern/tmp/p.md' 'cp notes.md .kern/tmp/' 'mv notes.txt .kern/reviews/p.md' \
+    'cat notes.txt > .kern/tmp/p.md' 'cat notes.txt >> .kern/ledgers/x/ledger.md' 'tee .kern/tmp/p.md < notes.txt' \
+    'ln -s ../../notes.txt .kern/tmp/p.md' 'install notes.txt .kern/tmp/p.md' 'dd if=notes.txt of=.kern/tmp/p.md' \
+    'cat notes.txt | tee .kern/tmp/p.md' 'printf %s "$(cat notes.txt)" > .kern/tmp/p.md'; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'holds a status: approved line'* ]] || { echo "$c: $output"; return 1; }
+  done
+  approved_spec 'yes'
+  sh_cmd 'cat .kern/specs/export.md > .kern/tmp/copy.md'
+  denied
+}
+
+@test "a copy into a working file from a file with no approval gets no vote" {
+  working_dirs
+  sh_cmd 'cp README.md .kern/tmp/r.md'
+  no_vote
+  sh_cmd 'cat README.md | tee .kern/tmp/r.md'
+  no_vote
+}
+
 @test "a working path built at run time stays judged" {
   working_dirs
   approved_spec 'yes'
   sh_cmd 'printf approved > .kern/tmp/$X.md'
   denied
   sh_cmd 'cat .kern/specs/export.md > .kern/tmp/$X.md'
+  denied
+  sh_cmd 'printf x > .kern/tmp/$X.md; cat .kern/specs/export.md'
   denied
 }
 

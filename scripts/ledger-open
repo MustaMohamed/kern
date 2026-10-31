@@ -176,10 +176,9 @@ case "$spec" in
     file=$spec
     case "$file" in WORK/*) file=$work/${file#WORK/} ;; esac
     main=$(kern_main_root "$PWD" 2> /dev/null) || main=''
-    case "$file" in
-      /*) refuse_working "$plan: spec: $spec" "$file" ;;
-      *) for c in "$file" "$(dirname "$plan")/$file" "$main/$file"; do refuse_working "$plan: spec: $spec" "$c"; done ;;
-    esac
+    for c in "$file" "$(dirname "$plan")/$file" "$main/$file"; do
+      refuse_working "$plan: spec: $spec" "$c"
+    done
     ;;
 esac
 status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
