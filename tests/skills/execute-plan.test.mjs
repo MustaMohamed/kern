@@ -45,8 +45,8 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // stop from a judgment call and says how a go and an open task end, and a refused path counts as a review, after word cuts.
   // 15,700 since M3 part 1's Task 15: step 1 names ledger-open's working-file refusal, step 10 task-done's timeout and a refused
   // `--no-probe`, step 11 the one-run rule, step 12 the saved return, after the dead parameter's words and `size-check`'s path went.
-  // 16,150 since its fix round 1: step 10's timeout rule and task-start line, step 11's saved log, step 12's spec, rules and asks,
-  // after a word trim.
+  // 16,150 since its fix rounds 1 and 2: step 10's timeout rule and task-start line, step 11's saved log, step 12's worktree, spec
+  // and rules and its saved return's first line, after word trims.
   assertMaxBytes(SKILL, 16150);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
   // 1,350 since the final review of pilot fix plan 2: round 2's review is `evidence` too, on the new report, not re-review.
@@ -140,11 +140,11 @@ export const PINS = {
     'when the Size line was already over it, take its one-PR word with no ask',
     'Either way record the word, quoted, with `lines: <n> (<measure>)` and the `-w` count, in a `Decision:` line whose what opens with size; `split` ends the run.'],
   11: ["apply each closed worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt> --tree <complete line's tree>`",
-    'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then take `<id>` with `wt-snap` and run `test.full` there; red: stop. Save its output as `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/references/evidence.md` says.',
+    'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then take `<id>` with `wt-snap` and run `test.full` there, saving its output as `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/references/evidence.md` says; red: stop.',
     'A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay.'],
   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',
     "(the `Worktree:` line's base tree)", 'mode `whole-branch` on `model.final_review`', 'to triage which minors block', 'Re-grade findings by effect.',
-    'Save its return as `<ledger dir>/reviews/final.txt` with the Write tool, opening `Spec given: <path or none>`.',
+    'Save its return as `<ledger dir>/reviews/final.txt` with the Write tool, opening `Spec given: <absolute path or none> tree=<id>`, `<id>` from `wt-diff`\'s second output line.',
     'One fix subagent gets the complete findings list, real gaps included (`kern:implementer`, a step 6 brief), each fix red then green',
     "one `re-review` on `model.final_review` of its diff from `final.diff`'s second line, packaged with an `--allow-file` per task", 'Residual findings go to the user in step 13.'],
   13: ['`ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report.', "No push or PR, no commit beyond step 10's (autopilot: below)"],
@@ -209,9 +209,15 @@ test('the final review is the same proof as self-review\'s spec lane, so one can
   // M3 part 1 Task 15 fix round 1, I1: this review never saw acceptance text, `States:`, `Handles:` or Not doing lines, and got no
   // `review.rules`, while self-review's lane skipped on its word. It now takes what the lane takes and asks what the lane asks.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[12].includes("with the package, the plan, that list, the plan's `spec:` file, if any, and the `review.rules` files, to triage which minors block and ask what is missing, partial, unasked or wrong, quoting spec lines."), s[12]);
+  // Fix round 2, I1: with no worktree path, the reviewer's one allowed read hit the main checkout and base code.
+  assert.ok(s[12].includes("with the package, `<plan-wt>`, the plan, that list, the plan's `spec:` file, if any, and the `review.rules` files, to triage which minors block."), s[12]);
   const lane = steps(readDoc('skills/self-review/SKILL.md').body)[4];
-  assert.ok(lane.includes('the `review.rules` files') && lane.includes('Ask what is missing, partial, unasked or wrong, quoting spec lines.'), lane);
+  assert.ok(lane.includes('the `review.rules` files'), lane);
+  // Fix round 2, C1: both dispatch mode `whole-branch` with a spec, so the ask lives once, in that mode. These two files load on every run.
+  for (const t of [s[12], lane]) {
+    assert.ok(t.includes('`whole-branch`'), t);
+    assert.ok(!t.includes('what is missing, partial, unasked or wrong'), t);
+  }
   const mode = readDoc('agents/task-reviewer.md').body.split('\n').find((l) => l.startsWith('- `whole-branch`:')) ?? '';
   assert.ok(mode.includes('Given a spec, also ask what is missing, partial, unasked or wrong, quoting spec lines.'), mode);
 });
@@ -462,7 +468,7 @@ test('step 13 names an applied closed task that stayed uncommitted', () => {
   // first. Skipping finish-branch step 8 skips commit's ledger pass, so that task stays dirty and out of the push.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[13].includes('Under autopilot, name each path an applied closed task left uncommitted.'), s[13]);
-  assert.ok(s[11].includes('run `test.full` there; red: stop.'), s[11]);
+  assert.ok(s[11].includes('says; red: stop.'), s[11]);
   assert.ok(s[10].includes('(a wave task: after step 11)'), s[10]);
 });
 

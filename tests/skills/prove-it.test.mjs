@@ -103,8 +103,8 @@ test('evidence reference', () => {
   assertHeadings('skills/prove-it/references/evidence.md', ['# Evidence by claim', '## Claim table', '## Labels', '## Inconclusive is a fail']);
   assertContains('skills/prove-it/references/evidence.md', ['zero tests ran']);
   // 2,150 since M3 part 1's Task 15 (raised from 2,100): the one-run rule with its two limits, and the emulator walk's bound.
-  // 2,530 since its fix round 1: the run's log and the citing line, and a walk's same-tree rule and what follows past 2 reruns.
-  assertMaxBytes('skills/prove-it/references/evidence.md', 2530);
+  // 2,550 since its fix rounds 1 and 2: the run's log from this session and the citing line, and a walk's same-tree rule and what follows past 2 reruns.
+  assertMaxBytes('skills/prove-it/references/evidence.md', 2550);
 });
 
 test('a failed emulator walk resumes from the failed step, within a bound', () => {

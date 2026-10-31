@@ -148,13 +148,16 @@ test('a cited test.full has a log a reader can check, and without it the run hap
   // M3 part 1 Task 15 fix round 1, I2: the skip rested on memory. The log is the record, with no new ledger line.
   const e = readDoc('skills/prove-it/references/evidence.md').raw;
   for (const n of ["The main session saves that run's output as `test-full-<id>.log` under `kern-dir tmp`;", 'a citing step writes `skip: test.full, passed on <id>: <log>, <summary line>`.',
-    'No log, or no passing summary line in it: rerun.']) assert.ok(e.includes(n), n);
+    // Fix round 2, N1: the log is keyed on the tree only and `kern-dir tmp` is never cleaned, so an old run's log would pass.
+    'No log this session saved, or no passing summary line in it: rerun.']) assert.ok(e.includes(n), n);
   // execute-plan saves its run by a pointer, and finish-branch step 4 reaches the rule through prove-it, whose step 3 names the file.
-  const save = 'Save its output as `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/references/evidence.md` says.';
-  assert.ok(steps(readDoc('skills/execute-plan/SKILL.md').body)[11].includes(save));
-  // Fix round 1, ruled in: a kernel-row run goes from implement to finish-branch, so its run saves the log too.
+  // Fix round 2, N6: the save happens during the run, so a cut-off call leaves its output too.
+  const save = 'saving its output as `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/references/evidence.md` says';
+  assert.ok(steps(readDoc('skills/execute-plan/SKILL.md').body)[11].includes(`run \`test.full\` there, ${save}; red: stop.`));
+  // Fix round 1, ruled in: a kernel-row run goes from implement to finish-branch, so its run saves the log too. Fix round 2, N2:
+  // every worker follows implement too, and a worker's log in the main session's `kern-dir tmp` could stand at step 4.
   const imp = steps(readDoc('skills/implement/SKILL.md').body)[11];
-  assert.ok(imp.indexOf('run `test.full`') >= 0 && imp.indexOf('run `test.full`') < imp.indexOf(save), imp);
+  assert.ok(imp.includes(`run \`test.full\` (main session only: ${save}), and name every red test`), imp);
   assert.ok(steps(readDoc(SKILL).body)[4].includes('by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`'));
   assert.ok(steps(readDoc('skills/prove-it/SKILL.md').body)[3].includes('`references/evidence.md` says when a passed `test.full` stands.'));
 });

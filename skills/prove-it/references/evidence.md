@@ -1,6 +1,6 @@
 # Evidence by claim
 
-Each claim needs its proving command run fresh, in full, on the tree that will be integrated. A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay. `<id>` is from `wt-snap` before that run; the citing step's `wt-snap` must match it. The main session saves that run's output as `test-full-<id>.log` under `kern-dir tmp`; a citing step writes `skip: test.full, passed on <id>: <log>, <summary line>`. No log, or no passing summary line in it: rerun. A subagent's report is no such run.
+Each claim needs its proving command run fresh, in full, on the tree that will be integrated. A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay. `<id>` is from `wt-snap` before that run; the citing step's `wt-snap` must match it. The main session saves that run's output as `test-full-<id>.log` under `kern-dir tmp`; a citing step writes `skip: test.full, passed on <id>: <log>, <summary line>`. No log this session saved, or no passing summary line in it: rerun. A subagent's report is no such run.
 
 ## Claim table
 

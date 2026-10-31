@@ -30,8 +30,8 @@ test('implement sections, steps and red flags', () => {
   // 6,245 since M3 part 1 Task 8 and its fix round 1: autopilot's rules for steps 1, 3 and 5, `{id}`'s source, step 9's
   // patch path, a go's way to finish-branch and the stop and park line, after word cuts.
   // 6,425 since its Task 15: step 11 takes the tree before `test.full` and cites a passed run on that exact tree.
-  // 6,515 since its fix round 1: step 11 saves that run's log, so a kernel-row run can cite it at finish-branch.
-  assertMaxBytes(SKILL, 6515);
+  // 6,535 since its fix rounds 1 and 2: step 11 saves that run's log in the main session only, so a kernel-row run can cite it at finish-branch.
+  assertMaxBytes(SKILL, 6535);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
