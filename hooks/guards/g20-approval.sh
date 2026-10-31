@@ -5,8 +5,9 @@
 # the user's own words. The check reads the file as it will be after the Write or Edit, so splitting
 # the change over two edits does not get past it. The frontmatter must hold exactly one approved: line,
 # in any case or indentation, and it must quote one whole line of the user's last message, verbatim,
-# that is not a non-answer such as "sounds good", holds a yes word (yes, ok, go ahead, lgtm and the
-# like), holds no negation or hold word (no, not, don't, wait, later and the like) and does not end in a
+# that is not a non-answer such as "sounds good", does not start with /kern:autopilot or /autopilot (a
+# refused go is still a line of that message), holds a yes word (yes, ok, go ahead, lgtm and the like),
+# holds no negation or hold word (no, not, don't, wait, later and the like) and does not end in a
 # question mark. The file must be older than that message. prompt-submit records the message's line
 # hashes in the session state. G16 denies a write to that state, and asks before (under autopilot
 # denies) a Write or Edit under kern's hooks/ directory and a Bash command that names a hook entry file,
@@ -240,6 +241,12 @@ _g20_file() {
   norm=$(printf '%s\n' "$quote" | env LC_ALL=C tr '[:upper:]' '[:lower:]' |
     sed -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //' -e 's/ $//' -e 's/[.!?,;:]*$//' -e 's/ $//')
   norm=${norm//$_G20_RSQ/\'}
+  case "${norm%% *}" in
+    /kern:autopilot | /autopilot)
+      vote deny G20 "\"$quote\" is an autopilot command, not an explicit yes; $_G20_ASK_YES"
+      return 0
+      ;;
+  esac
   case "$_G20_NOT_YES" in
     *" $norm "*)
       vote deny G20 "\"$quote\" is not an explicit yes; $_G20_ASK_YES"

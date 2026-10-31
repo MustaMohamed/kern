@@ -64,6 +64,25 @@ no_vote() {
   [ "$status" -eq 0 ] && [ -z "$output" ] || { echo "status $status: $output"; return 1; }
 }
 
+# deny_autopilot: the project denies autopilot, so a go refuses and a recorded one reads as off.
+deny_autopilot() {
+  mkdir -p "$R/.claude"
+  printf 'autopilot: denied\n' > "$R/.claude/kern.local.yml"
+}
+
+# go_refused: the state holds autopilot off and no go.
+go_refused() {
+  local f="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  grep -q '^autopilot: off$' "$f" || { cat "$f"; return 1; }
+  [ -z "$(sed -n 's/^go: //p' "$f")" ] || { cat "$f"; return 1; }
+}
+
+# command_denied: G20 denied the last call's quote as an autopilot command.
+command_denied() {
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [[ "$output" == *'is an autopilot command, not an explicit yes'* ]] || { echo "$output"; return 1; }
+}
+
 # go_denied: G20 denied the last call as an approval under autopilot with no go for it.
 go_denied() {
   [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
@@ -365,6 +384,82 @@ go_denied() {
   [ "$(read_failures awk)" -ge 3 ]
   read_fails awk '*toupper*' 0
   approve "$GO"
+  no_vote
+}
+
+@test "a go refused by a denied project is not a yes" {
+  ticket 'issue: MA-254'
+  deny_autopilot
+  say "$GO"
+  go_refused
+  approve "$GO"
+  command_denied
+}
+
+@test "a go refused for a skill conflict is not a yes" {
+  ticket 'issue: MA-254'
+  mkdir -p "$R/.claude/skills/commit"
+  printf 'x\n' > "$R/.claude/skills/commit/SKILL.md"
+  say "$GO"
+  go_refused
+  approve "$GO"
+  command_denied
+}
+
+@test "a go line on another ticket's spec is not a yes with autopilot off" {
+  ticket 'issue: MA-9'
+  deny_autopilot
+  say '/kern:autopilot go MA-1'
+  go_refused
+  approve '/kern:autopilot go MA-1'
+  command_denied
+}
+
+@test "a recorded go whose project then denies autopilot is not a yes" {
+  ticket 'issue: MA-254'
+  say "$GO"
+  deny_autopilot
+  approve "$GO"
+  command_denied
+}
+
+@test "a go line pasted into a longer message is not a yes" {
+  ticket 'issue: MA-254'
+  say "Please run this\n$GO"
+  go_refused
+  approve "$GO"
+  command_denied
+}
+
+@test "a quote's case and blanks do not hide an autopilot command" {
+  ticket 'issue: MA-254'
+  deny_autopilot
+  say "$GO"
+  for q in ' /kern:autopilot go MA-254' '/KERN:AUTOPILOT GO MA-254' '  /Kern:Autopilot   go ma-254'; do
+    approve "$q"
+    command_denied || { echo "quote: [$q]"; return 1; }
+  done
+  say '/autopilot go MA-254'
+  for q in '/autopilot go MA-254' ' /AUTOPILOT go MA-254'; do
+    approve "$q"
+    command_denied || { echo "quote: [$q]"; return 1; }
+  done
+}
+
+@test "an autopilot line is not a yes, whatever follows" {
+  ticket 'issue: MA-254'
+  for q in '/kern:autopilot ok' '/autopilot yes' '/kern:autopilot go ahead'; do
+    say "$q"
+    go_refused
+    approve "$q"
+    command_denied || { echo "quote: [$q]"; return 1; }
+  done
+}
+
+@test "a yes that only names the command still approves" {
+  ticket 'issue: MA-254'
+  say 'Yes, then run /kern:autopilot go MA-1'
+  approve 'Yes, then run /kern:autopilot go MA-1'
   no_vote
 }
 
