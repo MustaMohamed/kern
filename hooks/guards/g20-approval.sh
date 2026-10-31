@@ -12,9 +12,10 @@
 # denies) a Write or Edit under kern's hooks/ directory and a Bash command that names a hook entry file,
 # a .sh file under hooks/lib/ or hooks/guards/, or a state function, so the model cannot run
 # prompt-submit to forge the message or edit this guard unseen. A shell write that reaches a hook file
-# without naming its path is not seen (G16's accepted limits). Under autopilot nothing approves. G20 never votes allow. ledger-open runs only a plan with a
-# Markdown name, and G20, ledger-open and plan-check read frontmatter with one reader
-# (scripts/lib/frontmatter.awk), so every approval ledger-open accepts passed through G20.
+# without naming its path is not seen (G16's accepted limits). Under autopilot only a go approves, for its
+# ticket (_g20_go), in place of the checks on the user's last message. G20 never votes allow. ledger-open
+# runs only a plan with a Markdown name, and G20, ledger-open and plan-check read frontmatter with one
+# reader (scripts/lib/frontmatter.awk), so every approval ledger-open accepts passed through G20.
 #
 # Accepted limits:
 # - "The user's last message" is the last prompt prompt-submit does not read as wrapped. A prompt
@@ -24,6 +25,9 @@
 # - The approval does not bind the content. An approved file whose approved: lines stay the same can be
 #   rewritten by Edit or Write, the approval edit itself may change the body, and a new file has no
 #   draft to be older than the message, so removing a draft and writing it anew with a real quote passes.
+# - A go approves any file whose issue: line names its ticket, and the model writes that line.
+# - A subagent call that carries neither agent_type nor agent_id counts as the main session, as for
+#   consent_for.
 # - The hash is djb2, not a cryptographic hash: a quote built to collide with a line of the message
 #   passes. A shell write that hides the path or the word (a script run by name, a word built at run
 #   time, a recursive directory copy, git checkout or apply, a hard link) is not seen.
@@ -84,6 +88,31 @@ _g20_holds() {
 _g20_lines() {
   printf '%s\n' "$1" |
     env LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd][\"']?[[:space:]]*:[[:space:]]*//p"
+}
+
+# _g20_issues FRONTMATTER: the value of every issue: line, in order.
+_g20_issues() {
+  printf '%s\n' "$1" |
+    env LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Ii][Ss][Ss][Uu][Ee][\"']?[[:space:]]*:[[:space:]]*//p"
+}
+
+# _g20_go AFTER: exit 0 when the session's go approves the frontmatter AFTER: the call is the main
+# session's, the state's go and go_repo are set, go_repo is this repository's key, AFTER's one approved:
+# line quotes the go's line, and its one issue: line names the go's ticket. go_ticket takes a single
+# line, so no issue: line, or two of them, names none. A read that fails or comes back empty is no go.
+_g20_go() {
+  local go repo key quote id
+  [ -z "${AGENT-}${AGENT_ID-}" ] || return 1
+  go=$(state_get "$SID" go 2> /dev/null) || return 1
+  [ -n "$go" ] || return 1
+  repo=$(state_get "$SID" go_repo 2> /dev/null) || return 1
+  key=$(consent_key "${KERN_MAIN-}") || return 1
+  [ -n "$key" ] && [ "$repo" = "$key" ] || return 1
+  [ "$(printf '%s\n' "$1" | env LC_ALL=C grep -Eic "$_G20_APPROVED_RE")" = 1 ] || return 1
+  quote=$(_g20_lines "$1" | sed -n 's/^[^"]*"\(.*\)".*$/\1/p')
+  [ "$quote" = "/kern:autopilot go $go" ] || return 1
+  id=$(go_ticket "$(_g20_issues "$1")") || return 1
+  [ "$id" = "$go" ]
 }
 
 # _g20_any LIST WORDS: exit 0 when WORDS (blank-padded) holds one of the |-separated words or phrases of
@@ -191,7 +220,8 @@ _g20_file() {
   # An approved file whose approved: lines stay the same is not being approved now.
   if _g20_approved "$before" && [ "$(_g20_lines "$before")" = "$lines" ]; then return 0; fi
   if [ "${AUTOPILOT:-0}" = 1 ]; then
-    vote deny G20 "under autopilot nothing approves a spec or plan; keep status: draft (parked under autopilot) and park the question"
+    _g20_go "$after" && return 0
+    vote deny G20 "under autopilot only a go approves, for its ticket; keep status: draft (parked under autopilot) and park the question"
     return 0
   fi
   # ledger-open reads the first line that starts exactly with approved:, so G20 judges only a

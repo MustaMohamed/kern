@@ -254,6 +254,24 @@ approved_plan() {
   [ ! -e "$TMP/l/ledger.md" ]
 }
 
+@test "ledger-open and plan-check take a go approval" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  printf '%s\n' '---' 'form: short' 'status: approved' 'issue: MA-254' 'approved: 2026-10-31, "/kern:autopilot go MA-254"' '---' '' \
+    '## Problem' '' '## Constraints' '' '## Acceptance criteria' '' '1. Works.' '' '## Test seams' > "$TMP/spec.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/plan-check" "$TMP/spec.md"
+  [ "$status" -eq 0 ] || { echo "plan-check spec: $output $stderr"; false; }
+  printf '%s\n' '---' 'status: approved' 'spec: spec.md' 'issue: MA-254' 'approved: 2026-10-31, "/kern:autopilot go MA-254"' \
+    'execution: delegate' 'commits: ask' '---' '' '## Global Constraints' '' '- Bash 3.2.' '' '## Review Focus' '' '1. Focus.' '' \
+    '## File map' '' '### Task 1: One' '' '**Files:**' '- Create: `src/one.js`' '' '**Interfaces:**' '- Consumes: none' \
+    '- Produces: none' '' '**Blocked by:** none' '' '**Acceptance:** 1' '' '- [ ] Step 1: Run: `node --test`. Expected: one failure.' \
+    > "$TMP/go.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/plan-check" "$TMP/go.md"
+  [ "$status" -eq 0 ] || { echo "plan-check: $output $stderr"; false; }
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/go.md" "$TMP/l"
+  [ "$status" -eq 0 ] || { echo "ledger-open: $output $stderr"; false; }
+  [ -f "$TMP/l/ledger.md" ]
+}
+
 @test "ledger-open --summary lists decisions, parked and deferred lines and checks the main checkout" {
   REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
   approved_plan "$TMP/a.md"

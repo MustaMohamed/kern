@@ -63,6 +63,25 @@ gh_log() {
   [ "$(decision_of "$output")" = allow ]
 }
 
+@test "opening the draft PR ends the go" {
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: abc\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  g "$C" g02
+  [ "$(decision_of "$output")" = allow ]
+  grep -q '^go: $' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  [ "$(grep -c '^go: ' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" -eq 1 ]
+  grep -q '^autopilot: on$' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+
+@test "a draft PR G2 does not allow leaves the go" {
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: abc\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  export FAKE_GH_STATES=OPEN
+  g "$C" g02
+  [ "$(decision_of "$output")" = deny ]
+  grep -q '^go: MA-254$' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+
 @test "G2: an open PR for the head is denied; a merged one asks" {
   export FAKE_GH_STATES=OPEN
   g "gh pr create --draft --title x --body-file b.md" g02

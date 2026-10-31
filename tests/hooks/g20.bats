@@ -21,10 +21,53 @@ say() {
     bash "$K/hooks/prompt-submit" > /dev/null
 }
 
-# approve QUOTE [PATH]: an Edit that sets status: approved and replaces the placeholder approved: line
-# with one quoting QUOTE.
+# approve_payload QUOTE [PATH]: an Edit that sets status: approved and replaces the placeholder approved:
+# line with one quoting QUOTE.
+approve_payload() {
+  tool_payload Edit "\"file_path\":\"${2:-$SPEC}\",\"old_string\":\"status: draft\\ndate: 2026-10-14\\napproved: (set only on an explicit yes)\",\"new_string\":\"status: approved\\ndate: 2026-10-14\\napproved: 2026-10-14, \\\"$1\\\"\""
+}
+
+# approve QUOTE [PATH]: G20's vote on that Edit.
 approve() {
-  run_guard "$(tool_payload Edit "\"file_path\":\"${2:-$SPEC}\",\"old_string\":\"status: draft\\ndate: 2026-10-14\\napproved: (set only on an explicit yes)\",\"new_string\":\"status: approved\\ndate: 2026-10-14\\napproved: 2026-10-14, \\\"$1\\\"\"")" g20
+  run_guard "$(approve_payload "$1" "${2-}")" g20
+}
+
+GO='/kern:autopilot go MA-254'
+
+# ticket LINE...: the draft with LINE... in its frontmatter, old as in setup.
+ticket() {
+  printf '%s\n' '---' "$@" 'status: draft' 'date: 2026-10-14' 'approved: (set only on an explicit yes)' '---' '## Problem' > "$SPEC"
+  touch -t 202001010000 "$SPEC"
+}
+
+# approve_as FIELD: the go's Edit, from a call that carries the JSON field FIELD.
+approve_as() {
+  local p
+  p=$(approve_payload "$GO")
+  run_guard "{$1,${p#\{}" g20
+}
+
+# write_spec LINE...: a Write of a new spec whose frontmatter holds LINE..., JSON text.
+write_spec() {
+  local c='---' l
+  for l in "$@"; do c="$c\\n$l"; done
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/specs/new.md\",\"content\":\"$c\\n---\\n## Problem\\n\"")" g20
+}
+
+# state_line LINE: appends LINE to the state; state_get reads the last line of a key.
+state_line() {
+  printf '%s\n' "$1" >> "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+
+# no_vote: G20 said nothing on the last call.
+no_vote() {
+  [ "$status" -eq 0 ] && [ -z "$output" ] || { echo "status $status: $output"; return 1; }
+}
+
+# go_denied: G20 denied the last call as an approval under autopilot with no go for it.
+go_denied() {
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [[ "$output" == *'only a go approves, for its ticket'* ]] || { echo "$output"; return 1; }
 }
 
 @test "a quote of the user's last message approves" {
@@ -154,7 +197,183 @@ approve() {
   printf 'autopilot: on\n' >> "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   approve 'yes'
   [ "$(decision_of "$output")" = deny ]
-  [[ "$output" == *"under autopilot nothing approves"* ]] || false
+  [[ "$output" == *"under autopilot only a go approves, for its ticket; keep status: draft (parked under autopilot) and park the question"* ]] || false
+}
+
+@test "under autopilot a go approves its ticket's spec" {
+  ticket 'issue: MA-254'
+  say "$GO"
+  approve "$GO"
+  no_vote
+}
+
+@test "a go approves in the write that creates a short spec" {
+  say "$GO"
+  write_spec 'form: short' 'status: approved' 'issue: MA-254' 'approved: 2026-10-31, \"/kern:autopilot go MA-254\"'
+  no_vote
+}
+
+@test "a go matches other spellings of the issue" {
+  ticket 'issue: ma-254'
+  say "$GO"
+  approve "$GO"
+  no_vote
+  ticket 'issue: #853'
+  say '/kern:autopilot go 853'
+  approve '/kern:autopilot go 853'
+  no_vote
+  ticket 'issue: 853'
+  say '/kern:autopilot go #853'
+  approve '/kern:autopilot go 853'
+  no_vote
+}
+
+@test "a go does not approve another ticket" {
+  ticket 'issue: MA-9'
+  say "$GO"
+  approve "$GO"
+  go_denied
+  approve '/kern:autopilot go MA-9'
+  go_denied
+}
+
+@test "a spec with no ticket gets no approval" {
+  say "$GO"
+  ticket
+  approve "$GO"
+  go_denied
+  for l in 'issue: none' 'issue: (tracker id, or none)' 'issue:'; do
+    ticket "$l"
+    approve "$GO"
+    go_denied
+  done
+}
+
+@test "only the frontmatter's one issue: line names the ticket" {
+  say "$GO"
+  ticket
+  printf 'issue: MA-254\n' >> "$SPEC"
+  touch -t 202001010000 "$SPEC"
+  approve "$GO"
+  go_denied
+  ticket 'issue: MA-254' 'Issue: MA-9'
+  approve "$GO"
+  go_denied
+  ticket 'issue: MA-9' 'issue: MA-254'
+  approve "$GO"
+  go_denied
+}
+
+@test "the quote must be the go line" {
+  ticket 'issue: MA-254'
+  say "$GO"
+  for q in yes '/kern:autopilot go ma-254' '/kern:autopilot go MA-9' '/autopilot go MA-254' 'kern:autopilot go MA-254' \
+    '/kern:autopilot go MA-254 now'; do
+    approve "$q"
+    go_denied || { echo "quote: $q"; return 1; }
+  done
+  run_guard "$(tool_payload Edit "\"file_path\":\"$SPEC\",\"old_string\":\"status: draft\",\"new_string\":\"status: approved\"")" g20
+  go_denied
+}
+
+@test "a second approved: line takes the go's approval away" {
+  say "$GO"
+  write_spec 'status: approved' 'issue: MA-254' 'Approved: (old)' 'approved: 2026-10-31, \"/kern:autopilot go MA-254\"'
+  go_denied
+}
+
+@test "a subagent cannot use the go" {
+  ticket 'issue: MA-254'
+  say "$GO"
+  approve_as '"agent_type":"kern:implementer"'
+  go_denied
+  approve_as '"agent_id":"a1"'
+  go_denied
+  approve_as '"permission_mode":"default"'
+  no_vote
+}
+
+@test "a go from another repository does not approve" {
+  say "$GO"
+  R2="$BATS_TEST_TMPDIR/other"
+  make_repo "$R2"
+  R2=$(cd "$R2" && pwd -P)
+  CWD=$R2
+  mkdir -p "$R2/.kern/specs"
+  SPEC="$R2/.kern/specs/export.md"
+  ticket 'issue: MA-254'
+  approve "$GO"
+  go_denied
+}
+
+@test "a replaced go no longer approves" {
+  ticket 'issue: MA-1'
+  say '/kern:autopilot go MA-1'
+  say '/kern:autopilot go MA-2'
+  approve '/kern:autopilot go MA-1'
+  go_denied
+}
+
+@test "a draft written after the go still approves" {
+  ticket 'issue: MA-254'
+  say "$GO"
+  touch -t 203001010000 "$SPEC"
+  approve "$GO"
+  no_vote
+}
+
+@test "under autopilot with no go nothing approves" {
+  ticket 'issue: MA-254'
+  say '/kern:autopilot on'
+  approve "$GO"
+  go_denied
+}
+
+@test "a cleared go or go_repo is no go" {
+  ticket 'issue: MA-254'
+  say "$GO"
+  state_line 'go_repo: '
+  approve "$GO"
+  go_denied
+  say "$GO"
+  state_line 'go: '
+  approve "$GO"
+  go_denied
+}
+
+@test "a failed read is no go" {
+  ticket 'issue: MA-254'
+  say "$GO"
+  read_fails awk 'k=go'
+  approve "$GO"
+  go_denied
+  [ "$(read_failures awk)" -ge 1 ]
+  read_fails awk 'k=go' 0
+  read_fails awk 'k=go_repo'
+  approve "$GO"
+  go_denied
+  [ "$(read_failures awk)" -ge 2 ]
+  read_fails awk 'k=go_repo' 0
+  read_fails git '*hash-object*'
+  approve "$GO"
+  go_denied
+  [ "$(read_failures git)" -ge 1 ]
+  read_fails git '*hash-object*' 0
+  read_fails awk '*toupper*'
+  approve "$GO"
+  go_denied
+  [ "$(read_failures awk)" -ge 3 ]
+  read_fails awk '*toupper*' 0
+  approve "$GO"
+  no_vote
+}
+
+@test "a shell write of the go quote stays denied" {
+  ticket 'issue: MA-254'
+  say "$GO"
+  run_guard "$(tool_payload Bash "\"command\":\"sed -i '' 's|^approved:.*|approved: 2026-10-31, \\\"$GO\\\"|' $SPEC\"")" g20
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'set or change an approval with the Edit or Write tool'* ]] || false
 }
 
 @test "other files and draft edits get no G20 vote" {
