@@ -354,7 +354,7 @@ _g18_denies() {
   case "$1" in
     *\\$'\n'*)
       join=$(_g18_join "$1") || {
-        _G18_NEXT="G18 cannot read this line continuation: write the command on one line and retry."
+        _G18_NEXT="G18 cannot read this line continuation: write the command on one line, with no comment or here-doc, and retry."
         return 0
       }
       ;;
