@@ -32,7 +32,8 @@ test('implement sections, steps and red flags', () => {
   // 6,425 since its Task 15: step 11 takes the tree before `test.full` and cites a passed run on that exact tree.
   // 6,535 since its fix rounds 1 and 2: step 11 saves that run's log in the main session only, so a kernel-row run can cite it at finish-branch.
   // 6,655 since its Task 16 fix round 1: with no test command a go works on by step 10's closest check to finish-branch's end path.
-  assertMaxBytes(SKILL, 6655);
+  // 6,685 since its Task 16 fix round 2: step 7's list names that route.
+  assertMaxBytes(SKILL, 6685);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
@@ -79,7 +80,7 @@ test('the entry check is step 1 on its own, with a plain condition, and only the
   assert.ok(!s[1].includes('wt-new'), 'where to edit is not in the entry check');
   assert.match(s[2], /^2\. Pick where to edit\. In a kern worktree, edit there\./);
   assert.match(s[3], /^3\. Resolve `test\.focused`/);
-  assert.ok(s[7].includes('a command that step 3 could not resolve was asked for there'), s[7]);
+  assert.ok(s[7].includes("a command that step 3 could not resolve was asked for there, parked, or left to step 10's closest check"), s[7]);
   assertContains(SKILL, ['Stops at steps 1, 2, 3, 5 and 8.']);
 });
 
@@ -160,7 +161,7 @@ test('under autopilot implement keeps running: only a stop on the run rules wait
   // and stop, and a PR needs tested or verified changes.
   assert.ok(s[3].endsWith("never guess a command. Under autopilot, a required one is a required check that cannot run: the work goes on by step 10's closest check and ends on finish-branch's end path; any other parks, and step 7 skips it."), s[3]);
   assert.ok(auto.includes('Under autopilot the steps are the same, RED is never skipped unless step 3 finds no test command, and a file outside the approved list parks the slice.'), auto);
-  assert.ok(s[7].includes('a command that step 3 could not resolve was asked for there, or parked.'), s[7]);
+  assert.ok(s[7].includes("a command that step 3 could not resolve was asked for there, parked, or left to step 10's closest check."), s[7]);
   // Task 8 review, M6: finish-branch counts a red step 4 as `fix first`, so the parked test does not stay in the tree.
   assert.ok(s[5].endsWith('edit production code unasked. Under autopilot, it parks the slice with a `parked:` line and the test is left out of the tree.'), s[5]);
   assert.ok(auto.includes('a file outside the approved list parks the slice. A judgment call that takes a default gets a `parked:` line; any other stop waits for a typed reply, with the data and a recommendation.'), auto);
