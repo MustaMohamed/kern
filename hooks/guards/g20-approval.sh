@@ -15,9 +15,12 @@
 # function, so the model cannot run prompt-submit to forge the message or edit this guard unseen. A
 # shell write that reaches a hook file without naming its path is not seen (G16's accepted limits).
 # Under autopilot only a go approves, for its ticket (_g20_go), in place of the checks on the user's
-# last message. G20 never votes allow. ledger-open runs only a plan with a Markdown name, and G20,
-# ledger-open and plan-check read frontmatter with one reader (scripts/lib/frontmatter.awk), so every
-# approval ledger-open accepts passed through G20.
+# last message. G20 never votes allow. A file under WORK/ledgers, WORK/reviews or WORK/tmp is a working
+# file, not a spec or plan, so G20 does not judge a write to it (_g20_working); a shell copy from one to
+# any other Markdown file is still judged, as a copy from any file is. ledger-open runs only a plan with
+# a Markdown name that is not a working file and has no working file as its spec, and G20, ledger-open
+# and plan-check read frontmatter with one reader (scripts/lib/frontmatter.awk), so every approval
+# ledger-open accepts passed through G20.
 #
 # Accepted limits:
 # - "The user's last message" is the last prompt prompt-submit does not read as wrapped. A prompt
@@ -33,6 +36,8 @@
 # - The hash is djb2, not a cryptographic hash: a quote built to collide with a line of the message
 #   passes. A shell write that hides the path or the word (a script run by name, a word built at run
 #   time, a recursive directory copy, git checkout or apply, a hard link) is not seen.
+# - A working file's path is read as it stands before the call, so a symlink that the same command puts
+#   in place of a working directory is not seen.
 _G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess | no | nope | not yet | wait | stop | don't | do not "
 # A quote approves only when its words hold one of _G20_YES and none of _G20_HOLD, and it does not end in
 # a question mark. "good" and "sounds good" are not a yes.
@@ -152,6 +157,41 @@ _g20_mdfile() {
   return 1
 }
 
+# _g20_work: sets _G20_WORK, once per call, to the real path of the work dir, found as kern-dir finds it
+# in the main worktree. Fails when work_dir cannot be read whole or is one kern-dir refuses.
+_g20_work() {
+  local wd
+  [ -z "${_G20_WORK-}" ] || return 0
+  [ -n "${KERN_MAIN-}" ] || return 1
+  wd=$(settings_get work_dir .kern) || return 1
+  wd=${wd%/}
+  case "$wd" in '' | . | :* | .git | .git* | /* | *..*) return 1 ;; esac
+  _G20_WORK=$(cd -P "$KERN_MAIN/$wd" 2> /dev/null && env pwd -P) && [ -n "$_G20_WORK" ]
+}
+
+# _g20_working PATH: exit 0 when PATH (absolute) is a working file: it and each symlink on the way to it,
+# up to 8, lie under WORK/ledgers, WORK/reviews or WORK/tmp, so a symlink out, and one in from a spec,
+# stay judged. A directory that does not exist yet is not read, and fails: the command may make it a
+# symlink. cd -P reads a link/.. as the file system does, where a plain cd drops the link. pwd -P gives
+# the directory's own case from env's pwd; the builtin keeps the case it was given on macOS.
+_g20_working() {
+  local p="$1" i=0 d l
+  _g20_work || return 1
+  while :; do
+    d=$(cd -P "${p%/*}/" 2> /dev/null && env pwd -P) || return 1
+    p="${d%/}/${p##*/}"
+    case "$p" in
+      "$_G20_WORK"/ledgers/* | "$_G20_WORK"/reviews/* | "$_G20_WORK"/tmp/*) ;;
+      *) return 1 ;;
+    esac
+    [ -L "$p" ] || return 0
+    [ "$i" -lt 8 ] || return 1
+    l=$(readlink "$p") || return 1
+    case "$l" in /*) p=$l ;; *) p="$d/$l" ;; esac
+    i=$((i + 1))
+  done
+}
+
 # _g20_fm NAME: sets _G20_FM to the frontmatter of the text on stdin (NAME's), read by the shared
 # reader; an unclosed block counts to its end. Fails closed, and returns 1, when the reader cannot run.
 _g20_fm() {
@@ -174,6 +214,7 @@ _g20_file() {
   p=$(ti_get file_path) || return 0
   case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
   _g20_mdfile "$p" || return 0
+  _g20_working "$p" && return 0
   base=$(basename "$p")
   before=''
   if [ -f "$p" ] && [ -r "$p" ]; then
@@ -283,11 +324,11 @@ _g20_file() {
   fi
 }
 
-# A shell command that writes a Markdown file could set or change an approval without the quote
-# check. _g20_bash reads each simple command (git_words) and denies when one writes a Markdown file
-# (a redirect; an operand of sed -i, perl -i, awk or gawk -i inplace, ed, ex, vi, vim, tee, truncate or
-# sponge; dd of=; the destination of cp, mv, install, ln, rsync, ditto or git mv; the same inside
-# find -exec and xargs) and the command holds the word approved, or the file holds a status: approved
+# A shell command that writes a Markdown file other than a working file could set or change an approval
+# without the quote check. _g20_bash reads each simple command (git_words) and denies when one writes
+# such a file (a redirect; an operand of sed -i, perl -i, awk or gawk -i inplace, ed, ex, vi, vim, tee,
+# truncate or sponge; dd of=; the destination of cp, mv, install, ln, rsync, ditto or git mv; the same
+# inside find -exec and xargs) and the command holds the word approved, or the file holds a status: approved
 # line now, or the command names another file that does (cp, cat, tee or tail from a prepared file);
 # any line counts, not only frontmatter, because a shell edit can move body lines into it. A
 # script interpreter running inline code (python -c, node -e, a here-doc on stdin) is denied when the
@@ -299,8 +340,9 @@ _g20_file() {
 # any case), _G20_M when it names a Markdown file. _G20_DIRS holds each directory the command may be in,
 # one per line, _G20_SEEN each one it was in, and _G20_DIR the one _g20_seg1 judges from; it follows cd.
 # _G20_OVER is 1 once the set is past its cap. _G20_REC is the simple command _g20_seg reads. _G20_WRITES
-# is 1 once a simple command writes a Markdown file. _G20_SRC holds the command's other file words as
-# absolute paths, an array. _G20_WHY is the deny reason; the first one ends the check.
+# is 1 once a simple command writes a Markdown file that is not a working file. _G20_SRC holds the
+# command's other file words as absolute paths, an array. _G20_WHY is the deny reason; the first one
+# ends the check.
 
 # _g20_dyn WORD: exit 0 when WORD may name other files at run time: a glob, a $, a backtick or a brace.
 _g20_dyn() {
@@ -340,6 +382,8 @@ _g20_target() {
   fi
   _g20_abs "$w"
   _g20_md "$w" || _g20_mdfile "$_G20_P" || return 0
+  # A word built at run time may name any file, so only a literal path is a working file.
+  if ! _g20_dyn "$w" && _g20_working "$_G20_P"; then return 0; fi
   if [ "${_G20_OVER:-0}" = 1 ]; then
     _G20_WHY=$_G20_OVER_WHY
     return 0

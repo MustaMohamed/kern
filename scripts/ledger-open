@@ -6,10 +6,12 @@
 # A new ledger's header is `# kern ledger: <plan>`, `Plan: <git hash-object of the plan>` and `Main:`.
 # Exit 2: the plan is not approved (status: approved and an approved: line with a date and the user's
 # quoted words), the plan, the file a symlinked plan names, or its spec: line is not a Markdown name
-# (G20 checks approvals only in Markdown files), DIR holds another plan's ledger, or the plan's content
-# differs from its ledger's Plan: line. Each refusal writes nothing; one about an existing ledger also
-# prints `rerun as: bash .../ledger-open PLAN DIR-<n>`, the first free DIR-<n>. --summary exits 1 when the
-# main checkout changed.
+# (G20 checks approvals only in Markdown files), the plan or its spec: is a working file (under
+# WORK/ledgers, WORK/reviews or WORK/tmp, itself or through a symlink or ..; G20 does not judge those)
+# or is reached past 8 symlinks, a settings file that could set work_dir cannot be read, DIR holds
+# another plan's ledger, or the plan's content differs from its ledger's Plan: line. Each refusal writes
+# nothing; one about an existing ledger also prints `rerun as: bash .../ledger-open PLAN DIR-<n>`, the
+# first free DIR-<n>. --summary exits 1 when the main checkout changed.
 # Ledger identity adapted from superpowers subagent-driven-development/scripts/sdd-workspace (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -33,6 +35,67 @@ main_state() {
 markdown() {
   case "$1" in *.[Mm][Dd] | *.[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]) return 0 ;; esac
   return 1
+}
+
+# real_path FILE: absolute FILE with the longest part of its directory that exists read as the file
+# system reads it: no .. and no symlink, in the directory's own case. cd -P reads a link/.. as the file
+# system does, where a plain cd drops the link, and on macOS the pwd builtin keeps the case it was given.
+real_path() {
+  local d rest r
+  case "$1" in /*) d=$1 ;; *) d=$PWD/$1 ;; esac
+  rest=${d##*/}
+  d=${d%/*}
+  until r=$(cd -P "$d/" 2> /dev/null && env pwd -P); do
+    [ -n "$d" ] || return 1
+    rest=${d##*/}/$rest
+    d=${d%/*}
+  done
+  printf '%s/%s\n' "${r%/}" "$rest"
+}
+
+# work_of DIR: the real path of the work dir of DIR's repository, found as kern-dir finds it. Prints
+# nothing outside a repository, or for a work_dir kern-dir refuses, where G20 takes no file as a working
+# file. Exit 2 when a settings file that could set work_dir cannot be read.
+work_of() {
+  local wd rc=0
+  KERN_MAIN=$(kern_main_root "$1" 2> /dev/null) || return 0
+  export KERN_MAIN
+  wd=$(settings_get work_dir .kern) || rc=$?
+  if [ "$rc" != 0 ]; then
+    echo "ledger-open: work_dir is unknown: $(settings_unread_why work_dir)" >&2
+    return 2
+  fi
+  wd=${wd%/}
+  case "$wd" in '' | . | :* | .git | .git* | /* | *..*) return 0 ;; esac
+  wd=$(real_path "$KERN_MAIN/$wd/.") || return 2
+  printf '%s\n' "${wd%/.}"
+}
+
+# refuse_working WHAT FILE: exit 2 when FILE, or a symlink on the way to it, is under WORK/ledgers,
+# WORK/reviews or WORK/tmp of this repository or the one that holds it. G20 does not judge those files
+# (_g20_working), so an approval there proves nothing. WHAT names FILE in the refusal.
+refuse_working() {
+  local p=$2 i=0 mine w sub link
+  while :; do
+    p=$(real_path "$p") || { echo "ledger-open: cannot read the path of $1" >&2; exit 2; }
+    mine=$(work_of "$(dirname "$p")") || exit 2
+    for w in "$work" "$mine"; do
+      [ -n "$w" ] || continue
+      for sub in ledgers reviews tmp; do
+        case "$p" in
+          "$w/$sub"/*)
+            echo "ledger-open: $1 is a working file under $w/$sub; G20 does not judge approvals there, so a plan or spec cannot live there" >&2
+            exit 2
+            ;;
+        esac
+      done
+    done
+    [ -L "$p" ] || return 0
+    [ "$i" -lt 8 ] || { echo "ledger-open: $1 passes more than 8 symlinks, so it cannot show it is not a working file" >&2; exit 2; }
+    link=$(readlink "$p") || { echo "ledger-open: cannot read the symlink $p" >&2; exit 2; }
+    case "$link" in /*) p=$link ;; *) p=$(dirname "$p")/$link ;; esac
+    i=$((i + 1))
+  done
 }
 
 # free_dir: the first $dir-<n>, n from 2, that holds nothing and names no directory in worktree.dir. A
@@ -75,7 +138,7 @@ fi
 [ $# -ge 1 ] && [ $# -le 2 ] || { echo "usage: ledger-open PLAN [DIR] | ledger-open --summary DIR" >&2; exit 2; }
 plan=$1
 [ -f "$plan" ] || { echo "ledger-open: no such plan: $plan" >&2; exit 2; }
-plan=$(cd "$(dirname "$plan")" && pwd -P)/$(basename "$plan")
+plan=$(real_path "$plan") || { echo "ledger-open: cannot read the path of $plan" >&2; exit 2; }
 # A plan named x.md that is a symlink to x.txt carries an approval G20 never saw, so the file it names
 # must be Markdown too.
 real=$plan
@@ -88,6 +151,8 @@ done
 for name in "$plan" "$real"; do
   markdown "$name" || { echo "ledger-open: $name is not a Markdown file; G20 checks approvals only in .md files" >&2; exit 2; }
 done
+work=$(work_of "$PWD") || exit 2
+refuse_working "$plan" "$plan"
 # The frontmatter as G20 reads it (scripts/lib/frontmatter.awk), so an approval G20 never saw cannot
 # open a ledger.
 rc=0
@@ -100,7 +165,16 @@ esac
 spec=$(printf '%s\n' "$fm" | sed -n 's/^spec:[[:space:]]*//p' | head -n 1 | sed 's/[[:space:]]*$//')
 case "$spec" in
   '' | none) ;;
-  *) markdown "$spec" || { echo "ledger-open: $plan: spec: $spec is not a Markdown file; G20 checks approvals only in .md files" >&2; exit 2; } ;;
+  *)
+    markdown "$spec" || { echo "ledger-open: $plan: spec: $spec is not a Markdown file; G20 checks approvals only in .md files" >&2; exit 2; }
+    # Each place plan-check looks for the file; one that does not exist is still judged by its name.
+    file=$spec
+    case "$file" in WORK/*) file=$work/${file#WORK/} ;; esac
+    main=$(kern_main_root "$PWD" 2> /dev/null) || main=''
+    for c in "$file" "$(dirname "$plan")/$file" "$main/$file"; do
+      refuse_working "$plan: spec: $spec" "$c"
+    done
+    ;;
 esac
 status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
 approved=$(printf '%s\n' "$fm" | sed -n 's/^approved:[[:space:]]*//p' | head -n 1)

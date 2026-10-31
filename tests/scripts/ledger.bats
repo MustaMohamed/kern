@@ -3,6 +3,7 @@
 
 bats_require_minimum_version 1.5.0
 load ../helpers/wt
+load ../helpers/common
 
 setup() {
   wt_test_env
@@ -390,4 +391,187 @@ approved_plan() {
   run --separate-stderr bash "$KERN_ROOT/scripts/task-start" "$LEDGER" 1 "$forged"
   [ "$status" -eq 2 ]
   [ "$(wc -c < "$LEDGER")" -eq "$before" ]
+}
+
+# work_repo [WORK]: a fixture repo at $REPO, the current directory, with WORK's plans, specs, ledgers,
+# reviews and tmp directories; WORK is .kern by default.
+work_repo() {
+  W=${1:-.kern}
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  mkdir -p "$W/plans" "$W/specs" "$W/ledgers/x" "$W/reviews" "$W/tmp"
+}
+
+# spec_plan FILE SPEC: an approved plan whose spec: line is SPEC.
+spec_plan() {
+  printf '%s\n' '---' 'status: approved' "spec: $2" 'approved: 2026-10-14, "yes"' 'execution: delegate' 'commits: ask' '---' > "$1"
+}
+
+# refused NAME DIR: ledger-open refuses the plan NAME, naming the directory DIR, and opens no ledger.
+refused() {
+  rm -rf "$TMP/fresh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$1" "$TMP/fresh"
+  [ "$status" -eq 2 ] || { echo "status $status: $output $stderr"; return 1; }
+  [[ "$stderr" == *"$2"* ]] || { echo "no $2 in: $stderr"; return 1; }
+  [ ! -e "$TMP/fresh" ] || { echo 'a ledger was opened'; return 1; }
+}
+
+# opened NAME: ledger-open opens a ledger for the plan NAME.
+opened() {
+  rm -rf "$TMP/fresh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$1" "$TMP/fresh"
+  [ "$status" -eq 0 ] || { echo "status $status: $output $stderr"; return 1; }
+}
+
+@test "ledger-open refuses a plan under WORK/tmp, WORK/reviews or WORK/ledgers, naming the directory" {
+  work_repo
+  for d in tmp reviews ledgers/x; do
+    approved_plan ".kern/$d/p.md"
+    refused ".kern/$d/p.md" "$REPO/.kern/${d%/x}"
+  done
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" .kern/tmp/p.md
+  [ "$status" -eq 2 ]
+  [ ! -e .kern/ledgers/p ]
+}
+
+@test "ledger-open refuses a plan whose spec: is under a working directory" {
+  work_repo
+  mkdir -p docs
+  for s in .kern/reviews/s.md WORK/reviews/s.md WORK/tmp/s.md WORK/ledgers/x/s.md ../reviews/s.md "$REPO/.kern/tmp/s.md" \
+    WORK/specs/../tmp/s.md .kern/reviews/gone/s.md; do
+    spec_plan .kern/plans/p.md "$s"
+    refused .kern/plans/p.md "$REPO/.kern/"
+    [[ "$stderr" == *"spec: $s"* ]] || { echo "$s: $stderr"; return 1; }
+  done
+}
+
+@test "ledger-open takes a plan and spec in their own directories" {
+  work_repo
+  mkdir -p docs/specs docs/tmp
+  for s in WORK/specs/s.md .kern/specs/s.md docs/specs/s.md ../specs/s.md docs/tmp/s.md; do
+    spec_plan .kern/plans/p.md "$s"
+    opened .kern/plans/p.md
+  done
+}
+
+@test "ledger-open refuses a symlink under WORK/tmp that points out" {
+  work_repo
+  approved_plan .kern/plans/p.md
+  ln -s ../plans/p.md .kern/tmp/link.md
+  refused .kern/tmp/link.md "$REPO/.kern/tmp"
+  approved_plan "$TMP/out.md"
+  ln -s "$TMP/out.md" .kern/tmp/out.md
+  refused .kern/tmp/out.md "$REPO/.kern/tmp"
+}
+
+@test "ledger-open refuses a plan outside that points in" {
+  work_repo
+  approved_plan .kern/tmp/p.md
+  ln -s ../tmp/p.md .kern/plans/link.md
+  refused .kern/plans/link.md "$REPO/.kern/tmp"
+  ln -s "$REPO/.kern/tmp/p.md" "$TMP/out.md"
+  refused "$TMP/out.md" "$REPO/.kern/tmp"
+  ln -s ../tmp .kern/plans/dir
+  refused .kern/plans/dir/p.md "$REPO/.kern/tmp"
+  ln -s plans/link.md .kern/two.md
+  refused .kern/two.md "$REPO/.kern/tmp"
+}
+
+@test "ledger-open refuses a spec: that points in" {
+  work_repo
+  printf '# s\n' > .kern/tmp/s.md
+  ln -s ../tmp/s.md .kern/specs/link.md
+  spec_plan .kern/plans/p.md WORK/specs/link.md
+  refused .kern/plans/p.md "$REPO/.kern/tmp"
+}
+
+@test "ledger-open reads .. in the path as the file system does" {
+  work_repo
+  approved_plan .kern/tmp/p.md
+  refused .kern/plans/../tmp/p.md "$REPO/.kern/tmp"
+  approved_plan .kern/plans/q.md
+  opened .kern/tmp/../plans/q.md
+  # .. after a symlink leaves the directory the symlink reaches, not the one that holds the symlink.
+  mkdir .kern/tmp/sub
+  ln -s ../tmp/sub .kern/plans/dir
+  refused .kern/plans/dir/../p.md "$REPO/.kern/tmp"
+}
+
+@test "ledger-open refuses a plan past 8 symlinks" {
+  work_repo
+  approved_plan .kern/plans/p.md
+  prev=p.md
+  for i in 1 2 3 4 5 6 7 8; do
+    ln -s "$prev" ".kern/plans/l$i.md"
+    prev=l$i.md
+  done
+  opened .kern/plans/l8.md
+  ln -s l8.md .kern/plans/l9.md
+  refused .kern/plans/l9.md 'more than 8 symlinks'
+}
+
+@test "ledger-open reads the working directories from work_dir" {
+  work_repo .work
+  mkdir -p .claude .kern/tmp
+  printf 'work_dir: .work\n' > .claude/kern.local.yml
+  approved_plan .work/tmp/p.md
+  refused .work/tmp/p.md "$REPO/.work/tmp"
+  approved_plan .kern/tmp/p.md
+  opened .kern/tmp/p.md
+  spec_plan .kern/tmp/s.md WORK/reviews/s.md
+  refused .kern/tmp/s.md "$REPO/.work/reviews"
+}
+
+@test "ledger-open exits 2 when a settings file that could set work_dir cannot be read" {
+  work_repo
+  mkdir -p .claude
+  printf 'work_dir: .work\n' > .claude/kern.local.yml
+  approved_plan .kern/plans/p.md
+  read_fails awk "$REPO/.claude/kern.local.yml"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" .kern/plans/p.md "$TMP/fresh"
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *'ledger-open: work_dir is unknown: '*'kern.local.yml could not be read'* ]] || false
+  [ ! -e "$TMP/fresh" ]
+}
+
+@test "ledger-open reads a work dir that is a symlink where it lands" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  mkdir -p "$TMP/real/tmp"
+  ln -s "$TMP/real" .kern
+  approved_plan .kern/tmp/p.md
+  refused .kern/tmp/p.md "$TMP/real/tmp"
+}
+
+@test "ledger-open refuses a plan under the working directories of the repository that holds it" {
+  work_repo
+  approved_plan .kern/tmp/p.md
+  make_fixture "$TMP/other"
+  cd "$TMP/other"
+  refused "$REPO/.kern/tmp/p.md" "$REPO/.kern/tmp"
+}
+
+@test "ledger-open takes a linked worktree's own .kern/tmp, which is not WORK" {
+  work_repo
+  git worktree add -q -b t "$TMP/wt" 2> /dev/null
+  mkdir -p "$TMP/wt/.kern/tmp"
+  approved_plan "$TMP/wt/.kern/tmp/p.md"
+  cd "$TMP/wt"
+  opened .kern/tmp/p.md
+  approved_plan "$REPO/.kern/tmp/p.md"
+  refused "$REPO/.kern/tmp/p.md" "$REPO/.kern/tmp"
+}
+
+@test "ledger-open reads a directory named in another case as the file system does" {
+  work_repo
+  [ -d .kern/TMP ] || skip 'the file system tells case apart'
+  approved_plan .kern/tmp/p.md
+  refused .kern/TMP/p.md "$REPO/.kern/tmp"
+}
+
+@test "a name beside a working directory opens" {
+  work_repo
+  mkdir -p .kern/tmp2 .kern/plans/tmp
+  for f in .kern/tmp2/p.md .kern/plans/tmp/p.md .kern/tmp.md; do
+    approved_plan "$f"
+    opened "$f"
+  done
 }
