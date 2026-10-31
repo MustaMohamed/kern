@@ -61,20 +61,43 @@ wt_include() {
     done
 }
 
+# wt_sealed SRC DIR: no symlink in SRC/DIR, to a depth of 3, resolves into SRC outside DIR. One that does, as an
+# npm workspace or a composer path repository leaves, mixes the fork's code with SRC's, and a run on that mix can
+# fail where a fully changed tree passes. .bin is skipped: its links lead to packages the scan reaches itself,
+# and it can hold thousands.
+wt_sealed() {
+  local src=$1 dir=$2 link to real
+  find "$src/$dir" -maxdepth 3 -name .bin -prune -o -type l -print | while IFS= read -r link; do
+    if [ -d "$link" ]; then
+      real=$(cd -P "$link" 2> /dev/null && pwd -P) || continue
+    else
+      to=$(readlink "$link")
+      case "$to" in /*) ;; *) to=${link%/*}/$to ;; esac
+      real=$(cd -P "${to%/*}" 2> /dev/null && pwd -P) || continue
+    fi
+    case "$real/" in
+      "$src/$dir"/*) ;;
+      "$src"/*) exit 1 ;;
+    esac
+  done
+}
+
 # wt_share SRC DST: link DST's node_modules, .venv and vendor to SRC's, each that exists there, is git-ignored
-# and is not already in DST, then write the marker wt-check looks for. Return 1 when none was linked, so the
-# caller runs wt_setup. The list stays closed: linking every ignored directory would hand a mutated tree a
-# stale dist/. A symlink is not a directory to a pattern such as node_modules/, so DST's links show as
-# untracked: this suits a fork nothing snapshots.
+# and is not already in DST, then write the marker wt-check looks for. Return 1, with nothing linked, when there
+# is none to link or one is not wt_sealed, so the caller runs wt_setup, which must not write through a link. The
+# list stays closed: linking every ignored directory would hand a mutated tree a stale dist/. A symlink is not a
+# directory to a pattern such as node_modules/, so DST's links show as untracked: this suits a fork nothing
+# snapshots.
 wt_share() {
-  local src=$1 dst=$2 d linked=0
+  local src=$1 dst=$2 d list=''
   for d in node_modules .venv vendor; do
     if [ -e "$src/$d" ] && [ ! -e "$dst/$d" ] && git -C "$src" check-ignore -q -- "$d"; then
-      ln -s "$src/$d" "$dst/$d"
-      linked=1
+      wt_sealed "$src" "$d" || return 1
+      list="$list $d"
     fi
   done
-  [ "$linked" = 1 ] || return 1
+  [ -n "$list" ] || return 1
+  for d in $list; do ln -s "$src/$d" "$dst/$d"; done
   printf 'setup: shared\n' > "$(git -C "$dst" rev-parse --path-format=absolute --git-dir)/kern-setup-done"
 }
 

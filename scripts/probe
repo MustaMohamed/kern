@@ -171,8 +171,13 @@ attempt() {
     # xs !! 0 and !!x are inconclusive, not a broken build read as caught. A lone ! after punctuation
     # inside a string, a regex or a shebang can still be dropped. With no ! on the line, a bare condition is
     # wrapped in !( ): the whole of if (COND), else the name, call or index before a ? with a blank on each
-    # side, so a?.b and a ?? b stay. A loop stays out: its inverse can run for ever.
-    if ! awk -v ln="$mline" '
+    # side, so a?.b and a ?? b stay. A loop stays out: its inverse can run for ever. So does a file in a
+    # language where ! does not negate: there the wrap is a compile error that reads as caught.
+    case "$mfile" in
+      *.js | *.jsx | *.ts | *.tsx | *.mjs | *.cjs | *.java | *.kt | *.swift | *.go | *.rs | *.c | *.cc | *.cpp | *.h | *.hpp | *.cs | *.php | *.dart | *.scala) wrap=1 ;;
+      *) wrap=0 ;;
+    esac
+    if ! awk -v ln="$mline" -v wrap="$wrap" '
       function word(s, w,   i, b, a) {
         i = index(s, w); if (!i) return 0
         b = (i == 1) ? "" : substr(s, i - 1, 1); a = substr(s, i + length(w), 1)
@@ -213,7 +218,7 @@ attempt() {
           if (a == "=" || a == "" || a == "!" || b ~ /[]A-Za-z0-9_)}!]/) continue
           $0 = substr($0, 1, i - 1) substr($0, i + 1); done = 1; print > "/dev/stderr"
         }
-        if (!done && !index($0, "!")) {
+        if (wrap && !done && !index($0, "!")) {
           i = word($0, "if")
           if (i) {
             for (i += 2; substr($0, i, 1) == " "; i++) continue
@@ -253,8 +258,8 @@ make_fork --share-setup
 shared=0
 if [ "$(cat "$(git -C "$fork" rev-parse --path-format=absolute --git-dir)/kern-setup-done")" = 'setup: shared' ]; then shared=1; fi
 attempt "$@"
-# A verdict must not rest on links into WT: through one, as an npm workspace or an editable install leaves,
-# the changed fork runs WT's unchanged code, so a run that passes on a shared fork proves nothing yet.
+# A shared fork can still reach WT's code by a path held in a file, as a .pth or a PHP __DIR__ does, where
+# wt-fork's link scan cannot see it. So a run that passes there proves nothing yet: the verdict is the retry's.
 if [ "$survived" = 1 ] && [ "$shared" = 1 ]; then
   refork
   attempt "$@"

@@ -261,3 +261,53 @@ setup() {
   done
   [ ! -e "$SRC/w.txt" ]
 }
+
+@test "--share-setup leaves it to setup when a link resolves into SRC outside its directory" {
+  mkdir -p .claude
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > .claude/kern.local.yml
+  printf '.venv/\n' >> "$(git -C "$SRC" rev-parse --git-path info/exclude)"
+  mkdir -p "$SRC/packages/p" "$SRC/.venv" "$SRC/node_modules/@scope"
+  printf 'code\n' > "$SRC/packages/p/index.js"
+  # A scoped workspace link, two levels down.
+  ln -s ../../packages/p "$SRC/node_modules/@scope/p"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-27 --share-setup
+  [ "$status" -eq 0 ]
+  fork=$output
+  [ ! -e "$fork/node_modules" ]
+  # Nothing is linked, or setup would write through a link: .venv stays out too.
+  [ ! -e "$fork/.venv" ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  [ "$(cat "$(git -C "$fork" rev-parse --path-format=absolute --git-dir)/kern-setup-done")" = "setup: printf x >> $TMP/setups" ]
+  # A link to SRC itself, and a link to a file.
+  rm "$SRC/node_modules/@scope/p"
+  ln -s .. "$SRC/node_modules/self"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-28 --share-setup
+  [ "$status" -eq 0 ]
+  [ ! -e "$output/node_modules" ]
+  rm "$SRC/node_modules/self"
+  ln -s ../packages/p/index.js "$SRC/node_modules/entry.js"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-29 --share-setup
+  [ "$status" -eq 0 ]
+  [ ! -e "$output/node_modules" ]
+}
+
+@test "--share-setup still links a directory whose links stay inside it or leave SRC" {
+  mkdir -p .claude
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > .claude/kern.local.yml
+  mkdir -p "$SRC/node_modules/.bin" "$SRC/node_modules/tool" "$TMP/store/dep"
+  printf 'cli\n' > "$SRC/node_modules/tool/cli.js"
+  ln -s ../tool/cli.js "$SRC/node_modules/.bin/tool"
+  ln -s tool "$SRC/node_modules/alias"
+  ln -s "$TMP/store/dep" "$SRC/node_modules/dep"
+  ln -s "$TMP/missing" "$SRC/node_modules/dangling"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-30 --share-setup
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+  [ -L "$output/node_modules" ]
+  [ ! -e "$TMP/setups" ]
+  # A link past the scan's depth stays shared: the exposure the contract row names.
+  mkdir -p "$SRC/node_modules/a/b/c"
+  ln -s "$SRC" "$SRC/node_modules/a/b/c/deep"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-31 --share-setup
+  [ "$status" -eq 0 ]
+  [ -L "$output/node_modules" ]
+}

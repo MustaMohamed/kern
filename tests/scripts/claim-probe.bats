@@ -592,18 +592,19 @@ setup() {
   [ "$(cat "$WT/node_modules/pkg/index.js")" = 'if (wraps) {' ]
 }
 
-# link_pkg: the shape npm workspaces leave: node_modules/pkg points at the tree that holds it. Linked from WT, it
-# stays WT's on a shared fork, so a reversed run there reads WT's code; worktree.setup gives a fork its own.
-link_pkg() {
+# pth_pkg: the shape an editable install leaves: a file in the shared directory holds the source's absolute path, so
+# no link gives it away. From WT it stays WT's on a shared fork, so a reversed run reads WT's code; worktree.setup
+# gives a fork its own.
+pth_pkg() {
   export KERN_COUNT="$TMP/count"
   mkdir -p "$REPO/.claude" "$WT/node_modules"
-  ln -s .. "$WT/node_modules/pkg"
-  printf 'worktree.setup: mkdir -p node_modules; ln -s .. node_modules/pkg; printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+  printf '%s\n' "$WT" > "$WT/node_modules/pkg.pth"
+  printf 'worktree.setup: mkdir -p node_modules; pwd -P > node_modules/pkg.pth; printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
 }
 
 @test "a reversed run that passes on a shared fork retries with setup, and the verdict is the retry's" {
-  link_pkg
-  printf 'printf x >> "$KERN_COUNT"\nsh node_modules/pkg/check.sh -1 && exit 1\nexit 0\n' > "$WT/test-link.sh"
+  pth_pkg
+  printf 'printf x >> "$KERN_COUNT"\nsh "$(cat node_modules/pkg.pth)/check.sh" -1 && exit 1\nexit 0\n' > "$WT/test-link.sh"
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-link.sh
   [ "$status" -eq 0 ] || { echo "$output $stderr"; false; }
   [ "$output" = "probe: fail-then-pass ok" ]
@@ -611,14 +612,14 @@ link_pkg() {
   # WT, then the control and reversed runs on the shared fork and on the fork with setup.
   [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 5 ]
   [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
-  [ "$(readlink "$WT/node_modules/pkg")" = .. ]
+  [ "$(cat "$WT/node_modules/pkg.pth")" = "$WT" ]
   [ "$(cat "$WT/check.sh")" = '[ "$1" -ge 0 ]' ]
 }
 
 @test "a mutation that survives on a shared fork retries with setup, and the verdict is the retry's" {
-  link_pkg
+  pth_pkg
   printf '[ "$1" != bad ]\n' > "$WT/gate.sh"
-  printf 'bash node_modules/pkg/gate.sh bad && exit 1\nexit 0\n' > "$WT/test-gate.sh"
+  printf 'bash "$(cat node_modules/pkg.pth)/gate.sh" bad && exit 1\nexit 0\n' > "$WT/test-gate.sh"
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.sh:1 "$WT" -- sh test-gate.sh
   [ "$status" -eq 0 ] || { echo "$output $stderr"; false; }
   [ "$output" = 'probe: mutation caught ([ "$1" == bad ])' ]
@@ -627,7 +628,7 @@ link_pkg() {
 }
 
 @test "a test that does not cover the change still exits 1 after the retry" {
-  link_pkg
+  pth_pkg
   printf 'printf x >> "$KERN_COUNT"\nexit 0\n' > "$WT/test-count.sh"
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-count.sh
   [ "$status" -eq 1 ]
@@ -638,7 +639,7 @@ link_pkg() {
 }
 
 @test "a retry whose control fails is inconclusive, not the shared fork's exit 1" {
-  link_pkg
+  pth_pkg
   printf 'worktree.setup: touch built.log; printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
   printf '[ -f built.log ] && exit 1\nexit 0\n' > "$WT/test-unbuilt.sh"
   run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-unbuilt.sh
@@ -657,4 +658,67 @@ link_pkg() {
   [ "$status" -eq 1 ]
   [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
   [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 3 ]
+}
+
+@test "a change on both sides of a link cannot read as ok: a link into WT turns sharing off" {
+  mkdir -p "$REPO/.claude" "$WT/node_modules"
+  ln -s .. "$WT/node_modules/pkg"
+  printf 'worktree.setup: mkdir -p node_modules; ln -s .. node_modules/pkg; printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+  printf 'old\n' > "$WT/a.sh"
+  printf 'old\n' > "$WT/b.sh"
+  git -C "$WT" add a.sh b.sh
+  git -C "$WT" commit --quiet -m both
+  printf 'new\n' > "$WT/a.sh"
+  printf 'new\n' > "$WT/b.sh"
+  git -C "$WT" diff -- a.sh b.sh > "$TMP/both.patch"
+  printf 'cmp -s a.sh node_modules/pkg/b.sh\n' > "$WT/test-both.sh"
+  # Reversed in full, both sides are old and equal, so the test proves nothing about the change.
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/both.patch" -- sh test-both.sh
+  [ "$status" -eq 1 ] || { echo "$output $stderr"; false; }
+  [ "$output" = "probe: test did not fail with the guard removed" ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+}
+
+@test "a retry whose worktree.setup fails is inconclusive, and no probe worktree remains" {
+  mkdir -p "$REPO/.claude" "$WT/node_modules"
+  printf 'worktree.setup: exit 7\n' > "$REPO/.claude/kern.local.yml"
+  touch "$WT/only-here.log"
+  # After a failed control.
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- test -f only-here.log
+  [ "$status" -eq 3 ]
+  [[ "$output" == "probe: inconclusive (could not fork: "* ]] || false
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+  [ -z "$(ls "$REPO/.claude/worktrees" | grep '^probe-[0-9]' || true)" ]
+  # After a run that passes with the change reversed.
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-always.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == "probe: inconclusive (could not fork: "* ]] || false
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+  [ -z "$(ls "$REPO/.claude/worktrees" | grep '^probe-[0-9]' || true)" ]
+}
+
+@test "--mutate wraps a bare condition only where ! is logical negation" {
+  printf 'if (wraps) {\n' > "$WT/gate.src"
+  for ext in js jsx ts tsx mjs cjs java kt swift go rs c cc cpp h hpp cs php dart scala; do
+    cp "$WT/gate.src" "$WT/gate.$ext"
+    run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate "gate.$ext:1" "$WT" -- sh test-always.sh
+    [ "$output" = 'probe: mutation survived (if (!(wraps)) {)' ] || { echo "not wrapped: $ext: $output"; false; }
+  done
+  # Lua has no !, so the wrap is a compile error that reads as caught.
+  printf 'if (wraps) then\n' > "$WT/gate.lua"
+  printf 'x = wraps ? 1 : 2\n' > "$WT/gate.rb"
+  printf 'if (wraps):\n' > "$WT/gate.py"
+  printf 'if (wraps) {\n' > "$WT/Gatefile"
+  for f in gate.lua gate.rb gate.py gate.src Gatefile; do
+    run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate "$f:1" "$WT" -- sh test-always.sh
+    [ "$status" -eq 3 ] || { echo "wrapped: $f: $output"; false; }
+    [ "$output" = "probe: inconclusive (no condition to invert on $f:1)" ]
+  done
+}
+
+@test "--mutate: the operator and negation rules still reach a file of any type" {
+  printf 'if (wraps == 1) then\n' > "$WT/gate.lua"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.lua:1 "$WT" -- sh test-always.sh
+  [ "$output" = 'probe: mutation survived (if (wraps != 1) then)' ]
 }
