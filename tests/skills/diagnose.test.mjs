@@ -64,6 +64,16 @@ test('the loop and instrumentation run in a named worktree, and a loop still red
   assert.ok(s[6].includes('after three failed fixes, stop'), s[6]);
 });
 
+test('a go on a bug goes on to finish-branch, as implement\'s kernel row does', () => {
+  // M3 part 1 Task 15: no text named finish-branch here, so a go reached a PR only through
+  // autopilot's general sentence. implement step 12 skips its own line when diagnose reads it mid-run.
+  const line = "From the kernel's row under a go, follow `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md` on `<wt>`.";
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[9].endsWith(line), s[9]);
+  assert.ok(steps(readDoc('skills/implement/SKILL.md').body)[12].endsWith(line));
+  assertContains('kernel/kernel.md', ['Read {KERN}/diagnose/SKILL.md']);
+});
+
 test('under autopilot both diagnose stops wait for a typed reply, as run.md says', () => {
   // Task 14 review: both stops parked with a `default:` neither has, while this section points at run.md, whose rule is a wait.
   const auto = section(readDoc(SKILL).body, '## Stops and autopilot');

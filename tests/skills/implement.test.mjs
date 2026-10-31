@@ -29,7 +29,8 @@ test('implement sections, steps and red flags', () => {
   // 5,800 since Task 7 fix round 1 (I4): step 8 proposes the new line and asks, and parks under autopilot.
   // 6,245 since M3 part 1 Task 8 and its fix round 1: autopilot's rules for steps 1, 3 and 5, `{id}`'s source, step 9's
   // patch path, a go's way to finish-branch and the stop and park line, after word cuts.
-  assertMaxBytes(SKILL, 6245);
+  // 6,425 since its Task 15: step 11 takes the tree before `test.full` and cites a passed run on that exact tree.
+  assertMaxBytes(SKILL, 6425);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {

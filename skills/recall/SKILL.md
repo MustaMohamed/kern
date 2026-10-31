@@ -9,7 +9,7 @@ Rebuild the current state from kern's working files, transcripts and live state,
 
 ## Steps
 
-0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+0. Defer: if the kern settings block names an override for this job, follow that skill instead, say so in one line, and stop.
 1. Route. One named prior session: point to `claude --resume` and stop, making no tool call. A full state capsule already in the prompt: skip the mining. `recall chat`: go to step 9.
 2. Right after reading this file, before any other tool call, say `Scope: <window>, <topic>, <workspace>.`: the window (7 days unless stated; never turn "all" into "recent"), the topic, and the workspace (never another project's transcripts unasked). Adjacent work stays out unless it blocks this.
 3. Read kern's working files first. Find `WORK` with two separate commands, never `kern-dir`, which creates folders and edits `.git/info/exclude`: it is line 1 of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root`, a `/`, then the text before the tab in `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern`. A missing `WORK`, or a failed `kern-root`, is not an error: say there are no kern working files. Else read `WORK/ledgers/*/ledger.md` (incomplete tasks and `parked:` lines) and the status lines of `WORK/plans/*` and `WORK/specs/*`. List kern worktrees with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-audit`; a non-zero exit, or a worktree in the `unknown` bucket, goes in Sources skipped with its evidence, never as clean. Memory files are context, never state.

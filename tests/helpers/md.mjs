@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { parseFrontmatter } from '../../scripts/lib/frontmatter.mjs';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const DEFER = '0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.';
+export const DEFER = '0. Defer: if the kern settings block names an override for this job, follow that skill instead, say so in one line, and stop.';
 
 export function readDoc(rel) {
   const path = join(ROOT, rel);

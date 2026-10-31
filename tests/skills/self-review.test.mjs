@@ -39,7 +39,22 @@ test('self-review sections and steps', () => {
   // 8,250 since its proofs fix: "or a blocker already found, skips nothing" and step 9's pasted-output gate.
   // 8,500 since pilot fix plan 2's Task 5: step 6 searches readers for moved literals, step 7 makes no fork of its own.
   // 8,550 since that task's review fix: step 6 names every other reader, step 7 names the lone ! drop.
-  assertMaxBytes(SKILL, 8550);
+  // 8,750 since M3 part 1's Task 15: step 4's lane stands down for a whole-branch review that passed on this exact tree, in checkable words.
+  assertMaxBytes(SKILL, 8750);
+});
+
+test('the spec lane stands down only for a whole-branch review that passed on this exact tree', () => {
+  // M3 part 1 Task 15: the design's "Whole-branch review twice on one tree". After a fix the tree differs, so the lane runs.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[4].includes('When a whole-branch review passed on this exact tree, `skip: spec lane, whole-branch review passed on <tree>`'), s[4]);
+  // What "this exact tree" and "passed" mean, in words a run can check.
+  assert.ok(s[4].includes("`<tree>` is step 1's second output line and that review's `<package>.tree`, and its return says `Spec: compliant` and `Task quality: approved`."), s[4]);
+  // The tree comes from the script, the verdicts from the reviewer's own lines, and execute-plan saves the return.
+  assertContains('scripts/wt-diff', ['# Prints: package path, TO_TREE, then one changed path per line.', '<package>.tree, which holds TO_TREE']);
+  assertContains('agents/task-reviewer.md', ['Spec: compliant | issues', 'Task quality: approved | needs fixes']);
+  assert.ok(steps(readDoc('skills/execute-plan/SKILL.md').body)[12].includes('Save its return as `<ledger dir>/reviews/final.txt`'));
+  // A skip line never turns a failed check green, and a later round still runs every step on its new tree.
+  assertContains(SKILL, ['A lane skip line is reported and does not change the verdict.', 'runs every step, the checks the last skipped included']);
 });
 
 test('self-review exits, order and dispatches', () => {

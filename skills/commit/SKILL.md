@@ -12,7 +12,7 @@ finish-branch and, under autopilot, execute-plan run steps 2 to 6.
 
 ## Steps
 
-0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+0. Defer: if the kern settings block names an override for this job, follow that skill instead, say so in one line, and stop.
 1. Consent: the user typed `/kern:commit` or asked to commit in this session, or autopilot is on. Otherwise stop.
 2. Where: `<toplevel>` is what `git -C <wt> rev-parse --show-toplevel` prints; `<wt>` is the worktree the caller names, else `.`. If it fails, stop and report. Run every later git command as `git -C <toplevel> ...`. Branch: `git -C <toplevel> symbolic-ref -q --short HEAD` (exit 1: detached). On a protected branch, stop and ask: commit locally anyway, or the user moves the work. On a detached HEAD, stop: finish-branch offers to create a branch. Never switch branches.
 3. Files: read `git -C <toplevel> status --porcelain --untracked-files=all`; propose this task's files or those named; list the rest, unstaged. A changelog with an Unreleased section gets this change's line there, in the same commit, proposed with the files, never unasked. For a ledger with complete tasks, follow `references/ledger-tasks.md`: one commit per complete task, in ledger order, each staging that task's exact paths. Stage with `git -C <toplevel> add -- <files>` in its own call, never `-A` or `.`; leave out and name any `never_commit` path. Show `git -C <toplevel> diff --staged --stat`.

@@ -77,7 +77,8 @@ test('finish-branch sections, steps and red flags', () => {
   // 8,500 since Task 8's fix round 1: the end path's open-task case, and step 2's caller.
   // 8,625 since Task 14 and its fix round 1: step 4 takes the tree before the proof, and step 8 compares option 1's tree with it,
   // after a red-flag cut.
-  assertMaxBytes(SKILL, 8625);
+  // 8,770 since Task 15: step 4 cites a passed `test.full` on its exact tree.
+  assertMaxBytes(SKILL, 8770);
 });
 
 test('under autopilot a `fix first` verdict starts a bounded fix round, and a run past the bound pushes and opens no PR', () => {
@@ -120,6 +121,26 @@ test('the proven tree is taken before the proof, and files the proof wrote are n
   // A snapshot after the proof counted what the proof wrote, so the Proven tree check saw no difference.
   const s4 = steps(readDoc(SKILL).body)[4];
   assert.ok(s4.startsWith('4. Record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`, then prove `test.full` here by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`; files the proof wrote are not proven.'), s4);
+});
+
+test('one passed test.full stands for its exact tree, in each step that would run it again', () => {
+  // M3 part 1 Task 15: the design's "Full suite twice on one tree". The hard limit is the plan's: only a repeat of the same
+  // proof on the same tree may go, so a run on any other tree stays.
+  const rule = 'A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay.';
+  const f = steps(readDoc(SKILL).body);
+  assert.ok(f[4].includes(`files the proof wrote are not proven. ${rule} Red, or \`wt-snap\` failing: stop`), f[4]);
+  assert.ok(steps(readDoc('skills/execute-plan/SKILL.md').body)[11].includes(rule));
+  const imp = steps(readDoc('skills/implement/SKILL.md').body)[11];
+  assert.ok(imp.includes(rule), imp);
+  // `<id>` is taken before the run: a snapshot after it would count what the run wrote.
+  assert.ok(imp.indexOf('take `<id>` with `wt-snap <wt>`') < imp.indexOf('run `test.full`'), imp);
+  assert.ok(imp.indexOf('take `<id>` with `wt-snap <wt>`') >= 0, imp);
+  const agent = readDoc('agents/implementer.md').body.split('\n').find((l) => l.startsWith('4. Method:')) ?? '';
+  assert.ok(agent.includes(`run the full suite once at the end. ${rule}`), agent);
+  assertContains('agents/implementer.md', ['the full-suite command, its tree `<id>` and its summary line;']);
+  // The red flag and prove-it's rule still hold: a run proves only the tree it ran on, and a report is a claim.
+  assertContains(SKILL, ['| "Tests passed earlier this session" | A run proves only the tree it ran on.']);
+  assertContains('skills/prove-it/references/evidence.md', ['`<id>` is from `wt-snap` before that run; the citing step\'s `wt-snap` must match it.', "A subagent's report is no such run."]);
 });
 
 test('under autopilot a stop waits for a typed reply, and only a judgment call that takes a default parks', () => {

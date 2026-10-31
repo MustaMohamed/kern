@@ -12,7 +12,7 @@ The first case that holds, in this order:
    - none: step 6.
    - `Task N: start`: keep that tree as `tree-before`, with no second `task-start`. A snapshot still equal to it: a worker this session dispatched may still run, so wait for its notification and snapshot again. Still equal, or no such worker (a new session has none): dispatch again. A changed snapshot waits until the implementer has stopped, its report holding that round's `Status:` line: DONE or DONE_WITH_CONCERNS goes to step 8 as round r, any other status (or none) to step 7; until then wait for it or resume it (step and inline: finish the change first).
    - a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9; an r of 4 is past the cap, so stop with a split proposal.
-   - `Task N: fix round=<r> tree=<id>`: resume that round; a fresh snapshot that differs from its tree is the round's `tree-after` once the implementer has stopped, and its `Status:` line routes it as above.
+   - `Task N: fix round=<r> tree=<id>`: resume that round; once the implementer has stopped, a fresh snapshot that differs from its tree is the round's `tree-after`, and its `Status:` line sends DONE or DONE_WITH_CONCERNS to step 9's fix diff (a `Refused paths` file: step 8), else to step 7.
    - an approving review: step 10.
 4. Every task complete and applied: step 12.
 
@@ -20,4 +20,4 @@ A wave task resumes in the fork its `Wave:` line names. Never re-dispatch a comp
 
 ## Fix loop memory
 
-Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`, with any real gap step 8 appended. The next round gets that file. A file opening `Refused paths` takes step 8's no, not step 9's default: the next round packages from `tree-before` and reviews in mode `task` (a verification task: `evidence`). An implementer that cannot be reached (a new session, an agent that will not resume) is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.
+Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`, with any real gap step 8 appended. The next round gets that file. A file opening `Refused paths` takes step 8's no, not step 9's default: the next round packages from `tree-before` and reviews in mode `task` (a verification task: `evidence`). An implementer that cannot be reached is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.
