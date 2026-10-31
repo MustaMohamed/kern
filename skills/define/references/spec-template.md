@@ -1,6 +1,6 @@
 # Spec template
 
-Copy from the first `---` line to the end into `WORK/specs/<slug>.md`. Complete every section, or write `none` and why. Decisions name modules and contracts, not file paths; paths belong in the plan. A bounded change uses the short form: set `form: short` and keep only Problem, Size, Constraints, Acceptance criteria, Test seams and Not doing. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` checks the sections for either form. To approve, one Edit replaces the lines from `status: draft` through `approved:` with `status: approved` and `approved: <date>, "<one whole line of the user's yes>"`.
+Copy from the first `---` line to the end into `WORK/specs/<slug>.md`. Complete every section, or write `none` and why. Decisions name modules and contracts, not file paths; paths belong in the plan. A bounded change uses the short form: set `form: short` and keep only Problem, Size, Constraints, Acceptance criteria, Test seams and Not doing. A split adds an optional `## Later slices`. `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` checks the sections for either form. To approve, one Edit replaces the lines from `status: draft` through `approved:` with `status: approved` and `approved: <date>, "<one whole line of the user's yes>"`.
 
 ---
 status: draft

@@ -259,6 +259,36 @@ full_spec() { # full_spec STATUS APPROVED: a full-form spec with every section t
   [ -z "$output" ]
 }
 
+# slice_spec LINE...: a short approved spec under a go, with LINE... from its acceptance list on.
+slice_spec() {
+  printf '%s\n' '---' 'status: approved' 'form: short' 'date: 2026-10-31' 'issue: MA-1' 'approved: 2026-10-31, "/kern:autopilot go MA-1"' '---' \
+    '## Problem' '## Constraints' '- Always: x' '## Acceptance criteria' '' "$@" '## Test seams' > spec.md
+}
+
+@test "a first-slice plan passes when the spec moved its later lines to ## Later slices" {
+  # Under a go the split happens in the spec, so plan-check and proof-check count the slice unchanged.
+  slice_spec '1. Parses a line.' '' '## Later slices' '' '- Stores it.' '- Documents it.' ''
+  pc spec.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  sed -i.bak '/^### Task 2:/,$d' plan.md
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a line still under the acceptance heading fails when no task covers it, whatever else the spec holds" {
+  sed -i.bak '/^### Task 2:/,$d' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "acceptance criterion 2 of the spec is covered by no task"
+  says "acceptance criterion 3 of the spec is covered by no task"
+  slice_spec '1. Parses a line.' '2. Stores it.' '' '## Later slices' '' '- Documents it.' ''
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "acceptance criterion 2 of the spec is covered by no task"
+}
+
 @test "only the leading Acceptance list counts, not numbers in the prose after it" {
   sed -i.bak 's/^\*\*Acceptance:\*\* 2$/**Acceptance:** 1/; s/^\*\*Acceptance:\*\* 3$/**Acceptance:** 1, 3 - prose with 2 in it/' plan.md
   pc plan.md

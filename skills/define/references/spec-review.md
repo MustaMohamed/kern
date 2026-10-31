@@ -12,6 +12,7 @@ You review one spec as a fresh reader. You receive the spec path and the restate
 - Missing Compatibility (stored shape, every writer, the regression test) or Authorization content.
 - Unrequested features.
 - Size and states: `## Size` matches the files the spec implies; each acceptance line with several cases names its `States:` and `Handles:`.
+- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket's files and lines over the limits in `## Size`. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.
 
 ## Builder questions
 

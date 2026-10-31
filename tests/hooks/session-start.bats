@@ -642,6 +642,22 @@ e"
   [[ "$(printf '%s' "$output" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).hookSpecificOutput.additionalContext)')" == *"\${CLAUDE_PLUGIN_ROOT} means $F."* ]] || false
 }
 
+@test "compact and resume keep the go in the mode line; clear and startup drop it" {
+  # The hook's go line prints once, so after compaction the kernel head is what carries the go.
+  mode() { printf '%s\n' "$output" | grep '^kern mode:'; }
+  for src in compact resume; do
+    start startup
+    printf 'autopilot: on\ngo: MA-254\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+    start "$src"
+    [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=on go=MA-254' ]
+  done
+  start clear
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=off' ]
+  printf 'autopilot: on\ngo: MA-254\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  start startup
+  [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=off' ]
+}
+
 # A read of the state file that fails, as one does when a fork or exec is refused under load, must not
 # reset a state that exists (exec traces of 2026-10-21: autopilot turned off mid-session).
 @test "compact and resume keep an existing state when reading it fails" {

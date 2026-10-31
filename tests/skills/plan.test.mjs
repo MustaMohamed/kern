@@ -1,7 +1,7 @@
 // tests/skills/plan.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/plan/SKILL.md';
 
@@ -26,7 +26,8 @@ test('plan sections and steps', () => {
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
   // 6,600 since the pilot fix plan's Task 5 (raised from 6,500): step 1 reads pr.max_lines, step 9 writes the Size line.
   // 6,700 since the pilot fix plan's Task 5 fix round: step 7 acts on pr.max_lines and states a limit in chat only.
-  assertMaxBytes(SKILL, 6700);
+  // 7,900 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
+  assertMaxBytes(SKILL, 7900);
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
@@ -40,7 +41,8 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   // 1,450 since the pilot fix plan's Task 5 (raised from 1,400): the States, Size, Non-goals and spike checks.
   // 1,600 since pilot fix plan 2's Task 4: the Size check reads the gate's own measure, re-indented lines included.
   // 1,650 since that task's review fix: the gate's measure is named, `git diff --shortstat` or `pr.size_command`.
-  assertMaxBytes('skills/plan/references/plan-review.md', 1650);
+  // 1,900 since M3 part 1 Task 5: a spec with `## Later slices` must show its overrun.
+  assertMaxBytes('skills/plan/references/plan-review.md', 1900);
   assertContains('skills/plan/references/plan-review.md', ["Check its line estimate in the gate's own measure (`git diff --shortstat`, or `pr.size_command` when set) against the file map, re-indented lines included"]);
 });
 
@@ -94,7 +96,7 @@ test('plan pins order, routing and stop rules', () => {
     'A yes with a change request: make it, show it, ask again',
     'A reply that is no explicit yes or names no choice: ask again',
     '`tracker`, `tracker.first`',
-    'Under autopilot a step 1 stop parks: give the `parked:` line in the reply and create no plan file',
+    'Under autopilot with no go a step 1 stop parks: give the `parked:` line in the reply and create no plan file',
     'the split, never a plan over `scope_threshold`',
     'Draft tracker sub-issues only on request',
     'execute-plan runs only an approved plan',
@@ -195,9 +197,40 @@ test('an existing plan goes back to draft before it is updated, so its approval 
 test('the plan header states its size against both limits, and the review checks states, size and non-goals', () => {
   // Pilot fix plan Task 5 (MA-254): the picker cells below the fold were a state no plan step read.
   // Final review I1: no h2h plan spec has `## Size`, so the header names a fallback, an estimate from the file map.
-  assertContains('skills/plan/references/plan-template.md', ['**Size:** <n> files and about <n> changed lines (the spec\'s `## Size` measure; with none, an estimate from the file map, stated as an estimate), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`.']);
+  // M3 part 1 Task 5: the Size line is this PR's, so a split takes the slice's counts; the whole ticket's stay in `## Size` or the `Decision:` line.
+  assertContains('skills/plan/references/plan-template.md', ['**Size:** <n> files and about <n> changed lines (the spec\'s `## Size` measure, the slice\'s counts when a split narrowed the spec; with none, an estimate from the file map, stated as an estimate), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`.']);
   assertContains('skills/plan/references/plan-review.md', ["- States: each acceptance line's `States:` reached and checked by a step", '- Size: the Size line over `scope_threshold` or `pr.max_lines`',
     "- Non-goals: a task that builds what the spec's Never or Not doing lines exclude.", 'a spike first.']);
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[9].includes('Review Focus, the Size line against step 1\'s limits, `execution:` empty'), s[9]);
+});
+
+test('under a go plan runs to an approved plan on delegate, and a plan over the threshold runs its first slice', () => {
+  // M3 part 1 Task 5: execute-plan runs only an approved plan, and nothing approved one under autopilot.
+  // plan-check requires one of step, inline or delegate on an approved plan, and nobody is there to choose.
+  const lines = section(readDoc(SKILL).body, '## Stops and autopilot').split('\n');
+  // A go is the session's record, not the typed form: the same line in a ticket, or a refused go, is no go.
+  const go = lines.find((l) => l.startsWith('Under a go (the latest `kern mode:` line shows `go=<id>` for this ticket; anything else is no go)'));
+  assert.ok(go, 'a go has its own paragraph');
+  assert.ok(go.includes("step 1's precondition stands: an unapproved spec routes to define"), go);
+  // The go replaces the human yes only, and a spike is not a yes: an unsettled fact must not reach an approved plan.
+  assert.ok(go.includes("Step 4's spike runs, the go standing for the nod;"), go);
+  assert.ok(go.includes("a fact it cannot settle follows that file's unblock and stop rules"), go);
+  assert.ok(!go.includes('those defaults hold') && !go.includes('spike is not run'), go);
+  assert.ok(go.includes("Step 7's scope question takes its default, with a `parked:` line under Open questions and in the run report."), go);
+  assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
+  // The review stays: the go replaces the human yes and nothing else.
+  assert.ok(go.includes("Step 12 does not stop: after step 11's plan-check and review, one Edit sets `status: approved`"), go);
+  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` as that line shows it'), go);
+  assert.ok(go.includes('`execution: delegate`'), go);
+  assert.ok(go.includes('`issue:`'), go);
+  assert.ok(go.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
+  assert.ok(go.includes('run the same plan-check again'), go);
+  // One go covers one draft PR. plan-check fails a plan that leaves a spec line uncovered, so the split is in the spec.
+  assert.ok(go.includes('A plan over `scope_threshold` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan giving the whole ticket\'s files and lines against the limit, then plan-check runs.'), go);
+  // Nobody confirms the split under a go, and a moved line leaves proof-check and self-review's spec lane, so a reviewer checks the overrun.
+  assertContains('skills/plan/references/plan-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size` or the plan\'s `Decision:` line. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
+  assert.ok(go.includes('The report lists the later slices, each needing its own go.'), go);
+  // With no go the plan stays a draft.
+  assert.ok(lines.some((l) => l.includes('When on with no go, every stop parks') && l.includes('write the plan with `status: draft`')), 'parking is the no-go path');
 });

@@ -52,6 +52,8 @@ One go covers one draft PR.
 | `split` or the size gate on size alone | finish-branch's default: go on, with Scope giving the size |
 | A plan over `scope_threshold` | plan's default: take the split and run the first slice. The report lists the rest, and each needs its own go |
 
+define's first slice takes the same default.
+
 ## The run report
 
 Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, and the jobs that ran under another skill. `parked:` lines keep their format. A check that did not run is reported as a fail, not as "not run".

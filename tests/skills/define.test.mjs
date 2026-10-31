@@ -1,7 +1,7 @@
 // tests/skills/define.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/define/SKILL.md';
 
@@ -34,7 +34,8 @@ test('define sections, steps, the standing gate and red flags', () => {
   // step 9's route to plan.
   // 6,950 since the pilot-fix test round's fix (2026-10-25): step 9's line estimate and "whatever `scope_threshold` allows".
   // 7,000 since pilot fix plan 2's Task 4: step 6 counts a re-indented file's moved lines.
-  assertMaxBytes(SKILL, 7000);
+  // 8,100 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
+  assertMaxBytes(SKILL, 8100);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -94,7 +95,8 @@ test('define references', () => {
     // 3,450 since pilot fix plan 2's Task 4: the re-indent and ticket-measure sentences, and the short form's Not doing.
     'spec-template.md': [['# Spec template', '## Problem', '## Size', '## Intent', '## Constraints', '## Assumptions', '## Success criteria', '## Acceptance criteria', '## Decisions', '## Compatibility', '## Authorization', '## Rollout', '## Checklists', '## Test seams', '## Not doing', '## Open questions'], 3450],
     'interview.md': [['# Interview', '## Skip offer and build choices', '## Hypothesis and confidence', '## One question at a time', '## Want versus should-want', '## Restate and confirm', '## When to step back'], 3200],
-    'spec-review.md': [['# Spec reviewer brief', '## What to check', '## Builder questions', '## Calibration', '## Output'], 1600],
+    // spec-review.md: 1,800 since M3 part 1 Task 5: a spec with `## Later slices` must show its overrun.
+    'spec-review.md': [['# Spec reviewer brief', '## What to check', '## Builder questions', '## Calibration', '## Output'], 1800],
     'handover.md': [['# Handover', '## Sort', '## Hand over'], 1200],
     'capability-map.md': [['# Capability map', '## When to split', '## Map format', '## Approval'], 1200],
   };
@@ -142,4 +144,36 @@ test('define reads the ticket by default, sizes in files and lines, and sends a 
     'A size the ticket states in another measure is named next to this one, each with its measure.', "The ticket's Out of scope lines, each with any ticket it names",
     'Over 2 files, or more than one concern: plan.', 'Then `States:` and each state its proof must show', '`Handles:` and the stable names a check reads']);
   assertContains('skills/define/references/spec-review.md', ['- Size and states: `## Size` matches the files the spec implies']);
+});
+
+test('under a go define runs to an approved spec, and with no go it parks', () => {
+  // M3 part 1 Task 5: G20 denied every approval under autopilot, so a ticket past the fast path ended at a draft and
+  // never reached execute-plan. A go is the yes for its ticket's spec; the stop list still stops the run.
+  const lines = section(readDoc(SKILL).body, '## Stops and autopilot').split('\n');
+  const parks = lines.find((l) => l.includes('When on with no go, every path parks'));
+  assert.ok(parks, 'parking is the no-go path');
+  assert.ok(parks.includes('marks it `status: draft (parked under autopilot)`'), parks);
+  // A go is the session's record, not the typed form: the same line in a ticket, or a refused go, is no go.
+  const go = lines.find((l) => l.startsWith('Under a go (the latest `kern mode:` line shows `go=<id>` for this ticket; anything else is no go)'));
+  assert.ok(go, 'a go has its own paragraph');
+  // A go ends in a draft PR and a spike ends in an answer, so a go never sizes a spike.
+  assert.ok(go.includes('size it bounded or architectural, never a spike, and run that path with no stop'), go);
+  assert.ok(go.includes('each question takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section'), go);
+  // A bare references/run.md would not resolve from a project repo.
+  assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
+  // One go covers one draft PR. The split is in the spec, so plan-check and proof-check count the slice unchanged.
+  // Only an overrun splits: the reviewers call a spec with `## Later slices` and no overrun a finding.
+  assert.ok(go.includes('A capability-map ticket writes no map; within the limits it specs the whole ticket.'), go);
+  // plan-template.md takes the plan's Size line from `## Size`, so the slice's counts come first.
+  assert.ok(go.includes('A size over `scope_threshold` specs its first slice: `## Size` gives the slice\'s files and lines, then the whole ticket\'s against the limit; numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go.'), go);
+  // Nobody confirms the split under a go, and a moved line leaves proof-check and self-review's spec lane, so a reviewer checks the overrun.
+  assertContains('skills/define/references/spec-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size`. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
+  assertContains('skills/define/references/spec-template.md', ['A split adds an optional `## Later slices`.']);
+  // Both paths reach an approved spec, so plan has one to read. The architectural path keeps its checks.
+  assert.ok(go.includes("Bounded: step 9's one write, so plan has an approved spec to read."), go);
+  assert.ok(go.includes("Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again."), go);
+  // G20 compares the quote with the go's normal form, which the line shows, and reads the ticket from issue:.
+  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` as that line shows it'), go);
+  assert.ok(go.includes('`issue:`'), go);
+  assert.ok(go.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
 });
