@@ -195,7 +195,7 @@ At most 1,200 chars: the dispatcher already routed; precedence (brief, then the 
 Highest first:
 
 1. The user's explicit instruction in this session.
-2. A project skill that owns the same job: the `overrides.<job>` key, else a same-name project skill. It runs instead of kern's. kern's hooks still apply.
+2. A skill that owns the same job: the `overrides.<job>` key, else a same-name project skill. It runs instead of kern's. kern's hooks still apply.
 3. Project rules: CLAUDE.md, `.claude/rules/**`, memory. These may tighten anything and loosen nothing.
 4. `.claude/kern.local.yml`, then `.claude/kern.yml`.
 5. `~/.claude/kern.yml`.
@@ -557,7 +557,7 @@ Rules: work the lowest unmerged PR first; fix in the lowest branch that owns the
 
 ### 11.3 Behavioural fixtures
 
-1. A project skill for the same job is used instead of kern's route.
+1. A skill for the same job is used instead of kern's route.
 2. CLAUDE.md forbids pushing and settings set `push.policy: auto`: kern still asks, because prose tightens.
 3. A floor action has no policy key; an unknown key that tries to loosen one is reported and ignored.
 4. `kern: off` produces no routing.
