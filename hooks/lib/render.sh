@@ -72,13 +72,13 @@ KERN_FLOOR_KEYS="merge.policy deploy.policy production.policy force_push.policy 
 # their shortest form (the full line when it is shorter) and Unknown at none, and they take the room left
 # in that order, so the Unknown list is cut first and an unknown key never cuts an override; a whole entry
 # at a time, first-fit, so no character is split. A cut Overrides line ends with `not shown: <job>, ...`,
-# naming every job whose entry it cut, so the model knows each job that has a project override; since the
+# naming every job whose entry it cut, so the model knows each job that has an override; since the
 # set values come first, a cut job is a same-name one, whose skill is the job's name, unless a set value
 # is too long to fit. The names are kern's own job names, never a settings value, so the mark stays short
 # (about 150 chars for every job), and the shortest form is the mark alone. A cut Unknown list ends with
 # `and N more` (`N not shown` when no entry fits; it drops its line when that does not fit either), a cut
 # Set: with the "more" note. Known limit: the main worktree, settings files and floor lines are never cut,
-# so a cwd outside the root with a main path over about 92 chars can pass 600 when every other line is at
+# so a cwd outside the root with a main path over about 100 chars can pass 600 when every other line is at
 # its shortest. The 600 counts the plugin root in the note as {ROOT}, so the entries kept do not depend on
 # where kern is installed; the note prints the absolute path.
 settings_summary() {
@@ -88,7 +88,7 @@ settings_summary() {
   local ov_least set_least unk_least part items pre sep sep2 rest e body least n line full room kept tail
   local ov_jobs left names
   local more=" ... (more: bash {ROOT}/scripts/kern-get <key>)"
-  local ov_pre="${nl}Overrides (follow the project skill, say so in one line):" set_pre="${nl}Set:" unk_pre="${nl}Unknown keys, ignored:"
+  local ov_pre="${nl}Overrides (follow the skill, say so in one line):" set_pre="${nl}Set:" unk_pre="${nl}Unknown keys, ignored:"
   if [ -z "${KERN_MAIN-}" ]; then
     out="Not a git repository: user settings only.$nl"
   else
@@ -140,7 +140,7 @@ EOT
     name=$(settings_get "overrides.$job" '')
     case "$name" in off) continue ;; esac
     if [ -n "$name" ]; then
-      ov_set="$ov_set$job -> project skill $name$nl" jobs_set="$jobs_set$job$nl"
+      ov_set="$ov_set$job -> skill $name$nl" jobs_set="$jobs_set$job$nl"
     elif [ -n "${KERN_MAIN-}" ]; then
       if [ -f "$KERN_MAIN/.claude/skills/$job/SKILL.md" ] || [ -f "$KERN_MAIN/.claude/commands/$job.md" ]; then
         ov_same="$ov_same$job -> project skill $job$nl" jobs_same="$jobs_same$job$nl"
@@ -207,7 +207,7 @@ EOT
           case $part in
             set) tail=$more ;;
             ov)
-              job=${e%% -> project skill *}
+              job=${e%% -> *}
               names=${left/"$nl$job$nl"/$nl}
               names=${names#"$nl"}
               names=${names%"$nl"}

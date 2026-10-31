@@ -183,10 +183,24 @@ YML
   [ "$output" = "$RP/.claude/kern.local.yml	foo.bar" ]
 }
 
-@test "route.<name> is not a known key: overrides.<job> names a project skill for a job" {
+@test "route.<name> is not a known key: overrides.<job> names a skill for a job" {
   printf 'route.define: off\noverrides.define: off\n' >"$R/.claude/kern.local.yml"
   run settings_unknown_keys
   [ "$output" = "$RP/.claude/kern.local.yml	route.define" ]
+}
+
+@test "an override may name a user or plugin skill: it renders as a skill, not a project skill" {
+  # shellcheck source=hooks/lib/render.sh
+  . "$KERN_ROOT/hooks/lib/render.sh"
+  export KERN_MAIN="$RP"
+  mkdir -p "$HOME/.claude/skills/my-commit"
+  printf -- '---\nname: my-commit\n---\n' >"$HOME/.claude/skills/my-commit/SKILL.md"
+  printf 'overrides.commit: my-commit\noverrides.define: superpowers:brainstorming\n' >"$R/.claude/kern.local.yml"
+  run settings_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Overrides (follow the skill, say so in one line): commit -> skill my-commit"* ]] || false
+  [[ "$output" == *"define -> skill superpowers:brainstorming"* ]] || false
+  [[ "$output" != *"project skill my-commit"* ]] || false
 }
 
 @test "kern: off disables; list_has trims" {

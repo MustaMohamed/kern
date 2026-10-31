@@ -51,6 +51,7 @@
 # mode.voice: normal
 # mode.surface: auto
 
-# Project skills that own a kern job (kern's guards still apply to them)
+# Skills that own a kern job: a project, user or plugin skill (kern's guards still apply to them), or off to keep kern's
 # overrides.commit: commit
 # overrides.self-review: self-review
+# overrides.define: off

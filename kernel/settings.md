@@ -7,7 +7,7 @@ Files, highest first:
 
 kern reads project files from the main worktree root. The highest file that sets a key wins. Four list keys add up across all files instead: `protected_targets`, `never_commit`, `branch.protected` and `deploy.envs`. A project file therefore cannot drop an entry that the user file sets. Two settings do not follow highest-wins for the committed `.claude/kern.yml`, because a cloned repo could use them against the user. `kern: off` counts only from `.claude/kern.local.yml` or `~/.claude/kern.yml`, so a committed `kern: off` is ignored. The local file counts as local only when it is the user's own untracked file: a regular file, not a symlink, in a real `.claude` directory that is not a symlink, a submodule or a repository of its own and sits inside the main worktree, with git not tracking it in any case of its name. Otherwise it gets the committed-file rules. A committed policy key may be `ask` or `deny` and never `auto`: a committed `auto` reads as unset, so a lower file or the default applies. The same holds for `rebase.push: autopilot`. A committed `base_branch` only adds a protected branch: the `origin/HEAD` branch stays protected, as do main, master, trunk and develop when `origin/HEAD` is unknown. `autopilot: denied` in any file wins over `allowed` in a higher one.
 
-Above all files, the user's instruction in this session comes first, then a project skill that owns the job, then project rules in CLAUDE.md, `.claude/rules` and memory. Project rules may tighten a setting and never loosen it.
+Above all files, the user's instruction in this session comes first, then a skill that owns the job, then project rules in CLAUDE.md, `.claude/rules` and memory. Project rules may tighten a setting and never loosen it.
 
 Format: one `key: value` per line. `#` starts a comment at line start or after whitespace outside quotes. kern strips surrounding quotes, so quote a value that ends in a space. Lists are comma-separated. A key with `<...>` in this table stands for a family, such as `overrides.commit`. In the Read by column, `pre-tool-use G1` means guard G1 of the pre-tool-use hook.
 
@@ -88,7 +88,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `model.miner.effort` | `low` | as above | recall |
 | `workflow_records` | none | comma list of paths or tools with run records | recall |
 | `stack` | detected | text | architect, build-ui, implement |
-| `overrides.<job>` | none. session-start also finds a project skill with the job's name | project skill name, or `off` for no override: kern's route stays and the same-name match is off | session-start, every skill |
+| `overrides.<job>` | none. session-start also finds a project skill with the job's name | skill name, or `off` for no override: kern's route stays and the same-name match is off | session-start, skill-conflicts, every skill |
 
 G13 lets through only proven reads to a `protected_targets` entry and denies every other call that names one, in both modes.
 

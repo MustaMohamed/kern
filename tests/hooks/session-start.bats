@@ -90,7 +90,7 @@ ap_on() {
   [[ "$output" == *"push.policy=auto"* ]] || false
   # kern ships technical-writing from Task 15; until then no kern job matches the project skill.
   if [ -d "$K/skills/technical-writing" ]; then [[ "$output" == *"technical-writing -> project skill technical-writing"* ]] || false; fi
-  # route.<name> had no reader (audit B8): overrides.<job> names a project skill for a job.
+  # route.<name> had no reader (audit B8): overrides.<job> names a skill for a job.
   [[ "$output" != *"Routes:"* ]] || false
   [[ "$output" == *"Ignored, floor actions have no key: merge.policy"* ]] || false
   set_line=$(printf '%s\n' "$output" | grep '^Set: ')
@@ -126,11 +126,11 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   done
   start startup
   [[ "$output" != *"diagnose -> project skill"* ]] || false
-  has_line "Overrides (follow the project skill, say so in one line): commit -> project skill commit"
+  has_line "Overrides (follow the skill, say so in one line): commit -> project skill commit"
   # Without off, the same-name project skill overrides kern's route, in the line neg-project-skill reads.
   rm "$R/.claude/kern.local.yml"
   start startup
-  has_line "Overrides (follow the project skill, say so in one line): commit -> project skill commit; diagnose -> project skill diagnose"
+  has_line "Overrides (follow the skill, say so in one line): commit -> project skill commit; diagnose -> project skill diagnose"
 }
 
 @test "Set: holds known keys whose value differs from a literal default, policy keys first" {
@@ -173,18 +173,18 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   [ "$status" -eq 0 ]
   summary
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
-  [[ "$summary" == *$'\n'"Overrides (follow the project skill, say so in one line): diagnose -> project skill diagnose; not shown: commit"$'\n'* ]] ||
+  [[ "$summary" == *$'\n'"Overrides (follow the skill, say so in one line): diagnose -> project skill diagnose; not shown: commit"$'\n'* ]] ||
     { echo "$summary"; return 1; }
   [[ "$summary" == *$'\n'"Set: tracker.policy=deny; work_dir=.w ... (more: bash {ROOT}/scripts/kern-get <key>)"* ]] || { echo "$summary"; return 1; }
   # With no entry that fits, the line still names the job that has an override.
   rm -r "$R/.claude/skills/diagnose"
   start startup
-  has_line "Overrides (follow the project skill, say so in one line): not shown: commit"
+  has_line "Overrides (follow the skill, say so in one line): not shown: commit"
 }
 
 @test "unknown keys never cut an override, and a short Set: line holds no more room than it needs" {
-  # Twelve same-name project skills fill 523 chars of Overrides; with Set: and an unknown key the block is
-  # 617. Only the Unknown list may give way, here as a whole line: no shortest form of it fits.
+  # Twelve same-name project skills fill 515 chars of Overrides; with Set: and an unknown key the block is
+  # 609. Only the Unknown list may give way, here as a whole line: no shortest form of it fits.
   for job in commit define diagnose execute-plan finish-branch implement parallel-work plan prove-it recall self-review technical-writing; do
     mkdir -p "$R/.claude/skills/$job"
     printf -- '---\nname: %s\n---\n' "$job" >"$R/.claude/skills/$job/SKILL.md"
@@ -193,7 +193,7 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   start startup
   summary
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
-  has_line "Overrides (follow the project skill, say so in one line): commit -> project skill commit; define -> project skill define; diagnose -> project skill diagnose; execute-plan -> project skill execute-plan; finish-branch -> project skill finish-branch; implement -> project skill implement; parallel-work -> project skill parallel-work; plan -> project skill plan; prove-it -> project skill prove-it; recall -> project skill recall; self-review -> project skill self-review; technical-writing -> project skill technical-writing"
+  has_line "Overrides (follow the skill, say so in one line): commit -> project skill commit; define -> project skill define; diagnose -> project skill diagnose; execute-plan -> project skill execute-plan; finish-branch -> project skill finish-branch; implement -> project skill implement; parallel-work -> project skill parallel-work; plan -> project skill plan; prove-it -> project skill prove-it; recall -> project skill recall; self-review -> project skill self-review; technical-writing -> project skill technical-writing"
   has_line "Set: base_branch=develop"
   [[ "$summary" != *"Unknown keys"* ]] || { echo "$summary"; return 1; }
 }
@@ -212,7 +212,7 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
   [[ "$summary" == "Main worktree: "* ]] || false
   line=$(printf '%s\n' "$summary" | grep '^Overrides ')
-  re='^Overrides \(follow the project skill, say so in one line\): (.+); not shown: ([a-z, -]+)$'
+  re='^Overrides \(follow the skill, say so in one line\): (.+); not shown: ([a-z, -]+)$'
   [[ "$line" =~ $re ]] || { echo "$line"; return 1; }
   shown=$(printf '%s\n' "${BASH_REMATCH[1]}" | sed 's/; /\
 /g' | sed 's/ -> project skill .*//')
@@ -234,7 +234,7 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   summary
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
   line=$(printf '%s\n' "$summary" | grep '^Overrides ')
-  [[ "$line" == *"unslop -> project skill house-style-guide"* ]] || { echo "$line"; return 1; }
+  [[ "$line" == *"unslop -> skill house-style-guide"* ]] || { echo "$line"; return 1; }
   [[ "$line" == *"; not shown: "* ]] || { echo "$line"; return 1; }
   cut=${line##*; not shown: }
   [[ ", $cut, " != *", unslop, "* ]] || { echo "$line"; return 1; }
@@ -307,7 +307,7 @@ YML
   [[ "$summary" == *"self-review -> project skill self-review"* ]] || false
   [[ "$summary" == *"(more: bash $F/scripts/kern-get <key>)"* ]] || false
   before_set=${summary%%"Set: "*}
-  [[ "$before_set" == *"Overrides (follow the project skill, say so in one line): "* ]] || false
+  [[ "$before_set" == *"Overrides (follow the skill, say so in one line): "* ]] || false
   # The 600 counts the plugin root as {ROOT}, so the entries kept do not depend on the install path.
   summary=${summary//"$F"/\{ROOT\}}
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
