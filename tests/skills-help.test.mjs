@@ -85,10 +85,11 @@ test('setup never derives scope_threshold from a line cap, and names the measure
 test('setup step 4 lists each skill that overlaps a job and records the pick', () => {
   const setup = body.split('## Setup')[1].split('\n## ')[0];
   const step = setup.split('\n4. ')[1].split('\n5. ')[0];
-  for (const s of ['bash ${CLAUDE_PLUGIN_ROOT}/scripts/skill-conflicts', 'superpowers', 'plugin', "use that skill or keep kern's", 'recommended answer first', 'overrides.<job>: <skill>', 'overrides.<job>: off', "kern's guards still apply", "kern's routes only"]) assert.ok(step.includes(s), s);
+  for (const s of ['bash ${CLAUDE_PLUGIN_ROOT}/scripts/skill-conflicts', 'superpowers', 'plugin', "use that skill or keep kern's", 'recommended answer first', 'overrides.<job>: <skill>', 'overrides.<job>: off', "A job takes one pick: when several skills overlap it, ask which one or keep kern's.", "kern's guards still apply", "kern's routes only"]) assert.ok(step.includes(s), s);
   assert.doesNotMatch(body, /missing project skill/, 'check takes the user and plugin skills an override may name');
   const tpl = readFileSync(join(dir, 'templates', 'kern.local.yml'), 'utf8');
   assert.ok(tpl.includes('project, user or plugin skill') && tpl.includes('# overrides.define: off\n'));
   const table = readFileSync(join(dir, '..', '..', 'kernel', 'settings.md'), 'utf8');
   assert.ok(table.includes('| skill name, or `off` for no override'));
+  assert.ok(table.includes('the same-name match is off | session-start, skill-conflicts, every skill |'));
 });

@@ -309,7 +309,7 @@ fi
 # UserPromptSubmit run prints it, so a slash command's two runs print it once; a prompt that names or
 # switches a mode or autopilot gets none. It comes before the headless exit below: evals run headless. It
 # names the override in the same sentence as the route, as the kernel's Routing rule does, or a model with a
-# project skill for the job reads kern's route first.
+# skill for the job reads kern's route first.
 [ "$ROUTE" = 1 ] && [ "$SHOW_LINE" = 0 ] && printf '%s\n' 'kern: new request? Match it against the Routing table; Read its route, or the override named for its job, first.'
 # The Building line (M2b bfix2 U, the user's "Hook line (Recommended)", 2026-10-24). At cd4808a the kernel's
 # turn-start Building line fired in 1 of the 6 "Quick and clear" behaviour runs, and the stored-data case asked

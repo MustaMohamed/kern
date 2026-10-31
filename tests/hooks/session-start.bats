@@ -90,7 +90,7 @@ ap_on() {
   [[ "$output" == *"push.policy=auto"* ]] || false
   # kern ships technical-writing from Task 15; until then no kern job matches the project skill.
   if [ -d "$K/skills/technical-writing" ]; then [[ "$output" == *"technical-writing -> project skill technical-writing"* ]] || false; fi
-  # route.<name> had no reader (audit B8): overrides.<job> names a project skill for a job.
+  # route.<name> had no reader (audit B8): overrides.<job> names a skill for a job.
   [[ "$output" != *"Routes:"* ]] || false
   [[ "$output" == *"Ignored, floor actions have no key: merge.policy"* ]] || false
   set_line=$(printf '%s\n' "$output" | grep '^Set: ')

@@ -699,7 +699,7 @@ expand_go() {
 # Routing rule arrives once, at SessionStart; on the 2026-10-22 multi-diagnose runs Sonnet read no route for its
 # second task in 3 of 3 runs. Each later prompt gets one line; a session's first prompt gets none. The line
 # names the override in the same sentence as the route, as the kernel's Routing rule does, or a model with a
-# project skill for the job reads kern's route first (audit 2026-10-22, B4).
+# skill for the job reads kern's route first (audit 2026-10-22, B4).
 REMINDER='kern: new request? Match it against the Routing table; Read its route, or the override named for its job, first.'
 
 # reminders TEXT: how many lines of TEXT are the reminder.
