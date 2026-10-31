@@ -19,7 +19,7 @@ Turn an ask into an approved shared understanding, plus an approved spec when ar
 5. Restate as interview.md says, said apart from assumed. Only an explicit yes approves; "sounds good", "whatever you think" and silence do not.
 6. Size it now, in plain words; the user may override. First count the files and the changed lines from your reads, tests included, a re-indented file's moved lines too, and say both; the spec's `## Size` records them, with the independent concerns. Then: a spike (a throwaway probe); bounded (designed in chat: an existing flow, within `scope_threshold` files, no public API, persisted schema or authorization change); else architectural (a written spec). A request with no existing flow to extend is architectural. In doubt go heavier; upgrade mid-task, never downgrade. Several independently testable capabilities: map them (`references/capability-map.md`). The map is approved before any module spec.
 7. Decisions: ask in numbered rounds in chat, each question with a recommended answer worded so "yes" accepts it. A question that depends on an open one waits a round. Three or more options: chat, saying once "visual pages not installed", unless `visual` is installed.
-8. Spike: state the question and probe in 2 or 3 sentences; wait for a nod. Probe in a `wt-new <slug> --detach` worktree, or under `WORK/tmp`, never in the main checkout; exit 2: say why and ask. Return an answer; the code is throwaway.
+8. Spike: state the question and probe in 2 or 3 sentences; wait for a nod. Probe in a `wt-new <slug> --detach` worktree, or under `WORK/tmp`, never in the main checkout; exit 2: say why and ask. Return an answer.
 9. Bounded: give an in-chat design (approach, a line `Size: <n> files, about <m> changed lines`, tests, always, ask first and never constraints, a line per `checklists` item) and ask for the yes as a typed reply in chat, never through AskUserQuestion. On yes, write a `form: short` spec from `references/spec-template.md` in the directory `kern-dir specs` prints, with `status: approved` and `approved: <date>, "<one whole line of the user's yes, verbatim>"` in that one write. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <spec>` (fix what it prints; keep both approval lines). Over 2 files, whatever `scope_threshold` allows, or several independent concerns: the next step is plan; Read plan's SKILL.md, whose step 2 decides; else the kernel routes to implement.
 10. Architectural: offer 2 or 3 approaches, recommendation first; present the design in sections, each approved; write the spec from `references/spec-template.md` with `status: draft`; run `plan-check <spec>` and fix what it reports; self-review it.
 11. Spec review (architectural): send the spec to one fresh general-purpose subagent on `model.reviewer` with `run_in_background: false`, its brief `${CLAUDE_PLUGIN_ROOT}/skills/define/references/spec-review.md`, round 1 only. An approved design does not skip it; only the user naming the review does. The user's own review is not this one. Fix its findings; sort its builder questions as `references/handover.md` says.
@@ -37,7 +37,7 @@ Standing gate on every path: no code, scaffold, install, migration or branch bef
 | `base_branch` | detected | gap check |
 | `model.investigator`, `model.reviewer` | `opus` | explore; review |
 
-A project's own spec system (`docs/specs`) wins, but its spec still carries kern's `status` and `approved` lines, which G20 and plan read.
+A project's own spec system (`docs/specs`) wins; its spec still carries kern's `status` and `approved` lines, which G20 and plan read.
 
 ## Outputs
 
@@ -45,7 +45,9 @@ A project's own spec system (`docs/specs`) wins, but its spec still carries kern
 
 ## Stops and autopilot
 
-Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on, every path parks, as G20 denies any approval: define writes the draft with its open questions, marks it `status: draft (parked under autopilot)`, and records each question under Open questions and in the reply as `parked: <question>; default: <choice>; why: <one line>`. The fast path runs. Independent work continues.
+Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on with no go, every path parks: define writes the draft, marks it `status: draft (parked under autopilot)`, and records each open question under Open questions and in the reply as `parked: <question>; default: <choice>; why: <one line>`. The fast path runs. Independent work continues.
+
+Under a go (`/kern:autopilot go <id>` for this ticket), run the bounded or architectural path with no stop: each question takes its default with a `parked:` line, and only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run. Bounded: step 9's one write, so plan has an approved spec to read. Architectural: step 12's one Edit, after plan-check and spec review. Each sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` in normal form (`MA-254`, `853`). G20 also needs `issue:` to name this ticket; a bare `#` opens a YAML comment, so quote one: `issue: "#853"`.
 
 ## Red flags
 

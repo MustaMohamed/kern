@@ -329,7 +329,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 **5. Outputs.** `WORK/specs/<slug>.md`. Questions in chat (page when installed).
 
-**6. Stops and escalations; autopilot.** Every product or preference call goes to the user. Two rounds without rising confidence: step back and say so. [AD interview-me:132-140,218] Under autopilot define cannot approve itself: it writes the draft with open questions and recommended answers, marks `status: draft (parked under autopilot)`, writes a `parked:` ledger line, and only work that does not depend on it continues.
+**6. Stops and escalations; autopilot.** Every product or preference call goes to the user. Two rounds without rising confidence: step back and say so. [AD interview-me:132-140,218] Under autopilot with no go define cannot approve itself: it writes the draft with open questions and recommended answers, marks `status: draft (parked under autopilot)`, writes a `parked:` ledger line, and only work that does not depend on it continues. Under a go it runs the bounded or architectural path with no stop, takes each question's default with a `parked:` line, stops only on the stop list in `skills/autopilot/references/run.md`, and approves with the go's line after plan-check and, when architectural, spec review.
 
 **7. Acceptance**
 - "Add a CSV export to the reports page": sized bounded after the restate; one intent question with a guess; no Edit or Write outside `WORK` before the yes.
@@ -340,11 +340,11 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 - "Make billing multi-tenant": architectural; sections approved one at a time; spec written with `status: draft`; the turn ends after the spec; no plan written.
 - User answers the design with "whatever you think": an explicit yes is requested; status stays draft.
 - Project has `.claude/skills/define/`: defers in one line.
-- An approval edit whose quote is not a whole line of the user's last message, or is "sounds good", is denied by G20; under autopilot every approval edit is denied.
+- An approval edit whose quote is not a whole line of the user's last message, or is "sounds good", is denied by G20; under autopilot only the go's line approves, on a file whose `issue:` names the go's ticket.
 - A request with no existing flow to extend is classified architectural.
 - The full checklist is `tests/skills/define.acceptance.md`.
 
-**8. Sources; size.** SP brainstorming, spec-document-reviewer-prompt; AD interview-me, spec-driven-development; PO grilling, to-spec, triage; PS why/linear.md. SKILL.md at most 7,000 bytes (6,950 until pilot fix plan 2's Task 4; 6,500 until the first pilot fix plan's Task 4, then 6,900 until its test round's fix); `references/spec-template.md` at most 3,450 bytes (3,100 until pilot fix plan 2's Task 4; 3,000 until the first pilot fix plan's Task 4), `interview.md` 3,200, `spec-review.md` 1,600 (1,400 until M2b added the builder questions), `handover.md` 1,200, `capability-map.md` 1,200 (the plan's caps). Ideate and questionnaire modes deferred to M5.
+**8. Sources; size.** SP brainstorming, spec-document-reviewer-prompt; AD interview-me, spec-driven-development; PO grilling, to-spec, triage; PS why/linear.md. SKILL.md at most 7,600 bytes (7,000 until M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec; 6,950 until pilot fix plan 2's Task 4; 6,500 until the first pilot fix plan's Task 4, then 6,900 until its test round's fix); `references/spec-template.md` at most 3,450 bytes (3,100 until pilot fix plan 2's Task 4; 3,000 until the first pilot fix plan's Task 4), `interview.md` 3,200, `spec-review.md` 1,600 (1,400 until M2b added the builder questions), `handover.md` 1,200, `capability-map.md` 1,200 (the plan's caps). Ideate and questionnaire modes deferred to M5.
 
 ---
 
@@ -383,7 +383,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 **5. Outputs.** `WORK/plans/<slug>.md`; a summary in chat (plan page when installed).
 
-**6. Stops; autopilot.** Stops at steps 1, 7 and 12. Under autopilot the plan is written and parked with `status: draft`; `execute-plan` runs only an approved plan.
+**6. Stops; autopilot.** Stops at steps 1, 7 and 12. Under autopilot with no go the plan is written and parked with `status: draft`; `execute-plan` runs only an approved plan. Under a go the plan reaches `status: approved` with the go's line and `execution: delegate` after plan-check and review; a plan over `scope_threshold` takes the split and runs the first slice, and the report lists the rest, each needing its own go.
 
 **7. Acceptance**
 - Approved spec with 3 capabilities: tasks with exact Files and Interfaces; test commands detected with their source named; two tasks touching `db/migrations` ordered, not parallel.
@@ -393,7 +393,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 - `plan-check` reports a task that consumes a name before the task that produces it: the plan is fixed before it is presented.
 - The full checklist is `tests/skills/plan.acceptance.md`.
 
-**8. Sources; size.** SP writing-plans (+ plan-document-reviewer-prompt); AD planning-and-task-breakdown; PO to-tickets; PB multi-phase-plan; PS figure-it-out. SKILL.md at most 6,700 bytes (6,500 until the pilot fix plan's Task 5, which raised it to 6,600, and 6,700 since its fix round: step 7 acts on `pr.max_lines`); `references/plan-template.md` at most 2,200 bytes, `task-template.md` 2,200, `plan-review.md` 1,650 (1,450 until pilot fix plan 2's Task 4, which made it 1,600, and 1,650 since its review fix named the gate's measure; 1,400 until the first pilot fix plan's Task 5). Map mode (wayfinder) deferred past M2.
+**8. Sources; size.** SP writing-plans (+ plan-document-reviewer-prompt); AD planning-and-task-breakdown; PO to-tickets; PB multi-phase-plan; PS figure-it-out. SKILL.md at most 7,350 bytes (6,700 until M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice; 6,500 until the pilot fix plan's Task 5, which raised it to 6,600, and 6,700 since its fix round: step 7 acts on `pr.max_lines`); `references/plan-template.md` at most 2,200 bytes, `task-template.md` 2,200, `plan-review.md` 1,650 (1,450 until pilot fix plan 2's Task 4, which made it 1,600, and 1,650 since its review fix named the gate's measure; 1,400 until the first pilot fix plan's Task 5). Map mode (wayfinder) deferred past M2.
 
 ---
 ### C3. `execute-plan` (path, M2)

@@ -1,7 +1,7 @@
 // tests/skills/plan.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/plan/SKILL.md';
 
@@ -26,7 +26,8 @@ test('plan sections and steps', () => {
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
   // 6,600 since the pilot fix plan's Task 5 (raised from 6,500): step 1 reads pr.max_lines, step 9 writes the Size line.
   // 6,700 since the pilot fix plan's Task 5 fix round: step 7 acts on pr.max_lines and states a limit in chat only.
-  assertMaxBytes(SKILL, 6700);
+  // 7,350 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
+  assertMaxBytes(SKILL, 7350);
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
@@ -200,4 +201,24 @@ test('the plan header states its size against both limits, and the review checks
     "- Non-goals: a task that builds what the spec's Never or Not doing lines exclude.", 'a spike first.']);
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[9].includes('Review Focus, the Size line against step 1\'s limits, `execution:` empty'), s[9]);
+});
+
+test('under a go plan runs to an approved plan on delegate, and a plan over the threshold runs its first slice', () => {
+  // M3 part 1 Task 5: execute-plan runs only an approved plan, and nothing approved one under autopilot.
+  // plan-check requires one of step, inline or delegate on an approved plan, and nobody is there to choose.
+  const lines = section(readDoc(SKILL).body, '## Stops and autopilot').split('\n');
+  const go = lines.find((l) => l.startsWith('Under a go (`/kern:autopilot go <id>` for this ticket)'));
+  assert.ok(go, 'a go has its own paragraph');
+  assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
+  // The review stays: the go replaces the human yes and nothing else.
+  assert.ok(go.includes("after step 11's plan-check and review, one Edit sets `status: approved`"), go);
+  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` in normal form (`MA-254`, `853`)'), go);
+  assert.ok(go.includes('`execution: delegate`'), go);
+  assert.ok(go.includes('`issue:`'), go);
+  assert.ok(go.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
+  assert.ok(go.includes('run the same plan-check again'), go);
+  // One go covers one draft PR.
+  assert.ok(go.includes('A plan over `scope_threshold` takes the split and runs the first slice; the report lists the rest, each needing its own go.'), go);
+  // With no go the plan stays a draft.
+  assert.ok(lines.some((l) => l.includes('When on, every stop parks') && l.includes('write the plan with `status: draft`')), 'parking stands');
 });
