@@ -113,17 +113,23 @@ autopilot_off() {
   NOTICE="kern: the session state could not be read, so autopilot off also reset voice and surface to their defaults."
 }
 
-# apply_go ARGS: a typed `go <ticket>` turns autopilot on and records the go. The go must be the prompt's
-# one non-blank line, so a pasted block that opens with one records nothing, and name one id go_ticket
-# takes. A skill conflict with no pick refuses it before a denied project does, since setup refuses under
-# autopilot. A go binds to its repository, so one with no repository to name refuses too. A refusal
-# changes no state: autopilot stays as it was, with any earlier go.
+# apply_go ARGS: a typed `go <ticket>` turns autopilot on and records the go. PROMPT must be one non-blank
+# line of /kern:autopilot or /autopilot, go (in any case, as apply_autopilot reads it) and the id ARGS
+# names, an id go_ticket takes, and an expansion must come from the plugin. So a pasted block, a wrapped or
+# missing prompt and another source's command record nothing. A skill conflict with no pick refuses the
+# go before a denied project does, since setup refuses under autopilot. A go binds to its repository, so
+# one with no repository to name refuses too. A refusal changes no state: autopilot stays as it was,
+# with any earlier go.
 apply_go() {
-  local word id clash denier key
+  local word said id clash denier key
   word=$(printf '%s\n' "$1" | env LC_ALL=C awk 'NR == 1 && NF == 2 { print $2 }')
-  [ "$(printf '%s\n' "$PROMPT" | env LC_ALL=C awk 'NF { n++ } END { print n + 0 }')" -le 1 ] || word=""
+  said=$(printf '%s\n' "$PROMPT" | env LC_ALL=C awk '
+    NF { n++; w = NF; name = $1; verb = tolower($2); t = $3 }
+    END { if (n == 1 && w == 3 && (name == "/kern:autopilot" || name == "/autopilot") && verb == "go") print t }')
+  [ "$said" = "$word" ] || word=""
+  [ "$EVENT" != UserPromptExpansion ] || [ "$SRC" = plugin ] || word=""
   if ! id=$(go_ticket "$word") || [ -z "$id" ]; then
-    NOTICE="kern: autopilot go takes one ticket id, such as MA-254 or 853, alone in its prompt; nothing changed."
+    NOTICE="kern: autopilot go takes one ticket id, such as MA-254 or 853, typed alone in its prompt; nothing changed."
     return 0
   fi
   clash=$(skill_conflicts --unpicked | env LC_ALL=C awk -F '\t' '!seen[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }')
