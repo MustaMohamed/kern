@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # gh stand-in for the exec evals: logs every call to $KERN_EXEC_LOG and answers from $KERN_EXEC_PR
-# (none, open-at-head or open-older). It never reaches a network; a call it does not know fails.
+# (none, open-at-head or open-older) and $KERN_EXEC_TICKET (the case's issue 7: a title line, a blank line,
+# then its body). It never reaches a network; a call it does not know fails.
 # PR URLs are file://<origin path>/pull/<n>: finish-branch counts a PR only if its URL is this repo's
 # (`git remote get-url origin`), so the URL has to contain the origin path to be believed.
 printf '%s\n' "$*" >>"${KERN_EXEC_LOG:?KERN_EXEC_LOG is not set}"
@@ -10,6 +11,15 @@ pr_url() {
   printf 'file://%s/pull/%s' "$origin" "$1"
 }
 pr_json() { printf '[{"number":7,"state":"OPEN","headRefOid":"%s","url":"%s"}]\n' "$1" "$(pr_url 7)"; }
+# json_text: its argument as a JSON string, quotes included.
+json_text() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\t'/\\t}
+  s=${s//$'\n'/\\n}
+  printf '"%s"' "$s"
+}
 case "$1 $2" in
   "pr list")
     case "${KERN_EXEC_PR:-none}" in
@@ -42,6 +52,17 @@ case "$1 $2" in
     echo
     ;;
   "pr view") url=$(pr_url 7) || exit 1; printf '{"number":7,"state":"OPEN","url":"%s"}\n' "$url" ;;
+  "issue view")
+    [ "${3#\#}" = 7 ] || { echo "gh stub: no issue $3" >&2; exit 1; }
+    [ -n "${KERN_EXEC_TICKET-}" ] || { echo "gh stub: no ticket in this case" >&2; exit 1; }
+    title=${KERN_EXEC_TICKET%%$'\n'*}
+    body=${KERN_EXEC_TICKET#"$title"$'\n\n'}
+    case "$*" in
+      *--json*) printf '{"number":7,"title":%s,"body":%s,"state":"OPEN","author":{"login":"dev"},"url":%s,"labels":[],"assignees":[],"comments":[]}\n' \
+        "$(json_text "$title")" "$(json_text "$body")" "$(json_text "file://$origin/issues/7")" ;;
+      *) printf 'title:\t%s\nstate:\tOPEN\nauthor:\tdev\nlabels:\t\ncomments:\t0\nassignees:\t\nprojects:\t\nmilestone:\t\nnumber:\t7\n--\n%s\n' "$title" "$body" ;;
+    esac
+    ;;
   "api user") echo dev ;;
   "auth status") echo "Logged in to example.invalid account dev" ;;
   "pr checks") echo "no checks reported on the '$(git branch --show-current 2>/dev/null)' branch"; exit 1 ;;

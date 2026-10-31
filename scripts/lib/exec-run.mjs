@@ -119,9 +119,16 @@ export function autopilotProblem(events, configDir, read = (f) => readFileSync(f
 }
 
 // casePrompts(c): the prompts a case sends, each its own turn: `/kern:autopilot on` first when the case
-// turns autopilot on (a local command, which prints its own result event), then the case's turns: its
-// `turns` list when it has one (pilot fix plan 2, Task 10), else its one `turn`.
-export const casePrompts = (c) => [...(c.autopilot ? ['/kern:autopilot on'] : []), ...(c.turns ?? [c.turn])];
+// says autopilot: true (a local command, which prints its own result event), then the case's turns: its
+// `turns` list when it has one (pilot fix plan 2, Task 10), else its one `turn`. A case that says autopilot:
+// "go" sends no on: its one turn, `/kern:autopilot go <ticket>`, turns autopilot on, as a user's does.
+export const casePrompts = (c) => [...(c.autopilot === true ? ['/kern:autopilot on'] : []), ...(c.turns ?? [c.turn])];
+
+// caseLimits(c): what a case's claude run may spend, on top of the runner's defaults. 60 turns: finish-branch runs
+// its proof and a whole self-review before the size gate, and 30 was reached; the $3 default still caps spend. A go
+// runs define, plan, execute-plan and finish-branch in one prompt, with their subagents, so it gets more of each,
+// and the hour stands in for the default ten minutes, which would cut it off with nothing to grade.
+export const caseLimits = (c) => (c.id.startsWith('go-') ? { maxTurns: 120, maxBudgetUsd: 6, timeoutMs: 60 * 60 * 1000 } : { maxTurns: 60 });
 
 // gradeCase({ c, run, ghLog, git, configDir, plugin, graders, read }): a case's verdict. INVALID when the run
 // may not be graded (runProblem, which also wants one result event per prompt of casePrompts), when, given

@@ -27,7 +27,7 @@
 // ran passed; 2 for a usage error, before anything runs. A claude run that exits non-zero, times out,
 // ends early or cannot start is an invalid case, never a pass; a missing or non-executable claude stops.
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
@@ -38,7 +38,7 @@ import { limiter } from './lib/pool.mjs';
 import { dirtyRefusal, treeRecord } from './lib/run-record.mjs';
 import { reaper } from './lib/reaper.mjs';
 import { GRADERS } from './lib/exec-grade.mjs';
-import { UsageError, caseEnv, casePrompts, claudeConfigDir, dateStamp, execParts, gradeCase, kernStateFile, parseArgs, regradeExec, runEval, saveWorkspace, sessionId, snapshotBody, traceHooks,
+import { UsageError, caseEnv, caseLimits, casePrompts, claudeConfigDir, dateStamp, execParts, gradeCase, kernStateFile, parseArgs, regradeExec, runEval, saveWorkspace, sessionId, snapshotBody, traceHooks,
   userSettingsProblem, writeEvents, writeReply, writeTrace } from './lib/exec-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -145,9 +145,9 @@ async function runCase(c, save) {
     let run;
     try {
       run = await runClaudeAsync({
-        // 60 turns: finish-branch runs its proof and a whole self-review before the size gate, and 30 was reached; the $3 budget still caps spend.
-        cwd: dir, prompts, pluginDirs: [kern], model: MODEL, maxTurns: 60,
-        env: caseEnv({ bin, path: process.env.PATH, log, pr: c.pr || 'none', snapshot, trace }),
+        cwd: dir, prompts, pluginDirs: [kern], model: MODEL, ...caseLimits(c),
+        // The gh stand-in prints the ticket for `issue view 7`, passed on by the KERN_EXEC_ prefix.
+        env: { ...caseEnv({ bin, path: process.env.PATH, log, pr: c.pr || 'none', snapshot, trace }), ...(c.ticket ? { KERN_EXEC_TICKET: c.ticket } : {}) },
       });
     } catch (e) {
       if (!(e instanceof ClaudeRunError) || e.fatal) throw e;
@@ -155,6 +155,8 @@ async function runCase(c, save) {
       save({ reason: e.message, events: e.events, trace });
       return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [], session: null };
     }
+    // A case's keep file sits outside the workspace, so --regrade has no copy of it: the log says what the run left.
+    if (c.keep) appendFileSync(log, `keep: ${existsSync(join(dir, c.keep)) ? 'intact' : 'gone'}\n`);
     const ghLog = readFileSync(log, 'utf8').split('\n').filter(Boolean);
     const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', timeout: 60 * 1000 }).trim();
     const configDir = claudeConfigDir(process.env);
@@ -222,7 +224,7 @@ try {
     cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason),
     saveEvents: (id, events) => writeEvents(REPLIES, id, events), saveTrace: (id, file) => writeTrace(REPLIES, id, file), log: console.log, jobs: opts.jobs ?? 6, limit, unit,
     snapshot: gating ? 'committed' : opts.only ? 'none' : 'beside', mode: opts.only ? '--case' : opts.quick ? '--quick' : '--changed',
-    describe: (c) => `${c.id}: ${casePrompts(c).map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch}`,
+    describe: (c) => `${c.id}: ${casePrompts(c).map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch ?? 'main'}`,
   });
 } finally {
   if (plugin) { rmSync(dirname(plugin), { recursive: true, force: true }); guard.drop(dirname(plugin)); }

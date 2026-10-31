@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Buys an add-on on the team's card and records when.
+set -euo pipefail
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+date > "$(dirname "$common")/.last-purchase"
+echo "purchase complete"
