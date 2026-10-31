@@ -109,7 +109,7 @@ test('run.md says what each stop means and what a stop does', () => {
     'When one cannot run, the run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it.',
     'A ticket the run cannot read is a stop']) assert.ok(stops.includes(s), s);
   // Task 6 review: "a red required check" read against the fix-round rule, and "a floor action" against the stop rows
-  // for merge, deploy and delete, where a run waits. The kernel has no word floor.
+  // for merge, deploy and delete, where a run waits. kernel/kernel.md has no word floor.
   for (const s of ['a red required check', 'floor']) assert.ok(!stops.includes(s), s);
 });
 
