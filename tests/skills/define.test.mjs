@@ -162,8 +162,10 @@ test('under a go define runs to an approved spec, and with no go it parks', () =
   // A bare references/run.md would not resolve from a project repo.
   assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
   // One go covers one draft PR. The split is in the spec, so plan-check and proof-check count the slice unchanged.
-  assert.ok(go.includes('A capability-map ticket writes no map.'), go);
-  assert.ok(go.includes('That ticket, or a size over `scope_threshold`, specs its first slice: `## Size` gives the whole ticket\'s files and lines against the limit, numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go.'), go);
+  // Only an overrun splits: the reviewers call a spec with `## Later slices` and no overrun a finding.
+  assert.ok(go.includes('A capability-map ticket writes no map; within the limits it specs the whole ticket.'), go);
+  // plan-template.md takes the plan's Size line from `## Size`, so the slice's counts come first.
+  assert.ok(go.includes('A size over `scope_threshold` specs its first slice: `## Size` gives the slice\'s files and lines, then the whole ticket\'s against the limit; numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go.'), go);
   // Nobody confirms the split under a go, and a moved line leaves proof-check and self-review's spec lane, so a reviewer checks the overrun.
   assertContains('skills/define/references/spec-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size`. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
   assertContains('skills/define/references/spec-template.md', ['A split adds an optional `## Later slices`.']);
