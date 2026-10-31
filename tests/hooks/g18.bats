@@ -22,6 +22,22 @@ hook() { run bash "$KERN_ROOT/hooks/pre-tool-use" <<< "$(payload "$1" "$2")"; }
 autopilot() { printf 'voice: normal\nsurface: auto\nautopilot: on\n' > "$CLAUDE_PLUGIN_DATA/sessions/s1.state"; }
 denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output" == *"kern G18: "* ]]; }
 
+# each_no_vote, each_denied: hook each line of stdin as the investigator's command. In a line \" is a double
+# quote and \n a newline once the JSON payload is decoded.
+each_no_vote() {
+  while IFS= read -r cmd; do
+    hook kern:investigator "$cmd"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ] || { echo "unexpected vote for: $cmd"; false; }
+  done
+}
+each_denied() {
+  while IFS= read -r cmd; do
+    hook kern:investigator "$cmd"
+    denied || { echo "not denied: $cmd"; false; }
+  done
+}
+
 @test "read commands get no G18 vote" {
   for cmd in 'git log --oneline -5' 'git -C src blame a.txt' 'rg -n foo src' 'ls -la' 'wc -l a.txt' 'find . -name a.txt' 'sed -n 1,5p a.txt' "sed -n '\$p' a.txt" 'sort -rn a.txt' 'file a.txt' 'printf %s a.txt'; do
     hook kern:investigator "$cmd"
@@ -122,14 +138,180 @@ denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output"
   grep -q '^KERN_GUARD_IDS=".* g18[ "]' "$KERN_ROOT/hooks/pre-tool-use"
 }
 
-@test "an assignment is still denied: G18 has no variable reading" {
+@test "a variable the shell reads differently from G18 is still denied" {
   # Pilot fix plan 2, Task 7 as ruled in review (MA-254 round 2, events 14 and 15): the shell can change or skip an
   # assignment in ways G18 cannot see, such as single quotes, zsh subscripts and zsh modifiers.
-  for cmd in 'T=src/a; cat -n $T/a.txt' 'T=src; grep -n foo ${T}/a.txt | head -5' 'w=1; sed -n '"'"'1,$w$1p'"'"' a.txt' \
-    'T=a-o; sort $T[2,3] out.txt a.txt' 'T=ao; sort $T:s/a/-/ out.txt a.txt'; do
+  for cmd in 'w=1; sed -n '"'"'1,$w$1p'"'"' a.txt' 'T=a-o; sort $T[2,3] out.txt a.txt' 'T=ao; sort $T:s/a/-/ out.txt a.txt' \
+    'T=a-o; sort \"$T[2,3]\" out.txt a.txt' 'T=ao; sort \"$T:s/a/-/\" out.txt a.txt'; do
     hook kern:investigator "$cmd"
     denied || { echo "not denied: $cmd"; false; }
   done
+}
+
+@test "the pilot's read-only investigator commands get no vote" {
+  each_no_vote <<'EOF'
+git status -sb | head -2; git rev-parse --short HEAD
+for f in a.ts b.ts; do cat -n \"$f\"; done
+f=$(git ls-files | grep -i 'entity.ts$'); echo \"$f\"; grep -n Column \"$f\"
+d=src/x; cat -n $d/a.ts $d/b.ts; grep -n cycle $d/a.ts
+rg -n \"Props|onAdd|=>\" src/a.tsx | head -8
+grep -n 'x$' a.ts
+T=src/a; cat -n $T/a.txt
+T=src; grep -n foo ${T}/a.txt | head -5
+T=src; for x in a b; do cat $T/$x; done
+EOF
+}
+
+@test "the pilot's writes stay denied through a loop, a variable or a substitution" {
+  each_denied <<'EOF'
+for f in a b; do rm \"$f\"; done
+f=$(mktemp); echo x > \"$f\"
+for f in $(cat list); do cat \"$f\"; done
+sed -i 's/a/b/' a.ts
+EOF
+}
+
+@test "a for over literal words is read word by word" {
+  each_no_vote <<'EOF'
+for f in \"a.ts\" 'b.ts'; do echo \"== $f\"; head -5 ${f}; done
+for f in a b\ndo\n  cat -n $f\n  wc -l $f\ndone
+for f in a b; do grep -n x $f 2>/dev/null | head -3; done | sort -rn
+for f in a b; do git show HEAD:src/$f | head -5; done; for f in c d; do cat $f; done
+for f in a b; do sed -n 1,5p $f; done
+for f in a b; do cat $f 2>&1; done
+for f in a b; do cat $f &>/dev/null; done
+EOF
+  each_denied <<'EOF'
+for f in; do cat a; done
+for f in *.ts; do cat \"$f\"; done
+for f in {a,b}; do cat \"$f\"; done
+for f in ~/a b; do cat \"$f\"; done
+for f in 'a b' c; do cat \"$f\"; done
+for f in $d/a; do cat \"$f\"; done
+d=a; for f in $d b; do cat \"$f\"; done
+for f; do cat \"$f\"; done
+for f g in a b; do cat \"$f\"; done
+for file in a b; do cat \"$file\"; done
+for ((i = 0; i < 2; i++)); do cat a; done
+for f (a b) cat $f
+for f in a b; cat $f
+for f in a -o; do sort $f out.txt a.txt; done
+for f in a b; do $f x; done
+for f in a b; do cat \"$f\" > out.txt; done
+for f in a b; do cat \"$f\"; done > out.txt
+for f in a b; do cat \"$f\"; done 2> err.txt
+for f in a b; do for g in c d; do cat $f$g; done; done
+for f in a b; do d=$f; cat $d; done
+for f in a b; do d=x; cat $d/$f; done
+for f in a b; do cat $f; done; cat $f
+for f in a b; do cat $f
+while true; do cat a; done
+EOF
+}
+
+@test "a one-letter variable set to a plain value is read as that value" {
+  each_no_vote <<'EOF'
+d='src/x'; cat \"$d\"/a.ts
+d=src && cat ${d}/a.ts
+d=src\ncat $d/a.ts
+d=a.ts; sort -rn $d
+d=src; find $d -name a.ts
+d=a; git log --oneline -- $d
+d=a; d=b; cat $d
+EOF
+  each_denied <<'EOF'
+d=-o; sort $d out.txt a.txt
+d=rm; $d a
+d=a; rm $d
+d=
+d='a b'; cat $d
+d=*; cat $d
+d=~/a; cat $d
+d=a\\ b; cat $d
+d=a; e=$d; cat $e
+d=a e=b; cat $d
+d=a cat $d
+d+=a; cat $d
+file=a; cat $file
+path=/tmp; cat a
+cat $d
+cat $HOME/a
+d=a; cat $da
+d=a; cat ${d:-b}
+d=a; cat ${#d}
+d=a; cat $d$(ls)
+true && d=a; cat $d
+true || d=a; cat $d
+d=a || cat $d
+d=a | cat $d
+d=a & cat $d
+d=a && e=b; cat $e
+(d=a); cat $d
+{ d=a; }; cat $d
+if true; then d=a; fi; cat $d
+if true; then true; d=a; fi; cat $d
+d=a; cat <(ls $d)
+d=a; true && { true; d=b; }; cat $d
+d=a; cat <<E\nd=b\nE\ncat $d
+d=a; cat b # ; d=c\ncat $d
+d=\"a\\b\"; cat $d
+c=cat; $c a
+d=a; cat <<EOF2\n$d\nEOF2
+EOF
+}
+
+@test "an assignment of a read-only substitution is read as an unknown word" {
+  each_no_vote <<'EOF'
+f=\"$(git rev-parse --short HEAD)\"; echo $f
+d=src; f=$(ls $d | head -1); cat \"$d/$f\"
+f=$(git ls-files | head -1); g=$(cat $f | head -1); echo \"$g\"
+f=$(git ls-files | grep -c x) && echo \"$f\"
+EOF
+  each_denied <<'EOF'
+f=$(rm a); echo \"$f\"
+f=$(cat a | sh); echo \"$f\"
+f=$(cat a > b); echo \"$f\"
+f=$(cat $(ls)); echo \"$f\"
+f=$(g=a; cat $g); echo \"$f\"
+f=$(for g in a b; do cat $g; done); echo \"$f\"
+f=$(ls)x; cat $f
+f=a$(ls); cat $f
+f=$(ls)$(ls); cat $f
+f=`ls`; cat $f
+f=$(ls); sort $f out.txt
+f=$(ls); rg -n x $f
+f=$(ls); sed -n 1p $f
+f=$(ls); git log $f
+f=$(ls); find . $f
+f=$(ls); printf $f
+f=$(ls); $f a
+f=$(ls); for g in $f; do cat $g; done
+f=$(ls); cat $f > out.txt
+cat $(ls)
+EOF
+}
+
+@test "a quoted pattern is data" {
+  each_no_vote <<'EOF'
+rg -n 'a => b' a.ts
+rg -n '$(foo)' a.ts
+rg -n 'a <(b' a.ts
+rg -n \"a > b\" a.ts
+rg -n \"a <(b\" a.ts
+rg -n a\\>b a.ts
+git log --format='%h > %s' -1
+grep -n \"x$\" a.ts
+grep -n x$ a.ts
+EOF
+  each_denied <<'EOF'
+rg -n \"$(foo)\" a.ts
+rg -n \"a\" a.ts > \"b\"
+rg -n 'a' a.ts >'b'
+cat a.ts > b'
+cat 'a > b
+cat a >(cat)
+grep -n \"$x\" a.ts
+EOF
 }
 
 @test "a brace list of file names and an escaped backtick in double quotes pass" {
@@ -145,7 +327,7 @@ denied() { [[ "$output" =~ \"permissionDecision\":\ *\"deny\" ]] && [[ "$output"
 @test "variables, brace lists and backticks that could hide an option or run code are still denied" {
   for cmd in 'IFS=/; cat -n a.txt' 'PATH=/tmp; cat a.txt' 'T=-o; sort $T out.txt a.txt' \
     '{cat,a.txt}' 'rg -n foo x{,--pre=sh}' 'rg -n foo -{-pre=sh,x}' 'rg -n foo \"-\"{-pre=sh,x}' 'sed -n {1w/tmp/x,p} a.txt' 'cat a{1..3}.txt' 'cat {a,{b,c}}.txt' \
-    'cat \"$(id)\"' 'rg -n \"foo`id`\" a.md' 'T=src; for x in a b; do cat $T/$x; done' \
+    'cat \"$(id)\"' 'rg -n \"foo`id`\" a.md' \
     'printf -v PATH %s /tmp; cat a.txt' 'printf -- %s a' \
     'git -C {.,branch} log' 'sed -n 1p {a,b}.txt' 'find {.,src} -name x'; do
     hook kern:investigator "$cmd"

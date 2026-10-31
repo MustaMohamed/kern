@@ -5,6 +5,8 @@
 # git_sub, _shell_words and vote. G18_AGENTS holds the agent_type the M1 spike recorded for the
 # investigator.
 G18_AGENTS="kern:investigator"
+# Stands for the output of a $( ) in the text _g18_read gives back.
+G18_ANY=$'\034'
 
 # g18_allowed SIMPLE_COMMAND: exit 0 when the command only reads. Options are judged on the words the
 # shell passes, quotes and backslashes removed, so '-o' and -dele''te are seen as -o and -delete.
@@ -14,15 +16,20 @@ g18_allowed() {
   # file named 1x, and >/dev/nullx to /dev/nullx.
   c=$(printf '%s' "$1" | sed -E -e 's/[0-9]*>&[0-9]+([[:space:]]|$)/\1/g' \
     -e 's#(&|[0-9]*)>[[:space:]]*/dev/null([[:space:]]|$)#\2#g' -e 's/^[[:space:]]*//')
-  case "$c" in *'>'* | *'<('* | *\$\(*) return 1 ;; esac
   _g18_expands "$c" && return 1
   words=$(_shell_words "$c")
   w1=${words%%$'\n'*}
+  # A word from a $( ) may be anything, so only a command that is safe with any word takes one.
+  case "$c" in *"$G18_ANY"*)
+    _g18_plain "$w1"
+    return
+    ;;
+  esac
   case "$w1" in
     git)
       sub=$(git_sub "$c" | cut -f2) || return 1
       case "$sub" in
-        log | show | blame | diff | grep | ls-files | ls-tree | rev-parse | rev-list | cat-file | merge-base | describe | shortlog | name-rev) ;;
+        status | log | show | blame | diff | grep | ls-files | ls-tree | rev-parse | rev-list | cat-file | merge-base | describe | shortlog | name-rev) ;;
         *) return 1 ;;
       esac
       # A config value, an external diff, a pager or an output file can run a program or write one.
@@ -43,7 +50,6 @@ EOF
 $words
 EOF
       ;;
-    grep | ls | cat | head | tail | wc | cut | tr | nl | stat | du | pwd | echo | basename | dirname | realpath | cd | true | test | jq | column | cmp | diff | comm) ;;
     printf)
       # printf -v NAME assigns a variable at run time, which G18 cannot follow, so printf takes no option.
       while IFS= read -r w; do
@@ -97,17 +103,27 @@ $words
 EOF
       [ "$n" -ge 3 ] || return 1
       ;;
-    *) return 1 ;;
+    *) _g18_plain "$w1" || return 1 ;;
   esac
   return 0
 }
 
-# _g18_expands TEXT: exit 0 when the shell may turn TEXT into words it does not show: a $ or a
-# backtick outside single quotes ($_, ${x:--o}, $'-o'), or a brace expansion ({-o,out.txt}). A brace
-# pair after @ with no comma or .. inside, such as git's HEAD@{1} or @{u}, does not expand. One brace
-# list of file names in a word passes (list below) only when the record's first word is cat, head, tail,
-# wc, ls, grep, rg, stat or du: each takes extra words only as more operands to read. Other commands'
-# words are positional, so git -C {.,branch} log runs git -C . branch log; they keep the plain rule.
+# _g18_plain WORD: exit 0 when WORD is a read whose every option only reads, so any words may follow it.
+_g18_plain() {
+  case "$1" in
+    grep | ls | cat | head | tail | wc | cut | tr | nl | stat | du | pwd | echo | basename | dirname | realpath | cd | true | test | jq | column | cmp | diff | comm) return 0 ;;
+  esac
+  return 1
+}
+
+# _g18_expands TEXT: exit 0 when the shell may turn TEXT into words it does not show, or write: a $ or a
+# backtick outside single quotes ($_, ${x:--o}, $'-o', $(id)), a brace expansion ({-o,out.txt}), a > or <(
+# outside all quotes, or a quote that never closes. A $ before a blank, the end of the text or a closing
+# double quote stays a $, such as a regex anchor. A brace pair after @ with no comma or .. inside, such as
+# git's HEAD@{1} or @{u}, does not expand. One brace list of file names in a word passes (list below) only
+# when the record's first word is cat, head, tail, wc, ls, grep, rg, stat or du: each takes extra words only
+# as more operands to read. Other commands' words are positional, so git -C {.,branch} log runs
+# git -C . branch log; they keep the plain rule.
 _g18_expands() {
   printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
     # list W K: 1 when the record is a read (rd), and word W, the Kth, is not the first, does not start
@@ -125,18 +141,20 @@ _g18_expands() {
     }
     { buf = buf (NR > 1 ? "\n" : "") $0 }
     END {
-      # s keeps every character; a quoted or escaped brace, comma or blank becomes _, so it neither
-      # expands nor splits a word, and a quoted - still starts its word.
+      # s keeps every character; a quoted or escaped brace, comma, blank, < or > becomes _, so it neither
+      # expands, splits a word nor redirects, and a quoted - still starts its word.
       n = split(buf, C, ""); q = ""; s = ""
       for (i = 1; i <= n; i++) {
         c = C[i]
-        if (q == sq) { if (c == sq) q = ""; else s = s (c ~ /[{},[:space:]]/ ? "_" : c); continue }
-        if (c == "\\") { i++; s = s (C[i] ~ /[{},[:space:]]/ ? "_" : C[i]); continue }
-        if (c == "$" || c == "`") exit 0
-        if (q == "\"") { if (c == "\"") q = ""; else s = s (c ~ /[{},[:space:]]/ ? "_" : c); continue }
+        if (q == sq) { if (c == sq) q = ""; else s = s (c ~ /[{},<>[:space:]]/ ? "_" : c); continue }
+        if (c == "\\") { i++; s = s (C[i] ~ /[{},<>[:space:]]/ ? "_" : C[i]); continue }
+        if (c == "`") exit 0
+        if (c == "$" && C[i + 1] != "" && C[i + 1] !~ /[[:space:]]/ && !(q != "" && C[i + 1] == "\"")) exit 0
+        if (q == "\"") { if (c == "\"") q = ""; else s = s (c ~ /[{},<>[:space:]]/ ? "_" : c); continue }
         if (c == sq || c == "\"") { q = c; continue }
         s = s c
       }
+      if (q != "" || s ~ />|<[(]/) exit 0
       gsub(/@[{][^,.{}]*[}]/, "@", s)
       m = split(s, W, /[[:space:]]+/); k = 0; rd = 0
       for (i = 1; i <= m; i++) {
@@ -149,24 +167,165 @@ _g18_expands() {
     }'
 }
 
-# G18 has no variable reading: an assignment record is an unknown record and is denied, since the shell
-# can change or skip an assignment in ways G18 cannot see.
+# _g18_read CMD: the simple commands of CMD, one per line, with its loops and variables read out, for
+# _g18_denied to judge; exit 1 when G18 cannot read all of it. A for over literal words becomes its body
+# once per word. A variable becomes its value, in every quote the shell expands it in: a plain literal, or
+# $G18_ANY for a $( ) alone, whose commands take the assignment's place. Only one-letter names: no shell
+# and no allowlisted command reads one from its environment, while IFS, PATH, GIT_* or zsh's path would
+# change what runs. An assignment counts only at the top level, first or after ; or a newline, and ending
+# in ;, a newline or &&: anywhere else the shell may skip or lose it, and the value G18 judged would not be
+# the one that runs. A nested loop or substitution stops the read, and so does any other expansion, a
+# group, a subshell, a here-doc or a comment.
+_g18_read() {
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v any="$G18_ANY" '
+    function gap(i) { while (i <= n && (C[i] == " " || C[i] == "\t")) i++; return i }
+    function plain(s) { return !R && Q < 2 && s ~ /^[A-Za-z0-9_.\/:@+-]+$/ }
+    # ends(i): true when a command ends at i. The & and | of a redirect (2>&1, &>, >|) do not end one.
+    function ends(i,   c) {
+      c = C[i]
+      if (i > n || c == ";" || c == "\n" || (sb && c == ")")) return 1
+      if (c == "&") return C[i - 1] != ">" && C[i - 1] != "<" && C[i + 1] != ">"
+      return c == "|" && C[i - 1] != ">"
+    }
+    # ref(i, q): adds the expansion at the $ at i, in quote q, to W and P. Only $x and ${x} of a set x
+    # read: zsh takes $x: as a modifier and $x[ as a subscript. A $ that expands nothing stays a $, as
+    # in _g18_expands. Returns the last position read.
+    function ref(i, q,   b, v) {
+      v = C[i + 1]
+      if (v == "" || v == " " || v == "\t" || v == "\n" || (q != "" && v == "\"")) { W = W "$"; P = P "$"; return i }
+      b = v == "{"
+      i += 1 + b
+      v = C[i]
+      if (!(v in V)) exit 1
+      if (b) { if (C[++i] != "}") exit 1 }
+      else if (C[i + 1] ~ /[A-Za-z0-9_:[]/) exit 1
+      W = W V[v]; P = P V[v]; R = 1
+      return i
+    }
+    # word(i): reads the word at i into W, its text with variables read, and P, with its quotes gone as
+    # well. Q is 1 for a quote and 2 for a backslash; R is 1 for a variable. Returns the position after it.
+    function word(i,   c, q, a) {
+      W = P = ""; Q = R = 0; q = ""; a = i
+      for (; i <= n; i++) {
+        c = C[i]
+        if (q == sq) { W = W c; if (c == sq) q = ""; else P = P c; continue }
+        if (c == "`") exit 1
+        if (c == "\\") { W = W c C[++i]; P = P C[i]; Q = 2; continue }
+        if (c == "$") { i = ref(i, q); continue }
+        if (c == "\"" || (c == sq && q == "")) { W = W c; q = (q == "" ? c : ""); if (!Q) Q = 1; continue }
+        if (q != "") { W = W c; P = P c; continue }
+        if (c == " " || c == "\t" || ends(i)) break
+        if (c == "(" || c == ")" || (c == "<" && C[i + 1] == "<") || (c == "#" && i == a)) exit 1
+        W = W c; P = P c
+      }
+      if (q != "" || W == "{" || W == "}") exit 1
+      return i
+    }
+    # bind(v, i): reads the value at i of an assignment to v. Returns the position after it.
+    function bind(v, i,   d) {
+      d = C[i] == "\""
+      if (C[i + d] != "$" || C[i + d + 1] != "(") {
+        i = word(i)
+        if (!plain(P)) exit 1
+        V[v] = P
+        return i
+      }
+      sb = 1; i = stmts(i + d + 2, 2); sb = 0
+      if (d && C[++i] != "\"") exit 1
+      V[v] = any
+      return i + 1
+    }
+    # loop(i): reads a for, from the word after it, and its body once per word. Returns the position
+    # after its done.
+    function loop(i,   v, m, k, L, b) {
+      i = word(gap(i)); v = P
+      if (Q || v !~ /^[A-Za-z]$/) exit 1
+      i = word(gap(i))
+      if (Q || P != "in") exit 1
+      for (i = gap(i); !ends(i); i = gap(i)) {
+        i = word(i)
+        if (!plain(P)) exit 1
+        L[++m] = P
+      }
+      if (!m || (C[i] != ";" && C[i] != "\n")) exit 1
+      for (i++; i <= n && (C[i] == " " || C[i] == "\t" || C[i] == "\n"); i++) continue
+      b = word(i)
+      if (Q || P != "do") exit 1
+      for (k = 1; k <= m; k++) { V[v] = L[k]; i = stmts(b, 1) }
+      delete V[v]
+      return i
+    }
+    # stmts(i, ctx): reads statements from i, each command to O as a line, up to the end of the text (ctx
+    # 0), the done of a loop body (1) or the ) of a substitution (2). Returns the position it stopped at.
+    # lead: a statement that starts here is sure to run.
+    function stmts(i, ctx,   lead, t) {
+      lead = 1
+      for (;;) {
+        i = gap(i)
+        if (i > n) { if (ctx) exit 1; return i }
+        if (ctx == 2 && C[i] == ")") return i
+        if (C[i] == ";" || C[i] == "\n") { lead = 1; i++; continue }
+        if (C[i] == "&" || C[i] == "|") { lead = 0; i += C[i + 1] == C[i] ? 2 : 1; continue }
+        if (C[i] ~ /[A-Za-z]/ && C[i + 1] == "=") {
+          if (ctx || !lead) exit 1
+          i = gap(bind(C[i], i + 2))
+          if (i <= n && C[i] != ";" && C[i] != "\n" && (C[i] != "&" || C[i + 1] != "&")) exit 1
+          continue
+        }
+        lead = 0
+        i = word(i)
+        if (R) exit 1
+        if (!Q && P == "done" && ctx == 1) return i
+        if (!Q && P == "for") {
+          if (ctx) exit 1
+          i = gap(loop(i))
+          if (!ends(i)) exit 1
+          continue
+        }
+        t = W
+        for (i = gap(i); !ends(i); i = gap(i)) { i = word(i); t = t " " W }
+        O = O t "\n"
+      }
+    }
+    { buf = buf (NR > 1 ? "\n" : "") $0 }
+    END { n = split(buf, C, ""); stmts(1, 0); printf "%s", O }'
+}
+
+# _g18_denied TEXT: exit 0 when a command of TEXT is not allowed, with that command in _G18_LINE.
+_g18_denied() {
+  local line
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if ! g18_allowed "$line"; then
+      _G18_LINE=$line
+      return 0
+    fi
+  done <<EOF
+$(git_words "$1")
+EOF
+  return 1
+}
+
+# _g18_denies CMD: exit 0 when G18 denies CMD, with the command it names in _G18_LINE. A command with a
+# loop or a variable is judged as _g18_read reads it, so a body or a value that is not allowed alone is
+# denied here too; one it cannot read is denied.
+_g18_denies() {
+  local text
+  _g18_denied "$1" || return 1
+  text=$(_g18_read "$1") || return 0
+  _g18_denied "$text"
+}
+
 guard_g18() {
   [ "$TOOL" = "Bash" ] || return 0
   [ -n "${AGENT:-}" ] || return 0
   case " $G18_AGENTS " in *" $AGENT "*) ;; *) return 0 ;; esac
-  local cmd line
+  local cmd
   if ! cmd=$(ti_get command); then
     vote deny G18 "read-only agent: the Bash input has no command"
     return 0
   fi
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    if ! g18_allowed "$line"; then
-      vote deny G18 "$AGENT is read-only; '${line%%[[:space:]]*}' with these arguments is not on its allowlist (git log, show, blame, diff, grep, ls-files; rg, grep, ls, cat, head, tail, wc; find without -exec or -delete; sed -n with line numbers). Ask the controller to run it."
-      return 0
-    fi
-  done <<EOF
-$(git_words "$cmd")
-EOF
+  if _g18_denies "$cmd"; then
+    vote deny G18 "$AGENT is read-only; '${_G18_LINE%%[[:space:]]*}' with these arguments is not on its allowlist (git log, show, blame, diff, grep, ls-files, status; rg, grep, ls, cat, head, tail, wc; find without -exec or -delete; sed -n with line numbers; a for over literal words; a one-letter variable set first to a plain value or a read-only \$( )). Ask the controller to run it."
+  fi
 }
