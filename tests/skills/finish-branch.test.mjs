@@ -75,7 +75,8 @@ test('finish-branch sections, steps and red flags', () => {
   // 8,100 since M3 part 1's Task 7: the bounded fix round and how it ends.
   // 8,450 since its fix round 1: a red step 4 takes a fix round, and the end path names the gates it passes.
   // 8,500 since Task 8's fix round 1: the end path's open-task case, and step 2's caller.
-  assertMaxBytes(SKILL, 8500);
+  // 8,550 since Task 14: step 4 takes the tree before the proof, and step 8 reports a rebased tree as unproven, after a red-flag cut.
+  assertMaxBytes(SKILL, 8550);
 });
 
 test('under autopilot a `fix first` verdict starts a bounded fix round, and a run past the bound pushes and opens no PR', () => {
@@ -106,6 +107,19 @@ test('under autopilot a `fix first` verdict starts a bounded fix round, and a ru
   assertContains('skills/autopilot/references/run.md', ['| `split` from a finding on a line the last round changed |']);
 });
 
+test('option 1 reports a rebased tree as unproven (audit D13)', () => {
+  // Option 1 pushes nothing, so step 10's check never proves the tree a step 8 rebase made.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[8].includes('Then offer a rebase step 3 put off; option 1 reports the rebased tree as unproven.'), s[8]);
+  assert.ok(s[8].includes('Option 1 ends with the short SHA.'), s[8]);
+});
+
+test('the proven tree is taken before the proof, and files the proof wrote are not proven (audit D14)', () => {
+  // A snapshot after the proof counted what the proof wrote, so the Proven tree check saw no difference.
+  const s4 = steps(readDoc(SKILL).body)[4];
+  assert.ok(s4.startsWith('4. Record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <wt>`, then prove `test.full` here by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`; files the proof wrote are not proven.'), s4);
+});
+
 test('under autopilot a stop waits for a typed reply, and only a judgment call that takes a default parks', () => {
   // Task 6 review: this route said a stop parks and run.md says a stop waits.
   const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
@@ -121,7 +135,7 @@ test('branch-ops reference: rebase and the proven-tree check', () => {
     'offer it only if `git log --format=%ae <baseref>..HEAD origin/<branch>` prints only `git config user.email`; else G1 denies that push, so go on stale.',
     'Run `git rebase <baseref>` only on yes; on no, go on.', 'git refuses a rebase over uncommitted changes: offer it again after step 8\'s commit; refused again, go on.',
     'A rebase stopped by a conflict: run `git rebase --abort`, report the conflicting paths, and stop.',
-    'After a rebase in step 3 or 5, rerun from step 4; after one in step 8, the check below proves the new tree.',
+    'After a rebase in step 3 or 5, rerun from step 4; after one in step 8, the check below proves the new tree (options 2 and 3).',
     '`git rev-parse HEAD^{tree}` must equal the tree from finish-branch step 4; commit\'s own proof is separate.',
     'If not, run `git rev-parse HEAD`, then', 'wt-new <slug>-check-<sha7> --detach --base <HEAD sha>', '`<sha7>`: the SHA\'s first 7 characters',
     'Exit 2 with `path exists` means an earlier run left that check: run plain `git worktree remove <path>`, under autopilot too, then wt-new again.',

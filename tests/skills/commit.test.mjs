@@ -40,7 +40,8 @@ test('commit sections, steps and red flags', () => {
   // 5,370 since M3 part 1 Task 6: the pointer line to the run rules, after lossless cuts.
   // 5,660 since its Task 8 and that task's fix rounds 1 and 3: the no-PR end's proof rule, the line that a stop waits, both
   // scoped to autopilot, and step 3's `--untracked-files=all`, after a shorter `git add` sentence.
-  assertMaxBytes(SKILL, 5660);
+  // 5,680 since its Task 14: step 4 takes the proven tree before the proof, and files the proof wrote are not proven, after a cut there.
+  assertMaxBytes(SKILL, 5680);
 });
 
 test('commit ledger-tasks reference', () => {
@@ -109,4 +110,11 @@ test('step 3 lists a new directory as files, so `git add -- <files>` keeps G5\'s
   // Task 8 fix round 4: plain porcelain shows `?? src/`, so a task's new file under it can read as clean, and an
   // uncommitted file gets reported as already committed.
   assertContains(REF, ['A complete task whose paths are clean in `git -C <toplevel> status --porcelain --untracked-files=all` is reported as already committed']);
+});
+
+test('the proven tree is taken before the proof, and files the proof wrote are not proven (audit D14)', () => {
+  // A snapshot after the proof counted what the proof wrote, so step 7's check saw no difference.
+  const s4 = steps(readDoc(SKILL).body)[4];
+  assert.ok(s4.startsWith('4. Before the first commit, record the proven tree with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-snap <toplevel>`, then follow `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md` once (`verify.fast` and the focused tests); files the proof wrote are not proven.'), s4);
+  assert.ok(!s4.includes('Record the proven tree'), s4);
 });

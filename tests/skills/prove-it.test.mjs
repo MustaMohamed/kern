@@ -22,7 +22,9 @@ test('prove-it sections, steps, gate and red flags', () => {
   assert.equal(s[0], DEFER);
   assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'probe: fail-then-pass ok', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff', 'claim: command, result', 'Gate: steps 1 to 7 hold', 'zero tests run', '| Thought | Reality |',
     'for a module or export the patch adds, or a test-only patch, report `probe inconclusive: new module` and prove the new code with `probe --mutate <file>:<line> <wt> -- <test command>`']);
-  assertMaxBytes(SKILL, 3997);
+  // 4,550 since M3 part 1's Task 14 (raised from 3,997): step 4 reports a skipped or unrun check as `fail`, Outputs names
+  // what carries `inferred`, and the Under autopilot text follows run.md's wait rule and finish-branch's fix round and end path.
+  assertMaxBytes(SKILL, 4550);
 });
 
 test('a claim no command showed carries inferred or guess in its own sentence, not as a line form', () => {
@@ -109,4 +111,28 @@ test('the M0 placeholder is gone', () => {
 test('the gate hands a commit to commit and a push, a PR or a release to finish-branch', () => {
   // Coverage AD24 (M2b Task 17): a release is a commit, a tag and a push, which finish-branch cuts.
   assertContains(SKILL, ['unless this run is already inside commit or finish-branch (each reaches prove-it at its proof step)', 'for a commit, Read `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`', 'for a push, a PR or a release, Read `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md`']);
+});
+
+test('a skipped or unrun check is reported as fail and blocks verified; an unrun fix and a cause read from code say inferred', () => {
+  // M3 part 1 Task 14, from the solo pilot: a run said "ready and verified" with the ticket's check unrun and opened the
+  // PR, and stated an unrun fix and a cause read from code plainly.
+  const { body } = readDoc(SKILL);
+  const s4 = steps(body)[4];
+  assert.ok(s4.includes('A skipped or unrun check is reported as `fail`, never `not run`, and blocks `verified`.'), s4);
+  const outputs = section(body, '## Outputs');
+  assert.ok(outputs.includes("in step 7's forms; an unrun fix and a cause read from code carry `inferred`."), outputs);
+});
+
+test('under autopilot a failed proof takes a fix round or waits, and only finish-branch\'s end path passes the Gate', () => {
+  // Ruling on Task 14: the old text parked every failed proof, while run.md says a stop waits and finish-branch says a
+  // red step 4 takes a fix round; and the Gate read as holding on finish-branch's end path, which commits and pushes red.
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  assert.ok(!auto.includes('the failed work is parked'), auto);
+  for (const s of ['A failed proof blocks the claim and the outward action that needs it.',
+    'Under autopilot, a route with a fix round takes it there: finish-branch counts a red step 4 as `fix first`.',
+    'Any other failed proof waits for a typed reply, with the data and a recommendation (`${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`), and disjoint work may finish first;',
+    'only a judgment call that takes a default gets a `parked:` line.',
+    "On finish-branch's end path the Gate stops neither the commit nor the push: each red or unrun check is reported as `fail`, and the path claims nothing."]) assert.ok(auto.includes(s), s);
+  assertContains('skills/finish-branch/SKILL.md', ['Under autopilot a red step 4, first pass or in a round, counts as `fix first`.', 'reports each red or unrun check as `fail`, opens no PR and stops.']);
+  assertContains('skills/autopilot/references/run.md', ['then waits for a typed reply']);
 });

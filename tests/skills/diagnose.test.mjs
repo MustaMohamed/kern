@@ -27,7 +27,9 @@ test('diagnose sections, steps and red flags', () => {
     'find-polluter.sh', 'wt-new bisect-<n> --detach', '`! bash <path>`', 'itself the finding',
     'propose the cheap always-on signal (a log line, a metric, an assertion message) that would have shown it at first look, as a separate item']);
   assertContains('skills/diagnose/references/flaky-and-async.md', ['find-polluter.sh', 'loop-rate.sh', 'pin time']);
-  assertMaxBytes(SKILL, 6500);
+  // 6,640 since M3 part 1's Task 14 (raised from 6,500): step 2 names the worktree and step 8 gives a still-red loop its way
+  // back, after cutting two defaults Inputs already holds.
+  assertMaxBytes(SKILL, 6640);
 });
 
 test('diagnose references', () => {
@@ -50,4 +52,13 @@ test('diagnose never prints a secret: step 1 redacts the symptom, and instrument
   assert.ok(steps(readDoc(SKILL).body)[1].includes('Redact secrets'));
   const line = readDoc('skills/diagnose/references/root-cause-tracing.md').raw.split('\n').find((l) => l.startsWith('- Include the value,')) ?? '';
   assert.ok(line.endsWith('; a secret only as set or unset, never its value.'), line);
+});
+
+test('the loop and instrumentation run in a named worktree, and a loop still red after a fix goes back to the hypotheses (audit D18)', () => {
+  // The loop and instrumentation could land in the main checkout, and a still-red loop after a fix had no way back.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[2].includes('The loop and instrumentation run in a named worktree: `<wt>`, as `implement` step 2 picks it.'), s[2]);
+  assert.ok(s[8].includes("A loop still red after a fix goes back to step 5, as a failed fix on step 6's ladder."), s[8]);
+  assert.ok(s[5].startsWith('5. Write 3 to 5 ranked hypotheses'), s[5]);
+  assert.ok(s[6].includes('after three failed fixes, stop'), s[6]);
 });

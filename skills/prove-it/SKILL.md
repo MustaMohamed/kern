@@ -13,7 +13,7 @@ No claim of done, fixed, passing or verified without a fresh run on the real art
 1. Name the claim and its proving command from `references/evidence.md`. Resolve each with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`, else `kern-detect <key>`, and print each with its source. When both exit 3, ask for the command; the claim is a guess until it runs.
 2. For a subagent's "success", Read the package `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before, else HEAD>` writes, or the files it names, before you run its test; a failing test does not skip this. `git diff` omits untracked files.
 3. Run the proving command fresh and in full on the tree that will be integrated: the worktree, if the work is there.
-4. Read the exit code, the failure count and the whole output. Inconclusive, skipped, zero tests run, or the wrong environment counts as a fail. Suspect the observation method before the system.
+4. Read the exit code, the failure count and the whole output. Inconclusive, zero tests run, or the wrong environment counts as a fail. A skipped or unrun check is reported as `fail`, never `not run`, and blocks `verified`. Suspect the observation method before the system.
 5. For a new guard or regression test, make the patch with `wt-diff` (it writes `<package>.patch` too) and run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <change.patch> -- <test command>`; it must print `probe: fail-then-pass ok`. The allow case uses a value a real caller sends. Exit 3 is reported as "probe inconclusive"; for a module or export the patch adds, or a test-only patch, report `probe inconclusive: new module` and prove the new code with `probe --mutate <file>:<line> <wt> -- <test command>`.
 6. For "requirements met", re-read the acceptance lines from `spec.source` and tick each against evidence.
 7. Back a claim a command showed with `claim: command, result`. A claim no command showed carries the word inferred or guess in its own sentence, with what it rests on: "The cause, inferred from `src/x.js:42`, is …"; "The fix, inferred and not run, is …".
@@ -31,11 +31,11 @@ Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or the words
 
 ## Outputs
 
-Claims in chat, in step 7's forms. Only `wt-diff` writes: a package and its `.patch` under `WORK/reviews/`.
+Claims in chat, in step 7's forms; an unrun fix and a cause read from code carry `inferred`. Only `wt-diff` writes: a package and its `.patch` under `WORK/reviews/`.
 
 ## Stops and autopilot
 
-A failed proof blocks the claim and the outward action that needs it. Under autopilot, the failed work is parked with a `parked:` ledger line and disjoint work goes on.
+A failed proof blocks the claim and the outward action that needs it. Under autopilot, a route with a fix round takes it there: finish-branch counts a red step 4 as `fix first`. Any other failed proof waits for a typed reply, with the data and a recommendation (`${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`), and disjoint work may finish first; only a judgment call that takes a default gets a `parked:` line. On finish-branch's end path the Gate stops neither the commit nor the push: each red or unrun check is reported as `fail`, and the path claims nothing.
 
 ## Red flags
 

@@ -28,7 +28,7 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   }
   assertContains(SKILL, ['kern:implementer', 'kern:task-reviewer', 'Pass no `isolation` parameter', 'Never re-dispatch unchanged', 'split proposal',
     'plan-check --graph', 'plan-check --files', '--allow-file', 'Exit 4', '--minor', '--probe <package>.patch', 'return the task to the implementer',
-    'Batch small tasks', 'closed in its fork through steps 6 to 10', 'ledger-open --summary', 'One fix subagent gets the complete findings list',
+    'Batch small tasks', 'closes in its forks (steps 6 to 10)', 'ledger-open --summary', 'One fix subagent gets the complete findings list',
     'main: unchanged', 'run them only on yes', '`<ledger>` below is `<ledger dir>/ledger.md`', 'briefs/task-N.brief.md', 'dispatch only on `brief-check: ok`',
     '--no-probe']);
   // 13,550 since pilot fix plan 2's Task 1 (raised from 12,599): step 10 sizes the plan worktree after each closed task
@@ -64,7 +64,9 @@ test('ledger format and model table', () => {
   assertHeadings('skills/execute-plan/references/model-selection.md', ['# Model selection', '## Table', '## Rules']);
   assertMaxBytes('skills/execute-plan/references/model-selection.md', 1600);
   assertHeadings(RESUME, ['# Resume', '## Where to continue', '## Fix loop memory']);
-  assertMaxBytes(RESUME, 2500);
+  // 2,630 since M3 part 1's Task 14 (raised from 2,500): case 1 adopts a worktree, and a snapshot equal to `tree-before`
+  // waits for a worker that may still run.
+  assertMaxBytes(RESUME, 2630);
 });
 
 // Load-bearing lines, pinned to the step that carries them. Each pin fails the test when it is removed.
@@ -129,7 +131,7 @@ export const PINS = {
     '(a `pr.size_command` count: that question with its count)',
     'when the Size line was already over it, take its one-PR word with no ask',
     'Either way record the word, quoted, with `lines: <n> (<measure>)` and the `-w` count, in a `Decision:` line whose what opens with size; `split` ends the run.'],
-  11: ["Apply each closed worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt>`",
+  11: ["apply each closed worker's patch to the plan worktree one at a time with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply <package>.patch <plan-wt> --tree <complete line's tree>`",
     'writing `Applied: Task N patch=<path>` after each `applied`', 'Exit 3 is a conflict with nothing applied: stop.', 'Then `test.full` there; red: stop.'],
   12: ["`ledger-open --summary <ledger dir>` lists the ledger's rulings and minors, then the main checkout's state", '`wt-diff <plan-wt> <base-tree> --out <ledger dir>/reviews/final.diff`',
     "(the `Worktree:` line's base tree)", 'mode `whole-branch` on `model.final_review`', 'to triage which minors block', 'Re-grade findings by effect.',
@@ -151,10 +153,10 @@ export const PINS = {
     "| any step | a ruling: the user's answer to a stop, a mechanical call made without the user, or a \"Declined to judge\" ruling |"],
   resume: ['Read this when the ledger already holds lines past `Main:`, and after compaction.', 'Trust the ledger and the worktrees over memory.',
     'Steps 2 and 3 run again on every invocation and add only the lines the ledger lacks', 'plan-check and its `wave` rows come from this run',
-    'a step 3 conflict with no `Decision:` line is asked again (under autopilot, parked once)', 'r is 1 plus its review lines.', 'The first case that holds, in this order:', '1. No `Worktree:` line: step 5.',
+    'a step 3 conflict with no `Decision:` line is asked again (under autopilot, parked once)', 'r is 1 plus its review lines.', 'The first case that holds, in this order:', '1. No `Worktree:` line: step 5, running `wt-new --adopt` beside its `--plan`. A worktree a stopped step 5 left is reused; on a free path an adopt makes a worktree.',
     '2. A task on a `Wave:` line has its `Task N: complete` line but no `Applied: Task N patch=<path>` line: step 11 for it, before the final review or any later task.',
     'A task a `parked:` line holds stays out, with every task blocked by it.', '3. The first task in task order with no `Task N: complete` line, by its last line, `minor (deferred)` lines skipped:',
-    '- none: step 6.', 'keep that tree as `tree-before`, with no second `task-start`', 'A snapshot still equal to it means nothing landed: dispatch again.',
+    '- none: step 6.', 'keep that tree as `tree-before`, with no second `task-start`', 'A snapshot still equal to it means nothing landed: wait for the notification of a worker that may still run, then dispatch again.',
     "A changed snapshot waits until the implementer has stopped, its report holding that round's `Status:` line: DONE or DONE_WITH_CONCERNS goes to step 8 as round r, any other status (or none) to step 7",
     'until then wait for it or resume it (step and inline: finish the change first)', 'a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9',
     'an r of 4 is past the cap, so stop with a split proposal', '`Task N: fix round=<r> tree=<id>`: resume that round', 'a fresh snapshot that differs from its tree is',
@@ -354,7 +356,7 @@ test('an open task\'s end leaves a refused path out, and finish-branch\'s skippe
   const f = steps(readDoc('skills/finish-branch/SKILL.md').body);
   assert.ok(section(readDoc(SKILL).body, '## Stops and autopilot').includes("finish-branch's end path, skipping steps 4 to 8"));
   assert.match(f[3], /^3\. Base:/);
-  assert.match(f[4], /^4\. Prove `test\.full`/);
+  assert.match(f[4], /^4\. Record the proven tree with .*, then prove `test\.full`/);
   assert.match(f[5], /^5\. Read `\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/self-review\/SKILL\.md`/);
   assert.match(f[6], /^6\. Size gate:/);
   assert.match(f[7], /^7\. Show the menu/);

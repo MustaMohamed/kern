@@ -4,7 +4,7 @@ Under autopilot only the Proven tree check runs, without its teardown; its remov
 
 ## Rebase
 
-For a stale base (step 3) or a `rebase first` verdict (step 5). If `git rev-parse --verify --quiet origin/<branch>` prints a SHA, the branch is published: warn that a rebase rewrites published commits and needs the lease push in `push-and-pr.md`, and offer it only if `git log --format=%ae <baseref>..HEAD origin/<branch>` prints only `git config user.email`; else G1 denies that push, so go on stale. Run `git rebase <baseref>` only on yes; on no, go on. git refuses a rebase over uncommitted changes: offer it again after step 8's commit; refused again, go on. A rebase stopped by a conflict: run `git rebase --abort`, report the conflicting paths, and stop. After a rebase in step 3 or 5, rerun from step 4; after one in step 8, the check below proves the new tree.
+For a stale base (step 3) or a `rebase first` verdict (step 5). If `git rev-parse --verify --quiet origin/<branch>` prints a SHA, the branch is published: warn that a rebase rewrites published commits and needs the lease push in `push-and-pr.md`, and offer it only if `git log --format=%ae <baseref>..HEAD origin/<branch>` prints only `git config user.email`; else G1 denies that push, so go on stale. Run `git rebase <baseref>` only on yes; on no, go on. git refuses a rebase over uncommitted changes: offer it again after step 8's commit; refused again, go on. A rebase stopped by a conflict: run `git rebase --abort`, report the conflicting paths, and stop. After a rebase in step 3 or 5, rerun from step 4; after one in step 8, the check below proves the new tree (options 2 and 3).
 
 ## Proven tree
 
