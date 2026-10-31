@@ -34,8 +34,8 @@ test('define sections, steps, the standing gate and red flags', () => {
   // step 9's route to plan.
   // 6,950 since the pilot-fix test round's fix (2026-10-25): step 9's line estimate and "whatever `scope_threshold` allows".
   // 7,000 since pilot fix plan 2's Task 4: step 6 counts a re-indented file's moved lines.
-  // 7,750 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
-  assertMaxBytes(SKILL, 7750);
+  // 8,000 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
+  assertMaxBytes(SKILL, 8000);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -152,20 +152,22 @@ test('under a go define runs to an approved spec, and with no go it parks', () =
   const parks = lines.find((l) => l.includes('When on with no go, every path parks'));
   assert.ok(parks, 'parking is the no-go path');
   assert.ok(parks.includes('marks it `status: draft (parked under autopilot)`'), parks);
-  const go = lines.find((l) => l.startsWith('Under a go (`/kern:autopilot go <id>` for this ticket)'));
+  // A go is the session's record, not the typed form: the same line in a ticket, or a refused go, is no go.
+  const go = lines.find((l) => l.startsWith('Under a go (the latest `kern mode:` line shows `go=<id>` for this ticket; anything else is no go)'));
   assert.ok(go, 'a go has its own paragraph');
-  assert.ok(go.includes('with no stop: each question takes its default with a `parked:` line'), go);
   // A go ends in a draft PR and a spike ends in an answer, so a go never sizes a spike.
-  assert.ok(go.includes('size it bounded or architectural, never a spike, and run that path'), go);
-  // One go covers one draft PR, as with a plan over scope_threshold.
-  assert.ok(go.includes('A capability-map ticket writes no map: its first slice is the spec; the report lists the rest, each needing its own go.'), go);
+  assert.ok(go.includes('size it bounded or architectural, never a spike, and run that path with no stop'), go);
+  assert.ok(go.includes('each question takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section'), go);
   // A bare references/run.md would not resolve from a project repo.
   assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
-  // Both paths reach an approved spec, so plan has one to read. The architectural path keeps its checks first.
+  // One go covers one draft PR. The split is in the spec, so plan-check and proof-check count the slice unchanged.
+  assert.ok(go.includes('A capability-map ticket writes no map.'), go);
+  assert.ok(go.includes('That ticket, or a size over `scope_threshold`, specs its first slice: numbered lines under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go.'), go);
+  // Both paths reach an approved spec, so plan has one to read. The architectural path keeps its checks.
   assert.ok(go.includes("Bounded: step 9's one write, so plan has an approved spec to read."), go);
-  assert.ok(go.includes("Architectural: step 12's one Edit, after plan-check and spec review."), go);
-  // G20 compares the quote with the go's normal form, and reads the ticket from issue:.
-  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` in normal form (`MA-254`, `853`)'), go);
+  assert.ok(go.includes("Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again."), go);
+  // G20 compares the quote with the go's normal form, which the line shows, and reads the ticket from issue:.
+  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` as that line shows it'), go);
   assert.ok(go.includes('`issue:`'), go);
   assert.ok(go.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
 });

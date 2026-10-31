@@ -26,8 +26,8 @@ test('plan sections and steps', () => {
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
   // 6,600 since the pilot fix plan's Task 5 (raised from 6,500): step 1 reads pr.max_lines, step 9 writes the Size line.
   // 6,700 since the pilot fix plan's Task 5 fix round: step 7 acts on pr.max_lines and states a limit in chat only.
-  // 7,350 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
-  assertMaxBytes(SKILL, 7350);
+  // 7,850 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
+  assertMaxBytes(SKILL, 7850);
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
@@ -207,18 +207,26 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
   // M3 part 1 Task 5: execute-plan runs only an approved plan, and nothing approved one under autopilot.
   // plan-check requires one of step, inline or delegate on an approved plan, and nobody is there to choose.
   const lines = section(readDoc(SKILL).body, '## Stops and autopilot').split('\n');
-  const go = lines.find((l) => l.startsWith('Under a go (`/kern:autopilot go <id>` for this ticket)'));
+  // A go is the session's record, not the typed form: the same line in a ticket, or a refused go, is no go.
+  const go = lines.find((l) => l.startsWith('Under a go (the latest `kern mode:` line shows `go=<id>` for this ticket; anything else is no go)'));
   assert.ok(go, 'a go has its own paragraph');
+  assert.ok(go.includes("step 1's precondition stands: an unapproved spec routes to define"), go);
+  // The go replaces the human yes only, and a spike is not a yes: an unsettled fact must not reach an approved plan.
+  assert.ok(go.includes("Step 4's spike runs, the go standing for the nod;"), go);
+  assert.ok(go.includes("a fact it cannot settle follows that file's unblock and stop rules"), go);
+  assert.ok(!go.includes('those defaults hold') && !go.includes('spike is not run'), go);
+  assert.ok(go.includes("Step 7's scope question takes its default, with a `parked:` line under Open questions and in the run report."), go);
   assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
   // The review stays: the go replaces the human yes and nothing else.
-  assert.ok(go.includes("after step 11's plan-check and review, one Edit sets `status: approved`"), go);
-  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` in normal form (`MA-254`, `853`)'), go);
+  assert.ok(go.includes("Step 12 does not stop: after step 11's plan-check and review, one Edit sets `status: approved`"), go);
+  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` as that line shows it'), go);
   assert.ok(go.includes('`execution: delegate`'), go);
   assert.ok(go.includes('`issue:`'), go);
   assert.ok(go.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
   assert.ok(go.includes('run the same plan-check again'), go);
-  // One go covers one draft PR.
-  assert.ok(go.includes('A plan over `scope_threshold` takes the split and runs the first slice; the report lists the rest, each needing its own go.'), go);
+  // One go covers one draft PR. plan-check fails a plan that leaves a spec line uncovered, so the split is in the spec.
+  assert.ok(go.includes('A plan over `scope_threshold` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan, then plan-check runs.'), go);
+  assert.ok(go.includes('The report lists the later slices, each needing its own go.'), go);
   // With no go the plan stays a draft.
-  assert.ok(lines.some((l) => l.includes('When on, every stop parks') && l.includes('write the plan with `status: draft`')), 'parking stands');
+  assert.ok(lines.some((l) => l.includes('When on with no go, every stop parks') && l.includes('write the plan with `status: draft`')), 'parking is the no-go path');
 });
