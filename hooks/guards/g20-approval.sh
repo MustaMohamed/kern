@@ -5,18 +5,19 @@
 # the user's own words. The check reads the file as it will be after the Write or Edit, so splitting
 # the change over two edits does not get past it. The frontmatter must hold exactly one approved: line,
 # in any case or indentation, and it must quote one whole line of the user's last message, verbatim,
-# that is not a non-answer such as "sounds good", does not start with /kern:autopilot or /autopilot (a
-# refused go is still a line of that message), holds a yes word (yes, ok, go ahead, lgtm and the like),
-# holds no negation or hold word (no, not, don't, wait, later and the like) and does not end in a
-# question mark. The file must be older than that message. prompt-submit records the message's line
-# hashes in the session state. G16 denies a write to that state, and asks before (under autopilot
-# denies) a Write or Edit under kern's hooks/ directory and a Bash command that names a hook entry file,
-# a .sh file under hooks/lib/ or hooks/guards/, or a state function, so the model cannot run
-# prompt-submit to forge the message or edit this guard unseen. A shell write that reaches a hook file
-# without naming its path is not seen (G16's accepted limits). Under autopilot only a go approves, for its
-# ticket (_g20_go), in place of the checks on the user's last message. G20 never votes allow. ledger-open
-# runs only a plan with a Markdown name, and G20, ledger-open and plan-check read frontmatter with one
-# reader (scripts/lib/frontmatter.awk), so every approval ledger-open accepts passed through G20.
+# that is not a non-answer such as "sounds good", does not start with /kern:autopilot, /autopilot or
+# <command- (a refused go, typed or in its command envelope, is still a line of that message), holds a
+# yes word (yes, ok, go ahead, lgtm and the like), holds no negation or hold word (no, not, don't, wait,
+# later and the like) and does not end in a question mark. The file must be older than that message.
+# prompt-submit records the message's line hashes in the session state. G16 denies a write to that
+# state, and asks before (under autopilot denies) a Write or Edit under kern's hooks/ directory and a
+# Bash command that names a hook entry file, a .sh file under hooks/lib/ or hooks/guards/, or a state
+# function, so the model cannot run prompt-submit to forge the message or edit this guard unseen. A
+# shell write that reaches a hook file without naming its path is not seen (G16's accepted limits).
+# Under autopilot only a go approves, for its ticket (_g20_go), in place of the checks on the user's
+# last message. G20 never votes allow. ledger-open runs only a plan with a Markdown name, and G20,
+# ledger-open and plan-check read frontmatter with one reader (scripts/lib/frontmatter.awk), so every
+# approval ledger-open accepts passed through G20.
 #
 # Accepted limits:
 # - "The user's last message" is the last prompt prompt-submit does not read as wrapped. A prompt
@@ -91,10 +92,12 @@ _g20_lines() {
     env LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Aa][Pp][Pp][Rr][Oo][Vv][Ee][Dd][\"']?[[:space:]]*:[[:space:]]*//p"
 }
 
-# _g20_issues FRONTMATTER: the value of every issue: line, in order.
+# _g20_issues FRONTMATTER: the value of every issue: line, in order, without one pair of matching quotes
+# (a bare # opens a YAML comment, so "#853" is the safe spelling).
 _g20_issues() {
   printf '%s\n' "$1" |
-    env LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Ii][Ss][Ss][Uu][Ee][\"']?[[:space:]]*:[[:space:]]*//p"
+    env LC_ALL=C sed -n -E "s/^[[:space:]]*[\"']?[Ii][Ss][Ss][Uu][Ee][\"']?[[:space:]]*:[[:space:]]*//p" |
+    env LC_ALL=C sed -E "s/^\"(.*)\"\$|^'(.*)'\$/\1\2/"
 }
 
 # _g20_go AFTER: exit 0 when the session's go approves the frontmatter AFTER: the call is the main
@@ -242,8 +245,8 @@ _g20_file() {
     sed -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //' -e 's/ $//' -e 's/[.!?,;:]*$//' -e 's/ $//')
   norm=${norm//$_G20_RSQ/\'}
   case "${norm%% *}" in
-    /kern:autopilot | /autopilot)
-      vote deny G20 "\"$quote\" is an autopilot command, not an explicit yes; $_G20_ASK_YES"
+    /kern:autopilot | /autopilot | '<command-'*)
+      vote deny G20 "\"$quote\" is a command, not an explicit yes; $_G20_ASK_YES"
       return 0
       ;;
   esac

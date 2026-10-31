@@ -77,10 +77,10 @@ go_refused() {
   [ -z "$(sed -n 's/^go: //p' "$f")" ] || { cat "$f"; return 1; }
 }
 
-# command_denied: G20 denied the last call's quote as an autopilot command.
+# command_denied: G20 denied the last call's quote as a command.
 command_denied() {
   [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
-  [[ "$output" == *'is an autopilot command, not an explicit yes'* ]] || { echo "$output"; return 1; }
+  [[ "$output" == *'is a command, not an explicit yes'* ]] || { echo "$output"; return 1; }
 }
 
 # go_denied: G20 denied the last call as an approval under autopilot with no go for it.
@@ -245,6 +245,35 @@ go_denied() {
   say '/kern:autopilot go #853'
   approve '/kern:autopilot go 853'
   no_vote
+}
+
+@test "one pair of matching quotes around the issue is dropped" {
+  ticket 'issue: "#853"'
+  say '/kern:autopilot go 853'
+  approve '/kern:autopilot go 853'
+  no_vote
+  ticket 'issue: "MA-254"'
+  say "$GO"
+  approve "$GO"
+  no_vote
+  ticket "issue: 'ma-254'"
+  approve "$GO"
+  no_vote
+}
+
+@test "a quoted issue still names only its own ticket" {
+  say "$GO"
+  ticket 'issue: "MA-9"'
+  approve "$GO"
+  go_denied
+  for l in 'issue: "MA-254' "issue: MA-254'" "issue: \"MA-254'" "issue: \"'MA-254'\"" 'issue: ""MA-254""' 'issue: ""'; do
+    ticket "$l"
+    approve "$GO"
+    go_denied || { echo "line: $l"; return 1; }
+  done
+  ticket 'issue: "MA-254"' 'issue: "MA-9"'
+  approve "$GO"
+  go_denied
 }
 
 @test "a go does not approve another ticket" {
@@ -453,6 +482,35 @@ go_denied() {
     go_refused
     approve "$q"
     command_denied || { echo "quote: [$q]"; return 1; }
+  done
+}
+
+@test "the one-line command envelope of a go is not a yes" {
+  ticket 'issue: MA-254'
+  E='<command-name>/kern:autopilot</command-name><command-args>go MA-254</command-args>'
+  say "$E"
+  go_refused
+  approve "$E"
+  command_denied
+  deny_autopilot
+  say "$E"
+  go_refused
+  approve "$E"
+  command_denied
+}
+
+@test "no line of the three-line command envelope of a go is a yes" {
+  ticket 'issue: MA-254'
+  E='<command-message>kern:autopilot</command-message>\n<command-name>/kern:autopilot</command-name>\n<command-args>go MA-254</command-args>'
+  for setting in allowed denied; do
+    [ "$setting" = allowed ] || deny_autopilot
+    say "$E"
+    go_refused
+    for q in '<command-args>go MA-254</command-args>' ' <COMMAND-ARGS>go ma-254</COMMAND-ARGS>' \
+      '<command-name>/kern:autopilot</command-name>' '<command-message>kern:autopilot</command-message>'; do
+      approve "$q"
+      command_denied || { echo "$setting: quote: [$q]"; return 1; }
+    done
   done
 }
 
