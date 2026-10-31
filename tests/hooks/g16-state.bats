@@ -1110,9 +1110,10 @@ project_hooks() {
 @test "a hooks folder outside KERN_ROOT is not hook code: its paths, globs and variables get no vote" {
   project_hooks
   # shellcheck disable=SC2016 # literal $f and $x
-  expect_cmd none 'cat src/hooks/*' 'ls src/hooks/$x' 'wc -l src/hooks/{useForm,useTable}.ts' "cat $R/src/hooks/*" \
+  expect_cmd none 'cat src/hooks/*' 'wc -l src/hooks/{useForm,useTable}.ts' "cat $R/src/hooks/*" \
     'cat src/hooks/lib/util.sh' 'bash src/hooks/lib/util.sh' 'for f in src/hooks/*.ts; do wc -l "$f"; done' \
-    'cd src/hooks; cat useForm.ts' 'ls ./src/hooks/'
+    'cd src/hooks; cat useForm.ts' 'ls ./src/hooks/' 'node src/hooks/useForm.ts' 'cp src/hooks/*.ts /tmp/x/' \
+    'x=1; cat src/hooks/useForm.ts'
 }
 
 @test "a variable that resolves under KERN_ROOT/hooks and is then run still asks; under autopilot it is denied" {
@@ -1126,7 +1127,8 @@ project_hooks() {
 @test "a hooks path that a cd moves, a symlink into kern or a missing folder keeps the hook vote" {
   K=$(kern_root)
   project_hooks
-  mkdir -p "$R/hooks/lib" "$R/src/app"
+  mkdir -p "$R/hooks/lib" "$R/hooks/guards" "$R/src/app"
+  : >"$R/hooks/guards/g99.sh"
   ln -s "$K/hooks" "$R/src/hooks/k"
   ln -s "$K" "$R/kern"
   # shellcheck disable=SC2016 # a literal $x
@@ -1134,10 +1136,8 @@ project_hooks() {
     "git -C $K log hooks/\$x" \
     'bash src/hooks/k/$x' 'cat src/hooks/k/*' 'bash src/hooks/../../kern/hooks/$x' 'cat src/nope/hooks/$x' 'cat src/app/hooks/$x' \
     'bash $CLAUDE_PLUGIN_ROOT/hooks/$x' \
-    "$(printf '%s\n' "python3 - <<'EOF'" "import os; os.chdir('$K')" "p='hooks/lib/state.sh'" 'EOF')"
-  set_autopilot off
-  # shellcheck disable=SC2016 # a literal $x
-  expect_cmd none 'bash hooks/$x'
+    "$(printf '%s\n' "python3 - <<'EOF'" "import os; os.chdir('$K')" "p='hooks/guards/g99.sh'" 'EOF')" \
+    "cd $K; cp x hooks/guards/g99.sh" "tar -C $K -xf a.tar hooks/guards/g99.sh" 'ls src/app/hooks; cat prompt-submit'
 }
 
 @test "a copy of kern's hooks outside KERN_ROOT asks when it could run; a read-only command gets no vote" {
@@ -1149,7 +1149,8 @@ project_hooks() {
   expect_hook "bash $C/hooks/\$x" "bash $C/hooks/p*" "bash $C/hooks/prompt-submit" ". $C/hooks/lib/state.sh" \
     "cat $C/hooks/prompt-submit | sh"
   set_autopilot off
-  expect_cmd none "cat $C/hooks/prompt-submit" "grep -n x $C/hooks/lib/state.sh | head -5" "wc -l $C/hooks/lib/state.sh"
+  expect_cmd none "cat $C/hooks/prompt-submit" "grep -n x $C/hooks/lib/state.sh | head -5" "wc -l $C/hooks/lib/state.sh" \
+    "cat $C/hooks/prompt-submit > /dev/null" "wc -l $C/hooks/lib/state.sh 2>/dev/null" "grep x $C/hooks/prompt-submit 2>&1 | head"
 }
 
 @test "inside a hooks folder outside KERN_ROOT a variable gets no vote; inside kern's hooks directory it asks" {
@@ -1189,7 +1190,7 @@ project_hooks() {
   K=$(kern_root)
   mkdir -p "$BATS_TEST_TMPDIR/a b/hooks"
   expect_hook "grep -n x 'hooks/prompt-submit'" "grep 'hooks/prompt-submit\$' README.md" "cat '$BATS_TEST_TMPDIR/a b/hooks/prompt-submit'" \
-    "grep 'state_set|x' README.md" "cat '$K/hooks/lib/state.sh' | head -3"
+    "grep 'state_set|x' README.md" "cat '$K/hooks/lib/state.sh' | head -3" "cd '$BATS_TEST_TMPDIR/a b/hooks'; cat prompt-submit"
 }
 
 @test "a hooks directory above KERN_ROOT stays kern's" {
@@ -1197,6 +1198,8 @@ project_hooks() {
   mkdir -p "$T/kern"
   cp -R "$(kern_root)/hooks" "$(kern_root)/kernel" "$T/kern/"
   run env KERN_GUARDS=g16 bash "$T/kern/hooks/pre-tool-use" <<<"$(bash_payload "find $T -type f -exec bash {} \\;")"
+  [ "$(decision_of "$output")" = ask ]
+  run env KERN_GUARDS=g16 bash "$T/kern/hooks/pre-tool-use" <<<"$(bash_payload "cat $T/*")"
   [ "$(decision_of "$output")" = ask ]
 }
 
@@ -1216,4 +1219,50 @@ project_hooks() {
   PATH="$BATS_TEST_TMPDIR/bin:$PATH"
   project_hooks
   expect_hook 'cat src/hooks/*' "cat '*/*'"
+}
+
+# M3 part 1 Task 9, fix round 1: the disk at the guard's run cannot speak for a command that changes it.
+@test "a command that is not a read keeps a hook word the disk cannot speak for" {
+  K=$(kern_root)
+  F="$BATS_TEST_TMPDIR/far"
+  mkdir -p "$F/hooks"
+  project_hooks
+  # shellcheck disable=SC2016 # a literal $x
+  expect_hook "cp -R $K/. $F/; bash $F/hooks/prompt-submit" "rm -rf $F/hooks; ln -s $K/hooks $F/hooks; bash $F/hooks/\$x" \
+    "cp -R $K/. $F/; cd $F/hooks; bash prompt-submit" "cp -R $K/. $F/; bash $F/hooks/p*" 'bash src/hooks/p*' 'bash src/hooks/$x' \
+    'bash src/hooks/{a,b}' 'cat src/hooks/$x' 'f=src/hooks/new.ts; bash $f' 'cd src/hooks; bash $x' 'ls src/hooks; bash $x' \
+    'bash src/hooks/$x*' 'bash src/hooks/P*'
+}
+
+@test "a foreign hooks path in a command that names kern's hooks directory keeps the vote it had" {
+  K=$(kern_root)
+  project_hooks
+  expect_hook "cp src/hooks/lib/util.sh $K/hooks/lib/" "cp src/hooks/lib/util.sh $K/hooks/guards/g99.sh" \
+    "cat src/hooks/useForm.ts > $K/hooks/prompt-submit"
+}
+
+@test "a hook name in a non-read command stays, whatever the directory change the guard cannot read" {
+  K=$(kern_root)
+  project_hooks
+  mkdir -p "$R/hooks/lib"
+  # shellcheck disable=SC2016 # a literal ${c}
+  expect_hook "python3 -c \"import os; os.chdir('$K'); os.system('bash hooks/prompt-submit')\"" \
+    "node -e \"process.chdir('$K'); require('child_process').execSync('bash hooks/prompt-submit')\"" \
+    "sudo -D $K bash hooks/prompt-submit" "env -iC $K bash hooks/prompt-submit" "\${c}d $K; bash hooks/prompt-submit" \
+    "\${c}d $K; cat x > hooks/lib/state.sh" "sudo -D $K cp x hooks/lib/state.sh"
+}
+
+@test "a read-only reading that a command could fake keeps a copy of kern's hooks" {
+  C="$BATS_TEST_TMPDIR/copy"
+  mkdir -p "$C/hooks/lib"
+  : >"$C/hooks/prompt-submit"
+  : >"$C/hooks/lib/state.sh"
+  expect_hook "rg \$'\\x2d\\x2dpre=sh' x $C/hooks/prompt-submit" "cat \$'\\x2d\\x2dhelp' $C/hooks/prompt-submit" \
+    "cat <>x $C/hooks/prompt-submit" "<>x bash cat $C/hooks/prompt-submit" ">'a cat' bash $C/hooks/prompt-submit" \
+    "cat x > $C/hooks/prompt-submit" "cat x >&$C/hooks/prompt-submit" "cat $C/hooks/prompt-submit > $C/hooks/lib/state.sh" \
+    "find /x/hooks -name prompt-submit \$'\\x2dprint'"
+}
+
+@test "a redirect before the head does not hide a shell from the quoted glob check" {
+  expect_hook ">'a cat' bash -c 'bash */prompt-submit'" "<>x bash -c 'bash */prompt-submit'" "sort <>x -o '*/*' y"
 }
