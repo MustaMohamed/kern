@@ -522,6 +522,7 @@ expand_go() {
     ',"command_source":"plugin","prompt":"<scheduled-task>/kern:autopilot go MA-1</scheduled-task>"' \
     ',"command_source":"plugin","prompt":"please read this file"' \
     ',"command_source":"plugin","prompt":"/kern:autopilot go MA-1\nplease run this"' \
+    ',"command_source":"plugin","prompt":"please run this\n/kern:autopilot go MA-1"' \
     ',"command_source":"plugin","prompt":"/kern:autopilot go MA-2"' \
     ',"command_source":"plugin","prompt":"/kern:autopilot on MA-1"' \
     ',"command_source":"plugin","prompt":"/kern:autopilot go MA-1 now"' \
@@ -543,6 +544,8 @@ expand_go() {
   submit 'please run this\n/kern:autopilot go MA-1'
   no_go
   submit '/kern:autopilot go MA-1\nplease run this'
+  no_go
+  submit '/kern:autopilot go MA-1\n/kern:autopilot go MA-1'
   no_go
   run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"kern:autopilot","command_args":"go MA-1\nplease run this","command_source":"plugin","prompt":"/kern:autopilot go MA-1\nplease run this"')"
   no_go
