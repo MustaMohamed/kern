@@ -335,7 +335,7 @@ release_on_origin() {
   made=$output
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ad --plan "$TMP/plan.md"
   [ "$status" -eq 2 ]
-  # No fetch and no base check: a resume does not stall on a gone origin.
+  # No fetch: a resume does not stall on a gone origin.
   git remote set-url origin "$TMP/gone.git"
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ad --plan "$TMP/plan.md" --adopt
   [ "$status" -eq 0 ] || { echo "$stderr"; false; }
@@ -395,4 +395,119 @@ release_on_origin() {
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ak --plan "$TMP/plan.md" --detach --adopt
   [ "$status" -eq 2 ]
   [ ! -e "$REPO/.claude/worktrees/feat-ak" ]
+}
+
+# M3 part 1 Task 14: step 5 always passes --adopt, so a kept worktree must hold nothing wt-snap would take into
+# base-tree, where no later diff would show it, and a failed setup must not stay failed.
+@test "wt-new --adopt refuses commits past the base and names the count" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  made=$(bash "$KERN_ROOT/scripts/wt-new" feat-am --plan "$TMP/plan.md" 2> /dev/null)
+  git -C "$made" commit --quiet --allow-empty -m stale-one
+  git -C "$made" commit --quiet --allow-empty -m stale-two
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-am --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [ "$stderr" = "wt-new: not adopting $made: 2 commits past refs/remotes/origin/main; dirty paths: none" ]
+}
+
+@test "wt-new --adopt refuses a dirty worktree and names each path" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  made=$(bash "$KERN_ROOT/scripts/wt-new" feat-an --plan "$TMP/plan.md" 2> /dev/null)
+  tracked=$(git -C "$made" ls-files | head -n 1)
+  printf 'changed\n' >> "$made/$tracked"
+  mkdir -p "$made/new"
+  printf 'x\n' > "$made/new/stray.txt"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-an --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [[ "$stderr" == *"0 commits past refs/remotes/origin/main; dirty paths: "* ]] || false
+  [[ "$stderr" == *"$tracked"* ]] || false
+  [[ "$stderr" == *"new/stray.txt"* ]] || false
+}
+
+@test "wt-new --adopt: git-ignored setup output is not dirty" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  printf 'built/\n' > .gitignore
+  git add .gitignore && git commit --quiet -m ignore && git push --quiet origin main
+  mkdir -p .claude
+  printf 'worktree.setup: mkdir built && touch built/out\n' > .claude/kern.local.yml
+  made=$(bash "$KERN_ROOT/scripts/wt-new" feat-ao --plan "$TMP/plan.md" 2> /dev/null)
+  [ -f "$made/built/out" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ao --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 0 ]
+  [ "$output" = "$made" ]
+}
+
+@test "wt-new --adopt copies the includes and runs setup when the marker is missing" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  made=$(bash "$KERN_ROOT/scripts/wt-new" feat-ap --plan "$TMP/plan.md" 2> /dev/null)
+  gitdir=$(git -C "$made" rev-parse --path-format=absolute --git-dir)
+  rm "$gitdir/kern-setup-done"
+  mkdir -p .claude
+  printf 'worktree.setup: touch setup-ran\n' > .claude/kern.local.yml
+  printf 'secret.log\n' > .worktreeinclude
+  printf 'token\n' > secret.log
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ap --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 0 ]
+  [ "$output" = "$made" ]
+  [ -f "$made/setup-ran" ]
+  [ "$(cat "$made/secret.log")" = "token" ]
+  grep -q '^setup: touch setup-ran$' "$gitdir/kern-setup-done"
+  run bash "$KERN_ROOT/scripts/wt-check" "$made" origin/main
+  [ "$output" = "ok" ]
+}
+
+@test "wt-new --adopt exits 2 when the setup a missing marker needs fails, and a later adopt repairs it" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  mkdir -p .claude
+  printf 'worktree.setup: exit 7\n' > .claude/kern.local.yml
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-aq --plan "$TMP/plan.md"
+  [ "$status" -eq 2 ]
+  wt="$REPO/.claude/worktrees/feat-aq"
+  [ -d "$wt" ]
+  gitdir=$(git -C "$wt" rev-parse --path-format=absolute --git-dir)
+  [ ! -f "$gitdir/kern-setup-done" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-aq --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [[ "$stderr" == *"worktree.setup failed"* ]] || false
+  [ ! -f "$gitdir/kern-setup-done" ]
+  printf 'worktree.setup: true\n' > .claude/kern.local.yml
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-aq --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 0 ]
+  [ "$output" = "$wt" ]
+  [ -f "$gitdir/kern-setup-done" ]
+}
+
+@test "wt-new --adopt: a clean worktree with its marker takes no fetch and no second setup, behind its base or not" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  made=$(bash "$KERN_ROOT/scripts/wt-new" feat-ar --plan "$TMP/plan.md" 2> /dev/null)
+  mkdir -p .claude
+  printf 'worktree.setup: touch setup-ran\n' > .claude/kern.local.yml
+  git clone --quiet "$REPO.origin" "$TMP/other"
+  git -C "$TMP/other" -c user.email=o@example.com -c user.name=O commit --quiet --allow-empty -m newer
+  git -C "$TMP/other" push --quiet origin main
+  git fetch --quiet origin
+  tip=$(git rev-parse origin/main)
+  git remote set-url origin "$TMP/gone.git"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ar --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+  [ "$output" = "$made" ]
+  [ ! -e "$made/setup-ran" ]
+  [ "$(git rev-parse origin/main)" = "$tip" ]
+}
+
+@test "wt-new --adopt compares with a --base SHA, and exits 2 when the base cannot be read" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  made=$(bash "$KERN_ROOT/scripts/wt-new" feat-as --plan "$TMP/plan.md" 2> /dev/null)
+  git -C "$made" commit --quiet --allow-empty -m on-top
+  tip=$(git -C "$made" rev-parse HEAD)
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-as --plan "$TMP/plan.md" --base "$tip" --adopt
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+  [ "$output" = "$made" ]
+  printf -- '---\nbase: nosuch\n---\n' > "$TMP/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-as --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [[ "$stderr" == *"wt-new: could not compare $made with refs/remotes/origin/nosuch"* ]] || false
 }
