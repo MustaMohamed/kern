@@ -639,3 +639,551 @@ approved_spec() {
   approve 'ok good, go'
   [ -z "$output" ]
 }
+
+# sh_cmd COMMAND: G20 on a Bash COMMAND, which may hold any character.
+sh_cmd() {
+  . "$K/hooks/lib/json.sh"
+  run_guard "$(tool_payload Bash "\"command\":\"$(printf '%s' "$1" | json_escape)\"")" g20
+}
+
+# denied: G20 denied the last call.
+denied() {
+  [ "$(decision_of "$output")" = deny ] || { echo "expected deny: $output"; return 1; }
+}
+
+# working_dirs [WORK]: makes WORK/ledgers/x, WORK/reviews and WORK/tmp, WORK being .kern by default.
+working_dirs() {
+  mkdir -p "$R/${1:-.kern}/ledgers/x" "$R/${1:-.kern}/reviews" "$R/${1:-.kern}/tmp" "$R/.kern/plans"
+}
+
+# INVENTED: JSON text of a file that sets status: approved with a quote the user never gave.
+INVENTED='---\nstatus: approved\napproved: 2026-10-14, \"ship it\"\n---\n'
+
+# write_to PATH: a Write of the invented approval to PATH.
+write_to() {
+  run_guard "$(tool_payload Write "\"file_path\":\"$1\",\"content\":\"$INVENTED\"")" g20
+}
+
+# write_text PATH TEXT: a Write of TEXT, JSON text, to PATH.
+write_text() {
+  run_guard "$(tool_payload Write "\"file_path\":\"$1\",\"content\":\"$2\"")" g20
+}
+
+@test "a ledger append that holds approved gets no vote" {
+  working_dirs
+  sh_cmd "printf '%s\n' 'Decision: size approved as one PR' >> .kern/ledgers/x/ledger.md"
+  no_vote
+}
+
+@test "a here-doc that holds approved into a review note gets no vote" {
+  working_dirs
+  sh_cmd "cat > .kern/reviews/task-3.md <<'EOF'
+Task quality: approved
+EOF"
+  no_vote
+}
+
+@test "a working file written beside a read of an approved spec gets no vote" {
+  working_dirs
+  approved_spec 'yes'
+  sh_cmd "printf 'x\n' > .kern/reviews/p.proofs.md; bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
+  no_vote
+}
+
+@test "a shell write that holds approved into a spec or plan is denied" {
+  working_dirs
+  sh_cmd "printf 'status: approved\n' > .kern/specs/x.md"
+  denied
+  sh_cmd "printf 'status: approved\n' > .kern/plans/x.md"
+  denied
+}
+
+@test "a shell write to WORK/tmp gets no vote" {
+  working_dirs
+  sh_cmd "printf 'notes\n' > .kern/tmp/p.md"
+  no_vote
+  sh_cmd "printf 'approved\n' > .kern/tmp/p.md"
+  no_vote
+  printf '%s\n' '---' 'status: approved' '---' > "$R/.kern/tmp/p.md"
+  sh_cmd "printf 'notes\n' >> .kern/tmp/p.md"
+  no_vote
+}
+
+@test "a Write or Edit of a working file that holds only the word gets no vote" {
+  working_dirs
+  for f in ledgers/x/ledger.md reviews/task-3.md tmp/p.md; do
+    run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/$f\",\"content\":\"Task quality: approved\\n\"")" g20
+    no_vote
+  done
+  printf '## Problem\n' > "$R/.kern/tmp/note.md"
+  edit '## Problem' '## Problem\nThe size was approved.' false "$R/.kern/tmp/note.md"
+  no_vote
+}
+
+@test "a Write or Edit that approves a working file, spec or plan is denied" {
+  working_dirs
+  for f in ledgers/x/ledger.md reviews/task-3.md tmp/p.md plans/x.md; do
+    write_to "$R/.kern/$f"
+    denied
+  done
+  cp "$SPEC" "$R/.kern/tmp/draft.md"
+  edit 'status: draft' 'status: approved' false "$R/.kern/tmp/draft.md"
+  denied
+  edit 'status: draft' 'status: approved'
+  denied
+}
+
+@test "a shell redirect that approves a working file is denied" {
+  working_dirs
+  for f in .kern/ledgers/x/ledger.md .kern/reviews/p.md .kern/tmp/p.md; do
+    sh_cmd "echo 'status: approved' > $f"
+    denied
+  done
+}
+
+@test "the word status alone in a working file gets no vote" {
+  working_dirs
+  sh_cmd "printf 'Status: done\n' > .kern/reviews/p.md"
+  no_vote
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/reviews/q.md\",\"content\":\"Status: done\\n\"")" g20
+  no_vote
+}
+
+@test "both words in a shell write's text are denied, and the reason sends it to the Write tool" {
+  working_dirs
+  sh_cmd "printf 'status of the size: approved by the lead\n' > .kern/tmp/p.md"
+  denied
+  [[ "$output" == *'both status and approved'* ]] || false
+  [[ "$output" == *'use the Write tool, which judges each line'* ]] || false
+  [[ "$output" == *'a line holding both stays denied'* ]] || false
+}
+
+@test "both words in upper case in a working file's text are denied" {
+  working_dirs
+  sh_cmd "printf 'STATUS: DONE. APPROVED.\n' >> .kern/reviews/p.md"
+  denied
+}
+
+@test "both words in a here-doc into a working file are denied" {
+  working_dirs
+  sh_cmd "cat > .kern/reviews/task-3.md <<'EOF'
+Status: done
+Task quality: approved
+EOF"
+  denied
+}
+
+@test "a printf with newlines that approves a working file is denied" {
+  working_dirs
+  sh_cmd "printf '---\nstatus: approved\napproved: 2026-10-14\n---\n' > .kern/tmp/p.md"
+  denied
+}
+
+@test "a Write or Edit with both words on one line of a working file is denied, naming the line" {
+  working_dirs
+  write_text "$R/.kern/reviews/p.md" '# Note\nstatus of the size: approved by the lead\n'
+  denied
+  [[ "$output" == *'line 2 of p.md holds both status and approved'* ]] || false
+  [[ "$output" == *'reword that line'* ]] || false
+  [[ "$output" == *"keep a report's Status: line"* ]] || false
+  write_text "$R/.kern/reviews/p.md" 'APPROVED, AND THE STATUS STANDS\nstatus approved\n'
+  denied
+  [[ "$output" == *'line 1 of p.md'* ]] || false
+  [[ "$output" != *'line 2 of p.md'* ]] || false
+  printf 'Status: done\n' > "$R/.kern/reviews/q.md"
+  edit 'done' 'approved' false "$R/.kern/reviews/q.md"
+  denied
+  [[ "$output" == *'line 1 of q.md'* ]] || false
+}
+
+@test "a Write of a report with Status: on one line and the word on a later line gets no vote" {
+  working_dirs
+  mkdir -p "$R/.kern/ledgers/x/reports"
+  write_text "$R/.kern/ledgers/x/reports/task-3.md" 'Status: DONE_WITH_CONCERNS\n\nThe size was approved as one PR.\n'
+  no_vote
+  write_text "$R/.kern/ledgers/x/reports/task-4.md" 'Status: DONE \\\nThe size was approved as one PR.\n'
+  no_vote
+}
+
+@test "a Write of a draft under WORK/tmp with its approved: placeholder gets no vote" {
+  working_dirs
+  write_text "$R/.kern/tmp/draft.md" '---\nstatus: draft\napproved: (set only on an explicit yes)\n---\n## Problem\n'
+  no_vote
+}
+
+@test "an Edit of a real ledger gets no vote" {
+  working_dirs
+  printf '%s\n' '# kern ledger: .kern/plans/x.md' 'Plan: abc' 'Main: /r branch=main head=abc status=def' \
+    'Task 1: review round=1 tree=abc spec=compliant quality=approved' 'Task 2: note' > "$R/.kern/ledgers/x/ledger.md"
+  edit 'Task 2: note' 'Task 2: a note' false "$R/.kern/ledgers/x/ledger.md"
+  no_vote
+}
+
+@test "an Edit G20 cannot model reads the whole of a working file, as it has no exact bytes" {
+  working_dirs
+  printf 'Status: done\n' > "$R/.kern/reviews/q.md"
+  edit 'not in the file' 'approved' false "$R/.kern/reviews/q.md"
+  denied
+  [[ "$output" == *'old_string is not in q.md'* ]] || false
+  edit 'not in the file' 'the word approved'
+  no_vote
+}
+
+@test "a Write or Edit into a working directory that does not exist yet is judged from the nearest one that does" {
+  working_dirs
+  write_text "$R/.kern/reviews/new/deep/p.md" 'status of the size: approved by the lead\n'
+  denied
+  rm -rf "$R/.kern/tmp"
+  write_text "$R/.kern/tmp/new/p.md" 'status of the size: approved by the lead\n'
+  denied
+  edit 'x' 'status of the size: approved by the lead' false "$R/.kern/reviews/new/p.md"
+  denied
+  write_text "$R/.kern/reviews/new/p.md" 'Status: done\n'
+  no_vote
+}
+
+@test "a Write outside the working directories that does not exist yet gets no vote" {
+  working_dirs
+  write_text "$R/.kern/notes/new/p.md" 'status of the size: approved by the lead\n'
+  no_vote
+  write_text '/g20-no-such-directory/p.md' 'status of the size: approved by the lead\n'
+  no_vote
+}
+
+@test "both words in a spec's body are not a working file's matter" {
+  say 'yes'
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/specs/n.md\",\"content\":\"Status: done\\nTask quality: approved\\n\"")" g20
+  no_vote
+}
+
+@test "an approval written after a cd into a working directory is denied" {
+  working_dirs
+  sh_cmd "cd .kern/tmp && printf 'status: approved\n' > p.md"
+  denied
+}
+
+@test "an approval written through a symlinked working name is denied" {
+  working_dirs
+  printf 'x\n' > "$R/.kern/reviews/real.md"
+  ln -s ../reviews/real.md "$R/.kern/tmp/link.md"
+  ln -s ../reviews "$R/.kern/tmp/dir"
+  sh_cmd "printf 'status: approved\n' >> .kern/tmp/link.md"
+  denied
+  sh_cmd "printf 'status: approved\n' > .kern/tmp/dir/x.md"
+  denied
+  write_to "$R/.kern/tmp/link.md"
+  denied
+}
+
+@test "a name beside a working directory is not a working file" {
+  working_dirs
+  mkdir -p "$R/.kern/tmp2" "$R/.kern/specs/tmp"
+  for f in .kern/tmp2/p.md .kern/specs/tmp/p.md .kern/tmp.md tmp/p.md; do
+    mkdir -p "$R/${f%/*}"
+    sh_cmd "printf 'approved\n' > $f"
+    denied
+    write_to "$R/$f"
+    denied
+  done
+}
+
+@test "a symlink under WORK/tmp that points out is judged as the file it reaches" {
+  working_dirs
+  ln -s ../specs/export.md "$R/.kern/tmp/link.md"
+  sh_cmd "printf 'approved\n' >> .kern/tmp/link.md"
+  denied
+  write_to "$R/.kern/tmp/link.md"
+  denied
+  ln -s ../specs/export.md "$R/.kern/tmp/link.txt"
+  write_to "$R/.kern/tmp/link.txt"
+  denied
+  ln -s ../specs "$R/.kern/tmp/dir"
+  sh_cmd "printf 'approved\n' > .kern/tmp/dir/x.md"
+  denied
+  write_to "$R/.kern/tmp/dir/x.md"
+  denied
+}
+
+@test "a symlink that keeps inside the working directories is a working file" {
+  working_dirs
+  printf 'x\n' > "$R/.kern/reviews/real.md"
+  ln -s ../reviews/real.md "$R/.kern/tmp/link.md"
+  sh_cmd "printf 'approved\n' >> .kern/tmp/link.md"
+  no_vote
+}
+
+@test "a spec that is a symlink into WORK/tmp is judged as a spec" {
+  working_dirs
+  printf 'x\n' > "$R/.kern/tmp/p.md"
+  ln -s ../tmp/p.md "$R/.kern/plans/x.md"
+  sh_cmd "printf 'approved\n' >> .kern/plans/x.md"
+  denied
+  write_to "$R/.kern/plans/x.md"
+  denied
+}
+
+@test ".. in a path is read as the file system reads it" {
+  working_dirs
+  sh_cmd "printf 'approved\n' > .kern/tmp/../specs/x.md"
+  denied
+  write_to "$R/.kern/tmp/../specs/x.md"
+  denied
+  sh_cmd "cd .kern/tmp && printf 'approved\n' > ../specs/x.md"
+  denied
+  sh_cmd "printf 'approved\n' > .kern/specs/../tmp/p.md"
+  no_vote
+  # .. after a symlink leaves the directory the symlink reaches.
+  mkdir -p "$R/.kern/specs/sub"
+  ln -s ../specs/sub "$R/.kern/tmp/dir"
+  sh_cmd "printf 'approved\n' > .kern/tmp/dir/../x.md"
+  denied
+}
+
+@test "a directory that does not exist yet is not a working directory" {
+  working_dirs
+  sh_cmd "mkdir -p .kern/tmp/new && printf 'approved\n' > .kern/tmp/new/x.md"
+  denied
+}
+
+@test "a copy from a working file into a spec or plan is denied" {
+  working_dirs
+  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '---' > "$R/.kern/tmp/p.md"
+  for c in 'cp .kern/tmp/p.md .kern/plans/x.md' 'mv .kern/tmp/p.md .kern/specs/x.md' \
+    'cat .kern/tmp/p.md > .kern/plans/x.md' 'tee .kern/plans/x.md < .kern/tmp/p.md' \
+    'ln -s ../tmp/p.md .kern/plans/x.md' 'ln .kern/tmp/p.md .kern/plans/x.md'; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'status: approved line'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "an in-place edit of a working file in a command that holds approved is denied" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  for c in "sed -i '' 's/draft/approved/' .kern/tmp/p.md" "sed -i.bak -e 's/draft/approved/' .kern/tmp/p.md" \
+    "perl -pi -e 's/draft/approved/' .kern/tmp/p.md" "gawk -i inplace '{ sub(/draft/, \"approved\") } 1' .kern/tmp/p.md" \
+    "vim -c '%s/draft/approved/' -c wq .kern/tmp/p.md" "ed -s .kern/tmp/p.md <<'EOF'
+s/draft/approved/
+w
+EOF" "find .kern/tmp -name p.md -exec sed -i '' 's/draft/approved/' .kern/tmp/p.md ';'"; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'text editor'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "BSD sed's -I is an in-place edit" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  sh_cmd "sed -I '' 's/draft/approved/' .kern/tmp/p.md"
+  denied
+  sh_cmd "sed -I.bak 's/draft/approved/' .kern/specs/export.md"
+  denied
+}
+
+@test "gsed and busybox sed are text editors" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  for c in "gsed -i 's/draft/approved/' .kern/tmp/p.md" "busybox sed -i 's/draft/approved/' .kern/tmp/p.md"; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'text editor'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "ed -q takes no value, so the file after it is read" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  sh_cmd "ed -q .kern/tmp/p.md <<'EOF'
+s/draft/approved/
+w
+EOF"
+  denied
+}
+
+@test "a text editor that writes a working file through a redirect or a pipe in a command that holds approved is denied" {
+  working_dirs
+  for c in "sed 's/draft/approved/' .kern/specs/export.md > .kern/tmp/p.md" \
+    "awk '{ sub(/draft/, \"approved\") } 1' .kern/specs/export.md > .kern/tmp/p.md" \
+    "sed 's/draft/approved/' .kern/specs/export.md | tee .kern/tmp/p.md"; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'text editor'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "a text editor gets no vote on a working file when no command text holds approved" {
+  working_dirs
+  cp "$SPEC" "$R/.kern/tmp/p.md"
+  sh_cmd "sed -i '' 's/Problem/Issue/' .kern/tmp/p.md"
+  no_vote
+}
+
+@test "a text editor in its own simple command does not touch a working file's note" {
+  working_dirs
+  sh_cmd "sed -n 1p README.md; printf 'approved\n' >> .kern/ledgers/x/ledger.md"
+  no_vote
+}
+
+@test "a copy into a working file from a file that holds an approval is denied" {
+  working_dirs
+  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '---' > "$R/notes.txt"
+  cp "$R/notes.txt" "$R/notes.md"
+  for c in 'cp notes.txt .kern/tmp/p.md' 'cp notes.md .kern/tmp/' 'mv notes.txt .kern/reviews/p.md' \
+    'cat notes.txt > .kern/tmp/p.md' 'cat notes.txt >> .kern/ledgers/x/ledger.md' 'tee .kern/tmp/p.md < notes.txt' \
+    'ln -s ../../notes.txt .kern/tmp/p.md' 'install notes.txt .kern/tmp/p.md' 'dd if=notes.txt of=.kern/tmp/p.md' \
+    'cat notes.txt | tee .kern/tmp/p.md' 'printf %s "$(cat notes.txt)" > .kern/tmp/p.md' \
+    'printf %s `cat notes.txt` > .kern/tmp/p.md'; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'holds a status: approved line'* ]] || { echo "$c: $output"; return 1; }
+  done
+  approved_spec 'yes'
+  sh_cmd 'cat .kern/specs/export.md > .kern/tmp/copy.md'
+  denied
+}
+
+@test "a copy through a compound redirect into a working file is denied" {
+  working_dirs
+  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '---' > "$R/notes.txt"
+  for c in '{ cat notes.txt; } > .kern/tmp/p.md' '(cat notes.txt) > .kern/tmp/p.md' \
+    'for f in 1; do cat notes.txt; done > .kern/tmp/p.md' 'if true; then cat notes.txt; fi > .kern/tmp/p.md' \
+    'exec > .kern/tmp/p.md; cat notes.txt'; do
+    sh_cmd "$c"
+    denied
+    [[ "$output" == *'holds a status: approved line'* ]] || { echo "$c: $output"; return 1; }
+  done
+}
+
+@test "a substitution in an unquoted here-doc body joins the copy" {
+  working_dirs
+  printf '%s\n' '---' 'status: approved' 'approved: 2026-10-14, "yes"' '---' > "$R/notes.txt"
+  sh_cmd 'cat > .kern/tmp/p.md <<EOF
+$(cat notes.txt)
+EOF'
+  denied
+}
+
+@test "a pipe beside a working write joins them" {
+  working_dirs
+  approved_spec 'yes'
+  sh_cmd "grep -c Problem .kern/specs/export.md | wc -l; printf 'x\n' > .kern/tmp/n.md"
+  denied
+}
+
+@test "a || beside a working write joins nothing" {
+  working_dirs
+  approved_spec 'yes'
+  sh_cmd "grep -c Problem .kern/specs/export.md || true; printf 'x\n' > .kern/tmp/n.md"
+  no_vote
+  sh_cmd "grep -c Problem .kern/specs/export.md || grep -c Scope .kern/specs/export.md || true; printf 'x\n' > .kern/tmp/n.md"
+  no_vote
+}
+
+@test "a proofs table beside a read of an approved spec gets no vote" {
+  working_dirs
+  approved_spec 'yes'
+  sh_cmd "cat > .kern/reviews/p.proofs.md <<'EOF'
+| Line | State |
+|---|---|
+| 3 | \$(proved) |
+EOF
+bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
+  no_vote
+  sh_cmd "printf '| 3 | \$(proved) |\n' > .kern/reviews/p.proofs.md; bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
+  no_vote
+}
+
+@test "a sed that fails on the command leaves it read as joined" {
+  local bin="$BATS_TEST_TMPDIR/bin"
+  working_dirs
+  approved_spec 'yes'
+  mkdir "$bin"
+  printf '#!/bin/sh\ncase "$1" in "s/||"*) exit 1 ;; esac\nexec %s "$@"\n' "$(command -v sed)" > "$bin/sed"
+  chmod +x "$bin/sed"
+  PATH="$bin:$PATH"
+  sh_cmd "printf '| 3 |\n' > .kern/reviews/p.proofs.md; bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
+  denied
+}
+
+@test "a copy into a working file from a file with no approval gets no vote" {
+  working_dirs
+  sh_cmd 'cp README.md .kern/tmp/r.md'
+  no_vote
+  sh_cmd 'cat README.md | tee .kern/tmp/r.md'
+  no_vote
+}
+
+@test "a working path built at run time stays judged" {
+  working_dirs
+  approved_spec 'yes'
+  sh_cmd 'printf approved > .kern/tmp/$X.md'
+  denied
+  sh_cmd 'cat .kern/specs/export.md > .kern/tmp/$X.md'
+  denied
+  sh_cmd 'printf x > .kern/tmp/$X.md; cat .kern/specs/export.md'
+  denied
+}
+
+@test "work_dir in the settings names the working directories" {
+  working_dirs .work
+  mkdir -p "$R/.claude"
+  printf 'work_dir: .work\n' > "$R/.claude/kern.local.yml"
+  sh_cmd "printf 'approved\n' > .work/tmp/p.md"
+  no_vote
+  write_to "$R/.work/reviews/p.md"
+  denied
+  mkdir -p "$R/.kern/tmp"
+  sh_cmd "printf 'approved\n' > .kern/tmp/p.md"
+  denied
+  write_to "$R/.kern/tmp/p.md"
+  denied
+}
+
+@test "a work_dir kern-dir refuses, or settings that cannot be read, name no working directory" {
+  mkdir -p "$R/.claude" "$R/tmp"
+  printf 'work_dir: .\n' > "$R/.claude/kern.local.yml"
+  sh_cmd "printf 'approved\n' > tmp/p.md"
+  denied
+  working_dirs
+  printf 'work_dir: .kern\n' > "$R/.claude/kern.local.yml"
+  read_fails awk "$R/.claude/kern.local.yml"
+  sh_cmd "printf 'approved\n' > .kern/tmp/p.md"
+  denied
+}
+
+@test "a work dir that is a symlink holds its working files where it lands" {
+  mkdir -p "$BATS_TEST_TMPDIR/real/tmp" "$BATS_TEST_TMPDIR/real/specs"
+  rm -rf "$R/.kern"
+  ln -s "$BATS_TEST_TMPDIR/real" "$R/.kern"
+  sh_cmd "printf 'approved\n' > .kern/tmp/p.md"
+  no_vote
+  sh_cmd "printf 'approved\n' > .kern/specs/x.md"
+  denied
+}
+
+@test "WORK/tmp that is a symlink to the specs holds no working files" {
+  rm -rf "$R/.kern/tmp"
+  ln -s specs "$R/.kern/tmp"
+  sh_cmd "printf 'approved\n' > .kern/tmp/x.md"
+  denied
+}
+
+@test "WORK is the main worktree's: a linked worktree's own .kern/tmp is judged" {
+  working_dirs
+  git -C "$R" worktree add -q "$BATS_TEST_TMPDIR/wt" -b t 2> /dev/null
+  W=$(cd "$BATS_TEST_TMPDIR/wt" && pwd -P)
+  mkdir -p "$W/.kern/tmp"
+  export CWD="$W"
+  sh_cmd "printf 'approved\n' > .kern/tmp/p.md"
+  denied
+  sh_cmd "printf 'approved\n' > $R/.kern/tmp/p.md"
+  no_vote
+}
+
+@test "a working directory named in another case is the same directory on a case-blind file system" {
+  working_dirs
+  [ -d "$R/.kern/TMP" ] || skip 'the file system tells case apart'
+  sh_cmd "printf 'approved\n' > .kern/TMP/p.md"
+  no_vote
+}
