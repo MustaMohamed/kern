@@ -218,6 +218,7 @@ d=a.ts; sort -rn $d
 d=src; find $d -name a.ts
 d=a; git log --oneline -- $d
 d=a; d=b; cat $d
+d=a; cat $d\\\n/b.ts
 EOF
   each_denied <<'EOF'
 d=-o; sort $d out.txt a.txt
@@ -260,18 +261,16 @@ d=a; cat <<EOF2\n$d\nEOF2
 EOF
 }
 
-@test "a longer variable name is denied with the advice to use one letter" {
+@test "a longer variable name gets the advice to use one letter only when that would pass" {
   while IFS= read -r cmd; do
     hook kern:investigator "$cmd"
     denied || { echo "not denied: $cmd"; false; }
     [[ "$output" == *"use a one-letter name"* ]] || { echo "no advice: $cmd"; false; }
   done <<'EOF'
 file=a; cat $file
-file=a.ts; cat a.ts
 file=$(ls); cat \"$file\"
 for file in a b; do cat \"$file\"; done
 d=a; file=b; cat ${file}
-d=a; cat $file
 EOF
   while IFS= read -r cmd; do
     hook kern:investigator "$cmd"
@@ -281,7 +280,40 @@ EOF
 rm a
 for f in a b; do rm \"$f\"; done
 f=$(ls); sort $f out.txt
+d=a; cat $file
+cat $HOME/a
+PATH=/tmp; cat a
+rm a; file=b
+file=a.ts; cat a.ts
+rm a; file=b; cat $file
+for file in a b; do cat a; done
 EOF
+}
+
+@test "G18 reads a list across a newline, a joined line and the byte after a variable as the shell does" {
+  each_denied <<'EOF'
+d=-o; true ||\nd=a; sort $d out.txt a.txt
+d=-o; test -f missing &&\nd=a; sort $d out.txt a.txt
+d=-o; cat a |\nd=a; sort $d out.txt a.txt
+x=a; sort $x\\\ny-o out.txt a.txt
+T=ao; sort $T\\\n:s/a/-/ out.txt a.txt
+T=a-o; sort $T\\\n[2,3] out.txt a.txt
+sort a.txt $\\\n(echo -ob.txt)
+x=a; sort $xé-o out.txt a.txt
+grep -n x$
+EOF
+}
+
+@test "_g18_join removes a line continuation and stops where the shell keeps one" {
+  # shellcheck source=/dev/null
+  . "$KERN_ROOT/hooks/guards/g18-readonly-agent.sh"
+  [ "$(_g18_join $'a\\\nb')" = ab ]
+  [ "$(_g18_join $'a\\\\\nb')" = $'a\\\\\nb' ]
+  [ "$(_g18_join $'a\\\\\\\nb')" = $'a\\\\b' ]
+  run _g18_join $'a # b\\\nc'
+  [ "$status" -ne 0 ]
+  run _g18_join $'a <<E \\\nb'
+  [ "$status" -ne 0 ]
 }
 
 @test "an assignment of a read-only substitution is read as an unknown word" {

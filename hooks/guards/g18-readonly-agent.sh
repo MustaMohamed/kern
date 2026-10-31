@@ -118,12 +118,12 @@ _g18_plain() {
 
 # _g18_expands TEXT: exit 0 when the shell may turn TEXT into words it does not show, or write: a $ or a
 # backtick outside single quotes ($_, ${x:--o}, $'-o', $(id)), a brace expansion ({-o,out.txt}), a > or <(
-# outside all quotes, or a quote that never closes. A $ before a blank, the end of the text or a closing
-# double quote stays a $, such as a regex anchor. A brace pair after @ with no comma or .. inside, such as
-# git's HEAD@{1} or @{u}, does not expand. One brace list of file names in a word passes (list below) only
-# when the record's first word is cat, head, tail, wc, ls, grep, rg, stat or du: each takes extra words only
-# as more operands to read. Other commands' words are positional, so git -C {.,branch} log runs
-# git -C . branch log; they keep the plain rule.
+# outside all quotes, or a quote that never closes. A $ before a blank or a closing double quote stays a $,
+# such as a regex anchor. A brace pair after @ with no comma or .. inside, such as git's HEAD@{1} or @{u},
+# does not expand. One brace list of file names in a word passes (list below) only when the record's first
+# word is cat, head, tail, wc, ls, grep, rg, stat or du: each takes extra words only as more operands to
+# read. Other commands' words are positional, so git -C {.,branch} log runs git -C . branch log; they keep
+# the plain rule.
 _g18_expands() {
   printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
     # list W K: 1 when the record is a read (rd), and word W, the Kth, is not the first, does not start
@@ -149,7 +149,7 @@ _g18_expands() {
         if (q == sq) { if (c == sq) q = ""; else s = s (c ~ /[{},<>[:space:]]/ ? "_" : c); continue }
         if (c == "\\") { i++; s = s (C[i] ~ /[{},<>[:space:]]/ ? "_" : C[i]); continue }
         if (c == "`") exit 0
-        if (c == "$" && C[i + 1] != "" && C[i + 1] !~ /[[:space:]]/ && !(q != "" && C[i + 1] == "\"")) exit 0
+        if (c == "$" && C[i + 1] !~ /[[:space:]]/ && !(q != "" && C[i + 1] == "\"")) exit 0
         if (q == "\"") { if (c == "\"") q = ""; else s = s (c ~ /[{},<>[:space:]]/ ? "_" : c); continue }
         if (c == sq || c == "\"") { q = c; continue }
         s = s c
@@ -167,20 +167,23 @@ _g18_expands() {
     }'
 }
 
-# _g18_read CMD: the simple commands of CMD, one per line, with its loops and variables read out, for
-# _g18_denied to judge; exit 1 when G18 cannot read all of it, and 3 when a longer variable name is why.
+# _g18_read CMD: the simple commands of CMD, joined, one per line, with its loops and variables read out,
+# for _g18_denied to judge; exit 1 when G18 cannot read all of it or a longer variable name is set. Exit 3,
+# when a longer name is also read, gives the text it would have with a one-letter name.
 # A for over literal words becomes its body once per word. A variable becomes its value, in every quote
 # the shell expands it in: a plain literal, or $G18_ANY for a $( ) alone, whose commands take the
 # assignment's place. Only one-letter names, and that is what makes an assignment safe: no shell and no
 # allowlisted command reads one, while a longer name can change what runs. IFS, PATH and GIT_* do, and so
 # do zsh's lowercase path and fpath, tied to PATH and FPATH, so case does not mark them and no list of such
-# names stays complete. An assignment counts only at the top level, first or after ; or a newline, and
-# ending in ;, a newline or &&: anywhere else the shell may skip or lose it, and the value G18 judged would
-# not be the one that runs. A nested loop or substitution stops the read, and so does any other expansion,
-# a group, a subshell, a here-doc or a comment.
+# names stays complete. An assignment counts only at the top level, first or after ; or a newline that ends
+# a list, and ending in ;, a newline or &&. A newline after &&, || or | does not end the list. Anywhere else
+# the shell may skip or lose the assignment, and the value G18 judged would not be the one that runs. A
+# nested loop or substitution stops the read, and so does any other expansion, a group, a subshell, a
+# here-doc or a comment.
 _g18_read() {
   printf '%s' "$1" | env LC_ALL=C awk -v sq="'" -v any="$G18_ANY" '
     function gap(i) { while (i <= n && (C[i] == " " || C[i] == "\t")) i++; return i }
+    function past(i) { while (i <= n && (C[i] == " " || C[i] == "\t" || C[i] == "\n")) i++; return i }
     function plain(s) { return !R && Q < 2 && s ~ /^[A-Za-z0-9_.\/:@+-]+$/ }
     # ends(i): true when a command ends at i. The & and | of a redirect (2>&1, &>, >|) do not end one.
     function ends(i,   c) {
@@ -189,19 +192,23 @@ _g18_read() {
       if (c == "&") return C[i - 1] != ">" && C[i - 1] != "<" && C[i + 1] != ">"
       return c == "|" && C[i - 1] != ">"
     }
+    # after(c): true when byte c may follow a bare $x. Only these: zsh reads any other as more of the
+    # name, multibyte letters among them, or as a modifier or a subscript.
+    function after(c) { return c == "" || index(" \t\n/.-\";|&)$", c) > 0 }
     # ref(i, q): adds the expansion at the $ at i, in quote q, to W and P. Only $x and ${x} of a set x
-    # read: zsh takes $x: as a modifier and $x[ as a subscript. A $ that expands nothing stays a $, as
-    # in _g18_expands. Returns the last position read.
+    # read. A $ that expands nothing stays a $, as in _g18_expands. U is 1 once a longer name is read.
+    # Returns the last position read.
     function ref(i, q,   b, v) {
       v = C[i + 1]
-      if (v == "" || v == " " || v == "\t" || v == "\n" || (q != "" && v == "\"")) { W = W "$"; P = P "$"; return i }
+      if (v == " " || v == "\t" || (q != "" && v == "\"")) { W = W "$"; P = P "$"; return i }
       b = v == "{"
       i += 1 + b
-      v = C[i]
-      if (v ~ /[A-Za-z_]/ && C[i + 1] ~ /[A-Za-z0-9_]/) exit 3
+      for (v = ""; C[i] ~ /[A-Za-z0-9_]/; i++) v = v C[i]
+      i--
       if (!(v in V)) exit 1
       if (b) { if (C[++i] != "}") exit 1 }
-      else if (C[i + 1] ~ /[:[]/) exit 1
+      else if (!after(C[i + 1])) exit 1
+      if (v !~ /^[A-Za-z]$/) U = 1
       W = W V[v]; P = P V[v]; R = 1
       return i
     }
@@ -224,8 +231,10 @@ _g18_read() {
       if (q != "" || W == "{" || W == "}") exit 1
       return i
     }
-    # bind(v, i): reads the value at i of an assignment to v. Returns the position after it.
+    # bind(v, i): reads the value at i of an assignment to v. Returns the position after it. T is 1 once
+    # a longer name is set.
     function bind(v, i,   d) {
+      if (v !~ /^[A-Za-z]$/) T = 1
       d = C[i] == "\""
       if (C[i + d] != "$" || C[i + d + 1] != "(") {
         i = word(i)
@@ -240,22 +249,21 @@ _g18_read() {
     }
     # loop(i): reads a for, from the word after it, and its body once per word. Returns the position
     # after its done.
-    function loop(i,   v, m, k, L, b) {
+    function loop(i,   v, m, k, w, b) {
       i = word(gap(i)); v = P
-      if (!Q && v ~ /^[A-Za-z_][A-Za-z0-9_]+$/) exit 3
-      if (Q || v !~ /^[A-Za-z]$/) exit 1
+      if (Q || v !~ /^[A-Za-z_][A-Za-z0-9_]*$/) exit 1
+      if (v !~ /^[A-Za-z]$/) T = 1
       i = word(gap(i))
       if (Q || P != "in") exit 1
       for (i = gap(i); !ends(i); i = gap(i)) {
         i = word(i)
         if (!plain(P)) exit 1
-        L[++m] = P
+        w[++m] = P
       }
       if (!m || (C[i] != ";" && C[i] != "\n")) exit 1
-      for (i++; i <= n && (C[i] == " " || C[i] == "\t" || C[i] == "\n"); i++) continue
-      b = word(i)
+      b = word(past(i + 1))
       if (Q || P != "do") exit 1
-      for (k = 1; k <= m; k++) { V[v] = L[k]; i = stmts(b, 1) }
+      for (k = 1; k <= m; k++) { V[v] = w[k]; i = stmts(b, 1) }
       delete V[v]
       return i
     }
@@ -269,11 +277,11 @@ _g18_read() {
         if (i > n) { if (ctx) exit 1; return i }
         if (ctx == 2 && C[i] == ")") return i
         if (C[i] == ";" || C[i] == "\n") { lead = 1; i++; continue }
-        if (C[i] == "&" || C[i] == "|") { lead = 0; i += C[i + 1] == C[i] ? 2 : 1; continue }
-        if (substr(buf, i) ~ /^[A-Za-z_][A-Za-z0-9_]+[+]?=/) exit 3
-        if (C[i] ~ /[A-Za-z]/ && C[i + 1] == "=") {
+        if (C[i] == "&" || C[i] == "|") { lead = 0; i = past(i + (C[i + 1] == C[i] ? 2 : 1)); continue }
+        if (match(substr(buf, i), /^[A-Za-z_][A-Za-z0-9_]*=/)) {
           if (ctx || !lead) exit 1
-          i = gap(bind(C[i], i + 2))
+          t = RLENGTH
+          i = gap(bind(substr(buf, i, t - 1), i + t))
           if (i <= n && C[i] != ";" && C[i] != "\n" && (C[i] != "&" || C[i + 1] != "&")) exit 1
           continue
         }
@@ -293,7 +301,7 @@ _g18_read() {
       }
     }
     { buf = buf (NR > 1 ? "\n" : "") $0 }
-    END { n = split(buf, C, ""); stmts(1, 0); printf "%s", O }'
+    END { n = split(buf, C, ""); stmts(1, 0); printf "%s", O; exit (U ? 3 : T ? 1 : 0) }'
 }
 
 # _g18_denied TEXT: exit 0 when a command of TEXT is not allowed, with that command in _G18_LINE.
@@ -311,18 +319,38 @@ EOF
   return 1
 }
 
-# _g18_denies CMD: exit 0 when G18 denies CMD, with the command it names in _G18_LINE. A command with a
-# loop or a variable is judged as _g18_read reads it, so a body or a value that is not allowed alone is
-# denied here too; one it cannot read is denied, with _G18_LONG 1 when a longer variable name is why.
+# _g18_join CMD: CMD with its line continuations removed. A backslash pairs with the next character, so an
+# escaped backslash before a newline stays. Exit 1 on a line whose comment ends in a backslash, or on any
+# here-doc: the shell keeps a continuation there, so removing it would hide the next line.
+_g18_join() {
+  printf '%s' "$1" | env LC_ALL=C awk '
+    { if ($0 ~ /(^|[ \t;&|()])#.*\\$/) bad = 1; buf = buf (NR > 1 ? "\n" : "") $0 }
+    END {
+      if (bad || index(buf, "<<")) exit 1
+      n = split(buf, C, "")
+      for (i = 1; i <= n; i++) {
+        if (C[i] != "\\") { printf "%s", C[i]; continue }
+        if (C[i + 1] != "\n") printf "%s%s", C[i], C[i + 1]
+        i++
+      }
+    }'
+}
+
+# _g18_denies CMD: exit 0 when G18 denies CMD, with the command it names in _G18_LINE. Both passes read CMD
+# joined, since the shell joins lines before it reads a name or an expansion. A command with a loop or a
+# variable is judged as _g18_read reads it, so a body or a value that is not allowed alone is denied here
+# too; one it cannot read is denied. _G18_LONG is 1 when only a longer variable name stops CMD.
 _g18_denies() {
-  local text
+  local join=$1 text rc=0
   _G18_LONG=0
-  _g18_denied "$1" || return 1
-  text=$(_g18_read "$1") || {
-    [ "$?" != 3 ] || _G18_LONG=1
-    return 0
-  }
-  _g18_denied "$text"
+  _G18_LINE=$1
+  case "$1" in *\\$'\n'*) join=$(_g18_join "$1") || return 0 ;; esac
+  _g18_denied "$join" || return 1
+  text=$(_g18_read "$join") || rc=$?
+  case "$rc" in 0 | 3) ;; *) return 0 ;; esac
+  _g18_denied "$text" && return 0
+  [ "$rc" = 3 ] || return 1
+  _G18_LONG=1
 }
 
 guard_g18() {
