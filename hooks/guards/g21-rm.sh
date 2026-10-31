@@ -12,8 +12,10 @@
 # heads, a word with a blank whose command position names a tool. Those are split, their quotes dropped.
 # A target is unresolved when it holds a variable other than $TMPDIR, a leading ~ or =, a brace list, a
 # [ ] glob, a * or ? before its last part, a last part that can match .., or a ( in its simple command.
-# The worktree top is that of the command's cwd, and symlinks are followed through the part of a path
-# that exists, so a link that points out of the worktree is outside. Any git worktree but this one is
+# The worktree top is that of the call's cwd: the payload's, or the directory of an opening cd to a
+# literal absolute path in a linked worktree, since a subagent's shell starts at the main checkout. That
+# cd adds no reading of its own. Symlinks are followed through the part of a path that exists, so a
+# link that points out of the worktree is outside. Any git worktree but this one is
 # outside, and so is a directory that holds a worktree, but for the main checkout seen from a worktree
 # nested in it. A cd adds its target to the directories a relative path is read from, whatever its place
 # in the text, and each reading must pass, since kern cannot tell what a subshell undoes. A cd kern
@@ -26,7 +28,13 @@
 # function of the shell, a script that the command sources and that sets TMPDIR, and a case fold outside
 # ASCII. Each call is judged alone, so G21 does not trace what an earlier call placed in a scratch
 # directory: the design's rule on deletes, held in model text, covers that. With a cwd in the main
-# checkout the worktree is the main checkout, as for any session there.
+# checkout the worktree is the main checkout, as for any session there. A quoted first root or primary
+# value of find is not read at run time. A subagent or session that opens with a cd into a sibling
+# worktree deletes there with no vote, as a session in that worktree does.
+
+# _G21_TOOLS and _G21_FINDS: the delete tools and the finds, the one list the judge and _g21_paren read.
+_G21_TOOLS='rm rmdir unlink shred grm grmdir gunlink gshred'
+_G21_FINDS='find gfind'
 
 # _G21_AWK: the judge, run on git_words records after _GW_AWK. Prints one line per fact, in record order:
 # `T<TAB>word` a target to resolve, `C<TAB>word` a cd to a literal directory, `M` a cd kern cannot follow,
@@ -146,11 +154,12 @@ _G21_AWK='
     return j
   }
   BEGIN {
-    split("rm rmdir unlink shred grm grmdir gunlink gshred", G21A, " ")
+    split(tools, G21A, " ")
     for (k in G21A) G21T[G21A[k]] = G21W[G21A[k]] = 1
-    G21F["find"] = G21F["gfind"] = 1
+    split(finds, G21A, " ")
+    for (k in G21A) G21F[G21A[k]] = G21W[G21A[k]] = 1
     G21L["ln"] = G21L["gln"] = G21L["mv"] = G21L["gmv"] = 1
-    G21W["find"] = G21W["gfind"] = G21W["ln"] = G21W["gln"] = G21W["mv"] = G21W["gmv"] = 1
+    G21W["ln"] = G21W["gln"] = G21W["mv"] = G21W["gmv"] = 1
     G21W["xargs"] = G21W["parallel"] = G21W["ssh"] = 1
     G21C["sh"] = G21C["bash"] = G21C["zsh"] = G21C["dash"] = G21C["su"] = G21C["script"] = 1
     G21V = "^-(i?(name|path|wholename|regex|lname)|x?type|user|group|uid|gid|size|perm|flags|[aBcm](time|min|newer)|newer.*|maxdepth|mindepth|samefile|inum|links|fstype)$"
@@ -234,12 +243,15 @@ guard_g21() {
   _g21_named "$cmd ${KERN_ALIAS_TEXT-}" || return 0
   # A failed parse or judge leaves no `.`, so G21 asks.
   # shellcheck disable=SC2153 # _GW_AWK is set in gitctx.sh
-  out=$(set -o pipefail; git_words "$cmd" | env LC_ALL=C awk -v sq="'" "$_GW_AWK$_G21_AWK") || out=""
+  out=$(set -o pipefail; git_words "$cmd" |
+    env LC_ALL=C awk -v sq="'" -v tools="$_G21_TOOLS" -v finds="$_G21_FINDS" "$_GW_AWK$_G21_AWK") || out=""
   _G21_CMD=$cmd
-  _G21_DIRS=${CWD:-$PWD}$'\n'
+  _g21_open "$cmd"
+  _G21_DIRS=$_G21_CWD$'\n'
   _G21_CD=0
   _G21_LOST=0
   _G21_SWAP=0
+  _G21_ROUTE=0
   _G21_LOADED=0
   # Every cd, link and move counts before any target: the order of the text is not the order of the run.
   while IFS= read -r line; do
@@ -248,7 +260,14 @@ guard_g21() {
       M) _G21_CD=1 _G21_LOST=1 ;;
       O) _G21_LOST=1 ;;
       L) _G21_SWAP=1 ;;
-      C*) _G21_CD=1; _g21_cd "${line#C	}" ;;
+      C*)
+        if [ -n "$_G21_OPEN" ] && [ "${line#C	}" = "$_G21_OPEN" ]; then
+          _G21_OPEN=""
+        else
+          _G21_CD=1
+          _g21_cd "${line#C	}"
+        fi
+        ;;
     esac
   done <<EOT
 $out
@@ -271,6 +290,41 @@ $out
 EOT
 }
 
+# _G21_OPENRE: a call that opens with cd, one word, and &&: leading blanks only, no option and no prefix.
+_G21_OPENRE='^[[:blank:]]*cd[[:blank:]]+("[^"]+"|'\''[^'\'']+'\''|[^[:blank:]"'\'']+)[[:blank:]]+&&'
+
+# _g21_open CMD: sets _G21_CWD, the call's cwd. It is the payload's, or, when CMD opens as _G21_OPENRE
+# reads and its word is a literal absolute path whose physical form lies at or under a listed worktree
+# other than the first, the main checkout, that physical form. _G21_OPEN then holds the word, so the
+# judge's first cd line adds no reading. A cd that fails leaves git no directory, so no top is named.
+_g21_open() {
+  local w real line t n=0
+  _G21_CWD=${CWD:-$PWD}
+  _G21_OPEN=""
+  [[ $1 =~ $_G21_OPENRE ]] || return 0
+  w=${BASH_REMATCH[1]}
+  case "$w" in \"* | \'*) w=${w:1:${#w}-2} ;; esac
+  case "$w" in /*) ;; *) return 0 ;; esac
+  case "$w" in *[\$\`\\*?\[\]{}~\;\&\|\(\)\<\>\"\'\!#$'\n'$'\037']*) return 0 ;; esac
+  case "/$w/" in */../*) return 0 ;; esac
+  real=$(_g21_real "$w") || return 0
+  while IFS= read -r line; do
+    case "$line" in 'worktree '?*) ;; *) continue ;; esac
+    n=$((n + 1))
+    [ "$n" -gt 1 ] || continue
+    t=$(_g21_real "${line#worktree }") || continue
+    case "$real/" in
+      "$t"/*)
+        _G21_CWD=$real
+        _G21_OPEN=$w
+        return 0
+        ;;
+    esac
+  done <<EOT
+$(git -C "$_G21_CWD" -c core.fsmonitor=false worktree list --porcelain 2>/dev/null)
+EOT
+}
+
 # _g21_named CMD: exit 0 when CMD, with quotes, backslashes and newlines removed, holds a tool name or
 # -delete, in any case. A superset of what the judge can match, read before any parse.
 _g21_named() {
@@ -286,7 +340,8 @@ _g21_named() {
 # group, which git_words splits off its word. Quoted text may be a script, so it is read the same way,
 # unless the head is git, gh or a read and it runs no substitution. A failed read also exits other than 0.
 _g21_paren() {
-  printf '%s' "$1" | env LC_ALL=C tr '\n' '\037' | env LC_ALL=C awk -v sq="'" '
+  printf '%s' "$1" | env LC_ALL=C tr '\n' '\037' | env LC_ALL=C awk -v sq="'" -v tools="$_G21_TOOLS $_G21_FINDS" '
+    BEGIN { n = split(tools, A, " "); for (i = 1; i <= n; i++) TOOL[A[i]] = 1 }
     function scan(s,   n, C, i, c, q, w, t, h, sp, b, P) {
       n = split(s, C, ""); q = ""; w = ""; t = 0; h = ""; sp = ""
       for (i = 1; i <= n; i++) {
@@ -308,7 +363,7 @@ _g21_paren() {
           if (w != "") {
             b = tolower(P[split(w, P, "/")])
             if (h == "") h = b
-            if (c != "(" && b ~ /^g?(rm|rmdir|unlink|shred|find)$/) t = 1
+            if (c != "(" && (b in TOOL)) t = 1
             w = ""
           }
           if (c == "(" && C[i - 1] == "$") { t = 0; h = "" }
@@ -323,11 +378,22 @@ _g21_paren() {
     { if (scan($0)) exit 1 }'
 }
 
-# _g21_vote WHAT: asks; emit_decision denies under autopilot. The reason names the way through.
+# _g21_vote WHAT: asks; emit_decision denies under autopilot. The reason names the way through. The opening
+# cd is the route past a cd, and for a target or a directory option in a linked worktree but this one. A
+# target in the main checkout gets none, since no opening cd reaches it.
 _g21_vote() {
   local why="delete outside this worktree and its scratch directories, or one kern cannot resolve: ${1:0:80}"
+  local d lc
+  _g21_load
+  lc=$(_g21_lc "$_G21_CMD")
+  while IFS= read -r d; do
+    [ -n "$d" ] && [ "$d" != "$_G21_LTOP" ] && [ "$d" != "$_G21_LMAIN" ] || continue
+    case "$lc" in *"$d"*) _G21_ROUTE=1 ;; esac
+  done <<EOT
+$_G21_LTREES
+EOT
   [ "$_G21_SWAP" = 0 ] || why="$why; run the link or move as its own call"
-  [ "$_G21_CD" = 0 ] || why="$why; run cd <wt> as its own call"
+  [ "$_G21_CD$_G21_ROUTE" = 00 ] || why="$why; open the call with cd <absolute worktree path> &&"
   case "$1" in *'$'*) why="$why; for a temp file run mktemp as its own call, then name the literal path" ;; esac
   vote ask G21 "$why; name each target as a literal path inside the worktree, not its top, or in a scratch directory"
 }
@@ -394,11 +460,11 @@ _g21_tmpdir() {
 # _g21_lc TEXT: TEXT in lower case, ASCII only: a disk may fold case, and folding only refuses more.
 _g21_lc() { printf '%s\n' "$1" | env LC_ALL=C tr 'A-Z' 'a-z'; }
 
-# _g21_own_top: the command's cwd may name its worktree: core.worktree is unset, since a git config call
+# _g21_own_top: the call's cwd may name its worktree: core.worktree is unset, since a git config call
 # gets no vote and it would move the top, and under a go this is the go's repository.
 _g21_own_top() {
   local v go repo k
-  v=$(git -C "${CWD:-$PWD}" -c core.fsmonitor=false config --get core.worktree 2>/dev/null)
+  v=$(git -C "$_G21_CWD" -c core.fsmonitor=false config --get core.worktree 2>/dev/null)
   [ $? = 1 ] && [ -z "$v" ] || return 1
   go=$(state_get "$SID" go 2>/dev/null)
   case $? in 0) ;; 1) return 0 ;; *) return 1 ;; esac
@@ -420,7 +486,7 @@ _g21_load() {
   local t d wd line main="" hold
   _G21_TOP=""
   if _g21_own_top; then
-    t=$(git -C "${CWD:-$PWD}" -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null) && [ -n "$t" ] &&
+    t=$(git -C "$_G21_CWD" -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null) && [ -n "$t" ] &&
       _G21_TOP=$(_g21_real "$t")
   fi
   _G21_SCRATCH=""
@@ -455,7 +521,7 @@ EOT
       'worktree '?*) t=$(_g21_real "${line#worktree }") && _G21_TREES="$_G21_TREES$t"$'\n' ;;
     esac
   done <<EOT
-$(git -C "${CWD:-$PWD}" -c core.fsmonitor=false worktree list --porcelain 2>/dev/null)
+$(git -C "$_G21_CWD" -c core.fsmonitor=false worktree list --porcelain 2>/dev/null)
 EOT
   _G21_LTOP=$(_g21_lc "$_G21_TOP")
   _G21_LMAIN=$(_g21_lc "$main")
@@ -520,7 +586,12 @@ EOT
       case "$_G21_LTOP" in "$d"/*) continue ;; esac
     fi
     [ "$work" = 0 ] || [ "$d" != "$_G21_LMAIN" ] || continue
-    case "$lp" in "$d"/*) return 1 ;; esac
+    case "$lp" in
+      "$d"/*)
+        [ "$d" = "$_G21_LMAIN" ] || _G21_ROUTE=1
+        return 1
+        ;;
+    esac
   done <<EOT
 $_G21_LTREES
 EOT

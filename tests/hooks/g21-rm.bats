@@ -170,9 +170,9 @@ refused() {
   expect none 'cd "$x" && rm /tmp/kern-x'
 }
 
-@test "the reason after a cd says to run the cd alone" {
+@test "the reason after a cd says to open the call with it" {
   expect ask 'cd .. && rm a'
-  [[ "$output" == *'run cd <wt> as its own call'* ]] || false
+  [[ "$output" == *'open the call with cd <absolute worktree path> &&'* ]] || false
 }
 
 @test "a directory option before the tool leaves a relative target unresolved" {
@@ -358,6 +358,61 @@ refused() {
   export CWD="$BASE/wt"
   refused "rm -rf $R/.kern/tmp/*"
   expect none 'rm -rf /tmp/kern-x/*'
+}
+
+# open_setup: a session at the main checkout, under autopilot, with a linked worktree W at the default
+# worktree.dir beside a sibling S.
+open_setup() {
+  W="$R/.claude/worktrees/plan"
+  S="$R/.claude/worktrees/two"
+  mkdir -p "$R/.claude/worktrees"
+  git -C "$R" worktree add -q "$W" -b kern/plan
+  git -C "$R" worktree add -q "$S" -b kern/two
+  mkdir -p "$W/src" "$W/build"
+  set_autopilot on
+}
+
+@test "a call that opens with cd into a linked worktree reads that directory as its cwd" {
+  open_setup
+  expect none "cd $W && rm src/gen.ts" "cd $W && rm -rf build" "cd $W && git rm src/gen.ts" \
+    "cd \"$W\" && rm src/gen.ts" "cd '$W' && rm src/gen.ts" "cd $W/src && rm gen.ts" \
+    "cd $W && for i in 1 2; do rm src/gen.ts; done"
+}
+
+@test "after an opening cd every other path votes as in that worktree" {
+  open_setup
+  expect deny "cd $W && rm $R/README.md" "cd $W && rm $S/a" "cd $W && rm -rf $W" "cd $W && rm -rf .git"
+}
+
+@test "only a plain opening cd to a literal absolute path in a linked worktree counts" {
+  open_setup
+  mkdir -p "$W/\$x"
+  make_repo "$BASE/elsewhere"
+  expect deny "cd $W; rm src/gen.ts" "cd $W || rm src/gen.ts" 'cd .claude/worktrees/plan && rm src/gen.ts' \
+    "cd ${W#/} && rm $W/src/gen.ts" 'cd $W && rm src/gen.ts' "cd $W/\$x && rm $W/src/gen.ts" \
+    "cd $W/../plan && rm src/gen.ts" "cd $W/../plan && rm $W/src/gen.ts" "cd $BASE/other && rm src/gen.ts" \
+    "cd $BASE/elsewhere && rm a" "cd $R && rm $W/src/gen.ts"
+  # The main checkout is no match from a worktree either: the relative reading stays.
+  export CWD="$W"
+  expect deny "cd $R && rm src/gen.ts"
+}
+
+@test "the reason names the opening cd for a target in a listed worktree" {
+  open_setup
+  local route='open the call with cd <absolute worktree path> &&'
+  expect deny "rm $W/src/gen.ts"
+  [[ "$output" == *"$route"* ]] || false
+  expect deny "git -C $W rm src/gen.ts"
+  [[ "$output" == *"$route"* ]] || false
+  expect deny 'rm .claude/worktrees/plan/src/gen.ts'
+  [[ "$output" == *"$route"* ]] || false
+  expect deny 'rm ../other/a'
+  [[ "$output" != *"$route"* ]] || false
+  [[ "$output" != *'as its own call'* ]] || false
+  # No opening cd reaches the main checkout.
+  export CWD="$W"
+  expect deny "rm $R/README.md"
+  [[ "$output" != *"$route"* ]] || false
 }
 
 @test "G21 reads only Bash" {
