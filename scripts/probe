@@ -4,8 +4,9 @@
 # Usage: probe [--with-passed] [--exclude-tests] WT PATCH -- CMD...
 #        probe [--with-passed] --mutate FILE:LINE WT -- CMD...
 # --with-passed skips the run in WT, for a caller that has just run CMD on this same tree (task-done). The
-# fork's runs stay. The fork shares WT's setup (wt-fork --share-setup); a CMD that fails on a shared fork
-# gets one more fork with worktree.setup run, and that fork gives the verdict.
+# fork's runs stay. The fork shares WT's setup (wt-fork --share-setup). A control run that fails there, or a
+# run that passes with the change in, gets one more fork with worktree.setup run, and that fork gives the
+# verdict.
 # --exclude-tests reverses only the non-test files of PATCH, so a test the patch adds stays in the fork,
 # with its test data, fixtures, snapshots and golden files (is_probe_keep); without it, a PATCH that
 # touches one is inconclusive. A command word that names a path in WT must still exist in the fork, and a
@@ -124,122 +125,141 @@ make_fork() {
   fi
   fork=$made
 }
-make_fork --share-setup
-
-control=0
-(cd "$fork" && "$@") > "$logs/control.log" 2>&1 || control=$?
-if [ "$control" != 0 ] && [ "$(cat "$(git -C "$fork" rev-parse --path-format=absolute --git-dir)/kern-setup-done")" = 'setup: shared' ]; then
+# refork: swap the shared fork for one with worktree.setup run. Clearing shared bounds this to one retry.
+refork() {
   git -C "$wt" worktree remove --force "$fork" > /dev/null 2>&1 || true
   make_fork
-  control=0
-  (cd "$fork" && "$@") > "$logs/control.log" 2>&1 || control=$?
-fi
-if [ "$control" != 0 ]; then
-  echo "probe: inconclusive (the command fails in the fork before any change is reversed; missing ignored files or setup?)"
-  tail -n 5 "$logs/control.log" >&2
-  exit 3
-fi
+  shared=0
+}
 
-if [ -n "$mutate" ]; then
-  # The write below follows symlinks, so FILE and each link it leads through must end inside the fork.
-  # The 20-link limit sits below the kernels' own (32 on macOS, 40 on Linux), so a test can reach it.
-  mpath=$fork/$mfile hops=0
-  while [ -L "$mpath" ] && [ "$hops" -lt 20 ]; do
-    link=$(readlink "$mpath")
-    hops=$((hops + 1))
-    case "$link" in /*) mpath=$link ;; *) mpath=${mpath%/*}/$link ;; esac
-  done
-  if [ -L "$mpath" ]; then
-    echo "probe: inconclusive ($mfile: symlink chain does not end within 20 links)"
+# attempt CMD...: on the fork, CMD passes, the change goes in, and CMD runs again; survived=1 when that run
+# passes too. A control run that fails on a shared fork starts over on a fork with setup.
+attempt() {
+  if ! (cd "$fork" && "$@") > "$logs/control.log" 2>&1; then
+    if [ "$shared" = 1 ]; then
+      refork
+      attempt "$@"
+      return
+    fi
+    echo "probe: inconclusive (the command fails in the fork before any change is reversed; missing ignored files or setup?)"
+    tail -n 5 "$logs/control.log" >&2
     exit 3
   fi
-  mdir=$(cd -P "${mpath%/*}" 2> /dev/null && pwd -P) || mdir=''
-  case "$mdir/" in "$fork"/*) inside=1 ;; *) inside=0 ;; esac
-  if [ "$inside" = 0 ]; then
-    echo "probe: inconclusive ($mfile resolves through a symlink outside the fork)"
-    exit 3
-  fi
-  # Invert the first operator found on the line, in this order; a word must stand alone. With none, drop
-  # the first negation: a ! not before = and not after a name character or a closing bracket, so
-  # if (!ok) becomes if (ok) while x!.y and != stay. A ! beside another ! is never dropped, so a!!.b,
-  # xs !! 0 and !!x are inconclusive, not a broken build read as caught. A lone ! after punctuation
-  # inside a string, a regex or a shebang can still be dropped. With no ! on the line, a bare condition is
-  # wrapped in !( ): the whole of if (COND), else the name, call or index before a ? with a blank on each
-  # side, so a?.b and a ?? b stay. A loop stays out: its inverse can run for ever.
-  if ! awk -v ln="$mline" '
-    function word(s, w,   i, b, a) {
-      i = index(s, w); if (!i) return 0
-      b = (i == 1) ? "" : substr(s, i - 1, 1); a = substr(s, i + length(w), 1)
-      return (b !~ /[A-Za-z0-9_]/ && a !~ /[A-Za-z0-9_]/) ? i : 0
-    }
-    # negate(s, from, upto): s with the text between the two positions wrapped in !( ).
-    function negate(s, from, upto) { return substr(s, 1, from - 1) "!(" substr(s, from, upto - from + 1) ")" substr(s, upto + 1) }
-    # closer(s, open): the position of the ) that closes the ( at open, or 0.
-    function closer(s, open,   i, c, d) {
-      for (i = open; i <= length(s); i++) {
-        c = substr(s, i, 1)
-        if (c == "(") d++
-        else if (c == ")" && --d == 0) return i
-      }
-      return 0
-    }
-    # operand(s, upto): where the name, call or index that ends at upto starts; upto + 1 for none.
-    function operand(s, upto,   i, c, d) {
-      for (i = upto; i >= 1; i--) {
-        c = substr(s, i, 1)
-        if (c == ")" || c == "]") d++
-        else if (d > 0 && (c == "(" || c == "[")) d--
-        else if (d == 0 && c !~ /[A-Za-z0-9_$.]/) break
-      }
-      return (d > 0) ? upto + 1 : i + 1
-    }
-    NR == ln {
-      n = split("===,!==,==,!=,<=,>=,&&,||, < , > ,true,false", op, ",")
-      split("!==,===,!=,==,>,<,||,&&, >= , <= ,false,true", to, ",")
-      for (k = 1; k <= n; k++) {
-        i = (op[k] ~ /^[a-z]+$/) ? word($0, op[k]) : index($0, op[k])
-        if (i) { $0 = substr($0, 1, i - 1) to[k] substr($0, i + length(op[k])); done = 1; print > "/dev/stderr"; break }
-      }
-      for (i = 1; !done && i <= length($0); i++) {
-        if (substr($0, i, 1) != "!") continue
-        a = substr($0, i + 1, 1); b = (i == 1) ? "" : substr($0, i - 1, 1)
-        # a == "=" is defensive: the operator loop already took a line with !=.
-        if (a == "=" || a == "" || a == "!" || b ~ /[]A-Za-z0-9_)}!]/) continue
-        $0 = substr($0, 1, i - 1) substr($0, i + 1); done = 1; print > "/dev/stderr"
-      }
-      if (!done && !index($0, "!")) {
-        i = word($0, "if")
-        if (i) {
-          for (i += 2; substr($0, i, 1) == " "; i++) continue
-          if (substr($0, i, 1) == "(" && (a = closer($0, i)) > i + 1) { $0 = negate($0, i + 1, a - 1); done = 1 }
-        }
-        if (!done && (a = index($0, " ? ")) > 1 && (i = operand($0, a - 1)) < a) { $0 = negate($0, i, a - 1); done = 1 }
-        if (done) print > "/dev/stderr"
-      }
-    }
-    { print }
-    END { exit done ? 0 : 1 }' "$fork/$mfile" > "$logs/mutated" 2> "$logs/mutated-line"; then
-    echo "probe: inconclusive (no condition to invert on $mfile:$mline)"
-    exit 3
-  fi
-  cat "$logs/mutated" > "$fork/$mfile"
-else
-  # --whitespace=nowarn: the user's apply.whitespace must not change or refuse the reversed tree.
-  if ! git -C "$fork" apply -R --whitespace=nowarn --check ${excludes[@]+"${excludes[@]}"} "$patch" 2> "$logs/apply.err"; then
-    echo "probe: inconclusive (the patch does not reverse-apply: $(head -n 1 "$logs/apply.err"))"
-    exit 3
-  fi
-  git -C "$fork" apply -R --whitespace=nowarn ${excludes[@]+"${excludes[@]}"} "$patch"
-  for a in "$@"; do
-    case "$a" in -* | */) continue ;; esac
-    if [ -e "$wt/$a" ] && [ ! -e "$fork/$a" ]; then
-      echo "probe: inconclusive (the command names $a, which the reversed fork lacks)"
+
+  if [ -n "$mutate" ]; then
+    # The write below follows symlinks, so FILE and each link it leads through must end inside the fork.
+    # The 20-link limit sits below the kernels' own (32 on macOS, 40 on Linux), so a test can reach it.
+    mpath=$fork/$mfile hops=0
+    while [ -L "$mpath" ] && [ "$hops" -lt 20 ]; do
+      link=$(readlink "$mpath")
+      hops=$((hops + 1))
+      case "$link" in /*) mpath=$link ;; *) mpath=${mpath%/*}/$link ;; esac
+    done
+    if [ -L "$mpath" ]; then
+      echo "probe: inconclusive ($mfile: symlink chain does not end within 20 links)"
       exit 3
     fi
-  done
-fi
+    mdir=$(cd -P "${mpath%/*}" 2> /dev/null && pwd -P) || mdir=''
+    case "$mdir/" in "$fork"/*) inside=1 ;; *) inside=0 ;; esac
+    if [ "$inside" = 0 ]; then
+      echo "probe: inconclusive ($mfile resolves through a symlink outside the fork)"
+      exit 3
+    fi
+    # Invert the first operator found on the line, in this order; a word must stand alone. With none, drop
+    # the first negation: a ! not before = and not after a name character or a closing bracket, so
+    # if (!ok) becomes if (ok) while x!.y and != stay. A ! beside another ! is never dropped, so a!!.b,
+    # xs !! 0 and !!x are inconclusive, not a broken build read as caught. A lone ! after punctuation
+    # inside a string, a regex or a shebang can still be dropped. With no ! on the line, a bare condition is
+    # wrapped in !( ): the whole of if (COND), else the name, call or index before a ? with a blank on each
+    # side, so a?.b and a ?? b stay. A loop stays out: its inverse can run for ever.
+    if ! awk -v ln="$mline" '
+      function word(s, w,   i, b, a) {
+        i = index(s, w); if (!i) return 0
+        b = (i == 1) ? "" : substr(s, i - 1, 1); a = substr(s, i + length(w), 1)
+        return (b !~ /[A-Za-z0-9_]/ && a !~ /[A-Za-z0-9_]/) ? i : 0
+      }
+      # negate(s, from, upto): s with the text between the two positions wrapped in !( ).
+      function negate(s, from, upto) { return substr(s, 1, from - 1) "!(" substr(s, from, upto - from + 1) ")" substr(s, upto + 1) }
+      # closer(s, open): the position of the ) that closes the ( at open, or 0.
+      function closer(s, open,   i, c, d) {
+        for (i = open; i <= length(s); i++) {
+          c = substr(s, i, 1)
+          if (c == "(") d++
+          else if (c == ")" && --d == 0) return i
+        }
+        return 0
+      }
+      # operand(s, upto): where the name, call or index that ends at upto starts; upto + 1 for none.
+      function operand(s, upto,   i, c, d) {
+        for (i = upto; i >= 1; i--) {
+          c = substr(s, i, 1)
+          if (c == ")" || c == "]") d++
+          else if (d > 0 && (c == "(" || c == "[")) d--
+          else if (d == 0 && c !~ /[A-Za-z0-9_$.]/) break
+        }
+        return (d > 0) ? upto + 1 : i + 1
+      }
+      NR == ln {
+        n = split("===,!==,==,!=,<=,>=,&&,||, < , > ,true,false", op, ",")
+        split("!==,===,!=,==,>,<,||,&&, >= , <= ,false,true", to, ",")
+        for (k = 1; k <= n; k++) {
+          i = (op[k] ~ /^[a-z]+$/) ? word($0, op[k]) : index($0, op[k])
+          if (i) { $0 = substr($0, 1, i - 1) to[k] substr($0, i + length(op[k])); done = 1; print > "/dev/stderr"; break }
+        }
+        for (i = 1; !done && i <= length($0); i++) {
+          if (substr($0, i, 1) != "!") continue
+          a = substr($0, i + 1, 1); b = (i == 1) ? "" : substr($0, i - 1, 1)
+          # a == "=" is defensive: the operator loop already took a line with !=.
+          if (a == "=" || a == "" || a == "!" || b ~ /[]A-Za-z0-9_)}!]/) continue
+          $0 = substr($0, 1, i - 1) substr($0, i + 1); done = 1; print > "/dev/stderr"
+        }
+        if (!done && !index($0, "!")) {
+          i = word($0, "if")
+          if (i) {
+            for (i += 2; substr($0, i, 1) == " "; i++) continue
+            if (substr($0, i, 1) == "(" && (a = closer($0, i)) > i + 1) { $0 = negate($0, i + 1, a - 1); done = 1 }
+          }
+          if (!done && (a = index($0, " ? ")) > 1 && (i = operand($0, a - 1)) < a) { $0 = negate($0, i, a - 1); done = 1 }
+          if (done) print > "/dev/stderr"
+        }
+      }
+      { print }
+      END { exit done ? 0 : 1 }' "$fork/$mfile" > "$logs/mutated" 2> "$logs/mutated-line"; then
+      echo "probe: inconclusive (no condition to invert on $mfile:$mline)"
+      exit 3
+    fi
+    cat "$logs/mutated" > "$fork/$mfile"
+  else
+    # --whitespace=nowarn: the user's apply.whitespace must not change or refuse the reversed tree.
+    if ! git -C "$fork" apply -R --whitespace=nowarn --check ${excludes[@]+"${excludes[@]}"} "$patch" 2> "$logs/apply.err"; then
+      echo "probe: inconclusive (the patch does not reverse-apply: $(head -n 1 "$logs/apply.err"))"
+      exit 3
+    fi
+    git -C "$fork" apply -R --whitespace=nowarn ${excludes[@]+"${excludes[@]}"} "$patch"
+    for a in "$@"; do
+      case "$a" in -* | */) continue ;; esac
+      if [ -e "$wt/$a" ] && [ ! -e "$fork/$a" ]; then
+        echo "probe: inconclusive (the command names $a, which the reversed fork lacks)"
+        exit 3
+      fi
+    done
+  fi
 
-if (cd "$fork" && "$@") > "$logs/without.log" 2>&1; then
+  survived=0
+  if (cd "$fork" && "$@") > "$logs/without.log" 2>&1; then survived=1; fi
+}
+
+make_fork --share-setup
+shared=0
+if [ "$(cat "$(git -C "$fork" rev-parse --path-format=absolute --git-dir)/kern-setup-done")" = 'setup: shared' ]; then shared=1; fi
+attempt "$@"
+# A verdict must not rest on links into WT: through one, as an npm workspace or an editable install leaves,
+# the changed fork runs WT's unchanged code, so a run that passes on a shared fork proves nothing yet.
+if [ "$survived" = 1 ] && [ "$shared" = 1 ]; then
+  refork
+  attempt "$@"
+fi
+if [ "$survived" = 1 ]; then
   if [ -n "$mutate" ]; then echo "probe: mutation survived ($(cat "$logs/mutated-line"))"; else echo "probe: test did not fail with the guard removed"; fi
   exit 1
 fi

@@ -591,3 +591,70 @@ setup() {
   [[ "$output" == *"resolves through a symlink outside the fork"* ]] || false
   [ "$(cat "$WT/node_modules/pkg/index.js")" = 'if (wraps) {' ]
 }
+
+# link_pkg: the shape npm workspaces leave: node_modules/pkg points at the tree that holds it. Linked from WT, it
+# stays WT's on a shared fork, so a reversed run there reads WT's code; worktree.setup gives a fork its own.
+link_pkg() {
+  export KERN_COUNT="$TMP/count"
+  mkdir -p "$REPO/.claude" "$WT/node_modules"
+  ln -s .. "$WT/node_modules/pkg"
+  printf 'worktree.setup: mkdir -p node_modules; ln -s .. node_modules/pkg; printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+}
+
+@test "a reversed run that passes on a shared fork retries with setup, and the verdict is the retry's" {
+  link_pkg
+  printf 'printf x >> "$KERN_COUNT"\nsh node_modules/pkg/check.sh -1 && exit 1\nexit 0\n' > "$WT/test-link.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-link.sh
+  [ "$status" -eq 0 ] || { echo "$output $stderr"; false; }
+  [ "$output" = "probe: fail-then-pass ok" ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  # WT, then the control and reversed runs on the shared fork and on the fork with setup.
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 5 ]
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+  [ "$(readlink "$WT/node_modules/pkg")" = .. ]
+  [ "$(cat "$WT/check.sh")" = '[ "$1" -ge 0 ]' ]
+}
+
+@test "a mutation that survives on a shared fork retries with setup, and the verdict is the retry's" {
+  link_pkg
+  printf '[ "$1" != bad ]\n' > "$WT/gate.sh"
+  printf 'bash node_modules/pkg/gate.sh bad && exit 1\nexit 0\n' > "$WT/test-gate.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.sh:1 "$WT" -- sh test-gate.sh
+  [ "$status" -eq 0 ] || { echo "$output $stderr"; false; }
+  [ "$output" = 'probe: mutation caught ([ "$1" == bad ])' ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  [ "$(cat "$WT/gate.sh")" = '[ "$1" != bad ]' ]
+}
+
+@test "a test that does not cover the change still exits 1 after the retry" {
+  link_pkg
+  printf 'printf x >> "$KERN_COUNT"\nexit 0\n' > "$WT/test-count.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-count.sh
+  [ "$status" -eq 1 ]
+  [ "$output" = "probe: test did not fail with the guard removed" ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 5 ]
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+}
+
+@test "a retry whose control fails is inconclusive, not the shared fork's exit 1" {
+  link_pkg
+  printf 'worktree.setup: touch built.log; printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+  printf '[ -f built.log ] && exit 1\nexit 0\n' > "$WT/test-unbuilt.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-unbuilt.sh
+  [ "$status" -eq 3 ]
+  [[ "${lines[0]}" == "probe: inconclusive (the command fails in the fork before any change is reversed"* ]] || false
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  [ "$(git worktree list | grep -c 'probe-[0-9]')" -eq 0 ]
+}
+
+@test "with nothing shared, a reversed run that passes does not retry" {
+  export KERN_COUNT="$TMP/count"
+  mkdir -p "$REPO/.claude"
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > "$REPO/.claude/kern.local.yml"
+  printf 'printf x >> "$KERN_COUNT"\nexit 0\n' > "$WT/test-count.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-count.sh
+  [ "$status" -eq 1 ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+  [ "$(wc -c < "$KERN_COUNT" | tr -d ' ')" -eq 3 ]
+}
