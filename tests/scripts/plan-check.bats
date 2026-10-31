@@ -324,10 +324,14 @@ full_spec() { # full_spec STATUS APPROVED: a full-form spec with every section t
   pc plan.md
   [ "$status" -eq 1 ]
   says 'Task 1: Files entry src/parse?.js is a glob'
+  sed -i.bak 's#^- Create: `src/parse?.js`$#- Create: `src/{a,b}.js`#' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says 'Task 1: Files entry src/{a,b}.js is a glob'
 }
 
-@test "plan-check takes a path, a line range, a directory form and a bracketed route segment" {
-  for entry in 'src/a.js' 'src/a.js:3-9' 'src/*' 'src/**' 'app/[id]/page.tsx'; do
+@test "plan-check takes a path, a line range, a directory form, a route segment and a brace with no list" {
+  for entry in 'src/a.js' 'src/a.js:3-9' 'src/*' 'src/**' 'app/[id]/page.tsx' 'src/{id}/a.js' 'src/a,b.js'; do
     cp plan.md "plan-$$.md"
     sed -i.bak "s#^- Create: \`src/parse.js:1-20\`\$#- Create: \`$entry\`#" "plan-$$.md"
     pc "plan-$$.md"

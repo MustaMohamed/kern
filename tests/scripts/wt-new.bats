@@ -354,13 +354,17 @@ release_on_origin() {
   [[ "$stderr" == *"path exists"* ]] || false
 }
 
-@test "wt-new --adopt: a plain directory, another branch, a detached worktree and a stale record exit 2" {
+@test "wt-new --adopt: a plain directory, a plain file, another branch, a detached worktree and a stale record exit 2" {
   printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
   mkdir -p "$REPO/.claude/worktrees/feat-af/keep"
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-af --plan "$TMP/plan.md" --adopt
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"path exists"* ]] || false
   [ -d "$REPO/.claude/worktrees/feat-af/keep" ]
+  printf 'x\n' > "$REPO/.claude/worktrees/feat-al"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-al --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [ "$stderr" = "wt: path exists: $REPO/.claude/worktrees/feat-al" ]
   git worktree add --quiet -b other "$REPO/.claude/worktrees/feat-ag" main
   run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ag --plan "$TMP/plan.md" --adopt
   [ "$status" -eq 2 ]

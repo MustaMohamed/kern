@@ -330,11 +330,14 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 
 @test "--no-probe passes the listed types and an empty diff" {
   started
-  for f in README.md notes.txt pkg.json kern.yml ci.yaml cfg.toml; do
+  for f in README.md notes.txt pkg.json kern.yml ci.yaml cfg.toml guide.rst guide.adoc setup.cfg tox.ini \
+    LICENSE LICENSE-MIT LICENSE.txt NOTICE NOTICE.md .gitignore .gitattributes .editorconfig; do
     mkdir -p "$WT/docs"
     printf 'text\n' > "$WT/docs/$f"
   done
   printf 'text\n' > "$WT/README.md"
+  printf 'text\n' > "$WT/LICENSE"
+  printf 'text\n' > "$WT/.editorconfig"
   printf 'a: 1\n' > "$WT/kern.yml"
   T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
   review "$T6"
@@ -345,6 +348,21 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
   printf 'Task 2: start tree=%s at=x\nTask 2: review round=1 tree=%s spec=compliant quality=approved\n' "$T6" "$T6" >> "$L/ledger.md"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 2 "$WT" "$T6" --no-probe "verification task: no code" -- true
   [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+}
+
+@test "--no-probe refuses each name that only looks like a listed one" {
+  started
+  for f in Dockerfile Makefile a.sh rst ini gitignore NOTLICENSE MYNOTICE .gitignored .editorconfig.js a.rst.py; do
+    rm -rf "$WT/odd"
+    mkdir -p "$WT/odd"
+    printf 'x\n' > "$WT/odd/$f"
+    T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+    review "$T6"
+    run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --no-probe "docs" -- true
+    [ "$status" -eq 2 ] || { echo "accepted: $f"; false; }
+    [[ "$stderr" == *"odd/$f"* ]] || false
+  done
+  run ! grep -q '^Task 1: complete' "$L/ledger.md"
 }
 
 @test "--no-probe sees both sides of a rename, an odd path and a name that only ends like a listed type" {
@@ -454,4 +472,81 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
   review "$T6"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --no-probe "probe inconclusive: x" -- true
   [ "$status" -eq 2 ]
+}
+
+@test "probe inconclusive: a new module closes, by the reversed run's words or by the command's" {
+  # lib.sh is new: reversing the patch removes it, so the test cannot run.
+  printf 'exit 0\n' > "$WT/lib.sh"
+  printf 'sh lib.sh || exit 1\necho ran\n' > "$WT/test/check_test.sh"
+  T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  P6=$(bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T0" "$T6" --out "$L/reviews/task-1f.diff" | head -n 1)
+  review "$T6"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --probe "$P6.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"probe: inconclusive (the test did not run without the guard"* ]] || false
+  [ "$(cat "$L/logs/task-1.probe.tree")" = "$T6" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --probe "$P6.patch" -- sh lib.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"probe: inconclusive (the command names lib.sh, which the reversed fork lacks)"* ]] || false
+  [ "$(cat "$L/logs/task-1.probe.tree")" = "$T6" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T6" --no-probe "probe inconclusive: new module" -- sh test/check_test.sh
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+}
+
+@test "probe inconclusive: a patch from another tree opens nothing" {
+  # PKG reached T1. The tree has moved on, so it does not reverse-apply.
+  printf '[ "$1" -ge 0 ] || exit 1\n' > "$WT/check.sh"
+  T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  review "$T5"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T5" --probe "$PKG.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"the patch does not reverse-apply"* ]] || false
+  [ ! -e "$L/logs/task-1.probe.tree" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T5" --no-probe "probe inconclusive: x" -- sh test/check_test.sh
+  [ "$status" -eq 2 ]
+  # A verdict the record takes, on a patch that reached another tree.
+  T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  printf 'echo extra\n' >> "$WT/test/check_test.sh"
+  T7=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T6" "$T7" --out "$L/reviews/task-1g.diff" > /dev/null
+  printf 'echo more\n' >> "$WT/test/check_test.sh"
+  T8=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  review "$T8" 2
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T8" --probe "$L/reviews/task-1g.diff.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"the patch changes only test files"* ]] || false
+  [ ! -e "$L/logs/task-1.probe.tree" ]
+}
+
+@test "probe inconclusive: a failed apply, fork or control opens nothing, even on this tree's own package" {
+  # The package's patch, cut to a change this tree does not hold, with its tree record intact.
+  printf 'diff --git a/none.txt b/none.txt\n--- a/none.txt\n+++ b/none.txt\n@@ -1 +1 @@\n-a\n+b\n' > "$PKG.patch"
+  review "$T1"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$PKG.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"the patch does not reverse-apply"* ]] || false
+  [ ! -e "$L/logs/task-1.probe.tree" ]
+  # An unreadable patch.
+  printf 'this is not a patch\n' > "$PKG.patch"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$PKG.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"cannot read the patch"* ]] || false
+  [ ! -e "$L/logs/task-1.probe.tree" ]
+  # A control run that fails: the fork lacks an ignored file.
+  bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T0" "$T1" --out "$PKG" > /dev/null
+  touch "$WT/only-here.log"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$PKG.patch" -- test -f only-here.log
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"the command fails in the fork"* ]] || false
+  [ ! -e "$L/logs/task-1.probe.tree" ]
+  # A failed fork.
+  mkdir -p "$REPO/.claude"
+  printf 'worktree.setup: exit 7\n' > "$REPO/.claude/kern.local.yml"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$PKG.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"could not fork"* ]] || false
+  [ ! -e "$L/logs/task-1.probe.tree" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "probe inconclusive: x" -- sh test/check_test.sh
+  [ "$status" -eq 2 ]
+  run ! grep -q '^Task 1: complete' "$L/ledger.md"
 }

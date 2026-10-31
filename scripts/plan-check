@@ -8,8 +8,8 @@
 # A file with "### Task N:" headings is a plan; any other file is a spec. A clean spec with status: draft and
 # no form: short also prints one next: line naming define step 11's spec review, still exit 0.
 # Plan checks: frontmatter; Global Constraints, Review Focus and File map; per task Files, Interfaces
-# (Consumes, Produces), Blocked by, Acceptance and a Run:/Expected: pair; no glob in a Files entry but a
-# closing /* or /**; tasks numbered from 1; a task blocked only by earlier tasks; tasks sharing a file or
+# (Consumes, Produces), Blocked by, Acceptance and a Run:/Expected: pair; no glob or brace list in a Files
+# entry but a closing /* or /**; tasks numbered from 1; a task blocked only by earlier tasks; tasks sharing a file or
 # a shared_services entry ordered by Blocked by;
 # a consumed name blocked by its producer; every spec acceptance number covered; no placeholders, long
 # dashes or curly quotes. Structure checks adapted from pstack poteto-mode scripts/check-plan.mjs (MIT).
@@ -141,7 +141,7 @@ field == "files" && /^- (Create|Modify|Test|Delete):/ {
   k = spans($0, sp)
   for (i = 1; i <= k; i++) {
     p = sp[i]; sub(/:[0-9]+(-[0-9]+)?$/, "", p); sub(/\/\*\*?$/, "/", p); nfiles[cur]++; files[cur, nfiles[cur]] = p
-    if (p ~ /[*?]/) problem(NR, "Task " cur ": Files entry " sp[i] " is a glob; name each file, or a directory as dir/*")
+    if (p ~ /[*?]/ || p ~ /\{[^}]*,/) problem(NR, "Task " cur ": Files entry " sp[i] " is a glob; name each file, or a directory as dir/*")
   }
   next
 }

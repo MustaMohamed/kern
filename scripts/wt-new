@@ -84,7 +84,7 @@ if [ "$adopt" = 1 ]; then
   dir=$(wt_dir) || { echo "wt-new: no worktree made while worktree.dir is unknown" >&2; exit 2; }
   if [ -e "$dir/$slug" ]; then
     pick_branch
-    real=$(cd "$dir/$slug" && pwd -P)
+    real=$(cd "$dir/$slug" 2> /dev/null && pwd -P) || real=''
     if registered "$real" "$branch"; then
       printf '%s\n' "$real"
       exit 0
