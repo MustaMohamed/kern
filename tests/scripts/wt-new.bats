@@ -327,3 +327,72 @@ release_on_origin() {
   [ "$status" -eq 0 ]
   [ "$(git -C "$output" rev-parse HEAD)" = "$(git rev-parse main)" ]
 }
+
+@test "wt-new --adopt: an existing worktree on the branch prints its path, exit 0" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ad --plan "$TMP/plan.md"
+  [ "$status" -eq 0 ]
+  made=$output
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ad --plan "$TMP/plan.md"
+  [ "$status" -eq 2 ]
+  # No fetch and no base check: a resume does not stall on a gone origin.
+  git remote set-url origin "$TMP/gone.git"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ad --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+  [ "$output" = "$made" ]
+  [ "$(git worktree list | grep -c feat-ad)" -eq 1 ]
+}
+
+@test "wt-new --adopt takes the branch --branch names" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  made=$(bash "$KERN_ROOT/scripts/wt-new" feat-ae --plan "$TMP/plan.md" --branch team/feat-ae 2> /dev/null)
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ae --plan "$TMP/plan.md" --branch team/feat-ae --adopt
+  [ "$status" -eq 0 ]
+  [ "$output" = "$made" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ae --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"path exists"* ]] || false
+}
+
+@test "wt-new --adopt: a plain directory, a plain file, another branch, a detached worktree and a stale record exit 2" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  mkdir -p "$REPO/.claude/worktrees/feat-af/keep"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-af --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"path exists"* ]] || false
+  [ -d "$REPO/.claude/worktrees/feat-af/keep" ]
+  printf 'x\n' > "$REPO/.claude/worktrees/feat-al"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-al --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [ "$stderr" = "wt: path exists: $REPO/.claude/worktrees/feat-al" ]
+  git worktree add --quiet -b other "$REPO/.claude/worktrees/feat-ag" main
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ag --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  git worktree add --quiet --detach "$REPO/.claude/worktrees/feat-ah" main
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ah --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  # A registered path whose worktree is gone, with a plain directory in its place.
+  stale=$(bash "$KERN_ROOT/scripts/wt-new" feat-ai --plan "$TMP/plan.md" 2> /dev/null)
+  rm -rf "$stale"
+  mkdir -p "$stale"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ai --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+}
+
+@test "wt-new --adopt with a free path makes the worktree as usual" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-aj --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.claude/worktrees/feat-aj" ]
+  [ "$(git -C "$output" rev-parse --abbrev-ref HEAD)" = "kern/feat-aj" ]
+}
+
+@test "wt-new --adopt needs --plan and refuses --detach" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ak --adopt
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == "usage:"* ]] || false
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ak --plan "$TMP/plan.md" --detach --adopt
+  [ "$status" -eq 2 ]
+  [ ! -e "$REPO/.claude/worktrees/feat-ak" ]
+}

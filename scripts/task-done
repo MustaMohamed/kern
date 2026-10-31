@@ -2,10 +2,14 @@
 # Close a task in an execute-plan ledger. Writes the completion line only when all hold: the worktree
 # still snapshots to TREE, the task's last review approved exactly that tree, CMD exits 0 in WT, and
 # the test fails once the change (test files excluded) is reversed on a throwaway fork. The tree and
-# the last review line are read again after CMD and after the probe, and any change refuses. A task with no
-# test to probe (docs, config) names why with --no-probe, and the reason goes into the ledger. An
+# the last review line are read again after CMD and after the probe, and any change refuses. CMD runs once
+# on TREE here: the probe skips its own run in WT (--with-passed), and its fork's runs stay. A task with no
+# test to probe (docs, config) names why with --no-probe, and the reason goes into the ledger; it may change
+# only docs and config paths (no_probe_ok below), from the task's first start line to TREE. An
 # inconclusive probe proves nothing, so it closes nothing: the caller decides, and a change with nothing
-# to reverse closes with --no-probe naming the probe's reason.
+# to reverse closes with --no-probe "probe inconclusive: <why>", any paths, only when the last --probe run
+# on this tree, given the task's whole patch, could not judge the change (logs/task-N.probe.tree holds that
+# tree).
 # Usage: task-done LEDGER N WT TREE (--probe PATCH | --no-probe REASON) -- CMD...
 # Appends: Task N: complete tree=<id> test=<cmd> exit=0 review=approved probe=<ok|skipped (REASON)> last=<line>
 # Exit 2 when a check fails (nothing written); 1 when the probe shows the test passes without the
@@ -72,6 +76,43 @@ recheck() {
 logdir="$(dirname "$ledger")/logs"
 mkdir -p "$logdir"
 log="$logdir/task-$n.log"
+probetree="$logdir/task-$n.probe.tree"
+# What --no-probe may change, by extension or by basename. A Dockerfile is code, so it stays out.
+no_probe_ok='\.(md|txt|json|yml|yaml|toml|rst|adoc|cfg|ini)$|(^|/)((LICENSE|NOTICE)([-.][A-Z0-9][A-Z0-9.+-]*)?|\.gitignore|\.gitattributes|\.editorconfig)$'
+
+# first_start: the tree id on Task N's first start line, or nothing. The first: a later task-start cannot
+# shrink the task's change.
+first_start() {
+  local line
+  line=$(grep "^Task $n: start tree=" "$ledger" | head -n 1 || true)
+  line=${line#"Task $n: start tree="}
+  line=${line%% *}
+  case "$line" in '' | *[!0123456789abcdef]*) ;; *) printf '%s\n' "$line" ;; esac
+}
+
+case "$skip" in
+  '') ;;
+  'probe inconclusive:'*)
+    if [ "$(cat "$probetree" 2> /dev/null)" != "$tree" ]; then
+      echo "task-done: 'probe inconclusive:' needs a --probe run of Task $n's whole patch on tree ${tree:0:7} that could not judge the change; Task $n not recorded" >&2
+      exit 2
+    fi
+    ;;
+  *)
+    # --no-renames lists both sides of a rename and -z leaves a path unquoted, so only the path's own ending
+    # decides.
+    start=$(first_start)
+    [ -n "$start" ] || { echo "task-done: Task $n has no start line with a tree id, so --no-probe cannot see what it changed; run task-start" >&2; exit 2; }
+    paths=$(git -C "$wt" diff-tree -r --no-renames --name-only -z "$start" "$tree" | tr '\0' '\n') ||
+      { echo "task-done: cannot read Task $n's change from start tree ${start:0:7} to ${tree:0:7}" >&2; exit 2; }
+    code=$(printf '%s\n' "$paths" | env LC_ALL=C grep -avE "$no_probe_ok|^\$" || true)
+    if [ -n "$code" ]; then
+      echo "task-done: --no-probe takes only docs and config paths; Task $n changes: $(paste -sd ' ' - <<< "$code")" >&2
+      exit 2
+    fi
+    ;;
+esac
+
 cmd=''
 for a in "$@"; do
   case "$a" in
@@ -93,7 +134,8 @@ recheck "the test command"
 probe="skipped ($skip)"
 if [ -n "$patch" ]; then
   prc=0
-  bash "$here/probe" --exclude-tests "$wt" "$patch" -- "$@" > "$logdir/task-$n.probe.log" 2>&1 || prc=$?
+  rm -f "$probetree"
+  bash "$here/probe" --with-passed --exclude-tests "$wt" "$patch" -- "$@" > "$logdir/task-$n.probe.log" 2>&1 || prc=$?
   # The verdict, then any lines probe adds (after ok, the reversed run's last lines: the evidence).
   cat "$logdir/task-$n.probe.log"
   case "$prc" in
@@ -101,7 +143,24 @@ if [ -n "$patch" ]; then
       probe=ok
       recheck "the probe"
       ;;
-    3) echo "task-done: the probe is inconclusive, so it proves nothing about Task $n; not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 3 ;;
+    3)
+      # Only a change the probe could not judge opens --no-probe: tests only, or a new module or export the
+      # reversed run cannot reach. A failed apply or fork says nothing about the change. Nor does a patch that
+      # is not the task's whole change: a fix round's test edit would hide the code before it. The bytes are
+      # wt-diff's, from the task's first start line to TREE.
+      start=$(first_start)
+      if [ -n "$start" ] && git -C "$wt" diff-tree -r -p --binary --full-index "$start" "$tree" | cmp -s - "$patch"; then
+        case "$(head -n 1 "$logdir/task-$n.probe.log")" in
+          'probe: inconclusive (the patch changes only test files'* | \
+            'probe: inconclusive (the test did not run without the guard:'* | \
+            'probe: inconclusive (the command names '*', which the reversed fork lacks)')
+            printf '%s\n' "$tree" > "$probetree"
+            ;;
+        esac
+      fi
+      echo "task-done: the probe is inconclusive, so it proves nothing about Task $n; not recorded (log: $logdir/task-$n.probe.log)" >&2
+      exit 3
+      ;;
     1) echo "task-done: the test passes with the change reversed, so it does not prove Task $n; not recorded" >&2; exit 1 ;;
     *) echo "task-done: probe exited $prc; Task $n not recorded (log: $logdir/task-$n.probe.log)" >&2; exit 2 ;;
   esac

@@ -94,6 +94,7 @@ write_lines() { local i; for i in $(seq 1 "$2"); do printf 'line %s\n' "$i"; don
   printf 'pr.max_lines: 10\n' > "$REPO/.claude/kern.local.yml"
   write_lines "$WT/b.txt" 17
   T1=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "$T0" > /dev/null
   bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$T1" 1 compliant approved > /dev/null
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "docs only" -- true
   [ "$status" -eq 0 ]
@@ -107,6 +108,7 @@ write_lines() { local i; for i in $(seq 1 "$2"); do printf 'line %s\n' "$i"; don
   FK=$(bash "$KERN_ROOT/scripts/wt-fork" "$WT" size-x-task-1)
   write_lines "$FK/b.txt" 17
   T1=$(bash "$KERN_ROOT/scripts/wt-snap" "$FK")
+  bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "$T0" > /dev/null
   bash "$KERN_ROOT/scripts/task-review" "$L/ledger.md" 1 "$T1" 1 compliant approved > /dev/null
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$FK" "$T1" --no-probe "docs only" -- true
   [ "$status" -eq 0 ]

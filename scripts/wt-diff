@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Review package between two snapshot trees of a worktree. Also writes <package>.patch (binary-safe) for wt-apply.
+# Review package between two snapshot trees of a worktree. Also writes <package>.patch (binary-safe) for
+# wt-apply and <package>.tree, which holds TO_TREE, for wt-apply --tree.
 # Usage: wt-diff WT FROM_TREE [TO_TREE] [--out FILE] [--allow PATH]... [--allow-file FILE]
 # Prints: package path, TO_TREE, then one changed path per line. Exit 3 when the trees are identical.
 # With --allow or --allow-file, a changed path that no entry covers is named on stderr and the exit is 4;
@@ -58,6 +59,7 @@ mkdir -p "$(dirname "$out")"
   git -C "$wt" diff --no-ext-diff --no-textconv --no-color --src-prefix=a/ --dst-prefix=b/ --submodule=short --ignore-submodules=none -U10 "$fromt" "$tot"
 } > "$out"
 git -C "$wt" diff-tree -r -p --binary --full-index "$fromt" "$tot" > "$out.patch"
+printf '%s\n' "$tot" > "$out.tree"
 printf '%s\n%s\n' "$out" "$tot"
 changed=$(git -C "$wt" diff-tree -r --name-only "$fromt" "$tot")
 printf '%s\n' "$changed"

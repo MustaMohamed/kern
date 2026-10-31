@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Detached worktree at SRC_WT's HEAD with SRC_WT's uncommitted state (tracked and untracked) applied.
-# Usage: wt-fork SRC_WT SLUG    Prints the fork path. Exit 3 when the state cannot be applied, 2 when
-# worktree.setup fails; either way the fork is removed. The state moves as a diff-tree patch, which
-# ignores diff.noprefix, textconv and external diff drivers in the user's config.
+# Usage: wt-fork SRC_WT SLUG [--share-setup]    Prints the fork path. Exit 3 when the state cannot be
+# applied, 2 when worktree.setup fails; either way the fork is removed. The state moves as a diff-tree
+# patch, which ignores diff.noprefix, textconv and external diff drivers in the user's config.
+# --share-setup links SRC_WT's setup in place of running worktree.setup (wt_share). With nothing to link, or
+# with a symlink in one of those directories that leads into SRC_WT outside it, nothing is linked and
+# worktree.setup runs. A .worktreeinclude entry below a link is skipped.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
@@ -10,7 +13,9 @@ here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
 . "$here/lib/wt-common.sh"
 
-[ $# -eq 2 ] || { echo "usage: wt-fork SRC_WT SLUG" >&2; exit 2; }
+share=0
+if [ $# -eq 3 ] && [ "$3" = --share-setup ]; then share=1; set -- "$1" "$2"; fi
+[ $# -eq 2 ] || { echo "usage: wt-fork SRC_WT SLUG [--share-setup]" >&2; exit 2; }
 src=$(cd "$1" 2> /dev/null && pwd -P) || { echo "wt-fork: no such directory: $1" >&2; exit 2; }
 slug=$2
 # The letters are listed: a range such as A-Z follows the locale's collation in bash 3.2, and in
@@ -39,8 +44,10 @@ if [ -s "$patch" ] && ! git -C "$path" apply --whitespace=nowarn --binary "$patc
   echo "wt-fork: could not apply the uncommitted state of $src; fork removed" >&2
   exit 3
 fi
+shared=0
+if [ "$share" = 1 ] && wt_share "$src" "$path"; then shared=1; fi
 wt_include "$path"
-if ! wt_setup "$path"; then
+if [ "$shared" = 0 ] && ! wt_setup "$path"; then
   log="$(git -C "$path" rev-parse --path-format=absolute --git-dir)/kern-setup.log"
   tail -n 20 "$log" >&2 2> /dev/null || true
   git -C "$MAIN" worktree remove --force "$path" > /dev/null 2>&1 || true
