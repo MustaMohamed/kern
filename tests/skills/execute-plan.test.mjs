@@ -40,9 +40,9 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // 14,150 since the final review of pilot fix plan 2: step 10's size `Decision:` line carries `lines: <n> (<measure>)`
   // and the `-w` count (so finish-branch step 6 reads them), anchors the ask in the ledger, and writes the line from the
   // Size line's one-PR word when that was already over the limit; step 9 points a verification task's fix round to its two-round cap.
-  // 14,985 since M3 part 1 Task 8 and its fix rounds 1 and 2: steps 5, 8 and 10 keep a run going, the section separates a
+  // 15,200 since M3 part 1 Task 8 and its fix rounds 1 to 3: steps 5, 8 and 10 keep a run going, the section separates a
   // stop from a judgment call and says how a go and an open task end, and a refused path counts as a review, after word cuts.
-  assertMaxBytes(SKILL, 14985);
+  assertMaxBytes(SKILL, 15200);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
   // 1,350 since the final review of pilot fix plan 2: round 2's review is `evidence` too, on the new report, not re-review.
   assertMaxBytes('skills/execute-plan/references/verification.md', 1350);
@@ -99,8 +99,8 @@ export const PINS = {
   8: ['take `tree-after` with `wt-snap`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`',
     'Its first line is `<package>`, beside `<package>.patch`.', "Exit 3 (empty): return the task to the implementer, unless it is a verification task, whose diff is empty by design: review it as `references/verification.md` says.", "Exit 4 names a file outside the task's Files: pause and ask",
     'on a yes append it to `briefs/task-N.files` with a `Decision:` line, on a no return the task to the implementer',
-    "Under autopilot, try each path against a `generated_artifacts` command: remove the path, rerun the command and see it return. That is a yes: retake `tree-after` and rerun `wt-diff`.",
-    "Any other path is a no: save them as `reviews/task-N-r<r>.txt`, record `task-review <ledger> <N> <tree-after> <r> issues needs-fixes` and go to step 9, whose round packages from `tree-before` and reviews in mode `task`: no review saw this tree.",
+    "Under autopilot, try each path against a `generated_artifacts` command: move the path to `kern-dir tmp`'s `task-N/<path>`, rerun the command in `<wt>` and see it return. That is a yes: retake `tree-after` and rerun `wt-diff`.",
+    "Any other path is a no: move it back, save them as `reviews/task-N-r<r>.txt`, opening `Refused paths, no review saw this tree`, record `task-review <ledger> <N> <tree-after> <r> issues needs-fixes` and go to step 9, whose round packages from `tree-before` and reviews in mode `task` (a verification task: `evidence`): no review saw this tree.",
     '`kern:task-reviewer` on `model.reviewer` in mode `task`', 'do not pre-judge findings in the prompt',
     "Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines.", 'Resolve every "cannot verify" item yourself and rule on each "Declined to judge" line',
     'A real gap is a spec issue; add it to that `.txt` as a finding.',
@@ -370,7 +370,13 @@ test('a refused path counts as a review, so r, the cap and resume all see it', (
   // implementer passes and compaction lost the count. The saved file is round 2's "previous round's `.txt`".
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[8].includes('r = 1 + the task\'s review lines'), s[8]);
-  assert.ok(s[8].includes('save them as `reviews/task-N-r<r>.txt`, record `task-review <ledger> <N> <tree-after> <r> issues needs-fixes`'), s[8]);
+  assert.ok(s[8].includes('save them as `reviews/task-N-r<r>.txt`, opening `Refused paths, no review saw this tree`, record `task-review <ledger> <N> <tree-after> <r> issues needs-fixes`'), s[8]);
+  // Task 8 re-review, N4: that line reads like a real review after compaction, and resume hands round r's file on, so
+  // the file's first words stop step 9's default `re-review`.
+  assertContains(RESUME, ["Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`", 'The next round gets that file.']);
+  // N3: a verification task's review is `evidence` in its own reference.
+  assert.ok(s[8].includes('reviews in mode `task` (a verification task: `evidence`)'), s[8]);
+  assertContains('skills/execute-plan/references/verification.md', ['mode `evidence`']);
   assertContains('scripts/task-review', ['# Usage: task-review LEDGER N TREE ROUND SPEC QUALITY', 'case "$spec" in compliant | issues)', 'case "$quality" in approved | needs-fixes)', 'case "$round" in 1 | 2 | 3)']);
   assertContains(RESUME, ['For a task, r is 1 plus its review lines.', '- a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9']);
   // No reviewer saw that tree, so a fix diff alone would leave the task's own change unreviewed, and the refused path's
@@ -379,12 +385,27 @@ test('a refused path counts as a review, so r, the cap and resume all see it', (
   assert.ok(s[10].includes('After fix rounds, remake `<package>` from `tree-before`.'), s[10]);
 });
 
-test('a rerun that writes the same bytes shows nothing, so step 8 removes the path first and retakes the tree', () => {
+test('a rerun that writes the same bytes shows nothing, so step 8 moves the path aside first and retakes the tree', () => {
   // M3 part 1 Task 8 re-review: a rerun of the same bytes leaves `git status` clean, and one of other bytes moves the
   // tree off `tree-after`, so `wt-diff` reuses the old tree and task-done exits 2.
   const s = steps(readDoc(SKILL).body);
   const at = (t) => s[8].indexOf(t);
-  assert.ok(at('remove the path') < at('rerun the command') && at('rerun the command') < at('see it return') && at('see it return') < at('retake `tree-after`') && at('retake `tree-after`') < at('and rerun `wt-diff`'), s[8]);
-  assert.ok(at('remove the path') > 0, s[8]);
+  assert.ok(at('move the path to `kern-dir tmp`') < at('rerun the command in `<wt>`') && at('rerun the command in `<wt>`') < at('see it return') && at('see it return') < at('retake `tree-after`') && at('retake `tree-after`') < at('and rerun `wt-diff`'), s[8]);
+  assert.ok(at('move the path to `kern-dir tmp`') > 0, s[8]);
+  // Task 8 re-review: G21 denies a remove the default layout resolves outside `<wt>`, a same-effect retry stays blocked,
+  // and a removed path that does not return leaves tracked P missing, so the path moves and a no moves it back. The
+  // target carries the task and the path, so two paths with one base name do not collide.
+  assert.ok(!s[8].includes('remove the path'), s[8]);
+  assert.ok(s[8].includes('`task-N/<path>`'), s[8]);
+  assert.ok(at('Any other path is a no: move it back,') > at('see it return'), s[8]);
   assert.ok(!s[8].includes('paths a rerun of that command writes'), s[8]);
+});
+
+test('step 13 names an applied closed task that stayed uncommitted', () => {
+  // M3 part 1 Task 8 re-review, N5: step 10 commits a wave task after step 11, and a red `test.full` at step 11 stops
+  // first. Skipping finish-branch step 8 skips commit's ledger pass, so that task stays dirty and out of the push.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[13].includes('Under autopilot, name each path an applied closed task left uncommitted.'), s[13]);
+  assert.ok(s[11].includes('Then `test.full` there; red: stop.'), s[11]);
+  assert.ok(s[10].includes('(a wave task: after step 11)'), s[10]);
 });

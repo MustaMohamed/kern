@@ -38,9 +38,9 @@ test('commit sections, steps and red flags', () => {
   assert.ok(!raw.includes('$('), 'no command substitution in a prescribed command');
   // 5,328 since M2b Task 17 (raised from 5,200): the Unreleased changelog line, coverage AD24.
   // 5,370 since M3 part 1 Task 6: the pointer line to the run rules, after lossless cuts.
-  // 5,640 since its Task 8 and that task's fix round 1: the no-PR end's proof rule, the line that a stop waits, and both
-  // scoped to autopilot, after a shorter `git add` sentence.
-  assertMaxBytes(SKILL, 5640);
+  // 5,660 since its Task 8 and that task's fix rounds 1 and 3: the no-PR end's proof rule, the line that a stop waits, both
+  // scoped to autopilot, and step 3's `--untracked-files=all`, after a shorter `git add` sentence.
+  assertMaxBytes(SKILL, 5660);
 });
 
 test('commit ledger-tasks reference', () => {
@@ -99,4 +99,11 @@ test('under autopilot a commit stop waits for a typed reply, and only a judgment
   assert.ok(auto.includes('Stops: steps 1 to 4,'), auto);
   // A failed `git add` or `git commit` still reports what it printed.
   assert.ok(auto.includes('`git add` or `git commit` fails: report its output; never `--no-verify`, never another command shape.'), auto);
+});
+
+test('step 3 lists a new directory as files, so `git add -- <files>` keeps G5\'s allow', () => {
+  // M3 part 1 Task 12 review: plain porcelain collapses an untracked directory to `?? src/new/`, the natural
+  // `git add -- src/new/` gets no G5 allow, and the prompt it raises is no longer a stop here.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[3].startsWith('3. Files: read `git -C <toplevel> status --porcelain --untracked-files=all`;'), s[3]);
 });
