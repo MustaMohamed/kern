@@ -20,4 +20,4 @@ Autopilot commits each task as it closes, so complete tasks overlap only in a la
 
 ## Already committed
 
-A complete task whose paths are clean in `git status --porcelain` is reported as already committed, not as a failure.
+A complete task whose paths are clean in `git -C <toplevel> status --porcelain --untracked-files=all` is reported as already committed, not as a failure.

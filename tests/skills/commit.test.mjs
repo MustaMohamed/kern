@@ -106,4 +106,7 @@ test('step 3 lists a new directory as files, so `git add -- <files>` keeps G5\'s
   // `git add -- src/new/` gets no G5 allow, and the prompt it raises is no longer a stop here.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[3].startsWith('3. Files: read `git -C <toplevel> status --porcelain --untracked-files=all`;'), s[3]);
+  // Task 8 fix round 4: plain porcelain shows `?? src/`, so a task's new file under it can read as clean, and an
+  // uncommitted file gets reported as already committed.
+  assertContains(REF, ['A complete task whose paths are clean in `git -C <toplevel> status --porcelain --untracked-files=all` is reported as already committed']);
 });

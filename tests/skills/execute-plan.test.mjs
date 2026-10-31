@@ -372,8 +372,10 @@ test('a refused path counts as a review, so r, the cap and resume all see it', (
   assert.ok(s[8].includes('r = 1 + the task\'s review lines'), s[8]);
   assert.ok(s[8].includes('save them as `reviews/task-N-r<r>.txt`, opening `Refused paths, no review saw this tree`, record `task-review <ledger> <N> <tree-after> <r> issues needs-fixes`'), s[8]);
   // Task 8 re-review, N4: that line reads like a real review after compaction, and resume hands round r's file on, so
-  // the file's first words stop step 9's default `re-review`.
-  assertContains(RESUME, ["Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`", 'The next round gets that file.']);
+  // the file's first words stop step 9's default `re-review`. Task 8 fix round 4: resume says so, since without it a
+  // correct fix shows the refused path as a change, `wt-diff` exits 4, and each round refuses again up to the split stop.
+  assertContains(RESUME, ["Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`", 'The next round gets that file.',
+    "A file opening `Refused paths` takes step 8's no, not step 9's default: the next round packages from `tree-before` and reviews in mode `task` (a verification task: `evidence`)."]);
   // N3: a verification task's review is `evidence` in its own reference.
   assert.ok(s[8].includes('reviews in mode `task` (a verification task: `evidence`)'), s[8]);
   assertContains('skills/execute-plan/references/verification.md', ['mode `evidence`']);
