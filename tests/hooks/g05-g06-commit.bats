@@ -420,6 +420,15 @@ CDS-2465 in the body'"
   expect none g05 "git add -- src/a.ts"
 }
 
+@test "autopilot matches never_commit in any case before it allows git add" {
+  policy 'never_commit: .env, Secrets/*\n'
+  set_autopilot on
+  local c
+  for c in "git add -- DEEP/.ENV" "git add -- SECRETS/a.txt" "git add -- secrets/a.txt"; do
+    expect none g05 "$c" || return 1
+  done
+}
+
 @test "autopilot allows git -C <toplevel> add of named files, as commit runs it" {
   policy 'never_commit: .env\n'
   mkdir -p "$R/src"

@@ -14,7 +14,7 @@ setup() {
   mkdir -p "$TMPDIR" "$R/src" "$BASE/other"
 }
 
-teardown() { rm -rf "$BASE"; }
+teardown() { rm -rf "$BASE" "${ROOT-}"; }
 
 # expect WANT CMD...: G21 alone decides WANT on each CMD, which may hold double quotes and backslashes.
 expect() {
@@ -202,6 +202,162 @@ refused() {
   read_fails awk '*G21T*'
   expect ask 'rm src/a'
   [[ "$output" == *'could not read the command'* ]] || false
+}
+
+@test "a worktree nested in the main checkout owns its paths, as at the default worktree.dir" {
+  W="$R/.claude/worktrees/plan"
+  mkdir -p "$R/.claude/worktrees"
+  git -C "$R" worktree add -q "$W" -b kern/plan
+  git -C "$R" worktree add -q "$R/.claude/worktrees/two" -b kern/two
+  mkdir -p "$W/src"
+  export CWD="$W"
+  expect none 'rm src/gen.ts' "rm $W/src/gen.ts" 'rm -rf build'
+  set_autopilot on
+  expect none 'rm src/gen.ts'
+  set_autopilot off
+  refused "rm $R/README.md" "rm $R/.claude/worktrees/two/a" 'rm ../two/a' 'rm -rf .git' "rm -rf $W"
+}
+
+@test "a link or a move in the same command leaves every target to its own call" {
+  refused 'ln -s ../../other src/l; rm src/l/a' 'ln -s ../other src/l && rm -rf src/l/' \
+    'mv ../other src/o && rm -rf src/o' 'rm src/o/a; mv ../other src/o' 'gln -s ../other src/l; rm src/l/a'
+  expect ask 'ln -s ../other src/l; rm src/l/a'
+  [[ "$output" == *'run the link or move as its own call'* ]] || false
+}
+
+@test "cd is read as the shell runs it, not as the text reads" {
+  refused 'for i in 1 2; do rm a; cd ..; done' 'f() { rm a; }; cd ..; f' "trap 'rm a' EXIT; cd .." \
+    'CDPATH=.. cd other && rm a' 'chdir .. && rm a'
+  ln -s "$R/src" "$BASE/other/l"
+  refused 'cd ../other/l/.. && rm a' 'cd +1 && rm a'
+  mkdir -p "$R/src/lib"
+  ln -s "$R/src/lib" "$BASE/other/m"
+  export CWD="$R/src"
+  refused 'cd ../../other/m; cd ..; rm a'
+  export CWD="$R/src/lib"
+  refused 'for i in 1 2 3 4; do cd ..; done; rm a' 'f() { cd ..; }; f; f; f; f; rm a'
+  export CWD="$R"
+  export CDPATH=..
+  refused 'cd src && rm a'
+}
+
+@test "a find cannot be reworded past G21" {
+  refused 'printf ../other | xargs -I X find X -delete' 'printf ../other | xargs -J % find % -delete' \
+    'parallel -I X find X -delete ::: ../other' "ssh host 'find build -delete'" 'printf x | xargs find' \
+    'find ../other $x' 'find ../other "$x"' 'find ../other -$x' 'find ../other $(printf %s -delete)' \
+    "find ../other -\$'delete'" "find ../other -dele\$'te'" 'find $x' 'find "$@"' 'find . -name $x' \
+    'find . -name "$@"'
+  expect none 'find "$d" -name x' 'find . -name "$x"' 'find ../other -name x' 'find ../other -type f'
+}
+
+@test "the worktree top and WORK/tmp cannot be planted" {
+  git -C "$R" config core.worktree "$BASE"
+  refused 'rm src/a' 'rm ../other/a'
+  git -C "$R" config --unset core.worktree
+  git -C "$R" worktree add -q "$BASE/wt" -b feat
+  export CWD="$BASE/wt"
+  mkdir -p "$R/.kern"
+  ln -s "$BASE/other" "$R/.kern/tmp"
+  refused "rm $R/.kern/tmp/a"
+  rm "$R/.kern/tmp"
+  rmdir "$R/.kern"
+  ln -s "$BASE/other" "$R/.kern"
+  mkdir -p "$BASE/other/tmp"
+  refused "rm $R/.kern/tmp/a"
+}
+
+@test "a worktree spelled in another case is still that worktree" {
+  git -C "$R" worktree add -q "$R/src/wt" -b feat
+  refused 'rm -rf src/WT' 'rm -rf SRC/wt' 'rm SRC/WT/a'
+  git -C "$R" worktree add -q "$TMPDIR/wts" -b feat2
+  refused 'rm -rf "$TMPDIR/WTS"'
+}
+
+@test "the read list holds no word that runs a command" {
+  refused 'rg --pre rm x ../other' 'rg --pre=rm x ../other' "man -P 'rm ../other/a' ls" \
+    "man --pager='rm ../other/a' ls" "man -H'rm ../other/a' ls" "git grep -Orm x" \
+    "git grep --open-files-in-pager=rm x"
+  expect none 'git grep rm ../other' 'git log --grep rm -- ../other'
+}
+
+@test "TMPDIR set by a built name counts as set" {
+  refused 'x=TMP; export "${x}DIR=/etc"; rm "$TMPDIR/x"' 'export $(printf TMP)DIR=/etc; rm "$TMPDIR/x"' \
+    'read -r "$(echo TMP)DIR" <<< /etc; rm "$TMPDIR/x"'
+}
+
+@test "a command in one word, a directory option and the GNU names reach G21" {
+  refused "sudo -s 'rm ../other/a'" "flock /tmp/l -c 'rm ../other/a'" "tmux new -d 'rm ../other/a'" \
+    "nix-shell --run 'rm ../other/a'" "nix-shell --run='rm ../other/a'" "flock /tmp/l -c 'true; rm ../other/a'" \
+    'git --work-tree=../other rm a' 'git --git-dir=../other/.git rm a' 'GIT_WORK_TREE=../other git rm a' \
+    'export GIT_WORK_TREE=../other; git rm a' 'unshare --wd=../other rm a' 'setsid --wd ../other rm a' \
+    'nsenter --wd=../other rm a' 'grm ../other/a' 'grmdir ../other' 'gunlink ../a' 'gshred ../other/a' \
+    'gfind ../other -delete'
+  expect none "git commit -m 'rm ../x'" "gh pr create --draft --title 'rm ../x'"
+}
+
+@test "a zsh qualifier or group and a dot glob are unresolved" {
+  refused 'rm -rf src/lib(:a:h:h:h)' 'rm -rf (src/lib)(:a:h:h)' 'rm -rf (../other)' 'find src/.* -delete' \
+    'rm -rf src/.?' 'rm -rf src/..*' "zsh -c 'rm -rf src/lib(:a:h:h:h)'" "eval 'rm -rf (src/lib)(:a:h:h)'" \
+    "tmux new -d 'rm -rf src/lib(:a:h:h:h)'" 'echo "$(rm -rf src/lib(:a:h:h:h))"'
+  expect none 'rm "a(b)"' 'rm "src/(group)/a"' '(cd src && rm a)' 'f() { rm a; }; f' 'x=(1 2); rm a' \
+    'rm a # see (b)' "git commit -m 'rm (old) files'" "bash -c 'rm \"a(b)\"'" "grep -n 'rm (' src/a"
+}
+
+@test "under a go the worktree is the go's repository" {
+  other="$BASE/repo2"
+  make_repo "$other"
+  mkdir -p "$other/src"
+  main=$(git -C "$R" worktree list --porcelain | sed -n '1s/^worktree //p')
+  key=$(printf '%s' "$main" | git -C "$main" hash-object --stdin)
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: %s\n' "$key" >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  expect none 'rm -rf src'
+  export CWD="$other"
+  expect deny 'rm -rf src'
+}
+
+@test "the reason names the route" {
+  expect ask 'rm ../other/a'
+  [[ "$output" == *'name each target as a literal path inside the worktree, not its top, or in a scratch directory'* ]] || false
+  expect ask 'rm "$tmp"'
+  [[ "$output" == *'run mktemp as its own call'* ]] || false
+}
+
+@test "a scratch path beside the main checkout is outside, unless that directory is the scratch root" {
+  N="$TMPDIR/evals/repo"
+  make_repo "$N"
+  mkdir -p "$TMPDIR/evals/other"
+  export CWD="$N"
+  refused 'rm ../other/a' 'rm -rf ../other'
+  expect none 'rm /tmp/kern-x' 'rm "$TMPDIR/x"'
+  N="$TMPDIR/repo"
+  make_repo "$N"
+  export CWD="$N"
+  expect none 'rm "$TMPDIR/x"'
+  # A scratch root that lies under another one is still a root.
+  ROOT=$(mktemp -d /tmp/kern-g21.XXXXXX)
+  export TMPDIR="$ROOT"
+  N="$ROOT/repo"
+  make_repo "$N"
+  export CWD="$N"
+  expect none 'rm "$TMPDIR/x"'
+}
+
+@test "a worktree inside WORK/tmp stays outside" {
+  git -C "$R" worktree add -q "$BASE/wt" -b feat
+  mkdir -p "$R/.kern/tmp"
+  git -C "$R" worktree add -q "$R/.kern/tmp/fork" -b fork
+  export CWD="$BASE/wt"
+  refused "rm -rf $R/.kern/tmp/fork" "rm $R/.kern/tmp/fork/a"
+  expect none "rm $R/.kern/tmp/x"
+}
+
+@test "a glob directly at a scratch root asks" {
+  refused 'rm -rf /tmp/*' 'rm -rf /private/tmp/*' 'rm -rf "$TMPDIR"/*'
+  git -C "$R" worktree add -q "$BASE/wt" -b feat
+  export CWD="$BASE/wt"
+  refused "rm -rf $R/.kern/tmp/*"
+  expect none 'rm -rf /tmp/kern-x/*'
 }
 
 @test "G21 reads only Bash" {

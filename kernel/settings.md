@@ -120,6 +120,6 @@ A `<file>` is a regular file, not a symlink, inside the main worktree and outsid
 
 The other guards still vote, and the strictest vote wins. G6 denies a commit or push that holds a possible secret or a `never_commit` path. G3 denies a review body that does not open with a `review.taxonomy` label, and an approval of the user's own PR.
 
-G21 judges local deletes in both modes: `rm`, `rmdir`, `unlink`, `shred` and `find -delete`. Every target inside the command's worktree, `.git` aside, or in a scratch directory (`$TMPDIR`, `/tmp`, `/private/tmp`, `WORK/tmp`) passes with no vote. Any other target, or one kern cannot resolve, asks, and autopilot denies it. Another worktree, and a directory that holds one, are outside.
+G21 judges local deletes in both modes: `rm`, `rmdir`, `unlink`, `shred`, their GNU names and `find -delete`. Every target inside the command's worktree, `.git` and its top aside, or in a scratch directory (`$TMPDIR`, `/tmp`, `/private/tmp`, `WORK/tmp`) passes with no vote. Any other target, or one kern cannot resolve, asks, and autopilot denies it. Another worktree is outside, and so is a directory that holds one, unless that is the main checkout around this worktree. A link or move in the same command needs its own call.
 
 `tracker.policy: auto` never covers a delete or another tracker's MCP writes. Chat messages always ask. Merge, deploys and the other floor actions have no allowed shape.

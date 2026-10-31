@@ -258,7 +258,7 @@ _G00_AWK='
       if (c == sq && q == "") { q = sq; continue }
       out = out c
     }
-    return hreev(out)
+    return hreev(out, s)
   }
   # g0_judge(f, k, b): judges the shell b, of family f, at cw_w[k].
   function g0_judge(f, k, b,   s0, s1, src, w) {

@@ -32,6 +32,13 @@ expand() {
   [[ "$output" == *"visual skill, which is not installed"* ]] || false
 }
 
+@test "a broken PATH still records a typed go" {
+  run env PATH=/nonexistent /bin/bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"kern:autopilot","command_args":"go MA-254","command_source":"plugin","prompt":"/kern:autopilot go MA-254"')"
+  [ "$status" -eq 0 ]
+  [ "$(st autopilot)" = on ]
+  [ "$(st go)" = MA-254 ]
+}
+
 @test "an unknown mode word changes nothing and is not echoed" {
   expand kern:mode "terse loud"
   [ "$(st voice)" = normal ]

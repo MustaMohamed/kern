@@ -23,6 +23,13 @@ context_of() {
   [[ "$ctx" != *"Voice: terse"* ]] || false
 }
 
+@test "a broken PATH still injects the kernel" {
+  run env PATH=/nonexistent /bin/bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')"
+  [ "$status" -eq 0 ]
+  ctx=$(context_of "$output")
+  [[ "$ctx" == "# kern "*"(subagent)"* ]] || false
+}
+
 @test "terse voice reaches the subagent" {
   mkdir -p "$CLAUDE_PLUGIN_DATA/sessions"
   printf 'voice: terse\nsurface: auto\nautopilot: off\n' >"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"

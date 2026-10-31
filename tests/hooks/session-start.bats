@@ -65,7 +65,7 @@ ap_on() {
 
 @test "a second startup for the same session id turns autopilot off" {
   # Fail closed: a startup for an id that has state may be a reused id, whose old grant must not carry
-  # over. Known limit: a repeated SessionStart(startup) in one session also turns autopilot off.
+  # over. Known limit: with no live go, a repeated SessionStart(startup) in one session turns autopilot off.
   start startup
   ap_on
   [ "$(sed -n 's/^autopilot: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = on ]

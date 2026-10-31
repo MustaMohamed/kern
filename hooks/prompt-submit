@@ -9,6 +9,9 @@
 # overrides it, so exporting LANG=C changes no locale: it only takes the trigger away from this hook and
 # every command it runs. It comes first, before anything that could crash.
 [ -n "${LANG-}${LC_ALL-}" ] || export LANG=C
+# A hook may start with a PATH that holds no system tool: the system directories go last, so whatever the
+# PATH names still wins, and dirname below finds kern's root.
+export PATH="${PATH:+$PATH:}/usr/bin:/bin"
 KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export KERN_ROOT
 # Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo

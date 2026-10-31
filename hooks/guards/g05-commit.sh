@@ -218,7 +218,8 @@ EOT
 # _g05_add_proven IDX TOKS: the add at IDX, just read by _g05_split and _g01_opts (TOKS) and not broad, may
 # be allowed as the whole Bash call. All hold: _g05_alone; no option but -v; every redirection is quiet;
 # it names at least one path, each relative with no `..` part and not a directory, so never_commit can
-# judge it; G6 finds no path, as the repository names it, on never_commit; _g05_unprotected.
+# judge it; G6 finds no path, as the repository names it, on never_commit, in any case, since a disk may fold
+# it; _g05_unprotected.
 _g05_add_proven() {
   local t p names="" prefix hit
   _g05_alone "$1" || return 1
@@ -245,7 +246,7 @@ EOT
   [ -n "$names" ] || return 1
   # _g06_paths votes on a hit or a list it cannot read. The vote stays in this subshell, and the x shows
   # that its pipe worked.
-  hit=$(_KERN_VOTE=""; _g06_paths "$names"; printf 'x%s' "$_KERN_VOTE")
+  hit=$(shopt -s nocasematch; _KERN_VOTE=""; _g06_paths "$names"; printf 'x%s' "$_KERN_VOTE")
   [ "$hit" = x ] || return 1
   _g05_unprotected
 }
