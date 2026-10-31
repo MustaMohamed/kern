@@ -1,0 +1,11 @@
+[
+  { "owner": "execute-plan", "prompt": "Implement Task 5 (standing cost in tokens) of the plan in this repository, as the plan says. Do not run anything that calls a model: no claude -p, and no runner without --dry-run. Do not commit; leave the work in the working tree and tell me what you would commit." },
+  { "owner": "execute-plan", "prompt": "Implement Task 6 (the kernel-adherence grader) of the plan in this repository, as the plan says. Do not run anything that calls a model: no claude -p, and no runner without --dry-run. Do not commit; leave the work in the working tree and tell me what you would commit." },
+  { "owner": "implement", "prompt": "kern's guard G0 reads $(( as the start of a $( ) command substitution, so under autopilot `echo $(( $(date +%s) - 5 ))` is denied as a command built at run time. Make the guards read $(( ... )) as arithmetic while every $( ) inside it is still read as a command, so `echo $(( $(git push --force origin main) + 1 ))` stays denied. Add bats tests for both. Do not commit; leave the work in the working tree." },
+  { "owner": "define", "prompt": "<ticket> I want to start work on this task" },
+  { "owner": "define", "prompt": "<ticket>, from scratch. This session tests kern: use kern's own routes, not the project's own skills. Start from main and ignore the earlier PRs and their branches. End in a new draft PR." },
+  { "owner": "diagnose", "prompt": "Fix <ticket>: after a refused Save, the Every, count and date messages show one change late. Use kern's own routes for this session, not the project's own skills. Start from main and finish with a draft PR." },
+  { "owner": "define", "prompt": "Build <ticket>: the pay sheet's cycle line under the title. Use kern's own routes for this session, not the project's own skills. Start from main and finish with a draft PR." },
+  { "owner": "define", "prompt": "in file <issue file> I want to find a solution for this" },
+  { "owner": "diagnose", "prompt": "I have a new part of the ticket <ticket>, I finished part 1a & 1b, I want to start part 2, start investigation first, know the bug, know the root cause, don't change anything" }
+]

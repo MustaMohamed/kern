@@ -37,20 +37,20 @@ function loadCases(root) {
   });
 }
 
-// evals/heldout.json: a non-empty array of { owner, prompt }. Missing is an error only when a floor is set; malformed
-// always is. Returns null when there is nothing to rank.
-function loadHeldout(root, required, errors) {
-  const path = join(root, 'evals', 'heldout.json');
+// evals/heldout.json, and evals/heldout-pilot.json (M2b): a non-empty array of { owner, prompt }. Missing is an
+// error only when a floor is set; malformed always is. Returns null when there is nothing to rank.
+function loadHeldout(root, required, errors, file = 'heldout.json') {
+  const path = join(root, 'evals', file);
   if (!existsSync(path)) {
-    if (required) errors.push('evals/heldout.json is missing, so the held-out floor cannot be checked');
+    if (required) errors.push(`evals/${file} is missing, so the held-out floor cannot be checked`);
     return null;
   }
   let held;
   try { held = JSON.parse(readFileSync(path, 'utf8')); }
-  catch (e) { errors.push(`evals/heldout.json: invalid JSON: ${e.message}`); return null; }
-  if (!Array.isArray(held) || !held.length) { errors.push('evals/heldout.json must be a non-empty array of { owner, prompt }'); return null; }
+  catch (e) { errors.push(`evals/${file}: invalid JSON: ${e.message}`); return null; }
+  if (!Array.isArray(held) || !held.length) { errors.push(`evals/${file} must be a non-empty array of { owner, prompt }`); return null; }
   const bad = held.findIndex((h) => typeof h?.owner !== 'string' || typeof h?.prompt !== 'string');
-  if (bad >= 0) { errors.push(`evals/heldout.json entry ${bad} is not { owner, prompt }`); return null; }
+  if (bad >= 0) { errors.push(`evals/${file} entry ${bad} is not { owner, prompt }`); return null; }
   return held;
 }
 
@@ -133,21 +133,23 @@ export function evaluate(root, { minRank1, minHeldout = null }) {
   if (minRank1 !== null && rank1Rate !== null && rank1Rate < minRank1) errors.push(`rank-1 rate ${rank1Rate}% is below the floor ${minRank1}%`);
   if (minRank1 !== null && !positives) errors.push('no case positives to rank, so the rank-1 floor cannot be checked');
 
-  // Held-out organic prompts (evals/heldout.json), frozen by a test: never reworded to pass. Record a
-  // held-out miss; never edit a row or description to win one, or the set stops measuring anything.
-  let heldoutRate = null;
-  const held = loadHeldout(root, minHeldout != null, errors);
-  if (held) {
+  // Held-out organic prompts (evals/heldout.json), and real first prompts from the M2b pilot
+  // (evals/heldout-pilot.json, reported with no floor). Both are frozen by tests: never reworded to pass.
+  // Record a miss; never edit a row or description to win one, or the set stops measuring anything.
+  const heldRate = (held, label) => {
+    if (!held) return null;
     let hits = 0;
     for (const h of held) {
-      if (!owners.some((t) => ownerOf(t.name) === h.owner)) { errors.push(`heldout: no owner "${h.owner}" for "${h.prompt}"`); continue; }
+      if (!owners.some((t) => ownerOf(t.name) === h.owner)) { errors.push(`${label}: no owner "${h.owner}" for "${h.prompt}"`); continue; }
       const r = rank(h.prompt, corpus);
       if (ownerOf(r[0].name) === h.owner && r[0].score > 0) hits++;
     }
-    heldoutRate = Math.floor((hits / held.length) * 100);
-    if (minHeldout != null && heldoutRate !== null && heldoutRate < minHeldout) errors.push(`held-out rank-1 rate ${heldoutRate}% is below the floor ${minHeldout}%`);
-  }
-  return { errors, warnings, rank1Rate, heldoutRate, modelGraded: graded };
+    return Math.floor((hits / held.length) * 100);
+  };
+  const heldoutRate = heldRate(loadHeldout(root, minHeldout != null, errors), 'heldout');
+  if (minHeldout != null && heldoutRate !== null && heldoutRate < minHeldout) errors.push(`held-out rank-1 rate ${heldoutRate}% is below the floor ${minHeldout}%`);
+  const pilotRate = heldRate(loadHeldout(root, false, errors, 'heldout-pilot.json'), 'heldout-pilot');
+  return { errors, warnings, rank1Rate, heldoutRate, pilotRate, modelGraded: graded };
 }
 
 if (isMain(import.meta.url)) {
@@ -181,6 +183,7 @@ if (isMain(import.meta.url)) {
   for (const m of r.modelGraded) console.log(`model-graded, not checked here: ${m.owner}: "${m.prompt}"`);
   console.log(`rank-1 rate: ${r.rank1Rate ?? 'n/a'}% (baseline ${baseline.min_rank1}%, fixed floor ${floors.rank1}%)`);
   if (r.heldoutRate !== null) console.log(`held-out rank-1 rate: ${r.heldoutRate}% (fixed floor ${floors.heldout_rank1}%)`);
+  if (r.pilotRate !== null) console.log(`pilot prompts rank-1 rate: ${r.pilotRate}% (reported, no floor)`);
   if (process.argv.includes('--update-baseline') && !r.errors.length && r.rank1Rate !== null && r.rank1Rate > baseline.min_rank1) {
     writeFileSync(basePath, JSON.stringify({ min_rank1: r.rank1Rate }, null, 2) + '\n');
     console.log(`baseline raised to ${r.rank1Rate}%`);

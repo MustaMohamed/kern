@@ -257,3 +257,16 @@ test('the CLI fails with a message, never a default, when a gate file is missing
     assert.match(r.out, /route-eval: FAILED\n$/);
   }
 });
+
+test('pilot prompts give a reported rate with no floor', () => {
+  const pilot = JSON.stringify([{ owner: 'recall', prompt: 'where did I leave off after the gap' }, { owner: 'diagnose', prompt: 'catch me up' }]);
+  const r = evaluate(fixture({ 'evals/heldout-pilot.json': pilot }), { minRank1: null });
+  assert.equal(r.pilotRate, 50);
+  assert.equal(r.heldoutRate, null);
+  assert.deepEqual(r.errors, []);
+});
+
+test('the pilot prompts are frozen', () => {
+  const sha = createHash('sha256').update(readFileSync(join(ROOT, 'evals', 'heldout-pilot.json'))).digest('hex');
+  assert.equal(sha, 'bb3acbd4941b7ee66717da26eaedc2f9f75d026a418f1b9c73069fde208da2d0', 'evals/heldout-pilot.json is frozen: fix routing, never the prompts');
+});
