@@ -100,13 +100,17 @@ test('run.md holds the stop list row by row, with the stop the plan adds', () =>
 test('run.md says what each stop means and what a stop does', () => {
   const stops = section(RUN, '## The stop list');
   for (const s of ['A run stops only on this list.',
-    "This list loosens nothing else: the stops in this file, a route's run-ending failures, a red required check and the user's stop predicate still stop a run, and the kernel's floor holds, so a floor action is skipped and reported.",
+    "This list loosens nothing else: the stops in this file, a route's run-ending failures, a required check still red after its fix rounds and the user's stop predicate still stop a run.",
+    "The kernel's Autonomy line still holds: an action it keeps for the user's word that this list does not name, such as a force-push to a shared branch, is skipped and reported.",
     'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. Work that does not depend on the answer may finish first.',
     "Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.",
     "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
     'A required check is one the ticket or prove-it names for the change.',
     'When one cannot run, the run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it.',
     'A ticket the run cannot read is a stop']) assert.ok(stops.includes(s), s);
+  // Task 6 review: "a red required check" read against the fix-round rule, and "a floor action" against the stop rows
+  // for merge, deploy and delete, where a run waits. The kernel has no word floor.
+  for (const s of ['a red required check', 'floor']) assert.ok(!stops.includes(s), s);
 });
 
 test('run.md holds the five unblock steps in order, and what makes a route distinct', () => {

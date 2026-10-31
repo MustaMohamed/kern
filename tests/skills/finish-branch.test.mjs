@@ -60,8 +60,8 @@ test('finish-branch sections, steps and red flags', () => {
     'every kern ask is a denial', 'nothing is rebased or discarded, no teardown runs but the stale-check removal in `references/branch-ops.md`',
     'the menu resolves to option 3, or the highest option step 7 left: commit, then the dedup check, then the push and PR',
     'parked: <question>; default: <choice>; why: <one line>', 'a stale base or `rebase first`: no rebase; go on', 'A failed fetch: the last fetched ref.',
-    'The size gate: go on', 'Dedup: per its section.', 'Stray untracked files can park the finish at commit\'s "no files, no commit" default.',
-    '`fix first`, `split` and a failed or unrunnable proven-tree check included',
+    'The size gate or a `split` on size alone: go on, Scope giving the size', 'Dedup: per its section.', 'Stray untracked files can park the finish at commit\'s "no files, no commit" default.',
+    'Any other stop waits for a typed reply, with no push after a failed or unrunnable proven-tree check.',
     '"Tests passed earlier this session"', 'Only a PR at this head stops.', 'Only the typed word `discard` deletes work.',
     'The remote moved, unless this run rebased. Investigate; never a plain force.',
     "whose what opens with size and that quotes the user's one-PR answer settles it: name that answer, the ledger's count and this step's count, and go on.",
@@ -72,7 +72,29 @@ test('finish-branch sections, steps and red flags', () => {
   // 7,200 since pilot fix plan 2's Task 1: step 6 takes execute-plan's ledger answer and never stages to count.
   // 7,650 since pilot fix plan 2's Task 2: step 7's replies in words, step 11's reviews and PR checks.
   // 7,700 since group A fix round 1: step 6 names the ledger's count and this step's count, and step 11 says where `<n>` comes from.
-  assertMaxBytes(SKILL, 7700);
+  // 8,100 since M3 part 1's Task 7: the bounded fix round and how it ends.
+  assertMaxBytes(SKILL, 8100);
+});
+
+test('under autopilot a `fix first` verdict starts a bounded fix round, and a run past the bound pushes and opens no PR', () => {
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  for (const s of ['`fix first` starts a fix round, up to 3:',
+    // A fix changes the tree, and step 6 sizes step 4's tree, so a round proves it again before the review.
+    'fix the findings, then rerun step 4 and self-review in full.',
+    // The first row of run.md's split table. The size row is a default, so it sits with the other defaults.
+    'A `split` from a finding on a line the last round changed stops, and so does no verdict.',
+    'After the third round, or on a required check that cannot run, the run commits, pushes its branch, reports and opens no PR.',
+    'A typed reply that says to open the PR opens it.']) assert.ok(auto.includes(s), s);
+  assert.ok(steps(readDoc(SKILL).body)[5].includes('`fix first`, `split` or no verdict: stop with its report (autopilot: below).'));
+  assertContains('skills/autopilot/references/run.md', ['| `split` from a finding on a line the last round changed |']);
+});
+
+test('under autopilot a stop waits for a typed reply, and only a judgment call that takes a default parks', () => {
+  // Task 6 review: this route said a stop parks and run.md says a stop waits.
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  assert.ok(auto.includes('A judgment call parks as `parked: <question>; default: <choice>; why: <one line>`.'), auto);
+  assert.ok(!auto.includes('A stop parks'), auto);
+  assert.ok(!auto.includes('ends the run'), auto);
 });
 
 test('branch-ops reference: rebase and the proven-tree check', () => {

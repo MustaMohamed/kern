@@ -73,14 +73,15 @@ test('self-review exits, order and dispatches', () => {
     // Task 16o: the later-round split rule is in references/rounds.md (pinned below). Task 17a P10: "a first round
     // never splits" went to fit the cap; rounds.md says it ("`split` cannot apply", pinned below), and step 1 reads it.
     '`split`: a later round, as `references/rounds.md` says.',
-    '`fix first`: a failed or unrun check (step 2 or 7; not the `proof-check: not run` line), an unresolved hit, or a finding in the first two classes', "(the spec lane's Critical and Important count)",
+    '`fix first`: a failed or unrun check (step 2 or 7), an unresolved hit, or a finding in the first two classes', "(the spec lane's Critical and Important count)",
     // Task 17a P10: the restated `rev-parse <baseref>` test went to pay for D19; a diff that names a path already
     // means `<baseref>` differs from `<merge-base>`.
     '`rebase first`: `git -C <wt> diff --name-only <merge-base> <baseref>` names a path the package also changed',
     'or "base not refreshed" is reported', 'self-review never rebases', 'If `fix first` wins, still report a rebase need', 'A lane skip line is reported and does not change the verdict',
     // autopilot
     'never through AskUserQuestion', '`autopilot ON:` reminder', '`kern mode:` line with `autopilot=on`', 'the kernel\'s "Autopilot:" line',
-    'parked: <question>; default: <choice>; why: <one line>', 'a failed fetch (origin exists) goes on with the last fetched ref', 'any `wt-diff` non-zero exit end the run', 'lessons are not written',
+    'parked: <question>; default: <choice>; why: <one line>', 'a failed fetch (origin exists) goes on with the last fetched ref', 'Lessons are not written',
+    'Any other stop brings the data and a recommendation, then waits for a typed reply: a missing base, any `wt-diff` non-zero exit.',
   ]);
 });
 
@@ -237,6 +238,13 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
     'The diff adds an export with no caller yet and nothing wrong in it: no finding names it.']);
 });
 
+test('a later round names its split', () => {
+  // M3 part 1 Task 7: finish-branch stops on a fix-line `split` and goes on from one on size alone, so the verdict names
+  // the reading, and a size `split` still reports what would give `fix first`.
+  const since = section(readDoc(`${REF}/rounds.md`).body, '## Since package');
+  assert.ok(since.includes('A `split` names its reason, size or a fix line; with size, still report any `fix first`.'), since);
+});
+
 test('the skills spec names the finish-branch step that runs self-review', () => {
   // Task 16o review, M5: spec C8 said step 4 after finish-branch moved its self-review read to step 5.
   const n = steps(readDoc('skills/finish-branch/SKILL.md').body).findIndex((l) => l.includes('skills/self-review/SKILL.md'));
@@ -253,7 +261,7 @@ test('the author never clears its own lowered bar: revert it, or fix first until
   const nine = steps(readDoc(SKILL).body)[9];
   assert.ok(nine.includes('or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes), each under Cleared with its check'), nine);
   // A `bar-lowered` hit the user has not said yes to is unresolved, which `fix first` already names.
-  assert.ok(nine.includes('`fix first`: a failed or unrun check (step 2 or 7; not the `proof-check: not run` line), an unresolved hit,'), nine);
+  assert.ok(nine.includes('`fix first`: a failed or unrun check (step 2 or 7), an unresolved hit,'), nine);
   const scan = section(readDoc(`${REF}/claim-checks.md`).body, '## floor-scan');
   // Fix round 1, M3: a yes typed earlier in the session stands. I3: an unstaged revert left HEAD equal to the tree
   // finish-branch step 4 proved, so the push shipped the lowered bar; the verdict now holds until the revert is
@@ -266,7 +274,7 @@ test('the author never clears its own lowered bar: revert it, or fix first until
   assertContains('skills/finish-branch/references/branch-ops.md', ['Push only the proven tree: `git rev-parse HEAD^{tree}` must equal the tree from finish-branch step 4']);
   // The `parked:` line has the form self-review's Stops section and the execute-plan ledger (ledger-format.md) give;
   // lint rule 16 holds a skill's backticked ledger forms to docs/plans/contract.md, so the short form is named.
-  assertContains(SKILL, ['Under autopilot a stop parks as `parked: <question>; default: <choice>; why: <one line>`']);
+  assertContains(SKILL, ['Under autopilot a judgment call parks as `parked: <question>; default: <choice>; why: <one line>`']);
   assertContains('skills/execute-plan/references/ledger-format.md', ['`parked: <question>; default: <choice>; why: <one line>`']);
   assertContains('tests/skills/self-review.acceptance.md', ['The diff lowers a coverage threshold and the author justifies it: the `bar-lowered` hit is not under Cleared, and the verdict is `fix first` until the user types yes for it in chat or a revert is committed with the work\'s files.',
     'A yes typed earlier in the session stands; with it, the hit is under Cleared and the PR body\'s Merge danger names the change.',
@@ -302,22 +310,26 @@ test('self-review proves each acceptance state, reads every reader of moved code
   // Fix round 1, I1: a linked issue, PR text or a plan has no numbered acceptance lines, so proof-check exited 2 and
   // the verdict was `fix first`; and step 4 wrote tracker or PR text under `kern-dir tmp` only after step 2 ran.
   const find = 'Find the spec now, as step 4 says. With one, write `<package>.proofs.md` per `references/proofs.md`.';
-  const run = 'Run `proof-check <spec> <package>.proofs.md` only on a spec with numbered lines under `## Acceptance criteria`: any non-zero exit is a failed check.';
-  for (const t of [find, run, 'For any other spec, check the table by reading, and print `proof-check: not run (<source> has no numbered acceptance lines)`.',
-    'A skipped check counts as failed (`references/claim-checks.md`); that printed line is the one exception.']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
-  assert.ok(s[2].indexOf(find) < s[2].indexOf(run), 'the spec is found before proof-check runs');
+  // M3 part 1 Task 7: two wording rounds did not move `workflow-self-review-proofs`, so the proof check moved into
+  // claim-check, which step 2 always runs.
+  const run = 'Run `floor-scan <package>` and `claim-check <wt> <package>`, adding `--spec <spec> --proofs <package>.proofs.md` with a spec: exit 1 from either is hits, and a proof line among them a failed check;';
+  for (const t of [find, run, 'On `proof-check: n/a`, check the table by reading.', 'A skipped check counts as failed (`references/claim-checks.md`).']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
+  assert.ok(s[2].indexOf(find) < s[2].indexOf(run), 'the spec is found before claim-check runs');
+  assert.ok(!s[2].includes('proof-check <spec>'), 'no separate proof-check run');
   // Final review M6: with no spec, step 2 said nothing, so the proof-check that never ran read as an unrun check and gave
   // `fix first`. "Skip" would sit beside "A skipped check counts as failed", so the step says no proofs are due.
+  // M3 part 1 Task 7: `proof-check: n/a` is a check with nothing to read, so step 9 and the reference need no exception.
   assert.ok(s[2].includes(`${find} No spec: no proofs are due. Run`), s[2]);
-  // Fix round 2, I1: step 9 still gave `fix first` for an unrun step 2 check, so the not-run line still blocked an
-  // issue, PR or plan spec. Step 9 and the reference's skipped-check rule name the same one exception.
-  assert.ok(s[9].includes('`fix first`: a failed or unrun check (step 2 or 7; not the `proof-check: not run` line),'), s[9]);
+  assert.ok(s[9].includes('`fix first`: a failed or unrun check (step 2 or 7),'), s[9]);
+  assert.ok(!readDoc(SKILL).raw.includes('proof-check: not run'), 'n/a replaced the not-run line');
   const skipped = section(readDoc(`${REF}/claim-checks.md`).body, '## A skipped check is a failed check');
-  assert.ok(skipped.includes("The one exception is step 2's `proof-check: not run` line."), skipped);
+  assert.ok(!skipped.includes('exception'), skipped);
+  assertContains(`${REF}/claim-checks.md`, ['With `--spec` it then runs `proof-check`: its lines, or no proofs file, exit 1 and fail the check.',
+    '`proof-check: n/a`: the spec has no numbered acceptance lines.']);
   assert.ok(s[6].includes('look where grep stops. Code moved into a shared piece: read every other reader of the old code; a copy left behind is a finding.'), s[6]);
   assert.ok(s[9].includes('A bug counts only with a caller path that reaches it, as `path:line` steps; none: Cleared as unreachable.'), s[9]);
   assert.ok(s[9].includes("Rule each finding: `fix` inside the spec's Never and Not doing lines, else `ticket` (offered, never filed), or `reject: <citation>`."), s[9]);
-  assert.ok(s[9].includes('A finding with no ruling gives `fix first`. After fixes, a later round (`references/rounds.md`) re-checks the fix diff.'), s[9]);
+  assert.ok(s[9].includes('A finding with no ruling gives `fix first`. After fixes, a later round (`references/rounds.md`) runs every step, the checks the last skipped included, and re-checks the fix diff.'), s[9]);
   assertContains(`${REF}/proofs.md`, ['`proof-check <spec> <proofs>`', '| Line | State | Evidence |', 'A path must exist.', 'never file a proof for a state it does not show',
     'is written `degraded: <what differs>`, and proof-check fails it.']);
   // Final review M3: "one row per line and state" read as a `-` row for each line too, which proof-check flags as
