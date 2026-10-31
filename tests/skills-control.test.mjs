@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
+import { section } from './helpers/md.mjs';
 
 const read = (name) => parseFrontmatter(readFileSync(join(import.meta.dirname, '..', 'skills', name, 'SKILL.md'), 'utf8'));
 
@@ -25,7 +26,7 @@ test('autopilot frontmatter matches spec B2', () => {
     name: 'autopilot',
     description: "Turn this session's autopilot grant on or off, or show what it allows. Only a prompt you type can turn it on.",
     'disable-model-invocation': 'true',
-    'argument-hint': '[on|off|status]',
+    'argument-hint': '[on|off|go <ticket>|status]',
     'allowed-tools': 'Read, Glob, Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *)',
   });
 });
@@ -41,8 +42,115 @@ test('both read the hook line first and never write the state file', () => {
 
 test('autopilot lists the floor and who can turn it on', () => {
   const { body } = read('autopilot');
-  for (const s of ['Merge, deploy, review posting and tracker writes always need the user', 'Only the user, by typing `/kern:autopilot on`']) {
+  for (const s of ['Merge, deploy, review posting and tracker writes always need the user', 'Only the user, by typing `/kern:autopilot on` or `/kern:autopilot go <ticket>`']) {
     assert.ok(body.includes(s), s);
+  }
+});
+
+test('autopilot documents the go: its step, its reach and what a refused go does', () => {
+  const { body } = read('autopilot');
+  const go = body.split('\n6. `go <ticket>`')[1].split('\n\n')[0];
+  assert.match(go, /`kern: go recorded for <ticket>`/);
+  assert.ok(go.includes('Read `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`'), go);
+  assert.match(go, /No such line, or any other hook line about the go, means no go: quote what the hook said, if anything, and start nothing\./);
+  assert.match(go, /The run ends at the draft PR or at a stop under that file's rules, so ask for no stop predicate\./);
+  assert.ok(body.includes('3. `on` or `go <ticket>`, and the hook reported "autopilot denied by <file>"'), 'a denied go names the file');
+  const who = body.split('## Who can turn it on\n')[1];
+  for (const s of ["A go counts as the user's yes for that ticket's spec and plan and nothing else.", 'A second ticket needs a second go.',
+    'It ends when the draft PR opens, autopilot goes off or the session ends.', 'Autopilot itself stays on until the user turns it off.']) assert.ok(who.includes(s), s);
+});
+
+test('autopilot says what may follow an allowed shape, in the words settings.md uses, and covers a bare command (audit B11)', () => {
+  const { body } = read('autopilot');
+  const rule = 'Only `head`, `tail`, `grep` or `cat` with no file argument may follow it, and a redirection may only go to `/dev/null` or copy a file descriptor.';
+  assert.ok(body.includes(rule), 'the skill holds the rule');
+  assert.ok(readFileSync(join(import.meta.dirname, '..', 'kernel', 'settings.md'), 'utf8').includes(rule), 'settings.md holds the same words');
+  assert.ok(body.includes('\n4. `status`, or no argument:'), 'a bare /kern:autopilot reports status, as the hook treats it');
+});
+
+test('autopilot parks only the judgment calls run.md does not stop for', () => {
+  const { body } = read('autopilot');
+  assert.ok(body.includes('Park each judgment call `references/run.md` does not stop for, with the default chosen, and continue the work that does not depend on it.'));
+});
+
+test('the map names the go', () => {
+  const map = readFileSync(join(import.meta.dirname, '..', 'skills', 'help', 'references', 'map.md'), 'utf8');
+  const row = map.split('\n').find((l) => l.startsWith('| `autopilot` |'));
+  assert.ok(row.includes('`/kern:autopilot go <ticket>`') && row.includes('typed only'), row);
+});
+
+const RUN = readFileSync(join(import.meta.dirname, '..', 'skills', 'autopilot', 'references', 'run.md'), 'utf8');
+const lines = (heading) => (section(RUN, heading) ?? '').split('\n');
+
+test('run.md holds the stop list row by row, with the stop the plan adds', () => {
+  const rows = lines('## The stop list').filter((l) => l.startsWith('|'));
+  assert.deepEqual(rows, [
+    '| Autopilot stops for | Autopilot does not stop for |',
+    '|---|---|',
+    '| Merge to main | Reads |',
+    '| Deploy | Tests |',
+    '| Delete | Commits and pushes on its own branch |',
+    '| Spending money | A draft PR on tested or verified changes |',
+    '| A design choice that changes what gets built | |',
+    '| A required check that cannot run | |',
+    '| A ticket the run cannot read | |',
+  ]);
+});
+
+test('run.md says what each stop means and what a stop does', () => {
+  const stops = section(RUN, '## The stop list');
+  for (const s of ['A run stops only on this list.',
+    "This list loosens nothing else: the stops in this file, a route's run-ending failures, a red required check and the user's stop predicate still stop a run, and the kernel's floor holds, so a floor action is skipped and reported.",
+    'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. Work that does not depend on the answer may finish first.',
+    "Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.",
+    "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
+    'A required check is one the ticket or prove-it names for the change.',
+    'When one cannot run, the run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it.',
+    'A ticket the run cannot read is a stop']) assert.ok(stops.includes(s), s);
+});
+
+test('run.md holds the five unblock steps in order, and what makes a route distinct', () => {
+  const unblock = lines('## How a run unblocks itself');
+  assert.deepEqual(unblock.filter((l) => /^\d+\. /.test(l)), [
+    '1. Try a safer route to the same result.',
+    '2. Find the answer in the project, docs, code and ticket, and collect the data needed to understand.',
+    '3. Decide, and record what was chosen and why.',
+    '4. If the decision is on the stop list, stop as above.',
+    '5. After 3 distinct routes, skip the step and record it. If later work depends on that step, stop. A required check is never skipped.',
+  ]);
+  assert.ok(unblock.includes('A route is distinct only if it is a different action. The same target and effect in other words is the same action, and it stays blocked.'));
+});
+
+test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
+  const fix = section(RUN, '## Fix rounds');
+  for (const s of ['A `fix first` verdict starts a fix round in place of ending the run, up to 3 per self-review.',
+    'Each round fixes the findings and runs self-review again in full, including the checks the last round skipped.',
+    'After the third, the run pushes its branch, stops with the report and opens no PR.', 'No verdict also stops.',
+    'One go covers one draft PR.']) assert.ok(fix.includes(s), s);
+  assert.deepEqual(fix.split('\n').filter((l) => l.startsWith('|')).slice(2), [
+    '| `split` from a finding on a line the last round changed | The fixes are not converging: stop with the report |',
+    "| `split` or the size gate on size alone | finish-branch's default: go on, with Scope giving the size |",
+    "| A plan over `scope_threshold` | plan's default: take the split and run the first slice. The report lists the rest, and each needs its own go |",
+  ]);
+});
+
+test('run.md lists every report field, the jobs another skill ran among them', () => {
+  const report = section(RUN, '## The run report');
+  for (const s of ['the ticket and PR', 'each stop', 'each block and the route taken', 'each decision with its why', 'each skipped step', 'each check with its result',
+    'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run is reported as a fail, not as "not run".']) assert.ok(report.includes(s), s);
+  assert.match(RUN, /^These rules cover kern's routes only\. .*`overrides\.<job>`/m);
+});
+
+test('run.md sends long output to a file under kern-dir tmp and reads its tail', () => {
+  // An allowed git or gh shape may only redirect to /dev/null or copy a descriptor, so its output stays out of the rule.
+  assert.ok(section(RUN, '## Long output').includes('Long output from a command that is not an allowed git or gh shape goes to a file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints, and the run reads its tail.'));
+});
+
+test('each route under autopilot points at run.md from its own section', () => {
+  const pointer = 'Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.';
+  for (const name of ['implement', 'execute-plan', 'self-review', 'finish-branch', 'commit', 'diagnose']) {
+    const { body } = read(name);
+    assert.ok((section(body, '## Stops and autopilot') ?? '').split('\n').includes(pointer), name);
   }
 });
 

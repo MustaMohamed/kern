@@ -5,7 +5,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | Skill | Tier | Reached by | Job |
 |---|---|---|---|
 | `mode` | slash | `/kern:mode`, or "go terse", "html mode", "back to normal" | Switch voice and surface for this session |
-| `autopilot` | slash | `/kern:autopilot on`, typed only | Grant this session commits, branch pushes and draft PRs without asking |
+| `autopilot` | slash | `/kern:autopilot on` or `/kern:autopilot go <ticket>`, typed only | Grant this session commits, branch pushes and draft PRs without asking; a go also takes one ticket to a draft PR |
 | `help` | slash | `/kern:help`, `/kern:help setup`, `/kern:help check` | This map, fixes for a run, and project settings |
 | `technical-writing` | path | Kernel row "Prose others read", or `/kern:technical-writing` | Docs, PR bodies, issues and commit messages |
 | `unslop` | slash | The kernel's Reply rule, technical-writing step 5, or `/kern:unslop` | Rules for prose others read |

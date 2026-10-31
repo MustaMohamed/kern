@@ -2,7 +2,7 @@
 name: autopilot
 description: Turn this session's autopilot grant on or off, or show what it allows. Only a prompt you type can turn it on.
 disable-model-invocation: true
-argument-hint: "[on|off|status]"
+argument-hint: "[on|off|go <ticket>|status]"
 allowed-tools: Read, Glob, Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *)
 ---
 
@@ -13,14 +13,16 @@ A per-session grant for unattended runs. kern's prompt hook turns it on only fro
 ## Steps
 1. Read the `kern mode:` line the hook injected this turn. No such line: reply "the hook did not run; autopilot is off". Never write the state file and never report "on" without the hook line.
 2. `on`, and the line says `autopilot=on`: list what is allowed, what is denied and the floor. Say how to stop: `/kern:autopilot off`, "stop autopilot" or `/clear`. Then ask for, or propose, a checkable stop predicate for the run, such as "stop when every task in the plan has a complete ledger line or one is parked".
-3. `on`, and the hook reported "autopilot denied by <file>": name the file and the `autopilot: denied` key. Do not suggest changing it unless the user asks.
-4. `status`: on or off, the settings source of `autopilot`, and the `rebase.push` value.
+3. `on` or `go <ticket>`, and the hook reported "autopilot denied by <file>": name the file and the `autopilot: denied` key. Do not suggest changing it unless the user asks.
+4. `status`, or no argument: on or off, the settings source of `autopilot`, and the `rebase.push` value.
 5. `off`: confirm, then list the `parked:` lines written since autopilot turned on in `WORK/ledgers/*/ledger.md`. Find the directory without creating anything: line 1 of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root` is the main root, and the text before the tab in `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get work_dir .kern` is the work dir. Read `<main root>/<work_dir>/ledgers` only when it already exists. If it does not, say nothing was parked. Never run `kern-dir` here: it creates the directory and edits `.git/info/exclude`.
+6. `go <ticket>`, and the hook printed `kern: go recorded for <ticket>`: Read `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`, then take the ticket to a draft PR by the kernel's Routing table. The run ends at the draft PR or at a stop under that file's rules, so ask for no stop predicate. No such line, or any other hook line about the go, means no go: quote what the hook said, if anything, and start nothing.
 
 ## What autopilot allows
 - Commit on a branch that is not protected, with exactly one `-m` or `-F` and no other option except `-q` or `-v`, when the message passes the convention and attribution checks. kern denies `--amend`, `-a`, `--no-verify`, a pathspec and `git add -A`. With `commit.attribution: none`, the default, write no Co-Authored-By or other attribution trailer, even when Claude Code's attribution reminder asks for one: G5 denies it.
 - Write the commit message with `-m '<text>'`, or write it to a file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir msg` prints and pass that file's absolute path to `git commit -F`. kern cannot check a `$( )` or here-doc message, so it denies one.
 - Run git and gh directly, with no wrapper such as env, sudo, xargs or caffeinate, and no `cd` first. kern denies what it cannot prove.
+- Make each allowed git or gh shape the whole Bash call. Only `head`, `tail`, `grep` or `cat` with no file argument may follow it, and a redirection may only go to `/dev/null` or copy a file descriptor.
 - Spell every command out. kern denies a command it cannot read: a command name built at run time, a shell script it cannot parse, and code piped into a shell. Interpreter code in a file, or a python here-doc, is fine.
 - Stage and commit in separate calls. A `git add` before a commit or push in the same call asks, and autopilot denies it.
 - A gh alias or extension asks, and autopilot denies it. Run the gh command it stands for.
@@ -28,7 +30,9 @@ A per-session grant for unattended runs. kern's prompt hook turns it on only fro
 - Push with `git push --force-with-lease <remote> <current-branch>` only when settings say `rebase.push: autopilot`, the branch is not protected, and every commit on it past the base branch is the user's. kern denies a lease push of any other branch.
 - Open a draft PR from the current branch with `gh pr create --draft` plus `--title`, `--base`, `--fill`, `--fill-first`, `--fill-verbose`, `--dry-run`, `--no-maintainer-edit`, `--body-file` with a file in the repo, or `--head` naming the current branch, after the duplicate check. kern denies it when the head already has an open, merged or closed PR. With `commit.attribution: none`, the body has no attribution footer such as "Generated with Claude Code".
 
-kern denies every other action that would ask, because nobody is there to answer. Merge, deploy, review posting and tracker writes always need the user. Park each judgment call with the default chosen, and continue the work that does not depend on it.
+kern denies every other action that would ask, because nobody is there to answer. Merge, deploy, review posting and tracker writes always need the user. Park each judgment call `references/run.md` does not stop for, with the default chosen, and continue the work that does not depend on it.
 
 ## Who can turn it on
-Only the user, by typing `/kern:autopilot on`. Claude, a subagent, a skill, a background report, a scheduled task and another session cannot.
+Only the user, by typing `/kern:autopilot on` or `/kern:autopilot go <ticket>`. Claude, a subagent, a skill, a background report, a scheduled task and another session cannot.
+
+A go is one line, typed alone in its prompt, naming one ticket. A go counts as the user's yes for that ticket's spec and plan and nothing else. A second ticket needs a second go. It ends when the draft PR opens, autopilot goes off or the session ends. Autopilot itself stays on until the user turns it off.

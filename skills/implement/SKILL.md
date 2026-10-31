@@ -6,8 +6,6 @@ disable-model-invocation: true
 
 # implement
 
-Write production code in slices, each proven by a test seen failing for the right reason.
-
 ## Steps
 
 0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
@@ -41,7 +39,9 @@ Code and tests in the chosen tree; a chat report. `wt-diff` writes a review pack
 
 ## Stops and autopilot
 
-Stops at steps 1, 2, 3, 5 and 8. Under autopilot the steps are the same, RED is never skipped, and a file outside the approved list parks the slice with a `parked:` line.
+Stops at steps 1, 2, 3, 5 and 8. Under autopilot the steps are the same, RED is never skipped, and a file outside the approved list parks the slice.
+
+Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.
 
 ## Red flags
 

@@ -200,12 +200,12 @@ allowed-tools: Read
 name: autopilot
 description: Turn this session's autopilot grant on or off, or show what it allows. Only a prompt you type can turn it on.
 disable-model-invocation: true
-argument-hint: "[on|off|status]"
+argument-hint: "[on|off|go <ticket>|status]"
 allowed-tools: Read
 ---
 ```
 
-**2. Purpose.** A per-session grant that lets an unattended run commit, push its own branch and open draft PRs, and denies everything else that would ask. Reached only by the human typing `/kern:autopilot on|off|status`.
+**2. Purpose.** A per-session grant that lets an unattended run commit, push its own branch and open draft PRs, and denies everything else that would ask. Reached only by the human typing `/kern:autopilot on|off|go <ticket>|status`.
 
 **3. Inputs.** `autopilot` (`allowed`), `rebase.push` (`ask`), `commit.convention`, `commit.attribution` (`none`), `branch.protected`, `pr.dedup` (`on`).
 
@@ -214,15 +214,16 @@ allowed-tools: Read
 2. Any settings layer with `autopilot: denied`: state stays off; inject "autopilot denied by <file>". [approved]
 3. `off`, or a prompt-initial "stop autopilot", turns it off. Turning off is always allowed. [CV caveman-parse.js:250-260 durable off]
 4. State `autopilot: on`, `since: <iso time>`. Reset on `startup` and `clear`; kept on `compact` and `resume`. [approved]
-5. While on, each prompt carries: "autopilot ON: commit on a non-protected branch with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or $( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly, commands spelled out: no wrapper, no cd, no run-time-built name, no unparseable shell script, no code piped to a shell, no gh alias; git add in its own call, before the commit; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls." [M1 close: names the shapes the guards prove]
+5. While on, each prompt carries: "autopilot ON: commit on a non-protected branch with exactly one -m '<msg>' or -F <file> in the repo, no here-doc or $( ) message, when convention and attribution checks pass (no git add -A); push the current non-protected branch as git push [-u] <remote> <current-branch>, both named; draft PR after dedup; run git and gh directly, commands spelled out: no wrapper, no cd, no run-time-built name, no unparseable shell script, no code piped to a shell, no gh alias; git add in its own call, before the commit; lease push only if rebase.push=autopilot; every other ask is denied; merge, deploy, review posting, tracker writes need the user; park judgment calls not on the stop list." [M1 close: names the shapes the guards prove]
 6. The dispatcher reads `autopilot_on` (settings allowed and state on) once and applies it to every guard. G16 protects the state. [approved]
 
 **4. Steps**
 1. Read the injected `kern mode:` line. None: "the hook did not run; autopilot is off". **Never write the state file; never report "on" without the hook line.** [approved; D6]
 2. `on` accepted: list what is allowed, what is denied, the floor, and how to stop (`/kern:autopilot off` or `/clear`). Ask for, or propose, a checkable stop predicate for the run. [PB autonomous-run:5,11; PS poteto-mode:85-87]
 3. `on` refused by settings: name the file and key. Do not suggest changing it unless asked.
-4. `status`: on or off, since when, settings source, `rebase.push` value.
+4. `status`, or no argument: on or off, since when, settings source, `rebase.push` value.
 5. `off`: confirm; list `parked:` lines from `WORK/ledgers/*/ledger.md` written since `since`. [new]
+6. `go <ticket>` recorded: read `references/run.md`, then take the ticket to a draft PR. No such line, or any other hook line about the go: no go, so quote what the hook said, if anything, and start nothing.
 
 **5. Outputs.** Chat only.
 
@@ -407,7 +408,7 @@ argument-hint: "[plan path] [step|inline|delegate]"
 ---
 ```
 
-**2. Purpose.** Turn an approved plan into verified, reviewed changes, with a record that survives compaction. Reached by the kernel row "executing an agreed plan", or typed `/kern:execute-plan`. The SKILL.md leaves the "Reached by" sentence out to make room for its review dispatches' `run_in_background: false` (Task 16i).
+**2. Purpose.** Turn an approved plan into verified, reviewed changes, with a record that survives compaction. Reached by the kernel row "executing an agreed plan", or typed `/kern:execute-plan`. The SKILL.md leaves the "Reached by" sentence out to make room for its review dispatches' `run_in_background: false` (Task 16i). The SKILL.md leaves the first sentence out to make room for the pointer to the run rules (M3 part 1 Task 6).
 
 **3. Inputs.** `base_branch`, `branch.pattern`, `test.focused`, `test.full`, `typecheck`, `worktree.dir`, `worktree.setup`, `shared_services`, `scope_threshold`, `pr.max_lines` (300), `pr.size_command` (none), `review.rules`, `generated_artifacts`, `parallel.max`, `model.*` (A10). In code, not prose: the approval gate and ledger identity (`ledger-open`), plan structure, ordering and waves (`plan-check`), the out-of-Files pause (`wt-diff --allow-file`, exit 4), the review stamp (`task-review`) and completion only on a reviewed, unchanged, proven tree (`task-done --probe`).
 
@@ -506,7 +507,7 @@ disable-model-invocation: true
 ---
 ```
 
-**2. Purpose.** Write production code in slices, each proven by a test seen failing for the right reason. Reached by the kernel row "One bounded change of 1 or 2 files with an agreed design, or tests for existing code", by `execute-plan` inline mode, by `diagnose` step 7, and by the `implementer` agent, whose brief gives this file's absolute path. The SKILL.md leaves out the second sentence to stay within its 5,500 bytes (M2b Task 17, which routed tests for existing code here, coverage AD47).
+**2. Purpose.** Write production code in slices, each proven by a test seen failing for the right reason. Reached by the kernel row "One bounded change of 1 or 2 files with an agreed design, or tests for existing code", by `execute-plan` inline mode, by `diagnose` step 7, and by the `implementer` agent, whose brief gives this file's absolute path. The SKILL.md leaves out the second sentence to stay within its 5,500 bytes (M2b Task 17, which routed tests for existing code here, coverage AD47). The SKILL.md leaves the first sentence out to make room for the pointer to the run rules (M3 part 1 Task 6).
 
 **3. Inputs.** `test.focused`, `test.full`, `typecheck`, `lint` (detected, source printed), `generated_artifacts`, `scope_threshold`, `branch.protected`. Project test obligations come from the project rules already in context.
 
@@ -558,7 +559,7 @@ argument-hint: "[symptom | failing test]"
 ---
 ```
 
-**2. Purpose.** Cause before code. Reached by the kernel row "bug, failing test or unexpected output" (before any build route), or typed `/kern:diagnose`.
+**2. Purpose.** Cause before code. Reached by the kernel row "bug, failing test or unexpected output" (before any build route), or typed `/kern:diagnose`. The SKILL.md leaves the "Reached by" sentence out to make room for the pointer to the run rules (M3 part 1 Task 6), as define's does.
 
 **3. Inputs.** `test.focused`, `test.full`, `verify.browser`, `protected_targets`, `evidence_agents` (project agents for read-only data, none by default), `model.investigator` (`opus`).
 
@@ -647,7 +648,7 @@ disable-model-invocation: true
 ---
 ```
 
-**2. Purpose.** The author finds what the diff breaks beyond itself and runs every cheap check before anyone else spends tokens. A no-edit request skips no step: the package goes under `kern-dir reviews`, not the user's files, and the built-in lane writes nothing; a request skips a lane only by naming it (Task 16q: on 2026-10-23 kern skipped the built-in lane in 3 of 3 head-to-head review runs, and run 0 skipped every lane, since "those scripts write files", which the prompt's "Do not edit files" ruled out). Reached by the kernel row "review requested" when the diff is the user's own and no PR exists, by `finish-branch` step 5, or typed `/kern:self-review`. The SKILL.md leaves the "Reached by" sentence out to stay within its 7,000 bytes (Task 16o), as plan's and define's do.
+**2. Purpose.** The author finds what the diff breaks beyond itself and runs every cheap check before anyone else spends tokens. A no-edit request skips no step: the package goes under `kern-dir reviews`, not the user's files, and the built-in lane writes nothing; a request skips a lane only by naming it (Task 16q: on 2026-10-23 kern skipped the built-in lane in 3 of 3 head-to-head review runs, and run 0 skipped every lane, since "those scripts write files", which the prompt's "Do not edit files" ruled out). Reached by the kernel row "review requested" when the diff is the user's own and no PR exists, by `finish-branch` step 5, or typed `/kern:self-review`. The SKILL.md leaves the "Reached by" sentence out to stay within its 7,000 bytes (Task 16o), as plan's and define's do. The SKILL.md leaves the first sentence out to make room for the pointer to the run rules (M3 part 1 Task 6).
 
 **3. Inputs.** `base_branch`, `verify.fast`, `test.focused`, `review.rules`, `review.taxonomy`, `review.builtin` (`on`), `review.builtin.self_effort` (`medium`), `review.builtin.max_findings` (15), `lessons`, `scope_threshold`, `spec.source` and `model.reviewer` (`opus`) for the spec lane.
 
@@ -695,7 +696,7 @@ allowed-tools: Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${
 ---
 ```
 
-**2. Purpose.** One clean commit of the right files. Slash: committing is the user's call (D1). Also run by `finish-branch` and, under autopilot only, by `execute-plan`.
+**2. Purpose.** One clean commit of the right files. Slash: committing is the user's call (D1). Also run by `finish-branch` and, under autopilot only, by `execute-plan`. The SKILL.md leaves the first sentence out to make room for the pointer to the run rules (M3 part 1 Task 6).
 
 **3. Inputs.** `commit.convention` (detected), `commit.id_from_branch`, `commit.attribution` (`none`), `commit.policy` (`ask`), `branch.protected`, `never_commit`.
 
@@ -723,7 +724,7 @@ Red flags: the skill ends with a `## Red flags` table (`| Thought | Reality |`, 
 
 The full checklist is `tests/skills/commit.acceptance.md` (M2a), ticked in the M2b pilot.
 
-**8. Sources; size.** AD git-workflow-and-versioning; ADC build.md; SP finishing-a-development-branch; MM-ship 8 and G5. SKILL.md at most 5,328 bytes (raised from 4,200 in M2a Task 24: per-task staging needs its package path, overlap and worktree rules; raised from 5,200 in M2b Task 17: the Unreleased changelog line in step 3, coverage AD24); `references/ledger-tasks.md` at most 2,000 bytes.
+**8. Sources; size.** AD git-workflow-and-versioning; ADC build.md; SP finishing-a-development-branch; MM-ship 8 and G5. SKILL.md at most 5,370 bytes (raised from 4,200 in M2a Task 24: per-task staging needs its package path, overlap and worktree rules; raised from 5,200 in M2b Task 17: the Unreleased changelog line in step 3, coverage AD24; raised from 5,328 in M3 part 1 Task 6: the pointer line to the run rules); `references/ledger-tasks.md` at most 2,000 bytes.
 
 ---
 
@@ -739,7 +740,7 @@ allowed-tools: Bash(git rev-parse *), Bash(gh pr list *), Bash(bash ${CLAUDE_PLU
 ---
 ```
 
-**2. Purpose.** Integrate finished work the user's way, with a fresh base and a reviewer-ready draft PR. Slash: every step ends in an outward choice.
+**2. Purpose.** Integrate finished work the user's way, with a fresh base and a reviewer-ready draft PR. Slash: every step ends in an outward choice. The SKILL.md leaves the first sentence's opening clause out to make room for the pointer to the run rules (M3 part 1 Task 6).
 
 **3. Inputs.** `base_branch`, `branch.protected`, `test.full`, `scope_threshold`, `pr.max_lines` (300), `pr.size_command` (none), `push.policy`, `pr.policy` (`draft-after-approval`), `pr.template` (detected), `pr.dedup` (`on`), `deploy.envs`, `tracker`.
 
