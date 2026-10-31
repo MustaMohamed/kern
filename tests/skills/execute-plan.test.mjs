@@ -40,9 +40,9 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // 14,150 since the final review of pilot fix plan 2: step 10's size `Decision:` line carries `lines: <n> (<measure>)`
   // and the `-w` count (so finish-branch step 6 reads them), anchors the ask in the ledger, and writes the line from the
   // Size line's one-PR word when that was already over the limit; step 9 points a verification task's fix round to its two-round cap.
-  // 14,525 since M3 part 1 Task 8: steps 5, 8 and 10 keep a run going, and the section separates a stop from a judgment
-  // call and says how a go ends, after word cuts.
-  assertMaxBytes(SKILL, 14525);
+  // 14,705 since M3 part 1 Task 8 and its fix round 1: steps 5, 8 and 10 keep a run going, and the section separates a
+  // stop from a judgment call and says how a go and an open task end, after word cuts.
+  assertMaxBytes(SKILL, 14705);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
   // 1,350 since the final review of pilot fix plan 2: round 2's review is `evidence` too, on the new report, not re-review.
   assertMaxBytes('skills/execute-plan/references/verification.md', 1350);
@@ -99,7 +99,7 @@ export const PINS = {
   8: ['take `tree-after` with `wt-snap`', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before> <tree-after> --out <ledger dir>/reviews/task-N-<tree7>.diff --allow-file <ledger dir>/briefs/task-N.files`',
     'Its first line is `<package>`, beside `<package>.patch`.', "Exit 3 (empty): return the task to the implementer, unless it is a verification task, whose diff is empty by design: review it as `references/verification.md` says.", "Exit 4 names a file outside the task's Files: pause and ask",
     'on a yes append it to `briefs/task-N.files` with a `Decision:` line, on a no return the task to the implementer',
-    'Under autopilot, paths that came from a `generated_artifacts` command are a yes, then rerun `wt-diff`; any other path is a no.',
+    "Under autopilot, with a `generated_artifacts` command, paths a rerun of that command writes are a yes, then rerun `wt-diff`; any other path is a no, counted as step 9's next round.",
     '`kern:task-reviewer` on `model.reviewer` in mode `task`', 'do not pre-judge findings in the prompt',
     "Save its return as `<ledger dir>/reviews/task-N-r<r>.txt`, r = 1 + the task's review lines.", 'Resolve every "cannot verify" item yourself and rule on each "Declined to judge" line',
     'A real gap is a spec issue; add it to that `.txt` as a finding.',
@@ -140,7 +140,7 @@ export const PINS = {
     'When on, steps 1 and 2 and a failed `wt-new` still end the run.', 'A later judgment call parks as `parked: <question>; default: <choice>; why: <one line>` in the ledger and takes its default (', 'a red baseline goes on, naming red-before tests',
     'Any other stop waits for a typed reply, with the data and a recommendation: a stopped task stays open with every task blocked by it, and disjoint tasks continue',
     'Without autopilot `commits: ask` holds: no commit.',
-    'Push and a draft PR only through finish-branch, which a go runs after step 13.', "A task still open at step 13 means push, report, and no PR, its files committed under commit's no-PR end rule; teardown never runs.",
+    'Push and a draft PR only through finish-branch, which a go runs after step 13.', "A task still open at step 13 means push, report, and no PR: `/kern:commit` steps 2 to 6 on the dirty paths in that task's `briefs/task-N.files`, under commit's no-PR end rule, then finish-branch's end path (a wave task: report its fork); teardown never runs.",
     "the size stop takes one PR, why: a split is the user's scope call and a draft can be closed"],
   ledger: ['Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand.',
     "A batch of tasks shares one brief, package and review, and the scripts still write each task's lines.",
@@ -311,10 +311,10 @@ test('under autopilot a stop waits, a judgment call parks, and a generated file 
   assert.ok(!auto.includes('A later stop parks'), auto);
   assert.ok(auto.indexOf('A later judgment call parks') < auto.indexOf('Any other stop waits'), auto);
   // The autopilot rule follows the plain one in each step, so without autopilot exit 4 still asks and exit 3 still stops.
-  assert.ok(s[8].indexOf('pause and ask') < s[8].indexOf('Under autopilot, paths that came from'), s[8]);
+  assert.ok(s[8].indexOf('pause and ask') < s[8].indexOf('Under autopilot, with a `generated_artifacts` command'), s[8]);
   assert.ok(s[10].indexOf('else stop and ask.') < s[10].indexOf('Under autopilot, exit 3'), s[10]);
   assertContains('skills/autopilot/references/run.md', ['| A required check that cannot run |', 'the run pushes its branch, stops with the report and opens no PR.']);
-  assertContains('skills/finish-branch/SKILL.md', ['on a required check that cannot run, the run commits, pushes its branch, reports and opens no PR.']);
+  assertContains('skills/finish-branch/SKILL.md', ['a required check that cannot run: the run commits its work, pushes its branch']);
   // Step 13's own "No push or PR" holds without autopilot; the section says what a go does.
   assert.ok(s[13].includes("No push or PR, no commit beyond step 10's (autopilot: below); offer `/kern:commit` and `/kern:finish-branch`."), s[13]);
   // Task 7 review: finish-branch's end path commits past a red proof, and an open task's end follows the same rule.
@@ -328,4 +328,20 @@ test('step 5 builds {id} from a quoted issue value', () => {
   // and the `#` must not reach a branch name.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[5].includes('`{id}` (the plan\'s `issue:`, with quotes and a leading `#` removed)'), s[5]);
+});
+
+test('a task still open at step 13 commits its own paths, then takes finish-branch\'s end path', () => {
+  // M3 part 1 Task 8 review, I3: commit parked at "no files, no commit", so the push dropped the open task's work; with
+  // no complete task, commit step 3 fell back to `git status` and could stage paths step 8 refused; a wave task's work
+  // sits in its fork; and finish-branch's end path had two cases, so a green proof could open a draft PR.
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  assert.ok(auto.includes("the dirty paths in that task's `briefs/task-N.files`, under commit's no-PR end rule, then finish-branch's end path (a wave task: report its fork)"), auto);
+  assertContains('skills/finish-branch/SKILL.md', ["The end path is a third round still `fix first`, a task still open at execute-plan's step 13, or a required check that cannot run:"]);
+  // "/kern:commit steps 2 to 6" names commit's own steps: Where through the commit call, so step 1's consent and step 7's
+  // report stay out, and step 3 takes the named files.
+  const c = steps(readDoc('skills/commit/SKILL.md').body);
+  assert.match(c[2], /^2\. Where:/);
+  assert.ok(c[3].includes('propose this task\'s files or those named'), c[3]);
+  assert.match(c[6], /^6\. Write the message .*`git -C <toplevel> commit -F <dir>\/commit-msg`/);
+  assertContains('skills/commit/SKILL.md', ['finish-branch and, under autopilot, execute-plan run steps 2 to 6.']);
 });

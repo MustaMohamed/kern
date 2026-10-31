@@ -74,7 +74,8 @@ test('finish-branch sections, steps and red flags', () => {
   // 7,700 since group A fix round 1: step 6 names the ledger's count and this step's count, and step 11 says where `<n>` comes from.
   // 8,100 since M3 part 1's Task 7: the bounded fix round and how it ends.
   // 8,450 since its fix round 1: a red step 4 takes a fix round, and the end path names the gates it passes.
-  assertMaxBytes(SKILL, 8450);
+  // 8,500 since Task 8's fix round 1: the end path's open-task case, and step 2's caller.
+  assertMaxBytes(SKILL, 8500);
 });
 
 test('under autopilot a `fix first` verdict starts a bounded fix round, and a run past the bound pushes and opens no PR', () => {
@@ -89,7 +90,7 @@ test('under autopilot a `fix first` verdict starts a bounded fix round, and a ru
     'A `split` from a finding on a line the last round changed stops, and so does no verdict.',
     // Fix round 1, I1: the user's "Push allowed, and should Stop, PR should at least have a tested or verified the
     // changes". A red proof stopped commit and the Proven tree check, so the design's push never happened.
-    'The end path is a third round still `fix first`, or a required check that cannot run: the run commits its work, pushes its branch, reports each red or unrun check as `fail`, opens no PR and stops.',
+    "The end path is a third round still `fix first`, a task still open at execute-plan's step 13, or a required check that cannot run: the run commits its work, pushes its branch, reports each red or unrun check as `fail`, opens no PR and stops.",
     "A red or unrunnable proof stops neither commit's step 4 nor the Proven tree check there: the path claims nothing.",
     'A typed reply that says to open the PR opens it.']) assert.ok(auto.includes(s), s);
   assert.ok(!auto.includes('After the third round'), auto);

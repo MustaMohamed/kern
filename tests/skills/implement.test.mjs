@@ -27,9 +27,9 @@ test('implement sections, steps and red flags', () => {
   // tests asked for on existing code, after lossless cuts.
   // 5,650 since the pilot fix plan's Task 7: step 8's spec update.
   // 5,800 since Task 7 fix round 1 (I4): step 8 proposes the new line and asks, and parks under autopilot.
-  // 6,060 since M3 part 1 Task 8: autopilot's rules for steps 1, 3 and 5, a go's way to finish-branch and the stop and
-  // park line, after word cuts.
-  assertMaxBytes(SKILL, 6060);
+  // 6,245 since M3 part 1 Task 8 and its fix round 1: autopilot's rules for steps 1, 3 and 5, `{id}`'s source, step 9's
+  // patch path, a go's way to finish-branch and the stop and park line, after word cuts.
+  assertMaxBytes(SKILL, 6245);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
@@ -153,8 +153,10 @@ test('under autopilot implement keeps running: only a stop on the run rules wait
   const auto = section(body, '## Stops and autopilot');
   assert.ok(s[1].includes('ask nothing. Under autopilot, say the line and go on; such a change no approved spec covers is the design-choice stop in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`.'), s[1]);
   // `lint` and `typecheck` go unresolved in a project with neither, so only a required one is the stop.
-  assert.ok(s[3].endsWith('never guess a command. Under autopilot, a required one is a required check that cannot run.'), s[3]);
-  assert.ok(s[5].endsWith('edit production code unasked. Under autopilot, it parks the slice with a `parked:` line.'), s[5]);
+  assert.ok(s[3].endsWith('never guess a command. Under autopilot, a required one is a required check that cannot run; any other parks, and step 7 skips it.'), s[3]);
+  assert.ok(s[7].includes('a command that step 3 could not resolve was asked for there, or parked.'), s[7]);
+  // Task 8 review, M6: finish-branch counts a red step 4 as `fix first`, so the parked test does not stay in the tree.
+  assert.ok(s[5].endsWith('edit production code unasked. Under autopilot, it parks the slice with a `parked:` line and the test is left out of the tree.'), s[5]);
   assert.ok(auto.includes('a file outside the approved list parks the slice. A judgment call that takes a default gets a `parked:` line; any other stop waits for a typed reply, with the data and a recommendation.'), auto);
   assertContains('skills/autopilot/references/run.md', ['| A design choice that changes what gets built |', '| A required check that cannot run |', 'then waits for a typed reply']);
 });
@@ -165,6 +167,17 @@ test('a go that routed straight to implement goes on to finish-branch, and no ca
   // steps of their own after it, and kern:implementer never commits, so only the kernel's row goes on.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[12].endsWith("Do not commit. From the kernel's row under a go, follow `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/SKILL.md` on `<wt>`."), s[12]);
-  assertContains('skills/finish-branch/SKILL.md', ['or autopilot is on. Otherwise stop.', 'the menu resolves to option 3']);
+  // Task 8 review, M8: `<wt>` comes from implement, so finish-branch step 2 takes it before any stale ledger.
+  assertContains('skills/finish-branch/SKILL.md', ['or autopilot is on. Otherwise stop.', 'the menu resolves to option 3', '2. Find the work: a worktree the user or caller named, else']);
   assertContains('kernel/kernel.md', ['| One bounded change of 1 or 2 files with an agreed design, or tests for existing code | Read {KERN}/implement/SKILL.md |']);
+});
+
+test('step 2 strips a quoted id, and step 9 names the patch wt-diff wrote', () => {
+  // M3 part 1 Task 8 review. M7: a bare `#` opens a YAML comment, so `issue:` is quoted, and neither reaches a branch
+  // name. M3: the Outputs sentence that placed the patch went for bytes, so step 9 says where it is.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[2].includes("holds `{id}` (the spec's or plan's `issue:`, with quotes and a leading `#` removed),"), s[2]);
+  assert.ok(s[9].includes('`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before>` (first line: `<package>`)'), s[9]);
+  assert.ok(s[9].includes('scripts/probe --exclude-tests <wt> <package>.patch -- <test command>`'), s[9]);
+  assert.ok(!s[9].includes('<change.patch>'), s[9]);
 });
