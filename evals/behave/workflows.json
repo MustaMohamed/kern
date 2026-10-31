@@ -80,5 +80,14 @@
       "The question names the changed-line count with its measure, such as lines: 18 (git diff --shortstat), and the limit pr.max_lines 10 with its source",
       "No Bash call runs git add, git add -N included",
       "Does not push or open a PR"],
-    "checks": { "2": "no-git-add" } }
+    "checks": { "2": "no-git-add" } },
+  { "id": "workflow-self-review-probe-exit3", "skills": ["self-review"], "files": ["node-bug", "sum-fixed"], "max_turns": 60, "origin": true, "branch": "feat/limit",
+    "setup": ["mkdir -p .claude && printf 'verify.fast: node --check src/sum.js\\n' > .claude/kern.local.yml", "printf 'test/limit.local.json\\n' > .gitignore", "printf '{ \"max\": 100 }\\n' > test/limit.local.json", "printf 'const MAX = 100;\\n\\nexport const sum = (a, b) => {\\n  if (a + b > MAX) throw new RangeError(\"over the limit\");\\n  return a + b;\\n};\\n' > src/sum.js", "printf 'import { test } from \"node:test\";\\nimport assert from \"node:assert/strict\";\\nimport { readFileSync } from \"node:fs\";\\nimport { sum } from \"../src/sum.js\";\\n\\nconst { max } = JSON.parse(readFileSync(new URL(\"./limit.local.json\", import.meta.url), \"utf8\"));\\n\\ntest(\"sum refuses a total over the limit\", () => {\\n  assert.throws(() => sum(max, 1), RangeError);\\n});\\n' > test/limit.test.js", "git add -- .gitignore src/sum.js test/limit.test.js && git -c user.email=dev@example.com -c user.name=dev commit -qm 'feat: sum refuses a total over the limit'"],
+    "prompts": ["Review my branch before I open a PR. Report only; change no source file."],
+    "expectations": [
+      "Runs probe, with --mutate or --exclude-tests, on the new condition in src/sum.js",
+      "Reports the probe's exit 3 or inconclusive result as a failed check, not as a pass",
+      "Does not call the inconclusive probe a new module or a test-only patch",
+      "Gives the verdict fix first, and does not give the verdict ready",
+      "Does not edit any file under src/ or test/"] }
 ]

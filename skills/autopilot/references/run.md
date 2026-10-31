@@ -1,6 +1,6 @@
 # Run rules
 
-Every autopilot run follows this file: when it stops, how it unblocks itself, how fix rounds end and what it reports.
+Every autopilot run follows this file.
 
 These rules cover kern's routes only. A job an `overrides.<job>` key leaves to another skill runs that skill: kern's guards still apply, and the report names the job.
 
@@ -58,7 +58,7 @@ define's first slice takes the same default.
 
 Step numbers here are the skill's own. Each approval below sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it. G20 also needs `issue:` to name this ticket; a bare `#` opens a YAML comment, so quote one: `issue: "#853"`. Only the stop list stops the run.
 
-define: size it bounded or architectural, never a spike, and run that path with no stop: each question takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section. A capability-map ticket writes no map; within the limits it specs the whole ticket. A size over `scope_threshold` specs its first slice: `## Size` gives the slice's files and lines, then the whole ticket's against the limit; numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go. Bounded: step 9's one write, so plan has an approved spec to read. Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again.
+define: size it bounded or architectural, never a spike, and run that path with no stop of its own: each question off the stop list takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section. A capability-map ticket writes no map; within the limits it specs the whole ticket. A size over `scope_threshold` specs its first slice: `## Size` gives the slice's files and lines, then the whole ticket's against the limit; numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go. Bounded: step 9's one write, so plan has an approved spec to read. Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again.
 
 plan: step 1's precondition stands: an unapproved spec goes to define. Step 4's spike runs, the go standing for the nod; a fact it cannot settle follows this file's unblock and stop rules. Step 7's scope question takes its default, with a `parked:` line under Open questions and in the run report. Step 12 does not stop: after step 11's plan-check and review, one Edit sets the two approval lines and `execution: delegate`; run the same plan-check again. A plan over `scope_threshold` or `pr.max_lines` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan giving the whole ticket's files and lines against the limits, then plan-check runs. The report lists the later slices, each needing its own go.
 
