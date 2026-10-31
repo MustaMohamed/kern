@@ -41,9 +41,11 @@ A commit, push or draft PR, per the choice, or a release; a chat report: SHA, br
 
 ## Stops and autopilot
 
-Ask at each stop as a typed reply in chat, never through AskUserQuestion. A G1 or G2 prompt is the confirmation; a declined prompt or a denial stops, reported. `references/push-and-pr.md` says how the policies meet them.
+Ask at each stop as a typed reply in chat, never through AskUserQuestion. A G1 or G2 prompt is the confirmation; a declined prompt or a denial stops, reported.
 
 Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Under autopilot every kern ask is a denial, nothing is rebased or discarded, no teardown runs but the stale-check removal in `references/branch-ops.md`, and the menu resolves to option 3, or the highest option step 7 left: commit, then the dedup check, then the push and PR. A stop parks as `parked: <question>; default: <choice>; why: <one line>`. Defaults: a stale base or `rebase first`: no rebase; go on, the PR body's Merge danger saying so (why: a draft cannot merge; a rebase changes what was proven). A failed fetch: the last fetched ref. The size gate: go on, Scope giving the size (why: a split is the user's scope call; a draft can be closed). Dedup: per its section. Stray untracked files can park the finish at commit's "no files, no commit" default. Any other stop ends the run, `fix first`, `split` and a failed or unrunnable proven-tree check included.
+
+Under autopilot, stops, unblocking and the run report follow skills/autopilot/references/run.md.
 
 ## Red flags
 

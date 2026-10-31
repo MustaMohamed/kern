@@ -7,8 +7,6 @@ argument-hint: "[plan path] [step|inline|delegate]"
 
 # execute-plan
 
-Turn an approved plan into verified, reviewed changes, with a record surviving compaction.
-
 Review needs no commits: a task's change is the diff of its worktree's snapshot trees, `tree-before` at dispatch and `tree-after` at return; a verdict holds for that tree only. Subagents get absolute paths (`${CLAUDE_PLUGIN_ROOT}` resolved) and a named model and effort. Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines. An unnamed script exit stops the run: report its output.
 
 ## Steps
@@ -49,6 +47,8 @@ Review needs no commits: a task's change is the diff of its worktree's snapshot 
 ## Stops and autopilot
 
 Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. When on, steps 1 and 2 and a failed `wt-new` still end the run. A later stop parks as `parked: <question>; default: <choice>; why: <one line>` in the ledger: a question takes its default (the plan's text; a red baseline goes on, naming red-before tests; the size stop takes one PR, why: a split is the user's scope call and a draft can be closed), a stopped task stays open with every task blocked by it, and disjoint tasks continue. One commit per closed task when its checks pass, through `/kern:commit`; G5 allows only `git commit -m` or `-F <file>` on an unprotected branch. Without autopilot `commits: ask` holds: no commit. Push and a draft PR only through finish-branch; teardown never runs. Isolation, serialization, expand and contract, read-only production, the round cap, tests and secrets do not loosen.
+
+Under autopilot, stops, unblocking and the run report follow skills/autopilot/references/run.md.
 
 ## Red flags
 

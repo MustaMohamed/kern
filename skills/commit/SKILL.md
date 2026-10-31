@@ -8,7 +8,7 @@ allowed-tools: Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${
 
 # commit
 
-One clean commit of the right files. finish-branch and, under autopilot, execute-plan run steps 2 to 6.
+finish-branch and, under autopilot, execute-plan run steps 2 to 6.
 
 ## Steps
 
@@ -39,10 +39,12 @@ Commits; a chat report.
 
 Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Stops: steps 1 to 4, and `kern-dir` exits 2, `wt-snap` fails, G5 denies or asks and the user declines, `git add` or `git commit` fails. No kern guard allows `git add`: under autopilot it runs unprompted only where the user's permission settings allow it, else its prompt is a stop. Report its output; never `--no-verify`, never another command shape. A G5 deny naming only attribution or `commit.convention` is no stop: fix it, the subject matching the regex G5 names, and rerun the same `git commit -F` once; a second deny, or one naming another check, stops. Under autopilot any other G5 deny is a denial, never a retry with a looser message, and each stop parks as `parked: <question>; default: <choice>; why: <one line>` committing nothing on that path (defaults: no files, no commit; a failed toplevel, protected branch or detached HEAD, no commit); a protected branch or a detached HEAD never commits. Ledger-task defaults: the reference.
 
+Under autopilot, stops, unblocking and the run report follow skills/autopilot/references/run.md.
+
 ## Red flags
 
 | Thought | Reality |
 |---|---|
 | "I'll commit when the whole plan is done" | A giant commit cannot be reviewed. |
-| "The tests passed earlier" | Prove the tree you commit; several commits get one proof. |
+| "The tests passed earlier" | Prove the tree you commit. |
 | "The check failed, so I'll loosen the message" | A failed check stops; only an attribution or convention deny is retried. |

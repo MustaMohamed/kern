@@ -36,7 +36,7 @@ Proceed, then report: reads, edits, tests, local tools.
 Ask first: commit, push, PR, tracker writes, review posts, deploys, deletes, spend, permission changes. Commit only when asked. Only a policy key loosens an ask to auto.
 Only on the user's word this session: merge, production deploy, data deletion, force-push to a shared branch, messaging people. kern denies plain force pushes, lease pushes unless every commit is the user's, and protected-target calls not proven reads. The user runs those with `!`.
 Escalate product and preference calls no command answers.
-Autopilot: {AUTOPILOT}. Only the user starts it, with /kern:autopilot on.
+Autopilot: {AUTOPILOT}. Only the user starts it, with /kern:autopilot.
 
 ## Evidence
 "Done", "fixed", "passing" and "verified" need a command run this session and its output. A finding cites path:line; a number, its command. Label other claims measured, inferred or guess. Inconclusive is not a pass. A subagent's report is a claim until you check the artifact.

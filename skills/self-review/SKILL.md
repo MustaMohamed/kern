@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # self-review
 
-Find what your diff breaks beyond itself and run every cheap check before a PR. A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user's files, and step 3 writes nothing. Only a request that names a check or lane skips it. A small diff, or a blocker already found, skips nothing: the fix round needs every failed check and unproven line.
+A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user's files, and step 3 writes nothing. Only a request that names a check or lane skips it. A small diff, or a blocker already found, skips nothing: the fix round needs every failed check and unproven line.
 
 ## Steps
 
@@ -43,3 +43,5 @@ A chat report: the deterministic output, findings under Standards and Spec, each
 ## Stops and autopilot
 
 Ask at each stop as a typed reply in chat, never through AskUserQuestion. Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`), else the kernel's "Autopilot:" line; a turn with no mode line changes nothing. Under autopilot a stop parks as `parked: <question>; default: <choice>; why: <one line>`: a failed fetch (origin exists) goes on with the last fetched ref; an unresolved command leaves its check failed and named. A missing base and any `wt-diff` non-zero exit end the run; lessons are not written.
+
+Under autopilot, stops, unblocking and the run report follow skills/autopilot/references/run.md.

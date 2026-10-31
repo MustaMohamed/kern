@@ -158,7 +158,7 @@ test('the kernel\'s safety lines are pinned: every Autonomy line, the consent li
     'Ask first: commit, push, PR, tracker writes, review posts, deploys, deletes, spend, permission changes. Commit only when asked. Only a policy key loosens an ask to auto.',
     "Only on the user's word this session: merge, production deploy, data deletion, force-push to a shared branch, messaging people. kern denies plain force pushes, lease pushes unless every commit is the user's, and protected-target calls not proven reads. The user runs those with `!`.",
     'Escalate product and preference calls no command answers.',
-    'Autopilot: {AUTOPILOT}. Only the user starts it, with /kern:autopilot on.',
+    'Autopilot: {AUTOPILOT}. Only the user starts it, with /kern:autopilot.',
   ]);
   // Audit B13 (the user's "Allow memory", 2026-10-22): an unscoped "Never add a rule or lesson on your own." collided
   // with Claude Code's auto memory, which saves a lesson on each correction. The ban covers CLAUDE.md, rules and skills.
@@ -189,7 +189,7 @@ test('the safety lines keep their anchor terms, so a rewording that drops a rule
   for (const term of ['merge', 'production deploy', 'data deletion', 'force-push to a shared branch', 'messaging people']) assert.ok(floor[0].includes(term), `the user's-word line names ${term}`);
   const autopilot = autonomy.filter((l) => l.startsWith('Autopilot:'));
   assert.equal(autopilot.length, 1, 'one Autopilot line');
-  assert.ok(autopilot[0].includes('Only the user starts it') && autopilot[0].includes('/kern:autopilot on'), autopilot[0]);
+  assert.ok(autopilot[0].includes('Only the user starts it') && autopilot[0].includes('/kern:autopilot.'), autopilot[0]);
   const sub = readFileSync(join(ROOT, 'kernel', 'kernel-subagent.md'), 'utf8').split('\n').filter((l) => l.startsWith('Autonomy:'));
   assert.equal(sub.length, 1, 'one subagent Autonomy line');
   assert.match(sub[0], /Never merge or message anyone/);

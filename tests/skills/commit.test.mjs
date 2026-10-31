@@ -37,7 +37,8 @@ test('commit sections, steps and red flags', () => {
   assert.ok(!raw.includes('temp file'), 'the message file lives under WORK/tmp, which G5 accepts, not in a temp file');
   assert.ok(!raw.includes('$('), 'no command substitution in a prescribed command');
   // 5,328 since M2b Task 17 (raised from 5,200): the Unreleased changelog line, coverage AD24.
-  assertMaxBytes(SKILL, 5328);
+  // 5,358 since M3 part 1 Task 6: the pointer line to the run rules, after lossless cuts.
+  assertMaxBytes(SKILL, 5358);
 });
 
 test('commit ledger-tasks reference', () => {
