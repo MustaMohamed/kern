@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readDoc, assertFrontmatter, h2s, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
+import { readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/diagnose/SKILL.md';
 
@@ -30,6 +30,7 @@ test('diagnose sections, steps and red flags', () => {
   // 6,640 since M3 part 1's Task 14 (raised from 6,500): step 2 names the worktree and step 8 gives a still-red loop its way
   // back, after cutting two defaults Inputs already holds.
   assertMaxBytes(SKILL, 6640);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 6.64 KB,']);
 });
 
 test('diagnose references', () => {
@@ -61,4 +62,13 @@ test('the loop and instrumentation run in a named worktree, and a loop still red
   assert.ok(s[8].includes("A loop still red after a fix goes back to step 5, as a failed fix on step 6's ladder."), s[8]);
   assert.ok(s[5].startsWith('5. Write 3 to 5 ranked hypotheses'), s[5]);
   assert.ok(s[6].includes('after three failed fixes, stop'), s[6]);
+});
+
+test('under autopilot both diagnose stops wait for a typed reply, as run.md says', () => {
+  // Task 14 review: both stops parked with a `default:` neither has, while this section points at run.md, whose rule is a wait.
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  assert.ok(auto.includes('Under autopilot both wait for a typed reply, with the evidence so far and a recommendation, and independent work may finish first.'), auto);
+  assert.ok(!auto.includes('parked:'), auto);
+  assert.ok(auto.includes('${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md'), auto);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['Under autopilot both wait for a typed reply, with the evidence so far and a recommendation, and independent work may finish first. Production stays read-only (D8).']);
 });

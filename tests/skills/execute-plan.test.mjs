@@ -64,9 +64,9 @@ test('ledger format and model table', () => {
   assertHeadings('skills/execute-plan/references/model-selection.md', ['# Model selection', '## Table', '## Rules']);
   assertMaxBytes('skills/execute-plan/references/model-selection.md', 1600);
   assertHeadings(RESUME, ['# Resume', '## Where to continue', '## Fix loop memory']);
-  // 2,630 since M3 part 1's Task 14 (raised from 2,500): case 1 adopts a worktree, and a snapshot equal to `tree-before`
-  // waits for a worker that may still run.
-  assertMaxBytes(RESUME, 2630);
+  // 2,670 since M3 part 1's Task 14 and its fix round 1 (raised from 2,500): case 1 names the adopt, and a snapshot equal to
+  // `tree-before` waits for a worker this session dispatched, then snapshots again.
+  assertMaxBytes(RESUME, 2670);
 });
 
 // Load-bearing lines, pinned to the step that carries them. Each pin fails the test when it is removed.
@@ -83,7 +83,7 @@ export const PINS = {
   3: ['one todo per task', 'A spec or scope conflict the graph does not show: stop and ask; record the answer, or a mechanical call, as a `Decision:` line.'],
   4: ['at most `parallel.max`', 'unless parallel-work step 1 finds an overlap', 'spawn them in one message as `${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/SKILL.md` step 4 does',
     'Others run serially, in task order.', 'Batch small tasks of one shape (the same one-line edit across files) into one dispatch and one review over their joined Files lists'],
-  5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --plan <plan>`', "(`<plan-slug>`: the ledger dir's name)",
+  5: ['Once, make the plan worktree', '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <plan-slug> --plan <plan> --adopt`', "(`<plan-slug>`: the ledger dir's name)",
     "adding `--branch <name>` when `branch.pattern` holds `{id}` (the plan's `issue:`, with quotes and a leading `#` removed).", 'Exit 2: say why and ask.', 'both exit 3: ask', 'a red baseline goes to the user',
     'Then write `Worktree: <path> branch=<name> base-tree=<id>`, the id from `wt-snap`.'],
   6: ['`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork <plan-wt> <plan-slug>-task-<N>` (exit 2 or 3: say why and ask)',
@@ -153,10 +153,10 @@ export const PINS = {
     "| any step | a ruling: the user's answer to a stop, a mechanical call made without the user, or a \"Declined to judge\" ruling |"],
   resume: ['Read this when the ledger already holds lines past `Main:`, and after compaction.', 'Trust the ledger and the worktrees over memory.',
     'Steps 2 and 3 run again on every invocation and add only the lines the ledger lacks', 'plan-check and its `wave` rows come from this run',
-    'a step 3 conflict with no `Decision:` line is asked again (under autopilot, parked once)', 'r is 1 plus its review lines.', 'The first case that holds, in this order:', '1. No `Worktree:` line: step 5, running `wt-new --adopt` beside its `--plan`. A worktree a stopped step 5 left is reused; on a free path an adopt makes a worktree.',
+    'a step 3 conflict with no `Decision:` line is asked again (under autopilot, parked once)', 'r is 1 plus its review lines.', 'The first case that holds, in this order:', '1. No `Worktree:` line: step 5. Its `wt-new --adopt` reuses a worktree a stopped step 5 left; on a free path an adopt makes a worktree.',
     '2. A task on a `Wave:` line has its `Task N: complete` line but no `Applied: Task N patch=<path>` line: step 11 for it, before the final review or any later task.',
     'A task a `parked:` line holds stays out, with every task blocked by it.', '3. The first task in task order with no `Task N: complete` line, by its last line, `minor (deferred)` lines skipped:',
-    '- none: step 6.', 'keep that tree as `tree-before`, with no second `task-start`', 'A snapshot still equal to it means nothing landed: wait for the notification of a worker that may still run, then dispatch again.',
+    '- none: step 6.', 'keep that tree as `tree-before`, with no second `task-start`', 'A snapshot still equal to it: a worker this session dispatched may still run, so wait for its notification and snapshot again.', 'Still equal, or no such worker (a new session has none): dispatch again.',
     "A changed snapshot waits until the implementer has stopped, its report holding that round's `Status:` line: DONE or DONE_WITH_CONCERNS goes to step 8 as round r, any other status (or none) to step 7",
     'until then wait for it or resume it (step and inline: finish the change first)', 'a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9',
     'an r of 4 is past the cap, so stop with a split proposal', '`Task N: fix round=<r> tree=<id>`: resume that round', 'a fresh snapshot that differs from its tree is',
@@ -412,4 +412,18 @@ test('step 13 names an applied closed task that stayed uncommitted', () => {
   assert.ok(s[13].includes('Under autopilot, name each path an applied closed task left uncommitted.'), s[13]);
   assert.ok(s[11].includes('Then `test.full` there; red: stop.'), s[11]);
   assert.ok(s[10].includes('(a wave task: after step 11)'), s[10]);
+});
+
+test('a slow worker gets a second snapshot before any dispatch, and a crash before the `Worktree:` line adopts', () => {
+  // M3 part 1 Task 14 review. A worker that finished after the first snapshot had no second one, so a second implementer
+  // ran over finished work; and a new session gets no notification from an ended session's worker, so a wait had no end.
+  const lines = readDoc(RESUME).raw.split('\n');
+  const start = lines.find((l) => l.startsWith('   - `Task N: start`:')) ?? '';
+  const order = ['wait for its notification and snapshot again.', 'Still equal, or no such worker (a new session has none): dispatch again.', 'A changed snapshot waits until the implementer has stopped'];
+  const at = order.map((o) => start.indexOf(o));
+  assert.ok(at[0] >= 0 && at[0] < at[1] && at[1] < at[2], start);
+  // A crash before the `Worktree:` line leaves the ledger ending at `Main:`, so step 1 never reads resume.md: only step 5's
+  // own call can adopt, and an adopt on a free path makes the worktree as before.
+  assert.ok(steps(readDoc(SKILL).body)[1].includes('If the ledger already held lines past `Main:`'));
+  assert.ok(steps(readDoc(SKILL).body)[5].includes('scripts/wt-new <plan-slug> --plan <plan> --adopt`'));
 });

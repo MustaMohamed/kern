@@ -38,7 +38,7 @@ In chat: the symptom, the loop command and its output, the root cause at `path:l
 
 ## Stops and autopilot
 
-Stops at step 2 (no loop) and step 6 (a third failed fix). Under autopilot both are parked with the evidence so far as `parked: <question>; default: <choice>; why: <one line>`, and independent work continues. Production stays read-only.
+Stops at step 2 (no loop) and step 6 (a third failed fix). Under autopilot both wait for a typed reply, with the evidence so far and a recommendation, and independent work may finish first. Production stays read-only.
 
 Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.
 

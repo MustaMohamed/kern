@@ -6,11 +6,11 @@ Read this when the ledger already holds lines past `Main:`, and after compaction
 
 The first case that holds, in this order:
 
-1. No `Worktree:` line: step 5, running `wt-new --adopt` beside its `--plan`. A worktree a stopped step 5 left is reused; on a free path an adopt makes a worktree.
+1. No `Worktree:` line: step 5. Its `wt-new --adopt` reuses a worktree a stopped step 5 left; on a free path an adopt makes a worktree.
 2. A task on a `Wave:` line has its `Task N: complete` line but no `Applied: Task N patch=<path>` line: step 11 for it, before the final review or any later task. A task a `parked:` line holds stays out, with every task blocked by it.
 3. The first task in task order with no `Task N: complete` line, by its last line, `minor (deferred)` lines skipped:
    - none: step 6.
-   - `Task N: start`: keep that tree as `tree-before`, with no second `task-start`. A snapshot still equal to it means nothing landed: wait for the notification of a worker that may still run, then dispatch again. A changed snapshot waits until the implementer has stopped, its report holding that round's `Status:` line: DONE or DONE_WITH_CONCERNS goes to step 8 as round r, any other status (or none) to step 7; until then wait for it or resume it (step and inline: finish the change first).
+   - `Task N: start`: keep that tree as `tree-before`, with no second `task-start`. A snapshot still equal to it: a worker this session dispatched may still run, so wait for its notification and snapshot again. Still equal, or no such worker (a new session has none): dispatch again. A changed snapshot waits until the implementer has stopped, its report holding that round's `Status:` line: DONE or DONE_WITH_CONCERNS goes to step 8 as round r, any other status (or none) to step 7; until then wait for it or resume it (step and inline: finish the change first).
    - a review that did not approve: write `Task N: fix round=<r> tree=<id>` with the reviewed tree and continue step 9; an r of 4 is past the cap, so stop with a split proposal.
    - `Task N: fix round=<r> tree=<id>`: resume that round; a fresh snapshot that differs from its tree is the round's `tree-after` once the implementer has stopped, and its `Status:` line routes it as above.
    - an approving review: step 10.

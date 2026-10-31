@@ -75,8 +75,9 @@ test('finish-branch sections, steps and red flags', () => {
   // 8,100 since M3 part 1's Task 7: the bounded fix round and how it ends.
   // 8,450 since its fix round 1: a red step 4 takes a fix round, and the end path names the gates it passes.
   // 8,500 since Task 8's fix round 1: the end path's open-task case, and step 2's caller.
-  // 8,550 since Task 14: step 4 takes the tree before the proof, and step 8 reports a rebased tree as unproven, after a red-flag cut.
-  assertMaxBytes(SKILL, 8550);
+  // 8,625 since Task 14 and its fix round 1: step 4 takes the tree before the proof, and step 8 compares option 1's tree with it,
+  // after a red-flag cut.
+  assertMaxBytes(SKILL, 8625);
 });
 
 test('under autopilot a `fix first` verdict starts a bounded fix round, and a run past the bound pushes and opens no PR', () => {
@@ -107,11 +108,12 @@ test('under autopilot a `fix first` verdict starts a bounded fix round, and a ru
   assertContains('skills/autopilot/references/run.md', ['| `split` from a finding on a line the last round changed |']);
 });
 
-test('option 1 reports a rebased tree as unproven (audit D13)', () => {
-  // Option 1 pushes nothing, so step 10's check never proves the tree a step 8 rebase made.
+test('option 1 compares its tree with step 4\'s and reports any difference as unproven (audit D13)', () => {
+  // Option 1 pushes nothing, so step 10's check never proves the tree a step 8 rebase made. Task 14 review: nor one a commit
+  // made: step 4 green on T, the proof wrote W, commit staged W, and only `verify.fast` ran on T plus W.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[8].includes('Then offer a rebase step 3 put off; option 1 reports the rebased tree as unproven.'), s[8]);
-  assert.ok(s[8].includes('Option 1 ends with the short SHA.'), s[8]);
+  assert.ok(s[8].includes('Then offer a rebase step 3 put off. A release,'), s[8]);
+  assert.ok(s[8].endsWith("Option 1 ends with the short SHA. It compares `git rev-parse HEAD^{tree}` with step 4's tree and reports any difference, a rebase included, as unproven."), s[8]);
 });
 
 test('the proven tree is taken before the proof, and files the proof wrote are not proven (audit D14)', () => {

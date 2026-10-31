@@ -22,7 +22,7 @@ test('prove-it sections, steps, gate and red flags', () => {
   assert.equal(s[0], DEFER);
   assertContains(SKILL, ['${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests', 'probe: fail-then-pass ok', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff', 'claim: command, result', 'Gate: steps 1 to 7 hold', 'zero tests run', '| Thought | Reality |',
     'for a module or export the patch adds, or a test-only patch, report `probe inconclusive: new module` and prove the new code with `probe --mutate <file>:<line> <wt> -- <test command>`']);
-  // 4,550 since M3 part 1's Task 14 (raised from 3,997): step 4 reports a skipped or unrun check as `fail`, Outputs names
+  // 4,550 since M3 part 1's Task 14 (raised from 3,997): step 4 reports a skipped or unrun required check as `fail`, Outputs names
   // what carries `inferred`, and the Under autopilot text follows run.md's wait rule and finish-branch's fix round and end path.
   assertMaxBytes(SKILL, 4550);
 });
@@ -118,7 +118,8 @@ test('a skipped or unrun check is reported as fail and blocks verified; an unrun
   // PR, and stated an unrun fix and a cause read from code plainly.
   const { body } = readDoc(SKILL);
   const s4 = steps(body)[4];
-  assert.ok(s4.includes('A skipped or unrun check is reported as `fail`, never `not run`, and blocks `verified`.'), s4);
+  // Task 14 review: `required`, as run.md means it, since `skip:` lines are normal reports.
+  assert.ok(s4.includes('A skipped or unrun required check is reported as `fail`, never `not run`, and blocks `verified`.'), s4);
   const outputs = section(body, '## Outputs');
   assert.ok(outputs.includes("in step 7's forms; an unrun fix and a cause read from code carry `inferred`."), outputs);
 });

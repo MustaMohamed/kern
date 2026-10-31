@@ -343,16 +343,15 @@ test('a reader that repeats moved literals is a copy, and probe drops a lone ! i
   // shared piece's class lists and style strings. `probe --mutate` found no operator in `if (!wraps)`, and kern then
   // made a fork by hand and left it with a full node_modules.
   const s = steps(readDoc(SKILL).body);
-  // Group B review Minors 4 and 5: "them" had no plural referent, and the terms now match blast-radius.md's; step 7
-  // names the ! drop too.
-  const terms = "each moved element's class list, style object and literal strings";
+  // Group B review Minors 4 and 5: "them" had no plural referent, and the terms match blast-radius.md's; step 7 names
+  // the ! drop too. M3 part 1 Task 14: Task 5 of pilot fix plan 2 had narrowed "literal props or strings" to "literal
+  // strings", so a copied non-string prop was no longer named. Both files take the wider words.
+  const terms = "each moved element's class list, style object and literal props or strings";
   assert.ok(s[6].includes(`Search every other reader for ${terms} (\`references/blast-radius.md\`).`), s[6]);
   assert.ok(s[7].includes('probe inverts the first operator on that line, or drops a lone `!` when it has none, in a throwaway fork, never the worktree.'), s[7]);
   assert.ok(s[7].includes('Never mutate in a fork you make yourself: probe makes and removes its own'), s[7]);
   const grep = section(readDoc(`${REF}/blast-radius.md`).body, '## Where grep stops');
-  // M3 part 1 Task 14: Task 5 of pilot fix plan 2 narrowed "literal props or strings" to "literal strings", so a copied
-  // non-string prop was no longer named.
-  assert.ok(grep.includes("`rg -F` each moved element's class list, style object and literal props or strings (`numberOfLines={2}`) in every other reader of the old code."), grep);
+  assert.ok(grep.includes(`\`rg -F\` ${terms} (\`numberOfLines={2}\`) in every other reader of the old code.`), grep);
   assert.ok(grep.includes('is a copy and a finding, even when it imports nothing from the piece.'), grep);
   assertContains(`${REF}/claim-checks.md`, ['or drops a `!` when it has none, in a throwaway fork']);
 });

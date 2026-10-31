@@ -75,9 +75,11 @@ test('parallel-work pins the drain mapping, entry check, package location, teard
   // Stops and autopilot.
   const stops = body.slice(body.indexOf('## Stops and autopilot'));
   for (const n of ['Stops at steps 1, 3, 6, 7 and 8', 'on per the latest kern signal', 'a turn with no mode line changes nothing',
-    'parked: <question>; default: <choice>; why: <one line>', 'Teardown never runs under autopilot', 'AskUserQuestion', 'parks that unit while the rest continue']) {
+    // Task 14 review: this route said each stop parks, and run.md says a stop waits.
+    'When on, each stop waits for a typed reply, with the data and a recommendation:', 'Teardown never runs under autopilot', 'AskUserQuestion', 'holds that unit while the rest continue']) {
     assert.ok(stops.includes(n), `stops section must contain: ${n}`);
   }
+  assert.ok(!stops.includes('each stop parks'), stops);
 });
 
 test('small units are no reason to skip a fan-out the user asked for', () => {
