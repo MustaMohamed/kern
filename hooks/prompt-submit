@@ -103,13 +103,50 @@ set_surface() {
   state_set "$SID" "surface=$1" && CHANGED_SURFACE="$1"
 }
 
-# autopilot_off: writes autopilot off. When state_set cannot read the state to keep its other keys, the
-# default state is written instead (state_reset reads nothing; autopilot off), so turning autopilot off
-# never depends on a read; losing voice and surface is the safe loss, and the notice says so.
+# autopilot_off: writes autopilot off and clears the go. When state_set cannot read the state to keep its
+# other keys, the default state is written instead (state_reset reads nothing; autopilot off, no go), so
+# turning autopilot off never depends on a read; losing voice and surface is the safe loss, and the
+# notice says so.
 autopilot_off() {
-  state_set "$SID" autopilot=off && return 0
+  state_set "$SID" autopilot=off "go=" "go_repo=" && return 0
   state_reset "$SID" || return 1
   NOTICE="kern: the session state could not be read, so autopilot off also reset voice and surface to their defaults."
+}
+
+# apply_go ARGS: a typed `go <ticket>` turns autopilot on and records the go. The go must be the prompt's
+# one non-blank line, so a pasted block that opens with one records nothing, and name one id go_ticket
+# takes. A skill conflict with no pick refuses it before a denied project does, since setup refuses under
+# autopilot. A go binds to its repository, so one with no repository to name refuses too. A refusal
+# changes no state: autopilot stays as it was, with any earlier go.
+apply_go() {
+  local word id clash denier key
+  word=$(printf '%s\n' "$1" | env LC_ALL=C awk 'NR == 1 && NF == 2 { print $2 }')
+  [ "$(printf '%s\n' "$PROMPT" | env LC_ALL=C awk 'NF { n++ } END { print n + 0 }')" -le 1 ] || word=""
+  if ! id=$(go_ticket "$word") || [ -z "$id" ]; then
+    NOTICE="kern: autopilot go takes one ticket id, such as MA-254 or 853, alone in its prompt; nothing changed."
+    return 0
+  fi
+  clash=$(skill_conflicts --unpicked | env LC_ALL=C awk -F '\t' '!seen[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }')
+  if [ -n "$clash" ]; then
+    NOTICE="kern: autopilot go refused: $clash: a skill of the same name has no pick. With autopilot off, run /kern:help setup, then type the go again."
+    return 0
+  fi
+  if denier=$(autopilot_denied_by); then
+    NOTICE="kern: autopilot denied by $denier."
+    return 0
+  fi
+  if ! key=$(consent_key "$KERN_MAIN") || [ -z "$key" ]; then
+    NOTICE="kern: autopilot go not recorded: kern could not name this repository; nothing changed."
+    return 0
+  fi
+  set -- autopilot=on "go=$id" "go_repo=$key"
+  [ "$(state_get "$SID" autopilot 2>/dev/null)" = on ] || { set -- "$@" "since=$(now_iso)"; AP_TURNED_ON=1; }
+  if state_set "$SID" "$@"; then
+    NOTICE="kern: go recorded for $id."
+  else
+    AP_TURNED_ON=0
+    NOTICE="kern: autopilot go not recorded: the session state could not be written; retry."
+  fi
 }
 
 # apply_autopilot ARGS ALLOW_ON: ALLOW_ON is 1 only for a command the user typed.
@@ -132,9 +169,13 @@ apply_autopilot() {
         fi
       fi
       ;;
+    go)
+      [ "$2" = 1 ] || return 0
+      apply_go "$1"
+      ;;
     off) autopilot_off ;;
     "" | status) ;;
-    *) NOTICE="kern: autopilot argument not recognized; use on, off or status." ;;
+    *) NOTICE="kern: autopilot argument not recognized; use on, off, go <ticket> or status." ;;
   esac
 }
 

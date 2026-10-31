@@ -371,6 +371,76 @@ since: 2026-10-12T00:00:00Z'
   [ "$(printf '%*s%s\nyes, approved\n' 19988 '' 'yes, approved' | prompt_hashes)" = "$want" ]
 }
 
+@test "go_ticket prints the normal form of a ticket id" {
+  [ "$(go_ticket MA-254)" = MA-254 ]
+  [ "$(go_ticket ma-254)" = MA-254 ]
+  [ "$(go_ticket a1b-2)" = A1B-2 ]
+  [ "$(go_ticket 853)" = 853 ]
+  [ "$(go_ticket '#853')" = 853 ]
+}
+
+@test "go_ticket refuses anything else, printing nothing" {
+  nl=$'\n'
+  for bad in MA- -1 "" "#" "#MA-1" "##1" 1A-2 MA-1-2 MA "MA 1" "MA-1${nl}MA-2" "1${nl}" MA-1x; do
+    run go_ticket "$bad"
+    [ "$status" -eq 1 ] || { echo "status $status for [$bad]"; return 1; }
+    [ -z "$output" ] || { echo "output [$output] for [$bad]"; return 1; }
+  done
+}
+
+# skill_conflicts lives in settings.sh, which this file loads. Its jobs are the ones settings_summary lists.
+tab=$'\t'
+conflict_skills() {
+  export KERN_MAIN="$R" CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/config"
+  mkdir -p "$R/.claude/skills/commit" "$R/.claude/commands" "$CLAUDE_CONFIG_DIR/skills/plan" \
+    "$CLAUDE_CONFIG_DIR/commands"
+  : >"$R/.claude/skills/commit/SKILL.md"
+  : >"$R/.claude/commands/define.md"
+  : >"$CLAUDE_CONFIG_DIR/skills/plan/SKILL.md"
+  : >"$CLAUDE_CONFIG_DIR/commands/commit.md"
+}
+
+@test "skill_conflicts lists each same-name project and user skill with its pick" {
+  conflict_skills
+  printf 'overrides.commit: my-commit\noverrides.plan: off\n' >"$R/.claude/kern.local.yml"
+  run skill_conflicts
+  [ "$status" -eq 0 ]
+  [ "$output" = "commit${tab}project${tab}commit${tab}my-commit
+commit${tab}user${tab}commit${tab}my-commit
+define${tab}project${tab}define${tab}
+plan${tab}user${tab}plan${tab}off" ]
+}
+
+@test "skill_conflicts --unpicked keeps the lines with an empty pick" {
+  conflict_skills
+  printf 'overrides.commit: my-commit\noverrides.plan: off\n' >"$R/.claude/kern.local.yml"
+  run skill_conflicts --unpicked
+  [ "$status" -eq 0 ]
+  [ "$output" = "define${tab}project${tab}define${tab}" ]
+}
+
+@test "skill_conflicts counts a skill and a command of one source once" {
+  conflict_skills
+  : >"$R/.claude/commands/commit.md"
+  [ "$(skill_conflicts | grep -c "^commit${tab}project${tab}")" -eq 1 ]
+}
+
+@test "skill_conflicts reads ~/.claude with no CLAUDE_CONFIG_DIR, and skips the project with no KERN_MAIN" {
+  mkdir -p "$R/.claude/skills/commit" "$HOME/.claude/skills/plan"
+  : >"$R/.claude/skills/commit/SKILL.md"
+  : >"$HOME/.claude/skills/plan/SKILL.md"
+  [ "$(skill_conflicts)" = "plan${tab}user${tab}plan${tab}" ]
+}
+
+@test "skill_conflicts skips mode, autopilot and help, and a name that is no job" {
+  export KERN_MAIN="$R"
+  for job in mode autopilot help not-a-job; do
+    mkdir -p "$R/.claude/skills/$job"
+    : >"$R/.claude/skills/$job/SKILL.md"
+  done
+  [ -z "$(skill_conflicts)" ]
+}
+
 @test "state_file and a settings read survive many fresh bash 5.3 runs" {
   local found
   found=$(bash53) || skip "no bash 5.3 or later here"

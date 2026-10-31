@@ -294,3 +294,17 @@ consent_for() {
   k=$(consent_key "$KERN_MAIN") || return 1
   [ -n "$r" ] && [ "$r" = "$k" ]
 }
+
+# go_ticket ARG: prints the normal form of the ticket id a go names and exits 0: a tracker key such as
+# ma-254 in upper case, or an issue number without its #. Anything else, a second line included, prints
+# nothing and exits 1.
+go_ticket() {
+  printf '%s\n' "$1" | env LC_ALL=C awk '
+    NR == 1 { s = $0 }
+    END {
+      if (NR != 1) exit 1
+      if (s ~ /^[A-Za-z][A-Za-z0-9]*-[0-9]+$/) { print toupper(s); exit 0 }
+      if (s ~ /^#?[0-9]+$/) { sub(/^#/, "", s); print s; exit 0 }
+      exit 1
+    }'
+}

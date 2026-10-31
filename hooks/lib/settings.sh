@@ -397,6 +397,33 @@ $(_settings_files)
 EOT
 }
 
+# skill_conflicts [--unpicked]: one line per project or user skill named like a kern job, as
+# `<job><TAB><source><TAB><skill><TAB><pick>`. The jobs are skills/*/ less mode, autopilot and help, as
+# settings_summary lists them. A skill is skills/<job>/SKILL.md or commands/<job>.md, under KERN_MAIN's
+# .claude for source project (none without a KERN_MAIN) and CLAUDE_CONFIG_DIR or ~/.claude for source user.
+# <pick> is overrides.<job> or empty; --unpicked keeps the lines with an empty pick.
+skill_conflicts() {
+  local dir job src base pick
+  for dir in "$KERN_ROOT"/skills/*/; do
+    job=${dir%/}
+    job=${job##*/}
+    case "$job" in mode | autopilot | help) continue ;; esac
+    for src in project user; do
+      case "$src" in
+        project)
+          [ -n "${KERN_MAIN-}" ] || continue
+          base=$KERN_MAIN/.claude
+          ;;
+        *) base=${CLAUDE_CONFIG_DIR:-$HOME/.claude} ;;
+      esac
+      [ -f "$base/skills/$job/SKILL.md" ] || [ -f "$base/commands/$job.md" ] || continue
+      pick=$(settings_get "overrides.$job" '')
+      [ "${1-}" = --unpicked ] && [ -n "$pick" ] && continue
+      printf '%s\t%s\t%s\t%s\n' "$job" "$src" "$job" "$pick"
+    done
+  done
+}
+
 # policy_for ACTION: ask|auto|deny for commit, push, pr, tracker or review.post; any other action reads as ask.
 # A policy that could not be resolved reads as unknown: a settings layer that could not be read
 # (exit 4 from settings_get; deny still prints when a layer that reads says deny), or a command substitution
