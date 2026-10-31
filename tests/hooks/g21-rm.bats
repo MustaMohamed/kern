@@ -307,10 +307,8 @@ refused() {
   other="$BASE/repo2"
   make_repo "$other"
   mkdir -p "$other/src"
-  main=$(git -C "$R" worktree list --porcelain | sed -n '1s/^worktree //p')
-  key=$(printf '%s' "$main" | git -C "$main" hash-object --stdin)
   set_autopilot on
-  printf 'go: MA-254\ngo_repo: %s\n' "$key" >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  printf 'go: MA-254\ngo_repo: %s\n' "$(go_key "$R")" >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   expect none 'rm -rf src'
   export CWD="$other"
   expect deny 'rm -rf src'
@@ -359,6 +357,9 @@ refused() {
   refused "rm -rf $R/.kern/tmp/*"
   expect none 'rm -rf /tmp/kern-x/*'
 }
+
+# go_key DIR: what prompt-submit records as go_repo for a main checkout at DIR.
+go_key() { printf '%s' "$1" | git -C "$R" hash-object --stdin; }
 
 # open_setup: a session at the main checkout, under autopilot, with a linked worktree W at the default
 # worktree.dir beside a sibling S.
@@ -409,10 +410,51 @@ open_setup() {
   expect deny 'rm ../other/a'
   [[ "$output" != *"$route"* ]] || false
   [[ "$output" != *'as its own call'* ]] || false
-  # No opening cd reaches the main checkout.
+  # A session in a worktree gets no route: not to the main checkout, and not to a sibling.
   export CWD="$W"
   expect deny "rm $R/README.md"
   [[ "$output" != *"$route"* ]] || false
+  expect deny "rm $S/a"
+  [[ "$output" != *"$route"* ]] || false
+  expect deny 'cd .. && rm a'
+  [[ "$output" != *"$route"* ]] || false
+}
+
+@test "a lone & leaves an opening cd to the union reading, a redirection does not" {
+  open_setup
+  expect deny "cd $W && rm src/gen.ts & rm README.md"
+  expect none "cd $W && rm src/gen.ts 2>&1" "cd $W && rm src/gen.ts &>/dev/null"
+}
+
+@test "an opening cd into a worktree nested in a worktree" {
+  open_setup
+  I="$W/inner"
+  git -C "$R" worktree add -q "$I" -b kern/inner
+  expect none "cd $I && rm src/gen.ts"
+  expect deny "cd $W && rm -rf inner" "cd $W && rm inner/a"
+}
+
+@test "the worktrees come from the payload's cwd, past a repository inside the worktree" {
+  open_setup
+  make_repo "$W/sub"
+  git -C "$R" worktree add -q "$W/sub/inner" -b kern/inner
+  expect deny "cd $W/sub && rm -rf inner"
+}
+
+@test "an opening cd under a go is that repository's or names no top" {
+  open_setup
+  printf 'go: MA-254\ngo_repo: %s\n' "$(go_key "$R")" >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  expect none "cd $W && rm src/gen.ts"
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: %s\n' "$(go_key "$BASE/other")" >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  expect deny "cd $W && rm src/gen.ts"
+}
+
+@test "an opening cd reads core.worktree where it lands" {
+  open_setup
+  git -C "$R" config extensions.worktreeConfig true
+  git -C "$W" config --worktree core.worktree "$BASE"
+  expect deny "cd $W && rm $BASE/other/a"
 }
 
 @test "G21 reads only Bash" {

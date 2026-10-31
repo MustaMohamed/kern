@@ -247,6 +247,13 @@ guard_g21() {
     env LC_ALL=C awk -v sq="'" -v tools="$_G21_TOOLS" -v finds="$_G21_FINDS" "$_GW_AWK$_G21_AWK") || out=""
   _G21_CMD=$cmd
   _g21_open "$cmd"
+  # An opening cd the judge did not read as that word is no match.
+  if [ -n "$_G21_OPEN" ]; then
+    case $'\n'"$out"$'\n' in
+      *$'\n'"C	$_G21_OPEN"$'\n'*) ;;
+      *) _G21_CWD=${CWD:-$PWD} _G21_OPEN="" ;;
+    esac
+  fi
   _G21_DIRS=$_G21_CWD$'\n'
   _G21_CD=0
   _G21_LOST=0
@@ -291,18 +298,23 @@ EOT
 }
 
 # _G21_OPENRE: a call that opens with cd, one word, and &&: leading blanks only, no option and no prefix.
-_G21_OPENRE='^[[:blank:]]*cd[[:blank:]]+("[^"]+"|'\''[^'\'']+'\''|[^[:blank:]"'\'']+)[[:blank:]]+&&'
+# Space and tab are spelled out, since [[:blank:]] follows the locale and the shell's words do not.
+_G21_OPENRE=$'^[ \t]*cd[ \t]+("[^"]+"|\'[^\']+\'|[^ \t"\']+)[ \t]+&&'
 
 # _g21_open CMD: sets _G21_CWD, the call's cwd. It is the payload's, or, when CMD opens as _G21_OPENRE
 # reads and its word is a literal absolute path whose physical form lies at or under a listed worktree
 # other than the first, the main checkout, that physical form. _G21_OPEN then holds the word, so the
 # judge's first cd line adds no reading. A cd that fails leaves git no directory, so no top is named.
+# A lone & holds no match: it runs the list before it in a subshell, so the rest stays at the payload's
+# cwd. && and the redirections >&, <&, &> and &>> are not one. A failed read also holds no match.
 _g21_open() {
   local w real line t n=0
   _G21_CWD=${CWD:-$PWD}
   _G21_OPEN=""
   [[ $1 =~ $_G21_OPENRE ]] || return 0
   w=${BASH_REMATCH[1]}
+  printf '%s' "$1" | env LC_ALL=C awk '{ gsub(/&&|[<>]&|&>>?/, ""); if (index($0, "&")) f = 1 } END { exit f }' ||
+    return 0
   case "$w" in \"* | \'*) w=${w:1:${#w}-2} ;; esac
   case "$w" in /*) ;; *) return 0 ;; esac
   case "$w" in *[\$\`\\*?\[\]{}~\;\&\|\(\)\<\>\"\'\!#$'\n'$'\037']*) return 0 ;; esac
@@ -378,22 +390,23 @@ _g21_paren() {
     { if (scan($0)) exit 1 }'
 }
 
-# _g21_vote WHAT: asks; emit_decision denies under autopilot. The reason names the way through. The opening
-# cd is the route past a cd, and for a target or a directory option in a linked worktree but this one. A
-# target in the main checkout gets none, since no opening cd reaches it.
+# _g21_vote WHAT: asks; emit_decision denies under autopilot. The reason names the way through. A session
+# at the main checkout gets the opening cd as its route past a cd, and when a target lies in a linked
+# worktree or the text names one. A session in a worktree gets none, so no reason points it at a sibling.
 _g21_vote() {
   local why="delete outside this worktree and its scratch directories, or one kern cannot resolve: ${1:0:80}"
   local d lc
   _g21_load
   lc=$(_g21_lc "$_G21_CMD")
   while IFS= read -r d; do
-    [ -n "$d" ] && [ "$d" != "$_G21_LTOP" ] && [ "$d" != "$_G21_LMAIN" ] || continue
+    [ -n "$d" ] && [ "$d" != "$_G21_LTOP" ] || continue
     case "$lc" in *"$d"*) _G21_ROUTE=1 ;; esac
   done <<EOT
 $_G21_LTREES
 EOT
   [ "$_G21_SWAP" = 0 ] || why="$why; run the link or move as its own call"
-  [ "$_G21_CD$_G21_ROUTE" = 00 ] || why="$why; open the call with cd <absolute worktree path> &&"
+  [ "$_G21_CD$_G21_ROUTE" = 00 ] || [ "$_G21_LTOP" != "$_G21_LMAIN" ] ||
+    why="$why; open the call with cd <absolute worktree path> &&"
   case "$1" in *'$'*) why="$why; for a temp file run mktemp as its own call, then name the literal path" ;; esac
   vote ask G21 "$why; name each target as a literal path inside the worktree, not its top, or in a scratch directory"
 }
@@ -475,8 +488,8 @@ _g21_own_top() {
 }
 
 # _g21_load: once per command, reads the worktree top (_G21_TOP, empty outside a work tree), WORK/tmp
-# (_G21_WORK), the other scratch directories (_G21_SCRATCH) and every worktree of the repository
-# (_G21_TREES), physical, the lists one per line. WORK/tmp lies in the main worktree, so it is named
+# (_G21_WORK), the other scratch directories (_G21_SCRATCH) and every worktree of the payload cwd's
+# repository (_G21_TREES), physical, the lists one per line. WORK/tmp lies in the main worktree, so it is named
 # apart. It follows kern-dir: a work_dir that is unread, that leaves the repository, or that a link moves
 # names none. _G21_HOLD is the directory that holds the main checkout when that lies under a scratch
 # root but is none. The _G21_L names are the lower-case forms, for _g21_path.
@@ -521,7 +534,7 @@ EOT
       'worktree '?*) t=$(_g21_real "${line#worktree }") && _G21_TREES="$_G21_TREES$t"$'\n' ;;
     esac
   done <<EOT
-$(git -C "$_G21_CWD" -c core.fsmonitor=false worktree list --porcelain 2>/dev/null)
+$(git -C "${CWD:-$PWD}" -c core.fsmonitor=false worktree list --porcelain 2>/dev/null)
 EOT
   _G21_LTOP=$(_g21_lc "$_G21_TOP")
   _G21_LMAIN=$(_g21_lc "$main")
@@ -588,7 +601,7 @@ EOT
     [ "$work" = 0 ] || [ "$d" != "$_G21_LMAIN" ] || continue
     case "$lp" in
       "$d"/*)
-        [ "$d" = "$_G21_LMAIN" ] || _G21_ROUTE=1
+        _G21_ROUTE=1
         return 1
         ;;
     esac
