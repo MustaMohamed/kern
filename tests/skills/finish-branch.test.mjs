@@ -150,7 +150,11 @@ test('a cited test.full has a log a reader can check, and without it the run hap
   for (const n of ["The main session saves that run's output as `test-full-<id>.log` under `kern-dir tmp`;", 'a citing step writes `skip: test.full, passed on <id>: <log>, <summary line>`.',
     'No log, or no passing summary line in it: rerun.']) assert.ok(e.includes(n), n);
   // execute-plan saves its run by a pointer, and finish-branch step 4 reaches the rule through prove-it, whose step 3 names the file.
-  assert.ok(steps(readDoc('skills/execute-plan/SKILL.md').body)[11].includes('Save its output as `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/references/evidence.md` says.'));
+  const save = 'Save its output as `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/references/evidence.md` says.';
+  assert.ok(steps(readDoc('skills/execute-plan/SKILL.md').body)[11].includes(save));
+  // Fix round 1, ruled in: a kernel-row run goes from implement to finish-branch, so its run saves the log too.
+  const imp = steps(readDoc('skills/implement/SKILL.md').body)[11];
+  assert.ok(imp.indexOf('run `test.full`') >= 0 && imp.indexOf('run `test.full`') < imp.indexOf(save), imp);
   assert.ok(steps(readDoc(SKILL).body)[4].includes('by following `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`'));
   assert.ok(steps(readDoc('skills/prove-it/SKILL.md').body)[3].includes('`references/evidence.md` says when a passed `test.full` stands.'));
 });
