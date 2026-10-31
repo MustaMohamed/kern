@@ -10,8 +10,9 @@
 # when it is a regular file or a glob that no hook name can match (_g16_foreign).
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
-# to disk and then run by name; and any other spelling of a hook path than the ones _g16_hooks reads
-# (any case, line continuations, the APFS folds of s and k, quotes, backslashes, globs and braces).
+# to disk and then run by name; a word _g16_foreign clears, which it judges by a name and by the disk as
+# the guard runs; and any other spelling of a hook path than the ones _g16_hooks reads (any case, line
+# continuations, the APFS folds of s and k, quotes, backslashes, globs and braces).
 
 _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
 _G16_STATE_CMD="commands may not write kern session state"
@@ -24,7 +25,7 @@ _G16_UNREAD_HOOKS="the command's quotes could not be taken out (tr did not run),
 _G16_UNREAD_IN="input could not be lower-cased (tr did not run), so G16 cannot tell whether it carries /kern:autopilot or /kern:mode; try the call again"
 _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory or \$CLAUDE_CONFIG_DIR, where kern and Claude Code settings live; the user confirms each write"
-_G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool"
+_G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool, and a path written literally, with no substitution, gets judged by the file it names"
 _G16_HOOK_FILE="the target is kern's own hook code, under its hooks directory, which every guard and the approval check rely on; the user confirms each write"
 _G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
 # U+017F (long s) and U+212A (Kelvin sign), in UTF-8: APFS folds them to s and k in a file name.
@@ -1015,9 +1016,8 @@ _g16_hooks() {
 # _g16_foreign WORD RO MOVED NAMES [cwd]: exit 0 when WORD, a word that names a hooks directory, goes out
 # of the text. It reads the disk as the guard runs, which a command can change before it uses WORD, and it
 # sees only the directory changes the text spells. So a cleared word is no proof that a command misses
-# kern's hook code, and only a command that truly reads (RO 1) is cleared on the disk's word. MOVED is 1
-# when the text spells a directory change, and NAMES is the file names of kern's hook code. Every word
-# needs all of these:
+# kern's hook code. MOVED is 1 when the text spells a directory change, and NAMES is the file names of
+# kern's hook code. Every word needs all of these:
 # - the directory is plain: WORD, or WORD up to its last / when only the last part is a glob or a
 #   variable, in name characters. It needs a part named hooks, and must exist: a missing one proves
 #   nothing, and text does not tell where it would be;
@@ -1025,14 +1025,16 @@ _g16_hooks() {
 # - cd -P puts the directory outside KERN_ROOT, and KERN_ROOT outside it, in any case.
 # Then RO 1 clears it. Otherwise the directory must hold no file named in NAMES, since a copy of kern
 # runs as kern on the same plugin data, which also keeps a hook's own name. And the last part, in any
-# case, must be a regular file that is no symlink, or a glob with no $, backtick or { that _g16_glob
-# says cannot match NAMES, so that a hook name, a variable or a directory stays in any command that is
-# not a read. That is a test of a name and of the disk as the guard runs, and no more: the command may
-# change the file before it uses it, and a directory change the text does not spell can point a relative
-# word at another file. The awk's paths pass keeps the whole text of a command that matches hit or holds
-# a substitution, so a word cleared here never spells a hook, or a .sh file under hooks/lib or
-# hooks/guards. With cwd, WORD is the session's directory, which stays a directory, so the last part is
-# not read.
+# case, must be a regular file that is no symlink and not named in NAMES, or a glob with no $, backtick
+# or { that _g16_glob says cannot match NAMES, so that a hook name, a variable or a directory stays in
+# any command that is not a read. That is a test of a name and of the disk as the guard runs, and no
+# more: the command may change the file before it uses it, and a directory change the text does not
+# spell can point a relative word at another file. The awk's paths pass keeps the whole text of a
+# command that matches hit or holds a substitution, so a word cleared here never spells a hook, or a .sh
+# file under hooks/lib or hooks/guards. A cleared word still takes the hooks context with it, so a bare
+# hook name, a last part or a plain variable in another word reads as outside any hooks directory, and a
+# pipe can carry a derived directory with no substitution in the text. With cwd, WORD is the session's
+# directory, which stays a directory, so the last part is not read.
 _g16_foreign() {
   local w=${1%/} l d p r k bad=0 n
   l=${w##*/}
@@ -1070,7 +1072,10 @@ _g16_foreign() {
   case "$l" in
     *[\$\`\{]*) bad=1 ;;
     *[\*\?\[]*) if _g16_glob "$4" "$l"; then bad=1; fi ;;
-    *) [ -f "$p" ] && [ ! -L "$p" ] || bad=1 ;;
+    *)
+      case " $4 " in *" $l "*) bad=1 ;; esac
+      [ -f "$p" ] && [ ! -L "$p" ] || bad=1
+      ;;
   esac
   shopt -u nocasematch
   [ "$bad" = 0 ]
@@ -1151,9 +1156,13 @@ _g16_hooks_read() {
       ;;
   esac
   # var: the hooks directory in play may be kern's, so a word that could hold anything counts. Inside a
-  # foreign one (ctx from CWD alone) only a hook's name, or a glob that could match one, still counts.
+  # foreign one (ctx from CWD alone) only a hook's name, or a glob that could match one, still counts,
+  # unless the text holds a substitution, which can leave that directory.
   var=$ctx
-  if [ "$ctx" = 1 ] && _g16_foreign "$CWD" 0 0 "$names" cwd; then var=0; fi
+  case "$t" in
+    *'$('* | *'${'* | *'`'*) ;;
+    *) if [ "$ctx" = 1 ] && _g16_foreign "$CWD" 0 0 "$names" cwd; then var=0; fi ;;
+  esac
   r=$(printf '%s\n' "$t" | env LC_ALL=C awk -v ansi="$ansi" "$_G16_HOOK_AWK") || return 2
   if [ "$mode" = literal ]; then
     [ "${r%%"$nl"*}" = hit ]

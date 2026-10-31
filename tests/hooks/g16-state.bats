@@ -1309,3 +1309,19 @@ project_hooks() {
   expect_hook "cd $K; cd hooks; cat prompt-submit" "git -C $K log src/hooks/useForm.ts prompt-submit" \
     "$(printf '%s\n' "bash <<'EOF'" 'cat prompt-submit src/hooks/useForm.ts' 'EOF')"
 }
+
+# M3 part 1 Task 9, fix round 3.
+@test "a file named as kern's lib or guard file, in any case, keeps its vote in a foreign hooks folder" {
+  C="$BATS_TEST_TMPDIR/copy"
+  mkdir -p "$C/hooks"
+  : >"$C/hooks/STATE.SH"
+  : >"$C/hooks/G16-STATE.SH"
+  expect_hook "bash $C/hooks/STATE.SH" "bash $C/hooks/G16-STATE.SH"
+}
+
+@test "a substitution keeps the vote of a word inside a hooks folder outside KERN_ROOT" {
+  project_hooks
+  CWD="$R/src/hooks"
+  # shellcheck disable=SC2016 # literal $( ), ${ } and backticks
+  expect_hook 'cat ${x}' 'cat $(cat x)' 'cat `cat x`'
+}
