@@ -13,8 +13,9 @@ G18_ANY=$'\034'
 g18_allowed() {
   local c words w1 sub w n=0
   # 2>&1, >&2 and a redirect to /dev/null are dropped only when they end their word: >&1x writes to a
-  # file named 1x, and >/dev/nullx to /dev/nullx.
-  c=$(printf '%s' "$1" | sed -E -e 's/[0-9]*>&[0-9]+([[:space:]]|$)/\1/g' \
+  # file named 1x, and >/dev/nullx to /dev/nullx. One right after a $ or its digits is marked first, so
+  # it stays for _g18_expands to deny: dropped, it would leave a text ending in a $ that is not literal.
+  c=$(printf '%s' "$1" | sed -E -e 's/(\$[0-9]*&?>)/\1_/g' -e 's/[0-9]*>&[0-9]+([[:space:]]|$)/\1/g' \
     -e 's#(&|[0-9]*)>[[:space:]]*/dev/null([[:space:]]|$)#\2#g' -e 's/^[[:space:]]*//')
   _g18_expands "$c" && return 1
   words=$(_shell_words "$c")
@@ -118,8 +119,9 @@ _g18_plain() {
 
 # _g18_expands TEXT: exit 0 when the shell may turn TEXT into words it does not show, or write: a $ or a
 # backtick outside single quotes ($_, ${x:--o}, $'-o', $(id)), a brace expansion ({-o,out.txt}), a > or <(
-# outside all quotes, or a quote that never closes. A $ before a blank or a closing double quote stays a $,
-# such as a regex anchor. A brace pair after @ with no comma or .. inside, such as git's HEAD@{1} or @{u},
+# outside all quotes, or a quote that never closes. A $ before a blank, a closing double quote or the end
+# of TEXT stays a $, such as a regex anchor: _g18_denies joins lines first, so at the end of a record only a
+# separator can follow it. A brace pair after @ with no comma or .. inside, such as git's HEAD@{1} or @{u},
 # does not expand. One brace list of file names in a word passes (list below) only when the record's first
 # word is cat, head, tail, wc, ls, grep, rg, stat or du: each takes extra words only as more operands to
 # read. Other commands' words are positional, so git -C {.,branch} log runs git -C . branch log; they keep
@@ -149,7 +151,7 @@ _g18_expands() {
         if (q == sq) { if (c == sq) q = ""; else s = s (c ~ /[{},<>[:space:]]/ ? "_" : c); continue }
         if (c == "\\") { i++; s = s (C[i] ~ /[{},<>[:space:]]/ ? "_" : C[i]); continue }
         if (c == "`") exit 0
-        if (c == "$" && C[i + 1] !~ /[[:space:]]/ && !(q != "" && C[i + 1] == "\"")) exit 0
+        if (c == "$" && C[i + 1] != "" && C[i + 1] !~ /[[:space:]]/ && !(q != "" && C[i + 1] == "\"")) exit 0
         if (q == "\"") { if (c == "\"") q = ""; else s = s (c ~ /[{},<>[:space:]]/ ? "_" : c); continue }
         if (c == sq || c == "\"") { q = c; continue }
         s = s c
@@ -320,19 +322,33 @@ EOF
 }
 
 # _g18_join CMD: CMD with its line continuations removed. A backslash pairs with the next character, so an
-# escaped backslash before a newline stays. Exit 1 on a line whose comment ends in a backslash, or on any
-# here-doc: the shell keeps a continuation there, so removing it would hide the next line.
+# escaped backslash before a newline stays. Exit 1 where the shell keeps a continuation, since removing it
+# would change what runs: on a line whose comment ends in a backslash, inside single quotes, where the
+# newline can split a value in bash, and on a here-doc, tested on the joined text since a continuation can
+# split its <<. Inside single quotes it refuses, not keeps: an apostrophe in a comment can mislead the quote
+# tracking and so leave a real continuation in place. A misread the other way is safe, since _g18_read
+# stops at any comment.
 _g18_join() {
-  printf '%s' "$1" | env LC_ALL=C awk '
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
     { if ($0 ~ /(^|[ \t;&|()])#.*\\$/) bad = 1; buf = buf (NR > 1 ? "\n" : "") $0 }
     END {
-      if (bad || index(buf, "<<")) exit 1
+      if (bad) exit 1
       n = split(buf, C, "")
       for (i = 1; i <= n; i++) {
-        if (C[i] != "\\") { printf "%s", C[i]; continue }
-        if (C[i + 1] != "\n") printf "%s%s", C[i], C[i + 1]
-        i++
+        c = C[i]
+        if (q == sq) {
+          if (c == "\\" && C[i + 1] == "\n") exit 1
+          if (c == sq) q = ""
+        } else if (c == "\\") {
+          if (C[i + 1] != "\n") o = o c C[i + 1]
+          i++
+          continue
+        } else if (c == "\"") q = (q == "" ? c : "")
+        else if (c == sq && q == "") q = sq
+        o = o c
       }
+      if (index(o, "<<")) exit 1
+      printf "%s", o
     }'
 }
 

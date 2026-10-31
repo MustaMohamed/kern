@@ -300,7 +300,19 @@ T=ao; sort $T\\\n:s/a/-/ out.txt a.txt
 T=a-o; sort $T\\\n[2,3] out.txt a.txt
 sort a.txt $\\\n(echo -ob.txt)
 x=a; sort $xé-o out.txt a.txt
-grep -n x$
+EOF
+}
+
+@test "a continuation that the shell keeps or that splits an operator is denied" {
+  each_denied <<'EOF'
+cat a\\\n#b; rm c
+cat a # b\\\nrm c
+cat a\n# b\\\nrm c
+cat a \\\n# b\\\nrm c
+d='a\\\n-o'; sort $d out.txt a.txt
+d='x\\\n-delete'; find . $d
+for f in 'a\\\n-o'; do sort $f out.txt a.txt; done
+cat <\\\n<'E'\nb\\\nE\nrm a\nE
 EOF
 }
 
@@ -314,6 +326,11 @@ EOF
   [ "$status" -ne 0 ]
   run _g18_join $'a <<E \\\nb'
   [ "$status" -ne 0 ]
+  run _g18_join $'a \'b\\\nc\''
+  [ "$status" -ne 0 ]
+  run _g18_join $'cat <\\\n<E'
+  [ "$status" -ne 0 ]
+  [ "$(_g18_join $'\"it\'s\\\nb\"')" = "\"it'sb\"" ]
 }
 
 @test "an assignment of a read-only substitution is read as an unknown word" {
@@ -358,6 +375,12 @@ rg -n a\\>b a.ts
 git log --format='%h > %s' -1
 grep -n \"x$\" a.ts
 grep -n x$ a.ts
+grep -n x$
+grep x$ | head
+rg foo$
+git ls-files | grep tsx$
+grep x$ 2>&1
+cat a.txt >/dev/null 2>/dev/null
 EOF
   each_denied <<'EOF'
 rg -n \"$(foo)\" a.ts
@@ -367,6 +390,9 @@ cat a.ts > b'
 cat 'a > b
 cat a >(cat)
 grep -n \"$x\" a.ts
+grep x$2>&1
+rg -$0>&1
+d=a; cat $d; grep x$
 EOF
 }
 
