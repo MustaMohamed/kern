@@ -52,8 +52,8 @@ decide() {
   [ "$(decide "git commit -F $BATS_TEST_TMPDIR/msg")" = deny ]
 }
 
-@test "commit: git -C <wt> add -- <files> gets no kern vote" {
-  [ "$(decide "git -C $W add -- x.txt")" = none ]
+@test "commit: git -C <wt> add -- <files> is allowed under autopilot" {
+  [ "$(decide "git -C $W add -- x.txt")" = allow ]
 }
 
 @test "finish-branch: the draft PR command with a single-quoted --title and a body file under .kern/tmp is allowed" {
