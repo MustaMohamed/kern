@@ -704,18 +704,86 @@ EOF"
   no_vote
 }
 
-@test "a Write or Edit of a working file gets no vote; the same on a spec or plan is denied" {
+@test "a Write or Edit of a working file that holds only the word gets no vote" {
   working_dirs
   for f in ledgers/x/ledger.md reviews/task-3.md tmp/p.md; do
-    write_to "$R/.kern/$f"
+    run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/$f\",\"content\":\"Task quality: approved\\n\"")" g20
     no_vote
   done
   cp "$SPEC" "$R/.kern/tmp/draft.md"
-  edit 'status: draft' 'status: approved' false "$R/.kern/tmp/draft.md"
+  edit '## Problem' '## Problem\nThe size was approved.' false "$R/.kern/tmp/draft.md"
   no_vote
-  write_to "$R/.kern/plans/x.md"
+}
+
+@test "a Write or Edit that approves a working file, spec or plan is denied" {
+  working_dirs
+  for f in ledgers/x/ledger.md reviews/task-3.md tmp/p.md plans/x.md; do
+    write_to "$R/.kern/$f"
+    denied
+  done
+  cp "$SPEC" "$R/.kern/tmp/draft.md"
+  edit 'status: draft' 'status: approved' false "$R/.kern/tmp/draft.md"
   denied
   edit 'status: draft' 'status: approved'
+  denied
+}
+
+@test "a shell redirect that approves a working file is denied" {
+  working_dirs
+  for f in .kern/ledgers/x/ledger.md .kern/reviews/p.md .kern/tmp/p.md; do
+    sh_cmd "echo 'status: approved' > $f"
+    denied
+    sh_cmd "echo 'status: \"approved\"' >> $f"
+    denied
+    sh_cmd "echo \"'Status' : 'Approved'\" >> $f"
+    denied
+    sh_cmd "echo 'status:approved' >> $f"
+    denied
+  done
+}
+
+@test "a here-doc that approves a working file is denied" {
+  working_dirs
+  sh_cmd "cat > .kern/tmp/p.md <<'EOF'
+---
+status: approved
+approved: 2026-10-14, yes
+---
+EOF"
+  denied
+}
+
+@test "a printf that carries an approval in one word is denied" {
+  working_dirs
+  sh_cmd "printf '---\nstatus: approved\napproved: 2026-10-14\n---\n' > .kern/tmp/p.md"
+  denied
+  sh_cmd "printf 'status:\tapproved\n' > .kern/tmp/p.md"
+  denied
+}
+
+@test "an approval written after a cd into a working directory is denied" {
+  working_dirs
+  sh_cmd "cd .kern/tmp && printf 'status: approved\n' > p.md"
+  denied
+}
+
+@test "an approval written through a symlinked working name is denied" {
+  working_dirs
+  printf 'x\n' > "$R/.kern/reviews/real.md"
+  ln -s ../reviews/real.md "$R/.kern/tmp/link.md"
+  ln -s ../reviews "$R/.kern/tmp/dir"
+  sh_cmd "printf 'status: approved\n' >> .kern/tmp/link.md"
+  denied
+  sh_cmd "printf 'status: approved\n' > .kern/tmp/dir/x.md"
+  denied
+  write_to "$R/.kern/tmp/link.md"
+  denied
+}
+
+@test "when the check for an approval cannot run, a working file is judged" {
+  working_dirs
+  read_fails grep '*status*'
+  sh_cmd "printf 'approved\n' > .kern/tmp/p.md"
   denied
 }
 
@@ -817,7 +885,7 @@ EOF"
   sh_cmd "printf 'approved\n' > .work/tmp/p.md"
   no_vote
   write_to "$R/.work/reviews/p.md"
-  no_vote
+  denied
   mkdir -p "$R/.kern/tmp"
   sh_cmd "printf 'approved\n' > .kern/tmp/p.md"
   denied

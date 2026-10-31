@@ -447,7 +447,7 @@ opened() {
 @test "ledger-open takes a plan and spec in their own directories" {
   work_repo
   mkdir -p docs/specs docs/tmp
-  for s in WORK/specs/s.md .kern/specs/s.md docs/specs/s.md ../specs/s.md docs/tmp/s.md; do
+  for s in WORK/specs/s.md .kern/specs/s.md docs/specs/s.md ../specs/s.md docs/tmp/s.md WORK/plans/../specs/s.md; do
     spec_plan .kern/plans/p.md "$s"
     opened .kern/plans/p.md
   done
@@ -494,6 +494,28 @@ opened() {
   mkdir .kern/tmp/sub
   ln -s ../tmp/sub .kern/plans/dir
   refused .kern/plans/dir/../p.md "$REPO/.kern/tmp"
+}
+
+@test "ledger-open refuses a spec: that holds .. after a directory that does not exist" {
+  work_repo
+  for s in .kern/gone/../reviews/s.md WORK/gone/../reviews/s.md; do
+    spec_plan .kern/plans/p.md "$s"
+    refused .kern/plans/p.md "spec: $s"
+    [[ "$stderr" == *'a .. after a directory that does not exist'* ]] || { echo "$s: $stderr"; return 1; }
+  done
+}
+
+@test "ledger-open reads the repository it stands in, whatever the git environment names" {
+  work_repo
+  approved_plan .kern/tmp/p.md
+  make_fixture "$TMP/other"
+  export GIT_DIR="$TMP/other/.git" GIT_WORK_TREE="$TMP/other"
+  refused .kern/tmp/p.md "$REPO/.kern/tmp"
+  unset GIT_WORK_TREE
+  refused .kern/tmp/p.md "$REPO/.kern/tmp"
+  unset GIT_DIR
+  export GIT_COMMON_DIR="$TMP/other/.git"
+  refused .kern/tmp/p.md "$REPO/.kern/tmp"
 }
 
 @test "ledger-open refuses a plan past 8 symlinks" {

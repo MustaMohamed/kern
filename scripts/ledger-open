@@ -7,13 +7,16 @@
 # Exit 2: the plan is not approved (status: approved and an approved: line with a date and the user's
 # quoted words), the plan, the file a symlinked plan names, or its spec: line is not a Markdown name
 # (G20 checks approvals only in Markdown files), the plan or its spec: is a working file (under
-# WORK/ledgers, WORK/reviews or WORK/tmp, itself or through a symlink or ..; G20 does not judge those)
-# or is reached past 8 symlinks, a settings file that could set work_dir cannot be read, DIR holds
-# another plan's ledger, or the plan's content differs from its ledger's Plan: line. Each refusal writes
-# nothing; one about an existing ledger also prints `rerun as: bash .../ledger-open PLAN DIR-<n>`, the
-# first free DIR-<n>. --summary exits 1 when the main checkout changed.
+# WORK/ledgers, WORK/reviews or WORK/tmp, itself or through a symlink or ..; G20 lets the word approved
+# into those) or is reached past 8 symlinks, a spec: holds .. after a directory that does not exist, a
+# settings file that could set work_dir cannot be read, DIR holds another plan's ledger, or the plan's
+# content differs from its ledger's Plan: line. Each refusal writes nothing; one about an existing
+# ledger also prints `rerun as: bash .../ledger-open PLAN DIR-<n>`, the first free DIR-<n>. --summary
+# exits 1 when the main checkout changed.
 # Ledger identity adapted from superpowers subagent-driven-development/scripts/sdd-workspace (MIT).
 set -euo pipefail
+# The repository is the one the paths are in, not one the environment names.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
 here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
 . "$here/../hooks/lib/settings.sh"
@@ -40,6 +43,7 @@ markdown() {
 # real_path FILE: absolute FILE with the longest part of its directory that exists read as the file
 # system reads it: no .. and no symlink, in the directory's own case. cd -P reads a link/.. as the file
 # system does, where a plain cd drops the link, and on macOS the pwd builtin keeps the case it was given.
+# Exit 1 on a .. after a directory that does not exist, which names no known place.
 real_path() {
   local d rest r
   case "$1" in /*) d=$1 ;; *) d=$PWD/$1 ;; esac
@@ -50,6 +54,7 @@ real_path() {
     rest=${d##*/}/$rest
     d=${d%/*}
   done
+  case "/$rest" in */../* | */..) return 1 ;; esac
   printf '%s/%s\n' "${r%/}" "$rest"
 }
 
@@ -72,19 +77,19 @@ work_of() {
 }
 
 # refuse_working WHAT FILE: exit 2 when FILE, or a symlink on the way to it, is under WORK/ledgers,
-# WORK/reviews or WORK/tmp of this repository or the one that holds it. G20 does not judge those files
-# (_g20_working), so an approval there proves nothing. WHAT names FILE in the refusal.
+# WORK/reviews or WORK/tmp of this repository or the one that holds it. G20 lets the word approved into
+# those files (_g20_working), so they are not plans or specs. WHAT names FILE in the refusal.
 refuse_working() {
   local p=$2 i=0 mine w sub link
   while :; do
-    p=$(real_path "$p") || { echo "ledger-open: cannot read the path of $1" >&2; exit 2; }
+    p=$(real_path "$p") || { echo "ledger-open: cannot read the path of $1: it may hold a .. after a directory that does not exist" >&2; exit 2; }
     mine=$(work_of "$(dirname "$p")") || exit 2
     for w in "$work" "$mine"; do
       [ -n "$w" ] || continue
       for sub in ledgers reviews tmp; do
         case "$p" in
           "$w/$sub"/*)
-            echo "ledger-open: $1 is a working file under $w/$sub; G20 does not judge approvals there, so a plan or spec cannot live there" >&2
+            echo "ledger-open: $1 is a working file under $w/$sub; a plan or spec cannot live there" >&2
             exit 2
             ;;
         esac
@@ -171,9 +176,10 @@ case "$spec" in
     file=$spec
     case "$file" in WORK/*) file=$work/${file#WORK/} ;; esac
     main=$(kern_main_root "$PWD" 2> /dev/null) || main=''
-    for c in "$file" "$(dirname "$plan")/$file" "$main/$file"; do
-      refuse_working "$plan: spec: $spec" "$c"
-    done
+    case "$file" in
+      /*) refuse_working "$plan: spec: $spec" "$file" ;;
+      *) for c in "$file" "$(dirname "$plan")/$file" "$main/$file"; do refuse_working "$plan: spec: $spec" "$c"; done ;;
+    esac
     ;;
 esac
 status=$(printf '%s\n' "$fm" | sed -n 's/^status:[[:space:]]*//p' | head -n 1)
