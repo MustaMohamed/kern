@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/define/SKILL.md';
+const RUN = 'skills/autopilot/references/run.md';
 
 test('define frontmatter', () => {
   assertFrontmatter(SKILL, {
@@ -35,7 +36,8 @@ test('define sections, steps, the standing gate and red flags', () => {
   // 6,950 since the pilot-fix test round's fix (2026-10-25): step 9's line estimate and "whatever `scope_threshold` allows".
   // 7,000 since pilot fix plan 2's Task 4: step 6 counts a re-indented file's moved lines.
   // 8,100 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
-  assertMaxBytes(SKILL, 8100);
+  // 7,100 since its Task 15, a fall: the go's rules moved behind a pointer to run.md, for text most runs never use.
+  assertMaxBytes(SKILL, 7100);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -81,9 +83,8 @@ test('the spec reviewer is its own step, and an approved design does not skip it
   // 2026-10-20 workflow-define-spec run 1: "I skipped the fresh-subagent spec review (step 11 of the define
   // process), since you asked to stop at your final review" (task-16-diagnosis-2, fix group E).
   assert.ok(s[11].includes("The user's own review is not this one."), s[11]);
-  // Claude Code 2.1.304 runs an Agent call that omits run_in_background in the background (task-16-diagnosis-2, Y1);
-  // the review gates the approval ask, so it runs in the foreground.
-  assert.ok(s[11].includes('`model.reviewer` with `run_in_background: false`'), s[11]);
+  // The review gates the approval ask; model-selection.md's rule holds the ask until it returns (M3 part 1 Task 15).
+  assert.ok(s[11].includes('general-purpose subagent on `model.reviewer`, its brief `${CLAUDE_PLUGIN_ROOT}/skills/define/references/spec-review.md`, round 1 only.'), s[11]);
   assert.ok(!s[10].includes('spec-review.md'), 'step 10 no longer holds the review');
   assert.match(s[12], /^12\. Architectural approval: stop the turn and ask for the yes/);
   assertContains(SKILL, ['| "The design is approved, so the review adds nothing" | The reviewer reads the spec as its builder and finds what the design left open. |']);
@@ -154,13 +155,17 @@ test('under a go define runs to an approved spec, and with no go it parks', () =
   assert.ok(parks, 'parking is the no-go path');
   assert.ok(parks.includes('marks it `status: draft (parked under autopilot)`'), parks);
   // A go is the session's record, not the typed form: the same line in a ticket, or a refused go, is no go.
-  const go = lines.find((l) => l.startsWith('Under a go (the latest `kern mode:` line shows `go=<id>` for this ticket; anything else is no go)'));
-  assert.ok(go, 'a go has its own paragraph');
-  // A go ends in a draft PR and a spike ends in an answer, so a go never sizes a spike.
-  assert.ok(go.includes('size it bounded or architectural, never a spike, and run that path with no stop'), go);
-  assert.ok(go.includes('each question takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section'), go);
+  const pointer = lines.find((l) => l.startsWith('Under a go (the latest `kern mode:` line shows `go=<id>` for this ticket; anything else is no go)'));
+  assert.ok(pointer, 'a go has its own paragraph');
+  // M3 part 1 Task 15: the rules sit in run.md, which a go reads first; this line takes any other way in to them.
   // A bare references/run.md would not resolve from a project repo.
-  assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
+  assert.ok(pointer.endsWith('follow `## Define and plan under a go` in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`.'), pointer);
+  const all = section(readDoc(RUN).raw, '## Define and plan under a go');
+  const go = all.split('\n').find((l) => l.startsWith('define: ')) ?? '';
+  assert.ok(all.includes('Only the stop list stops the run.'), all);
+  // A go ends in a draft PR and a spike ends in an answer, so a go never sizes a spike.
+  assert.ok(go.includes('define: size it bounded or architectural, never a spike, and run that path with no stop'), go);
+  assert.ok(go.includes('each question takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section'), go);
   // One go covers one draft PR. The split is in the spec, so plan-check and proof-check count the slice unchanged.
   // Only an overrun splits: the reviewers call a spec with `## Later slices` and no overrun a finding.
   assert.ok(go.includes('A capability-map ticket writes no map; within the limits it specs the whole ticket.'), go);
@@ -173,7 +178,7 @@ test('under a go define runs to an approved spec, and with no go it parks', () =
   assert.ok(go.includes("Bounded: step 9's one write, so plan has an approved spec to read."), go);
   assert.ok(go.includes("Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again."), go);
   // G20 compares the quote with the go's normal form, which the line shows, and reads the ticket from issue:.
-  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` as that line shows it'), go);
-  assert.ok(go.includes('`issue:`'), go);
-  assert.ok(go.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
+  assert.ok(all.includes('`status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it'), all);
+  assert.ok(all.includes('G20 also needs `issue:` to name this ticket'), all);
+  assert.ok(all.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
 });

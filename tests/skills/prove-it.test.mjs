@@ -24,7 +24,8 @@ test('prove-it sections, steps, gate and red flags', () => {
     'for a module or export the patch adds, or a test-only patch, report `probe inconclusive: new module` and prove the new code with `probe --mutate <file>:<line> <wt> -- <test command>`']);
   // 4,550 since M3 part 1's Task 14 (raised from 3,997): step 4 reports a skipped or unrun required check as `fail`, Outputs names
   // what carries `inferred`, and the Under autopilot text follows run.md's wait rule and finish-branch's fix round and end path.
-  assertMaxBytes(SKILL, 4550);
+  // 4,610 since its Task 15: step 3 says when a passed `test.full` stands, or "fresh" read against that rule.
+  assertMaxBytes(SKILL, 4610);
 });
 
 test('a claim no command showed carries inferred or guess in its own sentence, not as a line form', () => {
@@ -101,7 +102,27 @@ test('verify.fast defaults to each of typecheck and lint that resolves, as setti
 test('evidence reference', () => {
   assertHeadings('skills/prove-it/references/evidence.md', ['# Evidence by claim', '## Claim table', '## Labels', '## Inconclusive is a fail']);
   assertContains('skills/prove-it/references/evidence.md', ['zero tests ran']);
-  assertMaxBytes('skills/prove-it/references/evidence.md', 2100);
+  // 2,150 since M3 part 1's Task 15 (raised from 2,100): the one-run rule with its two limits, and the emulator walk's bound.
+  // 2,550 since its fix rounds 1 and 2: the run's log from this session and the citing line, and a walk's same-tree rule and what follows past 2 reruns.
+  assertMaxBytes('skills/prove-it/references/evidence.md', 2550);
+});
+
+test('a failed emulator walk resumes from the failed step, within a bound', () => {
+  // M3 part 1 Task 15: the design's "Emulator walks rerun whole". The walk tool is the project's own, so kern's change is this guidance.
+  const walk = section(readDoc('skills/prove-it/references/evidence.md').raw, '## Inconclusive is a fail');
+  // Fix round 1, I3: a fix moves the tree, and a resumed walk would rest on the old one; and a real failure is red, not unrunnable.
+  for (const n of ['A failed emulator walk resumes from the failed step only on the same tree, at most 2 reruns of a step.', 'A fix moves the tree, so the walk reruns whole from a clean app.',
+    'Past 2 reruns, a real failure is red and takes a fix round; only a walk that cannot run is a required check that cannot run.']) assert.ok(walk.includes(n), n);
+  assert.ok(!walk.includes('then it is a required check'), walk);
+  assertContains('skills/autopilot/references/run.md', ['| A required check that cannot run |']);
+});
+
+test('the claim table and step 3 say when a passed test.full stands', () => {
+  // M3 part 1 Task 15: "An earlier run" read against the one-run-per-tree rule, and so did step 3's "fresh".
+  const e = 'skills/prove-it/references/evidence.md';
+  assertContains(e, ['An earlier run on another tree, a partial run,', 'A `test.full` that passed on tree `<id>` in this run stands for that tree;']);
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[3].includes('`references/evidence.md` says when a passed `test.full` stands.'), s[3]);
 });
 
 test('the M0 placeholder is gone', () => {

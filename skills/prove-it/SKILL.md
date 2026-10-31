@@ -9,10 +9,10 @@ No claim of done, fixed, passing or verified without a fresh run on the real art
 
 ## Steps
 
-0. Defer: if the kern settings block names an override for this job, follow that project skill instead, say so in one line, and stop.
+0. Defer: if the kern settings block names an override for this job, follow that skill instead, say so in one line, and stop.
 1. Name the claim and its proving command from `references/evidence.md`. Resolve each with `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get <key>`, else `kern-detect <key>`, and print each with its source. When both exit 3, ask for the command; the claim is a guess until it runs.
 2. For a subagent's "success", Read the package `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <tree-before, else HEAD>` writes, or the files it names, before you run its test; a failing test does not skip this. `git diff` omits untracked files.
-3. Run the proving command fresh and in full on the tree that will be integrated: the worktree, if the work is there.
+3. Run the proving command fresh and in full on the tree that will be integrated: the worktree, if the work is there. `references/evidence.md` says when a passed `test.full` stands.
 4. Read the exit code, the failure count and the whole output. Inconclusive, zero tests run, or the wrong environment counts as a fail. A skipped or unrun required check is reported as `fail`, never `not run`, and blocks `verified`. Suspect the observation method before the system.
 5. For a new guard or regression test, make the patch with `wt-diff` (it writes `<package>.patch` too) and run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/probe --exclude-tests <wt> <change.patch> -- <test command>`; it must print `probe: fail-then-pass ok`. The allow case uses a value a real caller sends. Exit 3 is reported as "probe inconclusive"; for a module or export the patch adds, or a test-only patch, report `probe inconclusive: new module` and prove the new code with `probe --mutate <file>:<line> <wt> -- <test command>`.
 6. For "requirements met", re-read the acceptance lines from `spec.source` and tick each against evidence.

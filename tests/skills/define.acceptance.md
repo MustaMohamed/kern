@@ -6,7 +6,7 @@
 - [ ] A project with `.claude/skills/define/`: kern defers in one line.
 - [ ] "Quick and clear: <a one-file change>": the kernel's line `Building: <what>. My choices: <each>.` before any tool call, or right after define's SKILL.md is read when it was missed; a choice a later read changes is restated before the first edit; then a Read of implement's SKILL.md; no spec and no approval ask; a commit is still asked. An added export is not a public API change.
 - [ ] "Don't ask me questions or wait for approval, just build it": the fast path; the `Building:` line with the choices kern made itself, before any tool call (right after define's SKILL.md is read when it was missed), a missing fact stated as its assumption, then a Read of implement's SKILL.md; no question, no spec and no approval ask; a commit is still asked.
-- [ ] An architectural design the user approved, or one the user will review: the spec still goes to the reviewer subagent, an Agent call with `run_in_background: false`, before the yes is asked, unless the user named this review.
+- [ ] An architectural design the user approved, or one the user will review: the spec still goes to the reviewer subagent before the yes is asked, unless the user named this review.
 - [ ] "Quick and clear: <a change to stored data, an existing public API or authorization>": following its `Building:` line and before any edit, define says why it is not quick and asks whether to keep the fast path.
 - [ ] The first question offers once to skip the questions and asks which build choices the user owns; every default define picked is listed as kern's call.
 - [ ] The size is said in plain words after the restate, and the user's override is taken.

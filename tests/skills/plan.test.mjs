@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/plan/SKILL.md';
+const RUN = 'skills/autopilot/references/run.md';
 
 test('plan frontmatter', () => {
   assertFrontmatter(SKILL, {
@@ -27,7 +28,8 @@ test('plan sections and steps', () => {
   // 6,600 since the pilot fix plan's Task 5 (raised from 6,500): step 1 reads pr.max_lines, step 9 writes the Size line.
   // 6,700 since the pilot fix plan's Task 5 fix round: step 7 acts on pr.max_lines and states a limit in chat only.
   // 7,900 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
-  assertMaxBytes(SKILL, 7900);
+  // 6,900 since its Task 15, a fall: the go's rules moved behind a pointer to run.md, for text most runs never use.
+  assertMaxBytes(SKILL, 6900);
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
@@ -97,7 +99,7 @@ test('plan pins order, routing and stop rules', () => {
     'A reply that is no explicit yes or names no choice: ask again',
     '`tracker`, `tracker.first`',
     'Under autopilot with no go a step 1 stop parks: give the `parked:` line in the reply and create no plan file',
-    'the split, never a plan over `scope_threshold`',
+    'the split, never a plan over `scope_threshold` or `pr.max_lines`',
     'Draft tracker sub-issues only on request',
     'execute-plan runs only an approved plan',
     'every stop parks',
@@ -179,12 +181,12 @@ test('only the user\'s word skips the plan review', () => {
   assert.ok(s[11].includes('round 1 only. Only the user\'s word skips this review, never size or budget.'), s[11]);
 });
 
-test('plan runs its gating review in the foreground', () => {
-  // Audit C-I6 (2026-10-22): in 2 of 3 kern plan transcripts the review's Agent call passed no
-  // run_in_background, so Claude Code ran it in the background and step 12 could ask for the yes before the
-  // review returned. define's spec review and execute-plan's reviews already pass false (ff764f9).
+test('plan sends its gating review to a fresh subagent, and step 12 waits for it', () => {
+  // Audit C-I6 (2026-10-22): in 2 of 3 kern plan transcripts step 12 could ask for the yes before the review returned.
+  // M3 part 1 Task 15: the dead Agent parameter went; model-selection.md's wait rule holds the ask.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[11].includes('send the plan to one fresh general-purpose subagent on `model.reviewer` (`run_in_background: false`), with `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md` as its brief'), s[11]);
+  assert.ok(s[11].includes('send the plan to one fresh general-purpose subagent on `model.reviewer`, with `${CLAUDE_PLUGIN_ROOT}/skills/plan/references/plan-review.md` as its brief'), s[11]);
+  assertContains('skills/execute-plan/references/model-selection.md', ["- When your next step needs an agent's return, wait for it."]);
 });
 
 test('an existing plan goes back to draft before it is updated, so its approval and its ledger are new', () => {
@@ -210,24 +212,28 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
   // plan-check requires one of step, inline or delegate on an approved plan, and nobody is there to choose.
   const lines = section(readDoc(SKILL).body, '## Stops and autopilot').split('\n');
   // A go is the session's record, not the typed form: the same line in a ticket, or a refused go, is no go.
-  const go = lines.find((l) => l.startsWith('Under a go (the latest `kern mode:` line shows `go=<id>` for this ticket; anything else is no go)'));
-  assert.ok(go, 'a go has its own paragraph');
-  assert.ok(go.includes("step 1's precondition stands: an unapproved spec routes to define"), go);
+  const pointer = lines.find((l) => l.startsWith('Under a go (the latest `kern mode:` line shows `go=<id>` for this ticket; anything else is no go)'));
+  assert.ok(pointer, 'a go has its own paragraph');
+  // M3 part 1 Task 15: the rules sit in run.md, which a go reads first; this line takes any other way in to them.
+  assert.ok(pointer.endsWith('follow `## Define and plan under a go` in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`.'), pointer);
+  const all = section(readDoc(RUN).raw, '## Define and plan under a go');
+  const go = all.split('\n').find((l) => l.startsWith('plan: ')) ?? '';
+  // "goes to", as "routes to" here names define for case-inputs.mjs, which would put every skill that points at run.md in a plan change's evals.
+  assert.ok(go.includes("plan: step 1's precondition stands: an unapproved spec goes to define"), go);
   // The go replaces the human yes only, and a spike is not a yes: an unsettled fact must not reach an approved plan.
   assert.ok(go.includes("Step 4's spike runs, the go standing for the nod;"), go);
-  assert.ok(go.includes("a fact it cannot settle follows that file's unblock and stop rules"), go);
+  assert.ok(go.includes("a fact it cannot settle follows this file's unblock and stop rules"), go);
   assert.ok(!go.includes('those defaults hold') && !go.includes('spike is not run'), go);
   assert.ok(go.includes("Step 7's scope question takes its default, with a `parked:` line under Open questions and in the run report."), go);
-  assert.ok(go.includes('only the stop list in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md` stops the run'), go);
+  assert.ok(all.includes('Only the stop list stops the run.'), all);
   // The review stays: the go replaces the human yes and nothing else.
-  assert.ok(go.includes("Step 12 does not stop: after step 11's plan-check and review, one Edit sets `status: approved`"), go);
-  assert.ok(go.includes('`approved: <date>, "/kern:autopilot go <id>"`, `<id>` as that line shows it'), go);
-  assert.ok(go.includes('`execution: delegate`'), go);
-  assert.ok(go.includes('`issue:`'), go);
-  assert.ok(go.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
-  assert.ok(go.includes('run the same plan-check again'), go);
+  assert.ok(go.includes("Step 12 does not stop: after step 11's plan-check and review, one Edit sets the two approval lines and `execution: delegate`; run the same plan-check again."), go);
+  assert.ok(all.includes('Each approval below sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it.'), all);
+  assert.ok(all.includes('G20 also needs `issue:` to name this ticket'), all);
+  assert.ok(all.includes('`issue: "#853"`'), 'a bare # opens a YAML comment, so the text shows it quoted');
   // One go covers one draft PR. plan-check fails a plan that leaves a spec line uncovered, so the split is in the spec.
-  assert.ok(go.includes('A plan over `scope_threshold` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan giving the whole ticket\'s files and lines against the limit, then plan-check runs.'), go);
+  // Task 15: define leaves a ticket within `scope_threshold` and over `pr.max_lines` to step 7.
+  assert.ok(go.includes('A plan over `scope_threshold` or `pr.max_lines` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan giving the whole ticket\'s files and lines against the limits, then plan-check runs.'), go);
   // Nobody confirms the split under a go, and a moved line leaves proof-check and self-review's spec lane, so a reviewer checks the overrun.
   assertContains('skills/plan/references/plan-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size` or the plan\'s `Decision:` line. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
   assert.ok(go.includes('The report lists the later slices, each needing its own go.'), go);

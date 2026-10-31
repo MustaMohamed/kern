@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
-import { section } from './helpers/md.mjs';
+import { section, assertMaxBytes, assertContains } from './helpers/md.mjs';
 
 const read = (name) => parseFrontmatter(readFileSync(join(import.meta.dirname, '..', 'skills', name, 'SKILL.md'), 'utf8'));
 
@@ -135,7 +135,8 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   assert.deepEqual(fix.split('\n').filter((l) => l.startsWith('|')).slice(2), [
     '| `split` from a finding on a line the last round changed | The fixes are not converging: stop with the report |',
     "| `split` or the size gate on size alone | finish-branch's default: go on, with Scope giving the size |",
-    "| A plan over `scope_threshold` | plan's default: take the split and run the first slice. The report lists the rest, and each needs its own go |",
+    // M3 part 1 Task 15: a ticket within `scope_threshold` and over `pr.max_lines` splits at plan step 7 too.
+    "| A plan over `scope_threshold` or `pr.max_lines` | plan's default: take the split and run the first slice. The report lists the rest, and each needs its own go |",
   ]);
 });
 
@@ -155,6 +156,42 @@ test('run.md lists every report field, the jobs another skill ran among them', (
 test('run.md sends long output to a file under kern-dir tmp and reads its tail', () => {
   // An allowed git or gh shape may only redirect to /dev/null or copy a descriptor, so its output stays out of the rule.
   assert.ok(section(RUN, '## Long output').includes('Long output from a command that is not an allowed git or gh shape goes to a file in the directory `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints, and the run reads its tail.'));
+});
+
+test('run.md keeps a go\'s main thread small, and one read of a route file does not outlive compaction', () => {
+  // M3 part 1 Task 15. The design's largest cost is main-thread turns times context.
+  const main = section(RUN, '## Main thread');
+  assert.ok(main, 'the section exists');
+  assert.ok(main.includes('Under a go, tasks run in subagents; bulk reads go to investigators; a route file is read once'), main);
+  assert.ok(main.includes(', and again only after compaction.'), main);
+  // Fix round 1, M1: an investigator's summary does not stand in for a read a step names.
+  assert.ok(main.includes("A step's named read stays in the main thread."), main);
+});
+
+test('run.md stays within its byte cap', () => {
+  // 6,100 since M3 part 1 Task 15, its first cap: the main-thread rule, and define's and plan's go rules behind a pointer.
+  // 6,130 since its fix round 1: a step's named read stays in the main thread.
+  assertMaxBytes('skills/autopilot/references/run.md', 6130);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,130 bytes (6,100 until M3 part 1 Task 15 fix round 1']);
+});
+
+test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {
+  // M3 part 1 Task 15. Each skill's own test holds step 0 to DEFER.
+  const dir = join(import.meta.dirname, '..', 'skills');
+  for (const n of readdirSync(dir).filter((d) => existsSync(join(dir, d, 'SKILL.md')))) {
+    assert.ok(!readFileSync(join(dir, n, 'SKILL.md'), 'utf8').includes('that project skill'), n);
+  }
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['Step 0 reads: "If the settings block names an override for this job, follow that skill instead, say so in one line, and stop."']);
+});
+
+test('the skills spec parks a judgment call only where run.md lets it', () => {
+  // M3 part 1 Task 15: A8 and execute-plan's section 6 parked every judgment call, while run.md
+  // stops on a design choice the ticket does not settle.
+  const spec = readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-m1-m2-skills.md'), 'utf8');
+  assert.ok(!spec.includes('judgment calls are parked'), 'no unbounded park');
+  assert.ok(spec.includes('Under autopilot: anything that would ask is denied; a judgment call the stop list in `skills/autopilot/references/run.md` does not stop for is parked as a `parked:` ledger line with the default chosen, a design choice on that list waits for a typed reply, and disjoint work continues;'));
+  assert.ok(spec.includes('Under autopilot: runs to the end; a judgment call the stop list in `skills/autopilot/references/run.md` does not stop for is parked with the default chosen; any other stop waits for a typed reply, with the data and a recommendation;'));
+  assert.ok(RUN.includes("A design choice stops the run when the ticket does not settle it"), 'run.md holds the rule the spec names');
 });
 
 test('each route under autopilot points at run.md from its own section', () => {
