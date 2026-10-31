@@ -139,7 +139,7 @@ export const PINS = {
     "the size stop takes one PR, why: a split is the user's scope call and a draft can be closed"],
   ledger: ['Only the scripts write `Task N: start`, review, minor and `Task N: complete` lines; never write or edit one by hand.',
     "A batch of tasks shares one brief, package and review, and the scripts still write each task's lines.",
-    "The other lines are appended with `printf '%s\\n' '<line>' >> <ledger>`", 'one holding the word approved goes in with the Edit tool',
+    "The other lines are appended with `printf '%s\\n' '<line>' >> <ledger>`",
     "Limit: no guard yet stops an Edit or Write that forges a script's line; that guard is deferred to M3.",
     'A task is done only when its `Task N: complete` line exists. Where a run resumes is in `resume.md`.',
     "| any step | a ruling: the user's answer to a stop, a mechanical call made without the user, or a \"Declined to judge\" ruling |"],

@@ -664,6 +664,11 @@ write_to() {
   run_guard "$(tool_payload Write "\"file_path\":\"$1\",\"content\":\"$INVENTED\"")" g20
 }
 
+# write_text PATH TEXT: a Write of TEXT, JSON text, to PATH.
+write_text() {
+  run_guard "$(tool_payload Write "\"file_path\":\"$1\",\"content\":\"$2\"")" g20
+}
+
 @test "a ledger append that holds approved gets no vote" {
   working_dirs
   sh_cmd "printf '%s\n' 'Decision: size approved as one PR' >> .kern/ledgers/x/ledger.md"
@@ -744,11 +749,13 @@ EOF"
   no_vote
 }
 
-@test "both words apart in a working file's text are denied" {
+@test "both words in a shell write's text are denied, and the reason sends it to the Write tool" {
   working_dirs
   sh_cmd "printf 'status of the size: approved by the lead\n' > .kern/tmp/p.md"
   denied
   [[ "$output" == *'both status and approved'* ]] || false
+  [[ "$output" == *'use the Write tool, which judges each line'* ]] || false
+  [[ "$output" == *'a line holding both stays denied'* ]] || false
 }
 
 @test "both words in upper case in a working file's text are denied" {
@@ -772,16 +779,75 @@ EOF"
   denied
 }
 
-@test "a Write or Edit that leaves both words in a working file's text is denied" {
+@test "a Write or Edit with both words on one line of a working file is denied, naming the line" {
   working_dirs
-  run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/reviews/p.md\",\"content\":\"Status: done\\nTask quality: approved\\n\"")" g20
+  write_text "$R/.kern/reviews/p.md" '# Note\nstatus of the size: approved by the lead\n'
   denied
-  [[ "$output" == *'both status and approved'* ]] || false
+  [[ "$output" == *'line 2 of p.md holds both status and approved'* ]] || false
+  [[ "$output" == *'reword that line'* ]] || false
+  [[ "$output" == *"keep a report's Status: line"* ]] || false
+  write_text "$R/.kern/reviews/p.md" 'APPROVED, AND THE STATUS STANDS\nstatus approved\n'
+  denied
+  [[ "$output" == *'line 1 of p.md'* ]] || false
+  [[ "$output" != *'line 2 of p.md'* ]] || false
   printf 'Status: done\n' > "$R/.kern/reviews/q.md"
   edit 'done' 'approved' false "$R/.kern/reviews/q.md"
   denied
+  [[ "$output" == *'line 1 of q.md'* ]] || false
+}
+
+@test "a Write of a report with Status: on one line and the word on a later line gets no vote" {
+  working_dirs
+  mkdir -p "$R/.kern/ledgers/x/reports"
+  write_text "$R/.kern/ledgers/x/reports/task-3.md" 'Status: DONE_WITH_CONCERNS\n\nThe size was approved as one PR.\n'
+  no_vote
+  write_text "$R/.kern/ledgers/x/reports/task-4.md" 'Status: DONE \\\nThe size was approved as one PR.\n'
+  no_vote
+}
+
+@test "a Write of a draft under WORK/tmp with its approved: placeholder gets no vote" {
+  working_dirs
+  write_text "$R/.kern/tmp/draft.md" '---\nstatus: draft\napproved: (set only on an explicit yes)\n---\n## Problem\n'
+  no_vote
+}
+
+@test "an Edit of a real ledger gets no vote" {
+  working_dirs
+  printf '%s\n' '# kern ledger: .kern/plans/x.md' 'Plan: abc' 'Main: /r branch=main head=abc status=def' \
+    'Task 1: review round=1 tree=abc spec=compliant quality=approved' 'Task 2: note' > "$R/.kern/ledgers/x/ledger.md"
+  edit 'Task 2: note' 'Task 2: a note' false "$R/.kern/ledgers/x/ledger.md"
+  no_vote
+}
+
+@test "an Edit G20 cannot model reads the whole of a working file, as it has no exact bytes" {
+  working_dirs
+  printf 'Status: done\n' > "$R/.kern/reviews/q.md"
   edit 'not in the file' 'approved' false "$R/.kern/reviews/q.md"
   denied
+  [[ "$output" == *'old_string is not in q.md'* ]] || false
+  edit 'not in the file' 'the word approved'
+  no_vote
+}
+
+@test "a Write or Edit into a working directory that does not exist yet is judged from the nearest one that does" {
+  working_dirs
+  write_text "$R/.kern/reviews/new/deep/p.md" 'status of the size: approved by the lead\n'
+  denied
+  rm -rf "$R/.kern/tmp"
+  write_text "$R/.kern/tmp/new/p.md" 'status of the size: approved by the lead\n'
+  denied
+  edit 'x' 'status of the size: approved by the lead' false "$R/.kern/reviews/new/p.md"
+  denied
+  write_text "$R/.kern/reviews/new/p.md" 'Status: done\n'
+  no_vote
+}
+
+@test "a Write outside the working directories that does not exist yet gets no vote" {
+  working_dirs
+  write_text "$R/.kern/notes/new/p.md" 'status of the size: approved by the lead\n'
+  no_vote
+  write_text '/g20-no-such-directory/p.md' 'status of the size: approved by the lead\n'
+  no_vote
 }
 
 @test "both words in a spec's body are not a working file's matter" {
@@ -1010,6 +1076,8 @@ EOF'
   approved_spec 'yes'
   sh_cmd "grep -c Problem .kern/specs/export.md || true; printf 'x\n' > .kern/tmp/n.md"
   no_vote
+  sh_cmd "grep -c Problem .kern/specs/export.md || grep -c Scope .kern/specs/export.md || true; printf 'x\n' > .kern/tmp/n.md"
+  no_vote
 }
 
 @test "a proofs table beside a read of an approved spec gets no vote" {
@@ -1024,6 +1092,18 @@ bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
   no_vote
   sh_cmd "printf '| 3 | \$(proved) |\n' > .kern/reviews/p.proofs.md; bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
   no_vote
+}
+
+@test "a sed that fails on the command leaves it read as joined" {
+  local bin="$BATS_TEST_TMPDIR/bin"
+  working_dirs
+  approved_spec 'yes'
+  mkdir "$bin"
+  printf '#!/bin/sh\ncase "$1" in "s/||"*) exit 1 ;; esac\nexec %s "$@"\n' "$(command -v sed)" > "$bin/sed"
+  chmod +x "$bin/sed"
+  PATH="$bin:$PATH"
+  sh_cmd "printf '| 3 |\n' > .kern/reviews/p.proofs.md; bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
+  denied
 }
 
 @test "a copy into a working file from a file with no approval gets no vote" {

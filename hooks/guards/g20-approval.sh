@@ -16,14 +16,15 @@
 # shell write that reaches a hook file without naming its path is not seen (G16's accepted limits).
 # Under autopilot only a go approves, for its ticket (_g20_go), in place of the checks on the user's
 # last message. G20 never votes allow. A file under WORK/ledgers, WORK/reviews or WORK/tmp is a working
-# file (_g20_working). One call may put the word status or the word approved in one, but not both: text
-# that holds both, in any case and anywhere in a command or in the file after a Write or Edit, is denied
-# (_g20_both). So is a text editor in a command that holds approved, and a copy from a file that holds a
-# status: approved line. A frontmatter approval by Write or Edit is judged there as anywhere, and a shell
-# copy from a working file to any other Markdown file is judged as a copy from any file is. ledger-open
-# runs only a plan with a Markdown name that is not a working file and has no working file as its spec,
-# and G20, ledger-open and plan-check read frontmatter with one reader (scripts/lib/frontmatter.awk), so
-# an approval ledger-open accepts passed through G20, within the accepted limits below.
+# file (_g20_working). A Write or Edit may not leave a line in one that holds both the word status and
+# the word approved, in any case (_g20_mixed), and a shell write to one may not hold both anywhere in its
+# command (_g20_both), because a printf's \n hides lines. A text editor in a command that holds approved
+# and a copy from a file that holds a status: approved line are denied too. A frontmatter approval by
+# Write or Edit is judged there as anywhere, and a shell copy from a working file to any other Markdown
+# file is judged as a copy from any file is. ledger-open runs only a plan with a Markdown name that is
+# not a working file and has no working file as its spec, and G20, ledger-open and plan-check read
+# frontmatter with one reader (scripts/lib/frontmatter.awk), so an approval ledger-open accepts passed
+# through G20, within the accepted limits below.
 #
 # Accepted limits:
 # - "The user's last message" is the last prompt prompt-submit does not read as wrapped. A prompt
@@ -44,9 +45,12 @@
 # - A shell write to a working file is judged one call at a time, by the call's text, and by the text
 #   editors it runs and the files it names in the same simple command, or anywhere in a command that a
 #   pipe, a substitution, a group, a subshell, a loop, an if, a case or an exec joins. Not seen there: a
-#   status line split across two Bash calls, a word built at run time so the text holds neither word, a
-#   file read by a simple command not joined to the write, and a recursive copy. ledger-open refuses a
-#   working file only while it is under a working directory.
+#   status line split across two calls, either two Bash calls or a Write holding one word followed by a
+#   shell append holding the other; words on two lines joined by a later shell edit; a word built at run
+#   time so the text does not hold both; a file read by a simple command not joined to the write; a
+#   source holding both words apart, which copies into a working file with no vote; a recursive copy;
+#   and a busybox wrapper applet, as busybox reaches only the commands _g20_cmd reads. ledger-open
+#   refuses a working file only while it is under a working directory.
 # - A pipe anywhere in a command joins all of it, so a working write beside a pipe that carries nothing
 #   to it is judged with it, as it was before working files were exempt. Splitting the call ends that.
 # - A repository nested in a working directory has its own work dir, so ledger-open run from inside it
@@ -72,7 +76,10 @@ _G20_FM_FILE="$KERN_ROOT/scripts/lib/frontmatter.awk"
 # comment after it.
 _G20_STATUS_RE="^[[:space:]]*[\"']?status[\"']?[[:space:]]*:[[:space:]]*[\"']?approved[\"']?[[:space:]]*(#.*)?\$"
 
-_G20_BOTH="the text holds both status and approved, which a working file may not, as it can read as an approval; reword it to hold one of them"
+# Why text with both words is denied: a Write or Edit is judged by the line, after "line N of FILE", and a
+# shell write by the command's whole text.
+_G20_BOTH_LINE="holds both status and approved, which a line of a working file may not, as it can read as an approval; reword that line, and keep a report's Status: line, since execute-plan reads a report with none as BLOCKED"
+_G20_BOTH_SHELL="the command holds both status and approved, which a shell write to a working file may not, as it can read as an approval; use the Write tool, which judges each line, and a line holding both stays denied"
 
 # _G20_EDIT_AWK: prints the text it reads after replacing ENVIRON G20_OLD with G20_NEW: the first
 # match, or every match when G20_ALL is true. Line ends are read as Claude Code's Edit reads them: CRLF
@@ -184,18 +191,19 @@ _g20_work() {
   _G20_WORK=$(cd -P "$KERN_MAIN/$wd" 2> /dev/null && env pwd -P) && [ -n "$_G20_WORK" ]
 }
 
-# _g20_working PATH: exit 0 when PATH (absolute) is a working file: it and each symlink on the way to it,
-# up to 8, lie under WORK/ledgers, WORK/reviews or WORK/tmp, so a symlink out, and one in from a spec,
-# stay judged. A directory that does not exist yet is not read, and fails: the command may make it a
-# symlink. cd -P reads a link/.. as the file system does, where a plain cd drops the link. pwd -P gives
-# the directory's own case from env's pwd; the builtin keeps the case it was given on macOS.
+# _g20_working PATH [TAIL]: exit 0 when PATH (absolute), with TAIL after it, is a working file: it and
+# each symlink on the way to it, up to 8, lie under WORK/ledgers, WORK/reviews or WORK/tmp, so a symlink
+# out, and one in from a spec, stay judged. A directory that does not exist yet is not read, and fails:
+# the command may make it a symlink. cd -P reads a link/.. as the file system does, where a plain cd
+# drops the link. pwd -P gives the directory's own case from env's pwd; the builtin keeps the case it was
+# given on macOS.
 _g20_working() {
-  local p="$1" i=0 d l
+  local p="$1" t="${2-}" i=0 d l
   _g20_work || return 1
   while :; do
     d=$(cd -P "${p%/*}/" 2> /dev/null && env pwd -P) || return 1
     p="${d%/}/${p##*/}"
-    case "$p" in
+    case "$p$t" in
       "$_G20_WORK"/ledgers/* | "$_G20_WORK"/reviews/* | "$_G20_WORK"/tmp/*) ;;
       *) return 1 ;;
     esac
@@ -214,10 +222,30 @@ _g20_both() {
   return 1
 }
 
-# _g20_mixed PATH TEXT: denies when PATH is a working file and TEXT, what it holds after the call, holds
-# both words. A body line can become frontmatter by a shell edit that names neither word.
+# _g20_near PATH: _g20_working for a Write or Edit, read from PATH's nearest directory that exists, as such
+# a call makes the rest itself and a missing directory is no symlink there.
+_g20_near() {
+  local p="$1" t=''
+  while [ -n "${p%/*}" ] && [ ! -d "${p%/*}" ]; do
+    t="/${p##*/}$t"
+    p=${p%/*}
+  done
+  _g20_working "$p" "$t"
+}
+
+# _g20_mixed PATH TEXT: denies when PATH is a working file and a line of TEXT, what it holds after the
+# call, holds both words, naming the first such line. A body line can become frontmatter by a shell edit
+# that names neither word.
 _g20_mixed() {
-  if _g20_both "$2" && _g20_working "$1"; then vote deny G20 "$_G20_BOTH"; fi
+  local l n=0
+  _g20_both "$2" && _g20_near "$1" || return 0
+  while IFS= read -r l; do
+    n=$((n + 1))
+    if _g20_both "$l"; then
+      vote deny G20 "line $n of $(basename "$1") $_G20_BOTH_LINE"
+      return 0
+    fi
+  done <<< "$2"
 }
 
 # _g20_fm NAME: sets _G20_FM to the frontmatter of the text on stdin (NAME's), read by the shared
@@ -280,7 +308,10 @@ _g20_file() {
           vote deny G20 "old_string is not in $base as G20 reads it, so it cannot judge an Edit that writes a status or approved: line; read the file and edit it again"
           return 0
         fi
-        _g20_mixed "$p" "$(cat "$p" 2> /dev/null)$new"
+        # No exact bytes here, so the whole text counts.
+        if _g20_both "$(cat "$p" 2> /dev/null)$new" && _g20_near "$p"; then
+          vote deny G20 "old_string is not in $base as G20 reads it, so it cannot tell which line of a working file would hold both status and approved; read the file and edit it again"
+        fi
         return 0
         ;;
       *)
@@ -419,10 +450,10 @@ _g20_target() {
   fi
   _g20_abs "$w"
   _g20_md "$w" || _g20_mdfile "$_G20_P" || return 0
-  # A working file may hold one of the two words, not both. A word built at run time may name any file,
-  # so only a literal path is a working file.
+  # A command that writes a working file may hold one of the two words, not both. A word built at run
+  # time may name any file, so only a literal path is a working file.
   if ! _g20_dyn "$w" && _g20_working "$_G20_P"; then
-    if [ "$_G20_S" = 1 ]; then _G20_WHY=$_G20_BOTH; else _G20_WW=1; fi
+    if [ "$_G20_S" = 1 ]; then _G20_WHY=$_G20_BOTH_SHELL; else _G20_WW=1; fi
     return 0
   fi
   if [ "${_G20_OVER:-0}" = 1 ]; then
@@ -899,14 +930,15 @@ _g20_seg1() {
 #   only there. || joins nothing.
 # - A redirect on a group, a subshell, a loop, an if or a case is a record that starts with it, or with
 #   the word that closes the compound; exec's lasts for the rest of the command.
+# sed and tr make the replacements, since ${var//[...]/} on whole command text is cubic (contract.md).
 _g20_joined() {
   local c s rec w
   case "$1" in
     *'|'* | *'('* | *'`'*)
       s=$(_split_words "$1")
       [ "${s%$'\n\t.'}" = "$2" ] || return 0
-      c=${1//||/;}
-      [ "$(_split_words "$c" | env LC_ALL=C tr '|()' '___')" = "$(_split_words "${c//[|()]/_}")" ] || return 0
+      c=$(printf '%s' "$1" | env LC_ALL=C sed 's/||/;/g') || return 0
+      [ "$(_split_words "$c" | env LC_ALL=C tr '|()' '___')" = "$(_split_words "$(printf '%s' "$c" | env LC_ALL=C tr '|()' '___')")" ] || return 0
       ;;
   esac
   while IFS= read -r rec; do
