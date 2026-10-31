@@ -18,7 +18,7 @@ setup() {
 # commands FILE: the backticked shell commands in FILE, one per line.
 commands() {
   grep -o '`[^`]*`' "$1" | tr -d '`' |
-    grep -E '^(git|rg|grep|ls|cat|head|tail|wc|find|sed|sort|cut|jq|awk|zcat|gzip|sqlite3|uniq|tee|xargs|python3?|node) ' || true
+    grep -E '^((git|rg|grep|ls|cat|head|tail|wc|find|sed|sort|cut|jq|awk|zcat|gzip|sqlite3|uniq|tee|xargs|python3?|node|for) |[A-Za-z]=)' || true
 }
 
 @test "each backticked command in forensics.md and investigator.md is on G18's allowlist" {
@@ -28,7 +28,17 @@ commands() {
   [ -n "$(commands "$K/skills/diagnose/references/forensics.md")" ]
   cmds=$(commands "$K/skills/diagnose/references/forensics.md"; commands "$K/agents/investigator.md")
   while IFS= read -r c; do
-    g18_allowed "$c" || { echo "G18 denies: $c"; return 1; }
+    if _g18_denies "$c"; then echo "G18 denies: $c"; return 1; fi
+  done <<EOF
+$cmds
+EOF
+}
+
+@test "each backticked command in forensics.md and investigator.md passes as a loop body" {
+  cmds=$(commands "$K/skills/diagnose/references/forensics.md"; commands "$K/agents/investigator.md")
+  [ -n "$cmds" ]
+  while IFS= read -r c; do
+    if _g18_denies "for f in a b; do $c; done"; then echo "G18 denies: $c"; return 1; fi
   done <<EOF
 $cmds
 EOF
@@ -37,6 +47,8 @@ EOF
 @test "G18 still denies writes and programs the investigator must not run" {
   for c in "sed -i s/a/b/ app.log" "echo x >f" "awk '{print}' app.log" "rg --pre cat x app.log" "sort -o out.txt in.txt" "git -c core.pager=cat log"; do
     if g18_allowed "$c"; then echo "G18 allows: $c"; return 1; fi
+    if ! _g18_denies "for f in a b; do $c; done"; then echo "G18 allows in a loop: $c"; return 1; fi
+    if ! _g18_denies "f=\$($c); echo \"\$f\""; then echo "G18 allows in a substitution: $c"; return 1; fi
   done
 }
 
@@ -44,5 +56,17 @@ EOF
   printf 'Run `awk '"'"'{print}'"'"' app.log` now.\n' > "$BATS_TEST_TMPDIR/planted.md"
   cmds=$(commands "$BATS_TEST_TMPDIR/planted.md")
   [ -n "$cmds" ]
-  ! g18_allowed "$cmds"
+  _g18_denies "$cmds"
+}
+
+@test "the parity check fails when a loop or an assignment that G18 denies is planted in a reference" {
+  # shellcheck disable=SC2016 # a literal command
+  printf 'Run `for f in a b; do rm "$f"; done` now.\nRun `f=$(mktemp); cat "$f"` now.\n' > "$BATS_TEST_TMPDIR/planted.md"
+  cmds=$(commands "$BATS_TEST_TMPDIR/planted.md")
+  [ "$(printf '%s\n' "$cmds" | wc -l)" -eq 2 ]
+  while IFS= read -r c; do
+    _g18_denies "$c"
+  done <<EOF
+$cmds
+EOF
 }
