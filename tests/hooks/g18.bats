@@ -309,10 +309,21 @@ cat a\\\n#b; rm c
 cat a # b\\\nrm c
 cat a\n# b\\\nrm c
 cat a \\\n# b\\\nrm c
-d='a\\\n-o'; sort $d out.txt a.txt
-d='x\\\n-delete'; find . $d
-for f in 'a\\\n-o'; do sort $f out.txt a.txt; done
 cat <\\\n<'E'\nb\\\nE\nrm a\nE
+EOF
+}
+
+@test "a continuation beside a single quote is denied with the advice to use one line" {
+  while IFS= read -r cmd; do
+    hook kern:investigator "$cmd"
+    denied || { echo "not denied: $cmd"; false; }
+    [[ "$output" == *"write the command on one line"* ]] || { echo "no advice: $cmd"; false; }
+  done <<'EOF'
+echo 'a' \\\n  b
+EOF
+  each_no_vote <<'EOF'
+echo a \\\n  b
+rg -n \"foo\" \\\n  a.ts
 EOF
 }
 
@@ -330,7 +341,9 @@ EOF
   [ "$status" -ne 0 ]
   run _g18_join $'cat <\\\n<E'
   [ "$status" -ne 0 ]
-  [ "$(_g18_join $'\"it\'s\\\nb\"')" = "\"it'sb\"" ]
+  run _g18_join $'\"it\'s\\\nb\"'
+  [ "$status" -ne 0 ]
+  [ "$(_g18_join $'\"a\\\nb\"')" = '"ab"' ]
 }
 
 @test "an assignment of a read-only substitution is read as an unknown word" {

@@ -321,31 +321,22 @@ EOF
   return 1
 }
 
-# _g18_join CMD: CMD with its line continuations removed. A backslash pairs with the next character, so an
-# escaped backslash before a newline stays. Exit 1 where the shell keeps a continuation, since removing it
-# would change what runs: on a line whose comment ends in a backslash, inside single quotes, where the
-# newline can split a value in bash, and on a here-doc, tested on the joined text since a continuation can
-# split its <<. Inside single quotes it refuses, not keeps: an apostrophe in a comment can mislead the quote
-# tracking and so leave a real continuation in place. A misread the other way is safe, since _g18_read
-# stops at any comment.
+# _g18_join CMD: CMD, which holds a backslash-newline, with its line continuations removed. A backslash
+# pairs with the next character, so an escaped backslash before a newline stays. The shell keeps a
+# continuation in single quotes, a comment and a here-doc, and removing one there would change what runs, so
+# exit 1 on any single quote in CMD, on a line whose comment ends in a backslash, and on a << in the joined
+# text, since a continuation can split it. Quotes are not tracked: they nest in $( ) in ways a flat scan
+# misreads, so any single quote refuses.
 _g18_join() {
   printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
     { if ($0 ~ /(^|[ \t;&|()])#.*\\$/) bad = 1; buf = buf (NR > 1 ? "\n" : "") $0 }
     END {
-      if (bad) exit 1
+      if (bad || index(buf, sq)) exit 1
       n = split(buf, C, "")
       for (i = 1; i <= n; i++) {
-        c = C[i]
-        if (q == sq) {
-          if (c == "\\" && C[i + 1] == "\n") exit 1
-          if (c == sq) q = ""
-        } else if (c == "\\") {
-          if (C[i + 1] != "\n") o = o c C[i + 1]
-          i++
-          continue
-        } else if (c == "\"") q = (q == "" ? c : "")
-        else if (c == sq && q == "") q = sq
-        o = o c
+        if (C[i] != "\\") { o = o C[i]; continue }
+        if (C[i + 1] != "\n") o = o C[i] C[i + 1]
+        i++
       }
       if (index(o, "<<")) exit 1
       printf "%s", o
@@ -355,31 +346,37 @@ _g18_join() {
 # _g18_denies CMD: exit 0 when G18 denies CMD, with the command it names in _G18_LINE. Both passes read CMD
 # joined, since the shell joins lines before it reads a name or an expansion. A command with a loop or a
 # variable is judged as _g18_read reads it, so a body or a value that is not allowed alone is denied here
-# too; one it cannot read is denied. _G18_LONG is 1 when only a longer variable name stops CMD.
+# too; one it cannot read is denied. _G18_NEXT is the retry that would pass, when G18 can name one.
 _g18_denies() {
   local join=$1 text rc=0
-  _G18_LONG=0
+  _G18_NEXT=""
   _G18_LINE=$1
-  case "$1" in *\\$'\n'*) join=$(_g18_join "$1") || return 0 ;; esac
+  case "$1" in
+    *\\$'\n'*)
+      join=$(_g18_join "$1") || {
+        _G18_NEXT="G18 cannot read this line continuation: write the command on one line and retry."
+        return 0
+      }
+      ;;
+  esac
   _g18_denied "$join" || return 1
   text=$(_g18_read "$join") || rc=$?
   case "$rc" in 0 | 3) ;; *) return 0 ;; esac
   _g18_denied "$text" && return 0
   [ "$rc" = 3 ] || return 1
-  _G18_LONG=1
+  _G18_NEXT="G18 reads only one-letter variable names: use a one-letter name and retry."
 }
 
 guard_g18() {
   [ "$TOOL" = "Bash" ] || return 0
   [ -n "${AGENT:-}" ] || return 0
   case " $G18_AGENTS " in *" $AGENT "*) ;; *) return 0 ;; esac
-  local cmd next="Ask the controller to run it."
+  local cmd
   if ! cmd=$(ti_get command); then
     vote deny G18 "read-only agent: the Bash input has no command"
     return 0
   fi
   if _g18_denies "$cmd"; then
-    [ "$_G18_LONG" = 0 ] || next="G18 reads only one-letter variable names: use a one-letter name and retry."
-    vote deny G18 "$AGENT is read-only; '${_G18_LINE%%[[:space:]]*}' with these arguments is not on its allowlist (git log, show, blame, diff, grep, ls-files, status; rg, grep, ls, cat, head, tail, wc; find without -exec or -delete; sed -n with line numbers; a for over literal words; a one-letter variable set first to a plain value or a read-only \$( )). $next"
+    vote deny G18 "$AGENT is read-only; '${_G18_LINE%%[[:space:]]*}' with these arguments is not on its allowlist (git log, show, blame, diff, grep, ls-files, status; rg, grep, ls, cat, head, tail, wc; find without -exec or -delete; sed -n with line numbers; a for over literal words; a one-letter variable set first to a plain value or a read-only \$( )). ${_G18_NEXT:-Ask the controller to run it.}"
   fi
 }
