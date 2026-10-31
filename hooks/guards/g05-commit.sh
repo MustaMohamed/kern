@@ -39,7 +39,7 @@ EOT
         continue
       fi
       case "$_G05_SUB" in
-        add | stage) _g05_add "${_G05_RECS[$i]}" ;;
+        add | stage) _g05_add "$i" ;;
         commit) _g05_commit "$i" ;;
       esac
     else
@@ -185,17 +185,18 @@ _g05_broad() {
   [ "$AUTOPILOT" = 1 ] && vote deny G5 "$1 under autopilot"
 }
 
-# _g05_add RECORD: git add or git stage that may stage every change: -A, -u, --renormalize or
-# --no-ignore-removal in any spelling, --pathspec-from-file, an option kern cannot read, a word of
-# RECORD that expands (_gh_literal: $, backticks, globs, ~, braces), or a pathspec _g05_wide calls
-# wide.
+# _g05_add IDX: git add or git stage, at IDX in _G05_RECS, that may stage every change: -A, -u,
+# --renormalize or --no-ignore-removal in any spelling, --pathspec-from-file, an option kern cannot
+# read, a word of the record that expands (_gh_literal: $, backticks, globs, ~, braces), or a pathspec
+# _g05_wide calls wide. Any other add gets no vote, unless autopilot runs it in the shape
+# _g05_add_proven accepts: a run stages named files with nobody to answer a prompt.
 _g05_add() {
   local toks t why=""
   if ! _g05_ready; then
     _g05_broad "git $_G05_SUB (kern could not load its option parser)"
     return 0
   fi
-  _gh_literal "$1" || why="with a word that expands"
+  _gh_literal "${_G05_RECS[$1]}" || why="with a word that expands"
   toks=$(_g01_opts "$_G05_ADD_OPTS" "${_G05_ARGS[@]}")
   while IFS= read -r t; do
     case "$t" in
@@ -206,8 +207,47 @@ _g05_add() {
   done <<EOT
 $toks
 EOT
-  [ -n "$why" ] && _g05_broad "git $_G05_SUB $why"
+  if [ -n "$why" ]; then
+    _g05_broad "git $_G05_SUB $why"
+  elif [ "$AUTOPILOT" = 1 ] && _g05_add_proven "$1" "$toks"; then
+    vote allow G5 "autopilot: git $_G05_SUB of named files"
+  fi
   return 0
+}
+
+# _g05_add_proven IDX TOKS: the add at IDX, just read by _g05_split and _g01_opts (TOKS) and not broad, may
+# be allowed as the whole Bash call. All hold: _g05_alone; no option but -v; every redirection is quiet;
+# it names at least one path, each relative with no `..` part and not a directory, so never_commit can
+# judge it; G6 finds no path, as the repository names it, on never_commit; _g05_unprotected.
+_g05_add_proven() {
+  local t p names="" prefix hit
+  _g05_alone "$1" || return 1
+  declare -F _g06_paths >/dev/null || return 1
+  prefix=$(git -C "$_G05_DIR" -c core.fsmonitor=false rev-parse --show-prefix 2>/dev/null) || return 1
+  while IFS= read -r t; do
+    case "$t" in
+      "" | --verbose) ;;
+      ">"*) _g01_quiet_redirect "${t#>}" || return 1 ;;
+      @*)
+        p=${t#@}
+        case "$p" in "" | /* | .. | ../* | */.. | */../*) return 1 ;; esac
+        [ ! -d "$_G05_DIR/$p" ] || return 1
+        while :; do
+          case "$p" in ./*) p=${p#./} ;; *) break ;; esac
+        done
+        names="$names$prefix$p"$'\n'
+        ;;
+      *) return 1 ;;
+    esac
+  done <<EOT
+$2
+EOT
+  [ -n "$names" ] || return 1
+  # _g06_paths votes on a hit or a list it cannot read. The vote stays in this subshell, and the x shows
+  # that its pipe worked.
+  hit=$(_KERN_VOTE=""; _g06_paths "$names"; printf 'x%s' "$_KERN_VOTE")
+  [ "$hit" = x ] || return 1
+  _g05_unprotected
 }
 
 # _g05_wide PATHSPEC: exit 0 when PATHSPEC may stage the whole tree: `.` or `..` in any spelling,
@@ -368,16 +408,13 @@ _g05_file_ok() {
   _gh_file_ok "$f"
 }
 
-# _g05_proven IDX TOKS: the commit at IDX in _G05_RECS, just read by _g05_split and _g01_opts (TOKS),
-# may be allowed as the whole Bash call. All hold: it is the command's first record and starts with
-# `git `, so no cd, assignment, wrapper, function or alias comes before it; every later record is a
-# read-only filter (_g01_filter); the command has no $( ) or backticks; no word of the record
-# expands (_gh_literal); only -C pairs that stay in this repository come before `commit`; every
-# option is -m, -F, -q or -v, with exactly one -m or -F and no pathspec; every redirection is quiet;
-# the -F file passes _g05_file_ok; HEAD is on a branch that branch_protected does not cover.
-# On failure _G05_WHY says which check failed.
-_g05_proven() {
-  local t i=1 src=0 f=""
+# _g05_alone IDX: the record at IDX in _G05_RECS, just read by _g05_split, stands for the whole Bash
+# call. All hold: it is the command's first record and starts with `git `, so no cd, assignment,
+# wrapper, function or alias comes before it; every later record is a read-only filter (_g01_filter);
+# the command has no $( ) or backticks; no word of the record expands (_gh_literal); only -C pairs that
+# stay in this repository come before the subcommand. On failure _G05_WHY says which check failed.
+_g05_alone() {
+  local i=1
   _G05_WHY=""
   _g05_ready || { _G05_WHY="kern could not load its parsers"; return 1; }
   [ "$1" = 0 ] || { _G05_WHY="other commands come before it"; return 1; }
@@ -391,23 +428,11 @@ _g05_proven() {
   done
   [ "$_G05_PLAIN" = 1 ] || { _G05_WHY="git options other than -C"; return 1; }
   [ "$_G05_CROSS" = 0 ] || { _G05_WHY="-C leaves this repository"; return 1; }
-  while IFS= read -r t; do
-    case "$t" in
-      "" | --quiet | --verbose) ;;
-      --message=*) src=$((src + 1)) ;;
-      --file=*) src=$((src + 1)); f=${t#--file=} ;;
-      ">"*) _g01_quiet_redirect "${t#>}" || { _G05_WHY="a redirection to a file"; return 1; } ;;
-      @*) _G05_WHY="a pathspec"; return 1 ;;
-      *) t=${t#\?}; _G05_WHY="option ${t%%=*}"; return 1 ;;
-    esac
-  done <<EOT
-$2
-EOT
-  [ "$src" = 1 ] || { _G05_WHY="not exactly one -m or -F"; return 1; }
-  if [ -n "$f" ] && ! _g05_file_ok "$_G05_DIR" "$f"; then
-    _G05_WHY="the -F file is not a regular file in the repo"
-    return 1
-  fi
+}
+
+# _g05_unprotected: HEAD is on a branch that branch_protected does not cover. On failure _G05_WHY says why.
+_g05_unprotected() {
+  local t
   t=$(current_branch "$_G05_DIR")
   case $? in
     0) ;;
@@ -429,6 +454,33 @@ EOT
     _G05_WHY="$t is a protected branch"
     return 1
   fi
+}
+
+# _g05_proven IDX TOKS: the commit at IDX in _G05_RECS, just read by _g05_split and _g01_opts (TOKS),
+# may be allowed as the whole Bash call. All hold: _g05_alone; every option is -m, -F, -q or -v, with
+# exactly one -m or -F and no pathspec; every redirection is quiet; the -F file passes _g05_file_ok;
+# _g05_unprotected. On failure _G05_WHY says which check failed.
+_g05_proven() {
+  local t src=0 f=""
+  _g05_alone "$1" || return 1
+  while IFS= read -r t; do
+    case "$t" in
+      "" | --quiet | --verbose) ;;
+      --message=*) src=$((src + 1)) ;;
+      --file=*) src=$((src + 1)); f=${t#--file=} ;;
+      ">"*) _g01_quiet_redirect "${t#>}" || { _G05_WHY="a redirection to a file"; return 1; } ;;
+      @*) _G05_WHY="a pathspec"; return 1 ;;
+      *) t=${t#\?}; _G05_WHY="option ${t%%=*}"; return 1 ;;
+    esac
+  done <<EOT
+$2
+EOT
+  [ "$src" = 1 ] || { _G05_WHY="not exactly one -m or -F"; return 1; }
+  if [ -n "$f" ] && ! _g05_file_ok "$_G05_DIR" "$f"; then
+    _G05_WHY="the -F file is not a regular file in the repo"
+    return 1
+  fi
+  _g05_unprotected
 }
 
 # _g05_commit IDX: the commit at IDX in _G05_RECS, just read by _g05_split.

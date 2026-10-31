@@ -74,6 +74,84 @@ ap_on() {
   [ "$(sed -n 's/^autopilot: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = off ]
 }
 
+# repo_key: go_repo for this repository, as apply_go writes it.
+repo_key() {
+  printf '%s' "$(git -C "$R" worktree list --porcelain | sed -n '1s/^worktree //p')" | git -C "$R" hash-object --stdin
+}
+
+# go_state KEY: this session's state holds autopilot on and go MA-254 with go_repo KEY.
+go_state() {
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: %s\n' "$1" >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+
+state_val() { sed -n "s/^$1: //p" "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"; }
+
+@test "a repeated startup keeps a live go" {
+  go_state "$(repo_key)"
+  start startup
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"autopilot=on"* ]] || false
+  [[ "$output" == *"go MA-254"* ]] || false
+  [ "$(state_val autopilot)" = on ]
+  [ "$(state_val go)" = MA-254 ]
+  [ "$(state_val go_repo)" = "$(repo_key)" ]
+}
+
+@test "a startup resets anything else" {
+  old="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  # No go.
+  set_autopilot on
+  start startup
+  [ "$(state_val autopilot)" = off ]
+  [[ "$output" != *"kern: "*"go "* ]] || false
+  # Another repo's go_repo.
+  go_state 0123456789abcdef0123456789abcdef01234567
+  start startup
+  [ "$(state_val autopilot)" = off ]
+  [ -z "$(state_val go)" ]
+  [ -z "$(state_val go_repo)" ]
+  [[ "$output" != *"go MA-254"* ]] || false
+  # A state file older than 24 hours.
+  go_state "$(repo_key)"
+  touch -t 202001010000 "$old"
+  start startup
+  [ "$(state_val autopilot)" = off ]
+  [ -z "$(state_val go)" ]
+  [[ "$output" != *"go MA-254"* ]] || false
+  # An empty go: G2 clears it at the draft PR, and go_repo stays.
+  go_state "$(repo_key)"
+  printf 'go: \n' >>"$old"
+  start startup
+  [ "$(state_val autopilot)" = off ]
+}
+
+@test "only a startup keeps a go: clear and a payload with no source reset it" {
+  go_state "$(repo_key)"
+  start clear
+  [ "$(state_val autopilot)" = off ]
+  [ -z "$(state_val go)" ]
+  go_state "$(repo_key)"
+  run bash "$K/hooks/session-start" <<<"$(payload SessionStart '"x":1')"
+  [ "$(state_val autopilot)" = off ]
+  [ -z "$(state_val go)" ]
+}
+
+@test "a repeated startup in a project that denies autopilot resets the go" {
+  go_state "$(repo_key)"
+  printf 'autopilot: denied\n' >"$R/.claude/kern.local.yml"
+  start startup
+  [ "$(state_val autopilot)" = off ]
+  [ -z "$(state_val go)" ]
+}
+
+@test "a broken PATH still finds kern's library" {
+  run env PATH=/nonexistent /bin/bash "$K/hooks/session-start" <<<"$(payload SessionStart '"source":"startup"')"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"reinstall kern"* ]] || false
+  [[ "${lines[0]}" == "# kern "* ]] || false
+}
+
 @test "terse from settings appends the terse rules" {
   printf 'mode.voice: terse\n' >"$R/.claude/kern.local.yml"
   start startup

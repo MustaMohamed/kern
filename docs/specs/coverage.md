@@ -58,7 +58,7 @@ The counts are as of the M2 re-audit (2026-10-23): 21 rows moved to Equal or bet
 | 23 | Multi-PR delivery from a plan as a verified stack the user lands | pstack | M3 | M |
 | 24 | Tree-identity check before pushing a content-preserving rewrite | pstack | M3 | S |
 | 25 | decision-log moves from M6 to M3, with formula escaping | pstack | M3 | M |
-| 26 | Local `rm` guard: deletes inside the worktree and scratch directories pass, others ask | kern | M3 | M |
+| 26 | Local `rm` guard: deletes inside the worktree and scratch directories pass, others ask | kern | M3 part 1 (G21) | M |
 | 27 | Principles reference for architect, refactor, implement and self-review | pstack | M5 | M |
 | 28 | verify-app create and maintain modes, writing a project verification skill on an explicit yes | pstack | M5 | M |
 | 29 | Race mode adds a read-only judge on a declared rubric, then grafts by hand | pstack | M5 | S |

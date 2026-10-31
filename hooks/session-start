@@ -7,6 +7,9 @@
 # overrides it, so exporting LANG=C changes no locale: it only takes the trigger away from this hook and
 # every command it runs. It comes first, before anything that could crash.
 [ -n "${LANG-}${LC_ALL-}" ] || export LANG=C
+# A hook may start with a PATH that holds no system tool: the system directories go last, so whatever the
+# PATH names still wins, and dirname below finds kern's root.
+export PATH="${PATH:+$PATH:}/usr/bin:/bin"
 KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export KERN_ROOT
 # Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
@@ -104,10 +107,27 @@ env_export() {
   return 0
 }
 
+# live_go: exit 0, with LIVE_GO set to the go, when this startup may be a repeat in a session that holds a
+# go: autopilot is on, the state's go is set, its go_repo is this repository's key, and the state file
+# changed in the last 24 hours. A startup resets so that a reused session id never inherits an old grant;
+# these bounds keep that for anything but a go cut off mid-run. A read that fails is no live go.
+LIVE_GO=""
+live_go() {
+  local go repo key
+  [ -n "$SID" ] && autopilot_on "$SID" 2>/dev/null || return 1
+  go=$(state_get "$SID" go 2>/dev/null) && [ -n "$go" ] || return 1
+  repo=$(state_get "$SID" go_repo 2>/dev/null) || return 1
+  key=$(consent_key "$KERN_MAIN") || return 1
+  [ -n "$repo" ] && [ "$repo" = "$key" ] || return 1
+  _state_path "$SID" || return 1
+  [ -n "$(find "$_KERN_STATE_PATH" -mmin -1440 2>/dev/null)" ] || return 1
+  LIVE_GO=$go
+}
+
 # shellcheck disable=SC2034 # read by the json.sh functions
 KERN_INPUT=$(cat)
 SID=$(json_get session_id) || SID=""
-SOURCE=$(json_get source) || SOURCE=startup
+SOURCE=$(json_get source) || SOURCE=""
 CWD=$(json_get cwd) || CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
 export CWD KERN_MAIN
@@ -117,6 +137,7 @@ if [ -n "$SID" ]; then
   case "$SOURCE" in
     # The state is kept, even when a read of it fails; a session with no state file gets the default.
     compact | resume) state_ensure "$SID" ;;
+    startup) live_go || state_reset "$SID" ;;
     *) state_reset "$SID" ;;
   esac
 fi
@@ -144,6 +165,7 @@ export K_VERSION K_ROOT K_KERN K_MODE K_AUTOPILOT K_SETTINGS
 env_export
 render_template "$KERN_ROOT/kernel/kernel.md"
 git_note
+[ -z "${LIVE_GO-}" ] || printf 'kern: a repeated startup kept go %s: autopilot stays on.\n' "$LIVE_GO"
 case "$K_MODE" in
   *voice=terse*) printf '\n' && cat "$KERN_ROOT/modes/terse.md" ;;
 esac

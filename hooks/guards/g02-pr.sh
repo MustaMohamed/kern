@@ -550,8 +550,20 @@ _g02_create() {
   fi
   # shellcheck disable=SC2016 # literal backticks
   fix='kern allows only `gh pr create --draft` alone, from the current branch, with --title, --base, --fill, --fill-first, --fill-verbose, --dry-run, --no-maintainer-edit, --body-file <file in the repo> or --head <current branch>'
+  _g02_after_cd "$1" && fix="run cd <wt> as its own call and gh pr create in the next; $fix"
   vote ask G2 "draft PR in a shape kern cannot check; $fix"
   [ "$AUTOPILOT" = 1 ] && vote deny G2 "draft PR of an unchecked shape under autopilot; $fix"
+}
+
+# _g02_after_cd IDX: a cd or pushd comes before the record at IDX in _GH_RECS. It only names the fix in a
+# reason, so a plain look at each record's start is enough.
+_g02_after_cd() {
+  local i=0
+  while [ "$i" -lt "$1" ]; do
+    case "${_GH_RECS[$i]}" in cd | "cd "* | pushd | "pushd "*) return 0 ;; esac
+    i=$((i + 1))
+  done
+  return 1
 }
 
 # _g02_edit_ok IDX: `gh pr edit` at IDX in _GH_RECS may be allowed: not under autopilot (D2), the user's
