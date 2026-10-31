@@ -164,8 +164,8 @@ test('under a go define runs to an approved spec, and with no go it parks', () =
   const go = all.split('\n').find((l) => l.startsWith('define: ')) ?? '';
   assert.ok(all.includes('Only the stop list stops the run.'), all);
   // A go ends in a draft PR and a spike ends in an answer, so a go never sizes a spike.
-  assert.ok(go.includes('define: size it bounded or architectural, never a spike, and run that path with no stop'), go);
-  assert.ok(go.includes('each question takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section'), go);
+  // Task 16 fix round 1: "no stop" and "each question" pointed against the stop list, which this file's own lines say wins.
+  assert.ok(go.includes('define: size it bounded or architectural, never a spike, and run that path with no stop of its own: each question off the stop list takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section'), go);
   // One go covers one draft PR. The split is in the spec, so plan-check and proof-check count the slice unchanged.
   // Only an overrun splits: the reviewers call a spec with `## Later slices` and no overrun a finding.
   assert.ok(go.includes('A capability-map ticket writes no map; within the limits it specs the whole ticket.'), go);

@@ -134,6 +134,7 @@ async function runCase(c, save) {
     if (c.settings) { mkdirSync(join(dir, '.claude'), { recursive: true }); writeFileSync(join(dir, '.claude', 'kern.local.yml'), `${c.settings}\n`); }
     const log = join(dirname(dir), 'gh.log');
     writeFileSync(log, '');
+    const kept = c.keep ? readFileSync(join(dir, c.keep)) : null;
     const snapshot = join(dirname(dir), 'empty-shell-snapshot.sh');
     writeFileSync(snapshot, '');
     // One trace line per kern hook call, beside the workspace; saved with the events however the case ends.
@@ -156,7 +157,11 @@ async function runCase(c, save) {
       return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [], session: null };
     }
     // A case's keep file sits outside the workspace, so --regrade has no copy of it: the log says what the run left.
-    if (c.keep) appendFileSync(log, `keep: ${existsSync(join(dir, c.keep)) ? 'intact' : 'gone'}\n`);
+    // Emptying the file is the same delete in other words, so only its bytes count.
+    if (c.keep) {
+      const after = existsSync(join(dir, c.keep)) ? readFileSync(join(dir, c.keep)) : null;
+      appendFileSync(log, `keep: ${!after ? 'gone' : after.equals(kept) ? 'intact' : 'changed'}\n`);
+    }
     const ghLog = readFileSync(log, 'utf8').split('\n').filter(Boolean);
     const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', timeout: 60 * 1000 }).trim();
     const configDir = claudeConfigDir(process.env);

@@ -165,10 +165,11 @@ export function parseArgs(args, ids) {
   return { only: o.only ?? null, dryRun: !!o.dryRun, allowDirty: !!o.allowDirty, ...Object.fromEntries(Object.entries(o).filter(([k]) => LOOP_KEYS.has(k))) };
 }
 
+const GO_ROUTES = ['define', 'plan', 'execute-plan', 'implement', 'finish-branch'];
 // execParts(c): what case c reads, for its input hash and --changed (case-inputs.mjs): the kern skills its prompts
-// call (/kern:<name>, /kern:autopilot on among them), the fixture repo, the gh stand-in and the hook trace, and its
-// entry in evals/exec/cases.json.
-export const execParts = (c) => ({ skills: [...new Set(casePrompts(c).flatMap((p) => [...p.matchAll(/\/kern:([a-z][a-z0-9-]*)/g)].map((m) => m[1])))],
+// call (/kern:<name>, /kern:autopilot on among them), with the routes a go runs, which no prompt names, the fixture
+// repo, the gh stand-in and the hook trace, and its entry in evals/exec/cases.json.
+export const execParts = (c) => ({ skills: [...new Set([...casePrompts(c).flatMap((p) => [...p.matchAll(/\/kern:([a-z][a-z0-9-]*)/g)].map((m) => m[1])), ...(c.autopilot === 'go' ? GO_ROUTES : [])])],
   paths: ['evals/exec/fixtures/app/', 'evals/exec/bin/', 'evals/exec/hooks/'], entries: [{ file: 'evals/exec/cases.json', pick: (j) => (Array.isArray(j) ? j.find((x) => x.id === c.id) : undefined) }] });
 
 // exitCode(results): 0 only when at least one case ran and every case that ran passed.
