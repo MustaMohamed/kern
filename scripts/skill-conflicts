@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Prints skill_conflicts' lines for /kern:help setup: job, source, skill, pick, tab-separated.
+set -euo pipefail
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh"
+case "$#:${1-}" in
+  0: | 1:--unpicked) ;;
+  *) echo "usage: skill-conflicts [--unpicked]" >&2; exit 2 ;;
+esac
+CWD="$PWD"
+KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+export CWD KERN_MAIN
+# A settings file that cannot be read leaves a pick empty. The || keeps set -e from ending the list at
+# settings_get's exit 4.
+skill_conflicts "$@" || exit

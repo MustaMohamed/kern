@@ -140,7 +140,7 @@ EOT
     name=$(settings_get "overrides.$job" '')
     case "$name" in off) continue ;; esac
     if [ -n "$name" ]; then
-      ov_set="$ov_set$job -> project skill $name$nl" jobs_set="$jobs_set$job$nl"
+      ov_set="$ov_set$job -> skill $name$nl" jobs_set="$jobs_set$job$nl"
     elif [ -n "${KERN_MAIN-}" ]; then
       if [ -f "$KERN_MAIN/.claude/skills/$job/SKILL.md" ] || [ -f "$KERN_MAIN/.claude/commands/$job.md" ]; then
         ov_same="$ov_same$job -> project skill $job$nl" jobs_same="$jobs_same$job$nl"
@@ -207,7 +207,7 @@ EOT
           case $part in
             set) tail=$more ;;
             ov)
-              job=${e%% -> project skill *}
+              job=${e%% -> *}
               names=${left/"$nl$job$nl"/$nl}
               names=${names#"$nl"}
               names=${names%"$nl"}

@@ -234,7 +234,7 @@ has_line() { printf '%s\n' "$output" | grep -qxF -- "$1"; }
   summary
   [ "${#summary}" -le 600 ] || { echo "summary is ${#summary} chars"; return 1; }
   line=$(printf '%s\n' "$summary" | grep '^Overrides ')
-  [[ "$line" == *"unslop -> project skill house-style-guide"* ]] || { echo "$line"; return 1; }
+  [[ "$line" == *"unslop -> skill house-style-guide"* ]] || { echo "$line"; return 1; }
   [[ "$line" == *"; not shown: "* ]] || { echo "$line"; return 1; }
   cut=${line##*; not shown: }
   [[ ", $cut, " != *", unslop, "* ]] || { echo "$line"; return 1; }

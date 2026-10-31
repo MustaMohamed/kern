@@ -53,7 +53,7 @@ test('setup defers the work dir to kern-dir; allowed-tools covers its read-only 
   assert.match(setup, /bash \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/kern-dir [a-z]/);
   assert.doesNotMatch(body, /\/\.kern\//);
   const tools = data['allowed-tools'].split(', ');
-  for (const t of ['Bash(git rev-parse --git-common-dir)', 'Bash(git check-ignore -q *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)']) assert.ok(tools.includes(t), t);
+  for (const t of ['Bash(git rev-parse --git-common-dir)', 'Bash(git check-ignore -q *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)', 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/skill-conflicts *)']) assert.ok(tools.includes(t), t);
   assert.ok(!tools.some((t) => t.includes('kern-dir')), 'kern-dir writes, so setup step 6 keeps its permission prompt');
 });
 
@@ -67,7 +67,7 @@ test('help allows only the exact git commands it prescribes, so no wildcard can 
     data['allowed-tools'],
     'Read, Bash(git remote -v), Bash(git rev-parse --git-common-dir), Bash(git check-ignore -q *), Bash(git worktree list), ' +
       'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), ' +
-      'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)',
+      'Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/skill-conflicts *)',
   );
   const git = data['allowed-tools'].split(', ').filter((t) => t.startsWith('Bash(git '));
   // The only wildcard over git is check-ignore -q, whose options only read; no other git entry ends in *.
@@ -80,4 +80,15 @@ test('setup never derives scope_threshold from a line cap, and names the measure
   assert.ok(body.includes('offer `pr.size_command`, a command whose last printed number is that count.'));
   const tpl = readFileSync(join(dir, 'templates', 'kern.local.yml'), 'utf8');
   assert.ok(tpl.includes('# tracker.first: true\n') && tpl.includes('# pr.max_lines: 300\n') && tpl.includes('# pr.size_command: scripts/pr-size {base} {tree}\n'));
+});
+
+test('setup step 4 lists each skill that overlaps a job and records the pick', () => {
+  const setup = body.split('## Setup')[1].split('\n## ')[0];
+  const step = setup.split('\n4. ')[1].split('\n5. ')[0];
+  for (const s of ['bash ${CLAUDE_PLUGIN_ROOT}/scripts/skill-conflicts', 'superpowers', 'plugin', "use that skill or keep kern's", 'recommended answer first', 'overrides.<job>: <skill>', 'overrides.<job>: off', "kern's guards still apply", "kern's routes only"]) assert.ok(step.includes(s), s);
+  assert.doesNotMatch(body, /missing project skill/, 'check takes the user and plugin skills an override may name');
+  const tpl = readFileSync(join(dir, 'templates', 'kern.local.yml'), 'utf8');
+  assert.ok(tpl.includes('project, user or plugin skill') && tpl.includes('# overrides.define: off\n'));
+  const table = readFileSync(join(dir, '..', '..', 'kernel', 'settings.md'), 'utf8');
+  assert.ok(table.includes('| skill name, or `off` for no override'));
 });

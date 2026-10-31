@@ -189,6 +189,20 @@ YML
   [ "$output" = "$RP/.claude/kern.local.yml	route.define" ]
 }
 
+@test "an override may name a user or plugin skill: it renders as a skill, not a project skill" {
+  # shellcheck source=hooks/lib/render.sh
+  . "$KERN_ROOT/hooks/lib/render.sh"
+  export KERN_MAIN="$RP"
+  mkdir -p "$HOME/.claude/skills/my-commit"
+  printf -- '---\nname: my-commit\n---\n' >"$HOME/.claude/skills/my-commit/SKILL.md"
+  printf 'overrides.commit: my-commit\noverrides.define: superpowers:brainstorming\n' >"$R/.claude/kern.local.yml"
+  run settings_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"commit -> skill my-commit"* ]] || false
+  [[ "$output" == *"define -> skill superpowers:brainstorming"* ]] || false
+  [[ "$output" != *"project skill my-commit"* ]] || false
+}
+
 @test "kern: off disables; list_has trims" {
   printf 'kern: off\n' >"$R/.claude/kern.local.yml"
   run kern_enabled

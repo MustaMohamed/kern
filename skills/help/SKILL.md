@@ -3,7 +3,7 @@ name: help
 description: "Map of kern: which skill fits, fixes for a run that went wrong, and help setup to write this project's settings."
 disable-model-invocation: true
 argument-hint: "[setup|check|<question>]"
-allowed-tools: Read, Bash(git remote -v), Bash(git rev-parse --git-common-dir), Bash(git check-ignore -q *), Bash(git worktree list), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *)
+allowed-tools: Read, Bash(git remote -v), Bash(git rev-parse --git-common-dir), Bash(git check-ignore -q *), Bash(git worktree list), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-detect *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-root *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/scripts/skill-conflicts *)
 ---
 
 # Help
@@ -32,7 +32,7 @@ The human-facing map of kern and the project setup. A message that asks for work
    - existing kern settings.
 2. Present two lists: what detection settled, and what needs a decision. Write a detected value only where detection guessed wrong.
 3. Ask about one key group at a time, recommended answer first, and skip the groups detection settled. The groups are tracker, conventions, check commands, review, risk and `worktree.setup`. Risk covers `autopilot`, `protected_targets`, `deploy.envs`, `never_commit`, `scope_threshold`, `pr.max_lines` and `shared_services`. `scope_threshold` counts files; `pr.max_lines` counts insertions plus deletions from `git diff --shortstat`, tests included. Never derive one from the other, or from a project's own line cap. A project that counts its PR size another way: offer `pr.size_command`, a command whose last printed number is that count.
-4. Map project skills to kern jobs and show the map, for example `overrides.commit: commit`. Say that kern's guards still apply to project skills.
+4. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/skill-conflicts` for the same-name skills: job, source, skill, pick. Read the session's skill list for user, project and enabled plugin skills that overlap a job by what they do, including superpowers while it is on. List each with its job and why. For each, ask `use that skill or keep kern's`, recommended answer first, and write `overrides.<job>: <skill>` or `overrides.<job>: off` into the draft. Say that kern's guards still apply, and that the run rules (stop, unblock, fix rounds) cover kern's routes only.
 5. Show the full commented draft of `.claude/kern.local.yml`, built from `${CLAUDE_PLUGIN_ROOT}/skills/help/templates/kern.local.yml`. Let the user edit it. Write it only after an explicit yes, as one file at the main worktree root. A re-run updates it in place.
 6. On the same yes, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir notes`. It reads `work_dir`, creates that directory and adds its exclude line. Then append to `$(git rev-parse --git-common-dir)/info/exclude` the line `/.claude/kern.local.yml`, and `worktree.dir` when it is inside the repo and `git check-ignore -q` fails for it. Never edit `.gitignore` or any tracked file.
 7. Offer the shared, committed `.claude/kern.yml` only if the user wants team settings. Committing it follows the normal commit rules. Offer user defaults for `mode.voice`, `mode.surface` and `kern_repo` in `~/.claude/kern.yml` as a separate yes.
@@ -45,6 +45,6 @@ Validate without writing anything. Read each settings file that exists: `.claude
 - floor-action keys, which the hooks ignore. `kernel/settings.md` names the floor actions: merge, production deploy, data deletion, force-push to a shared branch, messaging people. The ignored keys are `merge.policy`, `deploy.policy`, `production.policy`, `force_push.policy`, `delete.policy`, `message.policy` and `messaging.policy`;
 - any other key that is not in the table, as unknown;
 - a value outside its row's Values column, when that column lists fixed words. The hooks read a misspelt policy value such as `atuo` as `ask`, so name the key and the words it takes;
-- `overrides.<job>` values, other than `off` (no override), that name a missing project skill;
+- `overrides.<job>` values, other than `off` (no override), that name a missing skill;
 - settings files in a linked worktree, which `git worktree list` shows, that the main worktree root lacks;
 - missing exclude lines for `.claude/kern.local.yml` and the `work_dir` directory, `.kern` by default.
