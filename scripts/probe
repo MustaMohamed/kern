@@ -6,7 +6,7 @@
 # --with-passed skips the run in WT, for a caller that has just run CMD on this same tree (task-done). The
 # fork's runs stay. The fork shares WT's setup (wt-fork --share-setup). A control run that fails there, or a
 # run that passes with the change in, gets one more fork with worktree.setup run, and that fork gives the
-# verdict.
+# verdict. An ok on a shared fork adds one stderr line saying so; the first stdout line stays the verdict.
 # --exclude-tests reverses only the non-test files of PATCH, so a test the patch adds stays in the fork,
 # with its test data, fixtures, snapshots and golden files (is_probe_keep); without it, a PATCH that
 # touches one is inconclusive. A command word that names a path in WT must still exist in the fork, and a
@@ -294,3 +294,4 @@ else
   echo "probe: fail-then-pass ok"
   tail -n 5 "$logs/without.log" >&2
 fi
+[ "$shared" = 0 ] || echo "probe: that ok is from a shared fork, whose dependency directories link to WT's" >&2

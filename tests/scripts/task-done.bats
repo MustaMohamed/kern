@@ -331,7 +331,7 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 @test "--no-probe passes the listed types and an empty diff" {
   started
   for f in README.md notes.txt pkg.json kern.yml ci.yaml cfg.toml guide.rst guide.adoc setup.cfg tox.ini \
-    LICENSE LICENSE-MIT LICENSE.txt NOTICE NOTICE.md .gitignore .gitattributes .editorconfig; do
+    LICENSE LICENSE-MIT LICENSE.MIT LICENSE-APACHE-2.0 LICENSE.txt NOTICE NOTICE.md .gitignore .gitattributes .editorconfig; do
     mkdir -p "$WT/docs"
     printf 'text\n' > "$WT/docs/$f"
   done
@@ -352,9 +352,11 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 
 @test "--no-probe refuses each name that only looks like a listed one" {
   started
-  for f in Dockerfile Makefile a.sh rst ini gitignore NOTLICENSE MYNOTICE .gitignored .editorconfig.js a.rst.py; do
+  for f in Dockerfile Makefile a.sh rst ini gitignore NOTLICENSE MYNOTICE .gitignored .editorconfig.js a.rst.py \
+    src/LICENSE.js src/LICENSE.py NOTICE_board.tsx src/NOTICES.ts LICENSE_CHECK.sh src/NOTICE.go \
+    LICENSE-Check.py LICENSE_CHECK; do
     rm -rf "$WT/odd"
-    mkdir -p "$WT/odd"
+    mkdir -p "$(dirname "$WT/odd/$f")"
     printf 'x\n' > "$WT/odd/$f"
     T6=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
     review "$T6"
@@ -421,6 +423,7 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 @test "probe inconclusive: passes only after a --probe run on this tree exited 3" {
   # Test files only, so the probe has nothing to reverse.
   T3=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  started "$T3"
   printf 'echo extra\n' >> "$WT/test/check_test.sh"
   T4=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
   bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T3" "$T4" --out "$L/reviews/task-1c.diff" > /dev/null
@@ -439,12 +442,14 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 
 @test "probe inconclusive: the record does not reach another tree, another task or a later verdict" {
   T3=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  started "$T3"
   printf 'echo extra\n' >> "$WT/test/check_test.sh"
   T4=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
   bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T3" "$T4" --out "$L/reviews/task-1c.diff" > /dev/null
   review "$T4"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1c.diff.patch" -- sh test/check_test.sh
   [ "$status" -eq 3 ]
+  [ "$(cat "$L/logs/task-1.probe.tree")" = "$T4" ]
   # Another task on the same tree.
   printf 'Task 2: review round=1 tree=%s spec=compliant quality=approved\n' "$T4" >> "$L/ledger.md"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 2 "$WT" "$T4" --no-probe "probe inconclusive: x" -- true
@@ -457,6 +462,7 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
   # Another tree: exit 3 again, then a new tree.
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1c.diff.patch" -- sh test/check_test.sh
   [ "$status" -eq 3 ]
+  [ "$(cat "$L/logs/task-1.probe.tree")" = "$T4" ]
   printf 'echo more\n' >> "$WT/test/check_test.sh"
   T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
   review "$T5" 2
@@ -475,6 +481,7 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 }
 
 @test "probe inconclusive: a new module closes, by the reversed run's words or by the command's" {
+  started "$T0"
   # lib.sh is new: reversing the patch removes it, so the test cannot run.
   printf 'exit 0\n' > "$WT/lib.sh"
   printf 'sh lib.sh || exit 1\necho ran\n' > "$WT/test/check_test.sh"
@@ -494,6 +501,7 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 }
 
 @test "probe inconclusive: a patch from another tree opens nothing" {
+  started "$T0"
   # PKG reached T1. The tree has moved on, so it does not reverse-apply.
   printf '[ "$1" -ge 0 ] || exit 1\n' > "$WT/check.sh"
   T5=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
@@ -519,6 +527,7 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 }
 
 @test "probe inconclusive: a failed apply, fork or control opens nothing, even on this tree's own package" {
+  started "$T0"
   # The package's patch, cut to a change this tree does not hold, with its tree record intact.
   printf 'diff --git a/none.txt b/none.txt\n--- a/none.txt\n+++ b/none.txt\n@@ -1 +1 @@\n-a\n+b\n' > "$PKG.patch"
   review "$T1"
@@ -549,4 +558,34 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --no-probe "probe inconclusive: x" -- sh test/check_test.sh
   [ "$status" -eq 2 ]
   run ! grep -q '^Task 1: complete' "$L/ledger.md"
+}
+
+@test "probe inconclusive: a fix round's package does not stand for the task" {
+  # The task's change is T0 to T1, code and test. A later round edits only the test.
+  started "$T0"
+  printf 'echo extra\n' >> "$WT/test/check_test.sh"
+  T4=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T1" "$T4" --out "$L/reviews/task-1h.diff" > /dev/null
+  [ "$(cat "$L/reviews/task-1h.diff.tree")" = "$T4" ]
+  review "$T4"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1h.diff.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"the patch changes only test files"* ]] || false
+  [ ! -e "$L/logs/task-1.probe.tree" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --no-probe "probe inconclusive: x" -- sh test/check_test.sh
+  [ "$status" -eq 2 ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --no-probe "docs" -- sh test/check_test.sh
+  [ "$status" -eq 2 ]
+  run ! grep -q '^Task 1: complete' "$L/ledger.md"
+}
+
+@test "probe inconclusive: with no start line, the record stays unwritten and --probe keeps its exit" {
+  T3=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  printf 'echo extra\n' >> "$WT/test/check_test.sh"
+  T4=$(bash "$KERN_ROOT/scripts/wt-snap" "$WT")
+  bash "$KERN_ROOT/scripts/wt-diff" "$WT" "$T3" "$T4" --out "$L/reviews/task-1c.diff" > /dev/null
+  review "$T4"
+  run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T4" --probe "$L/reviews/task-1c.diff.patch" -- sh test/check_test.sh
+  [ "$status" -eq 3 ]
+  [ ! -e "$L/logs/task-1.probe.tree" ]
 }

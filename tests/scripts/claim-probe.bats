@@ -537,6 +537,30 @@ setup() {
   [ "$status" -eq 0 ]
   [ ! -e "$TMP/setups" ]
   [ -d "$WT/node_modules" ]
+  # An ok on a shared fork says so on stderr, and the verdict stays alone on stdout.
+  [ "$output" = "probe: fail-then-pass ok" ]
+  [ "$(printf '%s\n' "$stderr" | grep -c 'shared fork')" -eq 1 ]
+  printf '[ "$1" != bad ]\n' > "$WT/gate.sh"
+  printf 'bash gate.sh bad && exit 1\nexit 0\n' > "$WT/test-gate.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" --mutate gate.sh:1 "$WT" -- sh test-gate.sh
+  [ "$status" -eq 0 ]
+  [ "$output" = 'probe: mutation caught ([ "$1" == bad ])' ]
+  [ "$(printf '%s\n' "$stderr" | grep -c 'shared fork')" -eq 1 ]
+}
+
+@test "an ok from a fork with setup does not say shared fork" {
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-guard.sh
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"shared fork"* ]] || false
+  # The retry's ok is a fork with setup too.
+  mkdir -p "$REPO/.claude" "$WT/node_modules"
+  printf 'worktree.setup: touch built.log\n' > "$REPO/.claude/kern.local.yml"
+  touch "$WT/built.log"
+  printf '[ -f built.log ] || exit 1\nsh check.sh -1 && exit 1\nexit 0\n' > "$WT/test-built.sh"
+  run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-built.sh
+  [ "$status" -eq 0 ]
+  [ "$output" = "probe: fail-then-pass ok" ]
+  [[ "$stderr" != *"shared fork"* ]] || false
 }
 
 @test "a failed control retries with setup, and the probe's verdict is the retry's" {

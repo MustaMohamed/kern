@@ -3,8 +3,9 @@
 # Usage: wt-fork SRC_WT SLUG [--share-setup]    Prints the fork path. Exit 3 when the state cannot be
 # applied, 2 when worktree.setup fails; either way the fork is removed. The state moves as a diff-tree
 # patch, which ignores diff.noprefix, textconv and external diff drivers in the user's config.
-# --share-setup links SRC_WT's setup in place of running worktree.setup (wt_share); with nothing to link,
-# worktree.setup runs.
+# --share-setup links SRC_WT's setup in place of running worktree.setup (wt_share). With nothing to link, or
+# with a symlink in one of those directories that leads into SRC_WT outside it, nothing is linked and
+# worktree.setup runs. A .worktreeinclude entry below a link is skipped.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null

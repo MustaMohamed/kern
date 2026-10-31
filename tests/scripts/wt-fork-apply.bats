@@ -291,6 +291,39 @@ setup() {
   [ ! -e "$output/node_modules" ]
 }
 
+@test "--share-setup links nothing when a later directory is the one that is not sealed" {
+  mkdir -p .claude
+  printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > .claude/kern.local.yml
+  printf '.venv/\n' >> "$(git -C "$SRC" rev-parse --git-path info/exclude)"
+  mkdir -p "$SRC/node_modules/tool" "$SRC/.venv" "$SRC/packages/p"
+  printf 'code\n' > "$SRC/packages/p/index.py"
+  ln -s ../packages/p "$SRC/.venv/p"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-32 --share-setup
+  [ "$status" -eq 0 ]
+  fork=$output
+  # node_modules comes first in the list and is clean: setup would write through its link.
+  [ ! -e "$fork/node_modules" ]
+  [ ! -e "$fork/.venv" ]
+  [ "$(wc -c < "$TMP/setups" | tr -d ' ')" -eq 1 ]
+}
+
+@test "a .worktreeinclude entry below a shared directory does not copy through the link" {
+  mkdir -p "$REPO/node_modules/pkg" "$SRC/node_modules/pkg"
+  printf 'main\n' > "$REPO/node_modules/pkg/extra.txt"
+  printf 'top\n' > "$REPO/top.log"
+  printf 'node_modules/pkg/extra.txt\ntop.log\n' > "$REPO/.worktreeinclude"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-33 --share-setup
+  [ "$status" -eq 0 ] || { echo "$stderr"; false; }
+  fork=$output
+  [ -L "$fork/node_modules" ]
+  [ ! -e "$SRC/node_modules/pkg/extra.txt" ]
+  # An entry outside the link still copies, and so does this one on a fork with its own directory.
+  [ "$(cat "$fork/top.log")" = top ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-34
+  [ "$status" -eq 0 ]
+  [ "$(cat "$output/node_modules/pkg/extra.txt")" = main ]
+}
+
 @test "--share-setup still links a directory whose links stay inside it or leave SRC" {
   mkdir -p .claude
   printf 'worktree.setup: printf x >> %s/setups\n' "$TMP" > .claude/kern.local.yml
