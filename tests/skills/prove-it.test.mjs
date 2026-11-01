@@ -25,7 +25,8 @@ test('prove-it sections, steps, gate and red flags', () => {
   // 4,550 since M3 part 1's Task 14 (raised from 3,997): step 4 reports a skipped or unrun required check as `fail`, Outputs names
   // what carries `inferred`, and the Under autopilot text follows run.md's wait rule and finish-branch's fix round and end path.
   // 4,610 since its Task 15: step 3 says when a passed `test.full` stands, or "fresh" read against that rule.
-  assertMaxBytes(SKILL, 4610);
+  // 4,765 since its final review's fix (I1): under autopilot a `verify.fast` with nothing resolved is a named skip.
+  assertMaxBytes(SKILL, 4765);
 });
 
 test('a claim no command showed carries inferred or guess in its own sentence, not as a line form', () => {

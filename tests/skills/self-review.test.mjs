@@ -41,7 +41,8 @@ test('self-review sections and steps', () => {
   // 8,550 since that task's review fix: step 6 names every other reader, step 7 names the lone ! drop.
   // 8,750 since M3 part 1's Task 15: step 4's lane stands down for a whole-branch review that passed on this exact tree, in checkable words.
   // 8,915 since its fix rounds 1 and 2: the skip names the final review's file, base tree and spec, after the lane's ask moved to the agent's mode.
-  assertMaxBytes(SKILL, 8915);
+  // 9,058 since the final review's fix (I1): under autopilot a `verify.fast` with nothing resolved is a named skip.
+  assertMaxBytes(SKILL, 9058);
 });
 
 test('the spec lane stands down only for a whole-branch review that passed on this exact tree', () => {
@@ -260,6 +261,23 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
     'The prompt says "Do not edit files": steps 1 to 3 still run, the built-in lane included',
     'The diff swaps inline rounding for an equivalent helper: the helper is under Cleared with its check, never a finding or `pre-existing`.',
     'The diff adds an export with no caller yet and nothing wrong in it: no finding names it.']);
+});
+
+test('under autopilot a verify.fast with nothing resolved is a named skip in all four routes, and a person still gets the ask', () => {
+  // M3 part 1 final review, I1: with no lint and no typecheck, prove-it asked at the first commit and self-review kept
+  // a failed check, so a tested change got no PR. The user's bar: "PR should at least have a tested or verified the
+  // changes". implement step 3 already went on, so the other three agree with it. Only autopilot changes: the default
+  // row keeps "at least one", so a person's run still asks.
+  const skip = 'a `verify.fast` with nothing resolved is a named skip: no stop, no failed check, no fix round';
+  const kept = 'A lint the ticket names stays a required check.';
+  const stops = (f) => section(readDoc(f).body, '## Stops and autopilot');
+  assert.ok(stops('skills/prove-it/SKILL.md').includes(`Under autopilot ${skip}. ${kept}`), 'prove-it');
+  assert.ok(stops(SKILL).includes(`an unresolved command leaves its check failed and named; ${skip}. ${kept}`), 'self-review');
+  assert.ok(stops('skills/commit/SKILL.md').includes("Elsewhere step 4 stops, but for prove-it's named skip of a `verify.fast` with nothing resolved."), 'commit');
+  assert.ok(steps(readDoc('skills/plan/SKILL.md').body)[3].includes('a `verify.fast` with nothing resolved is a named skip.'), 'plan');
+  const implement = steps(readDoc('skills/implement/SKILL.md').body)[3];
+  assert.ok(implement.includes('Under autopilot, a required one is a required check that cannot run') && implement.includes('any other parks, and step 7 skips it'), implement);
+  for (const f of [SKILL, 'skills/prove-it/SKILL.md']) assertContains(f, ['| `verify.fast` | each of `typecheck` and `lint` that resolves; at least one |']);
 });
 
 test('a later round names its split', () => {

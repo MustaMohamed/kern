@@ -91,5 +91,5 @@ test('setup step 4 lists each skill that overlaps a job and records the pick', (
   assert.ok(tpl.includes('project, user or plugin skill') && tpl.includes('# overrides.define: off\n'));
   const table = readFileSync(join(dir, '..', '..', 'kernel', 'settings.md'), 'utf8');
   assert.ok(table.includes('| skill name, or `off` for no override'));
-  assert.ok(table.includes('the same-name match is off | session-start, skill-conflicts, every skill |'));
+  assert.ok(table.includes('the same-name match is off | session-start, prompt-submit, skill-conflicts, every skill |'));
 });

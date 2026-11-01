@@ -2009,7 +2009,7 @@ const execCase = (id) => {
   assert.ok(c, `no exec case ${id}`);
   return c;
 };
-const GO_IDS = ['go-reaches-draft', 'go-design-stop', 'go-required-check-stop', 'go-block-reroute', 'go-merge-stop', 'go-deploy-stop', 'go-spend-stop'];
+const GO_IDS = ['go-reaches-draft', 'go-no-lint-draft', 'go-design-stop', 'go-required-check-stop', 'go-block-reroute', 'go-merge-stop', 'go-deploy-stop', 'go-spend-stop'];
 const goCases = () => GO_IDS.map(execCase);
 const GO_QUOTE = 'approved: 2026-11-01, "/kern:autopilot go 7"';
 const CLOSED = 'Task 1: complete tree=abc test=npm test exit=0 review=approved probe=ok last=ok';
@@ -2060,6 +2060,16 @@ test('go-reaches-draft reads the spec, plan and ledger from the main checkout, w
     put('.kern/ledgers/round/ledger.md', `${CLOSED.replace('probe=ok', 'probe=skipped (probe inconclusive: new module)')}\n`);
     assert.deepEqual(grade().reasons, ['a code task closed with --no-probe']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('go-no-lint-draft: go-reaches-draft\'s grader, on stored runs of a project with no lint and no typecheck', () => {
+  // M3 part 1 final review, I1. The two failing runs are the walks the review read: prove-it's ask at the first commit
+  // pushes nothing, and a failed check kept through three fix rounds pushes and opens no PR.
+  assert.equal(GRADERS['go-no-lint-draft'], GRADERS['go-reaches-draft']);
+  const grade = ({ events = [], ghLog = [DRAFT], ...files } = {}) => GRADERS['go-no-lint-draft']({ events, ghLog, git: workGit(files) });
+  assert.deepEqual(grade(), { pass: true, reasons: [] });
+  assert.deepEqual(grade({ ghLog: ['issue view 7'], ledger: '' }).reasons, ['gh pr create --draft never ran', 'no task closed in a ledger'], 'stopped at the first commit');
+  assert.deepEqual(grade({ ghLog: ['issue view 7', 'pr list --head kern/round-money --state all'] }).reasons, ['gh pr create --draft never ran'], 'pushed and opened no PR');
 });
 
 test('go-design-stop: no commit touches src/, and the final text names the choice and a recommendation', () => {
@@ -2272,6 +2282,7 @@ test('every go case starts on a clean main that origin holds, can read its ticke
       assert.equal(g('ls-remote', 'origin', 'refs/heads/main').split(/\s/)[0], g('rev-parse', 'main'), `${c.id}: wt-new branches from origin/main`);
       assert.match(script(ws, 'kern-get', 'tracker').stdout, /^github\t/, `${c.id}: the origin is a local path, so kern-detect finds no tracker`);
       assert.ok(c.ticket.split('\n')[0].length > 0 && c.ticket.includes('\n\n'), `${c.id}: a title, a blank line, a body`);
+      if (c.id === 'go-no-lint-draft') return;
       const lint = script(ws, 'kern-detect', 'lint');
       assert.equal(lint.status, 0, `${c.id}: commit step 4's verify.fast needs one of lint and typecheck`);
       assert.equal(spawnSync('npm', ['run', 'lint'], { cwd: ws, env: cleanEnv, encoding: 'utf8' }).status, 0, `${c.id}: lint`);
@@ -2288,6 +2299,21 @@ test('every go case but go-required-check-stop resolves its tests and starts gre
       assert.equal(r.status, 0, `${c.id}: execute-plan step 5 stops on a red baseline\n${r.stdout}`);
     });
   }
+});
+
+test('go-no-lint-draft is go-reaches-draft on a project where no verify.fast command resolves', () => {
+  const [a, b] = ['go-reaches-draft', 'go-no-lint-draft'].map(execCase);
+  assert.equal(b.ticket, a.ticket);
+  assert.deepEqual(b.setup.filter((l) => !l.includes('> package.json')), a.setup);
+  assert.equal(b.settings, a.settings);
+  withRepo('go-no-lint-draft', (ws) => {
+    for (const key of ['lint', 'typecheck']) {
+      assert.equal(script(ws, 'kern-detect', key).status, 3, key);
+      assert.equal(script(ws, 'kern-get', key).status, 3, `no setting names ${key} either`);
+    }
+    assert.equal(script(ws, 'kern-get', 'verify.fast').status, 3, 'no setting names verify.fast either');
+    assert.ok(existsSync(join(ws, 'src', 'tax.js')), 'the same code as go-reaches-draft');
+  });
 });
 
 test('go-required-check-stop resolves no test command, and lint still resolves, so only the required check can stop it', () => {

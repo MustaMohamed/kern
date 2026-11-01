@@ -102,7 +102,7 @@ test('run.md says what each stop means and what a stop does', () => {
   for (const s of ['A run stops only on this list.',
     "This list loosens nothing else: the stops in this file, a route's run-ending failures, a required check still red after its fix rounds and the user's stop predicate still stop a run.",
     "The kernel's Autonomy line still holds: an action it keeps for the user's word that this list does not name, such as a force-push to a shared branch, is skipped and reported.",
-    'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. Work that does not depend on the answer may finish first.',
+    'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`, and the go holds. Work that does not depend on the answer may finish first.',
     "Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.",
     "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
     'A required check is one the ticket or prove-it names for the change.',
@@ -166,6 +166,35 @@ test('run.md keeps a go\'s main thread small, and one read of a route file does 
   assert.ok(main.includes(', and again only after compaction.'), main);
   // Fix round 1, M1: an investigator's summary does not stand in for a read a step names.
   assert.ok(main.includes("A step's named read stays in the main thread."), main);
+});
+
+test('a go names the permission mode it needs', () => {
+  // M3 part 1 final review, M11: only docs/pilot.md recorded that a go ran in mode auto.
+  assert.ok(read('autopilot').body.includes('A go needs permission mode `auto`: in the default mode it sits at every call kern does not allow.'));
+});
+
+test('the docs state what the whole-branch review found them short of', () => {
+  // M3 part 1 final review. M2: the go clears inside G2's vote, before the strictest vote is known.
+  const contract = readFileSync(join(import.meta.dirname, '..', 'docs', 'plans', 'contract.md'), 'utf8');
+  assert.ok(contract.includes("A create that then fails, a `--dry-run`, another guard's deny of the call or a subagent's call ends the go as well: the go only gates approval."), 'M2');
+  // M5: ruling 249 named reports and briefs; the both-words deny reaches these two as well, with or without a go.
+  const g20 = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
+  const both = 'a report, a brief, `pr-body.md` or a `*.proofs.md`';
+  assert.ok(contract.includes(both), 'M5, contract');
+  assert.ok(g20.includes('a report, a brief, pr-body.md or a *.proofs.md'), 'M5, guard');
+  // M3 stays open: the limit in words, for part 2.
+  const g16 = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g16-state.sh'), 'utf8').split('\n').slice(0, 20).join(' ').replace(/ # /g, ' ');
+  assert.ok(g16.includes("a project's own shell file under hooks/lib or hooks/guards named by a command that does not only read"), 'M3, guard');
+  assert.ok(contract.includes("a project's own shell file under `hooks/lib` or `hooks/guards` named by a command that does not only read"), 'M3, contract');
+  // M9: the five stale rows.
+  const design = readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-design.md'), 'utf8');
+  for (const s of ['the user typed `/kern:autopilot on` or `/kern:autopilot go <ticket>` in this session',
+    '| D10 | Fix loops stop after 3 rounds with a split proposal | Up to 3 rounds per self-review run on their own; a third still `fix first` pushes the branch, reports and opens no PR |',
+    'Draft allowed after dedup, which ends a go;',
+    'when find is a command head and every other simple command is `cd`, `ls` or a read-only filter',
+    "a path counts as kern's hook code only when it resolves under kern's own root"]) assert.ok(design.includes(s), s);
+  const settings = readFileSync(join(import.meta.dirname, '..', 'kernel', 'settings.md'), 'utf8');
+  assert.ok(settings.includes('| session-start, prompt-submit, skill-conflicts, every skill |'), 'M9, settings');
 });
 
 test('run.md stays within its byte cap', () => {

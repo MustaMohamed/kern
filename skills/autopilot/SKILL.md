@@ -35,4 +35,4 @@ kern denies every other action that would ask, because nobody is there to answer
 ## Who can turn it on
 Only the user, by typing `/kern:autopilot on` or `/kern:autopilot go <ticket>`. Claude, a subagent, a skill, a background report, a scheduled task and another session cannot.
 
-A go is one line, typed alone in its prompt, naming one ticket. A go counts as the user's yes for that ticket's spec and plan and nothing else. A second ticket needs a second go. It ends when the draft PR opens, autopilot goes off or the session ends. Autopilot itself stays on until the user turns it off.
+A go needs permission mode `auto`: in the default mode it sits at every call kern does not allow. A go is one line, typed alone in its prompt, naming one ticket. A go counts as the user's yes for that ticket's spec and plan and nothing else. A second ticket needs a second go. It ends when the draft PR opens, autopilot goes off or the session ends. Autopilot itself stays on until the user turns it off.

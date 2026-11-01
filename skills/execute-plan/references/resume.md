@@ -6,7 +6,7 @@ Read this when the ledger already holds lines past `Main:`, and after compaction
 
 The first case that holds, in this order:
 
-1. No `Worktree:` line: step 5. Its `wt-new --adopt` reuses a clean worktree a stopped step 5 left and finishes its setup; on a free path an adopt makes a worktree.
+1. No `Worktree:` line: step 5. Its `wt-new --adopt` reuses a clean worktree a stopped step 5 left and finishes its setup; on a free path an adopt makes a worktree. A refused adopt names what the worktree holds: the user saves that work elsewhere and removes the worktree and its branch, then step 5 runs again. A setup that rewrites a tracked file refuses every adopt until it stops.
 2. A task on a `Wave:` line has its `Task N: complete` line but no `Applied: Task N patch=<path>` line: step 11 for it, before the final review or any later task. A task a `parked:` line holds stays out, with every task blocked by it.
 3. The first task in task order with no `Task N: complete` line, by its last line, `minor (deferred)` lines skipped:
    - none: step 6.

@@ -1,7 +1,5 @@
 # Run rules
 
-Every autopilot run follows this file.
-
 These rules cover kern's routes only. A job an `overrides.<job>` key leaves to another skill runs that skill: kern's guards still apply, and the report names the job.
 
 ## The stop list
@@ -16,7 +14,7 @@ These rules cover kern's routes only. A job an `overrides.<job>` key leaves to a
 | A required check that cannot run | |
 | A ticket the run cannot read | |
 
-A run stops only on this list. At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. Work that does not depend on the answer may finish first.
+A run stops only on this list. At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`, and the go holds. Work that does not depend on the answer may finish first.
 
 This list loosens nothing else: the stops in this file, a route's run-ending failures, a required check still red after its fix rounds and the user's stop predicate still stop a run. The kernel's Autonomy line still holds: an action it keeps for the user's word that this list does not name, such as a force-push to a shared branch, is skipped and reported.
 
@@ -26,7 +24,7 @@ A design choice stops the run when the ticket does not settle it and the answer 
 
 A required check is one the ticket or prove-it names for the change. When one cannot run, the run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it.
 
-A ticket the run cannot read is a stop: nothing else settles what to build, so the run reports each way it tried.
+A ticket the run cannot read is a stop: the run reports each way it tried.
 
 No guard covers spending money, so this rule alone holds it. A read against production follows the project's `protected_targets`.
 

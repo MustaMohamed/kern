@@ -72,7 +72,13 @@ test('ledger format and model table', () => {
   // 2,700 since M3 part 1's Task 14 and its fix rounds 1 and 2 (raised from 2,500): case 1 names the adopt and what it reuses,
   // and a snapshot equal to `tree-before` waits for a worker this session dispatched, then snapshots again.
   // 2,735 since its Task 15: a resumed fix round names step 9, and step 8 only for a refused round, after a word cut.
-  assertMaxBytes(RESUME, 2735);
+  // 2,953 since its final review's fix (M10): case 1 names the way out of a refused adopt.
+  assertMaxBytes(RESUME, 2953);
+});
+
+test('resume names the way out of a refused adopt', () => {
+  // M3 part 1 final review, M10: wt-new says why and step 5 says ask, and no text named the recovery.
+  assertContains(RESUME, ['A refused adopt names what the worktree holds: the user saves that work elsewhere and removes the worktree and its branch, then step 5 runs again. A setup that rewrites a tracked file refuses every adopt until it stops.']);
 });
 
 // Load-bearing lines, pinned to the step that carries them. Each pin fails the test when it is removed.
@@ -146,7 +152,7 @@ export const PINS = {
     "(the `Worktree:` line's base tree)", 'mode `whole-branch` on `model.final_review`', 'to triage which minors block', 'Re-grade findings by effect.',
     'Save its return as `<ledger dir>/reviews/final.txt` with the Write tool, opening `Spec given: <absolute path or none> tree=<id>`, `<id>` from `wt-diff`\'s second output line.',
     'One fix subagent gets the complete findings list, real gaps included (`kern:implementer`, a step 6 brief), each fix red then green',
-    "one `re-review` on `model.final_review` of its diff from `final.diff`'s second line, packaged with an `--allow-file` per task", 'Residual findings go to the user in step 13.'],
+    "one `re-review` on `model.final_review` of its diff from `wt-diff`'s second output line, packaged with an `--allow-file` per task", 'Residual findings go to the user in step 13.'],
   13: ['`ledger-open --summary` must end with `main: unchanged`; anything else goes first in the report.', "No push or PR, no commit beyond step 10's (autopilot: below)"],
   14: ['Propose teardown, do not run it', '`${CLAUDE_PLUGIN_ROOT}/skills/parallel-work/references/worktrees.md` allows', 'the plan worktree once committed'],
   stops: ['Ask at each stop as a typed reply in chat, never through AskUserQuestion.', 'on per the latest kern signal', 'a turn with no mode line changes nothing',
@@ -196,8 +202,9 @@ test('execute-plan pins each step, the modes, the stops and the ledger rules', (
 test('execute-plan keeps one review flow, with the dead Agent parameter gone from the four files that held it', () => {
   // M3 part 1 Task 15. The Agent tool takes no run_in_background, so reviews come back as notification turns whatever
   // the text says (design, Cost and speed: "Remove the dead `run_in_background` text and keep one review flow").
-  // parallel-work step 4 keeps its own line, which this task's brief leaves alone.
-  for (const f of [SKILL, MS, 'skills/plan/SKILL.md', 'skills/define/SKILL.md']) assert.ok(!readDoc(f).raw.includes('run_in_background'), f);
+  // Parallel-work step 4 and the skills spec's copy of it went in the final review's fix (M8).
+  for (const f of [SKILL, MS, 'skills/plan/SKILL.md', 'skills/define/SKILL.md', 'skills/parallel-work/SKILL.md']) assert.ok(!readDoc(f).raw.includes('run_in_background'), f);
+  assert.ok(!readDoc('docs/specs/2026-10-12-kern-m1-m2-skills.md').raw.includes('in one message with `run_in_background: true`'));
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[8].includes('Dispatch `kern:task-reviewer` on `model.reviewer` in mode `task` with `briefs/task-N.md`'), s[8]);
   assert.ok(s[9].includes('gets a `re-review` with that file, dispatched, saved and recorded as step 8 does'), s[9]);

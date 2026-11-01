@@ -29,7 +29,16 @@ test('plan sections and steps', () => {
   // 6,700 since the pilot fix plan's Task 5 fix round: step 7 acts on pr.max_lines and states a limit in chat only.
   // 7,900 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
   // 6,900 since its Task 15, a fall: the go's rules moved behind a pointer to run.md, for text most runs never use.
-  assertMaxBytes(SKILL, 6900);
+  // 7,041 since its final review's fix (I1, M6): under a go, steps 1 and 3 follow run.md's stop list and not an ask.
+  assertMaxBytes(SKILL, 7041);
+});
+
+test('under a go the plan asks nothing the stop list does not stop for', () => {
+  // M3 part 1 final review, M6: run.md says "Only the stop list stops the run", and these steps said ask.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[1].includes('Under a go neither asks: `run.md`\'s stop list decides.'), s[1]);
+  assert.ok(s[3].includes('both exit 3: ask; under a go, `run.md`\'s stop list decides, and a `verify.fast`'), s[3]);
+  assertContains(RUN, ['Only the stop list stops the run.']);
 });
 
 test('plan templates are contracts task-brief and plan-check can read', () => {
@@ -148,7 +157,7 @@ test('the limits are read at step 1, stated in chat only at a scope split or sto
   // Final review M1: a 2026-10-24 head-to-head run looped `kern-get $k 4` over several keys, which would read
   // `pr.max_lines` as 4, so each `kern-get` runs in its own call.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Read the limits now with `kern-get scope_threshold 4` and `kern-get pr.max_lines 300`, each `kern-get` in its own call.'), s[1]);
+  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Under a go neither asks: `run.md`\'s stop list decides. Read the limits now with `kern-get scope_threshold 4` and `kern-get pr.max_lines 300`, each `kern-get` in its own call.'), s[1]);
   assert.ok(s[7].includes('One PR is one change, within `scope_threshold` files and `pr.max_lines` lines, else stop'), s[7]);
   assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. In chat, state a limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` or `pr.max_lines: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
   assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');

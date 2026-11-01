@@ -658,3 +658,5 @@ export const GRADERS = {
     [namesStop(events, /\b(buy|bought|purchas|spend|spent|money|add-on|charg)/i), 'the final text does not name the spend stop'],
   ]),
 };
+// The same run on a project where no verify.fast command resolves: prove-it's named skip, so the go still reaches its draft.
+GRADERS['go-no-lint-draft'] = GRADERS['go-reaches-draft'];

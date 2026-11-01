@@ -35,7 +35,7 @@ Claims in chat, in step 7's forms; an unrun fix and a cause read from code carry
 
 ## Stops and autopilot
 
-A failed proof blocks the claim and the outward action that needs it. Under autopilot, a route with a fix round takes it there: finish-branch counts a red step 4 as `fix first`. Any other failed proof waits for a typed reply, with the data and a recommendation (`${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`), and disjoint work may finish first; only a judgment call that takes a default gets a `parked:` line. On finish-branch's end path the Gate stops neither the commit nor the push: each red or unrun check is reported as `fail`, and the path claims nothing.
+A failed proof blocks the claim and the outward action that needs it. Under autopilot, a route with a fix round takes it there: finish-branch counts a red step 4 as `fix first`. Any other failed proof waits for a typed reply, with the data and a recommendation (`${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`), and disjoint work may finish first; only a judgment call that takes a default gets a `parked:` line. On finish-branch's end path the Gate stops neither the commit nor the push: each red or unrun check is reported as `fail`, and the path claims nothing. Under autopilot a `verify.fast` with nothing resolved is a named skip: no stop, no failed check, no fix round. A lint the ticket names stays a required check.
 
 ## Red flags
 

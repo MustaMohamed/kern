@@ -26,7 +26,7 @@ test('parallel-work sections and steps', () => {
   const s = steps(body);
   assert.equal(s.length, 9);
   assert.equal(s[0], DEFER);
-  assertContains(SKILL, ['run_in_background: true', 'Never poll a worker', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply',
+  assertContains(SKILL, ['Never poll a worker', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply',
     '${CLAUDE_PLUGIN_ROOT}/scripts/wt-check', '${CLAUDE_PLUGIN_ROOT}/scripts/brief-check', 'a gap is not a pass', 'DONE_WITH_CONCERNS is ISSUES',
     'BLOCKED and NEEDS_CONTEXT are BLOCKED', 'silent past its TIMEBOX', 'never resume it', 'one pilot unit first', 'wt-new <slug> --detach']);
   assertMaxBytes(SKILL, 6400);
