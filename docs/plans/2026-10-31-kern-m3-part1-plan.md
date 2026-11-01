@@ -575,7 +575,7 @@ Expected: exit 0, `not ok` count 0.
 - [ ] **Step 3: On the user's yes, run every paid runner at once**
 
 Run: `CLAUDE_CONFIG_DIR=$HOME/.claude-kern-eval bash scripts/eval-all --jobs 6 --no-cache`
-Expected: the Global Constraints scores hold, and the eight new exec cases pass.
+Expected: the Global Constraints scores hold, and the ten new exec cases pass.
 
 - [ ] **Step 4: Exit rule.** A failed gate gets one fix and one rerun as a round, at most 10 rounds, more only on the user's yes. Every gate passing ends the task. Update the scorecard page after each paid round.
 - [ ] **Step 5: Commit the records**

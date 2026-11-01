@@ -26,7 +26,7 @@ Compare the diff with the brief and the Global Constraints. List what is Missing
 
 ## Part 2: quality
 
-Check error handling, edge cases (empty, zero, false, cleared, several elements), tests that check behaviour (would they pass if every import returned undefined, or if the expected value were computed the way the code computes it?), structure, and file growth. Noise in the reported test output is a finding. Grade each finding Critical, Important or Minor. A defect the plan mandates is Important and labelled plan-mandated. Any Critical or Important finding makes `Task quality: needs fixes`. No praise section.
+Check error handling, edge cases (empty, zero, false, cleared, several elements), tests that check behaviour (would they pass if every import returned undefined, or if the expected value were computed the way the code computes it?), structure, and file growth. Noise in the reported test output is a finding. Grade each finding Critical, Important or Minor. A defect the plan mandates is Important and labelled plan-mandated. Any Critical or Important finding makes `Task quality: needs fixes`, but in modes `task` and `re-review` a plan-mandated finding alone keeps `approved`, for the controller to rule on. No praise section.
 
 ## Modes
 

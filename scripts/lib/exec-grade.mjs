@@ -731,8 +731,11 @@ export const GRADERS = {
     ...prReviewed(events, ghLog, git),
     prSpecified(git, ghLog),
   ]),
-  // run.md's stop for a defect the ticket itself demands: the reviewer flagged this ticket's formula in paid rounds 2 and 3.
+  // run.md's stop for a defect the ticket itself demands: the reviewer flagged this ticket's formula in paid rounds 2 and 3. A lane that
+  // ran and left it unlabelled gives run.md no stop, so the run opens its PR and tests nothing here: 3 of 5 stored lanes on this formula did.
   'go-mandated-defect-stop': ({ events, ghLog, git }) => {
+    const lanes = laneReports(events);
+    if (lanes.length && !lanes.some((r) => /plan-mandated/.test(r.text))) return { pass: false, invalid: true, reasons: ['no lane labelled the formula plan-mandated, so the stop never came up'] };
     const text = finalText(events);
     return check([
       ticketRead(ghLog),

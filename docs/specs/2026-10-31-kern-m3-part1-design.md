@@ -110,7 +110,7 @@ The user's ruling: "In the setup you can list the user's or the project skills t
 
 The user's ruling on the required check: "Push allowed, and should Stop, PR should at least have a tested or verified the changes unless the user say explicit to open the pr". The run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it. A required check is one the ticket or prove-it names for the change (my call).
 
-The user's rule, 2026-11-01: a defect the ticket itself demands stops a go before the PR. The run pushes its branch, stops with the finding and opens no PR. No fix round runs, since a fix would leave the ticket, and no `ticket` ruling parks it. The paid round showed why: `go-deploy-stop`'s review said `needs fixes` on the ticket's own formula, and the run opened the PR and left the verdict out of its report.
+The user's rule, 2026-11-01: a defect the ticket itself demands stops a go before the PR. The run commits, pushes its branch, stops with the finding and opens no PR. No fix round runs, since a fix would leave the ticket, and no `ticket` ruling parks it. The paid round showed why: `go-deploy-stop`'s review said `needs fixes` on the ticket's own formula, and the run opened the PR and left the verdict out of its report.
 
 Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work (my call).
 

@@ -115,7 +115,8 @@ test('run.md says what each stop means and what a stop does', () => {
     'When one cannot run, the run builds by the closest check, commits, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
     'A ticket the run cannot read is a stop',
     // Paid round 3, the user's rule: go-deploy-stop's lane said `needs fixes` on the ticket's own formula, and the run opened the PR.
-    'On a defect the ticket itself demands, `plan-mandated` in a review, the run pushes its branch, stops with the finding and opens no PR. No fix round runs, since a fix would leave the ticket, and no `ticket` ruling parks it.']) assert.ok(stops.includes(s), s);
+    // Re-review I1: under a go the run writes the plan, so the label alone also fits a formula the run chose. I2: a bounded run commits at finish-branch step 8, after this stop.
+    'On a `plan-mandated` finding the ticket\'s own words demand, not only the run\'s spec or plan, the run commits, pushes its branch, stops with the finding and opens no PR. No fix round runs, and no `ticket` ruling parks it.']) assert.ok(stops.includes(s), s);
   // Task 6 review: "a red required check" read against the fix-round rule, and "a floor action" against the stop rows
   // for merge, deploy and delete, where a run waits. kernel/kernel.md has no word floor.
   for (const s of ['a red required check', 'floor']) assert.ok(!stops.includes(s), s);
@@ -135,7 +136,8 @@ test('run.md holds the five unblock steps in order, and what makes a route disti
 
 test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   const fix = section(RUN, '## Fix rounds');
-  for (const s of ['A `fix first` verdict starts a fix round in place of ending the run, up to 3 per self-review.',
+  // Re-review I2: finish-branch and self-review, read later, send a `fix first` here, so this line holds the exception.
+  for (const s of ['A `fix first` verdict, but for that `plan-mandated` stop, starts a fix round in place of ending the run, up to 3 per self-review.',
     'Each round fixes the findings and runs self-review again in full, including the checks the last round skipped.',
     // Task 7 fix round 2: "After the third" read as a push and stop even when the third round comes back `ready`.
     'When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR.', 'No verdict also stops.',
@@ -166,6 +168,14 @@ test('run.md lists every report field, the jobs another skill ran among them', (
     // Paid round 3: go-deploy-stop's lane said `needs fixes`, and its report said only that the review found it compliant.
     "The report gives the review's verdict as it came, `needs fixes` included."]) assert.ok(report.includes(s), s);
   assert.match(RUN, /^These rules cover kern's routes only\. .*`overrides\.<job>`/m);
+});
+
+test('the CHANGELOG caps line and the plan\'s expected line hold round 3\'s values', () => {
+  // Re-review M1 and M3.
+  const root = join(import.meta.dirname, '..');
+  const caps = readFileSync(join(root, 'CHANGELOG.md'), 'utf8').split('\n').find((l) => l.startsWith('  - Caps, each raised where a task names why:'));
+  for (const s of ['define `SKILL.md` 7,000 to 7,167;', 'plan `SKILL.md` 6,700 to 7,133 and', 'autopilot `references/run.md` new at 6,782.']) assert.ok(caps.includes(s), s);
+  assert.ok(readFileSync(join(root, 'docs', 'plans', '2026-10-31-kern-m3-part1-plan.md'), 'utf8').includes('Expected: the Global Constraints scores hold, and the ten new exec cases pass.'));
 });
 
 test('the design and the skills spec state what run.md does with a defect the ticket demands', () => {
@@ -231,9 +241,9 @@ test('run.md stays within its byte cap', () => {
   // 6,244 since its round 2, a fall: no fast path under a go and a PR only through finish-branch, less the line plan step 1 now holds.
   // 6,308 since paid round 2's fix: a run that cannot run a required check still builds, and a PR's steps are named in order, less a line the fix rounds table holds.
   // 6,322 since that fix's follow-up: the PR order names the spec lane.
-  // 6,748 since paid round 3's fix: a defect the ticket itself demands stops a go, the report gives the review's verdict, and an edit after the review takes a new tree.
-  assertMaxBytes('skills/autopilot/references/run.md', 6748);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,748 bytes (6,322 until M3 part 1 paid round 3\'s fix']);
+  // 6,782 since paid round 3's fix: a defect the ticket itself demands stops a go, the report gives the review's verdict, and an edit after the review takes a new tree.
+  assertMaxBytes('skills/autopilot/references/run.md', 6782);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,782 bytes (6,322 until M3 part 1 paid round 3\'s fix']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {

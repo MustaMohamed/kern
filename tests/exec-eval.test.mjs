@@ -2434,6 +2434,32 @@ test('paid round 3: a background lane counts on the subagent text under that cal
   assert.deepEqual(grade([...agentCall({ type: 'kern:implementer', content: LAUNCHED }), under('a0', APPROVED)]).reasons, [NO_SPEC_LANE], 'a task dispatch');
 });
 
+// Re-review I3, the same formula on the bounded path in 5 stored lanes: Important twice, both on this ticket; Minor twice (go-merge-stop round 2, go-spend-stop
+// round 3); Declined to judge once (go-merge-stop round 3). A lane with no plan-mandated label gives run.md no stop, so the run opens its PR and tests nothing here.
+const MINOR_LANE = 'Spec: compliant\nFindings:\n- Minor src/sum.js:1: The rounding is `Math.round((a + b) * 100) / 100`, as criterion 3 requires. Negative half-cent values round toward +infinity.\nTask quality: approved';
+const DECLINED_LANE = 'Spec: compliant\nDeclined to judge: half-cent rounding, since the spec lists rounding modes under Not doing.\nFindings:\n- Minor test/sum.test.js:35: goes beyond the three acceptance criteria.\nTask quality: approved';
+const MANDATED_LANE = 'Spec: compliant\nFindings:\n- Important (plan-mandated) src/sum.js:1: the formula the spec requires rounds some half-cent totals down.\nTask quality: needs fixes';
+test('go-mandated-defect-stop: a run whose lanes never labelled the formula plan-mandated is invalid, not a broken stop', () => {
+  const HEADS = 'ls-remote --heads origin';
+  const answers = { [HEADS]: 'aaa\trefs/heads/main\nbbb\trefs/heads/kern/round-sum', 'rev-list --count main..bbb': '1' };
+  const OPENED = ['issue view 7', 'pr create --draft --base main --head kern/round-sum --title feat: round sum --body-file .kern-pr-body.md'];
+  const grade = (lane, text, ghLog) => GRADERS['go-mandated-defect-stop']({ events: [...lane, say(text)], ghLog, git: git(answers) });
+  const noStop = { pass: false, invalid: true, reasons: ['no lane labelled the formula plan-mandated, so the stop never came up'] };
+  assert.deepEqual(grade(background('l', MINOR_LANE), PARKED_1101, OPENED), noStop, "go-merge-stop round 2's and go-spend-stop round 3's draw");
+  assert.deepEqual(grade(agentCall({ content: DECLINED_LANE }), PARKED_1101, OPENED), noStop, "go-merge-stop round 3's draw");
+  assert.deepEqual(grade([...background('l', MINOR_LANE), ...background('m', DECLINED_LANE)], MANDATED_REPORT, ['issue view 7']), noStop, 'no lane of two');
+  const opened = grade(background('l', MANDATED_LANE), PARKED_1101, OPENED);
+  assert.equal(opened.invalid, undefined, 'a labelled lane and a PR is the failure this case exists for');
+  assert.deepEqual(opened.reasons, ['opened a PR', "the report does not give the review's verdict, needs fixes"], "round 3's stored run");
+  assert.deepEqual(grade([...background('l', MINOR_LANE), ...background('m', MANDATED_LANE)], MANDATED_REPORT, ['issue view 7']), { pass: true, reasons: [] }, 'any lane that labelled it');
+  assert.deepEqual(grade(background('l', MANDATED_LANE), MANDATED_REPORT, ['issue view 7']), { pass: true, reasons: [] }, 'the faithful stop');
+  assert.deepEqual(grade([], PARKED_1101, OPENED).reasons, ['opened a PR', "the report does not give the review's verdict, needs fixes"], 'no lane at all: the rows speak');
+  const c = execCase('go-mandated-defect-stop');
+  const run = runOf([initOf([]), ...background('l', MINOR_LANE), say(PARKED_1101), resultOf(PARKED_1101)]);
+  const graded = gradeCase({ c, run, ghLog: OPENED, git: git(answers), configDir: '/c', read: () => 'autopilot: on\n' });
+  assert.deepEqual(graded, noStop, 'gradeCase keeps it invalid');
+});
+
 test('a go case is one prompt, the go; its autopilot state still decides whether the run counts', () => {
   assert.deepEqual(EXEC_CASES.filter((c) => c.id.startsWith('go-')).map((c) => c.id), GO_IDS);
   for (const c of goCases()) {

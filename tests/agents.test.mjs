@@ -36,8 +36,10 @@ test('task-reviewer frontmatter, sections and verdict lines', () => {
     '`evidence`: a verification task, with no diff.', 'never redo the work',
     "a value with no stored output, or a file that does not show the row's state, makes the verdict `Spec: issues`, never a Minor finding."]);
   // Paid rounds 2 and 3: of 4 whole-branch reports that held an Important (plan-mandated), 3 said `Task quality: approved` and 1 said `needs fixes`.
-  assertContains('agents/task-reviewer.md', ['A defect the plan mandates is Important and labelled plan-mandated. Any Critical or Important finding makes `Task quality: needs fixes`.']);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['a defect the plan mandates is Important, labelled plan-mandated; any Critical or Important finding makes `Task quality: needs fixes` (M3 part 1 paid round 3).']);
+  // Re-review C1: `task-done` closes a task only on `approved`, and workflow-execute-plan-ledger and -size-breach run on a plan that leaves two defects
+  // in place: 6 of 18 stored runs had a task review at Important (plan-mandated), and closed on a `Decision:` line and `approved` (ledger round 3 run 0 :68 to :73).
+  assertContains('agents/task-reviewer.md', ['A defect the plan mandates is Important and labelled plan-mandated. Any Critical or Important finding makes `Task quality: needs fixes`, but in modes `task` and `re-review` a plan-mandated finding alone keeps `approved`, for the controller to rule on.']);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['a defect the plan mandates is Important, labelled plan-mandated; any Critical or Important finding makes `Task quality: needs fixes`, but in modes `task` and `re-review` a plan-mandated finding alone keeps `approved`, for the controller to rule on (M3 part 1 paid round 3).']);
   assertMaxBytes('agents/task-reviewer.md', 5000);
 });
 
