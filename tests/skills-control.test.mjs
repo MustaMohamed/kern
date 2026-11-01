@@ -102,7 +102,7 @@ test('run.md says what each stop means and what a stop does', () => {
   for (const s of ['A run stops only on this list.',
     "This list loosens nothing else: the stops in this file, a route's run-ending failures, a required check still red after its fix rounds and the user's stop predicate still stop a run.",
     "The kernel's Autonomy line still holds: an action it keeps for the user's word that this list does not name, such as a force-push to a shared branch, is skipped and reported.",
-    'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`, and the go holds. Work that does not depend on the answer may finish first.',
+    'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`; the go holds. Work that does not depend on the answer may finish first.',
     "Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.",
     "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
     'A required check is one the ticket or prove-it names for the change.',
@@ -149,7 +149,7 @@ test('run.md gives define\'s first slice the default of a plan over scope_thresh
 test('run.md lists every report field, the jobs another skill ran among them', () => {
   const report = section(RUN, '## The run report');
   for (const s of ['the ticket and PR', 'each stop', 'each block and the route taken', 'each decision with its why', 'each skipped step', 'each check with its result',
-    'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run is reported as a fail, not as "not run".']) assert.ok(report.includes(s), s);
+    'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".']) assert.ok(report.includes(s), s);
   assert.match(RUN, /^These rules cover kern's routes only\. .*`overrides\.<job>`/m);
 });
 

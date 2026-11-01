@@ -14,7 +14,7 @@ These rules cover kern's routes only. A job an `overrides.<job>` key leaves to a
 | A required check that cannot run | |
 | A ticket the run cannot read | |
 
-A run stops only on this list. At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`, and the go holds. Work that does not depend on the answer may finish first.
+A run stops only on this list. At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`; the go holds. Work that does not depend on the answer may finish first.
 
 This list loosens nothing else: the stops in this file, a route's run-ending failures, a required check still red after its fix rounds and the user's stop predicate still stop a run. The kernel's Autonomy line still holds: an action it keeps for the user's word that this list does not name, such as a force-push to a shared branch, is skipped and reported.
 
@@ -62,7 +62,7 @@ plan: step 1's precondition stands: an unapproved spec goes to define. Step 4's 
 
 ## The run report
 
-Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, and the jobs that ran under another skill. `parked:` lines keep their format. A check that did not run is reported as a fail, not as "not run".
+Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, and the jobs that ran under another skill. `parked:` lines keep their format. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
 
 ## Main thread
 
