@@ -29,8 +29,9 @@ test('diagnose sections, steps and red flags', () => {
   assertContains('skills/diagnose/references/flaky-and-async.md', ['find-polluter.sh', 'loop-rate.sh', 'pin time']);
   // 6,640 since M3 part 1's Task 14 (raised from 6,500): step 2 names the worktree and step 8 gives a still-red loop its way
   // back, after cutting two defaults Inputs already holds.
-  assertMaxBytes(SKILL, 6640);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 6.64 KB,']);
+  // 6,795 since paid round 2's fix: step 7 keeps an exported signature, and step 8 keeps the state the run found.
+  assertMaxBytes(SKILL, 6795);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 6,795 bytes,']);
 });
 
 test('diagnose references', () => {
@@ -62,6 +63,14 @@ test('the loop and instrumentation run in a named worktree, and a loop still red
   assert.ok(s[8].includes("A loop still red after a fix goes back to step 5, as a failed fix on step 6's ladder."), s[8]);
   assert.ok(s[5].startsWith('5. Write 3 to 5 ranked hypotheses'), s[5]);
   assert.ok(s[6].includes('after three failed fixes, stop'), s[6]);
+});
+
+test('a fix keeps the state it was found on and the exported signature (h2h diagnose, 11-01)', () => {
+  // Held-out failed on two kern runs and on none of control's: stale-cache-file's run rewrote the cache to get green, and
+  // three-calls' run changed `lineTotal`'s signature, so the held-out test's call failed.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[7].includes('Keep an exported signature unless it is the cause.'), s[7]);
+  assert.ok(s[8].includes('The original scenario runs on the state you found: a fix that rewrites that state has not fixed the code.'), s[8]);
 });
 
 test('a go on a bug goes on to finish-branch, as implement\'s kernel row does', () => {

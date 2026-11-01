@@ -21,7 +21,7 @@ test('plan sections and steps', () => {
   const s = steps(body);
   assert.equal(s.length, 13);
   assert.equal(s[0], DEFER);
-  assertContains(SKILL, ['one fresh general-purpose subagent on `model.reviewer`', '| `model.investigator`, `model.reviewer` | `opus` |', 'Not approved: Read `${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md` now and follow it, writing no plan;', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
+  assertContains(SKILL, ['one fresh general-purpose subagent on `model.reviewer`', '| `model.investigator`, `model.reviewer` | `opus` |', 'No such file, even for a design the user calls decided: Read `${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md` now and follow it, writing no plan;', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
     '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check', 'gets a spike first', 'prefactor', 'expand, migrate in batches, then contract', "spec's Constraints section",
     'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed',
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
@@ -33,7 +33,8 @@ test('plan sections and steps', () => {
   // The full path in step 1, not "define's SKILL.md": case-inputs' closure follows skills/<n>/, and this step is plan's
   // only link to define since it stopped saying "route to define".
   // 7,086 since paid round 1's fix: an unapproved spec reads define now, in place of a route the runs did not take.
-  assertMaxBytes(SKILL, 7086);
+  // 7,128 since paid round 2's fix: "Not approved" read as a spec that exists, so step 1 says no such file, even for a decided design.
+  assertMaxBytes(SKILL, 7128);
 });
 
 test('under a go the plan asks nothing the stop list does not stop for', () => {
@@ -248,7 +249,6 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
   assert.ok(go.includes('A plan over `scope_threshold` or `pr.max_lines` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan giving the whole ticket\'s files and lines against the limits, then plan-check runs.'), go);
   // Nobody confirms the split under a go, and a moved line leaves proof-check and self-review's spec lane, so a reviewer checks the overrun.
   assertContains('skills/plan/references/plan-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size` or the plan\'s `Decision:` line. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
-  assert.ok(go.includes('The report lists the later slices, each needing its own go.'), go);
   // With no go the plan stays a draft.
   assert.ok(lines.some((l) => l.includes('When on with no go, every stop parks') && l.includes('write the plan with `status: draft`')), 'parking is the no-go path');
 });

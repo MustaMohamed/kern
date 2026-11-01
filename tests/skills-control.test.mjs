@@ -110,7 +110,8 @@ test('run.md says what each stop means and what a stop does', () => {
     "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
     'A required check is one the ticket or prove-it names for the change.',
     // Paid round 1, go-required-check-stop: the run acted on this line, which held no word for its report.
-    'When one cannot run, the run pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
+    // Paid round 2: define's route has no "work goes on" line, so the run stopped with nothing built and no branch to push.
+    'When one cannot run, the run builds by the closest check, commits, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
     'A ticket the run cannot read is a stop']) assert.ok(stops.includes(s), s);
   // Task 6 review: "a red required check" read against the fix-round rule, and "a floor action" against the stop rows
   // for merge, deploy and delete, where a run waits. kernel/kernel.md has no word floor.
@@ -151,7 +152,8 @@ test('run.md gives define\'s first slice the default of a plan over scope_thresh
 });
 
 test('run.md opens its define and plan rules with a go\'s route: a ticket is no agreed design', () => {
-  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch. Step numbers here are the skill\'s own.'));
+  // Paid round 2: 4 of 5 PR runs ran wt-snap, none ran the size gate, and go-deploy-stop's pushed tree was not its reviewed tree.
+  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs, the size gate, the Proven tree check. Step numbers here are the skill\'s own.'));
 });
 
 test('run.md lists every report field, the jobs another skill ran among them', () => {
@@ -211,8 +213,9 @@ test('run.md stays within its byte cap', () => {
   // 6,130 since its fix round 1: a step's named read stays in the main thread.
   // 6,247 since paid round 1's fix: a ticket is no agreed design, and the stop's report names the check as `fail`.
   // 6,244 since its round 2, a fall: no fast path under a go and a PR only through finish-branch, less the line plan step 1 now holds.
-  assertMaxBytes('skills/autopilot/references/run.md', 6244);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,244 bytes (6,247 until M3 part 1 paid round 1\'s fix round 2']);
+  // 6,308 since paid round 2's fix: a run that cannot run a required check still builds, and a PR's steps are named in order, less a line the fix rounds table holds.
+  assertMaxBytes('skills/autopilot/references/run.md', 6308);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,308 bytes (6,244 until M3 part 1 paid round 2\'s fix']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {
