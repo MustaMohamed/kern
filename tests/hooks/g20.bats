@@ -219,6 +219,18 @@ go_denied() {
   [[ "$output" == *"under autopilot only a go approves, for its ticket; keep status: draft (parked under autopilot) and park the question"* ]] || false
 }
 
+@test "with a go live, a refused approval names the two lines the go wants, and only then" {
+  ticket 'issue: "#853"'
+  say "$GO"
+  approve "$GO"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'under autopilot only a go approves, for its ticket; this go wants one line approved: <date>, \"/kern:autopilot go MA-254\" and one line issue: \"MA-254\"; a file for another ticket keeps status: draft'* ]] || false
+  [[ "$output" != *'park the question'* ]] || false
+  approve_as '"agent_type":"kern:implementer"'
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'keep status: draft (parked under autopilot) and park the question'* ]] || false
+}
+
 @test "under autopilot a go approves its ticket's spec" {
   ticket 'issue: MA-254'
   say "$GO"
@@ -755,7 +767,7 @@ EOF"
   denied
   [[ "$output" == *'both status and approved'* ]] || false
   [[ "$output" == *'use the Write tool, which judges each line'* ]] || false
-  [[ "$output" == *'a line holding both stays denied'* ]] || false
+  [[ "$output" == *'a line holding both stays denied; for a ledger line, reword it or append it in a call of its own'* ]] || false
 }
 
 @test "both words in upper case in a working file's text are denied" {

@@ -528,7 +528,7 @@ started() { bash "$KERN_ROOT/scripts/task-start" "$L/ledger.md" 1 "${1:-$T1}" > 
 
 @test "probe inconclusive: a failed apply, fork or control opens nothing, even on this tree's own package" {
   started "$T0"
-  # The package's patch, cut to a change this tree does not hold, with its tree record intact.
+  # The package's patch, cut to a change this tree does not hold.
   printf 'diff --git a/none.txt b/none.txt\n--- a/none.txt\n+++ b/none.txt\n@@ -1 +1 @@\n-a\n+b\n' > "$PKG.patch"
   review "$T1"
   run --separate-stderr bash "$KERN_ROOT/scripts/task-done" "$L/ledger.md" 1 "$WT" "$T1" --probe "$PKG.patch" -- sh test/check_test.sh

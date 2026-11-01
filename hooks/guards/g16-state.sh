@@ -13,6 +13,9 @@
 # to disk and then run by name; a word _g16_foreign clears, which it judges by a name and by the disk as
 # the guard runs; and any other spelling of a hook path than the ones _g16_hooks reads (any case, line
 # continuations, the APFS folds of s and k, quotes, backslashes, globs and braces).
+# Open for part 2: a project's own shell file under hooks/lib or hooks/guards named by a command that does
+# not only read keeps the ask, as the text stays whole. A go turns that ask into a denial, so a commit
+# that stages such a file stops the go.
 
 _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
 _G16_STATE_CMD="commands may not write kern session state"

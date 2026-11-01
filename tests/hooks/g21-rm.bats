@@ -250,6 +250,14 @@ refused() {
   expect none 'find "$d" -name x' 'find . -name "$x"' 'find ../other -name x' 'find ../other -type f'
 }
 
+@test "a find with a built word gets its own reason, and the same vote" {
+  refused 'find . -name $x'
+  set_autopilot off
+  expect ask 'find ../other $x'
+  [[ "$output" == *'kern G21: find with a word built at run time, which may be any primary, so kern cannot tell it from a delete; write the word literally'* ]] || false
+  [[ "$output" != *'delete outside this worktree'* ]] || false
+}
+
 @test "the worktree top and WORK/tmp cannot be planted" {
   git -C "$R" config core.worktree "$BASE"
   refused 'rm src/a' 'rm ../other/a'

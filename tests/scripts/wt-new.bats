@@ -479,6 +479,28 @@ release_on_origin() {
   [ -f "$gitdir/kern-setup-done" ]
 }
 
+@test "wt-new exits 2 when a .worktreeinclude copy fails" {
+  printf 'secret.log\n' > .worktreeinclude
+  git add .worktreeinclude && git commit --quiet -m include && git push --quiet origin main
+  printf 'token\n' > secret.log
+  chmod 000 secret.log
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-ar
+  chmod 600 secret.log
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+}
+
+@test "wt-new --adopt exits 2 when the setup marker cannot be written" {
+  printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
+  made=$(bash "$KERN_ROOT/scripts/wt-new" feat-as --plan "$TMP/plan.md" 2> /dev/null)
+  gitdir=$(git -C "$made" rev-parse --path-format=absolute --git-dir)
+  rm "$gitdir/kern-setup-done"
+  mkdir "$gitdir/kern-setup-done"
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-new" feat-as --plan "$TMP/plan.md" --adopt
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+}
+
 @test "wt-new --adopt: a clean worktree with its marker takes no fetch and no second setup, behind its base or not" {
   printf -- '---\nbase: main\n---\n' > "$TMP/plan.md"
   made=$(bash "$KERN_ROOT/scripts/wt-new" feat-ar --plan "$TMP/plan.md" 2> /dev/null)

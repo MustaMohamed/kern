@@ -59,7 +59,7 @@ wt_include() {
       [ -L "$dst/${f%%/*}" ] && continue
       [ -e "$dst/$f" ] && continue
       mkdir -p "$dst/$(dirname "$f")"
-      cp -R "$MAIN/$f" "$dst/$f"
+      cp -R "$MAIN/$f" "$dst/$f" || exit 2
     done
 }
 
@@ -119,7 +119,7 @@ wt_setup() {
     fi
     printf 'setup: %s\n' "$setup" > "$gitdir/kern-setup-done"
   else
-    printf 'setup: none (worktree.setup unset)\n' > "$gitdir/kern-setup-done"
+    printf 'setup: none (worktree.setup unset)\n' > "$gitdir/kern-setup-done" || return 2
     echo "wt: worktree.setup is unset; no setup ran in $wt" >&2
   fi
 }

@@ -55,6 +55,8 @@
 #   to it is judged with it, as it was before working files were exempt. Splitting the call ends that.
 # - A repository nested in a working directory has its own work dir, so ledger-open run from inside it
 #   does not count the outer one's.
+# - The two words are matched as text, so a report, a brief, pr-body.md or a *.proofs.md whose line joins
+#   them takes one reword, with a go or without one.
 _G20_NOT_YES=" sounds good | whatever you think | whatever | up to you | your call | you decide | i guess | maybe | not sure | looks fine i guess | no | nope | not yet | wait | stop | don't | do not "
 # A quote approves only when its words hold one of _G20_YES and none of _G20_HOLD, and it does not end in
 # a question mark. "good" and "sounds good" are not a yes.
@@ -79,7 +81,7 @@ _G20_STATUS_RE="^[[:space:]]*[\"']?status[\"']?[[:space:]]*:[[:space:]]*[\"']?ap
 # Why text with both words is denied: a Write or Edit is judged by the line, after "line N of FILE", and a
 # shell write by the command's whole text.
 _G20_BOTH_LINE="holds both status and approved, which a line of a working file may not, as it can read as an approval; reword that line, and keep a report's Status: line, since execute-plan reads a report with none as BLOCKED"
-_G20_BOTH_SHELL="the command holds both status and approved, which a shell write to a working file may not, as it can read as an approval; use the Write tool, which judges each line, and a line holding both stays denied"
+_G20_BOTH_SHELL="the command holds both status and approved, which a shell write to a working file may not, as it can read as an approval; use the Write tool, which judges each line, and a line holding both stays denied; for a ledger line, reword it or append it in a call of its own"
 
 # _G20_EDIT_AWK: prints the text it reads after replacing ENVIRON G20_OLD with G20_NEW: the first
 # match, or every match when G20_ALL is true. Line ends are read as Claude Code's Edit reads them: CRLF
@@ -131,14 +133,17 @@ _g20_issues() {
 # session's, the state's go and go_repo are set, go_repo is this repository's key, AFTER's one approved:
 # line quotes the go's line, and its one issue: line names the go's ticket. go_ticket takes a single
 # line, so no issue: line, or two of them, names none. A read that fails or comes back empty is no go.
+# _G20_LIVE holds the go once the call, the state and the repository pass, for the deny's reason.
 _g20_go() {
   local go repo key quote id
+  _G20_LIVE=''
   [ -z "${AGENT-}${AGENT_ID-}" ] || return 1
   go=$(state_get "$SID" go 2> /dev/null) || return 1
   [ -n "$go" ] || return 1
   repo=$(state_get "$SID" go_repo 2> /dev/null) || return 1
   key=$(consent_key "${KERN_MAIN-}") || return 1
   [ -n "$key" ] && [ "$repo" = "$key" ] || return 1
+  _G20_LIVE=$go
   [ "$(printf '%s\n' "$1" | env LC_ALL=C grep -Eic "$_G20_APPROVED_RE")" = 1 ] || return 1
   quote=$(_g20_lines "$1" | sed -n 's/^[^"]*"\(.*\)".*$/\1/p')
   [ "$quote" = "/kern:autopilot go $go" ] || return 1
@@ -330,7 +335,11 @@ _g20_file() {
   if _g20_approved "$before" && [ "$(_g20_lines "$before")" = "$lines" ]; then return 0; fi
   if [ "${AUTOPILOT:-0}" = 1 ]; then
     _g20_go "$after" && return 0
-    vote deny G20 "under autopilot only a go approves, for its ticket; keep status: draft (parked under autopilot) and park the question"
+    if [ -n "$_G20_LIVE" ]; then
+      vote deny G20 "under autopilot only a go approves, for its ticket; this go wants one line approved: <date>, \"/kern:autopilot go $_G20_LIVE\" and one line issue: \"$_G20_LIVE\"; a file for another ticket keeps status: draft"
+    else
+      vote deny G20 "under autopilot only a go approves, for its ticket; keep status: draft (parked under autopilot) and park the question"
+    fi
     return 0
   fi
   # ledger-open reads the first line that starts exactly with approved:, so G20 judges only a

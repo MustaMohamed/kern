@@ -393,9 +393,14 @@ _g21_paren() {
 # _g21_vote WHAT: asks; emit_decision denies under autopilot. The reason names the way through. A session
 # at the main checkout gets the opening cd as its route past a cd, and when a target lies in a linked
 # worktree or the text names one. A session in a worktree gets none, so no reason points it at a sibling.
+# A find's built word need not be a delete, so it gets its own reason.
 _g21_vote() {
   local why="delete outside this worktree and its scratch directories, or one kern cannot resolve: ${1:0:80}"
   local d lc
+  if [ "$1" = 'find with a word kern cannot read' ]; then
+    vote ask G21 "find with a word built at run time, which may be any primary, so kern cannot tell it from a delete; write the word literally"
+    return 0
+  fi
   _g21_load
   lc=$(_g21_lc "$_G21_CMD")
   while IFS= read -r d; do
