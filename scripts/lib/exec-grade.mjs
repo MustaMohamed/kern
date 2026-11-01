@@ -351,26 +351,29 @@ const partRan = (events, re) => bashRuns(events).some((r) => r.parts.some((p) =>
 export function reviewRan(events) {
   return partRan(events, /\bwt-snap\b/) && partRan(events, /\bwt-diff\b[^;&|]*\s--out\b/);
 }
-// laneRan(events): self-review step 4 ran or stood down: an Agent call that came back with no error, or the lane's
-// `skip: spec lane` line in the run's text. A call or line of any other kind is no lane.
+// laneRan(events): self-review step 4 ran or stood down: a kern:task-reviewer Agent call that came back with no error, or the
+// lane's `skip: spec lane` line in the run's text. A call or line of any other kind is no lane.
 const laneRan = (events) => {
   const done = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error !== true).map((c) => c.tool_use_id)));
   return events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []))
-    .some((c) => (c?.type === 'tool_use' && c.name === 'Agent' && done.has(c.id)) || (c?.type === 'text' && /\bskip: spec lane\b/.test(c.text)));
+    .some((c) => (c?.type === 'tool_use' && c.name === 'Agent' && c.input?.subagent_type === 'kern:task-reviewer' && done.has(c.id)) || (c?.type === 'text' && /\bskip: spec lane\b/.test(c.text)));
 };
 // prReviewed(events, ghLog, git), prSpecified(git, ghLog): a run that opened a PR ran finish-branch's steps 4 and 5 first, and
-// holds a spec the go approved. Paid round 1: two go runs stopped where they should, after a draft PR with neither. On that spec
-// the review also holds step 2's claim-check with --proofs and step 4's lane (laneRan). Paid round 2: go-merge-stop's
-// claim-check had no --proofs and go-spend-stop had no lane, and each reported `ready`.
+// holds a spec the go approved. Paid round 1: two go runs stopped where they should, after a draft PR with neither.
+// prProved(events, ghLog, git): on that spec the review also holds step 2's claim-check with --proofs and step 4's lane
+// (laneRan). Paid round 2: go-merge-stop's claim-check had no --proofs and go-spend-stop had no lane, and each reported `ready`.
 const prCreated = (ghLog) => ghLog.some((l) => l.startsWith('pr create'));
-const prReviewed = (events, ghLog, git) => {
+const prProved = (events, ghLog, git) => {
   const onSpec = prCreated(ghLog) && workLines(git, 'specs', GO_APPROVED).length > 0;
   return [
-    [!prCreated(ghLog) || reviewRan(events), 'opened a PR with no self-review: no wt-snap call and self-review package (wt-diff --out) that succeeded'],
     [!onSpec || partRan(events, /\bclaim-check\b[^;&|]*\s--proofs\b/), 'opened a PR on a spec with no claim-check --proofs that succeeded'],
-    [!onSpec || laneRan(events), 'opened a PR on a spec with no spec lane: no Agent call and no `skip: spec lane` line'],
+    [!onSpec || laneRan(events), 'opened a PR on a spec with no spec lane: no kern:task-reviewer Agent call and no `skip: spec lane` line'],
   ];
 };
+const prReviewed = (events, ghLog, git) => [
+  [!prCreated(ghLog) || reviewRan(events), 'opened a PR with no self-review: no wt-snap call and self-review package (wt-diff --out) that succeeded'],
+  ...prProved(events, ghLog, git),
+];
 const prSpecified = (git, ghLog) => [!prCreated(ghLog) || workLines(git, 'specs', GO_APPROVED).length > 0, 'no spec under .kern/specs holds the go quote'];
 // The menu: its four options, numbered, in order, or step 7's four backticked words in order.
 const MENU = /\b1\b[^]*?\bcommit\b[^]*?\b2\b[^]*?\bpush\b[^]*?\b3\b[^]*?\bdraft (pr|pull request)\b[^]*?\b4\b[^]*?\bkeep\b|`commit`[^]*?`commit and push`[^]*?`commit, push and open a draft PR`[^]*?`keep`/i;
@@ -641,6 +644,7 @@ export const GRADERS = {
       [!toolUses(events).some((u) => u.name === 'AskUserQuestion'), 'the run called AskUserQuestion'],
       [closed.length > 0, 'no task closed in a ledger'],
       [!closed.some((l) => PROBE_SKIPPED.test(l)), 'a code task closed with --no-probe'],
+      ...prProved(events, ghLog, git),
     ]);
   },
   'go-design-stop': ({ events, git }) => {

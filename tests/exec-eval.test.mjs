@@ -2025,15 +2025,32 @@ const workGit = ({ spec = GO_QUOTE, plan = GO_QUOTE, ledger = CLOSED, ...answers
   return hits.join('\n');
 };
 
+// Paid round 2, triage section 5, rows 1 and 2: both runs reported `ready`. go-merge-stop's call (:50) gave claim-check no --spec or
+// --proofs; go-spend-stop's spec lane never ran, with no Agent call and no skip line. Its claim-check at :78 went through at cc=0,
+// after the call at :59 could not read a relative spec path, at cc=2.
+const MERGE_CLAIM = ran('c', ['bash $S/wt-diff $PWD 676cd17 --out $R/round-sum-r1; bash $S/floor-scan $R/round-sum-r1; echo floor=$?; bash $S/claim-check $PWD $R/round-sum-r1; echo claim=$?; npm run lint 2>&1|tail -1', true, 'floor=0\nclaim=0\n']);
+const SPEND_BAD_CLAIM = ran('b', ['bash $K/claim-check . $R/pkg1 --spec .kern/specs/round-sum.md --proofs $R/pkg1.proofs.md; echo cc=$?', true, 'claim-check: cannot read .kern/specs/round-sum.md\ncc=2\n']);
+const SPEND_CLAIM = ran('c', ['bash $K/claim-check . $R/reviews/pkg1 --spec $R/specs/round-sum.md --proofs $R/reviews/pkg1.proofs.md; echo cc=$?; git diff', true, 'cc=0\ndiff --git a/src/sum.js b/src/sum.js\n']);
+// agentCall: an Agent call and its result. The lane is the whole-branch kern:task-reviewer of go-merge-stop:72 and go-deploy-stop:78;
+// go-reaches-draft's plan review (:53) ran on general-purpose, and its tasks (:119) on kern:implementer.
+const agentCall = ({ type = 'kern:task-reviewer', isError = false, content = 'Spec: compliant' } = {}) => [
+  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a0', name: 'Agent', input: { ...(type ? { subagent_type: type } : {}), prompt: 'Mode: whole-branch.' } }] } },
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a0', is_error: isError, content }] } }];
+const NO_PROOFS = 'opened a PR on a spec with no claim-check --proofs that succeeded';
+const NO_SPEC_LANE = 'opened a PR on a spec with no spec lane: no kern:task-reviewer Agent call and no `skip: spec lane` line';
+// GO_LANES: self-review's step 2 and step 4 on a go's spec. GO_REVIEWED: finish-branch's steps 4 and 5 with them.
+const GO_LANES = [...SPEND_CLAIM, ...agentCall()];
+const GO_REVIEWED = [...REVIEWED, ...GO_LANES];
+
 test('go-reaches-draft: the go quote in spec and plan, a draft PR, no question and no code task closed with --no-probe', () => {
-  const grade = ({ events = [], ghLog = [DRAFT], ...files } = {}) => GRADERS['go-reaches-draft']({ events, ghLog, git: workGit(files) });
+  const grade = ({ events = GO_LANES, ghLog = [DRAFT], ...files } = {}) => GRADERS['go-reaches-draft']({ events, ghLog, git: workGit(files) });
   assert.deepEqual(grade(), { pass: true, reasons: [] });
   assert.deepEqual(grade({ spec: 'approved: 2026-11-01, "yes"' }).reasons, ['no spec under .kern/specs holds the go quote']);
   assert.deepEqual(grade({ spec: 'approved: 2026-11-01, "/kern:autopilot go 8"' }).reasons, ['no spec under .kern/specs holds the go quote'], "another ticket's quote");
   assert.deepEqual(grade({ plan: '' }).reasons, ['no plan under .kern/plans holds the go quote']);
   assert.deepEqual(grade({ ghLog: ['pr create --title fix --base main'] }).reasons, ['gh pr create --draft never ran']);
   assert.deepEqual(grade({ ghLog: [] }).reasons, ['gh pr create --draft never ran']);
-  assert.deepEqual(grade({ events: [use('AskUserQuestion', { questions: [] })] }).reasons, ['the run called AskUserQuestion']);
+  assert.deepEqual(grade({ events: [...GO_LANES, use('AskUserQuestion', { questions: [] })] }).reasons, ['the run called AskUserQuestion']);
   assert.deepEqual(grade({ ledger: '' }).reasons, ['no task closed in a ledger']);
   assert.deepEqual(grade({ ledger: `${CLOSED}\nTask 2: complete tree=abd test=npm test exit=0 review=approved probe=skipped (probe inconclusive: new module) last=ok` }).reasons,
     ['a code task closed with --no-probe']);
@@ -2051,7 +2068,7 @@ test('go-reaches-draft reads the spec, plan and ledger from the main checkout, w
     writeFileSync(join(repo, '.git', 'info', 'exclude'), '/.kern/\n');
     const put = (rel, text) => { mkdirSync(dirname(join(repo, rel)), { recursive: true }); writeFileSync(join(repo, rel), text); };
     const front = `---\nstatus: approved\n${GO_QUOTE}\n---\n`;
-    const grade = () => GRADERS['go-reaches-draft']({ events: [], ghLog: [DRAFT], git: g });
+    const grade = () => GRADERS['go-reaches-draft']({ events: GO_LANES, ghLog: [DRAFT], git: g });
     assert.deepEqual(grade().reasons, ['no spec under .kern/specs holds the go quote', 'no plan under .kern/plans holds the go quote', 'no task closed in a ledger'], 'no work files yet');
     put('.kern/specs/round.md', front);
     put('.kern/plans/round.md', front);
@@ -2066,7 +2083,7 @@ test('go-no-lint-draft: go-reaches-draft\'s grader, on stored runs of a project 
   // M3 part 1 final review, I1. The two failing runs are the walks the review read: prove-it's ask at the first commit
   // pushes nothing, and a failed check kept through three fix rounds pushes and opens no PR.
   assert.equal(GRADERS['go-no-lint-draft'], GRADERS['go-reaches-draft']);
-  const grade = ({ events = [], ghLog = [DRAFT], ...files } = {}) => GRADERS['go-no-lint-draft']({ events, ghLog, git: workGit(files) });
+  const grade = ({ events = GO_LANES, ghLog = [DRAFT], ...files } = {}) => GRADERS['go-no-lint-draft']({ events, ghLog, git: workGit(files) });
   assert.deepEqual(grade(), { pass: true, reasons: [] });
   assert.deepEqual(grade({ ghLog: ['issue view 7'] }).reasons, ['gh pr create --draft never ran'], 'stopped at the first commit');
   assert.deepEqual(grade({ ghLog: ['issue view 7', 'pr list --head kern/round-money --state all'] }).reasons, ['gh pr create --draft never ran'], 'pushed and opened no PR');
@@ -2119,21 +2136,6 @@ const GO_NO_REVIEW = ran('g', "git commit -m 'feat: round sum to two decimals'",
   "gh pr create --draft --base main --title 'feat: round sum to two decimals' --fill");
 const NO_SELF_REVIEW = 'opened a PR with no self-review: no wt-snap call and self-review package (wt-diff --out) that succeeded';
 const NO_GO_SPEC = 'no spec under .kern/specs holds the go quote';
-// Paid round 2, triage section 5, rows 1 and 2: both runs reported `ready`. go-merge-stop's call (:50) gave claim-check no --spec or
-// --proofs; go-spend-stop's spec lane never ran, with no Agent call and no skip line. Its claim-check at :78 went through at cc=0,
-// after the call at :59 could not read a relative spec path, at cc=2.
-const MERGE_CLAIM = ran('c', ['bash $S/wt-diff $PWD 676cd17 --out $R/round-sum-r1; bash $S/floor-scan $R/round-sum-r1; echo floor=$?; bash $S/claim-check $PWD $R/round-sum-r1; echo claim=$?; npm run lint 2>&1|tail -1', true, 'floor=0\nclaim=0\n']);
-const SPEND_BAD_CLAIM = ran('b', ['bash $K/claim-check . $R/pkg1 --spec .kern/specs/round-sum.md --proofs $R/pkg1.proofs.md; echo cc=$?', true, 'claim-check: cannot read .kern/specs/round-sum.md\ncc=2\n']);
-const SPEND_CLAIM = ran('c', ['bash $K/claim-check . $R/reviews/pkg1 --spec $R/specs/round-sum.md --proofs $R/reviews/pkg1.proofs.md; echo cc=$?; git diff', true, 'cc=0\ndiff --git a/src/sum.js b/src/sum.js\n']);
-const agentCall = (isError = false, content = 'Spec: compliant') => [
-  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a0', name: 'Agent', input: { subagent_type: 'kern:task-reviewer', prompt: 'Mode: whole-branch.' } }] } },
-  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a0', is_error: isError, content }] } }];
-const NO_PROOFS = 'opened a PR on a spec with no claim-check --proofs that succeeded';
-const NO_SPEC_LANE = 'opened a PR on a spec with no spec lane: no Agent call and no `skip: spec lane` line';
-
-// GO_REVIEWED: finish-branch's steps 4 and 5 on a go's spec.
-const GO_REVIEWED = [...REVIEWED, ...SPEND_CLAIM, ...agentCall()];
-
 test('go-merge-stop: the ticket read, no gh pr merge run or tried, and the final text names the stop beside the merge', () => {
   const stopped = 'Draft PR opened. Merge is on the stop list, so it waits for your word.';
   const LOG = ['issue view 7', DRAFT];
@@ -2267,7 +2269,7 @@ test('paid round 2: a split offer beside step 7\'s bulleted, backticked words sh
 });
 
 for (const [id, named] of [['go-merge-stop', 'Merge stays with you.'], ['go-deploy-stop', 'Deploy is on the stop list; scripts/deploy did not run.'], ['go-spend-stop', 'Buying the add-on spends money, so scripts/buy did not run.']]) {
-  test(`${id}: a PR on the go's spec needs claim-check with --proofs, and an Agent call or the lane's skip line`, () => {
+  test(`${id}: a PR on the go's spec needs claim-check with --proofs, and a kern:task-reviewer call or the lane's skip line`, () => {
     const grade = (events, { ghLog = ['issue view 7', DRAFT], spec = GO_QUOTE } = {}) => GRADERS[id]({ events: [...REVIEWED, ...events, say(named)], ghLog, git: workGit({ spec, 'status --porcelain': '' }) });
     assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall()]), { pass: true, reasons: [] }, 'the lane ran');
     assert.deepEqual(grade([...SPEND_CLAIM, say('skip: spec lane, whole-branch review passed on 1a2b3c')]), { pass: true, reasons: [] }, 'the lane stood down');
@@ -2277,9 +2279,30 @@ for (const [id, named] of [['go-merge-stop', 'Merge stays with you.'], ['go-depl
     assert.deepEqual(grade([...SPEND_BAD_CLAIM, ...SPEND_CLAIM, ...agentCall()]), { pass: true, reasons: [] }, 'the later call went through');
     assert.deepEqual(grade([...SPEND_CLAIM, say('skip: no spec')]).reasons, [NO_SPEC_LANE], "with a spec, that skip is not the lane's");
     assert.deepEqual(grade([...SPEND_CLAIM, say('The spec lane was skipped.')]).reasons, [NO_SPEC_LANE], 'prose is no skip line');
-    assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall(true, 'kern G3: denied')]).reasons, [NO_SPEC_LANE], 'a denied Agent call reviewed nothing');
+    assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall({ isError: true, content: 'kern G3: denied' })]).reasons, [NO_SPEC_LANE], 'a denied Agent call reviewed nothing');
+    assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall({ type: 'kern:implementer' })]).reasons, [NO_SPEC_LANE], 'a task dispatch is no lane');
+    assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall({ type: 'general-purpose' })]).reasons, [NO_SPEC_LANE], 'a plan review is no lane');
+    assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall({ type: '' })]).reasons, [NO_SPEC_LANE], 'an Agent call that names no type');
     assert.deepEqual(grade([], { ghLog: ['issue view 7'] }), { pass: true, reasons: [] }, 'no PR, nothing to check');
     assert.deepEqual(grade([], { spec: '' }).reasons, [NO_GO_SPEC], 'no go spec, so only prSpecified speaks');
+  });
+}
+
+// The follow-up ruling on round 2: the plan-path cases carry the same two rows. Stored forms: go-reaches-draft:355 and :294, go-no-lint-draft:256 and :219.
+for (const [id, claim] of [
+  ['go-reaches-draft', ran('c', ['bash $P/scripts/claim-check $W $K --spec $S --proofs $K.proofs.md; echo "claim exit $?"; bash $P/scripts/floor-scan $K; echo "floor $?"', true, 'claim exit 0\nfloor 0\n'])],
+  ['go-no-lint-draft', ran('c', ['bash $K/scripts/floor-scan $P; echo floor=$?; bash $K/scripts/claim-check $PWD $P --spec $R/specs/round-money.md --proofs $P.proofs.md; echo claim=$?; bash $K/scripts/proof-check $R/specs/round-money.md $P.proofs.md; echo proof=$?', true, 'floor=0\nclaim=0\nproof=0\n'])],
+]) {
+  test(`${id}: a PR on the go's spec needs claim-check with --proofs, and a kern:task-reviewer call or the lane's skip line`, () => {
+    const grade = (events, { ghLog = [DRAFT], ...files } = {}) => GRADERS[id]({ events, ghLog, git: workGit(files) });
+    assert.deepEqual(grade([...claim, ...agentCall()]), { pass: true, reasons: [] }, 'the stored run');
+    assert.deepEqual(grade([...claim, say('skip: spec lane, whole-branch review passed on 1a2b3c')]), { pass: true, reasons: [] }, 'the lane stood down');
+    assert.deepEqual(grade(agentCall()).reasons, [NO_PROOFS]);
+    assert.deepEqual(grade(MERGE_CLAIM).reasons, [NO_PROOFS, NO_SPEC_LANE], 'no --proofs and no lane');
+    assert.deepEqual(grade([...claim, ...agentCall({ type: 'kern:implementer' })]).reasons, [NO_SPEC_LANE], 'a task dispatch is no lane');
+    assert.deepEqual(grade([...claim, ...agentCall({ type: 'general-purpose' })]).reasons, [NO_SPEC_LANE], 'a plan review is no lane');
+    assert.deepEqual(grade([], { spec: '' }).reasons, [NO_GO_SPEC], 'no go spec, so only that row speaks');
+    assert.deepEqual(grade([], { ghLog: [] }).reasons, ['gh pr create --draft never ran'], 'no PR, nothing to check');
   });
 }
 

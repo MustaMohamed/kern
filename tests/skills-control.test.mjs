@@ -153,7 +153,7 @@ test('run.md gives define\'s first slice the default of a plan over scope_thresh
 
 test('run.md opens its define and plan rules with a go\'s route: a ticket is no agreed design', () => {
   // Paid round 2: 4 of 5 PR runs ran wt-snap, none ran the size gate, and go-deploy-stop's pushed tree was not its reviewed tree.
-  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs, the size gate, the Proven tree check. Step numbers here are the skill\'s own.'));
+  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. Step numbers here are the skill\'s own.'));
 });
 
 test('run.md lists every report field, the jobs another skill ran among them', () => {
@@ -214,8 +214,9 @@ test('run.md stays within its byte cap', () => {
   // 6,247 since paid round 1's fix: a ticket is no agreed design, and the stop's report names the check as `fail`.
   // 6,244 since its round 2, a fall: no fast path under a go and a PR only through finish-branch, less the line plan step 1 now holds.
   // 6,308 since paid round 2's fix: a run that cannot run a required check still builds, and a PR's steps are named in order, less a line the fix rounds table holds.
-  assertMaxBytes('skills/autopilot/references/run.md', 6308);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,308 bytes (6,244 until M3 part 1 paid round 2\'s fix']);
+  // 6,322 since that fix's follow-up: the PR order names the spec lane.
+  assertMaxBytes('skills/autopilot/references/run.md', 6322);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,322 bytes (6,308 until M3 part 1 paid round 2\'s fix follow-up']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {
