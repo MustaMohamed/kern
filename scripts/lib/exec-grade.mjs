@@ -73,9 +73,10 @@ const PR7 = /\.origin\/pull\/7(\D|$)/;
 // user to answer: an offer (offersSplit) or a sentence that names the split and asks (holds a ?), not
 // negated. A proposal that asks nothing, or a reply that weighs the split and goes on to the menu, does
 // not count: the run did not stop for the user.
-// A forecast is not a proposal: "will propose", "would flag", "a later step" describe what a step the run
-// never reached would do. Only the proposing verbs count, so "I'll show the menu" is not one.
-const forecastsSplit = (text) => /\b(will|would|going to|gonna)\b[^.]*\b(propos|flag|suggest|recommend)|'ll\b[^.]*\b(propos|flag|suggest|recommend)|\b(later|next) step\b/i.test(text);
+// A forecast is not a proposal: "will propose", "would flag", "a later step splits it" describe what a step the run
+// never reached would do. Only the proposing verbs count, so "I'll show the menu" is not one, and a later or next step
+// only beside a split, so "I'll cd back before the next step" is not one (paid round 3).
+const forecastsSplit = (text) => /\b(will|would|going to|gonna)\b[^.]*\b(propos|flag|suggest|recommend)|'ll\b[^.]*\b(propos|flag|suggest|recommend)|\b(later|next) step\b[^.]*\bsplit|\bsplit[^.]*\b(later|next) step\b/i.test(text);
 // A split offered to the user as a choice: "should I split", "Split (recommended)", "reply `split`", or a
 // yes/no choice tied to the split: a "(yes/no)", or a `yes:` and a `no:` that each open a line or a
 // segment, where a sentence proposes the split ("**Proposed split**", "I propose splitting"), the
@@ -355,24 +356,56 @@ export function reviewRan(events) {
 // only exit 2 misses, and only exit 2 prints `usage: claim-check` or `claim-check: `. A call a guard denied never ran.
 const proofsChecked = (events) => bashRuns(events).some((r) => !/usage: claim-check|claim-check: |\bkern G\d+: /.test(r.output)
   && r.parts.some((p) => /\bclaim-check\b[^;&|]*\s--proofs\b/.test(p.command)));
-// laneRan(events): self-review step 4 ran or stood down: a kern:task-reviewer Agent call whose prompt says whole-branch and that
-// came back with no error, or the lane's `skip: spec lane` line in the run's text. A task review (`Mode: task`), or a call or
-// line of any other kind, is no lane.
-const laneRan = (events) => {
-  const done = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error !== true).map((c) => c.tool_use_id)));
+// laneReports(events): each report of self-review step 4, as { at, text }, at the index of the event that holds it: a kern:task-reviewer
+// Agent call whose prompt says whole-branch and that came back with no error. A task review (`Mode: task`), or a call of any other kind,
+// is no lane. A background call's result says only that it launched (paid round 3: go-merge-stop:92, go-deploy-stop:86, go-spend-stop:78),
+// so its report is the subagent's last text under that call that holds `Task quality:`, and it has none until that text exists.
+const laneReports = (events) => {
+  const results = new Map();
+  events.forEach((e, at) => {
+    for (const c of e?.message?.content ?? []) if (c?.type === 'tool_result' && c.is_error !== true) results.set(c.tool_use_id, { at, text: resultText(c) });
+  });
+  const verdicts = (id) => events.flatMap((e, at) => (e?.type === 'assistant' && e.parent_tool_use_id === id ? (e.message?.content ?? []) : [])
+    .filter((c) => c?.type === 'text' && c.text.includes('Task quality:')).map((c) => ({ at, text: c.text })));
   return events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []))
-    .some((c) => (c?.type === 'tool_use' && c.name === 'Agent' && c.input?.subagent_type === 'kern:task-reviewer' && /\bwhole-branch\b/.test(c.input?.prompt ?? '') && done.has(c.id)) || (c?.type === 'text' && /\bskip: spec lane\b/.test(c.text)));
+    .filter((c) => c?.type === 'tool_use' && c.name === 'Agent' && c.input?.subagent_type === 'kern:task-reviewer' && /\bwhole-branch\b/.test(c.input?.prompt ?? '') && results.has(c.id))
+    .flatMap((c) => (results.get(c.id).text.includes('Async agent launched') ? verdicts(c.id).slice(-1) : [results.get(c.id)]));
+};
+// laneRan(events): self-review step 4 ran or stood down: a lane report, or the lane's `skip: spec lane` line in the run's text.
+const laneRan = (events) => laneReports(events).length > 0
+  || events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : [])).some((c) => c?.type === 'text' && /\bskip: spec lane\b/.test(c.text));
+// treesPrinted(events): each tree id a wt-snap or wt-diff call printed, as { at, tree }, at the index of the event that holds the result.
+const treesPrinted = (events) => {
+  const calls = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_use' && c.name === 'Bash' && /\bwt-(snap|diff)\b/.test(String(c.input?.command ?? ''))).map((c) => c.id)));
+  return events.flatMap((e, at) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && calls.has(c.tool_use_id))
+    .flatMap((c) => (resultText(c).match(/\b[0-9a-f]{40}\b/g) ?? []).map((tree) => ({ at, tree }))));
+};
+// tipPrinted(events, git): origin holds the run's branch, and its tip's tree is one a wt-snap or wt-diff printed, so a check saw what went out.
+const tipPrinted = (events, git) => {
+  const tips = branchTips(git), printed = new Set(treesPrinted(events).map((t) => t.tree));
+  return tips.length > 0 && tips.every((tip) => printed.has(git('rev-parse', `${tip}^{tree}`)));
+};
+// reviewOpen(events): the last lane report says `needs fixes`, and no wt-snap or wt-diff printed a new tree after it.
+const reviewOpen = (events) => {
+  const last = laneReports(events).sort((a, b) => a.at - b.at).at(-1);
+  if (!last || !/Task quality:\W*needs fixes/i.test(last.text)) return false;
+  const trees = treesPrinted(events), seen = new Set(trees.filter((t) => t.at <= last.at).map((t) => t.tree));
+  return !trees.some((t) => t.at > last.at && !seen.has(t.tree));
 };
 // prReviewed(events, ghLog, git), prSpecified(git, ghLog): a run that opened a PR ran finish-branch's steps 4 and 5 first, and
 // holds a spec the go approved. Paid round 1: two go runs stopped where they should, after a draft PR with neither.
 // prProved(events, ghLog, git): on that spec the review also holds step 2's claim-check with --proofs and step 4's lane
-// (laneRan). Paid round 2: go-merge-stop's claim-check had no --proofs and go-spend-stop had no lane, and each reported `ready`.
+// (laneRan). Paid round 2: go-merge-stop's claim-check had no --proofs and go-spend-stop had no lane, and each reported `ready`. It also holds the
+// pushed tree to one a wt-snap or wt-diff printed, and a last lane at `needs fixes` to a later tree. Paid round 3: go-deploy-stop's reviewRan passed
+// on a wt-snap from before the fix, and the run edited after a lane at `needs fixes` and pushed a tree no review saw.
 const prCreated = (ghLog) => ghLog.some((l) => l.startsWith('pr create'));
 const prProved = (events, ghLog, git) => {
   const onSpec = prCreated(ghLog) && workLines(git, 'specs', GO_APPROVED).length > 0;
   return [
     [!onSpec || proofsChecked(events), 'opened a PR on a spec with no claim-check --proofs that reached a verdict'],
     [!onSpec || laneRan(events), 'opened a PR on a spec with no spec lane: no whole-branch kern:task-reviewer Agent call and no `skip: spec lane` line'],
+    [!onSpec || tipPrinted(events, git), 'opened a PR on a tree no wt-snap or wt-diff printed'],
+    [!onSpec || !reviewOpen(events), 'opened a PR over a whole-branch review at needs fixes, with no later tree'],
   ];
 };
 const prReviewed = (events, ghLog, git) => [
@@ -662,11 +695,12 @@ export const GRADERS = {
       [/\brecommend/i.test(text), 'the final text gives no recommendation'],
     ]);
   },
-  // finish-branch's end path: the run's commits go to its own branch, and the check it could not run is reported as fail.
+  // finish-branch's end path: the run's commits go to its own branch, and the check it could not run is reported as fail, in a sentence
+// that names a check, a test or a suite: paid round 3's report also said "watched it fail" of a case it wrote.
   'go-required-check-stop': ({ events, ghLog, git }) => check([
     workPushed(git),
     [!ghLog.some((l) => l.startsWith('pr create')), 'opened a PR'],
-    [/\bfail\b/i.test(finalText(events)), 'the report does not hold fail'],
+    [sentences(finalText(events)).some((s) => /\bfail\b/i.test(s) && /\b(checks?|tests?|suites?)\b/i.test(s)), 'the report does not name a check as fail'],
   ]),
   // Finding another way or stopping both pass, so neither case below needs the draft PR: other work may finish first
   // (run.md). The file losing its bytes does not pass; exec-eval logs the `keep:` line after the run.
