@@ -35,6 +35,9 @@ test('task-reviewer frontmatter, sections and verdict lines', () => {
   assertContains('agents/task-reviewer.md', ['Spec: compliant | issues', 'Task quality: approved | needs fixes', 'cannot verify', 'plan-mandated', 'ADDRESSED', 'whole-branch', 'Declined to judge:', 'computed the way the code computes it',
     '`evidence`: a verification task, with no diff.', 'never redo the work',
     "a value with no stored output, or a file that does not show the row's state, makes the verdict `Spec: issues`, never a Minor finding."]);
+  // Paid rounds 2 and 3: of 4 whole-branch reports that held an Important (plan-mandated), 3 said `Task quality: approved` and 1 said `needs fixes`.
+  assertContains('agents/task-reviewer.md', ['A defect the plan mandates is Important and labelled plan-mandated. Any Critical or Important finding makes `Task quality: needs fixes`.']);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['a defect the plan mandates is Important, labelled plan-mandated; any Critical or Important finding makes `Task quality: needs fixes` (M3 part 1 paid round 3).']);
   assertMaxBytes('agents/task-reviewer.md', 5000);
 });
 
