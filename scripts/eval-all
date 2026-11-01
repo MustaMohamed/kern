@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Runs every paid eval runner at once, each with its own session pool, so a full gate takes as long as its
-# slowest runner. The runners are exec-eval, behave, kernel-adherence on Sonnet and on Haiku, and h2h plan and
-# review (the user, 2026-10-23: "I want all in parallel to finish faster").
+# slowest runner. The runners are exec-eval, behave, kernel-adherence on Sonnet and on Haiku, and h2h plan,
+# diagnose and review (the user, 2026-10-23: "I want all in parallel to finish faster").
 # Usage: scripts/eval-all [--jobs N] [--quick | --changed <range>] [--no-cache] [--only a,b] [--dry-run]
-# --jobs N goes to each runner (default 4; six runners, so up to 6N sessions at once). --quick, --changed,
+# --jobs N goes to each runner (default 4; seven runners, so up to 7N sessions at once). --quick, --changed,
 # --no-cache and --dry-run go to every runner. --only names the runners to start: exec, behave,
-# adherence-sonnet, adherence-haiku, h2h-plan, h2h-review. Each runner's output goes to
+# adherence-sonnet, adherence-haiku, h2h-plan, h2h-diagnose, h2h-review. Each runner's output goes to
 # evals/results/eval-all-<UTC stamp>/<name>.log; the runners keep their own refusals (no eval CLAUDE_CONFIG_DIR,
 # a dirty tree for a gating run, a mistyped flag). Prints one line per runner when all have ended, and exits 0
 # only when every runner exited 0.
@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
        exit 2 ;;
   esac
 done
-names=(exec behave adherence-sonnet adherence-haiku h2h-plan h2h-review)
+names=(exec behave adherence-sonnet adherence-haiku h2h-plan h2h-diagnose h2h-review)
 args_for() {
   case "$1" in
     exec) echo "scripts/exec-eval.mjs" ;;
@@ -35,6 +35,7 @@ args_for() {
     adherence-sonnet) echo "scripts/kernel-adherence.mjs" ;;
     adherence-haiku) echo "scripts/kernel-adherence.mjs --model claude-haiku-5-5" ;;
     h2h-plan) echo "scripts/h2h.mjs --category plan" ;;
+    h2h-diagnose) echo "scripts/h2h.mjs --category diagnose" ;;
     h2h-review) echo "scripts/h2h.mjs --category review" ;;
   esac
 }

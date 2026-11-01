@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,14 +20,22 @@ const run = (args, t) => {
   return { ...r, out };
 };
 
-test('eval-all --dry-run starts all six runners at once and exits 0 when each does', { skip: !upstream && 'run scripts/fetch-upstream' }, (t) => {
+test('eval-all --dry-run starts all seven runners at once and exits 0 when each does', { skip: !upstream && 'run scripts/fetch-upstream' }, (t) => {
   const r = run(['--dry-run', '--jobs', '2'], t);
   assert.equal(r.status, 0, r.stderr);
-  for (const n of ['exec', 'behave', 'adherence-sonnet', 'adherence-haiku', 'h2h-plan', 'h2h-review']) {
+  for (const n of ['exec', 'behave', 'adherence-sonnet', 'adherence-haiku', 'h2h-plan', 'h2h-diagnose', 'h2h-review']) {
     assert.match(r.stdout, new RegExp(`started ${n} \\(pid`));
     assert.match(r.stdout, new RegExp(`eval-all: ${n} +exit 0`));
   }
-  assert.equal(readdirSync(r.out).filter((f) => f.endsWith('.log')).length, 6);
+  assert.equal(readdirSync(r.out).filter((f) => f.endsWith('.log')).length, 7);
+});
+
+test('eval-all\'s h2h-diagnose runner is h2h on the diagnose category, which plan line 20 gates on', { skip: !upstream && 'run scripts/fetch-upstream' }, (t) => {
+  const r = run(['--dry-run', '--only', 'h2h-diagnose'], t);
+  assert.equal(r.status, 0, r.stderr);
+  const log = readFileSync(join(r.out, 'h2h-diagnose.log'), 'utf8');
+  assert.match(log, /^diagnose\/stale-cache-file: /m);
+  assert.doesNotMatch(log, /^(plan|review)\//m, 'the one category');
 });
 
 test('eval-all --only starts just the runners it names', (t) => {
