@@ -298,13 +298,13 @@ const h2hResult = (name, c) => {
 };
 
 // HEREDOC: a here-doc from its `<<WORD` to its closing line. SCRIPT_CALL: a script under a scripts/ folder, run by bash or where
-// a command starts, so a script read, listed or written about is no call.
+// a command starts, or run by bash through a variable (`bash $P/plan-check`), so a script read, listed or written about is no call.
 const HEREDOC = /<<-?\s*(['"]?)(\w+)\1[^\n]*\n[^]*?\n\s*\2(?=\s|$)/g;
-const SCRIPT_CALL = /(?:\bbash\s+|(?:^|[\n;&|(])\s*)\S*\bscripts\/([\w.-]+)/g;
+const SCRIPT_CALL = /(?:\bbash\s+|(?:^|[\n;&|(])\s*)\S*\bscripts\/([\w.-]+)|\bbash\s+"?\$\{?\w+\}?\/([\w.-]+)/g;
 // scriptsPast(command, shown): the name of each script command calls, in order, past the first shown characters of its
 // whitespace-collapsed text. Paid round 1: workflow-define-spec run 2's plan-check sat at character 3,531 of 3,592.
 const scriptsPast = (command, shown) => [...command.replace(HEREDOC, (h) => ' '.repeat(h.length)).matchAll(SCRIPT_CALL)]
-  .filter((m) => command.slice(0, m.index + m[0].length).replace(/\s+/g, ' ').length > shown).map((m) => m[1]);
+  .filter((m) => command.slice(0, m.index + m[0].length).replace(/\s+/g, ' ').length > shown).map((m) => m[1] ?? m[2]);
 
 const LEGEND = 'Transcript (in order: "Assistant:" or "Subagent:" heads text, each line of it after "> "; "N. Tool:" is a tool call, '
   + '"+ " lines what a Write or Edit wrote, "=> " lines its result, "(error)" when the tool failed; a subagent\'s lines sit indented under the call that started it):';

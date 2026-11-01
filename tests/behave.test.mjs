@@ -558,12 +558,14 @@ test('the behaviour record keeps the scripts a Bash command calls past its 300-c
   assert.equal(run2.length, '1. Bash: '.length + 300 + noted('plan-check').length, run2);
   assert.ok(run2.endsWith(noted('plan-check')), run2);
   assert.ok(call(`${heredoc}K=/tmp/p/kern; bash $K/scripts/plan-check s.md\nscripts/claim-check --spec s.md && bash "$K/scripts/plan-check" s.md`).endsWith(noted('plan-check', 'claim-check', 'plan-check')), 'each call, in order, however it is spelled');
+  // Re-review I1: round 1 holds 12 calls of this spelling in 4 of 72 runs, workflow-execute-plan-ledger-1's plan-check among them.
+  assert.ok(call(`${heredoc}P=/tmp/p/kern/scripts; bash $P/plan-check s.md; bash "${'$'}{P}/wt-snap" /w`).endsWith(noted('plan-check', 'wt-snap')), 'through a variable that holds the scripts folder');
   // Run 2's first plan-check: a call the record shows is not named again.
   const shown = `cd /w/billing-service; node --test 2>&1 | tail -15; bash /tmp/p/kern/scripts/plan-check .kern/specs/multi-currency-totals.md; cat ${'/tmp/p/kern/skills/define/references/'.repeat(6)}spec-review.md`;
   assert.ok(shown.length > 300 && !call(shown).includes('[digest'), call(shown));
   assert.ok(call(`${shown}; bash /tmp/p/kern/scripts/plan-check s.md`).endsWith(noted('plan-check')), 'a later call of a script the record shows is its own call');
   // Not calls: a name a here-doc writes, and a script read or listed.
-  const wrote = call(`${heredoc}cat > notes.md <<'EOF'\nbash scripts/plan-check s.md\nEOF\ncat /tmp/p/kern/scripts/plan-check; ls scripts/plan-check`);
+  const wrote = call(`${heredoc}cat > notes.md <<'EOF'\nbash scripts/plan-check s.md\nEOF\ncat /tmp/p/kern/scripts/plan-check; ls scripts/plan-check; P=/tmp/p/kern/scripts; cat $P/plan-check`);
   assert.ok(!wrote.includes('[digest'), wrote);
   assert.equal(call('bash /tmp/p/kern/scripts/plan-check s.md'), '1. Bash: bash /tmp/p/kern/scripts/plan-check s.md', 'a command with no cut');
   assert.ok(!lines(behaveDigest([use('a', 'Agent', { description: `${'x'.repeat(300)} bash scripts/plan-check` })]))[0].includes('[digest'), 'a Bash command only');
