@@ -72,7 +72,7 @@ The counts are as of the M2 re-audit (2026-10-23): 21 rows moved to Equal or bet
 | 37 | define sizes the work before it understands the intent, and names the class in process words | superpowers 7.0.0 | M2b (shipped 0.4.0) | S |
 | 38 | define's interview and spec have no anti-goals and no prior art | superpowers 7.0.0 | M2b (shipped 0.4.0) | S |
 | 39 | plan asks for full code in each step and has no proportion check against the spec | superpowers 6.4.2 | M2b (shipped 0.4.0) | S |
-| 40 | Hooks do not survive an empty or broken PATH, and the misleading "kern did not load" message hides the real cause | superpowers 7.0.0 | M3, with the M1 parser deferrals | S |
+| 40 | Hooks do not survive an empty or broken PATH, and the misleading "kern did not load" message hides the real cause | superpowers 7.0.0 | M3 part 1 | S |
 | 41 | The M2b behaviour grader keeps blank evidence instead of treating it as an invalid run | addy 0.6.13 | M2b (shipped 0.4.0) | S |
 | 42 | No `task-done.bats` case covers a passing command that prints nothing | superpowers 7.0.0 | M2b (shipped 0.4.0) | S |
 | 43 | plan-check reads fences by flipping on any line that starts with three backticks or tildes, so a spec quoting Markdown fails it | pstack 0.15.25 | M2b (shipped 0.4.0) | S |
@@ -174,7 +174,7 @@ Re-audited at the close of M2 (release 0.4.0) against built and tested code only
 | SP2: 1% rule, announce, one todo per item | superpowers 7.0.0 | Equal or better | `tests/kernel.test.mjs` (on a match the route is read before any other tool call; each new task reads its route again), `tests/adherence.test.mjs`, `tests/hooks/prompt-submit.bats` (the routing reminder on every later prompt), `evals/snapshots/adherence-routed-sonnet-5-5-2026-10-23.json` (the 18 single-task cases pass; multi-diagnose 1 of 3, a known limit) |
 | SP3: Rationalization and red-flag tables, pressure-tested | superpowers 7.0.0 | Equal or better | `tests/lint-rules.test.mjs` (rule 9: a discipline skill needs a Red flags table of 2 to 6 rows), `evals/snapshots/behave-sonnet-5-5-2026-10-22.json` (6 of 7 pressure cases pass) |
 | SP4: Hard gate before building; spike stays throwaway | superpowers 7.0.0 | Equal or better | `tests/skills/define.test.mjs` (the standing gate on every path and the detached spike worktree), `tests/hooks/g20.bats` (27 tests), `tests/hooks/g20-probes.bats` (55 tests) |
-| SP8: writing-plans with a plan reviewer | superpowers 7.0.0 | Equal or better | `tests/skills/plan.test.mjs` (one fresh general-purpose subagent on model.reviewer; only the user's word skips the plan review; the review runs in the foreground), `tests/scripts/plan-check.bats`, `evals/snapshots/h2h-sonnet-5-5-plan-2026-10-23-16q.json` (plan PASS) |
+| SP8: writing-plans with a plan reviewer | superpowers 7.0.0 | Equal or better | `tests/skills/plan.test.mjs` (one fresh general-purpose subagent on model.reviewer; only the user's word skips the plan review), `tests/scripts/plan-check.bats`, `evals/snapshots/h2h-sonnet-5-5-plan-2026-10-23-16q.json` (plan PASS) |
 | SP9: SDD controller, three prompts, model per role (the executor ruling on Declined to judge lines is the BV Declined to judge row) | superpowers 7.0.0 | Equal or better | `tests/skills/execute-plan.test.mjs`, `tests/agents.test.mjs`, `tests/scripts/no-commit-review.bats`, `tests/scripts/ledger.bats`, `evals/snapshots/behave-sonnet-5-5-2026-10-22.json` (workflow-execute-plan-ledger 3 of 3) |
 | SP11: task-brief, review package, sdd-workspace | superpowers 7.0.0 | Equal or better | `tests/scripts/task-brief.bats`, `tests/scripts/brief-check.bats`, `tests/scripts/wt-snap-diff.bats`, `tests/scripts/kern-dir.bats` |
 | SP12: Ledger written only when the test passes | superpowers 7.0.0 | Equal or better | `tests/scripts/task-done.bats` (a failing command is not recorded; no review, an older tree or an edited worktree is refused; --probe refuses a task whose test passes without the change) |
@@ -255,9 +255,18 @@ The list command printed 117 candidate rows. These five are not M2 work and keep
 - pstack P25, eval blinding: its counterpart is skill-eval (M6). M2b built the blinding only for kern's own head-to-head and pilot runs (`scripts/lib/h2h.mjs`). The user-facing eval playbook stays Planned (M6).
 - pstack P31, review lanes (interrogate, thermos, dyl-review): its counterpart is the pr-review lanes (M3). self-review, the M2 part, reviews one's own diff and is judged in P32 and P44. Planned (M3).
 
+## M3 part 1
+
+Built and tested, not yet released. Rule 4's re-audit of M3's rows waits for M3's close, and the counts above move then. The go, the run rules, setup's conflict step and the new eval cases come from no audited source, so they hold no row here; each one's state is in `docs/research/2026-10-31-m3-item-sort.md`.
+
+| Mechanism | Source | Verdict | Pinned by |
+|---|---|---|---|
+| Local `rm` guard, G21: deletes inside the worktree and scratch directories pass, others ask, and autopilot denies them (gap 26) | kern | Equal or better | `tests/hooks/g21-rm.bats` |
+| Hooks survive an empty or broken PATH, so it no longer reads as a failed install (gap 40) | superpowers 7.0.0 | Equal or better | `tests/hooks/pre-tool-use.bats`, `tests/hooks/session-start.bats`, `tests/hooks/prompt-submit.bats`, `tests/hooks/subagent-start.bats` |
+
 ## Accepted limits
 
-- Spending and permission changes outside the Claude Code settings files stay kernel text ("ask first"). No command reliably signals spending.
+- Spending and permission changes outside the Claude Code settings files stay kernel text ("ask first"), and autopilot's run rules stop for spending. No command reliably signals spending.
 - Windows: hooks are bash and POSIX tools (section 8.4 rule 1) and kern is personal (D-2). Revisit if a Windows machine is added. The 2026-10-17 audit adds superpowers' `run-hook.cmd` and caveman's hook stdin watchdog, config encodings (BOM, UTF-16LE) and hidden console windows to this limit.
 
 ## Rejected
