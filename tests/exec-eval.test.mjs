@@ -2247,6 +2247,7 @@ test('paid round 2: finish-split-nine-files passes on the stored run, and "(yes)
   const noOffer = ['no split offered for the user to answer, for nine files over scope_threshold 4'];
   assert.deepEqual(grade('The change touches 10 files, above scope_threshold 4. Do you want a changelog line (yes), or should I leave it (no)?').reasons, noOffer, 'a choice about something else');
   assert.deepEqual(grade('A split is not needed here. Do you want a changelog line (yes), or should I leave it (no)?').reasons, noOffer, 'a split the reply calls needless');
+  assert.deepEqual(grade('I propose a split into two PRs. Tests passed (yes).').reasons, noOffer, 'a lone (yes) asks nothing');
 });
 
 test('paid round 2: step 7\'s four words, bulleted and backticked, in order, are the menu', () => {

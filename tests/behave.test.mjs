@@ -1769,6 +1769,8 @@ test('task-done-each-task passes when task-done\'s result holds each plan task\'
   assert.equal(byHand.pass, false, 'a line that no task-done call printed is a hand edit');
   const cat = check([use('p', 'Bash', { command: 'cat .kern/plans/export.md' }), back('p', '### Task 1: toCsv\n\n### Task 2: quoting\n'), ...taskDone('a', 1, CLOSE_1), ...taskDone('b', 2, CLOSE_2), ...reply('x')]);
   assert.equal(cat.pass, true, 'a plan read by cat');
+  const other = check([...planRead, ...ran('cat notes.md', '### Task 3: a heading in some other file\n'), ...taskDone('a', 1, CLOSE_1), ...taskDone('b', 2, CLOSE_2), ...reply('x')]);
+  assert.equal(other.pass, true, other.evidence);
   const noPlan = check([...taskDone('a', 1, CLOSE_1), ...reply('x')]);
   assert.deepEqual([noPlan.pass, noPlan.evidence], [false, 'no read of a plan under .kern/plans/ shows a `### Task N:` heading']);
   const brief = check([use('p', 'Read', { file_path: '/w/.kern/ledgers/export/briefs/task-1.md' }), back('p', '11\t### Task 1: toCsv'), ...taskDone('a', 1, CLOSE_1), ...reply('x')]);
