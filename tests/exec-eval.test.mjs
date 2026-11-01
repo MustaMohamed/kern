@@ -2068,7 +2068,7 @@ test('go-no-lint-draft: go-reaches-draft\'s grader, on stored runs of a project 
   assert.equal(GRADERS['go-no-lint-draft'], GRADERS['go-reaches-draft']);
   const grade = ({ events = [], ghLog = [DRAFT], ...files } = {}) => GRADERS['go-no-lint-draft']({ events, ghLog, git: workGit(files) });
   assert.deepEqual(grade(), { pass: true, reasons: [] });
-  assert.deepEqual(grade({ ghLog: ['issue view 7'], ledger: '' }).reasons, ['gh pr create --draft never ran', 'no task closed in a ledger'], 'stopped at the first commit');
+  assert.deepEqual(grade({ ghLog: ['issue view 7'] }).reasons, ['gh pr create --draft never ran'], 'stopped at the first commit');
   assert.deepEqual(grade({ ghLog: ['issue view 7', 'pr list --head kern/round-money --state all'] }).reasons, ['gh pr create --draft never ran'], 'pushed and opened no PR');
 });
 

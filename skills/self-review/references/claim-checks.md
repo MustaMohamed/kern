@@ -16,4 +16,4 @@ Three scripts catch what reviewers miss; paste each run.
 
 ## A skipped check is a failed check
 
-A check that did not run, timed out, or ran on the wrong tree is reported as failed, with the reason.
+A check that did not run, timed out, or ran on the wrong tree fails, with the reason, but for a named skip.

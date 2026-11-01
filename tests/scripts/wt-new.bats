@@ -480,6 +480,7 @@ release_on_origin() {
 }
 
 @test "wt-new exits 2 when a .worktreeinclude copy fails" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads every file"
   printf 'secret.log\n' > .worktreeinclude
   git add .worktreeinclude && git commit --quiet -m include && git push --quiet origin main
   printf 'token\n' > secret.log

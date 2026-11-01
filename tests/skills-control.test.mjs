@@ -186,6 +186,7 @@ test('the docs state what the whole-branch review found them short of', () => {
   const g16 = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g16-state.sh'), 'utf8').split('\n').slice(0, 20).join(' ').replace(/ # /g, ' ');
   assert.ok(g16.includes("a project's own shell file under hooks/lib or hooks/guards named by a command that does not only read"), 'M3, guard');
   assert.ok(contract.includes("a project's own shell file under `hooks/lib` or `hooks/guards` named by a command that does not only read"), 'M3, contract');
+  assert.ok(contract.includes('adds `finish-size-decision` and the eight `go-` cases'), 'the go cases');
   // M9: the five stale rows.
   const design = readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-design.md'), 'utf8');
   for (const s of ['the user typed `/kern:autopilot on` or `/kern:autopilot go <ticket>` in this session',
