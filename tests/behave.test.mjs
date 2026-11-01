@@ -547,6 +547,28 @@ test('the behaviour record keeps the head of a long Bash result as well as its t
   assert.deepEqual(lines(behaveDigest([use('b', 'Bash', { command: 'ls' }), back('b', short)])), ['1. Bash: ls', `    => ${short}`], 'a result of 1,000 characters is whole');
 });
 
+// Paid round 1, workflow-define-spec run 2: a python here-doc of 3,592 characters ended in plan-check at character 3,531, so
+// the record held no such call. The grader wrote "plan-check is not re-run" and failed a run that had done every step.
+test('the behaviour record keeps the scripts a Bash command calls past its 300-character cut', () => {
+  const heredoc = `cd /w/billing-service/.kern/specs && python3 - <<'EOF'\np='multi-currency-totals.md'\ns=open(p).read()\n${`r("${'a'.repeat(70)}","${'b'.repeat(70)}")\n`.repeat(20)}open(p,'w').write(s)\nEOF\n`;
+  const next = "next: define step 11's spec review (one fresh reviewer subagent), unless it ran for this draft; before you ask for the yes. Only the user naming that review skips it.";
+  const call = (command) => lines(behaveDigest([use('a', 'Bash', { command }), back('a', next)]))[0];
+  const noted = (...names) => ` [digest: command cut; it goes on to call ${names.join(', ')}]`;
+  const run2 = call(`${heredoc}bash /tmp/p/kern/scripts/plan-check multi-currency-totals.md; git -C .. status --short`);
+  assert.equal(run2.length, '1. Bash: '.length + 300 + noted('plan-check').length, run2);
+  assert.ok(run2.endsWith(noted('plan-check')), run2);
+  assert.ok(call(`${heredoc}K=/tmp/p/kern; bash $K/scripts/plan-check s.md\nscripts/claim-check --spec s.md && bash "$K/scripts/plan-check" s.md`).endsWith(noted('plan-check', 'claim-check', 'plan-check')), 'each call, in order, however it is spelled');
+  // Run 2's first plan-check: a call the record shows is not named again.
+  const shown = `cd /w/billing-service; node --test 2>&1 | tail -15; bash /tmp/p/kern/scripts/plan-check .kern/specs/multi-currency-totals.md; cat ${'/tmp/p/kern/skills/define/references/'.repeat(6)}spec-review.md`;
+  assert.ok(shown.length > 300 && !call(shown).includes('[digest'), call(shown));
+  assert.ok(call(`${shown}; bash /tmp/p/kern/scripts/plan-check s.md`).endsWith(noted('plan-check')), 'a later call of a script the record shows is its own call');
+  // Not calls: a name a here-doc writes, and a script read or listed.
+  const wrote = call(`${heredoc}cat > notes.md <<'EOF'\nbash scripts/plan-check s.md\nEOF\ncat /tmp/p/kern/scripts/plan-check; ls scripts/plan-check`);
+  assert.ok(!wrote.includes('[digest'), wrote);
+  assert.equal(call('bash /tmp/p/kern/scripts/plan-check s.md'), '1. Bash: bash /tmp/p/kern/scripts/plan-check s.md', 'a command with no cut');
+  assert.ok(!lines(behaveDigest([use('a', 'Agent', { description: `${'x'.repeat(300)} bash scripts/plan-check` })]))[0].includes('[digest'), 'a Bash command only');
+});
+
 // Task 16j (task-16-diagnosis-3, recall-2): run 0's loop printed the plan, the spec, then the ledger, each after an
 // "=== <path>" line, and the ledger fell in the cut between the head and the tail.
 test('a cut Bash result keeps its file-header lines, each between marked cuts, so a loop over files shows what it printed', () => {

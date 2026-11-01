@@ -297,12 +297,21 @@ const h2hResult = (name, c) => {
   return r === null ? t.slice(0, 300) : ends(r, H2H);
 };
 
+// HEREDOC: a here-doc from its `<<WORD` to its closing line. SCRIPT_CALL: a script under a scripts/ folder, run by bash or where
+// a command starts, so a script read, listed or written about is no call.
+const HEREDOC = /<<-?\s*(['"]?)(\w+)\1[^\n]*\n[^]*?\n\s*\2(?=\s|$)/g;
+const SCRIPT_CALL = /(?:\bbash\s+|(?:^|[\n;&|(])\s*)\S*\bscripts\/([\w.-]+)/g;
+// scriptsPast(command, shown): the name of each script command calls, in order, past the first shown characters of its
+// whitespace-collapsed text. Paid round 1: workflow-define-spec run 2's plan-check sat at character 3,531 of 3,592.
+const scriptsPast = (command, shown) => [...command.replace(HEREDOC, (h) => ' '.repeat(h.length)).matchAll(SCRIPT_CALL)]
+  .filter((m) => command.slice(0, m.index + m[0].length).replace(/\s+/g, ' ').length > shown).map((m) => m[1]);
+
 const LEGEND = 'Transcript (in order: "Assistant:" or "Subagent:" heads text, each line of it after "> "; "N. Tool:" is a tool call, '
   + '"+ " lines what a Write or Edit wrote, "=> " lines its result, "(error)" when the tool failed; a subagent\'s lines sit indented under the call that started it):';
 
 // behaveDigest(events, max): the behaviour grader's record. No system prompt; skill text only as far as a
 // tool result shows it (the first 300 characters of a Read). The main assistant's text blocks ("Assistant:")
-// and tool calls in order. Under each call: what a Write or Edit wrote ("+ "), the events of the subagent
+// and tool calls in order, a Bash call cut at 300 characters naming the scripts it goes on to call. Under each call: what a Write or Edit wrote ("+ "), the events of the subagent
 // it started, if any (an Agent call or a forked Skill; events with its id as parent_tool_use_id:
 // "Subagent:" text and calls, indented), then its result ("=> "). Every line starts with its label, so no text can pass for another kind. Cut as
 // RECORD says; a subagent whose Agent call is missing is shown at the end.
@@ -331,7 +340,10 @@ export function behaveDigest(events, max = RECORD.max) {
       if (c?.type !== 'tool_use') continue;
       const input = c.input ?? {};
       const arg = input.file_path || input.command || input.skill || input.subject || input.description || first(JSON.stringify(input), 200);
-      let item = `${pad}${++n}. ${c.name}: ${first(String(arg).replace(/\s+/g, ' '), 300)}`;
+      const line = String(arg).replace(/\s+/g, ' ');
+      const shown = first(line, 300);
+      const past = c.name === 'Bash' && shown.length < line.length ? scriptsPast(String(arg), shown.length) : [];
+      let item = `${pad}${++n}. ${c.name}: ${shown}${past.length ? ` [digest: command cut; it goes on to call ${past.join(', ')}]` : ''}`;
       const body = c.name === 'Write' ? input.content : c.name === 'Edit' ? input.new_string : '';
       if (typeof body === 'string' && body) {
         const limit = /\.(md|markdown)$/i.test(String(input.file_path || '')) ? RECORD.markdownBody : RECORD.body;
