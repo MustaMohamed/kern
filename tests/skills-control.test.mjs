@@ -54,6 +54,9 @@ test('autopilot documents the go: its step, its reach and what a refused go does
   assert.ok(go.includes('Read `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`'), go);
   assert.match(go, /No such line, or any other hook line about the go, means no go: quote what the hook said, if anything, and start nothing\./);
   assert.match(go, /The run ends at the draft PR or at a stop under that file's rules, so ask for no stop predicate\./);
+  // Paid round 1, 2026-11-01: 4 of 6 go runs that built code took the ticket for the kernel's "agreed design", so they
+  // skipped define and wrote no spec.
+  assert.ok(go.includes("by the kernel's Routing table. A ticket is no agreed design: a build starts at define and a bug at diagnose."), go);
   assert.ok(body.includes('3. `on` or `go <ticket>`, and the hook reported "autopilot denied by <file>"'), 'a denied go names the file');
   const who = body.split('## Who can turn it on\n')[1];
   for (const s of ["A go counts as the user's yes for that ticket's spec and plan and nothing else.", 'A second ticket needs a second go.',
@@ -106,7 +109,8 @@ test('run.md says what each stop means and what a stop does', () => {
     "Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.",
     "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
     'A required check is one the ticket or prove-it names for the change.',
-    'When one cannot run, the run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it.',
+    // Paid round 1, go-required-check-stop: the run acted on this line, which held no word for its report.
+    'When one cannot run, the run pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
     'A ticket the run cannot read is a stop']) assert.ok(stops.includes(s), s);
   // Task 6 review: "a red required check" read against the fix-round rule, and "a floor action" against the stop rows
   // for merge, deploy and delete, where a run waits. kernel/kernel.md has no word floor.
@@ -144,6 +148,10 @@ test('run.md gives define\'s first slice the default of a plan over scope_thresh
   // The table's row names only a plan, so a strict reading would stop a run at define's split.
   const rounds = section(RUN, '## Fix rounds');
   assert.ok(rounds.includes('each needs its own go |\n\ndefine\'s first slice takes the same default.\n'), 'the sentence follows the table');
+});
+
+test('run.md opens its define and plan rules with a go\'s route: a ticket is no agreed design', () => {
+  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. Step numbers here are the skill\'s own.'));
 });
 
 test('run.md lists every report field, the jobs another skill ran among them', () => {
@@ -201,8 +209,9 @@ test('the docs state what the whole-branch review found them short of', () => {
 test('run.md stays within its byte cap', () => {
   // 6,100 since M3 part 1 Task 15, its first cap: the main-thread rule, and define's and plan's go rules behind a pointer.
   // 6,130 since its fix round 1: a step's named read stays in the main thread.
-  assertMaxBytes('skills/autopilot/references/run.md', 6130);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,130 bytes (6,100 until M3 part 1 Task 15 fix round 1']);
+  // 6,247 since paid round 1's fix: a ticket is no agreed design, and the stop's report names the check as `fail`.
+  assertMaxBytes('skills/autopilot/references/run.md', 6247);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,247 bytes (6,130 until M3 part 1 paid round 1\'s fix']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {

@@ -78,7 +78,18 @@ test('finish-branch sections, steps and red flags', () => {
   // 8,625 since Task 14 and its fix round 1: step 4 takes the tree before the proof, and step 8 compares option 1's tree with it,
   // after a red-flag cut.
   // 8,770 since Task 15: step 4 cites a passed `test.full` on its exact tree.
-  assertMaxBytes(SKILL, 8770);
+  // 8,848 since paid round 1's fix: step 6 greps the ledgers before it proposes a split.
+  assertMaxBytes(SKILL, 8848);
+});
+
+test('the size gate greps the ledgers for the size decision before it proposes a split', () => {
+  // Paid round 1, finish-size-decision: the run said "with no ledger" with the line on disk, because step 2's `ls -t` sits
+  // inside a three-way choice. The form is the ledger's own: `Decision: size: one PR, "one PR", lines: 14`.
+  const gate = steps(readDoc(SKILL).body)[6];
+  const grep = gate.indexOf("run `grep -H '^Decision: [Ss]ize' <dir>/*/ledger.md` (`<dir>`: step 2's)");
+  assert.ok(grep > 0, gate);
+  assert.ok(grep < gate.indexOf('A `Decision:` line in the work\'s ledger'), gate);
+  assert.ok(gate.indexOf('A `Decision:` line in the work\'s ledger') < gate.indexOf('Else propose a split alone'), gate);
 });
 
 test('under autopilot a `fix first` verdict starts a bounded fix round, and a run past the bound pushes and opens no PR', () => {

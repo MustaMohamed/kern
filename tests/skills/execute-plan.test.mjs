@@ -346,7 +346,7 @@ test('under autopilot a stop waits, a judgment call parks, and a generated file 
   // The autopilot rule follows the plain one in each step, so without autopilot exit 4 still asks and exit 3 still stops.
   assert.ok(s[8].indexOf('pause and ask') < s[8].indexOf('Under autopilot, try each path'), s[8]);
   assert.ok(s[10].indexOf('else stop and ask.') < s[10].indexOf('Under autopilot, exit 3'), s[10]);
-  assertContains('skills/autopilot/references/run.md', ['| A required check that cannot run |', 'the run pushes its branch, stops with the report and opens no PR.']);
+  assertContains('skills/autopilot/references/run.md', ['| A required check that cannot run |', 'the run pushes its branch, stops with the report, naming the check as `fail`, and opens no PR.']);
   assertContains('skills/finish-branch/SKILL.md', ['a required check that cannot run: the run commits its work, pushes its branch']);
   // Step 13's own "No push or PR" holds without autopilot; the section says what a go does.
   assert.ok(s[13].includes("No push or PR, no commit beyond step 10's (autopilot: below); offer `/kern:commit` and `/kern:finish-branch`."), s[13]);

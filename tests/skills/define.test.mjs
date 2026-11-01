@@ -79,10 +79,10 @@ test('the spec reviewer is its own step, and an approved design does not skip it
   // approved" (task-16-diagnosis, fix group 5).
   const s = steps(readDoc(SKILL).body);
   assert.match(s[11], /^11\. Spec review \(architectural\): send the spec to one fresh general-purpose subagent on `model\.reviewer`/);
-  assert.ok(s[11].includes('An approved design does not skip it; only the user naming the review does.'), s[11]);
   // 2026-10-20 workflow-define-spec run 1: "I skipped the fresh-subagent spec review (step 11 of the define
-  // process), since you asked to stop at your final review" (task-16-diagnosis-2, fix group E).
-  assert.ok(s[11].includes("The user's own review is not this one."), s[11]);
+  // process), since you asked to stop at your final review" (task-16-diagnosis-2, fix group E). Paid round 1,
+  // 2026-11-01, run 1 gave the same reason: the user said stop at the draft.
+  assert.ok(s[11].includes("An approved design, the user's own review or a stop at the draft does not skip it; only the user naming the review does."), s[11]);
   // The review gates the approval ask; model-selection.md's rule holds the ask until it returns (M3 part 1 Task 15).
   assert.ok(s[11].includes('general-purpose subagent on `model.reviewer`, its brief `${CLAUDE_PLUGIN_ROOT}/skills/define/references/spec-review.md`, round 1 only.'), s[11]);
   assert.ok(!s[10].includes('spec-review.md'), 'step 10 no longer holds the review');

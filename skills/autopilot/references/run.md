@@ -22,7 +22,7 @@ Delete means data, remote branches, tags, and files outside the run's own worktr
 
 A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.
 
-A required check is one the ticket or prove-it names for the change. When one cannot run, the run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it.
+A required check is one the ticket or prove-it names for the change. When one cannot run, the run pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.
 
 A ticket the run cannot read is a stop: the run reports each way it tried.
 
@@ -54,7 +54,7 @@ define's first slice takes the same default.
 
 ## Define and plan under a go
 
-Step numbers here are the skill's own. Each approval below sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it. G20 also needs `issue:` to name this ticket; a bare `#` opens a YAML comment, so quote one: `issue: "#853"`. Only the stop list stops the run.
+A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. Step numbers here are the skill's own. Each approval below sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it. G20 also needs `issue:` to name this ticket; a bare `#` opens a YAML comment, so quote one: `issue: "#853"`. Only the stop list stops the run.
 
 define: size it bounded or architectural, never a spike, and run that path with no stop of its own: each question off the stop list takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section. A capability-map ticket writes no map; within the limits it specs the whole ticket. A size over `scope_threshold` specs its first slice: `## Size` gives the slice's files and lines, then the whole ticket's against the limit; numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go. Bounded: step 9's one write, so plan has an approved spec to read. Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again.
 

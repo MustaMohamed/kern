@@ -33,7 +33,8 @@ test('implement sections, steps and red flags', () => {
   // 6,535 since its fix rounds 1 and 2: step 11 saves that run's log in the main session only, so a kernel-row run can cite it at finish-branch.
   // 6,655 since its Task 16 fix round 1: with no test command a go works on by step 10's closest check to finish-branch's end path.
   // 6,685 since its Task 16 fix round 2: step 7's list names that route.
-  assertMaxBytes(SKILL, 6685);
+  // 6,820 since paid round 1's fix: under a go with no approved spec, step 1 reads define in place of going on.
+  assertMaxBytes(SKILL, 6820);
 });
 
 test('implement runs define step 1\'s checks for a task with no agreed design, and asks when wt-new exits 2', () => {
@@ -155,7 +156,9 @@ test('under autopilot implement keeps running: only a stop on the run rules wait
   const { body } = readDoc(SKILL);
   const s = steps(body);
   const auto = section(body, '## Stops and autopilot');
-  assert.ok(s[1].includes('ask nothing. Under autopilot, say the line and go on; such a change no approved spec covers is the design-choice stop in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`.'), s[1]);
+  // Paid round 1, 2026-11-01: this step's "go on" let 4 of 6 go runs build a ticket with no spec. A diagnosed bug reaches
+  // this step with no spec by design, from diagnose step 7, so it does not go back to define.
+  assert.ok(s[1].includes("ask nothing. Under a go with no approved spec and no cause diagnose found, Read define's SKILL.md now and follow it, in place of going on. Under any other autopilot, say the line and go on; such a change no approved spec covers is the design-choice stop in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`."), s[1]);
   // `lint` and `typecheck` go unresolved in a project with neither, so only a required one is the stop.
   // Task 16 fix round 1: a stop here left no work, so finish-branch's end path pushed an empty branch. The user's rule: push
   // and stop, and a PR needs tested or verified changes.

@@ -21,7 +21,7 @@ test('plan sections and steps', () => {
   const s = steps(body);
   assert.equal(s.length, 13);
   assert.equal(s[0], DEFER);
-  assertContains(SKILL, ['one fresh general-purpose subagent on `model.reviewer`', '| `model.investigator`, `model.reviewer` | `opus` |', 'Not approved: stop and route to define', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
+  assertContains(SKILL, ['one fresh general-purpose subagent on `model.reviewer`', '| `model.investigator`, `model.reviewer` | `opus` |', 'Not approved: Read `${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md` now and follow it, writing nothing;', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
     '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check', 'gets a spike first', 'prefactor', 'expand, migrate in batches, then contract', "spec's Constraints section",
     'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed',
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
@@ -30,7 +30,10 @@ test('plan sections and steps', () => {
   // 7,900 since M3 part 1 Task 5: a go takes the plan to approved on delegate, and over the threshold to its first slice.
   // 6,900 since its Task 15, a fall: the go's rules moved behind a pointer to run.md, for text most runs never use.
   // 7,041 since its final review's fix (I1, M6): under a go, steps 1 and 3 follow run.md's stop list and not an ask.
-  assertMaxBytes(SKILL, 7041);
+  // The full path in step 1, not "define's SKILL.md": case-inputs' closure follows skills/<n>/, and this step is plan's
+  // only link to define since it stopped saying "route to define".
+  // 7,086 since paid round 1's fix: an unapproved spec reads define now, in place of a route the runs did not take.
+  assertMaxBytes(SKILL, 7086);
 });
 
 test('under a go the plan asks nothing the stop list does not stop for', () => {
