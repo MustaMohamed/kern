@@ -762,10 +762,11 @@ const doneSteps = (events) => {
 // CONSTRAINT(word): a line that opens with `<word>:` in any case, plain, bold or italic, as a list item or not.
 const SPEC_FILE = /(^|\/)\.kern\/specs\/[^/]+\.md$/;
 // PLAN_FILE: a plan under the work dir's plans folder. PLAN_TASK: a task heading, as cat or a Read (line number, tab) shows it.
-// TASK_CLOSED: the line task-done prints once it appends a close.
+// TASK_CLOSED: the line task-done prints once it appends a close. TASK_NAMED: the task a task-done call names, `task-done <ledger> <N>`.
 const PLAN_FILE = /(^|\/)\.kern\/plans\/[^/]+\.md$/;
 const PLAN_TASK = /^(?:\s*\d+\t)?### Task (\d+):/gm;
 const TASK_CLOSED = /^ledger: Task (\d+): complete /gm;
+const TASK_NAMED = /\btask-done\s+\S+\s+(\d+)(?=\s|$)/g;
 const fronted = (text) => {
   const lines = String(text ?? '').split(/\r?\n/);
   const end = lines.indexOf('---', 1);
@@ -1169,7 +1170,8 @@ export const CHECKS = {
   },
   // workflow-execute-plan-ledger (paid round 2: the record's middle cut hid Task 1's close in all 3 runs, and the grader failed
   // 2 of them): each `### Task N:` heading a read of the plan shows has a task-done call whose result holds the line
-  // task-done prints on a close. It reads events, so no cut can hide one.
+  // task-done prints on a close. It reads events, so no cut can hide one. A short tail can cut that line, so a call that names the
+  // task and shows a `size: lines:` line counts too: task-done prints those only after a close.
   'task-done-each-task': (events) => {
     const all = steps(events);
     const calls = new Map(all.filter((s) => s.call).map((s) => [s.id, s.call]));
@@ -1178,7 +1180,9 @@ export const CHECKS = {
     const tasks = [...new Set(numbers(PLAN_TASK, planRead))];
     if (!tasks.length) return { pass: false, evidence: 'no read of a plan under .kern/plans/ shows a `### Task N:` heading' };
     const closed = numbers(TASK_CLOSED, (c) => c.name === 'Bash' && /\btask-done\b/.test(String(c.input.command ?? '')));
-    const open = tasks.find((n) => !closed.includes(n));
+    const sized = all.filter((s) => s.result !== undefined && /^size: lines:/m.test(s.result) && calls.has(s.id))
+      .flatMap((s) => [...String(calls.get(s.id).input.command ?? '').matchAll(TASK_NAMED)].map((m) => m[1]));
+    const open = tasks.find((n) => !closed.includes(n) && !sized.includes(n));
     return open ? { pass: false, evidence: `no task-done result holds \`ledger: Task ${open}: complete\`` }
       : { pass: true, evidence: `task-done's results close each task the plan lists: ${tasks.map((n) => `Task ${n}`).join(', ')}` };
   },

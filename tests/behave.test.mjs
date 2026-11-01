@@ -1771,6 +1771,14 @@ test('task-done-each-task passes when task-done\'s result holds each plan task\'
   assert.equal(cat.pass, true, 'a plan read by cat');
   const other = check([...planRead, ...ran('cat notes.md', '### Task 3: a heading in some other file\n'), ...taskDone('a', 1, CLOSE_1), ...taskDone('b', 2, CLOSE_2), ...reply('x')]);
   assert.equal(other.pass, true, other.evidence);
+  // Re-review M4: `| tail -2` keeps task-done's two size lines and cuts its ledger line, and those lines print only after a close.
+  const tail2 = (out) => out.split('\n').filter(Boolean).slice(-2).join('\n');
+  const short = check([...planRead, ...taskDone('a', 1, tail2(CLOSE_1)), ...taskDone('b', 2, CLOSE_2), ...reply('x')]);
+  assert.equal(short.pass, true, short.evidence);
+  const wrong = check([...planRead, ...taskDone('a', 2, tail2(CLOSE_1)), ...reply('x')]);
+  assert.deepEqual([wrong.pass, wrong.evidence], [false, 'no task-done result holds `ledger: Task 1: complete`'], 'the size lines close the task the call names');
+  const sizeOnly = check([...planRead, ...ran('bash /k/scripts/size-check .kern/ledgers/export/ledger.md # Task 1', tail2(CLOSE_1)), ...taskDone('b', 2, CLOSE_2), ...reply('x')]);
+  assert.equal(sizeOnly.pass, false, 'size-check on its own closes nothing');
   const noPlan = check([...taskDone('a', 1, CLOSE_1), ...reply('x')]);
   assert.deepEqual([noPlan.pass, noPlan.evidence], [false, 'no read of a plan under .kern/plans/ shows a `### Task N:` heading']);
   const brief = check([use('p', 'Read', { file_path: '/w/.kern/ledgers/export/briefs/task-1.md' }), back('p', '11\t### Task 1: toCsv'), ...taskDone('a', 1, CLOSE_1), ...reply('x')]);

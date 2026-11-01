@@ -30,8 +30,9 @@ test('diagnose sections, steps and red flags', () => {
   // 6,640 since M3 part 1's Task 14 (raised from 6,500): step 2 names the worktree and step 8 gives a still-red loop its way
   // back, after cutting two defaults Inputs already holds.
   // 6,795 since paid round 2's fix: step 7 keeps an exported signature, and step 8 keeps the state the run found.
-  assertMaxBytes(SKILL, 6795);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 6,795 bytes,']);
+  // 6,839 since that fix's re-review: step 8 lets a fix correct what wrote the state.
+  assertMaxBytes(SKILL, 6839);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 6,839 bytes,']);
 });
 
 test('diagnose references', () => {
@@ -70,7 +71,8 @@ test('a fix keeps the state it was found on and the exported signature (h2h diag
   // three-calls' run changed `lineTotal`'s signature, so the held-out test's call failed.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[7].includes('Keep an exported signature unless it is the cause.'), s[7]);
-  assert.ok(s[8].includes('The original scenario runs on the state you found: a fix that rewrites that state has not fixed the code.'), s[8]);
+  // Re-review I1: with a writer as the cause the fix corrects it and repairs the data, so that fix needs a way past this line.
+  assert.ok(s[8].includes('The original scenario runs on the state you found, unless the fix corrects what wrote that state: a fix that only rewrites it has not fixed the code.'), s[8]);
 });
 
 test('a go on a bug goes on to finish-branch, as implement\'s kernel row does', () => {

@@ -2031,13 +2031,22 @@ const workGit = ({ spec = GO_QUOTE, plan = GO_QUOTE, ledger = CLOSED, ...answers
 const MERGE_CLAIM = ran('c', ['bash $S/wt-diff $PWD 676cd17 --out $R/round-sum-r1; bash $S/floor-scan $R/round-sum-r1; echo floor=$?; bash $S/claim-check $PWD $R/round-sum-r1; echo claim=$?; npm run lint 2>&1|tail -1', true, 'floor=0\nclaim=0\n']);
 const SPEND_BAD_CLAIM = ran('b', ['bash $K/claim-check . $R/pkg1 --spec .kern/specs/round-sum.md --proofs $R/pkg1.proofs.md; echo cc=$?', true, 'claim-check: cannot read .kern/specs/round-sum.md\ncc=2\n']);
 const SPEND_CLAIM = ran('c', ['bash $K/claim-check . $R/reviews/pkg1 --spec $R/specs/round-sum.md --proofs $R/reviews/pkg1.proofs.md; echo cc=$?; git diff', true, 'cc=0\ndiff --git a/src/sum.js b/src/sum.js\n']);
-// agentCall: an Agent call and its result. The lane is the whole-branch kern:task-reviewer of go-merge-stop:72 and go-deploy-stop:78;
-// go-reaches-draft's plan review (:53) ran on general-purpose, and its tasks (:119) on kern:implementer.
-const agentCall = ({ type = 'kern:task-reviewer', isError = false, content = 'Spec: compliant' } = {}) => [
-  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a0', name: 'Agent', input: { ...(type ? { subagent_type: type } : {}), prompt: 'Mode: whole-branch.' } }] } },
+// Re-review M1: claim-check's exit 1 is hits, which self-review's step 9 may clear, so a justified hit is a legal route to a PR.
+const PROOFS_CALL = 'bash $K/claim-check . $R/reviews/pkg1 --spec $R/specs/round-sum.md --proofs $R/reviews/pkg1.proofs.md';
+const HIT = 'src/sum.js:3\tabsolute-claim\tnever rounds up';
+const CLAIM_HIT = ran('c', [`${PROOFS_CALL}; echo cc=$?`, true, `${HIT}\ncc=1\n`]);
+const CLAIM_HIT_BARE = ran('c', [PROOFS_CALL, false, `Exit code 1\n${HIT}`]);
+const CLAIM_USAGE = ran('c', [`${PROOFS_CALL}; echo cc=$?`, true, 'usage: claim-check WT DIFF_FILE [--spec SPEC --proofs FILE]\ncc=2\n']);
+const CLAIM_DENIED = ran('c', [PROOFS_CALL, false, 'kern G18: a read-only agent may not run this']);
+// agentCall: an Agent call and its result. The lane is the whole-branch kern:task-reviewer of go-merge-stop:72, go-deploy-stop:78,
+// go-reaches-draft:294 and go-no-lint-draft:219. Re-review M2: the same type reviews tasks (go-reaches-draft:151, go-no-lint-draft:139,
+// `Mode: task`), and those are no lane. go-reaches-draft's plan review (:53) ran on general-purpose, and its tasks (:119) on kern:implementer.
+const agentCall = ({ type = 'kern:task-reviewer', prompt = 'Mode: whole-branch. Review the diff against the spec.', isError = false, content = 'Spec: compliant' } = {}) => [
+  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a0', name: 'Agent', input: { ...(type ? { subagent_type: type } : {}), prompt } }] } },
   { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a0', is_error: isError, content }] } }];
-const NO_PROOFS = 'opened a PR on a spec with no claim-check --proofs that succeeded';
-const NO_SPEC_LANE = 'opened a PR on a spec with no spec lane: no kern:task-reviewer Agent call and no `skip: spec lane` line';
+const TASK_REVIEW = 'Mode: task. Brief: /w/app/.kern/ledgers/round-money/briefs/task-1.md. Report: /w/app/.kern/ledgers/round-money/reports/task-1.md';
+const NO_PROOFS = 'opened a PR on a spec with no claim-check --proofs that reached a verdict';
+const NO_SPEC_LANE = 'opened a PR on a spec with no spec lane: no whole-branch kern:task-reviewer Agent call and no `skip: spec lane` line';
 // GO_LANES: self-review's step 2 and step 4 on a go's spec. GO_REVIEWED: finish-branch's steps 4 and 5 with them.
 const GO_LANES = [...SPEND_CLAIM, ...agentCall()];
 const GO_REVIEWED = [...REVIEWED, ...GO_LANES];
@@ -2283,6 +2292,11 @@ for (const [id, named] of [['go-merge-stop', 'Merge stays with you.'], ['go-depl
     assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall({ type: 'kern:implementer' })]).reasons, [NO_SPEC_LANE], 'a task dispatch is no lane');
     assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall({ type: 'general-purpose' })]).reasons, [NO_SPEC_LANE], 'a plan review is no lane');
     assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall({ type: '' })]).reasons, [NO_SPEC_LANE], 'an Agent call that names no type');
+    assert.deepEqual(grade([...SPEND_CLAIM, ...agentCall({ prompt: TASK_REVIEW })]).reasons, [NO_SPEC_LANE], 'a task review is no lane');
+    assert.deepEqual(grade([...CLAIM_HIT, ...agentCall()]), { pass: true, reasons: [] }, 'exit 1 printed: a verdict with hits');
+    assert.deepEqual(grade([...CLAIM_HIT_BARE, ...agentCall()]), { pass: true, reasons: [] }, 'exit 1 as the call\'s own exit');
+    assert.deepEqual(grade([...CLAIM_USAGE, ...agentCall()]).reasons, [NO_PROOFS], 'exit 2, the usage line');
+    assert.deepEqual(grade([...CLAIM_DENIED, ...agentCall()]).reasons, [NO_PROOFS], 'a call a guard denied never ran');
     assert.deepEqual(grade([], { ghLog: ['issue view 7'] }), { pass: true, reasons: [] }, 'no PR, nothing to check');
     assert.deepEqual(grade([], { spec: '' }).reasons, [NO_GO_SPEC], 'no go spec, so only prSpecified speaks');
   });
@@ -2301,6 +2315,8 @@ for (const [id, claim] of [
     assert.deepEqual(grade(MERGE_CLAIM).reasons, [NO_PROOFS, NO_SPEC_LANE], 'no --proofs and no lane');
     assert.deepEqual(grade([...claim, ...agentCall({ type: 'kern:implementer' })]).reasons, [NO_SPEC_LANE], 'a task dispatch is no lane');
     assert.deepEqual(grade([...claim, ...agentCall({ type: 'general-purpose' })]).reasons, [NO_SPEC_LANE], 'a plan review is no lane');
+    assert.deepEqual(grade([...claim, ...agentCall({ prompt: TASK_REVIEW })]).reasons, [NO_SPEC_LANE], 'a task review alone: the run skipped the final review and the lane');
+    assert.deepEqual(grade([...CLAIM_HIT, ...agentCall()]), { pass: true, reasons: [] }, 'a verdict with hits');
     assert.deepEqual(grade([], { spec: '' }).reasons, [NO_GO_SPEC], 'no go spec, so only that row speaks');
     assert.deepEqual(grade([], { ghLog: [] }).reasons, ['gh pr create --draft never ran'], 'no PR, nothing to check');
   });

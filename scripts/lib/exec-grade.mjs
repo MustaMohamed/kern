@@ -351,12 +351,17 @@ const partRan = (events, re) => bashRuns(events).some((r) => r.parts.some((p) =>
 export function reviewRan(events) {
   return partRan(events, /\bwt-snap\b/) && partRan(events, /\bwt-diff\b[^;&|]*\s--out\b/);
 }
-// laneRan(events): self-review step 4 ran or stood down: a kern:task-reviewer Agent call that came back with no error, or the
-// lane's `skip: spec lane` line in the run's text. A call or line of any other kind is no lane.
+// proofsChecked(events): a claim-check with --proofs reached a verdict. Exit 1 is hits, which self-review's step 9 may clear, so
+// only exit 2 misses, and only exit 2 prints `usage: claim-check` or `claim-check: `. A call a guard denied never ran.
+const proofsChecked = (events) => bashRuns(events).some((r) => !/usage: claim-check|claim-check: |\bkern G\d+: /.test(r.output)
+  && r.parts.some((p) => /\bclaim-check\b[^;&|]*\s--proofs\b/.test(p.command)));
+// laneRan(events): self-review step 4 ran or stood down: a kern:task-reviewer Agent call whose prompt says whole-branch and that
+// came back with no error, or the lane's `skip: spec lane` line in the run's text. A task review (`Mode: task`), or a call or
+// line of any other kind, is no lane.
 const laneRan = (events) => {
   const done = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error !== true).map((c) => c.tool_use_id)));
   return events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []))
-    .some((c) => (c?.type === 'tool_use' && c.name === 'Agent' && c.input?.subagent_type === 'kern:task-reviewer' && done.has(c.id)) || (c?.type === 'text' && /\bskip: spec lane\b/.test(c.text)));
+    .some((c) => (c?.type === 'tool_use' && c.name === 'Agent' && c.input?.subagent_type === 'kern:task-reviewer' && /\bwhole-branch\b/.test(c.input?.prompt ?? '') && done.has(c.id)) || (c?.type === 'text' && /\bskip: spec lane\b/.test(c.text)));
 };
 // prReviewed(events, ghLog, git), prSpecified(git, ghLog): a run that opened a PR ran finish-branch's steps 4 and 5 first, and
 // holds a spec the go approved. Paid round 1: two go runs stopped where they should, after a draft PR with neither.
@@ -366,8 +371,8 @@ const prCreated = (ghLog) => ghLog.some((l) => l.startsWith('pr create'));
 const prProved = (events, ghLog, git) => {
   const onSpec = prCreated(ghLog) && workLines(git, 'specs', GO_APPROVED).length > 0;
   return [
-    [!onSpec || partRan(events, /\bclaim-check\b[^;&|]*\s--proofs\b/), 'opened a PR on a spec with no claim-check --proofs that succeeded'],
-    [!onSpec || laneRan(events), 'opened a PR on a spec with no spec lane: no kern:task-reviewer Agent call and no `skip: spec lane` line'],
+    [!onSpec || proofsChecked(events), 'opened a PR on a spec with no claim-check --proofs that reached a verdict'],
+    [!onSpec || laneRan(events), 'opened a PR on a spec with no spec lane: no whole-branch kern:task-reviewer Agent call and no `skip: spec lane` line'],
   ];
 };
 const prReviewed = (events, ghLog, git) => [
