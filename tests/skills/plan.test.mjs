@@ -21,7 +21,7 @@ test('plan sections and steps', () => {
   const s = steps(body);
   assert.equal(s.length, 13);
   assert.equal(s[0], DEFER);
-  assertContains(SKILL, ['one fresh general-purpose subagent on `model.reviewer`', '| `model.investigator`, `model.reviewer` | `opus` |', 'Not approved: Read `${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md` now and follow it, writing nothing;', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
+  assertContains(SKILL, ['one fresh general-purpose subagent on `model.reviewer`', '| `model.investigator`, `model.reviewer` | `opus` |', 'Not approved: Read `${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md` now and follow it, writing no plan;', 'gh pr list --search', 'never parallel', '`step`, `inline` or `delegate`', 'execution:', 'commits: ask',
     '${CLAUDE_PLUGIN_ROOT}/scripts/plan-check', 'gets a spike first', 'prefactor', 'expand, migrate in batches, then contract', "spec's Constraints section",
     'on `model.investigator`', "one whole line of the user's yes, verbatim", 'visual pages not installed',
     'test-first steps that record decisions, not code', 'Self-review it for placeholders, type mismatches and proportion']);
@@ -230,8 +230,8 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
   assert.ok(pointer.endsWith('follow `## Define and plan under a go` in `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`.'), pointer);
   const all = section(readDoc(RUN).raw, '## Define and plan under a go');
   const go = all.split('\n').find((l) => l.startsWith('plan: ')) ?? '';
-  // "goes to", as "routes to" here names define for case-inputs.mjs, which would put every skill that points at run.md in a plan change's evals.
-  assert.ok(go.includes("plan: step 1's precondition stands: an unapproved spec goes to define"), go);
+  // Re-review M7: plan step 1 now reads define itself, so this line no longer restates it.
+  assert.ok(go.startsWith("plan: Step 4's spike runs,"), go);
   // The go replaces the human yes only, and a spike is not a yes: an unsettled fact must not reach an approved plan.
   assert.ok(go.includes("Step 4's spike runs, the go standing for the nod;"), go);
   assert.ok(go.includes("a fact it cannot settle follows this file's unblock and stop rules"), go);

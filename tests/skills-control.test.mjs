@@ -151,7 +151,7 @@ test('run.md gives define\'s first slice the default of a plan over scope_thresh
 });
 
 test('run.md opens its define and plan rules with a go\'s route: a ticket is no agreed design', () => {
-  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. Step numbers here are the skill\'s own.'));
+  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch. Step numbers here are the skill\'s own.'));
 });
 
 test('run.md lists every report field, the jobs another skill ran among them', () => {
@@ -210,8 +210,9 @@ test('run.md stays within its byte cap', () => {
   // 6,100 since M3 part 1 Task 15, its first cap: the main-thread rule, and define's and plan's go rules behind a pointer.
   // 6,130 since its fix round 1: a step's named read stays in the main thread.
   // 6,247 since paid round 1's fix: a ticket is no agreed design, and the stop's report names the check as `fail`.
-  assertMaxBytes('skills/autopilot/references/run.md', 6247);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,247 bytes (6,130 until M3 part 1 paid round 1\'s fix']);
+  // 6,244 since its round 2, a fall: no fast path under a go and a PR only through finish-branch, less the line plan step 1 now holds.
+  assertMaxBytes('skills/autopilot/references/run.md', 6244);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,244 bytes (6,247 until M3 part 1 paid round 1\'s fix round 2']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {

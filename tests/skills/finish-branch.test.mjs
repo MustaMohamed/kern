@@ -79,14 +79,16 @@ test('finish-branch sections, steps and red flags', () => {
   // after a red-flag cut.
   // 8,770 since Task 15: step 4 cites a passed `test.full` on its exact tree.
   // 8,848 since paid round 1's fix: step 6 greps the ledgers before it proposes a split.
-  assertMaxBytes(SKILL, 8848);
+  // 8,870 since its round 2: no ledger is no line.
+  assertMaxBytes(SKILL, 8870);
 });
 
 test('the size gate greps the ledgers for the size decision before it proposes a split', () => {
   // Paid round 1, finish-size-decision: the run said "with no ledger" with the line on disk, because step 2's `ls -t` sits
   // inside a three-way choice. The form is the ledger's own: `Decision: size: one PR, "one PR", lines: 14`.
   const gate = steps(readDoc(SKILL).body)[6];
-  const grep = gate.indexOf("run `grep -H '^Decision: [Ss]ize' <dir>/*/ledger.md` (`<dir>`: step 2's)");
+  // Re-review M2: with no ledger the glob matches nothing and grep exits 2, which line 10 would read as a stopping failure.
+  const grep = gate.indexOf("run `grep -H '^Decision: [Ss]ize' <dir>/*/ledger.md` (`<dir>`: step 2's; no ledger is no line)");
   assert.ok(grep > 0, gate);
   assert.ok(grep < gate.indexOf('A `Decision:` line in the work\'s ledger'), gate);
   assert.ok(gate.indexOf('A `Decision:` line in the work\'s ledger') < gate.indexOf('Else propose a split alone'), gate);
