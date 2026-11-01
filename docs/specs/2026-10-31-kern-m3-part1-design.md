@@ -106,8 +106,11 @@ The user's ruling: "In the setup you can list the user's or the project skills t
 | Spending money | A draft PR on tested or verified changes |
 | A design choice that changes what gets built | |
 | A required check that cannot run | |
+| A defect the ticket itself demands | |
 
-The user's ruling on that last stop: "Push allowed, and should Stop, PR should at least have a tested or verified the changes unless the user say explicit to open the pr". The run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it. A required check is one the ticket or prove-it names for the change (my call).
+The user's ruling on the required check: "Push allowed, and should Stop, PR should at least have a tested or verified the changes unless the user say explicit to open the pr". The run pushes its branch, stops with the report and opens no PR. A typed reply that says to open the PR opens it. A required check is one the ticket or prove-it names for the change (my call).
+
+The user's rule, 2026-11-01: a defect the ticket itself demands stops a go before the PR. The run pushes its branch, stops with the finding and opens no PR. No fix round runs, since a fix would leave the ticket, and no `ticket` ruling parks it. The paid round showed why: `go-deploy-stop`'s review said `needs fixes` on the ticket's own formula, and the run opened the PR and left the verdict out of its report.
 
 Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work (my call).
 
@@ -131,7 +134,7 @@ A route is distinct only if it is a different action. The same target and effect
 
 ## Fix rounds
 
-A `fix first` verdict starts a fix round in place of ending the run (my call on the limit: 3 per self-review). Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR (my call on the push). No verdict also stops.
+A `fix first` verdict starts a fix round in place of ending the run (my call on the limit: 3 per self-review). Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR (my call on the push). No verdict also stops. A defect the ticket itself demands takes no fix round: it stops as the stop list says.
 
 One go covers one draft PR. All three rules below are my call.
 
@@ -143,7 +146,7 @@ One go covers one draft PR. All three rules below are my call.
 
 ## The run report
 
-Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, and each check with its result. `parked:` lines keep their format. A check that did not run is reported as a fail, not as "not run".
+Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, and each check with its result. `parked:` lines keep their format. The report gives the review's verdict as it came, `needs fixes` included. A check that did not run is reported as a fail, not as "not run".
 
 ## Cost and speed
 

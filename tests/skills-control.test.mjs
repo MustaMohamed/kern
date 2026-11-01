@@ -97,6 +97,7 @@ test('run.md holds the stop list row by row, with the stop the plan adds', () =>
     '| A design choice that changes what gets built | |',
     '| A required check that cannot run | |',
     '| A ticket the run cannot read | |',
+    '| A defect the ticket itself demands | |',
   ]);
 });
 
@@ -112,7 +113,9 @@ test('run.md says what each stop means and what a stop does', () => {
     // Paid round 1, go-required-check-stop: the run acted on this line, which held no word for its report.
     // Paid round 2: define's route has no "work goes on" line, so the run stopped with nothing built and no branch to push.
     'When one cannot run, the run builds by the closest check, commits, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
-    'A ticket the run cannot read is a stop']) assert.ok(stops.includes(s), s);
+    'A ticket the run cannot read is a stop',
+    // Paid round 3, the user's rule: go-deploy-stop's lane said `needs fixes` on the ticket's own formula, and the run opened the PR.
+    'On a defect the ticket itself demands, `plan-mandated` in a review, the run pushes its branch, stops with the finding and opens no PR. No fix round runs, since a fix would leave the ticket, and no `ticket` ruling parks it.']) assert.ok(stops.includes(s), s);
   // Task 6 review: "a red required check" read against the fix-round rule, and "a floor action" against the stop rows
   // for merge, deploy and delete, where a run waits. kernel/kernel.md has no word floor.
   for (const s of ['a red required check', 'floor']) assert.ok(!stops.includes(s), s);
@@ -153,14 +156,27 @@ test('run.md gives define\'s first slice the default of a plan over scope_thresh
 
 test('run.md opens its define and plan rules with a go\'s route: a ticket is no agreed design', () => {
   // Paid round 2: 4 of 5 PR runs ran wt-snap, none ran the size gate, and go-deploy-stop's pushed tree was not its reviewed tree.
-  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. Step numbers here are the skill\'s own.'));
+  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. An edit after the review takes a new wt-snap and `test.full`, and the report names it. Step numbers here are the skill\'s own.'));
 });
 
 test('run.md lists every report field, the jobs another skill ran among them', () => {
   const report = section(RUN, '## The run report');
   for (const s of ['the ticket and PR', 'each stop', 'each block and the route taken', 'each decision with its why', 'each skipped step', 'each check with its result',
-    'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".']) assert.ok(report.includes(s), s);
+    'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".',
+    // Paid round 3: go-deploy-stop's lane said `needs fixes`, and its report said only that the review found it compliant.
+    "The report gives the review's verdict as it came, `needs fixes` included."]) assert.ok(report.includes(s), s);
   assert.match(RUN, /^These rules cover kern's routes only\. .*`overrides\.<job>`/m);
+});
+
+test('the design and the skills spec state what run.md does with a defect the ticket demands', () => {
+  const docs = join(import.meta.dirname, '..', 'docs', 'specs');
+  const design = readFileSync(join(docs, '2026-10-31-kern-m3-part1-design.md'), 'utf8');
+  for (const s of ['| A defect the ticket itself demands | |',
+    "The user's rule, 2026-11-01: a defect the ticket itself demands stops a go before the PR.",
+    'The report gives the review\'s verdict as it came, `needs fixes` included.']) assert.ok(design.includes(s), s);
+  const spec = readFileSync(join(docs, '2026-10-12-kern-m1-m2-skills.md'), 'utf8');
+  for (const s of ['a defect the ticket itself demands stops the go before the PR, with no fix round and no `ticket` ruling (M3 part 1 paid round 3)',
+    'An edit after the review takes a new wt-snap and `test.full`, and the report names it (paid round 3:']) assert.ok(spec.includes(s), s);
 });
 
 test('run.md sends long output to a file under kern-dir tmp and reads its tail', () => {
@@ -196,7 +212,7 @@ test('the docs state what the whole-branch review found them short of', () => {
   const g16 = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g16-state.sh'), 'utf8').split('\n').slice(0, 20).join(' ').replace(/ # /g, ' ');
   assert.ok(g16.includes("a project's own shell file under hooks/lib or hooks/guards named by a command that does not only read"), 'M3, guard');
   assert.ok(contract.includes("a project's own shell file under `hooks/lib` or `hooks/guards` named by a command that does not only read"), 'M3, contract');
-  assert.ok(contract.includes('adds `finish-size-decision` and the eight `go-` cases'), 'the go cases');
+  assert.ok(contract.includes('adds `finish-size-decision` and the nine `go-` cases'), 'the go cases');
   // M9: the five stale rows.
   const design = readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-design.md'), 'utf8');
   for (const s of ['the user typed `/kern:autopilot on` or `/kern:autopilot go <ticket>` in this session',
@@ -215,8 +231,9 @@ test('run.md stays within its byte cap', () => {
   // 6,244 since its round 2, a fall: no fast path under a go and a PR only through finish-branch, less the line plan step 1 now holds.
   // 6,308 since paid round 2's fix: a run that cannot run a required check still builds, and a PR's steps are named in order, less a line the fix rounds table holds.
   // 6,322 since that fix's follow-up: the PR order names the spec lane.
-  assertMaxBytes('skills/autopilot/references/run.md', 6322);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,322 bytes (6,308 until M3 part 1 paid round 2\'s fix follow-up']);
+  // 6,748 since paid round 3's fix: a defect the ticket itself demands stops a go, the report gives the review's verdict, and an edit after the review takes a new tree.
+  assertMaxBytes('skills/autopilot/references/run.md', 6748);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,748 bytes (6,322 until M3 part 1 paid round 3\'s fix']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {

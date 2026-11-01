@@ -13,6 +13,7 @@ These rules cover kern's routes only. A job an `overrides.<job>` key leaves to a
 | A design choice that changes what gets built | |
 | A required check that cannot run | |
 | A ticket the run cannot read | |
+| A defect the ticket itself demands | |
 
 A run stops only on this list. At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`; the go holds. Work that does not depend on the answer may finish first.
 
@@ -25,6 +26,8 @@ A design choice stops the run when the ticket does not settle it and the answer 
 A required check is one the ticket or prove-it names for the change. When one cannot run, the run builds by the closest check, commits, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.
 
 A ticket the run cannot read is a stop: the run reports each way it tried.
+
+On a defect the ticket itself demands, `plan-mandated` in a review, the run pushes its branch, stops with the finding and opens no PR. No fix round runs, since a fix would leave the ticket, and no `ticket` ruling parks it.
 
 No guard covers spending money, so this rule alone holds it. A read against production follows the project's `protected_targets`.
 
@@ -54,7 +57,7 @@ define's first slice takes the same default.
 
 ## Define and plan under a go
 
-A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. Step numbers here are the skill's own. Each approval below sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it. G20 also needs `issue:` to name this ticket; a bare `#` opens a YAML comment, so quote one: `issue: "#853"`. Only the stop list stops the run.
+A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. An edit after the review takes a new wt-snap and `test.full`, and the report names it. Step numbers here are the skill's own. Each approval below sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it. G20 also needs `issue:` to name this ticket; a bare `#` opens a YAML comment, so quote one: `issue: "#853"`. Only the stop list stops the run.
 
 define: size it bounded or architectural, never a spike or the fast path, and run that path with no stop of its own: each question off the stop list takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section. A capability-map ticket writes no map; within the limits it specs the whole ticket. A size over `scope_threshold` specs its first slice: `## Size` gives the slice's files and lines, then the whole ticket's against the limit; numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go. Bounded: step 9's one write, so plan has an approved spec to read. Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again.
 
@@ -62,7 +65,7 @@ plan: Step 4's spike runs, the go standing for the nod; a fact it cannot settle 
 
 ## The run report
 
-Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, and the jobs that ran under another skill. `parked:` lines keep their format. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
+Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, and the jobs that ran under another skill. `parked:` lines keep their format. The report gives the review's verdict as it came, `needs fixes` included. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
 
 ## Main thread
 

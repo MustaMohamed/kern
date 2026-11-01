@@ -34,7 +34,8 @@ test('plan sections and steps', () => {
   // only link to define since it stopped saying "route to define".
   // 7,086 since paid round 1's fix: an unapproved spec reads define now, in place of a route the runs did not take.
   // 7,128 since paid round 2's fix: "Not approved" read as a spec that exists, so step 1 says no such file, even for a decided design.
-  assertMaxBytes(SKILL, 7128);
+  // 7,133 since paid round 3's fix: step 9 runs git branch --show-current, and only empty output gives the detached line.
+  assertMaxBytes(SKILL, 7133);
 });
 
 test('under a go the plan asks nothing the stop list does not stop for', () => {
@@ -128,10 +129,11 @@ test('the base names its source, an undetected base is the current branch and is
   // a base SHA no command printed, as unsupported in 4 of 6 runs. Steps 1 and 3 name a source and say what to do on
   // exit 3; step 9 named neither (Task 16n).
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[9].includes('Get `base_branch` from `kern-get`, else `kern-detect`, naming its source; both exit 3: `base: <current branch> (current branch; not detected)`, from `git branch --show-current`'), s[9]);
+  // Paid round 3, reminder-seam run 2: the plan copied the detached line on branch main, and never called git branch --show-current.
+  assert.ok(s[9].includes('Get `base_branch` from `kern-get`, else `kern-detect`, naming its source; both exit 3: run `git branch --show-current` and write `base: <branch> (current branch; not detected)`'), s[9]);
   // Task 16n review, M1: on a detached HEAD `git branch --show-current` prints nothing, and the header read
   // `base:  (current branch; not detected)` or a guess.
-  assert.ok(s[9].includes('; it prints nothing: `base: unknown (detached HEAD; not detected)`.'), s[9]);
+  assert.ok(s[9].includes('; only empty output gives `base: unknown (detached HEAD; not detected)`.'), s[9]);
   // Step 10 defers to the template, which names the base by branch (Task 16n review, M1 pays its bytes so).
   assert.ok(s[10].includes('the base-and-head regression check as plan-template.md says'), s[10]);
   assert.ok(s[12].startsWith('12. Present a summary in chat, saying when the base was not detected'), s[12]);

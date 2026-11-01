@@ -37,7 +37,8 @@ test('define sections, steps, the standing gate and red flags', () => {
   // 7,000 since pilot fix plan 2's Task 4: step 6 counts a re-indented file's moved lines.
   // 8,100 since M3 part 1 Task 5: a go takes the bounded or architectural path to an approved spec.
   // 7,100 since its Task 15, a fall: the go's rules moved behind a pointer to run.md, for text most runs never use.
-  assertMaxBytes(SKILL, 7100);
+  // 7,167 since paid round 3's fix: step 9's Size line names the next step, so a design read before the yes routes by 2 files.
+  assertMaxBytes(SKILL, 7167);
 });
 
 test('an explicit approval waiver takes the fast path, as "quick and clear" does', () => {
@@ -136,7 +137,8 @@ test('define reads the ticket by default, sizes in files and lines, and sends a 
   assert.ok(s[6].includes("First count the files and the changed lines from your reads, tests included, a re-indented file's moved lines too, and say both"), s[6]);
   assert.ok(s[9].includes("Over 2 files, whatever `scope_threshold` allows, or several independent concerns: the next step is plan; Read plan's SKILL.md, whose step 2 decides; else the kernel routes to implement."), s[9]);
   // Paid round 2026-10-25: a 3-file design went to implement as "under the 4-file limit", and no design gave a line estimate before the yes.
-  assert.ok(s[9].includes('give an in-chat design (approach, a line `Size: <n> files, about <m> changed lines`, tests,'), s[9]);
+  // Paid round 3: define read before the yes put `scope_threshold` in turn 1, as the limit for plan, and the route's sentence came after the yes.
+  assert.ok(s[9].includes('give an in-chat design (approach; a line `Size: <n> files, about <m> changed lines, next: <step>`, plan over 2 files, whatever `scope_threshold` allows; tests;'), s[9]);
   assertContains(SKILL, ['| `tracker`, `tracker.first` | detected, `true` | issue |']);
   // Pilot fix plan 2 Task 4: one file's re-indent made 396 changed lines, 58 ignoring whitespace, against a ticket's
   // 332 in another measure; the ticket's Out of scope items reached only chat, so the plan review had no Not doing.
