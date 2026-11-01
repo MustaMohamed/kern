@@ -647,7 +647,7 @@ const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
   assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'double-before-test', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-git-add', 'no-recall-skill', 'no-session-mining',
-    'no-verified-uncommitted', 'no-write', 'one-next-move', 'plan-states', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'spec-shape', 'thread-tags']);
+    'no-verified-uncommitted', 'no-write', 'one-next-move', 'plan-states', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'spec-shape', 'task-done-each-task', 'thread-tags']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
@@ -1746,6 +1746,39 @@ test('a cached run is reused only while every kern skill it read is unchanged, a
     assert.match(resumed.lines[0], /^--resume: 2 run\(s\) of that run no longer match its inputs, the runner's code, the Claude Code version or a kern skill they read, so they are not kept$/);
     first.done();
   } finally { rmSync(dirname(root), { recursive: true, force: true }); }
+});
+
+// Paid round 2 (2026-11-01, tree 5dc01c4), workflow-execute-plan-ledger: all 3 runs closed both tasks (run 0 :89, :160), and the
+// record's middle cut hid Task 1's close, so the grader failed 2. These are run 0's forms.
+const EXPORT_PLAN = ['1\t---', '2\tstatus: approved', '37\t### Task 1: toCsv for plain values', '38\t', '56\t### Task 2: quoting', '57\t'].join('\n');
+const CLOSE_1 = '# duration_ms 43.299042\nledger: Task 1: complete tree=fecf331f6781812345c620ecb4bd3dc560518b94 test=npm test exit=0 review=approved probe=skipped (probe inconclusive: new module src/export.js) last=# duration_ms 43.299042\nsize: lines: 20 (git diff --shortstat), -w: 20, files: 2; pr.max_lines: 300 (default); scope_threshold: 4 (default)\nsize: within the limits\n';
+const CLOSE_2 = '# duration_ms 41.52825\nledger: Task 2: complete tree=6b89157a09c3bf007f98189f08f9791e33035505 test=npm test exit=0 review=approved probe=ok last=# duration_ms 40.928834\nsize: lines: 37 (git diff --shortstat), -w: 37, files: 2\n';
+const planRead = [use('p', 'Read', { file_path: '/w/billing-service/.kern/plans/export.md' }), back('p', EXPORT_PLAN)];
+const taskDone = (id, n, out) => [use(id, 'Bash', { command: `R=/k; D=$PWD/.kern/ledgers/export; WT=$PWD/.claude/worktrees/export\nbash $R/scripts/task-done $D/ledger.md ${n} $WT fecf331 --no-probe "probe inconclusive: new module src/export.js" -- npm test 2>&1 | tail -4` }), back(id, out)];
+
+test('task-done-each-task passes when task-done\'s result holds each plan task\'s close, whatever a record cut', () => {
+  const check = CHECKS['task-done-each-task'];
+  const v = check([...planRead, ...taskDone('a', 1, CLOSE_1), ...taskDone('b', 2, CLOSE_2), ...reply('Done.')]);
+  assert.equal(v.pass, true, v.evidence);
+  assert.match(v.evidence, /Task 1, Task 2/);
+  const open = check([...planRead, ...taskDone('a', 1, CLOSE_1), ...reply('Both tasks are done.')]);
+  assert.deepEqual([open.pass, open.evidence], [false, 'no task-done result holds `ledger: Task 2: complete`'], 'the reply\'s words close nothing');
+  const refused = check([...planRead, ...taskDone('a', 1, 'task-done: the test passes with the change reversed, so it does not prove Task 1; not recorded\n'), ...taskDone('b', 2, CLOSE_2), ...reply('x')]);
+  assert.deepEqual([refused.pass, refused.evidence], [false, 'no task-done result holds `ledger: Task 1: complete`'], 'a close task-done refused');
+  const byHand = check([...planRead, ...ran('echo ledger: Task 1: complete >> .kern/ledgers/export/ledger.md; cat .kern/ledgers/export/ledger.md', 'ledger: Task 1: complete tree=abc\n'), ...taskDone('b', 2, CLOSE_2), ...reply('x')]);
+  assert.equal(byHand.pass, false, 'a line that no task-done call printed is a hand edit');
+  const cat = check([use('p', 'Bash', { command: 'cat .kern/plans/export.md' }), back('p', '### Task 1: toCsv\n\n### Task 2: quoting\n'), ...taskDone('a', 1, CLOSE_1), ...taskDone('b', 2, CLOSE_2), ...reply('x')]);
+  assert.equal(cat.pass, true, 'a plan read by cat');
+  const noPlan = check([...taskDone('a', 1, CLOSE_1), ...reply('x')]);
+  assert.deepEqual([noPlan.pass, noPlan.evidence], [false, 'no read of a plan under .kern/plans/ shows a `### Task N:` heading']);
+  const brief = check([use('p', 'Read', { file_path: '/w/.kern/ledgers/export/briefs/task-1.md' }), back('p', '11\t### Task 1: toCsv'), ...taskDone('a', 1, CLOSE_1), ...reply('x')]);
+  assert.equal(brief.pass, false, 'a task brief is not the plan, so it cannot narrow the list');
+});
+
+test('workflow-execute-plan-ledger scripts its task-done expectation', () => {
+  const c = loadCases(ROOT).find((x) => x.id === 'workflow-execute-plan-ledger');
+  assert.deepEqual(c.checks, { 2: 'task-done-each-task' });
+  assert.equal(c.expectations[2], 'Runs task-done (or records a done line through it) after each task, not by hand-editing the ledger');
 });
 
 test('no-git-add fails on any git add, -N included, and passes with none (pilot fix plan 2, Task 10)', () => {

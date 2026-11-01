@@ -761,8 +761,11 @@ const doneSteps = (events) => {
 // to the next) that holds a `status:` line, as a spec does (C2 review, M7: a review or notes file there is no spec).
 // CONSTRAINT(word): a line that opens with `<word>:` in any case, plain, bold or italic, as a list item or not.
 const SPEC_FILE = /(^|\/)\.kern\/specs\/[^/]+\.md$/;
-// PLAN_FILE: a plan under the work dir's plans folder.
+// PLAN_FILE: a plan under the work dir's plans folder. PLAN_TASK: a task heading, as cat or a Read (line number, tab) shows it.
+// TASK_CLOSED: the line task-done prints once it appends a close.
 const PLAN_FILE = /(^|\/)\.kern\/plans\/[^/]+\.md$/;
+const PLAN_TASK = /^(?:\s*\d+\t)?### Task (\d+):/gm;
+const TASK_CLOSED = /^ledger: Task (\d+): complete /gm;
 const fronted = (text) => {
   const lines = String(text ?? '').split(/\r?\n/);
   const end = lines.indexOf('---', 1);
@@ -1163,6 +1166,21 @@ export const CHECKS = {
   'no-git-add': (events) => {
     const adds = steps(events).filter((s) => s.call?.name === 'Bash' && runsGit(s.call.input.command ?? '', 'add'));
     return adds.length ? { pass: false, evidence: `git add ran: Bash ${argOf(adds[0].call)}` } : { pass: true, evidence: 'no Bash call runs git add' };
+  },
+  // workflow-execute-plan-ledger (paid round 2: the record's middle cut hid Task 1's close in all 3 runs, and the grader failed
+  // 2 of them): each `### Task N:` heading a read of the plan shows has a task-done call whose result holds the line
+  // task-done prints on a close. It reads events, so no cut can hide one.
+  'task-done-each-task': (events) => {
+    const all = steps(events);
+    const calls = new Map(all.filter((s) => s.call).map((s) => [s.id, s.call]));
+    const planRead = ({ name, input }) => (name === 'Read' ? PLAN_FILE.test(String(input.file_path ?? '')) : name === 'Bash' && /\.kern\/plans\//.test(String(input.command ?? '')));
+    const numbers = (re, kept) => all.filter((s) => s.result !== undefined && calls.has(s.id) && kept(calls.get(s.id))).flatMap((s) => [...s.result.matchAll(re)].map((m) => m[1]));
+    const tasks = [...new Set(numbers(PLAN_TASK, planRead))];
+    if (!tasks.length) return { pass: false, evidence: 'no read of a plan under .kern/plans/ shows a `### Task N:` heading' };
+    const closed = numbers(TASK_CLOSED, (c) => c.name === 'Bash' && /\btask-done\b/.test(String(c.input.command ?? '')));
+    const open = tasks.find((n) => !closed.includes(n));
+    return open ? { pass: false, evidence: `no task-done result holds \`ledger: Task ${open}: complete\`` }
+      : { pass: true, evidence: `task-done's results close each task the plan lists: ${tasks.map((n) => `Task ${n}`).join(', ')}` };
   },
 };
 
