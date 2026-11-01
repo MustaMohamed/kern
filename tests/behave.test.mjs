@@ -457,6 +457,27 @@ test('with results on, an inline, background or read-only Skill result, or a for
   }
 });
 
+test('with results on, a background Agent call shows that subagent\'s last text, so its verdict reaches the grader (plan--scope-split-0-arm-A, paid round 3)', () => {
+  // The stored form: the launch at :54, its result at :57, and the report at :74, an assistant event with the call as parent_tool_use_id.
+  const LAUNCHED = 'Async agent launched successfully. (This tool result is internal metadata.)\nagentId: a1de8f1f01d781183\nThe agent is working in the background.';
+  const launch = [use('a', 'Agent', { description: 'Review the plan' }), back('a', [{ type: 'text', text: LAUNCHED }])];
+  const report = 'Verdict: approve\n\nNone of the findings is blocking.';
+  const d = h2hDigest(...launch, sub('a', [{ type: 'text', text: 'Reading the plan.' }]), sub('a', [{ type: 'text', text: report }]));
+  assert.ok(d.includes(`1. Agent: Review the plan\n${indent(report)}\n\nFinal reply:`), d);
+  assert.ok(!d.includes('Async agent launched'), 'the launch line is gone');
+  const long = `Verdict: revise\n${'r'.repeat(3000)}\nVerdict stands.`;
+  const cut = h2hDigest(...launch, sub('a', [{ type: 'text', text: long }]));
+  assert.match(cut, /1\. Agent: Review the plan\n {4}Verdict: revise\n[^]*\[digest: \d+ characters cut\][^]*Verdict stands\.\n\nFinal reply:/, 'cut as any report is');
+  const prompt = { type: 'user', parent_tool_use_id: 'a', message: { content: [{ type: 'text', text: 'Mode: whole-branch. Review the plan.' }] } };
+  assert.ok(h2hDigest(...launch, prompt).includes(`1. Agent: Review the plan\n${indent(LAUNCHED.slice(0, 300))}\n\nFinal reply:`), "the subagent's prompt is not its text, and with no text the launch line stays");
+  assert.ok(h2hDigest(...launch, sub('other', [{ type: 'text', text: report }])).includes(LAUNCHED.slice(0, 40)), "another call's text");
+  const inReport = framed('The tool said: Async agent launched.');
+  assert.ok(h2hDigest(use('b', 'Agent', { description: 'Review' }), back('b', [{ type: 'text', text: inReport }]), sub('b', [{ type: 'text', text: 'working notes' }])).includes('1. Agent: Review\n    The tool said: Async agent launched.\n\nFinal reply:'), 'a hand-back report that quotes the words stays the report');
+  const bash = h2hDigest(use('c', 'Bash', { command: 'cat notes' }), back('c', LAUNCHED), sub('c', [{ type: 'text', text: report }]));
+  assert.ok(bash.includes(indent(LAUNCHED)), 'only an Agent result');
+  assert.ok(!digest([...launch, sub('a', [{ type: 'text', text: report }]), { type: 'result', result: 'done' }]).includes('Verdict'), 'with results off, as before');
+});
+
 test('with results on, an Agent result without that frame, or not of its shape, and any other tool\'s result, keep their first 300 characters', () => {
   const plain = h2hDigest(use('a', 'Agent', { description: 'Review the plan' }), back('a', `RESULT${'a'.repeat(900)}`));
   assert.ok(plain.includes(`    RESULT${'a'.repeat(294)}\n`) && !plain.includes('a'.repeat(295)), plain);

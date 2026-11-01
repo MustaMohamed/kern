@@ -175,12 +175,15 @@ export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashHead: 400
 export function digest(events, max = 24000, { results = false } = {}) {
   const out = new Map();
   if (results) {
-    const names = new Map();
+    const names = new Map(), lastText = new Map();
     for (const e of events) {
       for (const c of e?.message?.content ?? []) {
         if (c?.type === 'tool_use') names.set(c.id, c.name);
-        if (c?.type === 'tool_result') out.set(c.tool_use_id, h2hResult(names.get(c.tool_use_id), c));
+        if (c?.type === 'text' && e.type === 'assistant' && e.parent_tool_use_id) lastText.set(e.parent_tool_use_id, c.text);
       }
+    }
+    for (const e of events) {
+      for (const c of e?.message?.content ?? []) if (c?.type === 'tool_result') out.set(c.tool_use_id, h2hResult(names.get(c.tool_use_id), c, lastText.get(c.tool_use_id)));
     }
   }
   const ids = events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => c.id));
@@ -288,13 +291,16 @@ const H2H = { head: 1000, tail: 1000 };
 // such as plan-check's `exit 0` before a cat. An Agent or forked Skill result is its report (report), cut the same
 // way: the first 300 characters ended inside an Agent result's hand-back frame, so no subagent's verdict reached the
 // grader, and inside a forked code review's first finding; a reviewer may put its verdict first (kern's plan review)
-// or last (superpowers' code reviewer). Any other tool's result, and one with no report of a known shape, is its
-// first 300 characters.
-const h2hResult = (name, c) => {
+// or last (superpowers' code reviewer). A background Agent call's result says only "Async agent launched", so it shows
+// last, that subagent's last text, cut the same way (paid round 3: on plan--scope-split-0-arm-A the grader took a true
+// "a fresh reviewer approved it" as unsupported). Any other tool's result, and one with no report of a known shape, is
+// its first 300 characters.
+const h2hResult = (name, c, last) => {
   const t = resultText(c);
   if (name === 'Bash') return `${c.is_error ? '(error) ' : ''}${ends(t, H2H)}`;
   const r = report(name, c);
-  return r === null ? t.slice(0, 300) : ends(r, H2H);
+  if (r !== null) return ends(r, H2H);
+  return name === 'Agent' && last && t.includes('Async agent launched') ? ends(last, H2H) : t.slice(0, 300);
 };
 
 // HEREDOC: a here-doc from its `<<WORD` to its closing line. SCRIPT_CALL: a script under a scripts/ folder, run by bash or where
