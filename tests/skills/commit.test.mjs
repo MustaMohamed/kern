@@ -30,7 +30,7 @@ test('commit sections, steps and red flags', () => {
     'leave out and name any `never_commit` path', 'a mismatch means it is not what was proven: say so.',
     'those before the last are not proven alone, and the report says so',
     'kern-dir` exits 2', '`wt-snap` fails', 'G5 denies or asks and the user declines', '`git add` or `git commit` fails', 'never `--no-verify`',
-    "Under autopilot `git add -- <paths>` runs unprompted, but G16 denies a project's own shell file under `hooks/lib` or `hooks/guards`: a stop.",
+    "Under autopilot `git add -- <paths>` runs unprompted, and G16 gives a project's own hook file that resolves outside kern's hooks folder no vote; kern's own hook code and any hook entry file (`pre-tool-use`, `prompt-submit`, `session-start`, `subagent-start`) still ask, and that ask is a stop.",
     'an `autopilot ON:` reminder or a `kern mode:` line with `autopilot=on`', "else the kernel's \"Autopilot:\" line",
     'parked: <question>; default: <choice>; why: <one line>', 'never through AskUserQuestion',
     'no files, no commit; a failed toplevel, protected branch or detached HEAD, no commit', 'a protected branch or a detached HEAD never commits']);
@@ -43,7 +43,9 @@ test('commit sections, steps and red flags', () => {
   // 5,680 since its Task 14: step 4 takes the proven tree before the proof, and files the proof wrote are not proven, after a cut there.
   // 5,744 since its final review's fix (I1): prove-it's named skip is no step 4 stop.
   // 5,831 since that fix's second round: G16's deny of a project's own hook file is a stop.
-  assertMaxBytes(SKILL, 5831);
+  // 5,984 since M3 part 2 Task 1: G16 gives a project's own hook file outside kern's hooks folder no vote, and kern's
+  // hook code or an entry file still asks, a stop.
+  assertMaxBytes(SKILL, 5984);
 });
 
 test('commit ledger-tasks reference', () => {

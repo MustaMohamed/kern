@@ -1325,3 +1325,130 @@ project_hooks() {
   # shellcheck disable=SC2016 # literal $( ), ${ } and backticks
   expect_hook 'cat ${x}' 'cat $(cat x)' 'cat `cat x`'
 }
+
+# M3 part 2 project 1 Task 1: a go commits a project's own hook files.
+# kern_wt: a copy of kern at $T/kern, the checkout kern runs from, with a go's worktree under
+# .claude/worktrees/w that holds every file named as kern's hooks.
+kern_wt() {
+  T="$BATS_TEST_TMPDIR/k"
+  W="$T/kern/.claude/worktrees/w"
+  mkdir -p "$W"
+  cp -R "$(kern_root)/hooks" "$(kern_root)/kernel" "$T/kern/"
+  cp -R "$(kern_root)/hooks" "$W/"
+}
+
+# expect_kern DECISION COMMAND...: each COMMAND, run through the copy's pre-tool-use with G16 alone, gives
+# DECISION.
+expect_kern() {
+  local d=$1 c
+  shift
+  for c in "$@"; do
+    run env KERN_GUARDS=g16 bash "$T/kern/hooks/pre-tool-use" <<<"$(bash_payload "$c")"
+    [ "$(decision_of "$output")" = "$d" ] || { echo "$c -> $output"; return 1; }
+  done
+}
+
+@test "a go stages a project's own hook file" {
+  project_hooks
+  expect_cmd none "git -C $R add -- src/hooks/lib/util.sh"
+  set_autopilot on
+  expect_cmd none "git -C $R add -- src/hooks/lib/util.sh"
+}
+
+@test "a copy, move or redirect onto a project's hook file gets no vote; sed -i still asks" {
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  : >"$R/src/hooks/guards/g1.sh"
+  expect_cmd none "cp x $R/src/hooks/guards/g1.sh" "mv x $R/src/hooks/guards/g1.sh" \
+    "printf x > $R/src/hooks/guards/g1.sh"
+  # GNU sed's e command and s///e flag run a file's text as shell (fix round 1).
+  expect_hook "sed -i s/a/b/ $R/src/hooks/guards/g1.sh" "sed --in-place -e s/a/b/ $R/src/hooks/lib/util.sh"
+}
+
+@test "tee, install and git mv onto a project's hook file get no vote" {
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  : >"$R/src/hooks/guards/g1.sh"
+  expect_cmd none "printf x | tee $R/src/hooks/guards/g1.sh" "install x $R/src/hooks/guards/g1.sh" \
+    "git -C $R mv src/hooks/lib/util.sh src/hooks/lib/u.sh"
+}
+
+@test "a verb outside the write class keeps its ask on a project's hook file" {
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  : >"$R/src/hooks/guards/g1.sh"
+  expect_hook "install --strip-program=x y $R/src/hooks/guards/g1.sh" "sed s/a/b/ $R/src/hooks/guards/g1.sh" \
+    "git -C $R diff src/hooks/lib/util.sh" "git -c core.x=y -C $R add src/hooks/lib/util.sh"
+}
+
+@test "a kern worktree's own hook files take the write class" {
+  kern_wt
+  for mode in off on; do
+    set_autopilot "$mode"
+    expect_kern none "git -C $W add -- hooks/lib/state.sh" "cp x $W/hooks/lib/state.sh" \
+      "cd $W && git add -- hooks/lib/state.sh && git commit -m wip"
+  done
+}
+
+@test "a read in a kern worktree's hooks folder gets no vote" {
+  kern_wt
+  expect_kern none "cat $W/hooks/lib/state.sh"
+}
+
+@test "running or sourcing a project's hook file still asks" {
+  project_hooks
+  expect_hook "bash $R/src/hooks/lib/util.sh" ". $R/src/hooks/lib/util.sh"
+}
+
+@test "a copy then a run asks" {
+  project_hooks
+  expect_hook "cp a.sh $R/src/hooks/lib/a.sh && bash $R/src/hooks/lib/a.sh"
+}
+
+@test "a project's hook entry file still asks" {
+  project_hooks
+  expect_hook "cp x $R/src/hooks/pre-tool-use" "bash $R/src/hooks/pre-tool-use"
+}
+
+@test "kern's own hook code still asks" {
+  K=$(kern_root)
+  mkdir -p "$R/hooks/guards"
+  : >"$R/hooks/guards/g99.sh"
+  expect_hook "git add $K/hooks/lib/state.sh" "cp x.sh $K/hooks/guards/g01-git.sh" "cd $K && cp x hooks/guards/g99.sh" \
+    "cd $K; cp x hooks/guards/g99.sh"
+}
+
+@test "an opening cd moves a relative hook path only when the shell surely runs it there" {
+  kern_wt
+  mkdir -p "$T/p/a" "$T/p/hooks/guards"
+  : >"$T/p/hooks/guards/g99.sh"
+  ln -s "$T/p/a" "$T/kern/l"
+  CWD="$T/kern"
+  expect_kern none "cd $T/p && cp x hooks/guards/g99.sh"
+  expect_kern ask "cd $T/p && true & cp x hooks/guards/g99.sh" "cd $T/kern/l/.. && cp x hooks/guards/g99.sh" \
+    "cd $T/p && cd $T/kern && cp x hooks/guards/g99.sh" "cd $T/p; cp x hooks/guards/g99.sh"
+}
+
+# Task 1 fix round 1: the move test reads a record's text with its quotes out, as the paths pass does.
+@test "a quoted cd in another simple command keeps a relative hook path's ask" {
+  kern_wt
+  mkdir -p "$T/p/hooks/guards"
+  : >"$T/p/hooks/guards/g99.sh"
+  CWD="$T/p"
+  expect_kern none "cp x hooks/guards/g99.sh"
+  expect_kern ask "echo 'cd $T/kern' && cp x hooks/guards/g99.sh" "x='cd $T/kern'; cp x hooks/guards/g99.sh"
+}
+
+@test "an unresolvable hook path keeps its ask" {
+  project_hooks
+  # shellcheck disable=SC2016 # a literal $X
+  expect_hook "cp a.sh $R/missing/hooks/lib/a.sh" 'cp a.sh $X/hooks/lib/a.sh'
+}
+
+@test "a project's hook file linked to another file keeps its ask" {
+  K=$(kern_root)
+  project_hooks
+  ln -s "$K/hooks/lib/state.sh" "$R/src/hooks/lib/s.sh"
+  ln "$R/src/hooks/useForm.ts" "$R/src/hooks/lib/h.sh"
+  expect_hook "cp x $R/src/hooks/lib/s.sh" "cp x $R/src/hooks/lib/h.sh"
+}
