@@ -13,7 +13,7 @@ Part 1 closed with 33 items its paid check left open and one known limit, self-r
 | 1 | Each of the 33 items closes by the contract below, pinned by a test, a lint or a grader row |
 | 2 | `workflow-self-review-proofs` passes through a mechanism, not wording |
 | 3 | A go commits a project's own files under `hooks/lib` and `hooks/guards` |
-| 4 | 18 of the audit's 22 M3 adopt rows land, or are recorded as already closed; the other 4 wait for project 2, as Audit adopt rows says |
+| 4 | 19 of the audit's 22 M3 adopt rows land, or are recorded as already closed; four clauses in the other 3 rows wait for project 2, as Audit adopt rows says |
 | 5 | No gate falls under the overview's exit rule |
 
 ## Non-goals
@@ -109,7 +109,7 @@ Part 1 closed with 33 items its paid check left open and one known limit, self-r
 
 The 22 rows of `docs/research/opus-audit-2026-10-22.md` section 5 whose When column says M3 land as their Take column says. Each is checked at HEAD first: part 1 closed some P16 and P19 findings, and a row a part 1 task closed is recorded with its commit, not rebuilt. diagnose's `[kern-dbg]` tag and its back-edge to step 5 are already at HEAD.
 
-Four rows change text the paid round must read unchanged: prove-it:21 with the kernel Evidence line, prove-it step 7's "Never hand the user a check you can run", and diagnose's "tighten the loop" and "a perf baseline first". `pressure-prove-it-deadline` loads prove-it and the kernel, and h2h diagnose reads step 7. These four land after project 1's paid check, as the first task of project 2's batch, and project 2's round measures them (my call). The other 18 land in project 1. A raised cap names its row.
+Four clauses, in rows L482, L488 and L489, change text the paid round must read unchanged: prove-it:21 with the kernel Evidence line, prove-it step 7's "Never hand the user a check you can run", and diagnose's "tighten the loop" and "a perf baseline first". `pressure-prove-it-deadline` loads prove-it and the kernel, and h2h diagnose reads step 7. These four land after project 1's paid check, as the first task of project 2's batch, and project 2's round measures them (my call). L482's third clause, a failed fix going back with its count, is already at HEAD. The other 19 rows land in project 1. A raised cap names its row.
 
 ## Proof
 
