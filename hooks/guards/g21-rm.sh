@@ -306,14 +306,36 @@ _G21_OPENRE=$'^[ \t]*cd[ \t]+("[^"]+"|\'[^\']+\'|[^ \t"\']+)[ \t]+&&'
 # other than the first, the main checkout, that physical form. _G21_OPEN then holds the word, so the
 # judge's first cd line adds no reading. A cd that fails leaves git no directory, so no top is named.
 # A lone & holds no match: it runs the list before it in a subshell, so the rest stays at the payload's
-# cwd. && and the redirections >&, <&, &> and &>> are not one. A failed read also holds no match.
+# cwd. &&, the pipe |& and the redirections >&, <&, &> and &>> are not one, nor is a & that a backslash
+# escapes or that a pair of single or double quotes holds. When the text holds a $, a backtick, a #, a [,
+# a << or a ((, where the shell may read a quote character as no quote, or a quote that never closes,
+# every & counts. A quoted span or an escaped character leaves one _ in its place, so the characters on
+# either side never join into &&, |&, >&, <&, &> or &>>. A failed read also holds no match.
 _g21_open() {
   local w real line t n=0
   _G21_CWD=${CWD:-$PWD}
   _G21_OPEN=""
   [[ $1 =~ $_G21_OPENRE ]] || return 0
   w=${BASH_REMATCH[1]}
-  printf '%s' "$1" | env LC_ALL=C awk '{ gsub(/&&|[<>]&|&>>?/, ""); if (index($0, "&")) f = 1 } END { exit f }' ||
+  printf '%s' "$1" | env LC_ALL=C awk -v sq="'" '
+    { s = s $0 "\n" }
+    END {
+      o = s
+      if (s !~ /[$`#[]|<<|[(][(]/) {
+        n = split(s, C, ""); q = ""; o = ""
+        for (i = 1; i <= n; i++) {
+          c = C[i]
+          if (q == sq) { if (c == sq) q = ""; continue }
+          if (q == "\"") { if (c == "\\") i++; else if (c == "\"") q = ""; continue }
+          if (c == "\\") { i++; o = o "_"; continue }
+          if (c == sq || c == "\"") { q = c; o = o "_"; continue }
+          o = o c
+        }
+        if (q != "") o = s
+      }
+      gsub(/&&|[|<>]&|&>>?/, "", o)
+      exit (index(o, "&") > 0)
+    }' ||
     return 0
   case "$w" in \"* | \'*) w=${w:1:${#w}-2} ;; esac
   case "$w" in /*) ;; *) return 0 ;; esac
@@ -494,14 +516,16 @@ _g21_own_top() {
 
 # _g21_load: once per command, reads the worktree top (_G21_TOP, empty outside a work tree), WORK/tmp
 # (_G21_WORK), the other scratch directories (_G21_SCRATCH) and every worktree of the payload cwd's
-# repository (_G21_TREES), physical, the lists one per line. WORK/tmp lies in the main worktree, so it is named
-# apart. It follows kern-dir: a work_dir that is unread, that leaves the repository, or that a link moves
-# names none. _G21_HOLD is the directory that holds the main checkout when that lies under a scratch
-# root but is none. The _G21_L names are the lower-case forms, for _g21_path.
+# repository and, after an opening cd, of the repository it lands in, as a repository nested in a
+# worktree lists its own (_G21_TREES), physical, the lists one per line. WORK/tmp lies in the main
+# worktree, so it is named apart. It follows kern-dir: a work_dir that is unread, that leaves the
+# repository, or that a link moves names none. _G21_HOLD is the directory that holds the main checkout
+# when that lies under a scratch root but is none. The _G21_L names are the lower-case forms, for
+# _g21_path.
 _g21_load() {
   [ "$_G21_LOADED" = 0 ] || return 0
   _G21_LOADED=1
-  local t d wd line main="" hold
+  local t d wd line main="" hold list
   _G21_TOP=""
   if _g21_own_top; then
     t=$(git -C "$_G21_CWD" -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null) && [ -n "$t" ] &&
@@ -534,12 +558,15 @@ _g21_load() {
 $_G21_SCRATCH
 EOT
   _G21_TREES=""
+  list=$(git -C "${CWD:-$PWD}" -c core.fsmonitor=false worktree list --porcelain 2>/dev/null)
+  [ "$_G21_CWD" = "${CWD:-$PWD}" ] ||
+    list=$list$'\n'$(git -C "$_G21_CWD" -c core.fsmonitor=false worktree list --porcelain 2>/dev/null)
   while IFS= read -r line; do
     case "$line" in
       'worktree '?*) t=$(_g21_real "${line#worktree }") && _G21_TREES="$_G21_TREES$t"$'\n' ;;
     esac
   done <<EOT
-$(git -C "${CWD:-$PWD}" -c core.fsmonitor=false worktree list --porcelain 2>/dev/null)
+$list
 EOT
   _G21_LTOP=$(_g21_lc "$_G21_TOP")
   _G21_LMAIN=$(_g21_lc "$main")
