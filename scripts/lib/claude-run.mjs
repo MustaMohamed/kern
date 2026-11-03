@@ -9,8 +9,9 @@ import { fileURLToPath } from 'node:url';
 export const ISOLATION = ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'];
 // A headless run cannot answer a permission prompt, and the isolation flags drop the user's allow rules, so
 // the tools a task needs are pre-approved. kern's guards still ask or deny on top; an ask in a headless run is refused. The subagent tool is listed under both
-// names it has had (Agent, Task).
-export const PERMISSIONS = ['--permission-mode', 'acceptEdits', '--allowedTools', 'Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite'];
+// names it has had (Agent, Task). ScheduleWakeup is denied (M3 part 2 project 1, Task 12): paid round 5's workflow-define-spec
+// run 1 slept 1,200 s on it, past the runner's 600 s timeout, and the run was invalid.
+export const PERMISSIONS = ['--permission-mode', 'acceptEdits', '--allowedTools', 'Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite', '--disallowedTools', 'ScheduleWakeup'];
 
 const SETUP_TIMEOUT_MS = 60 * 1000;
 

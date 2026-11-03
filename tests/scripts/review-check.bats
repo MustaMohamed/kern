@@ -51,14 +51,17 @@ spec() { printf '# Sum\n\n## Acceptance criteria\n\n1. sum adds two numbers.\n' 
   [ "$output" = "$(printf '%s\n' 'check: verify.fast: ok' 'check: floor-scan: ok' 'check: claim-check: ok' 'proofs: not due (no spec)' 'floor: none')" ]
 }
 
-@test "a spec with no proofs file fails" {
+# M3 part 2 project 1 Task 12 fix round 1: with no proofs file, proof-check reads an empty table, so it judged no proofs file,
+# and `proofs: checked` would read as a judged table.
+@test "a spec with no proofs file fails, its proofs not checked" {
   settings 'verify.fast: true'
   package
   spec
   check --spec "$TMP/spec.md"
   [ "$status" -eq 1 ]
   has 'check: claim-check: hits'
-  has 'proofs: checked'
+  has 'proofs: not checked (no proofs file)'
+  [[ "$output" != *'proofs: checked'* ]] || false
   has '--- claim-check'
   has "no proofs file: $PKG.proofs.md"
   [ "${lines[${#lines[@]} - 1]}" = 'floor: fix first' ]

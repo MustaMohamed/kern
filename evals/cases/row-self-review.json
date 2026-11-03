@@ -32,7 +32,7 @@
       "expected_output": "Routes to self-review first and follows its steps.",
       "expectations": [
         "Reads skills/self-review/SKILL.md",
-        "Runs floor-scan and claim-check on the package",
+        "Runs review-check on the package, or floor-scan and claim-check",
         "Ends with one verdict: split, fix first, rebase first or ready"
       ]
     }

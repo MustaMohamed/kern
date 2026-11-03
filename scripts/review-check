@@ -9,9 +9,10 @@
 # Output: `check: <name>: ok|fail|hits|unresolved|skip (named)` per check run, then `proofs: checked`,
 # `proofs: n/a (no numbered acceptance lines)` when claim-check prints proof-check's n/a line (the floor
 # does not change for it), `proofs: not checked (claim-check failed)` when claim-check exits other than 0
-# or 1 (its `fail` already floors at fix first), or `proofs: not due (no spec)`; then the last 20 lines of
-# each fail, hits or unresolved check under `--- <name>`; last `floor: fix first` or `floor: none`.
-# `proofs: checked` means proof-check judged the table, whatever it found. A floor-scan or claim-check exit 1
+# or 1 (its `fail` already floors at fix first), `proofs: not checked (no proofs file)` when claim-check
+# prints `no proofs file:` (a proof line, so the floor is fix first), or `proofs: not due (no spec)`; then the
+# last 20 lines of each fail, hits or unresolved check under `--- <name>`; last `floor: fix first` or `floor: none`.
+# `proofs: checked` means proof-check judged a proofs file, whatever it found. A floor-scan or claim-check exit 1
 # is hits, any other non-zero exit fail. An unresolved verify.fast is `skip (named)` under --autopilot, else
 # `unresolved`. Any fail, any unresolved, or a proof line in claim-check's output (`unproven:`, `no evidence:`,
 # `missing file:`, `unknown:`, `degraded:` or `no proofs file:`) floors at fix first. A plain hit (floor-scan's,
@@ -150,10 +151,14 @@ if [ -n "$spec" ]; then
   fi
   # Only claim-check's exit 0 or 1 carries proof-check's judgment; any other exit means it judged nothing.
   # claim-check's n/a line: proof-check found no numbered acceptance line, so it judged no table.
+  # claim-check's `no proofs file:` line: proof-check read an empty table in place of a missing file, so it
+  # judged no proofs file (M3 part 2 project 1, Task 12 fix round 1).
   if [ "$scan_rc" != 0 ] && [ "$scan_rc" != 1 ]; then
     echo 'proofs: not checked (claim-check failed)'
   elif grep -q '^proof-check: n/a (.* has no numbered acceptance lines)$' "$logs/claim-check.log"; then
     echo 'proofs: n/a (no numbered acceptance lines)'
+  elif grep -qE "^no proofs file: [^$tab]*\$" "$logs/claim-check.log"; then
+    echo 'proofs: not checked (no proofs file)'
   else
     echo 'proofs: checked'
   fi
