@@ -1485,10 +1485,22 @@ expect_kern() {
 }
 
 # Shape 3: the bytes U+001E (the pass's end mark) and U+001F (a blank to sw). The pass gives up on
-# either, since its reading of them need not be the shell's.
+# either, since its reading of them need not be the shell's. Since Task 14, json_ok refuses their
+# escapes first, so such a call stops at G0 and never reaches the pass.
 @test "the pass gives up on its own control bytes, so a hook glob still asks" {
-  local us=$'\037' rs=$'\036'
-  expect_hook "${us} rg 'h*/pre-tool-use' x" "${rs} rg 'h*/pre-tool-use' x"
+  . "$(kern_root)/hooks/lib/json.sh"
+  local us=$'\037' rs=$'\036' c j mode d
+  for mode in off on; do
+    set_autopilot "$mode"
+    d=ask
+    [ "$mode" = on ] && d=deny
+    for c in "${us} rg 'h*/pre-tool-use' x" "${rs} rg 'h*/pre-tool-use' x"; do
+      j=$(printf '%s' "$c" | json_escape)
+      run_guard "$(tool_payload Bash "\"command\":\"$j\"")" g16
+      [ "$(decision_of "$output")" = "$d" ] && [[ "$output" == *"kern G0: hook input not parseable"* ]] ||
+        { echo "autopilot $mode: $c -> $output"; return 1; }
+    done
+  done
 }
 
 # Shape 4: a quoted span ending in an escaped < or >. The redirect flag reads only unquoted, unescaped
