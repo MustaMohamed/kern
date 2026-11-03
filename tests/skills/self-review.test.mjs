@@ -183,7 +183,9 @@ test('self-review references', () => {
   const refs = {
     // 2,900 since pilot fix plan 2's Task 5 (raised from 2,600): moved literals.
     'blast-radius.md': [['# Blast radius', '## How sure are you', '## Writer sweep', '## Where grep stops', '## Risks and cleared'], 2900],
-    'doubt-cycle.md': [['# Doubt cycle', '## When a decision is non-trivial', '## The fresh reviewer', '## Reconcile', '## Doubt theater', '## Stop after three'], 2400],
+    // 2,484 since M3 part 2 project 1's Task 18 (raised from 2,400), audit row L490: a reviewer on the session's own
+    // model shares its blind spots, and a Sonnet session offers opus.
+    'doubt-cycle.md': [['# Doubt cycle', '## When a decision is non-trivial', '## The fresh reviewer', '## Reconcile', '## Doubt theater', '## Stop after three'], 2484],
     'rounds.md': [['# Rounds and packages', '## Package names', '## Previous package', '## Since package'], 1400],
     // M2b Task 17 raised claim-checks.md from 1,700 by the 180 bytes P69's `bar-lowered` rule needs, with its earlier
     // yes (M3) and its committed revert (I3), after the lossless 19-byte cut of "run in seconds and" from the opening.
@@ -436,4 +438,11 @@ test('a reader that repeats moved literals is a copy, and probe drops a lone ! i
   assert.ok(grep.includes(`\`rg -F\` ${terms} (\`numberOfLines={2}\`) in every other reader of the old code.`), grep);
   assert.ok(grep.includes('is a copy and a finding, even when it imports nothing from the piece.'), grep);
   assertContains(`${REF}/claim-checks.md`, ['or drops a `!` when it has none, in a throwaway fork']);
+});
+
+test('the doubt cycle names the same-model limit and offers opus on a Sonnet session, with no ask under autopilot', () => {
+  // M3 part 2 project 1 Task 18, audit row L490, after pstack blast-radius step 6: different models catch
+  // different real bugs, so a reviewer on the session's own model is a weaker check, and the report says so.
+  const fresh = section(readDoc(`${REF}/doubt-cycle.md`).body, '## The fresh reviewer');
+  assert.ok(fresh.includes("2. Dispatch `kern:investigator` on model `model.reviewer`. When that is the session's own model, the reviewer shares the session's blind spots: say so in the report, and on a Sonnet session offer `opus` first; under autopilot the report names it, with no ask. The prompt gives"), fresh);
 });

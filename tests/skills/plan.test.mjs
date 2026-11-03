@@ -35,7 +35,10 @@ test('plan sections and steps', () => {
   // 7,086 since paid round 1's fix: an unapproved spec reads define now, in place of a route the runs did not take.
   // 7,128 since paid round 2's fix: "Not approved" read as a spec that exists, so step 1 says no such file, even for a decided design.
   // 7,133 since paid round 3's fix: step 9 runs git branch --show-current, and only empty output gives the detached line.
-  assertMaxBytes(SKILL, 7133);
+  // 7,238 since M3 part 2 project 1's Task 18, audit row L494: step 7 takes plan-check's warn: line for a task over
+  // scope_threshold files.
+  // 7,277 since its fix round 1: step 11 leaves a warn: line step 7's stop settled.
+  assertMaxBytes(SKILL, 7277);
 });
 
 test('under a go the plan asks nothing the stop list does not stop for', () => {
@@ -58,7 +61,9 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   // 1,600 since pilot fix plan 2's Task 4: the Size check reads the gate's own measure, re-indented lines included.
   // 1,650 since that task's review fix: the gate's measure is named, `git diff --shortstat` or `pr.size_command`.
   // 1,900 since M3 part 1 Task 5: a spec with `## Later slices` must show its overrun.
-  assertMaxBytes('skills/plan/references/plan-review.md', 1900);
+  // 1,922 since M3 part 2 project 1's Task 18 fix round 1, audit row L494: the plan-check output the reviewer gets may
+  // hold a warn: line step 7's stop settled, after cutting "in substance" from the coverage check.
+  assertMaxBytes('skills/plan/references/plan-review.md', 1922);
   assertContains('skills/plan/references/plan-review.md', ["Check its line estimate in the gate's own measure (`git diff --shortstat`, or `pr.size_command` when set) against the file map, re-indented lines included"]);
 });
 
@@ -185,7 +190,7 @@ test('the plan summary cites no plan-check or git output', () => {
   // command printed. plan-check still runs at step 11; only the reply stops citing it.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[12].includes('else say once "visual pages not installed"); it cites no plan-check or git output.'), s[12]);
-  assert.ok(s[11].includes('Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints.'), s[11]);
+  assert.ok(s[11].includes('Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints but a warn: line step 7\'s stop settled.'), s[11]);
 });
 
 test('only the user\'s word skips the plan review', () => {
@@ -253,4 +258,17 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
   assertContains('skills/plan/references/plan-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size` or the plan\'s `Decision:` line. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
   // With no go the plan stays a draft.
   assert.ok(lines.some((l) => l.includes('When on with no go, every stop parks') && l.includes('write the plan with `status: draft`')), 'parking is the no-go path');
+});
+
+test('step 7 takes plan-check\'s warn: line for a task over scope_threshold files, and Review Focus lines get their tests', () => {
+  // M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task over the file
+  // limit is a PR over it, so plan-check warns and step 7's stop settles it.
+  const seven = steps(readDoc(SKILL).body)[7];
+  assert.ok(seven.includes('every migrate batch. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or take the stop below. One PR is one change,'), seven);
+  // Audit row L495, after superpowers' writing-plans Self-Review item 4.
+  // Fix round 1: a warn: line survives the user's one-PR word and a go's first slice, so neither step 11 nor the
+  // reviewer asks for a fix that cannot be made.
+  assertContains('skills/plan/references/plan-review.md', ["You receive the plan path, the spec path and plan-check's output, clean or a warn: line step 7's stop settled, nothing about how the plan was written."]);
+  const focus = section(readDoc('skills/plan/references/plan-template.md').body, '## Review Focus');
+  assert.ok(focus.includes("Each line's pinning test goes into the task that owns the code, which the line names; an empty section means checked and none found, not skipped."), focus);
 });

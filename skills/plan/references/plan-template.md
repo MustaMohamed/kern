@@ -24,7 +24,7 @@ The spec's Constraints lines (Always, Ask first, Never), verbatim, then one line
 
 ## Review Focus
 
-Inputs or conditions the spec implies but no test exercises, most likely first, each naming the task whose test pins it.
+Inputs or conditions the spec implies but no test exercises, most likely first. Each line's pinning test goes into the task that owns the code, which the line names; an empty section means checked and none found, not skipped.
 
 ## Open questions
 

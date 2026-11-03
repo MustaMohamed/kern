@@ -12,9 +12,10 @@
 | kern ignored a project rule | The rule tightens a default | Project rules only tighten, and only settings keys loosen. Add the key, or report the gap |
 
 ## Status line
-A plugin cannot add a status line. Add this to your own `statusLine` command to show `[kern terse]`, `[kern html]` or `[kern autopilot]`:
+A plugin cannot add a status line. Add this to your own `statusLine` command, run with bash, to show `[kern terse]`, `[kern html]` or `[kern autopilot]`. It reads the session's JSON from stdin, waiting at most a second, and finds the state under `CLAUDE_CONFIG_DIR` when that is set:
 
 ```bash
-sid=$(sed -n 's/.*"session_id":"\([A-Za-z0-9_-]*\)".*/\1/p'); f="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/kern-kern}/sessions/$sid.state"
+IFS= read -r -d '' -t 1 in; sid=$(printf '%s' "$in" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9_-]*\)".*/\1/p')
+f="${CLAUDE_PLUGIN_DATA:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/data/kern-kern}/sessions/$sid.state"
 [ -f "$f" ] && awk -F': ' '$1=="autopilot"&&$2=="on"{a=1} $1=="voice"&&$2=="terse"{t=1} $1=="surface"&&$2=="html"{h=1} END{if(a)printf "[kern autopilot] "; if(t)printf "[kern terse] "; if(h)printf "[kern html] "}' "$f"
 ```
