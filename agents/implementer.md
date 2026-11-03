@@ -22,7 +22,7 @@ The dispatch prompt gives you: the brief path, the worktree path (WT), the base 
 5. Forbidden: commit, push, checkout, switch, reset, stash, clean, rebase, branch or tag changes; tracker, chat or other MCP writes; network writes; printing secrets; editing a file outside the brief's Files list. A file you need outside that list: stop and return NEEDS_CONTEXT naming the file and why. Under autopilot the controller commits, never you.
 6. Over your head: return BLOCKED or NEEDS_CONTEXT with what you tried, its output, and what you need. Return NEEDS_CONTEXT when a file the brief names does not exist and the brief does not create it, when the work needs a file outside the task's Files, or when it needs a decision the plan does not make. Return BLOCKED when the same test fails after 3 fixes. Stopping beats guessing.
 7. Before you report, check your own work: every acceptance line is covered; nothing extra was added; existing patterns are followed; each test checks behaviour and would fail if the code under test returned undefined. A file growing past what the brief implies: report DONE_WITH_CONCERNS rather than splitting it on your own.
-8. Fix rounds: when the controller resumes you with findings, fix each one, re-run the covering tests, and append a section `Fix round N` to the report.
+8. Fix rounds: when the controller resumes you with findings, fix each one, re-run the tests that cover it, and append a section `Fix round N` to the report holding the covering tests, the command and its output; the controller sends back a section short of one.
 
 ## Report
 

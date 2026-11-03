@@ -36,6 +36,16 @@ test('implementer frontmatter, sections and return contract', () => {
   assertMaxBytes('agents/implementer.md', 4500);
 });
 
+test('the implementer\'s fix round section holds the covering tests, the command and its output', () => {
+  // M3 part 2 project 1 Task 17 (2026-10-22 Opus audit section 5, row L492): execute-plan step 9 sends a fix report
+  // back once when it lacks any of the three, so rule 8 asks for them, and the skills spec's outline says the same.
+  const rule = readDoc('agents/implementer.md').body.split('\n').find((l) => l.startsWith('8. ')) ?? '';
+  for (const s of ['Fix round N', 're-run the tests that cover it', 'holding the covering tests, the command and its output', 'a section short of one']) {
+    assert.ok(rule.includes(s), `rule 8 must hold: ${s}`);
+  }
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['append a fix report holding the covering tests, the command and its output']);
+});
+
 test('task-reviewer frontmatter, sections and verdict lines', () => {
   assertFrontmatter('agents/task-reviewer.md', {
     name: 'task-reviewer',
