@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# Self-review's deterministic pass in one call, with the verdict floor it sets.
+# Usage: review-check WT PACKAGE (--spec SPEC | --no-spec) [--test FILE] [--autopilot]
+# From WT it runs verify.fast, test.focused with {file} and {dir} replaced by FILE when --test is given,
+# floor-scan PACKAGE, and claim-check WT PACKAGE, with --spec SPEC --proofs PACKAGE.proofs.md under --spec.
+# verify.fast is kern-get's value, else each of typecheck and lint that kern-get or kern-detect resolves;
+# test.focused is kern-get's value, else kern-detect's. Each check's output goes to
+# <kern-dir tmp>/review-check-<PACKAGE name>/<check>.log, written fresh on each run.
+# Output: `check: <name>: ok|fail|hits|unresolved|skip (named)` per check run, then `proofs: checked` or
+# `proofs: not due (no spec)`, then the last 20 lines of each failed check under `--- <name>`, last
+# `floor: fix first` or `floor: none`. A floor-scan or claim-check exit 1 is hits, any other non-zero exit
+# fail. An unresolved verify.fast is `skip (named)` under --autopilot, else `unresolved`; any fail, hits or
+# other unresolved floors at fix first.
+# Exit 0 on `floor: none`, 1 on `floor: fix first`, 2 on usage, an unreadable WT, PACKAGE or SPEC, or a
+# kern-dir tmp failure, so a pass that did not run is not read as clean.
+set -u
+here=$(cd "$(dirname "$0")" && pwd -P)
+usage() { echo "usage: review-check WT PACKAGE (--spec SPEC | --no-spec) [--test FILE] [--autopilot]" >&2; exit 2; }
+[ $# -ge 3 ] || usage
+wt=$1 package=$2
+shift 2
+spec='' nospec=0 test='' hastest=0 autopilot=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --spec) [ $# -ge 2 ] && [ -z "$spec" ] || usage; spec=$2; shift 2 ;;
+    --no-spec) [ "$nospec" = 0 ] || usage; nospec=1; shift ;;
+    --test) [ $# -ge 2 ] && [ "$hastest" = 0 ] || usage; test=$2; hastest=1; shift 2 ;;
+    --autopilot) autopilot=1; shift ;;
+    *) usage ;;
+  esac
+done
+if [ -n "$spec" ] && [ "$nospec" = 1 ]; then usage; fi
+if [ -z "$spec" ] && [ "$nospec" = 0 ]; then usage; fi
+
+# abs FILE: FILE's absolute path, since the checks run from WT.
+abs() { printf '%s/%s\n' "$(cd "$(dirname "$1")" && pwd -P)" "$(basename "$1")"; }
+[ -d "$wt" ] && git -C "$wt" rev-parse --git-dir > /dev/null 2>&1 || { echo "review-check: not a git worktree: $wt" >&2; exit 2; }
+wt=$(cd "$wt" && pwd -P)
+[ -f "$package" ] && [ -r "$package" ] || { echo "review-check: cannot read $package" >&2; exit 2; }
+package=$(abs "$package")
+if [ -n "$spec" ]; then
+  [ -f "$spec" ] && [ -r "$spec" ] || { echo "review-check: cannot read $spec" >&2; exit 2; }
+  spec=$(abs "$spec")
+fi
+tmp=$(cd "$wt" && bash "$here/kern-dir" tmp) || { echo "review-check: kern-dir tmp failed" >&2; exit 2; }
+logs="$tmp/review-check-$(basename "$package")"
+mkdir -p "$logs" || { echo "review-check: cannot make $logs" >&2; exit 2; }
+rm -f "$logs/verify.fast.log" "$logs/test.log" "$logs/floor-scan.log" "$logs/claim-check.log"
+
+tab=$(printf '\t')
+# value SCRIPT KEY: the value SCRIPT (kern-get or kern-detect) prints for KEY, run from WT; exit 1 on none.
+value() {
+  local got
+  got=$(cd "$wt" && bash "$here/$1" "$2" 2> /dev/null) || return 1
+  got=${got%"$tab"*}
+  [ -n "$got" ] || return 1
+  printf '%s\n' "$got"
+}
+# resolve KEY [detect]: KEY's command from kern-get, then from kern-detect when asked; exit 1 when neither has one.
+resolve() {
+  value kern-get "$1" && return 0
+  [ "${2-}" = detect ] && value kern-detect "$1"
+}
+
+# run_cmd LOG CMD: runs CMD with bash from WT, stdin closed, the command and its output appended to LOG.
+run_cmd() {
+  printf '$ %s\n' "$2" >> "$1"
+  (cd "$wt" && bash -c "$2") < /dev/null >> "$1" 2>&1
+}
+
+# fill TEXT TOKEN VALUE: TEXT with every TOKEN replaced by VALUE.
+fill() {
+  local rest=$1 out=''
+  while :; do
+    case "$rest" in
+      *"$2"*) out="$out${rest%%"$2"*}$3"; rest=${rest#*"$2"} ;;
+      *) break ;;
+    esac
+  done
+  printf '%s\n' "$out$rest"
+}
+
+floor=none failed=''
+# report NAME STATUS: prints the check line; a failed check floors at fix first and gets its tail printed.
+report() {
+  echo "check: $1: $2"
+  case "$2" in
+    fail | hits | unresolved) floor='fix first'; failed="$failed $1" ;;
+  esac
+}
+
+log="$logs/verify.fast.log"
+if cmd=$(resolve verify.fast); then
+  if run_cmd "$log" "$cmd"; then report verify.fast ok; else report verify.fast fail; fi
+else
+  tc=$(resolve typecheck detect) || tc=''
+  li=$(resolve lint detect) || li=''
+  if [ -z "$tc" ] && [ -z "$li" ]; then
+    echo "review-check: no verify.fast setting, and neither typecheck nor lint resolves" > "$log"
+    if [ "$autopilot" = 1 ]; then report verify.fast 'skip (named)'; else report verify.fast unresolved; fi
+  else
+    rc=0
+    [ -z "$tc" ] || run_cmd "$log" "$tc" || rc=1
+    [ -z "$li" ] || run_cmd "$log" "$li" || rc=1
+    if [ "$rc" = 0 ]; then report verify.fast ok; else report verify.fast fail; fi
+  fi
+fi
+
+if [ "$hastest" = 1 ]; then
+  log="$logs/test.log"
+  if cmd=$(resolve test.focused detect); then
+    q=$(printf '%q' "$test")
+    cmd=$(fill "$cmd" '{file}' "$q")
+    cmd=$(fill "$cmd" '{dir}' "$q")
+    if run_cmd "$log" "$cmd"; then report test ok; else report test fail; fi
+  else
+    echo "review-check: test.focused resolves neither from kern-get nor from kern-detect" > "$log"
+    report test unresolved
+  fi
+fi
+
+# scan NAME CMD...: runs a check script from WT; exit 1 is hits, any other non-zero exit fail.
+scan() {
+  local name=$1 rc=0
+  shift
+  printf '$ %s\n' "${1##*/} ${*:2}" > "$logs/$name.log"
+  (cd "$wt" && bash "$@") < /dev/null >> "$logs/$name.log" 2>&1 || rc=$?
+  case "$rc" in
+    0) report "$name" ok ;;
+    1) report "$name" hits ;;
+    *) report "$name" fail ;;
+  esac
+}
+scan floor-scan "$here/floor-scan" "$package"
+if [ -n "$spec" ]; then
+  scan claim-check "$here/claim-check" "$wt" "$package" --spec "$spec" --proofs "$package.proofs.md"
+  echo 'proofs: checked'
+else
+  scan claim-check "$here/claim-check" "$wt" "$package"
+  echo 'proofs: not due (no spec)'
+fi
+
+for name in $failed; do
+  echo "--- $name"
+  tail -n 20 "$logs/$name.log"
+done
+echo "floor: $floor"
+[ "$floor" = none ]
