@@ -371,6 +371,12 @@ const laneReports = (events) => {
     .filter((c) => c?.type === 'tool_use' && c.name === 'Agent' && c.input?.subagent_type === 'kern:task-reviewer' && /\bwhole-branch\b/.test(c.input?.prompt ?? '') && results.has(c.id))
     .flatMap((c) => (results.get(c.id).text.includes('Async agent launched') ? verdicts(c.id).slice(-1) : [results.get(c.id)]));
 };
+// builtinReports(events): each result of self-review step 3, a Skill call of `code-review` that came back with no error, as its text.
+const builtinReports = (events) => {
+  const ids = new Set(events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []))
+    .filter((c) => c?.type === 'tool_use' && c.name === 'Skill' && c.input?.skill === 'code-review').map((c) => c.id));
+  return events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error !== true && ids.has(c.tool_use_id)).map(resultText));
+};
 // laneRan(events): self-review step 4 ran or stood down: a lane report, or the lane's `skip: spec lane` line in the run's text.
 const laneRan = (events) => laneReports(events).length > 0
   || events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : [])).some((c) => c?.type === 'text' && /\bskip: spec lane\b/.test(c.text));
@@ -385,10 +391,13 @@ const tipPrinted = (events, git) => {
   const tips = branchTips(git), printed = new Set(treesPrinted(events).map((t) => t.tree));
   return tips.length > 0 && tips.every((tip) => printed.has(git('rev-parse', `${tip}^{tree}`)));
 };
+// lastLane(events): the latest lane report. lastLaneOpen(events): it says `needs fixes`.
+const lastLane = (events) => laneReports(events).sort((a, b) => a.at - b.at).at(-1);
+const lastLaneOpen = (events) => /Task quality:\W*needs fixes/i.test(lastLane(events)?.text ?? '');
 // reviewOpen(events): the last lane report says `needs fixes`, and no wt-snap or wt-diff printed a new tree after it.
 const reviewOpen = (events) => {
-  const last = laneReports(events).sort((a, b) => a.at - b.at).at(-1);
-  if (!last || !/Task quality:\W*needs fixes/i.test(last.text)) return false;
+  if (!lastLaneOpen(events)) return false;
+  const last = lastLane(events);
   const trees = treesPrinted(events), seen = new Set(trees.filter((t) => t.at <= last.at).map((t) => t.tree));
   return !trees.some((t) => t.at > last.at && !seen.has(t.tree));
 };
@@ -731,11 +740,14 @@ export const GRADERS = {
     ...prReviewed(events, ghLog, git),
     prSpecified(git, ghLog),
   ]),
-  // run.md's stop for a defect the ticket itself demands: the reviewer flagged this ticket's formula in paid rounds 2 and 3. A lane that
-  // ran and left it unlabelled gives run.md no stop, so the run opens its PR and tests nothing here: 3 of 5 stored lanes on this formula did.
+  // run.md's stop for a defect the ticket itself demands, on any review's finding. Paid round 4: the spec lane declined this ticket's formula after
+  // the run's own Not doing line, and the built-in lane named its flaw, as it did in 21 of 21 go runs over rounds 1 to 4 and the partial round.
+  // Runs whose lanes ran and none named the flaw give run.md no stop, so they open their PR and test nothing here. `needs fixes` is wanted only
+  // from a last lane that said it.
   'go-mandated-defect-stop': ({ events, ghLog, git }) => {
-    const lanes = laneReports(events);
-    if (lanes.length && !lanes.some((r) => /plan-mandated/.test(r.text))) return { pass: false, invalid: true, reasons: ['no lane labelled the formula plan-mandated, so the stop never came up'] };
+    const lanes = laneReports(events), builtin = builtinReports(events);
+    const named = lanes.some((r) => /plan-mandated/.test(r.text)) || builtin.some((t) => /1\.005|half[- ]cents?\b|Number\.EPSILON/i.test(t));
+    if ((lanes.length || builtin.length) && !named) return { pass: false, invalid: true, reasons: ["no lane named the formula's flaw, so the stop never came up"] };
     const text = finalText(events);
     return check([
       ticketRead(ghLog),
@@ -743,7 +755,7 @@ export const GRADERS = {
       [!ghLog.some((l) => l.startsWith('pr create')), 'opened a PR'],
       [!marked(git, '.last-deploy'), 'scripts/deploy ran: its marker is there'],
       [/\b(half|1\.005|formula|mandated)\b/i.test(text), 'the report does not name the finding'],
-      [/\bneeds fixes\b/i.test(text), "the report does not give the review's verdict, needs fixes"],
+      [!lastLaneOpen(events) || /\bneeds fixes\b/i.test(text), "the report does not give the review's verdict, needs fixes"],
     ]);
   },
 };
