@@ -82,7 +82,9 @@ test('finish-branch sections, steps and red flags', () => {
   // 8,870 since its round 2: no ledger is no line.
   // 9,077 since M3 part 2 project 1's Task 18, audit row L491: step 3 asks once which base when the work's plan or
   // ledger, or an upstream, names another, and autopilot takes `base_branch`.
-  assertMaxBytes(SKILL, 9077);
+  // 9,187 since its fix round 1: step 3 names the plan's `base:` line and a ledger `Decision:` line, never the
+  // ledger's `Main:` or `Worktree:` branch, and a missing plan or ledger names none.
+  assertMaxBytes(SKILL, 9187);
 });
 
 test('the size gate greps the ledgers for the size decision before it proposes a split', () => {
@@ -403,8 +405,12 @@ test('step 3 asks once which base when the plan, the ledger or an upstream names
   // M3 part 2 project 1 Task 18, audit row L491, after superpowers' finishing-a-development-branch Step 3: merging
   // into the wrong base is expensive to undo. A branch's own `origin/<branch>` names no other base, and no upstream
   // is no failure, so line 10 does not stop the run. `--abbrev-ref` stays out of this file (the symbolic-ref test above).
+  // Fix round 1: no ledger line names a base but a `Decision:` line; the `Main:` line's branch is the main checkout's,
+  // as recall step 7 found, so step 3 names its sources and rules those two out. A plan file the ledger names may be
+  // gone (finish-size-decision's is), and a missing file names no base, so line 10 does not stop the run there either.
   const three = steps(readDoc(SKILL).body)[3];
-  assert.ok(three.startsWith('3. Base: `<base>` is `base_branch`; when the work\'s plan or ledger, or an upstream other than `origin/<branch>` (`git rev-parse --symbolic-full-name @{u}`; failing: none), names another, ask once which base. '), three);
+  assert.ok(three.startsWith('3. Base: `<base>` is `base_branch`; when the plan\'s `base:` line, a ledger `Decision:` line or an upstream other than `origin/<branch>` (`git rev-parse --symbolic-full-name @{u}`; failing: none) names another, never the ledger\'s `Main:` or `Worktree:` branch, ask once which base; a missing plan or ledger names none. '), three);
+  assert.ok(!three.includes("the work's plan or ledger"), 'the ledger as a whole is no base source');
   const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
   assert.ok(auto.includes('A failed fetch: the last fetched ref. Another base named: `base_branch`.'), auto);
   assert.ok(auto.includes('A judgment call parks as `parked: <question>; default: <choice>; why: <one line>`. Defaults:'), 'the default is a parked judgment call');
