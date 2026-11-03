@@ -684,6 +684,15 @@ mode() { printf '%s\n' "$output" | grep '^kern mode:'; }
   [[ "$output" != *"autopilot go refused"* ]] || false
 }
 
+@test "a failed conflict check refuses the go" {
+  read_fails awk '!seen*'
+  submit "/kern:autopilot go MA-1"
+  [ "$(read_failures awk)" -ge 1 ]
+  no_go
+  [[ "$output" == *"autopilot go refused: the skill conflict check failed"* ]] || false
+  [[ "$output" != *"go recorded for"* ]] || false
+}
+
 @test "a refused go leaves autopilot and the go it had" {
   S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   submit "/kern:autopilot go MA-1"

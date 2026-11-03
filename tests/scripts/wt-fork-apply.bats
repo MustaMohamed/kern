@@ -106,6 +106,21 @@ setup() {
   ! git worktree list | grep -q task-9
 }
 
+@test "a failed include removes the fork" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads every file"
+  printf 'secret.log\n' > .worktreeinclude
+  git add .worktreeinclude && git commit --quiet -m include
+  printf 'token\n' > secret.log
+  chmod 000 secret.log
+  run --separate-stderr bash "$KERN_ROOT/scripts/wt-fork" "$SRC" task-9
+  chmod 600 secret.log
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [[ "$stderr" == *"fork removed"* ]] || false
+  [ ! -e "$REPO/.claude/worktrees/task-9" ]
+  ! git worktree list | grep -q task-9
+}
+
 @test "diff.noprefix in the user's git config changes neither forks nor patches" {
   git config --global diff.noprefix true
   printf 'edited\n' >> "$SRC/a.txt"

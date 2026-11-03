@@ -119,10 +119,10 @@ autopilot_off() {
 # apply_go ARGS: a typed `go <ticket>` turns autopilot on and records the go. PROMPT must be one non-blank
 # line of /kern:autopilot or /autopilot, go (in any case, as apply_autopilot reads it) and the id ARGS
 # names, an id go_ticket takes, and an expansion must come from the plugin. So a pasted block, a wrapped or
-# missing prompt and another source's command record nothing. A skill conflict with no pick refuses the
-# go before a denied project does, since setup refuses under autopilot. A go binds to its repository, so
-# one with no repository to name refuses too. A refusal changes no state: autopilot stays as it was,
-# with any earlier go.
+# missing prompt and another source's command record nothing. A skill conflict with no pick, or a conflict
+# check that fails, refuses the go before a denied project does, since setup refuses under autopilot. A go
+# binds to its repository, so one with no repository to name refuses too. A refusal changes no state:
+# autopilot stays as it was, with any earlier go.
 apply_go() {
   local word said id clash denier key
   word=$(printf '%s\n' "$1" | env LC_ALL=C awk 'NR == 1 && NF == 2 { print $2 }')
@@ -135,7 +135,20 @@ apply_go() {
     NOTICE="kern: autopilot go takes one ticket id, such as MA-254 or 853, typed alone in its prompt; nothing changed."
     return 0
   fi
-  clash=$(skill_conflicts --unpicked | env LC_ALL=C awk -F '\t' '!seen[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }')
+  # The output ends with the pipe's status line, as in _settings_read. A status other than 0, or no status
+  # line, as when the substitution's pipe cannot be made, refuses the go: an empty answer reads as no conflict.
+  clash=$(
+    set -o pipefail
+    skill_conflicts --unpicked | env LC_ALL=C awk -F '\t' '!seen[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }'
+    printf '\n%s' "$?"
+  )
+  case "$clash" in
+    *$'\n'0) clash=${clash%$'\n'0} ;;
+    *)
+      NOTICE="kern: autopilot go refused: the skill conflict check failed; nothing changed."
+      return 0
+      ;;
+  esac
   if [ -n "$clash" ]; then
     NOTICE="kern: autopilot go refused: $clash: a skill of the same name has no pick. With autopilot off, run /kern:help setup, then type the go again."
     return 0
