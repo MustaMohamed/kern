@@ -88,6 +88,18 @@ spec() { printf '# Sum\n\n## Acceptance criteria\n\n1. sum adds two numbers.\n' 
   [ "${lines[${#lines[@]} - 1]}" = 'floor: none' ]
 }
 
+@test "a claim-check that fails under --spec has its proofs not checked" {
+  settings 'verify.fast: true'
+  package
+  printf '# Sum\n\n## Acceptance criteria\n\n1. sum adds two numbers. States: any\n' > "$TMP/spec.md"
+  check --spec "$TMP/spec.md"
+  [ "$status" -eq 1 ]
+  has 'check: claim-check: fail'
+  has 'proofs: not checked (claim-check failed)'
+  [[ "$output" != *'proofs: checked'* ]] || false
+  [ "${lines[${#lines[@]} - 1]}" = 'floor: fix first' ]
+}
+
 @test "a red verify.fast fails" {
   settings 'verify.fast: false'
   package
