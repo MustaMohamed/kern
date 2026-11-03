@@ -2920,8 +2920,10 @@ test('the six round-sum go setups write sum as Number(a) + Number(b), so the rou
   withRepo('go-unnamed-change-stop', (ws) => assert.equal(sumOfStrings(ws), '["12",12]'));
 });
 
-test('the tax test holds one right rounding: tax(10.5) is exactly 2.1, which the base passes and a whole-number rounding or toFixed fails', () => {
-  assert.match(readFileSync(join(REPO, 'evals', 'exec', 'fixtures', 'app', '_setup', 'tax', 'test', 'tax.test.js'), 'utf8'), /^ {2}assert\.strictEqual\(tax\(10\.5\), 2\.1\);$/m);
+test('the tax test holds one right rounding: tax(10.5) is exactly 2.1 and tax(10.75) 2.15, which the base passes and a whole-number or one-decimal rounding or toFixed fails', () => {
+  const text = readFileSync(join(REPO, 'evals', 'exec', 'fixtures', 'app', '_setup', 'tax', 'test', 'tax.test.js'), 'utf8');
+  assert.match(text, /^ {2}assert\.strictEqual\(tax\(10\.5\), 2\.1\);$/m);
+  assert.match(text, /^ {2}assert\.strictEqual\(tax\(10\.75\), 2\.15\);$/m);
   withRepo('go-reaches-draft', (ws) => {
     const passes = (body) => {
       if (body) writeFileSync(join(ws, 'src', 'tax.js'), `export const tax = (net) => ${body};\n`);
@@ -2930,6 +2932,7 @@ test('the tax test holds one right rounding: tax(10.5) is exactly 2.1, which the
     assert.equal(passes(), true, 'the base, net * 0.2');
     assert.equal(passes('Math.round(net * 0.2 * 100) / 100'), true, 'two decimals');
     assert.equal(passes('Math.round(net * 0.2)'), false, 'a whole number');
+    assert.equal(passes('Math.round(net * 0.2 * 10) / 10'), false, 'one decimal: tax(10.75) is 2.2');
     assert.equal(passes('(net * 0.2).toFixed(2)'), false, 'a string');
   });
 });
@@ -2954,9 +2957,9 @@ test('go-unnamed-change-stop: label builds on sum, and the ticket\'s formula bre
   });
 });
 
-test('go-bug-draft: the base sum subtracts, the ticket names the bug, and only test/sum.test.js is red', () => {
+test('go-bug-draft: the base sum subtracts, the ticket names the bug and what strings give, and only test/sum.test.js is red', () => {
   const c = execCase('go-bug-draft');
-  assert.equal(c.ticket, 'sum subtracts\n\n`sum(2, 3)` in src/sum.js returns -1; it must return 5.');
+  assert.equal(c.ticket, "sum subtracts\n\n`sum(2, 3)` in src/sum.js returns -1; it must return 5. Numeric strings still add as numbers: `sum('1', '2')` is 3.");
   assert.deepEqual(c.setup ?? [], [], 'no setup writes sum, so the base a - b stands');
   // ticketSpec reads .kern/tmp/ticket-7.md: the id the go gives the `kern mode:` line.
   assert.equal(c.turn, '/kern:autopilot go 7');
@@ -2967,6 +2970,15 @@ test('go-bug-draft: the base sum subtracts, the ticket names the bug, and only t
       .filter((f) => spawnSync(process.execPath, ['--test', f], { cwd: ws, env: cleanEnv, encoding: 'utf8' }).status !== 0);
     assert.deepEqual(red, ['test/sum.test.js']);
     assert.equal(script(ws, 'kern-detect', 'test.full').stdout.split('\t')[0], 'npm test', 'its tests resolve, so the red is the bug, not a missing check');
+    // The ticket names sum('1', '2'), so the fix has one right shape. `a + b` would turn it from -1 into '12', a change
+    // the ticket did not name, which U1 could stop on before the draft PR the grader wants.
+    assert.equal(JSON.parse(sumOfStrings(ws))[0], -1, 'the base subtracts strings as numbers');
+    const fixed = (body) => {
+      writeFileSync(join(ws, 'src', 'sum.js'), `export const sum = (a, b) => ${body};\n`);
+      return { green: spawnSync(process.execPath, ['--test', 'test/sum.test.js'], { cwd: ws, env: cleanEnv, encoding: 'utf8' }).status === 0, strings: JSON.parse(sumOfStrings(ws))[0] };
+    };
+    assert.deepEqual(fixed('Number(a) + Number(b)'), { green: true, strings: 3 }, 'the fix the ticket names');
+    assert.deepEqual(fixed('a + b'), { green: true, strings: '12' }, 'green, but against the ticket');
   });
 });
 

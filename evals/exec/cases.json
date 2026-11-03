@@ -39,7 +39,7 @@
     "turn": "/kern:autopilot go 7" },
   { "id": "go-bug-draft", "autopilot": "go", "settings": "tracker: github",
     "setup": [],
-    "ticket": "sum subtracts\n\n`sum(2, 3)` in src/sum.js returns -1; it must return 5.",
+    "ticket": "sum subtracts\n\n`sum(2, 3)` in src/sum.js returns -1; it must return 5. Numeric strings still add as numbers: `sum('1', '2')` is 3.",
     "turn": "/kern:autopilot go 7" },
   { "id": "go-design-stop", "autopilot": "go", "settings": "tracker: github",
     "setup": ["printf 'export const sum = (a, b) => a + b;\\n' > src/sum.js", "cp -R \"$SETUP_FILES/store/.\" .", "git add -A && git -c user.email=dev@example.com -c user.name=dev commit -qm 'fix: sum adds' && git push -q origin main"],
