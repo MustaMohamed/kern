@@ -47,7 +47,9 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // `--no-probe`, step 11 the one-run rule, step 12 the saved return, after the dead parameter's words and `size-check`'s path went.
   // 16,150 since its fix rounds 1 and 2: step 10's timeout rule and task-start line, step 11's saved log, step 12's worktree, spec
   // and rules and its saved return's first line, after word trims.
-  assertMaxBytes(SKILL, 16150);
+  // 16,371 since M3 part 2 project 1's Task 9: under a go, a baseline `test.full` with nothing resolved builds by the closest
+  // check and opens no PR, after step 4's "each in its fork" went.
+  assertMaxBytes(SKILL, 16371);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
   // 1,350 since the final review of pilot fix plan 2: round 2's review is `evidence` too, on the new report, not re-review.
   assertMaxBytes('skills/execute-plan/references/verification.md', 1350);
@@ -354,6 +356,19 @@ test('under autopilot a stop waits, a judgment call parks, and a generated file 
   assertContains('skills/commit/SKILL.md', ["execute-plan's task still open at step 13), a red or unrunnable step 4 proof is no stop"]);
   // Step 10 commits each closed task, so the section does not say it again.
   assert.ok(s[10].includes("Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6"), s[10]);
+});
+
+test('under a go, a baseline test.full with nothing resolved builds on by the closest check and opens no PR', () => {
+  // M3 part 2 project 1 Task 9. Step 5's "both exit 3: ask" stopped a go before any code, while implement's route builds
+  // by the closest check (design, "execute-plan stops with no `test.full` under a go"). The section carves the case out
+  // for a go only: a person's run still asks at step 5, and steps 1 and 2 and a failed `wt-new` still end a go.
+  const rule = 'Under a go, a baseline `test.full` with nothing resolved (`kern-get` and `kern-detect` both exit 3) is a required check that cannot run: build by the closest check, commit, push the branch, name `test.full` as `fail`, stop and open no PR.';
+  const { body } = readDoc(SKILL);
+  const auto = section(body, '## Stops and autopilot') ?? '';
+  for (const n of ['Under a go, a baseline `test.full` with nothing resolved', 'the closest check', 'name `test.full` as `fail`', 'open no PR', rule]) assert.ok(auto.includes(n), n);
+  assert.ok(auto.indexOf('When on, steps 1 and 2 and a failed `wt-new` still end the run.') < auto.indexOf(rule), auto);
+  assert.ok(steps(body)[5].includes('(`kern-get`, else `kern-detect`; both exit 3: ask)'), steps(body)[5]);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [`under a go, ${rule.slice('Under a go, '.length, -1)}, while a person's run asks at step 5`]);
 });
 
 test('step 10 names task-done\'s refusals of --no-probe, so none is an unnamed exit', () => {
