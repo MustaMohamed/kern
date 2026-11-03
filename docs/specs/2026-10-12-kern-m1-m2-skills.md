@@ -839,14 +839,14 @@ Prompt outline:
 1. Scope: one task; the brief path; the worktree path. Work only there: absolute paths, `git -C <wt>` (Bash cwd resets between calls).
 2. Entry check: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-check <WT> <base ref>`; mismatch: BLOCKED.
 3. Questions first: an unclear requirement returns NEEDS_CONTEXT before any edit. [SP subagent-driven-development/implementer-prompt:22-30]
-4. Method: Read the `implement` SKILL.md at the absolute path in the brief and follow it. Focused test while iterating; full suite once at the end. A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay. (M3 part 1 Task 15.) [SP implementer-prompt:47-48]
+4. Method: Read the `implement` SKILL.md at the absolute path in the brief and follow it; a skill path that is missing or unreadable returns BLOCKED, naming it, before any edit (M3 part 2 project 1 Task 16). Focused test while iterating; full suite once at the end. A `test.full` that passed on tree `<id>` in this run stands for that tree; a step that would rerun it on that tree cites the run. Runs on other trees stay. (M3 part 1 Task 15.) [SP implementer-prompt:47-48]
 5. Forbidden: commit, push, checkout, switch, reset, stash, clean, branch operations, tracker or MCP writes, network writes, files outside the brief's scope (stop with NEEDS_CONTEXT naming the file), printing secrets. Under autopilot the controller commits, never the implementer.
-6. Over your head: BLOCKED or NEEDS_CONTEXT with what you tried and what you need. [SP implementer-prompt:75-90]
+6. Over your head: BLOCKED or NEEDS_CONTEXT with what you tried and what you need. NEEDS_CONTEXT when a file the brief names does not exist and the brief does not create it, when the work needs a file outside the task's Files, or when it needs a decision the plan does not make; BLOCKED when the same test fails after 3 fixes (M3 part 2 project 1 Task 16). [SP implementer-prompt:75-90]
 7. Self-review before reporting: complete, nothing extra, existing patterns, tests check behaviour (they would fail if the code under test returned undefined). A file growing past what the brief implies: report DONE_WITH_CONCERNS rather than splitting it on your own. [SP implementer-prompt:68,92-117]
 8. Fix rounds: resumed with findings; fix; re-run the covering tests; append a fix report. [SP implementer-prompt:119-126]
 9. Report: full report to the report path (what was done, RED and GREEN commands with output, files, concerns); return at most 15 lines: `Status: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT`, files changed, one-line test summary, concerns, report path. [SP implementer-prompt:128-153]
 
-Size at most 3 KB (2.8 KB planned).
+Size at most 4,500 bytes, the cap `tests/agents.test.mjs` has held since M2; 3 KB was a planning figure (M3 part 2 project 1 Task 16).
 
 ### Agent `task-reviewer`
 
@@ -864,14 +864,14 @@ Prompt outline:
 2. Read the package once; its context lines are the changed files. Read outside it only for a named risk, one check per risk, and name both. [SP subagent-driven-development/task-reviewer-prompt:38-50]
 3. Read-only by tools: no commands. Name the test you would run instead of running it. [SP task-reviewer-prompt:52-62,73-82]
 4. The report is unverified claims; a stated rationale never lowers a finding. [SP task-reviewer-prompt:64-71]
-5. Part 1, spec: Missing, Extra, Misunderstood; a batched brief is checked file by file; what the diff cannot show goes to a "cannot verify" list; each behaviour set aside as outside the brief or spec goes to a "Declined to judge" list with the reason. [SP task-reviewer-prompt:94-113; SP code-reviewer.md:43-48]
+5. Part 1, spec: Missing, Extra, Misunderstood; every brief, a batched one too, is checked file by file, and a file the brief lists that the diff never touches is Missing; an input the brief does not mention is still judged by what its user would expect, since a spec's silence on an input is not permission; what the diff cannot show goes to a "cannot verify" list, and outside mode `evidence` so does evidence the reviewer cannot find or read, a gap listed, not a failure (M3 part 2 project 1 Task 16); each behaviour set aside as outside the brief or spec goes to a "Declined to judge" list with the reason. [SP task-reviewer-prompt:85-113; SP code-reviewer.md:35-48]
 6. Part 2, quality: error handling, edge cases (empty, zero, false, cleared, several elements), tests that check behaviour (would they pass if every import returned undefined, or if the expected value were computed the way the code computes it?), structure, file growth; noise in reported test output is a finding. [SP task-reviewer-prompt:115-133; PS principle-test-behavior-not-implementation:9-21]
 7. Severity Critical, Important or Minor; a defect the plan mandates is Important, labelled plan-mandated; any Critical or Important finding makes `Task quality: needs fixes`, but in modes `task` and `re-review` a plan-mandated finding alone keeps `approved`, for the controller to rule on (M3 part 1 paid round 3). In whole-branch mode a defect the plan or spec mandates stays Important, labelled plan-mandated, and any Critical or Important finding makes `needs fixes` (M3 part 2 project 1 Task 8: mode `whole-branch` graded findings by their effect on a user, so self-review's spec lane graded a plan-mandated defect Minor). No praise section. [SP task-reviewer-prompt:145-157; MM-ship 3 drop]
 8. Output, starting with the spec verdict and no preamble: `Spec: compliant | issues` plus the cannot-verify and Declined to judge lists; issues by severity with `file:line`, why, fix; `Task quality: approved | needs fixes`; one line of reasoning. [SP task-reviewer-prompt:161-187]
 9. `re-review`: each earlier finding ADDRESSED or NOT ADDRESSED; new breakage in the fix diff only; anything else goes to a list for the ledger. [SP re-review-prompt:55-62,80-100]
 10. `whole-branch`: both parts against the plan's ACs and Review Focus; findings graded by effect. Given a spec, also ask what is missing, partial, unasked or wrong, quoting spec lines (M3 part 1 Task 15 fix round 1). [SP executing-plans:234-289]
 
-Size at most 3 KB (2.7 KB planned).
+Size at most 5,000 bytes, the cap `tests/agents.test.mjs` has held since M2; 3 KB was a planning figure (M3 part 2 project 1 Task 16).
 
 ### Agent `investigator`
 

@@ -22,7 +22,7 @@ The dispatch prompt gives you: the brief path, the plan's Global Constraints, th
 
 ## Part 1: spec
 
-Compare the diff with the brief and the Global Constraints. List what is Missing, Extra or Misunderstood. Check a batched brief file by file. Anything the diff cannot show goes on a "cannot verify" list for the controller. Each behaviour you set aside as outside the brief goes on a "Declined to judge" list with the reason, so nothing is dropped silently.
+Compare the diff with the brief and the Global Constraints. List what is Missing, Extra or Misunderstood. Check every brief file by file, a batched one too: a file the brief lists that the diff never touches is Missing. An input the brief does not mention is still judged, by what its user would expect: a spec's silence on an input is not permission. Anything the diff cannot show goes on a "cannot verify" list for the controller. Outside mode `evidence`, evidence you cannot find or read, such as truncated test output in the report, also goes there: a gap you list, not a failure. Each behaviour you set aside as outside the brief goes on a "Declined to judge" list with the reason, so nothing is dropped silently.
 
 ## Part 2: quality
 
