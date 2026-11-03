@@ -49,7 +49,11 @@ test('execute-plan sections, steps, scripts and red flags', () => {
   // and rules and its saved return's first line, after word trims.
   // 16,371 since M3 part 2 project 1's Task 9: under a go, a baseline `test.full` with nothing resolved builds by the closest
   // check and opens no PR, after step 4's "each in its fork" went.
-  assertMaxBytes(SKILL, 16371);
+  // 16,525 since its Task 17 (2026-10-22 Opus audit section 5, rows L476 and L492): step 9 sends a fix report that lacks its
+  // covering tests, command or output back once before the re-review, and rounds 2 and 3 get the standing orders and
+  // resume.md's parked-finding pointers, after the intro's restated tree names went.
+  assertMaxBytes(SKILL, 16525);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["SKILL.md at most 16,525 bytes (16,371 until M3 part 2 project 1's Task 17:", 'rows L476 and L492; 16,150 until']);
   assertHeadings('skills/execute-plan/references/verification.md', ['# Verification tasks', '## Brief', '## Review', '## Close']);
   // 1,350 since the final review of pilot fix plan 2: round 2's review is `evidence` too, on the new report, not re-review.
   assertMaxBytes('skills/execute-plan/references/verification.md', 1350);
@@ -75,7 +79,11 @@ test('ledger format and model table', () => {
   // and a snapshot equal to `tree-before` waits for a worker this session dispatched, then snapshots again.
   // 2,735 since its Task 15: a resumed fix round names step 9, and step 8 only for a refused round, after a word cut.
   // 2,953 since its final review's fix (M10): case 1 names the way out of a refused adopt.
-  assertMaxBytes(RESUME, 2953);
+  // 3,523 since M3 part 2 project 1's Task 17 (audit section 5, rows L476 and L492): a worker that returns after its task
+  // was recorded reconciles against the ledger, every resume re-pastes the standing orders, and each fix round gets a
+  // pointer to the parked findings on its paths. Every other line here is pinned, so nothing was cut.
+  assertMaxBytes(RESUME, 3523);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["`resume.md` 3,523 (2,953 until M3 part 2 project 1's Task 17:", 'rows L476 and L492']);
 });
 
 test('resume names the way out of a refused adopt', () => {
@@ -508,4 +516,49 @@ test('a slow worker gets a second snapshot before any dispatch, and a crash befo
   assert.ok(steps(readDoc(SKILL).body)[5].includes('scripts/wt-new <plan-slug> --plan <plan> --adopt`'));
   // Task work comes after step 5 writes the `Worktree:` line, so a task's resume takes cases 2 to 4 and never reaches the adopt.
   assert.equal(lines.filter((l) => l.includes('wt-new')).length, 1, 'only case 1 names wt-new');
+});
+
+test('a late worker reconciles against the ledger before its tree counts, and every resume re-pastes the standing orders', () => {
+  // M3 part 2 project 1 Task 17 (2026-10-22 Opus audit section 5, row L476, from pstack orchestrate's zombie and
+  // standing-orders rules). An implementer that could not be reached was replaced, and nothing said what to do when it
+  // came back after all, so its tree could be reviewed or applied over the work that replaced it. A resume carried only
+  // the findings, so the brief's standing orders faded across resumes.
+  const where = section(readDoc(RESUME).body, '## Where to continue') ?? '';
+  for (const n of ['a worker that returns after its task was recorded', 'against the ledger',
+    'its tree counts only while that task has no `Task N: complete` line and no later round or other worker took it',
+    'else discard that tree, unreviewed and unapplied, and note it in a `Decision:` line.', 'standing orders on every resume']) {
+    assert.ok(where.includes(n), `resume.md's Where to continue must hold: ${n}`);
+  }
+  // The rule comes after "Never re-dispatch a completed task.", where a resume decides which worker's tree counts.
+  assert.ok(where.indexOf('Never re-dispatch a completed task.') < where.indexOf('a worker that returns after its task was recorded'), where);
+});
+
+test('each fix round gets a ledger pointer to the parked findings on its paths', () => {
+  // M3 part 2 project 1 Task 17 (audit section 5, row L492, from superpowers' subagent-driven-development, which
+  // carries a pointer to a parked ledger entry into the dispatch that touches its area). A round got only the last
+  // review's file, so a fix could redo a deferred Minor finding or undo an autopilot default it never saw.
+  const memory = section(readDoc(RESUME).body, '## Fix loop memory') ?? '';
+  for (const n of ['`parked:`', '`minor (deferred)`', 'a pointer, `<ledger>:<n>`,', 'naming a path in its Files or a task sharing one',
+    'the final review owns a parked finding, so the round neither fixes nor undoes it.']) {
+    assert.ok(memory.includes(n), `Fix loop memory must hold: ${n}`);
+  }
+});
+
+test('step 9 sends a fix report back once when it lacks its covering tests, command or output, before the re-review', () => {
+  // M3 part 2 project 1 Task 17 (audit section 5, row L492, from superpowers' fix loop: "confirm the fix report
+  // contains the covering tests, the command run, and the output"). Step 9 went from the fix straight to its package
+  // and re-review, so a round could reach the reviewer with no proof that its tests ran.
+  const s = steps(readDoc(SKILL).body);
+  const rule = 'A fix report lacking any of the covering tests, the command and its output goes back to its implementer once.';
+  assert.ok(s[9].includes(rule), s[9]);
+  assert.ok(s[9].indexOf('covering tests, the command and its output') < s[9].indexOf('re-review'), s[9]);
+  // The check comes before the package, since a report sent back can change the tree the package is taken from.
+  assert.ok(s[9].indexOf(rule) < s[9].indexOf('Each round packages its fix diff'), s[9]);
+  // resume.md is read on a resumed run or as round 2's fallback, so step 9 names what its rounds take from it: a round in
+  // one session with no compaction never opens resume.md.
+  const carry = "Both also get the standing orders and `references/resume.md`'s parked-finding pointers.";
+  assert.ok(s[9].includes(carry), s[9]);
+  assert.ok(s[9].indexOf('round 3 dispatches') < s[9].indexOf(carry) && s[9].indexOf(carry) < s[9].indexOf(rule), s[9]);
+  // A verification task's fix round keeps its own reference and cap.
+  assert.ok(s[9].startsWith('9. Fix loop for a spec issue or a Critical or Important finding; a verification task: `references/verification.md` (its two-round cap).'), s[9]);
 });

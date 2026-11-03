@@ -29,7 +29,10 @@ test('parallel-work sections and steps', () => {
   assertContains(SKILL, ['Never poll a worker', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-fork', '${CLAUDE_PLUGIN_ROOT}/scripts/wt-apply',
     '${CLAUDE_PLUGIN_ROOT}/scripts/wt-check', '${CLAUDE_PLUGIN_ROOT}/scripts/brief-check', 'a gap is not a pass', 'DONE_WITH_CONCERNS is ISSUES',
     'BLOCKED and NEEDS_CONTEXT are BLOCKED', 'silent past its TIMEBOX', 'never resume it', 'one pilot unit first', 'wt-new <slug> --detach']);
-  assertMaxBytes(SKILL, 6400);
+  // 6,514 since M3 part 2 project 1's Task 17 (raised from 6,400; 2026-10-22 Opus audit section 5, row L476): step 5
+  // accepts a late return only while its unit is still open, after step 4's repeat of step 2's model rule went.
+  assertMaxBytes(SKILL, 6514);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["SKILL.md at most 6,514 bytes (6,400 until M3 part 2 project 1's Task 17:", 'row L476']);
 });
 
 test('parallel-work pins the drain mapping, entry check, package location, teardown and stops', () => {
@@ -80,6 +83,18 @@ test('parallel-work pins the drain mapping, entry check, package location, teard
     assert.ok(stops.includes(n), `stops section must contain: ${n}`);
   }
   assert.ok(!stops.includes('each stop parks'), stops);
+});
+
+test('step 5 takes a late return only while its unit is still open', () => {
+  // M3 part 2 project 1 Task 17 (2026-10-22 Opus audit section 5, row L476, from pstack orchestrate: "A zombie that
+  // returns hours late reconciles against the current frontier and ledger before anything is accepted"). Step 5 records
+  // a silent worker as a gap and never resumes it, and said nothing of the worker that came back after that.
+  const s = steps(readDoc(SKILL).body);
+  for (const n of ['a late return', 'after its gap was recorded', 'only while its unit is still open in the caller\'s ledger, if any, and no other worker took it',
+    'else leave its tree unapplied and note that in its gap.']) {
+    assert.ok(s[5].includes(n), `step 5 must hold: ${n}`);
+  }
+  assert.ok(s[5].indexOf('never resume it') < s[5].indexOf('a late return'), s[5]);
 });
 
 test('small units are no reason to skip a fan-out the user asked for', () => {

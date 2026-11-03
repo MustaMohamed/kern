@@ -16,8 +16,8 @@ The first case that holds, in this order:
    - an approving review: step 10.
 4. Every task complete and applied: step 12.
 
-A wave task resumes in the fork its `Wave:` line names. Never re-dispatch a completed task.
+A wave task resumes in the fork its `Wave:` line names. Never re-dispatch a completed task. Reconcile against the ledger a worker that returns after its task was recorded: its tree counts only while that task has no `Task N: complete` line and no later round or other worker took it, else discard that tree, unreviewed and unapplied, and note it in a `Decision:` line. Re-paste the brief's standing orders on every resume, SendMessage included.
 
 ## Fix loop memory
 
-Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`, with any real gap step 8 appended. The next round gets that file. A file opening `Refused paths` takes step 8's no, not step 9's default: the next round packages from `tree-before` and reviews in mode `task` (a verification task: `evidence`). An implementer that cannot be reached is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.
+Round r's findings are the reviewer's return saved as `<ledger dir>/reviews/task-N-r<r>.txt`, with any real gap step 8 appended. The next round gets that file. It also gets a pointer, `<ledger>:<n>`, to each `parked:` or `minor (deferred)` line naming a path in its Files or a task sharing one: the final review owns a parked finding, so the round neither fixes nor undoes it. A file opening `Refused paths` takes step 8's no, not step 9's default: the next round packages from `tree-before` and reviews in mode `task` (a verification task: `evidence`). An implementer that cannot be reached is replaced by a fresh `kern:implementer` with the brief, the report and that file: the report file is the memory.
