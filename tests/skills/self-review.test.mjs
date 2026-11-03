@@ -25,7 +25,8 @@ test('self-review sections and steps', () => {
   // main session reads this skill (the kernel row and finish-branch step 5; no agent does). M2b Task 17 named
   // `floor-scan` (step 2) and `probe --exclude-tests` (step 7) bare the same way, after wt-diff's full path in step 1,
   // to pay for step 9's `bar-lowered` clause (P69) and step 6's manifest trigger (AD11) within the 7,000-byte cap.
-  assertContains(SKILL, ['Run `floor-scan <package>` and `claim-check <wt> <package> --spec <spec> --proofs <package>.proofs.md`', 'For each new guard test: `probe --exclude-tests <wt> <package>.patch -- <test>`.',
+  // M3 part 2 project 1 Task 8 names `review-check` bare in step 2 the same way; it runs floor-scan and claim-check itself.
+  assertContains(SKILL, ['one call: `review-check <wt> <package> --spec <spec>`', 'For each new guard test: `probe --exclude-tests <wt> <package>.patch -- <test>`.',
     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <merge-base> --out <package>`',
     'For a new conditional, one `probe --mutate <file>:<line> <wt> -- <test>`', 'never the worktree', 'Skill tool with `code-review`', 'Never pass `--comment`', 'skip: built-in code-review not available',
     'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'open `references/blast-radius.md`', 'look where grep stops',
@@ -44,7 +45,10 @@ test('self-review sections and steps', () => {
   // 9,058 since the final review's fix (I1): under autopilot a `verify.fast` with nothing resolved is a named skip.
   // 9,102 since the scoped re-review's edit: step 2 and `fix first` name the skip.
   // 9,114 since M3 part 1 paid round 4's fix: step 2 gives claim-check's full form first, dropping both flags with no spec.
-  assertMaxBytes(SKILL, 9114);
+  // 9,204 since M3 part 2 project 1 Task 8: step 2 is one `review-check` call, step 9 takes its floor, and under a go with
+  // no approved spec step 4 writes the ticket spec.
+  // 9,199 since its fix round 1, a fall: step 2 names review-check's `proofs: n/a` line.
+  assertMaxBytes(SKILL, 9199);
 });
 
 test('the spec lane stands down only for a whole-branch review that passed on this exact tree', () => {
@@ -79,8 +83,8 @@ test('self-review exits, order and dispatches', () => {
     // settings resolution
     '${CLAUDE_PLUGIN_ROOT}/scripts/kern-get', '`typecheck` and `lint` then try `kern-detect <key>`', 'exit 3 takes the table default', 'never guess a command',
     '| `scope_threshold` | 4 files |', '| `base_branch`, `test.focused` | detected |',
-    // deterministic exits
-    'exit 1 from either is hits', 'any other non-zero exit, or a red `verify.fast` or test, is a failed check',
+    // deterministic exits: M3 part 2 project 1 Task 8 hands them to review-check, whose `floor:` line step 9 takes
+    "Verdict from step 2's `review-check` output, never better than its `floor:` line.",
     // probe
     // Fix round 2: what --exclude-tests proves ("non-test changes reversed") is pinned in claim-checks.md below; the
     // pass lines decide the check
@@ -165,7 +169,10 @@ test('a smell or an uncovered missing test never blocks, and a later round split
 test('self-review runs its checks in the worktree, and verify.fast defaults to each of typecheck and lint that resolves', () => {
   // Task 17a P10, D7: step 2 named no tree, so a standalone self-review could prove the main checkout. The `cd` is a
   // call of its own, as finish-branch step 2 does it.
-  assert.ok(steps(readDoc(SKILL).body)[2].includes("Run `verify.fast` and step 7's `<test>` from `<wt>`, a `cd <wt>` as its own call first."), 'step 2 names the tree');
+  // M3 part 2 project 1 Task 8: review-check runs verify.fast and the test from its WT argument, so the `cd` call went.
+  const two = steps(readDoc(SKILL).body)[2];
+  assert.ok(two.includes('`review-check <wt> <package>'), 'step 2 names the tree');
+  assert.ok(!two.includes('a `cd <wt>` as its own call first'), two);
   // D16: "`typecheck` then `lint`" read as both, so a repo with lint and no typecheck never got a green verify.fast.
   // prove-it's row and kernel/settings.md:41 are pinned in tests/skills/prove-it.test.mjs.
   assertContains(SKILL, ['| `verify.fast` | each of `typecheck` and `lint` that resolves; at least one |']);
@@ -243,7 +250,8 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
   assert.ok(intro.includes('A no-edit request skips no step: `<package>` goes under `kern-dir reviews`, not the user\'s files, and step 3 writes nothing. Only a request that names a check or lane skips it. A small diff, or a blocker already found, skips nothing: the fix round needs every failed check and unproven line.'), intro);
   // Rerun after 5d6e8be: still 0 of 3 ran proof-check. Two said the diff was small enough to read; one, that the
   // blockers already decided the verdict, so the skipped checks only listed as unfinished. Step 9 now waits for them.
-  assert.ok(steps(body)[9].startsWith('9. Verdict, once each step 2 command has its output pasted; run any missing one first.'), steps(body)[9].slice(0, 120));
+  // M3 part 2 project 1 Task 8: step 2 is one review-check call, and step 9 can be no better than the floor it prints.
+  assert.ok(steps(body)[9].startsWith("9. Verdict from step 2's `review-check` output, never better than its `floor:` line."), steps(body)[9].slice(0, 120));
   // Paid round 2026-10-25: two of three runs skipped proof-check because "the diff is 10 lines", and no run gave each finding its ruling.
   assert.ok(section(body, '## Outputs').includes('findings under Standards and Spec, each ending in its ruling (`fix`, `ticket` or `reject: <citation>`)'));
   assertContains(`${REF}/rounds.md`, ['`<reviews>` is the output of `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir reviews`', "This run's `<package>` is `<reviews>/<slug>-<N+1>.diff`"]);
@@ -356,15 +364,16 @@ test('self-review proves each acceptance state, reads every reader of moved code
   const find = 'Find the spec now, as step 4 says. With one, write `<package>.proofs.md` per `references/proofs.md`.';
   // M3 part 1 Task 7: two wording rounds did not move `workflow-self-review-proofs`, so the proof check moved into
   // claim-check, which step 2 always runs. Paid round 4: go-deploy-stop ran claim-check with neither flag beside an approved spec, so the full
-  // command comes first and a run with no spec drops the flags.
-  const run = 'Run `floor-scan <package>` and `claim-check <wt> <package> --spec <spec> --proofs <package>.proofs.md`, dropping both flags with no spec: exit 1 from either is hits, and a proof line among them a failed check;';
-  for (const t of [find, run, 'On `proof-check: n/a`, check the table by reading.', 'A skipped check counts as failed, but for a named skip (`references/claim-checks.md`).']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
+  // command comes first and a run with no spec drops the flags. M3 part 2 project 1 Task 8: one review-check call runs
+  // floor-scan, and claim-check with `--spec <spec> --proofs <package>.proofs.md`; `--no-spec` stands for no spec.
+  const run = 'Then one call: `review-check <wt> <package> --spec <spec>` (`--no-spec` with none),';
+  for (const t of [find, run, 'On `proofs: n/a`, check the table by reading.', 'A skipped check counts as failed, but for a named skip (`references/claim-checks.md`).']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
   assert.ok(s[2].indexOf(find) < s[2].indexOf(run), 'the spec is found before claim-check runs');
   assert.ok(!s[2].includes('proof-check <spec>'), 'no separate proof-check run');
   // Final review M6: with no spec, step 2 said nothing, so the proof-check that never ran read as an unrun check and gave
   // `fix first`. "Skip" would sit beside "A skipped check counts as failed", so the step says no proofs are due.
   // M3 part 1 Task 7: `proof-check: n/a` is a check with nothing to read, so step 9 and the reference need no exception.
-  assert.ok(s[2].includes(`${find} No spec: no proofs are due. Run`), s[2]);
+  assert.ok(s[2].includes(`${find} No spec: no proofs are due. Then one call:`), s[2]);
   assert.ok(s[9].includes('`fix first`: a failed or unrun check (step 2 or 7, but for a named skip),'), s[9]);
   assert.ok(!readDoc(SKILL).raw.includes('proof-check: not run'), 'n/a replaced the not-run line');
   const skipped = section(readDoc(`${REF}/claim-checks.md`).body, '## A skipped check is a failed check');
@@ -383,6 +392,32 @@ test('self-review proves each acceptance state, reads every reader of moved code
   // `unknown` on a line that names states.
   assertContains(`${REF}/proofs.md`, ['then one row per state a line names, or one `-` row for a line with no `States:`.']);
   assert.ok(!readDoc(`${REF}/proofs.md`).body.includes('one row per line and state'), 'the old row rule is gone');
+});
+
+test('step 2 is one review-check call, step 9 takes its floor, and a go with no approved spec writes the ticket spec', () => {
+  // M3 part 2 project 1 Task 8, the design's "Self-review skips checks after `fix first`": a fix round ran its own pick
+  // of step 2's commands and reported `fix first` with no proofs run. review-check runs them all and prints the floor.
+  const s = steps(readDoc(SKILL).body);
+  for (const t of ['`review-check <wt> <package> --spec <spec>`', '(`--no-spec` with none)',
+    '`--test` with the one test file covering the change (its directory for a `{dir}` template)', '`--autopilot` under autopilot; paste its output.'])
+    assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
+  // review-check reads floor-scan's and claim-check's exits; the hand read of an n/a table and the named skip stay.
+  for (const t of ['exit 1 from either is hits', 'a red `verify.fast` or test', 'Run `floor-scan <package>`']) assert.ok(!s[2].includes(t), `step 2 keeps: ${t}`);
+  for (const t of ['On `proofs: n/a`, check the table by reading.', 'A skipped check counts as failed, but for a named skip (`references/claim-checks.md`).'])
+    assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
+  // Task 8 fix round 1: step 2 names the n/a line review-check prints, not claim-check's, which only its log holds.
+  assert.ok(!s[2].includes('proof-check: n/a'), s[2]);
+  assertContains('scripts/review-check', ["echo 'proofs: n/a (no numbered acceptance lines)'"]);
+  // Task 8 fix round 1: the floor follows the old step 2 rule. A failed or unresolved check or a proof line floors at
+  // `fix first` (tests/scripts/review-check.bats); a plain hit leaves the floor, and step 9 holds it unless it is
+  // justified under Cleared.
+  assert.ok(s[9].includes('an unresolved hit') && s[9].includes('a justified step 2 hit'), s[9]);
+  // The design's "A go's bug route and its case": a bare ticket gives `proof-check: n/a`, which claim-check passes, so
+  // a go's PR carried no proofs. Task 10's exec grader reads this file.
+  assert.ok(s[4].includes("Under a go with no approved spec, write the ticket's requirements as numbered lines under `## Acceptance criteria` in `<kern-dir tmp>/ticket-<id>.md`, `<id>` as the `kern mode:` line shows it; that file is the spec for step 2 and this lane."), s[4]);
+  assert.ok(s[4].indexOf('tracker or PR text goes under `kern-dir tmp`.') < s[4].indexOf('Under a go with no approved spec'), 'the ticket spec follows where tracker text goes');
+  assert.ok(s[9].startsWith("9. Verdict from step 2's `review-check` output, never better than its `floor:` line."), s[9].slice(0, 120));
+  assert.ok(s[9].includes('never better than') && s[9].includes('`floor:`'), s[9]);
 });
 
 test('a reader that repeats moved literals is a copy, and probe drops a lone ! in a fork of its own', () => {

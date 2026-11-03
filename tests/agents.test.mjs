@@ -40,6 +40,12 @@ test('task-reviewer frontmatter, sections and verdict lines', () => {
   // in place: 6 of 18 stored runs had a task review at Important (plan-mandated), and closed on a `Decision:` line and `approved` (ledger round 3 run 0 :68 to :73).
   assertContains('agents/task-reviewer.md', ['A defect the plan mandates is Important and labelled plan-mandated. Any Critical or Important finding makes `Task quality: needs fixes`, but in modes `task` and `re-review` a plan-mandated finding alone keeps `approved`, for the controller to rule on.']);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['a defect the plan mandates is Important, labelled plan-mandated; any Critical or Important finding makes `Task quality: needs fixes`, but in modes `task` and `re-review` a plan-mandated finding alone keeps `approved`, for the controller to rule on (M3 part 1 paid round 3).']);
+  // M3 part 2 project 1 Task 8: mode `whole-branch` grades findings by their effect on a user, so self-review's spec lane
+  // graded a plan-mandated defect Minor. The mode keeps that defect Important, and it makes `needs fixes`.
+  const wb = 'In whole-branch mode a defect the plan or spec mandates stays Important, labelled plan-mandated, and any Critical or Important finding makes `needs fixes`.';
+  const mode = readDoc('agents/task-reviewer.md').body.split('\n').find((l) => l.startsWith('- `whole-branch`:'));
+  assert.ok(mode && mode.includes(`grade findings by their effect on a user. ${wb}`), mode);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [`(M3 part 1 paid round 3). ${wb.slice(0, -1)} (M3 part 2 project 1 Task 8:`]);
   assertMaxBytes('agents/task-reviewer.md', 5000);
 });
 

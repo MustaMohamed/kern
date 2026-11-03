@@ -136,13 +136,45 @@ spec() { printf '# Sum\n\n## Acceptance criteria\n\n1. sum adds two numbers.\n' 
   [ "${lines[${#lines[@]} - 1]}" = 'floor: fix first' ]
 }
 
-@test "a floor-scan hit fails" {
+@test "a plain floor-scan hit prints its tail and leaves the floor to self-review" {
+  # Task 8 fix round 1: a justified hit goes under Cleared at self-review step 9, so only step 9 holds a hit at fix first.
   settings 'verify.fast: true'
   printf "export const sum = (a, b) => {\n  console.log('debug');\n  return a + b;\n};\n" > src/sum.js
   package
   check --no-spec
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 0 ]
   has 'check: floor-scan: hits'
   has '--- floor-scan'
+  [ "${lines[${#lines[@]} - 1]}" = 'floor: none' ]
+}
+
+@test "a proof line as claim-check's only hit floors at fix first" {
+  settings 'verify.fast: true'
+  package
+  printf '# Sum\n\n## Acceptance criteria\n\n1. sum adds two numbers.\n2. sum takes two arguments.\n' > "$TMP/spec.md"
+  printf '| Line | State | Evidence |\n|---|---|---|\n| 1 | - | `node --test`: 1 passed |\n' > "$PKG.proofs.md"
+  check --spec "$TMP/spec.md"
+  [ "$status" -eq 1 ]
+  has 'check: floor-scan: ok'
+  has 'check: claim-check: hits'
+  has 'proofs: checked'
+  has 'unproven: 2 -'
+  [[ "$output" != *absolute-claim* && "$output" != *sha-unknown* ]] || false
   [ "${lines[${#lines[@]} - 1]}" = 'floor: fix first' ]
+}
+
+@test "an absolute-claim as claim-check's only hit leaves the floor" {
+  settings 'verify.fast: true'
+  printf '// sum never overflows\nexport const sum = (a, b) => a + b;\n' > src/sum.js
+  package
+  spec
+  printf '| Line | State | Evidence |\n|---|---|---|\n| 1 | - | `node --test`: 1 passed |\n' > "$PKG.proofs.md"
+  check --spec "$TMP/spec.md"
+  [ "$status" -eq 0 ]
+  has 'check: floor-scan: ok'
+  has 'check: claim-check: hits'
+  has 'proofs: checked'
+  has '--- claim-check'
+  [[ "$output" == *absolute-claim* ]] || false
+  [ "${lines[${#lines[@]} - 1]}" = 'floor: none' ]
 }
