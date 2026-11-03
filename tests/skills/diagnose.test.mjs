@@ -33,8 +33,9 @@ test('diagnose sections, steps and red flags', () => {
   // 6,839 since that fix's re-review: step 8 lets a fix correct what wrote the state.
   // 6,940 since paid round 4's fix: step 7's allowed throw keeps the behaviour the report does not name, a fallback the code had among it.
   // 7,020 since its re-review: a fallback that is the cause may change, and derived data the code cannot use takes the fallback for missing data.
-  assertMaxBytes(SKILL, 7020);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 7,020 bytes,']);
+  // 7,002 since part 1's close: the derived-data sentence names no example, so the held-out task no longer meets its own class in the text.
+  assertMaxBytes(SKILL, 7002);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 7,002 bytes,']);
 });
 
 test('diagnose references', () => {
@@ -77,7 +78,9 @@ test('a fix keeps the state it was found on and the exported signature (h2h diag
   // read as leave to drop the fallback (inferred), so the line that allows it now keeps the behaviour the report does not name.
   // Its re-review, I1: both runs kept the missing-file fallback and threw on a file they could not use, so that file takes the fallback too.
   // M3: a fallback that is the cause may change, as a signature may.
-  assert.ok(s[7].includes("a loud throw at a boundary the trace crossed is allowed (`references/defense-in-depth.md`), but a fix keeps the behaviour the report does not name: a fallback the code had and an exported signature stay, unless one is the cause. Derived data the code cannot use, such as a cache, takes the code's fallback for missing data."), s[7]);
+  // Part 1's close, the user's "Drop the example": "such as a cache" named the class of the held-out task, so that task measured
+  // one sentence. Round 5 measured the sentence with the example; the sentence as shipped has no paid run.
+  assert.ok(s[7].includes("a loud throw at a boundary the trace crossed is allowed (`references/defense-in-depth.md`), but a fix keeps the behaviour the report does not name: a fallback the code had and an exported signature stay, unless one is the cause. Derived data the code cannot use takes the code's fallback for missing data."), s[7]);
   // The follow-up: the reference's "never substitutes a default" read the same way. Re-review I1: "no defined behaviour" fit a value that gave NaN,
   // so a check refuses only input the code already threw on.
   const loud = section(readDoc('skills/diagnose/references/defense-in-depth.md').body, '## Loud, never silent');
