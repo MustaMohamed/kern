@@ -537,10 +537,10 @@ Rules: work the lowest unmerged PR first; fix in the lowest branch that owns the
 
 ### 11.2 Lint rules
 
-1. Frontmatter present; `name` equals the directory; kebab case.
+1. Frontmatter present; `name` equals the directory; kebab case. The frontmatter reads as YAML: no tab in an indent, no quote left open, no top-level key set twice, and no unquoted value that opens with a YAML indicator or holds `: `.
 2. Only Claude Code's frontmatter keys.
 3. auto descriptions at most 300 chars and a trigger; path and slash at most 120 chars; agent descriptions at most 150 chars; auto total at most 1,500; auto plus agents at most 2,500.
-4. Referenced files exist.
+4. Referenced files exist, named in a SKILL.md or in its `references/*.md` files; a `#fragment` on a Markdown file matches the GitHub anchor of a heading in it.
 5. Skill-tool references name auto skills; Read paths resolve.
 6. Every kernel route resolves and opens with `## Steps`; every user-reachable skill is in `help`'s map.
 7. Rendered kernel at most 6,207 chars (warn) and 9,000 (error) with the longest fixture settings; standing cost (the kernel with no settings plus every auto skill and agent description) at most 6,296 (both the measured values, locked by Task 17a P11 and relocked by M2b bfix K and the pilot fix plan's Task 4); subagent kernel at most 1,200.

@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, existsSync, statSync, mkdtempSync, mkdirSync
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { parseFrontmatter } from './frontmatter.mjs';
+import { frontmatterYamlErrors, parseFrontmatter } from './frontmatter.mjs';
 import { kernelRows, parseRow, routedSkills } from './kernel-rows.mjs';
 
 export const SKILL_KEYS = new Set(['name', 'description', 'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation', 'user-invocable', 'allowed-tools', 'disallowed-tools', 'model', 'effort', 'context', 'agent', 'background', 'hooks', 'paths', 'shell', 'metadata', 'license', 'compatibility']);
@@ -52,6 +52,31 @@ function scanMarkdown(text) {
 }
 const h2Lines = (scan) => scan.lines.filter((l) => /^## /.test(l)).map((l) => l.trimEnd());
 
+// headingAnchors(text): the #fragments a Markdown file's ATX headings make on GitHub, outside fences and
+// frontmatter (rule 4): the heading text lowercased, all but letters, digits, `_`, `-` and spaces dropped, spaces
+// turned to hyphens, and -1, -2 on a repeated heading. Adapted from addyosmani/agent-skills
+// scripts/validate-reference-links.js (MIT).
+function headingAnchors(text) {
+  const anchors = new Set();
+  const seen = new Map();
+  for (const line of scanMarkdown(parseFrontmatter(text).body).lines) {
+    const m = line.match(/^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/);
+    if (!m) continue;
+    const slug = m[1].replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/<[^>]+>/g, '')
+      .toLowerCase().replace(/[^\p{L}\p{M}\p{N}_\- ]/gu, '').replace(/ /g, '-');
+    let count = seen.get(slug) || 0;
+    let anchor = count === 0 ? slug : `${slug}-${count}`;
+    while (anchors.has(anchor)) anchor = `${slug}-${++count}`;
+    anchors.add(anchor);
+    seen.set(slug, count + 1);
+  }
+  return anchors;
+}
+
+// refDocs(model, skill): the Markdown files under a skill's references/ folder, with their text (rules 4 and 16).
+const refDocs = (model, s) => walk(join(model.root, 'skills', s.dir, 'references')).filter((f) => f.endsWith('.md'))
+  .map((file) => ({ file, body: readFileSync(file, 'utf8'), ref: true }));
+
 // Rule 7 renders the kernel in a repo whose real path has one fixed length. The settings block keeps to 600 chars
 // and named the main worktree, so a longer path dropped a Set: entry and the measurement moved with the machine's
 // temp dir. Since Task 17a P13 the block names it only when the cwd is not the main root, and rule 7 renders at
@@ -80,8 +105,9 @@ export function loadModel(root) {
     for (const dir of readdirSync(skillsDir)) {
       const file = join(skillsDir, dir, 'SKILL.md');
       if (!existsSync(file)) continue;
-      const fm = parseFrontmatter(readFileSync(file, 'utf8'));
-      skills.push({ name: fm.data.name, dir, file, data: fm.data, body: fm.body, error: fm.error });
+      const text = readFileSync(file, 'utf8');
+      const fm = parseFrontmatter(text);
+      skills.push({ name: fm.data.name, dir, file, data: fm.data, body: fm.body, error: fm.error, yaml: frontmatterYamlErrors(text) });
     }
   }
   const kernelPath = join(root, 'kernel', 'kernel.md');
@@ -101,8 +127,9 @@ export function loadModel(root) {
   if (existsSync(agentsDir)) {
     for (const f of readdirSync(agentsDir).filter((n) => n.endsWith('.md'))) {
       const file = join(agentsDir, f);
-      const fm = parseFrontmatter(readFileSync(file, 'utf8'));
-      agents.push({ name: fm.data.name, base: f.replace(/\.md$/, ''), file, data: fm.data, body: fm.body, error: fm.error });
+      const text = readFileSync(file, 'utf8');
+      const fm = parseFrontmatter(text);
+      agents.push({ name: fm.data.name, base: f.replace(/\.md$/, ''), file, data: fm.data, body: fm.body, error: fm.error, yaml: frontmatterYamlErrors(text) });
     }
   }
   const exFile = join(root, 'scripts', 'lint-exemptions.json');
@@ -117,15 +144,22 @@ export const warn = (rule, path, message) => ({ rule, path, level: 'warn', messa
 export const RULES = [
   { id: 1, check(model) {
     const out = [];
+    // Frontmatter a YAML parser rejects (frontmatterYamlErrors), then parseFrontmatter's error. parseFrontmatter refuses
+    // a tab-indented line too, and the YAML message names that line, so that error is not repeated. True on an error.
+    const frontmatter = (d, p) => {
+      for (const m of d.yaml || []) out.push(err(1, p, m));
+      if (d.error && !(d.yaml?.length && /\(use single-line values\): *\t/.test(d.error))) out.push(err(1, p, d.error));
+      return Boolean(d.error);
+    };
     for (const s of model.skills) {
       const p = rel(model, s.file);
-      if (s.error) { out.push(err(1, p, s.error)); continue; }
+      if (frontmatter(s, p)) continue;
       if (!KEBAB.test(s.dir)) out.push(err(1, p, `directory ${s.dir} is not kebab case`));
       else if (s.name !== s.dir) out.push(err(1, p, `name ${s.name} does not equal directory ${s.dir}`));
     }
     for (const a of model.agents) {
       const p = rel(model, a.file);
-      if (a.error) { out.push(err(1, p, a.error)); continue; }
+      if (frontmatter(a, p)) continue;
       if (a.name !== a.base) out.push(err(1, p, `name ${a.name} does not equal file name ${a.base}`));
     }
     return out;
@@ -168,13 +202,29 @@ export const RULES = [
     return out;
   } },
   { id: 4, check(model) {
+    // A skill's SKILL.md and its references files. A local path resolves from the skill's folder, then the repo
+    // root; a #fragment on a Markdown file must be one of its heading anchors (headingAnchors).
     const out = [];
+    const anchors = new Map();
+    const anchorsOf = (f) => { if (!anchors.has(f)) anchors.set(f, headingAnchors(readFileSync(f, 'utf8'))); return anchors.get(f); };
+    const check = (p, shown, file, frag) => {
+      if (!file) out.push(err(4, p, `referenced file missing: ${shown}`));
+      else if (frag && file.endsWith('.md') && statSync(file).isFile() && !anchorsOf(file).has(frag)) {
+        out.push(err(4, p, `referenced anchor missing: ${shown}#${frag} (no heading in ${rel(model, file)} makes #${frag})`));
+      }
+    };
     for (const s of model.skills) {
-      const p = rel(model, s.file);
-      const local = [...s.body.matchAll(/`(?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#[^`\s]*)?`|\]\((?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#[^)\s]*)?\)/g)].map((m) => m[1] || m[2]);
-      for (const r of local) if (!existsSync(join(model.root, 'skills', s.dir, r)) && !existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: ${r}`));
-      const rooted = [...s.body.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)].map((m) => m[1].replace(/[.,;:]+$/, ''));
-      for (const r of rooted) if (!existsSync(join(model.root, r))) out.push(err(4, p, `referenced file missing: \${CLAUDE_PLUGIN_ROOT}/${r}`));
+      for (const d of [{ file: s.file, body: s.body }, ...refDocs(model, s)]) {
+        const p = rel(model, d.file);
+        for (const m of d.body.matchAll(/`(?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#([^`\s]*))?`|\]\((?:\.\/)?((?:references|templates|scripts|prompts)\/[\w./-]+)(?:#([^)\s]*))?\)/g)) {
+          const r = m[1] || m[3];
+          check(p, r, [join(model.root, 'skills', s.dir, r), join(model.root, r)].find((f) => existsSync(f)), m[2] || m[4]);
+        }
+        for (const m of d.body.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)(?:#([\p{L}\p{N}_-]+))?/gu)) {
+          const r = m[1].replace(/[.,;:]+$/, '');
+          check(p, `\${CLAUDE_PLUGIN_ROOT}/${r}`, existsSync(join(model.root, r)) ? join(model.root, r) : undefined, m[2]);
+        }
+      }
     }
     return out;
   } },
@@ -429,9 +479,7 @@ export const RULES = [
     const contract = readFileSync(cf, 'utf8').replace(/\r\n/g, '\n');
     const out = [];
     const docs = [...model.skills, ...model.agents].filter((d) => !d.error).map((d) => ({ file: d.file, body: d.body }));
-    for (const s of model.skills) {
-      for (const f of walk(join(model.root, 'skills', s.dir, 'references')).filter((x) => x.endsWith('.md'))) docs.push({ file: f, body: readFileSync(f, 'utf8'), ref: true });
-    }
+    for (const s of model.skills) docs.push(...refDocs(model, s));
     const seen = new Set();
     for (const d of docs) {
       const scan = scanMarkdown(d.body);

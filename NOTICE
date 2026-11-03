@@ -83,7 +83,8 @@ extension/fonts/GEIST_LICENSE.txt.
 - scripts/lib/rank.mjs: addy scripts/run-evals.js lines 62-102 and 121-139
 - scripts/route-eval.mjs: addy scripts/run-evals.js runDeterministic (adapted)
 - scripts/check-version.mjs: addy scripts/validate-versions.js (idea only; code written for kern)
-- scripts/lib/lint-rules.mjs: addy scripts/lib/skill-lint.js (rule set idea; code written for kern)
+- scripts/lib/lint-rules.mjs: addy scripts/lib/skill-lint.js (rule set idea; code written for kern); headingAnchors: addy scripts/validate-reference-links.js slugify and headingAnchors (adapted)
+- scripts/lib/frontmatter.mjs: addy scripts/lib/skill-lint.js frontmatterYamlErrors, lines 229-320 (adapted; the duplicate-key check written for kern)
 - skills/unslop/SKILL.md: local unslop/SKILL.md (the user's adapted copy of pstack unslop)
 - skills/technical-writing/SKILL.md: pstack pstack/skills/technical-writing/SKILL.md
 - skills/help/SKILL.md: pstack pstack/skills/poteto-help/SKILL.md (its multiple-choice opener and its sentence on checking the state that changes the answer)

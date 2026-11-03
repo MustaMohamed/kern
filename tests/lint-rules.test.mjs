@@ -5,7 +5,7 @@ import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSyn
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
+import { frontmatterYamlErrors, parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
 import { fileURLToPath } from 'node:url';
 import { RULE7_REPO_LEN, fixedLengthRepo, loadModel, runLint } from '../scripts/lib/lint-rules.mjs';
 import { replaceRoot } from '../scripts/lib/lint-rules.mjs';
@@ -137,9 +137,56 @@ test('rule 4: existing references pass, repo-root fallback, anchors and ./', () 
   const root = '\n## Steps\n\n1. Run `scripts/tool`.\n';
   assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', root), 'scripts/tool': 'x' }), []);
   const anchors = '\n## Steps\n\n1. See `references/ok.md#part`, `./references/ok.md` and [x](references/ok.md#x).\n';
-  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', anchors), 'skills/a/references/ok.md': 'x' }), []);
+  assert.deepEqual(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', anchors), 'skills/a/references/ok.md': '# Part\n\n## X\n' }), []);
   const bad = '\n## Steps\n\n1. See `references/missing.md#part`.\n';
   assert.deepEqual(rules(lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', bad) })), [4]);
+});
+
+test('frontmatterYamlErrors: an unclosed quote, a tab indent and a duplicate key are errors; valid YAML has none', () => {
+  const errs = (fm) => frontmatterYamlErrors(`---\n${fm}\n---\nbody\n`);
+  assert.deepEqual(errs('name: a\ndescription: "Use when x: y"\nargument-hint: \'[on|off]\'\nallowed-tools: Bash(git log *), Read'), []);
+  assert.deepEqual(errs('name: a\ndescription: :platform -x &anchor [a, b] #c'), [], 'only a leading indicator YAML rejects is flagged');
+  assert.deepEqual(frontmatterYamlErrors('---\r\nname: a\r\ndescription: Use when x.\r\n---\r\n'), [], 'CRLF');
+  assert.deepEqual(frontmatterYamlErrors('# no frontmatter\n'), []);
+  assert.match(errs('name: a\ndescription: "Use when x').join('\n'), /^frontmatter line 3 opens a double quote that never closes/);
+  assert.match(errs("name: a\ndescription: 'Use when x").join('\n'), /^frontmatter line 3 opens a single quote that never closes/);
+  assert.match(errs('name: a\n\tdescription: Use when x.').join('\n'), /^frontmatter line 3 indents with a tab/);
+  assert.match(errs('name: a\n  \tdescription: Use when x.').join('\n'), /^frontmatter line 3 indents with a tab/, 'a tab after spaces');
+  assert.match(errs('name: a\ndescription: Use when x.\nname: b').join('\n'), /^frontmatter line 4 sets key name again, first set on line 2/);
+  assert.deepEqual(errs('metadata:\n  a: 1\nother:\n  a: 2'), [], 'a key repeated under different parents is no duplicate');
+  assert.match(errs('name: a\ndescription: Use this: when x').join('\n'), /line 3 has an unquoted value holding ': '/);
+  assert.match(errs('name: a\ndescription: `other` does x').join('\n'), /line 3 starts an unquoted value with '`'/);
+  assert.match(errs('name: a\ndescription: |text').join('\n'), /line 3 starts an unquoted value with '\|' and text after it/);
+  assert.match(errs('name: a\ndescription: - x').join('\n'), /line 3 starts an unquoted value with '- '/);
+});
+
+test('rule 1: frontmatter a YAML parser rejects is an error: an unclosed quote, a tab indent, a duplicate key', () => {
+  const one = (files) => { const f = lint(files); assert.deepEqual(rules(f), [1], JSON.stringify(f)); return f[0].message; };
+  assert.match(one({ 'skills/a/SKILL.md': skill('a', 'description: "Use when x.') }), /quote that never closes/);
+  assert.match(one({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.\n\tlicense: MIT') }), /indents with a tab/);
+  assert.match(one({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.\ndescription: Use when y.') }), /sets key description again/);
+  assert.match(one({ 'agents/r.md': '---\nname: r\ndescription: d\nname: r\n---\n## Report\n\nbody\n' }), /sets key name again/);
+  const both = lint({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.\ndescription: Use when y.\nnot a key') });
+  assert.deepEqual(both.map((f) => [f.rule, f.message.replace(/^(.{30}).*/, '$1')]), [[1, 'frontmatter line 4 sets key de'], [1, 'unparsed frontmatter line (use']], 'a parse error beside a YAML error is still reported');
+});
+
+test('rule 4: a skill\'s references files are scanned, and a #fragment must be a heading anchor in its target', () => {
+  const target = '# Title\n\n## Step One: Read it\n\n## Step One: Read it\n\n### The `wt_new` script (v2)\n\n```\n## Fenced\n```\n';
+  const files = (body, ref) => ({ 'skills/a/SKILL.md': skill('a', 'description: Use when x.', body), 'skills/a/references/r.md': ref, 'skills/a/references/t.md': target, 'kernel/k.md': '## Part\n' });
+  const steps = (s) => `\n## Steps\n\n1. ${s}\n`;
+  const at = (f) => f.filter((x) => x.level === 'error').map((x) => `${x.rule} ${x.path}: ${x.message}`);
+  assert.deepEqual(at(lint(files(steps('Read `references/r.md`.'), 'See `references/gone.md` and run `${CLAUDE_PLUGIN_ROOT}/scripts/none`.\n'))), [
+    '4 skills/a/references/r.md: referenced file missing: references/gone.md',
+    '4 skills/a/references/r.md: referenced file missing: ${CLAUDE_PLUGIN_ROOT}/scripts/none',
+  ]);
+  const good = 'See `references/t.md#title`, [x](references/t.md#step-one-read-it), `references/t.md#step-one-read-it-1`, `references/t.md#the-wt_new-script-v2` and ${CLAUDE_PLUGIN_ROOT}/kernel/k.md#part.\n';
+  assert.deepEqual(lint(files(steps(good), good)), []);
+  assert.deepEqual(at(lint(files(steps('See `references/t.md#step-two`.'), 'See [x](references/t.md#fenced), `references/t.md#step-one-read-it-2` and ${CLAUDE_PLUGIN_ROOT}/kernel/k.md#nope.\n'))), [
+    '4 skills/a/SKILL.md: referenced anchor missing: references/t.md#step-two (no heading in skills/a/references/t.md makes #step-two)',
+    '4 skills/a/references/r.md: referenced anchor missing: references/t.md#fenced (no heading in skills/a/references/t.md makes #fenced)',
+    '4 skills/a/references/r.md: referenced anchor missing: references/t.md#step-one-read-it-2 (no heading in skills/a/references/t.md makes #step-one-read-it-2)',
+    '4 skills/a/references/r.md: referenced anchor missing: ${CLAUDE_PLUGIN_ROOT}/kernel/k.md#nope (no heading in kernel/k.md makes #nope)',
+  ]);
 });
 
 // M1 rules: 6 (routes and help map), 7 (kernel size), 13 (settings keys), 15 (hook-shape fixtures).
