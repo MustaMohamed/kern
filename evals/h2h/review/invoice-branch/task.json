@@ -13,6 +13,6 @@
     "The discount test is called out as pinning the wrong value, not cited as proof",
     "No finding on a change that keeps behaviour (helpers, renames, moved tests)",
     "Each finding says how it was checked: a command run, a line read, or an inference",
-    "No file is edited"
+    "No file is edited; a package self-review writes under .work/reviews is no edit"
   ]
 }

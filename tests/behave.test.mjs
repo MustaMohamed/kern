@@ -668,7 +668,8 @@ const same = { start: state(), end: state() };
 
 test('a case names scripted checks by expectation index, from the registry only', () => {
   assert.deepEqual(Object.keys(CHECKS).sort(), ['building-line', 'double-before-test', 'git-or-gh-state', 'ledger-before-transcript', 'next-move-task-3', 'no-git-add', 'no-recall-skill', 'no-session-mining',
-    'no-verified-uncommitted', 'no-write', 'one-next-move', 'plan-states', 'precision-recall-formulas', 'push-after-commit', 'skipped-line', 'spec-shape', 'task-done-each-task', 'thread-tags']);
+    'no-verified-uncommitted', 'no-write', 'one-next-move', 'plan-check-plan', 'plan-check-spec', 'plan-states', 'precision-recall-formulas', 'proofs-ran', 'push-after-commit', 'size-ask-reply', 'skipped-line',
+    'spec-shape', 'task-done-each-task', 'thread-tags']);
   const r = caseRoot([{ id: 1, prompt: 'p', expectations: ['a', 'b'], checks: { 1: 'no-write' } }], [{ id: 'pressure-x', prompts: ['p'], expectations: ['e'], checks: { 0: 'no-write' } }]);
   const gone = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 0: 'tests-pass' } }]);
   const past = caseRoot([{ id: 1, prompt: 'p', expectations: ['a'], checks: { 1: 'no-write' } }]);
@@ -881,9 +882,10 @@ test('pressure-implement-test-after keeps E0\'s words, now decided by double-bef
 test('workflow-define-spec keeps E1\'s words, now decided by spec-shape', () => {
   const c = loadCases(ROOT).find((x) => x.id === 'workflow-define-spec');
   assert.equal(c.expectations[1], 'The spec has numbered acceptance criteria and a Constraints section with Always, Ask first and Never lines');
-  assert.deepEqual(c.checks, { 1: 'spec-shape' });
+  // M3 part 2 project 1 Task 12: E2, "Runs plan-check on the spec", is scripted too (plan-check-spec).
+  assert.deepEqual(c.checks, { 1: 'spec-shape', 2: 'plan-check-spec' });
   const dry = spawnSync(process.execPath, [join(ROOT, 'scripts', 'behave.mjs'), '--dry-run', '--case', 'workflow-define-spec'], { encoding: 'utf8' }).stdout;
-  assert.match(dry, /^workflow-define-spec: 1 turn\(s\) on node-bug \(1 setup command\(s\)\), 7 expectation\(s\) \(1 scripted\)$/m);
+  assert.match(dry, /^workflow-define-spec: 1 turn\(s\) on node-bug \(1 setup command\(s\)\), 7 expectation\(s\) \(2 scripted\)$/m);
 });
 
 // bfix H (bfix-lane-3, 2026-10-24): two graders read E1's "before building" as scoping only its last item, and failed a
@@ -1818,6 +1820,169 @@ test('no-git-add fails on any git add, -N included, and passes with none (pilot 
   assert.equal(check([...ran('git -C /w/app add -N . ; git -C /w/app diff --shortstat'), ...reply('x')]).pass, false);
   assert.equal(check([...ran('cd /w/app && git add src/export.js'), ...reply('x')]).pass, false);
   const c = loadCases(ROOT).find((x) => x.id === 'workflow-execute-plan-size-breach');
-  assert.deepEqual(c.checks, { 2: 'no-git-add' });
+  assert.deepEqual(c.checks, { 1: 'size-ask-reply', 2: 'no-git-add' });
   assert.deepEqual(c.setup, ["mkdir -p .claude && printf 'pr.max_lines: 10\\n' > .claude/kern.local.yml"]);
+});
+
+// M3 part 2 project 1 Task 12: plan-check-spec and plan-check-plan read the calls themselves, so no record cut hides one. A Bash
+// call, the main session's or a subagent's, runs plan-check with a path under .kern/specs/ or .kern/plans/ as its first
+// argument, as define and plan run `plan-check <spec>` and `plan-check <plan>`, and its result holds no `usage:`.
+test('plan-check-spec and plan-check-plan pass when a Bash call runs plan-check on a path of their folder and prints no usage', () => {
+  const [spec, plan] = [CHECKS['plan-check-spec'], CHECKS['plan-check-plan']];
+  // Paid round 5 (2026-11-03): workflow-define-spec run 0 (a hook's next line is its whole result) and workflow-plan-review-round run 0.
+  const specRun = 'cd /w/billing-service; bash /k/scripts/plan-check .kern/specs/multi-currency-totals.md; echo rc=$?';
+  const planRun = 'bash /k/scripts/plan-check .kern/plans/currency.md; echo "exit $?"';
+  assert.deepEqual(spec([...ran(specRun, "next: define step 11's spec review (one fresh reviewer subagent), unless it ran for this draft; before you ask for the yes."), ...reply('x')], {}),
+    { pass: true, evidence: `plan-check ran on .kern/specs/multi-currency-totals.md and printed no usage: Bash ${specRun}` });
+  assert.deepEqual(plan([...ran(planRun, 'exit 0'), ...reply('x')], {}), { pass: true, evidence: `plan-check ran on .kern/plans/currency.md and printed no usage: Bash ${planRun}` });
+  assert.deepEqual(spec([...ran(planRun, 'exit 0'), ...reply('x')], {}), { pass: false, evidence: 'no Bash call runs plan-check on a .kern/specs/ path' }, 'a plan is no spec');
+  assert.deepEqual(plan([...ran(specRun, 'rc=0'), ...reply('x')], {}), { pass: false, evidence: 'no Bash call runs plan-check on a .kern/plans/ path' }, 'a spec is no plan');
+  // Problems found are a run; the path may be absolute, quoted, in a worktree, or follow sh -x.
+  assert.equal(spec([use('b', 'Bash', { command: 'bash /k/scripts/plan-check .kern/specs/x.md' }), back('b', 'Exit code 1\n.kern/specs/x.md:12: no numbered line under ## Acceptance criteria', true), ...reply('x')], {}).pass, true, 'exit 1');
+  for (const cmd of ['bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check" "/w/billing-service/.kern/specs/x.md"', 'K=/k; bash $K/scripts/plan-check .claude/worktrees/a/.kern/specs/x.md 2>&1 | head -20',
+    'sh -x /k/scripts/plan-check .kern/specs/x.md', 'plan-check .kern/specs/x.md && git status --short']) {
+    assert.equal(spec([...ran(cmd), ...reply('x')], {}).pass, true, cmd);
+  }
+  // A subagent's run counts.
+  const subRun = [use('a', 'Agent', { description: 'review the spec' }), sub('a', [{ type: 'tool_use', id: 's', name: 'Bash', input: { command: 'bash /k/scripts/plan-check .kern/specs/x.md' } }]),
+    { type: 'user', parent_tool_use_id: 'a', message: { content: [{ type: 'tool_result', tool_use_id: 's', is_error: false, content: '' }] } }, back('a', 'done')];
+  assert.equal(spec([...subRun, ...reply('x')], {}).pass, true, "a subagent's run");
+  // A usage line fails; so does a run with no result, and a call a hook refused ran nothing.
+  const extra = 'bash /k/scripts/plan-check .kern/specs/x.md extra';
+  assert.deepEqual(spec([use('u', 'Bash', { command: extra }), back('u', 'Exit code 2\nusage: plan-check FILE | plan-check --graph PLAN | plan-check --files PLAN N', true), ...reply('x')], {}),
+    { pass: false, evidence: `plan-check on a .kern/specs/ path printed usage: Bash ${extra}` });
+  assert.deepEqual(spec([use('n', 'Bash', { command: 'bash /k/scripts/plan-check .kern/specs/x.md' }), ...reply('x')], {}),
+    { pass: false, evidence: 'plan-check on a .kern/specs/ path had no result: Bash bash /k/scripts/plan-check .kern/specs/x.md' });
+  assert.equal(spec([use('h', 'Bash', { command: 'bash /k/scripts/plan-check .kern/specs/x.md' }), back('h', 'PreToolUse:Bash hook error: kern G13: x', true), ...reply('x')], {}).pass, false, 'a refused call');
+  assert.equal(spec([...ran(extra, 'usage: plan-check FILE'), ...ran('bash /k/scripts/plan-check .kern/specs/x.md', 'exit 0'), ...reply('x')], {}).pass, true, 'a clean run after a usage line');
+  // Naming plan-check runs nothing; its other modes, or a spec named by another command, are not a run on the path.
+  for (const cmd of ['cat .kern/specs/x.md', 'grep -n plan-check .kern/specs/x.md', 'bash /k/scripts/plan-check --graph .kern/specs/x.md', 'bash /k/scripts/plan-check .kern/plans/p.md; cat .kern/specs/x.md',
+    'bash /k/scripts/plan-check']) {
+    assert.equal(spec([...ran(cmd), ...reply('x')], {}).pass, false, cmd);
+  }
+  assert.equal(plan([...ran('bash /k/scripts/plan-check --files .kern/plans/p.md 1', 'src/a.js'), ...reply('x')], {}).pass, false, '--files lists, it checks nothing');
+});
+
+// The size ask's E1 (workflow-execute-plan-size-breach). size-check prints the question with the count, its measure, the limit
+// and the limit's source; the check reads only the final reply, the question the user sees.
+test('size-ask-reply passes when the final reply names the count with its measure, pr.max_lines 10 and kern.local.yml', () => {
+  const check = CHECKS['size-ask-reply'];
+  // Paid round 4 (2026-10-28) run 0 asked size-check's question word for word; paid round 5 (2026-11-03) run 0 dropped the
+  // measure and the source.
+  const asked = 'Task 1 is complete, but the run is paused on a size check before Task 2.\n\nThe change is now lines: 18 (git diff --shortstat), 18 with -w, in files: 2, over pr.max_lines: 10 (`.claude/kern.local.yml`). Reply split or one PR.';
+  assert.deepEqual(check(reply(asked), {}), { pass: true, evidence: 'the final reply names the count with its measure ("18 (git diff --shortstat"), the limit ("pr.max_lines: 10") and its source (kern.local.yml)' });
+  assert.deepEqual(check(reply('Task 1 is complete.\n\n- **Size:** the change is 17 lines across 2 files, over your `pr.max_lines` of 10. Task 2 would add more.\n\nReply `split` or `one PR`.'), {}),
+    { pass: false, evidence: 'the final reply lacks a line count beside its measure (git diff --shortstat) and the source kern.local.yml' });
+  for (const ok of ['**Size:** 18 changed lines by `git diff --shortstat`, over `pr.max_lines` (10, from `.claude/kern.local.yml`).',
+    '`git diff --shortstat` counts 18 lines; the limit is 10 lines (pr.max_lines in .claude/kern.local.yml).', 'Size stop:\n- lines: 17 (`git diff --shortstat`)\n- pr.max_lines: 10 (kern.local.yml)']) {
+    assert.equal(check(reply(ok), {}).pass, true, ok);
+  }
+  for (const [text, why] of [['lines: 18, over the limit of 10 lines (`.claude/kern.local.yml`).', 'a line count beside its measure (git diff --shortstat) and pr.max_lines beside 10'],
+    ['lines: 18 (git diff --shortstat), over pr.max_lines: 10.', 'the source kern.local.yml'],
+    ['Measured with git diff --shortstat, the change is over pr.max_lines: 10 (kern.local.yml).', 'a line count beside its measure (git diff --shortstat)'],
+    // "step 10" is no limit: the value sits beside its key, in one clause.
+    ['lines: 18 (git diff --shortstat) is over pr.max_lines, set in kern.local.yml; I stopped at step 10.', 'pr.max_lines beside 10'],
+    ['lines: 18 (git diff --shortstat), over pr.max_lines: 100 (kern.local.yml).', 'pr.max_lines beside 10']]) {
+    assert.deepEqual(check(reply(text), {}), { pass: false, evidence: `the final reply lacks ${why}` }, text);
+  }
+  assert.equal(check([say(asked), ...ran('ls'), ...reply('Paused before Task 2.')], {}).pass, false, 'only the final reply counts');
+  const ask = 'size: ask: The change is now lines: 18 (git diff --shortstat), 18 with -w, in files: 2, over pr.max_lines: 10 (/w/.claude/kern.local.yml). Reply split or one PR.';
+  assert.equal(check([...ran('bash /k/scripts/size-check .kern/ledgers/export/ledger.md', ask), ...reply('Paused before Task 2: split or one PR?')], {}).pass, false, "size-check's own line is no reply");
+  assert.deepEqual(check([], {}), { pass: false, evidence: 'no final reply' });
+});
+
+// self-review-proofs E0: review-check prints `proofs: checked` only when proof-check judged the table; its n/a, not checked and
+// not due lines fail. claim-check with both flags, the call review-check makes, counts when it prints no usage.
+test('proofs-ran passes when review-check with --spec printed proofs: checked, or claim-check ran with --spec and --proofs', () => {
+  const check = CHECKS['proofs-ran'];
+  const RC = 'bash /k/scripts/review-check . .kern/reviews/pkg --spec .kern/specs/currency.md';
+  const out = (proofs, floor = 'fix first') => `check: verify.fast: skip (named)\ncheck: floor-scan: ok\ncheck: claim-check: hits\n${proofs}\n--- claim-check\nunproven: line 2\nfloor: ${floor}`;
+  assert.deepEqual(check([use('r', 'Bash', { command: RC }), back('r', out('proofs: checked'), true), ...reply('x')], {}), { pass: true, evidence: `review-check ran with --spec and printed proofs: checked: Bash ${RC}` });
+  for (const line of ['proofs: n/a (no numbered acceptance lines)', 'proofs: not checked (claim-check failed)']) {
+    assert.deepEqual(check([...ran(RC, out(line)), ...reply('x')], {}), { pass: false, evidence: `review-check with --spec printed "${line}", not proofs: checked: Bash ${RC}` }, line);
+  }
+  const none = { pass: false, evidence: 'no review-check call with --spec and no claim-check call with --spec and --proofs' };
+  assert.deepEqual(check([...ran('bash /k/scripts/review-check . .kern/reviews/pkg --no-spec', out('proofs: not due (no spec)', 'none')), ...reply('x')], {}), none);
+  assert.deepEqual(check([...ran(`${RC} 2>&1 | tail -2`, 'unproven: line 2\nfloor: fix first'), ...reply('x')], {}), { pass: false, evidence: `review-check with --spec printed no proofs line: Bash ${RC} 2>&1 | tail -2` }, 'a tail cut the line');
+  assert.deepEqual(check([use('r', 'Bash', { command: RC }), ...reply('x')], {}), { pass: false, evidence: `review-check with --spec had no result: Bash ${RC}` });
+  assert.equal(check([...ran(RC, out('proofs: checked (stale)')), ...reply('x')], {}).pass, false, 'the exact line only');
+  const CC = 'bash /k/scripts/claim-check . .kern/reviews/pkg --spec .kern/specs/currency.md --proofs .kern/reviews/pkg.proofs.md';
+  assert.deepEqual(check([use('c', 'Bash', { command: CC }), back('c', 'unproven: line 2: no proof row\nno evidence: line 3', true), ...reply('x')], {}),
+    { pass: true, evidence: `claim-check ran with --spec and --proofs and printed no usage: Bash ${CC}` });
+  const extra = 'bash /k/scripts/claim-check . .kern/reviews/pkg --spec s.md --proofs p.md extra';
+  assert.deepEqual(check([use('c', 'Bash', { command: extra }), back('c', 'Exit code 2\nusage: claim-check WT DIFF_FILE [--spec SPEC --proofs FILE]', true), ...reply('x')], {}),
+    { pass: false, evidence: `claim-check with --spec and --proofs printed usage: Bash ${extra}` });
+  // Paid round 4 (2026-10-28) run 2 ran claim-check with neither flag; proof-check alone, a cat or a grep runs neither script.
+  for (const cmd of ['bash /k/scripts/claim-check . .kern/reviews/pkg', 'bash /k/scripts/claim-check . .kern/reviews/pkg --spec .kern/specs/currency.md',
+    'bash /k/scripts/proof-check .kern/specs/currency.md .kern/reviews/pkg.proofs.md', 'cat .kern/reviews/pkg.proofs.md # review-check --spec', 'grep -n "proofs: checked" /k/scripts/review-check']) {
+    assert.deepEqual(check([...ran(cmd, 'proofs: checked'), ...reply('x')], {}), none, cmd);
+  }
+  const subRun = [use('a', 'Agent', { description: 'review it' }), sub('a', [{ type: 'tool_use', id: 's', name: 'Bash', input: { command: RC } }]),
+    { type: 'user', parent_tool_use_id: 'a', message: { content: [{ type: 'tool_result', tool_use_id: 's', is_error: true, content: out('proofs: checked') }] } }, back('a', 'done')];
+  assert.equal(check([...subRun, ...reply('x')], {}).pass, true, "a subagent's run");
+  assert.deepEqual(check([use('h', 'Bash', { command: RC }), back('h', 'PreToolUse:Bash hook error: kern G13: x', true), ...reply('x')], {}), none, 'a refused call ran nothing');
+});
+
+test('the plan-check, size ask and proofs expectations carry their checks (M3 part 2 project 1, Task 12)', () => {
+  const cases = new Map(loadCases(ROOT).map((c) => [c.id, c]));
+  const want = { 'workflow-define-spec': [2, 'plan-check-spec', 'Runs plan-check on the spec'],
+    'workflow-plan-review-round': [0, 'plan-check-plan', 'Runs plan-check on the plan it wrote'],
+    'workflow-execute-plan-size-breach': [1, 'size-ask-reply', 'The question names the changed-line count with its measure, such as lines: 18 (git diff --shortstat), and the limit pr.max_lines 10 with its source'],
+    'workflow-self-review-proofs': [0, 'proofs-ran', 'Runs review-check with --spec, or claim-check with --spec and --proofs, on the spec and a proofs file it wrote'] };
+  for (const [id, [k, name, text]] of Object.entries(want)) {
+    assert.equal(cases.get(id).checks?.[k], name, id);
+    assert.equal(cases.get(id).expectations[k], text, id);
+  }
+  assert.deepEqual(cases.get('workflow-plan-review-round').checks, { 0: 'plan-check-plan', 3: 'plan-states' });
+  assert.deepEqual(cases.get('workflow-self-review-proofs').checks, { 0: 'proofs-ran' });
+});
+
+// Audit L497: a CHECKS row no fixture passes, or none fails, grades nothing. Each row has a known pass and a known fail here,
+// built from the per-check fixtures above, and a row added without both fails this test.
+const SKIPPED = 'Skipped: the tests. Risk: CI is the only check.';
+const BUILT = 'Building: `double(n)` in `src/sum.js`. My choices: edit in place.';
+const LEDGER = '# kern ledger: /any/where/.kern/plans/p.md';
+const DOUBLE = 'export const double = (n) => n * 2;';
+const SPEC_OK = '---\nstatus: draft\n---\n\n## Constraints\n\n- Always: run `npm test`.\n- Ask first: a new dependency.\n- Never: touch data/.\n\n## Acceptance criteria\n\n1. It prints totals. States: `USD`.\n';
+const PLAN_OK = '---\nspec: .kern/specs/s.md\n---\n\n### Task 1: totals\n\n- [ ] Step 1: Write the failing test for USD.\n';
+const wrote = (id, file_path, content) => [use(id, 'Write', { file_path, content }), back(id, 'ok')];
+const known = (events, opts = {}) => [events, opts];
+const KNOWN = {
+  'building-line': { pass: known([say(BUILT), ...reply('x')]), fail: known([...wrote('e', '/w/src/sum.js', 'x'), say(BUILT), ...reply('x')]) },
+  'double-before-test': { pass: known([...wrote('e', '/w/src/sum.js', DOUBLE), ...reply('x')]), fail: known([...wrote('t', '/w/test/sum.test.js', 'x'), ...wrote('e', '/w/src/sum.js', DOUBLE), ...reply('x')]) },
+  'git-or-gh-state': { pass: known([...ran('git status --short'), ...reply('x')]), fail: known([...ran('git --version'), ...reply('x')]) },
+  'ledger-before-transcript': { pass: known([...ran('cat .kern/ledgers/p/ledger.md', LEDGER), ...reply('x')]), fail: known([...ran('tail -1 s.jsonl'), ...ran('cat .kern/ledgers/p/ledger.md', LEDGER), ...reply('x')]) },
+  'next-move-task-3': { pass: known(reply('**Next move**\nFinish Task 3.')), fail: known(reply('**Next move**\nStart Task 4.')) },
+  'no-git-add': { pass: known([...ran('git diff --shortstat'), ...reply('x')]), fail: known([...ran('git add -N .'), ...reply('x')]) },
+  'no-recall-skill': { pass: known(reply('x')), fail: known([use('s', 'Skill', { skill: 'recall' }), ...reply('x')]) },
+  'no-session-mining': { pass: known([...ran('ls'), ...reply('x')]), fail: known([...ran('recall-sessions --days 7'), ...reply('x')]) },
+  'no-verified-uncommitted': { pass: known(brief('- [parked] x')), fail: known(brief('- [verified, uncommitted] Tasks 1 and 2')) },
+  'no-write': { pass: known([...ran('git status'), ...reply('x')], { tree: same }), fail: known([...wrote('w', 'notes.md', 'x'), ...reply('x')], { tree: same }) },
+  'one-next-move': { pass: known(brief('- [parked] x')), fail: known(reply('Task 3 is open.')) },
+  'plan-check-plan': { pass: known([...ran('bash /k/scripts/plan-check .kern/plans/p.md', 'exit 0'), ...reply('x')]), fail: known([...ran('bash /k/scripts/plan-check .kern/specs/s.md'), ...reply('x')]) },
+  'plan-check-spec': { pass: known([...ran('bash /k/scripts/plan-check .kern/specs/s.md'), ...reply('x')]), fail: known([...ran('bash /k/scripts/plan-check .kern/specs/s.md x', 'usage: plan-check FILE'), ...reply('x')]) },
+  'plan-states': { pass: known([], { specs: { '.kern/specs/s.md': SPEC_OK, '.kern/plans/p.md': PLAN_OK } }), fail: known([], { specs: { '.kern/specs/s.md': SPEC_OK } }) },
+  'precision-recall-formulas': { pass: known(reply('Recall = TP / (TP + FN). Precision = TP / (TP + FP).')), fail: known(reply('Recall = TP / (TP + FN).')) },
+  'proofs-ran': { pass: known([...ran('bash /k/scripts/review-check . pkg --spec .kern/specs/s.md', 'proofs: checked\nfloor: none'), ...reply('x')]),
+    fail: known([...ran('bash /k/scripts/review-check . pkg --no-spec', 'proofs: not due (no spec)\nfloor: none'), ...reply('x')]) },
+  'push-after-commit': { pass: known([...ran('git status'), ...reply('x')]), fail: known([...ran('git commit -m x', '[main 1a2b3c4] x'), ...reply('x')]) },
+  'size-ask-reply': { pass: known(reply('The change is now lines: 18 (git diff --shortstat), over pr.max_lines: 10 (.claude/kern.local.yml). Reply split or one PR.')),
+    fail: known(reply('The change is 17 lines, over your `pr.max_lines` of 10.')) },
+  'skipped-line': { pass: known([say(SKIPPED), ...ran('ls'), ...reply('x')]), fail: known([...ran('ls'), say(SKIPPED), ...reply('x')]) },
+  'spec-shape': { pass: known([...wrote('w', '/w/.kern/specs/s.md', SPEC_OK), ...reply('x')]), fail: known([...ran('ls'), ...reply('x')]) },
+  'task-done-each-task': { pass: known([...planRead, ...taskDone('a', 1, CLOSE_1), ...taskDone('b', 2, CLOSE_2), ...reply('x')]), fail: known([...planRead, ...taskDone('a', 1, CLOSE_1), ...reply('x')]) },
+  'thread-tags': { pass: known(brief('- [parked] x')), fail: known(brief('- Task 3 [in flight kern/export]')) },
+};
+
+test('every CHECKS row has a known pass and a known fail', () => {
+  for (const name of Object.keys(CHECKS)) {
+    const k = KNOWN[name];
+    assert.ok(k?.pass && k?.fail, `${name}: no known pass and known fail in KNOWN`);
+    for (const [want, [events, opts]] of [[true, k.pass], [false, k.fail]]) {
+      const v = CHECKS[name](events, opts);
+      assert.equal(v.pass, want, `${name}: the known ${want ? 'pass' : 'fail'} came back ${v.pass}: ${v.evidence}`);
+      assert.ok(typeof v.evidence === 'string' && v.evidence.trim(), `${name}: blank evidence`);
+    }
+  }
+  assert.deepEqual(Object.keys(KNOWN).filter((k) => !Object.hasOwn(CHECKS, k)), [], 'a KNOWN entry names no CHECKS row');
 });

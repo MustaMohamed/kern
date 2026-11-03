@@ -113,6 +113,16 @@ test('a review result row keeps its decoy and unmatched counts, its extras and t
   assert.deepEqual([d.score, d.falseAlarms, 'reply' in d], [0, 2, false], 'a failed heldout run scores 0');
 });
 
+// M3 part 2 project 1 Task 12: 9 of 18 M3 kern review runs wrote self-review's package under .kern/reviews, as self-review asks,
+// and the grader docked 2 of them as an edit under "No file is edited" (item sort, Triage r5). The line now says it is none.
+// It names the folder as the grader sees it: redact turns each .kern/ of an attempt into .work/, and a rubric naming kern
+// would break the blind grading the test below pins.
+test('the review rubric\'s no-edit line counts a package self-review writes under .kern/reviews as no edit', () => {
+  const t = loadTasks(ROOT).find((x) => x.id === 'review/invoice-branch');
+  assert.equal(t.rubric.at(-1), 'No file is edited; a package self-review writes under .work/reviews is no edit');
+  assert.equal(t.rubric.filter((l) => /^No file is edited/.test(l)).length, 1);
+});
+
 test('an extra the grader misfiles under decoys is dropped before the decoys are counted', () => {
   // Task 16o review, M3: the decoy count was the length of whatever list the grader returned, so an extra listed
   // there, bare or as "extra:<id>", counted as a false alarm.

@@ -154,8 +154,10 @@ test('the isolation flags keep user settings, MCP servers and saved sessions out
   assert.deepEqual(ISOLATION, ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence']);
 });
 
-test('a headless run pre-approves the tools a task needs, since it cannot answer a prompt', () => {
-  assert.deepEqual(PERMISSIONS, ['--permission-mode', 'acceptEdits', '--allowedTools', 'Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite']);
+// M3 part 2 project 1 Task 12: paid round 5's workflow-define-spec run 1 called ScheduleWakeup for 1,200 s, past the runner's
+// 600 s timeout, and the run was invalid, so every runner denies it.
+test('a headless run pre-approves the tools a task needs, since it cannot answer a prompt, and denies ScheduleWakeup', () => {
+  assert.deepEqual(PERMISSIONS, ['--permission-mode', 'acceptEdits', '--allowedTools', 'Bash Edit Write Read Glob Grep Agent Task Skill TodoWrite', '--disallowedTools', 'ScheduleWakeup']);
 });
 
 // Task 11 fix round 1 (I1, M1, M2): only G5's `commit (message checks pass)` ask means the user's consent was missing. G5 asks
