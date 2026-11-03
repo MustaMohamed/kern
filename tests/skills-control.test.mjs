@@ -114,7 +114,7 @@ test('run.md says what each stop means and what a stop does', () => {
     // Its re-review, M1: measured against the last round, a fix that puts back main's behaviour would stop a draft.
     // M3 part 2 project 1, the user's "Yes, first builds too": round 5's first build turned `sum('1', '2')` from '12' into 12 under the
     // ticket's rounding, so the rule moved here from the fix rounds and names the side effect.
-    "A first build or a fix round that changes behaviour the ticket does not name, against the base branch, is a design choice, a side effect the ticket's own change forces on inputs the ticket never names included: the run commits, pushes its branch, stops with the change named and opens no PR.",
+    "A first build or a fix round that changes behaviour the ticket does not name, against the base branch, is a design choice. That includes a side effect the ticket's own change forces on inputs the ticket never names. The run commits, pushes its branch, stops with the change named and opens no PR.",
     'A required check is one the ticket or prove-it names for the change.',
     // Paid round 1, go-required-check-stop: the run acted on this line, which held no word for its report.
     // Paid round 2: define's route has no "work goes on" line, so the run stopped with nothing built and no branch to push.
@@ -147,7 +147,8 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   const fix = section(RUN, '## Fix rounds');
   // Re-review I2: finish-branch and self-review, read later, send a `fix first` here, so this line holds the exception. Paid round 4's
   // follow-up: with the label gone, the exception names the stop, which sits in another section.
-  for (const s of ['A `fix first` verdict, but for a demanded defect, starts a fix round in place of ending the run, up to 3 per self-review.',
+  // M3 part 2 project 1 Task 7 fix round 1: a first build's change off the ticket comes back as a review finding, and a fix round would hide the stop.
+  for (const s of ["A `fix first` verdict, but for a demanded defect or a first build's change the stop list names, starts a fix round in place of ending the run, up to 3 per self-review.",
     'Each round fixes the findings and runs self-review again in full, including the checks the last round skipped.',
     // M3 part 2 project 1: a run kept no durable count of its rounds, so the count comes from the packages self-review already names.
     "Rounds count from self-review's packages: round N reviews `<slug>-<N+1>.diff`, so the third round's is `<slug>-4.diff`.",
@@ -270,8 +271,9 @@ test('run.md stays within its byte cap', () => {
   // 6,911 since its re-review, a fall: a round's change is measured against the base branch, and the line after the fix-round table, which define's rule repeats, goes.
   // 7,231 since M3 part 2 project 1 Task 7: a first build that changes behaviour the ticket does not name stops a go, rounds count from
   // self-review's packages, a tests-only ticket starts at implement, and an approved plan goes on to execute-plan.
-  assertMaxBytes('skills/autopilot/references/run.md', 7231);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,231 bytes (6,911 until M3 part 2 project 1 Task 7: ']);
+  // 7,282 since its fix round 1: a first build's change the stop list names starts no fix round, and the U1 sentence splits in three.
+  assertMaxBytes('skills/autopilot/references/run.md', 7282);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,282 bytes (7,231 until M3 part 2 project 1 Task 7 fix round 1: ']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {
