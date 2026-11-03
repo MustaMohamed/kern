@@ -70,6 +70,27 @@ next \ end' ]
   [ "$output" = '\u00e9 \u0080 \u00FF \u0100 \ud83d\ude00' ]
 }
 
+@test "json_ok refuses a \u escape of a byte kern's parsers hold as a mark: 0x01 and 0x1c to 0x1f" {
+  # git_words reads 0x1f as its in-record newline and 0x1d and 0x1e as record tags, G16 and G18 mark
+  # words with 0x1c and 0x1d, awk joins array subscripts with 0x1c, and G13 starts a line with 0x01.
+  # decode would hand any of them to a guard as the byte, so the hook input fails closed instead.
+  for e in 0001 001c 001d 001e 001f 001F 001C; do
+    KERN_INPUT="{\"tool_input\":{\"command\":\"ls a\\u${e}b\"}}"
+    run json_ok
+    [ "$status" -eq 1 ] || { echo "\\u$e was taken"; return 1; }
+    # An escaped backslash before the u is text.
+    KERN_INPUT="{\"tool_input\":{\"command\":\"ls a\\\\u${e}b\"}}"
+    run json_ok
+    [ "$status" -eq 0 ] || { echo "\\\\u$e was refused"; return 1; }
+  done
+  # Other control characters are no mark: a Write's content may hold an ESC or a bell.
+  for e in 0002 0007 001b 001B 0018; do
+    KERN_INPUT="{\"tool_input\":{\"content\":\"a\\u${e}b\"}}"
+    run json_ok
+    [ "$status" -eq 0 ] || { echo "\\u$e was refused"; return 1; }
+  done
+}
+
 @test "a hook input holding a \u0000 escape is not parseable, so the call asks, or is denied under autopilot" {
   # json_get refuses the escape, so a guard would read the field as absent; json_ok fails instead.
   KERN_INPUT='{"tool_input":{"content":"x\u0000"}}'

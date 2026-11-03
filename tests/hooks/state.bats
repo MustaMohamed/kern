@@ -106,7 +106,8 @@ autopilot: on"
   { printf 'autopilot: on\npad: '; head -c 65516 /dev/zero | tr '\0' x; printf '\n'; } >"$f"
   [ "$(wc -c <"$f")" -eq 65536 ]
   [ "$(state_get s1 autopilot)" = on ]
-  printf 'x\n' >>"$f"
+  printf 'x' >>"$f"
+  [ "$(wc -c <"$f")" -eq 65537 ]
   run state_get s1 autopilot
   [ "$status" -eq 2 ]
   [ -z "$output" ]

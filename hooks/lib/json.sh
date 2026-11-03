@@ -117,15 +117,19 @@ json_escape() {
 }
 
 # json_ok: exit 0 when $KERN_INPUT is one object: starts with { and ends with } after trimming, and
-# holds no \u0000 escape. json_get refuses that escape, so a guard would read its field as absent; the
-# hook fails closed instead. An escaped backslash before u0000 is text, and awk runs only when the
-# input holds those six characters.
+# holds no \u escape, in either hex case, of 0x00, 0x01 or 0x1c to 0x1f. json_get refuses \u0000, so a
+# guard would read its field as absent. The others json_get decodes into bytes kern's parsers hold as
+# marks: git_words' in-record newline (0x1f) and record tags (0x1d, 0x1e), G16's and G18's word marks
+# (0x1c, 0x1d), awk's array subscript join (0x1c), G13's line tag (0x01). A guard could misread one, so
+# the hook fails closed instead. Other control characters pass. An escaped backslash before the u is
+# text, and awk runs only when the input holds one of those escapes as written.
 json_ok() {
   local t
   t=$(printf '%s' "${KERN_INPUT-}" | tr -d ' \t\r\n')
   case "$t" in '{'*'}') ;; *) return 1 ;; esac
-  case "${KERN_INPUT-}" in *'\u0000'*) ;; *) return 0 ;; esac
-  printf '%s' "${KERN_INPUT-}" | env LC_ALL=C awk '{ gsub(/\\\\/, ""); if (index($0, "\\u0000")) exit 1 }'
+  case "${KERN_INPUT-}" in *'\u000'[01]* | *'\u001'[CDEFcdef]*) ;; *) return 0 ;; esac
+  printf '%s' "${KERN_INPUT-}" |
+    env LC_ALL=C awk '{ gsub(/\\\\/, ""); if ($0 ~ /\\u00(0[01]|1[CDEFcdef])/) exit 1 }'
 }
 
 # ti_get KEY: json_get applied to the hook's tool_input object ($TOOL_INPUT, set by pre-tool-use).
