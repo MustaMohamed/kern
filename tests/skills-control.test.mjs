@@ -56,7 +56,8 @@ test('autopilot documents the go: its step, its reach and what a refused go does
   assert.match(go, /The run ends at the draft PR or at a stop under that file's rules, so ask for no stop predicate\./);
   // Paid round 1, 2026-11-01: 4 of 6 go runs that built code took the ticket for the kernel's "agreed design", so they
   // skipped define and wrote no spec.
-  assert.ok(go.includes("by the kernel's Routing table. A ticket is no agreed design: a build starts at define and a bug at diagnose."), go);
+  // M3 part 2 project 1 Task 7: this line is read before run.md on every go, so it names the tests-only route too.
+  assert.ok(go.includes("by the kernel's Routing table. A ticket is no agreed design: a build starts at define, a bug at diagnose, and a ticket that only adds tests for existing code at implement."), go);
   assert.ok(body.includes('3. `on` or `go <ticket>`, and the hook reported "autopilot denied by <file>"'), 'a denied go names the file');
   const who = body.split('## Who can turn it on\n')[1];
   for (const s of ["A go counts as the user's yes for that ticket's spec and plan and nothing else.", 'A second ticket needs a second go.',
