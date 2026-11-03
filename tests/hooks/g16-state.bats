@@ -1452,3 +1452,54 @@ expect_kern() {
   ln "$R/src/hooks/useForm.ts" "$R/src/hooks/lib/h.sh"
   expect_hook "cp x $R/src/hooks/lib/s.sh" "cp x $R/src/hooks/lib/h.sh"
 }
+
+# M3 part 2 project 1 Task 2: G16 reads quotes through git_words' word splitter, sw. These rows pin the
+# votes its own quote parser gave.
+# The quoted pass leaves a word the literal rule matches, so the text rule reads each regex below as
+# text and asks, as it did before the swap (the plan's row said no vote; that would loosen it).
+@test "a quoted glob or regex naming a hook file reads as text" {
+  expect_hook "rg 'hooks/lib/.*\\.sh' src" 'grep -E "hooks/guards/g[0-9]+\.sh" -r .'
+}
+
+@test "an unquoted hook path beside a quoted one still asks" {
+  K=$(kern_root)
+  expect_hook "rg 'x' $K/hooks/lib/state.sh"
+}
+
+@test "an unclosed quote keeps the text whole" {
+  expect_hook "cat 'hooks/lib/state.sh"
+}
+
+# Task 2 fix round 1: sw keeps in one word what the old parser split at ; | & ( ) < > and CR. Where a
+# quoted span is glued to a command token or a redirect, the pass gives up, so no vote the old parser
+# cast is dropped. Each row below asked or got no vote at least as strictly before the swap.
+# Shape 1: a quoted hook glob joined by a separator to a command token. The pass gives up; the glob
+# stays and the word rule asks (the old parser rewrote it to _ in a read, giving no vote).
+@test "a quoted hook glob joined to a command token by a separator gives up and asks" {
+  expect_hook "rg 'h*/pre-tool-use';wc" "rg 'h*/pre-tool-use'|head" "rg 'h*/pre-tool-use'&wc"
+}
+
+# Shape 2: a trailing backslash. The end mark is not a clean final word, so the pass gives up.
+@test "a trailing backslash makes the quoted pass give up, so a hook glob still asks" {
+  expect_hook "rg 'h*/pre-tool-use' x \\"
+}
+
+# Shape 3: the bytes U+001E (the pass's end mark) and U+001F (a blank to sw). The pass gives up on
+# either, since its reading of them need not be the shell's.
+@test "the pass gives up on its own control bytes, so a hook glob still asks" {
+  local us=$'\037' rs=$'\036'
+  expect_hook "${us} rg 'h*/pre-tool-use' x" "${rs} rg 'h*/pre-tool-use' x"
+}
+
+# Shape 4: a quoted span ending in an escaped < or >. The redirect flag reads only unquoted, unescaped
+# operators, so it does not hold the next quoted glob as a target; the glob is rewritten, no vote, as
+# before the swap.
+@test "an escaped redirect operator does not hold the next quoted hook glob as a target" {
+  expect_cmd none "cat 'x'\\> 'h*/pre-tool-use'"
+}
+
+# The end-separator trim: a quoted glob glued to only trailing separators in a plain read is still
+# rewritten, so no vote, as before the swap.
+@test "a quoted glob glued to trailing separators in a plain read gets no vote" {
+  expect_cmd none "(grep '*/x/*')" "grep '*/x/*';"
+}
