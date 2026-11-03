@@ -117,7 +117,8 @@ test('run.md says what each stop means and what a stop does', () => {
     // Paid round 3, the user's rule: go-deploy-stop's lane said `needs fixes` on the ticket's own formula, and the run opened the PR.
     // Re-review I1: under a go the run writes the plan, so the label alone also fits a formula the run chose. I2: a bounded run commits at finish-branch step 8, after this stop.
     // Paid round 4: the spec lane declined the formula after the run's own Not doing line, and the built-in lane named it, so any review's finding counts.
-    'On a finding of any review that the ticket\'s own words demand, not only the run\'s spec or plan, the run commits, pushes its branch, stops with the finding and opens no PR. No fix round runs, and no `ticket` ruling parks it.']) assert.ok(stops.includes(s), s);
+    // Its re-review, M2: "a finding of any review that" let the clause attach to the review.
+    'On any review\'s finding that the ticket\'s own words demand, not only the run\'s spec or plan, the run commits, pushes its branch, stops with the finding and opens no PR. No fix round runs, and no `ticket` ruling parks it.']) assert.ok(stops.includes(s), s);
   assert.ok(!RUN.includes('plan-mandated'), 'only the spec lane writes that label');
   // Task 6 review: "a red required check" read against the fix-round rule, and "a floor action" against the stop rows
   // for merge, deploy and delete, where a run waits. kernel/kernel.md has no word floor.
@@ -143,7 +144,8 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   for (const s of ['A `fix first` verdict, but for a demanded defect, starts a fix round in place of ending the run, up to 3 per self-review.',
     'Each round fixes the findings and runs self-review again in full, including the checks the last round skipped.',
     // Paid round 4, the user's rule: go-spend-stop's fix rounds changed what `sum` does with inputs the ticket never named, and the run opened the PR.
-    'A round that changes behaviour the ticket does not name is a design choice: the run commits, pushes its branch, stops with the change named and opens no PR.',
+    // Its re-review, M1: measured against the last round, a fix that puts back main's behaviour would stop a draft.
+    'A round that changes behaviour the ticket does not name, against the base branch, is a design choice: the run commits, pushes its branch, stops with the change named and opens no PR.',
     // Task 7 fix round 2: "After the third" read as a push and stop even when the third round comes back `ready`.
     'When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR.', 'No verdict also stops.',
     'One go covers one draft PR.']) assert.ok(fix.includes(s), s);
@@ -156,9 +158,10 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
 });
 
 test('run.md gives define\'s first slice the default of a plan over scope_threshold', () => {
-  // The table's row names only a plan, so a strict reading would stop a run at define's split.
-  const rounds = section(RUN, '## Fix rounds');
-  assert.ok(rounds.includes('each needs its own go |\n\ndefine\'s first slice takes the same default.\n'), 'the sentence follows the table');
+  // The table's row names only a plan, so a strict reading would stop a run at define's split. Paid round 4's re-review, M5: define's own
+  // rule gives its first slice, the later slices and the report, so the line after the table repeated it.
+  assert.ok(section(RUN, '## Define and plan under a go').includes("A size over `scope_threshold` specs its first slice: `## Size` gives the slice's files and lines, then the whole ticket's against the limit; numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go."));
+  assert.ok(!section(RUN, '## Fix rounds').includes("define's first slice takes the same default."), 'stated once');
 });
 
 test('run.md opens its define and plan rules with a go\'s route: a ticket is no agreed design', () => {
@@ -179,7 +182,7 @@ test('the CHANGELOG caps line and the plan\'s expected line hold the current val
   // Re-review M1 and M3.
   const root = join(import.meta.dirname, '..');
   const caps = readFileSync(join(root, 'CHANGELOG.md'), 'utf8').split('\n').find((l) => l.startsWith('  - Caps, each raised where a task names why:'));
-  for (const s of ['define `SKILL.md` 7,000 to 7,167;', 'plan `SKILL.md` 6,700 to 7,133 and', 'autopilot `references/run.md` new at 6,934.']) assert.ok(caps.includes(s), s);
+  for (const s of ['define `SKILL.md` 7,000 to 7,167;', 'plan `SKILL.md` 6,700 to 7,133 and', 'autopilot `references/run.md` new at 6,911.']) assert.ok(caps.includes(s), s);
   assert.ok(readFileSync(join(root, 'docs', 'plans', '2026-10-31-kern-m3-part1-plan.md'), 'utf8').includes('Expected: the Global Constraints scores hold, and the ten new exec cases pass.'));
 });
 
@@ -252,8 +255,9 @@ test('run.md stays within its byte cap', () => {
   // 6,782 since paid round 3's fix: a defect the ticket itself demands stops a go, the report gives the review's verdict, and an edit after the review takes a new tree.
   // 6,926 since paid round 4's fix: a fix round that changes behaviour the ticket does not name stops a go, less the label any review's finding now replaces.
   // 6,934 since that fix's follow-up: the fix-round exception names the demanded defect.
-  assertMaxBytes('skills/autopilot/references/run.md', 6934);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,934 bytes (6,926 until M3 part 1 paid round 4\'s fix follow-up']);
+  // 6,911 since its re-review, a fall: a round's change is measured against the base branch, and the line after the fix-round table, which define's rule repeats, goes.
+  assertMaxBytes('skills/autopilot/references/run.md', 6911);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,911 bytes (6,934 until M3 part 1 paid round 4\'s fix re-review']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {

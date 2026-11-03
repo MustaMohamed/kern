@@ -27,7 +27,7 @@ A required check is one the ticket or prove-it names for the change. When one ca
 
 A ticket the run cannot read is a stop: the run reports each way it tried.
 
-On a finding of any review that the ticket's own words demand, not only the run's spec or plan, the run commits, pushes its branch, stops with the finding and opens no PR. No fix round runs, and no `ticket` ruling parks it.
+On any review's finding that the ticket's own words demand, not only the run's spec or plan, the run commits, pushes its branch, stops with the finding and opens no PR. No fix round runs, and no `ticket` ruling parks it.
 
 No guard covers spending money, so this rule alone holds it. A read against production follows the project's `protected_targets`.
 
@@ -43,7 +43,7 @@ A route is distinct only if it is a different action. The same target and effect
 
 ## Fix rounds
 
-A `fix first` verdict, but for a demanded defect, starts a fix round in place of ending the run, up to 3 per self-review. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. A round that changes behaviour the ticket does not name is a design choice: the run commits, pushes its branch, stops with the change named and opens no PR. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
+A `fix first` verdict, but for a demanded defect, starts a fix round in place of ending the run, up to 3 per self-review. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. A round that changes behaviour the ticket does not name, against the base branch, is a design choice: the run commits, pushes its branch, stops with the change named and opens no PR. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
 
 One go covers one draft PR.
 
@@ -52,8 +52,6 @@ One go covers one draft PR.
 | `split` from a finding on a line the last round changed | The fixes are not converging: stop with the report |
 | `split` or the size gate on size alone | finish-branch's default: go on, with Scope giving the size |
 | A plan over `scope_threshold` or `pr.max_lines` | plan's default: take the split and run the first slice. The report lists the rest, and each needs its own go |
-
-define's first slice takes the same default.
 
 ## Define and plan under a go
 

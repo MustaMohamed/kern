@@ -32,8 +32,9 @@ test('diagnose sections, steps and red flags', () => {
   // 6,795 since paid round 2's fix: step 7 keeps an exported signature, and step 8 keeps the state the run found.
   // 6,839 since that fix's re-review: step 8 lets a fix correct what wrote the state.
   // 6,940 since paid round 4's fix: step 7's allowed throw keeps the behaviour the report does not name, a fallback the code had among it.
-  assertMaxBytes(SKILL, 6940);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 6,940 bytes,']);
+  // 7,020 since its re-review: a fallback that is the cause may change, and derived data the code cannot use takes the fallback for missing data.
+  assertMaxBytes(SKILL, 7020);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 7,020 bytes,']);
 });
 
 test('diagnose references', () => {
@@ -71,13 +72,16 @@ test('a fix keeps the state it was found on and the exported signature (h2h diag
   // Held-out failed on two kern runs and on none of control's: stale-cache-file's run rewrote the cache to get green, and
   // three-calls' run changed `lineTotal`'s signature, so the held-out test's call failed.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[7].includes('Keep an exported signature unless it is the cause.'), s[7]);
+  assert.ok(s[7].includes('a fallback the code had and an exported signature stay, unless one is the cause.'), s[7]);
   // Paid round 4: two runs made a loader throw where the code had fallen back, so the original test stayed red. The allowed throw
   // read as leave to drop the fallback (inferred), so the line that allows it now keeps the behaviour the report does not name.
-  assert.ok(s[7].includes('a loud throw at a boundary the trace crossed is allowed (`references/defense-in-depth.md`), but a fix keeps the behaviour the report does not name, so a fallback the code had stays a fallback.'), s[7]);
-  // Its follow-up: the reference's "never substitutes a default" read the same way, so it keeps the fallback and still lets a check refuse undefined input.
+  // Its re-review, I1: both runs kept the missing-file fallback and threw on a file they could not use, so that file takes the fallback too.
+  // M3: a fallback that is the cause may change, as a signature may.
+  assert.ok(s[7].includes("a loud throw at a boundary the trace crossed is allowed (`references/defense-in-depth.md`), but a fix keeps the behaviour the report does not name: a fallback the code had and an exported signature stay, unless one is the cause. Derived data the code cannot use, such as a cache, takes the code's fallback for missing data."), s[7]);
+  // The follow-up: the reference's "never substitutes a default" read the same way. Re-review I1: "no defined behaviour" fit a value that gave NaN,
+  // so a check refuses only input the code already threw on.
   const loud = section(readDoc('skills/diagnose/references/defense-in-depth.md').body, '## Loud, never silent');
-  assert.ok(loud.includes('A fallback the code had stays a fallback; a check may refuse bad input where the code had no defined behaviour.'), loud);
+  assert.ok(loud.includes('A fallback the code had stays a fallback; a check may refuse input the code already threw on.'), loud);
   // Re-review I1: with a writer as the cause the fix corrects it and repairs the data, so that fix needs a way past this line.
   assert.ok(s[8].includes('The original scenario runs on the state you found, unless the fix corrects what wrote that state: a fix that only rewrites it has not fixed the code.'), s[8]);
 });

@@ -17,7 +17,7 @@ Use the layers the trace crossed; a layer that no bad value passed through needs
 
 ## Loud, never silent
 
-Every check throws or fails with the value and where it came from. It never substitutes a default, skips the operation or logs and continues (kern's D6). A fallback that keeps an adjacent case working is a compatibility net: do not add one; redesign. A fallback the code had stays a fallback; a check may refuse bad input where the code had no defined behaviour.
+Every check throws or fails with the value and where it came from. It never substitutes a default, skips the operation or logs and continues (kern's D6). A fallback that keeps an adjacent case working is a compatibility net: do not add one; redesign. A fallback the code had stays a fallback; a check may refuse input the code already threw on.
 
 ## Prove each layer
 
