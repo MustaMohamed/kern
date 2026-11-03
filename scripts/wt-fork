@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Detached worktree at SRC_WT's HEAD with SRC_WT's uncommitted state (tracked and untracked) applied.
 # Usage: wt-fork SRC_WT SLUG [--share-setup]    Prints the fork path. Exit 3 when the state cannot be
-# applied, 2 when worktree.setup fails; either way the fork is removed. The state moves as a diff-tree
-# patch, which ignores diff.noprefix, textconv and external diff drivers in the user's config.
+# applied, 2 when a .worktreeinclude copy or worktree.setup fails; in each case the fork is removed. The
+# state moves as a diff-tree patch, which ignores diff.noprefix, textconv and external diff drivers in the
+# user's config.
 # --share-setup links SRC_WT's setup in place of running worktree.setup (wt_share). With nothing to link, or
 # with a symlink in one of those directories that leads into SRC_WT outside it, nothing is linked and
 # worktree.setup runs. A .worktreeinclude entry below a link is skipped.
@@ -46,7 +47,11 @@ if [ -s "$patch" ] && ! git -C "$path" apply --whitespace=nowarn --binary "$patc
 fi
 shared=0
 if [ "$share" = 1 ] && wt_share "$src" "$path"; then shared=1; fi
-wt_include "$path"
+if ! wt_include "$path"; then
+  git -C "$MAIN" worktree remove --force "$path" > /dev/null 2>&1 || true
+  echo "wt-fork: a .worktreeinclude entry could not be copied into the fork; fork removed" >&2
+  exit 2
+fi
 if [ "$shared" = 0 ] && ! wt_setup "$path"; then
   log="$(git -C "$path" rev-parse --path-format=absolute --git-dir)/kern-setup.log"
   tail -n 20 "$log" >&2 2> /dev/null || true

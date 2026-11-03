@@ -41,10 +41,11 @@ wt_exclude_dir() {
 # wt_include DST: copy untracked files that MAIN/.worktreeinclude names (gitignore syntax) into DST.
 # An entry that holds worktree.dir, such as .claude/, is refused: copying it would copy every worktree.
 # An entry below a directory wt_share linked is skipped: the copy would land in SRC through the link.
+# Exit 2 when a copy fails, or when worktree.dir cannot be named; a caller may run it with errexit off.
 wt_include() {
   local dst=$1 f wtrel
   [ -f "$MAIN/.worktreeinclude" ] || return 0
-  wtrel=$(wt_dir 2>/dev/null) || [ $? = 4 ]
+  wtrel=$(wt_dir 2>/dev/null) || [ $? = 4 ] || return 2
   wtrel=${wtrel#"$MAIN"/}
   git -C "$MAIN" ls-files --others --ignored --directory --exclude-from="$MAIN/.worktreeinclude" |
     while IFS= read -r f; do
