@@ -257,7 +257,7 @@ The list command printed 117 candidate rows. These five are not M2 work and keep
 
 ## M3 part 1
 
-Built and tested, not yet released. Rule 4's re-audit of M3's rows waits for M3's close, and the counts above move then. The go, the run rules, setup's conflict step and the new eval cases come from no audited source, so they hold no row here; each one's state is in `docs/research/2026-10-31-m3-item-sort.md`.
+Built and tested, not yet released. Its paid check passed on round 5 under the user's exit rule of 2026-11-03, as the CHANGELOG's Unreleased section gives. Neither row below met a paid case: `go-block-reroute` stopped before any delete in all five rounds, so G21 never fired, and no case breaks PATH. Rule 4's re-audit of M3's rows waits for M3's close, and the counts above move then. The go, the run rules, setup's conflict step and the new eval cases come from no audited source, so they hold no row here; each one's state is in `docs/research/2026-10-31-m3-item-sort.md`.
 
 | Mechanism | Source | Verdict | Pinned by |
 |---|---|---|---|

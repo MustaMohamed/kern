@@ -18,6 +18,7 @@
 - Only a repeat of the same proof on the same tree may go. No check is removed.
 - A reworded command stays blocked. G16's block on forging hook state and prompts stays.
 - Current scores must not fall: exec 9/9, behaviour 22/23, adherence Sonnet 19/20 and Haiku 20/20, h2h plan, review and diagnose PASS.
+  - Changed at part 1's close, 2026-11-03, on the user's "Fall test, pooled (Recommended)": behaviour and adherence fall only when the last two rounds' pooled runs sit below 0.4.0's at one-sided Fisher p < 0.05, and a case whose runs since its last change sit below its M2 runs at p < 0.05 goes to the user. Each h2h row pools the last two rounds, unless a change between them reached it, when it takes the current round alone. Exec 9/9 stays strict per round, and h2h plan keeps its grace.
 - The repo is public: no client names or data, and no working guard-bypass commands.
 - Frozen files stay frozen: `evals/heldout.json`, `evals/heldout-pilot.json`, `evals/pilot/tasks.json`, `docs/plans/2026-10-25-kern-pilot-fixes.md`, `docs/plans/2026-10-26-kern-pilot-fixes-2.md`.
 - Run bats only with `bash tests/run-bats`. Node PATH: `PATH="$HOME/.volta/tools/image/node/22.23.3/bin:$HOME/.local/bin:$PATH"`.
@@ -578,6 +579,7 @@ Run: `CLAUDE_CONFIG_DIR=$HOME/.claude-kern-eval bash scripts/eval-all --jobs 6 -
 Expected: the Global Constraints scores hold, and the ten new exec cases pass.
 
 - [ ] **Step 4: Exit rule.** A failed gate gets one fix and one rerun as a round, at most 10 rounds, more only on the user's yes. Every gate passing ends the task. Update the scorecard page after each paid round.
+  - Changed at part 1's close, 2026-11-03: after round 5 the user chose "Fall test, pooled (Recommended)", the gates in the Global Constraints note, and "Close part 1 on round 5": rounds 4 and 5 are judged under that rule, the open fixes go to part 2, and no more paid runs. Part 1 closed at round 5 of 10, $288.09 with the partial round; the CHANGELOG's paid check line holds the verdict.
 - [ ] **Step 5: Commit the records**
 
 ```bash
