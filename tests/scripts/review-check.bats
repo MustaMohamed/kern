@@ -76,6 +76,18 @@ spec() { printf '# Sum\n\n## Acceptance criteria\n\n1. sum adds two numbers.\n' 
   [ "${lines[${#lines[@]} - 1]}" = 'floor: none' ]
 }
 
+@test "a spec with no numbered acceptance line is n/a, not checked" {
+  settings 'verify.fast: true'
+  package
+  printf '# Sum\n\n## Acceptance criteria\n\n- sum adds two numbers.\n' > "$TMP/issue.md"
+  check --spec "$TMP/issue.md"
+  [ "$status" -eq 0 ]
+  has 'check: claim-check: ok'
+  has 'proofs: n/a (no numbered acceptance lines)'
+  [[ "$output" != *'proofs: checked'* ]] || false
+  [ "${lines[${#lines[@]} - 1]}" = 'floor: none' ]
+}
+
 @test "a red verify.fast fails" {
   settings 'verify.fast: false'
   package

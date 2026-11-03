@@ -6,9 +6,11 @@
 # verify.fast is kern-get's value, else each of typecheck and lint that kern-get or kern-detect resolves;
 # test.focused is kern-get's value, else kern-detect's. Each check's output goes to
 # <kern-dir tmp>/review-check-<PACKAGE name>/<check>.log, written fresh on each run.
-# Output: `check: <name>: ok|fail|hits|unresolved|skip (named)` per check run, then `proofs: checked` or
-# `proofs: not due (no spec)`, then the last 20 lines of each failed check under `--- <name>`, last
-# `floor: fix first` or `floor: none`. A floor-scan or claim-check exit 1 is hits, any other non-zero exit
+# Output: `check: <name>: ok|fail|hits|unresolved|skip (named)` per check run, then `proofs: checked`,
+# `proofs: n/a (no numbered acceptance lines)` when claim-check prints proof-check's n/a line (the floor
+# does not change for it), or `proofs: not due (no spec)`; then the last 20 lines of each failed check
+# under `--- <name>`; last `floor: fix first` or `floor: none`. `proofs: checked` means proof-check judged
+# the table. A floor-scan or claim-check exit 1 is hits, any other non-zero exit
 # fail. An unresolved verify.fast is `skip (named)` under --autopilot, else `unresolved`; any fail, hits or
 # other unresolved floors at fix first.
 # Exit 0 on `floor: none`, 1 on `floor: fix first`, 2 on usage, an unreadable WT, PACKAGE or SPEC, or a
@@ -134,7 +136,12 @@ scan() {
 scan floor-scan "$here/floor-scan" "$package"
 if [ -n "$spec" ]; then
   scan claim-check "$here/claim-check" "$wt" "$package" --spec "$spec" --proofs "$package.proofs.md"
-  echo 'proofs: checked'
+  # claim-check's n/a line: proof-check found no numbered acceptance line, so it judged no table.
+  if grep -q '^proof-check: n/a (.* has no numbered acceptance lines)$' "$logs/claim-check.log"; then
+    echo 'proofs: n/a (no numbered acceptance lines)'
+  else
+    echo 'proofs: checked'
+  fi
 else
   scan claim-check "$here/claim-check" "$wt" "$package"
   echo 'proofs: not due (no spec)'
