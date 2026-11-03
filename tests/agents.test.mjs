@@ -29,6 +29,10 @@ test('implementer frontmatter, sections and return contract', () => {
   for (const s of ['a file the brief names does not exist', "outside the task's Files", 'the same test fails after 3 fixes', 'a decision the plan does not make']) {
     assert.ok(rule(6).includes(s), `rule 6 must hold: ${s}`);
   }
+  // The skills spec's outline names both rules, and its size sentence names this test's cap (3 KB was a planning figure).
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['a skill path that is missing or unreadable returns BLOCKED',
+    'NEEDS_CONTEXT when a file the brief names does not exist', 'BLOCKED when the same test fails after 3 fixes',
+    'Size at most 4,500 bytes, the cap `tests/agents.test.mjs` has held since M2']);
   assertMaxBytes('agents/implementer.md', 4500);
 });
 
@@ -61,6 +65,9 @@ test('task-reviewer frontmatter, sections and verdict lines', () => {
   for (const s of ['a gap you list, not a failure', 'a file the brief lists that the diff never touches is Missing', "a spec's silence on an input is not permission"]) {
     assert.ok(part1.includes(s), `Part 1 must hold: ${s}`);
   }
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['a file the brief lists that the diff never touches is Missing',
+    "a spec's silence on an input is not permission", 'a gap listed, not a failure',
+    'Size at most 5,000 bytes, the cap `tests/agents.test.mjs` has held since M2']);
   assertMaxBytes('agents/task-reviewer.md', 5000);
 });
 
