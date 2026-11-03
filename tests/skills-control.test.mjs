@@ -138,8 +138,9 @@ test('run.md holds the five unblock steps in order, and what makes a route disti
 
 test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   const fix = section(RUN, '## Fix rounds');
-  // Re-review I2: finish-branch and self-review, read later, send a `fix first` here, so this line holds the exception.
-  for (const s of ['A `fix first` verdict, but for that stop, starts a fix round in place of ending the run, up to 3 per self-review.',
+  // Re-review I2: finish-branch and self-review, read later, send a `fix first` here, so this line holds the exception. Paid round 4's
+  // follow-up: with the label gone, the exception names the stop, which sits in another section.
+  for (const s of ['A `fix first` verdict, but for a demanded defect, starts a fix round in place of ending the run, up to 3 per self-review.',
     'Each round fixes the findings and runs self-review again in full, including the checks the last round skipped.',
     // Paid round 4, the user's rule: go-spend-stop's fix rounds changed what `sum` does with inputs the ticket never named, and the run opened the PR.
     'A round that changes behaviour the ticket does not name is a design choice: the run commits, pushes its branch, stops with the change named and opens no PR.',
@@ -178,7 +179,7 @@ test('the CHANGELOG caps line and the plan\'s expected line hold the current val
   // Re-review M1 and M3.
   const root = join(import.meta.dirname, '..');
   const caps = readFileSync(join(root, 'CHANGELOG.md'), 'utf8').split('\n').find((l) => l.startsWith('  - Caps, each raised where a task names why:'));
-  for (const s of ['define `SKILL.md` 7,000 to 7,167;', 'plan `SKILL.md` 6,700 to 7,133 and', 'autopilot `references/run.md` new at 6,926.']) assert.ok(caps.includes(s), s);
+  for (const s of ['define `SKILL.md` 7,000 to 7,167;', 'plan `SKILL.md` 6,700 to 7,133 and', 'autopilot `references/run.md` new at 6,934.']) assert.ok(caps.includes(s), s);
   assert.ok(readFileSync(join(root, 'docs', 'plans', '2026-10-31-kern-m3-part1-plan.md'), 'utf8').includes('Expected: the Global Constraints scores hold, and the ten new exec cases pass.'));
 });
 
@@ -250,8 +251,9 @@ test('run.md stays within its byte cap', () => {
   // 6,322 since that fix's follow-up: the PR order names the spec lane.
   // 6,782 since paid round 3's fix: a defect the ticket itself demands stops a go, the report gives the review's verdict, and an edit after the review takes a new tree.
   // 6,926 since paid round 4's fix: a fix round that changes behaviour the ticket does not name stops a go, less the label any review's finding now replaces.
-  assertMaxBytes('skills/autopilot/references/run.md', 6926);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,926 bytes (6,782 until M3 part 1 paid round 4\'s fix']);
+  // 6,934 since that fix's follow-up: the fix-round exception names the demanded defect.
+  assertMaxBytes('skills/autopilot/references/run.md', 6934);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,934 bytes (6,926 until M3 part 1 paid round 4\'s fix follow-up']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {

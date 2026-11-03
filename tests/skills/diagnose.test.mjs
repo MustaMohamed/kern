@@ -75,6 +75,9 @@ test('a fix keeps the state it was found on and the exported signature (h2h diag
   // Paid round 4: two runs made a loader throw where the code had fallen back, so the original test stayed red. The allowed throw
   // read as leave to drop the fallback (inferred), so the line that allows it now keeps the behaviour the report does not name.
   assert.ok(s[7].includes('a loud throw at a boundary the trace crossed is allowed (`references/defense-in-depth.md`), but a fix keeps the behaviour the report does not name, so a fallback the code had stays a fallback.'), s[7]);
+  // Its follow-up: the reference's "never substitutes a default" read the same way, so it keeps the fallback and still lets a check refuse undefined input.
+  const loud = section(readDoc('skills/diagnose/references/defense-in-depth.md').body, '## Loud, never silent');
+  assert.ok(loud.includes('A fallback the code had stays a fallback; a check may refuse bad input where the code had no defined behaviour.'), loud);
   // Re-review I1: with a writer as the cause the fix corrects it and repairs the data, so that fix needs a way past this line.
   assert.ok(s[8].includes('The original scenario runs on the state you found, unless the fix corrects what wrote that state: a fix that only rewrites it has not fixed the code.'), s[8]);
 });
