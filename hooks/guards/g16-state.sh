@@ -5,17 +5,18 @@
 # .claude directory, or $CLAUDE_CONFIG_DIR/settings.json when that is set), every Write, Edit or
 # NotebookEdit whose target resolves under kern's hooks/ directory, and every command that names kern's
 # hook code (a hook entry file, a .sh file under hooks/lib/ or hooks/guards/) or a state function,
-# which could forge the user's prompt or turn a guard off. A path in a hooks directory outside KERN_ROOT
-# does not count when the command only reads, or, in a command that spells no hook code or substitution,
-# when it is a regular file or a glob that no hook name can match (_g16_foreign).
+# which could forge the user's prompt or turn a guard off. A path in a hooks directory does not count
+# when the command only reads and it resolves outside KERN_ROOT/hooks, or, in a command that spells no
+# hook code or substitution, when it resolves outside KERN_ROOT and is a regular file or a glob that no
+# hook name can match (_g16_foreign). Nor does a write (cp, mv, install, tee, sed -i, a > target, git
+# add or git mv, each simple command judged alone) of a project's own hook file that resolves outside
+# kern's hooks folder, a kern worktree's included, so a go can commit it (_g16_own). Running or sourcing
+# such a file, any write or run of a hook entry file, and a path G16 cannot resolve keep the ask.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; a word _g16_foreign clears, which it judges by a name and by the disk as
 # the guard runs; and any other spelling of a hook path than the ones _g16_hooks reads (any case, line
 # continuations, the APFS folds of s and k, quotes, backslashes, globs and braces).
-# Open for part 2: a project's own shell file under hooks/lib or hooks/guards named by a command that does
-# not only read keeps the ask, as the text stays whole. A go turns that ask into a denial, so a commit
-# that stages such a file stops the go.
 
 _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
 _G16_STATE_CMD="commands may not write kern session state"
@@ -957,7 +958,8 @@ _g16_glob() {
 # - a word with a brace group that holds a / and a , or .. (hoo{ks/prompt-sub,x}mit), which can join
 #   the parts on both sides of a slash. The command is never expanded to decide.
 # A word _g16_foreign clears goes out of the text before these rules, and so does a quoted glob or regex
-# in a read-only command (_G16_HOOK_AWK's quoted).
+# in a read-only command (_G16_HOOK_AWK's quoted). When a reading matches, _g16_own lifts the vote if the
+# text names hook code only through words a write takes that resolve outside kern's hooks folder.
 # Reading a hook file stays possible with the Read and Grep tools. Not seen (accepted limits): a hooks
 # directory reached without naming it (find $K -name prompt-submit, a glob for the directory in one
 # word and the hook in another), a name built at run time ($'\x..' escapes, xargs with no {}),
@@ -1006,6 +1008,8 @@ _g16_hooks() {
       3) unread=1 ;;
     esac
   fi
+  # The text names hook code only through words a write takes outside kern's hooks folder (_g16_own).
+  if [ "$hit" = 1 ] && _g16_own "${readings[0]}"; then hit=0; fi
   # A reading whose quotes tr could not take out was not read at all (Opus audit A13).
   [ "$unread" = 0 ] || vote deny G16 "$_G16_UNREAD_HOOKS"
   if [ "$hit" = 1 ]; then
@@ -1016,30 +1020,221 @@ _g16_hooks() {
   return 0
 }
 
+# _G16_OWN_AWK: reads git_words' records of a command, one per line, with git_words' sw (run with
+# $_GW_AWK and -v sq="'"), for _g16_own. For each record it prints `R`, its class and whether it may move
+# the shell's directory, then `C` and each directory of a git -C, then `W`, a role, the path and the
+# word, for each word. The class is w when the record's first word, unquoted, is cp, mv or tee, install
+# with no long option (--strip-program runs a program), or sed with -i or --in-place among its options;
+# g when it is git with no global option but -C, then add or mv; c when the first record is a cd and one
+# word; else o. A record moves when a word ends in cd, chdir, pushd or popd, or starts with -C, --chdir,
+# --cwd or --directory (a git -C of class g is read by _g16_own instead), or when its command name holds a
+# $ or a backtick or is eval, source or `.`. A word that names a hooks directory, as _G16_HOOK_AWK's dir
+# reads it in lower case, is h in a record of class w or g (git's -C and their directories aside), and t
+# as the target of an unquoted >, >>, >|, &>, &>> or >& in any record, its path then the target alone.
+# Every other word is k, input redirects and their targets included.
+# shellcheck disable=SC2016 # awk text
+_G16_OWN_AWK='
+BEGIN { s = "\034"; dir = "(^|[^a-z0-9._-])hooks([^a-z0-9._-]|$)"; op = "^[0-9]*(>>?|>[|]|&>>?|>&)" }
+{
+  sw($0)
+  cls = "o"; mv = 0; nc = 0; gi = 0
+  if (sw_n && !sw_q[1]) {
+    h = sw_w[1]
+    if (h ~ /^(cp|mv|tee)$/) cls = "w"
+    else if (h == "install") { cls = "w"; for (k = 2; k <= sw_n; k++) if (sw_w[k] ~ /^--./) cls = "o" }
+    else if (h == "sed") {
+      for (k = 2; k <= sw_n && sw_w[k] != "--"; k++)
+        if (sw_w[k] ~ /^--in-place/ || (sw_w[k] ~ /^-[^-]/ && index(sw_w[k], "i"))) { cls = "w"; break }
+    } else if (h == "git") {
+      for (k = 2; k < sw_n && sw_w[k] == "-C" && !sw_q[k]; k += 2) C[++nc] = sw_w[k + 1]
+      if (k <= sw_n && !sw_q[k] && sw_w[k] ~ /^(add|mv)$/) { cls = "g"; gi = k } else nc = 0
+    } else if (h == "cd" && NR == 1 && sw_n == 2) cls = "c"
+  }
+  for (k = 1; k <= sw_n; k++) {
+    if (gi && k > 1 && k < gi) continue
+    if (tolower(sw_w[k]) ~ /(^|[^a-z0-9_.-])(cd|chdir|pushd|popd)$/ || sw_w[k] ~ /^(-C|--chdir|--cwd|--directory)/) mv = 1
+  }
+  cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k])
+  if (cw_n) { b = cw_w[1]; if (b ~ /[$`]/) mv = 1; sub(/^.*\//, "", b); if (b ~ /^(eval|source|[.])$/) mv = 1 }
+  split("", R); split("", T)
+  for (k = 1; k <= sw_n; k++) { R[k] = "k"; T[k] = sw_w[k] }
+  for (k = 1; k <= sw_n; k++) {
+    w = sw_w[k]
+    if (gi && k > 1 && k < gi) continue
+    if (!sw_q[k] && w ~ (op "$")) { if (k < sw_n && tolower(sw_w[k + 1]) ~ dir) R[k + 1] = "t"; k++; continue }
+    if (!sw_q[k] && w ~ (op ".")) { t = w; sub(op, "", t); if (tolower(t) ~ dir) { R[k] = "t"; T[k] = t }; continue }
+    if (!sw_q[k] && w ~ /^[0-9]*</) { if (w ~ /^[0-9]*<+&?$/) k++; continue }
+    if ((cls == "w" || cls == "g") && k > 1 && tolower(w) ~ dir) R[k] = "h"
+  }
+  print "R" s cls s mv
+  for (k = 1; k <= nc; k++) print "C" s C[k]
+  for (k = 1; k <= sw_n; k++) print "W" s R[k] s T[k] s sw_w[k]
+}
+END { print "E" }'
+
+# _g16_own CMD: exit 0 when CMD, the folded text _g16_hooks read, names kern's hook code only through
+# words that a write takes and that resolve outside kern's hooks folder: a go may then stage, copy, move or
+# edit a project's own hooks/lib or hooks/guards file, a kern worktree's included. Each simple command
+# git_words prints is judged alone (_G16_OWN_AWK). In a write (class w or g), each word that names a
+# hooks directory, and in any command the target of an output redirect, goes to _g16_foreign with RO 2.
+# When all of them clear, the records are joined again, each one that held such a word from its other
+# words and the rest as printed, and _g16_hooks_read must find no hook code in that text, by every rule:
+# so a run or a source of the same file (cp a.sh p/hooks/lib/a.sh && bash p/hooks/lib/a.sh), an entry
+# file, a hook name in any other command and a path G16 cannot resolve keep the ask. When one word does
+# not clear, nothing does: a project's file copied into kern's hooks folder keeps its vote. A relative
+# word is read from the session's directory, or from the directory of an opening `cd DIR &&` (DIR
+# absolute, in name characters, with no . or .. part, where bash's logical cd and the disk agree, and no
+# & that runs the cd in the background), or for a git word from git's -C directories; it does not clear
+# when another record may move the shell (_G16_OWN_AWK), unless git's -C names an absolute directory.
+# Exit 1, so the vote stands, for text that holds <<, $(, ${, a backtick, <(, >( or the byte \034, when
+# git_words or awk fails or prints $KERN_UNREAD, when a record that holds such a word holds a #, and when
+# no word clears.
+_g16_own() {
+  local cmd=$1 out line rest tag i=0 j=0 n k base dep moved=0 dir t new="" any=0 nl=$'\n' fs=$'\034'
+  local -a rv rc rm rC wr wo wt ww drop chg
+  case "$cmd" in *'<<'* | *'$('* | *'${'* | *'`'* | *'<('* | *'>('* | *"$fs"*) return 1 ;; esac
+  out=$(set -o pipefail; git_words "$cmd") || return 1
+  # shellcheck disable=SC2016 # the literal record git_words prints
+  case "$out" in *'$KERN_UNREAD'*) return 1 ;; esac
+  while IFS= read -r line; do
+    n=$((n + 1))
+    rv[n]=$line
+  done <<EOT
+$out
+EOT
+  out=$(printf '%s\n' "$out" | env LC_ALL=C awk -v sq="'" "$_GW_AWK$_G16_OWN_AWK") || return 1
+  case "$out" in *"$nl"E) ;; *) return 1 ;; esac
+  while IFS= read -r line; do
+    tag=${line%%"$fs"*}
+    rest=${line#*"$fs"}
+    case "$tag" in
+      R)
+        i=$((i + 1))
+        rc[i]=${rest%%"$fs"*}
+        rm[i]=${rest#*"$fs"}
+        rC[i]=""
+        ;;
+      C) rC[i]="${rC[i]}$rest$fs" ;;
+      W)
+        j=$((j + 1))
+        wr[j]=$i
+        wo[j]=${rest%%"$fs"*}
+        rest=${rest#*"$fs"}
+        wt[j]=${rest%%"$fs"*}
+        ww[j]=${rest#*"$fs"}
+        ;;
+    esac
+  done <<EOT
+$out
+EOT
+  [ "$i" = "$n" ] || return 1
+  base=${CWD:-$PWD}
+  # An opening cd DIR &&: the first record, at the start of the text, then && after blanks.
+  if [ "${rc[1]-}" = c ]; then
+    dir=${ww[2]}
+    t=${cmd#"${cmd%%[![:space:]]*}"}
+    case "$t" in "${rv[1]}"*) t=${t#"${rv[1]}"} ;; *) t="" ;; esac
+    t=${t#"${t%%[![:blank:]]*}"}
+    case "$t" in '&&'*) ;; *) dir="" ;; esac
+    t=${cmd//&&/}
+    t=${t//>&/}
+    t=${t//<&/}
+    t=${t//&>/}
+    t=${t//|&/}
+    case "$t" in *'&'*) dir="" ;; esac
+    case "$dir" in "" | *[!A-Za-z0-9._/@+-]* | */./* | */../* | */. | */..) ;; /*) base=$dir rm[1]=0 ;; esac
+  fi
+  k=1
+  while [ "$k" -le "$n" ]; do
+    [ "${rm[k]}" = 0 ] || moved=1
+    k=$((k + 1))
+  done
+  k=1
+  while [ "$k" -le "$j" ]; do
+    case "${wo[k]}" in
+      h | t)
+        i=${wr[k]}
+        case "${rv[i]}" in *'#'*) return 1 ;; esac
+        dir=$base
+        dep=$moved
+        if [ "${wo[k]}" = h ] && [ "${rc[i]}" = g ]; then
+          rest=${rC[i]}
+          while [ -n "$rest" ]; do
+            t=${rest%%"$fs"*}
+            rest=${rest#*"$fs"}
+            case "$t" in "" | *[!A-Za-z0-9._/@+-]*) return 1 ;; /*) dir=$t dep=0 ;; *) dir="$dir/$t" ;; esac
+          done
+        fi
+        _g16_foreign_at "$dir" "${wt[k]}" 2 "$dep" "$_G16_HOOK_NAMES" || return 1
+        drop[k]=1
+        chg[i]=1
+        any=1
+        ;;
+    esac
+    k=$((k + 1))
+  done
+  [ "$any" = 1 ] || return 1
+  # The text again: a changed record from the words it keeps, any other as git_words printed it.
+  i=1
+  while [ "$i" -le "$n" ]; do
+    if [ "${chg[i]-}" = 1 ]; then
+      line=""
+      k=1
+      while [ "$k" -le "$j" ]; do
+        if [ "${wr[k]}" = "$i" ] && [ "${drop[k]-}" != 1 ]; then line="$line${line:+ }${ww[k]}"; fi
+        k=$((k + 1))
+      done
+    else
+      line=${rv[i]//$_GW_NL/$nl}
+    fi
+    new="$new$line$nl"
+    i=$((i + 1))
+  done
+  _g16_hooks_read "$new" full
+  [ "$?" = 1 ]
+}
+
+# _g16_foreign_at DIR WORD RO MOVED NAMES: _g16_foreign with a relative WORD read from DIR.
+_g16_foreign_at() {
+  local CWD=$1
+  shift
+  _g16_foreign "$@"
+}
+
 # _g16_foreign WORD RO MOVED NAMES [cwd]: exit 0 when WORD, a word that names a hooks directory, goes out
 # of the text. It reads the disk as the guard runs, which a command can change before it uses WORD, and it
 # sees only the directory changes the text spells. So a cleared word is no proof that a command misses
-# kern's hook code. MOVED is 1 when the text spells a directory change, and NAMES is the file names of
-# kern's hook code. Every word needs all of these:
+# kern's hook code. RO is how the command uses WORD: 1 when the whole command only reads, 2 when a simple
+# command of the write class takes it (_g16_own), and 0 for any other use, which may run or source it.
+# MOVED is 1 when the text spells a directory change, and NAMES is the file names of kern's hook code.
+# Every word needs all of these:
 # - the directory is plain: WORD, or WORD up to its last / when only the last part is a glob or a
 #   variable, in name characters. It needs a part named hooks, and must exist: a missing one proves
 #   nothing, and text does not tell where it would be;
-# - a relative WORD is read from CWD, so MOVED must be 0;
-# - cd -P puts the directory outside KERN_ROOT, and KERN_ROOT outside it, in any case.
-# Then RO 1 clears it. Otherwise the directory must hold no file named in NAMES, since a copy of kern
-# runs as kern on the same plugin data, which also keeps a hook's own name. And the last part, in any
-# case, must be a regular file that is no symlink and not named in NAMES, or a glob with no $, backtick
-# or { that _g16_glob says cannot match NAMES, so that a hook name, a variable or a directory stays in
-# any command that is not a read. That is a test of a name and of the disk as the guard runs, and no
-# more: the command may change the file before it uses it, and a directory change the text does not
-# spell can point a relative word at another file. The awk's paths pass keeps the whole text of a
-# command that matches hit or holds a substitution, so a word cleared here never spells a hook, or a .sh
-# file under hooks/lib or hooks/guards. A cleared word still takes the hooks context with it, so a bare
-# hook name, a last part or a plain variable in another word reads as outside any hooks directory, and a
-# pipe can carry a derived directory with no substitution in the text. With cwd, WORD is the session's
-# directory, which stays a directory, so the last part is not read.
+# - a relative WORD is read from CWD, so MOVED must be 0 (_g16_own sets CWD to the directory of a git -C or
+#   an opening cd);
+# - cd -P puts the directory outside the bound, and the bound outside it, in any case. The bound is
+#   KERN_ROOT for RO 0, and KERN_ROOT/hooks, as written and through cd -P, for RO 1 and 2, so a go's
+#   worktree under kern's checkout is a project with hooks of its own.
+# Then RO 1 clears it. RO 2 clears it when the last part, in any case, holds no $, backtick or {, is not
+# a hook entry file's name (_G16_HOOK_NAMES) nor a glob that _g16_glob says could match one, and is absent
+# or a regular file with one link that is no symlink: a write onto a hard link or a symlink writes the
+# file it shares. kern runs its entry files, so their names keep the ask; a lib or guard file outside the
+# bound is a project's own file. Otherwise (RO 0) the directory must hold no file named in NAMES, since a
+# copy of kern runs as kern on the same plugin data, which also keeps a hook's own name. And the last
+# part, in any case, must be a regular file that is no symlink and not named in NAMES, or a glob with no
+# $, backtick or { that _g16_glob says cannot match NAMES, so that a hook name, a variable or a directory
+# stays in any command that is not a read. That is a test of a name and of the disk as the guard runs,
+# and no more: the command may change the file before it uses it, and a directory change the text does
+# not spell can point a relative word at another file. The awk's paths pass keeps the whole text of a
+# command that matches hit or holds a substitution, so a word cleared there never spells a hook, or a .sh
+# file under hooks/lib or hooks/guards; only _g16_own clears such a word, for RO 2. A cleared word still
+# takes the hooks context with it, so a bare hook name, a last part or a plain variable in another word
+# reads as outside any hooks directory, and a pipe can carry a derived directory with no substitution in
+# the text. With cwd, WORD is the session's directory, which stays a directory, so the last part is not
+# read.
 _g16_foreign() {
-  local w=${1%/} l d p r k bad=0 n
+  local w=${1%/} l d p r k kl bad=0 n names=$4
   l=${w##*/}
   case "$w" in
     *[!A-Za-z0-9._/@+-]*)
@@ -1060,28 +1255,60 @@ _g16_foreign() {
   fi
   case "/$w/" in */[Hh][Oo][Oo][Kk][Ss]/*) ;; *) return 1 ;; esac
   r=$(cd -P "$d" 2>/dev/null && pwd -P) || return 1
-  k=$(cd -P "$KERN_ROOT" 2>/dev/null && pwd -P) || return 1
+  kl=${KERN_ROOT%/}
+  [ "$2" = 0 ] || kl="$kl/hooks"
+  k=$(cd -P "$kl" 2>/dev/null && pwd -P) || return 1
   shopt -s nocasematch
-  case "$r/" in "${KERN_ROOT%/}/"* | "${k%/}/"*) bad=1 ;; esac
+  case "$r/" in "$kl/"* | "${k%/}/"*) bad=1 ;; esac
   case "$k/" in "${r%/}/"*) bad=1 ;; esac
+  [ "$2" = 0 ] || case "$kl/" in "${r%/}/"*) bad=1 ;; esac
   shopt -u nocasematch
   [ "$bad" = 0 ] || return 1
-  [ "$2" = 0 ] || return 0
-  for n in $4; do
-    [ ! -e "$d/$n" ] || return 1
-  done
-  [ "${5-}" != cwd ] || return 0
+  [ "$2" != 1 ] || return 0
+  if [ "$2" = 2 ]; then
+    names=$_G16_HOOK_NAMES
+  else
+    for n in $names; do
+      [ ! -e "$d/$n" ] || return 1
+    done
+    [ "${5-}" != cwd ] || return 0
+  fi
   shopt -s nocasematch
   case "$l" in
     *[\$\`\{]*) bad=1 ;;
-    *[\*\?\[]*) if _g16_glob "$4" "$l"; then bad=1; fi ;;
+    *[\*\?\[]*)
+      if _g16_glob "$names" "$l"; then
+        bad=1
+      elif [ "$2" = 2 ]; then
+        # Each file the glob matches now, as the shell expands it; a blank would split the pattern.
+        case "$l" in *[[:space:]]*) bad=1 ;; esac
+        for n in "$d"/$l; do
+          if [ "$bad" = 0 ] && { [ -e "$n" ] || [ -L "$n" ]; }; then _g16_lone "$n" || bad=1; fi
+        done
+      fi
+      ;;
     *)
-      case " $4 " in *" $l "*) bad=1 ;; esac
-      [ -f "$p" ] && [ ! -L "$p" ] || bad=1
+      case " $names " in *" $l "*) bad=1 ;; esac
+      if [ "$2" != 2 ]; then
+        [ -f "$p" ] && [ ! -L "$p" ] || bad=1
+      elif [ -e "$p" ] || [ -L "$p" ]; then
+        _g16_lone "$p" || bad=1
+      fi
       ;;
   esac
   shopt -u nocasematch
   [ "$bad" = 0 ]
+}
+
+# _g16_lone FILE: exit 0 when FILE is a regular file with one link that is no symlink, so a write onto it
+# reaches no other file. The link count is ls -l's second field; when ls does not run, it is not 1.
+_g16_lone() {
+  local a n b
+  [ -f "$1" ] && [ ! -L "$1" ] || return 1
+  read -r a n b <<EOT
+$(ls -ld -- "$1" 2>/dev/null)
+EOT
+  [ "$n" = 1 ]
 }
 
 # _g16_paths_out TEXT NAMES ANSI: sets _G16_OUT to TEXT, quotes already out, without the words
