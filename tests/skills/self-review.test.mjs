@@ -47,7 +47,8 @@ test('self-review sections and steps', () => {
   // 9,114 since M3 part 1 paid round 4's fix: step 2 gives claim-check's full form first, dropping both flags with no spec.
   // 9,204 since M3 part 2 project 1 Task 8: step 2 is one `review-check` call, step 9 takes its floor, and under a go with
   // no approved spec step 4 writes the ticket spec.
-  assertMaxBytes(SKILL, 9204);
+  // 9,199 since its fix round 1, a fall: step 2 names review-check's `proofs: n/a` line.
+  assertMaxBytes(SKILL, 9199);
 });
 
 test('the spec lane stands down only for a whole-branch review that passed on this exact tree', () => {
@@ -366,7 +367,7 @@ test('self-review proves each acceptance state, reads every reader of moved code
   // command comes first and a run with no spec drops the flags. M3 part 2 project 1 Task 8: one review-check call runs
   // floor-scan, and claim-check with `--spec <spec> --proofs <package>.proofs.md`; `--no-spec` stands for no spec.
   const run = 'Then one call: `review-check <wt> <package> --spec <spec>` (`--no-spec` with none),';
-  for (const t of [find, run, 'On `proof-check: n/a`, check the table by reading.', 'A skipped check counts as failed, but for a named skip (`references/claim-checks.md`).']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
+  for (const t of [find, run, 'On `proofs: n/a`, check the table by reading.', 'A skipped check counts as failed, but for a named skip (`references/claim-checks.md`).']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
   assert.ok(s[2].indexOf(find) < s[2].indexOf(run), 'the spec is found before claim-check runs');
   assert.ok(!s[2].includes('proof-check <spec>'), 'no separate proof-check run');
   // Final review M6: with no spec, step 2 said nothing, so the proof-check that never ran read as an unrun check and gave
@@ -400,10 +401,17 @@ test('step 2 is one review-check call, step 9 takes its floor, and a go with no 
   for (const t of ['`review-check <wt> <package> --spec <spec>`', '(`--no-spec` with none)',
     '`--test` with the one test file covering the change (its directory for a `{dir}` template)', '`--autopilot` under autopilot; paste its output.'])
     assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
-  // The floor replaces reading floor-scan's and claim-check's exits; the hand read of an n/a table and the named skip stay.
+  // review-check reads floor-scan's and claim-check's exits; the hand read of an n/a table and the named skip stay.
   for (const t of ['exit 1 from either is hits', 'a red `verify.fast` or test', 'Run `floor-scan <package>`']) assert.ok(!s[2].includes(t), `step 2 keeps: ${t}`);
-  for (const t of ['On `proof-check: n/a`, check the table by reading.', 'A skipped check counts as failed, but for a named skip (`references/claim-checks.md`).'])
+  for (const t of ['On `proofs: n/a`, check the table by reading.', 'A skipped check counts as failed, but for a named skip (`references/claim-checks.md`).'])
     assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
+  // Task 8 fix round 1: step 2 names the n/a line review-check prints, not claim-check's, which only its log holds.
+  assert.ok(!s[2].includes('proof-check: n/a'), s[2]);
+  assertContains('scripts/review-check', ["echo 'proofs: n/a (no numbered acceptance lines)'"]);
+  // Task 8 fix round 1: the floor follows the old step 2 rule. A failed or unresolved check or a proof line floors at
+  // `fix first` (tests/scripts/review-check.bats); a plain hit leaves the floor, and step 9 holds it unless it is
+  // justified under Cleared.
+  assert.ok(s[9].includes('an unresolved hit') && s[9].includes('a justified step 2 hit'), s[9]);
   // The design's "A go's bug route and its case": a bare ticket gives `proof-check: n/a`, which claim-check passes, so
   // a go's PR carried no proofs. Task 10's exec grader reads this file.
   assert.ok(s[4].includes("Under a go with no approved spec, write the ticket's requirements as numbered lines under `## Acceptance criteria` in `<kern-dir tmp>/ticket-<id>.md`, `<id>` as the `kern mode:` line shows it; that file is the spec for step 2 and this lane."), s[4]);
