@@ -99,6 +99,22 @@ autopilot: on"
   [ "$status" -ne 0 ]
 }
 
+@test "state_get refuses a state file over 65536 bytes" {
+  # Refused as a symlink is, with exit 2 and nothing read; a file of exactly 65536 bytes reads.
+  mkdir -p "$(state_dir)"
+  f=$(state_file s1)
+  { printf 'autopilot: on\npad: '; head -c 65516 /dev/zero | tr '\0' x; printf '\n'; } >"$f"
+  [ "$(wc -c <"$f")" -eq 65536 ]
+  [ "$(state_get s1 autopilot)" = on ]
+  printf 'x' >>"$f"
+  [ "$(wc -c <"$f")" -eq 65537 ]
+  run state_get s1 autopilot
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  run autopilot_on s1
+  [ "$status" -ne 0 ]
+}
+
 @test "state_reset discards a garbled old file under a UTF-8 locale" {
   mkdir -p "$(state_dir)"
   printf 'voice: normal\n\377\377\nautopilot: on\n' >"$(state_file s1)"

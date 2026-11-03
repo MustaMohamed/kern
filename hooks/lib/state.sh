@@ -24,7 +24,10 @@ state_file() {
   printf '%s\n' "$_KERN_STATE_PATH"
 }
 
-# state_get SID KEY: prints the value. Exit 1 unset, 2 bad id or unsafe file.
+# state_get SID KEY: prints the value. Exit 1 unset, 2 bad id or unsafe file: a symlink, or a file over
+# 65536 bytes, which only a write outside kern makes (idea from caveman 4.0.1
+# src/hooks/caveman-config.js, Apache-2.0). wc counts it before awk reads it, exec'd so its substitution
+# forks once; a count that did not come back, its substitution's pipe failing, refuses the file too.
 # This library makes no locale change bash must undo. Homebrew bash 5.3.15 on macOS (2026-10-21)
 # segfaults now and then, about one run in 16, when a subshell undoes one: a `local LC_ALL=C` at return,
 # or the temporary LC_ALL of a command that more commands follow. It does so only while neither LANG nor
@@ -32,12 +35,13 @@ state_file() {
 # it. The old state_file's `local LC_ALL=C` ran inside `$(state_file)`, so state_get failed that way and
 # prompt-submit reset the state (Task 16l). `env LC_ALL=C cmd` sets the locale in cmd's environment only.
 state_get() {
-  local f
+  local f n
   _state_path "$1" || return 2
   f=$_KERN_STATE_PATH
   [ -L "${f%/*}" ] && return 2
   [ -L "$f" ] && return 2
   [ -f "$f" ] || return 1
+  n=$(exec wc -c <"$f") && [ "$n" -le 65536 ] 2>/dev/null || return 2
   env LC_ALL=C awk -v k="$2" 'index($0, k ": ") == 1 { v = substr($0, length(k) + 3); found = 1 }
     END { if (found) { print v; exit 0 } exit 1 }' "$f"
 }

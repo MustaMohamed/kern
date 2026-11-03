@@ -314,8 +314,15 @@ EOF"
 @test "G13: a carriage return splits a remote command; another control character denies" {
   printf 'protected_targets: v1-host\n' >"$R/.claude/kern.local.yml"
   g13_all deny "ssh v1-host 'dir C:\x"$'\r'"Remove-Item C:\x'" "ssh v1-host 'powershell -c dir C:\x\u000dRemove-Item C:\x'" \
-    "ssh v1-host 'dir C:\x\u0007'" "ssh v1-host 'dir C:\x"$'\v'"'"
+    "ssh v1-host 'dir C:\x"$'\v'"'"
+  # The JSON escapes Claude Code sends for a carriage return and a bell, which json_get decodes once.
+  for c in "ssh v1-host 'dir C:/x\u000dRemove-Item C:/x'" "ssh v1-host 'dir C:/x\u0007'"; do
+    g "$c" g13
+    [ "$(decision_of "$output")" = deny ] || { echo "$c -> $output"; return 1; }
+  done
   g13_all none "ssh v1-host 'dir C:\x'"
+  # gx doubles the backslash, so \u0007 is text in the command, which neither G13 nor the shell decodes.
+  g13_all none "ssh v1-host 'dir C:\x\u0007'"
 }
 
 @test "G13: SQL files are read only for a target, and denied above 1 MB" {

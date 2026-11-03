@@ -131,6 +131,21 @@ feed() {
   [ "$(parsed_decision "$output")" = deny ]
 }
 
+@test "a Bash command holding a \u001f escape, git_words' newline mark, fails closed; the same text after a backslash does not" {
+  printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"ls a\\u001fb"}}' \
+    "$CWD" >"$BATS_TEST_TMPDIR/in"
+  run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
+  [ "$(parsed_decision "$output")" = ask ]
+  [[ "$output" == *'"needs user approval: kern G0: hook input not parseable"'* ]] || false
+  set_autopilot on
+  run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
+  [ "$(parsed_decision "$output")" = deny ]
+  printf '{"session_id":"test-session","cwd":"%s","tool_name":"Bash","tool_input":{"command":"ls a\\\\u001fb"}}' \
+    "$CWD" >"$BATS_TEST_TMPDIR/in"
+  run bash "$K/hooks/pre-tool-use" <"$BATS_TEST_TMPDIR/in"
+  [ -z "$output" ]
+}
+
 @test "a 10 KB UTF-8 assignment before a command runs every guard in under 2 s" {
   local blob t0 t1
   # shellcheck disable=SC2046 # one argument per character

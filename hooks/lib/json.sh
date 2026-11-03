@@ -18,13 +18,30 @@ function str_end(p,   d) {
   }
   return 0
 }
-function decode(s) {
+# decode S: prints the string body S decoded. An escaped backslash is held as \001 while the other
+# escapes go, so each backslash left starts an escape. \u0001 to \u007f, in either hex case, print as
+# the character, once: the pieces between \u escapes are printed one by one, so a decoded \u0001 is
+# not read back as a backslash and the work stays linear. \u0080 and above stay as the six characters.
+# \u0000 exits 1 before anything prints, as bash cannot hold the byte.
+function decode(s,   n, P, i, h) {
   gsub(/\\\\/, "\001", s)
+  if (index(s, "\\u0000")) exit 1
   gsub(/\\"/, "\"", s); gsub(/\\\//, "/", s)
   gsub(/\\n/, "\n", s); gsub(/\\t/, "\t", s); gsub(/\\r/, "\r", s)
   gsub(/\\b/, "\b", s); gsub(/\\f/, "\f", s)
-  gsub(/\001/, "\\", s)
-  return s
+  if (!index(s, "\\u")) { gsub(/\001/, "\\", s); printf "%s", s; return }
+  for (i = 1; i < 128; i++) U[sprintf("%04x", i)] = sprintf("%c", i)
+  n = split(s, P, /\\u/)
+  for (i = 1; i <= n; i++) {
+    s = P[i]
+    if (i > 1) {
+      h = tolower(substr(s, 1, 4))
+      if (h in U) { printf "%s", U[h]; s = substr(s, 5) }
+      else printf "%s", "\\u"
+    }
+    gsub(/\001/, "\\", s)
+    printf "%s", s
+  }
 }
 function raw_end(p,   c, depth, e) {
   c = C[p]
@@ -61,7 +78,7 @@ END {
       if (substr(buf, k, 1) != "\"") exit 1
       e = str_end(k + 1)
       if (!e) exit 2
-      printf "%s", decode(substr(buf, k + 1, e - k - 1))
+      decode(substr(buf, k + 1, e - k - 1))
       exit 0
     }
     e = raw_end(k)
@@ -99,11 +116,20 @@ json_escape() {
     }'
 }
 
-# json_ok: exit 0 when $KERN_INPUT is one object: starts with { and ends with } after trimming.
+# json_ok: exit 0 when $KERN_INPUT is one object: starts with { and ends with } after trimming, and
+# holds no \u escape, in either hex case, of 0x00, 0x01 or 0x1c to 0x1f. json_get refuses \u0000, so a
+# guard would read its field as absent. The others json_get decodes into bytes kern's parsers hold as
+# marks: git_words' in-record newline (0x1f) and record tags (0x1d, 0x1e), G16's and G18's word marks
+# (0x1c, 0x1d), awk's array subscript join (0x1c), G13's line tag (0x01). A guard could misread one, so
+# the hook fails closed instead. Other control characters pass. An escaped backslash before the u is
+# text, and awk runs only when the input holds one of those escapes as written.
 json_ok() {
   local t
   t=$(printf '%s' "${KERN_INPUT-}" | tr -d ' \t\r\n')
-  case "$t" in '{'*'}') return 0 ;; *) return 1 ;; esac
+  case "$t" in '{'*'}') ;; *) return 1 ;; esac
+  case "${KERN_INPUT-}" in *'\u000'[01]* | *'\u001'[CDEFcdef]*) ;; *) return 0 ;; esac
+  printf '%s' "${KERN_INPUT-}" |
+    env LC_ALL=C awk '{ gsub(/\\\\/, ""); if ($0 ~ /\\u00(0[01]|1[CDEFcdef])/) exit 1 }'
 }
 
 # ti_get KEY: json_get applied to the hook's tool_input object ($TOOL_INPUT, set by pre-tool-use).
