@@ -1355,12 +1355,14 @@ expect_kern() {
   expect_cmd none "git -C $R add -- src/hooks/lib/util.sh"
 }
 
-@test "a copy, move, sed -i or redirect onto a project's hook file gets no vote" {
+@test "a copy, move or redirect onto a project's hook file gets no vote; sed -i still asks" {
   project_hooks
   mkdir -p "$R/src/hooks/guards"
   : >"$R/src/hooks/guards/g1.sh"
   expect_cmd none "cp x $R/src/hooks/guards/g1.sh" "mv x $R/src/hooks/guards/g1.sh" \
-    "sed -i s/a/b/ $R/src/hooks/guards/g1.sh" "printf x > $R/src/hooks/guards/g1.sh"
+    "printf x > $R/src/hooks/guards/g1.sh"
+  # GNU sed's e command and s///e flag run a file's text as shell (fix round 1).
+  expect_hook "sed -i s/a/b/ $R/src/hooks/guards/g1.sh" "sed --in-place -e s/a/b/ $R/src/hooks/lib/util.sh"
 }
 
 @test "tee, install and git mv onto a project's hook file get no vote" {
@@ -1425,6 +1427,16 @@ expect_kern() {
   expect_kern none "cd $T/p && cp x hooks/guards/g99.sh"
   expect_kern ask "cd $T/p && true & cp x hooks/guards/g99.sh" "cd $T/kern/l/.. && cp x hooks/guards/g99.sh" \
     "cd $T/p && cd $T/kern && cp x hooks/guards/g99.sh" "cd $T/p; cp x hooks/guards/g99.sh"
+}
+
+# Task 1 fix round 1: the move test reads a record's text with its quotes out, as the paths pass does.
+@test "a quoted cd in another simple command keeps a relative hook path's ask" {
+  kern_wt
+  mkdir -p "$T/p/hooks/guards"
+  : >"$T/p/hooks/guards/g99.sh"
+  CWD="$T/p"
+  expect_kern none "cp x hooks/guards/g99.sh"
+  expect_kern ask "echo 'cd $T/kern' && cp x hooks/guards/g99.sh" "x='cd $T/kern'; cp x hooks/guards/g99.sh"
 }
 
 @test "an unresolvable hook path keeps its ask" {

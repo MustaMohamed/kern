@@ -8,10 +8,11 @@
 # which could forge the user's prompt or turn a guard off. A path in a hooks directory does not count
 # when the command only reads and it resolves outside KERN_ROOT/hooks, or, in a command that spells no
 # hook code or substitution, when it resolves outside KERN_ROOT and is a regular file or a glob that no
-# hook name can match (_g16_foreign). Nor does a write (cp, mv, install, tee, sed -i, a > target, git
-# add or git mv, each simple command judged alone) of a project's own hook file that resolves outside
+# hook name can match (_g16_foreign). Nor does a write (cp, mv, install, tee, a > target, git add or
+# git mv, each simple command judged alone) of a project's own hook file that resolves outside
 # kern's hooks folder, a kern worktree's included, so a go can commit it (_g16_own). Running or sourcing
-# such a file, any write or run of a hook entry file, and a path G16 cannot resolve keep the ask.
+# such a file, any write or run of a hook entry file, sed -i (GNU sed's e runs text as shell; the Edit
+# tool edits such a file), and a path G16 cannot resolve keep the ask.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; a word _g16_foreign clears, which it judges by a name and by the disk as
@@ -1023,12 +1024,15 @@ _g16_hooks() {
 # _G16_OWN_AWK: reads git_words' records of a command, one per line, with git_words' sw (run with
 # $_GW_AWK and -v sq="'"), for _g16_own. For each record it prints `R`, its class and whether it may move
 # the shell's directory, then `C` and each directory of a git -C, then `W`, a role, the path and the
-# word, for each word. The class is w when the record's first word, unquoted, is cp, mv or tee, install
-# with no long option (--strip-program runs a program), or sed with -i or --in-place among its options;
-# g when it is git with no global option but -C, then add or mv; c when the first record is a cd and one
-# word; else o. A record moves when a word ends in cd, chdir, pushd or popd, or starts with -C, --chdir,
-# --cwd or --directory (a git -C of class g is read by _g16_own instead), or when its command name holds a
-# $ or a backtick or is eval, source or `.`. A word that names a hooks directory, as _G16_HOOK_AWK's dir
+# word, for each word. The class is w when the record's first word, unquoted, is cp, mv or tee, or install
+# with no long option (--strip-program runs a program); sed -i is no write here, as GNU sed's e command
+# and s///e flag run a file's text as shell. g when it is git with no global option but -C, then add or
+# mv; c when the first record is a cd and one word; else o. A record moves when its text with quotes and
+# backslashes taken out, split as _G16_HOOK_AWK's paths pass splits it (at blanks, ; | & < > ) and =),
+# holds a token that ends in cd, chdir, pushd or popd, or starts with -C, --chdir, --cwd or --directory
+# (the leading -C pairs of a class g record aside, when the tokens line up with them; _g16_own reads
+# those), or when its command name holds a $ or a backtick or is eval, source or `.`. So it is at least
+# as strict as the paths pass's moved. A word that names a hooks directory, as _G16_HOOK_AWK's dir
 # reads it in lower case, is h in a record of class w or g (git's -C and their directories aside), and t
 # as the target of an unquoted >, >>, >|, &>, &>> or >& in any record, its path then the target alone.
 # Every other word is k, input redirects and their targets included.
@@ -1042,17 +1046,19 @@ BEGIN { s = "\034"; dir = "(^|[^a-z0-9._-])hooks([^a-z0-9._-]|$)"; op = "^[0-9]*
     h = sw_w[1]
     if (h ~ /^(cp|mv|tee)$/) cls = "w"
     else if (h == "install") { cls = "w"; for (k = 2; k <= sw_n; k++) if (sw_w[k] ~ /^--./) cls = "o" }
-    else if (h == "sed") {
-      for (k = 2; k <= sw_n && sw_w[k] != "--"; k++)
-        if (sw_w[k] ~ /^--in-place/ || (sw_w[k] ~ /^-[^-]/ && index(sw_w[k], "i"))) { cls = "w"; break }
-    } else if (h == "git") {
+    else if (h == "git") {
       for (k = 2; k < sw_n && sw_w[k] == "-C" && !sw_q[k]; k += 2) C[++nc] = sw_w[k + 1]
       if (k <= sw_n && !sw_q[k] && sw_w[k] ~ /^(add|mv)$/) { cls = "g"; gi = k } else nc = 0
     } else if (h == "cd" && NR == 1 && sw_n == 2) cls = "c"
   }
-  for (k = 1; k <= sw_n; k++) {
-    if (gi && k > 1 && k < gi) continue
-    if (tolower(sw_w[k]) ~ /(^|[^a-z0-9_.-])(cd|chdir|pushd|popd)$/ || sw_w[k] ~ /^(-C|--chdir|--cwd|--directory)/) mv = 1
+  u = $0; gsub(/["\047\\]/, "", u); gsub(/\037/, " ", u)
+  m = 0; split("", U)
+  while (match(u, /[^ \t\r;|&<>)=]+/)) { U[++m] = substr(u, RSTART, RLENGTH); u = substr(u, RSTART + RLENGTH) }
+  ex = gi && U[1] == "git" && U[2 * nc + 2] == sw_w[gi]
+  for (k = 1; k <= nc; k++) if (U[2 * k] != "-C" || U[2 * k + 1] != C[k]) ex = 0
+  for (k = 1; k <= m; k++) {
+    if (ex && k > 1 && k <= 2 * nc + 1) continue
+    if (tolower(U[k]) ~ /(^|[^a-z0-9_.-])(cd|chdir|pushd|popd)$/ || U[k] ~ /^(-C|--chdir|--cwd|--directory)/) mv = 1
   }
   cw_reset(); for (k = 1; k <= sw_n; k++) cw(sw_w[k])
   if (cw_n) { b = cw_w[1]; if (b ~ /[$`]/) mv = 1; sub(/^.*\//, "", b); if (b ~ /^(eval|source|[.])$/) mv = 1 }
