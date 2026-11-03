@@ -434,6 +434,25 @@ open_setup() {
   expect none "cd $W && rm src/gen.ts 2>&1" "cd $W && rm src/gen.ts &>/dev/null"
 }
 
+@test "a quoted & is no lone &" {
+  open_setup
+  expect none "cd $W && rm \"a&b\""
+}
+
+@test "|& is a pipe, not a lone &" {
+  open_setup
+  expect none "cd $W && rm x |& cat"
+}
+
+@test "<& is no lone &" {
+  open_setup
+  expect none "cd $W && rm x <&0"
+}
+
+@test "a piped delete is judged" {
+  refused 'printf x | xargs rm'
+}
+
 @test "an opening cd into a worktree nested in a worktree" {
   open_setup
   I="$W/inner"
@@ -447,6 +466,14 @@ open_setup() {
   make_repo "$W/sub"
   git -C "$R" worktree add -q "$W/sub/inner" -b kern/inner
   expect deny "cd $W/sub && rm -rf inner"
+}
+
+@test "a nested repository's linked worktree is protected" {
+  open_setup
+  N="$W/nested"
+  make_repo "$N"
+  git -C "$N" worktree add -q "$N/lt" -b lt
+  refused "cd $N && rm -rf lt" "cd $N && rm -rf $N/lt"
 }
 
 @test "an opening cd under a go is that repository's or names no top" {
