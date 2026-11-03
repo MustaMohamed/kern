@@ -171,14 +171,18 @@ END {
 # its ends aside, it is quoted strings alone (in double quotes, a $ or backtick only escaped) that hold,
 # as sw reads them, a character outside plain name characters. It stays when it is an option (it may be
 # --pre=), a redirect target, or anything the hit rule would match. So a word with any part unquoted
-# stays, as does a quoted string that sw joins across ; | & ( ) to more text. quoted gives up on the
-# whole text at a # that starts a word or follows ; | & ( ) < > or CR, at a quote with no end or a
-# backslash at the end, and at the byte \036 (its end mark) or \037 (a blank to sw), where its reading
-# may not be the shell's; a here-doc body is the same, so _g16_hooks_read does not call it on text that
-# holds <<.
+# stays. sw does not split at ; | & ( ) < > or CR as the old parser did, so a quoted span joined with
+# no blank to a command token or a redirect is one sw word. There quoted gives up on the whole text,
+# since it cannot write _ for the span alone without reproducing that structure; buf is at least as
+# strict, as a rewrite only drops a vote. A word's skel, its unquoted unescaped characters, tells that
+# join (a separator and a non-separator in skel) from a span with only separators at its ends (the trim
+# rewrites that one). quoted also gives up at a # that starts a word or follows ; | & ( ) < > or CR, at
+# a quote with no end or a backslash at the end, and at the byte \036 (its end mark) or \037 (a blank
+# to sw), where its reading may not be the shell's; a here-doc body is the same, so _g16_hooks_read
+# does not call it on text that holds <<.
 # shellcheck disable=SC2016 # awk text
 _G16_QUOTED_AWK='
-function quoted(    M, n, C, i, k, s, e, j, m, V, rd, out, p, a, q, t, v) {
+function quoted(    M, n, C, i, k, s, e, j, m, V, rd, out, p, a, q, t, v, skel) {
   M = "\036"
   if (index(buf, M) || index(buf, "\037")) return buf
   # The end mark is a word of its own only when the text ends outside a quote and a backslash.
@@ -197,9 +201,22 @@ function quoted(    M, n, C, i, k, s, e, j, m, V, rd, out, p, a, q, t, v) {
     e = i - 1; p = ""
     for (j = s; j <= e; j++) p = p C[j]
     if (p ~ /[;|&()<>\r]#/) return buf
-    # q: the word as written, without the separators at its ends (an escaped one stays); v: the same
-    # word as sw read it. q must be quoted strings alone, a double-quoted one with no $ or backtick
-    # unless escaped.
+    # skel: the word with its quoted spans and escaped characters removed, so only its unquoted,
+    # unescaped characters are left. A separator (; | & ( ) < > or CR) in skel is unquoted, as the old
+    # parser read it, so skel tells a quoted span joined to more text from a span with only separators
+    # at its ends.
+    skel = p
+    gsub(/\\./, "", skel)
+    gsub(/\047[^\047]*\047/, "", skel)
+    gsub(/"[^"]*"/, "", skel)
+    # Give up (shapes 1 and 4) when a quoted span is glued, with no blank, to a command token or a
+    # redirect: skel then holds a separator and a non-separator. The old parser split there and judged
+    # each token; sw keeps them in one word, so its text is not reproduced across that boundary. buf is
+    # at least as strict, since a rewrite only ever drops a vote.
+    if (sw_q[k] && skel ~ /[;|&()<>\r]/ && skel ~ /[^;|&()<>\r]/) return buf
+    # q: the word as written, without the separators at its ends (an escaped one stays, so \( and \)
+    # keep their paren); v: the same word as sw read it. q must be quoted strings alone, a
+    # double-quoted one with no $ or backtick unless escaped.
     match(p, /^[;|&()\r]*/); a = RLENGTH
     q = substr(p, a + 1); match(q, /[;|&()\r]*$/)
     if (RSTART > 1 && substr(q, RSTART - 1, 1) == "\\") RSTART++
@@ -208,8 +225,9 @@ function quoted(    M, n, C, i, k, s, e, j, m, V, rd, out, p, a, q, t, v) {
     if (sw_q[k] && (q == "\\(" || q == "\\)" || (!rd && q ~ /^(\047[^\047]*\047|"([^"$`\\]|\\.)*")+$/ &&
       v !~ /^-/ && v ~ /[^ A-Za-z0-9._\/@+:,=%~-]/ && tolower(v) !~ hit))) p = substr(p, 1, a) "_" t
     out = out p
-    # rd: the next word is a redirect target, after a < or > with only separators since.
-    for (j = s; j <= e; j++) if (C[j] == "<" || C[j] == ">") rd = 1; else if (!index(";|&()\r", C[j])) rd = 0
+    # rd: the next word is a redirect target, when the word ends, past any trailing separators, in an
+    # unquoted, unescaped < or >. skel carries only those, so a quoted or escaped one does not set rd.
+    t = skel; sub(/[;|&()\r]*$/, "", t); rd = (t ~ /[<>]$/)
   }
   for (; i <= n; i++) { if (C[i] != " " && C[i] != "\t" && C[i] != "\n") return buf; out = out C[i] }
   t = out
