@@ -242,6 +242,56 @@ approved_plan() {
   [[ "$stderr" == *"belongs to another plan ($TMP/a.md)"* ]] || false
 }
 
+# Audit L493, after superpowers sdd-workspace: two plans with one basename used to meet at one ledger name,
+# and the second was refused.
+@test "a second plan with the same basename takes its parent's name" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  mkdir -p "$TMP/a" "$TMP/b"
+  approved_plan "$TMP/a/plan.md"; approved_plan "$TMP/b/plan.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a/plan.md"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.kern/ledgers/plan" ]
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/b/plan.md"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.kern/ledgers/b-plan" ]
+  [ "$(head -n 1 "$output/ledger.md")" = "# kern ledger: $TMP/b/plan.md" ]
+  [ "$(head -n 1 "$REPO/.kern/ledgers/plan/ledger.md")" = "# kern ledger: $TMP/a/plan.md" ]
+  printf 'Task 1: start tree=x\n' >> "$output/ledger.md"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/b/plan.md"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.kern/ledgers/b-plan" ]
+  grep -q '^Task 1: start' "$output/ledger.md"
+  # With the first plan's ledger gone, the second plan's rerun still finds its own, and makes no other.
+  rm -r "$REPO/.kern/ledgers/plan"
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/b/plan.md"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.kern/ledgers/b-plan" ]
+  grep -q '^Task 1: start' "$output/ledger.md"
+  [ ! -e "$REPO/.kern/ledgers/plan" ]
+}
+
+@test "a third collision still refuses" {
+  REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
+  mkdir -p "$TMP/a" "$TMP/b" "$TMP/x/b"
+  approved_plan "$TMP/a/plan.md"; approved_plan "$TMP/b/plan.md"; approved_plan "$TMP/x/b/plan.md"
+  bash "$KERN_ROOT/scripts/ledger-open" "$TMP/a/plan.md" > /dev/null 2>&1
+  bash "$KERN_ROOT/scripts/ledger-open" "$TMP/b/plan.md" > /dev/null 2>&1
+  before=$(cd "$REPO/.kern/ledgers" && find . | LC_ALL=C sort)
+  run --separate-stderr bash "$KERN_ROOT/scripts/ledger-open" "$TMP/x/b/plan.md"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [ "${stderr_lines[0]}" = "ledger-open: $REPO/.kern/ledgers/b-plan/ledger.md belongs to another plan ($TMP/b/plan.md); leave it and pass another DIR" ]
+  [ "${stderr_lines[1]}" = "ledger-open: rerun as: bash $KERN_ROOT/scripts/ledger-open $TMP/x/b/plan.md $REPO/.kern/ledgers/b-plan-2" ]
+  [ "${stderr_lines[2]}" = "ledger-open: that ledger starts empty: the completed tasks and the worktree of $REPO/.kern/ledgers/b-plan/ledger.md are not carried over, and stay where they are" ]
+  [ "${#stderr_lines[@]}" -eq 3 ]
+  [ "$(cd "$REPO/.kern/ledgers" && find . | LC_ALL=C sort)" = "$before" ]
+  rerun=${stderr_lines[1]#ledger-open: rerun as: }
+  run --separate-stderr eval "$rerun"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO/.kern/ledgers/b-plan-2" ]
+  [ "$(head -n 1 "$output/ledger.md")" = "# kern ledger: $TMP/x/b/plan.md" ]
+}
+
 @test "ledger-open refuses a plan that is not approved, or approved without the user's words" {
   REPO="$TMP/repo"; make_fixture "$REPO"; cd "$REPO"
   approved_plan "$TMP/d.md" draft
