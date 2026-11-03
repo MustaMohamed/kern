@@ -919,22 +919,36 @@ const planStates = (path, specs) => {
 };
 // results(events): each tool call's result text by the call's id, the main session's and every subagent's.
 const results = (events) => new Map(steps(events).filter((s) => s.result !== undefined).map((s) => [s.id, s.result]));
+// miss(text, list): the what of the first [re, what] in list whose re matches text, or null. EXIT_2: Claude Code's first line
+// for a Bash call that exited 2.
+const miss = (text, list) => list.find(([re]) => re.test(text))?.[1] ?? null;
+const EXIT_2 = '^Exit code 2$';
+// PLAN_CHECK_MISS: what in a plan-check result shows it checked nothing, in the order the evidence names it: its usage line, its
+// `no such file:` line (Task 12 fix round 1, review minor 2), or another exit 2 (EXIT_2, or a `plan-check: ` line, which plan-check
+// prints only when it exits 2).
+const PLAN_CHECK_MISS = [[/usage:/, 'printed usage'], [/no such file: /, 'printed no such file'], [new RegExp(`${EXIT_2}|^plan-check: `, 'm'), 'exited 2']];
 // planCheckOn(folder): the check that a Bash call, the main session's or a subagent's, runs plan-check with a path under
 // .kern/<folder>/ as its first argument (scriptArgs), as define runs `plan-check <spec>` and plan runs `plan-check <plan>`, and
-// that the call's result holds no `usage:`. A call a hook refused ran nothing (doneSteps). The --graph and --files modes check
-// nothing, so they do not count. Known limits: a path held in a variable, or one relative to a cd into .kern, is not read; and
-// a usage line that another command of the same call prints fails that call.
+// that the call's result shows plan-check read the file (no PLAN_CHECK_MISS). A call a hook refused ran nothing (doneSteps).
+// The --graph and --files modes check nothing, so they do not count. Known limits: a path held in a variable, or one relative
+// to a cd into .kern, is not read; and a miss line that another command of the same call prints fails that call.
 const planCheckOn = (folder) => (events) => {
   const under = new RegExp(`(^|/)\\.kern/${folder}/`);
   const result = results(events);
   const runs = doneSteps(events).filter((s) => s.call.name === 'Bash')
     .map((s) => ({ s, path: scriptArgs(s.call.input.command ?? '', 'plan-check').map((a) => a[0] ?? '').find((p) => under.test(p)) })).filter((x) => x.path);
-  const ok = runs.find(({ s }) => result.has(s.id) && !result.get(s.id).includes('usage:'));
+  const ok = runs.find(({ s }) => result.has(s.id) && !miss(result.get(s.id), PLAN_CHECK_MISS));
   if (ok) return { pass: true, evidence: `plan-check ran on ${first(ok.path, 200)} and printed no usage: Bash ${argOf(ok.s.call)}` };
   if (!runs.length) return { pass: false, evidence: `no Bash call runs plan-check on a .kern/${folder}/ path` };
   const { s } = runs[0];
-  return { pass: false, evidence: `plan-check on a .kern/${folder}/ path ${result.has(s.id) ? 'printed usage' : 'had no result'}: Bash ${argOf(s.call)}` };
+  return { pass: false, evidence: `plan-check on a .kern/${folder}/ path ${result.has(s.id) ? miss(result.get(s.id), PLAN_CHECK_MISS) : 'had no result'}: Bash ${argOf(s.call)}` };
 };
+// CLAIM_CHECK_MISS: what in a claim-check result shows proof-check judged no proofs file (Task 12 fix round 1, review I1), in the
+// order the evidence names it: its usage line; proof-check's n/a line (no numbered acceptance line, so no table); another exit 2
+// (EXIT_2, or a `claim-check: ` or `proof-check: ` line, which claim-check prints only when it exits 2); or `no proofs file:`,
+// which it prints when it read an empty table in place of a missing file.
+const CLAIM_CHECK_MISS = [[/usage:/, 'printed usage'], [/^proof-check: n\/a /m, 'printed proof-check: n/a'], [new RegExp(`${EXIT_2}|^(?:claim|proof)-check: `, 'm'), 'exited 2'],
+  [/^no proofs file: /m, 'printed no proofs file']];
 // COUNT_MEASURE: a line count beside its measure, `git diff --shortstat`, in either order, with no digit, line end, full stop
 // or semicolon between them, as `lines: 18 (git diff --shortstat)`. LIMIT_10: `pr.max_lines` beside the value 10 the same way,
 // as `pr.max_lines: 10` or "10 lines (pr.max_lines)"; 100 or 10.5 is not 10. NUM(n): the whole number n, or any when n is \d+.
@@ -1242,10 +1256,11 @@ export const CHECKS = {
     return { pass: true, evidence: `the final reply names the count with its measure ("${count[0]}"), the limit ("${limit[0]}") and its source (kern.local.yml)` };
   },
   // workflow-self-review-proofs E0 (Task 12): a Bash call, the main session's or a subagent's, runs review-check with --spec
-  // (scriptArgs) and its result holds the line `proofs: checked`, which review-check prints only when proof-check judged the
-  // table, so its n/a, not checked and not due lines fail; or a call runs claim-check with --spec and --proofs and its result
-  // holds no `usage:`. proof-check alone does not count. A call a hook refused ran nothing (doneSteps). Known limit: a tail
-  // that cuts review-check's proofs line hides it.
+  // (scriptArgs) and its result holds the line `proofs: checked`, which review-check prints only when proof-check judged a
+  // proofs file, so its n/a, not checked (claim-check failed, or no proofs file) and not due lines fail; or a call runs
+  // claim-check with --spec and --proofs and its result shows proof-check judged a proofs file (no CLAIM_CHECK_MISS).
+  // proof-check alone does not count. A call a hook refused ran nothing (doneSteps). Known limits: a tail that cuts
+  // review-check's proofs line hides it, and the row does not check which spec --spec names.
   'proofs-ran': (events) => {
     const result = results(events);
     const bash = doneSteps(events).filter((s) => s.call.name === 'Bash');
@@ -1253,14 +1268,17 @@ export const CHECKS = {
     const [reviews, claims] = [flagged('review-check', ['--spec']), flagged('claim-check', ['--spec', '--proofs'])];
     const checked = reviews.find((s) => /^proofs: checked$/m.test(result.get(s.id) ?? ''));
     if (checked) return { pass: true, evidence: `review-check ran with --spec and printed proofs: checked: Bash ${argOf(checked.call)}` };
-    const ran = claims.find((s) => result.has(s.id) && !result.get(s.id).includes('usage:'));
-    if (ran) return { pass: true, evidence: `claim-check ran with --spec and --proofs and printed no usage: Bash ${argOf(ran.call)}` };
+    const ran = claims.find((s) => result.has(s.id) && !miss(result.get(s.id), CLAIM_CHECK_MISS));
+    if (ran) return { pass: true, evidence: `claim-check ran with --spec and --proofs and judged the proofs file: Bash ${argOf(ran.call)}` };
     if (reviews.length) {
       const s = reviews[0], line = result.get(s.id)?.match(/^proofs: .*$/m)?.[0];
       const said = !result.has(s.id) ? 'had no result' : line ? `printed "${first(line, 120)}", not proofs: checked` : 'printed no proofs line';
       return { pass: false, evidence: `review-check with --spec ${said}: Bash ${argOf(s.call)}` };
     }
-    if (claims.length) return { pass: false, evidence: `claim-check with --spec and --proofs ${result.has(claims[0].id) ? 'printed usage' : 'had no result'}: Bash ${argOf(claims[0].call)}` };
+    if (claims.length) {
+      const s = claims[0];
+      return { pass: false, evidence: `claim-check with --spec and --proofs ${result.has(s.id) ? miss(result.get(s.id), CLAIM_CHECK_MISS) : 'had no result'}: Bash ${argOf(s.call)}` };
+    }
     return { pass: false, evidence: 'no review-check call with --spec and no claim-check call with --spec and --proofs' };
   },
 };

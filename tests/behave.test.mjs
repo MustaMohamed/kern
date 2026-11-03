@@ -1861,6 +1861,15 @@ test('plan-check-spec and plan-check-plan pass when a Bash call runs plan-check 
     assert.equal(spec([...ran(cmd), ...reply('x')], {}).pass, false, cmd);
   }
   assert.equal(plan([...ran('bash /k/scripts/plan-check --files .kern/plans/p.md 1', 'src/a.js'), ...reply('x')], {}).pass, false, '--files lists, it checks nothing');
+  // Task 12 fix round 1 (review minor 2): a plan-check that read no file checked nothing: a wrong path, or any other exit 2.
+  const gone = 'bash /k/scripts/plan-check .kern/specs/typo.md';
+  assert.deepEqual(spec([use('g', 'Bash', { command: gone }), back('g', 'Exit code 2\nplan-check: no such file: .kern/specs/typo.md', true), ...reply('x')], {}),
+    { pass: false, evidence: `plan-check on a .kern/specs/ path printed no such file: Bash ${gone}` });
+  assert.equal(spec([...ran(`${gone}; echo rc=$?`, 'plan-check: no such file: .kern/specs/typo.md\nrc=2'), ...reply('x')], {}).pass, false, 'no Exit code line, as an echo of $? leaves it');
+  const bare = 'bash /k/scripts/plan-check .kern/plans/p.md';
+  assert.deepEqual(plan([use('f', 'Bash', { command: bare }), back('f', 'Exit code 2\nplan-check: could not read the frontmatter of .kern/plans/p.md', true), ...reply('x')], {}),
+    { pass: false, evidence: `plan-check on a .kern/plans/ path exited 2: Bash ${bare}` });
+  assert.equal(spec([use('g', 'Bash', { command: gone }), back('g', 'Exit code 2\nplan-check: no such file: .kern/specs/typo.md', true), ...ran('bash /k/scripts/plan-check .kern/specs/x.md', 'exit 0'), ...reply('x')], {}).pass, true, 'a retry on the right path');
 });
 
 // The size ask's E1 (workflow-execute-plan-size-breach). size-check prints the question with the count, its measure, the limit
@@ -1908,7 +1917,7 @@ test('proofs-ran passes when review-check with --spec printed proofs: checked, o
   assert.equal(check([...ran(RC, out('proofs: checked (stale)')), ...reply('x')], {}).pass, false, 'the exact line only');
   const CC = 'bash /k/scripts/claim-check . .kern/reviews/pkg --spec .kern/specs/currency.md --proofs .kern/reviews/pkg.proofs.md';
   assert.deepEqual(check([use('c', 'Bash', { command: CC }), back('c', 'unproven: line 2: no proof row\nno evidence: line 3', true), ...reply('x')], {}),
-    { pass: true, evidence: `claim-check ran with --spec and --proofs and printed no usage: Bash ${CC}` });
+    { pass: true, evidence: `claim-check ran with --spec and --proofs and judged the proofs file: Bash ${CC}` });
   const extra = 'bash /k/scripts/claim-check . .kern/reviews/pkg --spec s.md --proofs p.md extra';
   assert.deepEqual(check([use('c', 'Bash', { command: extra }), back('c', 'Exit code 2\nusage: claim-check WT DIFF_FILE [--spec SPEC --proofs FILE]', true), ...reply('x')], {}),
     { pass: false, evidence: `claim-check with --spec and --proofs printed usage: Bash ${extra}` });
@@ -1921,6 +1930,17 @@ test('proofs-ran passes when review-check with --spec printed proofs: checked, o
     { type: 'user', parent_tool_use_id: 'a', message: { content: [{ type: 'tool_result', tool_use_id: 's', is_error: true, content: out('proofs: checked') }] } }, back('a', 'done')];
   assert.equal(check([...subRun, ...reply('x')], {}).pass, true, "a subagent's run");
   assert.deepEqual(check([use('h', 'Bash', { command: RC }), back('h', 'PreToolUse:Bash hook error: kern G13: x', true), ...reply('x')], {}), none, 'a refused call ran nothing');
+  // Task 12 fix round 1 (review I1): a claim-check that judged no proofs file is no proof run: no proofs file, any exit 2, or
+  // proof-check's n/a line. review-check now prints `proofs: not checked (no proofs file)` for the first.
+  for (const [result, err, what] of [['Exit code 1\nno proofs file: .kern/reviews/pkg.proofs.md', true, 'printed no proofs file'],
+    ['Exit code 2\nclaim-check: cannot read .kern/specs/currency.md', true, 'exited 2'], ['Exit code 2\nclaim-check: not a git worktree: /w', true, 'exited 2'],
+    ['Exit code 2\nclaim-check: .kern/reviews/pkg has no diff --git line; pass a git diff or a wt-diff package', true, 'exited 2'],
+    ['proof-check: n/a (.kern/specs/currency.md has no numbered acceptance lines)', false, 'printed proof-check: n/a']]) {
+    assert.deepEqual(check([use('c', 'Bash', { command: CC }), back('c', result, err), ...reply('x')], {}), { pass: false, evidence: `claim-check with --spec and --proofs ${what}: Bash ${CC}` }, result);
+  }
+  assert.equal(check([...ran(`${CC}; echo rc=$?`, 'claim-check: cannot read .kern/specs/currency.md\nrc=2'), ...reply('x')], {}).pass, false, 'an exit 2 an echo of $? reports');
+  const unread = 'proofs: not checked (no proofs file)';
+  assert.deepEqual(check([...ran(RC, out(unread)), ...reply('x')], {}), { pass: false, evidence: `review-check with --spec printed "${unread}", not proofs: checked: Bash ${RC}` });
 });
 
 test('the plan-check, size ask and proofs expectations carry their checks (M3 part 2 project 1, Task 12)', () => {
