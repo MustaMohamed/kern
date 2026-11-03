@@ -8,9 +8,9 @@ Updated 2026-10-14 for the M2 split: M2a (`docs/plans/2026-10-14-kern-m2a-plan.m
 
 | Skill / agent | Tier | Milestone | SKILL.md estimate | Purpose |
 |---|---|---|---|---|
-| `mode` | slash | M1 | 1.2 KB (+2 KB `modes/terse.md`) | Switch voice and surface for this session |
-| `autopilot` | slash | M1 | 1.5 KB | Per-session grant for unattended runs, typed by the human only |
-| `help` | slash | M1 | 3.5 KB (+6.5 KB refs, template) | Map of kern, fix-a-run, `help setup` writes `.claude/kern.local.yml` |
+| `mode` | slash | M1 | 2.6 KB built (+2.2 KB `modes/terse.md`) | Switch voice and surface for this session |
+| `autopilot` | slash | M1 | 5.7 KB built (+7.3 KB ref) | Per-session grant for unattended runs, typed by the human only |
+| `help` | slash | M1 | 5.9 KB built (+7.1 KB refs, template) | Map of kern, fix-a-run, `help setup` writes `.claude/kern.local.yml` |
 | `define` | path | M2a | at most 6.5 KB, 5.7 planned (+7.5 KB refs) | Clarify, classify, get explicit approval before code |
 | `plan` | path | M2a | at most 6.5 KB, 5.0 planned (+5 KB refs) | Approved spec to ordered, testable tasks |
 | `execute-plan` | path | M2a | at most 12 KB, about 11.3 built (+4 KB refs, scripts) | Run a plan with a ledger, implementer and two-verdict review, no commits |
@@ -188,7 +188,7 @@ allowed-tools: Read
 - `/kern:mode terse`, `/compact`, `/kern:mode status`: still terse.
 - "switch yourself into terse mode": Claude does not write state (G16 would deny); it tells the user to type `/kern:mode terse`.
 
-**8. Sources; size.** CV (mechanics and guards as ideas; ruleset written fresh; named `terse` per CV TRADEMARKS.md), PS poteto-mode reminder, modes-research 6. SKILL.md 1.2 KB; `modes/terse.md` 2 KB; hook script about 6 KB (not a skill).
+**8. Sources; size.** CV (mechanics and guards as ideas; ruleset written fresh; named `terse` per CV TRADEMARKS.md), PS poteto-mode reminder, modes-research 6. SKILL.md 2,612 bytes and `modes/terse.md` 2,239, neither with a cap test (1.2 KB and 2 KB planned); hook script about 6 KB (not a skill).
 
 ---
 
@@ -285,7 +285,7 @@ allowed-tools: Read, Bash(git remote *), Bash(git symbolic-ref *), Bash(git log 
 - `/kern:help check` with `merge.policy: auto`: reports merge as a floor action whose key is ignored.
 - `/kern:help` "fix this failing test for me": treated as work and routed to `diagnose`.
 
-**8. Sources; size.** PS poteto-help, setup-pstack; PO setup-matt-pocock-skills, ask-matt, writing-for-agents; AD docs/getting-started. SKILL.md 3.5 KB; `references/map.md` 3 KB; `references/fix-a-run.md` 1.5 KB; `templates/kern.local.yml` 2 KB.
+**8. Sources; size.** PS poteto-help, setup-pstack; PO setup-matt-pocock-skills, ask-matt, writing-for-agents; AD docs/getting-started. SKILL.md 5,857 bytes, `references/map.md` 3,050, `references/fix-a-run.md` 2,279 and `templates/kern.local.yml` 1,786, none with a cap test (3.5 KB, 3 KB, 1.5 KB and 2 KB planned).
 
 ---
 ## C. M2 skills
@@ -366,7 +366,7 @@ argument-hint: "[spec path | issue id]"
 
 **4. Steps**
 0. Defer (A6).
-1. Check preconditions: a spec file with `status: approved`; issue acceptance criteria alone are not approved (define's bounded path records them as an approved short spec). No such file, even for a design the user calls decided: read define's SKILL.md now and follow it, writing no plan (M3 part 1 paid round 1: all 3 workflow-define-size-to-plan runs read plan in turn 1 and gave a chat design with no `Size:` line; paid round 2: "Not approved" read as a spec that exists, and no run read define before the yes). A plan for this spec exists: update it in place. An unfinished plan for other work: stop and ask. Look for existing PRs with `gh pr list --search <id> --state all`. The limits are read here, with the first lookups: `kern-get scope_threshold 4` and, since the pilot fix plan's Task 5, `kern-get pr.max_lines 300`, each printing its value and source (`4<TAB>default` when unset). Until M2b bfix3 P3, step 7 ran that lookup, but runs gather every `kern-get` key the skill names into one loop at their first lookups: the loop dropped the `4` in 7 of 9 bfix2 head-to-head plan runs, and 3 never ran the defaulted call (bfix3-lane-P). [AD planning-and-task-breakdown:150-155; MM-define 8 step 0]
+1. Check preconditions: a spec file with `status: approved`; issue acceptance criteria alone are not approved (define's bounded path records them as an approved short spec). No such file, even for a design the user calls decided: read define's SKILL.md now and follow it, writing no plan (M3 part 1 paid round 1: all 3 workflow-define-size-to-plan runs read plan in turn 1 and gave a chat design with no `Size:` line; paid round 2: "Not approved" read as a spec that exists, and no run read define before the yes). A plan for this spec exists: set `status: draft`, then update it in place. An unfinished plan for other work: stop and ask. Look for existing PRs with `gh pr list --search <id> --state all`. The limits are read here, with the first lookups: `kern-get scope_threshold 4` and, since the pilot fix plan's Task 5, `kern-get pr.max_lines 300`, each printing its value and source (`4<TAB>default` when unset). Until M2b bfix3 P3, step 7 ran that lookup, but runs gather every `kern-get` key the skill names into one loop at their first lookups: the loop dropped the `4` in 7 of 9 bfix2 head-to-head plan runs, and 3 never ran the defaulted call (bfix3-lane-P). [AD planning-and-task-breakdown:150-155; MM-define 8 step 0]
 2. Skip the plan for 1 or 2 files with an obvious approach: say so, write nothing, and the kernel routes to implement. [PB multi-phase-plan:5]
 3. Ground the plan with `kern:investigator` subagents on `model.investigator` (default `opus`): file pointers, conventions, verify commands and their source, stored shapes and their writers. [PB multi-phase-plan:7; AD planning-and-task-breakdown:24-33]
 4. Send open product questions to the user as options with a recommendation; send fact questions to subagents. A question that reading cannot settle (does this library do X?) gets a spike first, through define step 8 in a `wt-new <slug> --detach` worktree. [PB multi-phase-plan:6; DE plan: spike through define step 8]
