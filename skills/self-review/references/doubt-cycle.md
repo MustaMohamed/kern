@@ -8,8 +8,8 @@ Run a cycle when the decision adds or changes branching logic, crosses a module 
 
 ## The fresh reviewer
 
-1. Write the artifact (the diff hunk, or the proposal in 3 to 5 sentences) and its contract (the spec lines or rules it must satisfy) as two files under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`. Keep the artifact small enough to read in one pass; a larger one is decomposed first.
-2. Dispatch `kern:investigator` on model `model.reviewer`. The prompt gives the question "where does this artifact fail this contract?", the two absolute paths as scope, a 40-line return budget, and the instruction to find faults, not to validate: assume the author is overconfident, and say explicitly when no fault turns up after a thorough look. Never the claim, never your reasoning: handing over conclusions returns your conclusions.
+1. Write the artifact (the diff hunk, or the proposal in 3 to 5 sentences) and its contract (the spec lines or rules it must satisfy) as two files under `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`. An artifact too big to read in one pass is decomposed first.
+2. Dispatch `kern:investigator` on model `model.reviewer`. When that is the session's own model, the reviewer shares the session's blind spots: say so in the report, and on a Sonnet session offer `opus` first; under autopilot the report names it, with no ask. The prompt gives the question "where does this artifact fail this contract?", the two absolute paths as scope, a 40-line return budget, and the instruction to find faults, not to validate: assume the author is overconfident, and say explicitly when no fault turns up after a thorough look. Never the claim, never your reasoning: handing over conclusions returns your conclusions.
 
 ## Reconcile
 

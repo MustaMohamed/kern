@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Lint a kern plan or spec, and read a plan's task graph, so its structure is checked in code.
-# Usage: plan-check FILE              problems as FILE:LINE: message; exit 0 clean, 1 problems, 2 usage
+# Usage: plan-check FILE              problems as FILE:LINE: message; exit 0 clean, 1 problems, 2 usage;
+#                                     a plan task whose Files name more distinct paths than scope_threshold
+#                                     also prints `plan-check: warn: Task N lists <n> files, over
+#                                     scope_threshold <v>`, which never changes the exit
 #        plan-check --graph PLAN      after a clean lint, TSV rows: overlap<TAB>A<TAB>B<TAB>shared and
 #                                     wave<TAB>N<TAB>tasks; tasks in one wave share no file or service
 #        plan-check --files PLAN N    Task N's Files paths, one per line, line ranges removed; a path
@@ -37,6 +40,8 @@ fi
 MAIN=$(kern_main_root "$PWD" 2> /dev/null) || MAIN=''
 export KERN_MAIN="$MAIN"
 SHARED=$(settings_get shared_services '' 2> /dev/null || true)
+# A scope_threshold that is not a whole number gives no warn: line; the other checks still run.
+ST=$(settings_get scope_threshold 4 2> /dev/null) || [ -n "$ST" ] || ST=4
 WD=$(settings_get work_dir .kern 2> /dev/null) || [ -n "$WD" ] || WD=.kern
 
 # Acceptance numbers of the plan's spec, when the spec: line names a file that resolves.
@@ -63,7 +68,7 @@ case "$spec" in
 esac
 
 DASH=$(printf '\342\200\223|\342\200\224') CURLY=$(printf '\342\200\230|\342\200\231|\342\200\234|\342\200\235') \
-  MODE=$mode N=$n SHARED=$SHARED SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec env LC_ALL=C awk -v sq="'" "$FM_AWK"$'\n'"$FENCE_AWK"'
+  MODE=$mode N=$n SHARED=$SHARED ST=$ST SPECBAD=$SPECBAD ACCEPT=$ACCEPT SPEC=$spec env LC_ALL=C awk -v sq="'" "$FM_AWK"$'\n'"$FENCE_AWK"'
 function problem(ln, msg) { printf "%s:%d: %s\n", FILENAME, ln, msg; bad = 1 }
 function spans(s, out,   k, t) {
   k = 0
@@ -192,6 +197,13 @@ END {
     if (!seenb[t]) problem(tline[t], "Task " t ": no Blocked by line")
     if (!seena[t]) problem(tline[t], "Task " t ": no Acceptance line")
     if (!run[t] || !expect[t]) problem(tline[t], "Task " t ": no Run: and Expected: pair")
+    # Lint mode only: --graph and --files print what scripts read. A path named twice counts once; a bare line
+    # range such as `:40` is no path.
+    if (ENVIRON["MODE"] == "lint" && ENVIRON["ST"] ~ /^[0-9]+$/) {
+      nd = 0; split("", seenf)
+      for (x = 1; x <= nfiles[t]; x++) if (files[t, x] != "" && !(files[t, x] in seenf)) { seenf[files[t, x]] = 1; nd++ }
+      if (nd > ENVIRON["ST"] + 0) print "plan-check: warn: Task " t " lists " nd " files, over scope_threshold " (ENVIRON["ST"] + 0)
+    }
     m = split(blk[t], bs, " ")
     for (j = 1; j <= m; j++) {
       if (bs[j] >= t || !(bs[j] in tline)) problem(tline[t], "Task " t " is blocked by Task " bs[j] ", which is not an earlier task")

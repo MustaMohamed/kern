@@ -80,7 +80,9 @@ test('finish-branch sections, steps and red flags', () => {
   // 8,770 since Task 15: step 4 cites a passed `test.full` on its exact tree.
   // 8,848 since paid round 1's fix: step 6 greps the ledgers before it proposes a split.
   // 8,870 since its round 2: no ledger is no line.
-  assertMaxBytes(SKILL, 8870);
+  // 9,077 since M3 part 2 project 1's Task 18, audit row L491: step 3 asks once which base when the work's plan or
+  // ledger, or an upstream, names another, and autopilot takes `base_branch`.
+  assertMaxBytes(SKILL, 9077);
 });
 
 test('the size gate greps the ledgers for the size decision before it proposes a split', () => {
@@ -395,4 +397,15 @@ test('finish-branch: the size gate names its measure, and pr.size_command replac
   assertContains(SKILL, ['| `scope_threshold`, `pr.max_lines`, `pr.size_command` | 4 files; 300 lines; none |']);
   assertContains('kernel/settings.md', ['| `pr.size_command` | none |', 'insertions plus deletions from `git diff --shortstat`, tests included']);
   assertContains('kernel/settings.md', ['tests included, or `pr.size_command`\'s count | plan, execute-plan, finish-branch, help |', '| execute-plan, finish-branch, help |']);
+});
+
+test('step 3 asks once which base when the plan, the ledger or an upstream names another; autopilot takes base_branch', () => {
+  // M3 part 2 project 1 Task 18, audit row L491, after superpowers' finishing-a-development-branch Step 3: merging
+  // into the wrong base is expensive to undo. A branch's own `origin/<branch>` names no other base, and no upstream
+  // is no failure, so line 10 does not stop the run. `--abbrev-ref` stays out of this file (the symbolic-ref test above).
+  const three = steps(readDoc(SKILL).body)[3];
+  assert.ok(three.startsWith('3. Base: `<base>` is `base_branch`; when the work\'s plan or ledger, or an upstream other than `origin/<branch>` (`git rev-parse --symbolic-full-name @{u}`; failing: none), names another, ask once which base. '), three);
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
+  assert.ok(auto.includes('A failed fetch: the last fetched ref. Another base named: `base_branch`.'), auto);
+  assert.ok(auto.includes('A judgment call parks as `parked: <question>; default: <choice>; why: <one line>`. Defaults:'), 'the default is a parked judgment call');
 });

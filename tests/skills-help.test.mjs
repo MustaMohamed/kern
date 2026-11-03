@@ -93,3 +93,55 @@ test('setup step 4 lists each skill that overlaps a job and records the pick', (
   assert.ok(table.includes('| skill name, or `off` for no override'));
   assert.ok(table.includes('the same-name match is off | session-start, prompt-submit, skill-conflicts, every skill |'));
 });
+
+test('the status-line snippet reads the config dir, spaced keys and stdin with a timeout', async () => {
+  // M3 part 2 project 1 Task 18, audit row L480, after caveman's statusline: CLAUDE_CONFIG_DIR moves the plugin
+  // data dir, Claude Code may space its JSON keys, and a stdin pipe that never closes must not wedge the bar.
+  const fix = readFileSync(join(dir, 'references', 'fix-a-run.md'), 'utf8');
+  const snippet = fix.split('\n```bash\n')[1].split('\n```')[0];
+  assert.ok(snippet.includes('${CLAUDE_PLUGIN_DATA:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/data/kern-kern}'), snippet);
+  assert.match(snippet, /\bread -r -d '' -t 1 /);
+  const { spawn } = await import('node:child_process');
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const cfg = mkdtempSync(join(tmpdir(), 'kern-statusline-'));
+  try {
+    mkdirSync(join(cfg, 'plugins', 'data', 'kern-kern', 'sessions'), { recursive: true });
+    writeFileSync(join(cfg, 'plugins', 'data', 'kern-kern', 'sessions', 'abc-1.state'), 'autopilot: on\nvoice: terse\n');
+    const env = { PATH: process.env.PATH, HOME: join(cfg, 'nohome'), CLAUDE_CONFIG_DIR: cfg };
+    const run = (input) => new Promise((resolve) => {
+      const child = spawn('bash', ['-c', snippet], { env });
+      let out = '';
+      const t0 = Date.now();
+      child.stdout.on('data', (d) => { out += d; });
+      // A snippet that reads stdin with no timeout would wait forever here; the kill turns that into a failure.
+      const kill = setTimeout(() => child.kill(), 5000);
+      child.on('close', () => { clearTimeout(kill); child.stdin.destroy(); resolve({ out, ms: Date.now() - t0 }); });
+      if (input !== null) child.stdin.end(input);
+    });
+    const spaced = await run('{\n  "session_id" : "abc-1",\n  "cwd" : "/w"\n}\n');
+    assert.equal(spaced.out, '[kern autopilot] [kern terse] ', 'a spaced "session_id" : " key under CLAUDE_CONFIG_DIR');
+    assert.equal((await run('{"session_id":"abc-1"}')).out, '[kern autopilot] [kern terse] ', 'the compact form still reads');
+    const open = await run(null);
+    assert.equal(open.out, '', 'stdin that never closes prints nothing');
+    assert.ok(open.ms < 5000, `the read times out: ${open.ms} ms`);
+  } finally {
+    rmSync(cfg, { recursive: true, force: true });
+  }
+});
+
+test('every map row names its nearest sibling skill and where the line falls', () => {
+  // M3 part 2 project 1 Task 18, audit row L481, after pocock's writing-docs: a trigger boundary against the
+  // nearest sibling, "for <X> instead, use <sibling>".
+  const map = readFileSync(join(dir, 'references', 'map.md'), 'utf8');
+  assert.ok(map.includes('\n| Skill | Tier | Reached by | Job | Nearest sibling |\n|---|---|---|---|---|\n'), 'the header names the column');
+  const rows = map.split('\n').filter((l) => /^\| `[a-z0-9-]+` \|/.test(l)).map((l) => l.split(' | '));
+  const names = rows.map((c) => c[0].slice(3, -1));
+  assert.ok(rows.length >= 16, `${rows.length} rows`);
+  for (const c of rows) {
+    assert.equal(c.length, 5, c.join(' | '));
+    const m = c[4].match(/^`([a-z0-9-]+)` when (.+) \|$/);
+    assert.ok(m, `the last cell names a sibling and when: ${c.join(' | ')}`);
+    assert.ok(names.includes(m[1]) && m[1] !== c[0].slice(3, -1), `${m[1]} is another skill in the map`);
+  }
+});

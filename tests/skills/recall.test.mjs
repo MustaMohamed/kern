@@ -177,3 +177,10 @@ test('the recall ledger fixture exists and leaves Task 3 incomplete', () => {
   assert.match(ledger, /^Task 3: start /m);
   assert.doesNotMatch(ledger, /^Task 3: complete /m);
 });
+
+test('step 6 sweeps the tracker when a file or subsystem is named too', () => {
+  // M3 part 2 project 1 Task 18, audit row L496, after pstack recall: the sweep is the default whenever the topic
+  // names a feature, file, subsystem or bug.
+  const six = steps(readDoc(SKILL).body)[6];
+  assert.ok(six.startsWith('6. When a feature, ticket, bug, file or subsystem is named, sweep `tracker` and `workflow_records`'), six);
+});

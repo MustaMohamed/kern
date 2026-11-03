@@ -368,3 +368,70 @@ slice_spec() {
     [ "$status" -eq 0 ] || { echo "refused: $entry: $output"; false; }
   done
 }
+
+# M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task whose Files exceed
+# scope_threshold makes a PR over it, so lint mode warns, and plan step 7's stop settles it. The warning never
+# changes the exit, and --graph and --files print none, since their output is read by scripts.
+five_files() {
+  sed -i.bak 's#^- Create: `src/parse.js:1-20`$#- Create: `src/parse.js:1-20`, `src/a.js`, `src/b.js`\
+- Test: `test/parse.test.js`, `test/a.test.js`#' plan.md
+}
+
+@test "a task with more files than scope_threshold gets a warn: line and keeps exit 0" {
+  mkdir -p .claude
+  printf 'scope_threshold: 4\n' > .claude/kern.local.yml
+  five_files
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "plan-check: warn: Task 1 lists 5 files, over scope_threshold 4" ]
+  [ -z "$stderr" ]
+}
+
+@test "the warn: line reads scope_threshold from settings and defaults to 4" {
+  pc plan.md
+  [ -z "$output" ]
+  five_files
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "plan-check: warn: Task 1 lists 5 files, over scope_threshold 4" ]
+  mkdir -p .claude
+  printf 'scope_threshold: 5\n' > .claude/kern.local.yml
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  printf 'scope_threshold: 1\n' > .claude/kern.local.yml
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "plan-check: warn: Task 1 lists 5 files, over scope_threshold 1" ]
+  printf 'scope_threshold: four\n' > .claude/kern.local.yml
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a path named twice counts once, and a bare line range counts as no file" {
+  sed -i.bak 's#^- Create: `src/parse.js:1-20`$#- Modify: `src/parse.js:1-20`, `:40-52`, `src/a.js`, `src/b.js`\
+- Test: `src/parse.js:60`, `src/c.js`#' plan.md
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  sed -i.bak 's#^- Test: `src/parse.js:60`, `src/c.js`$#- Test: `src/parse.js:60`, `src/c.js`, `src/d.js`#' plan.md
+  pc plan.md
+  [ "$output" = "plan-check: warn: Task 1 lists 5 files, over scope_threshold 4" ]
+}
+
+@test "the warn: line leaves a failing exit failing, and --graph and --files print none" {
+  five_files
+  pc --graph plan.md
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = $'overlap\t2\t3\tmigrations' ]
+  [[ "$output" != *warn* ]] || false
+  pc --files plan.md 1
+  [ "$status" -eq 0 ]
+  [ "$output" = $'src/parse.js\nsrc/a.js\nsrc/b.js\ntest/parse.test.js\ntest/a.test.js' ]
+  sed -i.bak 's/^\*\*Acceptance:\*\* 3$/**Acceptance:** 1/' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "acceptance criterion 3 of the spec is covered by no task"
+  says "plan-check: warn: Task 1 lists 5 files, over scope_threshold 4"
+}

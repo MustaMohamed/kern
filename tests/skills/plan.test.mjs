@@ -35,7 +35,9 @@ test('plan sections and steps', () => {
   // 7,086 since paid round 1's fix: an unapproved spec reads define now, in place of a route the runs did not take.
   // 7,128 since paid round 2's fix: "Not approved" read as a spec that exists, so step 1 says no such file, even for a decided design.
   // 7,133 since paid round 3's fix: step 9 runs git branch --show-current, and only empty output gives the detached line.
-  assertMaxBytes(SKILL, 7133);
+  // 7,238 since M3 part 2 project 1's Task 18, audit row L494: step 7 takes plan-check's warn: line for a task over
+  // scope_threshold files.
+  assertMaxBytes(SKILL, 7238);
 });
 
 test('under a go the plan asks nothing the stop list does not stop for', () => {
@@ -253,4 +255,14 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
   assertContains('skills/plan/references/plan-review.md', ['- Later slices: a spec with `## Later slices` must show the overrun, the whole ticket\'s files and lines over the limits in `## Size` or the plan\'s `Decision:` line. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.']);
   // With no go the plan stays a draft.
   assert.ok(lines.some((l) => l.includes('When on with no go, every stop parks') && l.includes('write the plan with `status: draft`')), 'parking is the no-go path');
+});
+
+test('step 7 takes plan-check\'s warn: line for a task over scope_threshold files, and Review Focus lines get their tests', () => {
+  // M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task over the file
+  // limit is a PR over it, so plan-check warns and step 7's stop settles it.
+  const seven = steps(readDoc(SKILL).body)[7];
+  assert.ok(seven.includes('every migrate batch. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or take the stop below. One PR is one change,'), seven);
+  // Audit row L495, after superpowers' writing-plans Self-Review item 4.
+  const focus = section(readDoc('skills/plan/references/plan-template.md').body, '## Review Focus');
+  assert.ok(focus.includes("Each line's pinning test goes into the task that owns the code, which the line names; an empty section means checked and none found, not skipped."), focus);
 });
