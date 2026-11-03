@@ -23,6 +23,8 @@ Delete means data, remote branches, tags, and files outside the run's own worktr
 
 A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.
 
+A first build or a fix round that changes behaviour the ticket does not name, against the base branch, is a design choice, a side effect the ticket's own change forces on inputs the ticket never names included: the run commits, pushes its branch, stops with the change named and opens no PR.
+
 A required check is one the ticket or prove-it names for the change. When one cannot run, the run builds by the closest check, commits, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.
 
 A ticket the run cannot read is a stop: the run reports each way it tried.
@@ -43,7 +45,7 @@ A route is distinct only if it is a different action. The same target and effect
 
 ## Fix rounds
 
-A `fix first` verdict, but for a demanded defect, starts a fix round in place of ending the run, up to 3 per self-review. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. A round that changes behaviour the ticket does not name, against the base branch, is a design choice: the run commits, pushes its branch, stops with the change named and opens no PR. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
+A `fix first` verdict, but for a demanded defect, starts a fix round in place of ending the run, up to 3 per self-review. Rounds count from self-review's packages: round N reviews `<slug>-<N+1>.diff`, so the third round's is `<slug>-4.diff`. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
 
 One go covers one draft PR.
 
@@ -55,11 +57,11 @@ One go covers one draft PR.
 
 ## Define and plan under a go
 
-A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. An edit after the review takes a new wt-snap and `test.full`, and the report names it. Step numbers here are the skill's own. Each approval below sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it. G20 also needs `issue:` to name this ticket; a bare `#` opens a YAML comment, so quote one: `issue: "#853"`. Only the stop list stops the run.
+A ticket is no agreed design. Under a go, a build starts at define, a bug at diagnose, and a ticket that only adds tests for existing code at implement. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. An edit after the review takes a new wt-snap and `test.full`, and the report names it. Step numbers here are the skill's own. Each approval below sets `status: approved` and `approved: <date>, "/kern:autopilot go <id>"`, `<id>` as the `kern mode:` line shows it. G20 also needs `issue:` to name this ticket; a bare `#` opens a YAML comment, so quote one: `issue: "#853"`. Only the stop list stops the run.
 
 define: size it bounded or architectural, never a spike or the fast path, and run that path with no stop of its own: each question off the stop list takes its default with a `parked:` line in the run report, and under Open questions where the spec has that section. A capability-map ticket writes no map; within the limits it specs the whole ticket. A size over `scope_threshold` specs its first slice: `## Size` gives the slice's files and lines, then the whole ticket's against the limit; numbered lines go under `## Acceptance criteria`, the rest as plain bullets under `## Later slices`, which the report lists, each needing its own go. Bounded: step 9's one write, so plan has an approved spec to read. Architectural: step 12's one Edit, after plan-check and spec review, then the same plan-check again.
 
-plan: Step 4's spike runs, the go standing for the nod; a fact it cannot settle follows this file's unblock and stop rules. Step 7's scope question takes its default, with a `parked:` line under Open questions and in the run report. Step 12 does not stop: after step 11's plan-check and review, one Edit sets the two approval lines and `execution: delegate`; run the same plan-check again. A plan over `scope_threshold` or `pr.max_lines` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan giving the whole ticket's files and lines against the limits, then plan-check runs.
+plan: Step 4's spike runs, the go standing for the nod; a fact it cannot settle follows this file's unblock and stop rules. Step 7's scope question takes its default, with a `parked:` line under Open questions and in the run report. Step 12 does not stop: after step 11's plan-check and review, one Edit sets the two approval lines and `execution: delegate`; run the same plan-check again. execute-plan then runs it. A plan over `scope_threshold` or `pr.max_lines` takes the split and runs the first slice: one Edit under the go moves the later lines of the approved spec to `## Later slices` as plain bullets, with a `Decision:` line in the plan giving the whole ticket's files and lines against the limits, then plan-check runs.
 
 ## The run report
 

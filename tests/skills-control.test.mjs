@@ -109,6 +109,11 @@ test('run.md says what each stop means and what a stop does', () => {
     'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`; the go holds. Work that does not depend on the answer may finish first.',
     "Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.",
     "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
+    // Paid round 4, the user's rule: go-spend-stop's fix rounds changed what `sum` does with inputs the ticket never named, and the run opened the PR.
+    // Its re-review, M1: measured against the last round, a fix that puts back main's behaviour would stop a draft.
+    // M3 part 2 project 1, the user's "Yes, first builds too": round 5's first build turned `sum('1', '2')` from '12' into 12 under the
+    // ticket's rounding, so the rule moved here from the fix rounds and names the side effect.
+    "A first build or a fix round that changes behaviour the ticket does not name, against the base branch, is a design choice, a side effect the ticket's own change forces on inputs the ticket never names included: the run commits, pushes its branch, stops with the change named and opens no PR.",
     'A required check is one the ticket or prove-it names for the change.',
     // Paid round 1, go-required-check-stop: the run acted on this line, which held no word for its report.
     // Paid round 2: define's route has no "work goes on" line, so the run stopped with nothing built and no branch to push.
@@ -143,12 +148,12 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   // follow-up: with the label gone, the exception names the stop, which sits in another section.
   for (const s of ['A `fix first` verdict, but for a demanded defect, starts a fix round in place of ending the run, up to 3 per self-review.',
     'Each round fixes the findings and runs self-review again in full, including the checks the last round skipped.',
-    // Paid round 4, the user's rule: go-spend-stop's fix rounds changed what `sum` does with inputs the ticket never named, and the run opened the PR.
-    // Its re-review, M1: measured against the last round, a fix that puts back main's behaviour would stop a draft.
-    'A round that changes behaviour the ticket does not name, against the base branch, is a design choice: the run commits, pushes its branch, stops with the change named and opens no PR.',
+    // M3 part 2 project 1: a run kept no durable count of its rounds, so the count comes from the packages self-review already names.
+    "Rounds count from self-review's packages: round N reviews `<slug>-<N+1>.diff`, so the third round's is `<slug>-4.diff`.",
     // Task 7 fix round 2: "After the third" read as a push and stop even when the third round comes back `ready`.
     'When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR.', 'No verdict also stops.',
     'One go covers one draft PR.']) assert.ok(fix.includes(s), s);
+  assert.ok(!fix.includes('A round that changes behaviour'), 'the stop list holds U1, for a first build too');
   assert.deepEqual(fix.split('\n').filter((l) => l.startsWith('|')).slice(2), [
     '| `split` from a finding on a line the last round changed | The fixes are not converging: stop with the report |',
     "| `split` or the size gate on size alone | finish-branch's default: go on, with Scope giving the size |",
@@ -166,7 +171,13 @@ test('run.md gives define\'s first slice the default of a plan over scope_thresh
 
 test('run.md opens its define and plan rules with a go\'s route: a ticket is no agreed design', () => {
   // Paid round 2: 4 of 5 PR runs ran wt-snap, none ran the size gate, and go-deploy-stop's pushed tree was not its reviewed tree.
-  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define and a bug at diagnose. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. An edit after the review takes a new wt-snap and `test.full`, and the report names it. Step numbers here are the skill\'s own.'));
+  // M3 part 2 project 1: a ticket for tests on existing code took define and a short spec under a go, though the kernel routes it to implement.
+  assert.ok(section(RUN, '## Define and plan under a go').trim().startsWith('A ticket is no agreed design. Under a go, a build starts at define, a bug at diagnose, and a ticket that only adds tests for existing code at implement. A draft PR comes only through finish-branch, in order: wt-snap, self-review with its proofs and spec lane, the size gate, the Proven tree check. An edit after the review takes a new wt-snap and `test.full`, and the report names it. Step numbers here are the skill\'s own.'));
+});
+
+test('run.md sends a go\'s approved plan on to execute-plan', () => {
+  // M3 part 2 project 1: round 5's go-no-lint-draft approved a 2-task plan with `execution: delegate`, then built both tasks inline with no ledger.
+  assert.ok(section(RUN, '## Define and plan under a go').includes('run the same plan-check again. execute-plan then runs it.'));
 });
 
 test('run.md lists every report field, the jobs another skill ran among them', () => {
@@ -256,8 +267,10 @@ test('run.md stays within its byte cap', () => {
   // 6,926 since paid round 4's fix: a fix round that changes behaviour the ticket does not name stops a go, less the label any review's finding now replaces.
   // 6,934 since that fix's follow-up: the fix-round exception names the demanded defect.
   // 6,911 since its re-review, a fall: a round's change is measured against the base branch, and the line after the fix-round table, which define's rule repeats, goes.
-  assertMaxBytes('skills/autopilot/references/run.md', 6911);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 6,911 bytes (6,934 until M3 part 1 paid round 4\'s fix re-review']);
+  // 7,231 since M3 part 2 project 1 Task 7: a first build that changes behaviour the ticket does not name stops a go, rounds count from
+  // self-review's packages, a tests-only ticket starts at implement, and an approved plan goes on to execute-plan.
+  assertMaxBytes('skills/autopilot/references/run.md', 7231);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,231 bytes (6,911 until M3 part 2 project 1 Task 7: ']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {
