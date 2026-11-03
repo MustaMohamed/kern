@@ -309,7 +309,8 @@ _G21_OPENRE=$'^[ \t]*cd[ \t]+("[^"]+"|\'[^\']+\'|[^ \t"\']+)[ \t]+&&'
 # cwd. &&, the pipe |& and the redirections >&, <&, &> and &>> are not one, nor is a & that a backslash
 # escapes or that a pair of single or double quotes holds. When the text holds a $, a backtick, a #, a [,
 # a << or a ((, where the shell may read a quote character as no quote, or a quote that never closes,
-# every & counts. A failed read also holds no match.
+# every & counts. A quoted span or an escaped character leaves one _ in its place, so the characters on
+# either side never join into &&, |&, >&, <&, &> or &>>. A failed read also holds no match.
 _g21_open() {
   local w real line t n=0
   _G21_CWD=${CWD:-$PWD}
@@ -326,8 +327,8 @@ _g21_open() {
           c = C[i]
           if (q == sq) { if (c == sq) q = ""; continue }
           if (q == "\"") { if (c == "\\") i++; else if (c == "\"") q = ""; continue }
-          if (c == "\\") { i++; continue }
-          if (c == sq || c == "\"") { q = c; continue }
+          if (c == "\\") { i++; o = o "_"; continue }
+          if (c == sq || c == "\"") { q = c; o = o "_"; continue }
           o = o c
         }
         if (q != "") o = s

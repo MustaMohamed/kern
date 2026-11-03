@@ -439,6 +439,16 @@ open_setup() {
   expect none "cd $W && rm \"a&b\""
 }
 
+@test "a quoted name after a redirect keeps the lone & after it" {
+  open_setup
+  expect deny "cd $W && rm src/gen.ts 2>\"f\"& rm README.md"
+}
+
+@test "an empty quoted pair between two & is no &&" {
+  open_setup
+  expect deny "cd $W && rm src/gen.ts &\"\"& rm README.md"
+}
+
 @test "|& is a pipe, not a lone &" {
   open_setup
   expect none "cd $W && rm x |& cat"
