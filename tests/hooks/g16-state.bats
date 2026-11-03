@@ -1515,3 +1515,26 @@ expect_kern() {
 @test "a quoted glob glued to trailing separators in a plain read gets no vote" {
   expect_cmd none "(grep '*/x/*')" "grep '*/x/*';"
 }
+
+# M3 part 2 project 1 Task 3: a copy or move into kern's hooks folders, and a write to its hooks.json.
+@test "a copy or move into kern's hooks folders asks" {
+  K=$(kern_root)
+  expect_hook "cp /tmp/g.sh $K/hooks/guards/" "mv x.sh \"$K/hooks/lib\""
+}
+
+@test "a shell write to kern's hooks.json asks" {
+  K=$(kern_root)
+  expect_hook "printf '{}' > $K/hooks/hooks.json" "cp a.json $K/hooks/hooks.json" "sed -i s/a/b/ $K/hooks/hooks.json"
+}
+
+@test "a Write to kern's hooks.json asks" {
+  K=$(kern_root)
+  expect_file_tools "$K/hooks/hooks.json" ask
+}
+
+@test "a project's own hooks.json and guards folder get no vote" {
+  K=$(kern_root)
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  expect_cmd none "cp g.sh $R/src/hooks/guards/" "printf '{}' > $R/src/hooks/hooks.json" "cat $K/hooks/hooks.json"
+}
