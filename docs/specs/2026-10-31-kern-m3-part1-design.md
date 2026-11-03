@@ -112,6 +112,8 @@ The user's ruling on the required check: "Push allowed, and should Stop, PR shou
 
 The user's rule, 2026-11-01: a defect the ticket itself demands stops a go before the PR. The run commits, pushes its branch, stops with the finding and opens no PR. No fix round runs, since a fix would leave the ticket, and no `ticket` ruling parks it. The paid round showed why: `go-deploy-stop`'s review said `needs fixes` on the ticket's own formula, and the run opened the PR and left the verdict out of its report.
 
+The user's rule, 2026-11-03: a fix round that changes behaviour the ticket does not name is a design choice. Under a go the run commits, pushes its branch, stops before the PR and names the change. Paid round 4 showed why: `go-spend-stop`'s fix rounds changed what `sum` does with inputs the ticket never named, and the run opened the PR with the change as a line for the user to check.
+
 Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work (my call).
 
 A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope (my call). Any other judgment takes a default and goes in the report.
@@ -134,7 +136,7 @@ A route is distinct only if it is a different action. The same target and effect
 
 ## Fix rounds
 
-A `fix first` verdict starts a fix round in place of ending the run (my call on the limit: 3 per self-review). Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR (my call on the push). No verdict also stops. A defect the ticket itself demands takes no fix round: it stops as the stop list says.
+A `fix first` verdict starts a fix round in place of ending the run (my call on the limit: 3 per self-review). Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR (my call on the push). No verdict also stops. A defect the ticket itself demands takes no fix round: it stops as the stop list says. A fix round that changes behaviour the ticket does not name stops as the stop list says.
 
 One go covers one draft PR. All three rules below are my call.
 

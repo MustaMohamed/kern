@@ -25,7 +25,7 @@ test('self-review sections and steps', () => {
   // main session reads this skill (the kernel row and finish-branch step 5; no agent does). M2b Task 17 named
   // `floor-scan` (step 2) and `probe --exclude-tests` (step 7) bare the same way, after wt-diff's full path in step 1,
   // to pay for step 9's `bar-lowered` clause (P69) and step 6's manifest trigger (AD11) within the 7,000-byte cap.
-  assertContains(SKILL, ['Run `floor-scan <package>` and `claim-check <wt> <package>`', 'For each new guard test: `probe --exclude-tests <wt> <package>.patch -- <test>`.',
+  assertContains(SKILL, ['Run `floor-scan <package>` and `claim-check <wt> <package> --spec <spec> --proofs <package>.proofs.md`', 'For each new guard test: `probe --exclude-tests <wt> <package>.patch -- <test>`.',
     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-diff <wt> <merge-base> --out <package>`',
     'For a new conditional, one `probe --mutate <file>:<line> <wt> -- <test>`', 'never the worktree', 'Skill tool with `code-review`', 'Never pass `--comment`', 'skip: built-in code-review not available',
     'A skipped check counts as failed', 'mode `whole-branch`', 'skip: no spec', '"Declined to judge" list', 'the Declined to judge list', 'open `references/blast-radius.md`', 'look where grep stops',
@@ -43,7 +43,8 @@ test('self-review sections and steps', () => {
   // 8,915 since its fix rounds 1 and 2: the skip names the final review's file, base tree and spec, after the lane's ask moved to the agent's mode.
   // 9,058 since the final review's fix (I1): under autopilot a `verify.fast` with nothing resolved is a named skip.
   // 9,102 since the scoped re-review's edit: step 2 and `fix first` name the skip.
-  assertMaxBytes(SKILL, 9102);
+  // 9,114 since M3 part 1 paid round 4's fix: step 2 gives claim-check's full form first, dropping both flags with no spec.
+  assertMaxBytes(SKILL, 9114);
 });
 
 test('the spec lane stands down only for a whole-branch review that passed on this exact tree', () => {
@@ -354,8 +355,9 @@ test('self-review proves each acceptance state, reads every reader of moved code
   // the verdict was `fix first`; and step 4 wrote tracker or PR text under `kern-dir tmp` only after step 2 ran.
   const find = 'Find the spec now, as step 4 says. With one, write `<package>.proofs.md` per `references/proofs.md`.';
   // M3 part 1 Task 7: two wording rounds did not move `workflow-self-review-proofs`, so the proof check moved into
-  // claim-check, which step 2 always runs.
-  const run = 'Run `floor-scan <package>` and `claim-check <wt> <package>`, adding `--spec <spec> --proofs <package>.proofs.md` with a spec: exit 1 from either is hits, and a proof line among them a failed check;';
+  // claim-check, which step 2 always runs. Paid round 4: go-deploy-stop ran claim-check with neither flag beside an approved spec, so the full
+  // command comes first and a run with no spec drops the flags.
+  const run = 'Run `floor-scan <package>` and `claim-check <wt> <package> --spec <spec> --proofs <package>.proofs.md`, dropping both flags with no spec: exit 1 from either is hits, and a proof line among them a failed check;';
   for (const t of [find, run, 'On `proof-check: n/a`, check the table by reading.', 'A skipped check counts as failed, but for a named skip (`references/claim-checks.md`).']) assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
   assert.ok(s[2].indexOf(find) < s[2].indexOf(run), 'the spec is found before claim-check runs');
   assert.ok(!s[2].includes('proof-check <spec>'), 'no separate proof-check run');
