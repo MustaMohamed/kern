@@ -60,21 +60,14 @@ _G16_WZ=$'\035'
 # ansi is 1 when the text held $'...', whose escapes can hide a $ or a leading dash from ro. ro also
 # refuses <>, and a redirect before a head, since either can hide the head once the quotes are out; &>
 # after a word is not before a head.
-# pass=quoted runs quoted on the text as written, for _g16_hooks_read; pass=paths marks words for
-# _g16_paths_out and prints whether the command only reads: ro, with no redirect but to /dev/null or a
-# file descriptor. It prints nothing, so the text stays whole, for a command that does not read and
-# matches hit or holds $(, ${ or a backtick: no word of such a command can be judged on its own.
-# Neither pass is a reading: each only prepares words for the rules to skip.
-# quoted prints the text with each quoted glob or regex (and each \( and \)) as the word _, when ro then
-# reads the whole command as read-only, so a shell reads none of them and each is a pattern or a file
-# name with a literal * in it. Otherwise it prints the text as it came. It leaves a word that is not
-# wholly quoted, a $ or a backtick in double quotes, an option (it may be --pre=), a redirect target, a
-# word of plain name characters, and anything the hit rule would match. It gives up on the whole text at
-# a # that starts a word and at a quote with no end, where its reading of the quotes may not be the
-# shell's; a here-doc body is the same, so _g16_hooks_read does not call it on text that holds <<.
+# pass=paths marks words for _g16_paths_out and prints whether the command only reads: ro, with no
+# redirect but to /dev/null or a file descriptor. It prints nothing, so the text stays whole, for a
+# command that does not read and matches hit or holds $(, ${ or a backtick: no word of such a command
+# can be judged on its own. Neither pass=paths nor _G16_QUOTED_AWK, which runs with this program for
+# its ro and hit, is a reading: each only prepares words for the rules to skip.
 # shellcheck disable=SC2016 # awk text
 _G16_HOOK_AWK='
-function ro(C,    ok, U, T, m, seg, k, p, sw, j, hd, ops, q) {
+function ro(C,    ok, U, T, m, seg, k, p, wd, j, hd, ops, q) {
   ok = 1
   sawfind = 0
   if (ansi || index(C, "$") || index(C, "`") || index(C, "<>")) ok = 0
@@ -90,76 +83,28 @@ function ro(C,    ok, U, T, m, seg, k, p, sw, j, hd, ops, q) {
   gsub(/<+[ \t]*[^ \t\n|;&()<>]*/, " ", T)
   m = split(T, seg, /[|;&\n()]+/)
   for (k = 1; k <= m && ok; k++) {
-    p = split(seg[k], sw, /[ \t\r]+/)
+    p = split(seg[k], wd, /[ \t\r]+/)
     j = 1
-    while (j <= p && sw[j] == "") j++
+    while (j <= p && wd[j] == "") j++
     if (j > p) continue
     # An assignment before a head can change what a filter runs.
-    if (sw[j] ~ /^[a-z_][a-z0-9_]*=/) { ok = 0; break }
+    if (wd[j] ~ /^[a-z_][a-z0-9_]*=/) { ok = 0; break }
     # A head under any other directory is a script that may only share a name with a filter.
-    hd = sw[j]; sub(/^(\/usr)?\/bin\//, "", hd)
+    hd = wd[j]; sub(/^(\/usr)?\/bin\//, "", hd)
     if (hd == "find") { sawfind = 1; continue }
     if (hd !~ filt) { ok = 0; break }
     # A filter that runs, reads or writes what the list names: any long option, sort -o (alone or in a
     # bundle), or a uniq second operand, its output file. - is an operand.
     ops = 0
     for (q = j + 1; q <= p; q++) {
-      if (sw[q] == "") continue
-      if (sw[q] ~ /^--/) ok = 0
-      else if (hd == "sort" && sw[q] ~ /^-[a-z0-9]*o/) ok = 0
-      else if (sw[q] == "-" || sw[q] !~ /^-/) ops++
+      if (wd[q] == "") continue
+      if (wd[q] ~ /^--/) ok = 0
+      else if (hd == "sort" && wd[q] ~ /^-[a-z0-9]*o/) ok = 0
+      else if (wd[q] == "-" || wd[q] !~ /^-/) ops++
     }
     if (hd == "uniq" && ops > 1) ok = 0
   }
   return ok
-}
-function quoted(    sep, n, i, j, k, c, d, s, v, all, q, redir, S) {
-  sep = " \t\r\n;|&<>()"
-  n = length(buf)
-  q = ""; redir = 0
-  for (i = 1; i <= n; i = j) {
-    c = substr(buf, i, 1)
-    if (index(sep, c)) {
-      q = q c
-      j = i + 1
-      if (c == ">" || c == "<") redir = 1
-      continue
-    }
-    if (c == "#") return buf
-    v = ""; all = 1
-    for (j = i; j <= n; ) {
-      d = substr(buf, j, 1)
-      if (index(sep, d)) break
-      if (d == "\047") {
-        k = index(substr(buf, j + 1), "\047")
-        if (!k) return buf
-        s = substr(buf, j + 1, k - 1)
-        j += k + 1
-      } else if (d == "\"") {
-        for (k = j + 1; k <= n; k++) {
-          d = substr(buf, k, 1)
-          if (d == "\"") break
-          if (d == "\\") k++
-          else if (d == "$" || d == "`") all = 0
-        }
-        if (k > n) return buf
-        s = substr(buf, j + 1, k - j - 1)
-        j = k + 1
-      } else {
-        all = 0
-        s = substr(buf, j, d == "\\" ? 2 : 1)
-        j += length(s)
-      }
-      v = v s
-    }
-    s = substr(buf, i, j - i)
-    if (s == "\\(" || s == "\\)" || (all && !redir && v !~ /^-/ && v ~ /[^ A-Za-z0-9._\/@+:,=%~-]/ && tolower(v) !~ hit)) s = "_"
-    q = q s
-    redir = 0
-  }
-  S = q
-  gsub(/["\047\\]/, "", S)
-  return ro(tolower(S)) ? q : buf
 }
 BEGIN {
   a = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -170,7 +115,6 @@ BEGIN {
   dir = "(^|[^" a "._-])hooks" e
   filt = "^(cd|ls|cat|tac|nl|head|tail|grep|egrep|fgrep|rg|sort|uniq|wc|cut|tr|column|cmp|comm|rev|fold)$"
 }
-pass == "quoted" { buf = buf (NR > 1 ? "\n" : "") $0; next }
 pass == "paths" {
   s = $0; o = ""
   while (match(s, /[^ \t\r;|&<>)=]+/)) {
@@ -188,7 +132,6 @@ $0 ~ dir { ctx = 1 }
 { cmd[nc++] = $0 }
 END {
   if (found) exit
-  if (pass == "quoted") { print quoted(); exit }
   C = ""
   for (k = 0; k < nc; k++) C = C (k ? "\n" : "") cmd[k]
   if (pass == "paths") {
@@ -214,6 +157,67 @@ END {
   }
   printf "%s\n%s", (ctx ? "ctx" : "-"), words
 }'
+
+# _G16_QUOTED_AWK: the quoted pass, for _g16_hooks_read. It runs as $_GW_AWK (for git_words' word
+# splitter sw), then this program, then $_G16_HOOK_AWK (for ro and hit), with -v sq="'" and -v
+# pass=quoted (no rule reads pass; it names the pass); its rules come first and end in next and exit,
+# so no rule of _G16_HOOK_AWK runs. It reads the text as written, and quoted prints it with each quoted
+# glob or regex (and each \( and \)) as the word _, when ro then reads the whole command as read-only,
+# so a shell reads none of them and each is a pattern or a file name with a literal * in it. Otherwise
+# it prints the text as it came.
+# sw splits the text into words and reads their quotes. quoted finds each word in the text by its
+# characters in order, past the quote characters and backslashes sw took out, so the text keeps its
+# lines and separators. A word goes only when sw read a quote in it and, with any ; | & ( ) or CR at
+# its ends aside, it is quoted strings alone (in double quotes, a $ or backtick only escaped) that hold,
+# as sw reads them, a character outside plain name characters. It stays when it is an option (it may be
+# --pre=), a redirect target, or anything the hit rule would match. So a word with any part unquoted
+# stays, as does a quoted string that sw joins across ; | & ( ) to more text. quoted gives up on the
+# whole text at a # that starts a word or follows ; | & ( ) < > or CR, at a quote with no end or a
+# backslash at the end, and at the byte \036 (its end mark) or \037 (a blank to sw), where its reading
+# may not be the shell's; a here-doc body is the same, so _g16_hooks_read does not call it on text that
+# holds <<.
+# shellcheck disable=SC2016 # awk text
+_G16_QUOTED_AWK='
+function quoted(    M, n, C, i, k, s, e, j, m, V, rd, out, p, a, q, t, v) {
+  M = "\036"
+  if (index(buf, M) || index(buf, "\037")) return buf
+  # The end mark is a word of its own only when the text ends outside a quote and a backslash.
+  sw(buf "\n" M)
+  if (!sw_n || sw_w[sw_n] != M || sw_q[sw_n]) return buf
+  n = split(buf, C, ""); i = 1; rd = 0; out = ""
+  for (k = 1; k < sw_n; k++) {
+    while (i <= n && (C[i] == " " || C[i] == "\t" || C[i] == "\n")) out = out C[i++]
+    # A # here is a comment sw left out.
+    if (i > n || C[i] == "#") return buf
+    # Word k runs from s through its last character, then over the quote characters and backslashes sw
+    # took out after it.
+    s = i; m = split(sw_w[k], V, "")
+    for (j = 1; j <= m; i++) { if (i > n) return buf; if (C[i] == V[j]) j++ }
+    while (i <= n && (C[i] == sq || C[i] == "\"" || C[i] == "\\")) i++
+    e = i - 1; p = ""
+    for (j = s; j <= e; j++) p = p C[j]
+    if (p ~ /[;|&()<>\r]#/) return buf
+    # q: the word as written, without the separators at its ends (an escaped one stays); v: the same
+    # word as sw read it. q must be quoted strings alone, a double-quoted one with no $ or backtick
+    # unless escaped.
+    match(p, /^[;|&()\r]*/); a = RLENGTH
+    q = substr(p, a + 1); match(q, /[;|&()\r]*$/)
+    if (RSTART > 1 && substr(q, RSTART - 1, 1) == "\\") RSTART++
+    t = substr(q, RSTART); q = substr(q, 1, RSTART - 1)
+    v = substr(sw_w[k], a + 1, length(sw_w[k]) - a - length(t))
+    if (sw_q[k] && (q == "\\(" || q == "\\)" || (!rd && q ~ /^(\047[^\047]*\047|"([^"$`\\]|\\.)*")+$/ &&
+      v !~ /^-/ && v ~ /[^ A-Za-z0-9._\/@+:,=%~-]/ && tolower(v) !~ hit))) p = substr(p, 1, a) "_" t
+    out = out p
+    # rd: the next word is a redirect target, after a < or > with only separators since.
+    for (j = s; j <= e; j++) if (C[j] == "<" || C[j] == ">") rd = 1; else if (!index(";|&()\r", C[j])) rd = 0
+  }
+  for (; i <= n; i++) { if (C[i] != " " && C[i] != "\t" && C[i] != "\n") return buf; out = out C[i] }
+  t = out
+  gsub(/["\047\\]/, "", t)
+  return ro(tolower(t)) ? out : buf
+}
+{ buf = buf (NR > 1 ? "\n" : "") $0; next }
+END { print quoted(); exit }'
 
 guard_g16() {
   case "$TOOL" in
@@ -959,7 +963,7 @@ _g16_glob() {
 # - a word with a brace group that holds a / and a , or .. (hoo{ks/prompt-sub,x}mit), which can join
 #   the parts on both sides of a slash. The command is never expanded to decide.
 # A word _g16_foreign clears goes out of the text before these rules, and so does a quoted glob or regex
-# in a read-only command (_G16_HOOK_AWK's quoted). When a reading matches, _g16_own lifts the vote if the
+# in a read-only command (_G16_QUOTED_AWK). When a reading matches, _g16_own lifts the vote if the
 # text names hook code only through words a write takes that resolve outside kern's hooks folder.
 # Reading a hook file stays possible with the Read and Grep tools. Not seen (accepted limits): a hooks
 # directory reached without naming it (find $K -name prompt-submit, a glob for the directory in one
@@ -1356,7 +1360,8 @@ _g16_hooks_read() {
   case "$t" in
     *'<<'*) ;;
     *[\"\']* | *\\[\(\)]*)
-      r=$(printf '%s\n' "$t" | env LC_ALL=C awk -v pass=quoted "$_G16_HOOK_AWK") && [ -n "$r" ] && t=$r
+      r=$(printf '%s\n' "$t" | env LC_ALL=C awk -v sq="'" -v pass=quoted "$_GW_AWK$_G16_QUOTED_AWK$_G16_HOOK_AWK") &&
+        [ -n "$r" ] && t=$r
       ;;
   esac
   # $'...' and $"..." read as plain quotes; then quotes and backslashes are taken out, in one _g16_tr

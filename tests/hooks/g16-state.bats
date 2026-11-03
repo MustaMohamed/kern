@@ -1452,3 +1452,20 @@ expect_kern() {
   ln "$R/src/hooks/useForm.ts" "$R/src/hooks/lib/h.sh"
   expect_hook "cp x $R/src/hooks/lib/s.sh" "cp x $R/src/hooks/lib/h.sh"
 }
+
+# M3 part 2 project 1 Task 2: G16 reads quotes through git_words' word splitter, sw. These rows pin the
+# votes its own quote parser gave.
+# The quoted pass leaves a word the literal rule matches, so the text rule reads each regex below as
+# text and asks, as it did before the swap (the plan's row said no vote; that would loosen it).
+@test "a quoted glob or regex naming a hook file reads as text" {
+  expect_hook "rg 'hooks/lib/.*\\.sh' src" 'grep -E "hooks/guards/g[0-9]+\.sh" -r .'
+}
+
+@test "an unquoted hook path beside a quoted one still asks" {
+  K=$(kern_root)
+  expect_hook "rg 'x' $K/hooks/lib/state.sh"
+}
+
+@test "an unclosed quote keeps the text whole" {
+  expect_hook "cat 'hooks/lib/state.sh"
+}
