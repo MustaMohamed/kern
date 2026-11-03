@@ -32,7 +32,7 @@ Check error handling, edge cases (empty, zero, false, cleared, several elements)
 
 - `task`: both parts against the brief.
 - `re-review`: mark each earlier finding ADDRESSED or NOT ADDRESSED; report new breakage in the fix diff only; anything else goes to a list for the ledger.
-- `whole-branch`: both parts against the plan's acceptance lines and Review Focus; grade findings by their effect on a user. Given a spec, also ask what is missing, partial, unasked or wrong, quoting spec lines.
+- `whole-branch`: both parts against the plan's acceptance lines and Review Focus; grade findings by their effect on a user. In whole-branch mode a defect the plan or spec mandates stays Important, labelled plan-mandated, and any Critical or Important finding makes `needs fixes`. Given a spec, also ask what is missing, partial, unasked or wrong, quoting spec lines.
 - `evidence`: a verification task, with no diff. Check each report row against the file it names: a value with no stored output, or a file that does not show the row's state, makes the verdict `Spec: issues`, never a Minor finding. Read the brief, the report and the files its rows name, plus one check per named risk; never redo the work.
 
 ## Output
