@@ -16,7 +16,6 @@ guard_g13() {
   [ "$TOOL" = Bash ] || return 0
   local cmd list
   cmd=$(ti_get command) || return 0
-  case "$cmd" in *'\u'*) cmd=$(_g13_unescape "$cmd") ;; esac
   case "$cmd" in *\\$'\n'*) cmd=$(_g13_join "$cmd") ;; esac
   # Cheap prefilter before settings_get: some client or transfer name, quotes and backslashes removed.
   _g13_flat "$cmd ${KERN_ALIAS_TEXT-}"
@@ -79,21 +78,6 @@ _g13_names() {
       ;;
   esac
   return 1
-}
-
-# _g13_unescape CMD: CMD with the JSON escapes \u0000 to \u007f decoded (ti_get leaves \uXXXX as is).
-_g13_unescape() {
-  printf '%s' "$1" | env LC_ALL=C awk '
-    BEGIN { for (i = 0; i < 128; i++) hex[sprintf("%04x", i)] = sprintf("%c", i) }
-    { buf = buf (NR > 1 ? "\n" : "") $0 }
-    END {
-      out = ""
-      while (match(buf, /\\u00[0-7][0-9a-fA-F]/)) {
-        out = out substr(buf, 1, RSTART - 1) hex[tolower(substr(buf, RSTART + 2, 4))]
-        buf = substr(buf, RSTART + RLENGTH)
-      }
-      printf "%s", out buf
-    }'
 }
 
 # _g13_join CMD: CMD with each backslash-newline the shell drops removed (one an even run of

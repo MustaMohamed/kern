@@ -121,8 +121,9 @@ _g14_is_write() {
 
 # _g14_mcp_proven SERVER NAME: the call may be allowed under tracker.policy auto. SERVER (lowercased)
 # has exactly one tracker family among its words, split on every character but a-z and 0-9; NAME is
-# on that family's list, byte for byte; tool_input holds no \u escape (kern's JSON reader leaves one
-# undecoded, so it could hide a key or a value); and the family's argument checks pass. On a
+# on that family's list, byte for byte; tool_input holds no \u escape (kern's JSON reader matches a key
+# as written and leaves \u0080 and above undecoded, so one could hide a key or a value); and the
+# family's argument checks pass. On a
 # failure after the list, _G14_WHY says why.
 _g14_mcp_proven() {
   local toks=" ${1//[!$_G14_ALNUM]/ } " w fam="" n=0 list hit=1

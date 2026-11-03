@@ -16,6 +16,81 @@ setup() {
 next \ end' ]
 }
 
+@test "decode turns \u0001 to \u007f into the character" {
+  # Each escape in lower and upper hex case; \u0001 stays the byte 0x01, which decode uses for an
+  # escaped backslash while it works, and \u0022 and \u005c give a quote and a backslash.
+  local i o c hex json want
+  for f in '%04x' '%04X'; do
+    json="" want=""
+    for i in $(seq 1 127); do
+      printf -v hex "$f" "$i"
+      printf -v o '%03o' "$i"
+      # shellcheck disable=SC2059 # the format is the octal escape
+      printf -v c "\\$o"
+      json="$json\\u$hex."
+      want="$want$c."
+    done
+    KERN_INPUT="{\"a\":\"$json\"}"
+    run json_get a
+    [ "$status" -eq 0 ]
+    [ "$output" = "$want" ]
+  done
+  KERN_INPUT='{"a":"\u0041\u002f\u004a\u004A"}'
+  run json_get a
+  [ "$output" = 'A/JJ' ]
+  # Decoded once: an escaped backslash before u0041 is text, and so is a backslash \u005c gives.
+  KERN_INPUT='{"a":"\\u0041","b":"\u005cu0041","c":"\\\u0041"}'
+  run json_get a
+  [ "$output" = '\u0041' ]
+  run json_get b
+  [ "$output" = '\u0041' ]
+  run json_get c
+  [ "$output" = '\A' ]
+}
+
+@test "decode refuses \u0000" {
+  # bash cannot hold the byte, so a value holding the escape is not read, and prints nothing.
+  KERN_INPUT='{"a":"x\u0000y","b":"ok"}'
+  run json_get a
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+  run json_get b
+  [ "$status" -eq 0 ]
+  [ "$output" = ok ]
+  KERN_INPUT='{"a":"x\\u0000y"}'
+  run json_get a
+  [ "$status" -eq 0 ]
+  [ "$output" = 'x\u0000y' ]
+}
+
+@test "decode leaves \u0080 and above as text" {
+  KERN_INPUT='{"a":"\u00e9 \u0080 \u00FF \u0100 \ud83d\ude00"}'
+  run json_get a
+  [ "$status" -eq 0 ]
+  [ "$output" = '\u00e9 \u0080 \u00FF \u0100 \ud83d\ude00' ]
+}
+
+@test "a hook input holding a \u0000 escape is not parseable, so the call asks, or is denied under autopilot" {
+  # json_get refuses the escape, so a guard would read the field as absent; json_ok fails instead.
+  KERN_INPUT='{"tool_input":{"content":"x\u0000"}}'
+  run json_ok
+  [ "$status" -eq 1 ]
+  KERN_INPUT='{"tool_input":{"content":"x\\u0000"}}'
+  run json_ok
+  [ "$status" -eq 0 ]
+  R="$BATS_TEST_TMPDIR/repo"
+  make_repo "$R"
+  kern_env "$R"
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/a.md\",\"content\":\"x\\u0000\"")"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" == *'"needs user approval: kern G0: hook input not parseable"'* ]] || false
+  set_autopilot on
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/a.md\",\"content\":\"x\\u0000\"")"
+  [ "$(decision_of "$output")" = deny ]
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/a.md\",\"content\":\"x\\\\u0000\"")"
+  [ "$(decision_of "$output")" = none ]
+}
+
 @test "json_get: absent key is 1, a non-string value is 1, unterminated input is 2" {
   KERN_INPUT='{"n":5}'
   run json_get missing
