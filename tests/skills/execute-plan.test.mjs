@@ -357,11 +357,11 @@ test('under autopilot a stop waits, a judgment call parks, and a generated file 
   assert.ok(s[8].indexOf('pause and ask') < s[8].indexOf('Under autopilot, try each path'), s[8]);
   assert.ok(s[10].indexOf('else stop and ask.') < s[10].indexOf('Under autopilot, exit 3'), s[10]);
   assertContains('skills/autopilot/references/run.md', ['| A required check that cannot run |', 'commits, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR.']);
-  assertContains('skills/finish-branch/SKILL.md', ['a required check that cannot run: the run commits its work, pushes its branch']);
+  assertContains('skills/finish-branch/SKILL.md', ["a required check that cannot run, or run.md's stop on a defect the ticket demands or on a change it does not name: the run commits its work, pushes its branch"]);
   // Step 13's own "No push or PR" holds without autopilot; the section says what a go does.
   assert.ok(s[13].includes("No push or PR, no commit beyond step 10's (autopilot: below); offer `/kern:commit` and `/kern:finish-branch`."), s[13]);
   // Task 7 review: finish-branch's end path commits past a red proof, and an open task's end follows the same rule.
-  assertContains('skills/commit/SKILL.md', ["execute-plan's task still open at step 13), a red or unrunnable step 4 proof is no stop"]);
+  assertContains('skills/commit/SKILL.md', ["execute-plan's task still open at step 13, run.md's stop on a defect the ticket demands or on a change it does not name), a red or unrunnable step 4 proof is no stop"]);
   // Step 10 commits each closed task, so the section does not say it again.
   assert.ok(s[10].includes("Under autopilot only, then commit the task's files with `/kern:commit` steps 2 to 6"), s[10]);
 });
@@ -427,7 +427,7 @@ test('a task still open at step 13 commits its own paths, then takes finish-bran
   // sits in its fork; and finish-branch's end path had two cases, so a green proof could open a draft PR.
   const auto = section(readDoc(SKILL).body, '## Stops and autopilot');
   assert.ok(auto.includes("the dirty paths in that task's `briefs/task-N.files`, under commit's no-PR end rule, then finish-branch's end path, skipping steps 4 to 8 (a wave task: report its fork)"), auto);
-  assertContains('skills/finish-branch/SKILL.md', ["The end path is a third round still `fix first`, a task still open at execute-plan's step 13, or a required check that cannot run:"]);
+  assertContains('skills/finish-branch/SKILL.md', ["The end path is a third round still `fix first`, a task still open at execute-plan's step 13, a required check that cannot run, or run.md's stop"]);
   // "/kern:commit steps 2 to 6" names commit's own steps: Where through the commit call, so step 1's consent and step 7's
   // report stay out, and step 3 takes the named files.
   const c = steps(readDoc('skills/commit/SKILL.md').body);
