@@ -335,6 +335,21 @@ allows() {
   done
 }
 
+@test "the scan skips API request blobs: a review-check after the read, then a late blob that repeats the read, allows" {
+  # An assistant blob copies a message's tool_use blocks at depth 4 under message.content, where the session's own
+  # calls sit, so a blob written after a later call would read as a new read (the controller's ruling on the round 4
+  # fix batch's concern 1).
+  prompt 'Review the branch.'
+  read_file "$SR"
+  result '1\t---'
+  sh_run "bash $P/scripts/review-check . pkg --no-spec"
+  result 'floor: none'
+  printf '{"type":"api-request-blob","sessionId":"test-session","hash":"3215d4a1aa39a7d63f95c2a0974d46e6ca61abb3abe0dc72afc570b17d594bca","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"Read","input":{"file_path":"%s"},"caller":{"type":"direct"}}]}}\n' "$SR" >>"$T"
+  say 'Verdict: ready.'
+  stop
+  allows
+}
+
 @test "a transcript with no self-review, or a turn with none, allows on a grep and never runs the scan" {
   local real
   real=$(command -v awk)
