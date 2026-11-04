@@ -34,8 +34,11 @@ test('diagnose sections, steps and red flags', () => {
   // 6,940 since paid round 4's fix: step 7's allowed throw keeps the behaviour the report does not name, a fallback the code had among it.
   // 7,020 since its re-review: a fallback that is the cause may change, and derived data the code cannot use takes the fallback for missing data.
   // 7,002 since part 1's close: the derived-data sentence names no example, so the held-out task no longer meets its own class in the text.
-  assertMaxBytes(SKILL, 7002);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 7,002 bytes,']);
+  // 7,144 since M3 part 2 project 2's Task 1 (2026-10-22 Opus audit section 5, row L482): step 2 tightens the loop, and a slow or heavy
+  // path gets a baseline first.
+  assertMaxBytes(SKILL, 7144);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 7,144 bytes,',
+    "SKILL.md at most 7,144 bytes (7,002 until M3 part 2 project 2's Task 1:"]);
 });
 
 test('diagnose references', () => {
@@ -67,6 +70,13 @@ test('the loop and instrumentation run in a named worktree, and a loop still red
   assert.ok(s[8].includes("A loop still red after a fix goes back to step 5, as a failed fix on step 6's ladder."), s[8]);
   assert.ok(s[5].startsWith('5. Write 3 to 5 ranked hypotheses'), s[5]);
   assert.ok(s[6].includes('after three failed fixes, stop'), s[6]);
+});
+
+test('step 2 tightens the loop, and a slow or heavy path gets a baseline first (audit L482)', () => {
+  // 2026-10-22 Opus audit section 5, row L482, from pocock diagnosing-bugs ("Tighten the loop" and its perf branch):
+  // step 2 asked for a fast, deterministic loop but never to improve one, and a slow path had no baseline to compare a
+  // change against. M3 part 2 project 2's Task 1.
+  assert.match(steps(readDoc(SKILL).body)[2], / Tighten the loop: faster, sharper, more deterministic\. For a slow or heavy path, measure a baseline first and compare each change against it\. Leave this step only with /);
 });
 
 test('a fix keeps the state it was found on and the exported signature (h2h diagnose, 11-01)', () => {

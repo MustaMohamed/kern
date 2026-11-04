@@ -132,6 +132,15 @@ test('the user\'s word skips only what it names, and Evidence, the guards and th
   ]);
 });
 
+test('the Evidence line covers any word that implies done, fixed, passing or verified (audit L488)', () => {
+  // 2026-10-22 Opus audit section 5, row L488, from superpowers verification-before-completion ("Paraphrases and
+  // synonyms"): the line named four words, so a claim in other words needed no run. prove-it's Gate moves with it.
+  // M3 part 2 project 2's Task 1. The plan's wording cost 28 rendered chars against rule 7's 19 of headroom, so the
+  // controller's ruling took this one, 18 chars.
+  const evidence = section(readFileSync(join(ROOT, 'kernel', 'kernel.md'), 'utf8'), '## Evidence');
+  assert.match(evidence, /^Any word implying "done", "fixed", "passing" or "verified" needs a command run this session and its output\. /m);
+});
+
 test('a step not done stays in the todo list, and only the user\'s word skips a review', () => {
   // 2026-10-22 head-to-head (task-16-h2h-plan-diagnosis): "A step you do not do stays as `skip: <reason>`" let kern
   // skip plan's review on its own judgement in 3 of 6 runs. The user's answer, "Only by my word": plan's and
