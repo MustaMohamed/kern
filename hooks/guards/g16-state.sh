@@ -16,9 +16,9 @@
 # resolves outside kern's hooks folder, a kern worktree's included, so a go can commit it (_g16_own),
 # nor one of its own hooks.json or of a folder of its own under which no file is a symlink or has a
 # second link, when no other word of the copy names a hook entry file or holds a glob that could match
-# one, a $, a backtick or a {, and the command holds no unquoted (. Running or sourcing such a file, any
-# write or run of a hook entry file, sed -i (GNU sed's e runs text as shell; the Edit tool edits such a
-# file), and a path G16 cannot resolve keep the ask.
+# one, a $, a backtick or a {, and the command is one simple command with no $' in it. Running or
+# sourcing such a file, any write or run of a hook entry file, sed -i (GNU sed's e runs text as shell;
+# the Edit tool edits such a file), and a path G16 cannot resolve keep the ask.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; a write into kern's hooks folders whose own word does not spell
@@ -1135,9 +1135,9 @@ END { print "E" }'
 # A folder that clears (_G16_FOLDER) takes the record's other words into it under their own last parts,
 # which the re-read below sees outside any hooks directory, so each of them must pass the word rule's
 # name tests (_g16_wname): an entry file's name, a glob that could match one, or a $, backtick or {
-# keeps the ask, and so does an unquoted ( or a $' anywhere in CMD (_g16_paren). When all of them
-# clear, the records are joined again, each one that held such a word from its other words and the rest
-# as printed, and _g16_hooks_read must find no hook code in that text, by every rule:
+# keeps the ask, and so does a CMD of more than one simple command (git_words' records) or with a $' in
+# it. When all clear, the records are joined again, each one that held such a word from its other
+# words and the rest as printed, and _g16_hooks_read must find no hook code in that text, by every rule:
 # so a run or a source of the same file (cp a.sh p/hooks/lib/a.sh && bash p/hooks/lib/a.sh), an entry
 # file, a hook name in any other command and a path G16 cannot resolve keep the ask. When one word does
 # not clear, nothing does: a project's file copied into kern's hooks folder keeps its vote. A relative
@@ -1241,9 +1241,13 @@ EOT
     if [ "${fold[${wr[k]}]-}" = 1 ] && [ "${drop[k]-}" != 1 ]; then _g16_wname "${ww[k]##*/}" || return 1; fi
     k=$((k + 1))
   done
-  # git_words cuts a record at an unquoted (, so a glob group such a copy takes can sit in a record of its
-  # own, which the loop above does not read: the ask stays.
-  if [ "$anyfold" = 1 ] && _g16_paren "$cmd"; then return 1; fi
+  # git_words cuts a record at an unquoted (, ), { or } word, which can move the copy's later words into a
+  # record of their own, with the ( or brace gone; it reads no $'...' escapes as bash does. So a folder
+  # clears only in one simple command with no $' in its text.
+  if [ "$anyfold" = 1 ]; then
+    [ "$n" = 1 ] || return 1
+    case "$cmd" in *"\$'"*) return 1 ;; esac
+  fi
   # The text again: a changed record from the words it keeps, any other as git_words printed it.
   i=1
   while [ "$i" -le "$n" ]; do
@@ -1451,29 +1455,6 @@ _g16_wname() {
   if _g16_glob "$_G16_HOOK_NAMES" "$1"; then bad=1; fi
   shopt -u nocasematch
   [ "$bad" = 0 ]
-}
-
-# _g16_paren TEXT: exit 0 when TEXT holds a ( outside quotes and not after a backslash, or a $' (whose
-# escapes neither git_words nor this scan reads as bash does), and when awk does not run.
-_g16_paren() {
-  local r
-  # shellcheck disable=SC2016 # awk text
-  r=$(printf '%s\n' "$1" | env LC_ALL=C awk -v sq="'" '
-{ buf = buf (NR > 1 ? "\n" : "") $0 }
-END {
-  n = split(buf, C, ""); q = ""
-  for (i = 1; i <= n; i++) {
-    c = C[i]
-    if (q == sq) { if (c == sq) q = ""; continue }
-    if (q == "\"") { if (c == "\\") i++; else if (c == "\"") q = ""; continue }
-    if (c == "\\") { i++; continue }
-    if (c == "$" && C[i + 1] == sq) { print "p"; exit }
-    if (c == sq || c == "\"") { q = c; continue }
-    if (c == "(") { print "p"; exit }
-  }
-  print "-"
-}') || return 0
-  [ "$r" != - ]
 }
 
 # _g16_lone_tree DIR: exit 0 when no file under DIR, at any depth, is a symlink or a regular file with

@@ -1581,10 +1581,26 @@ expect_kern() {
   expect_hook "cp ^x $R/src/hooks/guards/" "mv a/^b $R/src/hooks/lib"
 }
 
-@test "a -t copy into a project's hooks folder from an unquoted glob group keeps its ask; a quoted paren does not" {
+@test "a -t copy into a project's hooks folder from an unquoted glob group keeps its ask; a lone git add of the folder does not" {
   project_hooks
   mkdir -p "$R/src/hooks/guards"
   expect_hook "cp -t $R/src/hooks/guards x(y)" "install -t $R/src/hooks/lib a(b|c)"
   set_autopilot off
-  expect_cmd none "git -C $R add src/hooks/guards/ && git -C $R commit -m 'fix(g16): x'"
+  # Fix round 3: a folder clears only in one simple command, so this row's add and commit pair asks now.
+  expect_cmd none "git -C $R add src/hooks/guards/"
+}
+
+# Task 3 fix round 3: git_words cuts a record at an unquoted ( and at a { or } word, so a folder clears
+# only in one simple command.
+@test "a -t copy into a project's hooks folder after a comment or an old arithmetic form holding a lone quote keeps its ask" {
+  local nl=$'\n'
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  expect_hook "echo a # it's${nl}cp -t $R/src/hooks/guards x(y)" "echo \$[1'] && cp -t $R/src/hooks/guards x(y)"
+}
+
+@test "a -t copy into a project's hooks folder with a brace word among its sources keeps its ask" {
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  expect_hook "cp -t $R/src/hooks/guards a { b }" "mv -t $R/src/hooks/lib a } b"
 }
