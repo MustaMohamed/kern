@@ -50,9 +50,12 @@ test('self-review sections and steps', () => {
   // 9,199 since its fix round 1, a fall: step 2 names review-check's `proofs: n/a` line.
   // 9,325 since project 1's paid round 2 rulings (the user's "Fix it now", 2026-11-04): step 9 clears a wrapped test, a stricter
   // assertion on the same value and an `assertion-removed` hit whose line an assertion as strict or stricter replaced.
-  assertMaxBytes(SKILL, 9325);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `self-review` | path | M2a | at most 9,325 bytes,',
-    "SKILL.md at most 9,325 bytes (9,199 until M3 part 2 project 1's paid round 2 rulings: "]);
+  // 9,343 since that batch's review fix round 1: the `assertion-removed` clause names the same value, so a replaced assertion on
+  // another value, which loses coverage, is not cleared as "as strict".
+  assertMaxBytes(SKILL, 9343);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `self-review` | path | M2a | at most 9,343 bytes,',
+    "SKILL.md at most 9,343 bytes (9,325 until the review fix round 1 of M3 part 2 project 1's paid round 2 rulings: ",
+    "9,199 until M3 part 2 project 1's paid round 2 rulings: "]);
 });
 
 test('the spec lane stands down only for a whole-branch review that passed on this exact tree', () => {
@@ -131,7 +134,7 @@ test('a self-review finding is a defect on a changed line, a nit is a small one,
     // Task 16q narrowed `pre-existing` and the nit, and moved style into the Cleared clause (pinned in its test below).
     'the change did not cause goes under `pre-existing`;', 'a `nit` is a real defect too small to block',
     'Not findings: a change that keeps behaviour (a moved or wrapped test, a stricter assertion on the same value, an equivalent helper or rename)',
-    'or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes; `assertion-removed`: an assertion as strict or stricter replaced its line), each under Cleared with its check',
+    'or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes; `assertion-removed`: an assertion as strict or stricter on the same value replaced its line), each under Cleared with its check',
     // Fix round 1, M2: a missing test no finding covers stays in the report as its own line. Task 17a P10, D19: that
     // line goes under `Untested` and says it is not a finding (pinned in the test below).
     'a probably-fine guess', 'a first-round split idea.',
@@ -252,7 +255,7 @@ test('a nit says how its line fails, an equivalent helper is never pre-existing,
     // Project 1's paid round 2 (the user's "Fix it now", 2026-11-04): kern still flagged d3 in 5 of 5 review cells, each after a
     // Read of this SKILL.md and none of references/claim-checks.md, and 3 cited or cleared floor-scan's `assertion-removed` hit on
     // the replaced `assert.equal` line. The wrap, the stricter assertion and that hit are named here, where the cells read.
-    'Not findings: a change that keeps behaviour (a moved or wrapped test, a stricter assertion on the same value, an equivalent helper or rename), churn, style or "unrelated" with no failure, or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes; `assertion-removed`: an assertion as strict or stricter replaced its line), each under Cleared with its check, never `pre-existing`;',
+    'Not findings: a change that keeps behaviour (a moved or wrapped test, a stricter assertion on the same value, an equivalent helper or rename), churn, style or "unrelated" with no failure, or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes; `assertion-removed`: an assertion as strict or stricter on the same value replaced its line), each under Cleared with its check, never `pre-existing`;',
     'a probably-fine guess or a new export with no caller yet;']) assert.ok(nine.includes(s), `step 9 lacks: ${s}`);
   assert.ok(!nine.includes('style advice'), 'style with no failure goes under Cleared, not a bare not-findings item');
   // kern skipped the step 3 lane in 3 of 3 runs (tool calls Read, Bash, Bash) and, in run 0, every lane: "those
@@ -325,7 +328,7 @@ test('the author never clears its own lowered bar: revert it, or fix first until
   // for the countersign, since in kern only the user merges. Every other floor-scan class keeps "fixed or justified".
   const nine = steps(readDoc(SKILL).body)[9];
   // Project 1's paid round 2: an `assertion-removed` hit is cleared by its check, an assertion as strict or stricter on its line.
-  assert.ok(nine.includes('or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes; `assertion-removed`: an assertion as strict or stricter replaced its line), each under Cleared with its check'), nine);
+  assert.ok(nine.includes('or a justified step 2 hit (`bar-lowered`: only the user\'s typed yes; `assertion-removed`: an assertion as strict or stricter on the same value replaced its line), each under Cleared with its check'), nine);
   // A `bar-lowered` hit the user has not said yes to is unresolved, which `fix first` already names.
   assert.ok(nine.includes('`fix first`: a failed or unrun check (step 2 or 7, but for a named skip), an unresolved hit,'), nine);
   const scan = section(readDoc(`${REF}/claim-checks.md`).body, '## floor-scan');
