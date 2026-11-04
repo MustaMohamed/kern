@@ -212,17 +212,20 @@ prompt_hashes() {
 }
 
 # prompt_consent: reads the user's prompt on stdin and prints the outward actions it is an explicit
-# instruction for, from commit, push, pr, pr-edit, pr-title and pr-body, space-separated, or nothing.
-# Only a prompt of one non-blank line of at most 200 characters counts. Lowercased, its blanks folded and
-# a final run of . or ! dropped, the line must be `/kern:commit` (with any arguments), or a list of action
-# phrases joined by `and`, `then`, `,` or `&`, with only `please`, `ok`, `okay`, `yes`, `now`, `go ahead
-# and` or `and` before it and `please` or `now` after it. The phrases: `commit`, `commit it`, `commit
-# this`, `commit the changes` (commit); `push`, `push it`, `push the branch` (push); `open`, `create`,
-# `raise` or `make`, then an optional `a` or `the`, an optional `draft`, then `pr` or `pull request`, and
-# `draft pr` (pr and push); `update` or `edit`, then `the pr` or `the pull request` (pr-edit: a new title
-# and a body file), with `body` or `description` after it (pr-body: a body file only), or with `title`
-# after it (pr-title: a title only). Any other word, a question mark, a digit alone or a second line
-# gives nothing.
+# instruction for, from commit, lease, push, pr, pr-edit, pr-title, pr-body and ready, space-separated, or
+# nothing. Only a prompt of one non-blank line of at most 200 characters counts. Lowercased, its blanks
+# folded and a final run of . or ! dropped, the line must be `/kern:commit` (with any arguments), or a
+# list of action phrases joined by `and`, `then`, `,` or `&`, with only `please`, `ok`, `okay`, `yes`,
+# `now`, `go ahead and` or `and` before it and `please` or `now` after it. The phrases: `commit`, `commit
+# it`, `commit this`, `commit the changes` (commit); `rebase` or `sync`, alone or with `it`, `the
+# branch`, `the pr` or `the pull request` (lease: a rebase and a lease push); `push`, `push it`, `push the
+# branch` (push); `open`, `create`, `raise` or `make`, then an optional `a` or `the`, an optional
+# `draft`, then `pr` or `pull request`, and `draft pr` (pr and push); `update` or `edit`, then `the pr`
+# or `the pull request` (pr-edit: a new title and a body file), with `body` or `description` after it
+# (pr-body: a body file only), or with `title` after it (pr-title: a title only); `mark it` or `mark the
+# pr`, an optional `as`, `ready` and an optional `for review` (ready); `leave it` and `leave it here`,
+# which name no action, so `leave it and mark the pr ready` gives ready alone. Any other word, a question
+# mark, a digit alone or a second line gives nothing, so a bare yes gives no lease and no ready.
 prompt_consent() {
   env LC_ALL=C awk '
     NF { if (++n > 1) bad = 1; line = $0 }
@@ -237,20 +240,25 @@ prompt_consent() {
       for (i = 1; i <= k; i++) {
         p = part[i]
         if (p ~ /^commit( it| this| the changes)?$/) a["commit"] = 1
+        else if (p ~ /^(rebase|sync)( it| the branch| the pr| the pull request)?$/) a["lease"] = 1
         else if (p ~ /^push( it| the branch)?$/) a["push"] = 1
         else if (p ~ /^((open|create|raise|make)( a| the)?( draft)? (pr|pull request)|draft pr)$/) { a["pr"] = 1; a["push"] = 1 }
         else if (p ~ /^(update|edit) the (pr|pull request)$/) a["pr-edit"] = 1
         else if (p ~ /^(update|edit) the (pr|pull request) title$/) a["pr-title"] = 1
         else if (p ~ /^(update|edit) the (pr|pull request) (body|description)$/) a["pr-body"] = 1
+        else if (p ~ /^mark (it|the pr)( as)? ready( for review)?$/) a["ready"] = 1
+        else if (p ~ /^leave it( here)?$/) { }
         else exit 0
       }
       out = ""
       if ("commit" in a) out = "commit"
+      if ("lease" in a) out = out (out == "" ? "" : " ") "lease"
       if ("push" in a) out = out (out == "" ? "" : " ") "push"
       if ("pr" in a) out = out " pr"
       if ("pr-edit" in a) out = out (out == "" ? "" : " ") "pr-edit"
       if ("pr-title" in a) out = out (out == "" ? "" : " ") "pr-title"
       if ("pr-body" in a) out = out (out == "" ? "" : " ") "pr-body"
+      if ("ready" in a) out = out (out == "" ? "" : " ") "ready"
       if (out != "") print out
     }'
 }
@@ -311,4 +319,23 @@ go_ticket() {
       if (s ~ /^#?[0-9]+$/) { sub(/^#/, "", s); print s; exit 0 }
       exit 1
     }'
+}
+
+# go_live SID DIR: exit 0, with _KERN_GO set to the go, when session SID holds a live go for the
+# repository whose main worktree is DIR: autopilot is on (autopilot_on), the state's go is set, its
+# go_repo is consent_key DIR, and the state file changed in the last 1,440 minutes. A go lives past its
+# draft PR (go_phase pr) until autopilot off or a second go; these bounds keep a reused session id from
+# inheriting an old one. A read that fails is no live go. session-start reads a repeated startup's go
+# through it.
+go_live() {
+  local go repo key
+  _KERN_GO=""
+  [ -n "$1" ] && autopilot_on "$1" 2>/dev/null || return 1
+  go=$(state_get "$1" go 2>/dev/null) && [ -n "$go" ] || return 1
+  repo=$(state_get "$1" go_repo 2>/dev/null) || return 1
+  key=$(consent_key "$2") || return 1
+  [ -n "$repo" ] && [ "$repo" = "$key" ] || return 1
+  _state_path "$1" || return 1
+  [ -n "$(find "$_KERN_STATE_PATH" -mmin -1440 2>/dev/null)" ] || return 1
+  _KERN_GO=$go
 }

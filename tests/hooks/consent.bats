@@ -257,3 +257,57 @@ decide_with() {
     [ -z "$(c "$p")" ] || { echo "consent from: $p"; return 1; }
   done
 }
+
+@test "rebase and push gives lease and push" {
+  # M3 part 2 project 2, Task 2: a class 4 stop asks for the reply G1 reads for a lease push.
+  submit "rebase and push"
+  [ "$(st consent)" = "lease push" ]
+}
+
+@test "sync the pr gives lease" {
+  submit "sync the PR"
+  [ "$(st consent)" = lease ]
+}
+
+@test "mark the pr ready gives ready" {
+  submit "mark the PR ready"
+  [ "$(st consent)" = ready ]
+  submit "mark it as ready for review"
+  [ "$(st consent)" = ready ]
+}
+
+@test "leave it and mark the pr ready gives ready" {
+  # The waiver a stop offers: `leave it` parses, with no action of its own.
+  submit "leave it and mark the PR ready"
+  [ "$(st consent)" = ready ]
+}
+
+@test "a bare yes gives no lease or ready" {
+  for p in yes ok "go ahead"; do
+    submit "rebase and push"
+    submit "$p"
+    [ -z "$(st consent)" ] || { echo "consent from: $p"; return 1; }
+  done
+}
+
+@test "leave it alone gives nothing" {
+  submit "leave it alone"
+  [ -z "$(st consent)" ]
+}
+
+@test "prompt_consent reads each lease and ready phrase, and no near miss" {
+  . "$(kern_root)/hooks/lib/settings.sh"
+  . "$(kern_root)/hooks/lib/state.sh"
+  c() { printf '%s\n' "$1" | prompt_consent; }
+  for p in rebase sync 'rebase it' 'sync the branch' 'rebase the PR' 'sync the pull request' 'rebase and leave it'; do
+    [ "$(c "$p")" = lease ] || { echo "no lease from: $p"; return 1; }
+  done
+  for p in 'mark it ready' 'mark the PR as ready' 'mark it ready for review' 'Leave it here and mark the PR ready.'; do
+    [ "$(c "$p")" = ready ] || { echo "no ready from: $p"; return 1; }
+  done
+  [ "$(c 'commit, rebase, push and mark the PR ready')" = "commit lease push ready" ]
+  for p in 'leave it' 'leave it here' 'rebase onto main' 'sync it up' 'mark ready' 'mark it as ready now?' ready \
+    'leave it for now' 'fix it here'; do
+    [ -z "$(c "$p")" ] || { echo "consent from: $p"; return 1; }
+  done
+}

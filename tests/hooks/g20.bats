@@ -401,6 +401,36 @@ go_denied() {
   go_denied
 }
 
+@test "a go past its draft approves nothing" {
+  # M3 part 2 project 2, Task 2: G2 writes go_phase pr at the draft PR, and the go lives on through CI.
+  ticket 'issue: MA-254'
+  say "$GO"
+  mkdir -p "$R/.kern/plans"
+  plan="\"file_path\":\"$R/.kern/plans/export.md\",\"content\":\"---\\nstatus: approved\\nissue: MA-254\\napproved: 2026-11-05, \\\"$GO\\\"\\n---\\n## Goal\\n\""
+  state_line 'go_phase: pr'
+  run_guard "$(tool_payload Write "$plan")" g20
+  go_denied
+  [[ "$output" == *'only until its draft PR opens; the draft for MA-254 is open'* ]] || false
+  approve "$GO"
+  go_denied
+  state_line 'go_phase: '
+  approve "$GO"
+  no_vote
+}
+
+@test "a new go clears go_phase" {
+  ticket 'issue: "#8"'
+  say "$GO"
+  state_line 'go_phase: pr'
+  say '/kern:autopilot go 8'
+  [ "$(sed -n 's/^go_phase: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = "" ]
+  approve '/kern:autopilot go 8'
+  no_vote
+  state_line 'go_phase: pr'
+  say '/kern:autopilot off'
+  [ "$(sed -n 's/^go_phase: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = "" ]
+}
+
 @test "a failed read is no go" {
   ticket 'issue: MA-254'
   say "$GO"

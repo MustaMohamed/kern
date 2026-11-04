@@ -602,7 +602,7 @@ mode() { printf '%s\n' "$output" | grep '^kern mode:'; }
   [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=on go=MA-254' ]
   submit 'look at the tests'
   [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=on go=MA-254' ]
-  # G2 ends the go at the draft PR with an empty value, and autopilot stays on.
+  # An empty go, with autopilot still on.
   printf 'go: \n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   submit 'look at the tests'
   [ "$(mode)" = 'kern mode: voice=normal surface=auto autopilot=on' ]

@@ -59,7 +59,7 @@ need settings.sh settings_get settings_unread_why settings_source settings_keys 
 need settings.sh policy_for kern_enabled list_has skill_conflicts
 need state.sh state_dir _state_path state_file state_get state_set _state_put now_iso default_voice state_reset
 need state.sh state_ensure autopilot_denied_by autopilot_on
-need state.sh prompt_hashes prompt_consent consent_key consent_for go_ticket
+need state.sh prompt_hashes prompt_consent consent_key consent_for go_ticket go_live
 need render.sh render_template kern_version mode_line autopilot_text settings_summary
 
 # git_note: one line when git is older than 2.31, the first git that reads the GIT_CONFIG_* pairs
@@ -108,20 +108,13 @@ env_export() {
 }
 
 # live_go: exit 0, with LIVE_GO set to the go, when this startup may be a repeat in a session that holds a
-# go: autopilot is on, the state's go is set, its go_repo is this repository's key, and the state file
-# changed in the last 24 hours. A startup resets so that a reused session id never inherits an old grant;
-# these bounds keep that for anything but a go cut off mid-run. A read that fails is no live go.
+# live go for this repository (go_live: autopilot is on, the state's go is set, its go_repo is this
+# repository's key, and the state file changed in the last 24 hours). A startup resets so that a reused
+# session id never inherits an old grant; these bounds keep that for anything but a go cut off mid-run.
 LIVE_GO=""
 live_go() {
-  local go repo key
-  [ -n "$SID" ] && autopilot_on "$SID" 2>/dev/null || return 1
-  go=$(state_get "$SID" go 2>/dev/null) && [ -n "$go" ] || return 1
-  repo=$(state_get "$SID" go_repo 2>/dev/null) || return 1
-  key=$(consent_key "$KERN_MAIN") || return 1
-  [ -n "$repo" ] && [ "$repo" = "$key" ] || return 1
-  _state_path "$SID" || return 1
-  [ -n "$(find "$_KERN_STATE_PATH" -mmin -1440 2>/dev/null)" ] || return 1
-  LIVE_GO=$go
+  [ -n "$SID" ] && go_live "$SID" "$KERN_MAIN" || return 1
+  LIVE_GO=$_KERN_GO
 }
 
 # shellcheck disable=SC2034 # read by the json.sh functions

@@ -530,8 +530,9 @@ _g02_create() {
     if [ "$body" = 0 ] && _g02_proven "$1" "$toks" "$file"; then
       if [ "$AUTOPILOT" = 1 ]; then
         vote allow G2 "autopilot: draft PR for $cur after dedup"
-        # The draft PR ends the go. A create that then fails loses nothing: the go only gates approval.
-        state_set "$SID" "go="
+        # The draft PR ends the go's approval, not the go: the go lives on through CI, and G20 takes
+        # no go while go_phase is pr. A create that then fails loses only that approval.
+        state_set "$SID" "go_phase=pr"
       elif [ "$policy" = auto ]; then
         vote allow G2 "pr.policy auto: draft PR for $cur"
       elif consent_for "${SID-}" "${AGENT-}${AGENT_ID-}" pr; then
