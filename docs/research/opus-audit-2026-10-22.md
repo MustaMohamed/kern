@@ -473,28 +473,30 @@ A8, A10, A15, B12, B13, C-M7, C-M8, C-M10, C-M11, C-M12, C-M13, G6, G8, G12, G14
 | scripts/behave.mjs, scripts/h2h.mjs | .upstream/caveman-4.0.1/evals/llm_run.py:241-268 | A partial run writes a partial file and leaves the snapshot alone | now, P5 |
 | scripts/behave.mjs, h2h.mjs, kernel-adherence.mjs | scripts/lib/exec-run.mjs:141-156 (kern's own `parseArgs`) | Reject unknown or valueless flags before any paid call | now, P5 |
 | .github/workflows/ci.yml | .upstream/caveman-4.0.1/.github/workflows/ci.yml | Per-job `timeout-minutes`, a `concurrency` group, SHA-pinned actions | now, P15 |
-| skills/execute-plan/references/resume.md, skills/parallel-work/SKILL.md step 5 | .upstream/pstack/pstack/skills/poteto-mode/playbooks/orchestrate.md | Reconcile a late worker against the ledger before accepting it; re-paste standing orders on every resume | M3, P16 |
-| execute-plan integration, step 11 | .upstream/pocock/skills/engineering/implement-spec/SKILL.md | Check the integrated result against the reviewed tree | M3, P16 |
-| scripts/lib/frontmatter.mjs, lint rule 1 | .upstream/addy/scripts/lib/skill-lint.js:229-320 | `frontmatterYamlErrors` | M3, P17 |
-| lint rule 4 | .upstream/addy/scripts/validate-reference-links.js | Scan references files and check `#fragment` anchors | M3, P17 |
-| skills/help/references/fix-a-run.md | .upstream/caveman-4.0.1/src/hooks/caveman-statusline.sh:11-40 | Config-dir fallback, spaced JSON keys, a stdin timeout | M3, P18 |
-| skills/help/references/map.md | .upstream/pocock/.agents/writing-docs.md | A trigger boundary against the nearest sibling skill | M3, P18 |
-| skills/diagnose/SKILL.md | .upstream/pocock/skills/engineering/diagnosing-bugs/SKILL.md; .upstream/superpowers/skills/systematic-debugging/SKILL.md (Phase 4.4) | Tighten the loop; a perf baseline first; a failed fix goes back with its count | M3, P19 |
-| diagnose step 5 `[kern-dbg]` | .upstream/pocock/skills/engineering/diagnosing-bugs/SKILL.md | A per-run debug tag | M3 |
-| hooks/lib/json.sh | .upstream/caveman-4.0.1/src/hooks/caveman-mode-tracker.js | Decode `\u0000` to `\u007f` once | M3 |
-| hooks/lib/state.sh `state_get` | .upstream/caveman-4.0.1/src/hooks/caveman-config.js:108-240 | A size cap on the state read | M3 |
-| agents/implementer.md rules 4 and 6 | .upstream/superpowers/skills/subagent-driven-development/implementer-prompt.md; .upstream/pstack/harness/pstack/claude-code/agents/poteto-agent.md | Concrete escalation triggers; a missing skill path returns BLOCKED | M3 |
-| agents/task-reviewer.md | .upstream/superpowers/skills/subagent-driven-development/task-reviewer-prompt.md:85-95, 104-109; .upstream/superpowers/skills/requesting-code-review/code-reviewer.md | Unseen evidence is a gap, not a failure; a listed file the diff never touches is Missing; a spec's silence is not permission | M3 |
-| skills/prove-it/SKILL.md:21, kernel Evidence line | .upstream/superpowers/skills/verification-before-completion/SKILL.md | The gate covers any word that implies done, fixed or passing | M3 (kernel bytes) |
-| skills/prove-it/SKILL.md step 7 | .upstream/pstack/pstack/skills/poteto-mode/SKILL.md:115 | Never hand the user a check you can run | M3 |
-| skills/self-review/references/doubt-cycle.md | .upstream/pstack/pstack/skills/blast-radius/SKILL.md step 6 | Name the same-model limit; offer `opus` when the session runs on Sonnet | M3 |
-| skills/finish-branch/SKILL.md step 3 | .upstream/superpowers/skills/finishing-a-development-branch/SKILL.md (Step 3) | Ask once which base when the branch's upstream, plan or ledger names another | M3 |
-| execute-plan fix loop, resume.md | .upstream/superpowers/skills/subagent-driven-development/SKILL.md ("The fix loop") | Check the fix report holds tests, command and output before re-review; carry parked-finding pointers | M3 |
-| scripts/ledger-open | .upstream/superpowers/skills/subagent-driven-development/scripts/sdd-workspace | Disambiguate two plans with one basename | M3 |
-| plan step 7, plan-check | .upstream/addy/skills/planning-and-task-breakdown/SKILL.md | Warn when one task's Files exceed `scope_threshold` | M3 |
-| skills/plan/references/plan-template.md | .upstream/superpowers/skills/writing-plans/SKILL.md (Self-Review item 4) | Each Review Focus line gets its pinning test | M3 |
-| skills/recall/SKILL.md step 6 | .upstream/pstack/pstack/skills/recall/SKILL.md:20, 24-33 | Sweep the tracker when a file or subsystem is named too | M3 |
-| scripts/lib/behave.mjs `CHECKS` | .upstream/caveman-4.0.1/tests/test_eval_fidelity.py:143-160 | Known-pass and known-fail rows for every scripted check | M3 |
+| skills/execute-plan/references/resume.md, skills/parallel-work/SKILL.md step 5 | .upstream/pstack/pstack/skills/poteto-mode/playbooks/orchestrate.md | Reconcile a late worker against the ledger before accepting it; re-paste standing orders on every resume | M3, P16; done: 11d4ee0, project 1 Task 17; the wait for a dispatched worker at f9c5d1b |
+| execute-plan integration, step 11 | .upstream/pocock/skills/engineering/implement-spec/SKILL.md | Check the integrated result against the reviewed tree | M3, P16; done before project 1: 88cb53c and e90bc63 |
+| scripts/lib/frontmatter.mjs, lint rule 1 | .upstream/addy/scripts/lib/skill-lint.js:229-320 | `frontmatterYamlErrors` | M3, P17; done: 81a7b3f, project 1 Task 15 |
+| lint rule 4 | .upstream/addy/scripts/validate-reference-links.js | Scan references files and check `#fragment` anchors | M3, P17; done: 81a7b3f, project 1 Task 15 |
+| skills/help/references/fix-a-run.md | .upstream/caveman-4.0.1/src/hooks/caveman-statusline.sh:11-40 | Config-dir fallback, spaced JSON keys, a stdin timeout | M3, P18; done: 608b93a, project 1 Task 18 |
+| skills/help/references/map.md | .upstream/pocock/.agents/writing-docs.md | A trigger boundary against the nearest sibling skill | M3, P18; done: 608b93a, project 1 Task 18 |
+| skills/diagnose/SKILL.md | .upstream/pocock/skills/engineering/diagnosing-bugs/SKILL.md; .upstream/superpowers/skills/systematic-debugging/SKILL.md (Phase 4.4) | Tighten the loop; a perf baseline first; a failed fix goes back with its count | M3, P19; a failed fix going back with its count, done before project 1: e90bc63; "tighten the loop" and "a perf baseline first" wait for project 2's first task |
+| diagnose step 5 `[kern-dbg]` | .upstream/pocock/skills/engineering/diagnosing-bugs/SKILL.md | A per-run debug tag | M3; done before project 1: e7ca3cb |
+| hooks/lib/json.sh | .upstream/caveman-4.0.1/src/hooks/caveman-mode-tracker.js | Decode `\u0000` to `\u007f` once | M3; done: merge d2a8c4b, project 1 Task 14 |
+| hooks/lib/state.sh `state_get` | .upstream/caveman-4.0.1/src/hooks/caveman-config.js:108-240 | A size cap on the state read | M3; done: merge d2a8c4b, project 1 Task 14 |
+| agents/implementer.md rules 4 and 6 | .upstream/superpowers/skills/subagent-driven-development/implementer-prompt.md; .upstream/pstack/harness/pstack/claude-code/agents/poteto-agent.md | Concrete escalation triggers; a missing skill path returns BLOCKED | M3; done: f64d5b0, project 1 Task 16 |
+| agents/task-reviewer.md | .upstream/superpowers/skills/subagent-driven-development/task-reviewer-prompt.md:85-95, 104-109; .upstream/superpowers/skills/requesting-code-review/code-reviewer.md | Unseen evidence is a gap, not a failure; a listed file the diff never touches is Missing; a spec's silence is not permission | M3; done: f64d5b0, project 1 Task 16 |
+| skills/prove-it/SKILL.md:21, kernel Evidence line | .upstream/superpowers/skills/verification-before-completion/SKILL.md | The gate covers any word that implies done, fixed or passing | M3 (kernel bytes); waits for project 2's first task |
+| skills/prove-it/SKILL.md step 7 | .upstream/pstack/pstack/skills/poteto-mode/SKILL.md:115 | Never hand the user a check you can run | M3; waits for project 2's first task |
+| skills/self-review/references/doubt-cycle.md | .upstream/pstack/pstack/skills/blast-radius/SKILL.md step 6 | Name the same-model limit; offer `opus` when the session runs on Sonnet | M3; done: 608b93a, project 1 Task 18 |
+| skills/finish-branch/SKILL.md step 3 | .upstream/superpowers/skills/finishing-a-development-branch/SKILL.md (Step 3) | Ask once which base when the branch's upstream, plan or ledger names another | M3; done: merge a556642, project 1 Task 18 |
+| execute-plan fix loop, resume.md | .upstream/superpowers/skills/subagent-driven-development/SKILL.md ("The fix loop") | Check the fix report holds tests, command and output before re-review; carry parked-finding pointers | M3; done: 11d4ee0, project 1 Task 17 |
+| scripts/ledger-open | .upstream/superpowers/skills/subagent-driven-development/scripts/sdd-workspace | Disambiguate two plans with one basename | M3; done: df309e3, project 1 Task 19 |
+| plan step 7, plan-check | .upstream/addy/skills/planning-and-task-breakdown/SKILL.md | Warn when one task's Files exceed `scope_threshold` | M3; done: merge a556642, project 1 Task 18 |
+| skills/plan/references/plan-template.md | .upstream/superpowers/skills/writing-plans/SKILL.md (Self-Review item 4) | Each Review Focus line gets its pinning test | M3; done: 608b93a, project 1 Task 18 |
+| skills/recall/SKILL.md step 6 | .upstream/pstack/pstack/skills/recall/SKILL.md:20, 24-33 | Sweep the tracker when a file or subsystem is named too | M3; done: 608b93a, project 1 Task 18 |
+| scripts/lib/behave.mjs `CHECKS` | .upstream/caveman-4.0.1/tests/test_eval_fidelity.py:143-160 | Known-pass and known-fail rows for every scripted check | M3; done: d1e444a, project 1 Task 12 |
+
+The When cell of each M3 row gives its state at the records of M3 part 2's project 1, 85922bf (`docs/specs/2026-11-03-kern-m3-part2-p1-design.md`, Audit adopt rows), with the commit that closed it: the task's own commit where one commit carries the row, else the task's merge. 19 of the 22 rows are done, 17 in project 1 and 2 before it. Four clauses wait for project 2's first task, and project 2's paid round measures them: L482's "tighten the loop" and "a perf baseline first", L488's gate with the kernel Evidence line, and L489's step 7. Each changes text that project 1's paid round reads unchanged.
 
 ## 6. Decisions for the user
 
