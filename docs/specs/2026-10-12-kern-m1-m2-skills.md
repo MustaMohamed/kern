@@ -24,7 +24,7 @@ Updated 2026-10-14 for the M2 split: M2a (`docs/plans/2026-10-14-kern-m2a-plan.m
 | `recall` | auto | M2a | at most 7,241 bytes, 4.7 KB planned (+4.2 KB refs) | Rebuild state across sessions; `recall chat` for this thread |
 | agent `implementer` | agent | M2a | at most 4,500 bytes, 3 KB planned | One task in one worktree, test first, status contract |
 | agent `task-reviewer` | agent | M2a | at most 5,000 bytes, 3 KB planned | Read-only: spec verdict, then quality verdict |
-| agent `investigator` | agent | M2a | 2.5 KB | Read-only cited evidence for define, plan, diagnose |
+| agent `investigator` | agent | M2a | at most 3,000 bytes, 2.0 KB planned | Read-only cited evidence for define, plan, diagnose |
 
 Auto description budget used here: `prove-it` 257 + `recall` 265 = 522 of 1,500, leaving 978 for `write-skill`, `expand-contract`, `build-ui`. With the agents (implementer 149, task-reviewer 144, investigator 130) the auto skills and agents total 945 of the 2,500 that X18 allows.
 
