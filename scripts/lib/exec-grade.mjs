@@ -693,8 +693,10 @@ const askedNothing = (events) => [!toolUses(events).some((u) => u.name === 'AskU
 const draftOpened = (ghLog) => [ghLog.some((l) => l.startsWith('pr create') && /--draft/.test(l)), 'gh pr create --draft never ran'];
 // checkFailNamed(text): a check's name and `fail` on one line, in either order, apart only by spaces, backticks, *, |, : or =, as
 // run.md's required-check stop names the check as `fail`. Round 3's "watched it fail" holds both words and names no check. Final
-// review M1: the design says fail beside the check's name, so `fail: test.full` counts as `test.full: fail` does.
-const checkFailNamed = (text) => /(?:\btest\.full|\bnpm test|\btest suite|\btests)[ \t`*|:=]*\bfail\b|\bfail\b[ \t`*|:=]*(?:test\.full|npm test|test suite|tests)\b/i.test(String(text));
+// review M1: the design says fail beside the check's name, so `fail: test.full` counts as `test.full: fail` does. Paid round 2 (the
+// user's "Grader fix and run.md line", 2026-11-04): a name quoted with the ticket's own words counts when only the closing quote and
+// those characters stand before fail, as in `Required check "test suite must pass": **fail**.`
+const checkFailNamed = (text) => /(?:\btest\.full|\bnpm test|\btest suite|\btests)[ \t`*|:=]*\bfail\b|\bfail\b[ \t`*|:=]*(?:test\.full|npm test|test suite|tests)\b|"[^"\n]*\b(?:test\.full|npm test|test suite|tests)\b[^"\n]*"[ \t`*|:=]*\bfail\b/i.test(String(text));
 // bodyNamesCheck(git, branch): the last commit body on origin's branch names the red check (skills/commit, the no-PR end).
 const bodyNamesCheck = (git, branch) => { try { return checkFailNamed(git('log', '-1', '--format=%B', `origin/${branch}`)); } catch { return false; } };
 // skipNamed(events): the report names verify.fast or lint with a skip in one sentence, prove-it's named skip.

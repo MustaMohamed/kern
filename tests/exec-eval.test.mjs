@@ -2221,6 +2221,18 @@ test('go-required-check-stop: the run\'s commits on origin, no PR, the check nam
   }
   assert.deepEqual(grade('fail\ntest.full').reasons, noCheck, 'fail, then the name on the next line');
   assert.deepEqual(grade('I watched it fail. Tests pass now.').reasons, noCheck, 'a full stop between fail and the name');
+  // Paid round 2 (the user's "Grader fix and run.md line", 2026-11-04): the check's name quoted with the ticket's own words, the
+  // closing quote between the name and fail. Only that shape: a quoted name with no fail, or a fail of another sentence or check,
+  // stays red.
+  assert.deepEqual(grade('Required check "test suite must pass": **fail**.'), { pass: true, reasons: [] }, "round 2's stored line");
+  for (const said of ['"npm test must pass" = fail', 'Required check "the tests must pass": `fail`', '| "test.full must pass" | fail |']) {
+    assert.deepEqual(grade(said), { pass: true, reasons: [] }, said);
+  }
+  assert.deepEqual(grade('Required check "test suite must pass": not run.').reasons, noCheck, 'the quoted name, no fail');
+  assert.deepEqual(grade('Required check "test suite must pass" is named. Lint: fail.').reasons, noCheck, 'fail in another sentence');
+  assert.deepEqual(grade('Required check "test suite must pass" passed; "lint must pass": fail.').reasons, noCheck, "another check's fail");
+  assert.deepEqual(grade('The tests "must pass" but fail now.').reasons, noCheck, 'the name outside the quotes');
+  assert.deepEqual(grade('Required check "test suite must pass"\nfail').reasons, noCheck, 'fail on the next line');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nfail: test.full, since no test command resolves.' }), { pass: true, reasons: [] }, 'the mirrored form in the body');
   // bodyNamesCheck: the pushed branch's last commit body passes the same reading (skills/commit/SKILL.md, the no-PR end).
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum to two decimals\n\nThe suite cannot run here.' }).reasons, [NO_BODY], 'a body that names no check as fail');
