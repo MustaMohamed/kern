@@ -392,6 +392,8 @@ test('stopBlocked: the Stop hook\'s reason in a transcript or stream entry that 
   assert.equal(stopBlocked({ transcript: line(printed), events: [printed] }), false, 'a tool result');
   assert.equal(stopBlocked({ transcript: line({ type: 'assistant', message: { content: [{ type: 'text', text: `The hook said: ${REASON}` }] } }) }), false, "the model's own words");
   assert.equal(stopBlocked({ events: [use('Bash', { command: `grep -n '${STOP_BLOCK}' hooks/stop` })] }), false, 'a tool call');
+  // Fix round 1 (review Minor): the stream's result event carries the final reply's text, so a reply quoting the reason is no block.
+  assert.equal(stopBlocked({ events: [{ type: 'result', subtype: 'success', is_error: false, result: `The hook said: ${REASON}` }] }), false, "the result event's copy of the final reply");
   assert.equal(stopBlocked({ transcript: '', events: [] }), false);
   assert.equal(stopBlocked({}), false);
 });

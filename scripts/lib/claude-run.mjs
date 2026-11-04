@@ -112,12 +112,13 @@ const heldOutside = (v) => {
   return Object.entries(v).some(([k, x]) => k !== 'toolUseResult' && k !== 'tool_use_result' && heldOutside(x));
 };
 // stopBlocked({ transcript, events }): kern's Stop hook blocked a stop in the run: a line of its transcript, or an event of its
-// stream, holds the hook's reason, and is not the model's own (an assistant entry) or a tool's (heldOutside). How Claude Code
-// feeds a block back is read from neither shape, so any other entry counts.
+// stream, holds the hook's reason, and is not the model's own (an assistant entry, or the stream's result event, which copies
+// the final reply) or a tool's (heldOutside). How Claude Code feeds a block back is read from neither shape, so any other entry
+// counts.
 export function stopBlocked({ transcript = '', events = [] } = {}) {
   const lines = String(transcript ?? '').includes(STOP_BLOCK) ? String(transcript).split('\n') : [];
   const entries = [...lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }), ...(events ?? [])];
-  return entries.some((e) => e?.type !== 'assistant' && heldOutside(e));
+  return entries.some((e) => e?.type !== 'assistant' && e?.type !== 'result' && heldOutside(e));
 }
 
 // A child that could not run, or was cut off, is never a result. fatal: every later run would fail the
