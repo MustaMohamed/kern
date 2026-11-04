@@ -56,6 +56,17 @@ The user's words on round 1's reds (tree 7057f41).
 
 The controller's rulings on round 2's fix review, 2026-11-04, scope the Stop hook. A read counts only after the user's last prompt, so a read in an earlier turn no longer blocks a later one. A Read, `cat`, `sed` or `head` counts only on the running kern's own `skills/self-review/SKILL.md`, under kern's root or `CLAUDE_PLUGIN_ROOT` resolved physically, and a Skill call naming `kern:self-review` or `self-review` still counts. A `grep -F -q` for `self-review`, on the transcript and then on the turn, allows with no parse when either lacks it. `kern: off` allowing the stop stands, and round 2's rerun reaches `workflow-self-review-proofs` and every case the hook reaches.
 
+## Paid round 2 rulings, 2026-11-04
+
+The user's words on round 2's reds (tree b7bd1fb), before round 3, the project's last paid round, which measures all four changes.
+
+| Ruling | Words |
+|---|---|
+| Exec reds: `checkFailNamed` also takes a check's name quoted with the ticket's own words when only the closing quote stands before `fail`, and run.md's required-check stop commits with the check named `fail` in the message body, cap 7,282 to 7,330 | "Grader fix and run.md line" |
+| Round 3 measures the Stop hook: `ISOLATION` drops `--no-session-persistence`, and after each run the runner keeps the session's transcript beside the run's stream file, removes the session's folder under the eval config dir and records whether the hook blocked | "Measure the hook (Recommended)" |
+| h2h review's decoy d3: self-review step 9 clears a wrapped test, a stricter assertion on the same value and an `assertion-removed` hit whose line an assertion as strict or stricter replaced, cap 9,199 to 9,325 | "Fix it now" |
+| Behaviour's window for a targeted round: each case pools its last two rounds | "Per case (Recommended)" |
+
 ## Guards and scripts
 
 | Item | Contract |
