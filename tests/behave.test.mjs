@@ -1496,6 +1496,24 @@ test('behave keeps each run\'s session transcript beside its stream file and rec
   } finally { r.done(); }
 });
 
+// Fix round 1 of the round 3 fix batch's review: a transcript that cannot be written or removed is logged and skipped, as exec
+// logs a failed write, so a paid round never stops on it. A folder where the file goes makes both fail.
+test('behave logs a transcript it cannot write or remove, and the run goes on', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bm-'));
+  const raw = join(dir, 'results', 'behave-sonnet-5-5-2026-10-22');
+  for (const u of ['x-1-0', 'x-2-0']) mkdirSync(join(raw, `${u}.transcript.jsonl`), { recursive: true });
+  const s = stubRun((opts) => ({ ...runOf([...started(opts.pluginDirs), resultEvent('done')]), transcript: opts.prompts[0].includes('x-1') ? '{"type":"user"}\n' : '' }));
+  const r = await drive({ run: s.run, dir });
+  try {
+    assert.equal(r.thrown, null, String(r.thrown?.stack));
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.ok(r.lines.some((l) => /^results: could not write x-1-0\.transcript\.jsonl: /.test(l)), r.lines.join('\n'));
+    assert.ok(r.lines.some((l) => /^results: could not write x-2-0\.transcript\.jsonl: /.test(l)), 'the removal of a stale one too');
+    assert.ok(existsSync(join(r.raw, 'x-1-0.jsonl')));
+    assert.deepEqual(JSON.parse(r.committed).results.map((x) => x.valid), [1, 1]);
+  } finally { r.done(); }
+});
+
 test('Task 17a G11: a full run refuses a dirty kern tree unless --allow-dirty, and the snapshot records the tree either way', async () => {
   const dirty = { commit: 'c0ffee', dirty: true, changes: [' M skills/diagnose/SKILL.md'] };
   const s = stubRun();

@@ -651,6 +651,21 @@ test('h2h keeps each attempt\'s session transcript beside its stream file and re
   } finally { r.done(); }
 });
 
+// Fix round 1 of the round 3 fix batch's review: a transcript that cannot be written is logged and skipped. armAttempt took the
+// failed write for a harness fault and stopped the run.
+test('h2h logs a transcript it cannot write, and the task-run is graded', async () => {
+  const t = synthTask('plan');
+  const dir = mkdtempSync(join(tmpdir(), 'hm-'));
+  for (const id of 'ABCDE') mkdirSync(join(dir, 'results', 'h2h-2026-10-22', `${t.id.replace('/', '--')}-0-arm-${id}.transcript.jsonl`), { recursive: true });
+  const r = await driveH2H({ tasks: [t], dir, arm: (opts) => ({ ...plainArm(opts), transcript: '{"type":"user"}\n' }) });
+  try {
+    assert.equal(r.thrown, null, String(r.thrown?.stack));
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.equal(r.lines.filter((l) => /^results: could not write .*-0-arm-[A-E]\.transcript\.jsonl: /.test(l)).length, 2, r.lines.join('\n'));
+    assert.equal(JSON.parse(r.committed).results.length, 2, 'both arms graded');
+  } finally { r.done(); }
+});
+
 test('Task 17a G3: a filtered h2h run, an all-VOID one or one that stops never writes the committed snapshot, and key.json is merged', async () => {
   const [p1, p2, v1] = [synthTask('plan'), synthTask('plan'), synthTask('review', { labels: [] })];
   const filtered = await driveH2H({ argv: ['--category', 'plan', '--runs', '1'], tasks: [p1, p2, v1], before: 'the day\'s full run\n', key: { 'earlier:seed': { kern: 'arm-B', control: 'arm-A' } } });

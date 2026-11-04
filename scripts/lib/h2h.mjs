@@ -538,7 +538,7 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
     const base = t.id.replace('/', '--');
     const recs = await Promise.all(arms.map((a) => live.track(store.unit({ ...attemptSpec(t, r, a, ids), fresh,
       work: async () => {
-        const x = await armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan });
+        const x = await armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan, log });
         if (x.problem) return { valid: false, problem: x.problem };
         const { id: _, events, ...attempt } = x.attempt;
         return { valid: true, attempt, touched: a.id === 'kern' ? Object.fromEntries(touchedSkills(events, hashes, [a.dir]).map((n) => [n, hashes.get(n)])) : {} };
@@ -655,14 +655,14 @@ async function regradeH2H({ dir, tasks: allTasks, parse, log, usage, now }) {
   return gateExit(verdict);
 }
 
-// armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }): one arm's attempt at task t, run r: its
+// armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan, log }): one arm's attempt at task t, run r: its
 // workspace, gitFacts read before it runs, its run (events saved as <task>-<run>-<blind id>.jsonl, its session transcript
-// beside them as <task>-<run>-<blind id>.transcript.jsonl, and stopBlocked on the attempt), then the diff, the
+// beside them as <task>-<run>-<blind id>.transcript.jsonl, a failed write logged, and stopBlocked on the attempt), then the diff, the
 // out-of-area files, for diagnose the floor-scan hits and the heldout tests, and for plan the final files. Returns
 // { attempt } or { problem }, the reason the task-run is VOID: a run that may not be graded, a plugin that did not
 // load as the arm needs (G10), a floor-scan exit other than 0 or 1 (G9) or a child process's failure (G13); any other
 // error is thrown. The workspace goes either way.
-async function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }) {
+async function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan, log = () => {} }) {
   let cwd = null;
   try {
     cwd = taskWorkspace(t);
@@ -674,7 +674,7 @@ async function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }
     // A run cut off by the timeout keeps the events it printed, and its session transcript beside them.
     const kept = got ? got.events : events;
     if (kept.length) writeFileSync(join(raw, `${t.id.replace('/', '--')}-${r}-${id}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n'));
-    keepTranscript(raw, `${t.id.replace('/', '--')}-${r}-${id}`, transcript);
+    keepTranscript(raw, `${t.id.replace('/', '--')}-${r}-${id}`, transcript, log);
     if (problem) return { problem };
     git('add', '-A', '-N');
     const diff = git('diff', 'HEAD');

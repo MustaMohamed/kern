@@ -523,6 +523,19 @@ test('adherence keeps each run\'s session transcript beside its stream file and 
   } finally { r.done(); }
 });
 
+// Fix round 1 of the round 3 fix batch's review: a transcript that cannot be written is logged and skipped, never thrown.
+test('adherence logs a transcript it cannot write, and the run goes on', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'am-'));
+  mkdirSync(join(dir, 'results', 'adherence-routed-sonnet-5-5-2026-10-22', 'row-x-0.transcript.jsonl'), { recursive: true });
+  const r = await driveAdherence({ dir, run: (opts) => ({ ...answer('pass', opts), transcript: '{"type":"user"}\n' }) });
+  try {
+    assert.equal(r.thrown, null, String(r.thrown?.stack));
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.ok(r.lines.some((l) => /^results: could not write row-x-0\.transcript\.jsonl: /.test(l)), r.lines.join('\n'));
+    assert.equal(JSON.parse(r.committed).results[0].pass, true);
+  } finally { r.done(); }
+});
+
 test('Task 17a G3: adherence keeps a --case, --plugin, all-invalid or stopped run off the committed snapshot', async () => {
   const one = await driveAdherence({ argv: ['--case', 'row-x', '--runs', '1'], before: 'earlier\n' });
   try {

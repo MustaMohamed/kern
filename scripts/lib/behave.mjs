@@ -1297,12 +1297,16 @@ export async function gradeRun(c, events, tree, grade, specs) {
   return c.expectations.map((_, k) => scripted.get(k) ?? byModel.get(k));
 }
 
-// keepTranscript(dir, unit, text): <dir>/<unit>.transcript.jsonl holds a run's session transcript as runClaude took it, beside the
-// run's stream file <unit>.jsonl (paid round 2's rulings, the user's "Measure the hook (Recommended)", 2026-11-04). With none,
-// a file an earlier run of the unit left goes, so it never stands for this run. behave, adherence and h2h share it.
-export function keepTranscript(dir, unit, text) {
+// keepTranscript(dir, unit, text, log): <dir>/<unit>.transcript.jsonl holds a run's session transcript as runClaude took it,
+// beside the run's stream file <unit>.jsonl (paid round 2's rulings, the user's "Measure the hook (Recommended)", 2026-11-04).
+// With none, a file an earlier run of the unit left goes, so it never stands for this run. Best effort, as exec's writes are: a
+// write or removal that fails is logged and skipped, never thrown, so it cannot stop a paid round. behave, adherence and h2h
+// share it.
+export function keepTranscript(dir, unit, text, log = () => {}) {
   const file = join(dir, `${unit}.transcript.jsonl`);
-  if (text) { mkdirSync(dir, { recursive: true }); writeFileSync(file, text); } else rmSync(file, { force: true });
+  try {
+    if (text) { mkdirSync(dir, { recursive: true }); writeFileSync(file, text); } else rmSync(file, { force: true });
+  } catch (e) { log(`results: could not write ${unit}.transcript.jsonl: ${e.message}`); }
 }
 
 // tryRun(opts, run): one headless run and why it may not be graded ('' when it may). A run cut off by its
@@ -1453,7 +1457,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
       // A run cut off by the timeout keeps the events it printed.
       const kept = r ? r.events : events;
       if (kept.length) writeFileSync(join(raw, `${unit}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
-      keepTranscript(raw, unit, transcript);
+      keepTranscript(raw, unit, transcript, log);
       const blocked = stopBlocked({ transcript, events: kept });
       if (before) writeFileSync(join(raw, `${unit}.tree.json`), JSON.stringify({ ...states, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
       if (left) writeFileSync(join(raw, `${unit}.specs.json`), JSON.stringify(left, null, 2) + '\n');

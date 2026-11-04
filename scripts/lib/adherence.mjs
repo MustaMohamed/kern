@@ -418,7 +418,7 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
       } catch (e) { if (e.fatal) throw e; problem = failure = e.message; events = e.events ?? []; transcript = e.transcript ?? ''; }
       // A run cut off by the timeout keeps the events it printed, and its session transcript beside them.
       if (events.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), events.map((x) => JSON.stringify(x)).join('\n') + '\n');
-      keepTranscript(raw, `${c.id}-${i}`, transcript);
+      keepTranscript(raw, `${c.id}-${i}`, transcript, log);
       const g = r && !failure ? gradeCase(c, r.events, text, pluginRoot) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
       const detail = { pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: r ? r.status : null, invalid: !!failure,
         stopBlocked: stopBlocked({ transcript, events }) };
