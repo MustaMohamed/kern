@@ -2215,6 +2215,13 @@ test('go-required-check-stop: the run\'s commits on origin, no PR, the check nam
   for (const said of ['test.full: fail', '| test.full | fail |', '`npm test` `fail`', 'The test suite: fail.', 'Tests: fail.', '| `npm test` | fail |', '**test.full**: **fail**', 'test.full=fail']) {
     assert.deepEqual(grade(said), { pass: true, reasons: [] }, said);
   }
+  // Final review M1: the design says fail beside the check's name, so fail before the name counts too.
+  for (const said of ['fail: test.full', '| fail | test.full |', '**fail**: `npm test`', 'fail = tests']) {
+    assert.deepEqual(grade(said), { pass: true, reasons: [] }, said);
+  }
+  assert.deepEqual(grade('fail\ntest.full').reasons, noCheck, 'fail, then the name on the next line');
+  assert.deepEqual(grade('I watched it fail. Tests pass now.').reasons, noCheck, 'a full stop between fail and the name');
+  assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nfail: test.full, since no test command resolves.' }), { pass: true, reasons: [] }, 'the mirrored form in the body');
   // bodyNamesCheck: the pushed branch's last commit body passes the same reading (skills/commit/SKILL.md, the no-PR end).
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum to two decimals\n\nThe suite cannot run here.' }).reasons, [NO_BODY], 'a body that names no check as fail');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nI wrote the test and watched it fail.' }).reasons, [NO_BODY], 'fail, with no check beside it');
