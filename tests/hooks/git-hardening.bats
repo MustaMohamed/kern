@@ -38,14 +38,14 @@ setup() {
 
 @test "every hook exports the hardened git config right after KERN_ROOT, before it runs git" {
   local h got
-  for h in session-start subagent-start prompt-submit pre-tool-use; do
+  for h in session-start subagent-start prompt-submit pre-tool-use stop; do
     got=$(awk '/^export KERN_ROOT$/ { on = 1; next } on && /^#/ { next } on && n < 3 { print; n++ }' "$K/hooks/$h")
     [ "$got" = "$HARDEN" ] || { echo "$h does not harden git right after KERN_ROOT"; return 1; }
   done
 }
 
 @test "every git a hook runs, its children's too, gets both pairs after the environment's own" {
-  local L="$BATS_TEST_TMPDIR/git-calls" want
+  local L="$BATS_TEST_TMPDIR/git-calls" want before
   git -C "$R" switch -q -c feat
   printf 'more\n' >>"$R/README.md"
   git -C "$R" -c core.fsmonitor=false add README.md
@@ -59,6 +59,12 @@ setup() {
   bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')" >/dev/null
   bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptSubmit '"prompt":"hello"')" >/dev/null
   bash "$K/hooks/pre-tool-use" <<<"$(bash_payload "git commit -m 'add more'")" >/dev/null
+  # hooks/stop runs git only when its scan would block, for its kern: off check.
+  printf '{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/k/skills/self-review/SKILL.md"}}]},"type":"assistant"}\n' \
+    >"$BATS_TEST_TMPDIR/t.jsonl"
+  before=$(wc -l <"$L")
+  bash "$K/hooks/stop" <<<"$(payload Stop "\"transcript_path\":\"$BATS_TEST_TMPDIR/t.jsonl\",\"stop_hook_active\":false")" >/dev/null
+  [ "$(wc -l <"$L")" -gt "$before" ]
   want="GIT_CONFIG_COUNT=3 GIT_CONFIG_KEY_0=kern.test GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_KEY_2=core.hooksPath"
   want="$want GIT_CONFIG_VALUE_0=kept GIT_CONFIG_VALUE_1=false GIT_CONFIG_VALUE_2=/dev/null :: "
   # The calls cover the settings index read, G6's staged diff and kern-detect, a child of G5.

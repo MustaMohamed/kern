@@ -15,7 +15,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 
 | Key | Default | Values | Read by |
 |---|---|---|---|
-| `kern` | `on` | `on`, `off`. `off` turns off routing and guards in this project | session-start, subagent-start, prompt-submit, pre-tool-use |
+| `kern` | `on` | `on`, `off`. `off` turns off routing and guards in this project | session-start, subagent-start, prompt-submit, pre-tool-use, stop |
 | `kern_repo` | none | path to the kern clone, in the user file only | help |
 | `work_dir` | `.kern` | relative directory at the main worktree root | kern-dir, pre-tool-use G2, G3, G5, G14 and G21, all skills |
 | `mode.voice` | `normal` | `normal`, `terse` | session-start, prompt-submit, subagent-start |

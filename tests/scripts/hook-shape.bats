@@ -8,7 +8,7 @@ setup() {
   cp "$BATS_TEST_DIRNAME/../hook-shape.sh" "$K/tests/hook-shape.sh"
   printf '<empty>\n' >"$K/tests/fixtures/projects/one/expect.txt"
   printf 'x: 1\n' >"$K/tests/fixtures/projects/one/kern.local.yml"
-  for h in session-start prompt-submit pre-tool-use; do
+  for h in session-start prompt-submit pre-tool-use stop; do
     printf '#!/usr/bin/env bash\ncat >/dev/null\nprintf "%%s %%s\\n" %s "${CLAUDE_CONFIG_DIR-unset}" >>"%s/seen"\n' "$h" "$K" >"$K/hooks/$h"
   done
   printf '#!/usr/bin/env bash\ncat >/dev/null\nprintf "{}"\n' >"$K/hooks/subagent-start"
@@ -20,5 +20,5 @@ setup() {
   run env CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/config" bash "$K/tests/hook-shape.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "hook-shape: 1 cases passed" ]
-  [ "$(cat "$K/seen")" = "$(printf 'session-start unset\nprompt-submit unset\npre-tool-use unset')" ]
+  [ "$(cat "$K/seen")" = "$(printf 'session-start unset\nprompt-submit unset\npre-tool-use unset\nstop unset')" ]
 }

@@ -26,7 +26,7 @@ first_command() {
 
 @test "each entry hook runs the locale guard before anything else" {
   local h
-  for h in session-start prompt-submit pre-tool-use subagent-start; do
+  for h in session-start prompt-submit pre-tool-use subagent-start stop; do
     [ "$(first_command "$K/hooks/$h")" = "$GUARD" ] || { echo "$h starts with: $(first_command "$K/hooks/$h")"; return 1; }
   done
 }
