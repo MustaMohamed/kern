@@ -2608,8 +2608,20 @@ test('proofsChecked takes the last round: the last review-check before the PR ca
   assert.deepEqual(grade(NO_SPEC, PR, SPEC).reasons, [NO_PROOFS], 'proofs run only after the PR');
   assert.deepEqual(grade(SPEND_CLAIM), { pass: true, reasons: [] }, 'the old claim-check --spec --proofs form');
   assert.deepEqual(grade(SPEND_CLAIM, NO_SPEC).reasons, [NO_PROOFS], 'the old form, then a round with no spec');
-  assert.deepEqual(grade(NO_SPEC, SPEND_CLAIM), { pass: true, reasons: [] }, 'the old form as the last round');
-  assert.deepEqual(grade(SPEC, ran('x', ['bash $K/review-check . $R/kern-round-sum-2.diff --no-spec', false, 'kern G18: a read-only agent may not run this'])), { pass: true, reasons: [] }, 'a call a guard denied never ran');
+  const DENIED_RC = ran('x', ['bash $K/review-check . $R/kern-round-sum-2.diff --no-spec', false, 'kern G18: a read-only agent may not run this']);
+  assert.deepEqual(grade(SPEC, DENIED_RC), { pass: true, reasons: [] }, 'a call a guard denied never ran');
+  // Final review I1: with a review-check call before the PR, rounds count from review-check calls alone. claim-checks.md once
+  // described `claim-check <wt> <package>` as a call to make, so a run that reran it to confirm a cleared hit took the old form.
+  const BARE_CLAIM = ran('b', ['bash $K/claim-check . $R/kern-round-sum-1.diff; echo cc=$?', true, 'cc=0\n']);
+  assert.deepEqual(grade(SPEC, BARE_CLAIM), { pass: true, reasons: [] }, 'a bare claim-check after a review-check round is no round');
+  assert.deepEqual(grade(SPEC, SPEND_CLAIM), { pass: true, reasons: [] }, 'the old form after a review-check round is no round either');
+  assert.deepEqual(grade(NO_SPEC, SPEND_CLAIM).reasons, [NO_PROOFS], 'the last review-check had no spec, so a later old form does not save it');
+  assert.deepEqual(grade(DENIED_RC, SPEND_CLAIM), { pass: true, reasons: [] }, 'a review-check a guard denied never ran, so the old form counts');
+  assert.deepEqual(grade(BARE_CLAIM).reasons, [NO_PROOFS], 'with no review-check, a bare claim-check is the last round and fails');
+  // The old form fails where claim-check judged no proofs file, as review-check and behave's CLAIM_CHECK_MISS read it.
+  assert.deepEqual(grade(ran('c', [`${PROOFS_CALL}; echo cc=$?`, true, 'no proofs file: $R/reviews/pkg1.proofs.md\ncc=1\n'])).reasons, [NO_PROOFS], 'no proofs file');
+  assert.deepEqual(grade(ran('c', [PROOFS_CALL, false, 'Exit code 1\nno proofs file: $R/reviews/pkg1.proofs.md'])).reasons, [NO_PROOFS], 'no proofs file, exit 1 as the call\'s own exit');
+  assert.deepEqual(grade(ran('c', [`${PROOFS_CALL}; echo cc=$?`, true, 'proof-check: n/a ($R/specs/round-sum.md has no numbered acceptance lines)\ncc=0\n'])).reasons, [NO_PROOFS], 'proof-check: n/a judged no table');
 });
 
 // Re-review I3, the same formula on the bounded path in 5 stored lanes: Important twice, both on this ticket; Minor twice (go-merge-stop round 2, go-spend-stop

@@ -1,6 +1,6 @@
 # Claim checks
 
-Three scripts catch what reviewers miss; paste each run.
+Three scripts catch what reviewers miss; paste each run. Self-review step 2 runs floor-scan and claim-check through `review-check`.
 
 ## floor-scan
 

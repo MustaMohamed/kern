@@ -362,21 +362,25 @@ const scriptCalls = (command, name) => shellSegments(command).flatMap((seg) => {
 });
 // ranUnrefused(r): a Bash run whose result came back and that no guard refused: a call a guard denied never ran.
 const ranUnrefused = (r) => r.parts.length > 0 && !/\bkern G\d+: /.test(r.output);
-// proofsChecked(events): the last review round before the PR ran its proofs. A round is a Bash call that calls review-check or
-// claim-check (scriptCalls) and that ran (ranUnrefused), before the first call that ran `gh pr create` with no error, as ghCalls
-// reads a gh call. The last round passes when its review-check call carries --spec and the call printed the line `proofs: checked`:
-// review-check's `proofs: n/a`, `not checked` and `not due` lines judged no table. A last round with no review-check call takes the
-// old form: a claim-check with --spec and --proofs whose call printed no `usage: claim-check` or `claim-check: ` line. Its exit 1
-// is hits, which self-review's step 9 may clear, so only exit 2 misses, and only exit 2 prints those lines. Review Focus 3: a last
-// round that drops --spec after an earlier round used it fails.
+// proofsChecked(events): the last review round before the PR ran its proofs. A round is a Bash call that ran (ranUnrefused), before
+// the first call that ran `gh pr create` with no error, as ghCalls reads a gh call, and that calls review-check (scriptCalls); in a
+// run with no such call, one that calls claim-check. The last round passes when its review-check call carries --spec and the call
+// printed the line `proofs: checked`: review-check's `proofs: n/a`, `not checked` and `not due` lines judged no table. A run with no
+// review-check call takes the old form: its last claim-check call carries --spec and --proofs and printed no `usage: claim-check`,
+// `claim-check: `, `no proofs file: ` or `proof-check: n/a ` line. Its exit 1 is hits, which self-review's step 9 may clear, so only
+// exit 2 misses, and only exit 2 prints the first two lines; the last two show proof-check judged no proofs file, as review-check
+// and behave's CLAIM_CHECK_MISS read them. Review Focus 3: a last round that drops --spec after an earlier round used it fails.
+// Final review I1: a bare claim-check after a review-check round, which a run makes to confirm a cleared hit, is no round.
 const proofsChecked = (events) => {
   const runs = bashRuns(events);
   const opened = runs.find((r) => r.ok && ghWords(r.command).some((w) => w.startsWith('pr create')))?.at ?? Infinity;
-  const last = runs.filter((r) => r.at < opened && ranUnrefused(r) && (scriptCalls(r.command, 'review-check').length || scriptCalls(r.command, 'claim-check').length)).at(-1);
+  const ran = runs.filter((r) => r.at < opened && ranUnrefused(r));
+  const review = ran.filter((r) => scriptCalls(r.command, 'review-check').length).at(-1);
+  if (review) return scriptCalls(review.command, 'review-check').some((args) => args.includes('--spec')) && /^proofs: checked$/m.test(review.output);
+  const last = ran.filter((r) => scriptCalls(r.command, 'claim-check').length).at(-1);
   if (!last) return false;
-  const reviews = scriptCalls(last.command, 'review-check');
-  if (reviews.length) return reviews.some((args) => args.includes('--spec')) && /^proofs: checked$/m.test(last.output);
-  return !/usage: claim-check|claim-check: /.test(last.output) && scriptCalls(last.command, 'claim-check').some((args) => args.includes('--spec') && args.includes('--proofs'));
+  return !/usage: claim-check|claim-check: |^no proofs file: |^proof-check: n\/a /m.test(last.output)
+    && scriptCalls(last.command, 'claim-check').some((args) => args.includes('--spec') && args.includes('--proofs'));
 };
 // laneReports(events): each report of self-review step 4, as { at, text }, at the index of the event that holds it: a kern:task-reviewer
 // Agent call whose prompt says whole-branch and that came back with no error. A task review (`Mode: task`), or a call of any other kind,
