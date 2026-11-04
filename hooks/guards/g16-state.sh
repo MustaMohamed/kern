@@ -16,9 +16,10 @@
 # resolves outside kern's hooks folder, a kern worktree's included, so a go can commit it (_g16_own),
 # nor one of its own hooks.json or of a folder of its own under which no file is a symlink or has a
 # second link, when no other word of the copy names a hook entry file or holds a glob that could match
-# one, a $, a backtick or a {, and the command is one simple command with no $' in it. Running or
-# sourcing such a file, any write or run of a hook entry file, sed -i (GNU sed's e runs text as shell;
-# the Edit tool edits such a file), and a path G16 cannot resolve keep the ask.
+# one, a $, a backtick or a {, and the command is one simple command with no $' in it, as written or
+# with its line continuations joined. Running or sourcing such a file, any write or run of a hook entry
+# file, sed -i (GNU sed's e runs text as shell; the Edit tool edits such a file), and a path G16 cannot
+# resolve keep the ask.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; a write into kern's hooks folders whose own word does not spell
@@ -1147,11 +1148,16 @@ END { print "E" }'
 # when another record may move the shell (_G16_OWN_AWK), unless git's -C names an absolute directory.
 # Exit 1, so the vote stands, for text that holds <<, $(, ${, a backtick, <(, >( or the byte \034, when
 # git_words or awk fails or prints $KERN_UNREAD, when a record that holds such a word holds a #, and when
-# no word clears.
+# no word clears. The $' test and the text test read CMD both as written and with its line continuations
+# joined, as bash joins them before it reads a word.
 _g16_own() {
   local cmd=$1 out line rest tag i=0 j=0 n k base dep moved=0 dir t new="" any=0 anyfold=0 nl=$'\n' fs=$'\034'
+  local both
   local -a rv rc rm rC wr wo wt ww drop chg fold
-  case "$cmd" in *'<<'* | *'$('* | *'${'* | *'`'* | *'<('* | *'>('* | *"$fs"*) return 1 ;; esac
+  # The text as written and with every backslash before a newline taken out, as emit joins a record:
+  # bash joins a line continuation before it reads a word, so `$\<newline>'` is an ANSI-C quote to it.
+  both="$cmd$nl${cmd//\\$nl/}"
+  case "$both" in *'<<'* | *'$('* | *'${'* | *'`'* | *'<('* | *'>('* | *"$fs"*) return 1 ;; esac
   out=$(set -o pipefail; git_words "$cmd") || return 1
   # shellcheck disable=SC2016 # the literal record git_words prints
   case "$out" in *'$KERN_UNREAD'*) return 1 ;; esac
@@ -1243,10 +1249,11 @@ EOT
   done
   # git_words cuts a record at an unquoted (, ), { or } word, which can move the copy's later words into a
   # record of their own, with the ( or brace gone; it reads no $'...' escapes as bash does. So a folder
-  # clears only in one simple command with no $' in its text.
+  # clears only in one simple command with no $' in its text, as written or with its line continuations
+  # joined.
   if [ "$anyfold" = 1 ]; then
     [ "$n" = 1 ] || return 1
-    case "$cmd" in *"\$'"*) return 1 ;; esac
+    case "$both" in *"\$'"*) return 1 ;; esac
   fi
   # The text again: a changed record from the words it keeps, any other as git_words printed it.
   i=1

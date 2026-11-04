@@ -1581,12 +1581,13 @@ expect_kern() {
   expect_hook "cp ^x $R/src/hooks/guards/" "mv a/^b $R/src/hooks/lib"
 }
 
-@test "a -t copy into a project's hooks folder from an unquoted glob group keeps its ask; a lone git add of the folder does not" {
+@test "a -t copy into a project's hooks folder from an unquoted glob group, or a git add of the folder joined to a commit, keeps its ask; a lone git add does not" {
   project_hooks
   mkdir -p "$R/src/hooks/guards"
   expect_hook "cp -t $R/src/hooks/guards x(y)" "install -t $R/src/hooks/lib a(b|c)"
-  set_autopilot off
   # Fix round 3: a folder clears only in one simple command, so this row's add and commit pair asks now.
+  expect_hook "git -C $R add src/hooks/guards/ && git -C $R commit -m 'fix(g16): x'"
+  set_autopilot off
   expect_cmd none "git -C $R add src/hooks/guards/"
 }
 
@@ -1603,4 +1604,26 @@ expect_kern() {
   project_hooks
   mkdir -p "$R/src/hooks/guards"
   expect_hook "cp -t $R/src/hooks/guards a { b }" "mv -t $R/src/hooks/lib a } b"
+}
+
+# Task 3 fix round 4: bash joins a line continuation before it reads a word, so the folder clear reads
+# the text both as written and with its line continuations joined.
+@test "a copy into a project's hooks folder with a \$' keeps its ask, a line continuation after the \$ included" {
+  local nl=$'\n'
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  expect_hook "cp \$'/x' $R/src/hooks/guards/" "cp \$\\${nl}'/x' $R/src/hooks/guards/"
+}
+
+@test "a copy into a project's hooks folder with a line continuation inside a \${ keeps its ask" {
+  local nl=$'\n'
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  expect_hook "cp \$\\${nl}{x}/y $R/src/hooks/guards/"
+}
+
+@test "a git add of a project's hooks folder joined to another command keeps its ask" {
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  expect_hook "git -C $R add src/hooks/guards/; git -C $R status" "git -C $R add src/hooks/lib || true"
 }
