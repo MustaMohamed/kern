@@ -673,6 +673,7 @@ Expected: no gate falls under the exit rule; the new exec cases pass.
 
 - [ ] **Step 4: Triage.** Read `pressure-prove-it-deadline`: if it falls again with kern's bytes to it unchanged, it goes to the user with the runs. Read h2h diagnose's stale-cache runs: if the empty `catch {}` recurs, step 7's fallback ties to "Add no silencing guard" and the next round measures it. `workflow-execute-plan-size-breach` is judged on its reply-only row as a known limit. A case a new row turns red goes to the user.
 - [ ] **Step 5: Exit.** A failed gate gets one fix batch and one round, at most 3 rounds in all, a fourth only on the user's yes. Publish the scorecard page after each round.
+  - Closed at project 1's close, 2026-11-04, after four paid rounds. Round 1 ran every runner, and the user spent h2h plan's grace on its alarms red. Rounds 2 and 3 ran the 54 sessions their fixes reached, and round 3 closed goal 2. Round 4, on the user's "h2h review only, 15 runs (Recommended)", ran h2h review alone and passed it. Behaviour pools each case's last two rounds, on the user's "Per case (Recommended)". Exec ended at round 3's 15 of 21, every red ruled by the user, and `go-no-lint-draft`'s skip line and approval order and `go-block-reroute`'s fixture go to project 2. The CHANGELOG's paid check line holds the result.
 - [ ] **Step 6: Commit the records**
 
 ```bash
