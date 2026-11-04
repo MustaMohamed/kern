@@ -16,9 +16,9 @@
 # resolves outside kern's hooks folder, a kern worktree's included, so a go can commit it (_g16_own),
 # nor one of its own hooks.json or of a folder of its own under which no file is a symlink or has a
 # second link, when no other word of the copy names a hook entry file or holds a glob that could match
-# one, a $, a backtick or a {. Running or sourcing such a file, any write or run of a hook entry file,
-# sed -i (GNU sed's e runs text as shell; the Edit tool edits such a file), and a path G16 cannot
-# resolve keep the ask.
+# one, a $, a backtick or a {, and the command holds no unquoted (. Running or sourcing such a file, any
+# write or run of a hook entry file, sed -i (GNU sed's e runs text as shell; the Edit tool edits such a
+# file), and a path G16 cannot resolve keep the ask.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; a write into kern's hooks folders whose own word does not spell
@@ -1133,11 +1133,11 @@ END { print "E" }'
 # git_words prints is judged alone (_G16_OWN_AWK). In a write (class w or g), each word that names a
 # hooks directory, and in any command the target of an output redirect, goes to _g16_foreign with RO 2.
 # A folder that clears (_G16_FOLDER) takes the record's other words into it under their own last parts,
-# which the re-read below sees outside any hooks directory, so each of them must pass _g16_wname, the
-# write class's name tests: an entry file's name, a glob that could match one, or a $, backtick or {
-# keeps the ask. When all of them clear, the records are joined again, each one that held such a word
-# from its other words and the rest as printed, and _g16_hooks_read must find no hook code in that text,
-# by every rule:
+# which the re-read below sees outside any hooks directory, so each of them must pass the word rule's
+# name tests (_g16_wname): an entry file's name, a glob that could match one, or a $, backtick or {
+# keeps the ask, and so does an unquoted ( or a $' anywhere in CMD (_g16_paren). When all of them
+# clear, the records are joined again, each one that held such a word from its other words and the rest
+# as printed, and _g16_hooks_read must find no hook code in that text, by every rule:
 # so a run or a source of the same file (cp a.sh p/hooks/lib/a.sh && bash p/hooks/lib/a.sh), an entry
 # file, a hook name in any other command and a path G16 cannot resolve keep the ask. When one word does
 # not clear, nothing does: a project's file copied into kern's hooks folder keeps its vote. A relative
@@ -1149,7 +1149,7 @@ END { print "E" }'
 # git_words or awk fails or prints $KERN_UNREAD, when a record that holds such a word holds a #, and when
 # no word clears.
 _g16_own() {
-  local cmd=$1 out line rest tag i=0 j=0 n k base dep moved=0 dir t new="" any=0 nl=$'\n' fs=$'\034'
+  local cmd=$1 out line rest tag i=0 j=0 n k base dep moved=0 dir t new="" any=0 anyfold=0 nl=$'\n' fs=$'\034'
   local -a rv rc rm rC wr wo wt ww drop chg fold
   case "$cmd" in *'<<'* | *'$('* | *'${'* | *'`'* | *'<('* | *'>('* | *"$fs"*) return 1 ;; esac
   out=$(set -o pipefail; git_words "$cmd") || return 1
@@ -1228,7 +1228,7 @@ EOT
         drop[k]=1
         chg[i]=1
         any=1
-        [ "$_G16_FOLDER" = 0 ] || fold[i]=1
+        [ "$_G16_FOLDER" = 0 ] || fold[i]=1 anyfold=1
         ;;
     esac
     k=$((k + 1))
@@ -1241,6 +1241,9 @@ EOT
     if [ "${fold[${wr[k]}]-}" = 1 ] && [ "${drop[k]-}" != 1 ]; then _g16_wname "${ww[k]##*/}" || return 1; fi
     k=$((k + 1))
   done
+  # git_words cuts a record at an unquoted (, so a glob group such a copy takes can sit in a record of its
+  # own, which the loop above does not read: the ask stays.
+  if [ "$anyfold" = 1 ] && _g16_paren "$cmd"; then return 1; fi
   # The text again: a changed record from the words it keeps, any other as git_words printed it.
   i=1
   while [ "$i" -le "$n" ]; do
@@ -1436,19 +1439,41 @@ EOT
   [ "$n" = 1 ]
 }
 
-# _g16_wname PART: exit 0 when PART, the last part of a word, passes the name tests _g16_foreign gives
-# a write class word's last part, in any case: no $, backtick or {, not a hook entry file's name
-# (_G16_HOOK_NAMES), and, when it holds * ? or [, no glob that _g16_glob says could match one.
+# _g16_wname PART: exit 0 when PART, the last part of a word, passes the name tests the word rule of
+# _g16_hooks_read gives a last part inside a hooks directory, against the hook entry files' names
+# (_G16_HOOK_NAMES), in any case: no $, backtick or {, not an entry file's name, and nothing _g16_glob
+# says could match one (a zsh group, ^ or # counts as it does there).
 _g16_wname() {
   local bad=0
   shopt -s nocasematch
-  case "$1" in
-    *[\$\`\{]*) bad=1 ;;
-    *[\*\?\[]*) if _g16_glob "$_G16_HOOK_NAMES" "$1"; then bad=1; fi ;;
-    *) case " $_G16_HOOK_NAMES " in *" $1 "*) bad=1 ;; esac ;;
-  esac
+  case "$1" in *[\$\`\{]*) bad=1 ;; esac
+  case " $_G16_HOOK_NAMES " in *" $1 "*) bad=1 ;; esac
+  if _g16_glob "$_G16_HOOK_NAMES" "$1"; then bad=1; fi
   shopt -u nocasematch
   [ "$bad" = 0 ]
+}
+
+# _g16_paren TEXT: exit 0 when TEXT holds a ( outside quotes and not after a backslash, or a $' (whose
+# escapes neither git_words nor this scan reads as bash does), and when awk does not run.
+_g16_paren() {
+  local r
+  # shellcheck disable=SC2016 # awk text
+  r=$(printf '%s\n' "$1" | env LC_ALL=C awk -v sq="'" '
+{ buf = buf (NR > 1 ? "\n" : "") $0 }
+END {
+  n = split(buf, C, ""); q = ""
+  for (i = 1; i <= n; i++) {
+    c = C[i]
+    if (q == sq) { if (c == sq) q = ""; continue }
+    if (q == "\"") { if (c == "\\") i++; else if (c == "\"") q = ""; continue }
+    if (c == "\\") { i++; continue }
+    if (c == "$" && C[i + 1] == sq) { print "p"; exit }
+    if (c == sq || c == "\"") { q = c; continue }
+    if (c == "(") { print "p"; exit }
+  }
+  print "-"
+}') || return 0
+  [ "$r" != - ]
 }
 
 # _g16_lone_tree DIR: exit 0 when no file under DIR, at any depth, is a symlink or a regular file with

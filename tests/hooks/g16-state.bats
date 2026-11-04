@@ -1573,3 +1573,18 @@ expect_kern() {
   # 4 s, as the G13 and G15 row allows for shared runners.
   [ $((t1 - t0)) -lt 4000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
 }
+
+# Task 3 fix round 2.
+@test "a copy into a project's hooks folder of a word whose last part is a zsh negation keeps its ask" {
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  expect_hook "cp ^x $R/src/hooks/guards/" "mv a/^b $R/src/hooks/lib"
+}
+
+@test "a -t copy into a project's hooks folder from an unquoted glob group keeps its ask; a quoted paren does not" {
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  expect_hook "cp -t $R/src/hooks/guards x(y)" "install -t $R/src/hooks/lib a(b|c)"
+  set_autopilot off
+  expect_cmd none "git -C $R add src/hooks/guards/ && git -C $R commit -m 'fix(g16): x'"
+}
