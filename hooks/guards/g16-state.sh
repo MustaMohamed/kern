@@ -6,26 +6,27 @@
 # NotebookEdit whose target resolves under kern's hooks/ directory, every command that names kern's
 # hook code (a hook entry file, a .sh file under hooks/lib/ or hooks/guards/) or a state function,
 # which could forge the user's prompt or turn a guard off, every write (the class below) that takes a
-# hooks/lib or hooks/guards folder or a hooks/hooks.json file as a word (_g16_target), as a copy
-# into hooks/guards can add a guard and hooks.json says which hooks run, and every command but a read
-# that names a hooks.json G16 cannot place outside KERN_ROOT (sed -i). A path in a hooks directory does
-# not count when the command only reads and it resolves outside KERN_ROOT/hooks, or, in a command that
-# spells no hook code or substitution, when it resolves outside KERN_ROOT and is a regular file or a
-# glob that no hook name can match (_g16_foreign). Nor does a write (cp, mv, install, tee, a >
+# hooks/lib or hooks/guards folder or a hooks/hooks.json file as a word (_g16_target), as a copy into
+# hooks/guards can add a guard and hooks.json says which hooks run, and every command but a read that ro
+# accepts that names a hooks.json G16 cannot place outside KERN_ROOT (sed -i). A path in a hooks
+# directory does not count when the command only reads and it resolves outside KERN_ROOT/hooks, or, in a
+# command that spells no hook code or substitution, when it resolves outside KERN_ROOT and is a regular
+# file or a glob that no hook name can match (_g16_foreign). Nor does a write (cp, mv, install, tee, a >
 # target, git add or git mv, each simple command judged alone) of a project's own hook file that
 # resolves outside kern's hooks folder, a kern worktree's included, so a go can commit it (_g16_own),
 # nor one of its own hooks.json or of a folder of its own under which no file is a symlink or has a
-# second link. Running or sourcing such a file, any write or run of a hook entry file, sed -i (GNU
-# sed's e runs text as shell; the Edit tool edits such a file), and a path G16 cannot resolve keep
-# the ask.
+# second link, when no other word of the copy names a hook entry file or holds a glob that could match
+# one, a $, a backtick or a {. Running or sourcing such a file, any write or run of a hook entry file,
+# sed -i (GNU sed's e runs text as shell; the Edit tool edits such a file), and a path G16 cannot
+# resolve keep the ask.
 # Accepted limits: a path held in a variable or built at run time; a hooks directory reached without
 # naming it (find -exec, cd into a glob); interpreter code that builds a hook path; a script written
 # to disk and then run by name; a write into kern's hooks folders whose own word does not spell
-# hooks/lib or hooks/guards (after a cd into hooks, a glob for a part, a verb outside the write class
-# such as rsync or ln, a here-doc body a shell reads); a word _g16_foreign clears, which it judges by a
-# name and by the disk as the guard runs; and any other spelling of a hook path than the ones
-# _g16_hooks reads (any case, line continuations, the APFS folds of s and k, quotes, backslashes, globs
-# and braces).
+# hooks/lib or hooks/guards (after a cd into hooks, a glob for a part, a recursive copy of a folder
+# named lib or guards into kern's hooks folder itself, a verb outside the write class such as rsync or
+# ln, a here-doc body a shell reads); a word _g16_foreign clears, which it judges by a name and by the
+# disk as the guard runs; and any other spelling of a hook path than the ones _g16_hooks reads (any
+# case, line continuations, the APFS folds of s and k, quotes, backslashes, globs and braces).
 
 _G16_STATE_FILE="kern session state is written only by kern hooks; ask the user to type /kern:mode or /kern:autopilot"
 _G16_STATE_CMD="commands may not write kern session state"
@@ -1131,8 +1132,12 @@ END { print "E" }'
 # edit a project's own hooks/lib or hooks/guards file, a kern worktree's included. Each simple command
 # git_words prints is judged alone (_G16_OWN_AWK). In a write (class w or g), each word that names a
 # hooks directory, and in any command the target of an output redirect, goes to _g16_foreign with RO 2.
-# When all of them clear, the records are joined again, each one that held such a word from its other
-# words and the rest as printed, and _g16_hooks_read must find no hook code in that text, by every rule:
+# A folder that clears (_G16_FOLDER) takes the record's other words into it under their own last parts,
+# which the re-read below sees outside any hooks directory, so each of them must pass _g16_wname, the
+# write class's name tests: an entry file's name, a glob that could match one, or a $, backtick or {
+# keeps the ask. When all of them clear, the records are joined again, each one that held such a word
+# from its other words and the rest as printed, and _g16_hooks_read must find no hook code in that text,
+# by every rule:
 # so a run or a source of the same file (cp a.sh p/hooks/lib/a.sh && bash p/hooks/lib/a.sh), an entry
 # file, a hook name in any other command and a path G16 cannot resolve keep the ask. When one word does
 # not clear, nothing does: a project's file copied into kern's hooks folder keeps its vote. A relative
@@ -1145,7 +1150,7 @@ END { print "E" }'
 # no word clears.
 _g16_own() {
   local cmd=$1 out line rest tag i=0 j=0 n k base dep moved=0 dir t new="" any=0 nl=$'\n' fs=$'\034'
-  local -a rv rc rm rC wr wo wt ww drop chg
+  local -a rv rc rm rC wr wo wt ww drop chg fold
   case "$cmd" in *'<<'* | *'$('* | *'${'* | *'`'* | *'<('* | *'>('* | *"$fs"*) return 1 ;; esac
   out=$(set -o pipefail; git_words "$cmd") || return 1
   # shellcheck disable=SC2016 # the literal record git_words prints
@@ -1223,11 +1228,19 @@ EOT
         drop[k]=1
         chg[i]=1
         any=1
+        [ "$_G16_FOLDER" = 0 ] || fold[i]=1
         ;;
     esac
     k=$((k + 1))
   done
   [ "$any" = 1 ] || return 1
+  # A folder that clears takes the record's other words into it, under their own last parts, which the
+  # re-read below sees outside any hooks directory: each must pass the write class's name tests.
+  k=1
+  while [ "$k" -le "$j" ]; do
+    if [ "${fold[${wr[k]}]-}" = 1 ] && [ "${drop[k]-}" != 1 ]; then _g16_wname "${ww[k]##*/}" || return 1; fi
+    k=$((k + 1))
+  done
   # The text again: a changed record from the words it keeps, any other as git_words printed it.
   i=1
   while [ "$i" -le "$n" ]; do
@@ -1254,12 +1267,11 @@ EOT
 # with `.`, `..` and `//` read by _g16_tidy, ends in one of them, with or without a trailing /. A copy
 # into hooks/guards can add a guard that every tool call runs, and hooks.json says which hooks run.
 # _g16_own then lifts the vote when each such word resolves outside kern's hooks folder. Exit 1 when no
-# word does, and 2 when git_words or awk fails or prints $KERN_UNREAD. Only text that holds the letters
-# of hooks in order, in any case, is parsed, so a quote, a backslash or a line continuation inside the
-# word is still read.
+# word does, and 2 when git_words or awk fails or prints $KERN_UNREAD. Only text that _g16_named passes,
+# with the command's alias expansions, is parsed.
 _g16_target() {
   local out line rest role path r=1 fs=$'\034' nl=$'\n'
-  case "$1" in *[Hh]*[Oo]*[Oo]*[Kk]*[Ss]*) ;; *) return 1 ;; esac
+  _g16_named "$1 ${KERN_ALIAS_TEXT-}" || return 1
   out=$(set -o pipefail; git_words "$1" | env LC_ALL=C awk -v sq="'" "$_GW_AWK$_G16_OWN_AWK") || return 2
   # shellcheck disable=SC2016 # the literal record git_words prints
   case "$out" in *'$KERN_UNREAD'*) return 2 ;; esac
@@ -1285,6 +1297,19 @@ $out
 EOT
   shopt -u nocasematch
   return "$r"
+}
+
+# _g16_named TEXT: exit 0 when TEXT, with quotes, backslashes and newlines removed in one linear tr
+# pass, holds hooks in any case, or when tr does not run. A superset of what _g16_target can match: sw
+# keeps every other character of a word, and git_words drops only a backslash before a newline. A glob
+# with a * between letters would backtrack on long text in bash 3.2.
+_g16_named() {
+  local flat=$1
+  case "$1" in
+    *[\"\'\\]* | *$'\n'*) flat=$(printf '%s' "$1" | env LC_ALL=C tr -d '"\047\\\n') || return 0 ;;
+  esac
+  case "$flat" in *[Hh][Oo][Oo][Kk][Ss]*) return 0 ;; esac
+  return 1
 }
 
 # _g16_foreign_at DIR WORD RO MOVED NAMES: _g16_foreign with a relative WORD read from DIR.
@@ -1314,9 +1339,10 @@ _g16_foreign_at() {
 # or a regular file with one link that is no symlink: a write onto a hard link or a symlink writes the
 # file it shares. kern runs its entry files, so their names keep the ask; a lib or guard file outside the
 # bound is a project's own file. A folder, which a copy or move writes into, clears instead when no file
-# under it, at any depth, is a symlink or a regular file with more than one link (_g16_lone_tree).
-# Otherwise (RO 0) the directory must hold no file named in NAMES, since a
-# copy of kern runs as kern on the same plugin data, which also keeps a hook's own name. And the last
+# under it, at any depth, is a symlink or a regular file with more than one link (_g16_lone_tree), and
+# sets _G16_FOLDER, so _g16_own tests the names the copy brings in. Otherwise (RO 0) the directory must
+# hold no file named in NAMES, since a copy of kern runs as kern on the same plugin data, which also
+# keeps a hook's own name. And the last
 # part, in any case, must be a regular file that is no symlink and not named in NAMES, or a glob with no
 # $, backtick or { that _g16_glob says cannot match NAMES, so that a hook name, a variable or a directory
 # stays in any command that is not a read. That is a test of a name and of the disk as the guard runs,
@@ -1330,6 +1356,7 @@ _g16_foreign_at() {
 # read.
 _g16_foreign() {
   local w=${1%/} l d p r k kl bad=0 n names=$4
+  _G16_FOLDER=0
   l=${w##*/}
   case "$w" in
     *[!A-Za-z0-9._/@+-]*)
@@ -1387,6 +1414,7 @@ _g16_foreign() {
       if [ "$2" != 2 ]; then
         [ -f "$p" ] && [ ! -L "$p" ] || bad=1
       elif [ -d "$p" ]; then
+        _G16_FOLDER=1
         _g16_lone_tree "$r" || bad=1
       elif [ -e "$p" ] || [ -L "$p" ]; then
         _g16_lone "$p" || bad=1
@@ -1406,6 +1434,21 @@ _g16_lone() {
 $(ls -ld -- "$1" 2>/dev/null)
 EOT
   [ "$n" = 1 ]
+}
+
+# _g16_wname PART: exit 0 when PART, the last part of a word, passes the name tests _g16_foreign gives
+# a write class word's last part, in any case: no $, backtick or {, not a hook entry file's name
+# (_G16_HOOK_NAMES), and, when it holds * ? or [, no glob that _g16_glob says could match one.
+_g16_wname() {
+  local bad=0
+  shopt -s nocasematch
+  case "$1" in
+    *[\$\`\{]*) bad=1 ;;
+    *[\*\?\[]*) if _g16_glob "$_G16_HOOK_NAMES" "$1"; then bad=1; fi ;;
+    *) case " $_G16_HOOK_NAMES " in *" $1 "*) bad=1 ;; esac ;;
+  esac
+  shopt -u nocasematch
+  [ "$bad" = 0 ]
 }
 
 # _g16_lone_tree DIR: exit 0 when no file under DIR, at any depth, is a symlink or a regular file with

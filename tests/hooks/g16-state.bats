@@ -1538,3 +1538,38 @@ expect_kern() {
   mkdir -p "$R/src/hooks/guards"
   expect_cmd none "cp g.sh $R/src/hooks/guards/" "printf '{}' > $R/src/hooks/hooks.json" "cat $K/hooks/hooks.json"
 }
+
+# Task 3 fix round 1.
+@test "a copy into a project's hooks folder of a hook entry file's name, a glob for one or a variable keeps its ask" {
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  # shellcheck disable=SC2016 # a literal $f
+  expect_hook "cp /tmp/prompt-submit $R/src/hooks/guards/" "mv x/p* $R/src/hooks/lib" 'cp $f '"$R/src/hooks/guards/"
+}
+
+@test "a copy into a project's hooks folder that holds a symlink or a hard-linked file keeps its ask" {
+  K=$(kern_root)
+  project_hooks
+  mkdir -p "$R/src/hooks/guards"
+  ln -s "$K/hooks/guards/g01-git.sh" "$R/src/hooks/guards/g1.sh"
+  ln "$R/src/hooks/useForm.ts" "$R/src/hooks/lib/u.ts"
+  expect_hook "cp g.sh $R/src/hooks/guards/" "cp g.sh $R/src/hooks/lib/"
+}
+
+@test "a kern worktree's guards folder and hooks.json take the write class" {
+  kern_wt
+  expect_kern none "cp g.sh $W/hooks/guards/" "cp a.json $W/hooks/hooks.json"
+}
+
+@test "a long command with no hooks word is read in linear time" {
+  local cmd t0 t1
+  # h, o and k with no s after them: the letters-in-order glob this replaced backtracked in bash 3.2
+  # (58 s at 480 characters, past the 20 s hook timeout).
+  cmd="echo$(printf ' hook%.0s' $(seq 1 120))"
+  t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  run_guard "$(bash_payload "$cmd")" g16
+  t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  [ "$(decision_of "$output")" = none ]
+  # 4 s, as the G13 and G15 row allows for shared runners.
+  [ $((t1 - t0)) -lt 4000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
+}
