@@ -190,8 +190,9 @@ test('run.md lists every report field, the jobs another skill ran among them', (
     'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".',
     // Paid round 3: go-deploy-stop's lane said `needs fixes`, and its report said only that the review found it compliant.
     // M3 part 2 project 1's paid round 3: go-bug-draft's report gave the lane's "approved" for "the review's verdict" and no
-    // self-review verdict word, so the sentence names self-review.
-    "The report gives self-review's verdict as it came, `needs fixes` included."]) assert.ok(report.includes(s), s);
+    // self-review verdict word, so the sentence names self-review, and its example is self-review's own `fix first`, not the
+    // lane's `needs fixes` (the controller's ruling on the round 4 fix batch).
+    "The report gives self-review's verdict as it came, `fix first` included."]) assert.ok(report.includes(s), s);
   assert.match(RUN, /^These rules cover kern's routes only\. .*`overrides\.<job>`/m);
 });
 
@@ -294,8 +295,10 @@ test('run.md stays within its byte cap', () => {
   // the check as `fail` in its message body.
   // 7,331 since paid round 3's rulings (the user's "All three (Recommended)", 2026-11-04): the report gives self-review's verdict,
   // where "the review's verdict" let go-bug-draft give the spec lane's "approved".
-  assertMaxBytes('skills/autopilot/references/run.md', 7331);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,331 bytes (7,330 until M3 part 2 project 1\'s paid round 3 rulings: ']);
+  // 7,329 since the controller's ruling on that fix, a fall: the verdict's example is self-review's own `fix first`, not the lane's
+  // `needs fixes`.
+  assertMaxBytes('skills/autopilot/references/run.md', 7329);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,329 bytes (7,331 until the controller\'s ruling on M3 part 2 project 1\'s round 4 fix batch, a fall: ']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {
