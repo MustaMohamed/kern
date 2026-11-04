@@ -105,7 +105,7 @@ function odd(s,   L, k) {
 }
 # word(w): w with its quotes dropped and its directory part cut; no command name is 1,024 bytes long.
 function word(w,   P, np) {
-  if (length(w) > 1024) return ""
+  if (length(w) >= 1024) return ""
   gsub(/["\047]/, "", w)
   np = split(w, P, "/")
   return np ? P[np] : ""
@@ -203,7 +203,11 @@ END { if (read && ran < read) print "block" }
 # shellcheck disable=SC2034 # read by the json.sh functions
 KERN_INPUT=$(cat) || exit 0
 json_ok || exit 0
-[ "$(json_get_raw stop_hook_active 2>/dev/null)" = true ] && exit 0
+# A stop it already blocked allows, and so does a stop_hook_active json.sh finds malformed (exit 2), which
+# json_ok can pass.
+A=$(json_get_raw stop_hook_active 2>/dev/null)
+[ $? = 2 ] && exit 0
+[ "$A" = true ] && exit 0
 T=$(json_get transcript_path 2>/dev/null) || exit 0
 [ -n "$T" ] && [ -f "$T" ] && [ -r "$T" ] || exit 0
 # One grep of the whole transcript first: with no self-review in it, no read can count, and nothing more runs.
