@@ -115,6 +115,7 @@ kern/
   hooks/session-start               renders kernel + mode + settings summary
   hooks/subagent-start              renders subagent kernel + voice
   hooks/prompt-submit               mode and autopilot switches, reminders, unseen page answers
+  hooks/stop                        holds a stop while self-review's step 2 has not run
   hooks/guards/*.sh                 G1 to G17
   kernel/kernel.md  kernel-subagent.md  context.md  settings.md
   modes/terse.md  modes/html.md  modes/auto.md
@@ -317,6 +318,7 @@ Storage: `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.state`, flat `key: value` 
 | SessionStart | Inject the kernel plus only the active mode's rules |
 | UserPromptSubmit | Apply switches; inject a short reminder outside the default; on each prompt after a session's first, inject the routing reminder (section 4.3); on each prompt with quick or waiver words, inject the Building line (section 4.3); inject page answers not yet seen |
 | SubagentStart | Inject the active voice with the subagent kernel |
+| Stop | One trigger (M3 part 2 project 1, the user's "Stop hook (Recommended)", 2026-11-04): when the turn's last read of the running kern's self-review, a Read or a `cat`, `sed` or `head` of its own `SKILL.md` or a Skill call naming it, has no Bash call that runs `review-check` after it, block the stop once with a reason that names step 2. The turn starts at the user's last prompt, and a read of another checkout's copy does not count (the controller's rulings on round 2's fix review, 2026-11-04). A `grep` of the transcript, then of the turn, allows with no parse when either holds no `self-review`; past them, the hook reads only the turn's `tool_use` blocks, prints `{"decision":"block","reason":...}` and exits 0, and allows on `stop_hook_active`, `kern: off` and any fault. Project 2 extends it for autopilot's stop |
 
 Headless and scheduled runs (`claude -p`) skip the mode reminder. A headless run still gets the routing reminder and the Building line (section 4.3), since the evals that measure routing and the Building line run headless; a scheduled-task prompt is wrapped and gets none.
 
@@ -438,7 +440,7 @@ G8, an edit-time typecheck, was dropped: projects keep their own hooks, which mu
 2. Plugin hooks use exec form with `${CLAUDE_PLUGIN_ROOT}` paths.
 3. PreToolUse decisions are returned as `hookSpecificOutput.permissionDecision` (`allow`, `deny`, `ask`) with `permissionDecisionReason`. Claude Code applies the strictest decision across all hooks: deny, then defer, then ask, then allow. An `ask` reason opens with `needs user approval: `, as in `needs user approval: kern G5: commit (message checks pass)`: under `-p` or the SDK Claude Code turns an ask into a denial and the model reads only the reason (Task 16g). A deny reason, and an ask autopilot turns into a deny, opens with `kern`.
 4. A hook that cannot parse its input, or cannot load its libraries, returns `ask`, or `deny` under autopilot. A PreToolUse input holding an escape `\u0000`, `\u0001` or `\u001c` to `\u001f` (either hex case) counts as one it cannot parse. Bash cannot hold the byte 0x00, so kern's JSON reader refuses that value and a guard would read the field as absent. The reader decodes the others into bytes kern's own parsers hold as marks (`git_words`' in-record newline 0x1f and record tags 0x1d and 0x1e, G16's and G18's word marks 0x1c and 0x1d, awk's array subscript join 0x1c, G13's line tag 0x01), which a guard could misread. Other control characters pass (M3 part 2 Task 14). It never allows on a parse failure. Without its libraries it cannot read autopilot, so it denies under `bypassPermissions` instead.
-5. PostToolUse and Stop warnings exit 2 with the message on stderr, so Claude sees them.
+5. PostToolUse and Stop warnings exit 2 with the message on stderr, so Claude sees them. The Stop hook's block (section 6.3) prints a `decision` object and exits 0, and every fault in it allows the stop.
 6. The Skill tool's input fields are not documented, so G3 matches `--comment` against the raw `tool_input` text. That check is best effort, backed by the skill's own rule and G3's checks on `gh` posting commands.
 7. Each guard has a bats test with allow, ask and deny cases in both modes.
 8. No hook, and no script a hook runs, makes a locale change bash must undo: a command pinned to the C locale runs as `env LC_ALL=C cmd`, never under a `local LC_ALL` or an `LC_ALL=C cmd` prefix. Homebrew bash 5.3.15, the `bash` a hook runs on macOS, segfaults now and then when a subshell undoes one while neither `LANG` nor `LC_ALL` is set, which failed reads at random (Tasks 16l and 16m). Each entry hook also exports `LANG=C` first when neither is set, which leaves the locale as it was.

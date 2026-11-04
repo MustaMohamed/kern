@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+# kern Stop: self-review step 2's backstop (M3 part 2 project 1; the user's "Fix it in project 1" and "Stop hook
+# (Recommended)", 2026-11-04). When the turn's last read of the running kern's self-review has no review-check run
+# after it, it blocks the stop with a reason that names step 2: {"decision":"block","reason":...} on stdout, exit
+# 0. The turn starts at the user's last prompt, so a read in an earlier turn does not count, and a read of another
+# checkout's copy does not either (the controller's rulings on round 2's fix review). It reads only the
+# transcript's tool_use blocks, so a path in message text or a tool result does not count. A stop it already
+# blocked (stop_hook_active), kern: off and every fault allow the stop: allowing prints nothing and exits 0, since
+# a Stop hook must never trap a session. Project 2 extends it for autopilot's stop.
+# shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
+# Homebrew bash 5.3.15 segfaults now and then when a subshell undoes a locale change, but only while
+# neither LANG nor LC_ALL is set (Task 16l). An unset LANG already means the C locale, and an LC_* still
+# overrides it, so exporting LANG=C changes no locale: it only takes the trigger away from this hook and
+# every command it runs. It comes first, before anything that could crash.
+[ -n "${LANG-}${LC_ALL-}" ] || export LANG=C
+# A hook may start with a PATH that holds no system tool: the system directories go last, so whatever the
+# PATH names still wins, and dirname below finds kern's root.
+export PATH="${PATH:+$PATH:}/usr/bin:/bin"
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 0
+export KERN_ROOT
+# Every git call this hook makes, and every git its children run, gets no fsmonitor program and no repo
+# hooks, so a repository's own config cannot run code through a kern hook (git 2.31+ reads
+# GIT_CONFIG_COUNT). The two pairs go after the pairs the environment already holds, which still apply
+# (a container's safe.directory, for one). KERN_GC is their number; a count that is not a number of
+# at most 9 digits counts as none.
+case "${GIT_CONFIG_COUNT-}" in "" | *[!0-9]* | ??????????*) KERN_GC=0 ;; *) KERN_GC=$((10#$GIT_CONFIG_COUNT)) ;; esac
+export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor" "GIT_CONFIG_VALUE_$KERN_GC=false" \
+  "GIT_CONFIG_KEY_$((KERN_GC + 1))=core.hooksPath" "GIT_CONFIG_VALUE_$((KERN_GC + 1))=/dev/null"
+# POSIXLY_CORRECT in the environment starts bash in POSIX mode, where a "." that fails exits the
+# shell before "|| exit 0" runs.
+set +o posix
+
+# shellcheck source=hooks/lib/json.sh
+. "$KERN_ROOT/hooks/lib/json.sh" 2>/dev/null || exit 0
+declare -F json_ok >/dev/null && declare -F json_get >/dev/null && declare -F json_get_raw >/dev/null || exit 0
+
+# The transcript scan. Each line is one JSON entry; grep has kept those that hold "type":"tool_use" as
+# written, which only a JSON key and value can be (a quote inside a string is escaped). Splitting a line at
+# its double quotes, with each piece that ends in an odd run of backslashes joined to the next, gives the
+# text outside strings and the string bodies in turn, so the scan reads structure and builds only the few
+# values it needs. A tool_use block counts at depth 4 under message.content, where Claude Code writes the
+# session's own calls; a subagent's progress entry nests deeper, and a sidechain entry is skipped. A Read of
+# the running kern's skills/self-review/SKILL.md (a path in SRP, with /private before /var, /tmp or /etc
+# dropped), a Skill call naming kern:self-review or self-review, and a simple command in a Bash call that runs
+# cat, sed or head with a word naming that file are reads. In such a word, a leading $CLAUDE_PLUGIN_ROOT is the
+# running kern's root, and $NAME or ${NAME} takes the value an earlier command of the same call that only
+# assigns gave it; a relative path or any other variable names no file. A simple command that runs
+# review-check by path, bare, or through bash or sh is a run. Simple commands split at newline,
+# ; & | ( ) and backticks, ignoring quotes, so a separator quoted in a command can split it. Prints "block"
+# when the last read has no run after it. The time stays linear in the line: a regex gsub, sub or split in
+# BWK awk slows with the string's length on each match, so on a long string the scan uses only splits at
+# one character, which are literal, and builds a long value by joining its pieces in pairs.
+# shellcheck disable=SC2016 # awk text
+_KERN_STOP_AWK='
+BEGIN {
+  SEP[1] = "\n"; SEP[2] = ";"; SEP[3] = "&"; SEP[4] = "|"; SEP[5] = "("; SEP[6] = ")"; SEP[7] = "`"; NS = 7
+  nr = split(ENVIRON["KERN_STOP_ROOTS"], RT, "\n")
+  for (j = 1; j <= nr; j++) if (substr(RT[j], 1, 1) == "/") SRP[norm(RT[j] "/skills/self-review/SKILL.md")] = 1
+}
+# norm(p): p without the /private macOS puts before /var, /tmp and /etc, so both spellings of one file match.
+function norm(p) { return (p ~ /^\/private\/(var|tmp|etc)\//) ? substr(p, 9) : p }
+# own(p): p, a word of at most 1,024 bytes with its quotes dropped, names self-review in the running kern.
+function own(p,   rest, name, j) {
+  if (substr(p, 1, 1) == "$") {
+    rest = substr(p, 2)
+    if (substr(rest, 1, 1) == "{") { j = index(rest, "}"); if (j < 3) return 0; name = substr(rest, 2, j - 2); rest = substr(rest, j + 1) }
+    else { j = index(rest, "/"); if (j < 2) return 0; name = substr(rest, 1, j - 1); rest = substr(rest, j) }
+    if (name == "CLAUDE_PLUGIN_ROOT") return rest == "/skills/self-review/SKILL.md"
+    if (!(name in VARS)) return 0
+    p = VARS[name] rest
+  }
+  return (norm(p) in SRP)
+}
+# joined(A, k, sep): A[1] to A[k] with sep between each two, merged in pairs, so a value of many pieces is
+# copied about log2(k) times, not once per piece.
+function joined(A, k, sep,   i, j) {
+  if (k < 1) return ""
+  while (k > 1) {
+    j = 0
+    for (i = 1; i <= k; i += 2) A[++j] = (i < k) ? (A[i] sep A[i + 1]) : A[i]
+    k = j
+  }
+  return A[1]
+}
+# decode(s): the JSON string body s decoded. Split at each backslash: an empty piece is an escaped
+# backslash, and the piece after it is plain text; any other piece starts with its escape letter.
+# A \u escape stays as written.
+function decode(s,   B, nb, O, k, i, e) {
+  nb = split(s, B, "\\")
+  k = 1; O[1] = B[1]; i = 2
+  while (i <= nb) {
+    if (B[i] == "" && i < nb) { O[++k] = "\\" B[i + 1]; i += 2; continue }
+    e = substr(B[i], 1, 1)
+    if (e == "n") e = "\n"; else if (e == "t") e = "\t"; else if (e == "r") e = "\r"; else if (e == "u" || e == "") e = "\\" e
+    O[++k] = e substr(B[i], 2)
+    i++
+  }
+  return joined(O, k, "")
+}
+# odd(s): 1 when s ends in an odd number of backslashes, so the quote after it is escaped.
+function odd(s,   L, k) {
+  L = length(s); k = 0
+  while (k < L && substr(s, L - k, 1) == "\\") k++
+  return k % 2
+}
+# word(w): w with its quotes dropped and its directory part cut; no command name is 1,024 bytes long.
+function word(w,   P, np) {
+  if (length(w) > 1024) return ""
+  gsub(/["\047]/, "", w)
+  np = split(w, P, "/")
+  return np ? P[np] : ""
+}
+# cut(s, l): s split at SEP[l], then each piece at the separators after it, each simple command read in order.
+function cut(s, l,   A, na, j) {
+  if (l > NS) { simple(s); return }
+  na = split(s, A, SEP[l])
+  for (j = 1; j <= na; j++) cut(A[j], l + 1)
+}
+function simple(seg,   w, nw, k, h, j, e, x, only) {
+  nw = split(seg, w)
+  k = (nw && w[1] == "export") ? 2 : 1
+  # A command that only assigns (export included) sets VARS for the later commands of this call, each value
+  # as written with its quotes and trailing slashes dropped: a prefix assignment does not reach the words of its
+  # own command, and a value that is not an absolute root of the running kern names no file in SRP.
+  only = 1
+  for (j = k; j <= nw; j++) if (length(w[j]) >= 1024 || w[j] !~ /^[A-Za-z_][A-Za-z0-9_]*=/) { only = 0; break }
+  if (only) {
+    for (j = k; j <= nw; j++) {
+      e = index(w[j], "="); x = substr(w[j], e + 1); gsub(/["\047]/, "", x); sub(/\/+$/, "", x)
+      VARS[substr(w[j], 1, e - 1)] = x
+    }
+    return
+  }
+  k = 1
+  while (k <= nw && length(w[k]) < 1024 && (w[k] ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || w[k] ~ /^(!|\{|if|elif|then|else|while|until|do|time|env|command|exec|nohup)$/)) k++
+  if (k > nw) return
+  h = word(w[k])
+  if (h == "bash" || h == "sh") {
+    k++
+    while (k <= nw && substr(w[k], 1, 1) == "-") k++
+    if (k > nw) return
+    h = word(w[k])
+  }
+  if (h == "review-check") ran = ++seq
+  else if (h == "cat" || h == "sed" || h == "head") {
+    for (j = k + 1; j <= nw; j++) {
+      if (length(w[j]) >= 1024) continue
+      x = w[j]; gsub(/["\047]/, "", x)
+      if (own(x)) { read = ++seq; return }
+    }
+  }
+}
+function tool(name, path, cmd, sk) {
+  if (name == "Read") { if (length(path) < 1024 && own(path)) read = ++seq }
+  else if (name == "Skill") { if (substr(sk, 1, 1) == "/") sk = substr(sk, 2); if (sk == "kern:self-review" || sk == "self-review") read = ++seq }
+  else if (name == "Bash") { split("", VARS); cut(cmd, 1) }
+}
+{
+  if (index($0, "\"isSidechain\":true")) next
+  n = split($0, F, "\"")
+  d = 0; ex = 0; key = ""
+  i = 1
+  while (i <= n) {
+    m = split(F[i], ch, "")
+    for (p = 1; p <= m; p++) {
+      c = ch[p]
+      if (c == "{" || c == "[") {
+        d++
+        ck[d] = ex ? key : ""
+        kind[d] = c
+        ty[d] = ""; nm[d] = ""; fp[d] = ""; cm[d] = ""; sk[d] = ""
+        ex = 0
+      } else if (c == "}" || c == "]") {
+        if (d == 4 && kind[4] == "{" && ty[4] == "tool_use" && ck[3] == "content" && ck[2] == "message") tool(nm[4], fp[4], cm[4], sk[4])
+        if (d > 0) d--
+        ex = 0
+      } else if (c == ":") ex = 1
+      else if (c == ",") ex = 0
+    }
+    if (i == n) break
+    i++
+    want = ex && ((d == 4 && (key == "type" || key == "name")) || (d == 5 && ck[5] == "input" && (key == "file_path" || key == "command" || key == "skill")))
+    s = F[i]; esc = 0
+    if (want) PC[1] = s
+    while (i < n && odd(F[i])) { i++; esc++; if (want) PC[esc + 1] = F[i] }
+    if (ex) {
+      if (want) {
+        v = decode(esc ? joined(PC, esc + 1, "\"") : s)
+        if (key == "type") ty[4] = v
+        else if (key == "name") nm[4] = v
+        else if (key == "file_path") fp[4] = v
+        else if (key == "command") cm[4] = v
+        else sk[4] = v
+      }
+      ex = 0
+    } else key = esc ? "" : s
+    i++
+  }
+}
+END { if (read && ran < read) print "block" }
+'
+
+# shellcheck disable=SC2034 # read by the json.sh functions
+KERN_INPUT=$(cat) || exit 0
+json_ok || exit 0
+[ "$(json_get_raw stop_hook_active 2>/dev/null)" = true ] && exit 0
+T=$(json_get transcript_path 2>/dev/null) || exit 0
+[ -n "$T" ] && [ -f "$T" ] && [ -r "$T" ] || exit 0
+# One grep of the whole transcript first: with no self-review in it, no read can count, and nothing more runs.
+env LC_ALL=C grep -q -F 'self-review' "$T" 2>/dev/null || exit 0
+# The turn starts at the user's last prompt: a user entry whose content is text, or a list that opens with a text
+# or image block, written role before content as Claude Code writes it, and none of a meta entry (a skill's
+# body), a compact summary, a sidechain or progress entry, or a prompt Claude Code wrapped itself. With none
+# found, the turn is the whole transcript. The prompt grep takes one pattern, since BSD grep slows with each -e
+# pattern, and the filter after it reads only the prompt lines.
+L=$(env LC_ALL=C grep -n -E '"role":"user","content":("|\[\{"type":"(text|image)")' "$T" 2>/dev/null |
+  env LC_ALL=C grep -v -F -e '"isMeta":true' -e '"isCompactSummary":true' -e '"isSidechain":true' -e '"type":"progress"' \
+    -e '"content":"<task-notification' -e '"content":"<cross-session-message' -e '"content":"<scheduled-task' \
+    -e '"content":"<teammate-message' -e '"content":"<channel-message' -e '"content":"<agent-message' |
+  tail -n 1 | cut -d : -f 1)
+case "$L" in '' | *[!0-9]*) L=1 ;; esac
+# Then one grep of the turn, so a read from an earlier turn costs no parse either.
+[ "$L" = 1 ] || tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -q -F 'self-review' || exit 0
+# The running kern's roots: kern's root as this hook finds it and as CLAUDE_PLUGIN_ROOT names it, each as written
+# and resolved physically.
+KERN_STOP_ROOTS=""
+for r in "$KERN_ROOT" "${CLAUDE_PLUGIN_ROOT-}"; do
+  [ -n "$r" ] || continue
+  KERN_STOP_ROOTS="$KERN_STOP_ROOTS${r%/}"$'\n'
+  r=$(CDPATH='' cd -P -- "$r" 2>/dev/null && pwd -P) && KERN_STOP_ROOTS="$KERN_STOP_ROOTS$r"$'\n'
+done
+export KERN_STOP_ROOTS
+V=$(tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -F '"type":"tool_use"' | env LC_ALL=C awk "$_KERN_STOP_AWK" 2>/dev/null) || exit 0
+[ "$V" = block ] || exit 0
+# kern: off for this project allows. The settings read runs git, so it waits until the scan would block.
+CWD=$(json_get cwd 2>/dev/null) || CWD="$PWD"
+export CWD
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh" 2>/dev/null || exit 0
+declare -F kern_enabled >/dev/null && kern_enabled 2>/dev/null || exit 0
+# shellcheck disable=SC2016 # literal backticks
+printf '%s\n' '{"decision":"block","reason":"kern: self-review step 2 has not run since self-review was read. When a spec exists, write `<package>.proofs.md`, then run `review-check <wt> <package> --spec <spec>` (`--no-spec` with none) and give the verdict from its `floor:` line."}'
+exit 0

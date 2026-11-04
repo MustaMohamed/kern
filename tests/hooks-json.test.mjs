@@ -7,8 +7,8 @@ import { join } from 'node:path';
 const root = join(import.meta.dirname, '..');
 const hooks = JSON.parse(readFileSync(join(root, 'hooks', 'hooks.json'), 'utf8')).hooks;
 
-test('every M1 event is wired in exec form', () => {
-  assert.deepEqual(Object.keys(hooks).sort(), ['PreToolUse', 'SessionStart', 'SubagentStart', 'UserPromptExpansion', 'UserPromptSubmit']);
+test('every M1 event and the Stop hook are wired in exec form', () => {
+  assert.deepEqual(Object.keys(hooks).sort(), ['PreToolUse', 'SessionStart', 'Stop', 'SubagentStart', 'UserPromptExpansion', 'UserPromptSubmit']);
   for (const [event, groups] of Object.entries(hooks)) {
     for (const g of groups) for (const h of g.hooks) {
       assert.equal(h.command, 'bash', `${event} uses exec form`);
@@ -16,6 +16,12 @@ test('every M1 event is wired in exec form', () => {
       assert.ok(statSync(script).mode & 0o111, `${script} is executable`);
     }
   }
+});
+
+test('the Stop hook runs hooks/stop within 10 s and fails open', () => {
+  // M3 part 2 project 1, paid round 1's goal 2 (the user's "Stop hook (Recommended)", 2026-11-04): a Stop hook must
+  // never trap a session, so it has no onFailure block.
+  assert.deepEqual(hooks.Stop, [{ hooks: [{ type: 'command', command: 'bash', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/stop'], timeout: 10 }] }]);
 });
 
 test('the guard dispatcher fails closed and sees every guarded tool', () => {
