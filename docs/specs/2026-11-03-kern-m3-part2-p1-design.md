@@ -54,7 +54,7 @@ The user's words on round 1's reds (tree 7057f41).
 | `go-required-check-stop`: commit's no-PR end names the red check as `fail` in the message body, cap 6,062 to 6,072 | "Take the fix (Recommended)" |
 | Round 2 is a targeted rerun: it spends plan's grace and reruns the 3 voided exec cases, `go-required-check-stop` and h2h review | "Targeted rerun (Recommended)" |
 
-The controller's rulings on round 2's fix review, 2026-11-04, scope the Stop hook. A read counts only after the user's last prompt, so a read in an earlier turn no longer blocks a later one. A Read, `cat`, `sed` or `head` counts only on the running kern's own `skills/self-review/SKILL.md`, under kern's root or `CLAUDE_PLUGIN_ROOT` resolved physically, and a Skill call naming `kern:self-review` or `self-review` still counts. A `grep -F -q` for `self-review`, on the transcript and then on the turn, allows with no parse when neither holds it. `kern: off` allowing the stop stands, and round 2's rerun reaches `workflow-self-review-proofs` and every case the hook reaches.
+The controller's rulings on round 2's fix review, 2026-11-04, scope the Stop hook. A read counts only after the user's last prompt, so a read in an earlier turn no longer blocks a later one. A Read, `cat`, `sed` or `head` counts only on the running kern's own `skills/self-review/SKILL.md`, under kern's root or `CLAUDE_PLUGIN_ROOT` resolved physically, and a Skill call naming `kern:self-review` or `self-review` still counts. A `grep -F -q` for `self-review`, on the transcript and then on the turn, allows with no parse when either lacks it. `kern: off` allowing the stop stands, and round 2's rerun reaches `workflow-self-review-proofs` and every case the hook reaches.
 
 ## Guards and scripts
 
