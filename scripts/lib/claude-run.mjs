@@ -1,12 +1,15 @@
 // Run Claude Code headless on a fixture project, isolated from the host: no user settings (so no user
-// plugins or hooks), no MCP servers, no saved session. Shared by exec-eval (M2a) and the M2b runners.
+// plugins or hooks), no MCP servers. Shared by exec-eval (M2a) and the M2b runners. The session is saved, as a
+// user's is, so kern's Stop hook reads a transcript; runClaude takes it after the run and removes its folder.
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const ISOLATION = ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'];
+// M3 part 2 project 1, paid round 2 (the user's "Measure the hook (Recommended)", 2026-11-04): --no-session-persistence is gone. With
+// it, the Stop hook's transcript_path named no file, and the hook allowed in all 54 sessions of round 2.
+export const ISOLATION = ['--setting-sources', 'project', '--strict-mcp-config'];
 // A headless run cannot answer a permission prompt, and the isolation flags drop the user's allow rules, so
 // the tools a task needs are pre-approved. kern's guards still ask or deny on top; an ask in a headless run is refused. The subagent tool is listed under both
 // names it has had (Agent, Task). ScheduleWakeup is denied (M3 part 2 project 1, Task 12): paid round 5's workflow-define-spec
@@ -60,6 +63,62 @@ export function childEnv(parent, extra = {}) {
   const env = {};
   for (const [k, v] of Object.entries(parent)) if (inherited(k) && v !== undefined) env[k] = v;
   return { ...env, ...extra };
+}
+
+// configDirOf(env): the config dir env gives claude, a leading ~ read as env's HOME as evalConfigProblem reads it; '' when
+// env sets none.
+export const configDirOf = (env) => {
+  const raw = String(env?.CLAUDE_CONFIG_DIR ?? '').trim();
+  if (!raw) return '';
+  return raw === '~' || raw.startsWith('~/') ? join(env.HOME || homedir(), raw.slice(1)) : raw;
+};
+
+// A session id kern reads a file by: a plain name, so <id>.jsonl cannot reach outside its folder.
+const SESSION_ID = /^[A-Za-z0-9_-]+$/;
+// runSession(events): the session id the run's first system/init event names, or '' when none names a plain one.
+export function runSession(events) {
+  const id = (events ?? []).find((e) => e?.type === 'system' && e.subtype === 'init' && typeof e.session_id === 'string')?.session_id ?? '';
+  return SESSION_ID.test(id) ? id : '';
+}
+
+// takeTranscript(configDir, sid): session sid's transcript, which Claude Code writes as <configDir>/projects/<folder>/<sid>.jsonl,
+// read as text, and then that folder removed, so sessions do not pile up and no later run reads another's. The folder is named
+// after the session's cwd, and each run has a temp workspace of its own, so it holds this session alone (its subagents' files
+// included). '' when there is no such file, or sid is not a plain name; it never throws: a missing transcript is not an error.
+export function takeTranscript(configDir, sid) {
+  if (!configDir || !SESSION_ID.test(sid ?? '')) return '';
+  const projects = join(configDir, 'projects');
+  let folders;
+  try { folders = readdirSync(projects); } catch { return ''; }
+  for (const d of folders) {
+    const file = join(projects, d, `${sid}.jsonl`);
+    if (!existsSync(file)) continue;
+    let text = '';
+    try { text = readFileSync(file, 'utf8'); } catch { /* unreadable: the folder still goes */ }
+    try { rmSync(join(projects, d), { recursive: true, force: true }); } catch { /* best effort */ }
+    return text;
+  }
+  return '';
+}
+
+// STOP_BLOCK: words of the reason kern's Stop hook gives when it blocks a stop (hooks/stop).
+export const STOP_BLOCK = 'step 2 has not run';
+// heldOutside(v): v holds STOP_BLOCK in a string, outside a tool_use or tool_result block and a tool result's copy
+// (toolUseResult in a transcript, tool_use_result in the stream).
+const heldOutside = (v) => {
+  if (typeof v === 'string') return v.includes(STOP_BLOCK);
+  if (!v || typeof v !== 'object') return false;
+  if (v.type === 'tool_use' || v.type === 'tool_result') return false;
+  return Object.entries(v).some(([k, x]) => k !== 'toolUseResult' && k !== 'tool_use_result' && heldOutside(x));
+};
+// stopBlocked({ transcript, events }): kern's Stop hook blocked a stop in the run: a line of its transcript, or an event of its
+// stream, holds the hook's reason, and is not the model's own (an assistant entry, or the stream's result event, which copies
+// the final reply) or a tool's (heldOutside). How Claude Code feeds a block back is read from neither shape, so any other entry
+// counts.
+export function stopBlocked({ transcript = '', events = [] } = {}) {
+  const lines = String(transcript ?? '').includes(STOP_BLOCK) ? String(transcript).split('\n') : [];
+  const entries = [...lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }), ...(events ?? [])];
+  return entries.some((e) => e?.type !== 'assistant' && e?.type !== 'result' && heldOutside(e));
 }
 
 // A child that could not run, or was cut off, is never a result. fatal: every later run would fail the
@@ -139,7 +198,9 @@ export const NO_BACKGROUND = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
 // environment. A non-zero exit is returned in status; use runProblem() to decide whether the run may be
 // graded. Capped by turns (--max-turns, which `claude --help` does not list but the CLI reference
 // documents) and by dollars (--max-budget-usd). On the timeout claude's process group gets SIGTERM, then
-// SIGKILL after killGraceMs. More than maxBuffer bytes on stdout or stderr cuts the run off the same way.
+// SIGKILL after killGraceMs. More than maxBuffer bytes on stdout or stderr cuts the run off the same way. The result,
+// { argv, events, badLines, status, stderr, transcript }, carries the session's transcript (ended), and a timeout's error
+// carries it beside the events.
 export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000,
   killGraceMs = 5000, maxBuffer = 64 * 1024 * 1024 }) {
   const { argv, childEnvironment } = prepare({ cwd, prompts, pluginDirs, model, maxTurns, maxBudgetUsd, env });
@@ -147,7 +208,7 @@ export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12,
   const run = spawnSync(process.execPath, [DRIVER, ...argv], { cwd, input: JSON.stringify({ prompts, graceMs: killGraceMs }), stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
     encoding: 'utf8', timeout: timeoutMs, maxBuffer, env: childEnvironment });
   return ended({ argv, stdout: run.stdout, stderr: run.stderr, report: run.output?.[3], timedOut: run.error?.code === 'ETIMEDOUT', overflow: run.error?.code === 'ENOBUFS',
-    error: run.error, status: run.status, signal: run.signal, timeoutMs, maxBuffer });
+    error: run.error, status: run.status, signal: run.signal, timeoutMs, maxBuffer, configDir: configDirOf(childEnvironment) });
 }
 
 // runClaudeAsync: runClaude on spawn, not spawnSync, so the session pool (pool.mjs) runs several at once. Same
@@ -176,7 +237,8 @@ export function runClaudeAsync({ cwd, prompts, pluginDirs = [], model, maxTurns 
       clearTimeout(timer);
       const text = (k) => Buffer.concat(got[k]).toString('utf8');
       try {
-        resolve(ended({ argv, stdout: text('stdout'), stderr: text('stderr'), report: text('report'), timedOut, overflow, error, status, signal, timeoutMs, maxBuffer }));
+        resolve(ended({ argv, stdout: text('stdout'), stderr: text('stderr'), report: text('report'), timedOut, overflow, error, status, signal, timeoutMs, maxBuffer,
+          configDir: configDirOf(childEnvironment) }));
       } catch (e) { reject(e); }
     };
     // A driver that could not start has no pid, and may give no 'close'.
@@ -204,15 +266,18 @@ function prepare({ cwd, prompts, pluginDirs, model, maxTurns, maxBudgetUsd, env 
   return { argv, childEnvironment };
 }
 
-// ended({ argv, stdout, stderr, report, timedOut, overflow, error, status, signal, timeoutMs, maxBuffer }): the
+// ended({ argv, stdout, stderr, report, timedOut, overflow, error, status, signal, timeoutMs, maxBuffer, configDir }): the
 // run's result from what the driver printed (report: its fd 3 line) and how it ended, or the ClaudeRunError
-// that says why there is none. status, signal and error are the driver's.
-function ended({ argv, stdout, stderr, report, timedOut, overflow, error, status, signal, timeoutMs, maxBuffer }) {
-  // A run the timeout cut off is no result, but the events it printed go with the error, so a runner can save
-  // them and a reader see how far it got (Task 16h review, M6).
+// that says why there is none. status, signal and error are the driver's. However the run ended, its session's
+// transcript is taken from configDir first (takeTranscript), so no run leaves its session behind; a result carries it as
+// transcript, '' when there is none.
+function ended({ argv, stdout, stderr, report, timedOut, overflow, error, status, signal, timeoutMs, maxBuffer, configDir = '' }) {
+  const { events, badLines } = parseEvents(stdout);
+  const transcript = takeTranscript(configDir, runSession(events));
+  // A run the timeout cut off is no result, but the events it printed and its transcript go with the error, so a runner
+  // can save them and a reader see how far it got (Task 16h review, M6).
   if (timedOut) {
-    const { events } = parseEvents(stdout);
-    throw Object.assign(new ClaudeRunError(`claude timed out after ${timeoutMs} ms; the ${events.length} events it printed are kept`), { events });
+    throw Object.assign(new ClaudeRunError(`claude timed out after ${timeoutMs} ms; the ${events.length} events it printed are kept`), { events, transcript });
   }
   // ENOBUFS: the driver was stopped, and it stopped claude, before either could report. Only this run
   // printed that much, so it is not fatal.
@@ -226,13 +291,12 @@ function ended({ argv, stdout, stderr, report, timedOut, overflow, error, status
   if (!end) throw new ClaudeRunError(`the claude driver failed: ${error?.message || `exit ${status ?? signal}`}: ${(stderr || '').trim().split('\n').pop() || 'no stderr'}`, true);
   if (end.status === 126 || end.status === 127) throw new ClaudeRunError(`claude exited ${end.status}: ${(stderr || '').trim()}`, true);
   if (end.status === null) throw new ClaudeRunError(`claude was killed by ${end.signal}`);
-  const { events, badLines } = parseEvents(stdout);
   // A usage or rate limit: Claude Code answers by itself (model "<synthetic>") and no model ran. Every
   // later run would get the same reply, so the caller stops instead of grading it as a failed case.
   const limit = events.find((e) => e?.type === 'assistant' && e.message?.model === '<synthetic>' &&
     /\blimit\b/i.test((e.message.content ?? []).map((c) => c?.text ?? '').join(' ')));
   if (limit) throw new ClaudeRunError(`claude stopped at a usage limit: ${limit.message.content.map((c) => c?.text ?? '').join(' ').trim()}`, true);
-  return { argv, events, badLines, status: end.status, stderr: stderr || '' };
+  return { argv, events, badLines, status: end.status, stderr: stderr || '', transcript };
 }
 
 // countProblem(run, prompts): why the run's turns do not match the prompts sent, or '' when they do: each

@@ -14,9 +14,9 @@ import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
 import { caseInputs, changedCases, rangeSources, skillHashes, touchedSkills, treeSource } from './case-inputs.mjs';
 import { filesVersion, openRun, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
 import { limiter, ordered, tracker } from './pool.mjs';
-import { caseResult, pluginCopy, stage } from './behave.mjs';
+import { caseResult, keepTranscript, pluginCopy, stage } from './behave.mjs';
 import { dirtyRefusal, treeRecord } from './run-record.mjs';
-import { ISOLATION, PERMISSIONS, claudeVersion, countProblem, evalConfigProblem, pluginProblem, promptResult, runClaudeAsync, runProblem, toolUses, workspace } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, countProblem, evalConfigProblem, pluginProblem, promptResult, runClaudeAsync, runProblem, stopBlocked, toolUses, workspace } from './claude-run.mjs';
 
 // adherenceFlags(ids): scripts/kernel-adherence.mjs's flags for the shared parser (args.mjs), ids being the case
 // ids; --transcript, --route and --root are the offline grade of one saved session.
@@ -410,16 +410,18 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
       // its problem recorded. Any other run that did not happen (a timeout, a signal, a non-zero exit, a result
       // count that differs from the prompt count, a run without kern loaded as the case wants) fails the run,
       // with the reason.
-      let r = null; let problem = ''; let failure = ''; let events = [];
+      let r = null; let problem = ''; let failure = ''; let events = []; let transcript = '';
       try {
         r = await run({ cwd, prompts: c.prompts, pluginDirs: [pluginRoot], model: MODEL, maxTurns: c.kind === 'multi-turn' ? 16 : 8 });
         const loaded = pluginProblem(r.events, expect);
-        problem = runProblem(r, c.prompts.length) || loaded; failure = runFailure(r, c.prompts.length) || loaded; events = r.events;
-      } catch (e) { if (e.fatal) throw e; problem = failure = e.message; events = e.events ?? []; }
-      // A run cut off by the timeout keeps the events it printed.
+        problem = runProblem(r, c.prompts.length) || loaded; failure = runFailure(r, c.prompts.length) || loaded; events = r.events; transcript = r.transcript ?? '';
+      } catch (e) { if (e.fatal) throw e; problem = failure = e.message; events = e.events ?? []; transcript = e.transcript ?? ''; }
+      // A run cut off by the timeout keeps the events it printed, and its session transcript beside them.
       if (events.length) writeFileSync(join(raw, `${c.id}-${i}.jsonl`), events.map((x) => JSON.stringify(x)).join('\n') + '\n');
+      keepTranscript(raw, `${c.id}-${i}`, transcript, log);
       const g = r && !failure ? gradeCase(c, r.events, text, pluginRoot) : { pass: false, hops: 0, before: 0, todo: null, todoSteps: null, notes: [], reasons: [failure] };
-      const detail = { pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: r ? r.status : null, invalid: !!failure };
+      const detail = { pass: g.pass, hops: g.hops, before: g.before, todo: g.todo, todoSteps: g.todoSteps, notes: g.notes, reasons: g.reasons, problem, exit: r ? r.status : null, invalid: !!failure,
+        stopBlocked: stopBlocked({ transcript, events }) };
       return { valid: !failure, run: detail, session: r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin: pluginRoot } : null, text,
         touched: Object.fromEntries(touchedSkills(events, hashes, [pluginRoot]).map((n) => [n, hashes.get(n)])) };
     } finally {
@@ -435,7 +437,7 @@ export async function adherenceMain({ root, argv, env = process.env, cases: all 
   const inputs = new Map(cases.map((c) => [c.id, caseInputs(src, adherenceParts(c), kernSrc).hash]));
   const limit = limiter(JOBS);
   const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest, limit });
-  const specs = cases.map((c) => Array.from({ length: RUNS }, (_, i) => ({ name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`],
+  const specs = cases.map((c) => Array.from({ length: RUNS }, (_, i) => ({ name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.transcript.jsonl`],
     key: unitKey({ runner: 'adherence', inputs: inputs.get(c.id), case: c, model: MODEL, variant: VARIANT, code, claude, run: i }), fresh, work: () => runUnit(c, i) })));
   if (manifest) {
     const n = specs.flat().filter((s) => store.stale(s.name, s.key, fresh)).length;

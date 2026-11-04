@@ -214,20 +214,23 @@ test('a run cut off, failed or not run is invalid; only a fatal error stops the 
   const ok = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success', result: 'done' }] };
   const capped = { ...ok, events: [{ type: 'result', subtype: 'error_max_turns' }] };
   const one = { prompts: ['fix it'] };
-  assert.deepEqual(await tryRun(one, () => ok), { run: ok, problem: '' });
+  assert.deepEqual(await tryRun(one, () => ok), { run: ok, problem: '', transcript: '' });
+  // Paid round 2's rulings: the session's transcript runClaude took comes back beside the run, for the runner to keep.
+  assert.equal((await tryRun(one, () => ({ ...ok, transcript: '{"type":"user"}\n' }))).transcript, '{"type":"user"}\n');
   assert.match((await tryRun(one, () => capped)).problem, /error_max_turns/);
   assert.match((await tryRun(one, () => { throw new ClaudeRunError('claude timed out after 10 ms'); })).problem, /timed out/);
   await assert.rejects(tryRun(one, () => { throw new ClaudeRunError('claude is not on PATH', true); }), /not on PATH/);
   // Task 16h fix round 1, M6: a cut-off run's events come back with its problem, for the runner to save.
   const cut = Object.assign(new ClaudeRunError('claude timed out after 10 ms; the 1 events it printed are kept'), { events: [{ type: 'system', subtype: 'init' }] });
-  assert.deepEqual(await tryRun(one, () => { throw cut; }), { run: null, problem: cut.message, events: cut.events });
+  assert.deepEqual(await tryRun(one, () => { throw cut; }), { run: null, problem: cut.message, events: cut.events, transcript: '' });
+  assert.equal((await tryRun(one, () => { throw Object.assign(cut, { transcript: '{"type":"user"}\n' }); })).transcript, '{"type":"user"}\n', 'and its transcript');
   assert.deepEqual((await tryRun(one, () => { throw new ClaudeRunError('claude was killed by SIGKILL'); })).events, []);
 });
 
 test('a run whose result count differs from its prompt count is invalid, with the reason (Task 16e)', async () => {
   const ok = { status: 0, badLines: 0, stderr: '', events: [{ type: 'result', subtype: 'success', result: 'done' }] };
   // Two prompts run as one turn, as on Claude Code 2.1.304 before runClaude waited for each result.
-  assert.deepEqual(await tryRun({ prompts: ['first task', 'second task'] }, () => ok), { run: ok, problem: '2 prompts but 1 result event: each prompt must run as its own turn' });
+  assert.deepEqual(await tryRun({ prompts: ['first task', 'second task'] }, () => ok), { run: ok, problem: '2 prompts but 1 result event: each prompt must run as its own turn', transcript: '' });
   const twice = { ...ok, events: [...ok.events, ...ok.events] };
   assert.equal((await tryRun({ prompts: ['first task', 'second task'] }, () => twice)).problem, '');
   await assert.rejects(tryRun({}, () => ok), /needs the number of prompts sent/, 'a stub run still states its prompts');
@@ -1473,6 +1476,42 @@ test('Task 17a G3: a full run in which no run was valid, or one a fatal error st
     const s = stop.partial('all');
     assert.deepEqual([s.complete, s.cases, s.results.map((x) => x.id)], [false, ['x-1', 'x-2'], ['x-1']]);
   } finally { stop.done(); }
+});
+
+// Paid round 2's rulings (the user's "Measure the hook (Recommended)", 2026-11-04): sessions persist, so each run's transcript, as
+// runClaude takes it, goes beside its stream file, and the run records whether kern's Stop hook blocked. A grader call's does not.
+test('behave keeps each run\'s session transcript beside its stream file and records whether the Stop hook blocked', async () => {
+  const BLOCK = `${JSON.stringify({ type: 'user', isMeta: true, message: { role: 'user', content: 'Stop hook feedback:\nkern: self-review step 2 has not run since self-review was read.' } })}\n`;
+  const s = stubRun((opts) => ({ ...runOf([...started(opts.pluginDirs), resultEvent('done')]), transcript: opts.prompts[0].includes('x-1') ? BLOCK : '' }));
+  const graded = s.run;
+  const run = (opts) => { const r = graded(opts); return opts.prompts[0].startsWith('You grade') ? { ...r, transcript: 'grader\n' } : r; };
+  const r = await drive({ run });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.equal(readFileSync(join(r.raw, 'x-1-0.transcript.jsonl'), 'utf8'), BLOCK);
+    assert.ok(existsSync(join(r.raw, 'x-1-0.jsonl')));
+    assert.equal(existsSync(join(r.raw, 'x-2-0.transcript.jsonl')), false, 'a run with no transcript keeps none');
+    const runs = JSON.parse(r.committed).results.map((x) => x.runs[0].stopBlocked);
+    assert.deepEqual(runs, [true, false]);
+  } finally { r.done(); }
+});
+
+// Fix round 1 of the round 3 fix batch's review: a transcript that cannot be written or removed is logged and skipped, as exec
+// logs a failed write, so a paid round never stops on it. A folder where the file goes makes both fail.
+test('behave logs a transcript it cannot write or remove, and the run goes on', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bm-'));
+  const raw = join(dir, 'results', 'behave-sonnet-5-5-2026-10-22');
+  for (const u of ['x-1-0', 'x-2-0']) mkdirSync(join(raw, `${u}.transcript.jsonl`), { recursive: true });
+  const s = stubRun((opts) => ({ ...runOf([...started(opts.pluginDirs), resultEvent('done')]), transcript: opts.prompts[0].includes('x-1') ? '{"type":"user"}\n' : '' }));
+  const r = await drive({ run: s.run, dir });
+  try {
+    assert.equal(r.thrown, null, String(r.thrown?.stack));
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.ok(r.lines.some((l) => /^results: could not write x-1-0\.transcript\.jsonl: /.test(l)), r.lines.join('\n'));
+    assert.ok(r.lines.some((l) => /^results: could not write x-2-0\.transcript\.jsonl: /.test(l)), 'the removal of a stale one too');
+    assert.ok(existsSync(join(r.raw, 'x-1-0.jsonl')));
+    assert.deepEqual(JSON.parse(r.committed).results.map((x) => x.valid), [1, 1]);
+  } finally { r.done(); }
 });
 
 test('Task 17a G11: a full run refuses a dirty kern tree unless --allow-dirty, and the snapshot records the tree either way', async () => {

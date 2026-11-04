@@ -15,7 +15,7 @@ import { caseInputs, changedCases, rangeSources, skillHashes, touchedSkills, tre
 import { filesVersion, openRun, readRecord, reuseNote, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
 import { limiter, ordered, tracker } from './pool.mjs';
 import { COPY_OMITS, dirtyRefusal, treeRecord } from './run-record.mjs';
-import { ISOLATION, PERMISSIONS, claudeVersion, evalConfigProblem, finalText, pluginProblem, runClaudeAsync, runProblem, toolUses, workspace } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, claudeVersion, evalConfigProblem, finalText, pluginProblem, runClaudeAsync, runProblem, stopBlocked, toolUses, workspace } from './claude-run.mjs';
 
 // behaveFlags(ids): scripts/behave.mjs's flags for the shared parser (args.mjs), ids being the case ids.
 export const behaveFlags = (ids) => ({ '--case': { key: 'case', value: 'a case id', choices: ids, noun: 'case' }, '--runs': { key: 'runs', value: 'count' },
@@ -1297,11 +1297,24 @@ export async function gradeRun(c, events, tree, grade, specs) {
   return c.expectations.map((_, k) => scripted.get(k) ?? byModel.get(k));
 }
 
+// keepTranscript(dir, unit, text, log): <dir>/<unit>.transcript.jsonl holds a run's session transcript as runClaude took it,
+// beside the run's stream file <unit>.jsonl (paid round 2's rulings, the user's "Measure the hook (Recommended)", 2026-11-04).
+// With none, a file an earlier run of the unit left goes, so it never stands for this run. Best effort, as exec's writes are: a
+// write or removal that fails is logged and skipped, never thrown, so it cannot stop a paid round. behave, adherence and h2h
+// share it.
+export function keepTranscript(dir, unit, text, log = () => {}) {
+  const file = join(dir, `${unit}.transcript.jsonl`);
+  try {
+    if (text) { mkdirSync(dir, { recursive: true }); writeFileSync(file, text); } else rmSync(file, { force: true });
+  } catch (e) { log(`results: could not write ${unit}.transcript.jsonl: ${e.message}`); }
+}
+
 // tryRun(opts, run): one headless run and why it may not be graded ('' when it may). A run cut off by its
 // turn or budget cap, a non-zero exit, a timeout, or a result count that differs from opts.prompts.length
 // is an invalid run (M2a's runProblem), never a graded one; a fatal error (no claude at all) still stops
-// the runner. A run that threw comes back as { run: null, problem, events }, events being what it printed
-// before a timeout ([] otherwise), for the runner to save. run is runClaudeAsync, or a stub in tests (its result
+// the runner. A run that threw comes back as { run: null, problem, events, transcript }, events and transcript being
+// what it printed and what its session wrote before a timeout ([] and '' otherwise), for the runner to save; a run that
+// ended carries its transcript in run and as transcript. run is runClaudeAsync, or a stub in tests (its result
 // is awaited, so a stub may return it directly). With expect ({ plugins, kernel }, which run never sees), a run
 // that did not load those plugins or print or leave out the kernel as told is invalid too (pluginProblem, Task
 // 17a G10).
@@ -1311,9 +1324,9 @@ export async function tryRun({ expect = null, ...opts }, run = runClaudeAsync) {
     r = await run(opts);
   } catch (e) {
     if (e.fatal) throw e;
-    return { run: null, problem: e.message, events: e.events ?? [] };
+    return { run: null, problem: e.message, events: e.events ?? [], transcript: e.transcript ?? '' };
   }
-  return { run: r, problem: runProblem(r, opts.prompts?.length) || (expect ? pluginProblem(r.events, expect) : '') };
+  return { run: r, problem: runProblem(r, opts.prompts?.length) || (expect ? pluginProblem(r.events, expect) : ''), transcript: r.transcript ?? '' };
 }
 
 // caseSkills(c): the kern skills case c routes to: its skills (an evals/cases file's skill_name, or a behave case's
@@ -1435,7 +1448,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
       // read at either end makes the run invalid, and no model runs on one unread at the start.
       const before = readsTree(c) ? readTree(cwd, 'start') : null;
       if (before?.problem) return record({ invalid: true, reason: before.problem, verdict: null, exit: null }, null);
-      const { run: r, problem, events } = await tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20, expect }, run);
+      const { run: r, problem, events, transcript } = await tryRun({ cwd, prompts: c.prompts, pluginDirs: [plugin], model: MODEL, maxTurns: c.max_turns || 20, expect }, run);
       const after = before ? readTree(cwd, 'end') : null;
       const states = before ? { start: before.state, end: after.state } : undefined;
       // A case with a spec check (spec-shape) keeps the specs the run left, as a Bash or python edit is not in the transcript's
@@ -1444,6 +1457,8 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
       // A run cut off by the timeout keeps the events it printed.
       const kept = r ? r.events : events;
       if (kept.length) writeFileSync(join(raw, `${unit}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n') + '\n');
+      keepTranscript(raw, unit, transcript, log);
+      const blocked = stopBlocked({ transcript, events: kept });
       if (before) writeFileSync(join(raw, `${unit}.tree.json`), JSON.stringify({ ...states, ...(after.problem ? { problem: after.problem } : {}) }, null, 2) + '\n');
       if (left) writeFileSync(join(raw, `${unit}.specs.json`), JSON.stringify(left, null, 2) + '\n');
       let verdict = null; let invalid = !!problem || !!after?.problem || !!left?.problem; let reason = problem || after?.problem || left?.problem || '';
@@ -1460,7 +1475,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
         } catch (e) { if (e.fatal) throw e; invalid = true; reason = e.message; }
       }
       const keptReply = invalid && reply !== null ? { reply: reply.slice(0, RECORD.reply) } : {};
-      return record({ invalid, reason, verdict, exit: r ? r.status : null, ...keptReply }, r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin } : null, kept);
+      return record({ invalid, reason, verdict, exit: r ? r.status : null, stopBlocked: blocked, ...keptReply }, r ? { status: r.status, badLines: r.badLines, stderr: r.stderr.slice(-4000), plugin } : null, kept);
     } finally { rmSync(dirname(cwd), { recursive: true, force: true }); rmSync(gdir, { recursive: true, force: true }); }
   };
   const src = treeSource(root);
@@ -1470,7 +1485,7 @@ export async function behaveMain({ root, argv, env = process.env, cases: all = n
   const inputs = new Map(cases.map((c) => [c.id, caseInputs(src, caseParts(c)).hash]));
   const limit = limiter(JOBS);
   const store = unitStore({ raw, cache, from: basename(raw), noCache: !!o.noCache, resume: !!manifest, limit });
-  const specs = cases.map((c) => Array.from({ length: RUNS }, (_, i) => ({ name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.tree.json`, `${c.id}-${i}.specs.json`],
+  const specs = cases.map((c) => Array.from({ length: RUNS }, (_, i) => ({ name: `${c.id}-${i}`, files: [`${c.id}-${i}.jsonl`, `${c.id}-${i}.transcript.jsonl`, `${c.id}-${i}.tree.json`, `${c.id}-${i}.specs.json`],
     key: unitKey({ runner: 'behave', inputs: inputs.get(c.id), case: c, model: MODEL, grader: graderVersion, claude, run: i }), fresh, work: () => runUnit(c, i) })));
   if (manifest) {
     const n = specs.flat().filter((s) => store.stale(s.name, s.key, fresh)).length;

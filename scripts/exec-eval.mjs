@@ -6,7 +6,9 @@
 //        node scripts/exec-eval.mjs --resume <replies dir> [--jobs N] [--no-cache]
 //        node scripts/exec-eval.mjs --regrade <replies dir>
 // Each case's final reply goes to evals/results/exec-<date>/<id>.txt (gitignored), or (no reply: <why>) for
-// an invalid case, and its stream-json events, tool results included, to <id>.events.jsonl beside it; the
+// an invalid case, and its stream-json events, tool results included, to <id>.events.jsonl beside it, with the
+// session's transcript, when Claude Code wrote one, as <id>.transcript.jsonl (runClaude takes it and removes the
+// session's folder from the eval config dir; the record's stopBlocked says whether kern's Stop hook blocked); the
 // last line prints the directory; a --dry-run writes none. Each kern hook runs through a trace (traceHooks),
 // whose lines go to <id>.trace.jsonl beside the events, a cut-off or invalid case's too. A case that
 // turns autopilot on is INVALID when kern's state file for the run's session does not read autopilot: on
@@ -30,7 +32,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, runSummary, toolUses, workspace } from './lib/claude-run.mjs';
+import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, runSummary, stopBlocked, toolUses, workspace } from './lib/claude-run.mjs';
 import { pluginCopy } from './lib/behave.mjs';
 import { caseInputs, changedCases, rangeSources, skillHashes, touchedSkills, treeSource } from './lib/case-inputs.mjs';
 import { filesVersion, openRun, timeStamp, unitKey, unitStore, writeManifest } from './lib/eval-cache.mjs';
@@ -39,7 +41,7 @@ import { dirtyRefusal, treeRecord } from './lib/run-record.mjs';
 import { reaper } from './lib/reaper.mjs';
 import { GRADERS } from './lib/exec-grade.mjs';
 import { UsageError, caseEnv, caseLimits, casePrompts, claudeConfigDir, dateStamp, execParts, gradeCase, kernStateFile, parseArgs, regradeExec, runEval, saveWorkspace, sessionId, snapshotBody, traceHooks,
-  userSettingsProblem, writeEvents, writeReply, writeTrace } from './lib/exec-run.mjs';
+  userSettingsProblem, writeEvents, writeReply, writeTrace, writeTranscript } from './lib/exec-run.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const all = JSON.parse(readFileSync(join(ROOT, 'evals', 'exec', 'cases.json'), 'utf8'));
@@ -152,9 +154,9 @@ async function runCase(c, save) {
       });
     } catch (e) {
       if (!(e instanceof ClaudeRunError) || e.fatal) throw e;
-      // A run cut off by the timeout keeps the events it printed.
-      save({ reason: e.message, events: e.events, trace });
-      return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [], session: null };
+      // A run cut off by the timeout keeps the events it printed, and its transcript.
+      save({ reason: e.message, events: e.events, transcript: e.transcript, trace });
+      return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [], stopBlocked: stopBlocked(e), session: null };
     }
     // A case's keep file sits outside the workspace, so --regrade has no copy of it: the log says what the run left.
     // Emptying the file is the same delete in other words, so only its bytes count.
@@ -166,7 +168,7 @@ async function runCase(c, save) {
     const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', timeout: 60 * 1000 }).trim();
     const configDir = claudeConfigDir(process.env);
     const g = gradeCase({ c, run, ghLog, git, configDir, plugin: kern });
-    save({ ...(g.invalid ? { reason: g.reasons[0] } : { reply: finalText(run.events) }), events: run.events, trace });
+    save({ ...(g.invalid ? { reason: g.reasons[0] } : { reply: finalText(run.events) }), events: run.events, transcript: run.transcript, trace });
     // What --regrade reads besides the events: the stub's log, kern's state for the session, and the final workspace.
     keep(c.id, () => {
       copyFileSync(log, join(REPLIES, `${c.id}.gh.log`));
@@ -176,7 +178,7 @@ async function runCase(c, save) {
       saveWorkspace(REPLIES, c.id, dir);
     });
     return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
-      commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command),
+      commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command), stopBlocked: stopBlocked(run),
       session: { status: run.status, badLines: run.badLines, stderr: run.stderr.slice(-4000), plugin: kern },
       touched: Object.fromEntries(touchedSkills(run.events, hashes, [kern]).map((n) => [n, hashes.get(n)])) };
   } finally {
@@ -216,7 +218,7 @@ const readVersion = () => {
 const code = filesVersion(ROOT, EXEC_CODE);
 const unit = async (c, work) => {
   const rec = await store.unit({
-    name: c.id, files: ['txt', 'events.jsonl', 'trace.jsonl', 'gh.log', 'state', 'ws'].map((x) => `${c.id}.${x}`),
+    name: c.id, files: ['txt', 'events.jsonl', 'transcript.jsonl', 'trace.jsonl', 'gh.log', 'state', 'ws'].map((x) => `${c.id}.${x}`),
     key: keyOf(c), fresh,
     work: async () => { const { session, touched, ...result } = await work(); return { valid: !result.invalid, result, session, touched }; },
   });
@@ -227,7 +229,8 @@ let exit;
 try {
   exit = await runEval({
     cases, only: opts.only, dryRun: opts.dryRun, runCase, writeSnapshot, readVersion, repliesDir: REPLIES, saveReply: (id, reply, reason) => writeReply(REPLIES, id, reply, reason),
-    saveEvents: (id, events) => writeEvents(REPLIES, id, events), saveTrace: (id, file) => writeTrace(REPLIES, id, file), log: console.log, jobs: opts.jobs ?? 6, limit, unit,
+    saveEvents: (id, events) => writeEvents(REPLIES, id, events), saveTrace: (id, file) => writeTrace(REPLIES, id, file),
+    saveTranscript: (id, text) => writeTranscript(REPLIES, id, text), log: console.log, jobs: opts.jobs ?? 6, limit, unit,
     snapshot: gating ? 'committed' : opts.only ? 'none' : 'beside', mode: opts.only ? '--case' : opts.quick ? '--quick' : '--changed',
     describe: (c) => `${c.id}: ${casePrompts(c).map((p) => JSON.stringify(p)).join(' then ')} on branch ${c.branch ?? 'main'}`,
   });

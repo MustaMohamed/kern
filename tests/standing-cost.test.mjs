@@ -3,7 +3,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { inputTokens, median } from '../scripts/standing-cost.mjs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { inputTokens, median, once } from '../scripts/standing-cost.mjs';
+import { fakeClaude } from './helpers/eval-stub.mjs';
 
 test('input tokens count cached and uncached input, and a result without usage throws', () => {
   assert.equal(inputTokens({ input_tokens: 4, cache_creation_input_tokens: 1000, cache_read_input_tokens: 9000, output_tokens: 7 }), 10004);
@@ -28,4 +31,16 @@ test('the dry run calls no model', () => {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/standing-cost.mjs', import.meta.url)), '--dry-run'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^claude -p hello x 3 with --plugin-dir /);
+});
+
+// Paid round 2's rulings (the user's "Measure the hook (Recommended)", 2026-11-04): ISOLATION no longer holds
+// --no-session-persistence, so once() removes the session's project folder under the eval config dir after its run.
+test('once() leaves no session folder in the eval config dir, and another session\'s folder stays', () => {
+  const env = fakeClaude(`mkdir -p "$CLAUDE_CONFIG_DIR/projects/-sc" && echo '{}' > "$CLAUDE_CONFIG_DIR/projects/-sc/sc-1.jsonl"
+echo '{"type":"result","subtype":"success","is_error":false,"result":"hi","session_id":"sc-1","usage":{"input_tokens":5,"cache_read_input_tokens":7}}'`, { drain: false });
+  mkdirSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-other'), { recursive: true });
+  writeFileSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-other', 'o.jsonl'), '{}\n');
+  assert.equal(once(false, env), 12);
+  assert.equal(existsSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-sc')), false);
+  assert.ok(existsSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-other', 'o.jsonl')));
 });

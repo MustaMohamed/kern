@@ -83,6 +83,14 @@ export function writeEvents(dir, id, events) {
   writeFileSync(join(dir, `${id}.events.jsonl`), events.map((e) => `${JSON.stringify(e)}\n`).join(''));
 }
 
+// writeTranscript(dir, id, text): <dir>/<id>.transcript.jsonl holds the session's transcript as runClaude took it, beside the
+// events; with no transcript, any such file an earlier run of the case left goes, so it never stands for this run.
+export function writeTranscript(dir, id, text) {
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${id}.transcript.jsonl`);
+  if (text) writeFileSync(file, text); else rmSync(file, { force: true });
+}
+
 // writeTrace(dir, id, file): <dir>/<id>.trace.jsonl is a copy of the case's hook trace file, beside its
 // events.
 export function writeTrace(dir, id, file) {
@@ -183,10 +191,10 @@ export const exitCode = (results) => (results.length > 0 && results.every((r) =>
 // the results go: 'committed' (a full run: written only with at least one valid case, so an all-INVALID run never
 // replaces a same-day snapshot), 'beside' (a --quick or --changed run, mode naming it: always, beside the replies) or
 // 'none' (a --case run); writeSnapshot(results, version, snapshot) writes it. It returns the exit code for every
-// non-dry run alike. Each runCase gets a save({ reply, reason, events, trace }) to call before its workspace goes; it
-// saves the reply, then the events when saveEvents is given, then the hook trace file when saveTrace is; the last line
-// names the replies directory.
-export async function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, saveEvents, saveTrace, repliesDir, log, jobs = 6,
+// non-dry run alike. Each runCase gets a save({ reply, reason, events, transcript, trace }) to call before its workspace
+// goes; it saves the reply, then the events when saveEvents is given, the session's transcript ('' when the run left
+// none) when saveTranscript is, then the hook trace file when saveTrace is; the last line names the replies directory.
+export async function runEval({ cases, only, dryRun, runCase, describe, readVersion, writeSnapshot, saveReply, saveEvents, saveTrace, saveTranscript, repliesDir, log, jobs = 6,
   limit = limiter(jobs), snapshot = only ? 'none' : 'committed', mode = '--case', unit = (c, work) => limit.run(work) }) {
   const t0 = Date.now();
   if (dryRun) {
@@ -216,9 +224,10 @@ export async function runEval({ cases, only, dryRun, runCase, describe, readVers
         write();
       } catch (e) { log(`replies: could not write ${c.id}${what}: ${e.message}`); }
     };
-    const save = ({ reply, reason, events, trace } = {}) => {
+    const save = ({ reply, reason, events, transcript, trace } = {}) => {
       attempt('', () => saveReply(c.id, reply, reason));
       if (events && saveEvents) attempt(' events', () => saveEvents(c.id, events));
+      if (saveTranscript) attempt(' transcript', () => saveTranscript(c.id, transcript ?? ''));
       if (trace && saveTrace) attempt(' trace', () => saveTrace(c.id, trace));
     };
     return Promise.resolve(unit(c, () => runCase(c, save))).then((r) => emit(k, r)).catch(fail);

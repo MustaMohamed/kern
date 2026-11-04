@@ -15,9 +15,9 @@ import { LOOP_FLAGS, UsageError, loopProblem, parseArgs } from './args.mjs';
 import { caseInputs, changedCases, dirHash, rangeSources, skillHashes, touchedSkills, treeSource } from './case-inputs.mjs';
 import { filesVersion, lockedUpdate, openRun, readRecord, roundLine, timeStamp, unitKey, unitStore, writeManifest } from './eval-cache.mjs';
 import { limiter, ordered, tracker } from './pool.mjs';
-import { digest, pluginCopy, tryRun } from './behave.mjs';
+import { digest, keepTranscript, pluginCopy, tryRun } from './behave.mjs';
 import { dirtyRefusal, statusEntries, treeRecord } from './run-record.mjs';
-import { ISOLATION, PERMISSIONS, childEnv, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, workspace } from './claude-run.mjs';
+import { ISOLATION, PERMISSIONS, childEnv, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, stopBlocked, workspace } from './claude-run.mjs';
 
 export const CATEGORIES = ['plan', 'diagnose', 'review'];
 
@@ -105,7 +105,8 @@ export function falseAlarms(category, e) {
 }
 
 // resultRow(task, run, attempt, grade, reply): one arm's row in the snapshot, from its attempt ({ arm, id, e,
-// heldout, git }) and its grade. gate reads score and falseAlarms. A review row also keeps the split behind
+// heldout, git, stopBlocked }) and its grade; stopBlocked, whether kern's Stop hook blocked in the arm's run, is kept
+// when the attempt has it (paid round 2's rulings) and never reaches the grader. gate reads score and falseAlarms. A review row also keeps the split behind
 // falseAlarms, decoys and unmatched as counts, the count of extras the grader set aside, and the grader's raw
 // reply for that task-run, so a split can be checked against what the grader wrote: the 2026-10-22 snapshot kept
 // only the sum, and the review diagnosis had to infer each split from `why` (Task 16o). The row holds no blind id,
@@ -127,7 +128,8 @@ export function resultRow(t, run, x, g, reply) {
   const e = { ...x.e, decoyHits: named.decoy.size, unmatched: g.unmatched ?? 0, unsupported: g.unsupported ?? 0 };
   const score = t.category === 'diagnose' && !x.heldout ? 0 : g.score / 10;
   const matched = t.category === 'review' ? [...named.bug] : g.matched ?? [];
-  const row = { task: t.id, category: t.category, run, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, git: x.git, matched, why: g.why ?? '' };
+  const row = { task: t.id, category: t.category, run, arm: x.arm, score, falseAlarms: falseAlarms(t.category, e), heldout: x.heldout, git: x.git, matched, why: g.why ?? '',
+    ...(x.stopBlocked !== undefined ? { stopBlocked: x.stopBlocked } : {}) };
   if (t.category !== 'review') return row;
   return { ...row, decoys: e.decoyHits, unmatched: e.unmatched, extras: named.extra.size, reply };
 }
@@ -524,7 +526,7 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
   // its blind id in this run, and plainly in the cache) and its key.
   const attemptSpec = (t, r, a, ids) => {
     const base = t.id.replace('/', '--');
-    return { name: `${base}-${r}-${a.id}`, files: [['attempt.jsonl', `${base}-${r}-${ids[a.id]}.jsonl`]],
+    return { name: `${base}-${r}-${a.id}`, files: [['attempt.jsonl', `${base}-${r}-${ids[a.id]}.jsonl`], ['transcript.jsonl', `${base}-${r}-${ids[a.id]}.transcript.jsonl`]],
       key: unitKey({ runner: 'h2h', task: without(t, ['dir', ...GRADING_ONLY]), files: filesOf(t), arm: a.id, kern: a.id === 'kern' ? kernOf(t.category) : null,
         plugin: a.content ?? null, model: MODEL, code, claude, run: r }) };
   };
@@ -536,7 +538,7 @@ export async function h2hMain({ root, argv, env = process.env, tasks: all = null
     const base = t.id.replace('/', '--');
     const recs = await Promise.all(arms.map((a) => live.track(store.unit({ ...attemptSpec(t, r, a, ids), fresh,
       work: async () => {
-        const x = await armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan });
+        const x = await armAttempt({ t, a, id: ids[a.id], r, raw, arms, model: MODEL, run, env, floorScan, log });
         if (x.problem) return { valid: false, problem: x.problem };
         const { id: _, events, ...attempt } = x.attempt;
         return { valid: true, attempt, touched: a.id === 'kern' ? Object.fromEntries(touchedSkills(events, hashes, [a.dir]).map((n) => [n, hashes.get(n)])) : {} };
@@ -653,13 +655,14 @@ async function regradeH2H({ dir, tasks: allTasks, parse, log, usage, now }) {
   return gateExit(verdict);
 }
 
-// armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }): one arm's attempt at task t, run r: its
-// workspace, gitFacts read before it runs, its run (events saved as <task>-<run>-<blind id>.jsonl), then the diff, the
+// armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan, log }): one arm's attempt at task t, run r: its
+// workspace, gitFacts read before it runs, its run (events saved as <task>-<run>-<blind id>.jsonl, its session transcript
+// beside them as <task>-<run>-<blind id>.transcript.jsonl, a failed write logged, and stopBlocked on the attempt), then the diff, the
 // out-of-area files, for diagnose the floor-scan hits and the heldout tests, and for plan the final files. Returns
 // { attempt } or { problem }, the reason the task-run is VOID: a run that may not be graded, a plugin that did not
 // load as the arm needs (G10), a floor-scan exit other than 0 or 1 (G9) or a child process's failure (G13); any other
 // error is thrown. The workspace goes either way.
-async function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }) {
+async function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan, log = () => {} }) {
   let cwd = null;
   try {
     cwd = taskWorkspace(t);
@@ -667,10 +670,11 @@ async function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }
     // What Claude Code's git status context shows this session, read before it starts; the grader gets it.
     const facts = gitFacts(cwd);
     const expect = { plugins: a.dir ? [a.dir] : [], kernel: a.id === 'kern' ? 'on' : 'off' };
-    const { run: got, problem, events } = await tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model, maxTurns: t.max_turns || 40, expect }, run);
-    // A run cut off by the timeout keeps the events it printed.
+    const { run: got, problem, events, transcript } = await tryRun({ cwd, prompts: t.prompts, pluginDirs: a.dir ? [a.dir] : [], model, maxTurns: t.max_turns || 40, expect }, run);
+    // A run cut off by the timeout keeps the events it printed, and its session transcript beside them.
     const kept = got ? got.events : events;
     if (kept.length) writeFileSync(join(raw, `${t.id.replace('/', '--')}-${r}-${id}.jsonl`), kept.map((x) => JSON.stringify(x)).join('\n'));
+    keepTranscript(raw, `${t.id.replace('/', '--')}-${r}-${id}`, transcript, log);
     if (problem) return { problem };
     git('add', '-A', '-N');
     const diff = git('diff', 'HEAD');
@@ -693,7 +697,7 @@ async function armAttempt({ t, a, id, r, raw, arms, model, run, env, floorScan }
     }
     // A plan lands in an ignored work directory, so the grader reads the files the run left, not the diff alone.
     const wrote = t.category === 'plan' ? finalFiles(cwd) : '';
-    return { attempt: { arm: a.id, id, events: got.events, e, heldout, git: facts, text: redact(`${digest(got.events, 24000, { results: true })}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) } };
+    return { attempt: { arm: a.id, id, events: got.events, e, heldout, git: facts, stopBlocked: stopBlocked({ transcript, events: got.events }), text: redact(`${digest(got.events, 24000, { results: true })}\n\nDiff:\n${diff || '(none)'}${wrote ? `\n\nFiles written:\n${wrote}` : ''}`, arms) } };
   } catch (err) {
     // Only a child process's failure (git, a setup command: an error with a status or stderr) voids the task-run; any
     // other error is a harness fault, which would void every task-run after it, so it stops the run (P5 review, Minor 3).
