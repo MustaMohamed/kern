@@ -239,5 +239,5 @@ export CWD
 . "$KERN_ROOT/hooks/lib/settings.sh" 2>/dev/null || exit 0
 declare -F kern_enabled >/dev/null && kern_enabled 2>/dev/null || exit 0
 # shellcheck disable=SC2016 # literal backticks
-printf '%s\n' '{"decision":"block","reason":"kern: self-review step 2 has not run since self-review was read. When a spec exists, write `<package>.proofs.md`, then run `review-check <wt> <package> --spec <spec>` (`--no-spec` with none) and give the verdict from its `floor:` line."}'
+printf '%s\n' '{"decision":"block","reason":"kern: self-review step 2 has not run since self-review was read. When a spec exists, write `<package>.proofs.md`, then run `review-check <wt> <package> --spec <spec>` (`--no-spec` with none) then give the whole report again, its verdict from the `floor:` line."}'
 exit 0

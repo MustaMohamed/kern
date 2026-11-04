@@ -97,7 +97,10 @@ allows() {
   [[ "$reason" == 'kern: self-review step 2 has not run since self-review was read.'* ]] || false
   [[ "$reason" == *'When a spec exists, write `<package>.proofs.md`'* ]] || false
   [[ "$reason" == *'(`--no-spec` with none)'* ]] || false
-  [[ "$reason" == *'give the verdict from its `floor:` line.' ]] || false
+  # Paid round 3's h2h review run 0 answered a block with a reply that only added review-check's output, and the
+  # grader graded that last reply, so the reason asks for the whole report again (the user's "All three
+  # (Recommended)", 2026-11-04).
+  [[ "$reason" == *'(`--no-spec` with none) then give the whole report again, its verdict from the `floor:` line.' ]] || false
   # unslop: no em dash and no en dash.
   [[ "$reason" != *"$(printf '\342\200\224')"* && "$reason" != *"$(printf '\342\200\223')"* ]] || false
 }
