@@ -279,6 +279,24 @@ allows() {
   blocks
 }
 
+@test "an API request blob starts no turn: a read after the prompt, then a blob, then no review-check blocks" {
+  # CLI 2.1.318 copies the messages of each API request into the transcript as api-request-blob lines. A user one
+  # holds "role":"user","content": with a list that opens with a text block, or a string, and no isMeta flag (paid
+  # round 3's triage), so a blob written between the read and the stop started the turn past the read and allowed.
+  local b
+  for b in '[{"type":"text","text":"<system-reminder>\nAs you answer, you can use the following context:\n</system-reminder>\n"},{"type":"text","text":"Review the branch."}]' \
+    '"<system-reminder>\n[SYSTEM NOTIFICATION - NOT USER INPUT]\nThis is an automated background-task event.\n</system-reminder>"'; do
+    : >"$T"
+    prompt 'Review the branch.'
+    read_file "$SR"
+    result '1\t---\n2\tname: self-review'
+    printf '{"type":"api-request-blob","sessionId":"test-session","hash":"b2f955116893f3540d5f55a21fcbb1486d4172b956a4e051a96ff5d4a96f0531","message":{"role":"user","content":%s}}\n' "$b" >>"$T"
+    say 'Verdict: fix first.'
+    stop
+    blocks || { echo "for: $b"; return 1; }
+  done
+}
+
 @test "a transcript with no self-review, or a turn with none, allows on a grep and never runs the scan" {
   local real
   real=$(command -v awk)

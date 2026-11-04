@@ -210,11 +210,13 @@ T=$(json_get transcript_path 2>/dev/null) || exit 0
 env LC_ALL=C grep -q -F 'self-review' "$T" 2>/dev/null || exit 0
 # The turn starts at the user's last prompt: a user entry whose content is text, or a list that opens with a text
 # or image block, written role before content as Claude Code writes it, and none of a meta entry (a skill's
-# body), a compact summary, a sidechain or progress entry, or a prompt Claude Code wrapped itself. With none
-# found, the turn is the whole transcript. The prompt grep takes one pattern, since BSD grep slows with each -e
-# pattern, and the filter after it reads only the prompt lines.
+# body), a compact summary, a sidechain or progress entry, an API request blob (CLI 2.1.318 copies each
+# request's messages into the transcript, a user one with no isMeta flag), or a prompt Claude Code wrapped
+# itself. With none found, the turn is the whole transcript. The prompt grep takes one pattern, since BSD grep
+# slows with each -e pattern, and the filter after it reads only the prompt lines.
 L=$(env LC_ALL=C grep -n -E '"role":"user","content":("|\[\{"type":"(text|image)")' "$T" 2>/dev/null |
   env LC_ALL=C grep -v -F -e '"isMeta":true' -e '"isCompactSummary":true' -e '"isSidechain":true' -e '"type":"progress"' \
+    -e '"type":"api-request-blob"' \
     -e '"content":"<task-notification' -e '"content":"<cross-session-message' -e '"content":"<scheduled-task' \
     -e '"content":"<teammate-message' -e '"content":"<channel-message' -e '"content":"<agent-message' |
   tail -n 1 | cut -d : -f 1)
