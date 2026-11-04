@@ -67,6 +67,18 @@ The user's words on round 2's reds (tree b7bd1fb), before round 3, the project's
 | h2h review's decoy d3: self-review step 9 clears a wrapped test, a stricter assertion on the same value and an `assertion-removed` hit whose line an assertion as strict or stricter replaced, cap 9,199 to 9,325 | "Fix it now" |
 | Behaviour's window for a targeted round: each case pools its last two rounds | "Per case (Recommended)" |
 
+## Paid round 3 rulings, 2026-11-04
+
+The user's words on round 3's reds (tree e7afc48).
+
+| Ruling | Words |
+|---|---|
+| Exec's model-noise reds are ruled noise: `finish-split-nine-files`, `go-reaches-draft`, `go-no-lint-draft`'s plan and ledger rows and `go-required-check-stop`'s spec row, and the plan skip in both plan-path go runs is watched | "Rule noise, watch plan (Recommended)" |
+| Three small fixes: run.md's report gives self-review's verdict, cap 7,330 to 7,331; the Stop hook's reason asks for the whole report again, its verdict from the `floor:` line; the hook's turn finder skips `api-request-blob` lines | "All three (Recommended)" |
+| Round 4, past the project's 3 paid rounds, reruns h2h review alone: 3 runs of its 5 arms | "h2h review only, 15 runs (Recommended)" |
+
+The controller's ruling on this batch: the four Stop hook Minors round 2's fix review deferred land with these fixes, since the batch changes `hooks/stop` anyway. A `stop_hook_active` that json.sh reads as malformed allows, a word of 1,024 bytes or more names no command, commit's size sentence quotes "Take the fix (Recommended)" in full, and a row pins a single-quoted path.
+
 ## Guards and scripts
 
 | Item | Contract |
