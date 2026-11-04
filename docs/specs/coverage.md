@@ -264,6 +264,10 @@ Built and tested, not yet released. Its paid check passed on round 5 under the u
 | Local `rm` guard, G21: deletes inside the worktree and scratch directories pass, others ask, and autopilot denies them (gap 26) | kern | Equal or better | `tests/hooks/g21-rm.bats` |
 | Hooks survive an empty or broken PATH, so it no longer reads as a failed install (gap 40) | superpowers 7.0.0 | Equal or better | `tests/hooks/pre-tool-use.bats`, `tests/hooks/session-start.bats`, `tests/hooks/prompt-submit.bats`, `tests/hooks/subagent-start.bats` |
 
+## M3 part 2, project 1
+
+Built and tested, not yet released, and its paid check has not run. It closes no gap above. It lands 17 of the Opus audit's 22 M3 adopt rows, each a source mechanism from superpowers, pstack, addy, pocock or caveman, and records 2 more as closed before it; four clauses in the other 3 rows wait for project 2's first task. Section 5 of `docs/research/opus-audit-2026-10-22.md` gives each row's commit. Rule 4's re-audit of M3's rows waits for M3's close, and the counts above move then. Its other items come from part 1's paid check and its final review, from no audited source, so they hold no row here; each one's state is in `docs/research/2026-10-31-m3-item-sort.md`.
+
 ## Accepted limits
 
 - Spending and permission changes outside the Claude Code settings files stay kernel text ("ask first"), and autopilot's run rules stop for spending. No command reliably signals spending.
