@@ -65,7 +65,7 @@ plan: Step 4's spike runs, the go standing for the nod; a fact it cannot settle 
 
 ## The run report
 
-Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, and the jobs that ran under another skill. `parked:` lines keep their format. The report gives the review's verdict as it came, `needs fixes` included. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
+Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, and the jobs that ran under another skill. `parked:` lines keep their format. The report gives self-review's verdict as it came, `needs fixes` included. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
 
 ## Main thread
 
