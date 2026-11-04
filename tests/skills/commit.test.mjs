@@ -47,9 +47,11 @@ test('commit sections, steps and red flags', () => {
   // hook code or an entry file still asks, a stop.
   // 6,062 since M3 part 2 project 1's final review fix (I2): run.md's stops on a defect the ticket demands and on a change it
   // does not name are no-PR ends, so a red proof there is no step 4 stop.
-  // 6,072 since its paid round 1 (the user's "Take the fix", 2026-11-04): the no-PR end's message body names the red check
-  // as `fail`, which go-required-check-stop's bodyNamesCheck reads beside the check's name.
+  // 6,072 since its paid round 1 (the user's "Take the fix (Recommended)", 2026-11-04): the no-PR end's message body names
+  // the red check as `fail`, which go-required-check-stop's bodyNamesCheck reads beside the check's name.
   assertMaxBytes(SKILL, 6072);
+  // The size sentence quotes the user in full (round 2's fix review, Minor 3).
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['SKILL.md at most 6,072 bytes (6,062 until M3 part 2 project 1\'s paid round 1, the user\'s "Take the fix (Recommended)" of 2026-11-04: ']);
 });
 
 test('commit ledger-tasks reference', () => {
@@ -105,8 +107,8 @@ test('under autopilot a commit stop waits for a typed reply, and only a judgment
   // so a red proof there is no stop. The body says so; on every other path step 4 still stops. Task 8 review, M2: both
   // rules open under autopilot, so a typed /kern:commit never reads as commit-past-red. M3 part 2 project 1's final review, I2:
   // run.md's demanded-defect and unnamed-change stops commit and push too, and a red test is what the unnamed change forces.
-  // Its paid round 1 (the user's "Take the fix", 2026-11-04): go-required-check-stop's body said the check "could not run"
-  // with no `fail`, and run.md asks `fail` of the report only, so the body names the red check as `fail` too.
+  // Its paid round 1 (the user's "Take the fix (Recommended)", 2026-11-04): go-required-check-stop's body said the check
+  // "could not run" with no `fail`, and run.md asks `fail` of the report only, so the body names the red check as `fail` too.
   assert.ok(auto.includes("Under autopilot, on a run's no-PR end (finish-branch's third fix round still `fix first`, a required check that cannot run, execute-plan's task still open at step 13, run.md's stop on a defect the ticket demands or on a change it does not name), a red or unrunnable step 4 proof is no stop, and the message body names the red check as `fail`. Elsewhere step 4 stops, but for prove-it's named skip of a `verify.fast` with nothing resolved."), auto);
   assert.ok(auto.includes('Stops: steps 1 to 4,'), auto);
   // A failed `git add` or `git commit` still reports what it printed.
