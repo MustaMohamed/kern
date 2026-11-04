@@ -259,6 +259,19 @@ test('the docs state what the whole-branch review found them short of', () => {
   assert.ok(settings.includes('| session-start, prompt-submit, skill-conflicts, every skill |'), 'M9, settings');
 });
 
+test('the skills spec and the design keep the lines project 1 changed', () => {
+  // M3 part 2 project 1's final review, I3: goal 1 pins each item by a test, and the skill tests read the skills, not the
+  // spec. Plan step 1 opens as the skill does; prove-it, self-review and commit name the named skip, each needle held to its
+  // own paragraph by the text around it; and design 8.3's G16 row holds Task 1's carve-out.
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    "1. Check preconditions: a spec file with `status: approved`; issue acceptance criteria alone are not approved (define's bounded path records them as an approved short spec).",
+    "each red or unrun check is reported as `fail`, and the path claims nothing. Under autopilot a `verify.fast` with nothing resolved is a named skip: no stop, no failed check, no fix round. A lint the ticket names stays a required check (M3 part 1's final review fix, I1).",
+    'and lessons are not written. Under autopilot a `verify.fast` with nothing resolved is a named skip: no stop, no failed check, no fix round. A lint the ticket names stays a required check (M3 part 1\'s final review fix, I1).',
+    "elsewhere step 4 stops, but for prove-it's named skip of a `verify.fast` with nothing resolved (M3 part 1 Task 8, from Task 7's review; the skip since M3 part 1's final review fix, I1"]);
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    "a write (`cp`, `mv`, `install`, `tee`, a `>` target, `git add` or `git mv`, each simple command judged alone) of a project's own hook file that resolves outside kern's hooks folder gets no vote either"]);
+});
+
 test('run.md stays within its byte cap', () => {
   // 6,100 since M3 part 1 Task 15, its first cap: the main-thread rule, and define's and plan's go rules behind a pointer.
   // 6,130 since its fix round 1: a step's named read stays in the main thread.
