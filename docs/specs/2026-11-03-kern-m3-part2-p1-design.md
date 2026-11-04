@@ -79,7 +79,7 @@ The user's words on round 3's reds (tree e7afc48).
 
 The controller's ruling on this batch: the four Stop hook Minors round 2's fix review deferred land with these fixes, since the batch changes `hooks/stop` anyway. A `stop_hook_active` that json.sh reads as malformed allows, a word of 1,024 bytes or more names no command, commit's size sentence quotes "Take the fix (Recommended)" in full, and a row pins a single-quoted path.
 
-The controller's rulings on the batch's concerns, before its review: the hook's scan skips `api-request-blob` lines too, since an assistant blob copies a message's calls and could be written after a later call, and run.md's report names self-review's own `fix first` where it named the lane's `needs fixes`, cap 7,331 to 7,329.
+The controller's rulings on the batch's concerns, before its review: the hook's scan skips `api-request-blob` lines too, since an assistant blob copies a message's calls and could be written after a later call, and run.md's report names self-review's own `fix first` where it named the lane's `needs fixes`, cap 7,331 to 7,329. A second ruling restores the lane's word, which go-mandated-defect-stop's grader reads: the report gives self-review's verdict, and any lane's `needs fixes` as it came, cap 7,329 to 7,337.
 
 ## Guards and scripts
 
