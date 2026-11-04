@@ -141,7 +141,7 @@ allows() {
 @test "a word of 1,024 bytes or more names no command: a 1,024-byte path to review-check is no run, a 1,023-byte one is" {
   local a w
   a=$(printf '%1010s' '' | tr ' ' a)
-  # /, 1,010 letters and /review-check: 1,024 bytes (r2-review.md, Minor 2: word() cut only above 1,024).
+  # /, 1,010 letters and /review-check: 1,024 bytes (round 2's fix review, Minor 2: word() cut only above 1,024).
   w="/$a/review-check"
   [ "${#w}" -eq 1024 ]
   read_file "$SR"
@@ -158,7 +158,7 @@ allows() {
 }
 
 @test "a single-quoted path counts as written: a cat of self-review, a value the call set, a review-check run" {
-  # Each arm of the quote strip that drops a single quote (r2-review.md, Minor 4).
+  # Each arm of the quote strip that drops a single quote (round 2's fix review, Minor 4).
   local c
   for c in "cat '$SR'" "K='$K'; cat \$K/skills/self-review/SKILL.md"; do
     : >"$T"
@@ -208,7 +208,7 @@ allows() {
   local in
   read_file "$SR"
   # The last input passes json_ok, and a malformed string hides stop_hook_active, so json.sh reads it with exit 2
-  # while transcript_path still reads (r2-review.md, Minor 1).
+  # while transcript_path still reads (round 2's fix review, Minor 1).
   for in in '' 'not json' "{\"transcript_path\":\"$T\"" "[\"transcript_path\",\"$T\"]" "{\"transcript_path\":\"$T\",\"stop_hook_active\":false" \
     "{\"transcript_path\":\"$T\",\"q\":\"a\\\",\"stop_hook_active\":true}"; do
     run bash "$K/hooks/stop" <<<"$in"

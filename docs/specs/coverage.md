@@ -266,7 +266,7 @@ Built and tested, not yet released. Its paid check passed on round 5 under the u
 
 ## M3 part 2, project 1
 
-Built and tested, not yet released, and its paid check has not run. It closes no gap above. It lands 17 of the Opus audit's 22 M3 adopt rows, each a source mechanism from superpowers, pstack, addy, pocock or caveman, and records 2 more as closed before it; four clauses in the other 3 rows wait for project 2's first task. Section 5 of `docs/research/opus-audit-2026-10-22.md` gives each row's commit. Rule 4's re-audit of M3's rows waits for M3's close, and the counts above move then. Its other items come from part 1's paid check and its final review, from no audited source, so they hold no row here; each one's state is in `docs/research/2026-10-31-m3-item-sort.md`.
+Built and tested, not yet released. Its paid check ran four rounds on 2026-11-04, as the CHANGELOG's Unreleased section gives. G21's row above still met no paid case: on its new fixture `go-block-reroute` stopped before any delete in rounds 1 to 3, so G21 never fired. Project 1 closes no gap above. It lands 17 of the Opus audit's 22 M3 adopt rows, each a source mechanism from superpowers, pstack, addy, pocock or caveman, and records 2 more as closed before it; four clauses in the other 3 rows wait for project 2's first task. Section 5 of `docs/research/opus-audit-2026-10-22.md` gives each row's commit. Rule 4's re-audit of M3's rows waits for M3's close, and the counts above move then. Its other items come from part 1's paid check and its final review, from no audited source, so they hold no row here; each one's state is in `docs/research/2026-10-31-m3-item-sort.md`.
 
 ## Accepted limits
 
