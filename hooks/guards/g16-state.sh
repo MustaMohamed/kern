@@ -1128,6 +1128,33 @@ BEGIN { s = "\034"; dir = "(^|[^a-z0-9._-])hooks([^a-z0-9._-]|$)"; op = "^[0-9]*
 }
 END { print "E" }'
 
+# _g16_paren TEXT: exit 0 when TEXT holds a ( or ) outside quotes and not after a backslash, reading '...',
+# $'...' (a backslash escapes there) and "..." as bash does, or ends inside a quote, or when awk fails;
+# exit 1 when every ( and ) is quoted or escaped. _g16_own calls it only on text with no $(, backtick or
+# here-doc, so a double quote holds no command.
+# shellcheck disable=SC2016 # awk text
+_G16_PAREN_AWK='
+{ buf = buf (NR > 1 ? "\n" : "") $0 }
+END {
+  n = split(buf, C, ""); q = ""
+  for (i = 1; i <= n; i++) {
+    c = C[i]
+    if (q == "s") { if (c == sq) q = ""; continue }
+    if (q != "") { if (c == "\\") i++; else if ((q == "a" && c == sq) || (q == "d" && c == "\"")) q = ""; continue }
+    if (c == "\\") i++
+    else if (c == sq) q = "s"
+    else if (c == "$" && C[i + 1] == sq) { q = "a"; i++ }
+    else if (c == "\"") q = "d"
+    else if (c == "(" || c == ")") { print "p"; exit }
+  }
+  print (q == "" ? "n" : "p")
+}'
+_g16_paren() {
+  local r
+  r=$(printf '%s' "$1" | env LC_ALL=C awk -v sq="'" "$_G16_PAREN_AWK") || return 0
+  [ "$r" != n ]
+}
+
 # _g16_own CMD: exit 0 when CMD, the folded text _g16_hooks read, names kern's hook code only through
 # words that a write takes and that resolve outside kern's hooks folder: a go may then stage, copy, move or
 # edit a project's own hooks/lib or hooks/guards file, a kern worktree's included. Each simple command
@@ -1137,7 +1164,10 @@ END { print "E" }'
 # which the re-read below sees outside any hooks directory, so each of them must pass the word rule's
 # name tests (_g16_wname): an entry file's name, a glob that could match one, or a $, backtick or {
 # keeps the ask, and so does a CMD of more than one simple command (git_words' records) or with a $' in
-# it. When all clear, the records are joined again, each one that held such a word from its other
+# it. A file word keeps the ask in a CMD of more than one simple command whose text holds an unquoted ( or
+# ) (_g16_paren): git_words cuts a record there, so the word's last part can land in a record of its own,
+# which the re-read sees outside any hooks directory (M3 part 2 project 1's final review, M2). When all
+# clear, the records are joined again, each one that held such a word from its other
 # words and the rest as printed, and _g16_hooks_read must find no hook code in that text, by every rule:
 # so a run or a source of the same file (cp a.sh p/hooks/lib/a.sh && bash p/hooks/lib/a.sh), an entry
 # file, a hook name in any other command and a path G16 cannot resolve keep the ask. When one word does
@@ -1250,10 +1280,12 @@ EOT
   # git_words cuts a record at an unquoted (, ), { or } word, which can move the copy's later words into a
   # record of their own, with the ( or brace gone; it reads no $'...' escapes as bash does. So a folder
   # clears only in one simple command with no $' in its text, as written or with its line continuations
-  # joined.
+  # joined, and a file word in more than one simple command only when each ( and ) is quoted or escaped.
   if [ "$anyfold" = 1 ]; then
     [ "$n" = 1 ] || return 1
     case "$both" in *"\$'"*) return 1 ;; esac
+  elif [ "$n" != 1 ]; then
+    case "$both" in *'('* | *')'*) if _g16_paren "$cmd" || _g16_paren "${cmd//\\$nl/}"; then return 1; fi ;; esac
   fi
   # The text again: a changed record from the words it keeps, any other as git_words printed it.
   i=1

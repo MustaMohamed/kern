@@ -191,7 +191,8 @@ test('self-review references', () => {
     // yes (M3) and its committed revert (I3), after the lossless 19-byte cut of "run in seconds and" from the opening.
     // 1,939 since Task 6 fix round 2 (I1): the 59 bytes of the proof-check not-run exception.
     // 2,000 since pilot fix plan 2's Task 5: probe drops a lone ! when the line has no operator.
-    'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 2000],
+    // 2,073 since M3 part 2 project 1's final review fix, I1: self-review step 2 runs floor-scan and claim-check through review-check.
+    'claim-checks.md': [['# Claim checks', '## floor-scan', '## claim-check', '## probe', '## A skipped check is a failed check'], 2073],
     'smells.md': [['# Smell baseline', '## Rules', '## Smells'], 2200],
     // proofs.md 1,200 to 1,350 since pilot fix plan 2's Task 6: the degraded: marker.
     'proofs.md': [['# Proofs', '## Table', '## Evidence', '## Gaps'], 1350],
@@ -210,6 +211,8 @@ test('self-review references', () => {
     '`probe --mutate <file>:<line> <wt> -- <test>`, `<file>` relative to `<wt>`, inverts the first operator on that line',
     // Fix round 1, Minor 3: step 2's "pasting commands and output" does not reach step 7's probes
     'catch what reviewers miss; paste each run.',
+    // M3 part 2 project 1's final review, I1: a bare claim-check after review-check is no round, so the opening names the call.
+    'Self-review step 2 runs floor-scan and claim-check through `review-check`.',
     // Task 16o: SKILL.md step 7 now names only the two passes and points here, so exit 1 says it fails the check, as step 7 did
     'probe: fail-then-pass ok', 'Exit 1 (no failure, or the mutation survived) fails the check', 'Exit 3 is inconclusive, never a pass, and fails the check']);
   assertContains(`${REF}/rounds.md`, ['<reviews>/<slug>-<N+1>.diff', 'kern-dir reviews', 'the text after `..`', 'wt-diff <wt> <previous-tree> --out', '`detached`',

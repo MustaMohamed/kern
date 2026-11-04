@@ -45,7 +45,9 @@ test('commit sections, steps and red flags', () => {
   // 5,831 since that fix's second round: G16's deny of a project's own hook file is a stop.
   // 5,984 since M3 part 2 Task 1: G16 gives a project's own hook file outside kern's hooks folder no vote, and kern's
   // hook code or an entry file still asks, a stop.
-  assertMaxBytes(SKILL, 5984);
+  // 6,062 since M3 part 2 project 1's final review fix (I2): run.md's stops on a defect the ticket demands and on a change it
+  // does not name are no-PR ends, so a red proof there is no step 4 stop.
+  assertMaxBytes(SKILL, 6062);
 });
 
 test('commit ledger-tasks reference', () => {
@@ -99,8 +101,9 @@ test('under autopilot a commit stop waits for a typed reply, and only a judgment
   assert.ok(!auto.includes('No kern guard allows `git add`'), auto);
   // Task 7 review: finish-branch's end path commits, pushes, reports each red or unrun check as `fail` and opens no PR,
   // so a red proof there is no stop. The body says so; on every other path step 4 still stops. Task 8 review, M2: both
-  // rules open under autopilot, so a typed /kern:commit never reads as commit-past-red.
-  assert.ok(auto.includes("Under autopilot, on a run's no-PR end (finish-branch's third fix round still `fix first`, a required check that cannot run, execute-plan's task still open at step 13), a red or unrunnable step 4 proof is no stop, and the message body names the red check. Elsewhere step 4 stops, but for prove-it's named skip of a `verify.fast` with nothing resolved."), auto);
+  // rules open under autopilot, so a typed /kern:commit never reads as commit-past-red. M3 part 2 project 1's final review, I2:
+  // run.md's demanded-defect and unnamed-change stops commit and push too, and a red test is what the unnamed change forces.
+  assert.ok(auto.includes("Under autopilot, on a run's no-PR end (finish-branch's third fix round still `fix first`, a required check that cannot run, execute-plan's task still open at step 13, run.md's stop on a defect the ticket demands or on a change it does not name), a red or unrunnable step 4 proof is no stop, and the message body names the red check. Elsewhere step 4 stops, but for prove-it's named skip of a `verify.fast` with nothing resolved."), auto);
   assert.ok(auto.includes('Stops: steps 1 to 4,'), auto);
   // A failed `git add` or `git commit` still reports what it printed.
   assert.ok(auto.includes('`git add` or `git commit` fails: report its output; never `--no-verify`, never another command shape.'), auto);

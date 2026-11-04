@@ -1627,3 +1627,12 @@ expect_kern() {
   mkdir -p "$R/src/hooks/guards"
   expect_hook "git -C $R add src/hooks/guards/; git -C $R status" "git -C $R add src/hooks/lib || true"
 }
+
+# Final review M2: git_words cuts a record at an unquoted ( or ), so a write target's last part can land in a record of
+# its own. The file clear keeps the ask then, in a command of more than one record, as the folder clear does.
+@test "a write onto a project's hook file whose last part holds an unquoted paren keeps its ask; a quoted paren does not" {
+  project_hooks
+  expect_hook "cp x $R/src/hooks/pre-tool-us(e)" "printf x > $R/src/hooks/pre-tool-us(e)"
+  set_autopilot off
+  expect_cmd none "git -C $R add -- src/hooks/lib/util.sh && git -C $R commit -m 'fix(g16): x'"
+}

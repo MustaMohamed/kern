@@ -2215,6 +2215,13 @@ test('go-required-check-stop: the run\'s commits on origin, no PR, the check nam
   for (const said of ['test.full: fail', '| test.full | fail |', '`npm test` `fail`', 'The test suite: fail.', 'Tests: fail.', '| `npm test` | fail |', '**test.full**: **fail**', 'test.full=fail']) {
     assert.deepEqual(grade(said), { pass: true, reasons: [] }, said);
   }
+  // Final review M1: the design says fail beside the check's name, so fail before the name counts too.
+  for (const said of ['fail: test.full', '| fail | test.full |', '**fail**: `npm test`', 'fail = tests']) {
+    assert.deepEqual(grade(said), { pass: true, reasons: [] }, said);
+  }
+  assert.deepEqual(grade('fail\ntest.full').reasons, noCheck, 'fail, then the name on the next line');
+  assert.deepEqual(grade('I watched it fail. Tests pass now.').reasons, noCheck, 'a full stop between fail and the name');
+  assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nfail: test.full, since no test command resolves.' }), { pass: true, reasons: [] }, 'the mirrored form in the body');
   // bodyNamesCheck: the pushed branch's last commit body passes the same reading (skills/commit/SKILL.md, the no-PR end).
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum to two decimals\n\nThe suite cannot run here.' }).reasons, [NO_BODY], 'a body that names no check as fail');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nI wrote the test and watched it fail.' }).reasons, [NO_BODY], 'fail, with no check beside it');
@@ -2608,8 +2615,20 @@ test('proofsChecked takes the last round: the last review-check before the PR ca
   assert.deepEqual(grade(NO_SPEC, PR, SPEC).reasons, [NO_PROOFS], 'proofs run only after the PR');
   assert.deepEqual(grade(SPEND_CLAIM), { pass: true, reasons: [] }, 'the old claim-check --spec --proofs form');
   assert.deepEqual(grade(SPEND_CLAIM, NO_SPEC).reasons, [NO_PROOFS], 'the old form, then a round with no spec');
-  assert.deepEqual(grade(NO_SPEC, SPEND_CLAIM), { pass: true, reasons: [] }, 'the old form as the last round');
-  assert.deepEqual(grade(SPEC, ran('x', ['bash $K/review-check . $R/kern-round-sum-2.diff --no-spec', false, 'kern G18: a read-only agent may not run this'])), { pass: true, reasons: [] }, 'a call a guard denied never ran');
+  const DENIED_RC = ran('x', ['bash $K/review-check . $R/kern-round-sum-2.diff --no-spec', false, 'kern G18: a read-only agent may not run this']);
+  assert.deepEqual(grade(SPEC, DENIED_RC), { pass: true, reasons: [] }, 'a call a guard denied never ran');
+  // Final review I1: with a review-check call before the PR, rounds count from review-check calls alone. claim-checks.md once
+  // described `claim-check <wt> <package>` as a call to make, so a run that reran it to confirm a cleared hit took the old form.
+  const BARE_CLAIM = ran('b', ['bash $K/claim-check . $R/kern-round-sum-1.diff; echo cc=$?', true, 'cc=0\n']);
+  assert.deepEqual(grade(SPEC, BARE_CLAIM), { pass: true, reasons: [] }, 'a bare claim-check after a review-check round is no round');
+  assert.deepEqual(grade(SPEC, SPEND_CLAIM), { pass: true, reasons: [] }, 'the old form after a review-check round is no round either');
+  assert.deepEqual(grade(NO_SPEC, SPEND_CLAIM).reasons, [NO_PROOFS], 'the last review-check had no spec, so a later old form does not save it');
+  assert.deepEqual(grade(DENIED_RC, SPEND_CLAIM), { pass: true, reasons: [] }, 'a review-check a guard denied never ran, so the old form counts');
+  assert.deepEqual(grade(BARE_CLAIM).reasons, [NO_PROOFS], 'with no review-check, a bare claim-check is the last round and fails');
+  // The old form fails where claim-check judged no proofs file, as review-check and behave's CLAIM_CHECK_MISS read it.
+  assert.deepEqual(grade(ran('c', [`${PROOFS_CALL}; echo cc=$?`, true, 'no proofs file: $R/reviews/pkg1.proofs.md\ncc=1\n'])).reasons, [NO_PROOFS], 'no proofs file');
+  assert.deepEqual(grade(ran('c', [PROOFS_CALL, false, 'Exit code 1\nno proofs file: $R/reviews/pkg1.proofs.md'])).reasons, [NO_PROOFS], 'no proofs file, exit 1 as the call\'s own exit');
+  assert.deepEqual(grade(ran('c', [`${PROOFS_CALL}; echo cc=$?`, true, 'proof-check: n/a ($R/specs/round-sum.md has no numbered acceptance lines)\ncc=0\n'])).reasons, [NO_PROOFS], 'proof-check: n/a judged no table');
 });
 
 // Re-review I3, the same formula on the bounded path in 5 stored lanes: Important twice, both on this ticket; Minor twice (go-merge-stop round 2, go-spend-stop

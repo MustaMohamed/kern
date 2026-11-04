@@ -84,7 +84,9 @@ test('finish-branch sections, steps and red flags', () => {
   // ledger, or an upstream, names another, and autopilot takes `base_branch`.
   // 9,187 since its fix round 1: step 3 names the plan's `base:` line and a ledger `Decision:` line, never the
   // ledger's `Main:` or `Worktree:` branch, and a missing plan or ledger names none.
-  assertMaxBytes(SKILL, 9187);
+  // 9,265 since M3 part 2 project 1's final review fix (I2): the end path names run.md's stops on a defect the ticket demands
+  // and on a change it does not name.
+  assertMaxBytes(SKILL, 9265);
 });
 
 test('the size gate greps the ledgers for the size decision before it proposes a split', () => {
@@ -109,8 +111,9 @@ test('under autopilot a `fix first` verdict starts a bounded fix round, and a ru
     // The first row of run.md's split table. The size row is a default, so it sits with the other defaults.
     'A `split` from a finding on a line the last round changed stops, and so does no verdict.',
     // Fix round 1, I1: the user's "Push allowed, and should Stop, PR should at least have a tested or verified the
-    // changes". A red proof stopped commit and the Proven tree check, so the design's push never happened.
-    "The end path is a third round still `fix first`, a task still open at execute-plan's step 13, or a required check that cannot run: the run commits its work, pushes its branch, reports each red or unrun check as `fail`, opens no PR and stops.",
+    // changes". A red proof stopped commit and the Proven tree check, so the design's push never happened. M3 part 2 project 1's
+    // final review, I2: run.md's demanded-defect and unnamed-change stops commit and push their branch as well.
+    "The end path is a third round still `fix first`, a task still open at execute-plan's step 13, a required check that cannot run, or run.md's stop on a defect the ticket demands or on a change it does not name: the run commits its work, pushes its branch, reports each red or unrun check as `fail`, opens no PR and stops.",
     "A red or unrunnable proof stops neither commit's step 4 nor the Proven tree check there: the path claims nothing.",
     'A typed reply that says to open the PR opens it.']) assert.ok(auto.includes(s), s);
   assert.ok(!auto.includes('After the third round'), auto);
