@@ -39,7 +39,8 @@ declare -F json_ok >/dev/null && declare -F json_get >/dev/null && declare -F js
 # its double quotes, with each piece that ends in an odd run of backslashes joined to the next, gives the
 # text outside strings and the string bodies in turn, so the scan reads structure and builds only the few
 # values it needs. A tool_use block counts at depth 4 under message.content, where Claude Code writes the
-# session's own calls; a subagent's progress entry nests deeper, and a sidechain entry is skipped. A Read of
+# session's own calls; a subagent's progress entry nests deeper, and a sidechain entry is skipped, and so is an
+# API request blob, which copies a message's calls at that depth and can be written after a later call. A Read of
 # the running kern's skills/self-review/SKILL.md (a path in SRP, with /private before /var, /tmp or /etc
 # dropped), a Skill call naming kern:self-review or self-review, and a simple command in a Bash call that runs
 # cat, sed or head with a word naming that file are reads. In such a word, a leading $CLAUDE_PLUGIN_ROOT is the
@@ -105,7 +106,7 @@ function odd(s,   L, k) {
 }
 # word(w): w with its quotes dropped and its directory part cut; no command name is 1,024 bytes long.
 function word(w,   P, np) {
-  if (length(w) > 1024) return ""
+  if (length(w) >= 1024) return ""
   gsub(/["\047]/, "", w)
   np = split(w, P, "/")
   return np ? P[np] : ""
@@ -156,7 +157,7 @@ function tool(name, path, cmd, sk) {
   else if (name == "Bash") { split("", VARS); cut(cmd, 1) }
 }
 {
-  if (index($0, "\"isSidechain\":true")) next
+  if (index($0, "\"isSidechain\":true") || index($0, "\"type\":\"api-request-blob\"")) next
   n = split($0, F, "\"")
   d = 0; ex = 0; key = ""
   i = 1
@@ -203,18 +204,24 @@ END { if (read && ran < read) print "block" }
 # shellcheck disable=SC2034 # read by the json.sh functions
 KERN_INPUT=$(cat) || exit 0
 json_ok || exit 0
-[ "$(json_get_raw stop_hook_active 2>/dev/null)" = true ] && exit 0
+# A stop it already blocked allows, and so does a stop_hook_active json.sh finds malformed (exit 2), which
+# json_ok can pass.
+A=$(json_get_raw stop_hook_active 2>/dev/null)
+[ $? = 2 ] && exit 0
+[ "$A" = true ] && exit 0
 T=$(json_get transcript_path 2>/dev/null) || exit 0
 [ -n "$T" ] && [ -f "$T" ] && [ -r "$T" ] || exit 0
 # One grep of the whole transcript first: with no self-review in it, no read can count, and nothing more runs.
 env LC_ALL=C grep -q -F 'self-review' "$T" 2>/dev/null || exit 0
 # The turn starts at the user's last prompt: a user entry whose content is text, or a list that opens with a text
 # or image block, written role before content as Claude Code writes it, and none of a meta entry (a skill's
-# body), a compact summary, a sidechain or progress entry, or a prompt Claude Code wrapped itself. With none
-# found, the turn is the whole transcript. The prompt grep takes one pattern, since BSD grep slows with each -e
-# pattern, and the filter after it reads only the prompt lines.
+# body), a compact summary, a sidechain or progress entry, an API request blob (CLI 2.1.318 copies each
+# request's messages into the transcript, a user one with no isMeta flag), or a prompt Claude Code wrapped
+# itself. With none found, the turn is the whole transcript. The prompt grep takes one pattern, since BSD grep
+# slows with each -e pattern, and the filter after it reads only the prompt lines.
 L=$(env LC_ALL=C grep -n -E '"role":"user","content":("|\[\{"type":"(text|image)")' "$T" 2>/dev/null |
   env LC_ALL=C grep -v -F -e '"isMeta":true' -e '"isCompactSummary":true' -e '"isSidechain":true' -e '"type":"progress"' \
+    -e '"type":"api-request-blob"' \
     -e '"content":"<task-notification' -e '"content":"<cross-session-message' -e '"content":"<scheduled-task' \
     -e '"content":"<teammate-message' -e '"content":"<channel-message' -e '"content":"<agent-message' |
   tail -n 1 | cut -d : -f 1)
@@ -239,5 +246,5 @@ export CWD
 . "$KERN_ROOT/hooks/lib/settings.sh" 2>/dev/null || exit 0
 declare -F kern_enabled >/dev/null && kern_enabled 2>/dev/null || exit 0
 # shellcheck disable=SC2016 # literal backticks
-printf '%s\n' '{"decision":"block","reason":"kern: self-review step 2 has not run since self-review was read. When a spec exists, write `<package>.proofs.md`, then run `review-check <wt> <package> --spec <spec>` (`--no-spec` with none) and give the verdict from its `floor:` line."}'
+printf '%s\n' '{"decision":"block","reason":"kern: self-review step 2 has not run since self-review was read. When a spec exists, write `<package>.proofs.md`, then run `review-check <wt> <package> --spec <spec>` (`--no-spec` with none) then give the whole report again, its verdict from the `floor:` line."}'
 exit 0

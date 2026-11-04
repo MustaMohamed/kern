@@ -97,7 +97,10 @@ allows() {
   [[ "$reason" == 'kern: self-review step 2 has not run since self-review was read.'* ]] || false
   [[ "$reason" == *'When a spec exists, write `<package>.proofs.md`'* ]] || false
   [[ "$reason" == *'(`--no-spec` with none)'* ]] || false
-  [[ "$reason" == *'give the verdict from its `floor:` line.' ]] || false
+  # Paid round 3's h2h review run 0 answered a block with a reply that only added review-check's output, and the
+  # grader graded that last reply, so the reason asks for the whole report again (the user's "All three
+  # (Recommended)", 2026-11-04).
+  [[ "$reason" == *'(`--no-spec` with none) then give the whole report again, its verdict from the `floor:` line.' ]] || false
   # unslop: no em dash and no en dash.
   [[ "$reason" != *"$(printf '\342\200\224')"* && "$reason" != *"$(printf '\342\200\223')"* ]] || false
 }
@@ -135,6 +138,41 @@ allows() {
   done
 }
 
+@test "a word of 1,024 bytes or more names no command: a 1,024-byte path to review-check is no run, a 1,023-byte one is" {
+  local a w
+  a=$(printf '%1010s' '' | tr ' ' a)
+  # /, 1,010 letters and /review-check: 1,024 bytes (r2-review.md, Minor 2: word() cut only above 1,024).
+  w="/$a/review-check"
+  [ "${#w}" -eq 1024 ]
+  read_file "$SR"
+  sh_run "$w . pkg --no-spec"
+  stop
+  blocks
+  w="/${a#a}/review-check"
+  [ "${#w}" -eq 1023 ]
+  : >"$T"
+  read_file "$SR"
+  sh_run "$w . pkg --no-spec"
+  stop
+  allows
+}
+
+@test "a single-quoted path counts as written: a cat of self-review, a value the call set, a review-check run" {
+  # Each arm of the quote strip that drops a single quote (r2-review.md, Minor 4).
+  local c
+  for c in "cat '$SR'" "K='$K'; cat \$K/skills/self-review/SKILL.md"; do
+    : >"$T"
+    sh_run "$c"
+    stop
+    blocks || { echo "for: $c"; return 1; }
+  done
+  : >"$T"
+  read_file "$SR"
+  sh_run "bash '$P/scripts/review-check' . pkg --no-spec"
+  stop
+  allows
+}
+
 @test "allows a stop the hook already blocked (stop_hook_active true)" {
   read_file "$SR"
   stop true
@@ -169,7 +207,10 @@ allows() {
 @test "allows on unparseable input" {
   local in
   read_file "$SR"
-  for in in '' 'not json' "{\"transcript_path\":\"$T\"" "[\"transcript_path\",\"$T\"]" "{\"transcript_path\":\"$T\",\"stop_hook_active\":false"; do
+  # The last input passes json_ok, and a malformed string hides stop_hook_active, so json.sh reads it with exit 2
+  # while transcript_path still reads (r2-review.md, Minor 1).
+  for in in '' 'not json' "{\"transcript_path\":\"$T\"" "[\"transcript_path\",\"$T\"]" "{\"transcript_path\":\"$T\",\"stop_hook_active\":false" \
+    "{\"transcript_path\":\"$T\",\"q\":\"a\\\",\"stop_hook_active\":true}"; do
     run bash "$K/hooks/stop" <<<"$in"
     allows || { echo "for: $in"; return 1; }
   done
@@ -274,6 +315,39 @@ allows() {
   printf '{"parentUuid":"x","isSidechain":false,"type":"user","message":{"role":"user","content":"This session is being continued from a previous conversation."},"isCompactSummary":true,"uuid":"c1"}\n' >>"$T"
   stop
   blocks
+}
+
+@test "an API request blob starts no turn: a read after the prompt, then a blob, then no review-check blocks" {
+  # CLI 2.1.318 copies the messages of each API request into the transcript as api-request-blob lines. A user one
+  # holds "role":"user","content": with a list that opens with a text block, or a string, and no isMeta flag (paid
+  # round 3's triage), so a blob written between the read and the stop started the turn past the read and allowed.
+  local b
+  for b in '[{"type":"text","text":"<system-reminder>\nAs you answer, you can use the following context:\n</system-reminder>\n"},{"type":"text","text":"Review the branch."}]' \
+    '"<system-reminder>\n[SYSTEM NOTIFICATION - NOT USER INPUT]\nThis is an automated background-task event.\n</system-reminder>"'; do
+    : >"$T"
+    prompt 'Review the branch.'
+    read_file "$SR"
+    result '1\t---\n2\tname: self-review'
+    printf '{"type":"api-request-blob","sessionId":"test-session","hash":"b2f955116893f3540d5f55a21fcbb1486d4172b956a4e051a96ff5d4a96f0531","message":{"role":"user","content":%s}}\n' "$b" >>"$T"
+    say 'Verdict: fix first.'
+    stop
+    blocks || { echo "for: $b"; return 1; }
+  done
+}
+
+@test "the scan skips API request blobs: a review-check after the read, then a late blob that repeats the read, allows" {
+  # An assistant blob copies a message's tool_use blocks at depth 4 under message.content, where the session's own
+  # calls sit, so a blob written after a later call would read as a new read (the controller's ruling on the round 4
+  # fix batch's concern 1).
+  prompt 'Review the branch.'
+  read_file "$SR"
+  result '1\t---'
+  sh_run "bash $P/scripts/review-check . pkg --no-spec"
+  result 'floor: none'
+  printf '{"type":"api-request-blob","sessionId":"test-session","hash":"3215d4a1aa39a7d63f95c2a0974d46e6ca61abb3abe0dc72afc570b17d594bca","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"Read","input":{"file_path":"%s"},"caller":{"type":"direct"}}]}}\n' "$SR" >>"$T"
+  say 'Verdict: ready.'
+  stop
+  allows
 }
 
 @test "a transcript with no self-review, or a turn with none, allows on a grep and never runs the scan" {
