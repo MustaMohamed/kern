@@ -42,6 +42,18 @@ Part 1 closed with 33 items its paid check left open and one known limit, self-r
 | The size ask | "The reply must carry it": the question the user sees names the measure and the source |
 | U1's reach | "Yes, first builds too" |
 
+## Paid round 1 rulings, 2026-11-04
+
+The user's words on round 1's reds (tree 7057f41).
+
+| Ruling | Words |
+|---|---|
+| Goal 2, `workflow-self-review-proofs` at 0 of 3, is fixed in this project | "Fix it in project 1" |
+| The mechanism is a Stop hook: `hooks/stop` blocks a stop once when the session's last read of self-review has no `review-check` run after it, and project 2 extends it for autopilot's stop | "Stop hook (Recommended)" |
+| `go-no-lint-draft`'s approval order and `go-block-reroute`'s fixture go to project 2 | "Carry to project 2 (Recommended)" |
+| `go-required-check-stop`: commit's no-PR end names the red check as `fail` in the message body, cap 6,062 to 6,072 | "Take the fix (Recommended)" |
+| Round 2 is a targeted rerun: it spends plan's grace and reruns the 3 voided exec cases, `go-required-check-stop` and h2h review | "Targeted rerun (Recommended)" |
+
 ## Guards and scripts
 
 | Item | Contract |
