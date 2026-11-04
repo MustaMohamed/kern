@@ -631,6 +631,26 @@ test('Task 17a G1: a plan is graded from the files the run left, ignored .kern/ 
   } finally { r.done(); }
 });
 
+// Paid round 2's rulings (the user's "Measure the hook (Recommended)", 2026-11-04): sessions persist, so each arm's transcript, as
+// runClaude takes it, goes beside its attempt's stream file under the same blind id, and its row records whether kern's Stop hook
+// blocked. The grader prompt never holds it.
+test('h2h keeps each attempt\'s session transcript beside its stream file and records whether the Stop hook blocked', async () => {
+  const BLOCK = `${JSON.stringify({ type: 'user', isMeta: true, message: { role: 'user', content: 'Stop hook feedback:\nkern: self-review step 2 has not run since self-review was read.' } })}\n`;
+  const arm = (opts) => ({ ...plainArm(opts), transcript: opts.pluginDirs.length ? BLOCK : '' });
+  const r = await driveH2H({ tasks: [synthTask('plan')], arm });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    const kept = readdirSync(r.raw).filter((f) => f.endsWith('.transcript.jsonl'));
+    assert.equal(kept.length, 1, kept.join(', '));
+    assert.match(kept[0], /-0-arm-[A-Z]\.transcript\.jsonl$/);
+    assert.ok(existsSync(join(r.raw, kept[0].replace('.transcript.jsonl', '.jsonl'))), 'beside the stream file of the same blind id');
+    assert.equal(readFileSync(join(r.raw, kept[0]), 'utf8'), BLOCK);
+    const rows = JSON.parse(r.committed).results;
+    assert.deepEqual(rows.map((x) => [x.arm, x.stopBlocked]).sort(), [['control', false], ['kern', true]]);
+    assert.ok(!r.graderPrompts[0].includes('step 2 has not run'), 'the grader never sees it');
+  } finally { r.done(); }
+});
+
 test('Task 17a G3: a filtered h2h run, an all-VOID one or one that stops never writes the committed snapshot, and key.json is merged', async () => {
   const [p1, p2, v1] = [synthTask('plan'), synthTask('plan'), synthTask('review', { labels: [] })];
   const filtered = await driveH2H({ argv: ['--category', 'plan', '--runs', '1'], tasks: [p1, p2, v1], before: 'the day\'s full run\n', key: { 'earlier:seed': { kern: 'arm-B', control: 'arm-A' } } });

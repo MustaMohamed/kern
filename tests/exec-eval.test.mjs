@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attributed, GRADERS, chainParts, guardAsked, stoppedOnRedProof, gitCalls, ghCalls, shellSegments, sizeGateRan, stubMissed } from '../scripts/lib/exec-grade.mjs';
-import { ISOLATION, PERMISSIONS, ClaudeRunError, childEnv, countProblem, pluginProblem, runClaude, runProblem, runSummary, workspace } from '../scripts/lib/claude-run.mjs';
+import { ISOLATION, PERMISSIONS, STOP_BLOCK, ClaudeRunError, childEnv, countProblem, pluginProblem, runClaude, runProblem, runSummary, stopBlocked, workspace } from '../scripts/lib/claude-run.mjs';
 import { KERNEL, NO_AUTH, fakeClaude, init as initOf, ran as runOf, result as resultOf, sessionStart as hookStart, started, turnClaude, use } from './helpers/eval-stub.mjs';
 import { UsageError, autopilotProblem, caseEnv, caseLimits, casePrompts,claudeConfigDir, dateStamp, execParts, exitCode, gradeCase, kernStateFile, parseArgs, regradeExec, replyDate, runEval, sessionId, snapshotBody, traceHooks, userSettingsProblem, writeEvents, writeReply, writeTrace } from '../scripts/lib/exec-run.mjs';
 import { COPY_OMITS, caseWorkspace, loadCases, pluginCopy } from '../scripts/lib/behave.mjs';
@@ -150,8 +150,11 @@ test('finish-branch: a PR at this head stops; one at an older head gets the push
   assert.equal(GRADERS['finish-pr-older-head']({ events: said, ghLog: ['pr list'], git: none, branch: 'feat/sum' }).pass, false);
 });
 
-test('the isolation flags keep user settings, MCP servers and saved sessions out', () => {
-  assert.deepEqual(ISOLATION, ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence']);
+// M3 part 2 project 1, paid round 2 (the user's "Measure the hook (Recommended)", 2026-11-04): with --no-session-persistence the Stop
+// hook's transcript_path named no file, so it allowed in all 54 sessions. Sessions persist now, and runClaude takes each transcript
+// and removes its project folder after the run (the rows below).
+test('the isolation flags keep user settings and MCP servers out, and sessions persist so the Stop hook reads a transcript', () => {
+  assert.deepEqual(ISOLATION, ['--setting-sources', 'project', '--strict-mcp-config']);
 });
 
 // M3 part 2 project 1 Task 12: paid round 5's workflow-define-spec run 1 called ScheduleWakeup for 1,200 s, past the runner's
@@ -317,7 +320,7 @@ test('Task 16h fix M6: a run the timeout cuts off keeps the events it printed, a
   assert.deepEqual(err.events.map((e) => e.type), ['system', 'assistant']);
   // behave, h2h and kernel-adherence run from their libs since Task 17a (behaveMain, h2hMain, adherenceMain).
   for (const [runner, saved] of [['lib/behave.mjs', /const kept = r \? r\.events : events;/], ['lib/h2h.mjs', /const kept = got \? got\.events : events;/],
-    ['lib/adherence.mjs', /problem = failure = e\.message; events = e\.events \?\? \[\];/], ['exec-eval.mjs', /save\(\{ reason: e\.message, events: e\.events, trace \}\)/]]) {
+    ['lib/adherence.mjs', /problem = failure = e\.message; events = e\.events \?\? \[\];/], ['exec-eval.mjs', /save\(\{ reason: e\.message, events: e\.events, transcript: e\.transcript, trace \}\)/]]) {
     assert.match(readFileSync(join(REPO, 'scripts', runner), 'utf8'), saved, `${runner} saves a cut-off run's events`);
   }
 });
@@ -327,6 +330,70 @@ test('runClaude: output over the buffer limit is a run cut off, said as such, no
   assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', maxBuffer: 1024, env: fakeClaude(stub) }),
     (e) => e instanceof ClaudeRunError && !e.fatal && /^claude printed more than 1024 bytes to stdout or stderr/.test(e.message));
   assert.equal(runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env: fakeClaude(stub) }).badLines, 1, 'under the default 64 MB it is returned');
+});
+
+// The session transcript (paid round 2's rulings, "Measure the hook (Recommended)"). Claude Code writes it under its config dir as
+// projects/<the cwd, made a folder name>/<session id>.jsonl. LINES holds the Stop hook's reason, as a block feeds it back.
+const REASON = 'kern: self-review step 2 has not run since self-review was read.';
+const LINES = `${JSON.stringify({ type: 'user', message: { role: 'user', content: 'review it' } })}\n${JSON.stringify({ type: 'user', isMeta: true, message: { role: 'user', content: `Stop hook feedback:\n${REASON}` } })}\n`;
+// transcriptClaude(sid, after): a stand-in that writes LINES as session sid's transcript, prints the init event naming sid, runs
+// after (shell), then answers. Its config dir holds a second project folder, another session's, which must stay.
+const transcriptClaude = (sid, after = '') => {
+  const env = fakeClaude(`mkdir -p "$CLAUDE_CONFIG_DIR/projects/-w-app" && cat "$CLAUDE_CONFIG_DIR/../lines" > "$CLAUDE_CONFIG_DIR/projects/-w-app/s-1.jsonl"
+echo '{"type":"system","subtype":"init","session_id":"${sid}"}'
+${after}
+echo '{"type":"result","subtype":"success","is_error":false,"result":"ok"}'`);
+  writeFileSync(join(dirname(env.CLAUDE_CONFIG_DIR), 'lines'), LINES);
+  mkdirSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-other'), { recursive: true });
+  writeFileSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-other', 'other.jsonl'), 'x\n');
+  return env;
+};
+
+test('runClaude takes the session transcript and removes its project folder; a run with none, or an unsafe id, gives an empty one', () => {
+  const env = transcriptClaude('s-1');
+  const r = runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env });
+  assert.equal(runProblem(r, 1), '');
+  assert.equal(r.transcript, LINES);
+  assert.equal(existsSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-w-app')), false, 'the session\'s project folder is removed');
+  assert.equal(readFileSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-other', 'other.jsonl'), 'utf8'), 'x\n', "another session's folder stays");
+  // A missing transcript is not an error: the init names a session with no file, or no init names one.
+  const none = runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env: transcriptClaude('s-2') });
+  assert.deepEqual([none.transcript, runProblem(none, 1)], ['', '']);
+  const bare = runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env: fakeClaude(`echo '{"type":"result","subtype":"success","is_error":false,"result":"ok"}'`) });
+  assert.deepEqual([bare.transcript, runProblem(bare, 1)], ['', '']);
+  // An id that is not a plain name could reach outside projects/<folder>, so it reads and removes nothing.
+  const odd = transcriptClaude('../-other/other');
+  assert.equal(runClaude({ cwd: work(), prompts: ['hi'], model: 'm', env: odd }).transcript, '');
+  assert.ok(existsSync(join(odd.CLAUDE_CONFIG_DIR, 'projects', '-other', 'other.jsonl')) && existsSync(join(odd.CLAUDE_CONFIG_DIR, 'projects', '-w-app', 's-1.jsonl')));
+});
+
+test('a run the timeout cuts off keeps its transcript with its events, and its project folder is removed', () => {
+  const env = transcriptClaude('s-1', 'exec sleep 30');
+  let err = null;
+  assert.throws(() => runClaude({ cwd: work(), prompts: ['hi'], model: 'm', timeoutMs: 1500, killGraceMs: 300, env }), (e) => { err = e; return e instanceof ClaudeRunError && !e.fatal; });
+  assert.deepEqual([err.events.length, err.transcript], [1, LINES]);
+  assert.equal(existsSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-w-app')), false);
+  // Each runner keeps it as it keeps the events (exec-eval's save is pinned in the Task 16h fix M6 row; h2h runs through tryRun).
+  for (const [runner, kept] of [['lib/behave.mjs', /return \{ run: null, problem: e\.message, events: e\.events \?\? \[\], transcript: e\.transcript \?\? '' \};/],
+    ['lib/adherence.mjs', /events = e\.events \?\? \[\]; transcript = e\.transcript \?\? '';/]]) {
+    assert.match(readFileSync(join(REPO, 'scripts', runner), 'utf8'), kept, `${runner} keeps a cut-off run's transcript`);
+  }
+});
+
+test('stopBlocked: the Stop hook\'s reason in a transcript or stream entry that is neither the model\'s own nor a tool\'s', () => {
+  assert.ok(REASON.includes(STOP_BLOCK) && readFileSync(join(REPO, 'hooks', 'stop'), 'utf8').includes(`"reason":"${REASON}`), "STOP_BLOCK is the hook's own reason");
+  const line = (...o) => o.map((x) => JSON.stringify(x)).join('\n');
+  assert.equal(stopBlocked({ transcript: LINES }), true, 'fed back as a user entry');
+  assert.equal(stopBlocked({ transcript: line({ type: 'system', subtype: 'stop_hook_summary', hookErrors: [REASON], preventedContinuation: false }) }), true, 'a system entry');
+  assert.equal(stopBlocked({ events: [{ type: 'system', subtype: 'hook_response', hook_event: 'Stop', output: JSON.stringify({ decision: 'block', reason: REASON }) }] }), true, 'the stream, with no transcript');
+  assert.equal(stopBlocked({ transcript: 'not json\n', events: [{ type: 'user', message: { content: [{ type: 'text', text: REASON }] } }] }), true, 'the stream beside a transcript that holds no reason');
+  // A tool that printed the reason, the model's own words and a command that names it are no block.
+  const printed = { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: REASON }] }, toolUseResult: { stdout: REASON }, tool_use_result: REASON };
+  assert.equal(stopBlocked({ transcript: line(printed), events: [printed] }), false, 'a tool result');
+  assert.equal(stopBlocked({ transcript: line({ type: 'assistant', message: { content: [{ type: 'text', text: `The hook said: ${REASON}` }] } }) }), false, "the model's own words");
+  assert.equal(stopBlocked({ events: [use('Bash', { command: `grep -n '${STOP_BLOCK}' hooks/stop` })] }), false, 'a tool call');
+  assert.equal(stopBlocked({ transcript: '', events: [] }), false);
+  assert.equal(stopBlocked({}), false);
 });
 
 test('runClaude: a non-zero exit is returned for the caller to fail on, with stdin as stream-json turns and the budget cap', () => {
@@ -1424,6 +1491,26 @@ test('Task 17a G11: a full exec run refuses a kern tree that is not a clean comm
   assert.deepEqual([kern.commit, kern.dirty], [null, true]);
   assert.match(kern.problem, /^not a git checkout/);
   assert.equal(snapshotBody({ model: 'm', claude: 'v', results: [], userSettings: false, tree: { commit: 'c0ffee', dirty: false, changes: [] } }).kern.commit, 'c0ffee');
+});
+
+// Paid round 2's rulings ("Measure the hook (Recommended)"): exec-eval keeps each case's session transcript beside its events,
+// records whether the Stop hook blocked, and leaves no session folder in the eval config dir.
+test('exec-eval keeps the session transcript beside the events, records the Stop hook\'s block, and removes the session folder', () => {
+  const act = `fs.mkdirSync(process.env.CLAUDE_CONFIG_DIR + '/projects/-w-invoice-app', { recursive: true });
+fs.writeFileSync(process.env.CLAUDE_CONFIG_DIR + '/projects/-w-invoice-app/s1.jsonl', ${JSON.stringify(LINES)});`;
+  const stub = recordingClaude(true, act);
+  const r = spawnSync(process.execPath, [EXEC(), '--case', 'finish-menu-first', '--no-cache'], { env: stub.env, encoding: 'utf8', timeout: 120000 });
+  assert.match(r.stdout, /^FAIL finish-menu-first: /m, `${r.stdout}${r.stderr}`);
+  const replies = r.stdout.match(/^replies: (.*)$/m)[1];
+  assert.equal(readFileSync(join(replies, 'finish-menu-first.transcript.jsonl'), 'utf8'), LINES);
+  assert.ok(existsSync(join(replies, 'finish-menu-first.events.jsonl')));
+  assert.equal(JSON.parse(readFileSync(join(replies, 'finish-menu-first.result.json'), 'utf8')).result.stopBlocked, true);
+  assert.equal(existsSync(join(stub.env.CLAUDE_CONFIG_DIR, 'projects', '-w-invoice-app')), false, 'no session folder is left');
+  // A run with no transcript keeps no file and records no block.
+  const plain = recordingClaude(true);
+  spawnSync(process.execPath, [EXEC(), '--case', 'finish-menu-first', '--no-cache'], { env: plain.env, encoding: 'utf8', timeout: 120000 });
+  assert.equal(existsSync(join(replies, 'finish-menu-first.transcript.jsonl')), false, "the earlier run's transcript does not stand for this one");
+  assert.equal(JSON.parse(readFileSync(join(replies, 'finish-menu-first.result.json'), 'utf8')).result.stopBlocked, false);
 });
 
 const until = async (ok, ms) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise((d) => setTimeout(d, 50))) if (ok()) return true; return ok(); };

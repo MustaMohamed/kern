@@ -506,6 +506,23 @@ test('Task 17a G5: adherence passes a case by caseResult, so an invalid run is l
   try { assert.equal(JSON.parse(two.committed).results[0].pass, false, 'two invalid runs of three fail the case, as behave\'s rule says'); } finally { two.done(); }
 });
 
+// Paid round 2's rulings (the user's "Measure the hook (Recommended)", 2026-11-04): sessions persist, so each run's transcript, as
+// runClaude takes it, goes beside its stream file, and the run records whether kern's Stop hook blocked.
+test('adherence keeps each run\'s session transcript beside its stream file and records whether the Stop hook blocked', async () => {
+  const BLOCK = `${JSON.stringify({ type: 'system', subtype: 'stop_hook_summary', hookErrors: ['kern: self-review step 2 has not run since self-review was read.'] })}\n`;
+  let n = 0;
+  const run = (opts) => ({ ...answer('pass', opts), transcript: n++ === 0 ? BLOCK : '' });
+  const r = await driveAdherence({ argv: ['--runs', '2', '--jobs', '1'], run });
+  try {
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    const raw = join(r.results, 'adherence-routed-sonnet-5-5-2026-10-22');
+    assert.equal(readFileSync(join(raw, 'row-x-0.transcript.jsonl'), 'utf8'), BLOCK);
+    assert.ok(existsSync(join(raw, 'row-x-0.jsonl')));
+    assert.equal(existsSync(join(raw, 'row-x-1.transcript.jsonl')), false, 'a run with no transcript keeps none');
+    assert.deepEqual(JSON.parse(r.committed).results[0].detail.map((x) => x.stopBlocked), [true, false]);
+  } finally { r.done(); }
+});
+
 test('Task 17a G3: adherence keeps a --case, --plugin, all-invalid or stopped run off the committed snapshot', async () => {
   const one = await driveAdherence({ argv: ['--case', 'row-x', '--runs', '1'], before: 'earlier\n' });
   try {

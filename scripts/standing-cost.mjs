@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ISOLATION, childEnv, claudeVersion, evalConfigProblem } from './lib/claude-run.mjs';
+import { ISOLATION, childEnv, claudeVersion, configDirOf, evalConfigProblem, takeTranscript } from './lib/claude-run.mjs';
 import { isMain } from './lib/is-main.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
@@ -25,7 +25,8 @@ export const inputTokens = (u) => {
 export const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
 // once(withKern, parent): one `claude -p hello` run's input tokens, its child seeing childEnv(parent). It
-// refuses as the runners do (evalConfigProblem), behind main's own check.
+// refuses as the runners do (evalConfigProblem), behind main's own check. ISOLATION saves the session (paid round 2's
+// rulings), so the session's folder under the eval config dir is removed after the run, as runClaude does; nothing keeps it.
 export function once(withKern, parent = process.env) {
   const env = childEnv(parent);
   const refusal = evalConfigProblem(env);
@@ -34,8 +35,11 @@ export function once(withKern, parent = process.env) {
   const argv = ['-p', 'hello', '--output-format', 'json', '--model', MODEL, '--max-turns', '1', '--max-budget-usd', '1', ...ISOLATION, ...(withKern ? ['--plugin-dir', ROOT] : [])];
   const r = spawnSync('claude', argv, { cwd, encoding: 'utf8', timeout: 180000, env });
   rmSync(cwd, { recursive: true, force: true });
+  let j = null;
+  try { j = JSON.parse(r.stdout); } catch { /* no result: the status below says why */ }
+  takeTranscript(configDirOf(env), typeof j?.session_id === 'string' ? j.session_id : '');
   if (r.status !== 0) throw new Error(`standing-cost: claude exited ${r.status}: ${r.error?.message ?? r.stderr.trim().split('\n').pop()}`);
-  const j = JSON.parse(r.stdout);
+  if (!j) throw new Error('standing-cost: claude printed no JSON result');
   // A usage limit comes back as an error result with zero usage: never a measurement.
   if (j.is_error) throw new Error(`standing-cost: claude reported an error, not a measurement: ${String(j.result ?? '').trim()}`);
   return inputTokens(j.usage);

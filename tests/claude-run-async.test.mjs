@@ -88,3 +88,24 @@ test('runClaudeAsync runs sessions side by side: four 1-second claudes take abou
   mkdirSync(join(sub, 'sub'));
   assert.equal((await runClaudeAsync({ cwd: join(sub, 'sub'), prompts: ['hi'], model: 'm', env })).status, 0);
 });
+
+// Paid round 2's rulings (the user's "Measure the hook (Recommended)", 2026-11-04): sessions persist, so runClaudeAsync, as runClaude
+// does, takes the session's transcript after the run and removes its project folder, on a timeout too.
+test('runClaudeAsync takes the session transcript and removes its project folder, on a timeout too', async () => {
+  const stub = (after) => {
+    const env = fakeClaude(`mkdir -p "$CLAUDE_CONFIG_DIR/projects/-w-app" && printf '%s\\n' '{"type":"user"}' > "$CLAUDE_CONFIG_DIR/projects/-w-app/s-9.jsonl"
+echo '{"type":"system","subtype":"init","session_id":"s-9"}'
+${after}
+echo '{"type":"result","subtype":"success","is_error":false,"result":"ok"}'`);
+    return env;
+  };
+  const env = stub('');
+  const r = await attempt(env);
+  assert.deepEqual([runProblem(r, 1), r.transcript], ['', '{"type":"user"}\n']);
+  assert.equal(existsSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-w-app')), false);
+  const late = stub('exec sleep 30');
+  await assert.rejects(attempt(late, { timeoutMs: 1500, killGraceMs: 300 }), (e) => e instanceof ClaudeRunError && e.transcript === '{"type":"user"}\n' && e.events.length === 1);
+  assert.equal(existsSync(join(late.CLAUDE_CONFIG_DIR, 'projects', '-w-app')), false);
+  const none = await attempt(fakeClaude('echo \'{"type":"result","subtype":"success","is_error":false,"result":"x"}\''));
+  assert.deepEqual([runProblem(none, 1), none.transcript], ['', '']);
+});
