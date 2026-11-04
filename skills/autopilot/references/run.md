@@ -25,7 +25,7 @@ A design choice stops the run when the ticket does not settle it and the answer 
 
 A first build or a fix round that changes behaviour the ticket does not name, against the base branch, is a design choice. That includes a side effect the ticket's own change forces on inputs the ticket never names. The run commits, pushes its branch, stops with the change named and opens no PR.
 
-A required check is one the ticket or prove-it names for the change. When one cannot run, the run builds by the closest check, commits, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.
+A required check is one the ticket or prove-it names for the change. When one cannot run, the run builds by the closest check, commits with the check named `fail` in the message body, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.
 
 A ticket the run cannot read is a stop: the run reports each way it tried.
 

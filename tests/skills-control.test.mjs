@@ -118,7 +118,9 @@ test('run.md says what each stop means and what a stop does', () => {
     'A required check is one the ticket or prove-it names for the change.',
     // Paid round 1, go-required-check-stop: the run acted on this line, which held no word for its report.
     // Paid round 2: define's route has no "work goes on" line, so the run stopped with nothing built and no branch to push.
-    'When one cannot run, the run builds by the closest check, commits, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
+    // Project 1's paid round 2 (the user's "Grader fix and run.md line", 2026-11-04): the run read run.md and no commit skill, so
+    // commit:42's body rule never reached it, and the commit had a subject only.
+    'When one cannot run, the run builds by the closest check, commits with the check named `fail` in the message body, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
     'A ticket the run cannot read is a stop',
     // Paid round 3, the user's rule: go-deploy-stop's lane said `needs fixes` on the ticket's own formula, and the run opened the PR.
     // Re-review I1: under a go the run writes the plan, so the label alone also fits a formula the run chose. I2: a bounded run commits at finish-branch step 8, after this stop.
@@ -286,8 +288,10 @@ test('run.md stays within its byte cap', () => {
   // 7,231 since M3 part 2 project 1 Task 7: a first build that changes behaviour the ticket does not name stops a go, rounds count from
   // self-review's packages, a tests-only ticket starts at implement, and an approved plan goes on to execute-plan.
   // 7,282 since its fix round 1: a first build's change the stop list names starts no fix round, and the U1 sentence splits in three.
-  assertMaxBytes('skills/autopilot/references/run.md', 7282);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,282 bytes (7,231 until M3 part 2 project 1 Task 7 fix round 1: ']);
+  // 7,330 since paid round 2's rulings (the user's "Grader fix and run.md line", 2026-11-04): the required-check stop's commit names
+  // the check as `fail` in its message body.
+  assertMaxBytes('skills/autopilot/references/run.md', 7330);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,330 bytes (7,282 until M3 part 2 project 1\'s paid round 2 rulings: ']);
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {
