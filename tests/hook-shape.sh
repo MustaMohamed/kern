@@ -4,7 +4,8 @@
 # empty for <empty>);
 # SubagentStart prints valid JSON within 1,400 characters; UserPromptSubmit exits 0 (its plain
 # stdout is context); PreToolUse exits 0 and prints nothing or valid JSON; Stop, on a transcript whose
-# one call reads self-review, exits 0 and prints nothing or valid JSON, so it reads each case's settings.
+# one call reads the running kern's self-review, exits 0 and prints nothing or valid JSON, so it reads each
+# case's settings.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # A CLAUDE_ENV_FILE from the caller would get session-start's export line, and a CLAUDE_CONFIG_DIR would
@@ -48,8 +49,8 @@ for dir in "$ROOT"/tests/fixtures/projects/*/; do
     { echo "FAIL $name: prompt-submit exited non-zero"; fail=1; }
   pre=$(printf '{%s,"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status"}}' "$base" | bash "$ROOT/hooks/pre-tool-use")
   printf '%s' "$pre" | json_ok || { echo "FAIL $name: PreToolUse output is not JSON"; fail=1; }
-  printf '{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t","name":"Read","input":{"file_path":"/k/skills/self-review/SKILL.md"}}]},"type":"assistant"}\n' \
-    >"$TMP/$name/t.jsonl"
+  printf '{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t","name":"Read","input":{"file_path":"%s/skills/self-review/SKILL.md"}}]},"type":"assistant"}\n' \
+    "$ROOT" >"$TMP/$name/t.jsonl"
   stop=$(printf '{%s,"hook_event_name":"Stop","stop_hook_active":false,"transcript_path":"%s"}' "$base" "$TMP/$name/t.jsonl" |
     bash "$ROOT/hooks/stop") || { echo "FAIL $name: stop exited non-zero"; fail=1; }
   printf '%s' "$stop" | json_ok || { echo "FAIL $name: Stop output is not JSON"; fail=1; }

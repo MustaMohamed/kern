@@ -59,9 +59,10 @@ setup() {
   bash "$K/hooks/subagent-start" <<<"$(payload SubagentStart '"agent_id":"a1","agent_type":"Explore"')" >/dev/null
   bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptSubmit '"prompt":"hello"')" >/dev/null
   bash "$K/hooks/pre-tool-use" <<<"$(bash_payload "git commit -m 'add more'")" >/dev/null
-  # hooks/stop runs git only when its scan would block, for its kern: off check.
-  printf '{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/k/skills/self-review/SKILL.md"}}]},"type":"assistant"}\n' \
-    >"$BATS_TEST_TMPDIR/t.jsonl"
+  # hooks/stop runs git only when its scan would block, for its kern: off check, so the call reads the running
+  # kern's own self-review.
+  printf '{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"%s/skills/self-review/SKILL.md"}}]},"type":"assistant"}\n' \
+    "$K" >"$BATS_TEST_TMPDIR/t.jsonl"
   before=$(wc -l <"$L")
   bash "$K/hooks/stop" <<<"$(payload Stop "\"transcript_path\":\"$BATS_TEST_TMPDIR/t.jsonl\",\"stop_hook_active\":false")" >/dev/null
   [ "$(wc -l <"$L")" -gt "$before" ]

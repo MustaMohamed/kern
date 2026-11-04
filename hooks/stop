@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # kern Stop: self-review step 2's backstop (M3 part 2 project 1; the user's "Fix it in project 1" and "Stop hook
-# (Recommended)", 2026-11-04). When the session's last read of self-review has no review-check run after it, it
-# blocks the stop with a reason that names step 2: {"decision":"block","reason":...} on stdout, exit 0. It reads
-# only the transcript's tool_use blocks, so a path in message text or a tool result does not count. A stop it
-# already blocked (stop_hook_active), kern: off and every fault allow the stop: allowing prints nothing and exits
-# 0, since a Stop hook must never trap a session. Project 2 extends it for autopilot's stop.
+# (Recommended)", 2026-11-04). When the turn's last read of the running kern's self-review has no review-check run
+# after it, it blocks the stop with a reason that names step 2: {"decision":"block","reason":...} on stdout, exit
+# 0. The turn starts at the user's last prompt, so a read in an earlier turn does not count, and a read of another
+# checkout's copy does not either (the controller's rulings on round 2's fix review). It reads only the
+# transcript's tool_use blocks, so a path in message text or a tool result does not count. A stop it already
+# blocked (stop_hook_active), kern: off and every fault allow the stop: allowing prints nothing and exits 0, since
+# a Stop hook must never trap a session. Project 2 extends it for autopilot's stop.
 # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 # Homebrew bash 5.3.15 segfaults now and then when a subshell undoes a locale change, but only while
 # neither LANG nor LC_ALL is set (Task 16l). An unset LANG already means the C locale, and an LC_* still
@@ -37,17 +39,38 @@ declare -F json_ok >/dev/null && declare -F json_get >/dev/null && declare -F js
 # its double quotes, with each piece that ends in an odd run of backslashes joined to the next, gives the
 # text outside strings and the string bodies in turn, so the scan reads structure and builds only the few
 # values it needs. A tool_use block counts at depth 4 under message.content, where Claude Code writes the
-# session's own calls; a subagent's progress entry nests deeper, and a sidechain entry is skipped. A Read
-# whose file_path ends in skills/self-review/SKILL.md, a Skill call naming kern:self-review or self-review,
-# and a simple command in a Bash call that runs cat, sed or head on that file are reads; a simple command
-# that runs review-check by path, bare, or through bash or sh is a run. Simple commands split at newline,
+# session's own calls; a subagent's progress entry nests deeper, and a sidechain entry is skipped. A Read of
+# the running kern's skills/self-review/SKILL.md (a path in SRP, with /private before /var, /tmp or /etc
+# dropped), a Skill call naming kern:self-review or self-review, and a simple command in a Bash call that runs
+# cat, sed or head with a word naming that file are reads. In such a word, a leading $CLAUDE_PLUGIN_ROOT is the
+# running kern's root, and $NAME or ${NAME} takes the value an earlier command of the same call that only
+# assigns gave it; a relative path or any other variable names no file. A simple command that runs
+# review-check by path, bare, or through bash or sh is a run. Simple commands split at newline,
 # ; & | ( ) and backticks, ignoring quotes, so a separator quoted in a command can split it. Prints "block"
 # when the last read has no run after it. The time stays linear in the line: a regex gsub, sub or split in
 # BWK awk slows with the string's length on each match, so on a long string the scan uses only splits at
 # one character, which are literal, and builds a long value by joining its pieces in pairs.
 # shellcheck disable=SC2016 # awk text
 _KERN_STOP_AWK='
-BEGIN { SEP[1] = "\n"; SEP[2] = ";"; SEP[3] = "&"; SEP[4] = "|"; SEP[5] = "("; SEP[6] = ")"; SEP[7] = "`"; NS = 7 }
+BEGIN {
+  SEP[1] = "\n"; SEP[2] = ";"; SEP[3] = "&"; SEP[4] = "|"; SEP[5] = "("; SEP[6] = ")"; SEP[7] = "`"; NS = 7
+  nr = split(ENVIRON["KERN_STOP_ROOTS"], RT, "\n")
+  for (j = 1; j <= nr; j++) if (substr(RT[j], 1, 1) == "/") SRP[norm(RT[j] "/skills/self-review/SKILL.md")] = 1
+}
+# norm(p): p without the /private macOS puts before /var, /tmp and /etc, so both spellings of one file match.
+function norm(p) { return (p ~ /^\/private\/(var|tmp|etc)\//) ? substr(p, 9) : p }
+# own(p): p, a word of at most 1,024 bytes with its quotes dropped, names self-review in the running kern.
+function own(p,   rest, name, j) {
+  if (substr(p, 1, 1) == "$") {
+    rest = substr(p, 2)
+    if (substr(rest, 1, 1) == "{") { j = index(rest, "}"); if (j < 3) return 0; name = substr(rest, 2, j - 2); rest = substr(rest, j + 1) }
+    else { j = index(rest, "/"); if (j < 2) return 0; name = substr(rest, 1, j - 1); rest = substr(rest, j) }
+    if (name == "CLAUDE_PLUGIN_ROOT") return rest == "/skills/self-review/SKILL.md"
+    if (!(name in VARS)) return 0
+    p = VARS[name] rest
+  }
+  return (norm(p) in SRP)
+}
 # joined(A, k, sep): A[1] to A[k] with sep between each two, merged in pairs, so a value of many pieces is
 # copied about log2(k) times, not once per piece.
 function joined(A, k, sep,   i, j) {
@@ -93,8 +116,21 @@ function cut(s, l,   A, na, j) {
   na = split(s, A, SEP[l])
   for (j = 1; j <= na; j++) cut(A[j], l + 1)
 }
-function simple(seg,   w, nw, k, h) {
+function simple(seg,   w, nw, k, h, j, e, x, only) {
   nw = split(seg, w)
+  k = (nw && w[1] == "export") ? 2 : 1
+  # A command that only assigns (export included) sets VARS for the later commands of this call, each value
+  # as written with its quotes and trailing slashes dropped: a prefix assignment does not reach the words of its
+  # own command, and a value that is not an absolute root of the running kern names no file in SRP.
+  only = 1
+  for (j = k; j <= nw; j++) if (length(w[j]) >= 1024 || w[j] !~ /^[A-Za-z_][A-Za-z0-9_]*=/) { only = 0; break }
+  if (only) {
+    for (j = k; j <= nw; j++) {
+      e = index(w[j], "="); x = substr(w[j], e + 1); gsub(/["\047]/, "", x); sub(/\/+$/, "", x)
+      VARS[substr(w[j], 1, e - 1)] = x
+    }
+    return
+  }
   k = 1
   while (k <= nw && length(w[k]) < 1024 && (w[k] ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || w[k] ~ /^(!|\{|if|elif|then|else|while|until|do|time|env|command|exec|nohup)$/)) k++
   if (k > nw) return
@@ -106,12 +142,18 @@ function simple(seg,   w, nw, k, h) {
     h = word(w[k])
   }
   if (h == "review-check") ran = ++seq
-  else if ((h == "cat" || h == "sed" || h == "head") && seg ~ /(^|[^A-Za-z0-9_.-])skills\/self-review\/SKILL\.md([^A-Za-z0-9_.-]|$)/) read = ++seq
+  else if (h == "cat" || h == "sed" || h == "head") {
+    for (j = k + 1; j <= nw; j++) {
+      if (length(w[j]) >= 1024) continue
+      x = w[j]; gsub(/["\047]/, "", x)
+      if (own(x)) { read = ++seq; return }
+    }
+  }
 }
 function tool(name, path, cmd, sk) {
-  if (name == "Read") { if (path ~ /(^|\/)skills\/self-review\/SKILL\.md$/) read = ++seq }
+  if (name == "Read") { if (length(path) < 1024 && own(path)) read = ++seq }
   else if (name == "Skill") { if (substr(sk, 1, 1) == "/") sk = substr(sk, 2); if (sk == "kern:self-review" || sk == "self-review") read = ++seq }
-  else if (name == "Bash") cut(cmd, 1)
+  else if (name == "Bash") { split("", VARS); cut(cmd, 1) }
 }
 {
   if (index($0, "\"isSidechain\":true")) next
@@ -164,7 +206,31 @@ json_ok || exit 0
 [ "$(json_get_raw stop_hook_active 2>/dev/null)" = true ] && exit 0
 T=$(json_get transcript_path 2>/dev/null) || exit 0
 [ -n "$T" ] && [ -f "$T" ] && [ -r "$T" ] || exit 0
-V=$(env LC_ALL=C grep -F '"type":"tool_use"' "$T" 2>/dev/null | env LC_ALL=C awk "$_KERN_STOP_AWK" 2>/dev/null) || exit 0
+# One grep of the whole transcript first: with no self-review in it, no read can count, and nothing more runs.
+env LC_ALL=C grep -q -F 'self-review' "$T" 2>/dev/null || exit 0
+# The turn starts at the user's last prompt: a user entry whose content is text, or a list that opens with a text
+# or image block, written role before content as Claude Code writes it, and none of a meta entry (a skill's
+# body), a compact summary, a sidechain or progress entry, or a prompt Claude Code wrapped itself. With none
+# found, the turn is the whole transcript. The prompt grep takes one pattern, since BSD grep slows with each -e
+# pattern, and the filter after it reads only the prompt lines.
+L=$(env LC_ALL=C grep -n -E '"role":"user","content":("|\[\{"type":"(text|image)")' "$T" 2>/dev/null |
+  env LC_ALL=C grep -v -F -e '"isMeta":true' -e '"isCompactSummary":true' -e '"isSidechain":true' -e '"type":"progress"' \
+    -e '"content":"<task-notification' -e '"content":"<cross-session-message' -e '"content":"<scheduled-task' \
+    -e '"content":"<teammate-message' -e '"content":"<channel-message' -e '"content":"<agent-message' |
+  tail -n 1 | cut -d : -f 1)
+case "$L" in '' | *[!0-9]*) L=1 ;; esac
+# Then one grep of the turn, so a read from an earlier turn costs no parse either.
+[ "$L" = 1 ] || tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -q -F 'self-review' || exit 0
+# The running kern's roots: kern's root as this hook finds it and as CLAUDE_PLUGIN_ROOT names it, each as written
+# and resolved physically.
+KERN_STOP_ROOTS=""
+for r in "$KERN_ROOT" "${CLAUDE_PLUGIN_ROOT-}"; do
+  [ -n "$r" ] || continue
+  KERN_STOP_ROOTS="$KERN_STOP_ROOTS${r%/}"$'\n'
+  r=$(CDPATH='' cd -P -- "$r" 2>/dev/null && pwd -P) && KERN_STOP_ROOTS="$KERN_STOP_ROOTS$r"$'\n'
+done
+export KERN_STOP_ROOTS
+V=$(tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -F '"type":"tool_use"' | env LC_ALL=C awk "$_KERN_STOP_AWK" 2>/dev/null) || exit 0
 [ "$V" = block ] || exit 0
 # kern: off for this project allows. The settings read runs git, so it waits until the scan would block.
 CWD=$(json_get cwd 2>/dev/null) || CWD="$PWD"

@@ -2,9 +2,10 @@
 # hooks/stop: self-review step 2's backstop (M3 part 2 project 1, paid round 1's goal 2; the user's "Fix it in
 # project 1" and "Stop hook (Recommended)", 2026-11-04). In 3 of 3 runs of workflow-self-review-proofs the model
 # read self-review, gave `fix first` from reading and ran no review-check. The hook blocks the stop once when the
-# session's last read of self-review has no review-check run after it, and fails open on every fault. Each row
-# writes a small transcript in the shapes Claude Code writes: one JSON object per line, an assistant entry per
-# tool_use block, the tool's result in a user entry.
+# turn's last read of the running kern's self-review has no review-check run after it, and fails open on every
+# fault (the turn and the running kern since the controller's rulings on round 2's fix review). Each row writes a
+# small transcript in the shapes Claude Code writes: one JSON object per line, the user's prompt in a user entry,
+# an assistant entry per tool_use block, the tool's result in a user entry.
 
 load ../helpers/common
 
@@ -17,7 +18,8 @@ setup() {
   : >"$T"
   N=0
   P=/plugins/kern
-  SR="$P/skills/self-review/SKILL.md"
+  # The running kern's own copy: kern_env points CLAUDE_PLUGIN_ROOT at K, and the hook runs from K.
+  SR="$K/skills/self-review/SKILL.md"
 }
 
 # entry CONTENT: appends an assistant entry whose message.content is [CONTENT], keys in the order a Claude Code
@@ -38,6 +40,18 @@ sh_run() { use Bash "\"command\":\"$1\",\"description\":\"run\""; }
 skill() { use Skill "\"skill\":\"$1\""; }
 # say TEXT: an assistant text block.
 say() { entry "\"type\":\"text\",\"text\":\"$1\""; }
+# prompt TEXT: a user entry holding a typed prompt, as a transcript writes it (role before content).
+prompt() {
+  N=$((N + 1))
+  printf '{"parentUuid":"u%s","isSidechain":false,"userType":"external","cwd":"%s","sessionId":"test-session","type":"user","message":{"role":"user","content":"%s"},"uuid":"q%s"}\n' \
+    "$N" "$CWD" "$1" "$N" >>"$T"
+}
+# meta TEXT: a user entry Claude Code adds itself, as a skill's body after a Skill call (isMeta).
+meta() {
+  N=$((N + 1))
+  printf '{"parentUuid":"u%s","isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"text","text":"%s"}]},"isMeta":true,"uuid":"m%s","sourceToolUseID":"toolu_%s"}\n' \
+    "$N" "$1" "$N" "$N" >>"$T"
+}
 # result TEXT: the user entry holding the last tool_use's result, with the toolUseResult copy a transcript keeps.
 result() {
   printf '{"parentUuid":"u%s","isSidechain":false,"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_%s","type":"tool_result","content":"%s","is_error":false}]},"uuid":"r%s","toolUseResult":{"type":"text","file":{"filePath":"%s","content":"%s"}}}\n' \
@@ -68,6 +82,7 @@ allows() {
 }
 
 @test "blocks after a self-review Read with no review-check, as in round 1's three runs" {
+  prompt 'Review the currency branch before the PR.'
   read_file "$SR"
   result '1\t---\n2\tname: self-review'
   read_file "$CWD/.kern/specs/currency.md"
@@ -180,14 +195,113 @@ allows() {
   done
 }
 
-@test "counts a cat, sed or head of the file as a read" {
+@test "counts a cat, sed or head of the file as a read, through CLAUDE_PLUGIN_ROOT or a path the call set" {
   local c
-  for c in "cat $SR" "sed -n '1,60p' \\\"$SR\\\"" "head -80 $SR" "cd /w; cat -n $SR | head -40"; do
+  for c in "cat $SR" "sed -n '1,60p' \\\"$SR\\\"" "head -80 $SR" "cd /w; cat -n $SR | head -40" \
+    "cat \${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md" "head -40 \\\"\$CLAUDE_PLUGIN_ROOT/skills/self-review/SKILL.md\\\"" \
+    "K=$K; R=\$(bash \$K/scripts/kern-dir reviews); cat \$K/skills/self-review/SKILL.md" "S=\\\"$K/skills/\\\"; sed -n 1,9p \${S}/self-review/SKILL.md" "export K=$K && cat \$K/skills/self-review/SKILL.md"; do
     : >"$T"
     sh_run "$c"
     stop
     blocks || { echo "for: $c"; return 1; }
   done
+}
+
+@test "counts only the running kern's own copy: another checkout's, a relative path or an unknown variable allows" {
+  local c
+  for c in "cat /other/kern/skills/self-review/SKILL.md" "cat skills/self-review/SKILL.md" "head \$HOME/kern/skills/self-review/SKILL.md" \
+    "K=/other/kern; cat \$K/skills/self-review/SKILL.md" "K=\$(pwd); cat \$K/skills/self-review/SKILL.md" "cat ${SR}.bak" \
+    "S=$K/skills sed -n 1p \${S}/self-review/SKILL.md"; do
+    : >"$T"
+    sh_run "$c"
+    stop
+    allows || { echo "for: $c"; return 1; }
+  done
+  : >"$T"
+  read_file /other/kern/skills/self-review/SKILL.md
+  read_file "$CWD/skills/self-review/SKILL.md"
+  stop
+  allows
+  # Each Bash call starts a fresh shell, so a path set in an earlier call names nothing.
+  : >"$T"
+  sh_run "K=$K"
+  sh_run "cat \$K/skills/self-review/SKILL.md"
+  stop
+  allows
+}
+
+@test "the running kern's root counts as written and resolved, through a link and through CLAUDE_PLUGIN_ROOT" {
+  local p
+  ln -s "$K" "$BATS_TEST_TMPDIR/kern-link"
+  for p in "$BATS_TEST_TMPDIR/kern-link/skills/self-review/SKILL.md" "$SR"; do
+    : >"$T"
+    read_file "$p"
+    run env CLAUDE_PLUGIN_ROOT="$BATS_TEST_TMPDIR/kern-link" bash "$BATS_TEST_TMPDIR/kern-link/hooks/stop" \
+      <<<"$(payload Stop "\"transcript_path\":\"$T\",\"stop_hook_active\":false")"
+    blocks || { echo "for: $p"; return 1; }
+  done
+  # macOS spells a temporary folder with or without /private; both name one file.
+  : >"$T"
+  read_file /private/var/folders/kern-test/kern/skills/self-review/SKILL.md
+  run env CLAUDE_PLUGIN_ROOT=/var/folders/kern-test/kern bash "$K/hooks/stop" <<<"$(payload Stop "\"transcript_path\":\"$T\",\"stop_hook_active\":false")"
+  blocks
+}
+
+@test "counts only a read in the turn: a read before the last prompt allows, one after it blocks" {
+  prompt 'Review the branch.'
+  read_file "$SR"
+  say 'Verdict: fix first.'
+  prompt 'Thanks. Now rename the helper in src/format.js.'
+  sh_run 'git diff --stat'
+  stop
+  allows
+  read_file "$SR"
+  stop
+  blocks
+  # A prompt whose content is a list of blocks starts a turn too.
+  printf '{"parentUuid":"x","isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"text","text":"Next task."}]},"uuid":"q9"}\n' >>"$T"
+  stop
+  allows
+}
+
+@test "a meta entry, a prompt Claude Code wrapped itself and a tool result start no turn" {
+  prompt 'Review the branch.'
+  skill kern:self-review
+  meta 'Base directory for this skill: /k. # self-review'
+  sh_run 'npm test'
+  result 'ok 2 - sum adds'
+  prompt '<task-notification><task-id>b1</task-id><status>completed</status></task-notification>'
+  printf '{"parentUuid":"x","isSidechain":false,"type":"user","message":{"role":"user","content":"This session is being continued from a previous conversation."},"isCompactSummary":true,"uuid":"c1"}\n' >>"$T"
+  stop
+  blocks
+}
+
+@test "a transcript with no self-review, or a turn with none, allows on a grep and never runs the scan" {
+  local real
+  real=$(command -v awk)
+  mkdir "$BATS_TEST_TMPDIR/bin"
+  # This awk records a run of the hook's scan and fails it, and runs every other awk program as usual.
+  printf '#!/bin/sh\ncase "$*" in *"function own("*) : >"%s"; exit 1 ;; esac\nexec "%s" "$@"\n' \
+    "$BATS_TEST_TMPDIR/scanned" "$real" >"$BATS_TEST_TMPDIR/bin/awk"
+  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  read_file "$CWD/src/format.js"
+  sh_run 'npm test'
+  stop
+  allows
+  [ ! -e "$BATS_TEST_TMPDIR/scanned" ]
+  prompt 'Review the branch.'
+  read_file "$SR"
+  prompt 'Now rename the helper.'
+  sh_run 'git diff --stat'
+  stop
+  allows
+  [ ! -e "$BATS_TEST_TMPDIR/scanned" ]
+  # A read in the turn runs the scan, and a failed scan allows.
+  read_file "$SR"
+  stop
+  allows
+  [ -e "$BATS_TEST_TMPDIR/scanned" ]
 }
 
 @test "one Bash call reads in order: a read then review-check allows, review-check then a read blocks" {
@@ -253,10 +367,12 @@ allows() {
 }
 
 @test "a transcript over 6 MB finishes well under the 10 s timeout, read to its last call" {
-  # 2,000 results that quote the path and a tool_use, 2,000 Bash calls, one 1 MB Write full of escaped quotes,
-  # an early review-check, then the last read of self-review: a block. Then a 1 MB Bash here-doc full of escaped
-  # quotes whose last line runs review-check: an allow, as the command's value is built whole.
+  # A prompt, 2,000 results that quote the path and a tool_use, 2,000 Bash calls, one 1 MB Write full of escaped
+  # quotes, an early review-check, then the last read of self-review: a block. Then a 1 MB Bash here-doc full of
+  # escaped quotes whose last line runs review-check: an allow, as the command's value is built whole. Then a new
+  # prompt: an allow from one grep of the turn, which names no self-review.
   awk -v sr="$SR" -v p="$P" -v cwd="$CWD" 'BEGIN {
+    print "{\"parentUuid\":null,\"isSidechain\":false,\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Review the branch.\"},\"uuid\":\"q0\"}"
     pad = "text \\\"quoted\\\" " sr " {\\\"type\\\":\\\"tool_use\\\",\\\"name\\\":\\\"Read\\\",\\\"input\\\":{\\\"file_path\\\":\\\"" sr "\\\"}} "
     while (length(pad) < 1300) pad = pad pad
     q = "a\\\"b"; while (length(q) < 1000000) q = q q
@@ -285,4 +401,11 @@ allows() {
   allows
   echo "# stop took $((t1 - t0)) ms on $(wc -c <"$T") bytes, an allow" >&3
   [ $((t1 - t0)) -lt 5000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
+  prompt 'Now the changelog line.'
+  t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  stop
+  t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  allows
+  echo "# stop took $((t1 - t0)) ms on $(wc -c <"$T") bytes after a new prompt, an allow" >&3
+  [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
 }
