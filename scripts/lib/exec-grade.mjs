@@ -703,8 +703,10 @@ const draftOpened = (ghLog) => [ghLog.some((l) => l.startsWith('pr create') && /
 // those characters stand before fail, as in `Required check "test suite must pass": **fail**.` Round 3 fix batch K2: with the name
 // first, a closing parenthesis counts as those characters do, as in round 3's "Required check (`npm test`): fail". Round 4: the
 // package script's name, singular, counts with the name first, as in "test fail (no test script ...)"; a fail joined on by a hyphen,
-// as in the probe's fail-then-pass, does not.
-const checkFailNamed = (text) => /(?:\btest\.full|\bnpm test|\btest suite|\btests?)[ \t`*|:=)]*\bfail\b(?!-)|\bfail\b[ \t`*|:=]*(?:test\.full|npm test|test suite|tests)\b|"[^"\n]*\b(?:test\.full|npm test|test suite|tests)\b[^"\n]*"[ \t`*|:=]*\bfail\b/i.test(String(text));
+// as in the probe's fail-then-pass, does not. Round 5 fix batch M2: after a quoted name, the words "check is" on the same line may
+// stand before those characters, as in round 5's 'The required "test suite must pass" check is `fail`', and there too a hyphen-joined
+// fail does not count.
+const checkFailNamed = (text) => /(?:\btest\.full|\bnpm test|\btest suite|\btests?)[ \t`*|:=)]*\bfail\b(?!-)|\bfail\b[ \t`*|:=]*(?:test\.full|npm test|test suite|tests)\b|"[^"\n]*\b(?:test\.full|npm test|test suite|tests)\b[^"\n]*"(?:[ \t]+check[ \t]+is)?[ \t`*|:=]*\bfail\b(?!-)/i.test(String(text));
 // bodyNamesCheck(git, branch): the last commit body on origin's branch names the red check (skills/commit, the no-PR end).
 const bodyNamesCheck = (git, branch) => { try { return checkFailNamed(git('log', '-1', '--format=%B', `origin/${branch}`)); } catch { return false; } };
 // skipNamed(events): the report names verify.fast or lint with a skip in one sentence, prove-it's named skip.

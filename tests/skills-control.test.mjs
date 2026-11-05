@@ -814,6 +814,12 @@ test("the contract's checkFailNamed takes a closing parenthesis after the check'
     "; with the name before `fail` and no quote between them, a closing parenthesis also counts among those characters, since M3 part 2 project 2's round 3 fix batch, K2, whose go-required-check-stop report and commit body put the check's name in parentheses)"]);
 });
 
+test("the contract's checkFailNamed takes check is after a quoted name", () => {
+  // M3 part 2 project 2's round 5 fix batch, M2: go-required-check-stop's report read 'The required "test suite must pass" check is `fail`'.
+  assertContains('docs/plans/contract.md', [
+    "; the words `check is`, on that line, may stand between that closing quote and those characters, and a `fail` joined on by a hyphen does not count after a quoted name, since M3 part 2 project 2's round 5 fix batch, M2, whose go-required-check-stop report put `check is` between the quoted name and `fail`;"]);
+});
+
 test("the contract's approvedAfterReview skips a denied write", () => {
   // M3 part 2 project 2's round 5 fix batch, M1: G20 denied go-reaches-draft's early approval (:101, :102), which the row then read.
   assertContains('docs/plans/contract.md', [
