@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
-import { section, assertMaxBytes, assertContains } from './helpers/md.mjs';
+import { section, assertMaxBytes, assertContains, assertHeadings } from './helpers/md.mjs';
 
 const read = (name) => parseFrontmatter(readFileSync(join(import.meta.dirname, '..', 'skills', name, 'SKILL.md'), 'utf8'));
 
@@ -53,7 +53,8 @@ test('autopilot documents the go: its step, its reach and what a refused go does
   assert.match(go, /`kern: go recorded for <ticket>`/);
   assert.ok(go.includes('Read `${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md`'), go);
   assert.match(go, /No such line, or any other hook line about the go, means no go: quote what the hook said, if anything, and start nothing\./);
-  assert.match(go, /The run ends at the draft PR or at a stop under that file's rules, so ask for no stop predicate\./);
+  // M3 part 2 project 2 Task 5: the go's finish line moved from the draft PR to `gh pr ready` on clear CI.
+  assert.ok(go.includes("The run ends at `gh pr ready` on its own PR or at a stop under that file's rules, so ask for no stop predicate."), go);
   // Paid round 1, 2026-11-01: 4 of 6 go runs that built code took the ticket for the kernel's "agreed design", so they
   // skipped define and wrote no spec.
   // M3 part 2 project 1 Task 7: this line is read before run.md on every go, so it names the tests-only route too.
@@ -96,7 +97,8 @@ test('run.md holds the stop list row by row, with the stop the plan adds', () =>
     '| Merge to main | Reads |',
     '| Deploy | Tests |',
     '| Delete | Commits and pushes on its own branch |',
-    '| Spending money | A draft PR on tested or verified changes |',
+    // M3 part 2 project 2 Task 5: a go runs on past its draft, through CI fixes to `gh pr ready`.
+    '| Spending money | A draft PR, CI fixes on its branch and `gh pr ready` on clear CI |',
     '| A design choice that changes what gets built | |',
     '| A required check that cannot run | |',
     '| A ticket the run cannot read | |',
@@ -109,7 +111,8 @@ test('run.md says what each stop means and what a stop does', () => {
   for (const s of ['A run stops only on this list.',
     "This list loosens nothing else: the stops in this file, a route's run-ending failures, a required check still red after its fix rounds and the user's stop predicate still stop a run.",
     "The kernel's Autonomy line still holds: an action it keeps for the user's word that this list does not name, such as a force-push to a shared branch, is skipped and reported.",
-    'At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`; the go holds. Work that does not depend on the answer may finish first.',
+    // M3 part 2 project 2 Task 5: the Stop hook (Task 7) reads the stop from one fixed line.
+    'At a stop, the run brings the data it collected and a recommendation in a report that opens with a `kern stop: <what>` line naming the stop, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`; the go holds. Work that does not depend on the answer may finish first.',
     "Delete means data, remote branches, tags, and files outside the run's own worktree and scratch directories. Removing a file on the run's own branch is ordinary work.",
     "A design choice stops the run when the ticket does not settle it and the answer changes user-visible behaviour, stored data shape, a public interface or the ticket's scope. Any other judgment takes a default and goes in the report.",
     // Paid round 4, the user's rule: go-spend-stop's fix rounds changed what `sum` does with inputs the ticket never named, and the run opened the PR.
@@ -158,7 +161,8 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
     "Rounds count from self-review's packages: round N reviews `<slug>-<N+1>.diff`, so the third round's is `<slug>-4.diff`.",
     // Task 7 fix round 2: "After the third" read as a push and stop even when the third round comes back `ready`.
     'When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR.', 'No verdict also stops.',
-    'One go covers one draft PR.']) assert.ok(fix.includes(s), s);
+    // M3 part 2 project 2 Task 5: the go lives past its draft, so the CI loop's rules take over there.
+    'One go covers one PR. After the draft opens, follow `references/ci.md`.']) assert.ok(fix.includes(s), s);
   assert.ok(!fix.includes('A round that changes behaviour'), 'the stop list holds U1, for a first build too');
   assert.deepEqual(fix.split('\n').filter((l) => l.startsWith('|')).slice(2), [
     '| `split` from a finding on a line the last round changed | The fixes are not converging: stop with the report |',
@@ -189,7 +193,8 @@ test('run.md sends a go\'s approved plan on to execute-plan', () => {
 test('run.md lists every report field, the jobs another skill ran among them', () => {
   const report = section(RUN, '## The run report');
   for (const s of ['the ticket and PR', 'each stop', 'each block and the route taken', 'each decision with its why', 'each skipped step', 'each check with its result',
-    'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".',
+    // M3 part 2 project 2 Task 5: the CI loop's verdict and classes.
+    "the last CI verdict and each red's class", 'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".',
     // Paid round 3: go-deploy-stop's lane said `needs fixes`, and its report said only that the review found it compliant.
     // M3 part 2 project 1's paid round 3: go-bug-draft's report gave the lane's "approved" for "the review's verdict" and no
     // self-review verdict word, so the sentence names self-review, and a lane's `needs fixes` as its own clause, which
@@ -401,8 +406,69 @@ test('run.md stays within its byte cap', () => {
   // `needs fixes`.
   // 7,337 since the controller's second ruling on it: the report gives self-review's verdict, and any lane's `needs fixes` as it
   // came, which go-mandated-defect-stop's grader reads.
-  assertMaxBytes('skills/autopilot/references/run.md', 7337);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,337 bytes (7,329 until the controller\'s second ruling on M3 part 2 project 1\'s round 4 fix batch: ']);
+  // 7,518 since M3 part 2 project 2's Task 5: a go does not stop for CI fixes or `gh pr ready` on clear CI, a stop's report opens
+  // with a `kern stop: <what>` line, the go follows `references/ci.md` once its draft opens, and the report gives the CI verdict
+  // and each red's class.
+  assertMaxBytes('skills/autopilot/references/run.md', 7518);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,518 bytes (7,337 until M3 part 2 project 2\'s Task 5: ',
+    '; 7,329 until the controller\'s second ruling on M3 part 2 project 1\'s round 4 fix batch: ']);
+});
+
+test('ci.md stays within its byte cap', () => {
+  // 6,651 since M3 part 2 project 2's Task 5, its first cap: the CI loop from the draft PR to `gh pr ready` or a stop, in its own
+  // file since run.md sat at its cap.
+  assertMaxBytes('skills/autopilot/references/ci.md', 6651);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 6,651 bytes (new in M3 part 2 project 2\'s Task 5: ']);
+});
+
+test('the skills spec states the go past its draft, and the autopilot size it brought', () => {
+  // M3 part 2 project 2 Task 5: autopilot has no cap test; its size sentence and step 6 move with the skill.
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    'then take the ticket to a draft PR, and from there by `references/ci.md` to `gh pr ready` on its own PR or a stop (M3 part 2 project 2 Task 5).',
+    'SKILL.md 6,121 bytes (6,106 until M3 part 2 project 2\'s Task 5: step 6\'s run ends at `gh pr ready` on its own PR, not at the draft; 5,651 until its Task 4: ',
+    '| `autopilot` | slash | M1 | 6.1 KB built (+14.2 KB refs) |']);
+});
+
+const CI = 'skills/autopilot/references/ci.md';
+
+test('ci.md holds the CI loop a go follows from its draft PR to `gh pr ready`, in the design\'s order', () => {
+  // M3 part 2 project 2 Task 5: design "The CI loop" and "The finish line" as rules. The Stop hook (Task 7) reads the
+  // `kern stop:` line; the exec graders (Task 10) read `CI round:` and the reply words, which the guards (Tasks 2 and 4) read.
+  assertHeadings(CI, ['# CI loop', '## Wait', '## Read a red', '## Classes', '## Class 4', '## CI fix rounds', '## Every push', '## Ready']);
+  assertContains(CI, [
+    // When: under a go only; a person's run keeps finish-branch step 11's single read.
+    'These rules run under a go only, after the draft PR opens and after each push.',
+    "A person's run keeps finish-branch step 11's single `gh pr checks` read, with no wait.",
+    'a `kern stop: <what>` line',
+    // Wait and limit.
+    'Start `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ci-wait <wt>` as a background command',
+    'Never poll with turns',
+    '| `ci: pending <names> (timeout <N>m)` | 3 | Stop',
+    // Read a red.
+    '`gh run view <id> --log-failed`', '`git diff origin/<base>...HEAD`',
+    "each red's class with the log line that shows it",
+    // The five classes, and the replies in their words.
+    "| 1 | The PR's change caused it |", '| 2 | External, the PR cannot fix it |', '| 3 | External, the PR can fix it |',
+    '| 4 | The branch is behind its base or out of sync |', '| 5 | Red in a file the PR touches, from code the PR did not change |',
+    '`fix it here`', '`leave it and mark the PR ready`', '`leave it`', '`rebase and push`',
+    'A bare yes, ok or go ahead gives no consent', 'An unclear red goes as class 2.',
+    // Class 4.
+    '`git rebase origin/<base>` in the run\'s worktree, in its own Bash call',
+    'A resolution that changes behaviour neither side names is a design choice: stop.',
+    '`git push --force-with-lease origin <branch>`', 'A rebase is no CI round.',
+    // Fix rounds.
+    'Up to 3 per go, counted apart from self-review\'s rounds.', '`CI round: <N>`', '`git log --format=%b origin/<base>..HEAD`',
+    'When the wait after round 3 is still red, stop: the branch is pushed and the PR stays draft.',
+    // Ready.
+    'exactly `gh pr ready`, with no PR number, `-R`, pipe, redirect or second command',
+    'A typed `leave it and mark the PR ready` lets G2 allow it for that prompt only']);
+  // Every push runs its steps in the design's order: test.full, self-review, proof, the body, the push, the wait.
+  const push = section(readFileSync(join(import.meta.dirname, '..', CI), 'utf8'), '## Every push');
+  const at = ['`test.full`', '`review-check`', 'Proof', '`gh pr edit --body-file', '`git push origin <branch>`', 'The wait'].map((s) => push.indexOf(s));
+  assert.ok(at.every((n, i) => n >= 0 && (i === 0 || n > at[i - 1])), `every push's order: ${at}`);
+  // run.md points at it, and autopilot step 6 names the new finish line.
+  assertContains('skills/autopilot/references/run.md', ['`references/ci.md`', '`kern stop: <what>`']);
+  assert.ok(read('autopilot').body.split('\n6. `go <ticket>`')[1].split('\n')[0].includes('`gh pr ready`'), 'autopilot step 6 names gh pr ready');
 });
 
 test('no skill calls an override a project skill, since an override can name a user or plugin skill', () => {

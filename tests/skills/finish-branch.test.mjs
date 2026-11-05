@@ -86,7 +86,22 @@ test('finish-branch sections, steps and red flags', () => {
   // ledger's `Main:` or `Worktree:` branch, and a missing plan or ledger names none.
   // 9,265 since M3 part 2 project 1's final review fix (I2): the end path names run.md's stops on a defect the ticket demands
   // and on a change it does not name.
-  assertMaxBytes(SKILL, 9265);
+  // 9,453 since M3 part 2 project 2's Task 5: step 11's single checks read is skipped under a go, which follows autopilot's
+  // `references/ci.md` after step 11, its class 4 rebase the only one autopilot makes.
+  assertMaxBytes(SKILL, 9453);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `finish-branch` | slash | M2a | at most 9,453 bytes,',
+    "SKILL.md at most 9,453 bytes (9,265 until M3 part 2 project 2's Task 5: ",
+    "Under a go, after step 11, the run follows autopilot's `references/ci.md` to `gh pr ready` or a stop, its class 4 rebase the only one autopilot makes (M3 part 2 project 2 Task 5)."]);
+});
+
+test('under a go, finish-branch hands the open draft to the CI loop after step 11', () => {
+  // M3 part 2 project 2 Task 5: a person's run keeps step 11's single checks read; a go waits on CI in autopilot's
+  // `references/ci.md`, whose class 4 rebase is the one exception to "nothing is rebased".
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[11].includes('and, but under a go, run `gh pr checks <n>`'), s[11]);
+  assertOnce(SKILL, ['Under a go, after step 11, follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/ci.md to `gh pr ready` or a stop. Its class 4 rebase is the only one autopilot makes.']);
+  const auto = section(readDoc(SKILL).body, '## Stops and autopilot').split('\n');
+  assert.ok(auto.indexOf('Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.') < auto.findIndex((l) => l.startsWith('Under a go, after step 11,')), 'the go line follows the run.md pointer');
 });
 
 test('the size gate greps the ledgers for the size decision before it proposes a split', () => {
@@ -229,14 +244,15 @@ test('push-and-pr reference: dedup, push, PR', () => {
     'Only merged or closed PRs: push, then ask before a new PR', 'Autopilot parks with no PR', 'gh missing, logged out or failing: report its output; push, but open no PR.',
     'git push -u origin <branch>', 'Under `push.policy: ask` G1 asks', 'under `auto` or autopilot it allows this shape', '`deny` denies every push',
     'After this run\'s rebase of a published branch, push with `git push --force-with-lease origin <branch>` instead, as its own call',
-    'G1 asks when every commit past the base is the user\'s, else denies', 'Autopilot never rebases, so never lease-pushes.',
+    // M3 part 2 project 2 Task 5: a go's CI loop rebases and lease-pushes on a class 4 red, and marks the PR ready.
+    'G1 asks when every commit past the base is the user\'s, else denies', 'Autopilot rebases and lease-pushes only in a go\'s CI loop.',
     'never `--no-verify`', 'A plain push rejected right after this run\'s rebase is that rebase: it rewrote published commits, so use the lease push.',
     'Any other rejection means the remote moved', 'git log --oneline HEAD..origin/<branch>', 'Never a plain force.',
     '`bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp`', '(exit 2: stop)', 'else `references/pr-body.md`',
     "gh pr create --draft --title '<subject per commit.convention>' --base <base> --body-file <dir>/pr-body.md",
     'no terminal can prompt for one', "write each `'` in it as `'\\''`",
     'A subject with a backtick, or a `$` before `(`, is reworded for the title without them',
-    '`pr.policy` meets G2 as `push.policy` meets G1', 'only this draft shape, for a branch with no PR', '`gh pr ready` is never run',
+    '`pr.policy` meets G2 as `push.policy` meets G1', 'only this draft shape, for a branch with no PR', '`gh pr ready` runs only in a go\'s CI loop',
     'say the branch is pushed and stop', 'never retry another shape']);
   // M2b Task 17 (P69 review, M1): a `pr.template` body still names a kept lowered bar, and autopilot's stale base,
   // under Merge danger. The cap rose from 2,400 by the 41 bytes left after cutting the title rule's ": G2 cannot check
@@ -246,7 +262,9 @@ test('push-and-pr reference: dedup, push, PR', () => {
   assertOnce(PUSH, [danger]);
   assert.ok(pr.indexOf('Write the body from `pr.template`, else `references/pr-body.md`') < pr.indexOf(danger) && pr.indexOf(danger) < pr.indexOf('gh pr create'), 'the clause sits with the body, before the gh command');
   assertNoSubstitution(PUSH);
-  assertMaxBytes(PUSH, 2441);
+  // 2,467 since M3 part 2 project 2's Task 5: autopilot rebases, lease-pushes and runs `gh pr ready` only in a go's CI loop.
+  assertMaxBytes(PUSH, 2467);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["`push-and-pr.md` at most 2,467 (2,441 until M3 part 2 project 2's Task 5: "]);
 });
 
 test('PR body template', () => {
