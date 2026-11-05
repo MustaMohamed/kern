@@ -50,7 +50,14 @@ show-ends/E/0 show-tabs/T/0 show-all/A/0 -/e/0 -/t/0 -/u/0"
 _G01_NAME_CHARS="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-"
 
 guard_g01() {
-  [ "$TOOL" = Bash ] || return 0
+  case "$TOOL" in
+    Bash) ;;
+    Write | Edit | NotebookEdit)
+      _g01_edit
+      return 0
+      ;;
+    *) return 0 ;;
+  esac
   local cmd rec w=() t m moved=0 end=0 unread=0
   cmd=$(ti_get command) || { fail_closed "Bash call without a command"; return 0; }
   # A command substitution whose pipe could not be made gives status 0 and no output, so an empty
@@ -404,6 +411,64 @@ _g01_main_op() {
   else
     vote ask G1 "$tool $2 in the main checkout changes shared state (D3)"
   fi
+}
+
+# _g01_edit: a go's file edits stay out of the main checkout (M3 part 2 project 2's round 2 fix batch; the user's
+# "Build the G1 deny", 2026-11-05). In paid rounds 1 and 2 a go whose `git switch -c` G1 denied in the main checkout
+# then wrote its change there with the Write or Edit tool. Under a live go (go_live; a plain autopilot run is not
+# held to it), a Write, Edit or NotebookEdit whose target's nearest directory that exists is in the main checkout
+# (in_main_checkout), and that is not under KERN_MAIN/<work_dir>/, is denied. A linked worktree is no main
+# checkout, so a kern worktree passes, and a file in no repository gets no vote. The work dir is read as kern-dir
+# reads it; one that cannot be read or that kern-dir refuses, and a target whose parts after that directory hold
+# ., .. or an empty part, are no work dir. A Bash write is not seen here.
+_g01_edit() {
+  local p w near real work=""
+  [ "${AUTOPILOT:-0}" = 1 ] && go_live "${SID-}" "${KERN_MAIN-}" 2>/dev/null || return 0
+  if [ "$TOOL" = NotebookEdit ]; then
+    p=$(ti_get notebook_path) || return 0
+  else
+    p=$(ti_get file_path) || return 0
+  fi
+  [ -n "$p" ] || return 0
+  case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
+  _g01_real "$p" && real=$_G01_REAL
+  near=$_G01_NEAR
+  in_main_checkout "$near" || return 0
+  # The work dir, read through cd -P as the target is: itself when it exists, else its nearest directory that does.
+  if [ -n "$real" ] && w=$(settings_get work_dir .kern 2>/dev/null); then
+    w=${w%/}
+    case "$w" in
+      '' | . | :* | .git | .git* | /* | *..*) ;;
+      *)
+        if [ -d "$KERN_MAIN/$w" ]; then
+          work=$(cd -P "$KERN_MAIN/$w" 2>/dev/null && env pwd -P) || work=""
+        elif _g01_real "$KERN_MAIN/$w"; then
+          work=$_G01_REAL
+        fi
+        ;;
+    esac
+  fi
+  if [ -n "$work" ]; then
+    case "$real" in "$work"/*) return 0 ;; esac
+  fi
+  vote deny G1 "$TOOL in the main checkout (D3); use a kern worktree"
+}
+
+# _g01_real PATH: sets _G01_NEAR to PATH's (absolute) nearest directory that exists, as written, and _G01_REAL to
+# PATH read through that directory with cd -P and env pwd -P, the parts after it as written. Fails when that read
+# fails or comes back empty, or those parts hold ., .. or an empty part, which a Write resolves where a string
+# compare cannot.
+_g01_real() {
+  local d="${1%/*}" t="/${1##*/}"
+  while [ -n "$d" ] && [ ! -d "$d" ]; do
+    t="/${d##*/}$t"
+    d=${d%/*}
+  done
+  _G01_NEAR=${d:-/}
+  _G01_REAL=""
+  case "$t/" in */./* | */../* | *//*) return 1 ;; esac
+  _G01_REAL=$(cd -P "$_G01_NEAR" 2>/dev/null && env pwd -P) && [ -n "$_G01_REAL" ] || return 1
+  _G01_REAL="${_G01_REAL%/}$t"
 }
 
 # _g01_git DIR PLAIN SUB WORDS...

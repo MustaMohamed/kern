@@ -390,7 +390,7 @@ test('the design, the contract and autopilot keep a go marking its own PR ready 
     "and lifts no deny but two under autopilot: G1's lease push of the user's own branch, and G2's `gh pr ready` on a live go's own open draft, over checks that are red, pending or unread, a review-check record that is missing or above the floor, and a PR head that is not HEAD. Outside autopilot G1 and G2 read no typed consent for those two.",
     "`--force-with-lease` only with `rebase.push: autopilot` or the user's typed rebase or sync; a go marks its own PR ready on clear CI and a passed review-check, and edits its body from a file (M3 part 2 project 2); everything else denied |",
     "A go's CI fix rounds stop the same way, up to 3 per go (M3 part 2 project 2) |",
-    "only with `rebase.push: autopilot` or when the user's last typed prompt asks to rebase or sync (section 5.1; a bare yes is not one, M3 part 2 project 2), and only when every commit on it is the user's |",
+    "only with `rebase.push: autopilot` or when the user's last typed prompt asks to rebase or sync (section 5.1; a bare yes is not one, M3 part 2 project 2), and only when every commit on it is the user's.",
     // Final review I1: the allow also leaves the Stop hook its read of the go's report.
     "Under a live go with its draft open, `gh pr ready` on that PR (no PR number, no `-R`) allowed when the user's last typed prompt says to mark it ready, or when the PR's head is HEAD, its checks read clear or none at the call and the review-check record for HEAD's tree ends `floor: none`; the allow ends the go and leaves the Stop hook one read of its report (`go_report`, section 6.3).",
     '`gh pr edit --body-file <file>` alone on that PR allowed with no prompt, the file checked as on create (M3 part 2 project 2). Any other `gh pr edit`, non-draft, an attributed body file and any other `gh pr ready` denied |']);
@@ -751,6 +751,26 @@ test("the contract and both designs keep the round 2 fix batch's G20 route gate"
   // The guard's reason is the contract's, the work dir's specs named in place of the placeholder.
   const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
   assert.ok(guard.includes(`vote deny G20 "${reason.replace('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the contract\'s reason');
+});
+
+test("the contract and both designs keep the round 2 fix batch's G1 edit deny", () => {
+  // M3 part 2 project 2's paid round 2, H3 (the user's "Build the G1 deny", 2026-11-05): after G1 denied a go's switch in the
+  // main checkout, the run wrote its change there with the Write or Edit tool, in rounds 1 and 2.
+  assertContains('docs/plans/contract.md', [
+    "- **G1 denies a go's file edits in the main checkout (M3 part 2 project 2's round 2 fix batch; the user's \"Build the G1 deny\", 2026-11-05).**",
+    '`guard_g01` hands Write, Edit and NotebookEdit to `_g01_edit`, and gives no tool but those and Bash a vote.',
+    'Under autopilot with `go_live "$SID" "$KERN_MAIN"` holding (a plain autopilot run is not held to it),',
+    "When `in_main_checkout` holds for that directory, and the target, read through it with `cd -P` and the parts after it as written (`_g01_real`), is not under `KERN_MAIN/<work_dir>/` (`work_dir` read as `kern-dir` reads it, through `cd -P` when it exists), it denies `<tool> in the main checkout (D3); use a kern worktree`, a subagent's call included.",
+    "A linked worktree, one under `.claude/worktrees/` included, is no main checkout, so its files pass, and a file in no repository gets no vote.",
+    'Limit: a Bash write into the main checkout (a here-doc, an inline script) is not seen.']);
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    "Under a live go, a Write, Edit or NotebookEdit in the main checkout outside the work dir is denied as well; a linked worktree passes (M3 part 2 project 2's round 2 fix batch) |"]);
+  assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
+    "| G1 | A Write, Edit or NotebookEdit in the main checkout, outside the work dir, is denied: a go's work lives in a kern worktree, as implement says. This closes the main checkout edits that followed G1's denied switch in paid rounds 1 and 2 (the round 2 fix batch; the user's \"Build the G1 deny\", 2026-11-05) |"]);
+  // The guard's reason is the contract's, and it reads the go as G2 does.
+  const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g01-git.sh'), 'utf8');
+  assert.ok(guard.includes('vote deny G1 "$TOOL in the main checkout (D3); use a kern worktree"'), 'the guard gives the contract\'s reason');
+  assert.ok(guard.includes('[ "${AUTOPILOT:-0}" = 1 ] && go_live "${SID-}" "${KERN_MAIN-}" 2>/dev/null || return 0'), 'only under a live go');
 });
 
 test("the contract and the skills spec keep plan-check's plan line for a short spec over 2 files", () => {
