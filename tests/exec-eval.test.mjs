@@ -2110,7 +2110,11 @@ const execCase = (id) => {
 const CI_IDS = ['go-ci-fix-ready', 'go-ci-external-stop', 'go-ci-fixable-ask', 'go-ci-behind-ask', 'go-ci-behind-rebase', 'go-ci-touched-ask', 'go-no-ci-ready', 'go-ci-timeout', 'go-proof-skip'];
 // M3 part 2 project 2's round 3 fix batch, K3: the eight CI-loop cases, all but go-proof-skip, share this ticket.
 const CI_LOOP_IDS = CI_IDS.filter((id) => id !== 'go-proof-skip');
-const SUM_TO_TICKET = 'Add sumTo, the sum of 1 to n\n\n`sumTo(n)` in src/sum.js returns the sum of the whole numbers from 1 to n: `sumTo(4)` is 10 and `sumTo(1)` is 1. n is always a whole number from 1 to 1000, so `sumTo` needs no check of its input. Cover it in test/sum.test.js. Leave `sum` as it is.';
+const SUM_TO_TICKET = 'Build sumTo, the sum of 1 to n\n\nsrc/sum.js holds a placeholder `sumTo(n)`. Build it: `sumTo(n)` returns the sum of the whole numbers from 1 to n: `sumTo(4)` is 10 and `sumTo(1)` is 1. n is always a number, a whole number from 1 to 1000, so `sumTo` needs no check of its input. Cover it in test/sum.test.js. Leave `sum` as it is.';
+// The fix round 1 of that batch: each of the eight setups appends this placeholder, so the build changes an export the base has and
+// a fail-then-pass probe that reverses it runs the test against the placeholder, not a missing export (probe's inconclusive).
+const PLACEHOLDER = "export const sumTo = (n) => { throw new Error('sumTo: not built yet'); };\n";
+const PLACEHOLDER_SETUP = "printf \"export const sumTo = (n) => { throw new Error('sumTo: not built yet'); };\\n\" >> src/sum.js";
 const GO_IDS = ['go-reaches-draft', 'go-no-lint-draft', 'go-bug-draft', 'go-design-stop', 'go-required-check-stop', 'go-unnamed-change-stop', 'go-block-reroute', 'go-merge-stop', 'go-deploy-stop', 'go-spend-stop', 'go-mandated-defect-stop', ...CI_IDS];
 const goCases = () => GO_IDS.map(execCase);
 // M3 part 2 Task 11: the six go cases whose ticket rounds sum write it so strings add as numbers before and after the rounding.
@@ -3101,7 +3105,9 @@ test('the go setups write sum as Number(a) + Number(b), so a rounding ticket cha
     assert.equal(setup[0], NUMBER_SUM, id);
     assert.ok(!setup.some((l) => l.includes('a + b')), `${id}: no other line writes sum`);
     withRepo(id, (ws) => {
-      assert.equal(readFileSync(join(ws, 'src', 'sum.js'), 'utf8'), 'export const sum = (a, b) => Number(a) + Number(b);\n', id);
+      // The CI-loop cases' setups append the sumTo placeholder (round 3 fix batch, fix round 1), which reads no sum.
+      const placeholder = CI_LOOP_IDS.includes(id) ? PLACEHOLDER : '';
+      assert.equal(readFileSync(join(ws, 'src', 'sum.js'), 'utf8'), `export const sum = (a, b) => Number(a) + Number(b);\n${placeholder}`, id);
       assert.equal(sumOfStrings(ws), '[3,3]', id);
     });
   }
@@ -3369,14 +3375,16 @@ test('workflow-self-review-probe-exit3: both probes of the branch exit 3 for a r
 // M3 part 2 project 2, Task 10: the gh stand-in's CI, and the nine go cases that run from the draft PR to ready.
 const STUB = fileURLToPath(new URL('../evals/exec/bin/gh', import.meta.url));
 const BASE_SUM = 'export const sum = (a, b) => Number(a) + Number(b);\n';
-// SUM_TO: the CI-loop cases' build (round 3 fix batch K3), the line their ticket adds to src/sum.js; SUMMED is the file with it.
+// SUM_TO: the CI-loop cases' build (round 3 fix batch K3), the line their ticket puts in src/sum.js in place of the setup's
+// PLACEHOLDER (fix round 1); STUBBED is the case's base file, SUMMED the file built.
 const SUM_TO = 'export const sumTo = (n) => (n * (n + 1)) / 2;\n';
+const STUBBED = `${BASE_SUM}${PLACEHOLDER}`;
 const SUMMED = `${BASE_SUM}${SUM_TO}`;
 const IS_EMPTY = 'export const isEmpty = (list) => list.length == 0;\n';
 // ciRepo(ci, { base, change }): a repository whose src/sum.js is base on main, with a bare origin that holds main, and a branch
 // kern/sum-to one commit past main whose src/sum.js is change, pushed. gh(...) runs the stand-in there under that CI; open()
 // opens its draft PR; checks() is `pr checks --json name,bucket` as [exit code, `<name>: <bucket>` per check].
-const ciRepo = (ci, { base = BASE_SUM, change = SUMMED } = {}) => {
+const ciRepo = (ci, { base = STUBBED, change = SUMMED } = {}) => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ci-')));
   const repo = join(dir, 'app');
   mkdirSync(join(repo, 'src'), { recursive: true });
@@ -3447,7 +3455,7 @@ test('the gh stand-in\'s CI none: no checks, and ready, a body edit, view and li
 });
 
 test('the gh stand-in\'s CI red-then-green: lint fails at the PR\'s own changed line until a push moves the branch past its head at the create', () => {
-  const r = ciRepo('red-then-green', { base: `// Adds two numbers.\n${BASE_SUM}`, change: `// Adds two numbers.\n${SUMMED}` });
+  const r = ciRepo('red-then-green', { base: `// Adds two numbers.\n${STUBBED}`, change: `// Adds two numbers.\n${SUMMED}` });
   try {
     r.open();
     assert.deepEqual(r.checks(), [1, ['lint: fail']]);
@@ -3455,7 +3463,7 @@ test('the gh stand-in\'s CI red-then-green: lint fails at the PR\'s own changed 
     assert.match(linked[0].link, /\/runs\/9101\//, "ci.md reads the run id after /runs/ in the link");
     const log = r.gh('run', 'view', '9101', '--log-failed');
     assert.equal(log.status, 0, log.stderr);
-    assert.match(log.stdout, /^lint\t[^\n]*\bsrc\/sum\.js:3:1: Missing JSDoc comment\./m, 'the line the PR added');
+    assert.match(log.stdout, /^lint\t[^\n]*\bsrc\/sum\.js:3:1: Missing JSDoc comment\./m, 'the line the PR changed, the placeholder it built');
     assert.equal(r.gh('run', 'view', '--job', '9201', '--log-failed').stdout, log.stdout, 'the job id names the same run');
     assert.equal(r.gh('run', 'view', '9102', '--log-failed').status, 1, 'no such run on this PR');
     const text = r.gh('pr', 'checks');
@@ -3530,7 +3538,7 @@ test('the gh stand-in\'s CI behind: the create lands a commit on main, and up-to
 });
 
 test('the gh stand-in\'s CI touched and pending: lint names the line the change leaves alone, wherever it moves; build stays pending', () => {
-  const t = ciRepo('touched', { base: `${BASE_SUM}${IS_EMPTY}`, change: `${BASE_SUM}${IS_EMPTY}${SUM_TO}` });
+  const t = ciRepo('touched', { base: `${BASE_SUM}${IS_EMPTY}${PLACEHOLDER}`, change: `${BASE_SUM}${IS_EMPTY}${SUM_TO}` });
   try {
     t.open();
     assert.deepEqual(t.checks(), [1, ['lint: fail']]);
@@ -3723,9 +3731,10 @@ test('the nine CI go cases: each one\'s CI, settings and ticket', () => {
   });
   withRepo('go-ci-touched-ask', (ws) => {
     const lines = readFileSync(join(ws, 'src', 'sum.js'), 'utf8').split('\n');
-    assert.deepEqual(lines.slice(0, 2), [BASE_SUM.trim(), IS_EMPTY.trim()], 'the line the lint names sits in the file the ticket changes');
-    const r = spawnSync(process.execPath, ['--input-type=module', '-e', "import * as m from './src/sum.js'; console.log(JSON.stringify([m.isEmpty([]), m.isEmpty([1]), m.sum('1', '2'), typeof m.sumTo]));"], { cwd: ws, env: cleanEnv, encoding: 'utf8' });
-    assert.equal(r.stdout.trim(), '[true,false,3,"undefined"]', 'sumTo is the ticket\'s to add, and isEmpty and sum read no sumTo, so adding it changes nothing the ticket does not name');
+    assert.deepEqual(lines, [BASE_SUM.trim(), IS_EMPTY.trim(), PLACEHOLDER.trim(), ''], 'the line the lint names sits in the file the ticket changes, above the placeholder');
+    const code = "import * as m from './src/sum.js'; let built; try { m.sumTo(4); built = true; } catch (e) { built = e.message; } console.log(JSON.stringify([m.isEmpty([]), m.isEmpty([1]), m.sum('1', '2'), built]));";
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: ws, env: cleanEnv, encoding: 'utf8' });
+    assert.equal(r.stdout.trim(), '[true,false,3,"sumTo: not built yet"]', 'sumTo is the ticket\'s to build, and isEmpty and sum read no sumTo, so building it changes nothing the ticket does not name');
   });
 });
 
@@ -3739,14 +3748,25 @@ test('round 3 fix batch: the eight CI-loop cases share one sumTo ticket with one
     assert.equal(ticket, SUM_TO_TICKET, id);
     assert.doesNotMatch(ticket, /round|decimal|cent|0\.\d|toFixed|parse/i, id);
     assert.match(ticket, /\bsrc\/sum\.js\b[\s\S]*\btest\/sum\.test\.js\b/, `${id}: the change in src/sum.js, its test in test/sum.test.js`);
+    // Fix round 1: the setup's second line appends the placeholder the ticket builds, before the commit that lands it on main.
+    assert.equal(execCase(id).setup[1], PLACEHOLDER_SETUP, id);
   }
   // The ticket's own examples hold on the build the stand-in tests use, and every input the ticket names gives the one sum a loop
   // gives: no float, no band.
   withRepo('go-no-ci-ready', (ws) => {
+    assert.equal(readFileSync(join(ws, 'src', 'sum.js'), 'utf8'), STUBBED, 'the placeholder is on main');
     writeFileSync(join(ws, 'src', 'sum.js'), SUMMED);
     const code = "import { sumTo } from './src/sum.js'; let s = 0, ok = true; for (let n = 1; n <= 1000; n += 1) { s += n; ok &&= sumTo(n) === s && Number.isSafeInteger(s); } console.log(JSON.stringify([sumTo(4), sumTo(1), ok]));";
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: ws, env: cleanEnv, encoding: 'utf8' });
     assert.equal(r.stdout.trim(), '[10,1,true]', r.stderr);
+    // Fix round 1 (the review's Important 1): reversed, the build leaves the placeholder, which the test imports and which throws, so
+    // the guard probe implement and self-review run gives fail-then-pass ok, not inconclusive on a missing export.
+    appendFileSync(join(ws, 'test', 'sum.test.js'), "\nimport { sumTo } from '../src/sum.js';\n\ntest('sumTo sums the whole numbers from 1 to n', () => {\n  assert.equal(sumTo(4), 10);\n  assert.equal(sumTo(1), 1);\n});\n");
+    const patch = join(dirname(ws), 'task.patch');
+    writeFileSync(patch, repoGit(ws)('diff') + '\n');
+    const p = script(ws, 'probe', '--exclude-tests', ws, patch, '--', 'node', '--test', 'test/sum.test.js');
+    assert.equal(p.status, 0, p.stdout + p.stderr);
+    assert.match(p.stdout, /^probe: fail-then-pass ok$/m);
   });
 });
 
@@ -4072,7 +4092,8 @@ test('the contract keeps the stand-in\'s CI, the CI go cases and stopReasons', (
     'its log says main is past the tag `v1.4.0` with no bump, so main fails the check too, and asks for a minor bump. The case tags `v1.4.0` one commit before main\'s tip.',
     'or, with no jq on PATH, a bare field of PR 8 or of the first PR listed;',
     "`go-proof-skip`'s screen is the HTML page `views/invoice.html`, which `src/invoice-view.js` fills in.",
-    "Since M3 part 2 project 2's round 3 fix batch (K3), the eight CI cases other than `go-proof-skip` share one ticket with one exact answer: `sumTo(n)` in `src/sum.js` returns the sum of the whole numbers from 1 to n, for n a whole number from 1 to 1000, covered in `test/sum.test.js`; under the rounding ticket they had before, about 15% of builds stalled in fix rounds before CI ran.",
+    "Since M3 part 2 project 2's round 3 fix batch (K3), the eight CI cases other than `go-proof-skip` share one ticket with one exact answer: it builds `sumTo(n)` in `src/sum.js`, the sum of the whole numbers from 1 to n, for n a number, a whole number from 1 to 1000, covered in `test/sum.test.js`; under the rounding ticket they had before, about 15% of builds stalled in fix rounds before CI ran.",
+    "Each of their setups appends a placeholder `sumTo` that throws `sumTo: not built yet` (the fix batch's fix round 1), so the build changes an export the base has and its fail-then-pass probe is not inconclusive on a missing export.",
     '`claude-run.stopReasons({ transcript, events })` lists each kind of Stop hook block a run met',
     'exec records it on each case\'s result beside `stopBlocked`; no grader reads it.',
   ]) assert.ok(contract.includes(line), line);
