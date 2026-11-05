@@ -1056,3 +1056,46 @@ no_vote() {
   edit_call Write "$BATS_TEST_TMPDIR/scratch/notes/sum.js"
   no_vote
 }
+
+@test "under a go another repository's main checkout gets no vote: the deny holds the go's own repository" {
+  # Fix round 1 (the review's Minor 2): a dotfiles repository that holds ~/.claude is no main checkout of the go's.
+  local H="$BATS_TEST_TMPDIR/home"
+  go_on
+  make_repo "$H"
+  mkdir -p "$H/.claude/projects/p/memory" "$H/src"
+  edit_call Write "$H/.claude/projects/p/memory/notes.md"
+  no_vote
+  edit_call Edit "$H/src/sum.js"
+  no_vote
+  edit_call Write "$R/src/sum.js"
+  edit_denied Write
+}
+
+@test "under a go a settings read that fails allows, as G20's route gate does" {
+  # Fix round 1 (the review's Minor 3): a layer G1 cannot read (settings_get exits 4) may name another work dir.
+  # Only the work_dir read fails: a file that cannot be read at all also fails autopilot's policy read, so no go.
+  go_on
+  settings 'work_dir: .work'
+  read_fails awk 'key=work_dir'
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  no_vote
+  [ "$(read_failures awk)" -ge 1 ]
+  read_fails awk 'key=work_dir' 0
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  edit_denied Write
+}
+
+@test "under a go with the session in a linked worktree, the work dir is still the main checkout's" {
+  # The review's Minor 13: a relative .kern path is the linked worktree's own, which is no main checkout.
+  go_on
+  CWD="$BATS_TEST_TMPDIR/wt"
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  no_vote
+  edit_call Write .kern/specs/round-sum.md
+  no_vote
+  edit_call Write src/sum.js
+  no_vote
+  mkdir -p "$R/src"
+  edit_call Write "$R/src/sum.js"
+  edit_denied Write
+}

@@ -1647,3 +1647,43 @@ go_route() {
   build "$R/new/../src/sum.js"
   no_vote
 }
+
+@test "a file outside the main worktree's root is no build: memory, a scratchpad and /tmp pass" {
+  # Fix round 1 (the review's Minor 1): the gate holds the go's repository, not every file the session writes.
+  local d
+  go_route
+  for d in "$BATS_TEST_TMPDIR/home/.claude/projects/p/memory" "$BATS_TEST_TMPDIR/scratchpad" /tmp; do
+    mkdir -p "$d"
+    build "$d/notes.md"
+    no_vote || { echo "dir: $d"; return 1; }
+  done
+  build "$R/src/sum.js"
+  route_denied
+}
+
+@test "a spec G20 cannot read, a specs dir it cannot list and a transcript grep that fails allow" {
+  go_route
+  # A spec whose frontmatter cannot be read counts, as G20's other reads do (the review's Minor 13).
+  printf '%s\n' '---' 'status: draft' '---' > "$R/.kern/specs/locked.md"
+  chmod 000 "$R/.kern/specs/locked.md"
+  build "$R/src/sum.js"
+  chmod 644 "$R/.kern/specs/locked.md"
+  no_vote
+  rm "$R/.kern/specs/locked.md"
+  build "$R/src/sum.js"
+  route_denied
+  # A specs dir that cannot be listed (fix round 1, the review's Minor 7).
+  chmod 000 "$R/.kern/specs"
+  build "$R/src/sum.js"
+  chmod 755 "$R/.kern/specs"
+  no_vote
+  # The diagnose read's third grep fails while the first finds a line (the review's Minor 6): a subagent's read,
+  # which that grep would drop, so only its fault opens the gate.
+  tr_read "$K/skills/diagnose/SKILL.md" true
+  build "$R/src/sum.js"
+  route_denied
+  read_fails grep '*isSidechain*'
+  build "$R/src/sum.js"
+  no_vote
+  [ "$(read_failures grep)" -ge 1 ]
+}

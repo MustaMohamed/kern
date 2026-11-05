@@ -378,12 +378,13 @@ guard_g20() {
 # six paid runs of go-required-check-stop built the go's ticket with no spec, though implement, run.md and the
 # autopilot command each say a go's build starts at define. _g20_route denies a Write, Edit or NotebookEdit when
 # all hold, the costly tests last: the call is the main session's; a go is live (go_live); the target, read with
-# _g20_dir, is not under the work dir; it is no test path (_g20_test); no WORK/specs/*.md names this go
-# (_g20_go_spec); and the transcript holds no main-thread Read of the running kern's diagnose skill
-# (_g20_diagnosed), since a bug starts there and diagnose writes no spec. A fault in any read allows, as in
-# G20's other votes. Accepted limits: a Bash write (a here-doc, an inline script) is not seen; a diagnose Read
-# opens the gate for any edit; test paths are read by name; and a spec counts by its approved: and issue: lines,
-# which the model writes, so G20's approval check is what binds them to the user's go.
+# _g20_dir, is under the main worktree's root and not under the work dir, so a memory, scratchpad or /tmp file
+# passes (fix round 1); it is no test path (_g20_test); no WORK/specs/*.md names this go (_g20_go_spec); and the
+# transcript holds no main-thread Read of the running kern's diagnose skill (_g20_diagnosed), since a bug starts
+# there and diagnose writes no spec. A fault in any read allows, as in G20's other votes. Accepted limits: a Bash
+# write (a here-doc, an inline script) is not seen; a diagnose Read opens the gate for any edit; test paths are
+# read by name; and a spec counts by its approved: and issue: lines, which the model writes, so G20's approval
+# check is what binds them to the user's go.
 _g20_route() {
   local p work main rel
   [ -z "${AGENT-}${AGENT_ID-}" ] && [ "${AUTOPILOT:-0}" = 1 ] || return 0
@@ -403,14 +404,15 @@ _g20_route() {
   p="$_G20_REAL/${p##*/}"
   case "$p" in "$work"/*) return 0 ;; esac
   rel=${p#"$main"/}
+  [ "$rel" != "$p" ] || return 0
   _g20_test "$rel" && return 0
   _g20_go_spec "$_KERN_GO" && return 0
   _g20_diagnosed && return 0
   vote deny G20 "under a go, a build starts at define, and no spec under $KERN_MAIN/$_G20_WD/specs carries this go's approval. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only."
 }
 
-# _g20_test PATH: exit 0 when PATH, a file's path from the main worktree's root (or absolute, for a file outside
-# it), names a test: a folder test, tests or __tests__ on the way, or a name *.test.*, *.spec.* or *_test.*.
+# _g20_test PATH: exit 0 when PATH, a file's path from the main worktree's root, names a test: a folder test,
+# tests or __tests__ on the way, or a name *.test.*, *.spec.* or *_test.*.
 _g20_test() {
   case "/$1" in
     */test/* | */tests/* | */__tests__/*) return 0 ;;
@@ -423,13 +425,17 @@ _g20_test() {
 
 # _g20_go_spec GO: exit 0 when a Markdown file right under WORK/specs has a frontmatter that sets status:
 # approved and names the go for ticket GO (_g20_names_go), whatever go_phase holds, so the go's CI fix rounds
-# past its draft PR edit on. A spec G20 cannot read counts, so a fault allows.
+# past its draft PR edit on. A spec G20 cannot read counts, and so does a specs dir it cannot list, so a fault
+# allows (fix round 1).
 _g20_go_spec() {
-  local f fm rc
+  local f fm rc d="$KERN_MAIN/$_G20_WD/specs"
+  if [ -e "$d" ]; then
+    [ -d "$d" ] && [ -r "$d" ] && [ -x "$d" ] || return 0
+  fi
   for f in "$KERN_MAIN/$_G20_WD"/specs/*.md; do
     [ -f "$f" ] || continue
     rc=0
-    fm=$(env LC_ALL=C awk -v fm_print=1 -f "$_G20_FM_FILE" < "$f" 2> /dev/null) || rc=$?
+    fm=$(env LC_ALL=C awk -v fm_print=1 -f "$_G20_FM_FILE" 2> /dev/null < "$f") || rc=$?
     case "$rc" in 0 | 3) ;; *) return 0 ;; esac
     _g20_approved "$fm" && _g20_names_go "$fm" "$1" && return 0
   done
@@ -440,9 +446,10 @@ _g20_go_spec() {
 # running kern's skills/diagnose/SKILL.md: a line that holds the Read's file_path for kern's root as this hook
 # finds it or as CLAUDE_PLUGIN_ROOT names it, each as written and through cd -P, with /private before /var, /tmp
 # or /etc and without it, and the name Read, and that is no sidechain, progress or API request blob line. A
-# transcript that is not named or cannot be read, and a grep that fails, count as a read, so a fault allows.
+# transcript that is not named or cannot be read, and a grep that fails (any status over 1, fix round 1), count
+# as a read, so a fault allows.
 _g20_diagnosed() {
-  local tp r q x pats=() st
+  local tp r q x s pats=() st
   tp=$(json_get transcript_path 2> /dev/null) && [ -n "$tp" ] && [ -f "$tp" ] && [ -r "$tp" ] || return 0
   for r in "${KERN_ROOT-}" "${CLAUDE_PLUGIN_ROOT-}"; do
     case "$r" in /*) ;; *) continue ;; esac
@@ -457,12 +464,14 @@ _g20_diagnosed() {
     done
   done
   [ "${#pats[@]}" -gt 0 ] || return 0
-  env LC_ALL=C grep -F "${pats[@]}" "$tp" 2> /dev/null | env LC_ALL=C grep -F '"name":"Read"' |
-    env LC_ALL=C grep -v -F -e '"isSidechain":true' -e '"type":"progress"' -e '"type":"api-request-blob"' |
-    env LC_ALL=C grep -q .
+  env LC_ALL=C grep -F "${pats[@]}" "$tp" 2> /dev/null | env LC_ALL=C grep -F '"name":"Read"' 2> /dev/null |
+    env LC_ALL=C grep -v -F -e '"isSidechain":true' -e '"type":"progress"' -e '"type":"api-request-blob"' 2> /dev/null |
+    env LC_ALL=C grep -q . 2> /dev/null
   st=("${PIPESTATUS[@]}")
   [ "${st[3]}" = 0 ] && return 0
-  [ "${st[0]}" -le 1 ] || return 0
+  for s in "${st[@]}"; do
+    [ "$s" -le 1 ] || return 0
+  done
   return 1
 }
 

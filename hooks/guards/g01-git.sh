@@ -417,12 +417,14 @@ _g01_main_op() {
 # "Build the G1 deny", 2026-11-05). In paid rounds 1 and 2 a go whose `git switch -c` G1 denied in the main checkout
 # then wrote its change there with the Write or Edit tool. Under a live go (go_live; a plain autopilot run is not
 # held to it), a Write, Edit or NotebookEdit whose target's nearest directory that exists is in the main checkout
-# (in_main_checkout), and that is not under KERN_MAIN/<work_dir>/, is denied. A linked worktree is no main
-# checkout, so a kern worktree passes, and a file in no repository gets no vote. The work dir is read as kern-dir
-# reads it; one that cannot be read or that kern-dir refuses, and a target whose parts after that directory hold
-# ., .. or an empty part, are no work dir. A Bash write is not seen here.
+# (in_main_checkout) of the go's own repository (its main root, through cd -P, is KERN_MAIN's), and that is not
+# under KERN_MAIN/<work_dir>/, is denied. A linked worktree is no main checkout, so a kern worktree passes, and a
+# file in no repository, or in another repository's main checkout, gets no vote (fix round 1: a dotfiles repo
+# that holds ~/.claude). The work dir is read as kern-dir reads it; a settings read that fails (exit 4, a layer it
+# cannot read) allows, as G20's route gate does (fix round 1); one that kern-dir refuses, and a target whose parts
+# after that directory hold ., .. or an empty part, are no work dir. A Bash write is not seen here.
 _g01_edit() {
-  local p w near real work=""
+  local p w near real m1 m2 rc work=""
   [ "${AUTOPILOT:-0}" = 1 ] && go_live "${SID-}" "${KERN_MAIN-}" 2>/dev/null || return 0
   if [ "$TOOL" = NotebookEdit ]; then
     p=$(ti_get notebook_path) || return 0
@@ -434,8 +436,14 @@ _g01_edit() {
   _g01_real "$p" && real=$_G01_REAL
   near=$_G01_NEAR
   in_main_checkout "$near" || return 0
+  m1=$(kern_main_root "$near" 2>/dev/null) && m1=$(cd -P "$m1" 2>/dev/null && env pwd -P) || return 0
+  m2=$(cd -P "${KERN_MAIN-}" 2>/dev/null && env pwd -P) || return 0
+  [ -n "$m1" ] && [ "$m1" = "$m2" ] || return 0
   # The work dir, read through cd -P as the target is: itself when it exists, else its nearest directory that does.
-  if [ -n "$real" ] && w=$(settings_get work_dir .kern 2>/dev/null); then
+  if [ -n "$real" ]; then
+    rc=0
+    w=$(settings_get work_dir .kern 2>/dev/null) || rc=$?
+    [ "$rc" = 0 ] || return 0
     w=${w%/}
     case "$w" in
       '' | . | :* | .git | .git* | /* | *..*) ;;

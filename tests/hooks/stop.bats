@@ -1130,6 +1130,9 @@ ready_allowed() {
 # the proof on the running app, with neither verify.browser nor verify.app set, must hold the line as printed.
 SKIPLINE='skip: proof on the running app, no verify.browser or verify.app'
 PROOF_REASON="kern: your report names the proof on the running app, and neither verify.browser nor verify.app is set, so it is prove-it's named skip. Give the whole report again with this line as printed: \`$SKIPLINE\`."
+# Under a go the proof skip runs only until the run reports a stop, so its rows meet the finish line before the draft
+# (fix round 1: with stop_down 1 the user is back, and a reply may answer a question, not report the go).
+NO_DRAFT='kern: this go has not reached its finish line: no draft PR is open yet. Do that next, or, when the run must stop here, end with the report, its first line `kern stop: <what>`.'
 
 @test "a go's report that names the proof on the running app, with neither setting, is sent back for the skip line" {
   local l
@@ -1139,24 +1142,22 @@ PROOF_REASON="kern: your report names the proof on the running app, and neither 
     'skip: proof on the running app. The ticket needs none' \
     'No verify.app is set.' 'The running app was not checked.'; do
     : >"$T"
-    go_on
-    state_line 'stop_down: 1'
+    go_on ''
     go_prompt
     say "Verdict: ready.\\n$l"
     stop
     held || { echo "line: $l"; return 1; }
-    [[ "$reason" == "$PROOF_REASON" ]] || { echo "line: $l"; return 1; }
+    [[ "$reason" == "$NO_DRAFT $PROOF_REASON" ]] || { echo "line: $l"; return 1; }
     [ "$(st stop_backs)" = 1 ] || { echo "line: $l"; return 1; }
   done
   # It counts like the other checks: a second send-back is the second in a row.
   stop true
   held
-  [[ "$reason" == "$PROOF_REASON" ]] || false
+  [[ "$reason" == "$NO_DRAFT $PROOF_REASON" ]] || false
   [ "$(st stop_backs)" = 2 ]
   # While a wait is open the run has not given its report.
   : >"$T"
   go_on
-  state_line 'stop_down: 1'
   go_prompt
   drafted
   fixture background-bash
@@ -1186,13 +1187,12 @@ PROOF_REASON="kern: your report names the proof on the running app, and neither 
   local l
   for l in "$SKIPLINE" "- \`$SKIPLINE\`" "Proof on the running app was not run.\\n$SKIPLINE"; do
     : >"$T"
-    go_on
-    state_line 'stop_down: 1'
+    go_on ''
     go_prompt
     say "Verdict: ready.\\n$l"
     stop
-    allows || { echo "line: $l"; return 1; }
-    [ -z "$(st stop_backs)" ] || { echo "line: $l"; return 1; }
+    held || { echo "line: $l"; return 1; }
+    [[ "$reason" == "$NO_DRAFT" ]] || { echo "line: $l"; return 1; }
   done
   # The owed report likewise.
   : >"$T"
@@ -1210,16 +1210,33 @@ PROOF_REASON="kern: your report names the proof on the running app, and neither 
   local k
   for k in 'verify.browser: npx playwright test' 'verify.app: npm run app:check'; do
     : >"$T"
-    go_on
-    state_line 'stop_down: 1'
+    go_on ''
     mkdir -p "$R/.claude"
     printf '%s\n' "$k" >"$R/.claude/kern.local.yml"
     go_prompt
     say 'Verdict: ready.\nProof on the running app: the invoice screen renders the rounded total.'
     stop
-    allows || { echo "setting: $k"; return 1; }
-    [ -z "$(st stop_backs)" ] || { echo "setting: $k"; return 1; }
+    held || { echo "setting: $k"; return 1; }
+    [[ "$reason" == "$NO_DRAFT" ]] || { echo "setting: $k"; return 1; }
   done
+}
+
+@test "after a go reports a stop, a reply that names the running app is not sent back for the skip line" {
+  # Fix round 1 (the review's Important 1): the go stays live past its stop, and the user's next question is no report.
+  go_on ''
+  go_prompt
+  say 'kern stop: the ticket requires proof on the running app, and neither verify.browser nor verify.app is set'
+  stop
+  allows
+  [ "$(st stop_down)" = 1 ]
+  prompt 'How do I set verify.browser?'
+  say 'Add a verify.browser line to .claude/kern.local.yml with the command that drives the running app.'
+  stop
+  allows
+  [ -z "$(st stop_backs)" ]
+  # A stop the hook already blocked, and a stop_down written before this turn, allow alike.
+  stop true
+  allows
 }
 
 @test "a kern stop line exempts the proof skip: a required proof that cannot run is a stop" {

@@ -715,18 +715,20 @@ test("the contract and both designs keep the round 2 fix batch's proof skip", ()
   // reworded prove-it's skip line twice, so the Stop hook holds a report that names the proof to the line as printed.
   const reason = "``kern: your report names the proof on the running app, and neither verify.browser nor verify.app is set, so it is prove-it's named skip. Give the whole report again with this line as printed: `skip: proof on the running app, no verify.browser or verify.app`.``";
   assertContains('docs/plans/contract.md', [
-    "(7) The proof skip (M3 part 2 project 2's round 2 fix batch; the user's \"Build the Stop hook check\", 2026-11-05: `go-proof-skip`'s report reworded prove-it's skip line in paid rounds 1 and 2), where (4) runs: under a live go with no wait open, and in the report a go owes while `go_report` is `1`.",
+    "(7) The proof skip (M3 part 2 project 2's round 2 fix batch; the user's \"Build the Stop hook check\", 2026-11-05: `go-proof-skip`'s report reworded prove-it's skip line in paid rounds 1 and 2), where a report is due: under a live go with no wait open until the run reports a stop (`stop_down` empty), and in the report a go owes while `go_report` is `1`. After a reported stop the user is back, and a later reply may answer a question, not report the go, so it is not read (the fix batch's fix round 1).",
     "A line of the last message matches `verify\\.(browser|app)|running app`, the last message does not hold `skip: proof on the running app, no verify.browser or verify.app` as printed, it holds no `kern stop: ` line as (3) reads one (a required proof that cannot run is a stop, not a skip), and `settings_get` gives neither `verify.browser` nor `verify.app` a value (a read that exits other than 0 or 3 counts as set, so it allows); reason " + reason,
     "In the owed report its block is no send-back, as (4)'s is; outside a go with no report owed it never runs. Under a go each block that holds (3), (4), (5), (6) or (7) is a send-back",
     "`report skip`, `proof skip` (since the round 2 fix batch's check (7)), `unproven edit`"]);
   assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
-    "| The proof skip | Where the report is read, under a go with no wait open and in the report a go owes after `gh pr ready`: a report that names `verify.browser`, `verify.app` or the running app, with neither setting set and no `kern stop:` line, holds prove-it's line `skip: proof on the running app, no verify.browser or verify.app` as printed, or the hook sends it back for that line. Under a go the send-back counts toward the 3. This closes `go-proof-skip`'s reworded skip line, missed in paid rounds 1 and 2 (the round 2 fix batch; the user's \"Build the Stop hook check\", 2026-11-05) |"]);
+    "| The proof skip | Where the report is read, under a go with no wait open until the run reports a stop and in the report a go owes after `gh pr ready`: a report that names `verify.browser`, `verify.app` or the running app, with neither setting set and no `kern stop:` line, holds prove-it's line `skip: proof on the running app, no verify.browser or verify.app` as printed, or the hook sends it back for that line. Under a go the send-back counts toward the 3. This closes `go-proof-skip`'s reworded skip line, missed in paid rounds 1 and 2 (the round 2 fix batch; the user's \"Build the Stop hook check\", 2026-11-05) |"]);
   assertContains('docs/specs/2026-10-12-kern-design.md', [
-    "The proof skip (M3 part 2 project 2's round 2 fix batch), where the report is read: a last message that names `verify.browser`, `verify.app` or the running app, with neither setting set and no `kern stop: ` line, must hold prove-it's line `skip: proof on the running app, no verify.browser or verify.app` as printed.",
+    "The proof skip (M3 part 2 project 2's round 2 fix batch), where the report is read, under a live go until the run reports its first stop and in the report a go owes after ready: a last message that names `verify.browser`, `verify.app` or the running app, with neither setting set and no `kern stop: ` line, must hold prove-it's line `skip: proof on the running app, no verify.browser or verify.app` as printed.",
     'Under a go each finish-line, report, proof skip or nudge block adds 1 to `stop_backs`']);
   // The hook's reason is the contract's, word for word, and the line it asks for is prove-it's set line.
   const hook = readFileSync(join(import.meta.dirname, '..', 'hooks', 'stop'), 'utf8');
   assert.ok(hook.includes(`add "${reason.slice(2, -2).replaceAll('`', '\\`')}"`), 'the hook gives the contract\'s reason');
+  // The fix batch's fix round 1: under a go the check runs only until the run reports a stop.
+  assert.ok(hook.includes('if { { [ "$GO" = 1 ] && [ -z "$DOWN" ]; } || [ "$READ" = 1 ]; } && [ "$PENDING" = 0 ] && proof_skip; then'), 'not after a reported stop');
   assertContains('skills/prove-it/SKILL.md', ['skip: proof on the running app, no verify.browser or verify.app']);
 });
 
@@ -738,13 +740,17 @@ test("the contract and both designs keep the round 2 fix batch's G20 route gate"
     "- **G20's route gate under a go (M3 part 2 project 2's round 2 fix batch; the user's \"Build the G20 gate\", 2026-11-05).**",
     '`guard_g20` hands Write, Edit and NotebookEdit to `_g20_route`, and Write and Edit then to `_g20_file` as before.',
     'the call carries neither `agent_type` nor `agent_id`; `AUTOPILOT` is 1 and `go_live "$SID" "$KERN_MAIN"` holds;',
-    "`_g20_test` finds no test in its path from the main worktree's root (absolute for a file outside it): a folder `test`, `tests` or `__tests__` on the way, or a name `*.test.*`, `*.spec.*` or `*_test.*`;",
+    "`_g20_test` finds no test in its path from the main worktree's root: a folder `test`, `tests` or `__tests__` on the way, or a name `*.test.*`, `*.spec.*` or `*_test.*`;",
     'whatever `go_phase` holds, so the go\'s CI fix rounds past its draft edit on;',
     "and, read last, the input's `transcript_path` holds no main-thread Read of the running kern's `skills/diagnose/SKILL.md`",
     `The deny reads \`\`${reason}\`\``,
     'A fault allows, as in G20\'s other votes:',
+    // The fix batch's fix round 1: a file outside the main worktree is no build, a specs dir or grep fault allows,
+    // and the go outlives its reported stop.
+    "is under the main worktree's root and not under `KERN_MAIN/<work_dir>/` read the same way, so a memory, scratchpad or `/tmp` file passes (the fix batch's fix round 1);",
+    'a specs dir that cannot be listed, a transcript that is not named or cannot be read, and any grep of the pipe that fails (status over 1; the last two since fix round 1). After a reported stop the go stays live, so the gate holds until `/kern:autopilot off`.',
     'Accepted limits: a Bash write (a here-doc, an inline script) is not seen, so a denied run could route around it; a diagnose Read opens the gate for any edit; test paths are read by name;']);
-  const gate = "a main-thread Write, Edit or NotebookEdit outside the work dir, of a file that is no test by its path, is denied until a spec under `WORK/specs` carries the go's approval, or the run has read diagnose: a go's build starts at define, a bug at diagnose";
+  const gate = "a main-thread Write, Edit or NotebookEdit under the main worktree's root and outside the work dir, of a file that is no test by its path, is denied until a spec under `WORK/specs` carries the go's approval, or the run has read diagnose: a go's build starts at define, a bug at diagnose";
   assertContains('docs/specs/2026-10-12-kern-design.md', [`Under a live go ${gate} (M3 part 2 project 2's round 2 fix batch) |`]);
   assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
     `| G20 | A${gate.slice(1)}. This closes \`go-required-check-stop\`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05) |`]);
@@ -762,15 +768,19 @@ test("the contract and both designs keep the round 2 fix batch's G1 edit deny", 
     'Under autopilot with `go_live "$SID" "$KERN_MAIN"` holding (a plain autopilot run is not held to it),',
     "When `in_main_checkout` holds for that directory, and the target, read through it with `cd -P` and the parts after it as written (`_g01_real`), is not under `KERN_MAIN/<work_dir>/` (`work_dir` read as `kern-dir` reads it, through `cd -P` when it exists), it denies `<tool> in the main checkout (D3); use a kern worktree`, a subagent's call included.",
     "A linked worktree, one under `.claude/worktrees/` included, is no main checkout, so its files pass, and a file in no repository gets no vote.",
+    // The fix batch's fix round 1: only the go's own repository, a settings fault allows, and the go outlives its stop.
+    "Only the go's own repository is held: `kern_main_root` of that directory, through `cd -P`, must be `KERN_MAIN` through `cd -P`, so another repository's main checkout (a dotfiles repository that holds `~/.claude`, say) gets no vote (the fix batch's fix round 1).",
+    "a settings read that fails (`settings_get` exits other than 0, as it exits 4 for a layer it cannot read) allows, as G20's route gate does (fix round 1). After a reported stop the go stays live, so this deny holds until `/kern:autopilot off`.",
     'Limit: a Bash write into the main checkout (a here-doc, an inline script) is not seen.']);
   assertContains('docs/specs/2026-10-12-kern-design.md', [
-    "Under a live go, a Write, Edit or NotebookEdit in the main checkout outside the work dir is denied as well; a linked worktree passes (M3 part 2 project 2's round 2 fix batch) |"]);
+    "Under a live go, a Write, Edit or NotebookEdit in the go's own main checkout outside the work dir is denied as well; a linked worktree and another repository's main checkout pass (M3 part 2 project 2's round 2 fix batch) |"]);
   assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
-    "| G1 | A Write, Edit or NotebookEdit in the main checkout, outside the work dir, is denied: a go's work lives in a kern worktree, as implement says. This closes the main checkout edits that followed G1's denied switch in paid rounds 1 and 2 (the round 2 fix batch; the user's \"Build the G1 deny\", 2026-11-05) |"]);
+    "| G1 | A Write, Edit or NotebookEdit in the go's own main checkout, outside the work dir, is denied: a go's work lives in a kern worktree, as implement says. This closes the main checkout edits that followed G1's denied switch in paid rounds 1 and 2 (the round 2 fix batch; the user's \"Build the G1 deny\", 2026-11-05) |"]);
   // The guard's reason is the contract's, and it reads the go as G2 does.
   const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g01-git.sh'), 'utf8');
   assert.ok(guard.includes('vote deny G1 "$TOOL in the main checkout (D3); use a kern worktree"'), 'the guard gives the contract\'s reason');
   assert.ok(guard.includes('[ "${AUTOPILOT:-0}" = 1 ] && go_live "${SID-}" "${KERN_MAIN-}" 2>/dev/null || return 0'), 'only under a live go');
+  assert.ok(guard.includes('[ -n "$m1" ] && [ "$m1" = "$m2" ] || return 0'), "only in the go's own repository");
 });
 
 test("the contract and the skills spec keep plan-check's plan line for a short spec over 2 files", () => {
