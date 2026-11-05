@@ -1513,7 +1513,7 @@ build() { route Write "\"file_path\":\"$1\",\"content\":\"export const sum = (a,
 # route_denied: G20 denied the last call with the route gate's reason.
 route_denied() {
   [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
-  [[ "$output" == *"kern G20: under a go, a build starts at define, and no spec under $R/.kern/specs carries this go's approval. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only."* ]] ||
+  [[ "$output" == *"kern G20: under a go, a build starts at define, and no spec under $R/.kern/specs carries this go's approval. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only. A session that EnterWorktree moved into a worktree cannot write that path: ExitWorktree with action keep, write the spec, then edit the worktree by its path."* ]] ||
     { echo "$output"; return 1; }
 }
 # go_route: a live go for MA-254, a transcript with the go's prompt, and the project's src and test folders.
