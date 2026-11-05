@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { ROOT, readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/prove-it/SKILL.md';
+const EVIDENCE = 'skills/prove-it/references/evidence.md';
 
 test('prove-it frontmatter is the spec text', () => {
   assertFrontmatter(SKILL, {
@@ -28,9 +29,12 @@ test('prove-it sections, steps, gate and red flags', () => {
   // 4,765 since its final review's fix (I1): under autopilot a `verify.fast` with nothing resolved is a named skip.
   // 4,836 since M3 part 2 project 2's Task 1 (2026-10-22 Opus audit section 5, rows L488 and L489): the Gate covers any
   // word that says or implies done, fixed, passing or verified, and step 7 runs a check it can run.
-  assertMaxBytes(SKILL, 4836);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `prove-it` | auto | M2a | at most 4,836 bytes,',
-    "SKILL.md at most 4,836 bytes (4,765 until M3 part 2 project 2's Task 1:"]);
+  // 5,472 since its Task 6 and that task's fix round 1 (design "Proof on the running app"): step 3 sends a screen change to
+  // that proof, Inputs add `verify.app`, Outputs point to evidence.md for the chat, and Stops make it required, else a
+  // named skip when it cannot run.
+  assertMaxBytes(SKILL, 5472);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `prove-it` | auto | M2a | at most 5,472 bytes,',
+    "SKILL.md at most 5,472 bytes (4,836 until M3 part 2 project 2's Task 6 and its fix round 1:", "; 4,765 until M3 part 2 project 2's Task 1:"]);
 });
 
 test('a claim no command showed carries inferred or guess in its own sentence, not as a line form', () => {
@@ -105,11 +109,14 @@ test('verify.fast defaults to each of typecheck and lint that resolves, as setti
 });
 
 test('evidence reference', () => {
-  assertHeadings('skills/prove-it/references/evidence.md', ['# Evidence by claim', '## Claim table', '## Labels', '## Inconclusive is a fail']);
+  assertHeadings('skills/prove-it/references/evidence.md', ['# Evidence by claim', '## Claim table', '## Labels', '## Inconclusive is a fail', '## Proof on the running app']);
   assertContains('skills/prove-it/references/evidence.md', ['zero tests ran']);
   // 2,150 since M3 part 1's Task 15 (raised from 2,100): the one-run rule with its two limits, and the emulator walk's bound.
   // 2,550 since its fix rounds 1 and 2: the run's log from this session and the citing line, and a walk's same-tree rule and what follows past 2 reruns.
-  assertMaxBytes('skills/prove-it/references/evidence.md', 2550);
+  // 3,279 since M3 part 2 project 2's Task 6 and its fix round 1: the Proof on the running app section, which the claim
+  // table's UI row points to, and a walk that is not required and cannot run is a named skip.
+  assertMaxBytes('skills/prove-it/references/evidence.md', 3279);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["`references/evidence.md` at most 3,279 bytes (2,550 until M3 part 2 project 2's Task 6 and its fix round 1:"]);
 });
 
 test('a failed emulator walk resumes from the failed step, within a bound', () => {
@@ -117,7 +124,8 @@ test('a failed emulator walk resumes from the failed step, within a bound', () =
   const walk = section(readDoc('skills/prove-it/references/evidence.md').raw, '## Inconclusive is a fail');
   // Fix round 1, I3: a fix moves the tree, and a resumed walk would rest on the old one; and a real failure is red, not unrunnable.
   for (const n of ['A failed emulator walk resumes from the failed step only on the same tree, at most 2 reruns of a step.', 'A fix moves the tree, so the walk reruns whole from a clean app.',
-    'Past 2 reruns, a real failure is red and takes a fix round; only a walk that cannot run is a required check that cannot run.']) assert.ok(walk.includes(n), n);
+    // M3 part 2 project 2 Task 6 fix round 1: a walk that is not required and cannot run is a named skip, as SKILL.md's Stops say.
+    'Past 2 reruns, a real failure is red and takes a fix round; only a required walk that cannot run is a required check that cannot run; one not required is a named skip with its cause.']) assert.ok(walk.includes(n), n);
   assert.ok(!walk.includes('then it is a required check'), walk);
   assertContains('skills/autopilot/references/run.md', ['| A required check that cannot run |']);
 });
@@ -169,6 +177,43 @@ test('the Gate covers any word that says or implies done, fixed, passing or veri
   // synonyms"): the Gate named four words, so a claim in other words passed it unrun. The kernel's Evidence line moves
   // with it. M3 part 2 project 2's Task 1.
   assert.match(readDoc(SKILL).body, /^Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or any word that says or implies done, fixed, passing or verified\. Then, /m);
+});
+
+test('a screen change gets proof on the running app, sent to the chat, or a named skip', () => {
+  // M3 part 2 project 2 Task 6, design "Proof on the running app", with the user's rulings: the files go to the chat;
+  // a video or a GIF is for something that changes over time and needs to be noticed, or a recording the user or the
+  // ticket's verification steps ask for; proof that cannot run is skipped and named without blocking the work, except
+  // a required one, which stops. Only `verify.browser` or the new `verify.app` takes it.
+  const SKIP = '`skip: proof on the running app, no verify.browser or verify.app`';
+  const { body } = readDoc(SKILL);
+  const s3 = steps(body)[3];
+  assert.ok(s3.endsWith(" A change to what someone sees or does on a screen also gets proof on the running app, by that file's `## Proof on the running app`."), s3);
+  assertContains(SKILL, ['| `verify.browser` | none | proof in a browser |\n| `verify.app` | none | proof on a simulator or emulator |']);
+  // The required case and the named skips live only in SKILL.md, which is in context whenever evidence.md is read. Task 10's
+  // grader reads the no-setting line; fix round 1: a proof that is not required and whose setting cannot run is a named
+  // skip with its cause, not a fail, so a go still reaches ready (ci.md's Ready takes a named skip).
+  const auto = section(body, '## Stops and autopilot');
+  for (const s of ['Proof on the running app is required when the ticket or a verification step names it or the claim is "UI works"; a required one that cannot run is a stop.',
+    `In any run, one that is not required and cannot run is a named skip, no stop and no failed check: ${SKIP} with neither setting, else \`skip: proof on the running app, <cause>\`.`]) assert.ok(auto.includes(s), s);
+  const outputs = section(body, '## Outputs');
+  assert.ok(outputs.includes('Proof files go to the chat, as `references/evidence.md` says.'), outputs);
+  const proof = section(readDoc(EVIDENCE).body, '## Proof on the running app');
+  for (const s of ['A change to what someone sees or does on a screen gets screenshots of each changed screen, taken on the running app.',
+    "- Add a video or a GIF for something that changes over time and needs to be noticed, or when the ticket's verification steps or the user ask for one or for a recording of the whole flow.",
+    '- Take them only through `verify.browser`, for a web app, or `verify.app`, for a simulator or emulator.',
+    '- Run it on the tree being pushed, after `test.full`. A later fix moves the tree, so run it again before that push.',
+    '- Save the files under `kern-dir tmp`. In the desktop app, send each to the chat with `SendUserFile`; elsewhere, list their paths in the report.']) assert.ok(proof.includes(s), s);
+  // Fix round 1: one copy of each rule. The skip, the required case and pr-body.md's no-images rule are not repeated here.
+  for (const s of ['skip: proof on the running app', 'required', 'PR body']) assert.ok(!proof.includes(s), `evidence.md's section does not repeat: ${s}`);
+  // The claim table's UI row points at the section, so a "UI works" claim takes the same rules.
+  assertContains(EVIDENCE, ['| UI works | Proof on the running app, below | Unit tests; the component compiles |']);
+  // The new key: settings.md's row (lint rule 13) and the template's commented line; design 5.4's row is pinned in
+  // tests/skills-control.test.mjs. Fix round 1: both settings rows say what none means under the new rule.
+  const none = (other) => `with no \`${other}\` either, proof on the running app is a named skip, or a stop when it is required`;
+  assertContains('kernel/settings.md', [`| \`verify.browser\` | none: ${none('verify.app')} | command | prove-it, diagnose, verify-app |`,
+    `| \`verify.app\` | none: ${none('verify.browser')} | how to start and drive the app on a simulator or emulator | prove-it, diagnose |`]);
+  assert.ok(!readDoc('kernel/settings.md').raw.includes('ask when a UI claim needs it'), 'settings.md drops the stale ask');
+  assertContains('skills/help/templates/kern.local.yml', ['# verify.browser: node scripts/browser-check.mjs\n# verify.app: node scripts/app-check.mjs\n']);
 });
 
 test('step 7 runs a check it can run instead of handing it to the user (audit L489)', () => {

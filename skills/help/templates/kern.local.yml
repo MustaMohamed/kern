@@ -17,6 +17,7 @@
 # lint: npm run lint
 # build: npm run build
 # verify.browser: node scripts/browser-check.mjs
+# verify.app: node scripts/app-check.mjs
 
 # Git and PRs
 # commit.convention: "^[A-Z]+-[0-9]+: "

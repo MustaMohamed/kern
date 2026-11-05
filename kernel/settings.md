@@ -40,7 +40,8 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `lint` | detected | command | kern-detect, prove-it |
 | `build` | detected | command | kern-detect, prove-it |
 | `verify.fast` | each of `typecheck` and `lint` that resolves; at least one | command | self-review, prove-it |
-| `verify.browser` | none: ask when a UI claim needs it | command | prove-it, diagnose, verify-app |
+| `verify.browser` | none: with no `verify.app` either, proof on the running app is a named skip, or a stop when it is required | command | prove-it, diagnose, verify-app |
+| `verify.app` | none: with no `verify.browser` either, proof on the running app is a named skip, or a stop when it is required | how to start and drive the app on a simulator or emulator | prove-it, diagnose |
 | `generated_artifacts` | none | comma list of `trigger-glob=command` | implement, prove-it, self-review |
 | `ratchet.<metric>` | none | `<path>:<key>`, with `:max` appended when a higher value loosens the bar | floor-scan, self-review |
 | `checklists` | existing data and consumers, authorization scope, persisted-shape change | comma list | define, plan |

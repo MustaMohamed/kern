@@ -24,4 +24,4 @@ One-way or two-way door. The blast radius: data, consumers, deploy order. What b
 
 ## Verification
 
-Before and after. Screenshots first when the change is visible and the environment can show it; otherwise commands with their output: the failing reproduction, the passing run, the full suite summary.
+Say in text what was checked, before and after: the commands with their output, such as the failing reproduction, the passing run and the full suite summary. For a screen change, name each screen the proof on the running app covered, or give its skip line. No images: screenshots and recordings go to the chat.

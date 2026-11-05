@@ -36,9 +36,10 @@ test('diagnose sections, steps and red flags', () => {
   // 7,002 since part 1's close: the derived-data sentence names no example, so the held-out task no longer meets its own class in the text.
   // 7,144 since M3 part 2 project 2's Task 1 (2026-10-22 Opus audit section 5, row L482): step 2 tightens the loop, and a slow or heavy
   // path gets a baseline first.
-  assertMaxBytes(SKILL, 7144);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 7,144 bytes,',
-    "SKILL.md at most 7,144 bytes (7,002 until M3 part 2 project 2's Task 1:"]);
+  // 7,181 since its Task 6: step 2's loop and Inputs name `verify.app` beside `verify.browser`.
+  assertMaxBytes(SKILL, 7181);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `diagnose` | path | M2a | at most 7,181 bytes,',
+    "SKILL.md at most 7,181 bytes (7,144 until M3 part 2 project 2's Task 6:", "; 7,002 until M3 part 2 project 2's Task 1:"]);
 });
 
 test('diagnose references', () => {
@@ -116,4 +117,13 @@ test('under autopilot both diagnose stops wait for a typed reply, as run.md says
   assert.ok(!auto.includes('parked:'), auto);
   assert.ok(auto.includes('${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md'), auto);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['Under autopilot both wait for a typed reply, with the evidence so far and a recommendation, and independent work may finish first. Production stays read-only (D8).']);
+});
+
+test('a loop can drive the app on a simulator or emulator through verify.app, beside verify.browser', () => {
+  // M3 part 2 project 2 Task 6: `verify.app` is read by prove-it and diagnose (kernel/settings.md); diagnose named only
+  // `verify.browser`, so an app bug's loop had no setting to reach for.
+  const s2 = steps(readDoc(SKILL).body)[2];
+  assert.ok(s2.includes('a CLI fixture diff; `verify.browser` or `verify.app`; a captured-trace replay;'), s2);
+  assertContains(SKILL, ['| `verify.browser`, `verify.app` | none; ask when the bug is in a UI | browser or app loops |']);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['**3. Inputs.** `test.focused`, `test.full`, `verify.browser`, `verify.app`, `protected_targets`,']);
 });
