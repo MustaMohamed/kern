@@ -156,6 +156,26 @@ reads() {
   [ -z "$stderr" ]
 }
 
+@test "with no pkill a read under /bin/bash leaves no watchdog holding its output" {
+  # Review fix round 2: on bash 3.2 a redirection on a function call saved the capture pipe to a high fd that
+  # with_timeout's watchdog sleep inherited; with no pkill to kill the sleep, each read took its 10 s.
+  [ -x /bin/bash ] || skip "no /bin/bash"
+  local nb="$BATS_TEST_TMPDIR/nopkill" t p start took
+  mkdir -p "$nb"
+  for t in bash env awk git sleep cat sed tail head dirname basename tr wc stat ls mkdir mktemp mv rm grep date uname readlink id cut sort; do
+    p=$(command -v "$t") || continue
+    case "$p" in /*) ln -s "$p" "$nb/$t" ;; esac
+  done
+  [ "$(PATH="$BATS_TEST_TMPDIR/bin:$nb" /bin/bash -c 'command -v pkill || echo none')" = none ]
+  export FAKE_GH_CHECKS='[{"bucket":"pass","name":"build"}]'
+  start=$SECONDS
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin:$nb" /bin/bash "$W" "$R"
+  took=$((SECONDS - start))
+  [ "$status" -eq 0 ]
+  [ "$output" = "check: build: pass"$'\n'"ci: clear" ]
+  [ "$took" -lt 5 ] || { echo "one read took ${took}s"; return 1; }
+}
+
 @test "a bad minutes value is a usage error" {
   export FAKE_GH_CHECKS='[{"bucket":"pass","name":"build"}]'
   run --separate-stderr bash "$W" "$R" --minutes 0

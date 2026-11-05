@@ -107,13 +107,17 @@ ci_read() {
   command -v gh >/dev/null 2>&1 || { printf 'ci_read: gh is not installed\n' >&2; return 2; }
   [ -d "$1" ] || { printf 'ci_read: no directory at %s\n' "$1" >&2; return 2; }
   # gh's stderr reaches the capture through fd 3 while gh runs; its exit code and stdout follow, each
-  # after a \036 byte, once gh has exited. JSON holds no raw \036, so the last two split it. fd 3 closes
-  # for with_timeout, so its watchdog cannot hold the capture open.
+  # after a \036 byte, once gh has exited. JSON holds no raw \036, so the last two split it. The fds move
+  # with exec inside each subshell, never as redirections on a command: bash 3.2 saves the fd a command's
+  # redirection replaces to a high fd that a child inherits, so with_timeout's watchdog sleep, once pkill
+  # misses it, would hold the capture open for its 10 s, and the caller's fd 3 would reach gh.
   res=$(
-    {
-      out=$(cd "$1" && GH_DEBUG='' with_timeout 10 gh pr checks --json name,bucket 2>&3 3>&-)
-      printf '\036%s\036%s' "$?" "$out"
-    } 3>&1
+    exec 3>&1
+    out=$(
+      exec 2>&3 3>&-
+      cd "$1" && GH_DEBUG='' with_timeout 10 gh pr checks --json name,bucket
+    )
+    printf '\036%s\036%s' "$?" "$out"
   )
   out=${res##*$'\036'}
   res=${res%$'\036'*}
