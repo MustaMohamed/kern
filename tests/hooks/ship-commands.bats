@@ -77,7 +77,8 @@ decide() {
 }
 
 @test "finish-branch: under autopilot, with no rebase.push and no typed rebase, the lease push is denied" {
-  # It backs finish-branch's "Autopilot never rebases". Since M3 part 2 project 2 Task 4 a go's CI loop may
-  # lease-push on the user's typed rebase or sync (g01-git.bats), so the deny is no longer every autopilot's.
+  # It backs push-and-pr's "Autopilot rebases and lease-pushes only in a go's CI loop" (M3 part 2 project 2 Task 5).
+  # Since that project's Task 4 a go's CI loop may lease-push on the user's typed rebase or sync (g01-git.bats), so
+  # the deny is no longer every autopilot's.
   [ "$(decide "git push --force-with-lease origin feat/x")" = deny ]
 }

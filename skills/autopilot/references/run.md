@@ -9,13 +9,13 @@ These rules cover kern's routes only. A job an `overrides.<job>` key leaves to a
 | Merge to main | Reads |
 | Deploy | Tests |
 | Delete | Commits and pushes on its own branch |
-| Spending money | A draft PR on tested or verified changes |
+| Spending money | A draft PR, CI fixes on its branch and `gh pr ready` on clear CI |
 | A design choice that changes what gets built | |
 | A required check that cannot run | |
 | A ticket the run cannot read | |
 | A defect the ticket itself demands | |
 
-A run stops only on this list. At a stop, the run brings the data it collected and a recommendation, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`; the go holds. Work that does not depend on the answer may finish first.
+A run stops only on this list. At a stop, the run brings the data it collected and a recommendation in a report that opens with a `kern stop: <what>` line naming the stop, then waits for a typed reply. A stop a guard denies stays denied after a yes: give the user the command to run with `!`; the go holds. Work that does not depend on the answer may finish first.
 
 This list loosens nothing else: the stops in this file, a route's run-ending failures, a required check still red after its fix rounds and the user's stop predicate still stop a run. The kernel's Autonomy line still holds: an action it keeps for the user's word that this list does not name, such as a force-push to a shared branch, is skipped and reported.
 
@@ -47,7 +47,7 @@ A route is distinct only if it is a different action. The same target and effect
 
 A `fix first` verdict, but for a demanded defect or a first build's change the stop list names, starts a fix round in place of ending the run, up to 3 per self-review. Rounds count from self-review's packages: round N reviews `<slug>-<N+1>.diff`, so the third round's is `<slug>-4.diff`. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
 
-One go covers one draft PR.
+One go covers one PR. After the draft opens, follow `references/ci.md`.
 
 | Case | What the run does |
 |---|---|
@@ -65,7 +65,7 @@ plan: Step 4's spike runs, the go standing for the nod; a fact it cannot settle 
 
 ## The run report
 
-Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, and the jobs that ran under another skill. `parked:` lines keep their format. The report gives self-review's verdict, and any lane's `needs fixes` as it came. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
+Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, the last CI verdict and each red's class, and the jobs that ran under another skill. `parked:` lines keep their format. The report gives self-review's verdict, and any lane's `needs fixes` as it came. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
 
 ## Main thread
 

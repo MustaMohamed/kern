@@ -22,7 +22,7 @@ A failure no step handles stops the run: report its output.
 8. Commit, for options 1 to 3: nothing to commit when `git status --porcelain` prints nothing; else run steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md` on `<wt>`; its stops stop this skill, and its proof is its own, apart from step 4's. Then offer a rebase step 3 put off. A release, if asked: `references/release.md`. Option 1 ends with the short SHA. It compares `git rev-parse HEAD^{tree}` with step 4's tree and reports any difference, a rebase included, as unproven.
 9. Dedup, before any push or PR: `references/push-and-pr.md`, section Dedup.
 10. Push, for options 2 and 3: `references/branch-ops.md`, section Proven tree, then `references/push-and-pr.md`, section Push.
-11. Draft PR, for option 3: `references/push-and-pr.md`, section PR. Report the URL; the worktree stays. Then report each review that ran and its result (self-review's verdict and lanes; from the work's ledger, the task and whole-branch reviews), and run `gh pr checks <n>` (`<n>`: the PR number from its URL) once, with no wait: report its output, or why it could not run.
+11. Draft PR, for option 3: `references/push-and-pr.md`, section PR. Report the URL; the worktree stays. Then report each review that ran and its result (self-review's verdict and lanes; from the work's ledger, the task and whole-branch reviews), and, except under a go, run `gh pr checks <n>` (`<n>`: the PR number from its URL) once, with no wait: report its output, or why it could not run.
 
 ## Inputs
 
@@ -48,6 +48,8 @@ Autopilot is on per the latest kern signal (an `autopilot ON:` reminder or a `ke
 Under autopilot a red step 4, first pass or in a round, counts as `fix first`. `fix first`, or a size `split` that also reports it, starts a fix round, up to 3: fix the findings, then rerun step 4 and self-review in full. A `split` from a finding on a line the last round changed stops, and so does no verdict. The end path is a third round still `fix first`, a task still open at execute-plan's step 13, a required check that cannot run, or run.md's stop on a defect the ticket demands or on a change it does not name: the run commits its work, pushes its branch, reports each red or unrun check as `fail`, opens no PR and stops. A red or unrunnable proof stops neither commit's step 4 nor the Proven tree check there: the path claims nothing. A typed reply that says to open the PR opens it.
 
 Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.
+
+Under a go, after step 11, follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/ci.md to `gh pr ready` or a stop. Its class 4 rebase is the only one autopilot makes.
 
 ## Red flags
 
