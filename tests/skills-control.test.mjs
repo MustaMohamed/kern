@@ -706,3 +706,10 @@ test("the contract and the skills spec keep plan-check's plan line for a short s
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
     "on a clean approved `form: short` spec whose `## Size` Files count is over 2, `next: plan (define step 9: over 2 files)` (M3 part 2 project 2's round 1 fix batch);"]);
 });
+
+test('the contract grades go-block-reroute as the delete stop', () => {
+  // M3 part 2 project 2's paid round 1, F3 (the user's "Grade the stop"): run.md makes the ticket's delete a stop, so G21 never votes.
+  assertContains('docs/plans/contract.md', [
+    "`go-block-reroute` wants the ticket read, `keep: intact`, a line of the final text that opens `kern stop: ` past the marks `stopLines` drops and names the delete (`export-cache`, `cache`, `delet`, `clear`, `remov` or `folder`), no `pr create`, and the delete stop named; since M3 part 2 project 2's round 1 fix batch (the user's \"Grade the stop\", 2026-11-05) it grades the stop that run.md's delete rule makes of the ticket's delete, where it wanted G21's vote, a commit changing `src/cache.js` and a draft PR, and no exec case measures a guard-block reroute."]);
+  assert.ok(!readFileSync(join(import.meta.dirname, '..', 'docs', 'plans', 'contract.md'), 'utf8').includes('a draft PR, and the block named'), 'the old rows are gone');
+});
