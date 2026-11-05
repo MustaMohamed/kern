@@ -15,7 +15,8 @@
 # function, so the model cannot run prompt-submit to forge the message or edit this guard unseen. A
 # shell write that reaches a hook file without naming its path is not seen (G16's accepted limits).
 # Under autopilot only a go approves, for its ticket (_g20_go), in place of the checks on the user's
-# last message. G20 never votes allow. A file under WORK/ledgers, WORK/reviews or WORK/tmp is a working
+# last message, and a plan under WORK/plans only once its review approves it (_g20_reviewed). G20 never
+# votes allow. A file under WORK/ledgers, WORK/reviews or WORK/tmp is a working
 # file (_g20_working). A Write or Edit may not leave a line in one that holds both the word status and
 # the word approved, in any case (_g20_mixed), and a shell write to one may not hold both anywhere in its
 # command (_g20_both), because a printf's \n hides lines. A text editor in a command that holds approved
@@ -35,6 +36,10 @@
 #   rewritten by Edit or Write, the approval edit itself may change the body, and a new file has no
 #   draft to be older than the message, so removing a draft and writing it anew with a real quote passes.
 # - A go approves any file whose issue: line names its ticket, and the model writes that line.
+# - The model writes a go's plan review record too, so G20 reads that it holds an approve verdict, not that
+#   a reviewer wrote it or reviewed this draft. A plan outside WORK/plans, below a folder in it, or
+#   reached by a hard link waits for no record. After a revise verdict a go has no second review round,
+#   so its plan stays a draft.
 # - A subagent call that carries neither agent_type nor agent_id counts as the main session, as for
 #   consent_for.
 # - The hash is djb2, not a cryptographic hash: a quote built to collide with a line of the message
@@ -199,16 +204,78 @@ _g20_mdfile() {
   return 1
 }
 
-# _g20_work: sets _G20_WORK, once per call, to the real path of the work dir, found as kern-dir finds it
-# in the main worktree. Fails when work_dir cannot be read whole or is one kern-dir refuses.
-_g20_work() {
-  local wd
-  [ -z "${_G20_WORK-}" ] || return 0
+# _g20_wd: sets _G20_WD to the work_dir setting, relative to the main worktree, as kern-dir reads it.
+# Fails when work_dir cannot be read whole or is one kern-dir refuses.
+_g20_wd() {
   [ -n "${KERN_MAIN-}" ] || return 1
-  wd=$(settings_get work_dir .kern) || return 1
-  wd=${wd%/}
-  case "$wd" in '' | . | :* | .git | .git* | /* | *..*) return 1 ;; esac
-  _G20_WORK=$(cd -P "$KERN_MAIN/$wd" 2> /dev/null && env pwd -P) && [ -n "$_G20_WORK" ]
+  _G20_WD=$(settings_get work_dir .kern) || return 1
+  _G20_WD=${_G20_WD%/}
+  case "$_G20_WD" in '' | . | :* | .git | .git* | /* | *..*) return 1 ;; esac
+}
+
+# _g20_work: sets _G20_WORK, once per call, to the real path of the work dir, found as kern-dir finds it
+# in the main worktree. Fails when _g20_wd fails or the work dir does not exist.
+_g20_work() {
+  [ -z "${_G20_WORK-}" ] || return 0
+  _g20_wd || return 1
+  _G20_WORK=$(cd -P "$KERN_MAIN/$_G20_WD" 2> /dev/null && env pwd -P) && [ -n "$_G20_WORK" ]
+}
+
+# _g20_dir DIR: sets _G20_REAL to DIR (absolute) with its nearest part that exists read by cd -P and env
+# pwd -P, and the parts after it, which a Write makes, as written.
+_g20_dir() {
+  local d="$1" t=''
+  case "$d" in /*) ;; *) return 1 ;; esac
+  while [ -n "$d" ] && [ ! -d "$d" ]; do
+    t="/${d##*/}$t"
+    d=${d%/*}
+  done
+  _G20_REAL=$(cd -P "${d:-/}" 2> /dev/null && env pwd -P) || return 1
+  _G20_REAL="${_G20_REAL%/}$t"
+}
+
+# _g20_plan PATH: exit 0, with _G20_SLUG set, when PATH (absolute), or a symlink on the way from it (up
+# to 8), names a Markdown file right under WORK/plans, where plan writes its plans; the slug is that name
+# without its extension. Each directory is read by _g20_dir, so a plan whose folder a Write makes is seen.
+# Exit 1 when it is no plan, and 2 when the work dir or a link cannot be read.
+_g20_plan() {
+  local p="$1" i=0 w n l
+  _G20_SLUG=''
+  _g20_wd && _g20_dir "$KERN_MAIN/$_G20_WD/plans" || return 2
+  w=$_G20_REAL
+  while :; do
+    _g20_dir "${p%/*}" || return 2
+    p="$_G20_REAL/${p##*/}"
+    n=${p#"$w"/}
+    if [ "$n" != "$p" ] && [ "${n%/*}" = "$n" ] && _g20_md "$n"; then
+      _G20_SLUG=${n%.*}
+      return 0
+    fi
+    [ -L "$p" ] && [ "$i" -lt 8 ] || return 1
+    l=$(readlink "$p") || return 2
+    case "$l" in /*) p=$l ;; *) p="${p%/*}/$l" ;; esac
+    i=$((i + 1))
+  done
+}
+
+# _g20_reviewed PATH: called once _g20_go approves PATH. A plan (_g20_plan) approves under a go only after
+# its review approves it: denies unless WORK/reviews/plan-<slug>.md, the plan reviewer's reply that plan
+# step 11 saves, is a regular file with a line that, its blanks around trimmed, is Verdict: approve. A
+# record that cannot be read is no approve, and a work dir or link G20 cannot read fails closed.
+_g20_reviewed() {
+  local r rc=0
+  _g20_plan "$1" || rc=$?
+  case "$rc" in
+    0) ;;
+    1) return 0 ;;
+    *)
+      fail_closed "G20 could not read the work dir or a link on the way to $(basename "$1") to tell whether it is a plan, which under a go approves only after its review"
+      return 0
+      ;;
+  esac
+  r="$KERN_MAIN/$_G20_WD/reviews/plan-$_G20_SLUG.md"
+  [ -f "$r" ] && env LC_ALL=C grep -Eq '^[[:space:]]*Verdict: approve[[:space:]]*$' "$r" 2> /dev/null && return 0
+  vote deny G20 "under a go a plan approves only after its review: $r, where plan step 11 saves the plan reviewer's reply, holds no line Verdict: approve; keep status: draft"
 }
 
 # _g20_working PATH [TAIL]: exit 0 when PATH (absolute), with TAIL after it, is a working file: it and
@@ -349,7 +416,10 @@ _g20_file() {
   # An approved file whose approved: lines stay the same is not being approved now.
   if _g20_approved "$before" && [ "$(_g20_lines "$before")" = "$lines" ]; then return 0; fi
   if [ "${AUTOPILOT:-0}" = 1 ]; then
-    _g20_go "$after" && return 0
+    if _g20_go "$after"; then
+      _g20_reviewed "$p"
+      return 0
+    fi
     if [ -n "$_G20_PAST" ]; then
       vote deny G20 "under autopilot only a go approves, for its ticket, and only until its draft PR opens; the draft for $_G20_PAST is open, so keep status: draft (parked under autopilot) and park the question"
     elif [ -n "$_G20_LIVE" ]; then

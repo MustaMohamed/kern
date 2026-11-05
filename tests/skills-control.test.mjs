@@ -298,7 +298,27 @@ test('the contract and the design keep the reply words and the go past its draft
     '`_g02_create` runs `state_set "$SID" "go_phase=pr"`. `go`, `go_repo` and `autopilot` stay, so the go lives on through CI',
     '`apply_go` writes `go_phase` empty with its `go`, `autopilot_off` writes it empty with `go` and `go_repo`, and `state_reset` writes no `go_phase`.',
     'only when `go_live SID KERN_MAIN` holds (M3 part 2 project 2, Task 2)']);
-  assertContains('docs/specs/2026-10-12-kern-design.md', ['| Only a go approves, for its ticket, until its draft PR opens |']);
+  // Task 8 carried the cell on past the draft clause.
+  assertContains('docs/specs/2026-10-12-kern-design.md', ['| Only a go approves, for its ticket, until its draft PR opens;']);
+});
+
+test("the contract, the design and the skills spec keep a go's plan waiting for its review", () => {
+  // M3 part 2 project 2, Task 8: plan step 11 saves the plan review's reply, and under a go G20 denies the plan's
+  // approval until that reply holds the line Verdict: approve.
+  assertContains('docs/plans/contract.md', [
+    'under autopilot, deny unless a go approves it, a plan under `WORK/plans` only once its review approves it (see "G20 takes the go" under Additions from the M3 plan)',
+    "A go's plan waits for its review (M3 part 2 project 2, Task 8): once `_g20_go` approves a Write or Edit whose path, or a symlink on the way from it (up to 8), names a Markdown file right under `WORK/plans`",
+    '`_g20_reviewed` denies unless `WORK/reviews/plan-<slug>.md`, `<slug>` that name without its extension and WORK the `work_dir` setting under `KERN_MAIN`, is a regular file holding a line that, its blanks around trimmed, is exactly `Verdict: approve`.',
+    "The deny reads `under a go a plan approves only after its review: <record>, where plan step 11 saves the plan reviewer's reply, holds no line Verdict: approve; keep status: draft`.",
+    'A record that cannot be read is no approve, and a work dir or link G20 cannot read fails closed.',
+    "A person's approval, with autopilot off, is unchanged.",
+    'the model writes the record, so G20 reads that it holds an approve verdict, not that a reviewer wrote it or reviewed this draft;',
+    'after a `revise` verdict a go has no second review round, so its plan stays a draft.']);
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    "until its draft PR opens; a plan under `WORK/plans` only once `WORK/reviews/plan-<slug>.md`, its review's saved reply, holds the line `Verdict: approve` (M3 part 2 project 2) |"]);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    "round 1 only, saving its reply verbatim with the Write tool to `<kern-dir reviews>/plan-<slug>.md` (M3 part 2 project 2's Task 8: under a go G20 reads it before the plan's approval)",
+    "and G20 denies that approval until the review's saved reply holds the line `Verdict: approve` (M3 part 2 project 2's Task 8)."]);
 });
 
 test('run.md stays within its byte cap', () => {

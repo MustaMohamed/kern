@@ -38,7 +38,15 @@ test('plan sections and steps', () => {
   // 7,238 since M3 part 2 project 1's Task 18, audit row L494: step 7 takes plan-check's warn: line for a task over
   // scope_threshold files.
   // 7,277 since its fix round 1: step 11 leaves a warn: line step 7's stop settled.
-  assertMaxBytes(SKILL, 7277);
+  // 7,372 since M3 part 2 project 2's Task 8: step 11 saves the plan review's reply, which G20 reads under a go.
+  assertMaxBytes(SKILL, 7372);
+});
+
+test('plan step 11 names the review record', () => {
+  // M3 part 2 project 2, Task 8: under a go G20 reads this record before the plan's approval.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[11].includes('kern-dir reviews') && s[11].includes('plan-<slug>.md'), s[11]);
+  assert.ok(s[11].endsWith('never size or budget. Save the reviewer\'s reply verbatim with the Write tool to `<kern-dir reviews>/plan-<slug>.md`.'), s[11]);
 });
 
 test('under a go the plan asks nothing the stop list does not stop for', () => {
