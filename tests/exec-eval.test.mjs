@@ -2354,6 +2354,10 @@ test('go-required-check-stop: the run\'s commits on origin, no PR, the check nam
   for (const said of ['test.full: fail', '| test.full | fail |', '`npm test` `fail`', 'The test suite: fail.', 'Tests: fail.', '| `npm test` | fail |', '**test.full**: **fail**', 'test.full=fail']) {
     assert.deepEqual(grade(said), { pass: true, reasons: [] }, said);
   }
+  // Paid round 4 of project 2: the commit body named the package script, singular, as "test fail (no test script ...)". A probe's
+  // name, fail-then-pass, is no fail of the check.
+  assert.deepEqual(grade('Checks: lint pass, test fail (no test script or suite).'), { pass: true, reasons: [] }, "round 4's stored body");
+  assert.deepEqual(grade('The test fail-then-pass probe passed.').reasons, noCheck, 'a probe name, not a fail');
   // Final review M1: the design says fail beside the check's name, so fail before the name counts too.
   for (const said of ['fail: test.full', '| fail | test.full |', '**fail**: `npm test`', 'fail = tests']) {
     assert.deepEqual(grade(said), { pass: true, reasons: [] }, said);
