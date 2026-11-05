@@ -18,8 +18,9 @@
 # - A go's report, under a live go with no wait open: each `check: <name>: skip (named)` line review-check
 #   printed in the turn is named in the last message, on a line that also says skip. G2's allow of the go's
 #   `gh pr ready` ends the go and writes go_report=1, so the check also runs outside a go, once: the first
-#   stop with no wait open reads it, and a stop allowed after that, the one after a block included, empties
-#   go_report.
+#   stop with no wait open reads it, a stop the hook already blocked included (M3 part 2 project 2's round 7
+#   fix batch). A stop it allows empties go_report; a block writes go_report=2, and the stop after it empties
+#   go_report and reads no report.
 # - The proof skip, under a live go with no wait open until the run reports a stop (stop_down empty), and in the
 #   report a go owes after ready (M3 part 2 project 2's round 2 fix batch and its fix round 1; the user's "Build
 #   the Stop hook check", 2026-11-05): a line of the last message names verify.browser, verify.app or the running
@@ -36,7 +37,7 @@
 # report, saying it stopped short; with stop_backs at 3 the next stop is allowed, and any stop allowed with
 # stop_backs at 3 sets it back to 0. A wait's first task-notification after the last block (a line past
 # stop_line), once per wait, or a typed prompt (prompt-submit) starts the count again. Outside a go a stop the
-# hook already blocked allows, as before.
+# hook already blocked allows, as before, unless it owes the go's report.
 # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 # Homebrew bash 5.3.15 segfaults now and then when a subshell undoes a locale change, but only while
 # neither LANG nor LC_ALL is set (Task 16l). An unset LANG already means the C locale, and an LC_* still
@@ -457,33 +458,38 @@ GO=0
 if [ -n "$SID" ] && G=$(state_get "$SID" go 2>/dev/null) && [ -n "$G" ] && main_root && go_live "$SID" "$KERN_MAIN"; then
   GO=1
 fi
-# A go G2 let mark its PR ready has ended, and still owes its report (go_report, which that allow writes; final
-# review I1): outside a go the report check runs once more. A read that fails is no report owed.
+# A go G2 let mark its PR ready has ended, and still owes its report (go_report 1, which that allow writes; final
+# review I1): outside a go the report check runs once more, at the first stop with no wait open. Its block writes
+# go_report 2 (M3 part 2 project 2's round 7 fix batch), and the stop after it empties the key and reads no
+# report, so the hook never blocks twice in a row on one report. kern: off writes nothing. A read that fails is
+# no report owed.
 REP=0
-if [ "$GO" = 0 ] && [ -n "$SID" ] && RP=$(state_get "$SID" go_report 2>/dev/null) && [ "$RP" = 1 ]; then
-  REP=1
+RP=""
+if [ "$GO" = 0 ] && [ -n "$SID" ]; then
+  RP=$(state_get "$SID" go_report 2>/dev/null) || RP=""
+  case "$RP" in
+    1) REP=1 ;;
+    2)
+      main_root
+      kern_enabled 2>/dev/null && state_set "$SID" "go_report=" 2>/dev/null
+      ;;
+  esac
 fi
-# report_read: the owed report is read, so go_report empties, unless kern is off for this project; the stop is
-# allowed either way.
-report_read() {
-  main_root
-  kern_enabled 2>/dev/null && state_set "$SID" "go_report=" 2>/dev/null
-  exit 0
-}
-# Outside a go, a stop the hook already blocked allows, as before; the owed report's check is once, so that stop
-# also empties go_report.
-if [ "$GO" = 0 ] && [ "$A" = true ]; then
-  [ "$REP" = 1 ] && report_read
+# Outside a go, a stop the hook already blocked allows, as before, unless a report is owed: in paid round 7 two
+# finish-line send-backs left stop_hook_active set when go-proof-skip's ready ended its go, and the report's
+# reworded skip line went unread (the round 7 fix batch; the user's "Both fixes, then round 8 (Recommended)",
+# 2026-11-05).
+if [ "$GO" = 0 ] && [ "$A" = true ] && [ "$REP" = 0 ]; then
   exit 0
 fi
 # Outside a go, one grep of the whole transcript first: with no self-review and no size-check in it, only the
 # nudges could block, and they run only with `stop.nudge: on` and an edit to read; otherwise nothing more runs.
-# An owed report reads on.
+# An owed report reads on. Outside a go the nudges block once, so a stop the hook already blocked runs none.
 NUDGE=$GO
 MARK=0
 if [ "$GO" = 0 ]; then
   env LC_ALL=C grep -q -F -e 'self-review' -e 'size-check' "$T" 2>/dev/null && MARK=1
-  if env LC_ALL=C grep -q -E '"name":"(Edit|Write|NotebookEdit|MultiEdit)"' "$T" 2>/dev/null; then
+  if [ "$A" != true ] && env LC_ALL=C grep -q -E '"name":"(Edit|Write|NotebookEdit|MultiEdit)"' "$T" 2>/dev/null; then
     [ "$(settings_get stop.nudge off 2>/dev/null)" = on ] && NUDGE=1
   fi
   [ "$MARK" = 1 ] || [ "$NUDGE" = 1 ] || [ "$REP" = 1 ] || exit 0
@@ -721,8 +727,8 @@ if [ "$GO" = 1 ]; then
   B0=$SV
   case "$B0" in 0 | 1 | 2 | 3) ;; *) B0=0 ;; esac
 fi
-# An owed report, outside the go, is read the same way once no wait is open; its send-back is not counted, since
-# the stop after it allows (stop_hook_active).
+# An owed report, outside the go, is read the same way once no wait is open, on a stop the hook already blocked too;
+# its send-back is not counted, since the stop after it allows (go_report 2).
 READ=0
 if [ "$REP" = 1 ] && [ "$PENDING" = 0 ]; then
   READ=1
@@ -771,10 +777,14 @@ fi
 # would act.
 main_root
 kern_enabled 2>/dev/null || exit 0
-# A stop allowed once the owed report was read empties go_report.
-if [ "$READ" = 1 ] && [ "$SR" = 0 ] && [ -z "$REASON" ]; then
-  state_set "$SID" "go_report=" 2>/dev/null
-  exit 0
+# A stop allowed once the owed report was read empties go_report. A block writes go_report=2, so the stop after it
+# reads no report; a write that fails allows, since go_report 1 would read the report again (round 7 fix batch).
+if [ "$READ" = 1 ]; then
+  if [ "$SR" = 0 ] && [ -z "$REASON" ]; then
+    state_set "$SID" "go_report=" 2>/dev/null
+    exit 0
+  fi
+  state_set "$SID" go_report=2 2>/dev/null || exit 0
 fi
 if [ "$GO" = 1 ]; then
   [ "$SETDOWN" = 1 ] && { state_set "$SID" stop_down=1 2>/dev/null || exit 0; }

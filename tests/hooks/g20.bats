@@ -1687,3 +1687,126 @@ go_route() {
   no_vote
   [ "$(read_failures grep)" -ge 1 ]
 }
+
+# The commit gate (M3 part 2 project 2's round 7 fix batch; the user's "Both fixes, then round 8 (Recommended)",
+# 2026-11-05): round 7's go-required-check-stop wrote its build by a shell redirect, which the route gate does not
+# see, and committed it with no spec. Under the route gate's own gate, G5 hands each commit to _g20_commit_route,
+# which reads the paths the commit takes, whatever wrote them.
+
+# go_wt: go_route, then a linked worktree W on branch ma-254 under .claude/worktrees, where a go builds.
+go_wt() {
+  go_route
+  W="$R/.claude/worktrees/ma-254"
+  git -C "$R" worktree add -q "$W" -b ma-254 2> /dev/null
+}
+# commit CMD [EXTRA]: G5's vote on the Bash call CMD (no double quote) run in W, from a session whose transcript is
+# TR, with EXTRA top-level fields after a comma. G5 calls the commit gate.
+commit() {
+  local cwd=$CWD
+  CWD=$W
+  run_guard "$(payload PreToolUse "\"transcript_path\":\"$TR\",${2:+$2,}\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"}")" g05
+  CWD=$cwd
+}
+# commit_denied PATH: G20 denied the last commit with the commit gate's reason, naming PATH; another guard's deny
+# may come first.
+commit_denied() {
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [[ "$output" == *"G20: under a go, a build starts at define, and no spec under $R/.kern/specs carries this go's approval, so this commit of $1 is held. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket commits test files only. A session that EnterWorktree moved into a worktree cannot write $R/.kern/specs: ExitWorktree with action keep, write the spec, then commit in the worktree by its path."* ]] ||
+    { echo "$output"; return 1; }
+}
+# commit_passed: G20 said nothing on the last commit, and G5 allowed it.
+commit_passed() {
+  [ "$(decision_of "$output")" = allow ] && [[ "$output" != *G20* ]] || { echo "$output"; return 1; }
+}
+# staged FILE...: writes each FILE in W and stages it.
+staged() {
+  local f
+  for f in "$@"; do
+    mkdir -p "$(dirname "$W/$f")"
+    printf 'export const sum = (a, b) => a + b;\n' > "$W/$f"
+  done
+  git -C "$W" add -- "$@"
+}
+
+@test "under a go a commit of a build with no spec is denied, whatever wrote its files" {
+  go_wt
+  staged src/sum.js test/sum.test.js
+  commit "git commit -m 'feat: round sum'"
+  commit_denied src/sum.js
+  # A file the commit deletes is a build too.
+  git -C "$W" commit -q -m 'feat: round sum'
+  git -C "$W" rm -q src/sum.js
+  commit "git commit -m 'feat: drop sum'"
+  commit_denied src/sum.js
+}
+
+@test "a spec the go approved, or a diagnose Read, opens the commit gate" {
+  go_wt
+  staged src/sum.js
+  tr_read "$K/skills/define/SKILL.md"
+  commit "git commit -m 'feat: round sum'"
+  commit_denied src/sum.js
+  printf '%s\n' '---' 'form: short' 'status: approved' 'issue: MA-254' 'approved: 2026-11-05, "/kern:autopilot go MA-254"' '---' '## Problem' > "$R/.kern/specs/round-sum.md"
+  commit "git commit -m 'feat: round sum'"
+  commit_passed
+  rm "$R/.kern/specs/round-sum.md"
+  commit "git commit -m 'feat: round sum'"
+  commit_denied src/sum.js
+  tr_read "$K/skills/diagnose/SKILL.md"
+  commit "git commit -m 'fix: round sum'"
+  commit_passed
+}
+
+@test "a tests-only commit passes the commit gate, and so does a file under the work dir" {
+  go_wt
+  staged test/sum.test.js tests/round.py src/__tests__/sum.js src/sum.spec.ts
+  commit "git commit -m 'test: round sum'"
+  commit_passed
+  # A file under the work dir, in a commit run in the main checkout, is no build either.
+  git -C "$R" switch -q -c ma-254-notes
+  mkdir -p "$R/.kern/notes"
+  printf 'n\n' > "$R/.kern/notes/n.md"
+  git -C "$R" add -f .kern/notes/n.md
+  W=$R
+  commit "git commit -m 'docs: notes'"
+  commit_passed
+}
+
+@test "outside a go, or for a subagent, the commit gate does not vote" {
+  go_wt
+  staged src/sum.js
+  commit "git commit -m 'feat: round sum'" '"agent_id":"a1"'
+  commit_passed
+  # Autopilot off ends the go; G5 asks as it does for any commit then. Autopilot on with no go allows.
+  say '/kern:autopilot off'
+  commit "git commit -m 'feat: round sum'"
+  [ "$(decision_of "$output")" = ask ]
+  [[ "$output" != *G20* ]] || false
+  say '/kern:autopilot on'
+  commit "git commit -m 'feat: round sum'"
+  commit_passed
+}
+
+@test "with -a the commit gate reads the tracked changes too" {
+  local c
+  go_wt
+  staged src/sum.js
+  git -C "$W" commit -q -m 'feat: sum'
+  printf 'export const sum = (a, b) => Math.round((a + b) * 100) / 100;\n' > "$W/src/sum.js"
+  # Unstaged, the change is no part of a plain commit.
+  commit "git commit -m 'feat: round sum'"
+  commit_passed
+  for c in "git commit -a -m 'feat: round sum'" "git commit --all -m 'feat: round sum'" "git commit -am 'feat: round sum'"; do
+    commit "$c"
+    commit_denied src/sum.js || { echo "for: $c"; return 1; }
+  done
+}
+
+@test "a git fault in the commit gate allows" {
+  go_wt
+  staged src/sum.js
+  read_fails git '--cached'
+  commit "git commit -m 'feat: round sum'"
+  commit_passed
+  [ "$(read_failures git)" -ge 1 ]
+}

@@ -645,7 +645,7 @@ test('the design, the contract and the settings keep the Stop hook that holds a 
     "A go's finish line (M3 part 2 project 2), under a live go until the run reports its first stop: a stop is allowed when the last message holds a line that opens `kern stop: ` past any list, quote, emphasis or heading mark, as the eval grader reads it, which stands the check down for the rest of the go (`stop_down`), or while a background `ci-wait` or subagent the go started has no task-notification; otherwise the reason names the first missing step: the draft PR, a `ci-wait` after the last push, a push after a red verdict, or `gh pr ready`.",
     "A go's report, while no such wait is open: each `check: <name>: skip (named)` line `review-check` printed in the turn is named in the last message beside the word skip.",
     "The nudges, under a go, or outside one only with `stop.nudge: on`: a main-thread Edit, Write or NotebookEdit outside the work dir with no `test.focused`, `test.full`, `task-done`, `review-check` or `probe` run after it, and `floor-scan`'s hits in `git diff HEAD` of the files those calls edited (G7, section 8.3) that the last message does not name by `path:line`.",
-    "Under a go each finish-line, report, proof skip or nudge block adds 1 to `stop_backs`; the third asks the run to end with its report, saying it stopped short, and the next stop is allowed; any stop allowed at 3 sets the count back to 0. A typed prompt, or the first task-notification after the last block of a background `ci-wait` or subagent the go started, once for each, starts the count again; a notice of anything else does not. Outside a go `stop_hook_active` allows.",
+    "Under a go each finish-line, report, proof skip or nudge block adds 1 to `stop_backs`; the third asks the run to end with its report, saying it stopped short, and the next stop is allowed; any stop allowed at 3 sets the count back to 0. A typed prompt, or the first task-notification after the last block of a background `ci-wait` or subagent the go started, once for each, starts the count again; a notice of anything else does not. Outside a go `stop_hook_active` allows, unless the go's report is owed.",
     "| G7 floor guard | opt-in, `stop.nudge: on` | At turn end the Stop hook runs `floor-scan` on `git diff HEAD` of the files the turn's main-thread edits touched: a new suppression, a skipped or deleted test, a removed assert, an empty catch or a debug print blocks the stop once, unless the last message names its `path:line` with a reason (M3 part 2 project 2) | Under a go, always on: each block counts toward the Stop hook's 3 send-backs in a row (section 6.3). A plain `/kern:autopilot on` run is as interactive |",
     'any write or run of a hook entry file (`hooks/stop` among them since M3 part 2 project 2)']);
   assertContains('docs/plans/contract.md', [
@@ -689,15 +689,18 @@ test("the skills spec's key table holds verify.browser's default and points at t
 test('the design and the contract keep the report a go owes after ready, and the stop line the grader reads', () => {
   // Final review I1: G2's ready allow ends the go, so go_report keeps the Stop hook's report check for the stop after it.
   // Final review I2: the hook drops the marks the grader drops before `kern stop: `.
+  // M3 part 2 project 2's round 7 fix batch (the user's "Both fixes, then round 8 (Recommended)", 2026-11-05): two finish-line
+  // send-backs left stop_hook_active set at go-proof-skip's ready, so the owed report went unread; it is read on such a stop
+  // too, and its block writes go_report=2, so the stop after it reads no report.
   assertContains('docs/specs/2026-10-12-kern-design.md', [
-    "G2's allow of the go's `gh pr ready` ends the go and writes `go_report=1`, so this check runs once more outside the go, at the first stop with no wait open; its block there is not counted, and the stop allowed after it empties `go_report`, as do a typed prompt, a new go and autopilot off.",
+    "G2's allow of the go's `gh pr ready` ends the go and writes `go_report=1`, so this check runs once more outside the go, at the first stop with no wait open, a stop the hook already blocked included (M3 part 2 project 2's round 7 fix batch); its block there is not counted and writes `go_report=2`, and the stop after that block, or a stop the check allows, empties `go_report`, as do a typed prompt while it is `1`, a new go and autopilot off.",
     'allows with no parse when neither holds `self-review` or `size-check`, no nudge applies and no report is owed;']);
   assertContains('docs/plans/contract.md', [
-    "G2's allow of a go's `gh pr ready` adds `go_report` (`1` while the ended go's report is owed to the Stop hook, else empty or unset), the final review's I1.",
+    "G2's allow of a go's `gh pr ready` adds `go_report` (`1` while the ended go's report is owed to the Stop hook, `2` once the Stop hook blocked on that report, since M3 part 2 project 2's round 7 fix batch, else empty or unset), the final review's I1.",
     '`apply_go` writes `go_phase` empty with its `go`, `autopilot_off` writes it empty with `go` and `go_repo`, and `state_reset` writes no `go_phase`. Both also write `go_report` empty',
-    'Outside a go `stop_hook_active` allows, as before; with `go_report` at `1` that stop also writes it empty.',
+    "Outside a go `stop_hook_active` allows, as before, unless `go_report` is `1`, when that stop reads the owed report alone, (4) and (7) below (M3 part 2 project 2's round 7 fix batch; the user's \"Both fixes, then round 8 (Recommended)\", 2026-11-05: in paid round 7 two finish-line send-backs left `stop_hook_active` set when `go-proof-skip`'s `gh pr ready` ended its go, so the owed report's reworded skip line went unread); outside a go a stop that finds `go_report` at `2` writes it empty first, `stop_hook_active` or not, unless `kern: off`.",
     'With `go_report` at `1` it always reads on.',
-    "Outside a go it runs once more while `go_report` is `1` (G2's ready allow ends the go and writes it; the final review's I1), at the first stop with no wait open: there its block is no send-back, and the stop it allows, or the `stop_hook_active` stop after its block, writes `go_report` empty; a read of `go_report` that fails owes no report.",
+    "Outside a go it runs once more while `go_report` is `1` (G2's ready allow ends the go and writes it; the final review's I1), at the first stop with no wait open, a `stop_hook_active` stop included since the round 7 fix batch: there its block is no send-back and writes `go_report=2` (a write that fails allows), the stop it allows writes `go_report` empty, and the stop after its block reads no report and writes `go_report` empty, so the hook never blocks twice in a row on one report; a read of `go_report` that fails owes no report.",
     "and `go_report` empty likewise when it is `1`; `apply_go` writes `stop_backs=0`, and `stop_down` and `go_report` empty, with its go, and `autopilot_off` writes `go_report` empty.",
     // Final review M1: the two cases that push after the draft wait on their last push too.
     '`go-ci-fix-ready` and `go-ci-behind-rebase` also want such a call after the last push that ran, so a fix or lease push is waited on before ready (the final review\'s M1); with no push that ran that row passes, and the push rows fail the run.']);
@@ -709,6 +712,9 @@ test('the design and the contract keep the report a go owes after ready, and the
   const grade = readFileSync(join(import.meta.dirname, '..', 'scripts', 'lib', 'exec-grade.mjs'), 'utf8');
   assert.ok(hook.includes('sub(/^([ \\t>*_`#+-]|[0-9]+[.)][ \\t])+/, "", x); if (substr(x, 1, 11) == "kern stop: ")'), 'the hook strips the marks');
   assert.ok(grade.includes(".replace(/^(?:[\\s>*_`#+-]|\\d+[.)](?=\\s))+/, '')).filter((l) => l.startsWith('kern stop: '))"), 'the grader strips the same marks');
+  // The round 7 fix batch: a stop_hook_active stop reads on while a report is owed, and the owed report's block writes 2.
+  assert.ok(hook.includes('if [ "$GO" = 0 ] && [ "$A" = true ] && [ "$REP" = 0 ]; then'), 'a stop the hook blocked reads an owed report');
+  assert.ok(hook.includes('  state_set "$SID" go_report=2 2>/dev/null || exit 0\n'), 'the owed report blocks once');
 });
 
 test("the contract keeps the round 1 fix batch's Stop hook reason", () => {
@@ -761,13 +767,42 @@ test("the contract and both designs keep the round 2 fix batch's G20 route gate"
     'Accepted limits: a Bash write (a here-doc, an inline script) is not seen, so a denied run could route around it; a diagnose Read opens the gate for any edit; test paths are read by name;',
     "Its last sentence came in M3 part 2 project 2's round 5 fix batch, M3: in paid round 5 a go that Claude Code's EnterWorktree pinned to a worktree could write the spec neither under `KERN_MAIN`, which Claude Code refused, nor in the worktree, which this gate denied and `_g20_go_spec` does not read."]);
   const gate = "a main-thread Write, Edit or NotebookEdit under the main worktree's root and outside the work dir, of a file that is no test by its path, is denied until a spec under `WORK/specs` carries the go's approval, or the run has read diagnose: a go's build starts at define, a bug at diagnose";
-  assertContains('docs/specs/2026-10-12-kern-design.md', [`Under a live go ${gate} (M3 part 2 project 2's round 2 fix batch) |`]);
+  // The round 7 fix batch adds a sentence to each design row, so the pins end at the round 2 text.
+  assertContains('docs/specs/2026-10-12-kern-design.md', [`Under a live go ${gate} (M3 part 2 project 2's round 2 fix batch).`]);
   assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
-    `| G20 | A${gate.slice(1)}. This closes \`go-required-check-stop\`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05) |`]);
+    `| G20 | A${gate.slice(1)}. This closes \`go-required-check-stop\`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05).`]);
   // The guard's reason is the contract's, the work dir's specs named in place of each placeholder (two since the round 5 fix
   // batch's fix round 1, which names the folder a pinned session cannot write).
   const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
   assert.ok(guard.includes(`vote deny G20 "${reason.replaceAll('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the contract\'s reason');
+});
+
+test("the contract and both designs keep the round 7 fix batch's commit gate", () => {
+  // M3 part 2 project 2's paid round 7 (the user's "Both fixes, then round 8 (Recommended)", 2026-11-05): go-required-check-stop
+  // wrote its build by a shell redirect, which the route gate does not see, and committed it with no spec, so under the same
+  // gate G20 holds the commit, whatever wrote its files.
+  const route = 'under a go, a build starts at define, and no spec under <KERN_MAIN>/<work_dir>/specs carries this go\'s approval. Read ${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only. A session that EnterWorktree moved into a worktree cannot write <KERN_MAIN>/<work_dir>/specs: ExitWorktree with action keep, write the spec, then edit the worktree by its path.';
+  const swap = (s, from, to) => {
+    assert.equal(s.split(from).length, 2, `one ${from}`);
+    return s.split(from).join(to);
+  };
+  assertContains('docs/plans/contract.md', [
+    "Since M3 part 2 project 2's round 7 fix batch (the user's \"Both fixes, then round 8 (Recommended)\", 2026-11-05: in paid round 7 `go-required-check-stop` wrote its build by a shell redirect, which this gate does not see, and committed it with no spec), G5 hands each commit to `_g20_commit_route DIR ALL`, which under the same gate denies when a path the commit takes (`git diff --cached --name-only --no-renames -z` and, when the commit carries `-a` and ALL is `1`, `git diff --name-only --no-renames -z`, each run in the top of DIR's worktree) is under the main worktree's root, not under the work dir and no test path, and neither `_g20_go_spec` nor `_g20_diagnosed` holds, with the deny above but `, so this commit of <path> is held` before its first period, `commits` for `edits` and `commit in the worktree by its path` for `edit the worktree by its path`, and a git or read fault allows.",
+    "Since M3 part 2 project 2's round 7 fix batch (the user's \"Both fixes, then round 8 (Recommended)\", 2026-11-05), `_g05_commit` calls G20's `_g20_commit_route \"$_G05_DIR\" ALL`, ALL `1` when `word_has` finds `--all` in the commit's options, once the message checks, `commit.policy` and the consent step pass and before `_g05_proven`, so under a live go a commit of a build with no spec is denied whatever wrote its files (G20's route gate above)."]);
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    ". The same gate denies a main-thread commit under a live go that takes such a file, whatever wrote it (M3 part 2 project 2's round 7 fix batch) |",
+    "; under a live go, a commit of a build with no spec denied by G20's route gate (M3 part 2 project 2's round 7 fix batch) |"]);
+  assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
+    ". The same gate denies a main-thread commit that takes such a file, staged or, with `-a`, tracked, whatever wrote it, since round 7's `go-required-check-stop` wrote its build by a shell redirect, which the gate does not see, and committed it (the round 7 fix batch; the user's \"Both fixes, then round 8 (Recommended)\", 2026-11-05) |"]);
+  // The commit's reason is the route's with the contract's three changes, and the guard gives it.
+  let commit = swap(route, "this go's approval.", "this go's approval, so this commit of <path> is held.");
+  commit = swap(commit, 'edits test files only', 'commits test files only');
+  commit = swap(commit, 'edit the worktree by its path', 'commit in the worktree by its path');
+  const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
+  assert.ok(guard.includes(`vote deny G20 "${commit.replaceAll('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('<path>', '$f').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the commit reason');
+  // G5 hands the commit to the gate before its proven-shape allow.
+  const g05 = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g05-commit.sh'), 'utf8');
+  assert.ok(g05.includes('  _g20_commit_route "$_G05_DIR" "$all"\n  if _g05_proven "$1" "$toks"; then'), 'G5 calls the gate before its allow');
 });
 
 test("the contract and both designs keep the round 2 fix batch's G1 edit deny", () => {
