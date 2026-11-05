@@ -482,6 +482,33 @@ jslug() {
   [ "$status" -eq 1 ]
 }
 
+# M3 part 2 project 2, Task 9: the runs of a parallel eval round share one CLAUDE_CONFIG_DIR, each in a workspace
+# <tmp>/w-*/<name> of its own. A run's recall takes none of another run's sessions or prompts: not by the folder slug,
+# the worktree.dir prefix (a removed worktree's folder) or history.jsonl.
+@test "recall lists only this run's sessions in a shared config dir" {
+  cc="$TMP/eval-config"
+  for w in a b; do
+    W="$TMP/w-$w/invoice-app"
+    mkdir -p "$W/.claude/worktrees"
+    git init -q -b main "$W"
+    s=$(printf '%s' "$W" | LC_ALL=C tr -c 'A-Za-z0-9' '-')
+    mkdir -p "$cc/projects/$s" "$cc/projects/$s--claude-worktrees-fix"
+    printf '{"type":"user","cwd":"%s"}\n' "$W" > "$cc/projects/$s/run-$w.jsonl"
+    printf '{"type":"user","cwd":"%s"}\n' "$W/.claude/worktrees/fix" > "$cc/projects/$s--claude-worktrees-fix/wt-$w.jsonl"
+    printf '{"display":"invoice totals in %s","pastedContents":{},"timestamp":%s,"project":"%s","sessionId":"run-%s"}\n' "$w" "$now" "$W" "$w" >> "$cc/history.jsonl"
+  done
+  cd "$TMP/w-a/invoice-app"
+  CLAUDE_CONFIG_DIR="$cc" run --separate-stderr bash "$KERN_ROOT/scripts/recall-sessions" --topic invoice
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^session')" -eq 2 ]
+  [[ "$output" == *"/run-a.jsonl"* ]] || false
+  [[ "$output" == *"/wt-a.jsonl"* ]] || false
+  [[ "$output" == *$'\trun-a\tinvoice totals in a'* ]] || false
+  [[ "$output" != *w-b* ]] || false
+  [[ "$output" != *run-b* ]] || false
+  [[ "$output" != *wt-b* ]] || false
+}
+
 @test "the test env drops a CLAUDE_CONFIG_DIR the caller set" {
   export CLAUDE_CONFIG_DIR="$TMP/elsewhere"
   wt_test_env

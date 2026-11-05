@@ -199,8 +199,8 @@ export const NO_BACKGROUND = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
 // graded. Capped by turns (--max-turns, which `claude --help` does not list but the CLI reference
 // documents) and by dollars (--max-budget-usd). On the timeout claude's process group gets SIGTERM, then
 // SIGKILL after killGraceMs. More than maxBuffer bytes on stdout or stderr cuts the run off the same way. The result,
-// { argv, events, badLines, status, stderr, transcript }, carries the session's transcript (ended), and a timeout's error
-// carries it beside the events.
+// { argv, events, badLines, status, stderr, transcript }, carries the session's transcript (ended), and the error of a run
+// cut off by the timeout, by output past maxBuffer or by a signal carries it beside the events.
 export function runClaude({ cwd, prompts, pluginDirs = [], model, maxTurns = 12, maxBudgetUsd = 3, env = {}, timeoutMs = 10 * 60 * 1000,
   killGraceMs = 5000, maxBuffer = 64 * 1024 * 1024 }) {
   const { argv, childEnvironment } = prepare({ cwd, prompts, pluginDirs, model, maxTurns, maxBudgetUsd, env });
@@ -274,14 +274,14 @@ function prepare({ cwd, prompts, pluginDirs, model, maxTurns, maxBudgetUsd, env 
 function ended({ argv, stdout, stderr, report, timedOut, overflow, error, status, signal, timeoutMs, maxBuffer, configDir = '' }) {
   const { events, badLines } = parseEvents(stdout);
   const transcript = takeTranscript(configDir, runSession(events));
-  // A run the timeout cut off is no result, but the events it printed and its transcript go with the error, so a runner
-  // can save them and a reader see how far it got (Task 16h review, M6).
-  if (timedOut) {
-    throw Object.assign(new ClaudeRunError(`claude timed out after ${timeoutMs} ms; the ${events.length} events it printed are kept`), { events, transcript });
-  }
+  // A run cut off by the timeout, by output past maxBuffer or by a signal is no result, but the events it printed and its
+  // transcript go with the error, so a runner can save them and a reader see how far it got (Task 16h review, M6) and
+  // whether the Stop hook blocked (M3 part 2 project 2, Task 9).
+  const cut = (message) => Object.assign(new ClaudeRunError(message), { events, transcript });
+  if (timedOut) throw cut(`claude timed out after ${timeoutMs} ms; the ${events.length} events it printed are kept`);
   // ENOBUFS: the driver was stopped, and it stopped claude, before either could report. Only this run
   // printed that much, so it is not fatal.
-  if (overflow) throw new ClaudeRunError(`claude printed more than ${maxBuffer} bytes to stdout or stderr, so the run was cut off`);
+  if (overflow) throw cut(`claude printed more than ${maxBuffer} bytes to stdout or stderr, so the run was cut off`);
   let end = null;
   try { end = JSON.parse(report || 'null'); } catch { end = null; }
   if (end?.error?.code === 'ENOENT') throw new ClaudeRunError('claude is not on PATH', true);
@@ -290,7 +290,7 @@ function ended({ argv, stdout, stderr, report, timedOut, overflow, error, status
   // before it read a prompt is not this: the driver takes it and reports claude's own status or signal.
   if (!end) throw new ClaudeRunError(`the claude driver failed: ${error?.message || `exit ${status ?? signal}`}: ${(stderr || '').trim().split('\n').pop() || 'no stderr'}`, true);
   if (end.status === 126 || end.status === 127) throw new ClaudeRunError(`claude exited ${end.status}: ${(stderr || '').trim()}`, true);
-  if (end.status === null) throw new ClaudeRunError(`claude was killed by ${end.signal}`);
+  if (end.status === null) throw cut(`claude was killed by ${end.signal}`);
   // A usage or rate limit: Claude Code answers by itself (model "<synthetic>") and no model ran. Every
   // later run would get the same reply, so the caller stops instead of grading it as a failed case.
   const limit = events.find((e) => e?.type === 'assistant' && e.message?.model === '<synthetic>' &&

@@ -277,6 +277,12 @@ test('the skills spec and the design keep the lines project 1 changed', () => {
     "a write (`cp`, `mv`, `install`, `tee`, a `>` target, `git add` or `git mv`, each simple command judged alone) of a project's own hook file that resolves outside kern's hooks folder gets no vote either"]);
 });
 
+test('the contract says a run cut off by output or a signal keeps its transcript', () => {
+  // M3 part 2 project 2, Task 9: ended attaches events and transcript to the overflow and signal errors, as to the timeout's.
+  assertContains('docs/plans/contract.md', [
+    'and the `ClaudeRunError` of a run cut off by the timeout, by output past `maxBuffer` or by a signal carries it beside `events`']);
+});
+
 test('run.md stays within its byte cap', () => {
   // 6,100 since M3 part 1 Task 15, its first cap: the main-thread rule, and define's and plan's go rules behind a pointer.
   // 6,130 since its fix round 1: a step's named read stays in the main thread.

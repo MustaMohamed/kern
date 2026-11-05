@@ -89,23 +89,42 @@ test('runClaudeAsync runs sessions side by side: four 1-second claudes take abou
   assert.equal((await runClaudeAsync({ cwd: join(sub, 'sub'), prompts: ['hi'], model: 'm', env })).status, 0);
 });
 
-// Paid round 2's rulings (the user's "Measure the hook (Recommended)", 2026-11-04): sessions persist, so runClaudeAsync, as runClaude
-// does, takes the session's transcript after the run and removes its project folder, on a timeout too.
-test('runClaudeAsync takes the session transcript and removes its project folder, on a timeout too', async () => {
-  const stub = (after) => {
-    const env = fakeClaude(`mkdir -p "$CLAUDE_CONFIG_DIR/projects/-w-app" && printf '%s\\n' '{"type":"user"}' > "$CLAUDE_CONFIG_DIR/projects/-w-app/s-9.jsonl"
+// sessionClaude(after): a stand-in claude that saves session s-9's transcript, prints its init event, runs after, then
+// prints a success result.
+const sessionClaude = (after) => fakeClaude(`mkdir -p "$CLAUDE_CONFIG_DIR/projects/-w-app" && printf '%s\\n' '{"type":"user"}' > "$CLAUDE_CONFIG_DIR/projects/-w-app/s-9.jsonl"
 echo '{"type":"system","subtype":"init","session_id":"s-9"}'
 ${after}
 echo '{"type":"result","subtype":"success","is_error":false,"result":"ok"}'`);
-    return env;
-  };
-  const env = stub('');
+
+// Paid round 2's rulings (the user's "Measure the hook (Recommended)", 2026-11-04): sessions persist, so runClaudeAsync, as runClaude
+// does, takes the session's transcript after the run and removes its project folder, on a timeout too.
+test('runClaudeAsync takes the session transcript and removes its project folder, on a timeout too', async () => {
+  const env = sessionClaude('');
   const r = await attempt(env);
   assert.deepEqual([runProblem(r, 1), r.transcript], ['', '{"type":"user"}\n']);
   assert.equal(existsSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-w-app')), false);
-  const late = stub('exec sleep 30');
+  const late = sessionClaude('exec sleep 30');
   await assert.rejects(attempt(late, { timeoutMs: 1500, killGraceMs: 300 }), (e) => e instanceof ClaudeRunError && e.transcript === '{"type":"user"}\n' && e.events.length === 1);
   assert.equal(existsSync(join(late.CLAUDE_CONFIG_DIR, 'projects', '-w-app')), false);
   const none = await attempt(fakeClaude('echo \'{"type":"result","subtype":"success","is_error":false,"result":"x"}\''));
   assert.deepEqual([runProblem(none, 1), none.transcript], ['', '']);
+});
+
+// M3 part 2 project 2, Task 9: a run cut off by output past maxBuffer, or by a signal, keeps its transcript and the events it
+// printed on the error, as a timeout's does, so a runner saves the transcript and reads stopBlocked from it.
+test('an overflowed run keeps its transcript and events', async () => {
+  // The pause sends the init event in a chunk of its own, before the output that crosses the limit.
+  const env = sessionClaude(`sleep 0.3; head -c 4096 /dev/zero | tr '\\0' x; echo`);
+  let err = null;
+  await assert.rejects(attempt(env, { maxBuffer: 1024 }), (e) => { err = e; return e instanceof ClaudeRunError && !e.fatal && /printed more than 1024 bytes/.test(e.message); });
+  assert.deepEqual([err.transcript, err.events?.map((e) => e.type)], ['{"type":"user"}\n', ['system']]);
+  assert.equal(existsSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-w-app')), false);
+});
+
+test('a killed run keeps its transcript and events', async () => {
+  const env = sessionClaude('kill -TERM $$');
+  let err = null;
+  await assert.rejects(attempt(env), (e) => { err = e; return e instanceof ClaudeRunError && !e.fatal && /killed by SIGTERM/.test(e.message); });
+  assert.deepEqual([err.transcript, err.events?.map((e) => e.type)], ['{"type":"user"}\n', ['system']]);
+  assert.equal(existsSync(join(env.CLAUDE_CONFIG_DIR, 'projects', '-w-app')), false);
 });
