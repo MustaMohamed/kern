@@ -128,6 +128,7 @@ const STOP_KINDS = [
   ['finish line', /has not reached its finish line: ([^;"\n]*?)(?=;|\.\s|\.?"|\.?$)/g],
   ['size ask', /size-check asked the size question/g],
   ['report skip', /the report does not name that skip/g],
+  ['proof skip', /so it is prove-it's named skip/g],
   ['unproven edit', /a file was edited after the last proving command/g],
   ['lowered floor', /finds a lowered floor/g],
   ['third send-back', /third send-back in a row/g],
@@ -140,8 +141,8 @@ const stringsOutside = (v) => {
   return Object.entries(v).flatMap(([k, x]) => (k === 'toolUseResult' || k === 'tool_use_result' ? [] : stringsOutside(x)));
 };
 // stopReasons({ transcript, events }): each kind of Stop hook block the run met, read from the entries stopBlocked reads, once
-// each in the order met: `self-review`, `finish line: <step>`, `size ask`, `report skip`, `unproven edit`, `lowered floor` and
-// `third send-back`. A record of how often a go was held, which no grader reads.
+// each in the order met: `self-review`, `finish line: <step>`, `size ask`, `report skip`, `proof skip`, `unproven edit`, `lowered
+// floor` and `third send-back`. A record of how often a go was held, which no grader reads.
 export function stopReasons({ transcript = '', events = [] } = {}) {
   const lines = String(transcript ?? '').split('\n').filter((l) => /kern: |send-back/.test(l));
   const entries = [...lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }), ...(events ?? [])];

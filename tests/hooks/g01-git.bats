@@ -949,3 +949,153 @@ g1q() { g1 "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
   g1 "git reset --hard HEAD~3"
   [ "$(decision_of "$output")" = deny ]
 }
+
+# G1's edit deny (M3 part 2 project 2's round 2 fix batch, the user's "Build the G1 deny", 2026-11-05): in paid rounds
+# 1 and 2 a go whose `git switch -c` G1 denied in the main checkout then wrote its change there with the Write or Edit
+# tool. Under a live go a Write, Edit or NotebookEdit in the main checkout, outside the work dir, is denied.
+
+# go_on: autopilot on with a live go MA-254 for this repository, as apply_go writes it.
+go_on() {
+  local top
+  set_autopilot on
+  top=$(git -C "$R" worktree list --porcelain | sed -n '1s/^worktree //p')
+  printf 'go: MA-254\ngo_repo: %s\n' "$(printf '%s' "$top" | git -C "$R" hash-object --stdin)" >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+# edit_call TOOL PATH [EXTRA]: G1's vote on TOOL writing PATH, with EXTRA top-level fields after a comma. The payload
+# is built in an assignment: bash 3.2 brace-expands a literal {"a":1,"b":2} inside "$( )" in a command's argument.
+edit_call() {
+  local key=file_path p
+  [ "$1" = NotebookEdit ] && key=notebook_path
+  p="$(payload PreToolUse "${3:+$3,}\"tool_name\":\"$1\",\"tool_input\":{\"$key\":\"$2\",\"content\":\"x\\n\"}")"
+  run_guard "$p" g01
+}
+# edit_denied TOOL: G1 denied the last call as TOOL in the main checkout.
+edit_denied() {
+  [ "$(decision_of "$output")" = deny ] && [[ "$output" == *"kern G1: $1 in the main checkout (D3); use a kern worktree"* ]] ||
+    { echo "$output"; return 1; }
+}
+# no_vote: G1 said nothing on the last call.
+no_vote() {
+  [ "$status" -eq 0 ] && [ -z "$output" ] || { echo "status $status: $output"; return 1; }
+}
+
+@test "under a go a Write, Edit or NotebookEdit in the main checkout is denied, a subagent's too" {
+  go_on
+  mkdir -p "$R/src"
+  edit_call Write "$R/src/sum.js"
+  edit_denied Write
+  edit_call Edit "$R/README.md"
+  edit_denied Edit
+  edit_call NotebookEdit "$R/src/sum.ipynb"
+  edit_denied NotebookEdit
+  edit_call Write src/sum.js
+  edit_denied Write
+  edit_call Write "$R/src/sum.js" '"agent_type":"kern:implementer"'
+  edit_denied Write
+  # A Read gets no vote.
+  run_guard "$(tool_payload Read "\"file_path\":\"$R/README.md\"")" g01
+  no_vote
+}
+
+@test "under a go a linked worktree's files pass, beside the main checkout or under it" {
+  go_on
+  edit_call Write "$BATS_TEST_TMPDIR/wt/src/sum.js"
+  no_vote
+  git -C "$R" worktree add -q -b ma-254 "$R/.claude/worktrees/ma-254" >/dev/null 2>&1
+  edit_call Edit "$R/.claude/worktrees/ma-254/README.md"
+  no_vote
+  CWD="$R/.claude/worktrees/ma-254"
+  edit_call Write src/sum.js
+  no_vote
+  # Beside it, in the main checkout's own .claude/worktrees, a path no worktree holds yet is the main checkout's.
+  edit_call Write "$R/.claude/worktrees/other/src/sum.js"
+  edit_denied Write
+}
+
+@test "under a go the work dir passes, as work_dir names it" {
+  go_on
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  no_vote
+  mkdir -p "$R/.kern/tmp"
+  edit_call Edit "$R/.kern/tmp/pr-body.md"
+  no_vote
+  settings 'work_dir: .work'
+  edit_call Write "$R/.work/specs/round-sum.md"
+  no_vote
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  edit_denied Write
+  # A work_dir kern-dir refuses names no work dir, and a path G1 cannot resolve is the main checkout's.
+  settings 'work_dir: ../outside'
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  edit_denied Write
+  settings 'work_dir: .kern'
+  edit_call Write "$R/.kern/new/../specs/round-sum.md"
+  edit_denied Write
+}
+
+@test "with no live go G1 gives an edit no vote" {
+  mkdir -p "$R/src"
+  edit_call Write "$R/src/sum.js"
+  no_vote
+  # Autopilot on with no go: a plain autopilot run is not widened to.
+  set_autopilot on
+  edit_call Write "$R/src/sum.js"
+  no_vote
+  # A go of another repository.
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: abc\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  edit_call Write "$R/src/sum.js"
+  no_vote
+}
+
+@test "under a go a new file in a new directory is read from its nearest directory that exists" {
+  go_on
+  edit_call Write "$R/lib/round/deep/sum.js"
+  edit_denied Write
+  # A file in no repository gets no vote.
+  edit_call Write "$BATS_TEST_TMPDIR/scratch/notes/sum.js"
+  no_vote
+}
+
+@test "under a go another repository's main checkout gets no vote: the deny holds the go's own repository" {
+  # Fix round 1 (the review's Minor 2): a dotfiles repository that holds ~/.claude is no main checkout of the go's.
+  local H="$BATS_TEST_TMPDIR/home"
+  go_on
+  make_repo "$H"
+  mkdir -p "$H/.claude/projects/p/memory" "$H/src"
+  edit_call Write "$H/.claude/projects/p/memory/notes.md"
+  no_vote
+  edit_call Edit "$H/src/sum.js"
+  no_vote
+  edit_call Write "$R/src/sum.js"
+  edit_denied Write
+}
+
+@test "under a go a settings read that fails allows, as G20's route gate does" {
+  # Fix round 1 (the review's Minor 3): a layer G1 cannot read (settings_get exits 4) may name another work dir.
+  # Only the work_dir read fails: a file that cannot be read at all also fails autopilot's policy read, so no go.
+  go_on
+  settings 'work_dir: .work'
+  read_fails awk 'key=work_dir'
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  no_vote
+  [ "$(read_failures awk)" -ge 1 ]
+  read_fails awk 'key=work_dir' 0
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  edit_denied Write
+}
+
+@test "under a go with the session in a linked worktree, the work dir is still the main checkout's" {
+  # The review's Minor 13: a relative .kern path is the linked worktree's own, which is no main checkout.
+  go_on
+  CWD="$BATS_TEST_TMPDIR/wt"
+  edit_call Write "$R/.kern/specs/round-sum.md"
+  no_vote
+  edit_call Write .kern/specs/round-sum.md
+  no_vote
+  edit_call Write src/sum.js
+  no_vote
+  mkdir -p "$R/src"
+  edit_call Write "$R/src/sum.js"
+  edit_denied Write
+}
