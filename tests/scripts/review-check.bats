@@ -200,3 +200,22 @@ spec() { printf '# Sum\n\n## Acceptance criteria\n\n1. sum adds two numbers.\n' 
   grep -qx -- '--- verify.fast' "$rec"
   [ "$(tail -n 1 "$rec")" = 'floor: fix first' ]
 }
+
+@test "a record write that fails leaves no record, and stdout as it was" {
+  # Task 4 fix round 1: a record that lost lines must never land. A tee that passes its input on but writes no
+  # file stands in for a full disk on the tails' write.
+  settings 'verify.fast: false'
+  package
+  bash "$KERN_ROOT/scripts/review-check" "$REPO" "$PKG" --no-spec > "$TMP/want.txt" || true
+  tree=$(bash "$KERN_ROOT/scripts/wt-snap" "$REPO")
+  rec="$(cd "$REPO" && bash "$KERN_ROOT/scripts/kern-dir" tmp)/review-check-$tree.txt"
+  [ -f "$rec" ]
+  mkdir -p "$TMP/bin"
+  printf '#!/bin/sh\ncat\nexit 1\n' > "$TMP/bin/tee"
+  chmod +x "$TMP/bin/tee"
+  run bash -c 'PATH="$5:$PATH" bash "$1" "$2" "$3" --no-spec > "$4"' _ "$KERN_ROOT/scripts/review-check" "$REPO" "$PKG" "$TMP/got.txt" "$TMP/bin"
+  [ "$status" -eq 1 ]
+  cmp "$TMP/want.txt" "$TMP/got.txt"
+  [ ! -e "$rec" ]
+  [ -z "$(find "$(dirname "$rec")" -maxdepth 1 -name '.review-check-*')" ]
+}

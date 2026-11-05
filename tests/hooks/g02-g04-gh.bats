@@ -126,6 +126,8 @@ go_on() {
 }
 st() { sed -n "s/^$1: //p" "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"; }
 tree() { git -C "$R" rev-parse "${1-HEAD}^{tree}"; }
+# pushed [REV]: the fake gh reports REV (HEAD when left out) as the PR's head, as after a push GitHub has seen.
+pushed() { FAKE_GH_HEAD=$(git -C "$R" rev-parse "${1-HEAD}"); export FAKE_GH_HEAD; }
 # record TREE FLOOR: review-check's record for TREE under the repo's kern-dir tmp, its last line `floor: FLOOR`.
 record() {
   local d
@@ -141,6 +143,7 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
 @test "a go marks its PR ready on clear CI and a passed review-check" {
   go_on
   record "$(tree)" none
+  pushed
   export FAKE_GH_CHECKS="$PASS"
   expect allow "gh pr ready"
   [[ "$output" == *"CI clear, review-check passed tree $(tree | cut -c1-7)"* ]] || false
@@ -152,6 +155,7 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
 @test "no checks counts as clear" {
   go_on
   record "$(tree)" none
+  pushed
   export FAKE_GH_CHECKS='[]'
   expect allow "gh pr ready"
   [[ "$output" == *"CI none"* ]] || false
@@ -161,6 +165,7 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
 @test "red or pending CI denies ready" {
   go_on
   record "$(tree)" none
+  pushed
   export FAKE_GH_CHECKS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"fail"}]'
   expect deny "gh pr ready"
   [[ "$output" == *"ci: red lint"* ]] || false
@@ -174,6 +179,7 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
 @test "a CI read that fails denies ready" {
   go_on
   record "$(tree)" none
+  pushed
   unset FAKE_GH_CHECKS
   expect deny "gh pr ready"
   [[ "$output" == *"could not read the PR's checks"* ]] || false
@@ -210,6 +216,8 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
 @test "typed consent marks it ready over a red" {
   go_on
   export FAKE_GH_CHECKS='[{"name":"lint","bucket":"fail"}]'
+  # No record and a PR head that is not HEAD: the typed word lifts those denies too.
+  pushed "HEAD^{tree}"
   submit "leave it and mark the PR ready"
   [ "$(st consent)" = ready ]
   expect allow "gh pr ready"
@@ -249,13 +257,89 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
   printf '## Why\n\nx\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n' >"$R/pr-body.md"
   expect deny "gh pr edit --body-file pr-body.md"
   [[ "$output" == *"attribution footer or trailer"* ]] || false
-  expect deny "gh pr edit --title x"
+  [[ "$output" == *"gh pr edit under a go: the body file holds attribution"* ]] || false
   printf '## Why\n\nx\n' >"$R/pr-body.md"
-  expect deny "gh pr edit 12 --body-file pr-body.md"
-  expect deny "gh pr edit --body-file pr-body.md --add-label bug"
+  for c in "gh pr edit --title x" "gh pr edit --title x --body-file pr-body.md" "gh pr edit 12 --body-file pr-body.md" \
+    "gh pr edit --body-file pr-body.md --add-label bug" "gh pr edit -R o/r --body-file pr-body.md"; do
+    expect deny "$c"
+    [[ "$output" == *"gh pr edit under a go: it acts only on the go's own PR"* ]] || { echo "$c: $output"; return 1; }
+  done
   # Before the draft there is no PR of the go's to edit.
   go_on ''
   expect deny "gh pr edit --body-file pr-body.md"
+  [[ "$output" == *"gh pr edit under a go: the go's draft PR is not open yet"* ]] || false
+}
+
+@test "the PR's head must be HEAD" {
+  # Task 4 fix round 1: the record is for HEAD's tree and the checks are the PR head's, so they must be one commit.
+  go_on
+  record "$(tree)" none
+  export FAKE_GH_CHECKS="$PASS"
+  pushed "HEAD^{tree}"
+  expect deny "gh pr ready"
+  [[ "$output" == *"the PR's head $(tree | cut -c1-7) is not HEAD $(git -C "$R" rev-parse --short=7 HEAD)"* ]] || false
+  unset FAKE_GH_HEAD
+  expect deny "gh pr ready"
+  [[ "$output" == *"could not read the PR's head"* ]] || false
+  [ "$(st go)" = MA-254 ]
+  pushed
+  expect allow "gh pr ready"
+  [ -z "$(st go)" ]
+}
+
+@test "gh pr ready --undo under a go is no allow and keeps the go" {
+  go_on
+  record "$(tree)" none
+  pushed
+  export FAKE_GH_CHECKS="$PASS"
+  submit "mark the PR ready"
+  expect none "gh pr ready --undo"
+  [ "$(st go)" = MA-254 ]
+  [ "$(st go_phase)" = pr ]
+}
+
+@test "a lost read never allows the go's ready or edit" {
+  # Task 4 fix round 1: a substitution whose pipe cannot be made gives status 0 and no output, so an empty token
+  # list must not read as bare `gh pr ready`, nor a lost argument read as none. Each substitution guard_g02 starts
+  # fails in turn, under consent and a clear go.
+  local K c n f
+  K=$(kern_root)
+  go_on
+  record "$(tree)" none
+  pushed
+  export FAKE_GH_CHECKS="$PASS"
+  printf '## Why\n\nx\n' >"$R/pr-body.md"
+  submit "mark the PR ready"
+  KERN_ROOT=$K
+  for f in json settings state decide aliases gitctx; do . "$K/hooks/lib/$f.sh"; done
+  for f in "$K"/hooks/guards/g*.sh; do . "$f"; done
+  SID=test-session TOOL=Bash AGENT='' AGENT_ID='' KERN_PROMPT_ID='' KERN_ALIAS_TEXT='' AUTOPILOT=1
+  KERN_MAIN=$(kern_main_root "$CWD")
+  # g2v CMD: guard_g02's strictest vote for CMD, printed from inside the run.
+  g2v() { TOOL_INPUT="{\"command\":\"$1\"}" _KERN_VOTE='' _GH_LOADED=0; guard_g02; printf '%s\n' "${_KERN_VOTE:-none}"; }
+  for c in "gh pr ready 12" "gh pr ready -R o/r" "gh pr edit 12 --body-file pr-body.md"; do
+    [ "$(g2v "$c")" = deny ] || { echo "no deny for $c"; return 1; }
+    [ "$(pipe_fails _gh_opts g2v "$c" 2>/dev/null)" != allow ] || { echo "allowed $c when its token read failed"; return 1; }
+    n=1
+    while [ "$n" -le 200 ]; do
+      [ "$(pipe_fails "$n" g2v "$c" 2>/dev/null)" != allow ] || { echo "allowed $c when substitution $n failed"; return 1; }
+      [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || break
+      n=$((n + 1))
+    done
+    [ "$n" -gt 5 ] && [ "$n" -le 200 ] || { echo "$c: $n substitutions"; return 1; }
+  done
+  [ "$(st go)" = MA-254 ]
+  # With no consent, each read on the clear path that comes back empty denies: HEAD, the PR's head, the CI
+  # read and its verdict. Each fails by its text, which no earlier substitution holds.
+  submit "thanks"
+  [ -z "$(st consent)" ]
+  for f in 'quiet HEAD 2' headRefOid 'ci_read "$CWD"' "sed -n 's/^ci: //p'"; do
+    [ "$(pipe_fails "$f" g2v "gh pr ready" 2>/dev/null)" = deny ] || { echo "no deny when the read holding $f failed"; return 1; }
+    [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || { echo "no substitution holds $f"; return 1; }
+  done
+  [ "$(st go)" = MA-254 ]
+  [ "$(g2v "gh pr ready")" = allow ]
+  [ -z "$(st go)" ]
 }
 
 @test "a person's ready and edit keep today's votes" {

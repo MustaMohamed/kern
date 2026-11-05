@@ -59,9 +59,9 @@ rm -f "$logs/verify.fast.log" "$logs/test.log" "$logs/floor-scan.log" "$logs/cla
 # The record: this run's stdout, kept as <kern-dir tmp>/review-check-<tree>.txt, <tree> the full id of WT's
 # whole working state as wt-snap takes it before any check runs. G2 reads it at a go's `gh pr ready` for
 # HEAD's tree. Any old record for the tree goes first, and the new one is moved in whole once the floor is
-# printed, so a run cut short leaves none. A tree wt-snap cannot take, or a record file that cannot be
-# made, means no record; stdout and the exit code stay as they are.
-rec='' rtmp=''
+# printed, so a run cut short leaves none. A tree wt-snap cannot take, a record file that cannot be made,
+# or a write to it that fails (rfail) means no record; stdout and the exit code stay as they are.
+rec='' rtmp='' rfail=0
 tree=$(bash "$here/wt-snap" "$wt" 2> /dev/null) || tree=''
 case "$tree" in
   '' | *[!0123456789abcdef]*) ;;
@@ -74,7 +74,7 @@ esac
 # out LINE: prints LINE, and adds it to the record.
 out() {
   printf '%s\n' "$1"
-  [ -z "$rtmp" ] || printf '%s\n' "$1" >> "$rtmp"
+  [ -z "$rtmp" ] || printf '%s\n' "$1" 2> /dev/null >> "$rtmp" || rfail=1
 }
 
 tab=$(printf '\t')
@@ -193,11 +193,13 @@ fi
 for name in $tails; do
   out "--- $name"
   if [ -n "$rtmp" ]; then
-    tail -n 20 "$logs/$name.log" | tee -a "$rtmp"
+    tail -n 20 "$logs/$name.log" | tee -a "$rtmp" || rfail=1
   else
     tail -n 20 "$logs/$name.log"
   fi
 done
 out "floor: $floor"
-[ -z "$rtmp" ] || mv -f "$rtmp" "$rec" 2> /dev/null || rm -f "$rtmp"
+if [ -n "$rtmp" ]; then
+  if [ "$rfail" = 0 ]; then mv -f "$rtmp" "$rec" 2> /dev/null || rm -f "$rtmp"; else rm -f "$rtmp"; fi
+fi
 [ "$floor" = none ]

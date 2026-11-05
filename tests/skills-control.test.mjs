@@ -324,11 +324,12 @@ test('the design, the contract and autopilot keep a go marking its own PR ready 
   // edits its body; G1 takes the typed lease; review-check writes the record G2 reads.
   assertContains('docs/specs/2026-10-12-kern-design.md', [
     'a commit, a push, a draft PR (which covers its push), a PR edit, a lease push after a rebase or `gh pr ready`, in the closed grammar of `prompt_consent`',
-    "and lifts no deny but two under autopilot: G1's lease push of the user's own branch, and G2's `gh pr ready` on a live go's own PR over a red or pending check.",
+    // Fix round 1: the typed word lifts every deny of a go's ready but its shape and its open draft.
+    "and lifts no deny but two under autopilot: G1's lease push of the user's own branch, and G2's `gh pr ready` on a live go's own open draft, over checks that are red, pending or unread, a review-check record that is missing or above the floor, and a PR head that is not HEAD.",
     "`--force-with-lease` only with `rebase.push: autopilot` or the user's typed rebase or sync; a go marks its own PR ready on clear CI and a passed review-check, and edits its body from a file (M3 part 2 project 2); everything else denied |",
     "A go's CI fix rounds stop the same way, up to 3 per go (M3 part 2 project 2) |",
     "only with `rebase.push: autopilot` or when the user's last typed prompt asks to rebase or sync (section 5.1; a bare yes is not one, M3 part 2 project 2), and only when every commit on it is the user's |",
-    "Under a live go with its draft open, `gh pr ready` on that PR (no PR number, no `-R`) allowed when the user's last typed prompt says to mark it ready, or when its checks read clear or none at the call and the review-check record for HEAD's tree ends `floor: none`; the allow ends the go.",
+    "Under a live go with its draft open, `gh pr ready` on that PR (no PR number, no `-R`) allowed when the user's last typed prompt says to mark it ready, or when the PR's head is HEAD, its checks read clear or none at the call and the review-check record for HEAD's tree ends `floor: none`; the allow ends the go.",
     '`gh pr edit --body-file <file>` alone on that PR allowed with no prompt, the file checked as on create (M3 part 2 project 2). Any other `gh pr edit`, non-draft, an attributed body file and any other `gh pr ready` denied |']);
   assertContains('docs/plans/contract.md', [
     'G5 (`commit`), G1 (`push`, and `lease` under autopilot) and G2 (`pr`, `pr-edit`, `pr-title`, `pr-body`, and `ready` under a live go) call it.',
@@ -338,8 +339,15 @@ test('the design, the contract and autopilot keep a go marking its own PR ready 
     "so the go lives on through CI until G2 allows its `gh pr ready` (Task 4), `/kern:autopilot off`, a second go or the session's end",
     "- **G2 marks a go's PR ready and edits its body (M3 part 2 project 2, Task 4).**",
     "is a regular readable file whose last non-blank line, blanks trimmed, is `floor: none`: review-check prints its floor last, so a check's tail above it is not one.",
-    'Each allow runs `state_set "$SID" "go=" "go_phase="`, which ends the go; `go_repo` and `autopilot` stay.']);
+    'Each allow runs `state_set "$SID" "go=" "go_phase="`, which ends the go; `go_repo` and `autopilot` stay.',
+    // Fix round 1: lost reads, the PR's head, the failed record write and the settle the next task's ci-wait gives.
+    "ready also needs the record's text to be exactly `gh pr ready`, since tokens lost to a substitution whose pipe could not be made come back empty, which is ready's allowed shape (fix round 1).",
+    '`gh pr view --json headRefOid --jq .headRefOid`, run in CWD with no PR named under `with_timeout 10` and `GH_DEBUG` empty, must equal `git -C "$CWD" rev-parse --verify --quiet HEAD`',
+    'a mismatch denies `the PR\'s head <id7> is not HEAD <id7>; push HEAD first, or wait for GitHub to register the push`.',
+    "and a `ci: none` read right after a push, before GitHub registers the new head's checks, reads as clear.",
+    "or a write to it that fails (a line's append or the tails' `tee -a`, fix round 1) writes no record and changes neither stdout nor the exit."]);
   assertContains('skills/autopilot/SKILL.md', [
+    "or when the PR's head is the pushed HEAD, its checks are clear or none and `review-check` passed HEAD's tree with `floor: none`.",
     "only when settings say `rebase.push: autopilot` or the user's last typed prompt asks to rebase or sync, the branch is not protected,",
     '- Under a go whose draft PR is open: `gh pr edit --body-file <file in the repo>` alone, and `gh pr ready` alone, with no PR number or `-R`.']);
 });

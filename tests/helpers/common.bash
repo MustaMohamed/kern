@@ -226,7 +226,8 @@ read_failures() {
 }
 
 # fake_gh: puts a stub `gh` first on PATH. FAKE_GH_STATES (comma list) answers `pr list`,
-# FAKE_GH_RC its exit code, FAKE_GH_ME answers `api user`, FAKE_GH_AUTHOR answers `pr view`.
+# FAKE_GH_RC its exit code, FAKE_GH_ME answers `api user`, FAKE_GH_AUTHOR answers `pr view`, and FAKE_GH_HEAD
+# answers `pr view --json headRefOid` (nothing when it is unset, then exit FAKE_GH_RC).
 # `pr checks --json name,bucket` prints FAKE_GH_CHECKS (a JSON array), or with FAKE_GH_CHECKS_FILE set
 # that file's next line on each call (its last line once the lines run out, the count kept in
 # FAKE_GH_CHECKS_FILE.n), so a test can script pending, then red. It prints FAKE_GH_STDERR on stderr,
@@ -257,6 +258,7 @@ case "$*" in
     exit "${FAKE_GH_RC:-0}"
     ;;
   "api user"*) printf '%s\n' "${FAKE_GH_ME:-me}" ;;
+  "pr view --json headRefOid"*) [ -z "${FAKE_GH_HEAD-}" ] || printf '%s\n' "$FAKE_GH_HEAD"; exit "${FAKE_GH_RC:-0}" ;;
   "pr view"*) printf '%s\n' "${FAKE_GH_AUTHOR:-someone}" ;;
 esac
 GH

@@ -1,8 +1,9 @@
 # shellcheck shell=bash
 # G2 PR create: drafts only, no duplicate PR for a head, no attribution in a body file under
 # `commit.attribution: none` (_g02_body). Under autopilot `gh pr ready` and `gh pr edit` are denied but on
-# a live go's own open draft: ready on the user's typed word or on clear CI and a passed review-check of
-# HEAD's tree, which ends the go (_g02_go_ready), and an edit of its body from a file (_g02_go_edit).
+# a live go's own open draft: ready on the user's typed word, or on clear CI, a passed review-check of
+# HEAD's tree and HEAD as the PR's head, which ends the go (_g02_go_ready); and an edit of its body from a
+# file (_g02_go_edit).
 # Any other gh command that is not on a closed read list, and that no other guard judges, asks, and is
 # denied under autopilot (_g02_write).
 # An allow approves the whole Bash call, so G2 allows a draft only in the shape _g02_proven accepts;
@@ -179,8 +180,12 @@ _g02_write() {
     vote allow G2 "gh pr edit of this branch's PR: the user's last prompt asked for it"
     return 0
   fi
-  if [ "$2" = "pr edit" ] && _g02_go_edit "$1"; then
-    vote allow G2 "gh pr edit --body-file of the go's PR"
+  if [ "$2" = "pr edit" ] && [ "$AUTOPILOT" = 1 ] && go_live "${SID-}" "${KERN_MAIN-}"; then
+    if _g02_go_edit "$1"; then
+      vote allow G2 "gh pr edit --body-file of the go's PR"
+    else
+      vote deny G2 "gh pr edit under a go: $_G02_WHY (gh pr edit --body-file <file in the repo> alone, with no PR number or -R)"
+    fi
     return 0
   fi
   vote ask G2 "gh $2 is not a gh read kern knows (view, list, status and the like); the user confirms it"
@@ -600,17 +605,20 @@ _g02_edit_ok() {
   _g02_body "$file"
 }
 
-# _g02_go_edit IDX: `gh pr edit` at IDX in _GH_RECS may be allowed with no consent: under autopilot with a
-# live go, on the go's own PR (_g02_go_pr) with --body-file alone, pr.policy ask or auto, and a body file
-# that passes _gh_file_ok and _g02_body, so a go keeps its PR body in step with each push. Anything else
-# falls back to _g02_write's deny.
+# _g02_go_edit IDX: `gh pr edit` at IDX in _GH_RECS, under autopilot with a live go (the caller checks
+# both), may be allowed with no consent: on the go's own PR (_g02_go_pr) with --body-file alone, pr.policy
+# ask or auto, and a body file that passes _gh_file_ok and _g02_body, so a go keeps its PR body in step
+# with each push. Tokens lost to a substitution whose pipe could not be made hold no --body-file, so they
+# fail. On a failure _G02_WHY says why, and the caller denies.
 _g02_go_edit() {
   local toks file
-  [ "$AUTOPILOT" = 1 ] && go_live "${SID-}" "${KERN_MAIN-}" || return 1
+  _G02_WHY="pr.policy is not ask or auto"
   case "$(policy_for pr)" in ask | auto) ;; *) return 1 ;; esac
   toks=$(_gh_args "${_GH_RECS[$1]}" 2 | _gh_opts "$_GH_EDIT_OPTS")
   _g02_go_pr "$1" "$toks" body-file || return 1
+  _G02_WHY="the body file is not a regular file in the repo that git keeps"
   file=$(_gh_last "$toks" body-file) && _gh_file_ok "$file" || return 1
+  _G02_WHY="the body file holds attribution, or kern could not check it"
   _g02_body "$file"
 }
 
@@ -630,22 +638,27 @@ _g02_ready() {
 # _g02_go_pr IDX TOKS NAMES: the gh pr record at IDX, read by _gh_opts as TOKS, acts on a live go's own
 # PR: the go's draft PR is open (go_phase pr, which a read that fails or comes back empty is not), and the
 # call is _gh_proven, carries only the options NAMES lists (space-separated, maybe none) and names no PR,
-# so gh takes the current branch's PR in this repository. On a failure _G02_WHY says why.
+# so gh takes the current branch's PR in this repository. The argument test reads TOKS with no
+# substitution: one whose pipe could not be made gives status 0 and no output, which would read as no
+# argument. On a failure _G02_WHY says why.
 _g02_go_pr() {
   _G02_WHY="the go's draft PR is not open yet; open it first"
   [ "$(state_get "$SID" go_phase 2>/dev/null)" = pr ] || return 1
   _G02_WHY="it acts only on the go's own PR, the current branch's, in a shape kern can check"
-  _gh_proven "$1" "$2" && _gh_only "$2" "$3" && [ -z "$(_gh_pos "$2")" ]
+  _gh_proven "$1" "$2" && _gh_only "$2" "$3" || return 1
+  case $'\n'"$2" in *$'\n@'*) return 1 ;; esac
 }
 
 # _g02_go_ready IDX TOKS: `gh pr ready` at IDX under a live go (_KERN_GO). It is allowed on the go's own
 # PR (_g02_go_pr, with no option at all, so no -R) when the user's last typed prompt says to mark it
-# ready, or when CWD's tree has a review-check record whose floor is none (_g02_reviewed) and ci_read reads
-# its PR's checks as clear or none. The allow ends the go. Anything else is denied, the reason naming what
-# is missing.
+# ready. Without that it also needs CWD's tree to have a review-check record whose floor is none
+# (_g02_reviewed), the PR's head to be CWD's HEAD (_g02_pushed), and ci_read to read the PR's checks as
+# clear or none. The allow ends the go. Anything else is denied, the reason naming what is missing.
 _g02_go_ready() {
   local tree out rc verdict
-  if ! _g02_go_pr "$1" "$2" ""; then
+  # TOKS lost to a substitution whose pipe could not be made is empty, the shape allowed here, so the
+  # record itself must be the bare command, read with no substitution.
+  if ! _g02_go_pr "$1" "$2" "" || [ "${_GH_RECS[$1]}" != "gh pr ready" ]; then
     vote deny G2 "gh pr ready under a go: $_G02_WHY (gh pr ready alone, with no PR number, -R or other option)"
     return 0
   fi
@@ -664,6 +677,12 @@ _g02_go_ready() {
   esac
   if ! _g02_reviewed "$tree"; then
     vote deny G2 "gh pr ready under a go needs a review-check of HEAD's tree ${tree%"${tree#???????}"} whose floor is none: $_G02_WHY; run self-review on this tree first"
+    return 0
+  fi
+  # The record is for HEAD's tree and the checks are the PR head's, so the two must be one commit: an
+  # unpushed fix, or a push GitHub has not registered, would pass on the old head's checks.
+  if ! _g02_pushed; then
+    vote deny G2 "gh pr ready under a go: $_G02_WHY"
     return 0
   fi
   # ci_read prints its checks and verdict on stdout, the hook's decision channel, so it is captured; its
@@ -691,6 +710,23 @@ _g02_go_ready() {
       vote deny G2 "gh pr ready under a go: kern could not read the PR's checks (${out:-no verdict came back}); retry, or stop and report"
       ;;
   esac
+}
+
+# _g02_pushed: the PR of CWD's branch has CWD's HEAD as its head: `gh pr view --json headRefOid`, run in CWD
+# with no PR named, under with_timeout 10 and with GH_DEBUG empty, equals `git rev-parse HEAD`. Either read
+# failing, or coming back empty or not hex, as from a substitution whose pipe could not be made, fails. On
+# a failure _G02_WHY says why.
+_g02_pushed() {
+  local head prh
+  _G02_WHY="kern could not read HEAD (retry)"
+  head=$(git -C "$CWD" rev-parse --verify --quiet HEAD 2>/dev/null) || head=""
+  case "$head" in "" | *[!0123456789abcdef]*) return 1 ;; esac
+  _G02_WHY="kern could not read the PR's head (retry, or stop and report)"
+  command -v gh >/dev/null 2>&1 || return 1
+  prh=$(cd "$CWD" 2>/dev/null && GH_DEBUG='' with_timeout 10 gh pr view --json headRefOid --jq .headRefOid 2>/dev/null) || prh=""
+  case "$prh" in "" | *[!0123456789abcdef]*) return 1 ;; esac
+  _G02_WHY="the PR's head ${prh%"${prh#???????}"} is not HEAD ${head%"${head#???????}"}; push HEAD first, or wait for GitHub to register the push"
+  [ "$prh" = "$head" ]
 }
 
 # _g02_reviewed TREE: the review-check record for TREE, `<kern-dir tmp>/review-check-<TREE>.txt` under
