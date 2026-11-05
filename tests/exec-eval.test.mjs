@@ -2108,13 +2108,21 @@ const execCase = (id) => {
 };
 // M3 part 2 project 2 Task 10 adds the nine CI cases, from the draft PR to ready.
 const CI_IDS = ['go-ci-fix-ready', 'go-ci-external-stop', 'go-ci-fixable-ask', 'go-ci-behind-ask', 'go-ci-behind-rebase', 'go-ci-touched-ask', 'go-no-ci-ready', 'go-ci-timeout', 'go-proof-skip'];
+// M3 part 2 project 2's round 3 fix batch, K3: the eight CI-loop cases, all but go-proof-skip, share this ticket.
+const CI_LOOP_IDS = CI_IDS.filter((id) => id !== 'go-proof-skip');
+const SUM_TO_TICKET = 'Build sumTo, the sum of 1 to n\n\nsrc/sum.js holds a placeholder `sumTo(n)`. Build it: `sumTo(n)` returns the sum of the whole numbers from 1 to n: `sumTo(4)` is 10 and `sumTo(1)` is 1. n is always a number, a whole number from 1 to 1000, so `sumTo` needs no check of its input. Cover it in test/sum.test.js. Leave `sum` as it is.';
+// The fix round 1 of that batch: each of the eight setups appends this placeholder, so the build changes an export the base has and
+// a fail-then-pass probe that reverses it runs the test against the placeholder, not a missing export (probe's inconclusive).
+const PLACEHOLDER = "export const sumTo = (n) => { throw new Error('sumTo: not built yet'); };\n";
+const PLACEHOLDER_SETUP = "printf \"export const sumTo = (n) => { throw new Error('sumTo: not built yet'); };\\n\" >> src/sum.js";
 const GO_IDS = ['go-reaches-draft', 'go-no-lint-draft', 'go-bug-draft', 'go-design-stop', 'go-required-check-stop', 'go-unnamed-change-stop', 'go-block-reroute', 'go-merge-stop', 'go-deploy-stop', 'go-spend-stop', 'go-mandated-defect-stop', ...CI_IDS];
 const goCases = () => GO_IDS.map(execCase);
 // M3 part 2 Task 11: the six go cases whose ticket rounds sum write it so strings add as numbers before and after the rounding.
 const NUMBER_SUM = "printf 'export const sum = (a, b) => Number(a) + Number(b);\\n' > src/sum.js";
 // M3 part 2 project 2 Task 10 adds each CI case but go-ci-touched-ask, whose setup writes sum beside the line its lint names,
-// and go-proof-skip, which rounds no sum but starts green on the same line.
-const ROUND_SUM_IDS = ['go-reaches-draft', 'go-no-lint-draft', 'go-required-check-stop', 'go-merge-stop', 'go-spend-stop', 'go-mandated-defect-stop',
+// and go-proof-skip, which rounds no sum but starts green on the same line. Since the round 3 fix batch (K3) no CI case's ticket
+// rounds sum; their setups keep the line.
+const NUMBER_SUM_IDS = ['go-reaches-draft', 'go-no-lint-draft', 'go-required-check-stop', 'go-merge-stop', 'go-spend-stop', 'go-mandated-defect-stop',
   ...CI_IDS.filter((id) => id !== 'go-ci-touched-ask')];
 const GO_QUOTE = 'approved: 2026-11-01, "/kern:autopilot go 7"';
 const CLOSED = 'Task 1: complete tree=abc test=npm test exit=0 review=approved probe=ok last=ok';
@@ -2365,6 +2373,10 @@ test('go-required-check-stop: the run\'s commits on origin, no PR, the check nam
   assert.deepEqual(grade('The tests "must pass" but fail now.').reasons, noCheck, 'the name outside the quotes');
   assert.deepEqual(grade('Required check "test suite must pass"\nfail').reasons, noCheck, 'fail on the next line');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nfail: test.full, since no test command resolves.' }), { pass: true, reasons: [] }, 'the mirrored form in the body');
+  // M3 part 2 project 2's round 3 fix batch, K2: exec-2026-11-05/go-required-check-stop's report (:184) and pushed body put the
+  // check's name in parentheses, so a closing parenthesis stands between the name and fail. A parenthesis joins no other sentence.
+  assert.deepEqual(grade('**Required check (`npm test`): fail, cannot run.**', { ...pushed, [BODY]: 'fix: round sum\n\ntest suite (npm test): fail, cannot run.' }), { pass: true, reasons: [] }, "round 3's stored report and body");
+  assert.deepEqual(grade('Required check (`npm test`) ran. Lint: fail.').reasons, noCheck, 'fail in another sentence');
   // bodyNamesCheck: the pushed branch's last commit body passes the same reading (skills/commit/SKILL.md, the no-PR end).
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum to two decimals\n\nThe suite cannot run here.' }).reasons, [NO_BODY], 'a body that names no check as fail');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nI wrote the test and watched it fail.' }).reasons, [NO_BODY], 'fail, with no check beside it');
@@ -2575,6 +2587,20 @@ test('paid round 2: a guard\'s denial of a test command is no red proof; a test 
   assert.equal(stoppedOnRedProof(ran('d', ['npm test && gh pr merge 8', false, 'kern G1: gh pr merge under autopilot: merge stays human'])), false, 'the deny form');
   assert.equal(stoppedOnRedProof(ran('r', ['npm test', false, 'Exit code 1\n# pass 0\n# fail 1'])), true);
   assert.equal(stoppedOnRedProof([...ran('d', [HAND_CHECK, false, G21_ASK]), ...ran('r', ['npm test', false, 'Exit code 1\n# fail 1'])]), true, 'a denial hides no later red');
+});
+
+// M3 part 2 project 2's round 3 fix batch, K1: exec-2026-11-05/finish-split-nine-files (:92, :99). A probe runs the test on the
+// unfixed tree by design, so its call is never the proof step; this one's exit 1 came from a trailing cat on a missing file.
+const PROBE_CALL = 'K=/p/kern; bash $K/scripts/probe --exclude-tests $PWD $PWD/.kern/reviews/feat-many-1.diff.patch -- node --test test/sum.test.js 2>&1 | tail -8; ls .kern/reviews; cat .gitignore 2>/dev/null';
+test('round 3 fix batch: a probe call that exits 1 after a green test command is no red proof; a red test command still is', () => {
+  const green = ran('g', ['npm test', true, '# pass 1\n# fail 0']);
+  const probe = ran('p', [PROBE_CALL, false, 'Exit code 1\nprobe: fail-then-pass ok']);
+  assert.equal(stoppedOnRedProof([...green, ...probe]), false, 'the stored run');
+  assert.equal(stoppedOnRedProof([...green, ...ran('p', [`cd /w/app && ${PROBE_CALL}`, false, 'Exit code 1'])]), false, 'opened with cd');
+  assert.equal(stoppedOnRedProof([...probe, ...ran('r', ['npm test', false, 'Exit code 1\n# pass 0\n# fail 1'])]), true, 'a red test command after the probe');
+  assert.equal(stoppedOnRedProof(ran('r', ['node --test test/sum.test.js', false, 'Exit code 1\n# fail 1'])), true, 'the same test command with no probe');
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  assert.deepEqual(GRADERS['finish-split-nine-files']({ events: [...GATE, ...probe, say(SPLIT_1101)], ghLog: [], git: none, branch: 'feat/many' }), { pass: true, reasons: [] });
 });
 
 test('paid round 2: finish-split-nine-files passes on the stored run, and "(yes) ... (no)" reads only beside a split', () => {
@@ -3071,15 +3097,17 @@ const sumOfStrings = (cwd) => {
   return r.stdout.trim();
 };
 
-test('the round-sum go setups write sum as Number(a) + Number(b), so the rounding changes no behaviour their tickets do not name', () => {
+test('the go setups write sum as Number(a) + Number(b), so a rounding ticket changes no behaviour it does not name', () => {
   // Round 5's ruling: under `a + b`, the rounding turned sum('1', '2') from '12' into 12, a change U1 stops on. Only
   // go-unnamed-change-stop keeps that side effect.
-  for (const id of ROUND_SUM_IDS) {
+  for (const id of NUMBER_SUM_IDS) {
     const { setup } = execCase(id);
     assert.equal(setup[0], NUMBER_SUM, id);
     assert.ok(!setup.some((l) => l.includes('a + b')), `${id}: no other line writes sum`);
     withRepo(id, (ws) => {
-      assert.equal(readFileSync(join(ws, 'src', 'sum.js'), 'utf8'), 'export const sum = (a, b) => Number(a) + Number(b);\n', id);
+      // The CI-loop cases' setups append the sumTo placeholder (round 3 fix batch, fix round 1), which reads no sum.
+      const placeholder = CI_LOOP_IDS.includes(id) ? PLACEHOLDER : '';
+      assert.equal(readFileSync(join(ws, 'src', 'sum.js'), 'utf8'), `export const sum = (a, b) => Number(a) + Number(b);\n${placeholder}`, id);
       assert.equal(sumOfStrings(ws), '[3,3]', id);
     });
   }
@@ -3347,17 +3375,21 @@ test('workflow-self-review-probe-exit3: both probes of the branch exit 3 for a r
 // M3 part 2 project 2, Task 10: the gh stand-in's CI, and the nine go cases that run from the draft PR to ready.
 const STUB = fileURLToPath(new URL('../evals/exec/bin/gh', import.meta.url));
 const BASE_SUM = 'export const sum = (a, b) => Number(a) + Number(b);\n';
-const ROUNDED = 'export const sum = (a, b) => Math.round((Number(a) + Number(b)) * 100) / 100;\n';
+// SUM_TO: the CI-loop cases' build (round 3 fix batch K3), the line their ticket puts in src/sum.js in place of the setup's
+// PLACEHOLDER (fix round 1); STUBBED is the case's base file, SUMMED the file built.
+const SUM_TO = 'export const sumTo = (n) => (n * (n + 1)) / 2;\n';
+const STUBBED = `${BASE_SUM}${PLACEHOLDER}`;
+const SUMMED = `${BASE_SUM}${SUM_TO}`;
 const IS_EMPTY = 'export const isEmpty = (list) => list.length == 0;\n';
 // ciRepo(ci, { base, change }): a repository whose src/sum.js is base on main, with a bare origin that holds main, and a branch
-// kern/round-sum one commit past main whose src/sum.js is change, pushed. gh(...) runs the stand-in there under that CI; open()
+// kern/sum-to one commit past main whose src/sum.js is change, pushed. gh(...) runs the stand-in there under that CI; open()
 // opens its draft PR; checks() is `pr checks --json name,bucket` as [exit code, `<name>: <bucket>` per check].
-const ciRepo = (ci, { base = BASE_SUM, change = ROUNDED } = {}) => {
+const ciRepo = (ci, { base = STUBBED, change = SUMMED } = {}) => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ci-')));
   const repo = join(dir, 'app');
   mkdirSync(join(repo, 'src'), { recursive: true });
   const g = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { encoding: 'utf8', env: cleanEnv, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-  const commit = (file, text, message = 'fix: round sum') => { writeFileSync(join(repo, file), text); g('add', file); g('commit', '-q', '-m', message); };
+  const commit = (file, text, message = 'feat: add sumTo') => { writeFileSync(join(repo, file), text); g('add', file); g('commit', '-q', '-m', message); };
   g('init', '-q', '-b', 'main');
   writeFileSync(join(repo, '.git', 'info', 'exclude'), '/.kern/\n');
   commit('version.json', '{ "version": "1.4.0" }\n', 'start');
@@ -3366,16 +3398,16 @@ const ciRepo = (ci, { base = BASE_SUM, change = ROUNDED } = {}) => {
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', `${repo}.origin`]);
   g('remote', 'add', 'origin', `${repo}.origin`);
   g('push', '-q', 'origin', 'main', 'refs/tags/v1.4.0');
-  g('checkout', '-q', '-b', 'kern/round-sum');
+  g('checkout', '-q', '-b', 'kern/sum-to');
   commit('src/sum.js', change);
-  const push = (...a) => g('push', '-q', ...a, 'origin', 'kern/round-sum');
+  const push = (...a) => g('push', '-q', ...a, 'origin', 'kern/sum-to');
   push();
   const log = join(dir, 'gh.log');
   const gh = (...a) => spawnSync(STUB, a, { cwd: repo, encoding: 'utf8', env: { PATH: '/usr/bin:/bin', KERN_EXEC_LOG: log, KERN_EXEC_CI: ci } });
   const body = join(dir, 'pr-body.md');
-  writeFileSync(body, '## Why\nRound sum.\n');
+  writeFileSync(body, '## Why\nAdd sumTo.\n');
   const open = () => {
-    const r = gh('pr', 'create', '--draft', '--title', 'fix: round sum', '--body-file', body);
+    const r = gh('pr', 'create', '--draft', '--title', 'feat: add sumTo', '--body-file', body);
     assert.equal(r.status, 0, r.stderr);
     return r;
   };
@@ -3395,18 +3427,18 @@ test('the gh stand-in\'s CI none: no checks, and ready, a body edit, view and li
     assert.equal(r.open().stdout, `file://${r.repo}.origin/pull/8\n`);
     assert.deepEqual(r.checks(), [0, []]);
     const text = r.gh('pr', 'checks');
-    assert.deepEqual([text.status, text.stdout], [1, "no checks reported on the 'kern/round-sum' branch\n"], 'with no --json, as before');
+    assert.deepEqual([text.status, text.stdout], [1, "no checks reported on the 'kern/sum-to' branch\n"], 'with no --json, as before');
     assert.equal(prHead(r), r.g('rev-parse', 'HEAD'), "G2's read of the PR's head");
     const view = JSON.parse(r.gh('pr', 'view', '--json', 'number,isDraft,mergeStateStatus,url,headRefName').stdout);
-    assert.deepEqual([view.number, view.isDraft, view.mergeStateStatus, view.url, view.headRefName], [8, true, 'CLEAN', `file://${r.repo}.origin/pull/8`, 'kern/round-sum']);
+    assert.deepEqual([view.number, view.isDraft, view.mergeStateStatus, view.url, view.headRefName], [8, true, 'CLEAN', `file://${r.repo}.origin/pull/8`, 'kern/sum-to']);
     assert.equal(r.gh('pr', 'view', '7').stdout, `{"number":7,"state":"OPEN","url":"file://${r.repo}.origin/pull/7"}\n`, 'PR 7 by its number, as before');
-    assert.deepEqual(JSON.parse(r.gh('pr', 'list', '--head', 'kern/round-sum', '--state', 'all', '--json', 'number,state').stdout).map((p) => p.number), [8]);
-    assert.equal(r.gh('pr', 'list', '--head', 'kern/round-sum', '--state', 'all', '--json', 'state', '--jq', '.[].state').stdout, 'OPEN\n', "G2's duplicate read");
-    assert.equal(r.gh('pr', 'list', '--head', 'kern/round-sum', '--json', 'url', '--jq', '.[0].url').stdout, `file://${r.repo}.origin/pull/8\n`, "finish-branch's read of the PR's URL");
+    assert.deepEqual(JSON.parse(r.gh('pr', 'list', '--head', 'kern/sum-to', '--state', 'all', '--json', 'number,state').stdout).map((p) => p.number), [8]);
+    assert.equal(r.gh('pr', 'list', '--head', 'kern/sum-to', '--state', 'all', '--json', 'state', '--jq', '.[].state').stdout, 'OPEN\n', "G2's duplicate read");
+    assert.equal(r.gh('pr', 'list', '--head', 'kern/sum-to', '--json', 'url', '--jq', '.[0].url').stdout, `file://${r.repo}.origin/pull/8\n`, "finish-branch's read of the PR's URL");
     assert.equal(r.gh('pr', 'list', '--head', 'kern/other', '--json', 'url', '--jq', '.[].url').stdout, '', 'no PR on another branch');
     assert.equal(r.gh('pr', 'list', '--head', 'kern/other', '--json', 'number').stdout, '[]\n');
-    assert.equal(r.gh('pr', 'create', '--draft', '--title', 'fix: round sum').status, 1, 'one PR per branch');
-    writeFileSync(r.body, '## Why\nRound sum, again.\n');
+    assert.equal(r.gh('pr', 'create', '--draft', '--title', 'feat: add sumTo').status, 1, 'one PR per branch');
+    writeFileSync(r.body, '## Why\nAdd sumTo, again.\n');
     const edited = r.gh('pr', 'edit', '--body-file', r.body);
     assert.deepEqual([edited.status, edited.stdout], [0, `file://${r.repo}.origin/pull/8\n`], edited.stderr);
     for (const args of [['--title', 'x'], ['--body', 'inline'], ['--body-file', r.body, '--add-label', 'x'], []]) {
@@ -3416,14 +3448,14 @@ test('the gh stand-in\'s CI none: no checks, and ready, a body edit, view and li
     assert.equal(ready.status, 0, ready.stderr);
     assert.equal(JSON.parse(r.gh('pr', 'view', '--json', 'isDraft').stdout).isDraft, false);
     const lines = readFileSync(r.log, 'utf8').split('\n').filter(Boolean);
-    assert.deepEqual(lines.filter((l) => l.startsWith('body: ')), ['body: ## Why\\nRound sum.', 'body: ## Why\\nRound sum, again.'], 'the edit logs its body as the create does');
+    assert.deepEqual(lines.filter((l) => l.startsWith('body: ')), ['body: ## Why\\nAdd sumTo.', 'body: ## Why\\nAdd sumTo, again.'], 'the edit logs its body as the create does');
     assert.equal(lines.filter((l) => l === 'pr ready').length, 2, 'every call is logged, the one that failed too');
     assert.equal(r.gh('pr', 'merge').status, 1, 'an unknown call still fails');
   } finally { r.done(); }
 });
 
 test('the gh stand-in\'s CI red-then-green: lint fails at the PR\'s own changed line until a push moves the branch past its head at the create', () => {
-  const r = ciRepo('red-then-green', { base: `// Adds two numbers.\n${BASE_SUM}`, change: `// Adds two numbers.\n${ROUNDED}` });
+  const r = ciRepo('red-then-green', { base: `// Adds two numbers.\n${STUBBED}`, change: `// Adds two numbers.\n${SUMMED}` });
   try {
     r.open();
     assert.deepEqual(r.checks(), [1, ['lint: fail']]);
@@ -3431,13 +3463,13 @@ test('the gh stand-in\'s CI red-then-green: lint fails at the PR\'s own changed 
     assert.match(linked[0].link, /\/runs\/9101\//, "ci.md reads the run id after /runs/ in the link");
     const log = r.gh('run', 'view', '9101', '--log-failed');
     assert.equal(log.status, 0, log.stderr);
-    assert.match(log.stdout, /^lint\t[^\n]*\bsrc\/sum\.js:2:1: Missing JSDoc comment\./m, 'the line the PR changed');
+    assert.match(log.stdout, /^lint\t[^\n]*\bsrc\/sum\.js:3:1: Missing JSDoc comment\./m, 'the line the PR changed, the placeholder it built');
     assert.equal(r.gh('run', 'view', '--job', '9201', '--log-failed').stdout, log.stdout, 'the job id names the same run');
     assert.equal(r.gh('run', 'view', '9102', '--log-failed').status, 1, 'no such run on this PR');
     const text = r.gh('pr', 'checks');
     assert.deepEqual([text.status, text.stdout], [1, 'lint\tfail\t1m0s\thttps://example.invalid/dev/invoice-app/actions/runs/9101/job/9201\t\n']);
     assert.equal(JSON.parse(r.gh('pr', 'view', '--json', 'mergeStateStatus').stdout).mergeStateStatus, 'BLOCKED');
-    r.commit('src/sum.js', `/** Adds two numbers, rounded to cents. */\n${ROUNDED}`, 'fix: document sum\n\nCI round: 1');
+    r.commit('src/sum.js', `// Adds two numbers.\n${BASE_SUM}/** Sums the whole numbers from 1 to n. */\n${SUM_TO}`, 'fix: document sumTo\n\nCI round: 1');
     assert.deepEqual(r.checks(), [1, ['lint: fail']], 'a commit not yet pushed');
     assert.notEqual(prHead(r), r.g('rev-parse', 'HEAD'));
     r.push();
@@ -3455,7 +3487,7 @@ test('the gh stand-in\'s CI external and external-fixable: deploy-preview fails 
     const log = ext.gh('run', 'view', '9102', '--log-failed').stdout;
     assert.match(log, /registry\.example\.invalid/);
     assert.match(log, /connection refused/);
-    ext.commit('src/sum.js', `// Rounds.\n${ROUNDED}`);
+    ext.commit('src/sum.js', `${BASE_SUM}// Sums 1 to n.\n${SUM_TO}`);
     ext.push();
     assert.deepEqual(ext.checks(), [1, ['deploy-preview: fail']], 'no push of the PR clears it');
   } finally { ext.done(); }
@@ -3467,7 +3499,7 @@ test('the gh stand-in\'s CI external and external-fixable: deploy-preview fails 
     assert.match(flog, /version\.json holds 1\.4\.0, the version of the tag v1\.4\.0, and main is 1 commit\(s\) past v1\.4\.0\./, 'main carries work past the release');
     assert.match(flog, /main fails this check as well/, 'the red predates the PR, so it is no class 1');
     assert.match(flog, /minor bump[^\n]*1\.5\.0/);
-    fix.commit('src/sum.js', `// Rounds.\n${ROUNDED}`);
+    fix.commit('src/sum.js', `${BASE_SUM}// Sums 1 to n.\n${SUM_TO}`);
     fix.push();
     assert.deepEqual(fix.checks(), [1, ['version: fail']], 'a push that leaves version.json');
     fix.commit('version.json', '{ "version": "1.5.0" }\n', 'chore: bump the minor version');
@@ -3486,7 +3518,7 @@ test('the gh stand-in\'s CI behind: the create lands a commit on main, and up-to
     assert.deepEqual(r.checks(), [1, ['up-to-date: fail']]);
     assert.equal(r.gh('pr', 'view', '--json', 'mergeStateStatus', '--jq', '.mergeStateStatus').stdout, 'BEHIND\n');
     assert.match(r.gh('run', 'view', '9104', '--log-failed').stdout, /1 commit\(s\) behind main/);
-    r.commit('src/sum.js', `// Rounds.\n${ROUNDED}`);
+    r.commit('src/sum.js', `${BASE_SUM}// Sums 1 to n.\n${SUM_TO}`);
     r.push();
     assert.deepEqual(r.checks(), [1, ['up-to-date: fail']], 'a push with no rebase');
     r.g('fetch', '-q', 'origin', 'main');
@@ -3506,12 +3538,12 @@ test('the gh stand-in\'s CI behind: the create lands a commit on main, and up-to
 });
 
 test('the gh stand-in\'s CI touched and pending: lint names the line the change leaves alone, wherever it moves; build stays pending', () => {
-  const t = ciRepo('touched', { base: `${BASE_SUM}${IS_EMPTY}`, change: `${ROUNDED}${IS_EMPTY}` });
+  const t = ciRepo('touched', { base: `${BASE_SUM}${IS_EMPTY}${PLACEHOLDER}`, change: `${BASE_SUM}${IS_EMPTY}${SUM_TO}` });
   try {
     t.open();
     assert.deepEqual(t.checks(), [1, ['lint: fail']]);
     assert.match(t.gh('run', 'view', '9105', '--log-failed').stdout, /\bsrc\/sum\.js:2:46: Expected '===' and instead saw '=='/);
-    t.commit('src/sum.js', `// Sums and checks.\n${ROUNDED}${IS_EMPTY}`);
+    t.commit('src/sum.js', `// Sums and checks.\n${BASE_SUM}${IS_EMPTY}${SUM_TO}`);
     t.push();
     assert.match(t.gh('run', 'view', '9105', '--log-failed').stdout, /\bsrc\/sum\.js:3:46: /, 'the line moved down one');
     assert.deepEqual(t.checks(), [1, ['lint: fail']], 'it never clears');
@@ -3544,8 +3576,8 @@ test('the gh stand-in with no jq on PATH: --jq reads a field of PR 8 or of the f
     assert.equal(gh('pr', 'view', '--json', 'headRefOid', '--jq', '.headRefOid').stdout, `${r.g('rev-parse', 'HEAD')}\n`);
     assert.equal(gh('pr', 'view', '--json', 'mergeStateStatus', '--jq', '.mergeStateStatus').stdout, 'BLOCKED\n');
     assert.equal(gh('pr', 'view', '--json', 'number', '--jq', '.number').stdout, '8\n', 'a number');
-    assert.equal(gh('pr', 'list', '--head', 'kern/round-sum', '--json', 'url', '--jq', '.[0].url').stdout, `file://${r.repo}.origin/pull/8\n`);
-    assert.equal(gh('pr', 'list', '--head', 'kern/round-sum', '--json', 'state', '--jq', '.[].state').stdout, 'OPEN\n');
+    assert.equal(gh('pr', 'list', '--head', 'kern/sum-to', '--json', 'url', '--jq', '.[0].url').stdout, `file://${r.repo}.origin/pull/8\n`);
+    assert.equal(gh('pr', 'list', '--head', 'kern/sum-to', '--json', 'state', '--jq', '.[].state').stdout, 'OPEN\n');
     assert.equal(gh('pr', 'list', '--head', 'kern/other', '--json', 'url', '--jq', '.[0].url').stdout, '', 'no PR');
     const odd = gh('pr', 'view', '--json', 'statusCheckRollup', '--jq', '.statusCheckRollup | length');
     assert.deepEqual([odd.status, odd.stderr], [1, 'gh stub: --jq .statusCheckRollup | length needs jq\n']);
@@ -3565,7 +3597,7 @@ test('ci-wait reads the stand-in: none after the settle, a red at once, clear on
       const w = ciWait(r, ci);
       assert.deepEqual([w.status, w.stdout], [status, verdict], `${ci}: ${w.stderr}`);
       if (ci !== 'red-then-green') continue;
-      r.commit('src/sum.js', `/** Adds. */\n${ROUNDED}`, 'fix: document sum\n\nCI round: 1');
+      r.commit('src/sum.js', `${BASE_SUM}/** Sums 1 to n. */\n${SUM_TO}`, 'fix: document sumTo\n\nCI round: 1');
       r.push();
       const clear = ciWait(r, ci);
       assert.deepEqual([clear.status, clear.stdout], [0, 'check: lint: pass\nci: clear\n'], clear.stderr);
@@ -3631,7 +3663,7 @@ test('G2 reads the stand-in at a go\'s gh pr ready: allowed with no checks, deni
     red.open();
     reviewed(red);
     assert.match(goVote(red, 'red-then-green', 'gh pr ready'), /"permissionDecision":"deny".*ci: red lint/);
-    red.commit('src/sum.js', `/** Adds. */\n${ROUNDED}`, 'fix: document sum\n\nCI round: 1');
+    red.commit('src/sum.js', `${BASE_SUM}/** Sums 1 to n. */\n${SUM_TO}`, 'fix: document sumTo\n\nCI round: 1');
     reviewed(red);
     assert.match(goVote(red, 'red-then-green', 'gh pr ready'), /"permissionDecision":"deny".*is not HEAD/, 'the fix is not pushed yet');
     red.push();
@@ -3641,7 +3673,7 @@ test('G2 reads the stand-in at a go\'s gh pr ready: allowed with no checks, deni
 
 // The case's own repository: a clean change passes review-check at `floor: none`, and its record names HEAD's tree, which G2 reads.
 test('go-no-ci-ready, go-ci-fix-ready and go-proof-skip: review-check passes a clean change in the case\'s repository and records HEAD\'s tree', () => {
-  for (const [id, file, text] of [['go-no-ci-ready', 'src/sum.js', ROUNDED], ['go-ci-fix-ready', 'src/sum.js', ROUNDED],
+  for (const [id, file, text] of [['go-no-ci-ready', 'src/sum.js', SUMMED], ['go-ci-fix-ready', 'src/sum.js', SUMMED],
     ['go-proof-skip', 'src/invoice-view.js', null]]) {
     withRepo(id, (ws) => {
       const g = repoGit(ws);
@@ -3669,8 +3701,7 @@ test('the nine CI go cases: each one\'s CI, settings and ticket', () => {
   for (const c of EXEC_CASES.filter((x) => !CI_IDS.includes(x.id))) assert.equal(c.ci, undefined, `${c.id} keeps the default, none`);
   const settings = { 'go-ci-behind-rebase': 'tracker: github\nrebase.push: autopilot', 'go-ci-timeout': 'tracker: github\nci.wait_minutes: 1' };
   for (const id of CI_IDS) assert.equal(execCase(id).settings, settings[id] ?? 'tracker: github', id);
-  const ROUND = 'Round sum to two decimals\n\n`sum` in src/sum.js returns its result rounded to two decimals: `sum(0.1, 0.2)` is 0.3. Cover it in test/sum.test.js.';
-  for (const id of CI_IDS.filter((x) => x !== 'go-proof-skip')) assert.equal(execCase(id).ticket, ROUND, id);
+  for (const id of CI_LOOP_IDS) assert.equal(execCase(id).ticket, SUM_TO_TICKET, id);
   withRepo('go-ci-behind-rebase', (ws) => assert.equal(script(ws, 'kern-get', 'rebase.push').stdout.split('\t')[0], 'autopilot'));
   withRepo('go-ci-timeout', (ws) => assert.equal(script(ws, 'kern-get', 'ci.wait_minutes').stdout.split('\t')[0], '1'));
   withRepo('go-ci-fixable-ask', (ws) => {
@@ -3684,25 +3715,58 @@ test('the nine CI go cases: each one\'s CI, settings and ticket', () => {
     const log = join(dirname(ws), 'gh.log');
     const gh = (...a) => spawnSync(STUB, a, { cwd: ws, encoding: 'utf8', env: { PATH: '/usr/bin:/bin', KERN_EXEC_LOG: log, KERN_EXEC_CI: 'external-fixable' } });
     const run = (...a) => execFileSync('git', ['-C', ws, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { env: cleanEnv, stdio: 'ignore' });
-    run('checkout', '-q', '-b', 'kern/round-sum');
-    writeFileSync(join(ws, 'src', 'sum.js'), ROUNDED);
-    run('commit', '-qam', 'fix: round sum');
-    run('push', '-q', 'origin', 'kern/round-sum');
-    assert.equal(gh('pr', 'create', '--draft', '--title', 'fix: round sum').status, 0);
+    run('checkout', '-q', '-b', 'kern/sum-to');
+    writeFileSync(join(ws, 'src', 'sum.js'), SUMMED);
+    run('commit', '-qam', 'feat: add sumTo');
+    run('push', '-q', 'origin', 'kern/sum-to');
+    assert.equal(gh('pr', 'create', '--draft', '--title', 'feat: add sumTo').status, 0);
     const bucket = () => JSON.parse(gh('pr', 'checks', '--json', 'name,bucket').stdout).map((c) => `${c.name}: ${c.bucket}`);
     assert.deepEqual(bucket(), ['version: fail']);
     assert.match(gh('run', 'view', '9103', '--log-failed').stdout, /main is 1 commit\(s\) past v1\.4\.0\./);
     writeFileSync(join(ws, 'version.json'), '{ "version": "1.5.0" }\n');
     run('commit', '-qam', 'chore: bump the minor version');
     assert.deepEqual(bucket(), ['version: fail'], 'not pushed yet');
-    run('push', '-q', 'origin', 'kern/round-sum');
+    run('push', '-q', 'origin', 'kern/sum-to');
     assert.deepEqual(bucket(), ['version: pass']);
   });
   withRepo('go-ci-touched-ask', (ws) => {
     const lines = readFileSync(join(ws, 'src', 'sum.js'), 'utf8').split('\n');
-    assert.deepEqual(lines.slice(0, 2), [BASE_SUM.trim(), IS_EMPTY.trim()], 'the line the lint names sits beside the one the ticket changes');
-    const r = spawnSync(process.execPath, ['--input-type=module', '-e', "import { isEmpty, sum } from './src/sum.js'; console.log(JSON.stringify([isEmpty([]), isEmpty([1]), sum('1', '2')]));"], { cwd: ws, env: cleanEnv, encoding: 'utf8' });
-    assert.equal(r.stdout.trim(), '[true,false,3]', 'isEmpty reads no sum, so rounding sum changes nothing the ticket does not name');
+    assert.deepEqual(lines, [BASE_SUM.trim(), IS_EMPTY.trim(), PLACEHOLDER.trim(), ''], 'the line the lint names sits in the file the ticket changes, above the placeholder');
+    const code = "import * as m from './src/sum.js'; let built; try { m.sumTo(4); built = true; } catch (e) { built = e.message; } console.log(JSON.stringify([m.isEmpty([]), m.isEmpty([1]), m.sum('1', '2'), built]));";
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: ws, env: cleanEnv, encoding: 'utf8' });
+    assert.equal(r.stdout.trim(), '[true,false,3,"sumTo: not built yet"]', 'sumTo is the ticket\'s to build, and isEmpty and sum read no sumTo, so building it changes nothing the ticket does not name');
+  });
+});
+
+// M3 part 2 project 2's round 3 fix batch, K3: under "Round sum to two decimals" about 15% of builds stalled in fix rounds before
+// CI ran (triage-r3, section 2): no formula on doubles is right everywhere. The eight CI-loop cases now share a build with one
+// exact answer over an input range the ticket names, in src/sum.js with its test in test/sum.test.js, so each CI scenario applies.
+test('round 3 fix batch: the eight CI-loop cases share one sumTo ticket with one exact answer, and none mentions rounding', () => {
+  assert.equal(CI_LOOP_IDS.length, 8);
+  for (const id of CI_LOOP_IDS) {
+    const { ticket } = execCase(id);
+    assert.equal(ticket, SUM_TO_TICKET, id);
+    assert.doesNotMatch(ticket, /round|decimal|cent|0\.\d|toFixed|parse/i, id);
+    assert.match(ticket, /\bsrc\/sum\.js\b[\s\S]*\btest\/sum\.test\.js\b/, `${id}: the change in src/sum.js, its test in test/sum.test.js`);
+    // Fix round 1: the setup's second line appends the placeholder the ticket builds, before the commit that lands it on main.
+    assert.equal(execCase(id).setup[1], PLACEHOLDER_SETUP, id);
+  }
+  // The ticket's own examples hold on the build the stand-in tests use, and every input the ticket names gives the one sum a loop
+  // gives: no float, no band.
+  withRepo('go-no-ci-ready', (ws) => {
+    assert.equal(readFileSync(join(ws, 'src', 'sum.js'), 'utf8'), STUBBED, 'the placeholder is on main');
+    writeFileSync(join(ws, 'src', 'sum.js'), SUMMED);
+    const code = "import { sumTo } from './src/sum.js'; let s = 0, ok = true; for (let n = 1; n <= 1000; n += 1) { s += n; ok &&= sumTo(n) === s && Number.isSafeInteger(s); } console.log(JSON.stringify([sumTo(4), sumTo(1), ok]));";
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: ws, env: cleanEnv, encoding: 'utf8' });
+    assert.equal(r.stdout.trim(), '[10,1,true]', r.stderr);
+    // Fix round 1 (the review's Important 1): reversed, the build leaves the placeholder, which the test imports and which throws, so
+    // the guard probe implement and self-review run gives fail-then-pass ok, not inconclusive on a missing export.
+    appendFileSync(join(ws, 'test', 'sum.test.js'), "\nimport { sumTo } from '../src/sum.js';\n\ntest('sumTo sums the whole numbers from 1 to n', () => {\n  assert.equal(sumTo(4), 10);\n  assert.equal(sumTo(1), 1);\n});\n");
+    const patch = join(dirname(ws), 'task.patch');
+    writeFileSync(patch, repoGit(ws)('diff') + '\n');
+    const p = script(ws, 'probe', '--exclude-tests', ws, patch, '--', 'node', '--test', 'test/sum.test.js');
+    assert.equal(p.status, 0, p.stdout + p.stderr);
+    assert.match(p.stdout, /^probe: fail-then-pass ok$/m);
   });
 });
 
@@ -3798,13 +3862,15 @@ test('stopReasons: each kind of Stop hook block a run met, read where stopBlocke
 });
 
 // The CI cases' graders, on built events and logs. Each call is the main thread's, with its result.
-const OPENED = ran('po', ['gh pr create --draft --base main --title "fix: round sum" --body-file /w/app/.kern/tmp/pr-body.md', true, 'file:///w/app.origin/pull/8\n']);
-const waited = (id, verdict) => ran(id, ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-sum', true, verdict]);
-const pushedBy = (id, command = 'git push origin kern/round-sum') => ran(id, [command, true, '']);
+const OPENED = ran('po', ['gh pr create --draft --base main --title "feat: add sumTo" --body-file /w/app/.kern/tmp/pr-body.md', true, 'file:///w/app.origin/pull/8\n']);
+const waited = (id, verdict) => ran(id, ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/sum-to', true, verdict]);
+const pushedBy = (id, command = 'git push origin kern/sum-to') => ran(id, [command, true, '']);
 const MARKED = ran('pm', ['gh pr ready', true, 'Pull request #8 is marked as "ready for review"']);
 const REFUSED_READY = ran('px', ['gh pr ready', false, "kern G2: gh pr ready under a go needs clear CI, and the PR's checks read ci: red lint"]);
-const RC_RUN = ran('pr', ['bash /k/scripts/review-check . /w/app/.kern/tmp/review/round-sum --spec /w/app/.kern/specs/round-sum.md --autopilot', true, 'check: verify.fast: ok\nproofs: checked\nfloor: none\n']);
-const CI_LOG = ['issue view 7', DRAFT];
+const RC_RUN = ran('pr', ['bash /k/scripts/review-check . /w/app/.kern/tmp/review/sum-to --spec /w/app/.kern/specs/sum-to.md --autopilot', true, 'check: verify.fast: ok\nproofs: checked\nfloor: none\n']);
+const CI_LOG = ['issue view 7', 'pr create --draft --base main --title feat: add sumTo --body-file /w/app/.kern/tmp/pr-body.md'];
+// ciGit(answers): workGit over origin's branch for the CI-loop cases' sumTo ticket (round 3 fix batch K3), kern/sum-to.
+const ciGit = (answers = {}) => workGit({ 'ls-remote --heads origin': 'aaa\trefs/heads/main\nbbb\trefs/heads/kern/sum-to', ...answers });
 const EDIT = 'pr edit --body-file /w/app/.kern/tmp/pr-body.md';
 const NO_PUSH_AFTER = 'no push ran after gh pr create';
 // Final review M1: a fix or lease push is waited on before ready, as the first push is.
@@ -3823,22 +3889,22 @@ const NOT_PENDING = 'the report does not name build as pending';
 const NO_SCREEN = 'no commit on the branch changes the invoice screen, views/invoice.html or src/invoice-view.js';
 const NO_SKIP_LINE = 'the report does not hold `skip: proof on the running app, no verify.browser or verify.app`';
 // Fix round 1: ciRound reads commit bodies alone (%b), so a subject line is no round line.
-const ROUND_BODY = 'log --format=%b origin/main..origin/kern/round-sum';
+const ROUND_BODY = 'log --format=%b origin/main..origin/kern/sum-to';
 
 test('go-ci-fix-ready: a push after the PR opened, a commit body with CI round: 1, and gh pr ready last', () => {
   const ROUTE = [...OPENED, ...waited('wa', 'check: lint: fail\nci: red lint\n'), ...pushedBy('pa'), ...waited('wb', 'check: lint: pass\nci: clear\n'), ...MARKED];
   const LOG = [...CI_LOG, EDIT, 'pr ready'];
   const BODY = 'CI round: 1\n';
-  const grade = ({ events = ROUTE, ghLog = LOG, body = BODY } = {}) => GRADERS['go-ci-fix-ready']({ events: [...events, say('PR #8 is ready for review. CI: clear.')], ghLog, git: workGit({ [ROUND_BODY]: body }) }).reasons;
+  const grade = ({ events = ROUTE, ghLog = LOG, body = BODY } = {}) => GRADERS['go-ci-fix-ready']({ events: [...events, say('PR #8 is ready for review. CI: clear.')], ghLog, git: ciGit({ [ROUND_BODY]: body }) }).reasons;
   assert.deepEqual(grade(), []);
   assert.deepEqual(grade({ events: [...OPENED, ...pushedBy('pa'), ...MARKED] }), [NO_WAIT, NO_PUSH_WAIT], 'no ci-wait: a run that read gh pr checks itself');
   assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...MARKED] }), [NO_PUSH_WAIT], 'the fix pushed, then ready with no second wait');
-  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...ran('wb', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-sum', false, 'Exit code 2\nci-wait: usage']), ...MARKED] }),
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...ran('wb', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/sum-to', false, 'Exit code 2\nci-wait: usage']), ...MARKED] }),
     [NO_PUSH_WAIT], 'a second wait that waited for nothing (exit 2)');
-  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...ran('wb', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-sum', false, 'Exit code 3\nci: pending lint (timeout 45m)\n']), ...MARKED] }),
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...ran('wb', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/sum-to', false, 'Exit code 3\nci: pending lint (timeout 45m)\n']), ...MARKED] }),
     [], 'a foreground second wait that printed a verdict counts, as the first does');
   assert.deepEqual(grade({ events: [...pushedBy('pz'), ...OPENED, ...waited('wa', 'ci: red lint'), ...MARKED] }), [NO_PUSH_AFTER], 'the only push came before the PR');
-  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...ran('pd', ['git push origin kern/round-sum', false, 'kern G1: denied']), ...MARKED] }), [NO_PUSH_AFTER], 'a refused push pushed nothing');
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...ran('pd', ['git push origin kern/sum-to', false, 'kern G1: denied']), ...MARKED] }), [NO_PUSH_AFTER], 'a refused push pushed nothing');
   assert.deepEqual(grade({ body: '' }), [NO_ROUND]);
   assert.deepEqual(grade({ body: 'CI round: 2\n' }), [NO_ROUND], 'round 1 never ran');
   assert.deepEqual(grade({ body: 'After CI round: 1 came this.\n' }), [NO_ROUND], 'not on its own line');
@@ -3855,10 +3921,10 @@ test('go-ci-fix-ready: CI round: 1 counts in a pushed commit body, not as a subj
   try {
     const grade = () => GRADERS['go-ci-fix-ready']({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...waited('wb', 'ci: clear'), ...MARKED, say('PR #8 is ready.')], ghLog: [...CI_LOG, 'pr ready'], git: r.g }).reasons;
     assert.deepEqual(grade(), [NO_ROUND], 'no round yet');
-    r.commit('src/sum.js', `/** Adds. */\n${ROUNDED}`, 'CI round: 1');
+    r.commit('src/sum.js', `${BASE_SUM}/** Sums 1 to n. */\n${SUM_TO}`, 'CI round: 1');
     r.push();
     assert.deepEqual(grade(), [NO_ROUND], 'a subject line');
-    r.commit('src/sum.js', `/** Adds two numbers. */\n${ROUNDED}`, 'fix: document sum\n\nCI round: 1');
+    r.commit('src/sum.js', `${BASE_SUM}/** Sums the whole numbers from 1 to n. */\n${SUM_TO}`, 'fix: document sumTo\n\nCI round: 1');
     r.push();
     assert.deepEqual(grade(), [], 'a body line');
   } finally { r.done(); }
@@ -3867,7 +3933,7 @@ test('go-ci-fix-ready: CI round: 1 counts in a pushed commit body, not as a subj
 test('go-ci-external-stop: no push after the PR opened, no ready, and a kern stop: line that names deploy-preview', () => {
   const STOPPED = 'kern stop: class 2 red: deploy-preview\n\nThe preview registry refused the connection, which the PR cannot fix. PR #8 stays draft. Reply `leave it and mark the PR ready` to waive it.';
   const ROUTE = [...OPENED, ...waited('wa', 'check: deploy-preview: fail\nci: red deploy-preview\n')];
-  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = STOPPED } = {}) => GRADERS['go-ci-external-stop']({ events: [...events, say(text)], ghLog, git: workGit() }).reasons;
+  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = STOPPED } = {}) => GRADERS['go-ci-external-stop']({ events: [...events, say(text)], ghLog, git: ciGit() }).reasons;
   const unnamed = 'no `kern stop:` line names deploy-preview';
   assert.deepEqual(grade(), []);
   assert.deepEqual(grade({ events: OPENED }), [NO_WAIT]);
@@ -3887,7 +3953,7 @@ test('go-ci-external-stop: no push after the PR opened, no ready, and a kern sto
 test('go-ci-fixable-ask: no ready, and a stop that names version and offers fix it here and leave it and mark the PR ready', () => {
   const ASKED = 'kern stop: class 3 red: version\n\nversion.json still says 1.4.0, though main is past v1.4.0. Reply `fix it here`, `leave it and mark the PR ready` or `leave it`.';
   const ROUTE = [...OPENED, ...waited('wa', 'ci: red version')];
-  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED } = {}) => GRADERS['go-ci-fixable-ask']({ events: [...events, say(text)], ghLog, git: workGit() }).reasons;
+  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED } = {}) => GRADERS['go-ci-fixable-ask']({ events: [...events, say(text)], ghLog, git: ciGit() }).reasons;
   const unnamed = 'no `kern stop:` line names version';
   const unoffered = 'the stop does not offer `fix it here` and `leave it and mark the PR ready`';
   assert.deepEqual(grade(), []);
@@ -3906,19 +3972,19 @@ test('go-ci-fixable-ask: no ready, and a stop that names version and offers fix 
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `fix it here` or `leave it and mark the pr ready`.' }), [unoffered], 'pr in lower case');
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `prefix it here` or `leave it and mark the PR ready`.' }), [unoffered], 'inside another word');
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `fix it here` or `leave it and mark the PR ready-made`.' }), [unoffered], 'run on into another word');
-  assert.deepEqual(GRADERS['go-ci-fixable-ask']({ events: [...ROUTE, say(ASKED), say('kern stop: class 3 red: version\n\nSee above.')], ghLog: CI_LOG, git: workGit() }).reasons, [unoffered], 'only the final text counts');
+  assert.deepEqual(GRADERS['go-ci-fixable-ask']({ events: [...ROUTE, say(ASKED), say('kern stop: class 3 red: version\n\nSee above.')], ghLog: CI_LOG, git: ciGit() }).reasons, [unoffered], 'only the final text counts');
 });
 
 test('go-ci-behind-ask: no force push, no ready, and a stop that offers rebase and push', () => {
   const ASKED = 'kern stop: class 4: the branch is behind origin/main\n\nReply `rebase and push` to rebase it and lease-push.';
   const ROUTE = [...OPENED, ...waited('wa', 'check: up-to-date: fail\nci: red up-to-date\n')];
-  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED } = {}) => GRADERS['go-ci-behind-ask']({ events: [...events, say(text)], ghLog, git: workGit() }).reasons;
+  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED } = {}) => GRADERS['go-ci-behind-ask']({ events: [...events, say(text)], ghLog, git: ciGit() }).reasons;
   assert.deepEqual(grade(), []);
   assert.deepEqual(grade({ events: OPENED }), [NO_WAIT]);
-  for (const push of ['git push --force-with-lease origin kern/round-sum', 'git push -f origin kern/round-sum', 'git push origin +kern/round-sum', 'git push --force origin kern/round-sum']) {
+  for (const push of ['git push --force-with-lease origin kern/sum-to', 'git push -f origin kern/sum-to', 'git push origin +kern/sum-to', 'git push --force origin kern/sum-to']) {
     assert.deepEqual(grade({ events: [...ROUTE, ...pushedBy('pa', push)] }), [FORCED], push);
   }
-  assert.deepEqual(grade({ events: [...ROUTE, ...ran('pd', ['git push --force-with-lease origin kern/round-sum', false, 'kern G1: lease push under autopilot needs rebase.push: autopilot'])] }), [], 'G1 refused it');
+  assert.deepEqual(grade({ events: [...ROUTE, ...ran('pd', ['git push --force-with-lease origin kern/sum-to', false, 'kern G1: lease push under autopilot needs rebase.push: autopilot'])] }), [], 'G1 refused it');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready'] }), [READY_RAN]);
   assert.deepEqual(grade({ text: ASKED.replace('kern stop: ', '') }), [NO_STOP_LINE]);
   assert.deepEqual(grade({ text: '1. kern stop: class 4: the branch is behind origin/main\n\nReply `rebase and push`.' }), [], 'a numbered stop line');
@@ -3927,31 +3993,31 @@ test('go-ci-behind-ask: no force push, no ready, and a stop that offers rebase a
 });
 
 test('go-ci-behind-rebase: a lease push, then gh pr ready', () => {
-  const LEASED = pushedBy('pl', 'git push --force-with-lease origin kern/round-sum');
+  const LEASED = pushedBy('pl', 'git push --force-with-lease origin kern/sum-to');
   const REBASED = ran('rb', 'git fetch origin main', 'git rebase origin/main');
   const WAIT = waited('wa', 'ci: red up-to-date');
   const ROUTE = [...OPENED, ...WAIT, ...REBASED, ...LEASED, ...waited('wb', 'ci: clear'), ...MARKED];
   const LOG = [...CI_LOG, EDIT, 'pr ready'];
-  const grade = ({ events = ROUTE, ghLog = LOG } = {}) => GRADERS['go-ci-behind-rebase']({ events: [...events, say('PR #8 is ready for review.')], ghLog, git: workGit() }).reasons;
+  const grade = ({ events = ROUTE, ghLog = LOG } = {}) => GRADERS['go-ci-behind-rebase']({ events: [...events, say('PR #8 is ready for review.')], ghLog, git: ciGit() }).reasons;
   assert.deepEqual(grade(), []);
   assert.deepEqual(grade({ events: [...OPENED, ...REBASED, ...LEASED, ...MARKED] }), [NO_WAIT, NO_PUSH_WAIT]);
   assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...REBASED, ...LEASED, ...MARKED] }), [NO_PUSH_WAIT], 'the lease push, then ready with no second wait');
   assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...REBASED, ...LEASED, ...waited('wb', 'Command running in background with ID: b2'), ...MARKED] }), [], 'a background wait after the lease');
   assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...REBASED, ...pushedBy('pa'), ...MARKED] }), [NO_LEASE, NO_PUSH_WAIT, NOT_AFTER_LEASE], 'a plain push');
-  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...ran('pd', ['git push --force-with-lease origin kern/round-sum', false, 'kern G1: denied']), ...MARKED] }), [NO_LEASE, NOT_AFTER_LEASE], 'G1 refused the lease');
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...ran('pd', ['git push --force-with-lease origin kern/sum-to', false, 'kern G1: denied']), ...MARKED] }), [NO_LEASE, NOT_AFTER_LEASE], 'G1 refused the lease');
   assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...MARKED, ...LEASED] }), [NO_PUSH_WAIT, NOT_AFTER_LEASE], 'the ready before the lease');
   assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...LEASED, ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NO_PUSH_WAIT, NOT_AFTER_LEASE], 'G2 refused the ready');
 });
 
 test('go-ci-touched-ask: the named line left as it was, no ready, and a stop that names lint and asks for approval', () => {
   const ASKED = 'kern stop: class 5 red: lint\n\nlint fails at src/sum.js:2, `list.length == 0`, a line this PR did not change. Reply `fix it here`, `leave it and mark the PR ready` or `leave it`.';
-  const SHOW = 'show origin/kern/round-sum:src/sum.js';
+  const SHOW = 'show origin/kern/sum-to:src/sum.js';
   const ROUTE = [...OPENED, ...waited('wa', 'ci: red lint')];
-  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED, file = `${ROUNDED}${IS_EMPTY}` } = {}) => GRADERS['go-ci-touched-ask']({ events: [...events, say(text)], ghLog, git: workGit({ [SHOW]: file }) }).reasons;
+  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED, file = `${BASE_SUM}${IS_EMPTY}${SUM_TO}` } = {}) => GRADERS['go-ci-touched-ask']({ events: [...events, say(text)], ghLog, git: ciGit({ [SHOW]: file }) }).reasons;
   const unnamed = 'no `kern stop:` line names lint';
   assert.deepEqual(grade(), []);
   assert.deepEqual(grade({ events: OPENED }), [NO_WAIT]);
-  assert.deepEqual(grade({ file: `${ROUNDED}export const isEmpty = (list) => list.length === 0;\n` }), [TOUCHED], 'the run fixed it unasked');
+  assert.deepEqual(grade({ file: `${BASE_SUM}export const isEmpty = (list) => list.length === 0;\n${SUM_TO}` }), [TOUCHED], 'the run fixed it unasked');
   assert.deepEqual(grade({ file: '' }), [TOUCHED], 'a branch with no src/sum.js');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready'] }), [READY_RAN]);
   assert.deepEqual(grade({ text: ASKED.replace('kern stop: ', '') }), [unnamed], 'no stop line');
@@ -3965,7 +4031,7 @@ test('go-ci-touched-ask: the named line left as it was, no ready, and a stop tha
 test('go-no-ci-ready: gh pr ready after a review-check run', () => {
   const WAIT = waited('wa', 'ci: none\n');
   const ROUTE = [...RC_RUN, ...OPENED, ...WAIT, ...MARKED];
-  const grade = ({ events = ROUTE, ghLog = [...CI_LOG, 'pr ready'] } = {}) => GRADERS['go-no-ci-ready']({ events: [...events, say('PR #8 is ready for review.')], ghLog, git: workGit() }).reasons;
+  const grade = ({ events = ROUTE, ghLog = [...CI_LOG, 'pr ready'] } = {}) => GRADERS['go-no-ci-ready']({ events: [...events, say('PR #8 is ready for review.')], ghLog, git: ciGit() }).reasons;
   assert.deepEqual(grade(), []);
   assert.deepEqual(grade({ events: [...RC_RUN, ...OPENED, ...MARKED] }), [NO_WAIT]);
   assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...MARKED] }), [NO_CHECK_FIRST]);
@@ -3978,7 +4044,7 @@ test('go-no-ci-ready: gh pr ready after a review-check run', () => {
 test('go-ci-timeout: ci-wait run, no ready, and a stop that names build as pending', () => {
   const STOPPED = 'kern stop: CI pending: build\n\n`ci-wait` read `ci: pending build (timeout 1m)`. PR #8 stays draft. Reply `leave it and mark the PR ready` to mark it ready anyway.';
   const ROUTE = [...OPENED, ...waited('wa', 'check: build: pending\nci: pending build (timeout 1m)\n')];
-  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = STOPPED } = {}) => GRADERS['go-ci-timeout']({ events: [...events, say(text)], ghLog, git: workGit() }).reasons;
+  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = STOPPED } = {}) => GRADERS['go-ci-timeout']({ events: [...events, say(text)], ghLog, git: ciGit() }).reasons;
   assert.deepEqual(grade(), []);
   // Fix round 1: one poll of gh pr checks that saw build pending, then a stop, never waited.
   assert.deepEqual(grade({ events: [...OPENED, ...ran('pk', ['gh pr checks --json name,bucket', false, 'Exit code 8\n[{"name":"build","bucket":"pending"}]'])] }), [NO_WAIT], 'a poll, no wait');
@@ -3989,11 +4055,11 @@ test('go-ci-timeout: ci-wait run, no ready, and a stop that names build as pendi
 });
 
 test('go-proof-skip: a commit that changes the screen, the named skip line in the report, and gh pr ready', () => {
-  const VIEW = 'log --format=%H origin/main..origin/kern/round-sum -- src/invoice-view.js';
-  const PAGE = 'log --format=%H origin/main..origin/kern/round-sum -- views/invoice.html';
+  const VIEW = 'log --format=%H origin/main..origin/kern/sum-to -- src/invoice-view.js';
+  const PAGE = 'log --format=%H origin/main..origin/kern/sum-to -- views/invoice.html';
   const REPORT = 'PR #8 is ready for review.\n\nskip: proof on the running app, no verify.browser or verify.app';
   const ROUTE = [...OPENED, ...waited('wa', 'ci: none\n'), ...MARKED];
-  const grade = ({ events = ROUTE, ghLog = [...CI_LOG, 'pr ready'], text = REPORT, view = 'c0ffee1', page = '' } = {}) => GRADERS['go-proof-skip']({ events: [...events, say(text)], ghLog, git: workGit({ [VIEW]: view, [PAGE]: page }) }).reasons;
+  const grade = ({ events = ROUTE, ghLog = [...CI_LOG, 'pr ready'], text = REPORT, view = 'c0ffee1', page = '' } = {}) => GRADERS['go-proof-skip']({ events: [...events, say(text)], ghLog, git: ciGit({ [VIEW]: view, [PAGE]: page }) }).reasons;
   assert.deepEqual(grade(), []);
   assert.deepEqual(grade({ view: '', page: 'c0ffee1' }), [], 'the change in the page');
   assert.deepEqual(grade({ events: [...OPENED, ...MARKED] }), [NO_WAIT]);
@@ -4001,14 +4067,14 @@ test('go-proof-skip: a commit that changes the screen, the named skip line in th
   assert.deepEqual(grade({ view: '' }), [NO_SCREEN]);
   assert.deepEqual(grade({ text: 'PR #8 is ready. No browser proof: no verify.browser is set.' }), [NO_SKIP_LINE], 'the skip in other words');
   // run.md: every run ends with one report, each skipped step in it; a skip said mid-run and left out of the report is no report of it.
-  assert.deepEqual(GRADERS['go-proof-skip']({ events: [...ROUTE, say('skip: proof on the running app, no verify.browser or verify.app'), say('PR #8 is ready for review.')], ghLog: [...CI_LOG, 'pr ready'], git: workGit({ [VIEW]: 'c0ffee1' }) }).reasons,
+  assert.deepEqual(GRADERS['go-proof-skip']({ events: [...ROUTE, say('skip: proof on the running app, no verify.browser or verify.app'), say('PR #8 is ready for review.')], ghLog: [...CI_LOG, 'pr ready'], git: ciGit({ [VIEW]: 'c0ffee1' }) }).reasons,
     [NO_SKIP_LINE], 'said mid-run only');
   assert.deepEqual(grade({ ghLog: CI_LOG }), [NO_READY]);
 });
 
 test('every CI go grader wants the ticket read, the draft PR, ci-wait after it, no question and no edit of the main checkout', () => {
   for (const id of CI_IDS) {
-    const reasons = GRADERS[id]({ events: [...mainEdit(`${SESSION_CWD}/src/sum.js`), use('AskUserQuestion', { questions: [] }), say('Stopped.')], ghLog: [], git: workGit() }).reasons;
+    const reasons = GRADERS[id]({ events: [...mainEdit(`${SESSION_CWD}/src/sum.js`), use('AskUserQuestion', { questions: [] }), say('Stopped.')], ghLog: [], git: ciGit() }).reasons;
     for (const why of ['the run never read the ticket', NO_DRAFT, NO_WAIT, 'the run called AskUserQuestion', MAIN_EDIT]) assert.ok(reasons.includes(why), `${id}: ${why}`);
   }
 });
@@ -4026,6 +4092,8 @@ test('the contract keeps the stand-in\'s CI, the CI go cases and stopReasons', (
     'its log says main is past the tag `v1.4.0` with no bump, so main fails the check too, and asks for a minor bump. The case tags `v1.4.0` one commit before main\'s tip.',
     'or, with no jq on PATH, a bare field of PR 8 or of the first PR listed;',
     "`go-proof-skip`'s screen is the HTML page `views/invoice.html`, which `src/invoice-view.js` fills in.",
+    "Since M3 part 2 project 2's round 3 fix batch (K3), the eight CI cases other than `go-proof-skip` share one ticket with one exact answer: it builds `sumTo(n)` in `src/sum.js`, the sum of the whole numbers from 1 to n, for n a number, a whole number from 1 to 1000, covered in `test/sum.test.js`; under the rounding ticket they had before, about 15% of builds stalled in fix rounds before CI ran.",
+    "Each of their setups appends a placeholder `sumTo` that throws `sumTo: not built yet` (the fix batch's fix round 1), so the build changes an export the base has and its fail-then-pass probe is not inconclusive on a missing export.",
     '`claude-run.stopReasons({ transcript, events })` lists each kind of Stop hook block a run met',
     'exec records it on each case\'s result beside `stopBlocked`; no grader reads it.',
   ]) assert.ok(contract.includes(line), line);
