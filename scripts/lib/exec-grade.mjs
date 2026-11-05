@@ -658,11 +658,13 @@ const verdictReported = (events) => /\b(ready|fix first|split|rebase first|needs
 // approvedAfterReview(events): run.md's plan step under a go: the first Write or Edit that puts the go quote into a .kern/plans/
 // file comes after a plan-check call and an Agent call that each name that plan as `plans/<file>`. Both round-5 draft runs wrote
 // the approval in the plan's first write, before the review. A run that writes no quote by Write or Edit passes this row; the
-// plan row still wants the quote.
+// plan row still wants the quote. Round 5 fix batch M1: a Write or Edit whose result was an error wrote nothing, as mainUntouched
+// reads it, so G20's deny of round 5's early approval (go-reaches-draft:101, :102) is no approval.
 const approvedAfterReview = (events) => {
-  const uses = events.flatMap((e, at) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => ({ at, name: c.name, input: c.input ?? {} })));
+  const uses = events.flatMap((e, at) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => ({ at, id: c.id, name: c.name, input: c.input ?? {} })));
+  const failed = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error === true).map((c) => c.tool_use_id)));
   const quote = new RegExp(GO_APPROVED, 'm');
-  const first = uses.find((u) => ['Write', 'Edit'].includes(u.name) && String(u.input.file_path ?? '').includes('.kern/plans/') && quote.test(String(u.input.content ?? u.input.new_string ?? '')));
+  const first = uses.find((u) => ['Write', 'Edit'].includes(u.name) && !failed.has(u.id) && String(u.input.file_path ?? '').includes('.kern/plans/') && quote.test(String(u.input.content ?? u.input.new_string ?? '')));
   if (!first) return true;
   const path = String(first.input.file_path);
   const plan = path.slice(path.lastIndexOf('.kern/plans/') + '.kern/'.length);

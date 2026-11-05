@@ -813,3 +813,10 @@ test("the contract's checkFailNamed takes a closing parenthesis after the check'
   assertContains('docs/plans/contract.md', [
     "; with the name before `fail` and no quote between them, a closing parenthesis also counts among those characters, since M3 part 2 project 2's round 3 fix batch, K2, whose go-required-check-stop report and commit body put the check's name in parentheses)"]);
 });
+
+test("the contract's approvedAfterReview skips a denied write", () => {
+  // M3 part 2 project 2's round 5 fix batch, M1: G20 denied go-reaches-draft's early approval (:101, :102), which the row then read.
+  assertContains('docs/plans/contract.md', [
+    "`approvedAfterReview` (the first Write or Edit that came back with no error and puts the go quote into a `.kern/plans/` file follows",
+    "; a denied write counts for nothing since M3 part 2 project 2's round 5 fix batch, M1, whose go-reaches-draft put the approval in a plan Write that G20 denied)"]);
+});

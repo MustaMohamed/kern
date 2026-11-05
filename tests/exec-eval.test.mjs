@@ -2939,6 +2939,11 @@ test('go-reaches-draft: the report gives the verdict, the plan\'s approval follo
   assert.deepEqual(grade([...write('w1', PLAN, FRONT), ...planCheck('p1', '.kern/specs/round-money.md'), ...review('a1'), ...edit('w2', PLAN, APPROVAL), ...DRAFT_RUN]).reasons, [EARLY_APPROVAL], "the spec's plan-check");
   assert.deepEqual(grade([...write('w1', PLAN, FRONT), ...planCheck('p1'), ...review('a1', 'Review the spec at /w/app/.kern/specs/round-money.md'), ...edit('w2', PLAN, APPROVAL), ...DRAFT_RUN]).reasons, [EARLY_APPROVAL], "an Agent call that names another file");
   assert.deepEqual(grade([...write('w0', `${SESSION_CWD}/.kern/specs/round-money.md`, `---\n${APPROVAL}\n---\n`), ...ordered, ...DRAFT_RUN]), { pass: true, reasons: [] }, "the spec's approval is define's");
+  // Paid round 5 of project 2 (go-reaches-draft:101, :102): G20 denied the plan's first Write, which held the approval, and the run
+  // then kept run.md's order. A denied call wrote nothing, as mainUntouched reads it; the same Write let through still fails.
+  const early = (isError) => tool('w0', 'Write', { file_path: PLAN, content: `---\n${APPROVAL}\n---\n# Round money\n` }, { isError, content: isError ? 'kern G20: under a go a plan approves only after its review' : '' });
+  assert.deepEqual(grade([...early(true), ...ordered, ...DRAFT_RUN]), { pass: true, reasons: [] }, "round 5's denied early approval");
+  assert.deepEqual(grade([...early(false), ...ordered, ...DRAFT_RUN]).reasons, [EARLY_APPROVAL], 'the same early approval let through');
   // verdictReported: one of self-review's verdicts, or the lane's needs fixes, in the report.
   for (const verdict of ['ready', 'fix first', 'split', 'rebase first', 'needs fixes']) assert.deepEqual(grade([...GO_LANES, say(`Draft PR #8. Verdict: \`${verdict}\`.`)]), { pass: true, reasons: [] }, verdict);
   // Paid round 5's go-reaches-draft report gave each review's words and no verdict.
