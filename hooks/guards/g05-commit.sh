@@ -486,7 +486,7 @@ EOT
 
 # _g05_commit IDX: the commit at IDX in _G05_RECS, just read by _g05_split.
 _g05_commit() {
-  local toks msg problems policy fix attr
+  local toks msg problems policy fix attr all
   if ! _g05_ready; then
     vote ask G5 "kern could not load its option parser, so this commit cannot be checked"
     return 0
@@ -537,6 +537,11 @@ _g05_commit() {
     vote ask G5 "commit (message checks pass)"
     return 0
   fi
+  # Under a live go G20 holds a commit of a build with no spec, whatever wrote its files (M3 part 2 project 2's
+  # round 7 fix batch). It reads the commit's paths, a -a commit's tracked changes too, before any allow.
+  all=0
+  word_has "$toks" --all && all=1
+  _g20_commit_route "$_G05_DIR" "$all"
   if _g05_proven "$1" "$toks"; then
     if [ "$AUTOPILOT" = 1 ]; then
       vote allow G5 "autopilot commit: message checks pass"

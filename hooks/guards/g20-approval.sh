@@ -382,13 +382,12 @@ guard_g20() {
 # passes (fix round 1); it is no test path (_g20_test); no WORK/specs/*.md names this go (_g20_go_spec); and the
 # transcript holds no main-thread Read of the running kern's diagnose skill (_g20_diagnosed), since a bug starts
 # there and diagnose writes no spec. A fault in any read allows, as in G20's other votes. Accepted limits: a Bash
-# write (a here-doc, an inline script) is not seen; a diagnose Read opens the gate for any edit; test paths are
-# read by name; and a spec counts by its approved: and issue: lines, which the model writes, so G20's approval
-# check is what binds them to the user's go.
+# write (a here-doc, an inline script) is not seen, though its commit is (_g20_commit_route); a diagnose Read
+# opens the gate for any edit; test paths are read by name; and a spec counts by its approved: and issue: lines,
+# which the model writes, so G20's approval check is what binds them to the user's go.
 _g20_route() {
-  local p work main rel
-  [ -z "${AGENT-}${AGENT_ID-}" ] && [ "${AUTOPILOT:-0}" = 1 ] || return 0
-  go_live "$SID" "${KERN_MAIN-}" 2> /dev/null || return 0
+  local p
+  _g20_gate || return 0
   if [ "$TOOL" = NotebookEdit ]; then
     p=$(ti_get notebook_path) || return 0
   else
@@ -396,19 +395,73 @@ _g20_route() {
   fi
   [ -n "$p" ] || return 0
   case "$p" in /*) ;; *) p="${CWD:-$PWD}/$p" ;; esac
-  _g20_wd && _g20_dir "$KERN_MAIN/$_G20_WD" || return 0
-  work=$_G20_REAL
-  _g20_dir "$KERN_MAIN" || return 0
-  main=$_G20_REAL
-  _g20_dir "${p%/*}" || return 0
-  p="$_G20_REAL/${p##*/}"
-  case "$p" in "$work"/*) return 0 ;; esac
-  rel=${p#"$main"/}
-  [ "$rel" != "$p" ] || return 0
-  _g20_test "$rel" && return 0
+  _g20_roots && _g20_dir "${p%/*}" || return 0
+  _g20_build "$_G20_REAL/${p##*/}" || return 0
   _g20_go_spec "$_KERN_GO" && return 0
   _g20_diagnosed && return 0
   vote deny G20 "under a go, a build starts at define, and no spec under $KERN_MAIN/$_G20_WD/specs carries this go's approval. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only. A session that EnterWorktree moved into a worktree cannot write $KERN_MAIN/$_G20_WD/specs: ExitWorktree with action keep, write the spec, then edit the worktree by its path."
+}
+
+# The commit gate (M3 part 2 project 2's round 7 fix batch; the user's "Both fixes, then round 8 (Recommended)",
+# 2026-11-05): in paid round 7 go-required-check-stop wrote its build by a shell redirect, which _g20_route does
+# not see, and committed it with no spec. G5 calls _g20_commit_route DIR ALL for a commit run in DIR, ALL 1 when the
+# commit carries -a, so the gate holds the one step every build passes, whatever wrote its files. Under
+# _g20_route's own gate it denies when a path the commit takes is a build's file (_g20_build) and neither
+# _g20_go_spec nor _g20_diagnosed holds. The paths are the staged ones (git diff --cached) and, with ALL, the
+# tracked changes (git diff), each from the top of DIR's worktree, a rename read as a delete and an add. A read
+# or git fault allows: a git that fails names no path.
+_g20_commit_route() {
+  local top f
+  _g20_gate || return 0
+  top=$(git -C "$1" rev-parse --show-toplevel 2> /dev/null) && [ -n "$top" ] || return 0
+  _g20_roots && _g20_dir "$top" || return 0
+  top=$_G20_REAL
+  f=$({
+    git -C "$top" diff --cached --name-only --no-renames -z
+    [ "${2-}" != 1 ] || git -C "$top" diff --name-only --no-renames -z
+  } 2> /dev/null | _g20_first_build "$top")
+  [ -n "$f" ] || return 0
+  _g20_go_spec "$_KERN_GO" && return 0
+  _g20_diagnosed && return 0
+  vote deny G20 "under a go, a build starts at define, and no spec under $KERN_MAIN/$_G20_WD/specs carries this go's approval, so this commit of $f is held. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket commits test files only. A session that EnterWorktree moved into a worktree cannot write $KERN_MAIN/$_G20_WD/specs: ExitWorktree with action keep, write the spec, then commit in the worktree by its path."
+}
+
+# _g20_gate: exit 0 when the route gate is open: the call is the main session's, autopilot is on, and a go is
+# live for this repository (go_live, which sets _KERN_GO).
+_g20_gate() {
+  [ -z "${AGENT-}${AGENT_ID-}" ] && [ "${AUTOPILOT:-0}" = 1 ] || return 1
+  go_live "$SID" "${KERN_MAIN-}" 2> /dev/null
+}
+
+# _g20_roots: sets _G20_WORKR to the work dir and _G20_MAINR to the main worktree's root, each read by _g20_dir.
+# Fails when either cannot be read.
+_g20_roots() {
+  _g20_wd && _g20_dir "$KERN_MAIN/$_G20_WD" || return 1
+  _G20_WORKR=$_G20_REAL
+  _g20_dir "$KERN_MAIN" || return 1
+  _G20_MAINR=$_G20_REAL
+}
+
+# _g20_build PATH: exit 0 when PATH, read as _g20_dir reads a path, is a build's file: under the main worktree's
+# root and not under the work dir (_g20_roots sets both), and no test path (_g20_test) from that root.
+_g20_build() {
+  local rel
+  case "$1" in "$_G20_WORKR"/*) return 1 ;; esac
+  rel=${1#"$_G20_MAINR"/}
+  [ "$rel" != "$1" ] || return 1
+  ! _g20_test "$rel"
+}
+
+# _g20_first_build TOP: prints the first of the NUL-ended paths on stdin, each from TOP, a path _g20_dir read,
+# that _g20_build calls a build's file. Git tracks no file through a symlinked folder, so TOP/PATH needs no read.
+_g20_first_build() {
+  local f
+  while IFS= read -r -d '' f; do
+    if [ -n "$f" ] && _g20_build "$1/$f"; then
+      printf '%s' "$f"
+      return 0
+    fi
+  done
 }
 
 # _g20_test PATH: exit 0 when PATH, a file's path from the main worktree's root, names a test: a folder test,

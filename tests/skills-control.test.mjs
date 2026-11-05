@@ -761,13 +761,42 @@ test("the contract and both designs keep the round 2 fix batch's G20 route gate"
     'Accepted limits: a Bash write (a here-doc, an inline script) is not seen, so a denied run could route around it; a diagnose Read opens the gate for any edit; test paths are read by name;',
     "Its last sentence came in M3 part 2 project 2's round 5 fix batch, M3: in paid round 5 a go that Claude Code's EnterWorktree pinned to a worktree could write the spec neither under `KERN_MAIN`, which Claude Code refused, nor in the worktree, which this gate denied and `_g20_go_spec` does not read."]);
   const gate = "a main-thread Write, Edit or NotebookEdit under the main worktree's root and outside the work dir, of a file that is no test by its path, is denied until a spec under `WORK/specs` carries the go's approval, or the run has read diagnose: a go's build starts at define, a bug at diagnose";
-  assertContains('docs/specs/2026-10-12-kern-design.md', [`Under a live go ${gate} (M3 part 2 project 2's round 2 fix batch) |`]);
+  // The round 7 fix batch adds a sentence to each design row, so the pins end at the round 2 text.
+  assertContains('docs/specs/2026-10-12-kern-design.md', [`Under a live go ${gate} (M3 part 2 project 2's round 2 fix batch).`]);
   assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
-    `| G20 | A${gate.slice(1)}. This closes \`go-required-check-stop\`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05) |`]);
+    `| G20 | A${gate.slice(1)}. This closes \`go-required-check-stop\`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05).`]);
   // The guard's reason is the contract's, the work dir's specs named in place of each placeholder (two since the round 5 fix
   // batch's fix round 1, which names the folder a pinned session cannot write).
   const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
   assert.ok(guard.includes(`vote deny G20 "${reason.replaceAll('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the contract\'s reason');
+});
+
+test("the contract and both designs keep the round 7 fix batch's commit gate", () => {
+  // M3 part 2 project 2's paid round 7 (the user's "Both fixes, then round 8 (Recommended)", 2026-11-05): go-required-check-stop
+  // wrote its build by a shell redirect, which the route gate does not see, and committed it with no spec, so under the same
+  // gate G20 holds the commit, whatever wrote its files.
+  const route = 'under a go, a build starts at define, and no spec under <KERN_MAIN>/<work_dir>/specs carries this go\'s approval. Read ${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only. A session that EnterWorktree moved into a worktree cannot write <KERN_MAIN>/<work_dir>/specs: ExitWorktree with action keep, write the spec, then edit the worktree by its path.';
+  const swap = (s, from, to) => {
+    assert.equal(s.split(from).length, 2, `one ${from}`);
+    return s.split(from).join(to);
+  };
+  assertContains('docs/plans/contract.md', [
+    "Since M3 part 2 project 2's round 7 fix batch (the user's \"Both fixes, then round 8 (Recommended)\", 2026-11-05: in paid round 7 `go-required-check-stop` wrote its build by a shell redirect, which this gate does not see, and committed it with no spec), G5 hands each commit to `_g20_commit_route DIR ALL`, which under the same gate denies when a path the commit takes (`git diff --cached --name-only --no-renames -z` and, when the commit carries `-a` and ALL is `1`, `git diff --name-only --no-renames -z`, each run in the top of DIR's worktree) is under the main worktree's root, not under the work dir and no test path, and neither `_g20_go_spec` nor `_g20_diagnosed` holds, with the deny above but `, so this commit of <path> is held` before its first period, `commits` for `edits` and `commit in the worktree by its path` for `edit the worktree by its path`, and a git or read fault allows.",
+    "Since M3 part 2 project 2's round 7 fix batch (the user's \"Both fixes, then round 8 (Recommended)\", 2026-11-05), `_g05_commit` calls G20's `_g20_commit_route \"$_G05_DIR\" ALL`, ALL `1` when `word_has` finds `--all` in the commit's options, once the message checks, `commit.policy` and the consent step pass and before `_g05_proven`, so under a live go a commit of a build with no spec is denied whatever wrote its files (G20's route gate above)."]);
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    ". The same gate denies a main-thread commit under a live go that takes such a file, whatever wrote it (M3 part 2 project 2's round 7 fix batch) |",
+    "; under a live go, a commit of a build with no spec denied by G20's route gate (M3 part 2 project 2's round 7 fix batch) |"]);
+  assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
+    ". The same gate denies a main-thread commit that takes such a file, staged or, with `-a`, tracked, whatever wrote it, since round 7's `go-required-check-stop` wrote its build by a shell redirect, which the gate does not see, and committed it (the round 7 fix batch; the user's \"Both fixes, then round 8 (Recommended)\", 2026-11-05) |"]);
+  // The commit's reason is the route's with the contract's three changes, and the guard gives it.
+  let commit = swap(route, "this go's approval.", "this go's approval, so this commit of <path> is held.");
+  commit = swap(commit, 'edits test files only', 'commits test files only');
+  commit = swap(commit, 'edit the worktree by its path', 'commit in the worktree by its path');
+  const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
+  assert.ok(guard.includes(`vote deny G20 "${commit.replaceAll('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('<path>', '$f').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the commit reason');
+  // G5 hands the commit to the gate before its proven-shape allow.
+  const g05 = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g05-commit.sh'), 'utf8');
+  assert.ok(g05.includes('  _g20_commit_route "$_G05_DIR" "$all"\n  if _g05_proven "$1" "$toks"; then'), 'G5 calls the gate before its allow');
 });
 
 test("the contract and both designs keep the round 2 fix batch's G1 edit deny", () => {
