@@ -221,23 +221,27 @@ _g20_work() {
   _G20_WORK=$(cd -P "$KERN_MAIN/$_G20_WD" 2> /dev/null && env pwd -P) && [ -n "$_G20_WORK" ]
 }
 
-# _g20_dir DIR: sets _G20_REAL to DIR (absolute) with its nearest part that exists read by cd -P and env
-# pwd -P, and the parts after it, which a Write makes, as written.
+# _g20_dir DIR: sets _G20_REAL to DIR (absolute, or empty for /) with its nearest part that exists read by
+# cd -P and env pwd -P, and the parts after it, which a Write makes, as written. Fails when that read comes
+# back empty (a substitution whose pipe could not be made gives status 0 and no output), or when those
+# parts hold ., .. or an empty part, which the Write resolves where a string compare cannot.
 _g20_dir() {
   local d="$1" t=''
-  case "$d" in /*) ;; *) return 1 ;; esac
+  case "$d" in '' | /*) ;; *) return 1 ;; esac
   while [ -n "$d" ] && [ ! -d "$d" ]; do
     t="/${d##*/}$t"
     d=${d%/*}
   done
-  _G20_REAL=$(cd -P "${d:-/}" 2> /dev/null && env pwd -P) || return 1
+  case "$t/" in */./* | */../* | *//*) return 1 ;; esac
+  _G20_REAL=$(cd -P "${d:-/}" 2> /dev/null && env pwd -P) && [ -n "$_G20_REAL" ] || return 1
   _G20_REAL="${_G20_REAL%/}$t"
 }
 
 # _g20_plan PATH: exit 0, with _G20_SLUG set, when PATH (absolute), or a symlink on the way from it (up
 # to 8), names a Markdown file right under WORK/plans, where plan writes its plans; the slug is that name
 # without its extension. Each directory is read by _g20_dir, so a plan whose folder a Write makes is seen.
-# Exit 1 when it is no plan, and 2 when the work dir or a link cannot be read.
+# Exit 1 only when it is no plan. Exit 2 when it cannot tell: the work dir, a directory or a link cannot
+# be read (an empty read included), or the links go past 8.
 _g20_plan() {
   local p="$1" i=0 w n l
   _G20_SLUG=''
@@ -251,8 +255,9 @@ _g20_plan() {
       _G20_SLUG=${n%.*}
       return 0
     fi
-    [ -L "$p" ] && [ "$i" -lt 8 ] || return 1
-    l=$(readlink "$p") || return 2
+    [ -L "$p" ] || return 1
+    [ "$i" -lt 8 ] || return 2
+    l=$(readlink "$p") && [ -n "$l" ] || return 2
     case "$l" in /*) p=$l ;; *) p="${p%/*}/$l" ;; esac
     i=$((i + 1))
   done
@@ -260,8 +265,9 @@ _g20_plan() {
 
 # _g20_reviewed PATH: called once _g20_go approves PATH. A plan (_g20_plan) approves under a go only after
 # its review approves it: denies unless WORK/reviews/plan-<slug>.md, the plan reviewer's reply that plan
-# step 11 saves, is a regular file with a line that, its blanks around trimmed, is Verdict: approve. A
-# record that cannot be read is no approve, and a work dir or link G20 cannot read fails closed.
+# step 11 saves, is a regular file with a line that, its blanks around trimmed, is Verdict: approve, and
+# no such line Verdict: revise. A record that cannot be read is no approve, and a plan G20 cannot tell
+# (_g20_plan exit 2) fails closed.
 _g20_reviewed() {
   local r rc=0
   _g20_plan "$1" || rc=$?
@@ -269,13 +275,17 @@ _g20_reviewed() {
     0) ;;
     1) return 0 ;;
     *)
-      fail_closed "G20 could not read the work dir or a link on the way to $(basename "$1") to tell whether it is a plan, which under a go approves only after its review"
+      fail_closed "G20 could not tell whether ${1##*/} is a plan, which under a go approves only after its review: the work dir or a link on the way cannot be read, or the path holds a ., .. or empty part after a directory that does not exist yet; write the plan to the path kern-dir plans prints"
       return 0
       ;;
   esac
   r="$KERN_MAIN/$_G20_WD/reviews/plan-$_G20_SLUG.md"
-  [ -f "$r" ] && env LC_ALL=C grep -Eq '^[[:space:]]*Verdict: approve[[:space:]]*$' "$r" 2> /dev/null && return 0
-  vote deny G20 "under a go a plan approves only after its review: $r, where plan step 11 saves the plan reviewer's reply, holds no line Verdict: approve; keep status: draft"
+  if [ -f "$r" ] && env LC_ALL=C grep -Eq '^[[:space:]]*Verdict: approve[[:space:]]*$' "$r" 2> /dev/null; then
+    # Only grep's exit 1, no match, is no revise line, so a read that fails stays no approve.
+    env LC_ALL=C grep -Eq '^[[:space:]]*Verdict: revise[[:space:]]*$' "$r" 2> /dev/null
+    [ "$?" != 1 ] || return 0
+  fi
+  vote deny G20 "under a go a plan approves only after its review: $r, where plan step 11 saves the plan reviewer's reply, needs a line Verdict: approve and no line Verdict: revise; keep status: draft"
 }
 
 # _g20_working PATH [TAIL]: exit 0 when PATH (absolute), with TAIL after it, is a working file: it and
