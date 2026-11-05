@@ -14,7 +14,8 @@
 #   red-then-green    lint fails until origin's head of the branch moves past the head at the create; its log, a
 #                     lint of the lines the PR changes, names the first line the PR's change adds under src/
 #   external          deploy-preview fails; its log names an outside registry that refused the connection
-#   external-fixable  version fails until the branch changes version.json from main; its log asks for a minor bump
+#   external-fixable  version fails until the branch changes version.json from main; its log says main is past the
+#                     tag v1.4.0 with no bump, so main fails it too, and asks for a minor bump
 #   behind            the create lands a commit on origin's main; up-to-date fails, and `pr view --json
 #                     mergeStateStatus` says BEHIND, until the branch on origin holds main's head
 #   touched           lint fails; its log, a lint of the files the PR changes, names the `list.length == 0` line of
@@ -162,7 +163,8 @@ pr8() {
     "$draft" "$(json_text "$(st title)")" "$(json_text "$(pr_url 8)")" "$(json_text "$(st branch)")" "$(now)" "$(merge_state)" "$(rollup)"
 }
 # jq_out JSON ARGS...: JSON, or what jq makes of it with the --jq or -q expression in ARGS. With no jq on PATH,
-# a bare `.<field>` of PR 8's object is read here, and any other expression fails.
+# a bare `.<field>` of PR 8's object, or `.[0].<field>` or `.[].<field>` of a list of one PR, is read here
+# (nothing for an empty list), and any other expression fails.
 jq_out() {
   local json=$1 q f
   shift
@@ -171,8 +173,17 @@ jq_out() {
     printf '%s\n' "$json" | jq -r "$q"
     return
   fi
-  f=${q#.}
-  case "$q" in .[A-Za-z]*) ;; *) f="" ;; esac
+  f=$q
+  case "$q" in
+    '.[0].'* | '.[].'*)
+      case "$json" in
+        "[]") return 0 ;;
+        "[{"*) f=.${q#*].} json=${json#\[} ;;
+        *) f="" ;;
+      esac
+      ;;
+  esac
+  case "$f" in .[A-Za-z]*) f=${f#.} ;; *) f="" ;; esac
   case "$f" in *[!A-Za-z]*) f="" ;; esac
   case "$json" in "{"*) ;; *) f="" ;; esac
   [ -n "$f" ] || { echo "gh stub: --jq $q needs jq" >&2; return 1; }
@@ -214,9 +225,11 @@ run_log() {
         "##[error]Process completed with exit code 1."
       ;;
     9103)
+      # main carries work past the release and fails the check too, so the red predates the PR, which can still fix it.
+      n=$(og rev-list --count v1.4.0..main) || n=''
       printf 'version\tCheck the version\t2026-11-05T09:00:08Z %s\n' \
-        "version.json holds 1.4.0, the version main released as the tag v1.4.0." \
-        "A change after a release needs a minor bump: set version.json to 1.5.0." \
+        "version.json holds 1.4.0, the version of the tag v1.4.0, and main is ${n:-at least 1} commit(s) past v1.4.0." \
+        "Changes after a release need a minor bump: set version.json to 1.5.0. main fails this check as well." \
         "##[error]Process completed with exit code 1."
       ;;
     9104)
@@ -236,11 +249,8 @@ case "$1 $2" in
   "pr list")
     if [ -f "$STATE" ]; then
       h=$(opt head -H "$@") || h=$(st branch)
-      if [ "$h" = "$(st branch)" ]; then
-        case "$*" in *--jq*) echo OPEN ;; *) pr_json "$(now)" 8 "$(pr_url 8)" ;; esac
-      else
-        case "$*" in *--jq*) ;; *) echo '[]' ;; esac
-      fi
+      if [ "$h" = "$(st branch)" ]; then list=$(pr_json "$(now)" 8 "$(pr_url 8)"); else list='[]'; fi
+      jq_out "$list" "$@" || exit 1
       exit 0
     fi
     case "${KERN_EXEC_PR:-none}" in

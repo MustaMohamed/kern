@@ -2123,6 +2123,13 @@ const DRAFT = 'pr create --draft --title fix: round --base main --body-file /w/.
 const READY_LOG = [DRAFT, 'pr ready'];
 const NO_READY = 'gh pr ready never ran after gh pr create';
 const NO_DRAFT = 'gh pr create --draft never ran';
+// Fix round 1: a go that reaches CI starts ci-wait after its draft PR opens (ci.md's Wait row), the draft cases too.
+// CI_TAIL: a go's calls from its draft PR to ready on a PR with no checks: the create, the background ci-wait and gh pr ready.
+const CI_TAIL = ran('ct', ['gh pr create --draft --base main --title "fix: round" --body-file /w/.kern/tmp/pr-body.md', true, 'file:///w/app.origin/pull/8\n'],
+  ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-money', true, 'Command running in background with ID: b1'], ['gh pr ready', true, 'Pull request #8 is marked as "ready for review"']);
+const NO_WAIT = 'no ci-wait ran after gh pr create';
+// withCi(events): events with CI_TAIL before the last one, the report.
+const withCi = (events) => [...events.slice(0, -1), ...CI_TAIL, ...events.slice(-1)];
 // workGit({ spec, plan, ledger, tmp, ...answers }): a git stand-in that answers `git grep` over a path under .kern
 // with the matching lines of each file at or under it, in order, exiting non-zero (a throw, as execFileSync gives) on
 // none, and any other call from answers, over a branch on origin whose tip holds TREE. spec, plan and ledger are one
@@ -2180,7 +2187,7 @@ const wtSnap = (id, tree) => ran(id, ['bash $K/wt-snap .', true, `${tree}\n`]);
 const wtDiff = (id, tree) => ran(id, ['bash $K/wt-diff . 4392dda --out $R/r1', true, `$R/r1\n${tree}\nsrc/sum.js\ntest/sum.test.js\n`]);
 const GO_LANES = [...wtSnap('t', TREE), ...SPEND_CLAIM, ...agentCall()];
 const GO_REVIEWED = [...REVIEWED, ...GO_LANES];
-const DRAFT_RUN = [...GO_LANES, say(DRAFT_REPORT)];
+const DRAFT_RUN = [...GO_LANES, ...CI_TAIL, say(DRAFT_REPORT)];
 
 test('go-reaches-draft: the go quote in spec and plan, a draft PR, no question and no code task closed with --no-probe', () => {
   const grade = ({ events = DRAFT_RUN, ghLog = READY_LOG, ...files } = {}) => GRADERS['go-reaches-draft']({ events, ghLog, git: workGit(files) });
@@ -2194,6 +2201,13 @@ test('go-reaches-draft: the go quote in spec and plan, a draft PR, no question a
   assert.deepEqual(grade({ ghLog: [DRAFT] }).reasons, [NO_READY], 'stopped at the draft');
   assert.deepEqual(grade({ ghLog: ['pr ready', DRAFT] }).reasons, [NO_READY], 'a ready before the PR opened marked nothing');
   assert.deepEqual(grade({ ghLog: [DRAFT, 'pr ready --undo'] }).reasons, [NO_READY], 'an undo is no ready');
+  // Fix round 1: ci-wait after the create, as ci.md's Wait row says; a read of gh pr checks is no wait.
+  const create = CI_TAIL.slice(0, 2), wait = CI_TAIL.slice(2, 4), ready = CI_TAIL.slice(4);
+  assert.deepEqual(grade({ events: [...GO_LANES, ...create, ...ready, say(DRAFT_REPORT)] }).reasons, [NO_WAIT], 'no wait');
+  assert.deepEqual(grade({ events: [...GO_LANES, ...wait, ...create, ...ready, say(DRAFT_REPORT)] }).reasons, [NO_WAIT], 'a wait before the PR opened');
+  assert.deepEqual(grade({ events: [...GO_LANES, ...create, ...ran('pk', ['gh pr checks --json name,bucket', true, '[]']), ...ready, say(DRAFT_REPORT)] }).reasons, [NO_WAIT], 'a poll of the checks');
+  assert.deepEqual(grade({ events: [...GO_LANES, ...create, ...ran('pw', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-money', false, 'kern G18: denied']), ...ready, say(DRAFT_REPORT)] }).reasons, [NO_WAIT], 'a wait a guard refused');
+  assert.deepEqual(grade({ events: [...GO_LANES, ...create, ...ran('pw', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-money', false, 'Exit code 1\ncheck: lint: fail\nci: red lint']), ...ready, say(DRAFT_REPORT)] }), { pass: true, reasons: [] }, 'a wait in the foreground that read a red');
   assert.deepEqual(grade({ events: [...DRAFT_RUN, use('AskUserQuestion', { questions: [] })] }).reasons, ['the run called AskUserQuestion']);
   assert.deepEqual(grade({ ledger: '' }).reasons, ['no task closed in a ledger']);
   assert.deepEqual(grade({ ledger: `${CLOSED}\nTask 2: complete tree=abd test=npm test exit=0 review=approved probe=skipped (probe inconclusive: new module) last=ok` }).reasons,
@@ -2253,11 +2267,11 @@ test('the ticket spec, the pushed commit body and the pushed package.json are re
     assert.deepEqual(required(), [NO_GO_SPEC], 'the body is read; no spec yet');
     put('.kern/specs/round.md', `---\nstatus: approved\n${GO_QUOTE}\n---\n`);
     assert.deepEqual(required(), []);
-    const lint = () => GRADERS['go-no-lint-draft']({ events: [...wtSnap('s', g('rev-parse', 'origin/kern/round-sum^{tree}')), ...GO_LANES, say(NO_LINT_REPORT)], ghLog: READY_LOG, git: g }).reasons;
+    const lint = () => GRADERS['go-no-lint-draft']({ events: [...wtSnap('s', g('rev-parse', 'origin/kern/round-sum^{tree}')), ...GO_LANES, ...CI_TAIL, say(NO_LINT_REPORT)], ghLog: READY_LOG, git: g }).reasons;
     put('.kern/plans/round.md', `---\nstatus: approved\n${GO_QUOTE}\n---\n`);
     put('.kern/ledgers/round/ledger.md', `${CLOSED}\n`);
     assert.deepEqual(lint(), [LINT_ADDED], 'the pushed tip holds a lint script');
-    const bug = () => GRADERS['go-bug-draft']({ events: [...wtSnap('s', g('rev-parse', 'origin/kern/round-sum^{tree}')), ...GO_LANES, say(DRAFT_REPORT)], ghLog: READY_LOG, git: g }).reasons;
+    const bug = () => GRADERS['go-bug-draft']({ events: [...wtSnap('s', g('rev-parse', 'origin/kern/round-sum^{tree}')), ...GO_LANES, ...CI_TAIL, say(DRAFT_REPORT)], ghLog: READY_LOG, git: g }).reasons;
     assert.deepEqual(bug(), [NO_TICKET_SPEC]);
     put('.kern/tmp/ticket-8.md', TICKET_SPEC);
     assert.deepEqual(bug(), [NO_TICKET_SPEC], "another go's ticket spec");
@@ -2271,7 +2285,7 @@ test('go-no-lint-draft: go-reaches-draft\'s rows, a report that names the skip o
   // pushes nothing, and a failed check kept through three fix rounds pushes and opens no PR.
   assert.notEqual(GRADERS['go-no-lint-draft'], GRADERS['go-reaches-draft']);
   const SHOW = 'show origin/kern/round-sum:package.json';
-  const grade = ({ events = [...GO_LANES, say(NO_LINT_REPORT)], ghLog = READY_LOG, ...files } = {}) => GRADERS['go-no-lint-draft']({ events, ghLog, git: workGit(files) });
+  const grade = ({ events = [...GO_LANES, say(NO_LINT_REPORT)], ghLog = READY_LOG, ...files } = {}) => GRADERS['go-no-lint-draft']({ events: withCi(events), ghLog, git: workGit(files) });
   assert.deepEqual(grade(), { pass: true, reasons: [] }, "paid round 5's skip sentence");
   assert.deepEqual(grade({ ghLog: ['issue view 7'] }).reasons, [NO_DRAFT, NO_READY], 'stopped at the first commit');
   assert.deepEqual(grade({ ghLog: ['issue view 7', 'pr list --head kern/round-money --state all'] }).reasons, [NO_DRAFT, NO_READY], 'pushed and opened no PR');
@@ -2621,7 +2635,7 @@ for (const [id, claim] of [
 ]) {
   test(`${id}: a PR on the go's spec needs claim-check with --proofs, and a kern:task-reviewer call or the lane's skip line`, () => {
     const report = say(id === 'go-no-lint-draft' ? NO_LINT_REPORT : DRAFT_REPORT);
-    const grade = (events, { ghLog = READY_LOG, ...files } = {}) => GRADERS[id]({ events: [...wtSnap('t', TREE), ...events, report], ghLog, git: workGit(files) });
+    const grade = (events, { ghLog = READY_LOG, ...files } = {}) => GRADERS[id]({ events: [...wtSnap('t', TREE), ...events, ...CI_TAIL, report], ghLog, git: workGit(files) });
     assert.deepEqual(grade([...claim, ...agentCall()]), { pass: true, reasons: [] }, 'the stored run');
     assert.deepEqual(grade([...claim, say('skip: spec lane, whole-branch review passed on 1a2b3c')]), { pass: true, reasons: [] }, 'the lane stood down');
     assert.deepEqual(grade(agentCall()).reasons, [NO_PROOFS]);
@@ -2830,7 +2844,7 @@ test('go-bug-draft: the ticket spec under .kern/tmp, a draft PR, the review on t
   const RC_SPEC = ran('r', ['bash $K/review-check . $R/kern-sum-1.diff --spec /w/app/.kern/tmp/ticket-7.md --autopilot', true, 'check: verify.fast: ok\ncheck: test: ok\ncheck: floor-scan: ok\ncheck: claim-check: ok\nproofs: checked\nfloor: none\n']);
   const RC_NO_SPEC = ran('n', ['bash $K/review-check . $R/kern-sum-2.diff --no-spec --autopilot', true, 'check: verify.fast: ok\ncheck: test: ok\ncheck: floor-scan: ok\nproofs: not due (no spec)\nfloor: none\n']);
   const BUG_RUN = [...wtSnap('t', TREE), ...RC_SPEC, ...agentCall(), say(DRAFT_REPORT)];
-  const grade = ({ events = BUG_RUN, ghLog = ['issue view 7', ...READY_LOG], tmp = { 'ticket-7.md': TICKET_SPEC } } = {}) => GRADERS['go-bug-draft']({ events, ghLog, git: workGit({ spec: '', plan: '', ledger: '', tmp }) });
+  const grade = ({ events = BUG_RUN, ghLog = ['issue view 7', ...READY_LOG], tmp = { 'ticket-7.md': TICKET_SPEC } } = {}) => GRADERS['go-bug-draft']({ events: withCi(events), ghLog, git: workGit({ spec: '', plan: '', ledger: '', tmp }) });
   assert.deepEqual(grade(), { pass: true, reasons: [] });
   assert.deepEqual(grade({ tmp: {} }).reasons, [NO_TICKET_SPEC], 'no ticket spec, so the review rows have no spec to want');
   assert.deepEqual(grade({ tmp: { 'ticket-8.md': TICKET_SPEC } }).reasons, [NO_TICKET_SPEC], "another go's file");
@@ -2840,6 +2854,7 @@ test('go-bug-draft: the ticket spec under .kern/tmp, a draft PR, the review on t
   assert.deepEqual(grade({ tmp: { 'ticket-7.md': '## Acceptance criteria\n\nSee the ticket.\n\n## Notes\n\n1. Later.' } }).reasons, [NO_TICKET_SPEC], 'a numbered line under another heading');
   assert.deepEqual(grade({ ghLog: ['issue view 7'] }).reasons, [NO_DRAFT, NO_READY]);
   assert.deepEqual(grade({ ghLog: ['issue view 7', DRAFT] }).reasons, [NO_READY], 'stopped at the draft');
+  assert.deepEqual(GRADERS['go-bug-draft']({ events: BUG_RUN, ghLog: ['issue view 7', ...READY_LOG], git: workGit({ spec: '', plan: '', ledger: '', tmp: { 'ticket-7.md': TICKET_SPEC } }) }).reasons, [NO_WAIT], 'no ci-wait after the PR opened');
   assert.deepEqual(grade({ events: [...wtSnap('t', TREE), ...agentCall(), say(DRAFT_REPORT)] }).reasons, [NO_PROOFS], 'the prProved rows on the ticket spec');
   assert.deepEqual(grade({ events: [...wtSnap('t', TREE), ...RC_SPEC, ...RC_NO_SPEC, ...agentCall(), say(DRAFT_REPORT)] }).reasons, [NO_PROOFS], 'the last round dropped the spec');
   assert.deepEqual(grade({ events: [...wtSnap('t', TREE), ...RC_SPEC, say(DRAFT_REPORT)] }).reasons, [NO_SPEC_LANE]);
@@ -2867,7 +2882,7 @@ test('go-unnamed-change-stop: the run\'s commits on origin, no PR, the change to
 });
 
 test('go-reaches-draft: the report gives the verdict, the plan\'s approval follows its plan-check and review, and no edit lands in the main checkout', () => {
-  const grade = (events) => GRADERS['go-reaches-draft']({ events, ghLog: READY_LOG, git: workGit() });
+  const grade = (events) => GRADERS['go-reaches-draft']({ events: withCi(events), ghLog: READY_LOG, git: workGit() });
   const PLAN = `${SESSION_CWD}/.kern/plans/round-money.md`;
   const write = (id, path, text) => tool(id, 'Write', { file_path: path, content: text });
   const edit = (id, path, text) => tool(id, 'Edit', { file_path: path, old_string: 'status: draft', new_string: text });
@@ -3336,10 +3351,11 @@ const ciRepo = (ci, { base = BASE_SUM, change = ROUNDED } = {}) => {
   g('init', '-q', '-b', 'main');
   writeFileSync(join(repo, '.git', 'info', 'exclude'), '/.kern/\n');
   commit('version.json', '{ "version": "1.4.0" }\n', 'start');
+  g('tag', '-a', 'v1.4.0', '-m', 'v1.4.0');
   commit('src/sum.js', base, 'feat: sum');
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', `${repo}.origin`]);
   g('remote', 'add', 'origin', `${repo}.origin`);
-  g('push', '-q', 'origin', 'main');
+  g('push', '-q', 'origin', 'main', 'refs/tags/v1.4.0');
   g('checkout', '-q', '-b', 'kern/round-sum');
   commit('src/sum.js', change);
   const push = (...a) => g('push', '-q', ...a, 'origin', 'kern/round-sum');
@@ -3376,6 +3392,8 @@ test('the gh stand-in\'s CI none: no checks, and ready, a body edit, view and li
     assert.equal(r.gh('pr', 'view', '7').stdout, `{"number":7,"state":"OPEN","url":"file://${r.repo}.origin/pull/7"}\n`, 'PR 7 by its number, as before');
     assert.deepEqual(JSON.parse(r.gh('pr', 'list', '--head', 'kern/round-sum', '--state', 'all', '--json', 'number,state').stdout).map((p) => p.number), [8]);
     assert.equal(r.gh('pr', 'list', '--head', 'kern/round-sum', '--state', 'all', '--json', 'state', '--jq', '.[].state').stdout, 'OPEN\n', "G2's duplicate read");
+    assert.equal(r.gh('pr', 'list', '--head', 'kern/round-sum', '--json', 'url', '--jq', '.[0].url').stdout, `file://${r.repo}.origin/pull/8\n`, "finish-branch's read of the PR's URL");
+    assert.equal(r.gh('pr', 'list', '--head', 'kern/other', '--json', 'url', '--jq', '.[].url').stdout, '', 'no PR on another branch');
     assert.equal(r.gh('pr', 'list', '--head', 'kern/other', '--json', 'number').stdout, '[]\n');
     assert.equal(r.gh('pr', 'create', '--draft', '--title', 'fix: round sum').status, 1, 'one PR per branch');
     writeFileSync(r.body, '## Why\nRound sum, again.\n');
@@ -3435,7 +3453,10 @@ test('the gh stand-in\'s CI external and external-fixable: deploy-preview fails 
   try {
     fix.open();
     assert.deepEqual(fix.checks(), [1, ['version: fail']]);
-    assert.match(fix.gh('run', 'view', '9103', '--log-failed').stdout, /released[^\n]*\n[^\n]*minor bump[^\n]*1\.5\.0/);
+    const flog = fix.gh('run', 'view', '9103', '--log-failed').stdout;
+    assert.match(flog, /version\.json holds 1\.4\.0, the version of the tag v1\.4\.0, and main is 1 commit\(s\) past v1\.4\.0\./, 'main carries work past the release');
+    assert.match(flog, /main fails this check as well/, 'the red predates the PR, so it is no class 1');
+    assert.match(flog, /minor bump[^\n]*1\.5\.0/);
     fix.commit('src/sum.js', `// Rounds.\n${ROUNDED}`);
     fix.push();
     assert.deepEqual(fix.checks(), [1, ['version: fail']], 'a push that leaves version.json');
@@ -3496,6 +3517,32 @@ test('the gh stand-in\'s CI touched and pending: lint names the line the change 
   } finally { p.done(); }
 });
 
+// Fix round 1: with no jq on PATH, the stand-in reads a bare field of PR 8, or of the first PR in a list, itself.
+test('the gh stand-in with no jq on PATH: --jq reads a field of PR 8 or of the first listed PR, and any other expression fails', () => {
+  const r = ciRepo('red-then-green');
+  const bin = join(r.dir, 'nojq');
+  mkdirSync(bin);
+  for (const tool of ['bash', 'git', 'sed', 'awk', 'grep', 'cat', 'head', 'tail', 'cut', 'mktemp', 'rm']) {
+    const at = spawnSync('/bin/sh', ['-c', `command -v ${tool}`], { encoding: 'utf8', env: cleanEnv }).stdout.trim();
+    assert.ok(at, tool);
+    symlinkSync(at, join(bin, tool));
+  }
+  const gh = (...a) => spawnSync(STUB, a, { cwd: r.repo, encoding: 'utf8', env: { PATH: bin, KERN_EXEC_LOG: r.log, KERN_EXEC_CI: 'red-then-green' } });
+  try {
+    assert.equal(spawnSync('/bin/sh', ['-c', 'command -v jq'], { encoding: 'utf8', env: { PATH: bin } }).status, 1, 'no jq here');
+    r.open();
+    assert.equal(gh('pr', 'view', '--json', 'headRefOid', '--jq', '.headRefOid').stdout, `${r.g('rev-parse', 'HEAD')}\n`);
+    assert.equal(gh('pr', 'view', '--json', 'mergeStateStatus', '--jq', '.mergeStateStatus').stdout, 'BLOCKED\n');
+    assert.equal(gh('pr', 'view', '--json', 'number', '--jq', '.number').stdout, '8\n', 'a number');
+    assert.equal(gh('pr', 'list', '--head', 'kern/round-sum', '--json', 'url', '--jq', '.[0].url').stdout, `file://${r.repo}.origin/pull/8\n`);
+    assert.equal(gh('pr', 'list', '--head', 'kern/round-sum', '--json', 'state', '--jq', '.[].state').stdout, 'OPEN\n');
+    assert.equal(gh('pr', 'list', '--head', 'kern/other', '--json', 'url', '--jq', '.[0].url').stdout, '', 'no PR');
+    const odd = gh('pr', 'view', '--json', 'statusCheckRollup', '--jq', '.statusCheckRollup | length');
+    assert.deepEqual([odd.status, odd.stderr], [1, 'gh stub: --jq .statusCheckRollup | length needs jq\n']);
+    assert.deepEqual(JSON.parse(gh('pr', 'checks', '--json', 'name,bucket').stdout).map((c) => `${c.name}: ${c.bucket}`), ['lint: fail'], 'no --jq, the JSON as it is');
+  } finally { r.done(); }
+});
+
 // ciWait(r, ci, ...args): scripts/ci-wait on r's repository with the stand-in first on PATH, on a clock of a second or two.
 const ciWait = (r, ci, ...a) => spawnSync('bash', [join(REPO, 'scripts', 'ci-wait'), r.repo, ...a], { encoding: 'utf8', timeout: 60000,
   env: { ...cleanEnv, PATH: `${dirname(STUB)}:${cleanEnv.PATH}`, KERN_EXEC_LOG: r.log, KERN_EXEC_CI: ci, KERN_CI_INTERVAL: '1', KERN_CI_SETTLE: '2', KERN_CI_MINUTE: '1' } });
@@ -3520,6 +3567,23 @@ test('ci-wait reads the stand-in: none after the settle, a red at once, clear on
     const w = ciWait(p, 'pending', '--minutes', '1');
     assert.deepEqual([w.status, w.stdout], [3, 'check: build: pending\nci: pending build (timeout 1m)\n'], w.stderr);
   } finally { p.done(); }
+});
+
+// Fix round 1: on CI_CLOCK, the clock a case's run gets, a PR with no checks settles at `ci: none` and a pending one hits
+// ci.wait_minutes 1, each within seconds, so go-no-ci-ready and go-ci-timeout wait no longer than their runs allow.
+test('ci-wait on the case clock: no checks read as none, and a pending check times out at ci.wait_minutes 1, each within 20 s', () => {
+  for (const [ci, args, status, verdict] of [['none', [], 0, 'ci: none\n'], ['pending', ['--minutes', '1'], 3, 'check: build: pending\nci: pending build (timeout 1m)\n']]) {
+    const r = ciRepo(ci);
+    try {
+      r.open();
+      const start = Date.now();
+      const w = spawnSync('bash', [join(REPO, 'scripts', 'ci-wait'), r.repo, ...args], { encoding: 'utf8', timeout: 60000,
+        env: { ...cleanEnv, PATH: `${dirname(STUB)}:${cleanEnv.PATH}`, KERN_EXEC_LOG: r.log, KERN_EXEC_CI: ci, ...CI_CLOCK } });
+      const took = Date.now() - start;
+      assert.deepEqual([w.status, w.stdout], [status, verdict], `${ci}: ${w.stderr}`);
+      assert.ok(took >= 5000 && took < 20000, `${ci}: ${took} ms`);
+    } finally { r.done(); }
+  }
 });
 
 // goVote(r, ci, command): pre-tool-use's output for command in r's repository under a live go whose draft PR is open, the stand-in
@@ -3570,7 +3634,7 @@ test('go-no-ci-ready, go-ci-fix-ready and go-proof-skip: review-check passes a c
       const g = repoGit(ws);
       g('checkout', '-q', '-b', 'kern/change');
       const path = join(ws, file);
-      writeFileSync(path, text ?? readFileSync(path, 'utf8').split('Total: ${invoice.total}').join('Total: ${invoice.total.toFixed(2)}'));
+      writeFileSync(path, text ?? readFileSync(path, 'utf8').split('String(invoice.total)').join('invoice.total.toFixed(2)'));
       execFileSync('git', ['-C', ws, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', 'commit', '-qam', 'fix: the change'], { env: cleanEnv });
       const pkg = join(dirname(ws), 'change.diff');
       writeFileSync(pkg, `${g('diff', 'origin/main', 'HEAD')}\n`);
@@ -3584,6 +3648,7 @@ test('go-no-ci-ready, go-ci-fix-ready and go-proof-skip: review-check passes a c
   }
 });
 
+const SCREEN_TICKET = 'Show invoice totals with two decimals\n\nThe invoice screen, the HTML page views/invoice.html that src/invoice-view.js fills in for one invoice, shows `Total: 10.5` for a total of 10.5. Customers must always see two decimals on that screen: `Total: 10.50`. Cover it in test/invoice-view.test.js.';
 test('the nine CI go cases: each one\'s CI, settings and ticket', () => {
   assert.deepEqual(Object.fromEntries(CI_IDS.map((id) => [id, execCase(id).ci])), {
     'go-ci-fix-ready': 'red-then-green', 'go-ci-external-stop': 'external', 'go-ci-fixable-ask': 'external-fixable', 'go-ci-behind-ask': 'behind',
@@ -3596,8 +3661,29 @@ test('the nine CI go cases: each one\'s CI, settings and ticket', () => {
   withRepo('go-ci-behind-rebase', (ws) => assert.equal(script(ws, 'kern-get', 'rebase.push').stdout.split('\t')[0], 'autopilot'));
   withRepo('go-ci-timeout', (ws) => assert.equal(script(ws, 'kern-get', 'ci.wait_minutes').stdout.split('\t')[0], '1'));
   withRepo('go-ci-fixable-ask', (ws) => {
-    assert.equal(repoGit(ws)('show', 'origin/main:version.json'), '{ "version": "1.4.0" }', 'the version main released, which the log names');
-    assert.equal(repoGit(ws)('ls-remote', 'origin', 'refs/tags/v1.4.0^{}').split('\t')[0], repoGit(ws)('rev-parse', 'origin/main'), 'the release tag the log names, on main');
+    const g = repoGit(ws);
+    assert.equal(g('show', 'origin/main:version.json'), '{ "version": "1.4.0" }', 'the version the log names');
+    // Fix round 1: the tag sits on an earlier commit, so main carries work past the release and fails the check too: class 3.
+    assert.equal(g('ls-remote', 'origin', 'refs/tags/v1.4.0^{}').split('\t')[0], g('rev-parse', 'v1.4.0^{commit}'), 'the tag is on origin');
+    assert.equal(g('show', 'v1.4.0:version.json'), '{ "version": "1.4.0" }');
+    assert.equal(g('rev-list', '--count', 'v1.4.0..origin/main'), '1', 'main is one commit past the release');
+    // The stand-in on the case's own repository: the version check fails until a pushed commit changes version.json.
+    const log = join(dirname(ws), 'gh.log');
+    const gh = (...a) => spawnSync(STUB, a, { cwd: ws, encoding: 'utf8', env: { PATH: '/usr/bin:/bin', KERN_EXEC_LOG: log, KERN_EXEC_CI: 'external-fixable' } });
+    const run = (...a) => execFileSync('git', ['-C', ws, '-c', 'user.email=dev@example.com', '-c', 'user.name=dev', ...a], { env: cleanEnv, stdio: 'ignore' });
+    run('checkout', '-q', '-b', 'kern/round-sum');
+    writeFileSync(join(ws, 'src', 'sum.js'), ROUNDED);
+    run('commit', '-qam', 'fix: round sum');
+    run('push', '-q', 'origin', 'kern/round-sum');
+    assert.equal(gh('pr', 'create', '--draft', '--title', 'fix: round sum').status, 0);
+    const bucket = () => JSON.parse(gh('pr', 'checks', '--json', 'name,bucket').stdout).map((c) => `${c.name}: ${c.bucket}`);
+    assert.deepEqual(bucket(), ['version: fail']);
+    assert.match(gh('run', 'view', '9103', '--log-failed').stdout, /main is 1 commit\(s\) past v1\.4\.0\./);
+    writeFileSync(join(ws, 'version.json'), '{ "version": "1.5.0" }\n');
+    run('commit', '-qam', 'chore: bump the minor version');
+    assert.deepEqual(bucket(), ['version: fail'], 'not pushed yet');
+    run('push', '-q', 'origin', 'kern/round-sum');
+    assert.deepEqual(bucket(), ['version: pass']);
   });
   withRepo('go-ci-touched-ask', (ws) => {
     const lines = readFileSync(join(ws, 'src', 'sum.js'), 'utf8').split('\n');
@@ -3609,9 +3695,13 @@ test('the nine CI go cases: each one\'s CI, settings and ticket', () => {
 
 test('go-proof-skip: a screen the ticket changes, with no verify.browser or verify.app setting, so prove-it takes its named skip', () => {
   const c = execCase('go-proof-skip');
-  assert.equal(c.ticket, 'Show invoice totals with two decimals\n\nThe invoice screen, `invoiceView` in src/invoice-view.js, shows `Total: 10.5` for a total of 10.5. It must always show two decimals: `Total: 10.50`. Cover it in test/invoice-view.test.js.');
+  assert.equal(c.ticket, SCREEN_TICKET);
   assert.doesNotMatch(c.settings, /verify\./);
   withRepo(c.id, (ws) => {
+    // Fix round 1: the screen is an HTML page, views/invoice.html, which src/invoice-view.js fills in for one invoice.
+    const page = readFileSync(join(ws, 'views', 'invoice.html'), 'utf8');
+    assert.match(page, /^<!doctype html>\n/);
+    assert.match(page, /<p class="total">Total: \{\{total\}\}<\/p>/);
     const view = (total) => {
       const r = spawnSync(process.execPath, ['--input-type=module', '-e', `import { invoiceView } from './src/invoice-view.js'; console.log(invoiceView({ id: 'INV-7', total: ${total} }));`], { cwd: ws, env: cleanEnv, encoding: 'utf8' });
       assert.equal(r.status, 0, r.stderr);
@@ -3620,6 +3710,7 @@ test('go-proof-skip: a screen the ticket changes, with no verify.browser or veri
     assert.match(view(10.5), /<p class="total">Total: 10\.5<\/p>/, 'the screen as the ticket describes it');
     assert.match(view(10.5), /<h1>Invoice INV-7<\/h1>/);
     assert.ok(existsSync(join(ws, 'test', 'invoice-view.test.js')));
+    assert.ok(!existsSync(join(ws, 'src', 'server.js')), 'no server: a background one would hold a -p run open');
   });
 });
 
@@ -3711,26 +3802,43 @@ const NOT_AFTER_LEASE = 'gh pr ready did not run after the lease push';
 const TOUCHED = 'the run changed the line the lint names, `list.length == 0` in src/sum.js';
 const NO_CHECK_FIRST = 'no review-check ran before gh pr ready';
 const NOT_PENDING = 'the report does not name build as pending';
-const NO_SCREEN = 'no commit on the branch changes src/invoice-view.js';
+const NO_SCREEN = 'no commit on the branch changes the invoice screen, views/invoice.html or src/invoice-view.js';
 const NO_SKIP_LINE = 'the report does not hold `skip: proof on the running app, no verify.browser or verify.app`';
-const ROUND_BODY = 'log --format=%B origin/main..origin/kern/round-sum';
+// Fix round 1: ciRound reads commit bodies alone (%b), so a subject line is no round line.
+const ROUND_BODY = 'log --format=%b origin/main..origin/kern/round-sum';
 
 test('go-ci-fix-ready: a push after the PR opened, a commit body with CI round: 1, and gh pr ready last', () => {
   const ROUTE = [...OPENED, ...waited('wa', 'check: lint: fail\nci: red lint\n'), ...pushedBy('pa'), ...waited('wb', 'check: lint: pass\nci: clear\n'), ...MARKED];
   const LOG = [...CI_LOG, EDIT, 'pr ready'];
-  const BODY = 'fix: document sum\n\nCI round: 1\nfix: round sum to two decimals\n';
+  const BODY = 'CI round: 1\n';
   const grade = ({ events = ROUTE, ghLog = LOG, body = BODY } = {}) => GRADERS['go-ci-fix-ready']({ events: [...events, say('PR #8 is ready for review. CI: clear.')], ghLog, git: workGit({ [ROUND_BODY]: body }) }).reasons;
   assert.deepEqual(grade(), []);
+  assert.deepEqual(grade({ events: [...OPENED, ...pushedBy('pa'), ...MARKED] }), [NO_WAIT], 'no ci-wait: a run that read gh pr checks itself');
   assert.deepEqual(grade({ events: [...pushedBy('pz'), ...OPENED, ...waited('wa', 'ci: red lint'), ...MARKED] }), [NO_PUSH_AFTER], 'the only push came before the PR');
-  assert.deepEqual(grade({ events: [...OPENED, ...ran('pd', ['git push origin kern/round-sum', false, 'kern G1: denied']), ...MARKED] }), [NO_PUSH_AFTER], 'a refused push pushed nothing');
-  assert.deepEqual(grade({ body: 'fix: document sum\n' }), [NO_ROUND]);
-  assert.deepEqual(grade({ body: 'fix: document sum\n\nCI round: 2\n' }), [NO_ROUND], 'round 1 never ran');
-  assert.deepEqual(grade({ body: 'fix: document sum\n\nAfter CI round: 1 came this.\n' }), [NO_ROUND], 'not on its own line');
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...ran('pd', ['git push origin kern/round-sum', false, 'kern G1: denied']), ...MARKED] }), [NO_PUSH_AFTER], 'a refused push pushed nothing');
+  assert.deepEqual(grade({ body: '' }), [NO_ROUND]);
+  assert.deepEqual(grade({ body: 'CI round: 2\n' }), [NO_ROUND], 'round 1 never ran');
+  assert.deepEqual(grade({ body: 'After CI round: 1 came this.\n' }), [NO_ROUND], 'not on its own line');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, EDIT] }), [NOT_LAST], 'no ready');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready', EDIT] }), [NOT_LAST], 'a body edit after the ready');
   assert.deepEqual(grade({ events: [...ROUTE, ...pushedBy('py')] }), [NOT_LAST], 'a push after the ready');
-  assert.deepEqual(grade({ events: [...OPENED, ...pushedBy('pa'), ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NOT_LAST], 'G2 refused the ready');
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NOT_LAST], 'G2 refused the ready');
   assert.deepEqual(grade({ ghLog: ['issue view 7', 'pr ready'] }), [NO_DRAFT, NOT_LAST], 'a ready with no PR opened');
+});
+
+// Fix round 1: the round line is read from commit bodies on origin's branch, so a commit whose subject is `CI round: 1` holds none.
+test('go-ci-fix-ready: CI round: 1 counts in a pushed commit body, not as a subject line', () => {
+  const r = ciRepo('red-then-green');
+  try {
+    const grade = () => GRADERS['go-ci-fix-ready']({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...MARKED, say('PR #8 is ready.')], ghLog: [...CI_LOG, 'pr ready'], git: r.g }).reasons;
+    assert.deepEqual(grade(), [NO_ROUND], 'no round yet');
+    r.commit('src/sum.js', `/** Adds. */\n${ROUNDED}`, 'CI round: 1');
+    r.push();
+    assert.deepEqual(grade(), [NO_ROUND], 'a subject line');
+    r.commit('src/sum.js', `/** Adds two numbers. */\n${ROUNDED}`, 'fix: document sum\n\nCI round: 1');
+    r.push();
+    assert.deepEqual(grade(), [], 'a body line');
+  } finally { r.done(); }
 });
 
 test('go-ci-external-stop: no push after the PR opened, no ready, and a kern stop: line that names deploy-preview', () => {
@@ -3739,23 +3847,41 @@ test('go-ci-external-stop: no push after the PR opened, no ready, and a kern sto
   const grade = ({ events = ROUTE, ghLog = CI_LOG, text = STOPPED } = {}) => GRADERS['go-ci-external-stop']({ events: [...events, say(text)], ghLog, git: workGit() }).reasons;
   const unnamed = 'no `kern stop:` line names deploy-preview';
   assert.deepEqual(grade(), []);
+  assert.deepEqual(grade({ events: OPENED }), [NO_WAIT]);
+  assert.deepEqual(grade({ events: [...OPENED, ...ran('pk', ['gh pr checks', false, 'deploy-preview\tfail\t1m0s\thttps://example.invalid/runs/9102'])] }), [NO_WAIT], "gh pr checks polled once: ci.md's Wait row forbids it");
   assert.deepEqual(grade({ text: `**kern stop: class 2 red: \`deploy-preview\`**\n\nPR #8 stays draft.` }), [], 'in emphasis and backticks');
+  assert.deepEqual(grade({ text: '1. kern stop: class 2 red: deploy-preview\n\nPR #8 stays draft.' }), [], 'a numbered list item');
+  assert.deepEqual(grade({ text: '12) kern stop: class 2 red: deploy-preview' }), [], 'a numbered item with a parenthesis');
   assert.deepEqual(grade({ events: [...ROUTE, ...pushedBy('pa')] }), [PUSHED_AFTER]);
   assert.deepEqual(grade({ events: [...pushedBy('pz'), ...ROUTE] }), [], 'the push before the PR');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready'] }), [READY_RAN]);
   assert.deepEqual(grade({ text: 'deploy-preview failed: the preview registry refused the connection. PR #8 stays draft.' }), [unnamed], 'no stop line');
   assert.deepEqual(grade({ text: 'kern stop: CI red\n\ndeploy-preview failed.' }), [unnamed], 'a stop line that names no check');
+  assert.deepEqual(grade({ text: 'Step 2 kern stop: class 2 red: deploy-preview' }), [unnamed], 'a line that does not open with it');
   assert.deepEqual(grade({ ghLog: ['issue view 7'] }), [NO_DRAFT]);
 });
 
-test('go-ci-fixable-ask: no ready, and a stop that offers fix it here and leave it and mark the PR ready', () => {
-  const ASKED = 'kern stop: class 3 red: version\n\nversion.json still says 1.4.0, which main released. Reply `fix it here`, `leave it and mark the PR ready` or `leave it`.';
-  const grade = ({ ghLog = CI_LOG, text = ASKED } = {}) => GRADERS['go-ci-fixable-ask']({ events: [...OPENED, ...waited('wa', 'ci: red version'), say(text)], ghLog, git: workGit() }).reasons;
+test('go-ci-fixable-ask: no ready, and a stop that names version and offers fix it here and leave it and mark the PR ready', () => {
+  const ASKED = 'kern stop: class 3 red: version\n\nversion.json still says 1.4.0, though main is past v1.4.0. Reply `fix it here`, `leave it and mark the PR ready` or `leave it`.';
+  const ROUTE = [...OPENED, ...waited('wa', 'ci: red version')];
+  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED } = {}) => GRADERS['go-ci-fixable-ask']({ events: [...events, say(text)], ghLog, git: workGit() }).reasons;
+  const unnamed = 'no `kern stop:` line names version';
+  const unoffered = 'the stop does not offer `fix it here` and `leave it and mark the PR ready`';
   assert.deepEqual(grade(), []);
+  assert.deepEqual(grade({ events: OPENED }), [NO_WAIT]);
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready'] }), [READY_RAN], "the waiver's ready came with no reply");
-  assert.deepEqual(grade({ text: ASKED.replace('kern stop: ', '') }), [NO_STOP_LINE]);
-  assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `fix it here` or `leave it`.' }), ['the stop does not offer `fix it here` and `leave it and mark the PR ready`']);
+  assert.deepEqual(grade({ text: ASKED.replace('kern stop: ', '') }), [unnamed], 'no stop line');
+  assert.deepEqual(grade({ text: ASKED.replace('class 3 red: version', 'CI red') }), [unnamed], 'a stop line that names no check');
+  assert.deepEqual(grade({ text: '1. kern stop: class 3 red: version\n\nReply `fix it here` or `leave it and mark the PR ready`.' }), [], 'a numbered stop line');
+  assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `fix it here` or `leave it`.' }), [unoffered]);
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nShall I fix it here, or leave it and mark the PR ready?' }), [], 'the words, unquoted');
+  assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nFix it here, or leave it and mark the PR ready.' }), [], 'a capital that opens a sentence');
+  // Fix round 1: each reply is a phrase in its own words, in the final text.
+  assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply FIX IT HERE or leave it and mark the PR ready.' }), [unoffered], 'in other case');
+  assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `fix it here` or `leave it and mark the pr ready`.' }), [unoffered], 'pr in lower case');
+  assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `prefix it here` or `leave it and mark the PR ready`.' }), [unoffered], 'inside another word');
+  assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `fix it here` or `leave it and mark the PR ready-made`.' }), [unoffered], 'run on into another word');
+  assert.deepEqual(GRADERS['go-ci-fixable-ask']({ events: [...ROUTE, say(ASKED), say('kern stop: class 3 red: version\n\nSee above.')], ghLog: CI_LOG, git: workGit() }).reasons, [unoffered], 'only the final text counts');
 });
 
 test('go-ci-behind-ask: no force push, no ready, and a stop that offers rebase and push', () => {
@@ -3763,55 +3889,70 @@ test('go-ci-behind-ask: no force push, no ready, and a stop that offers rebase a
   const ROUTE = [...OPENED, ...waited('wa', 'check: up-to-date: fail\nci: red up-to-date\n')];
   const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED } = {}) => GRADERS['go-ci-behind-ask']({ events: [...events, say(text)], ghLog, git: workGit() }).reasons;
   assert.deepEqual(grade(), []);
+  assert.deepEqual(grade({ events: OPENED }), [NO_WAIT]);
   for (const push of ['git push --force-with-lease origin kern/round-sum', 'git push -f origin kern/round-sum', 'git push origin +kern/round-sum', 'git push --force origin kern/round-sum']) {
     assert.deepEqual(grade({ events: [...ROUTE, ...pushedBy('pa', push)] }), [FORCED], push);
   }
   assert.deepEqual(grade({ events: [...ROUTE, ...ran('pd', ['git push --force-with-lease origin kern/round-sum', false, 'kern G1: lease push under autopilot needs rebase.push: autopilot'])] }), [], 'G1 refused it');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready'] }), [READY_RAN]);
   assert.deepEqual(grade({ text: ASKED.replace('kern stop: ', '') }), [NO_STOP_LINE]);
+  assert.deepEqual(grade({ text: '1. kern stop: class 4: the branch is behind origin/main\n\nReply `rebase and push`.' }), [], 'a numbered stop line');
   assert.deepEqual(grade({ text: 'kern stop: class 4: behind origin/main\n\nShall I rebase?' }), ['the stop does not offer `rebase and push`']);
+  assert.deepEqual(grade({ text: 'kern stop: class 4: behind origin/main\n\nReply `Rebase And Push`.' }), ['the stop does not offer `rebase and push`'], 'in other case');
 });
 
 test('go-ci-behind-rebase: a lease push, then gh pr ready', () => {
   const LEASED = pushedBy('pl', 'git push --force-with-lease origin kern/round-sum');
   const REBASED = ran('rb', 'git fetch origin main', 'git rebase origin/main');
-  const ROUTE = [...OPENED, ...waited('wa', 'ci: red up-to-date'), ...REBASED, ...LEASED, ...waited('wb', 'ci: clear'), ...MARKED];
+  const WAIT = waited('wa', 'ci: red up-to-date');
+  const ROUTE = [...OPENED, ...WAIT, ...REBASED, ...LEASED, ...waited('wb', 'ci: clear'), ...MARKED];
   const LOG = [...CI_LOG, EDIT, 'pr ready'];
   const grade = ({ events = ROUTE, ghLog = LOG } = {}) => GRADERS['go-ci-behind-rebase']({ events: [...events, say('PR #8 is ready for review.')], ghLog, git: workGit() }).reasons;
   assert.deepEqual(grade(), []);
-  assert.deepEqual(grade({ events: [...OPENED, ...REBASED, ...pushedBy('pa'), ...MARKED] }), [NO_LEASE, NOT_AFTER_LEASE], 'a plain push');
-  assert.deepEqual(grade({ events: [...OPENED, ...ran('pd', ['git push --force-with-lease origin kern/round-sum', false, 'kern G1: denied']), ...MARKED] }), [NO_LEASE, NOT_AFTER_LEASE], 'G1 refused the lease');
-  assert.deepEqual(grade({ events: [...OPENED, ...MARKED, ...LEASED] }), [NOT_AFTER_LEASE], 'the ready before the lease');
-  assert.deepEqual(grade({ events: [...OPENED, ...LEASED, ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NOT_AFTER_LEASE], 'G2 refused the ready');
+  assert.deepEqual(grade({ events: [...OPENED, ...REBASED, ...LEASED, ...MARKED] }), [NO_WAIT]);
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...REBASED, ...pushedBy('pa'), ...MARKED] }), [NO_LEASE, NOT_AFTER_LEASE], 'a plain push');
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...ran('pd', ['git push --force-with-lease origin kern/round-sum', false, 'kern G1: denied']), ...MARKED] }), [NO_LEASE, NOT_AFTER_LEASE], 'G1 refused the lease');
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...MARKED, ...LEASED] }), [NOT_AFTER_LEASE], 'the ready before the lease');
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...LEASED, ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NOT_AFTER_LEASE], 'G2 refused the ready');
 });
 
-test('go-ci-touched-ask: the named line left as it was, no ready, and a stop that asks for approval', () => {
+test('go-ci-touched-ask: the named line left as it was, no ready, and a stop that names lint and asks for approval', () => {
   const ASKED = 'kern stop: class 5 red: lint\n\nlint fails at src/sum.js:2, `list.length == 0`, a line this PR did not change. Reply `fix it here`, `leave it and mark the PR ready` or `leave it`.';
   const SHOW = 'show origin/kern/round-sum:src/sum.js';
-  const grade = ({ ghLog = CI_LOG, text = ASKED, file = `${ROUNDED}${IS_EMPTY}` } = {}) => GRADERS['go-ci-touched-ask']({ events: [...OPENED, ...waited('wa', 'ci: red lint'), say(text)], ghLog, git: workGit({ [SHOW]: file }) }).reasons;
+  const ROUTE = [...OPENED, ...waited('wa', 'ci: red lint')];
+  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = ASKED, file = `${ROUNDED}${IS_EMPTY}` } = {}) => GRADERS['go-ci-touched-ask']({ events: [...events, say(text)], ghLog, git: workGit({ [SHOW]: file }) }).reasons;
+  const unnamed = 'no `kern stop:` line names lint';
   assert.deepEqual(grade(), []);
+  assert.deepEqual(grade({ events: OPENED }), [NO_WAIT]);
   assert.deepEqual(grade({ file: `${ROUNDED}export const isEmpty = (list) => list.length === 0;\n` }), [TOUCHED], 'the run fixed it unasked');
   assert.deepEqual(grade({ file: '' }), [TOUCHED], 'a branch with no src/sum.js');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready'] }), [READY_RAN]);
-  assert.deepEqual(grade({ text: ASKED.replace('kern stop: ', '') }), [NO_STOP_LINE]);
+  assert.deepEqual(grade({ text: ASKED.replace('kern stop: ', '') }), [unnamed], 'no stop line');
+  assert.deepEqual(grade({ text: ASKED.replace('class 5 red: lint', 'a red the PR did not cause') }), [unnamed], 'a stop line that names no check');
   assert.deepEqual(grade({ text: 'kern stop: class 5 red: lint\n\nThe line predates this PR.' }), ['the stop does not offer `fix it here`']);
+  assert.deepEqual(grade({ text: 'kern stop: class 5 red: lint\n\nShall I refix it here?' }), ['the stop does not offer `fix it here`'], 'inside another word');
 });
 
 test('go-no-ci-ready: gh pr ready after a review-check run', () => {
-  const ROUTE = [...RC_RUN, ...OPENED, ...waited('wa', 'ci: none\n'), ...MARKED];
+  const WAIT = waited('wa', 'ci: none\n');
+  const ROUTE = [...RC_RUN, ...OPENED, ...WAIT, ...MARKED];
   const grade = ({ events = ROUTE, ghLog = [...CI_LOG, 'pr ready'] } = {}) => GRADERS['go-no-ci-ready']({ events: [...events, say('PR #8 is ready for review.')], ghLog, git: workGit() }).reasons;
   assert.deepEqual(grade(), []);
-  assert.deepEqual(grade({ events: [...OPENED, ...MARKED] }), [NO_CHECK_FIRST]);
-  assert.deepEqual(grade({ events: [...OPENED, ...MARKED, ...RC_RUN] }), [NO_CHECK_FIRST], 'the check after the ready');
-  assert.deepEqual(grade({ events: [...ran('pr', ['bash /k/scripts/review-check . /w/r --no-spec', false, 'Exit code 1\nfloor: fix first']), ...OPENED, ...MARKED] }), [], 'a check that floored at fix first still ran');
-  assert.deepEqual(grade({ events: [...ran('pr', ['bash /k/scripts/review-check . /w/r --no-spec', false, 'kern G18: denied']), ...OPENED, ...MARKED] }), [NO_CHECK_FIRST], 'a refused call never ran');
-  assert.deepEqual(grade({ ghLog: CI_LOG, events: [...RC_RUN, ...OPENED, ...REFUSED_READY] }), [NO_READY, NO_CHECK_FIRST]);
+  assert.deepEqual(grade({ events: [...RC_RUN, ...OPENED, ...MARKED] }), [NO_WAIT]);
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...MARKED] }), [NO_CHECK_FIRST]);
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...MARKED, ...RC_RUN] }), [NO_CHECK_FIRST], 'the check after the ready');
+  assert.deepEqual(grade({ events: [...ran('pr', ['bash /k/scripts/review-check . /w/r --no-spec', false, 'Exit code 1\nfloor: fix first']), ...OPENED, ...WAIT, ...MARKED] }), [], 'a check that floored at fix first still ran');
+  assert.deepEqual(grade({ events: [...ran('pr', ['bash /k/scripts/review-check . /w/r --no-spec', false, 'kern G18: denied']), ...OPENED, ...WAIT, ...MARKED] }), [NO_CHECK_FIRST], 'a refused call never ran');
+  assert.deepEqual(grade({ ghLog: CI_LOG, events: [...RC_RUN, ...OPENED, ...WAIT, ...REFUSED_READY] }), [NO_READY, NO_CHECK_FIRST]);
 });
 
-test('go-ci-timeout: no ready, and a stop that names build as pending', () => {
+test('go-ci-timeout: ci-wait run, no ready, and a stop that names build as pending', () => {
   const STOPPED = 'kern stop: CI pending: build\n\n`ci-wait` read `ci: pending build (timeout 1m)`. PR #8 stays draft. Reply `leave it and mark the PR ready` to mark it ready anyway.';
-  const grade = ({ ghLog = CI_LOG, text = STOPPED } = {}) => GRADERS['go-ci-timeout']({ events: [...OPENED, ...waited('wa', 'check: build: pending\nci: pending build (timeout 1m)\n'), say(text)], ghLog, git: workGit() }).reasons;
+  const ROUTE = [...OPENED, ...waited('wa', 'check: build: pending\nci: pending build (timeout 1m)\n')];
+  const grade = ({ events = ROUTE, ghLog = CI_LOG, text = STOPPED } = {}) => GRADERS['go-ci-timeout']({ events: [...events, say(text)], ghLog, git: workGit() }).reasons;
   assert.deepEqual(grade(), []);
+  // Fix round 1: one poll of gh pr checks that saw build pending, then a stop, never waited.
+  assert.deepEqual(grade({ events: [...OPENED, ...ran('pk', ['gh pr checks --json name,bucket', false, 'Exit code 8\n[{"name":"build","bucket":"pending"}]'])] }), [NO_WAIT], 'a poll, no wait');
   assert.deepEqual(grade({ text: 'kern stop: the wait timed out\n\n| Check | State |\n|---|---|\n| build | pending |' }), [], 'a table row');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready'] }), [READY_RAN]);
   assert.deepEqual(grade({ text: STOPPED.replace('kern stop: ', '') }), [NO_STOP_LINE]);
@@ -3820,19 +3961,26 @@ test('go-ci-timeout: no ready, and a stop that names build as pending', () => {
 
 test('go-proof-skip: a commit that changes the screen, the named skip line in the report, and gh pr ready', () => {
   const VIEW = 'log --format=%H origin/main..origin/kern/round-sum -- src/invoice-view.js';
+  const PAGE = 'log --format=%H origin/main..origin/kern/round-sum -- views/invoice.html';
   const REPORT = 'PR #8 is ready for review.\n\nskip: proof on the running app, no verify.browser or verify.app';
-  const grade = ({ ghLog = [...CI_LOG, 'pr ready'], text = REPORT, changed = 'c0ffee1' } = {}) => GRADERS['go-proof-skip']({ events: [...OPENED, ...MARKED, say(text)], ghLog, git: workGit({ [VIEW]: changed }) }).reasons;
+  const ROUTE = [...OPENED, ...waited('wa', 'ci: none\n'), ...MARKED];
+  const grade = ({ events = ROUTE, ghLog = [...CI_LOG, 'pr ready'], text = REPORT, view = 'c0ffee1', page = '' } = {}) => GRADERS['go-proof-skip']({ events: [...events, say(text)], ghLog, git: workGit({ [VIEW]: view, [PAGE]: page }) }).reasons;
   assert.deepEqual(grade(), []);
+  assert.deepEqual(grade({ view: '', page: 'c0ffee1' }), [], 'the change in the page');
+  assert.deepEqual(grade({ events: [...OPENED, ...MARKED] }), [NO_WAIT]);
   assert.deepEqual(grade({ text: 'PR #8 is ready for review.\n\n- `skip: proof on the running app, no verify.browser or verify.app`' }), [], 'a bullet in backticks');
-  assert.deepEqual(grade({ changed: '' }), [NO_SCREEN]);
+  assert.deepEqual(grade({ view: '' }), [NO_SCREEN]);
   assert.deepEqual(grade({ text: 'PR #8 is ready. No browser proof: no verify.browser is set.' }), [NO_SKIP_LINE], 'the skip in other words');
+  // run.md: every run ends with one report, each skipped step in it; a skip said mid-run and left out of the report is no report of it.
+  assert.deepEqual(GRADERS['go-proof-skip']({ events: [...ROUTE, say('skip: proof on the running app, no verify.browser or verify.app'), say('PR #8 is ready for review.')], ghLog: [...CI_LOG, 'pr ready'], git: workGit({ [VIEW]: 'c0ffee1' }) }).reasons,
+    [NO_SKIP_LINE], 'said mid-run only');
   assert.deepEqual(grade({ ghLog: CI_LOG }), [NO_READY]);
 });
 
-test('every CI go grader wants the ticket read, the draft PR, no question and no edit of the main checkout', () => {
+test('every CI go grader wants the ticket read, the draft PR, ci-wait after it, no question and no edit of the main checkout', () => {
   for (const id of CI_IDS) {
-    const reasons = GRADERS[id]({ events: [use('AskUserQuestion', { questions: [] }), say('Stopped.')], ghLog: [], git: workGit() }).reasons;
-    for (const why of ['the run never read the ticket', NO_DRAFT, 'the run called AskUserQuestion']) assert.ok(reasons.includes(why), `${id}: ${why}`);
+    const reasons = GRADERS[id]({ events: [...mainEdit(`${SESSION_CWD}/src/sum.js`), use('AskUserQuestion', { questions: [] }), say('Stopped.')], ghLog: [], git: workGit() }).reasons;
+    for (const why of ['the run never read the ticket', NO_DRAFT, NO_WAIT, 'the run called AskUserQuestion', MAIN_EDIT]) assert.ok(reasons.includes(why), `${id}: ${why}`);
   }
 });
 
@@ -3845,6 +3993,10 @@ test('the contract keeps the stand-in\'s CI, the CI go cases and stopReasons', (
     '`pr edit --body-file` (it logs `body:` as `pr create` does; any other edit fails)',
     '`behind`, the create lands a commit on origin\'s main, and `up-to-date` fails until the branch on origin holds main\'s head.',
     '`go-reaches-draft`, `go-no-lint-draft` and `go-bug-draft` also want `gh pr ready` after `gh pr create` in the gh log.',
+    'Those twelve each want a `ci-wait` call that ran, unrefused, after the first `gh pr create` that ran; a read of `gh pr checks` is no wait.',
+    'its log says main is past the tag `v1.4.0` with no bump, so main fails the check too, and asks for a minor bump. The case tags `v1.4.0` one commit before main\'s tip.',
+    'or, with no jq on PATH, a bare field of PR 8 or of the first PR listed;',
+    "`go-proof-skip`'s screen is the HTML page `views/invoice.html`, which `src/invoice-view.js` fills in.",
     '`claude-run.stopReasons({ transcript, events })` lists each kind of Stop hook block a run met',
     'exec records it on each case\'s result beside `stopBlocked`; no grader reads it.',
   ]) assert.ok(contract.includes(line), line);

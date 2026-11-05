@@ -1,7 +1,9 @@
-// The invoice screen: the HTML the app shows for one invoice.
-export const invoiceView = (invoice) => [
-  '<main class="invoice">',
-  `  <h1>Invoice ${invoice.id}</h1>`,
-  `  <p class="total">Total: ${invoice.total}</p>`,
-  '</main>',
-].join('\n');
+import { readFileSync } from 'node:fs';
+
+// The invoice screen: the page views/invoice.html, filled in for one invoice.
+const PAGE = readFileSync(new URL('../views/invoice.html', import.meta.url), 'utf8');
+
+// fill(text, name, value): text with every {{name}} replaced by value.
+const fill = (text, name, value) => text.split(`{{${name}}}`).join(value);
+
+export const invoiceView = (invoice) => fill(fill(PAGE, 'id', String(invoice.id)), 'total', String(invoice.total));

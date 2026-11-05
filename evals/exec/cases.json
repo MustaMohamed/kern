@@ -82,7 +82,7 @@
     "ticket": "Round sum to two decimals\n\n`sum` in src/sum.js returns its result rounded to two decimals: `sum(0.1, 0.2)` is 0.3. Cover it in test/sum.test.js.",
     "turn": "/kern:autopilot go 7" },
   { "id": "go-ci-fixable-ask", "autopilot": "go", "settings": "tracker: github", "ci": "external-fixable",
-    "setup": ["printf 'export const sum = (a, b) => Number(a) + Number(b);\\n' > src/sum.js", "printf '{ \"version\": \"1.4.0\" }\\n' > version.json", "git add -A && git -c user.email=dev@example.com -c user.name=dev commit -qm 'fix: sum adds' && git push -q origin main", "git -c user.email=dev@example.com -c user.name=dev tag -a v1.4.0 -m v1.4.0 && git push -q origin v1.4.0"],
+    "setup": ["printf 'export const sum = (a, b) => Number(a) + Number(b);\\n' > src/sum.js", "printf '{ \"version\": \"1.4.0\" }\\n' > version.json", "git add version.json && git -c user.email=dev@example.com -c user.name=dev commit -qm 'chore: release 1.4.0' && git -c user.email=dev@example.com -c user.name=dev tag -a v1.4.0 -m v1.4.0", "git add -A && git -c user.email=dev@example.com -c user.name=dev commit -qm 'fix: sum adds' && git push -q origin main refs/tags/v1.4.0"],
     "ticket": "Round sum to two decimals\n\n`sum` in src/sum.js returns its result rounded to two decimals: `sum(0.1, 0.2)` is 0.3. Cover it in test/sum.test.js.",
     "turn": "/kern:autopilot go 7" },
   { "id": "go-ci-behind-ask", "autopilot": "go", "settings": "tracker: github", "ci": "behind",
@@ -107,6 +107,6 @@
     "turn": "/kern:autopilot go 7" },
   { "id": "go-proof-skip", "autopilot": "go", "settings": "tracker: github", "ci": "none",
     "setup": ["printf 'export const sum = (a, b) => Number(a) + Number(b);\\n' > src/sum.js", "cp -R \"$SETUP_FILES/screen/.\" .", "git add -A && git -c user.email=dev@example.com -c user.name=dev commit -qm 'fix: sum adds' && git push -q origin main"],
-    "ticket": "Show invoice totals with two decimals\n\nThe invoice screen, `invoiceView` in src/invoice-view.js, shows `Total: 10.5` for a total of 10.5. It must always show two decimals: `Total: 10.50`. Cover it in test/invoice-view.test.js.",
+    "ticket": "Show invoice totals with two decimals\n\nThe invoice screen, the HTML page views/invoice.html that src/invoice-view.js fills in for one invoice, shows `Total: 10.5` for a total of 10.5. Customers must always see two decimals on that screen: `Total: 10.50`. Cover it in test/invoice-view.test.js.",
     "turn": "/kern:autopilot go 7" }
 ]
