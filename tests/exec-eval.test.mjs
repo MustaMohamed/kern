@@ -2365,6 +2365,10 @@ test('go-required-check-stop: the run\'s commits on origin, no PR, the check nam
   assert.deepEqual(grade('The tests "must pass" but fail now.').reasons, noCheck, 'the name outside the quotes');
   assert.deepEqual(grade('Required check "test suite must pass"\nfail').reasons, noCheck, 'fail on the next line');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nfail: test.full, since no test command resolves.' }), { pass: true, reasons: [] }, 'the mirrored form in the body');
+  // M3 part 2 project 2's round 3 fix batch, K2: exec-2026-11-05/go-required-check-stop's report (:184) and pushed body put the
+  // check's name in parentheses, so a closing parenthesis stands between the name and fail. A parenthesis joins no other sentence.
+  assert.deepEqual(grade('**Required check (`npm test`): fail, cannot run.**', { ...pushed, [BODY]: 'fix: round sum\n\ntest suite (npm test): fail, cannot run.' }), { pass: true, reasons: [] }, "round 3's stored report and body");
+  assert.deepEqual(grade('Required check (`npm test`) ran. Lint: fail.').reasons, noCheck, 'fail in another sentence');
   // bodyNamesCheck: the pushed branch's last commit body passes the same reading (skills/commit/SKILL.md, the no-PR end).
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum to two decimals\n\nThe suite cannot run here.' }).reasons, [NO_BODY], 'a body that names no check as fail');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nI wrote the test and watched it fail.' }).reasons, [NO_BODY], 'fail, with no check beside it');

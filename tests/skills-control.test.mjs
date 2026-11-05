@@ -807,3 +807,9 @@ test('the contract and the skills spec keep the size defaults kern-get gives', (
     "Layered settings read (A4); prints `value<TAB>source`; with no default, `scope_threshold` and `pr.max_lines` print `kernel/settings.md`'s `4` and `300` when unset (M3 part 2 project 2's round 1 fix batch) |",
     "The limits are read here, with the first lookups: `kern-get scope_threshold` and, since the pilot fix plan's Task 5, `kern-get pr.max_lines`, each in its own call, printing its value and source (`4<TAB>default` when unset). Until M3 part 2 project 2's round 1 fix batch each lookup passed its default, `4` and `300`, which kern-get now gives itself: two head-to-head plan runs that round looped both keys with one default or none and stated a limit no lookup printed (the user's \"Fix kern-get defaults\")."]);
 });
+
+test("the contract's checkFailNamed takes a closing parenthesis after the check's name", () => {
+  // M3 part 2 project 2's round 3 fix batch, K2: go-required-check-stop's report read "Required check (`npm test`): fail".
+  assertContains('docs/plans/contract.md', [
+    "; with the name before `fail` and no quote between them, a closing parenthesis also counts among those characters, since M3 part 2 project 2's round 3 fix batch, K2, whose go-required-check-stop report and commit body put the check's name in parentheses)"]);
+});
