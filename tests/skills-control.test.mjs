@@ -492,22 +492,30 @@ test('the design, the contract and the settings keep the Stop hook that holds a 
     '| Stop | One reason lists each check that fails, printed as `{"decision":"block","reason":...}` with exit 0; `kern: off` and any fault allow.',
     "The size ask (M3 part 2 project 2): the turn's results hold `size-check`'s `size: ask: <q>` and the last message does not hold `<q>` as printed. These two block once: a stop the hook already blocked (`stop_hook_active`) skips them.",
     "A go's finish line (M3 part 2 project 2), under a live go until the run reports its first stop: a stop is allowed when the last message holds a line that opens `kern stop: `, which stands the check down for the rest of the go (`stop_down`), or while a background `ci-wait` or subagent the go started has no task-notification; otherwise the reason names the first missing step: the draft PR, a `ci-wait` after the last push, a push after a red verdict, or `gh pr ready`.",
-    "A go's report: each `check: <name>: skip (named)` line `review-check` printed in the turn is named in the last message beside the word skip.",
+    "A go's report, while no such wait is open: each `check: <name>: skip (named)` line `review-check` printed in the turn is named in the last message beside the word skip.",
     "The nudges, under a go, or outside one only with `stop.nudge: on`: a main-thread Edit, Write or NotebookEdit outside the work dir with no `test.focused`, `test.full`, `task-done`, `review-check` or `probe` run after it, and `floor-scan`'s hits in `git diff HEAD` of the files those calls edited (G7, section 8.3) that the last message does not name by `path:line`.",
-    "Under a go each finish-line, report or nudge block adds 1 to `stop_backs`; the third asks the run to end with its report, saying it stopped short, and the next stop is allowed. A typed prompt, or a task-notification after the last block, starts the count again. Outside a go `stop_hook_active` allows.",
+    "Under a go each finish-line, report or nudge block adds 1 to `stop_backs`; the third asks the run to end with its report, saying it stopped short, and the next stop is allowed; any stop allowed at 3 sets the count back to 0. A typed prompt, or the first task-notification after the last block of a background `ci-wait` or subagent the go started, once for each, starts the count again; a notice of anything else does not. Outside a go `stop_hook_active` allows.",
     "| G7 floor guard | opt-in, `stop.nudge: on` | At turn end the Stop hook runs `floor-scan` on `git diff HEAD` of the files the turn's main-thread edits touched: a new suppression, a skipped or deleted test, a removed assert, an empty catch or a debug print blocks the stop once, unless the last message names its `path:line` with a reason (M3 part 2 project 2) | Under a go, always on: each block counts toward the Stop hook's 3 send-backs in a row (section 6.3). A plain `/kern:autopilot on` run is as interactive |",
     'any write or run of a hook entry file (`hooks/stop` among them since M3 part 2 project 2)']);
   assertContains('docs/plans/contract.md', [
     'hooks/stop                                                                                    (M3 part 2 projects 1 and 2)',
     '(today `kern-detect`, which G5 and the Stop hook run, `floor-scan`, which the Stop hook runs, and `kern-get`, which a rendered line names)',
     "The Stop hook adds `stop_backs` (its send-backs in a row under a go, 0 to 3), `stop_line` (the transcript's line count at its last such send-back) and `stop_down` (`1` once the go's run reported a stop, else empty or unset), M3 part 2 project 2, Task 7.",
-    'a hook entry file (`prompt-submit`, `session-start`, `subagent-start`, `pre-tool-use` or, since M3 part 2 project 2\'s Task 7, `stop`) after `hooks/`',
+    'a hook entry file (`prompt-submit`, `session-start`, `subagent-start`, `pre-tool-use` or, since M3 part 2 project 2\'s Task 7, `stop`, which counts in this path form only and is no entry file\'s name for the word and write rules below, so `docker compose stop` in a hooks folder gets no vote and a project\'s own `hooks/stop` clears) after `hooks/`',
     '- **The Stop hook holds a go to ready (M3 part 2 project 2, Task 7).**',
     'Outside a go the hook reads on only when the transcript holds `self-review` or `size-check` (one `grep -F`), or `stop.nudge` reads `on`',
     "(3) The finish line, under a live go with `stop_down` empty: a line of the last message that opens `kern stop: `, leading blanks dropped, writes `stop_down=1` and passes;",
-    'Under a go each block that holds (3), (4), (5) or (6) is a send-back: `stop_backs` (0 to 3) goes up by 1 and `stop_line` takes the transcript\'s line count, and a write that fails allows.',
-    'A task-notification line past `stop_line` reads as `stop_backs` 0.',
-    "Known limits: a background task from before the go's prompt, or one whose notification Claude Code never writes, holds nothing open;"]);
+    'Under a go each block that holds (3), (4), (5) or (6) is a send-back: `stop_backs` (0 to 3) goes up by 1 and `stop_line` takes the transcript\'s line count, and a write that fails allows, as do a read',
+    "any stop allowed with `stop_backs` at 3 writes `stop_backs=0`. A wait's first task-notification line past `stop_line` reads as `stop_backs` 0, so each wait starts the count again once; a notice of anything else (a Monitor's event, a command that is no wait) does not.",
+    "so does one of the go's waits, a Bash call whose simple command runs `ci-wait` or an Agent (or Task) call, whose result's `toolUseResult` holds a `backgroundTaskId` or the status `async_launched`, while no task-notification names its `tool_use_id`; any other background command holds nothing open.",
+    '(4) The report, under a live go with no wait open: each',
+    "(6) runs `git --literal-pathspecs diff --no-ext-diff --no-textconv --no-color HEAD -- <files>` in each file's repository top, each file named from that top (`rev-parse --show-prefix`), up to 100 files,",
+    "Each hit whose `path:line` the last message does not hold with no digit right after it is named, the first 20 and then `and N more`.",
+    "as do a read of `stop_down`, `go_phase`, `stop_backs` or `stop_line` that fails and a line count that is no number.",
+    "A grep for the turn or for the go's prompt that fails allows, since a wider window could block on an earlier turn.",
+    "The scan runs under `pipefail`, so a `tail` of the transcript that fails allows.",
+    "never a `KERN_MAIN` the environment brings.",
+    "Known limits: a wait from before the go's prompt holds nothing open, and one whose notification Claude Code never writes keeps the finish line open;"]);
   assertContains('kernel/settings.md', [
     "| `stop.nudge` | `off` | `off`, `on`. `on` turns on the Stop hook's nudges outside a go: an edit with no proving command after it, and a lowered floor in the edited files that the last message does not name. Under a go they always run | stop |"]);
   // The project 1 entry no longer says project 2 extends it, and neither does the hook's header.

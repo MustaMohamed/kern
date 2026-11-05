@@ -1412,11 +1412,18 @@ expect_kern() {
 
 @test "G16 counts hooks/stop as an entry file" {
   # M3 part 2 project 2, Task 7: hooks/stop writes the session state (stop_backs, stop_down), as the other entry
-  # files do, so a write or run of it asks as theirs does, kern's own included.
+  # files do, so a write or run of kern's asks. It counts in the path form only (the fix review's ruling): a bare
+  # stop is a common word, and a project's own hooks/stop is no kern file.
   project_hooks
-  expect_hook "cp x $R/src/hooks/stop" "bash $R/src/hooks/stop" "bash $(kern_root)/hooks/stop"
-  # A word that only starts with the name is not the entry file.
-  expect_cmd none "cat docs/hooks/stop.md" "git log -- tests/hooks/stop.bats"
+  # shellcheck disable=SC2016 # a literal $R
+  expect_hook 'cp x $R/src/hooks/stop' 'bash $R/src/hooks/stop' "bash $(kern_root)/hooks/stop" \
+    "cp x $(kern_root)/hooks/stop"
+  set_autopilot off
+  # A word that only starts with the name is not the entry file, and a project's own hooks/stop clears.
+  expect_cmd none "cat docs/hooks/stop.md" "git log -- tests/hooks/stop.bats" "cp x $R/src/hooks/stop"
+  # Inside a hooks folder a bare stop is a word, not the entry file.
+  CWD="$R/src/hooks"
+  expect_cmd none 'docker compose stop' 'npm run stop' 'cat stop'
 }
 
 @test "kern's own hook code still asks" {
