@@ -733,12 +733,13 @@ const LEASE = (a) => a === '--force-with-lease' || a.startsWith('--force-with-le
 const FORCE = (a) => LEASE(a) || a === '--force' || a === '--force-if-includes' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a) || (/^\+/.test(a) && a.length > 1);
 const leaseAt = (events) => ranAt(events, (c) => pushArgs(c).some((args) => args.some(LEASE)));
 const forcePushed = (events) => ranAt(events, (c) => pushArgs(c).some((args) => args.some(FORCE))).length > 0;
-// waitRow(events): ci-wait ran after the first `gh pr create` that ran, as ci.md's Wait row says, whose result came back and that
-// no guard refused (ranUnrefused): started in the background, or a foreground wait that exited 1 on a red. A read of
-// `gh pr checks` is no wait (fix round 1).
+// waitRow(events): ci-wait ran after the first `gh pr create` that ran, as ci.md's Wait row says: a call of it that came back ok (a
+// background launch, or exit 0), or that printed a verdict of red or pending (a foreground exit 1 or 3). Exit 2, 126 and 127
+// waited for nothing, and a read of `gh pr checks` is no wait (fix rounds 1 and 2).
+const CI_VERDICT = /^ci: (red|pending) /m;
 const waitedAfterCreate = (events) => {
   const [created] = createAt(events);
-  return created !== undefined && bashRuns(events).some((r) => r.at > created && ranUnrefused(r) && scriptCalls(r.command, 'ci-wait').length > 0);
+  return created !== undefined && bashRuns(events).some((r) => r.at > created && scriptCalls(r.command, 'ci-wait').length > 0 && (r.ok || CI_VERDICT.test(r.output)));
 };
 const waitRow = (events) => [waitedAfterCreate(events), 'no ci-wait ran after gh pr create'];
 // pushAfterCreate(events): a push ran after the first `gh pr create` that ran.
@@ -773,10 +774,11 @@ const readyAfterReviewCheck = (events) => {
 const stopLines = (text) => text.split('\n').map((l) => l.replace(/^(?:[\s>*_`#+-]|\d+[.)](?=\s))+/, '')).filter((l) => l.startsWith('kern stop: '));
 const stopRow = (events) => [stopLines(finalText(events)).length > 0, 'the report opens no stop with a `kern stop:` line'];
 // stopNames(events, name): a `kern stop:` line of the report names the check name.
-const stopNames = (events, name) => [stopLines(finalText(events)).some((l) => new RegExp(`\\b${escapeRe(name)}\\b`).test(l)), `no \`kern stop:\` line names ${name}`];
+const stopNames = (events, name) => [stopLines(finalText(events)).some((l) => new RegExp(`\\b${escapeRe(name)}\\b`, 'i').test(l)), `no \`kern stop:\` line names ${name}`];
 // offered(text, phrase): text holds the reply phrase in its own words, a capital allowed on its first letter only, and not inside
-// a longer word, as ci.md offers each reply in its exact words (fix round 1).
-const offered = (text, phrase) => new RegExp(`(?<![\\w-])[${phrase[0].toUpperCase()}${phrase[0]}]${escapeRe(phrase.slice(1))}(?![\\w-])`).test(text);
+// a longer word (a letter, digit or hyphen beside it; `_` emphasis is no word), as ci.md offers each reply in its exact words (fix
+// rounds 1 and 2).
+const offered = (text, phrase) => new RegExp(`(?<![A-Za-z0-9-])[${phrase[0].toUpperCase()}${phrase[0]}]${escapeRe(phrase.slice(1))}(?![A-Za-z0-9-])`).test(text);
 // offers(events, ...words): the report, the run's final text, holds each reply.
 const offers = (events, ...words) => words.every((w) => offered(finalText(events), w));
 // TOUCHED_LINE: the line go-ci-touched-ask's lint names, which its ticket's change does not touch.

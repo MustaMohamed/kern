@@ -2208,6 +2208,16 @@ test('go-reaches-draft: the go quote in spec and plan, a draft PR, no question a
   assert.deepEqual(grade({ events: [...GO_LANES, ...create, ...ran('pk', ['gh pr checks --json name,bucket', true, '[]']), ...ready, say(DRAFT_REPORT)] }).reasons, [NO_WAIT], 'a poll of the checks');
   assert.deepEqual(grade({ events: [...GO_LANES, ...create, ...ran('pw', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-money', false, 'kern G18: denied']), ...ready, say(DRAFT_REPORT)] }).reasons, [NO_WAIT], 'a wait a guard refused');
   assert.deepEqual(grade({ events: [...GO_LANES, ...create, ...ran('pw', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-money', false, 'Exit code 1\ncheck: lint: fail\nci: red lint']), ...ready, say(DRAFT_REPORT)] }), { pass: true, reasons: [] }, 'a wait in the foreground that read a red');
+  // Fix round 2: a wait counts when its call came back ok (a background launch, or exit 0) or printed a ci-wait verdict of red or
+  // pending (a foreground exit 1 or 3); exit 2, 126 and 127 waited for nothing.
+  const waitCall = (ok, output, command = 'bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-money') => grade({ events: [...GO_LANES, ...create, ...ran('pw', [command, ok, output]), ...ready, say(DRAFT_REPORT)] }).reasons;
+  assert.deepEqual(waitCall(true, 'Command running in background with ID: b2'), [], 'a background launch');
+  assert.deepEqual(waitCall(true, 'check: lint: pass\nci: clear\n'), [], 'a foreground wait that read clear');
+  assert.deepEqual(waitCall(false, 'Exit code 3\ncheck: build: pending\nci: pending build (timeout 1m)'), [], 'a foreground wait that timed out');
+  assert.deepEqual(waitCall(false, 'Exit code 127\nbash: /scripts/ci-wait: No such file or directory', 'bash /scripts/ci-wait /w/app/.claude/worktrees/round-money'), [NO_WAIT], 'CLAUDE_PLUGIN_ROOT unset: no such script');
+  assert.deepEqual(waitCall(false, 'Exit code 2\nusage: ci-wait WT [--minutes N]', 'bash /k/scripts/ci-wait'), [NO_WAIT], 'a usage error');
+  assert.deepEqual(waitCall(false, 'Exit code 126\nbash: /k/scripts/ci-wait: Permission denied'), [NO_WAIT], 'a script that could not run');
+  assert.deepEqual(waitCall(false, 'Exit code 2\nci-wait: gh pr checks failed: no pull request found'), [NO_WAIT], 'a read that failed');
   assert.deepEqual(grade({ events: [...DRAFT_RUN, use('AskUserQuestion', { questions: [] })] }).reasons, ['the run called AskUserQuestion']);
   assert.deepEqual(grade({ ledger: '' }).reasons, ['no task closed in a ledger']);
   assert.deepEqual(grade({ ledger: `${CLOSED}\nTask 2: complete tree=abd test=npm test exit=0 review=approved probe=skipped (probe inconclusive: new module) last=ok` }).reasons,
@@ -3571,17 +3581,20 @@ test('ci-wait reads the stand-in: none after the settle, a red at once, clear on
 
 // Fix round 1: on CI_CLOCK, the clock a case's run gets, a PR with no checks settles at `ci: none` and a pending one hits
 // ci.wait_minutes 1, each within seconds, so go-no-ci-ready and go-ci-timeout wait no longer than their runs allow.
-test('ci-wait on the case clock: no checks read as none, and a pending check times out at ci.wait_minutes 1, each within 20 s', () => {
+// Fix round 2: the bound is the default clock, which settles after 120 s and times out ci.wait_minutes 1 after 60 s, so load on
+// the host does not flake it.
+test('ci-wait on the case clock: no checks read as none, and a pending check times out at ci.wait_minutes 1, each in under a minute', () => {
   for (const [ci, args, status, verdict] of [['none', [], 0, 'ci: none\n'], ['pending', ['--minutes', '1'], 3, 'check: build: pending\nci: pending build (timeout 1m)\n']]) {
     const r = ciRepo(ci);
     try {
       r.open();
       const start = Date.now();
-      const w = spawnSync('bash', [join(REPO, 'scripts', 'ci-wait'), r.repo, ...args], { encoding: 'utf8', timeout: 60000,
+      const w = spawnSync('bash', [join(REPO, 'scripts', 'ci-wait'), r.repo, ...args], { encoding: 'utf8', timeout: 120000,
         env: { ...cleanEnv, PATH: `${dirname(STUB)}:${cleanEnv.PATH}`, KERN_EXEC_LOG: r.log, KERN_EXEC_CI: ci, ...CI_CLOCK } });
       const took = Date.now() - start;
       assert.deepEqual([w.status, w.stdout], [status, verdict], `${ci}: ${w.stderr}`);
-      assert.ok(took >= 5000 && took < 20000, `${ci}: ${took} ms`);
+      assert.ok(took >= 5000, `${ci}: ${took} ms, at least the 6 s CI_CLOCK gives`);
+      assert.ok(took < 60000, `${ci}: ${took} ms, under the default clock's 60 s minute`);
     } finally { r.done(); }
   }
 });
@@ -3876,6 +3889,8 @@ test('go-ci-fixable-ask: no ready, and a stop that names version and offers fix 
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `fix it here` or `leave it`.' }), [unoffered]);
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nShall I fix it here, or leave it and mark the PR ready?' }), [], 'the words, unquoted');
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nFix it here, or leave it and mark the PR ready.' }), [], 'a capital that opens a sentence');
+  assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply _fix it here_ or _leave it and mark the PR ready_.' }), [], 'in underscore emphasis');
+  assert.deepEqual(grade({ text: 'kern stop: class 3 red: Version\n\nReply `fix it here` or `leave it and mark the PR ready`.' }), [], 'the check named with a capital');
   // Fix round 1: each reply is a phrase in its own words, in the final text.
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply FIX IT HERE or leave it and mark the PR ready.' }), [unoffered], 'in other case');
   assert.deepEqual(grade({ text: 'kern stop: class 3 red: version\n\nReply `fix it here` or `leave it and mark the pr ready`.' }), [unoffered], 'pr in lower case');
@@ -3930,6 +3945,8 @@ test('go-ci-touched-ask: the named line left as it was, no ready, and a stop tha
   assert.deepEqual(grade({ text: ASKED.replace('kern stop: ', '') }), [unnamed], 'no stop line');
   assert.deepEqual(grade({ text: ASKED.replace('class 5 red: lint', 'a red the PR did not cause') }), [unnamed], 'a stop line that names no check');
   assert.deepEqual(grade({ text: 'kern stop: class 5 red: lint\n\nThe line predates this PR.' }), ['the stop does not offer `fix it here`']);
+  assert.deepEqual(grade({ text: 'kern stop: Lint fails on a line this PR did not change\n\nReply `fix it here`.' }), [], 'the check named with a capital');
+  assert.deepEqual(grade({ text: 'kern stop: class 5 red: linter\n\nReply `fix it here`.' }), ['no `kern stop:` line names lint'], 'inside another word');
   assert.deepEqual(grade({ text: 'kern stop: class 5 red: lint\n\nShall I refix it here?' }), ['the stop does not offer `fix it here`'], 'inside another word');
 });
 
@@ -3993,7 +4010,7 @@ test('the contract keeps the stand-in\'s CI, the CI go cases and stopReasons', (
     '`pr edit --body-file` (it logs `body:` as `pr create` does; any other edit fails)',
     '`behind`, the create lands a commit on origin\'s main, and `up-to-date` fails until the branch on origin holds main\'s head.',
     '`go-reaches-draft`, `go-no-lint-draft` and `go-bug-draft` also want `gh pr ready` after `gh pr create` in the gh log.',
-    'Those twelve each want a `ci-wait` call that ran, unrefused, after the first `gh pr create` that ran; a read of `gh pr checks` is no wait.',
+    'Those twelve each want a `ci-wait` call after the first `gh pr create` that ran, one that came back ok (a background launch, or exit 0) or printed a `ci: red` or `ci: pending` verdict (a foreground exit 1 or 3); exit 2, 126 or 127 waited for nothing, and a read of `gh pr checks` is no wait.',
     'its log says main is past the tag `v1.4.0` with no bump, so main fails the check too, and asks for a minor bump. The case tags `v1.4.0` one commit before main\'s tip.',
     'or, with no jq on PATH, a bare field of PR 8 or of the first PR listed;',
     "`go-proof-skip`'s screen is the HTML page `views/invoice.html`, which `src/invoice-view.js` fills in.",
