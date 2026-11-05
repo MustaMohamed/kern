@@ -18,6 +18,8 @@
 # `missing file:`, `unknown:`, `degraded:` or `no proofs file:`) floors at fix first. A plain hit (floor-scan's,
 # or claim-check's sha-unknown and absolute-claim) leaves the floor: self-review step 9 holds an unresolved one
 # at fix first and lists a justified one under Cleared.
+# The same stdout goes to <kern-dir tmp>/review-check-<tree>.txt, <tree> the full id of WT's whole working state
+# (wt-snap), which G2 reads at a go's `gh pr ready`.
 # Exit 0 on `floor: none`, 1 on `floor: fix first`, 2 on usage, an unreadable WT, PACKAGE or SPEC, or a
 # kern-dir tmp failure, so a pass that did not run is not read as clean.
 set -u
@@ -53,6 +55,27 @@ tmp=$(cd "$wt" && bash "$here/kern-dir" tmp) || { echo "review-check: kern-dir t
 logs="$tmp/review-check-$(basename "$package")"
 mkdir -p "$logs" || { echo "review-check: cannot make $logs" >&2; exit 2; }
 rm -f "$logs/verify.fast.log" "$logs/test.log" "$logs/floor-scan.log" "$logs/claim-check.log"
+
+# The record: this run's stdout, kept as <kern-dir tmp>/review-check-<tree>.txt, <tree> the full id of WT's
+# whole working state as wt-snap takes it before any check runs. G2 reads it at a go's `gh pr ready` for
+# HEAD's tree. Any old record for the tree goes first, and the new one is moved in whole once the floor is
+# printed, so a run cut short leaves none. A tree wt-snap cannot take, or a record file that cannot be
+# made, means no record; stdout and the exit code stay as they are.
+rec='' rtmp=''
+tree=$(bash "$here/wt-snap" "$wt" 2> /dev/null) || tree=''
+case "$tree" in
+  '' | *[!0123456789abcdef]*) ;;
+  *)
+    rec="$tmp/review-check-$tree.txt"
+    rm -f "$rec"
+    rtmp=$(mktemp "$tmp/.review-check-$tree.XXXXXX" 2> /dev/null) || rtmp=''
+    ;;
+esac
+# out LINE: prints LINE, and adds it to the record.
+out() {
+  printf '%s\n' "$1"
+  [ -z "$rtmp" ] || printf '%s\n' "$1" >> "$rtmp"
+}
 
 tab=$(printf '\t')
 # value SCRIPT KEY: the value SCRIPT (kern-get or kern-detect) prints for KEY, run from WT; exit 1 on none.
@@ -91,7 +114,7 @@ floor=none tails='' scan_rc=0
 # report NAME STATUS: prints the check line; a fail, hits or unresolved check gets its tail printed, and a fail or
 # unresolved one floors at fix first. A hit floors only as a proof line, which the claim-check run below reads.
 report() {
-  echo "check: $1: $2"
+  out "check: $1: $2"
   case "$2" in
     fail | unresolved) floor='fix first'; tails="$tails $1" ;;
     hits) tails="$tails $1" ;;
@@ -154,22 +177,27 @@ if [ -n "$spec" ]; then
   # claim-check's `no proofs file:` line: proof-check read an empty table in place of a missing file, so it
   # judged no proofs file (M3 part 2 project 1, Task 12 fix round 1).
   if [ "$scan_rc" != 0 ] && [ "$scan_rc" != 1 ]; then
-    echo 'proofs: not checked (claim-check failed)'
+    out 'proofs: not checked (claim-check failed)'
   elif grep -q '^proof-check: n/a (.* has no numbered acceptance lines)$' "$logs/claim-check.log"; then
-    echo 'proofs: n/a (no numbered acceptance lines)'
+    out 'proofs: n/a (no numbered acceptance lines)'
   elif grep -qE "^no proofs file: [^$tab]*\$" "$logs/claim-check.log"; then
-    echo 'proofs: not checked (no proofs file)'
+    out 'proofs: not checked (no proofs file)'
   else
-    echo 'proofs: checked'
+    out 'proofs: checked'
   fi
 else
   scan claim-check "$here/claim-check" "$wt" "$package"
-  echo 'proofs: not due (no spec)'
+  out 'proofs: not due (no spec)'
 fi
 
 for name in $tails; do
-  echo "--- $name"
-  tail -n 20 "$logs/$name.log"
+  out "--- $name"
+  if [ -n "$rtmp" ]; then
+    tail -n 20 "$logs/$name.log" | tee -a "$rtmp"
+  else
+    tail -n 20 "$logs/$name.log"
+  fi
 done
-echo "floor: $floor"
+out "floor: $floor"
+[ -z "$rtmp" ] || mv -f "$rtmp" "$rec" 2> /dev/null || rm -f "$rtmp"
 [ "$floor" = none ]

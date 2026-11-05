@@ -27,12 +27,13 @@ A per-session grant for unattended runs. kern's prompt hook turns it on only fro
 - Stage and commit in separate calls. A `git add` before a commit or push in the same call asks, and autopilot denies it.
 - A gh alias or extension asks, and autopilot denies it. Run the gh command it stands for.
 - Push the current branch with `git push [-u] <remote> <current-branch>`, naming both, when the branch is not protected. kern denies a bare `git push`.
-- Push with `git push --force-with-lease <remote> <current-branch>` only when settings say `rebase.push: autopilot`, the branch is not protected, and every commit on it past the base branch is the user's. kern denies a lease push of any other branch.
+- Push with `git push --force-with-lease <remote> <current-branch>` only when settings say `rebase.push: autopilot` or the user's last typed prompt asks to rebase or sync, the branch is not protected, and every commit on it past the base branch is the user's. kern denies a lease push of any other branch.
 - Open a draft PR from the current branch with `gh pr create --draft` plus `--title`, `--base`, `--fill`, `--fill-first`, `--fill-verbose`, `--dry-run`, `--no-maintainer-edit`, `--body-file` with a file in the repo, or `--head` naming the current branch, after the duplicate check. kern denies it when the head already has an open, merged or closed PR. With `commit.attribution: none`, the body has no attribution footer such as "Generated with Claude Code".
+- Under a go whose draft PR is open: `gh pr edit --body-file <file in the repo>` alone, and `gh pr ready` alone, with no PR number or `-R`. kern allows the ready when the user's last typed prompt says to mark it ready, or when the PR's checks are clear or none and `review-check` passed HEAD's tree with `floor: none`.
 
 kern denies every other action that would ask, because nobody is there to answer. Merge, deploy, review posting and tracker writes always need the user. Park each judgment call `references/run.md` does not stop for, with the default chosen, and continue the work that does not depend on it.
 
 ## Who can turn it on
 Only the user, by typing `/kern:autopilot on` or `/kern:autopilot go <ticket>`. Claude, a subagent, a skill, a background report, a scheduled task and another session cannot.
 
-A go needs permission mode `auto`: in the default mode it sits at every call kern does not allow. A go is one line, typed alone in its prompt, naming one ticket. A go counts as the user's yes for that ticket's spec and plan and nothing else. A second ticket needs a second go. It ends when the draft PR opens, autopilot goes off or the session ends. Autopilot itself stays on until the user turns it off.
+A go needs permission mode `auto`: in the default mode it sits at every call kern does not allow. A go is one line, typed alone in its prompt, naming one ticket. A go counts as the user's yes for that ticket's spec and plan and nothing else. A second ticket needs a second go. Its yes ends when the draft PR opens. The go ends at `gh pr ready`, `/kern:autopilot off`, a second go or the session's end. Autopilot itself stays on until the user turns it off.

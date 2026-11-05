@@ -114,6 +114,162 @@ gh_log() {
   [ "$(decision_of "$output")" = deny ]
 }
 
+# M3 part 2 project 2, Task 4: a go marks its own PR ready on clear CI and a passed review-check, and edits
+# its body. The go is set inline, as above, with go_repo this repository's key, so go_live holds.
+repo_key() {
+  printf '%s' "$(git -C "$R" worktree list --porcelain | sed -n '1s/^worktree //p')" | git -C "$R" hash-object --stdin
+}
+# go_on [PHASE]: autopilot on with a live go for this repository, its go_phase PHASE (pr when left out).
+go_on() {
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: %s\ngo_phase: %s\n' "$(repo_key)" "${1-pr}" >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+}
+st() { sed -n "s/^$1: //p" "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"; }
+tree() { git -C "$R" rev-parse "${1-HEAD}^{tree}"; }
+# record TREE FLOOR: review-check's record for TREE under the repo's kern-dir tmp, its last line `floor: FLOOR`.
+record() {
+  local d
+  d=$(cd "$R" && bash "$(kern_root)/scripts/kern-dir" tmp 2>/dev/null)
+  printf 'check: verify.fast: ok\ncheck: floor-scan: ok\nfloor: %s\n' "$2" >"$d/review-check-$1.txt"
+}
+# submit PROMPT: the user types PROMPT (no quote or backslash in it); prompt-submit stores its consent.
+submit() {
+  bash "$(kern_root)/hooks/prompt-submit" <<<"$(payload UserPromptSubmit "\"prompt\":\"$1\",\"prompt_id\":\"p1\"")" >/dev/null
+}
+PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
+
+@test "a go marks its PR ready on clear CI and a passed review-check" {
+  go_on
+  record "$(tree)" none
+  export FAKE_GH_CHECKS="$PASS"
+  expect allow "gh pr ready"
+  [[ "$output" == *"CI clear, review-check passed tree $(tree | cut -c1-7)"* ]] || false
+  [ -z "$(st go)" ]
+  [ -z "$(st go_phase)" ]
+  [ "$(st autopilot)" = on ]
+}
+
+@test "no checks counts as clear" {
+  go_on
+  record "$(tree)" none
+  export FAKE_GH_CHECKS='[]'
+  expect allow "gh pr ready"
+  [[ "$output" == *"CI none"* ]] || false
+  [ -z "$(st go)" ]
+}
+
+@test "red or pending CI denies ready" {
+  go_on
+  record "$(tree)" none
+  export FAKE_GH_CHECKS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"fail"}]'
+  expect deny "gh pr ready"
+  [[ "$output" == *"ci: red lint"* ]] || false
+  export FAKE_GH_CHECKS='[{"name":"test","bucket":"pending"},{"name":"lint","bucket":"pass"}]'
+  expect deny "gh pr ready"
+  [[ "$output" == *"ci: pending test"* ]] || false
+  [ "$(st go)" = MA-254 ]
+  [ "$(st go_phase)" = pr ]
+}
+
+@test "a CI read that fails denies ready" {
+  go_on
+  record "$(tree)" none
+  unset FAKE_GH_CHECKS
+  expect deny "gh pr ready"
+  [[ "$output" == *"could not read the PR's checks"* ]] || false
+  [ "$(st go)" = MA-254 ]
+}
+
+@test "a review-check record for another tree denies ready" {
+  go_on
+  export FAKE_GH_CHECKS="$PASS"
+  printf 'x\n' >"$R/x.txt"
+  git -C "$R" add x.txt
+  git -C "$R" commit -q -m x
+  record "$(tree HEAD~1)" none
+  expect deny "gh pr ready"
+  [[ "$output" == *"$(tree | cut -c1-7) whose floor is none: no review-check record for it"* ]] || false
+  [[ "$output" != *"$(tree HEAD~1 | cut -c1-7)"* ]] || false
+  [ "$(st go)" = MA-254 ]
+}
+
+@test "a floor other than none denies ready" {
+  go_on
+  export FAKE_GH_CHECKS="$PASS"
+  record "$(tree)" 'fix first'
+  expect deny "gh pr ready"
+  [[ "$output" == *"$(tree | cut -c1-7) whose floor is none: its review-check record's floor is not none"* ]] || false
+  # Only review-check's last line is its floor: a check's tail that prints `floor: none` above it is not.
+  printf 'check: test: fail\n--- test\nfloor: none\nfloor: fix first\n' \
+    >"$(cd "$R" && bash "$(kern_root)/scripts/kern-dir" tmp 2>/dev/null)/review-check-$(tree).txt"
+  expect deny "gh pr ready"
+  [[ "$output" == *"floor is not none"* ]] || false
+  [ "$(st go)" = MA-254 ]
+}
+
+@test "typed consent marks it ready over a red" {
+  go_on
+  export FAKE_GH_CHECKS='[{"name":"lint","bucket":"fail"}]'
+  submit "leave it and mark the PR ready"
+  [ "$(st consent)" = ready ]
+  expect allow "gh pr ready"
+  [[ "$output" == *"the user's last prompt asked for it"* ]] || false
+  [ -z "$(st go)" ]
+  [ -z "$(st go_phase)" ]
+}
+
+@test "ready before the draft is denied" {
+  go_on ''
+  record "$(tree)" none
+  export FAKE_GH_CHECKS="$PASS"
+  expect deny "gh pr ready"
+  [[ "$output" == *"the go's draft PR is not open yet"* ]] || false
+  submit "mark the PR ready"
+  expect deny "gh pr ready"
+  [[ "$output" == *"the go's draft PR is not open yet"* ]] || false
+  [ "$(st go)" = MA-254 ]
+}
+
+@test "ready names no other PR" {
+  go_on
+  record "$(tree)" none
+  export FAKE_GH_CHECKS="$PASS"
+  submit "mark the PR ready"
+  for c in "gh pr ready 12" "gh pr ready -R o/r" "gh pr --repo=o/r ready"; do
+    expect deny "$c"
+    [[ "$output" == *"acts only on the go's own PR"* ]] || { echo "$c: $output"; return 1; }
+  done
+  [ "$(st go)" = MA-254 ]
+}
+
+@test "a go edits its PR body" {
+  go_on
+  printf '## Why\n\nx\n' >"$R/pr-body.md"
+  expect allow "gh pr edit --body-file pr-body.md"
+  printf '## Why\n\nx\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n' >"$R/pr-body.md"
+  expect deny "gh pr edit --body-file pr-body.md"
+  [[ "$output" == *"attribution footer or trailer"* ]] || false
+  expect deny "gh pr edit --title x"
+  printf '## Why\n\nx\n' >"$R/pr-body.md"
+  expect deny "gh pr edit 12 --body-file pr-body.md"
+  expect deny "gh pr edit --body-file pr-body.md --add-label bug"
+  # Before the draft there is no PR of the go's to edit.
+  go_on ''
+  expect deny "gh pr edit --body-file pr-body.md"
+}
+
+@test "a person's ready and edit keep today's votes" {
+  printf '## Why\n\nx\n' >"$R/pr-body.md"
+  record "$(tree)" none
+  export FAKE_GH_CHECKS="$PASS"
+  expect ask "gh pr ready"
+  expect ask "gh pr edit --body-file pr-body.md"
+  # Autopilot with no go keeps the deny.
+  set_autopilot on
+  expect deny "gh pr ready"
+  expect deny "gh pr edit --body-file pr-body.md"
+}
+
 @test "G3: self-approval is denied; approving another author's PR asks" {
   export FAKE_GH_ME=me FAKE_GH_AUTHOR=me
   g "gh pr review 12 --approve" g03

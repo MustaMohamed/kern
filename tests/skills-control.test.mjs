@@ -61,7 +61,9 @@ test('autopilot documents the go: its step, its reach and what a refused go does
   assert.ok(body.includes('3. `on` or `go <ticket>`, and the hook reported "autopilot denied by <file>"'), 'a denied go names the file');
   const who = body.split('## Who can turn it on\n')[1];
   for (const s of ["A go counts as the user's yes for that ticket's spec and plan and nothing else.", 'A second ticket needs a second go.',
-    'It ends when the draft PR opens, autopilot goes off or the session ends.', 'Autopilot itself stays on until the user turns it off.']) assert.ok(who.includes(s), s);
+    // M3 part 2 project 2 Task 4: the go lives past its draft PR and ends at `gh pr ready`.
+    "Its yes ends when the draft PR opens. The go ends at `gh pr ready`, `/kern:autopilot off`, a second go or the session's end.",
+    'Autopilot itself stays on until the user turns it off.']) assert.ok(who.includes(s), s);
 });
 
 test('autopilot says what may follow an allowed shape, in the words settings.md uses, and covers a bare command (audit B11)', () => {
@@ -257,8 +259,8 @@ test('the docs state what the whole-branch review found them short of', () => {
   // M9: the five stale rows.
   const design = readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-design.md'), 'utf8');
   for (const s of ['the user typed `/kern:autopilot on` or `/kern:autopilot go <ticket>` in this session',
-    '| D10 | Fix loops stop after 3 rounds with a split proposal | Up to 3 rounds per self-review run on their own; a third still `fix first` pushes the branch, reports and opens no PR |',
-    "Draft allowed after dedup, which ends a go's approval but not the go (M3 part 2 project 2);",
+    '| D10 | Fix loops stop after 3 rounds with a split proposal | Up to 3 rounds per self-review run on their own; a third still `fix first` pushes the branch, reports and opens no PR.',
+    "Draft allowed after dedup, which ends a go's approval but not the go (M3 part 2 project 2).",
     'when find is a command head and every other simple command is `cd`, `ls` or a read-only filter',
     "a path counts as kern's hook code only when it resolves under kern's own root"]) assert.ok(design.includes(s), s);
   const settings = readFileSync(join(import.meta.dirname, '..', 'kernel', 'settings.md'), 'utf8');
@@ -315,6 +317,31 @@ test('the design and the contract keep the CI wait project 2 added', () => {
     '| `ci-wait` | `ci-wait WT [--minutes N]`',
     '`ci: none` stands only after 2 minutes of reads with no checks, re-read every 20 s at most',
     'its verdict line as `ci: pending <name>[, ...] (timeout <N>m)`']);
+});
+
+test('the design, the contract and autopilot keep a go marking its own PR ready and the typed lease', () => {
+  // M3 part 2 project 2 Task 4: G2 marks a go's PR ready on clear CI and a passed review-check, or on the typed word, and
+  // edits its body; G1 takes the typed lease; review-check writes the record G2 reads.
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    'a commit, a push, a draft PR (which covers its push), a PR edit, a lease push after a rebase or `gh pr ready`, in the closed grammar of `prompt_consent`',
+    "and lifts no deny but two under autopilot: G1's lease push of the user's own branch, and G2's `gh pr ready` on a live go's own PR over a red or pending check.",
+    "`--force-with-lease` only with `rebase.push: autopilot` or the user's typed rebase or sync; a go marks its own PR ready on clear CI and a passed review-check, and edits its body from a file (M3 part 2 project 2); everything else denied |",
+    "A go's CI fix rounds stop the same way, up to 3 per go (M3 part 2 project 2) |",
+    "only with `rebase.push: autopilot` or when the user's last typed prompt asks to rebase or sync (section 5.1; a bare yes is not one, M3 part 2 project 2), and only when every commit on it is the user's |",
+    "Under a live go with its draft open, `gh pr ready` on that PR (no PR number, no `-R`) allowed when the user's last typed prompt says to mark it ready, or when its checks read clear or none at the call and the review-check record for HEAD's tree ends `floor: none`; the allow ends the go.",
+    '`gh pr edit --body-file <file>` alone on that PR allowed with no prompt, the file checked as on create (M3 part 2 project 2). Any other `gh pr edit`, non-draft, an attributed body file and any other `gh pr ready` denied |']);
+  assertContains('docs/plans/contract.md', [
+    'G5 (`commit`), G1 (`push`, and `lease` under autopilot) and G2 (`pr`, `pr-edit`, `pr-title`, `pr-body`, and `ready` under a live go) call it.',
+    "- **Lease push under autopilot (M3 part 2 project 2, Task 4):** to an unprotected branch, G1 takes the lease from `rebase.push: autopilot` or, when that is not set, from `consent_for ... lease`",
+    'Under autopilot `gh pr ready` and `gh pr edit` are denied but on a live go\'s own open draft (`_g02_go_ready`, `_g02_go_edit`;',
+    'Its whole stdout also goes to the record `<kern-dir tmp>/review-check-<tree>.txt`, `<tree>` the full id of WT\'s whole working state as `wt-snap WT` takes it before any check runs',
+    "so the go lives on through CI until G2 allows its `gh pr ready` (Task 4), `/kern:autopilot off`, a second go or the session's end",
+    "- **G2 marks a go's PR ready and edits its body (M3 part 2 project 2, Task 4).**",
+    "is a regular readable file whose last non-blank line, blanks trimmed, is `floor: none`: review-check prints its floor last, so a check's tail above it is not one.",
+    'Each allow runs `state_set "$SID" "go=" "go_phase="`, which ends the go; `go_repo` and `autopilot` stay.']);
+  assertContains('skills/autopilot/SKILL.md', [
+    "only when settings say `rebase.push: autopilot` or the user's last typed prompt asks to rebase or sync, the branch is not protected,",
+    '- Under a go whose draft PR is open: `gh pr edit --body-file <file in the repo>` alone, and `gh pr ready` alone, with no PR number or `-R`.']);
 });
 
 test('run.md stays within its byte cap', () => {

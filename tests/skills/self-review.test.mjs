@@ -424,7 +424,8 @@ test('step 2 is one review-check call, step 9 takes its floor, and a go with no 
     assert.ok(s[2].includes(t), `step 2 lacks: ${t}`);
   // Task 8 fix round 1: step 2 names the n/a line review-check prints, not claim-check's, which only its log holds.
   assert.ok(!s[2].includes('proof-check: n/a'), s[2]);
-  assertContains('scripts/review-check', ["echo 'proofs: n/a (no numbered acceptance lines)'"]);
+  // M3 part 2 project 2 Task 4: review-check prints each line through `out`, which also writes its record.
+  assertContains('scripts/review-check', ["out 'proofs: n/a (no numbered acceptance lines)'"]);
   // Task 8 fix round 1: the floor follows the old step 2 rule. A failed or unresolved check or a proof line floors at
   // `fix first` (tests/scripts/review-check.bats); a plain hit leaves the floor, and step 9 holds it unless it is
   // justified under Cleared.
