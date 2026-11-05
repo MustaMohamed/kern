@@ -46,6 +46,10 @@ settings() {
   set_autopilot on
   g1 "git switch feat"
   [ "$(decision_of "$output")" = deny ]
+  # Paid round 5 of M3 part 2 project 2: a go denied here took Claude Code's EnterWorktree, whose session cannot write the
+  # work dir, so the deny names kern's worktree script.
+  [[ "$output" == *"kern G1: git switch in the main checkout (D3); use a kern worktree: \`bash \${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>\`, not the EnterWorktree tool, whose session cannot write the work dir"* ]] ||
+    { echo "$output"; return 1; }
 }
 
 @test "reset --hard, stash and clean in the main checkout ask" {
@@ -971,7 +975,7 @@ edit_call() {
 }
 # edit_denied TOOL: G1 denied the last call as TOOL in the main checkout.
 edit_denied() {
-  [ "$(decision_of "$output")" = deny ] && [[ "$output" == *"kern G1: $1 in the main checkout (D3); use a kern worktree"* ]] ||
+  [ "$(decision_of "$output")" = deny ] && [[ "$output" == *"kern G1: $1 in the main checkout (D3); use a kern worktree: \`bash \${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>\`, not the EnterWorktree tool, whose session cannot write the work dir"* ]] ||
     { echo "$output"; return 1; }
 }
 # no_vote: G1 said nothing on the last call.

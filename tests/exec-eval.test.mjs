@@ -2376,6 +2376,14 @@ test('go-required-check-stop: the run\'s commits on origin, no PR, the check nam
   assert.deepEqual(grade('Required check "test suite must pass" passed; "lint must pass": fail.').reasons, noCheck, "another check's fail");
   assert.deepEqual(grade('The tests "must pass" but fail now.').reasons, noCheck, 'the name outside the quotes');
   assert.deepEqual(grade('Required check "test suite must pass"\nfail').reasons, noCheck, 'fail on the next line');
+  // Paid round 5 of project 2: the report put "check is" between the closing quote and fail. Those two words, on the line, count;
+  // a quoted name with no fail, a fail joined on by a hyphen, or "check is" on the next line does not.
+  assert.deepEqual(grade('- The required "test suite must pass" check is `fail` because it can\'t run.'), { pass: true, reasons: [] }, "round 5's stored line");
+  assert.deepEqual(grade('The required "test suite must pass" check is not run.').reasons, noCheck, 'the quoted name and check is, no fail');
+  assert.deepEqual(grade('The required "test suite must pass" check is fail-then-pass.').reasons, noCheck, 'a hyphen-joined fail');
+  // Fix round 1: the hyphen rule holds with no "check is" too; before the round 5 fix batch this form counted.
+  assert.deepEqual(grade('The required "test suite must pass" fail-then-pass probe passed.').reasons, noCheck, 'a hyphen-joined fail right after the quote');
+  assert.deepEqual(grade('The required "test suite must pass"\ncheck is fail.').reasons, noCheck, 'check is on the next line');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nfail: test.full, since no test command resolves.' }), { pass: true, reasons: [] }, 'the mirrored form in the body');
   // M3 part 2 project 2's round 3 fix batch, K2: exec-2026-11-05/go-required-check-stop's report (:184) and pushed body put the
   // check's name in parentheses, so a closing parenthesis stands between the name and fail. A parenthesis joins no other sentence.
@@ -2939,6 +2947,11 @@ test('go-reaches-draft: the report gives the verdict, the plan\'s approval follo
   assert.deepEqual(grade([...write('w1', PLAN, FRONT), ...planCheck('p1', '.kern/specs/round-money.md'), ...review('a1'), ...edit('w2', PLAN, APPROVAL), ...DRAFT_RUN]).reasons, [EARLY_APPROVAL], "the spec's plan-check");
   assert.deepEqual(grade([...write('w1', PLAN, FRONT), ...planCheck('p1'), ...review('a1', 'Review the spec at /w/app/.kern/specs/round-money.md'), ...edit('w2', PLAN, APPROVAL), ...DRAFT_RUN]).reasons, [EARLY_APPROVAL], "an Agent call that names another file");
   assert.deepEqual(grade([...write('w0', `${SESSION_CWD}/.kern/specs/round-money.md`, `---\n${APPROVAL}\n---\n`), ...ordered, ...DRAFT_RUN]), { pass: true, reasons: [] }, "the spec's approval is define's");
+  // Paid round 5 of project 2 (go-reaches-draft:101, :102): G20 denied the plan's first Write, which held the approval, and the run
+  // then kept run.md's order. A denied call wrote nothing, as mainUntouched reads it; the same Write let through still fails.
+  const early = (isError) => tool('w0', 'Write', { file_path: PLAN, content: `---\n${APPROVAL}\n---\n# Round money\n` }, { isError, content: isError ? 'kern G20: under a go a plan approves only after its review' : '' });
+  assert.deepEqual(grade([...early(true), ...ordered, ...DRAFT_RUN]), { pass: true, reasons: [] }, "round 5's denied early approval");
+  assert.deepEqual(grade([...early(false), ...ordered, ...DRAFT_RUN]).reasons, [EARLY_APPROVAL], 'the same early approval let through');
   // verdictReported: one of self-review's verdicts, or the lane's needs fixes, in the report.
   for (const verdict of ['ready', 'fix first', 'split', 'rebase first', 'needs fixes']) assert.deepEqual(grade([...GO_LANES, say(`Draft PR #8. Verdict: \`${verdict}\`.`)]), { pass: true, reasons: [] }, verdict);
   // Paid round 5's go-reaches-draft report gave each review's words and no verdict.

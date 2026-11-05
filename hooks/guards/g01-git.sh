@@ -407,7 +407,7 @@ _g01_main_op() {
   fi
   in_main_checkout "$1" || return 0
   if [ "$AUTOPILOT" = 1 ]; then
-    vote deny G1 "$tool $2 in the main checkout (D3); use a kern worktree"
+    vote deny G1 "$tool $2 in the main checkout (D3); use a kern worktree: \`bash \${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>\`, not the EnterWorktree tool, whose session cannot write the work dir"
   else
     vote ask G1 "$tool $2 in the main checkout changes shared state (D3)"
   fi
@@ -459,7 +459,7 @@ _g01_edit() {
   if [ -n "$work" ]; then
     case "$real" in "$work"/*) return 0 ;; esac
   fi
-  vote deny G1 "$TOOL in the main checkout (D3); use a kern worktree"
+  vote deny G1 "$TOOL in the main checkout (D3); use a kern worktree: \`bash \${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>\`, not the EnterWorktree tool, whose session cannot write the work dir"
 }
 
 # _g01_real PATH: sets _G01_NEAR to PATH's (absolute) nearest directory that exists, as written, and _G01_REAL to

@@ -735,7 +735,9 @@ test("the contract and both designs keep the round 2 fix batch's proof skip", ()
 test("the contract and both designs keep the round 2 fix batch's G20 route gate", () => {
   // M3 part 2 project 2's paid round 2, H2 (the user's "Build the G20 gate", 2026-11-05): go-required-check-stop built
   // with no spec in five of six runs, so under a go G20 holds a build's edits until a spec carries the go's approval.
-  const reason = 'under a go, a build starts at define, and no spec under <KERN_MAIN>/<work_dir>/specs carries this go\'s approval. Read ${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only.';
+  // The round 5 fix batch, M3: a go that Claude Code's EnterWorktree pinned to a worktree could write the spec nowhere G20 reads it,
+  // so the deny names the way out.
+  const reason = 'under a go, a build starts at define, and no spec under <KERN_MAIN>/<work_dir>/specs carries this go\'s approval. Read ${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only. A session that EnterWorktree moved into a worktree cannot write <KERN_MAIN>/<work_dir>/specs: ExitWorktree with action keep, write the spec, then edit the worktree by its path.';
   assertContains('docs/plans/contract.md', [
     "- **G20's route gate under a go (M3 part 2 project 2's round 2 fix batch; the user's \"Build the G20 gate\", 2026-11-05).**",
     '`guard_g20` hands Write, Edit and NotebookEdit to `_g20_route`, and Write and Edit then to `_g20_file` as before.',
@@ -749,24 +751,29 @@ test("the contract and both designs keep the round 2 fix batch's G20 route gate"
     // and the go outlives its reported stop.
     "is under the main worktree's root and not under `KERN_MAIN/<work_dir>/` read the same way, so a memory, scratchpad or `/tmp` file passes (the fix batch's fix round 1);",
     'a specs dir that cannot be listed, a transcript that is not named or cannot be read, and any grep of the pipe that fails (status over 1; the last two since fix round 1). After a reported stop the go stays live, so the gate holds until `/kern:autopilot off`.',
-    'Accepted limits: a Bash write (a here-doc, an inline script) is not seen, so a denied run could route around it; a diagnose Read opens the gate for any edit; test paths are read by name;']);
+    'Accepted limits: a Bash write (a here-doc, an inline script) is not seen, so a denied run could route around it; a diagnose Read opens the gate for any edit; test paths are read by name;',
+    "Its last sentence came in M3 part 2 project 2's round 5 fix batch, M3: in paid round 5 a go that Claude Code's EnterWorktree pinned to a worktree could write the spec neither under `KERN_MAIN`, which Claude Code refused, nor in the worktree, which this gate denied and `_g20_go_spec` does not read."]);
   const gate = "a main-thread Write, Edit or NotebookEdit under the main worktree's root and outside the work dir, of a file that is no test by its path, is denied until a spec under `WORK/specs` carries the go's approval, or the run has read diagnose: a go's build starts at define, a bug at diagnose";
   assertContains('docs/specs/2026-10-12-kern-design.md', [`Under a live go ${gate} (M3 part 2 project 2's round 2 fix batch) |`]);
   assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
     `| G20 | A${gate.slice(1)}. This closes \`go-required-check-stop\`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05) |`]);
-  // The guard's reason is the contract's, the work dir's specs named in place of the placeholder.
+  // The guard's reason is the contract's, the work dir's specs named in place of each placeholder (two since the round 5 fix
+  // batch's fix round 1, which names the folder a pinned session cannot write).
   const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
-  assert.ok(guard.includes(`vote deny G20 "${reason.replace('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the contract\'s reason');
+  assert.ok(guard.includes(`vote deny G20 "${reason.replaceAll('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the contract\'s reason');
 });
 
 test("the contract and both designs keep the round 2 fix batch's G1 edit deny", () => {
   // M3 part 2 project 2's paid round 2, H3 (the user's "Build the G1 deny", 2026-11-05): after G1 denied a go's switch in the
-  // main checkout, the run wrote its change there with the Write or Edit tool, in rounds 1 and 2.
+  // main checkout, the run wrote its change there with the Write or Edit tool, in rounds 1 and 2. The round 5 fix batch, M3: a go
+  // took Claude Code's EnterWorktree tool after these denies and could write no spec where G20 reads it, so they name kern's wt-new.
+  const tail = 'use a kern worktree: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, not the EnterWorktree tool, whose session cannot write the work dir';
   assertContains('docs/plans/contract.md', [
     "- **G1 denies a go's file edits in the main checkout (M3 part 2 project 2's round 2 fix batch; the user's \"Build the G1 deny\", 2026-11-05).**",
     '`guard_g01` hands Write, Edit and NotebookEdit to `_g01_edit`, and gives no tool but those and Bash a vote.',
     'Under autopilot with `go_live "$SID" "$KERN_MAIN"` holding (a plain autopilot run is not held to it),',
-    "When `in_main_checkout` holds for that directory, and the target, read through it with `cd -P` and the parts after it as written (`_g01_real`), is not under `KERN_MAIN/<work_dir>/` (`work_dir` read as `kern-dir` reads it, through `cd -P` when it exists), it denies `<tool> in the main checkout (D3); use a kern worktree`, a subagent's call included.",
+    `When \`in_main_checkout\` holds for that directory, and the target, read through it with \`cd -P\` and the parts after it as written (\`_g01_real\`), is not under \`KERN_MAIN/<work_dir>/\` (\`work_dir\` read as \`kern-dir\` reads it, through \`cd -P\` when it exists), it denies \`\`<tool> in the main checkout (D3); ${tail}\`\`, a subagent's call included.`,
+    "Since M3 part 2 project 2's round 5 fix batch, M3, that deny and `_g01_main_op`'s deny under autopilot (``<tool> <what> in the main checkout (D3); use a kern worktree: ...``, the same tail) name `wt-new`: in paid round 5 a go took Claude Code's EnterWorktree tool after these denies, and could then write no spec where G20 reads it.",
     "A linked worktree, one under `.claude/worktrees/` included, is no main checkout, so its files pass, and a file in no repository gets no vote.",
     // The fix batch's fix round 1: only the go's own repository, a settings fault allows, and the go outlives its stop.
     "Only the go's own repository is held: `kern_main_root` of that directory, through `cd -P`, must be `KERN_MAIN` through `cd -P`, so another repository's main checkout (a dotfiles repository that holds `~/.claude`, say) gets no vote (the fix batch's fix round 1).",
@@ -778,7 +785,9 @@ test("the contract and both designs keep the round 2 fix batch's G1 edit deny", 
     "| G1 | A Write, Edit or NotebookEdit in the go's own main checkout, outside the work dir, is denied: a go's work lives in a kern worktree, as implement says. This closes the main checkout edits that followed G1's denied switch in paid rounds 1 and 2 (the round 2 fix batch; the user's \"Build the G1 deny\", 2026-11-05) |"]);
   // The guard's reason is the contract's, and it reads the go as G2 does.
   const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g01-git.sh'), 'utf8');
-  assert.ok(guard.includes('vote deny G1 "$TOOL in the main checkout (D3); use a kern worktree"'), 'the guard gives the contract\'s reason');
+  const shell = tail.replaceAll('`', '\\`').replace('${', '\\${');
+  assert.ok(guard.includes(`vote deny G1 "$TOOL in the main checkout (D3); ${shell}"`), 'the guard gives the contract\'s reason');
+  assert.ok(guard.includes(`vote deny G1 "$tool $2 in the main checkout (D3); ${shell}"`), "_g01_main_op's deny has the same tail");
   assert.ok(guard.includes('[ "${AUTOPILOT:-0}" = 1 ] && go_live "${SID-}" "${KERN_MAIN-}" 2>/dev/null || return 0'), 'only under a live go');
   assert.ok(guard.includes('[ -n "$m1" ] && [ "$m1" = "$m2" ] || return 0'), "only in the go's own repository");
 });
@@ -812,4 +821,17 @@ test("the contract's checkFailNamed takes a closing parenthesis after the check'
   // M3 part 2 project 2's round 3 fix batch, K2: go-required-check-stop's report read "Required check (`npm test`): fail".
   assertContains('docs/plans/contract.md', [
     "; with the name before `fail` and no quote between them, a closing parenthesis also counts among those characters, since M3 part 2 project 2's round 3 fix batch, K2, whose go-required-check-stop report and commit body put the check's name in parentheses)"]);
+});
+
+test("the contract's checkFailNamed takes check is after a quoted name", () => {
+  // M3 part 2 project 2's round 5 fix batch, M2: go-required-check-stop's report read 'The required "test suite must pass" check is `fail`'.
+  assertContains('docs/plans/contract.md', [
+    "; the words `check is`, on that line, may stand between that closing quote and those characters, and a `fail` joined on by a hyphen does not count after a quoted name, since M3 part 2 project 2's round 5 fix batch, M2, whose go-required-check-stop report put `check is` between the quoted name and `fail`;"]);
+});
+
+test("the contract's approvedAfterReview skips a denied write", () => {
+  // M3 part 2 project 2's round 5 fix batch, M1: G20 denied go-reaches-draft's early approval (:101, :102), which the row then read.
+  assertContains('docs/plans/contract.md', [
+    "`approvedAfterReview` (the first Write or Edit that came back with no error and puts the go quote into a `.kern/plans/` file follows",
+    "; a denied write counts for nothing since M3 part 2 project 2's round 5 fix batch, M1, whose go-reaches-draft put the approval in a plan Write that G20 denied)"]);
 });

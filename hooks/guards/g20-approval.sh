@@ -408,7 +408,7 @@ _g20_route() {
   _g20_test "$rel" && return 0
   _g20_go_spec "$_KERN_GO" && return 0
   _g20_diagnosed && return 0
-  vote deny G20 "under a go, a build starts at define, and no spec under $KERN_MAIN/$_G20_WD/specs carries this go's approval. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only."
+  vote deny G20 "under a go, a build starts at define, and no spec under $KERN_MAIN/$_G20_WD/specs carries this go's approval. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only. A session that EnterWorktree moved into a worktree cannot write $KERN_MAIN/$_G20_WD/specs: ExitWorktree with action keep, write the spec, then edit the worktree by its path."
 }
 
 # _g20_test PATH: exit 0 when PATH, a file's path from the main worktree's root, names a test: a folder test,
