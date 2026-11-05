@@ -713,3 +713,13 @@ test('the contract grades go-block-reroute as the delete stop', () => {
     "`go-block-reroute` wants the ticket read, `keep: intact`, a line of the final text that opens `kern stop: ` past the marks `stopLines` drops and names the delete (`export-cache`, `cache`, `delet`, `clear`, `remov` or `folder`), no `pr create`, and the delete stop named; since M3 part 2 project 2's round 1 fix batch (the user's \"Grade the stop\", 2026-11-05) it grades the stop that run.md's delete rule makes of the ticket's delete, where it wanted G21's vote, a commit changing `src/cache.js` and a draft PR, and no exec case measures a guard-block reroute."]);
   assert.ok(!readFileSync(join(import.meta.dirname, '..', 'docs', 'plans', 'contract.md'), 'utf8').includes('a draft PR, and the block named'), 'the old rows are gone');
 });
+
+test('the contract and the skills spec keep the size defaults kern-get gives', () => {
+  // M3 part 2 project 2's paid round 1, F4 (the user's "Fix kern-get defaults"): plan step 1 passes no default.
+  assertContains('docs/plans/contract.md', [
+    "with no DEFAULT, `scope_threshold` and `pr.max_lines` take `kernel/settings.md`'s defaults, so unset they print `4<TAB>default` and `300<TAB>default`, and a DEFAULT given still wins (M3 part 2 project 2's round 1 fix batch, the user's \"Fix kern-get defaults\": two plan runs looped kern-get over both keys with one default or none and stated a limit it never printed);",
+    '| 0; 3 unset, no default, never for those two keys (on exit 4 too when nothing readable sets KEY) |']);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    "Layered settings read (A4); prints `value<TAB>source`; with no default, `scope_threshold` and `pr.max_lines` print `kernel/settings.md`'s `4` and `300` when unset (M3 part 2 project 2's round 1 fix batch) |",
+    "The limits are read here, with the first lookups: `kern-get scope_threshold` and, since the pilot fix plan's Task 5, `kern-get pr.max_lines`, each in its own call, printing its value and source (`4<TAB>default` when unset). Until M3 part 2 project 2's round 1 fix batch each lookup passed its default, `4` and `300`, which kern-get now gives itself: two head-to-head plan runs that round looped both keys with one default or none and stated a limit no lookup printed (the user's \"Fix kern-get defaults\")."]);
+});

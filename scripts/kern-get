@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Layered settings read. Prints `value<TAB>source`; exit 3 when unset and no default is given. When a
+# Layered settings read. Prints `value<TAB>source`; exit 3 when unset and no default is given, but for
+# scope_threshold and pr.max_lines, which take kernel/settings.md's defaults. When a
 # settings file that could set the key cannot be read, it still prints what it has (a policy reads unknown
 # or deny), with a line on stderr saying why: skills read exit 3 as "take the default" and handle no other
 # failure, and the hooks decide on settings themselves.
@@ -9,6 +10,15 @@ export KERN_ROOT
 # shellcheck source=hooks/lib/settings.sh
 . "$KERN_ROOT/hooks/lib/settings.sh"
 [ $# -ge 1 ] || { echo "usage: kern-get KEY [DEFAULT]" >&2; exit 2; }
+# The size limits' defaults, from kernel/settings.md's rows: a lookup of either key with no DEFAULT prints its
+# own default, so a loop over both keys states no limit kern-get did not print (M3 part 2 project 2's paid
+# round 1). An explicit DEFAULT wins.
+if [ $# -eq 1 ]; then
+  case "$1" in
+    scope_threshold) set -- "$1" 4 ;;
+    pr.max_lines) set -- "$1" 300 ;;
+  esac
+fi
 CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
 export CWD KERN_MAIN
