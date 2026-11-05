@@ -502,6 +502,24 @@ no_go() {
   no_go
 }
 
+@test "a typed prompt ends the Stop hook's send-backs; a wrapped one does not; a go clears them and its stop" {
+  # M3 part 2 project 2, Task 7: stop_backs counts the Stop hook's send-backs in a row under a go, and stop_down
+  # stands its finish line down after the run reports a stop.
+  local s="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  printf 'stop_backs: 2\nstop_down: 1\n' >>"$s"
+  submit '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>'
+  [ "$(st stop_backs)" = 2 ]
+  submit 'Where does the run stand?'
+  [ "$(st stop_backs)" = 0 ]
+  [ "$(st stop_down)" = 1 ]
+  printf 'stop_backs: 3\n' >>"$s"
+  expand kern:autopilot "go MA-1"
+  [ "$(st go)" = MA-1 ]
+  [ "$(st stop_backs)" = 0 ]
+  [ -z "$(st stop_down)" ]
+  grep -q '^stop_down: $' "$s"
+}
+
 # expand_go FIELDS: a kern:autopilot expansion of `go MA-1` with FIELDS added, each after a comma. A real
 # payload, from a stored exec trace, also holds command_source plugin and the typed line as prompt.
 expand_go() {

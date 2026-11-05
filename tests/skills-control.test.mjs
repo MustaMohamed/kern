@@ -483,3 +483,38 @@ test('autopilot commits and draft PRs follow commit.attribution (coverage gap 54
   for (const s of ["With `commit.attribution: none`, the default, write no Co-Authored-By or other attribution trailer, even when Claude Code's attribution reminder asks for one: G5 denies it.",
     'With `commit.attribution: none`, the body has no attribution footer such as "Generated with Claude Code".']) assert.ok(body.includes(s), s);
 });
+
+test('the design, the contract and the settings keep the Stop hook that holds a go to ready', () => {
+  // M3 part 2 project 2, Task 7: design 6.3's Stop row and 8.3's G7 row state the checks, the opt-in and the count;
+  // 5.4 and kernel/settings.md add stop.nudge; hooks/stop joins G16's hook entry files.
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    '| Checks | `stop.nudge` | `off`; `on` turns on the Stop hook\'s nudges outside a go (section 6.3) | the Stop hook |',
+    '| Stop | One reason lists each check that fails, printed as `{"decision":"block","reason":...}` with exit 0; `kern: off` and any fault allow.',
+    "The size ask (M3 part 2 project 2): the turn's results hold `size-check`'s `size: ask: <q>` and the last message does not hold `<q>` as printed. These two block once: a stop the hook already blocked (`stop_hook_active`) skips them.",
+    "A go's finish line (M3 part 2 project 2), under a live go until the run reports its first stop: a stop is allowed when the last message holds a line that opens `kern stop: `, which stands the check down for the rest of the go (`stop_down`), or while a background `ci-wait` or subagent the go started has no task-notification; otherwise the reason names the first missing step: the draft PR, a `ci-wait` after the last push, a push after a red verdict, or `gh pr ready`.",
+    "A go's report: each `check: <name>: skip (named)` line `review-check` printed in the turn is named in the last message beside the word skip.",
+    "The nudges, under a go, or outside one only with `stop.nudge: on`: a main-thread Edit, Write or NotebookEdit outside the work dir with no `test.focused`, `test.full`, `task-done`, `review-check` or `probe` run after it, and `floor-scan`'s hits in `git diff HEAD` of the files those calls edited (G7, section 8.3) that the last message does not name by `path:line`.",
+    "Under a go each finish-line, report or nudge block adds 1 to `stop_backs`; the third asks the run to end with its report, saying it stopped short, and the next stop is allowed. A typed prompt, or a task-notification after the last block, starts the count again. Outside a go `stop_hook_active` allows.",
+    "| G7 floor guard | opt-in, `stop.nudge: on` | At turn end the Stop hook runs `floor-scan` on `git diff HEAD` of the files the turn's main-thread edits touched: a new suppression, a skipped or deleted test, a removed assert, an empty catch or a debug print blocks the stop once, unless the last message names its `path:line` with a reason (M3 part 2 project 2) | Under a go, always on: each block counts toward the Stop hook's 3 send-backs in a row (section 6.3). A plain `/kern:autopilot on` run is as interactive |",
+    'any write or run of a hook entry file (`hooks/stop` among them since M3 part 2 project 2)']);
+  assertContains('docs/plans/contract.md', [
+    'hooks/stop                                                                                    (M3 part 2 projects 1 and 2)',
+    '(today `kern-detect`, which G5 and the Stop hook run, `floor-scan`, which the Stop hook runs, and `kern-get`, which a rendered line names)',
+    "The Stop hook adds `stop_backs` (its send-backs in a row under a go, 0 to 3), `stop_line` (the transcript's line count at its last such send-back) and `stop_down` (`1` once the go's run reported a stop, else empty or unset), M3 part 2 project 2, Task 7.",
+    'a hook entry file (`prompt-submit`, `session-start`, `subagent-start`, `pre-tool-use` or, since M3 part 2 project 2\'s Task 7, `stop`) after `hooks/`',
+    '- **The Stop hook holds a go to ready (M3 part 2 project 2, Task 7).**',
+    'Outside a go the hook reads on only when the transcript holds `self-review` or `size-check` (one `grep -F`), or `stop.nudge` reads `on`',
+    "(3) The finish line, under a live go with `stop_down` empty: a line of the last message that opens `kern stop: `, leading blanks dropped, writes `stop_down=1` and passes;",
+    'Under a go each block that holds (3), (4), (5) or (6) is a send-back: `stop_backs` (0 to 3) goes up by 1 and `stop_line` takes the transcript\'s line count, and a write that fails allows.',
+    'A task-notification line past `stop_line` reads as `stop_backs` 0.',
+    "Known limits: a background task from before the go's prompt, or one whose notification Claude Code never writes, holds nothing open;"]);
+  assertContains('kernel/settings.md', [
+    "| `stop.nudge` | `off` | `off`, `on`. `on` turns on the Stop hook's nudges outside a go: an edit with no proving command after it, and a lowered floor in the edited files that the last message does not name. Under a go they always run | stop |"]);
+  // The project 1 entry no longer says project 2 extends it, and neither does the hook's header.
+  const contract = readFileSync(join(import.meta.dirname, '..', 'docs', 'plans', 'contract.md'), 'utf8');
+  const design = readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-design.md'), 'utf8');
+  const hook = readFileSync(join(import.meta.dirname, '..', 'hooks', 'stop'), 'utf8');
+  for (const [name, text] of [['contract', contract], ['design', design], ['hooks/stop', hook]]) {
+    assert.ok(!/Project 2 extends it/.test(text), name);
+  }
+});

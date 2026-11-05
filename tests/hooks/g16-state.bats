@@ -1410,6 +1410,15 @@ expect_kern() {
   expect_hook "cp x $R/src/hooks/pre-tool-use" "bash $R/src/hooks/pre-tool-use"
 }
 
+@test "G16 counts hooks/stop as an entry file" {
+  # M3 part 2 project 2, Task 7: hooks/stop writes the session state (stop_backs, stop_down), as the other entry
+  # files do, so a write or run of it asks as theirs does, kern's own included.
+  project_hooks
+  expect_hook "cp x $R/src/hooks/stop" "bash $R/src/hooks/stop" "bash $(kern_root)/hooks/stop"
+  # A word that only starts with the name is not the entry file.
+  expect_cmd none "cat docs/hooks/stop.md" "git log -- tests/hooks/stop.bats"
+}
+
 @test "kern's own hook code still asks" {
   K=$(kern_root)
   mkdir -p "$R/hooks/guards"

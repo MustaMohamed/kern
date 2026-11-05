@@ -17,7 +17,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 |---|---|---|---|
 | `kern` | `on` | `on`, `off`. `off` turns off routing and guards in this project | session-start, subagent-start, prompt-submit, pre-tool-use, stop |
 | `kern_repo` | none | path to the kern clone, in the user file only | help |
-| `work_dir` | `.kern` | relative directory at the main worktree root | kern-dir, pre-tool-use G2, G3, G5, G14 and G21, all skills |
+| `work_dir` | `.kern` | relative directory at the main worktree root | kern-dir, pre-tool-use G2, G3, G5, G14 and G21, stop, all skills |
 | `mode.voice` | `normal` | `normal`, `terse` | session-start, prompt-submit, subagent-start |
 | `mode.voice.headless` | `normal` | `normal`, `terse`. The voice a headless session (`claude -p`, the Agent SDK) starts in, in place of `mode.voice` | session-start, prompt-submit, subagent-start |
 | `mode.surface` | `auto` | `chat`, `auto`, `html` | session-start, prompt-submit |
@@ -34,8 +34,8 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `scope_threshold` | `4` | files per change before a pause | define, plan, execute-plan, implement, self-review, finish-branch, help |
 | `pr.max_lines` | `300` | changed lines before a split is proposed: insertions plus deletions from `git diff --shortstat`, tests included, or `pr.size_command`'s count | plan, execute-plan, finish-branch, help |
 | `pr.size_command` | none | command run in the worktree; `{base}` stands for the merge base and `{tree}` for the proven tree; the last number it prints is the line count | execute-plan, finish-branch, help |
-| `test.focused` | detected | command. `{file}` stands for the test path. Where a file cannot be targeted, use `{dir}` for go or `{name}` for cargo | kern-detect, implement, diagnose, prove-it |
-| `test.full` | detected | command | kern-detect, implement, prove-it, finish-branch |
+| `test.focused` | detected | command. `{file}` stands for the test path. Where a file cannot be targeted, use `{dir}` for go or `{name}` for cargo | kern-detect, implement, diagnose, prove-it, stop |
+| `test.full` | detected | command | kern-detect, implement, prove-it, finish-branch, stop |
 | `typecheck` | detected | command | kern-detect, implement, prove-it |
 | `lint` | detected | command | kern-detect, prove-it |
 | `build` | detected | command | kern-detect, prove-it |
@@ -59,6 +59,7 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `pr.template` | detected | path | kern-detect, finish-branch |
 | `ci.wait_minutes` | `45` | integer from 1 to 600: how long a go's CI wait reads pending checks before it reports a timeout | ci-wait |
 | `ci.advisory` | none | comma list of check names, each matched exactly and in case, that never gate a go's `gh pr ready` | ci-wait, pre-tool-use G2 |
+| `stop.nudge` | `off` | `off`, `on`. `on` turns on the Stop hook's nudges outside a go: an edit with no proving command after it, and a lowered floor in the edited files that the last message does not name. Under a go they always run | stop |
 | `rebase.push` | `ask` | `ask`, `autopilot` | pre-tool-use G1, take-feedback |
 | `stack.tool` | detected | `gh-stack`, `git`, `none` | take-feedback, finish-branch |
 | `protected_targets` | none | comma list. Each entry is an exact host, matched in any case, also as user@host or in a URL. An entry may also be a host:port, where localhost, 127.0.0.1 and ::1 count as one host, or an sqlite file path. List every ssh alias and each SSH tunnel's local host:port | pre-tool-use G13, diagnose |

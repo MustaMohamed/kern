@@ -42,7 +42,7 @@ _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory or \$CLAUDE_CONFIG_DIR, where kern and Claude Code settings live; the user confirms each write"
 _G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool, and a path written literally, with no substitution, gets judged by the file it names"
 _G16_HOOK_FILE="the target is kern's own hook code, under its hooks directory, which every guard and the approval check rely on; the user confirms each write"
-_G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
+_G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use stop"
 # U+017F (long s) and U+212A (Kelvin sign), in UTF-8: APFS folds them to s and k in a file name.
 _G16_LONG_S=$'\305\277'
 _G16_KELVIN=$'\342\204\252'
@@ -120,7 +120,7 @@ function ro(C,    ok, U, T, m, seg, k, p, wd, j, hd, ops, q) {
 BEGIN {
   a = "abcdefghijklmnopqrstuvwxyz0123456789"
   e = "([^" a "._-]|$)"
-  hit = "hooks/(/|[.]/)*(prompt-submit|session-start|subagent-start|pre-tool-use)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
+  hit = "hooks/(/|[.]/)*(prompt-submit|session-start|subagent-start|pre-tool-use|stop)" e "|hooks/lib/[^/ \t\r;|&<>()]*[.]sh"
   hit = hit "|hooks/guards/[^/ \t\r;|&<>()]*[.]sh"
   hit = hit "|(^|[^" a "_])(state_set|_state_put|state_reset|state_ensure)([^" a "_]|$)"
   dir = "(^|[^" a "._-])hooks" e
