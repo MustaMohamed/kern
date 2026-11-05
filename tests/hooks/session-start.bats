@@ -98,6 +98,17 @@ state_val() { sed -n "s/^$1: //p" "$CLAUDE_PLUGIN_DATA/sessions/test-session.sta
   [ "$(state_val go_repo)" = "$(repo_key)" ]
 }
 
+@test "a repeated startup keeps a go past its draft PR" {
+  # M3 part 2 project 2, Task 2: the go lives on through CI, and live_go reads it through go_live.
+  go_state "$(repo_key)"
+  printf 'go_phase: pr\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  start startup
+  [[ "$output" == *"go MA-254"* ]] || false
+  [ "$(state_val go)" = MA-254 ]
+  [ "$(state_val go_phase)" = pr ]
+  grep -q 'go_live "\$SID" "\$KERN_MAIN"' "$K/hooks/session-start"
+}
+
 @test "a startup resets anything else" {
   old="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   # No go.
@@ -119,7 +130,7 @@ state_val() { sed -n "s/^$1: //p" "$CLAUDE_PLUGIN_DATA/sessions/test-session.sta
   [ "$(state_val autopilot)" = off ]
   [ -z "$(state_val go)" ]
   [[ "$output" != *"go MA-254"* ]] || false
-  # An empty go: G2 clears it at the draft PR, and go_repo stays.
+  # An empty go, with go_repo still set.
   go_state "$(repo_key)"
   printf 'go: \n' >>"$old"
   start startup

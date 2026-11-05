@@ -239,9 +239,10 @@ test('a go names the permission mode it needs', () => {
 });
 
 test('the docs state what the whole-branch review found them short of', () => {
-  // M3 part 1 final review. M2: the go clears inside G2's vote, before the strictest vote is known.
+  // M3 part 1 final review. M2: the go clears inside G2's vote, before the strictest vote is known. Since M3 part 2
+  // project 2 Task 2 G2 ends only the go's approval there, so the same calls end that approval.
   const contract = readFileSync(join(import.meta.dirname, '..', 'docs', 'plans', 'contract.md'), 'utf8');
-  assert.ok(contract.includes("A create that then fails, a `--dry-run`, another guard's deny of the call or a subagent's call ends the go as well: the go only gates approval."), 'M2');
+  assert.ok(contract.includes("A create that then fails, a `--dry-run`, another guard's deny of the call or a subagent's call ends the go's approval as well."), 'M2');
   // M5: ruling 249 named reports and briefs; the both-words deny reaches these two as well, with or without a go.
   const g20 = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
   const both = 'a report, a brief, `pr-body.md` or a `*.proofs.md`';
@@ -257,7 +258,7 @@ test('the docs state what the whole-branch review found them short of', () => {
   const design = readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-design.md'), 'utf8');
   for (const s of ['the user typed `/kern:autopilot on` or `/kern:autopilot go <ticket>` in this session',
     '| D10 | Fix loops stop after 3 rounds with a split proposal | Up to 3 rounds per self-review run on their own; a third still `fix first` pushes the branch, reports and opens no PR |',
-    'Draft allowed after dedup, which ends a go;',
+    "Draft allowed after dedup, which ends a go's approval but not the go (M3 part 2 project 2);",
     'when find is a command head and every other simple command is `cd`, `ls` or a read-only filter',
     "a path counts as kern's hook code only when it resolves under kern's own root"]) assert.ok(design.includes(s), s);
   const settings = readFileSync(join(import.meta.dirname, '..', 'kernel', 'settings.md'), 'utf8');
@@ -281,6 +282,23 @@ test('the contract says a run cut off by output or a signal keeps its transcript
   // M3 part 2 project 2, Task 9: ended attaches events and transcript to the overflow and signal errors, as to the timeout's.
   assertContains('docs/plans/contract.md', [
     'and the `ClaudeRunError` of a run cut off by the timeout, by output past `maxBuffer` or by a signal carries it beside `events`']);
+});
+
+test('the contract and the design keep the reply words and the go past its draft', () => {
+  // M3 part 2 project 2, Task 2: consent gains lease and ready, G2's draft ends the go's approval, not the go, and
+  // go_live is the one reading of a live go.
+  assertContains('docs/plans/contract.md', [
+    'from `commit`, `lease`, `push`, `pr`, `pr-edit`, `pr-title`, `pr-body` and `ready`, space-separated, or nothing.',
+    "`rebase` or `sync`, alone or with ` it`, ` the branch`, ` the pr` or ` the pull request`, gives `lease`, so `rebase and push` gives `lease push`",
+    "`mark it ready`, `mark the pr ready` or `mark the pull request ready`, with an optional ` as` before `ready` and an optional ` for review` after it, gives `ready`. `leave it` and `leave it here` name no action, so `leave it and mark the PR ready` gives `ready` alone.",
+    'a bare `yes`, `ok` or `go ahead` gives no `lease` and no `ready`.',
+    "`go_phase` (`pr` once G2 allows the go's draft PR, else empty or unset, M3 part 2 project 2).",
+    '`go_live SID DIR` (M3 part 2 project 2, Task 2) exits 0, with `_KERN_GO` set to the go,',
+    "the state's `go_phase` is not `pr` (M3 part 2 project 2, Task 2), and a `go_phase` read that fails is no go, the read ending with its status line so that a substitution whose pipe could not be made (status 0, no output) is no go too;",
+    '`_g02_create` runs `state_set "$SID" "go_phase=pr"`. `go`, `go_repo` and `autopilot` stay, so the go lives on through CI',
+    '`apply_go` writes `go_phase` empty with its `go`, `autopilot_off` writes it empty with `go` and `go_repo`, and `state_reset` writes no `go_phase`.',
+    'only when `go_live SID KERN_MAIN` holds (M3 part 2 project 2, Task 2)']);
+  assertContains('docs/specs/2026-10-12-kern-design.md', ['| Only a go approves, for its ticket, until its draft PR opens |']);
 });
 
 test('run.md stays within its byte cap', () => {

@@ -63,23 +63,29 @@ gh_log() {
   [ "$(decision_of "$output")" = allow ]
 }
 
-@test "opening the draft PR ends the go" {
+@test "opening the draft PR keeps the go and ends its approval" {
+  # M3 part 2 project 2, Task 2: the go lives on through CI; go_phase pr ends its approval (G20).
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   set_autopilot on
-  printf 'go: MA-254\ngo_repo: abc\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  printf 'go: MA-254\ngo_repo: abc\n' >>"$S"
   g "$C" g02
   [ "$(decision_of "$output")" = allow ]
-  grep -q '^go: $' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
-  [ "$(grep -c '^go: ' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" -eq 1 ]
-  grep -q '^autopilot: on$' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  grep -q '^go: MA-254$' "$S"
+  [ "$(grep -c '^go: ' "$S")" -eq 1 ]
+  grep -q '^go_phase: pr$' "$S"
+  grep -q '^go_repo: abc$' "$S"
+  grep -q '^autopilot: on$' "$S"
 }
 
 @test "a draft PR G2 does not allow leaves the go" {
+  S="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
   set_autopilot on
-  printf 'go: MA-254\ngo_repo: abc\n' >>"$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  printf 'go: MA-254\ngo_repo: abc\n' >>"$S"
   export FAKE_GH_STATES=OPEN
   g "$C" g02
   [ "$(decision_of "$output")" = deny ]
-  grep -q '^go: MA-254$' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  grep -q '^go: MA-254$' "$S"
+  [ "$(grep -c '^go_phase: ' "$S")" -eq 0 ]
 }
 
 @test "G2: an open PR for the head is denied; a merged one asks" {

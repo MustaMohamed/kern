@@ -176,7 +176,9 @@ STUB
 # A DEBUG trap, inherited by functions and subshells, counts each command whose text holds `$(`, fills
 # every free fd but one just before the Nth, and frees them at the next command. Each process counts on
 # its own: a subshell counts from where its parent was. Touches $BATS_TEST_TMPDIR/pipe-failed when the
-# Nth one came. Run it in a subshell: it lowers the soft fd limit to 64.
+# Nth one came. Run it in a subshell: it lowers the soft fd limit to 64. An N that is not a number is a
+# text: the first such command whose text holds it is the one, as a substitution an earlier one's own
+# subshell would reach first by count (Task 2's fix round 1, G20's go_phase read).
 pipe_fails() {
   _pf_n=$1 _pf_seen=0 _pf_full=0 _pf_free=""
   shift
@@ -201,7 +203,10 @@ _pf_step() {
     *'$('*)
       [ "$_pf_full" = 0 ] || return 0
       _pf_seen=$((_pf_seen + 1))
-      [ "$_pf_seen" = "$_pf_n" ] || return 0
+      case "$_pf_n" in
+        '' | *[!0-9]*) case "$BASH_COMMAND" in *"$_pf_n"*) ;; *) return 0 ;; esac ;;
+        *) [ "$_pf_seen" = "$_pf_n" ] || return 0 ;;
+      esac
       : >"$BATS_TEST_TMPDIR/pipe-failed"
       for x in $_pf_free; do
         if [ "$first" = 1 ]; then first=0; continue; fi

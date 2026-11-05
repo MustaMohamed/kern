@@ -130,19 +130,34 @@ _g20_issues() {
 }
 
 # _g20_go AFTER: exit 0 when the session's go approves the frontmatter AFTER: the call is the main
-# session's, the state's go and go_repo are set, go_repo is this repository's key, AFTER's one approved:
-# line quotes the go's line, and its one issue: line names the go's ticket. go_ticket takes a single
-# line, so no issue: line, or two of them, names none. A read that fails or comes back empty is no go.
-# _G20_LIVE holds the go once the call, the state and the repository pass, for the deny's reason.
+# session's, the state's go and go_repo are set, go_repo is this repository's key, go_phase is not pr
+# (G2 sets it at the go's draft PR, after which the go approves nothing), AFTER's one approved: line
+# quotes the go's line, and its one issue: line names the go's ticket. go_ticket takes a single line, so
+# no issue: line, or two of them, names none. A read that fails or comes back empty is no go.
+# _G20_LIVE holds the go once the call, the state and the repository pass, for the deny's reason, and
+# _G20_PAST holds it instead when go_phase is pr.
 _g20_go() {
-  local go repo key quote id
+  local go repo key phase quote id
   _G20_LIVE=''
+  _G20_PAST=''
   [ -z "${AGENT-}${AGENT_ID-}" ] || return 1
   go=$(state_get "$SID" go 2> /dev/null) || return 1
   [ -n "$go" ] || return 1
   repo=$(state_get "$SID" go_repo 2> /dev/null) || return 1
   key=$(consent_key "${KERN_MAIN-}") || return 1
   [ -n "$key" ] && [ "$repo" = "$key" ] || return 1
+  # The go_phase read ends with its status line: a substitution whose pipe could not be made gives status
+  # 0 and no output, which must not read as an empty go_phase. Status 1 with no output is a go_phase never
+  # written; any other status, or no status line, is no go.
+  phase=$(state_get "$SID" go_phase 2> /dev/null; printf '\n%s' "$?")
+  case "$phase" in
+    pr$'\n\n'0)
+      _G20_PAST=$go
+      return 1
+      ;;
+    *$'\n'0 | $'\n'1) ;;
+    *) return 1 ;;
+  esac
   _G20_LIVE=$go
   [ "$(printf '%s\n' "$1" | env LC_ALL=C grep -Eic "$_G20_APPROVED_RE")" = 1 ] || return 1
   quote=$(_g20_lines "$1" | sed -n 's/^[^"]*"\(.*\)".*$/\1/p')
@@ -335,7 +350,9 @@ _g20_file() {
   if _g20_approved "$before" && [ "$(_g20_lines "$before")" = "$lines" ]; then return 0; fi
   if [ "${AUTOPILOT:-0}" = 1 ]; then
     _g20_go "$after" && return 0
-    if [ -n "$_G20_LIVE" ]; then
+    if [ -n "$_G20_PAST" ]; then
+      vote deny G20 "under autopilot only a go approves, for its ticket, and only until its draft PR opens; the draft for $_G20_PAST is open, so keep status: draft (parked under autopilot) and park the question"
+    elif [ -n "$_G20_LIVE" ]; then
       vote deny G20 "under autopilot only a go approves, for its ticket; this go wants one line approved: <date>, \"/kern:autopilot go $_G20_LIVE\" and one line issue: \"$_G20_LIVE\"; a file for another ticket keeps status: draft"
     else
       vote deny G20 "under autopilot only a go approves, for its ticket; keep status: draft (parked under autopilot) and park the question"

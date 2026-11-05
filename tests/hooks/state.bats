@@ -404,6 +404,31 @@ since: 2026-10-12T00:00:00Z'
   done
 }
 
+@test "go_live needs the repo and a fresh state file" {
+  O="$BATS_TEST_TMPDIR/other"
+  make_repo "$O"
+  state_reset s1
+  state_set s1 autopilot=on go=MA-254 "go_repo=$(consent_key "$R")"
+  go_live s1 "$R"
+  [ "$_KERN_GO" = MA-254 ]
+  run go_live s1 "$O"
+  [ "$status" -eq 1 ]
+  state_set s1 autopilot=off
+  run go_live s1 "$R"
+  [ "$status" -eq 1 ]
+  state_set s1 autopilot=on
+  go_live s1 "$R"
+  state_set s1 go=
+  run go_live s1 "$R"
+  [ "$status" -eq 1 ]
+  state_set s1 go=MA-254
+  touch -t "$(date -v-1441M +%Y%m%d%H%M.%S 2>/dev/null || date -d '1441 minutes ago' +%Y%m%d%H%M.%S)" "$(state_file s1)"
+  run go_live s1 "$R"
+  [ "$status" -eq 1 ]
+  run go_live '' "$R"
+  [ "$status" -eq 1 ]
+}
+
 # skill_conflicts lives in settings.sh, which this file loads. Its jobs are the ones settings_summary lists.
 tab=$'\t'
 conflict_skills() {

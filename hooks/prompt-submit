@@ -106,12 +106,12 @@ set_surface() {
   state_set "$SID" "surface=$1" && CHANGED_SURFACE="$1"
 }
 
-# autopilot_off: writes autopilot off and clears the go. When state_set cannot read the state to keep its
-# other keys, the default state is written instead (state_reset reads nothing; autopilot off, no go), so
-# turning autopilot off never depends on a read; losing voice and surface is the safe loss, and the
-# notice says so.
+# autopilot_off: writes autopilot off and clears the go and its go_phase. When state_set cannot read the
+# state to keep its other keys, the default state is written instead (state_reset reads nothing; autopilot
+# off, no go), so turning autopilot off never depends on a read; losing voice and surface is the safe
+# loss, and the notice says so.
 autopilot_off() {
-  state_set "$SID" autopilot=off "go=" "go_repo=" && return 0
+  state_set "$SID" autopilot=off "go=" "go_repo=" "go_phase=" && return 0
   state_reset "$SID" || return 1
   NOTICE="kern: the session state could not be read, so autopilot off also reset voice and surface to their defaults."
 }
@@ -161,7 +161,8 @@ apply_go() {
     NOTICE="kern: autopilot go not recorded: kern could not name this repository; nothing changed."
     return 0
   fi
-  set -- autopilot=on "go=$id" "go_repo=$key"
+  # A new go starts before its draft PR, so G20 takes it again (go_phase, which G2 sets at the draft).
+  set -- autopilot=on "go=$id" "go_repo=$key" "go_phase="
   [ "$(state_get "$SID" autopilot 2>/dev/null)" = on ] || { set -- "$@" "since=$(now_iso)"; AP_TURNED_ON=1; }
   if state_set "$SID" "$@"; then
     NOTICE="kern: go recorded for $id."

@@ -401,6 +401,36 @@ go_denied() {
   go_denied
 }
 
+@test "a go past its draft approves nothing" {
+  # M3 part 2 project 2, Task 2: G2 writes go_phase pr at the draft PR, and the go lives on through CI.
+  ticket 'issue: MA-254'
+  say "$GO"
+  mkdir -p "$R/.kern/plans"
+  plan="\"file_path\":\"$R/.kern/plans/export.md\",\"content\":\"---\\nstatus: approved\\nissue: MA-254\\napproved: 2026-11-05, \\\"$GO\\\"\\n---\\n## Goal\\n\""
+  state_line 'go_phase: pr'
+  run_guard "$(tool_payload Write "$plan")" g20
+  go_denied
+  [[ "$output" == *'only until its draft PR opens; the draft for MA-254 is open'* ]] || false
+  approve "$GO"
+  go_denied
+  state_line 'go_phase: '
+  approve "$GO"
+  no_vote
+}
+
+@test "a new go clears go_phase" {
+  ticket 'issue: "#8"'
+  say "$GO"
+  state_line 'go_phase: pr'
+  say '/kern:autopilot go 8'
+  [ "$(sed -n 's/^go_phase: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = "" ]
+  approve '/kern:autopilot go 8'
+  no_vote
+  state_line 'go_phase: pr'
+  say '/kern:autopilot off'
+  [ "$(sed -n 's/^go_phase: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = "" ]
+}
+
 @test "a failed read is no go" {
   ticket 'issue: MA-254'
   say "$GO"
@@ -419,13 +449,50 @@ go_denied() {
   go_denied
   [ "$(read_failures git)" -ge 1 ]
   read_fails git '*hash-object*' 0
-  read_fails awk '*toupper*'
+  # M3 part 2 project 2, Task 2's fix round 1: a go_phase read that fails is no go either.
+  read_fails awk 'k=go_phase'
   approve "$GO"
   go_denied
   [ "$(read_failures awk)" -ge 3 ]
+  read_fails awk 'k=go_phase' 0
+  read_fails awk '*toupper*'
+  approve "$GO"
+  go_denied
+  [ "$(read_failures awk)" -ge 4 ]
   read_fails awk '*toupper*' 0
   approve "$GO"
   no_vote
+}
+
+@test "a go past its draft approves nothing when a substitution's pipe fails" {
+  # Task 2's fix round 1: a substitution whose pipe cannot be made gives status 0 and no output, which must
+  # not read as an empty go_phase. The go_phase read fails by its text, since by count an earlier read's
+  # own subshell reaches each index first; then each substitution _g20_go starts fails in turn.
+  local n=1 f after
+  for f in json settings state decide; do . "$K/hooks/lib/$f.sh"; done
+  . "$K/hooks/guards/g20-approval.sh"
+  say "$GO"
+  SID=test-session
+  KERN_MAIN=$(kern_main_root "$R")
+  after=$(printf '%s\n' 'status: approved' 'issue: MA-254' "approved: 2026-11-05, \"$GO\"")
+  _g20_go "$after"
+  state_line 'go_phase: pr'
+  _g20_go "$after" || true
+  [ "$_G20_PAST" = MA-254 ]
+  if (pipe_fails go_phase _g20_go "$after") 2>/dev/null; then
+    echo "approved when the go_phase read's pipe failed"
+    return 1
+  fi
+  [ -e "$BATS_TEST_TMPDIR/pipe-failed" ]
+  while [ "$n" -le 40 ]; do
+    if (pipe_fails "$n" _g20_go "$after") 2>/dev/null; then
+      echo "approved when substitution $n failed"
+      return 1
+    fi
+    [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || break
+    n=$((n + 1))
+  done
+  [ "$n" -gt 5 ] && [ "$n" -le 40 ]
 }
 
 @test "a go refused by a denied project is not a yes" {
