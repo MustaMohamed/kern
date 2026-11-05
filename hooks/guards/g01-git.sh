@@ -754,7 +754,7 @@ _g01_upstream_remote() {
 # base_branch_name read this one, so another repository's base branch would not count as protected.
 _g01_push() {
   local dir="$1" plain="$2" toks t r cur policy fix det="" force=none del=0 odd=0 val=0 all=0 have=0 prot=0 what
-  local remote="" refs=() tg=()
+  local remote="" refs=() tg=() why
   shift 2
   toks=$(_g01_opts "$_G01_PUSH_OPTS" "$@")
   while IFS= read -r t; do
@@ -859,14 +859,25 @@ EOT
     return 0
   fi
   if [ "$force" = lease ]; then
+    # Under autopilot the lease comes from settings or from the user's last typed prompt, `rebase` or
+    # `sync` (consent lease, M3 part 2 project 2); a bare yes gives none. The shape and author checks
+    # below hold for both.
+    why=""
+    if [ "$AUTOPILOT" = 1 ]; then
+      if [ "$(settings_get rebase.push ask)" = autopilot ]; then
+        why="(rebase.push: autopilot)"
+      elif consent_for "${SID-}" "${AGENT-}${AGENT_ID-}" lease; then
+        why="(the user's last prompt asked for it)"
+      fi
+    fi
     if [ "$AUTOPILOT" = 0 ]; then
       if _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}"; then
         vote ask G1 "force-with-lease push of ${tg[*]}$det"
       else
         vote deny G1 "${tg[*]} may hold commits by other authors (or that could not be checked); a shared branch is never force-pushed$det"
       fi
-    elif [ "$(settings_get rebase.push ask)" != autopilot ]; then
-      vote deny G1 "lease push under autopilot needs rebase.push: autopilot$det"
+    elif [ -z "$why" ]; then
+      vote deny G1 "lease push under autopilot needs rebase.push: autopilot, or the user's last typed prompt asking to rebase or sync (a bare yes is not one)$det"
     elif [ "$val" = 1 ]; then
       vote deny G1 "--force-with-lease=<ref>:<expect> under autopilot; use the bare option$det"
     elif ! _g01_proven "$dir" "$plain" "$odd" "$cur" "$remote" "${refs[@]}"; then
@@ -874,7 +885,7 @@ EOT
     elif ! _g01_own_refs "$dir" "$remote" "$cur" "${refs[@]}"; then
       vote deny G1 "lease push of $cur: not every commit is yours, or that could not be checked"
     else
-      vote allow G1 "lease push of own branch $cur (rebase.push: autopilot)"
+      vote allow G1 "lease push of own branch $cur $why"
     fi
     return 0
   fi

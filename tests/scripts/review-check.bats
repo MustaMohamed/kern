@@ -181,3 +181,41 @@ spec() { printf '# Sum\n\n## Acceptance criteria\n\n1. sum adds two numbers.\n' 
   [[ "$output" == *absolute-claim* ]] || false
   [ "${lines[${#lines[@]} - 1]}" = 'floor: none' ]
 }
+
+# M3 part 2 project 2 Task 4: G2 reads the record at a go's `gh pr ready`, keyed by the tree review-check reviewed.
+@test "review-check writes its record" {
+  settings 'verify.fast: true'
+  package
+  bash "$KERN_ROOT/scripts/review-check" "$REPO" "$PKG" --no-spec > "$TMP/out.txt"
+  tree=$(bash "$KERN_ROOT/scripts/wt-snap" "$REPO")
+  rec="$(cd "$REPO" && bash "$KERN_ROOT/scripts/kern-dir" tmp)/review-check-$tree.txt"
+  [ -f "$rec" ]
+  cmp "$TMP/out.txt" "$rec"
+  [ "$(tail -n 1 "$rec")" = 'floor: none' ]
+  # A failing run on the same tree replaces it, tails and all.
+  settings 'verify.fast: false'
+  run bash -c 'bash "$1" "$2" "$3" --no-spec > "$4"' _ "$KERN_ROOT/scripts/review-check" "$REPO" "$PKG" "$TMP/out.txt"
+  [ "$status" -eq 1 ]
+  cmp "$TMP/out.txt" "$rec"
+  grep -qx -- '--- verify.fast' "$rec"
+  [ "$(tail -n 1 "$rec")" = 'floor: fix first' ]
+}
+
+@test "a record write that fails leaves no record, and stdout as it was" {
+  # Task 4 fix round 1: a record that lost lines must never land. A tee that passes its input on but writes no
+  # file stands in for a full disk on the tails' write.
+  settings 'verify.fast: false'
+  package
+  bash "$KERN_ROOT/scripts/review-check" "$REPO" "$PKG" --no-spec > "$TMP/want.txt" || true
+  tree=$(bash "$KERN_ROOT/scripts/wt-snap" "$REPO")
+  rec="$(cd "$REPO" && bash "$KERN_ROOT/scripts/kern-dir" tmp)/review-check-$tree.txt"
+  [ -f "$rec" ]
+  mkdir -p "$TMP/bin"
+  printf '#!/bin/sh\ncat\nexit 1\n' > "$TMP/bin/tee"
+  chmod +x "$TMP/bin/tee"
+  run bash -c 'PATH="$5:$PATH" bash "$1" "$2" "$3" --no-spec > "$4"' _ "$KERN_ROOT/scripts/review-check" "$REPO" "$PKG" "$TMP/got.txt" "$TMP/bin"
+  [ "$status" -eq 1 ]
+  cmp "$TMP/want.txt" "$TMP/got.txt"
+  [ ! -e "$rec" ]
+  [ -z "$(find "$(dirname "$rec")" -maxdepth 1 -name '.review-check-*')" ]
+}

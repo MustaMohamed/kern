@@ -140,6 +140,51 @@ settings() {
   [ "$(decision_of "$output")" = allow ]
 }
 
+# M3 part 2 project 2, Task 4: the user's typed rebase or sync is the lease G1 takes under autopilot.
+# lease_wt: a worktree on feat/x with one commit of the user's, the session's cwd in it, autopilot on. The
+# setup's feat branch goes first: git keeps no feat/x beside a feat.
+lease_wt() {
+  W="$BATS_TEST_TMPDIR/wx"
+  git -C "$R" worktree remove --force "$BATS_TEST_TMPDIR/wt"
+  git -C "$R" branch -q -D feat
+  git -C "$R" worktree add -q -b feat/x "$W" >/dev/null 2>&1
+  printf 'a\n' >"$W/a.txt"; git -C "$W" add a.txt; git -C "$W" commit -q -m a
+  export CWD="$W"
+  set_autopilot on
+}
+# submit PROMPT: the user types PROMPT (no quote or backslash in it); prompt-submit stores its consent.
+submit() {
+  bash "$(kern_root)/hooks/prompt-submit" <<<"$(payload UserPromptSubmit "\"prompt\":\"$1\",\"prompt_id\":\"p1\"")" >/dev/null
+}
+
+@test "a typed lease allows the lease push under autopilot" {
+  lease_wt
+  submit "rebase and push"
+  expect allow "git push --force-with-lease origin feat/x"
+  [[ "$output" == *"the user's last prompt asked for it"* ]] || false
+  # The shape checks stay: the bare option, the current branch, no other flag.
+  expect deny "git push --force-with-lease=feat/x:0123456 origin feat/x" "git push --force-with-lease origin main:feat/y" \
+    "git push --force-with-lease -o ci.skip origin feat/x"
+}
+
+@test "a bare yes leaves the lease denied" {
+  lease_wt
+  settings 'rebase.push: ask'
+  submit "rebase and push"
+  submit "yes"
+  expect deny "git push --force-with-lease origin feat/x"
+  [[ "$output" == *"rebase.push: autopilot"* ]] || false
+}
+
+@test "a lease on another author's commits stays denied" {
+  lease_wt
+  printf 'b\n' >"$W/b.txt"; git -C "$W" add b.txt
+  git -C "$W" -c user.email=other@example.com commit -q -m b
+  submit "rebase and push"
+  expect deny "git push --force-with-lease origin feat/x"
+  [[ "$output" == *"not every commit is yours"* ]] || false
+}
+
 @test "merge asks; gh pr merge asks; both denied under autopilot" {
   g1 "git -C $BATS_TEST_TMPDIR/wt merge main"
   [ "$(decision_of "$output")" = ask ]
