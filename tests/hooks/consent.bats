@@ -274,6 +274,9 @@ decide_with() {
   [ "$(st consent)" = ready ]
   submit "mark it as ready for review"
   [ "$(st consent)" = ready ]
+  # Fix round 1's ruling: `the pull request` as well, as lease takes it.
+  submit "mark the pull request ready"
+  [ "$(st consent)" = ready ]
 }
 
 @test "leave it and mark the pr ready gives ready" {
@@ -302,7 +305,8 @@ decide_with() {
   for p in rebase sync 'rebase it' 'sync the branch' 'rebase the PR' 'sync the pull request' 'rebase and leave it'; do
     [ "$(c "$p")" = lease ] || { echo "no lease from: $p"; return 1; }
   done
-  for p in 'mark it ready' 'mark the PR as ready' 'mark it ready for review' 'Leave it here and mark the PR ready.'; do
+  for p in 'mark it ready' 'mark the PR as ready' 'mark it ready for review' 'Leave it here and mark the PR ready.' \
+    'mark the pull request ready' 'mark the pull request as ready for review'; do
     [ "$(c "$p")" = ready ] || { echo "no ready from: $p"; return 1; }
   done
   [ "$(c 'commit, rebase, push and mark the PR ready')" = "commit lease push ready" ]

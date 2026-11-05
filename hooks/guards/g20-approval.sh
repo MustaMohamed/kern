@@ -146,12 +146,18 @@ _g20_go() {
   repo=$(state_get "$SID" go_repo 2> /dev/null) || return 1
   key=$(consent_key "${KERN_MAIN-}") || return 1
   [ -n "$key" ] && [ "$repo" = "$key" ] || return 1
-  phase=$(state_get "$SID" go_phase 2> /dev/null)
-  case $? in 0 | 1) ;; *) return 1 ;; esac
-  if [ "$phase" = pr ]; then
-    _G20_PAST=$go
-    return 1
-  fi
+  # The go_phase read ends with its status line: a substitution whose pipe could not be made gives status
+  # 0 and no output, which must not read as an empty go_phase. Status 1 with no output is a go_phase never
+  # written; any other status, or no status line, is no go.
+  phase=$(state_get "$SID" go_phase 2> /dev/null; printf '\n%s' "$?")
+  case "$phase" in
+    pr$'\n\n'0)
+      _G20_PAST=$go
+      return 1
+      ;;
+    *$'\n'0 | $'\n'1) ;;
+    *) return 1 ;;
+  esac
   _G20_LIVE=$go
   [ "$(printf '%s\n' "$1" | env LC_ALL=C grep -Eic "$_G20_APPROVED_RE")" = 1 ] || return 1
   quote=$(_g20_lines "$1" | sed -n 's/^[^"]*"\(.*\)".*$/\1/p')

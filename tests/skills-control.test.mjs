@@ -284,11 +284,11 @@ test('the contract and the design keep the reply words and the go past its draft
   assertContains('docs/plans/contract.md', [
     'from `commit`, `lease`, `push`, `pr`, `pr-edit`, `pr-title`, `pr-body` and `ready`, space-separated, or nothing.',
     "`rebase` or `sync`, alone or with ` it`, ` the branch`, ` the pr` or ` the pull request`, gives `lease`, so `rebase and push` gives `lease push`",
-    "`mark it ready` or `mark the pr ready`, with an optional ` as` before `ready` and an optional ` for review` after it, gives `ready`. `leave it` and `leave it here` name no action, so `leave it and mark the PR ready` gives `ready` alone.",
+    "`mark it ready`, `mark the pr ready` or `mark the pull request ready`, with an optional ` as` before `ready` and an optional ` for review` after it, gives `ready`. `leave it` and `leave it here` name no action, so `leave it and mark the PR ready` gives `ready` alone.",
     'a bare `yes`, `ok` or `go ahead` gives no `lease` and no `ready`.',
     "`go_phase` (`pr` once G2 allows the go's draft PR, else empty or unset, M3 part 2 project 2).",
     '`go_live SID DIR` (M3 part 2 project 2, Task 2) exits 0, with `_KERN_GO` set to the go,',
-    "the state's `go_phase` is not `pr` (M3 part 2 project 2, Task 2), and a `go_phase` read that fails is no go;",
+    "the state's `go_phase` is not `pr` (M3 part 2 project 2, Task 2), and a `go_phase` read that fails is no go, the read ending with its status line so that a substitution whose pipe could not be made (status 0, no output) is no go too;",
     '`_g02_create` runs `state_set "$SID" "go_phase=pr"`. `go`, `go_repo` and `autopilot` stay, so the go lives on through CI',
     '`apply_go` writes `go_phase` empty with its `go`, `autopilot_off` writes it empty with `go` and `go_repo`, and `state_reset` writes no `go_phase`.',
     'only when `go_live SID KERN_MAIN` holds (M3 part 2 project 2, Task 2)']);

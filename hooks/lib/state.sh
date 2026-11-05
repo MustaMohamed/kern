@@ -222,10 +222,11 @@ prompt_hashes() {
 # branch` (push); `open`, `create`, `raise` or `make`, then an optional `a` or `the`, an optional
 # `draft`, then `pr` or `pull request`, and `draft pr` (pr and push); `update` or `edit`, then `the pr`
 # or `the pull request` (pr-edit: a new title and a body file), with `body` or `description` after it
-# (pr-body: a body file only), or with `title` after it (pr-title: a title only); `mark it` or `mark the
-# pr`, an optional `as`, `ready` and an optional `for review` (ready); `leave it` and `leave it here`,
-# which name no action, so `leave it and mark the pr ready` gives ready alone. Any other word, a question
-# mark, a digit alone or a second line gives nothing, so a bare yes gives no lease and no ready.
+# (pr-body: a body file only), or with `title` after it (pr-title: a title only); `mark it`, `mark the
+# pr` or `mark the pull request`, an optional `as`, `ready` and an optional `for review` (ready); `leave
+# it` and `leave it here`, which name no action, so `leave it and mark the pr ready` gives ready alone.
+# Any other word, a question mark, a digit alone or a second line gives nothing, so a bare yes gives no
+# lease and no ready.
 prompt_consent() {
   env LC_ALL=C awk '
     NF { if (++n > 1) bad = 1; line = $0 }
@@ -246,7 +247,7 @@ prompt_consent() {
         else if (p ~ /^(update|edit) the (pr|pull request)$/) a["pr-edit"] = 1
         else if (p ~ /^(update|edit) the (pr|pull request) title$/) a["pr-title"] = 1
         else if (p ~ /^(update|edit) the (pr|pull request) (body|description)$/) a["pr-body"] = 1
-        else if (p ~ /^mark (it|the pr)( as)? ready( for review)?$/) a["ready"] = 1
+        else if (p ~ /^mark (it|the pr|the pull request)( as)? ready( for review)?$/) a["ready"] = 1
         else if (p ~ /^leave it( here)?$/) { }
         else exit 0
       }
