@@ -1068,7 +1068,8 @@ ready_allowed() {
   stop
   held
   [[ "$reason" == 'kern: review-check printed `check: verify.fast: skip (named)` this turn, and the report does not name that skip. Give the whole report again with a line that names each skipped check and the word skip.' ]] || false
-  [ "$(st go_report)" = 1 ]
+  # The block writes go_report=2 since the round 7 fix batch, so the stop after it reads no report.
+  [ "$(st go_report)" = 2 ]
   # Outside the go a send-back is not counted.
   [ -z "$(st stop_backs)" ]
   say 'PR #12 is ready for review.\n- verify.fast: skip (named), no command resolves.'
@@ -1125,6 +1126,73 @@ ready_allowed() {
   [[ "$reason" == *'`check: verify.fast: skip (named)`'* ]] || false
 }
 
+# The round 7 fix batch (M3 part 2 project 2; the user's "Both fixes, then round 8 (Recommended)", 2026-11-05): in paid
+# round 7 go-proof-skip's two finish-line send-backs left stop_hook_active set when its `gh pr ready` ended the go, so
+# the hook let that stop through and the reworded skip line in the owed report went unread. The owed report is read
+# on such a stop too; its block writes go_report=2, and the stop after it allows and empties the key.
+
+# report_key VALUE: the state's go_report is VALUE, on one line, so st reads it alone.
+report_key() {
+  sed '/^go_report: /d' "$(STATE)" >"$(STATE).new" && mv "$(STATE).new" "$(STATE)"
+  state_line "go_report: $1"
+}
+
+@test "a go's owed report is read on a stop the hook already blocked, and blocks once" {
+  go_on
+  go_prompt
+  drafted
+  say 'The draft is open.'
+  stop
+  held
+  [[ "$reason" == *'no `ci-wait` has run since the last push'* ]] || false
+  [ "$(st stop_backs)" = 1 ]
+  sh_run "bash $P/scripts/ci-wait $R"
+  out 'ci: none'
+  ready_allowed
+  say 'PR #12 is ready for review.\nProof on the running app: skipped, since neither `verify.browser` nor `verify.app` is set.'
+  stop true
+  held
+  [[ "$reason" == "$PROOF_REASON" ]] || false
+  [ "$(st go_report)" = 2 ]
+  # Outside the go the send-back is not counted, and the next stop allows and empties the key.
+  [ "$(st stop_backs)" = 1 ]
+  stop true
+  allows
+  [ -z "$(st go_report)" ]
+  # A write of go_report=2 that fails allows, so the report is never read twice in a row.
+  report_key 1
+  chmod a-w "$CLAUDE_PLUGIN_DATA/sessions"
+  stop true
+  chmod u+w "$CLAUDE_PLUGIN_DATA/sessions"
+  allows
+  [ "$(st go_report)" = 1 ]
+}
+
+@test "a stop the hook already blocked, with no report owed, still allows" {
+  go_on
+  go_prompt
+  drafted
+  sh_run "bash $P/scripts/review-check $R pkg --no-spec --autopilot"
+  out 'check: verify.fast: skip (named)\nfloor: none'
+  ready_allowed
+  say 'PR #12 is ready for review.\nProof on the running app: skipped, since neither `verify.browser` nor `verify.app` is set.'
+  # The report was read, and blocked on once (go_report 2): this stop empties the key, stop_hook_active or not.
+  report_key 2
+  stop true
+  allows
+  [ -z "$(st go_report)" ]
+  report_key 2
+  stop
+  allows
+  [ -z "$(st go_report)" ]
+  # Nothing owed: the report is not read.
+  stop true
+  allows
+  stop
+  allows
+  [ -z "$(st go_report)" ]
+}
+
 # Check (7), the proof skip (M3 part 2 project 2's round 2 fix batch, the user's "Build the Stop hook check",
 # 2026-11-05): go-proof-skip's report reworded prove-it's skip line in paid rounds 1 and 2, so a report that names
 # the proof on the running app, with neither verify.browser nor verify.app set, must hold the line as printed.
@@ -1177,7 +1245,7 @@ NO_DRAFT='kern: this go has not reached its finish line: no draft PR is open yet
   held
   [[ "$reason" == "$PROOF_REASON" ]] || false
   [ -z "$(st stop_backs)" ]
-  [ "$(st go_report)" = 1 ]
+  [ "$(st go_report)" = 2 ]
   stop true
   allows
   [ -z "$(st go_report)" ]
