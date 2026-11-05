@@ -339,7 +339,7 @@ test("the contract, the design and the skills spec keep a go's plan waiting for 
     'waits for no record, as plan step 11 always writes `<dir>/<slug>.md`;',
     "a user's word to skip the review leaves a go's plan with no record, so the go cannot approve it, and a user who wants no review turns autopilot off."]);
   assertContains('docs/specs/2026-10-12-kern-design.md', [
-    "until its draft PR opens; a plan under `WORK/plans` only once `WORK/reviews/plan-<slug>.md`, its review's saved reply, holds the line `Verdict: approve` and no line `Verdict: revise` (M3 part 2 project 2) |"]);
+    "until its draft PR opens; a plan under `WORK/plans` only once `WORK/reviews/plan-<slug>.md`, its review's saved reply, holds the line `Verdict: approve` and no line `Verdict: revise` (M3 part 2 project 2)."]);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
     "round 1 only, saving its reply verbatim with the Write tool to `<kern-dir reviews>/plan-<slug>.md` (M3 part 2 project 2's Task 8: under a go G20 reads it before the plan's approval)",
     "and G20 denies that approval until the review's saved reply holds the line `Verdict: approve` and no line `Verdict: revise` (M3 part 2 project 2's Task 8).",
@@ -728,6 +728,29 @@ test("the contract and both designs keep the round 2 fix batch's proof skip", ()
   const hook = readFileSync(join(import.meta.dirname, '..', 'hooks', 'stop'), 'utf8');
   assert.ok(hook.includes(`add "${reason.slice(2, -2).replaceAll('`', '\\`')}"`), 'the hook gives the contract\'s reason');
   assertContains('skills/prove-it/SKILL.md', ['skip: proof on the running app, no verify.browser or verify.app']);
+});
+
+test("the contract and both designs keep the round 2 fix batch's G20 route gate", () => {
+  // M3 part 2 project 2's paid round 2, H2 (the user's "Build the G20 gate", 2026-11-05): go-required-check-stop built
+  // with no spec in five of six runs, so under a go G20 holds a build's edits until a spec carries the go's approval.
+  const reason = 'under a go, a build starts at define, and no spec under <KERN_MAIN>/<work_dir>/specs carries this go\'s approval. Read ${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only.';
+  assertContains('docs/plans/contract.md', [
+    "- **G20's route gate under a go (M3 part 2 project 2's round 2 fix batch; the user's \"Build the G20 gate\", 2026-11-05).**",
+    '`guard_g20` hands Write, Edit and NotebookEdit to `_g20_route`, and Write and Edit then to `_g20_file` as before.',
+    'the call carries neither `agent_type` nor `agent_id`; `AUTOPILOT` is 1 and `go_live "$SID" "$KERN_MAIN"` holds;',
+    "`_g20_test` finds no test in its path from the main worktree's root (absolute for a file outside it): a folder `test`, `tests` or `__tests__` on the way, or a name `*.test.*`, `*.spec.*` or `*_test.*`;",
+    'whatever `go_phase` holds, so the go\'s CI fix rounds past its draft edit on;',
+    "and, read last, the input's `transcript_path` holds no main-thread Read of the running kern's `skills/diagnose/SKILL.md`",
+    `The deny reads \`\`${reason}\`\``,
+    'A fault allows, as in G20\'s other votes:',
+    'Accepted limits: a Bash write (a here-doc, an inline script) is not seen, so a denied run could route around it; a diagnose Read opens the gate for any edit; test paths are read by name;']);
+  const gate = "a main-thread Write, Edit or NotebookEdit outside the work dir, of a file that is no test by its path, is denied until a spec under `WORK/specs` carries the go's approval, or the run has read diagnose: a go's build starts at define, a bug at diagnose";
+  assertContains('docs/specs/2026-10-12-kern-design.md', [`Under a live go ${gate} (M3 part 2 project 2's round 2 fix batch) |`]);
+  assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
+    `| G20 | A${gate.slice(1)}. This closes \`go-required-check-stop\`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05) |`]);
+  // The guard's reason is the contract's, the work dir's specs named in place of the placeholder.
+  const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
+  assert.ok(guard.includes(`vote deny G20 "${reason.replace('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the contract\'s reason');
 });
 
 test("the contract and the skills spec keep plan-check's plan line for a short spec over 2 files", () => {

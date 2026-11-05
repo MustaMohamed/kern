@@ -1490,3 +1490,160 @@ bash proof-check .kern/specs/export.md .kern/reviews/p.proofs.md"
   sh_cmd "printf 'approved\n' > .kern/TMP/p.md"
   no_vote
 }
+
+# The route gate (M3 part 2 project 2's round 2 fix batch, the user's "Build the G20 gate", 2026-11-05): paid rounds
+# 11-04 2 to 4 and 11-05 1 and 2 built a go's ticket with no spec. Under a live go a main-thread Write, Edit or
+# NotebookEdit outside the work dir, of a file that is no test, waits for a spec the go approved under WORK/specs,
+# or a Read of the running kern's diagnose skill in the transcript.
+
+TR_N=0
+# tr_read PATH [SIDECHAIN]: appends to the transcript a main-thread Read of PATH (a subagent's with SIDECHAIN true).
+tr_read() {
+  TR_N=$((TR_N + 1))
+  printf '{"parentUuid":"p%s","isSidechain":%s,"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_%s","name":"Read","input":{"file_path":"%s"}}]},"type":"assistant","uuid":"u%s"}\n' \
+    "$TR_N" "${2:-false}" "$TR_N" "$1" "$TR_N" >> "$TR"
+}
+# route TOOL FIELDS [EXTRA]: G20's vote on a call of TOOL whose tool_input holds FIELDS, from a session whose
+# transcript is TR, with EXTRA top-level fields after a comma.
+route() {
+  run_guard "$(payload PreToolUse "\"transcript_path\":\"$TR\",${3:+$3,}\"tool_name\":\"$1\",\"tool_input\":{$2}")" g20
+}
+# build PATH [EXTRA]: route's Write of PATH.
+build() { route Write "\"file_path\":\"$1\",\"content\":\"export const sum = (a, b) => a + b;\\n\"" "${2-}"; }
+# route_denied: G20 denied the last call with the route gate's reason.
+route_denied() {
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [[ "$output" == *"kern G20: under a go, a build starts at define, and no spec under $R/.kern/specs carries this go's approval. Read \${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only."* ]] ||
+    { echo "$output"; return 1; }
+}
+# go_route: a live go for MA-254, a transcript with the go's prompt, and the project's src and test folders.
+go_route() {
+  TR="$BATS_TEST_TMPDIR/t.jsonl"
+  printf '{"type":"user","message":{"role":"user","content":"/kern:autopilot go MA-254"}}\n' > "$TR"
+  mkdir -p "$R/src" "$R/test"
+  say "$GO"
+}
+
+@test "under a go a build edit with no spec the go approved is denied, by Write, Edit and NotebookEdit" {
+  go_route
+  build "$R/src/sum.js"
+  route_denied
+  printf 'export const sum = (a, b) => a - b;\n' > "$R/src/sum.js"
+  route Edit "\"file_path\":\"$R/src/sum.js\",\"old_string\":\"a - b\",\"new_string\":\"a + b\""
+  route_denied
+  route NotebookEdit "\"notebook_path\":\"$R/src/sum.ipynb\",\"new_source\":\"1 + 1\""
+  route_denied
+  # A new file in a new folder, a relative path, and a linked worktree's file are builds too.
+  build "$R/lib/round/sum.js"
+  route_denied
+  build "src/sum.js"
+  route_denied
+  git -C "$R" worktree add -q "$R/.claude/worktrees/ma-254" -b ma-254 2> /dev/null
+  build "$R/.claude/worktrees/ma-254/src/sum.js"
+  route_denied
+  # A spec that is a draft, approved for another ticket, or approved by a quote that is not the go's opens nothing.
+  printf '%s\n' '---' 'status: draft' 'issue: MA-254' 'approved: 2026-11-05, "/kern:autopilot go MA-254"' '---' > "$R/.kern/specs/draft.md"
+  printf '%s\n' '---' 'status: approved' 'issue: MA-1' 'approved: 2026-11-05, "/kern:autopilot go MA-1"' '---' > "$R/.kern/specs/other.md"
+  printf '%s\n' '---' 'status: approved' 'issue: MA-254' 'approved: 2026-11-05, "yes"' '---' > "$R/.kern/specs/yes.md"
+  build "$R/src/sum.js"
+  route_denied
+}
+
+@test "a spec under WORK/specs that the go approved opens the gate, past the draft PR too" {
+  go_route
+  printf '%s\n' '---' 'form: short' 'status: approved' 'issue: MA-254' 'approved: 2026-11-05, "/kern:autopilot go MA-254"' '---' '## Problem' > "$R/.kern/specs/round-sum.md"
+  build "$R/src/sum.js"
+  no_vote
+  # The go's CI fix rounds edit past the draft, where the go approves no new file.
+  state_line 'go_phase: pr'
+  build "$R/src/sum.js"
+  no_vote
+  # A spec below a folder in specs, or a spec of a second go, does not count.
+  mkdir -p "$R/.kern/specs/old"
+  mv "$R/.kern/specs/round-sum.md" "$R/.kern/specs/old/round-sum.md"
+  build "$R/src/sum.js"
+  route_denied
+  mv "$R/.kern/specs/old/round-sum.md" "$R/.kern/specs/round-sum.md"
+  say '/kern:autopilot go MA-255'
+  build "$R/src/sum.js"
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *'no spec under '*'/specs carries this go'*'s approval'* ]] || false
+}
+
+@test "a test file is no build: a tests-only ticket edits test files with no spec" {
+  local p
+  go_route
+  for p in test/sum.test.js tests/test_sum.py src/__tests__/sum.js src/sum.test.js src/sum.spec.ts sum_test.go \
+    .claude/worktrees/ma-254/test/sum.js; do
+    build "$R/$p"
+    no_vote || { echo "path: $p"; return 1; }
+  done
+  # A test word in a file or folder name that is no test path is a build.
+  for p in src/testing.js src/contest/sum.js src/tests.js; do
+    build "$R/$p"
+    route_denied || { echo "path: $p"; return 1; }
+  done
+}
+
+@test "a main-thread Read of the running kern's diagnose skill opens the gate: a bug starts at diagnose" {
+  go_route
+  # Another checkout's diagnose, a subagent's read and define's skill open nothing.
+  tr_read "$BATS_TEST_TMPDIR/other-kern/skills/diagnose/SKILL.md"
+  tr_read "$K/skills/diagnose/SKILL.md" true
+  tr_read "$K/skills/define/SKILL.md"
+  build "$R/src/sum.js"
+  route_denied
+  tr_read "$K/skills/diagnose/SKILL.md"
+  build "$R/src/sum.js"
+  no_vote
+}
+
+@test "a subagent's edit is left to the subagent's own route" {
+  go_route
+  build "$R/src/sum.js" '"agent_type":"kern:implementer"'
+  no_vote
+  build "$R/src/sum.js" '"agent_id":"a1"'
+  no_vote
+}
+
+@test "with no live go the gate does not vote" {
+  go_route
+  # Autopilot off, which ends the go, autopilot on with no go, and a go of another repository.
+  say '/kern:autopilot off'
+  build "$R/src/sum.js"
+  no_vote
+  say '/kern:autopilot on'
+  build "$R/src/sum.js"
+  no_vote
+  say "$GO"
+  build "$R/src/sum.js"
+  route_denied
+  R2="$BATS_TEST_TMPDIR/other"
+  make_repo "$R2"
+  R2=$(cd "$R2" && pwd -P)
+  CWD=$R2
+  build "$R2/src/sum.js"
+  no_vote
+}
+
+@test "a file under the work dir is no build, and a fault allows" {
+  go_route
+  build "$R/.kern/tmp/pr-body.md"
+  no_vote
+  build "$R/.kern/specs/round-sum.md"
+  no_vote
+  build "$R/.kern/new/notes.txt"
+  no_vote
+  # A transcript the guard cannot read, a work dir it cannot read, and a path it cannot resolve allow.
+  rm "$TR"
+  build "$R/src/sum.js"
+  no_vote
+  go_route
+  mkdir -p "$R/.claude"
+  printf 'work_dir: ../outside\n' > "$R/.claude/kern.local.yml"
+  build "$R/src/sum.js"
+  no_vote
+  rm "$R/.claude/kern.local.yml"
+  build "$R/new/../src/sum.js"
+  no_vote
+}

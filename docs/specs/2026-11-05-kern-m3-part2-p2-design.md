@@ -128,6 +128,7 @@ Under a go only. After the draft PR opens and after each push, the run waits for
 | G2 | A draft PR no longer ends the go; it ends the go's approval power |
 | G1 | A lease push of the go's branch is allowed with `rebase.push: autopilot`, as today, or when the user's last typed prompt asks to rebase, push or sync. Every commit on the branch past the base must still be the user's |
 | Self-review's half of ready | A mechanism, guard or hook, keeps `gh pr ready` off a tree self-review did not pass (the builder's choice) |
+| G20 | A main-thread Write, Edit or NotebookEdit outside the work dir, of a file that is no test by its path, is denied until a spec under `WORK/specs` carries the go's approval, or the run has read diagnose: a go's build starts at define, a bug at diagnose. This closes `go-required-check-stop`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05) |
 
 Semver: each change above loosens a default, a MAJOR change under design section 12, decided at the next release bump; kern is at 0.x.
 
