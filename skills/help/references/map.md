@@ -5,7 +5,7 @@ Installed skills only. The Tier column says how a skill loads. An `auto` skill l
 | Skill | Tier | Reached by | Job | Nearest sibling |
 |---|---|---|---|---|
 | `mode` | slash | `/kern:mode`, or "go terse", "html mode", "back to normal" | Switch voice and surface for this session | `autopilot` when the session should act without asking, not sound different |
-| `autopilot` | slash | `/kern:autopilot on` or `/kern:autopilot go <ticket>`, typed only | Grant this session commits, branch pushes and draft PRs without asking; a go also takes one ticket to a draft PR | `finish-branch` when one branch needs one commit, push or draft PR, asking as it goes |
+| `autopilot` | slash | `/kern:autopilot on` or `/kern:autopilot go <ticket>`, typed only | Grant this session commits, branch pushes and draft PRs without asking; a go also takes one ticket through a draft PR to `gh pr ready` or a stop | `finish-branch` when one branch needs one commit, push or draft PR, asking as it goes |
 | `help` | slash | `/kern:help`, `/kern:help setup`, `/kern:help check` | This map, fixes for a run, and project settings | `recall` when the question is where this work stands, not how kern works |
 | `technical-writing` | path | Kernel row "Prose others read", or `/kern:technical-writing` | Docs, PR bodies, issues and commit messages | `unslop` when only a reply's tone needs fixing |
 | `unslop` | slash | The kernel's Reply rule, technical-writing step 5, or `/kern:unslop` | Rules for prose others read | `technical-writing` when writing a doc, PR body, issue or commit message |

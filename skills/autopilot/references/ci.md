@@ -74,6 +74,8 @@ Commit every change before step 1 and leave no untracked file: at ready, G2 read
 
 A red step 1 or a `fix first` starts run.md's fix round: fix, commit, and run again from step 1. These rounds count from this push's first package, so the third round's package is that number plus 3. A third still `fix first` pushes, stops and keeps the PR draft.
 
+A `split` after the draft is a stop, never a ready: on size it asks split or one PR, as finish-branch's go-on default covers only the draft.
+
 ## Ready
 
 Run `gh pr ready` when all hold: the wait after the last push read `ci: clear` or `ci: none`; self-review's verdict on that pushed tree is `ready`, with its `review-check` run; proof is sent or its named skip reported; the body matches the pushed tree.

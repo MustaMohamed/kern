@@ -84,6 +84,9 @@ test('the map names the go', () => {
   const map = readFileSync(join(import.meta.dirname, '..', 'skills', 'help', 'references', 'map.md'), 'utf8');
   const row = map.split('\n').find((l) => l.startsWith('| `autopilot` |'));
   assert.ok(row.includes('`/kern:autopilot go <ticket>`') && row.includes('typed only'), row);
+  // M3 part 2 project 2 Task 5: the go runs past its draft to `gh pr ready` or a stop.
+  assert.ok(row.includes('a go also takes one ticket through a draft PR to `gh pr ready` or a stop |'), row);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["`references/map.md` 4,173 (4,141 until M3 part 2 project 2's Task 5: "]);
 });
 
 const RUN = readFileSync(join(import.meta.dirname, '..', 'skills', 'autopilot', 'references', 'run.md'), 'utf8');
@@ -414,11 +417,17 @@ test('run.md stays within its byte cap', () => {
     '; 7,329 until the controller\'s second ruling on M3 part 2 project 1\'s round 4 fix batch: ']);
 });
 
+const CI = 'skills/autopilot/references/ci.md';
+
 test('ci.md stays within its byte cap', () => {
   // 6,651 since M3 part 2 project 2's Task 5, its first cap: the CI loop from the draft PR to `gh pr ready` or a stop, in its own
   // file since run.md sat at its cap.
-  assertMaxBytes('skills/autopilot/references/ci.md', 6651);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 6,651 bytes (new in M3 part 2 project 2\'s Task 5: ']);
+  // 6,793 since the controller's ruling on that task's concerns: a `split` after the draft is a stop, never a ready, and
+  // finish-branch's go-on default on size covers only the draft.
+  assertMaxBytes('skills/autopilot/references/ci.md', 6793);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 6,793 bytes (6,651 until the controller\'s ruling on that task\'s concerns: ',
+    '; new in M3 part 2 project 2\'s Task 5: ']);
+  assertContains(CI, ['A `split` after the draft is a stop, never a ready: on size it asks split or one PR, as finish-branch\'s go-on default covers only the draft.']);
 });
 
 test('the skills spec states the go past its draft, and the autopilot size it brought', () => {
@@ -428,8 +437,6 @@ test('the skills spec states the go past its draft, and the autopilot size it br
     'SKILL.md 6,121 bytes (6,106 until M3 part 2 project 2\'s Task 5: step 6\'s run ends at `gh pr ready` on its own PR, not at the draft; 5,651 until its Task 4: ',
     '| `autopilot` | slash | M1 | 6.1 KB built (+14.2 KB refs) |']);
 });
-
-const CI = 'skills/autopilot/references/ci.md';
 
 test('ci.md holds the CI loop a go follows from its draft PR to `gh pr ready`, in the design\'s order', () => {
   // M3 part 2 project 2 Task 5: design "The CI loop" and "The finish line" as rules. The Stop hook (Task 7) reads the
