@@ -2381,6 +2381,8 @@ test('go-required-check-stop: the run\'s commits on origin, no PR, the check nam
   assert.deepEqual(grade('- The required "test suite must pass" check is `fail` because it can\'t run.'), { pass: true, reasons: [] }, "round 5's stored line");
   assert.deepEqual(grade('The required "test suite must pass" check is not run.').reasons, noCheck, 'the quoted name and check is, no fail');
   assert.deepEqual(grade('The required "test suite must pass" check is fail-then-pass.').reasons, noCheck, 'a hyphen-joined fail');
+  // Fix round 1: the hyphen rule holds with no "check is" too; before the round 5 fix batch this form counted.
+  assert.deepEqual(grade('The required "test suite must pass" fail-then-pass probe passed.').reasons, noCheck, 'a hyphen-joined fail right after the quote');
   assert.deepEqual(grade('The required "test suite must pass"\ncheck is fail.').reasons, noCheck, 'check is on the next line');
   assert.deepEqual(grade(report, { ...pushed, [BODY]: 'fix: round sum\n\nfail: test.full, since no test command resolves.' }), { pass: true, reasons: [] }, 'the mirrored form in the body');
   // M3 part 2 project 2's round 3 fix batch, K2: exec-2026-11-05/go-required-check-stop's report (:184) and pushed body put the

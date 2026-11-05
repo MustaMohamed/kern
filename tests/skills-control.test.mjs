@@ -737,7 +737,7 @@ test("the contract and both designs keep the round 2 fix batch's G20 route gate"
   // with no spec in five of six runs, so under a go G20 holds a build's edits until a spec carries the go's approval.
   // The round 5 fix batch, M3: a go that Claude Code's EnterWorktree pinned to a worktree could write the spec nowhere G20 reads it,
   // so the deny names the way out.
-  const reason = 'under a go, a build starts at define, and no spec under <KERN_MAIN>/<work_dir>/specs carries this go\'s approval. Read ${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only. A session that EnterWorktree moved into a worktree cannot write that path: ExitWorktree with action keep, write the spec, then edit the worktree by its path.';
+  const reason = 'under a go, a build starts at define, and no spec under <KERN_MAIN>/<work_dir>/specs carries this go\'s approval. Read ${CLAUDE_PLUGIN_ROOT}/skills/define/SKILL.md and write it first. A bug starts at diagnose; a tests-only ticket edits test files only. A session that EnterWorktree moved into a worktree cannot write <KERN_MAIN>/<work_dir>/specs: ExitWorktree with action keep, write the spec, then edit the worktree by its path.';
   assertContains('docs/plans/contract.md', [
     "- **G20's route gate under a go (M3 part 2 project 2's round 2 fix batch; the user's \"Build the G20 gate\", 2026-11-05).**",
     '`guard_g20` hands Write, Edit and NotebookEdit to `_g20_route`, and Write and Edit then to `_g20_file` as before.',
@@ -757,9 +757,10 @@ test("the contract and both designs keep the round 2 fix batch's G20 route gate"
   assertContains('docs/specs/2026-10-12-kern-design.md', [`Under a live go ${gate} (M3 part 2 project 2's round 2 fix batch) |`]);
   assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
     `| G20 | A${gate.slice(1)}. This closes \`go-required-check-stop\`'s build with no spec, five of six paid runs (the round 2 fix batch; the user's "Build the G20 gate", 2026-11-05) |`]);
-  // The guard's reason is the contract's, the work dir's specs named in place of the placeholder.
+  // The guard's reason is the contract's, the work dir's specs named in place of each placeholder (two since the round 5 fix
+  // batch's fix round 1, which names the folder a pinned session cannot write).
   const guard = readFileSync(join(import.meta.dirname, '..', 'hooks', 'guards', 'g20-approval.sh'), 'utf8');
-  assert.ok(guard.includes(`vote deny G20 "${reason.replace('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the contract\'s reason');
+  assert.ok(guard.includes(`vote deny G20 "${reason.replaceAll('<KERN_MAIN>/<work_dir>', '$KERN_MAIN/$_G20_WD').replace('${CLAUDE_PLUGIN_ROOT}', '\\${CLAUDE_PLUGIN_ROOT}')}"`), 'the guard gives the contract\'s reason');
 });
 
 test("the contract and both designs keep the round 2 fix batch's G1 edit deny", () => {
