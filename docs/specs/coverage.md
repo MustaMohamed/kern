@@ -52,8 +52,8 @@ The counts are as of the M2 re-audit (2026-10-23): 21 rows moved to Equal or bet
 | 17 | PR body with a smallest-useful-view summary and a screenshot tier | pocock | M2a (shipped in 0.3.0) | S |
 | 18 | Hook git calls run with `core.fsmonitor` and `core.hooksPath` disabled | caveman | M2a (shipped in 0.3.0) | S |
 | 19 | SubagentStart tests: normal voice, `kern: off`, a bad session id | caveman | M2a (shipped in 0.3.0) | S |
-| 20 | Autopilot stop enforced by a Stop hook: a recorded predicate or a turn cap | pstack | M3 | M |
-| 21 | Stop-time nudge when edits have no proof since the last change | pstack | M3 | S |
+| 20 | Autopilot stop enforced by a Stop hook: a recorded predicate or a turn cap | pstack | M3 part 2, project 2 (built, not released) | M |
+| 21 | Stop-time nudge when edits have no proof since the last change | pstack | M3 part 2, project 2 (built, not released) | S |
 | 22 | `pr-state`: one merge-readiness verdict over conflicts, threads, checks and the review gate | pstack | M3 | M |
 | 23 | Multi-PR delivery from a plan as a verified stack the user lands | pstack | M3 | M |
 | 24 | Tree-identity check before pushing a content-preserving rewrite | pstack | M3 | S |
@@ -267,6 +267,15 @@ Built and tested, not yet released. Its paid check passed on round 5 under the u
 ## M3 part 2, project 1
 
 Built and tested, not yet released. Its paid check ran four rounds on 2026-11-04, as the CHANGELOG's Unreleased section gives. G21's row above still met no paid case: on its new fixture `go-block-reroute` stopped before any delete in rounds 1 to 3, so G21 never fired. Project 1 closes no gap above. It lands 17 of the Opus audit's 22 M3 adopt rows, each a source mechanism from superpowers, pstack, addy, pocock or caveman, and records 2 more as closed before it; four clauses in the other 3 rows wait for project 2's first task. Section 5 of `docs/research/opus-audit-2026-10-22.md` gives each row's commit. Rule 4's re-audit of M3's rows waits for M3's close, and the counts above move then. Its other items come from part 1's paid check and its final review, from no audited source, so they hold no row here; each one's state is in `docs/research/2026-10-31-m3-item-sort.md`.
+
+## M3 part 2, project 2
+
+Built and tested, not yet released. Its paid check has not run; the CHANGELOG's Unreleased section will give it. Project 2 builds gaps 20 and 21 for a go, in the rows below. A plain `/kern:autopilot on` run still holds no stop predicate, on the user's "go runs only", and outside a go the nudges run only with `stop.nudge: on`, on the user's "Opt-in (Recommended)". Project 2 also lands the last four clauses of the Opus audit's M3 adopt rows, so all 22 rows are done; section 5 of `docs/research/opus-audit-2026-10-22.md` gives each row's commit. Rule 4's re-audit of M3's rows waits for M3's close, and the counts above move then. The CI loop, proof on the running app and the guard changes under a go come from the user's rulings in `docs/specs/2026-11-05-kern-m3-part2-p2-design.md`, from no audited source, so they hold no row here. Each item project 2 carried from project 1 has its state in `docs/research/2026-10-31-m3-item-sort.md`.
+
+| Mechanism | Source | Verdict | Pinned by |
+|---|---|---|---|
+| Enforced stop for autonomous runs: the Stop hook holds a live go to `gh pr ready` or a reported `kern stop:` line, and sends it back at most 3 times in a row (gap 20) | pstack 0.15.25 | Equal or better, for a go | `tests/hooks/stop.bats` |
+| Stop-time nudges: a main-thread edit with no proving command after it, and floor-scan's hits in the edited files that the last message does not name (gap 21, with G7) | pstack 0.15.25 | Equal or better under a go; opt-in outside one | `tests/hooks/stop.bats` |
 
 ## Accepted limits
 
