@@ -9,7 +9,9 @@
 #        plan-check --files PLAN N    Task N's Files paths, one per line, line ranges removed; a path
 #                                     ending in /** or /* is printed as its directory with a trailing /
 # A file with "### Task N:" headings is a plan; any other file is a spec. A clean spec with status: draft and
-# no form: short also prints one next: line naming define step 11's spec review, still exit 0.
+# no form: short also prints one next: line naming define step 11's spec review, still exit 0; a clean spec with
+# status: approved and form: short whose ## Size Files count is over 2 prints `next: plan (define step 9: over 2
+# files)`, still exit 0.
 # Plan checks: frontmatter; Global Constraints, Review Focus and File map; per task Files, Interfaces
 # (Consumes, Produces), Blocked by, Acceptance and a Run:/Expected: pair; no glob or brace list in a Files
 # entry but a closing /* or /**; tasks numbered from 1; a task blocked only by earlier tasks; tasks sharing a file or
@@ -110,6 +112,12 @@ fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
   if (prose ~ /(^|[^A-Za-z])(TBD|TODO)([^A-Za-z]|$)/ || tolower(prose) ~ /similar to task|add appropriate|fill in|implement later/) problem(NR, "placeholder: " $0)
 }
 /^## / { h2[$0] = 1; field = ""; if (cur) { cur = "" } }
+# A spec: the count that the first Files: line under ## Size gives, past a list mark and bold (spec-template.md).
+/^## / { insize = ($0 ~ /^## Size[ \t]*$/) }
+insize && !sizeseen {
+  s = $0; sub(/^[ \t]*([-*+][ \t]+)?(\*\*|__)?/, "", s)
+  if (match(s, /^Files:(\*\*|__)?[ \t]*[0-9]+/)) { s = substr(s, 1, RLENGTH); gsub(/[^0-9]/, "", s); sizefiles = s + 0; sizeseen = 1 }
+}
 /^### Task [0-9]+:/ {
   t = $3; sub(/:$/, "", t); t += 0
   cur = t; tasks++; order[tasks] = t; tline[t] = NR; field = ""
@@ -175,6 +183,9 @@ END {
     if (bad) exit 1
     # A clean draft full-form spec: define step 11 comes next. Runs that skipped it stopped right after this result.
     if (st == "draft" && fm["form"] != "short") print "next: define step 11" sq "s spec review (one fresh reviewer subagent), unless it ran for this draft; before you ask for the yes. Only the user naming that review skips it."
+    # A clean approved short spec over 2 files: define step 9 sends it to plan. In paid round 1 of M3 part 2 project 2,
+    # a go built from such a spec with no plan, 3 rounds running.
+    if (st == "approved" && fm["form"] == "short" && sizefiles > 2) print "next: plan (define step 9: over 2 files)"
     exit 0
   }
   # A plan.

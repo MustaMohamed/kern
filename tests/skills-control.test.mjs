@@ -698,3 +698,11 @@ test("the contract keeps the round 1 fix batch's Stop hook reason", () => {
   assertContains('docs/plans/contract.md', [
     "Under a live go its reason ends `Then give the whole report again.`, since the grader reads the last reply (M3 part 2 project 2's round 1 fix batch: go-required-check-stop's last reply after this send-back gave a probe's result alone)."]);
 });
+
+test("the contract and the skills spec keep plan-check's plan line for a short spec over 2 files", () => {
+  // M3 part 2 project 2's paid round 1, F2: go-no-lint-draft's approved short spec named 4 files and the run built with no plan.
+  assertContains('docs/plans/contract.md', [
+    "A spec with no problems, `status: approved` and `form: short` whose `## Size` section's first `Files:` line, past a list mark and bold, opens with a count over 2 also prints `next: plan (define step 9: over 2 files)` and exits 0 (M3 part 2 project 2's round 1 fix batch: `go-no-lint-draft` built from such a spec with no plan, 3 rounds running); 2 or fewer files, no count, a draft and the full form print no such line |"]);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    "on a clean approved `form: short` spec whose `## Size` Files count is over 2, `next: plan (define step 9: over 2 files)` (M3 part 2 project 2's round 1 fix batch);"]);
+});

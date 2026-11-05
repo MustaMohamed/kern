@@ -171,6 +171,61 @@ full_spec() { # full_spec STATUS APPROVED: a full-form spec with every section t
   [ "$output" = "bad.md:1: missing section ## Rollout" ]
 }
 
+# M3 part 2 project 2's paid round 1: go-no-lint-draft's approved short spec read "Files: 4 (...). Next: implement." in 3
+# rounds running, and the run built with no plan. define step 9 sends a bounded spec over 2 files to plan, so a clean
+# approved short spec whose `## Size` Files count is over 2 gets that next step in plan-check's result.
+PLAN_NEXT='next: plan (define step 9: over 2 files)'
+short_spec() { # short_spec STATUS SIZE_LINE...: a short-form spec, its ## Size section holding SIZE_LINE...
+  local st=$1
+  shift
+  printf '%s\n' '---' "status: $st" 'form: short' 'date: 2026-11-05' 'issue: "#7"' 'approved: 2026-11-05, "/kern:autopilot go 7"' '---' '' \
+    '## Problem' '' 'Files: 9 named in the ticket, which the Size count does not read.' '' '## Size' '' "$@" '' \
+    '## Constraints' '' '- Always: x' '' '## Acceptance criteria' '' '1. a' '' '## Test seams' '' '## Not doing'
+}
+
+@test "a clean approved short spec over 2 files prints one next: line for plan" {
+  short_spec approved 'Files: 4 (src/sum.js, src/tax.js, test/sum.test.js, test/tax.test.js). Lines: about 20 changed. Next: implement.' > four.md
+  pc four.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "$PLAN_NEXT" ]
+  [ -z "$stderr" ]
+  # The first Files: line of the section counts, its paths after a comma or on a bullet as runs write them.
+  short_spec approved 'Files: 3, `src/format.js`, `bin/cli.js`, `test/format.test.js`. Lines: about 30 changed.' 'Files: 1 in the later slices.' > three.md
+  pc three.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "$PLAN_NEXT" ]
+  short_spec approved '- **Files:** 3' > bullet.md
+  pc bullet.md
+  [ "$output" = "$PLAN_NEXT" ]
+}
+
+@test "an approved short spec of exactly 2 files, or with no Files count, prints no next: line" {
+  short_spec approved 'Files: 2 (src/sum.js, test/sum.test.js). Lines: about 10 changed.' > two.md
+  pc two.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  # A Files count outside ## Size, as in the Problem section here, is not read.
+  short_spec approved 'Lines: about 10 changed.' > none.md
+  pc none.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a draft or full-form spec over 2 files, and a short spec with a problem, print no plan line" {
+  short_spec draft 'Files: 4 (src/sum.js, src/tax.js, test/sum.test.js, test/tax.test.js).' > draft.md
+  pc draft.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  { full_spec approved '2026-11-05, "yes"'; printf '%s\n' '## Size' 'Files: 4 (a, b, c, d).'; } > full.md
+  pc full.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  short_spec approved 'Files: 4 (a, b, c, d).' | grep -v '^## Test seams$' > bad.md
+  pc bad.md
+  [ "$status" -eq 1 ]
+  [ "$output" = "bad.md:1: missing section ## Test seams" ]
+}
+
 @test "usage errors exit 2" {
   pc
   [ "$status" -eq 2 ]
