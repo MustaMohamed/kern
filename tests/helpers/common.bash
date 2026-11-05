@@ -227,12 +227,35 @@ read_failures() {
 
 # fake_gh: puts a stub `gh` first on PATH. FAKE_GH_STATES (comma list) answers `pr list`,
 # FAKE_GH_RC its exit code, FAKE_GH_ME answers `api user`, FAKE_GH_AUTHOR answers `pr view`.
+# `pr checks --json name,bucket` prints FAKE_GH_CHECKS (a JSON array), or with FAKE_GH_CHECKS_FILE set
+# that file's next line on each call (its last line once the lines run out, the count kept in
+# FAKE_GH_CHECKS_FILE.n), so a test can script pending, then red. It prints FAKE_GH_STDERR on stderr,
+# after stdout, or before it with FAKE_GH_STDERR_FIRST set; with GH_DEBUG set and not empty it first
+# logs `[git remote -v]` on stderr, as gh's debug log does. It appends its physical working directory to
+# FAKE_GH_LOG when that is set, and exits FAKE_GH_RC.
 fake_gh() {
   mkdir -p "$BATS_TEST_TMPDIR/bin"
   cat >"$BATS_TEST_TMPDIR/bin/gh" <<'GH'
 #!/usr/bin/env bash
 case "$*" in
   "pr list"*) [ -n "${FAKE_GH_STATES-}" ] && printf '%s\n' "$FAKE_GH_STATES" | tr ',' '\n'; exit "${FAKE_GH_RC:-0}" ;;
+  "pr checks --json name,bucket")
+    [ -z "${FAKE_GH_LOG-}" ] || pwd -P >>"$FAKE_GH_LOG"
+    [ -z "${GH_DEBUG-}" ] || printf '[git remote -v]\n' >&2
+    [ -z "${FAKE_GH_STDERR_FIRST-}" ] || [ -z "${FAKE_GH_STDERR-}" ] || printf '%s\n' "$FAKE_GH_STDERR" >&2
+    if [ -n "${FAKE_GH_CHECKS_FILE-}" ]; then
+      n=$(cat "$FAKE_GH_CHECKS_FILE.n" 2>/dev/null || echo 0)
+      n=$((n + 1))
+      echo "$n" >"$FAKE_GH_CHECKS_FILE.n"
+      line=$(sed -n "${n}p" "$FAKE_GH_CHECKS_FILE")
+      [ -n "$line" ] || line=$(tail -n 1 "$FAKE_GH_CHECKS_FILE")
+      printf '%s\n' "$line"
+    elif [ -n "${FAKE_GH_CHECKS-}" ]; then
+      printf '%s\n' "$FAKE_GH_CHECKS"
+    fi
+    [ -n "${FAKE_GH_STDERR_FIRST-}" ] || [ -z "${FAKE_GH_STDERR-}" ] || printf '%s\n' "$FAKE_GH_STDERR" >&2
+    exit "${FAKE_GH_RC:-0}"
+    ;;
   "api user"*) printf '%s\n' "${FAKE_GH_ME:-me}" ;;
   "pr view"*) printf '%s\n' "${FAKE_GH_AUTHOR:-someone}" ;;
 esac

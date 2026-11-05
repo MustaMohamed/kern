@@ -57,6 +57,8 @@ Policy keys take `ask`, `auto` or `deny`, and default to `ask`. The hooks read a
 | `pr.policy` | `draft-after-approval`, read as `ask` | `ask`, `auto`, `deny`. PRs are always drafts | pre-tool-use G2, finish-branch |
 | `pr.dedup` | `on` | `on`. G2 always checks | finish-branch |
 | `pr.template` | detected | path | kern-detect, finish-branch |
+| `ci.wait_minutes` | `45` | integer from 1 to 600: how long a go's CI wait reads pending checks before it reports a timeout | ci-wait |
+| `ci.advisory` | none | comma list of check names, each matched exactly and in case, that never gate a go's `gh pr ready` | ci-wait, pre-tool-use G2 |
 | `rebase.push` | `ask` | `ask`, `autopilot` | pre-tool-use G1, take-feedback |
 | `stack.tool` | detected | `gh-stack`, `git`, `none` | take-feedback, finish-branch |
 | `protected_targets` | none | comma list. Each entry is an exact host, matched in any case, also as user@host or in a URL. An entry may also be a host:port, where localhost, 127.0.0.1 and ::1 count as one host, or an sqlite file path. List every ssh alias and each SSH tunnel's local host:port | pre-tool-use G13, diagnose |
