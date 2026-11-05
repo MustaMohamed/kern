@@ -638,7 +638,7 @@ test('the design, the contract and the settings keep the Stop hook that holds a 
     "A go's finish line (M3 part 2 project 2), under a live go until the run reports its first stop: a stop is allowed when the last message holds a line that opens `kern stop: ` past any list, quote, emphasis or heading mark, as the eval grader reads it, which stands the check down for the rest of the go (`stop_down`), or while a background `ci-wait` or subagent the go started has no task-notification; otherwise the reason names the first missing step: the draft PR, a `ci-wait` after the last push, a push after a red verdict, or `gh pr ready`.",
     "A go's report, while no such wait is open: each `check: <name>: skip (named)` line `review-check` printed in the turn is named in the last message beside the word skip.",
     "The nudges, under a go, or outside one only with `stop.nudge: on`: a main-thread Edit, Write or NotebookEdit outside the work dir with no `test.focused`, `test.full`, `task-done`, `review-check` or `probe` run after it, and `floor-scan`'s hits in `git diff HEAD` of the files those calls edited (G7, section 8.3) that the last message does not name by `path:line`.",
-    "Under a go each finish-line, report or nudge block adds 1 to `stop_backs`; the third asks the run to end with its report, saying it stopped short, and the next stop is allowed; any stop allowed at 3 sets the count back to 0. A typed prompt, or the first task-notification after the last block of a background `ci-wait` or subagent the go started, once for each, starts the count again; a notice of anything else does not. Outside a go `stop_hook_active` allows.",
+    "Under a go each finish-line, report, proof skip or nudge block adds 1 to `stop_backs`; the third asks the run to end with its report, saying it stopped short, and the next stop is allowed; any stop allowed at 3 sets the count back to 0. A typed prompt, or the first task-notification after the last block of a background `ci-wait` or subagent the go started, once for each, starts the count again; a notice of anything else does not. Outside a go `stop_hook_active` allows.",
     "| G7 floor guard | opt-in, `stop.nudge: on` | At turn end the Stop hook runs `floor-scan` on `git diff HEAD` of the files the turn's main-thread edits touched: a new suppression, a skipped or deleted test, a removed assert, an empty catch or a debug print blocks the stop once, unless the last message names its `path:line` with a reason (M3 part 2 project 2) | Under a go, always on: each block counts toward the Stop hook's 3 send-backs in a row (section 6.3). A plain `/kern:autopilot on` run is as interactive |",
     'any write or run of a hook entry file (`hooks/stop` among them since M3 part 2 project 2)']);
   assertContains('docs/plans/contract.md', [
@@ -649,7 +649,7 @@ test('the design, the contract and the settings keep the Stop hook that holds a 
     '- **The Stop hook holds a go to ready (M3 part 2 project 2, Task 7).**',
     'Outside a go the hook reads on only when the transcript holds `self-review` or `size-check` (one `grep -F`), or `stop.nudge` reads `on`',
     "(3) The finish line, under a live go with `stop_down` empty: a line of the last message that opens `kern stop: `, once a leading run of blanks, `>`, `*`, `_`, backticks, `#`, `+`, `-` and list numbers (digits, then `.` or `)` and a blank) is dropped, as `stopLines` in `scripts/lib/exec-grade.mjs` drops them (the final review's I2), writes `stop_down=1` and passes;",
-    'Under a go each block that holds (3), (4), (5) or (6) is a send-back: `stop_backs` (0 to 3) goes up by 1 and `stop_line` takes the transcript\'s line count, and a write that fails allows, as do a read',
+    'Under a go each block that holds (3), (4), (5), (6) or (7) is a send-back: `stop_backs` (0 to 3) goes up by 1 and `stop_line` takes the transcript\'s line count, and a write that fails allows, as do a read',
     "any stop allowed with `stop_backs` at 3 writes `stop_backs=0`. A wait's first task-notification line past `stop_line` reads as `stop_backs` 0, so each wait starts the count again once; a notice of anything else (a Monitor's event, a command that is no wait) does not.",
     "so does one of the go's waits, a Bash call whose simple command runs `ci-wait` or an Agent (or Task) call, whose result's `toolUseResult` holds a `backgroundTaskId` or the status `async_launched`, while no task-notification names its `tool_use_id`; any other background command holds nothing open.",
     '(4) The report, under a live go with no wait open: each',
@@ -708,6 +708,26 @@ test("the contract keeps the round 1 fix batch's Stop hook reason", () => {
   // M3 part 2 project 2's paid round 1, F1: under a go the unproven-edit reason asks for the whole report again.
   assertContains('docs/plans/contract.md', [
     "Under a live go its reason ends `Then give the whole report again.`, since the grader reads the last reply (M3 part 2 project 2's round 1 fix batch: go-required-check-stop's last reply after this send-back gave a probe's result alone)."]);
+});
+
+test("the contract and both designs keep the round 2 fix batch's proof skip", () => {
+  // M3 part 2 project 2's paid round 2, H1 (the user's "Build the Stop hook check", 2026-11-05): go-proof-skip's report
+  // reworded prove-it's skip line twice, so the Stop hook holds a report that names the proof to the line as printed.
+  const reason = "``kern: your report names the proof on the running app, and neither verify.browser nor verify.app is set, so it is prove-it's named skip. Give the whole report again with this line as printed: `skip: proof on the running app, no verify.browser or verify.app`.``";
+  assertContains('docs/plans/contract.md', [
+    "(7) The proof skip (M3 part 2 project 2's round 2 fix batch; the user's \"Build the Stop hook check\", 2026-11-05: `go-proof-skip`'s report reworded prove-it's skip line in paid rounds 1 and 2), where (4) runs: under a live go with no wait open, and in the report a go owes while `go_report` is `1`.",
+    "A line of the last message matches `verify\\.(browser|app)|running app`, the last message does not hold `skip: proof on the running app, no verify.browser or verify.app` as printed, it holds no `kern stop: ` line as (3) reads one (a required proof that cannot run is a stop, not a skip), and `settings_get` gives neither `verify.browser` nor `verify.app` a value (a read that exits other than 0 or 3 counts as set, so it allows); reason " + reason,
+    "In the owed report its block is no send-back, as (4)'s is; outside a go with no report owed it never runs. Under a go each block that holds (3), (4), (5), (6) or (7) is a send-back",
+    "`report skip`, `proof skip` (since the round 2 fix batch's check (7)), `unproven edit`"]);
+  assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
+    "| The proof skip | Where the report is read, under a go with no wait open and in the report a go owes after `gh pr ready`: a report that names `verify.browser`, `verify.app` or the running app, with neither setting set and no `kern stop:` line, holds prove-it's line `skip: proof on the running app, no verify.browser or verify.app` as printed, or the hook sends it back for that line. Under a go the send-back counts toward the 3. This closes `go-proof-skip`'s reworded skip line, missed in paid rounds 1 and 2 (the round 2 fix batch; the user's \"Build the Stop hook check\", 2026-11-05) |"]);
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    "The proof skip (M3 part 2 project 2's round 2 fix batch), where the report is read: a last message that names `verify.browser`, `verify.app` or the running app, with neither setting set and no `kern stop: ` line, must hold prove-it's line `skip: proof on the running app, no verify.browser or verify.app` as printed.",
+    'Under a go each finish-line, report, proof skip or nudge block adds 1 to `stop_backs`']);
+  // The hook's reason is the contract's, word for word, and the line it asks for is prove-it's set line.
+  const hook = readFileSync(join(import.meta.dirname, '..', 'hooks', 'stop'), 'utf8');
+  assert.ok(hook.includes(`add "${reason.slice(2, -2).replaceAll('`', '\\`')}"`), 'the hook gives the contract\'s reason');
+  assertContains('skills/prove-it/SKILL.md', ['skip: proof on the running app, no verify.browser or verify.app']);
 });
 
 test("the contract and the skills spec keep plan-check's plan line for a short spec over 2 files", () => {

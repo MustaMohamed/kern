@@ -208,10 +208,11 @@ test('a screen change gets proof on the running app, sent to the chat, or a name
   // The claim table's UI row points at the section, so a "UI works" claim takes the same rules.
   assertContains(EVIDENCE, ['| UI works | Proof on the running app, below | Unit tests; the component compiles |']);
   // The new key: settings.md's row (lint rule 13) and the template's commented line; design 5.4's row is pinned in
-  // tests/skills-control.test.mjs. Fix round 1: both settings rows say what none means under the new rule.
+  // tests/skills-control.test.mjs. Fix round 1: both settings rows say what none means under the new rule. The round 2
+  // fix batch's Stop hook check (7) reads both keys, so each row names stop as a reader.
   const none = (other) => `with no \`${other}\` either, proof on the running app is a named skip, or a stop when it is required`;
-  assertContains('kernel/settings.md', [`| \`verify.browser\` | none: ${none('verify.app')} | command | prove-it, diagnose, verify-app |`,
-    `| \`verify.app\` | none: ${none('verify.browser')} | how to start and drive the app on a simulator or emulator | prove-it, diagnose |`]);
+  assertContains('kernel/settings.md', [`| \`verify.browser\` | none: ${none('verify.app')} | command | prove-it, diagnose, verify-app, stop |`,
+    `| \`verify.app\` | none: ${none('verify.browser')} | how to start and drive the app on a simulator or emulator | prove-it, diagnose, stop |`]);
   assert.ok(!readDoc('kernel/settings.md').raw.includes('ask when a UI claim needs it'), 'settings.md drops the stale ask');
   assertContains('skills/help/templates/kern.local.yml', ['# verify.browser: node scripts/browser-check.mjs\n# verify.app: node scripts/app-check.mjs\n']);
 });

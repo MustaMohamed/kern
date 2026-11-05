@@ -20,17 +20,22 @@
 #   `gh pr ready` ends the go and writes go_report=1, so the check also runs outside a go, once: the first
 #   stop with no wait open reads it, and a stop allowed after that, the one after a block included, empties
 #   go_report.
+# - The proof skip, where the report check runs (M3 part 2 project 2's round 2 fix batch; the user's "Build the
+#   Stop hook check", 2026-11-05): a line of the last message names verify.browser, verify.app or the running
+#   app, the message does not hold prove-it's set line `skip: proof on the running app, no verify.browser or
+#   verify.app` as printed, it holds no `kern stop: ` line (a required proof that cannot run is a stop), and
+#   neither setting is set.
 # - The nudges, under a live go, or outside one with `stop.nudge: on`: a main-thread Edit, Write or
 #   NotebookEdit in the turn, kern's work dir aside, with no proving command after the last one (test.focused,
 #   test.full, task-done, review-check or probe); and floor-scan's hits in `git diff HEAD` of the files those
 #   calls edited that the last message does not name by path:line. Subagents' work is left to task-done and
 #   review-check.
-# Under a go a block that holds a finish-line, report or nudge reason adds 1 to stop_backs and writes the
-# transcript's line count to stop_line. The third such block in a row asks the run to end with its report,
-# saying it stopped short; with stop_backs at 3 the next stop is allowed, and any stop allowed with stop_backs
-# at 3 sets it back to 0. A wait's first task-notification after the last block (a line past stop_line), once
-# per wait, or a typed prompt (prompt-submit) starts the count again. Outside a go a stop the hook already
-# blocked allows, as before.
+# Under a go a block that holds a finish-line, report, proof skip or nudge reason adds 1 to stop_backs and
+# writes the transcript's line count to stop_line. The third such block in a row asks the run to end with its
+# report, saying it stopped short; with stop_backs at 3 the next stop is allowed, and any stop allowed with
+# stop_backs at 3 sets it back to 0. A wait's first task-notification after the last block (a line past
+# stop_line), once per wait, or a typed prompt (prompt-submit) starts the count again. Outside a go a stop the
+# hook already blocked allows, as before.
 # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 # Homebrew bash 5.3.15 segfaults now and then when a subshell undoes a locale change, but only while
 # neither LANG nor LC_ALL is set (Task 16l). An unset LANG already means the C locale, and an LC_* still
@@ -410,6 +415,9 @@ END {
   for (j = 1; j <= nsk; j++) if (!named(SKO[j])) { if (++k <= 20) print "skip " SKO[j] }
   if (k > 20) print "skipmore " (k - 20)
   if (sizeq != "" && !index(text, sizeq)) print "size " sizeq
+  # The proof skip: a line of the last message matches verify\.(browser|app)|running app, which holds no newline,
+  # so a literal index of the whole message reads it, and the message does not hold the set line as printed.
+  if ((index(text, "verify.browser") || index(text, "verify.app") || index(text, "running app")) && !index(text, "skip: proof on the running app, no verify.browser or verify.app")) print "proofskip"
   if (edit > proof) print "unproven"
   for (j = 1; j <= ne && j <= 100; j++) print "file " EO[j]
   print "notif " fn
@@ -562,7 +570,7 @@ case "$V" in *$'\001'*) ;; *) exit 0 ;; esac
 TEXT=${V#*$'\001'}
 V=${V%%$'\001'*}
 
-SELF=0 STOPLINE=0 PENDING=0 STEP="" SKIPS="" SIZEQ="" UNPROVEN=0 FILES="" NOTIF=0
+SELF=0 STOPLINE=0 PENDING=0 STEP="" SKIPS="" SIZEQ="" PROOFSKIP=0 UNPROVEN=0 FILES="" NOTIF=0
 while [ -n "$V" ]; do
   l=${V%%$'\n'*}
   case "$V" in *$'\n'*) V=${V#*$'\n'} ;; *) V="" ;; esac
@@ -574,6 +582,7 @@ while [ -n "$V" ]; do
     "skip "*) SKIPS="$SKIPS${SKIPS:+, }\`check: ${l#skip }: skip (named)\`" ;;
     "skipmore "*) SKIPS="$SKIPS and ${l#skipmore } more" ;;
     "size "*) SIZEQ=${l#size } ;;
+    proofskip) PROOFSKIP=1 ;;
     unproven) UNPROVEN=1 ;;
     "file "*) FILES="$FILES${l#file }"$'\n' ;;
     "notif "*) NOTIF=${l#notif } ;;
@@ -733,6 +742,24 @@ if [ "$NUDGE" = 1 ] && [ "$EDITS" = 1 ]; then
       COUNTED=1
     fi
   fi
+fi
+# proof_skip: the proof skip fails. The scan found the proof named and the set line missing, the last message holds
+# no stop line, and neither verify.browser nor verify.app is set. A settings read that fails counts as set, so it
+# allows. The settings run git, so they are read last.
+proof_skip() {
+  local v
+  [ "$PROOFSKIP" = 1 ] && [ "$STOPLINE" = 0 ] || return 1
+  main_root
+  v=$(settings_get verify.browser 2>/dev/null)
+  case $? in 0 | 3) [ -z "$v" ] || return 1 ;; *) return 1 ;; esac
+  v=$(settings_get verify.app 2>/dev/null)
+  case $? in 0 | 3) [ -z "$v" ] ;; *) return 1 ;; esac
+}
+# The proof skip is read where the report is: under a go with no wait open, where its block is a send-back, and in
+# the report a go owes after ready (READ), where it is not.
+if { [ "$GO" = 1 ] || [ "$READ" = 1 ]; } && [ "$PENDING" = 0 ] && proof_skip; then
+  add "kern: your report names the proof on the running app, and neither verify.browser nor verify.app is set, so it is prove-it's named skip. Give the whole report again with this line as printed: \`skip: proof on the running app, no verify.browser or verify.app\`."
+  [ "$GO" = 1 ] && COUNTED=1
 fi
 # A stop allowed with stop_backs at 3 still writes it back to 0, so the next failure blocks again.
 [ "$SR" = 1 ] || [ -n "$REASON" ] || [ "$SETDOWN" = 1 ] || [ "$B0" = 3 ] || [ "$READ" = 1 ] || exit 0

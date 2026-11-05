@@ -3775,6 +3775,8 @@ const SIZE_BLOCK = 'kern: size-check asked the size question this turn, and your
 const EDIT_BLOCK = 'kern: a file was edited after the last proving command of the turn. Run `test.focused` or `test.full` on the change, or `task-done`, `review-check` or `probe`, and report the result.';
 const FLOOR_BLOCK = "kern: floor-scan finds a lowered floor in this turn's edits: test/sum.test.js:4 (skip). Undo it, or name each `path:line` in your last message with the reason it stays.";
 const THIRD = 'This is the third send-back in a row: end with your report, saying the run stopped short.';
+// M3 part 2 project 2's round 2 fix batch, H1: check (7), the proof skip.
+const PROOF_BLOCK = "kern: your report names the proof on the running app, and neither verify.browser nor verify.app is set, so it is prove-it's named skip. Give the whole report again with this line as printed: `skip: proof on the running app, no verify.browser or verify.app`.";
 test('stopReasons: each kind of Stop hook block a run met, read where stopBlocked reads, a go\'s finish line with its step', () => {
   const line = (...o) => o.map((x) => JSON.stringify(x)).join('\n');
   const fed = (text) => ({ type: 'user', isMeta: true, message: { role: 'user', content: `Stop hook feedback:\n${text}` } });
@@ -3785,6 +3787,7 @@ test('stopReasons: each kind of Stop hook block a run met, read where stopBlocke
   assert.deepEqual(stopReasons({ transcript: line({ type: 'system', subtype: 'stop_hook_summary', hookErrors: [`${FINISH_RED} ${THIRD}`] }) }),
     ['finish line: `ci-wait` reported `ci: red lint` and no push came after it', 'third send-back'], 'a system entry');
   assert.deepEqual(stopReasons({ transcript: line(fed(`${SIZE_BLOCK} ${EDIT_BLOCK} ${FLOOR_BLOCK}`)) }), ['size ask', 'unproven edit', 'lowered floor']);
+  assert.deepEqual(stopReasons({ transcript: line(fed(`${SKIP_BLOCK} ${PROOF_BLOCK} ${THIRD}`)) }), ['report skip', 'proof skip', 'third send-back']);
   assert.deepEqual(stopReasons({ transcript: line(fed(FINISH_DRAFT), fed(FINISH_CI)), events: [fed(FINISH_DRAFT)] }),
     ['finish line: no draft PR is open yet', 'finish line: no `ci-wait` has run since the last push'], 'each kind once, in the order met');
   const printed = { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: FINISH_CI }] }, toolUseResult: { stdout: FINISH_CI } };
