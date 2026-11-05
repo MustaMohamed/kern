@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Wait on a PR's checks for a go's CI loop, as a background command so no model turn polls. Reads the checks of
+# WT's PR with hooks/lib/ci.sh's ci_read every 30 s until a read is not pending, then prints that read: one
+# `check: <name>: <bucket>` line per check and its verdict, `ci: clear`, `ci: red <names>` or `ci: none`. Checks
+# register a few seconds after a PR opens, so `ci: none` stands only after 2 minutes of reads with no checks,
+# re-read every 20 s at most. Past N minutes of pending reads it prints the last read, its verdict as
+# `ci: pending <names> (timeout <N>m)`. N is --minutes, else ci.wait_minutes, else 45: an integer from 1 to 600.
+# KERN_CI_INTERVAL (seconds between reads, 30), KERN_CI_SETTLE (seconds of no checks, 120) and KERN_CI_MINUTE
+# (seconds in a minute, 60) shorten the clock for tests.
+# Exit 0 clear or none, 1 red, 3 pending at the limit, 2 a usage error or a read that failed (ci_read's cause on
+# stderr).
+# Usage: ci-wait WT [--minutes N]
+set -euo pipefail
+KERN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export KERN_ROOT
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh"
+# shellcheck source=hooks/lib/gitctx.sh
+. "$KERN_ROOT/hooks/lib/gitctx.sh"
+# shellcheck source=hooks/lib/ci.sh
+. "$KERN_ROOT/hooks/lib/ci.sh"
+
+usage() {
+  echo "usage: ci-wait WT [--minutes N]${1:+: $1}" >&2
+  exit 2
+}
+
+[ $# -ge 1 ] || usage
+wt=$1
+shift
+flag=0
+minutes=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --minutes)
+      [ $# -ge 2 ] || usage "--minutes needs a value"
+      flag=1
+      minutes=$2
+      shift 2
+      ;;
+    *) usage "unknown argument $1" ;;
+  esac
+done
+[ -d "$wt" ] || usage "no directory at $wt"
+CWD=$(cd "$wt" && pwd)
+KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+export CWD KERN_MAIN
+
+from="--minutes"
+if [ "$flag" = 0 ]; then
+  # Exit 4 leaves a settings file unread; the value the readable files give still holds, as kern-get's does.
+  minutes=$(settings_get ci.wait_minutes 45) || :
+  from="ci.wait_minutes ($(settings_source ci.wait_minutes))"
+fi
+case "$minutes" in '' | *[!0-9]* | 0*) usage "$from must be an integer from 1 to 600, not '$minutes'" ;; esac
+[ "${#minutes}" -le 3 ] && [ "$minutes" -le 600 ] || usage "$from must be an integer from 1 to 600, not '$minutes'"
+
+# seconds NAME VALUE MIN: a usage error unless VALUE, the clock knob NAME, is a whole number from MIN (0 or 1).
+seconds() {
+  case "$2" in '' | *[!0-9]* | 0?*) usage "$1 must be a whole number of seconds, not '$2'" ;; esac
+  [ "${#2}" -le 6 ] && [ "$2" -ge "$3" ] || usage "$1 must be a whole number of seconds from $3, not '$2'"
+}
+interval=${KERN_CI_INTERVAL:-30}
+settle=${KERN_CI_SETTLE:-120}
+minute=${KERN_CI_MINUTE:-60}
+seconds KERN_CI_INTERVAL "$interval" 1
+seconds KERN_CI_SETTLE "$settle" 0
+seconds KERN_CI_MINUTE "$minute" 1
+limit=$((minutes * minute))
+reread=$interval
+[ "$reread" -le 20 ] || reread=20
+
+SECONDS=0
+none_at=""
+while :; do
+  rc=0
+  out=$(ci_read "$CWD") || rc=$?
+  now=$SECONDS
+  case "$rc" in
+    0)
+      if [ "$out" != "ci: none" ]; then
+        printf '%s\n' "$out"
+        exit 0
+      fi
+      [ -n "$none_at" ] || none_at=$now
+      left=$((none_at + settle - now))
+      if [ "$left" -le 0 ]; then
+        printf '%s\n' "$out"
+        exit 0
+      fi
+      [ "$left" -le "$reread" ] || left=$reread
+      sleep "$left"
+      ;;
+    3)
+      none_at=""
+      left=$((limit - now))
+      if [ "$left" -le 0 ]; then
+        printf '%s (timeout %sm)\n' "$out" "$minutes"
+        exit 3
+      fi
+      [ "$left" -le "$interval" ] || left=$interval
+      sleep "$left"
+      ;;
+    1)
+      printf '%s\n' "$out"
+      exit 1
+      ;;
+    *)
+      [ -z "$out" ] || printf '%s\n' "$out"
+      exit 2
+      ;;
+  esac
+done

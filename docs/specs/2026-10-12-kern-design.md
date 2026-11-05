@@ -244,6 +244,8 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 | Git | `push.policy` | `ask` | finish-branch, G1 |
 | Git | `pr.policy` | `draft-after-approval` | finish-branch, G2 |
 | Git | `pr.template` | Detected (`.github/pull_request_template.md`) | finish-branch |
+| CI | `ci.wait_minutes` | `45`; an integer from 1 to 600 | autopilot, `ci-wait` |
+| CI | `ci.advisory` | None; check names, exact and case-sensitive, that never gate ready | autopilot, `ci-wait`, G2 |
 | Stacks | `stack.tool` | Detected: `gh-stack`, `git` or `none` | take-feedback, finish-branch, G17 |
 | Stacks | `rebase.push` | `ask` | take-feedback, G1, G17 |
 | Review | `review.taxonomy` | `blocker,suggestion,nit` | self-review, pr-review, G3 |

@@ -277,6 +277,19 @@ test('the skills spec and the design keep the lines project 1 changed', () => {
     "a write (`cp`, `mv`, `install`, `tee`, a `>` target, `git add` or `git mv`, each simple command judged alone) of a project's own hook file that resolves outside kern's hooks folder gets no vote either"]);
 });
 
+test('the design and the contract keep the CI wait project 2 added', () => {
+  // M3 part 2 project 2 Task 3: the settings rows, ci_read's verdicts and ci-wait's clock.
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    '| CI | `ci.wait_minutes` | `45`; an integer from 1 to 600 | autopilot, `ci-wait` |',
+    '| CI | `ci.advisory` | None; check names, exact and case-sensitive, that never gate ready | autopilot, `ci-wait`, G2 |']);
+  assertContains('docs/plans/contract.md', [
+    'when any bucket is `fail` or `cancel` (red wins over pending)',
+    'An empty array and gh\'s "no checks reported" error both read as none.',
+    '| `ci-wait` | `ci-wait WT [--minutes N]`',
+    '`ci: none` stands only after 2 minutes of reads with no checks, re-read every 20 s at most',
+    'its verdict line as `ci: pending <name>[, ...] (timeout <N>m)`']);
+});
+
 test('run.md stays within its byte cap', () => {
   // 6,100 since M3 part 1 Task 15, its first cap: the main-thread rule, and define's and plan's go rules behind a pointer.
   // 6,130 since its fix round 1: a step's named read stays in the main thread.
