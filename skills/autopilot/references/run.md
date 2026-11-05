@@ -25,7 +25,7 @@ A design choice stops the run when the ticket does not settle it and the answer 
 
 A first build or a fix round that changes behaviour the ticket does not name, against the base branch, is a design choice. That includes a side effect the ticket's own change forces on inputs the ticket never names. The run commits, pushes its branch, stops with the change named and opens no PR.
 
-A required check is one the ticket or prove-it names for the change. When one cannot run, the run builds by the closest check, commits with the check named `fail` in the message body, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.
+A required check is one the ticket or prove-it names for the change. When one cannot run, the run still starts where Define and plan below says, then builds by the closest check, commits with the check named `fail` in the message body, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.
 
 A ticket the run cannot read is a stop: the run reports each way it tried.
 
@@ -65,7 +65,7 @@ plan: Step 4's spike runs, the go standing for the nod; a fact it cannot settle 
 
 ## The run report
 
-Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, the last CI verdict and each red's class, and the jobs that ran under another skill. `parked:` and `skip:` lines keep their format, as the skill that names the skip gives it. The report gives self-review's verdict, and any lane's `needs fixes` as it came. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
+Every run ends with one report: the ticket and PR, each stop, each block and the route taken, each decision with its why, each skipped step, each check with its result, the last CI verdict and each red's class, and the jobs that ran under another skill. `parked:` and `skip:` lines keep their format, as the skill that names the skip gives it. A screen change with no required proof on the running app and neither verify.browser nor verify.app set reports `skip: proof on the running app, no verify.browser or verify.app`. The report gives self-review's verdict, and any lane's `needs fixes` as it came. A check that did not run, but for a named skip, is reported as a fail, not as "not run".
 
 ## Main thread
 

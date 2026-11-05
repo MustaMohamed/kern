@@ -128,7 +128,9 @@ test('run.md says what each stop means and what a stop does', () => {
     // Paid round 2: define's route has no "work goes on" line, so the run stopped with nothing built and no branch to push.
     // Project 1's paid round 2 (the user's "Grader fix and run.md line", 2026-11-04): the run read run.md and no commit skill, so
     // commit:42's body rule never reached it, and the commit had a subject only.
-    'When one cannot run, the run builds by the closest check, commits with the check named `fail` in the message body, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
+    // Paid round 6 (the user's "Raise cap, fix both", 2026-11-05): the run read define, then took "builds by the closest check" as
+    // its whole route, so the line sends it to Define and plan first.
+    'When one cannot run, the run still starts where Define and plan below says, then builds by the closest check, commits with the check named `fail` in the message body, pushes its branch, stops with the report, naming the check as `fail`, and opens no PR. A typed reply that says to open the PR opens it.',
     'A ticket the run cannot read is a stop',
     // Paid round 3, the user's rule: go-deploy-stop's lane said `needs fixes` on the ticket's own formula, and the run opened the PR.
     // Re-review I1: under a go the run writes the plan, so the label alone also fits a formula the run chose. I2: a bounded run commits at finish-branch step 8, after this stop.
@@ -201,6 +203,9 @@ test('run.md lists every report field, the jobs another skill ran among them', (
     // M3 part 2 project 2's paid round 1 (the user's "Keep the set line"): go-proof-skip named its skip in its own words, not
     // prove-it's `skip: proof on the running app, no verify.browser or verify.app`, so a `skip:` line keeps its skill's form.
     '`parked:` and `skip:` lines keep their format, as the skill that names the skip gives it.',
+    // M3 part 2 project 2's paid round 6 (the user's "Raise cap, fix both", 2026-11-05): go-proof-skip's runs in rounds 4 to 6 never
+    // read prove-it, the only file that spelled the line, so run.md, which every go reads, spells it.
+    'A screen change with no required proof on the running app and neither verify.browser nor verify.app set reports `skip: proof on the running app, no verify.browser or verify.app`.',
     // Paid round 3: go-deploy-stop's lane said `needs fixes`, and its report said only that the review found it compliant.
     // M3 part 2 project 1's paid round 3: go-bug-draft's report gave the lane's "approved" for "the review's verdict" and no
     // self-review verdict word, so the sentence names self-review, and a lane's `needs fixes` as its own clause, which
@@ -443,8 +448,10 @@ test('run.md stays within its byte cap', () => {
   // M3 part 2 project 2's round 1 fix batch kept 7,518: the report's `skip:` line clause (55 bytes) came from the overrides
   // line's "and the report names the job", which the report's field list holds, and the issue line's YAML aside, whose quote
   // rule and example stay.
-  assertMaxBytes('skills/autopilot/references/run.md', 7518);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,518 bytes (7,337 until M3 part 2 project 2\'s Task 5: ',
+  // 7,743 since M3 part 2 project 2's paid round 6 (the user's "Raise cap, fix both", 2026-11-05): the required-check stop starts
+  // where Define and plan says before it builds by the closest check, and the report's skip clause spells the screen change's line.
+  assertMaxBytes('skills/autopilot/references/run.md', 7743);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,743 bytes (7,518 until M3 part 2 project 2\'s paid round 6: ', '; 7,337 until M3 part 2 project 2\'s Task 5: ',
     '; 7,329 until the controller\'s second ruling on M3 part 2 project 1\'s round 4 fix batch: ']);
 });
 
