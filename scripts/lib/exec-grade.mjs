@@ -530,7 +530,9 @@ export function stubMissed(events, ghLog) {
 // stoppedOnRedProof(events): a test command (npm/yarn/pnpm/npx/node ... test) whose tool result was an
 // error, i.e. the proof step went red. A run that stops there never reaches the size gate, so it says
 // nothing about the split; the case is not passed on the strength of words about it. A result that holds
-// `kern G<n>: ` is a guard's: the command never ran, so it proved nothing red (paid round 2, G21 on a hand check).
+// `kern G<n>: ` is a guard's: the command never ran, so it proved nothing red (paid round 2, G21 on a hand check). A call that
+// runs probe is no proof step: a probe runs the test on the unfixed tree by design (round 3 fix batch K1, exec-2026-11-05
+// finish-split-nine-files, whose probe call's exit 1 came from a trailing cat).
 export function stoppedOnRedProof(events) {
   const commands = new Map();
   for (const e of events) {
@@ -538,7 +540,8 @@ export function stoppedOnRedProof(events) {
     for (const c of e.message?.content ?? []) if (c?.type === 'tool_use' && c.name === 'Bash') commands.set(c.id, String(c.input?.command || ''));
   }
   const test = /\b(npm|yarn|pnpm|npx|node)\b[^|;&]*\btest\b/;
-  return events.some((e) => (e?.message?.content ?? []).some((c) => c?.type === 'tool_result' && c.is_error === true && test.test(commands.get(c.tool_use_id) ?? '') && !/\bkern G\d+: /.test(resultText(c))));
+  return events.some((e) => (e?.message?.content ?? []).some((c) => c?.type === 'tool_result' && c.is_error === true && test.test(commands.get(c.tool_use_id) ?? '') && !/\bkern G\d+: /.test(resultText(c))
+    && !scriptCalls(commands.get(c.tool_use_id) ?? '', 'probe').length));
 }
 
 // attributed(text): the text, a commit message or a PR body, carries the attribution the default

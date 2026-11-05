@@ -2577,6 +2577,20 @@ test('paid round 2: a guard\'s denial of a test command is no red proof; a test 
   assert.equal(stoppedOnRedProof([...ran('d', [HAND_CHECK, false, G21_ASK]), ...ran('r', ['npm test', false, 'Exit code 1\n# fail 1'])]), true, 'a denial hides no later red');
 });
 
+// M3 part 2 project 2's round 3 fix batch, K1: exec-2026-11-05/finish-split-nine-files (:92, :99). A probe runs the test on the
+// unfixed tree by design, so its call is never the proof step; this one's exit 1 came from a trailing cat on a missing file.
+const PROBE_CALL = 'K=/p/kern; bash $K/scripts/probe --exclude-tests $PWD $PWD/.kern/reviews/feat-many-1.diff.patch -- node --test test/sum.test.js 2>&1 | tail -8; ls .kern/reviews; cat .gitignore 2>/dev/null';
+test('round 3 fix batch: a probe call that exits 1 after a green test command is no red proof; a red test command still is', () => {
+  const green = ran('g', ['npm test', true, '# pass 1\n# fail 0']);
+  const probe = ran('p', [PROBE_CALL, false, 'Exit code 1\nprobe: fail-then-pass ok']);
+  assert.equal(stoppedOnRedProof([...green, ...probe]), false, 'the stored run');
+  assert.equal(stoppedOnRedProof([...green, ...ran('p', [`cd /w/app && ${PROBE_CALL}`, false, 'Exit code 1'])]), false, 'opened with cd');
+  assert.equal(stoppedOnRedProof([...probe, ...ran('r', ['npm test', false, 'Exit code 1\n# pass 0\n# fail 1'])]), true, 'a red test command after the probe');
+  assert.equal(stoppedOnRedProof(ran('r', ['node --test test/sum.test.js', false, 'Exit code 1\n# fail 1'])), true, 'the same test command with no probe');
+  const none = git({ 'rev-list --count main..feat/many': '0' });
+  assert.deepEqual(GRADERS['finish-split-nine-files']({ events: [...GATE, ...probe, say(SPLIT_1101)], ghLog: [], git: none, branch: 'feat/many' }), { pass: true, reasons: [] });
+});
+
 test('paid round 2: finish-split-nine-files passes on the stored run, and "(yes) ... (no)" reads only beside a split', () => {
   const none = git({ 'rev-list --count main..feat/many': '0' });
   const grade = (text, events = []) => GRADERS['finish-split-nine-files']({ events: [...GATE, ...events, say(text)], ghLog: [], git: none, branch: 'feat/many' });
