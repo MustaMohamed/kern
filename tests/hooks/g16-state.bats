@@ -1426,6 +1426,27 @@ expect_kern() {
   expect_cmd none 'docker compose stop' 'npm run stop' 'cat stop'
 }
 
+@test "a bare stop asks where the hooks folder in play may be kern's" {
+  # The fix review's second ruling: in kern's own hooks folder, or one G16 cannot tell from it, a bare stop, or a
+  # glob that could match it, may run kern's Stop hook, which writes stop_down.
+  K=$(kern_root)
+  project_hooks
+  # shellcheck disable=SC2016 # a literal $x
+  expect_hook "cd $K/hooks && bash stop" "cd $K/hooks; bash st*p" 'cd $x/hooks && bash stop' \
+    "cd $BATS_TEST_TMPDIR/nope/hooks; bash stop"
+  CWD="$K/hooks"
+  expect_hook 'bash stop' 'cp x stop' 'docker compose stop'
+  # In a project's own hooks folder, plainly not kern's, it stays a word.
+  set_autopilot off
+  CWD="$R/src/hooks"
+  expect_cmd none 'docker compose stop' 'npm run stop' 'bash stop'
+  CWD="$R"
+  expect_cmd none 'docker compose stop'
+  # A cd in the text puts the word rule in a hooks folder it does not resolve, as with a variable (unk), so even a
+  # project's own folder reached that way keeps the ask.
+  expect_hook "cd $R/src/hooks && docker compose stop"
+}
+
 @test "kern's own hook code still asks" {
   K=$(kern_root)
   mkdir -p "$R/hooks/guards"

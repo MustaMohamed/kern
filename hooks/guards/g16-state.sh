@@ -42,9 +42,9 @@ _G16_TAB=$'\t'
 _G16_INTO="a command other than a read names a .claude directory or \$CLAUDE_CONFIG_DIR, where kern and Claude Code settings live; the user confirms each write"
 _G16_HOOKS="the command names kern's hook code or a state function, and running a hook or calling state_set could forge the user's prompt or the session state; read hook files with the Read or Grep tool, and a path written literally, with no substitution, gets judged by the file it names"
 _G16_HOOK_FILE="the target is kern's own hook code, under its hooks directory, which every guard and the approval check rely on; the user confirms each write"
-# The entry files whose name counts alone, as a word or a last part. hooks/stop counts in the path form only
-# (hit in _G16_HOOK_AWK): a bare stop is a common word (docker compose stop, npm run stop), and a project's own
-# hooks/stop is no kern file.
+# The entry files whose name counts alone, as a word or a last part. hooks/stop counts in the path form (hit in
+# _G16_HOOK_AWK), and as a bare word only where the hooks directory in play may be kern's (_g16_hooks_read): a
+# bare stop is a common word (docker compose stop, npm run stop), and a project's own hooks/stop is no kern file.
 _G16_HOOK_NAMES="prompt-submit session-start subagent-start pre-tool-use"
 # U+017F (long s) and U+212A (Kelvin sign), in UTF-8: APFS folds them to s and k in a file name.
 _G16_LONG_S=$'\305\277'
@@ -1635,6 +1635,10 @@ _g16_hooks_read() {
       if [ "$unk" = 1 ]; then
         case "$last" in *[\{\$\`]*) hit=1 ;; esac
         case "$w" in *'{'*,*'}'* | *'{'*..*'}'*) hit=1 ;; esac
+        # hooks/stop by its bare name, or a glob that could match it, only where the hooks directory in play
+        # may be kern's: in a project's own hooks folder stop is a common word (docker compose stop).
+        case "$last" in stop) hit=1 ;; esac
+        _g16_glob stop "$last" && hit=1
       fi
       case " $names " in *" $last "*) hit=1 ;; esac
       _g16_glob "$names" "$last" && hit=1
