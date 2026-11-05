@@ -42,12 +42,24 @@ SID=$(json_get session_id) || exit 0
 # keeps the consent stored with that id. An expansion with any other prompt_id, or none, clears it: a
 # typed command can fire UserPromptExpansion alone (the exec trace of 2026-10-24 has `/kern:autopilot on`
 # with no submit). A clear that fails changes nothing else; consent_for also binds consent to the
-# prompt's prompt_id and to the repository.
+# prompt's prompt_id and to the repository. A typed prompt, one no wrapper tag opens, also ends a run of the
+# Stop hook's send-backs under a go (stop_backs, M3 part 2 project 2): the user is back. The prompt is read for
+# its wrapper only when the state holds a count above 0.
 if KERN_SF=$(state_file "$SID" 2>/dev/null) && [ -f "$KERN_SF" ]; then
   KERN_EPID=""
-  [ "$EVENT" = UserPromptExpansion ] && { KERN_EPID=$(json_get prompt_id) || KERN_EPID=""; }
+  KERN_BACKS=""
+  case "$(state_get "$SID" stop_backs 2>/dev/null)" in '' | 0) ;; *) KERN_BACKS="stop_backs=0" ;; esac
+  if [ "$EVENT" = UserPromptExpansion ]; then
+    KERN_EPID=$(json_get prompt_id) || KERN_EPID=""
+  elif [ -n "$KERN_BACKS" ]; then
+    KERN_P0=$(json_get prompt) || KERN_P0=""
+    KERN_P0=${KERN_P0#"${KERN_P0%%[![:space:]]*}"}
+    for KERN_T in $KERN_WRAPPER_TAGS; do
+      case "$KERN_P0" in "$KERN_T"*) KERN_BACKS="" ;; esac
+    done
+  fi
   [ -n "$KERN_EPID" ] && [ "$(state_get "$SID" consent_prompt 2>/dev/null)" = "$KERN_EPID" ] ||
-    state_set "$SID" "consent=" 2>/dev/null
+    state_set "$SID" "consent=" ${KERN_BACKS:+"$KERN_BACKS"} 2>/dev/null
 fi
 CWD=$(json_get cwd) || CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
@@ -161,8 +173,9 @@ apply_go() {
     NOTICE="kern: autopilot go not recorded: kern could not name this repository; nothing changed."
     return 0
   fi
-  # A new go starts before its draft PR, so G20 takes it again (go_phase, which G2 sets at the draft).
-  set -- autopilot=on "go=$id" "go_repo=$key" "go_phase="
+  # A new go starts before its draft PR, so G20 takes it again (go_phase, which G2 sets at the draft), and with
+  # no Stop hook send-backs and no stop reported (stop_backs, stop_down).
+  set -- autopilot=on "go=$id" "go_repo=$key" "go_phase=" "stop_backs=0" "stop_down="
   [ "$(state_get "$SID" autopilot 2>/dev/null)" = on ] || { set -- "$@" "since=$(now_iso)"; AP_TURNED_ON=1; }
   if state_set "$SID" "$@"; then
     NOTICE="kern: go recorded for $id."

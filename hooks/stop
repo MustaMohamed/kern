@@ -1,12 +1,32 @@
 #!/usr/bin/env bash
-# kern Stop: self-review step 2's backstop (M3 part 2 project 1; the user's "Fix it in project 1" and "Stop hook
-# (Recommended)", 2026-11-04). When the turn's last read of the running kern's self-review has no review-check run
-# after it, it blocks the stop with a reason that names step 2: {"decision":"block","reason":...} on stdout, exit
-# 0. The turn starts at the user's last prompt, so a read in an earlier turn does not count, and a read of another
-# checkout's copy does not either (the controller's rulings on round 2's fix review). It reads only the
-# transcript's tool_use blocks, so a path in message text or a tool result does not count. A stop it already
-# blocked (stop_hook_active), kern: off and every fault allow the stop: allowing prints nothing and exits 0, since
-# a Stop hook must never trap a session. Project 2 extends it for autopilot's stop.
+# kern Stop: holds a stop back with one reason that lists each check that fails, {"decision":"block","reason":...}
+# on stdout, exit 0. Allowing prints nothing and exits 0. kern: off and every fault (the input, the session state,
+# a settings file, the transcript, a script it runs) allow, since a Stop hook must never trap a session.
+# - Self-review step 2, every session (M3 part 2 project 1; the user's "Fix it in project 1" and "Stop hook
+#   (Recommended)", 2026-11-04): the turn's last read of the running kern's self-review has no review-check run
+#   after it. A read in an earlier turn, or of another checkout's copy, does not count (the controller's rulings
+#   on round 2's fix review).
+# - The size ask, every session (M3 part 2 project 2): the turn's tool results hold size-check's
+#   `size: ask: <q>` line and the turn's last message does not hold <q> as printed.
+# These two block once: a stop the hook already blocked (stop_hook_active) skips them.
+# - A go's finish line, under a live go (go_live) with no stop reported yet (stop_down empty): the last message
+#   holds a line that opens `kern stop: ` (the run reports a stop, and stop_down becomes 1: the user is back),
+#   or one of the go's waits, a background ci-wait or subagent it started, has no task-notification yet.
+#   Otherwise the reason names the first step missing: the draft PR (go_phase, which G2 sets at the
+#   draft), a ci-wait after the last push or `gh pr create`, a push after a red verdict, or `gh pr ready`.
+# - A go's report, under a live go with no wait open: each `check: <name>: skip (named)` line review-check
+#   printed in the turn is named in the last message, on a line that also says skip.
+# - The nudges, under a live go, or outside one with `stop.nudge: on`: a main-thread Edit, Write or
+#   NotebookEdit in the turn, kern's work dir aside, with no proving command after the last one (test.focused,
+#   test.full, task-done, review-check or probe); and floor-scan's hits in `git diff HEAD` of the files those
+#   calls edited that the last message does not name by path:line. Subagents' work is left to task-done and
+#   review-check.
+# Under a go a block that holds a finish-line, report or nudge reason adds 1 to stop_backs and writes the
+# transcript's line count to stop_line. The third such block in a row asks the run to end with its report,
+# saying it stopped short; with stop_backs at 3 the next stop is allowed, and any stop allowed with stop_backs
+# at 3 sets it back to 0. A wait's first task-notification after the last block (a line past stop_line), once
+# per wait, or a typed prompt (prompt-submit) starts the count again. Outside a go a stop the hook already
+# blocked allows, as before.
 # shellcheck disable=SC1091 # the libraries are followed under shellcheck -x
 # Homebrew bash 5.3.15 segfaults now and then when a subshell undoes a locale change, but only while
 # neither LANG nor LC_ALL is set (Task 16l). An unset LANG already means the C locale, and an LC_* still
@@ -30,33 +50,74 @@ export GIT_CONFIG_COUNT=$((KERN_GC + 2)) "GIT_CONFIG_KEY_$KERN_GC=core.fsmonitor
 # shell before "|| exit 0" runs.
 set +o posix
 
+# need LIB FUNCTION...: a library that did not define every FUNCTION allows the stop.
+need() {
+  local f
+  shift
+  for f in "$@"; do
+    declare -F "$f" >/dev/null || exit 0
+  done
+}
+
 # shellcheck source=hooks/lib/json.sh
 . "$KERN_ROOT/hooks/lib/json.sh" 2>/dev/null || exit 0
-declare -F json_ok >/dev/null && declare -F json_get >/dev/null && declare -F json_get_raw >/dev/null || exit 0
+# shellcheck source=hooks/lib/settings.sh
+. "$KERN_ROOT/hooks/lib/settings.sh" 2>/dev/null || exit 0
+# shellcheck source=hooks/lib/state.sh
+. "$KERN_ROOT/hooks/lib/state.sh" 2>/dev/null || exit 0
+# Every function each library defines, as hooks/pre-tool-use lists them; a bats test keeps these lists equal
+# to the definitions.
+need json.sh json_get json_get_raw json_escape json_ok ti_get
+need settings.sh kern_main_root _settings_walk_root _settings_files _settings_lookup _settings_read _settings_ignored
+need settings.sh _settings_local_ok
+need settings.sh settings_get settings_unread_why settings_source settings_keys settings_known_keys settings_unknown_keys
+need settings.sh policy_for kern_enabled list_has skill_conflicts
+need state.sh state_dir _state_path state_file state_get state_set _state_put now_iso default_voice state_reset
+need state.sh state_ensure autopilot_denied_by autopilot_on
+need state.sh prompt_hashes prompt_consent consent_key consent_for go_ticket go_live
 
-# The transcript scan. Each line is one JSON entry; grep has kept those that hold "type":"tool_use" as
-# written, which only a JSON key and value can be (a quote inside a string is escaped). Splitting a line at
-# its double quotes, with each piece that ends in an odd run of backslashes joined to the next, gives the
-# text outside strings and the string bodies in turn, so the scan reads structure and builds only the few
-# values it needs. A tool_use block counts at depth 4 under message.content, where Claude Code writes the
-# session's own calls; a subagent's progress entry nests deeper, and a sidechain entry is skipped, and so is an
-# API request blob, which copies a message's calls at that depth and can be written after a later call. A Read of
-# the running kern's skills/self-review/SKILL.md (a path in SRP, with /private before /var, /tmp or /etc
-# dropped), a Skill call naming kern:self-review or self-review, and a simple command in a Bash call that runs
-# cat, sed or head with a word naming that file are reads. In such a word, a leading $CLAUDE_PLUGIN_ROOT is the
-# running kern's root, and $NAME or ${NAME} takes the value an earlier command of the same call that only
-# assigns gave it; a relative path or any other variable names no file. A simple command that runs
-# review-check by path, bare, or through bash or sh is a run. Simple commands split at newline,
-# ; & | ( ) and backticks, ignoring quotes, so a separator quoted in a command can split it. Prints "block"
-# when the last read has no run after it. The time stays linear in the line: a regex gsub, sub or split in
-# BWK awk slows with the string's length on each match, so on a long string the scan uses only splits at
-# one character, which are literal, and builds a long value by joining its pieces in pairs.
+# The transcript scan. Each line is one JSON entry. Splitting a line at its double quotes, with each piece that
+# ends in an odd run of backslashes joined to the next, gives the text outside strings and the string bodies in
+# turn, so the scan reads structure and builds only the few values it needs. It parses a line only when it may
+# hold what a check reads: a tool_use, an assistant text block, or a tool result that launched a background task
+# or holds a marker line; a task-notification line it reads for its <tool-use-id> values alone. A block counts at
+# depth 4 under message.content, where Claude Code writes the session's own calls and results; a subagent's
+# progress entry nests deeper, a sidechain entry is skipped, and so is an API request blob, which copies a
+# message's calls at that depth and can be written after a later call. Lines from the turn's first (the user's
+# last prompt, `turn`) feed the turn's checks; the lines before it, from the go's prompt, feed only the finish
+# line. The last message is the assistant text after the last tool_use.
+# Self-review: a Read of the running kern's skills/self-review/SKILL.md (a path in SRP, with /private before
+# /var, /tmp or /etc dropped), a Skill call naming kern:self-review or self-review, and a simple command in a
+# Bash call that runs cat, sed or head with a word naming that file are reads. In such a word, a leading
+# $CLAUDE_PLUGIN_ROOT is the running kern's root, and $NAME or ${NAME} takes the value an earlier command of the
+# same call that only assigns gave it; a relative path or any other variable names no file. A simple command
+# that runs review-check by path, bare, or through bash or sh is a run. Simple commands split at newline,
+# ; & | ( ) and backticks, ignoring quotes, so a separator quoted in a command can split it.
+# The finish line: a simple command that runs ci-wait (by path or through bash or sh), git push or gh pr
+# create; a result whose toolUseResult holds a backgroundTaskId or the status async_launched, for a Bash call
+# that ran ci-wait or an Agent call, launched one of the go's waits, by its tool_use_id (any other background
+# command holds nothing open); and a result line that reads `ci: red <names>`, `ci: clear`, `ci: none` or
+# `ci: pending ...`, after a Read's line number if any, is ci-wait's verdict. A task-notification names a wait in
+# <tool-use-id>; a notice of no wait (a Monitor's event, another task) counts for nothing.
+# The nudges: a simple command whose first words are those of test.focused or test.full (KERN_STOP_TESTS, one
+# per line) is a proving command, as is task-done, review-check or probe. An edit of a path under kern's work
+# dir (KERN_STOP_WORK) does not count.
+# The output: a line per finding, then \001 and the last message. The time stays linear in the line: a regex
+# gsub, sub or split in BWK awk slows with the string's length on each match, so on a long string the scan uses
+# only splits at one character, which are literal, and builds a long value by joining its pieces in pairs.
 # shellcheck disable=SC2016 # awk text
 _KERN_STOP_AWK='
 BEGIN {
   SEP[1] = "\n"; SEP[2] = ";"; SEP[3] = "&"; SEP[4] = "|"; SEP[5] = "("; SEP[6] = ")"; SEP[7] = "`"; NS = 7
   nr = split(ENVIRON["KERN_STOP_ROOTS"], RT, "\n")
   for (j = 1; j <= nr; j++) if (substr(RT[j], 1, 1) == "/") SRP[norm(RT[j] "/skills/self-review/SKILL.md")] = 1
+  nr = split(ENVIRON["KERN_STOP_TESTS"], RT, "\n")
+  for (j = 1; j <= nr; j++) { m = split(RT[j], TW); if (m) { nt++; TN[nt] = m; for (i = 1; i <= m; i++) TP[nt, i] = TW[i] } }
+  WORK = ENVIRON["KERN_STOP_WORK"]
+  if (substr(WORK, 1, 1) == "/") WORK = norm(WORK); else WORK = ""
+  # A Read numbers each line: blanks, digits, then a tab, or the arrow U+2192, raw or as a \u escape.
+  ARW = "\342\206\222"
+  LNUM = "^ *[0-9]+(\t|" ARW "|\\\\u2192)"
 }
 # norm(p): p without the /private macOS puts before /var, /tmp and /etc, so both spellings of one file match.
 function norm(p) { return (p ~ /^\/private\/(var|tmp|etc)\//) ? substr(p, 9) : p }
@@ -111,6 +172,34 @@ function word(w,   P, np) {
   np = split(w, P, "/")
   return np ? P[np] : ""
 }
+# bare(w): w with its quotes dropped, or "" for a word of 1,024 bytes or more.
+function bare(w) {
+  if (length(w) >= 1024) return ""
+  gsub(/["\047]/, "", w)
+  return w
+}
+# verb(w, j, nw): the first word from w[j] on that is not an option, quotes dropped, its index in VI. The
+# options git and gh take a value after (-C, -c, -R and the like) skip that value too.
+function verb(w, j, nw,   x) {
+  VI = 0
+  while (j <= nw) {
+    x = bare(w[j])
+    if (x == "-C" || x == "-c" || x == "-R" || x == "--repo" || x == "--git-dir" || x == "--work-tree" || x == "--namespace") { j += 2; continue }
+    if (substr(x, 1, 1) == "-") { j++; continue }
+    VI = j
+    return x
+  }
+  return ""
+}
+# tested(w, k, nw): the simple command from w[k] on starts with the words of test.focused or test.full.
+function tested(w, k, nw,   t, i) {
+  for (t = 1; t <= nt; t++) {
+    if (k + TN[t] - 1 > nw) continue
+    for (i = 1; i <= TN[t]; i++) if (bare(w[k + i - 1]) != TP[t, i]) break
+    if (i > TN[t]) return 1
+  }
+  return 0
+}
 # cut(s, l): s split at SEP[l], then each piece at the separators after it, each simple command read in order.
 function cut(s, l,   A, na, j) {
   if (l > NS) { simple(s); return }
@@ -135,6 +224,7 @@ function simple(seg,   w, nw, k, h, j, e, x, only) {
   k = 1
   while (k <= nw && length(w[k]) < 1024 && (w[k] ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || w[k] ~ /^(!|\{|if|elif|then|else|while|until|do|time|env|command|exec|nohup)$/)) k++
   if (k > nw) return
+  if (inturn && nt && tested(w, k, nw)) proof = ++seq
   h = word(w[k])
   if (h == "bash" || h == "sh") {
     k++
@@ -142,8 +232,12 @@ function simple(seg,   w, nw, k, h, j, e, x, only) {
     if (k > nw) return
     h = word(w[k])
   }
-  if (h == "review-check") ran = ++seq
-  else if (h == "cat" || h == "sed" || h == "head") {
+  if (h == "review-check") { if (inturn) { ran = ++seq; proof = seq } }
+  else if (h == "task-done" || h == "probe") { if (inturn) proof = ++seq }
+  else if (h == "ci-wait") { ciw = ++seq; cwc = 1 }
+  else if (h == "git") { if (verb(w, k + 1, nw) == "push") push = ++seq }
+  else if (h == "gh") { if (verb(w, k + 1, nw) == "pr" && verb(w, VI + 1, nw) == "create") create = ++seq }
+  else if (inturn && (h == "cat" || h == "sed" || h == "head")) {
     for (j = k + 1; j <= nw; j++) {
       if (length(w[j]) >= 1024) continue
       x = w[j]; gsub(/["\047]/, "", x)
@@ -151,15 +245,58 @@ function simple(seg,   w, nw, k, h, j, e, x, only) {
     }
   }
 }
+# edited(p): a main-thread edit of p in the turn, unless p lies in the kern work dir.
+function edited(p,   q) {
+  if (p == "" || length(p) >= 4096 || index(p, "\n")) return
+  q = norm(p)
+  if (WORK != "" && substr(q, 1, length(WORK)) == WORK) return
+  edit = ++seq
+  if (!(p in EF)) { EF[p] = 1; EO[++ne] = p }
+}
 function tool(name, path, cmd, sk) {
+  if (name == "Bash") { split("", VARS); cut(cmd, 1); return }
+  if (!inturn) return
   if (name == "Read") { if (length(path) < 1024 && own(path)) read = ++seq }
   else if (name == "Skill") { if (substr(sk, 1, 1) == "/") sk = substr(sk, 2); if (sk == "kern:self-review" || sk == "self-review") read = ++seq }
-  else if (name == "Bash") { split("", VARS); cut(cmd, 1) }
+  else if (name == "Edit" || name == "Write" || name == "NotebookEdit" || name == "MultiEdit") edited(path)
 }
-{
-  if (index($0, "\"isSidechain\":true") || index($0, "\"type\":\"api-request-blob\"")) next
-  n = split($0, F, "\"")
-  d = 0; ex = 0; key = ""
+# result(s): the text of a tool result, read line by line for the verdict of ci-wait, and in the turn for the
+# ask of size-check and the named skips of review-check, the line number a Read adds (LNUM) dropped.
+function result(s,   R, nl, j, x, y) {
+  nl = split(s, R, "\n")
+  for (j = 1; j <= nl; j++) {
+    x = R[j]
+    if (length(x) > 4096) continue
+    sub(/\r$/, "", x)
+    if (x ~ LNUM) sub(LNUM, "", x)
+    if (substr(x, 1, 4) == "ci: ") {
+      y = substr(x, 5)
+      if (substr(y, 1, 4) == "red ") { vk = "red"; vn = substr(y, 5); vs = ++seq }
+      else if (y == "clear" || y == "none" || substr(y, 1, 8) == "pending ") { vk = "ok"; vs = ++seq }
+    } else if (!inturn) continue
+    else if (substr(x, 1, 11) == "size: ask: ") sizeq = substr(x, 12)
+    else if (substr(x, 1, 7) == "check: " && length(x) > 21 && substr(x, length(x) - 13) == ": skip (named)") {
+      y = substr(x, 8, length(x) - 21)
+      if (!(y in SKS)) { SKS[y] = 1; SKO[++nsk] = y }
+    }
+  }
+}
+# block(): a content block at depth 4 under message.content has closed. A tool_use ends the last message so far,
+# and the text lines held for it. A Bash call that runs ci-wait, and an Agent (or Task) call, may start one of
+# the waits of the go (WT, by the id of the call): its result then shows whether it went to the background.
+function block() {
+  if (ty[4] == "tool_use") {
+    ntx = 0; np = 0; cwc = 0
+    tool(nm, fp, cm, sk)
+    if (tid != "" && ((nm == "Bash" && cwc) || nm == "Agent" || nm == "Task")) WT[tid] = 1
+  }
+  else if (ty[4] == "text") { if (role == "assistant") TX[++ntx] = tx }
+  else if (ty[4] == "tool_result") { if (tid != "") LT[++nlt] = tid; if (rc != "") result(rc) }
+}
+# parse(s): reads the JSON line s for the blocks and values the checks use.
+function parse(s,   n, i, m, p, c, d, ex, key, want, v, esc, j) {
+  n = split(s, F, "\"")
+  d = 0; ex = 0; key = ""; role = ""; launch = 0; nlt = 0
   i = 1
   while (i <= n) {
     m = split(F[i], ch, "")
@@ -169,10 +306,10 @@ function tool(name, path, cmd, sk) {
         d++
         ck[d] = ex ? key : ""
         kind[d] = c
-        ty[d] = ""; nm[d] = ""; fp[d] = ""; cm[d] = ""; sk[d] = ""
+        if (d == 4) { ty[4] = ""; nm = ""; fp = ""; cm = ""; sk = ""; tid = ""; tx = ""; rc = "" }
         ex = 0
       } else if (c == "}" || c == "]") {
-        if (d == 4 && kind[4] == "{" && ty[4] == "tool_use" && ck[3] == "content" && ck[2] == "message") tool(nm[4], fp[4], cm[4], sk[4])
+        if (d == 4 && kind[4] == "{" && ck[3] == "content" && ck[2] == "message") block()
         if (d > 0) d--
         ex = 0
       } else if (c == ":") ex = 1
@@ -180,54 +317,184 @@ function tool(name, path, cmd, sk) {
     }
     if (i == n) break
     i++
-    want = ex && ((d == 4 && (key == "type" || key == "name")) || (d == 5 && ck[5] == "input" && (key == "file_path" || key == "command" || key == "skill")))
-    s = F[i]; esc = 0
-    if (want) PC[1] = s
+    want = 0
+    if (ex) {
+      if (d == 4) want = ck[3] == "content" && ck[2] == "message" && (key == "type" || key == "name" || key == "id" || key == "tool_use_id" || key == "text" || key == "content")
+      else if (d == 5) want = ck[5] == "input" && ck[3] == "content" && ck[2] == "message" && (key == "file_path" || key == "notebook_path" || key == "command" || key == "skill")
+      else if (d == 6) want = key == "text" && ck[5] == "content" && ck[3] == "content" && ck[2] == "message"
+      else if (d == 2) want = (ck[2] == "message" && key == "role") || (ck[2] == "toolUseResult" && (key == "backgroundTaskId" || key == "status"))
+    }
+    v = F[i]; esc = 0
+    if (want) PC[1] = v
     while (i < n && odd(F[i])) { i++; esc++; if (want) PC[esc + 1] = F[i] }
     if (ex) {
       if (want) {
-        v = decode(esc ? joined(PC, esc + 1, "\"") : s)
-        if (key == "type") ty[4] = v
-        else if (key == "name") nm[4] = v
-        else if (key == "file_path") fp[4] = v
-        else if (key == "command") cm[4] = v
-        else sk[4] = v
+        v = decode(esc ? joined(PC, esc + 1, "\"") : v)
+        if (d == 4) {
+          if (key == "type") ty[4] = v
+          else if (key == "name") nm = v
+          else if (key == "id" || key == "tool_use_id") tid = v
+          else if (key == "text") tx = v
+          else rc = v
+        } else if (d == 5) {
+          if (key == "command") cm = v
+          else if (key == "skill") sk = v
+          else fp = v
+        } else if (d == 6) rc = (rc == "") ? v : rc "\n" v
+        else if (key == "role") role = v
+        else if (key == "backgroundTaskId") { if (v != "") launch = 1 }
+        else if (v == "async_launched") launch = 1
       }
       ex = 0
-    } else key = esc ? "" : s
+    } else key = esc ? "" : v
     i++
   }
+  if (launch) for (j = 1; j <= nlt; j++) if (LT[j] in WT) launched[LT[j]] = 1
 }
-END { if (read && ran < read) print "block" }
+# marked(m): the line, a tool result, holds the marker m at the start of a line of its text: right after an
+# opening quote, a newline, or the end of the line number a Read adds (a tab, or the arrow raw or escaped).
+function marked(m) { return index($0, "\"" m) || index($0, "\\n" m) || index($0, "\\t" m) || index($0, ARW m) || index($0, "\\u2192" m) }
+# notified(): a task-notification line names the task it reports by its tool use, in <tool-use-id>; FN keeps the
+# first line that names each.
+function notified(   s, i, j, c, id) {
+  s = $0
+  while (c < 20 && (i = index(s, "<tool-use-id>")) > 0) {
+    s = substr(s, i + 13); j = index(s, "</tool-use-id>")
+    if (j > 1 && j < 200) { id = substr(s, 1, j - 1); done[id] = 1; if (!(id in FN)) FN[id] = ln }
+    c++
+  }
+}
+# named(n): a line of the last message holds n and the word skip.
+function named(n,   j) {
+  for (j = 1; j <= nx; j++) if (index(X[j], n) && index(tolower(X[j]), "skip")) return 1
+  return 0
+}
+{
+  ln = base + NR
+  inturn = (ln >= turn)
+  if (ln == turn) { ntx = 0; np = 0 }
+  if (index($0, "\"isSidechain\":true") || index($0, "\"type\":\"api-request-blob\"")) next
+  if (index($0, "\"type\":\"tool_use\"")) { parse($0); next }
+  if ((index($0, "\"content\":\"<task-notification") || index($0, "\"prompt\":\"<task-notification")) && !index($0, "\"type\":\"tool_result\"")) { notified(); next }
+  # An assistant line with text and no call waits: only the text after the last call is the last message, so it
+  # is parsed at the end, unless a call comes after it.
+  if (index($0, "\"type\":\"text\"") && index($0, "\"role\":\"assistant\"")) { PEND[++np] = $0; next }
+  if (!index($0, "\"type\":\"tool_result\"")) next
+  if (index($0, "\"backgroundTaskId\":\"") || index($0, "\"status\":\"async_launched\"") || marked("ci: ") || (inturn && (marked("size: ask: ") || (marked("check: ") && index($0, ": skip (named)"))))) parse($0)
+}
+END {
+  for (j = 1; j <= np; j++) parse(PEND[j])
+  if (read && ran < read) print "selfreview"
+  text = joined(TX, ntx, "\n")
+  nx = split(text, X, "\n")
+  for (j = 1; j <= nx; j++) { x = X[j]; sub(/^[ \t]+/, "", x); if (substr(x, 1, 11) == "kern stop: ") { print "stopline"; break } }
+  # A wait is open while no notification names it. The count starts again at the latest first notice of a wait.
+  fn = 0
+  for (t in launched) {
+    if (!(t in done)) op = 1
+    else if (FN[t] > fn) fn = FN[t]
+  }
+  if (op) print "pending"
+  a = (push > create) ? push : create
+  if (ciw <= a) print "step ciwait"
+  else if (vs > a && vk == "red") print "step red " vn
+  else print "step ready"
+  # At most 20 skips and 100 files, so the lines the hook reads stay few.
+  k = 0
+  for (j = 1; j <= nsk; j++) if (!named(SKO[j])) { if (++k <= 20) print "skip " SKO[j] }
+  if (k > 20) print "skipmore " (k - 20)
+  if (sizeq != "" && !index(text, sizeq)) print "size " sizeq
+  if (edit > proof) print "unproven"
+  for (j = 1; j <= ne && j <= 100; j++) print "file " EO[j]
+  print "notif " fn
+  printf "\001%s", text
+}
 '
 
 # shellcheck disable=SC2034 # read by the json.sh functions
 KERN_INPUT=$(cat) || exit 0
 json_ok || exit 0
-# A stop it already blocked allows, and so does a stop_hook_active json.sh finds malformed (exit 2), which
-# json_ok can pass.
+# A stop_hook_active json.sh finds malformed (exit 2), which json_ok can pass, allows.
 A=$(json_get_raw stop_hook_active 2>/dev/null)
 [ $? = 2 ] && exit 0
-[ "$A" = true ] && exit 0
 T=$(json_get transcript_path 2>/dev/null) || exit 0
 [ -n "$T" ] && [ -f "$T" ] && [ -r "$T" ] || exit 0
-# One grep of the whole transcript first: with no self-review in it, no read can count, and nothing more runs.
-env LC_ALL=C grep -q -F 'self-review' "$T" 2>/dev/null || exit 0
+SID=$(json_get session_id 2>/dev/null) || SID=""
+CWD=$(json_get cwd 2>/dev/null) || CWD="$PWD"
+export CWD
+
+# main_root: KERN_MAIN, the main worktree of CWD, found once; the settings reads and go_live use it. A KERN_MAIN
+# the environment brings is dropped: it comes from the input's cwd alone, as in pre-tool-use and prompt-submit.
+# Until main_root runs, an empty KERN_MAIN has the settings reads find it from CWD.
+KERN_MAIN=""
+export KERN_MAIN
+KERN_MR=0
+main_root() {
+  if [ "$KERN_MR" = 0 ]; then
+    KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
+    KERN_MR=1
+  fi
+  [ -n "$KERN_MAIN" ]
+}
+
+# A live go, read first from the state's go key, which costs no git call when it is empty.
+GO=0
+if [ -n "$SID" ] && G=$(state_get "$SID" go 2>/dev/null) && [ -n "$G" ] && main_root && go_live "$SID" "$KERN_MAIN"; then
+  GO=1
+fi
+# Outside a go, a stop the hook already blocked allows, as before.
+[ "$GO" = 1 ] || [ "$A" != true ] || exit 0
+# Outside a go, one grep of the whole transcript first: with no self-review and no size-check in it, only the
+# nudges could block, and they run only with `stop.nudge: on` and an edit to read; otherwise nothing more runs.
+NUDGE=$GO
+MARK=0
+if [ "$GO" = 0 ]; then
+  env LC_ALL=C grep -q -F -e 'self-review' -e 'size-check' "$T" 2>/dev/null && MARK=1
+  if env LC_ALL=C grep -q -E '"name":"(Edit|Write|NotebookEdit|MultiEdit)"' "$T" 2>/dev/null; then
+    [ "$(settings_get stop.nudge off 2>/dev/null)" = on ] && NUDGE=1
+  fi
+  [ "$MARK" = 1 ] || [ "$NUDGE" = 1 ] || exit 0
+fi
 # The turn starts at the user's last prompt: a user entry whose content is text, or a list that opens with a text
 # or image block, written role before content as Claude Code writes it, and none of a meta entry (a skill's
 # body), a compact summary, a sidechain or progress entry, an API request blob (CLI 2.1.318 copies each
 # request's messages into the transcript, a user one with no isMeta flag), or a prompt Claude Code wrapped
-# itself. With none found, the turn is the whole transcript. The prompt grep takes one pattern, since BSD grep
-# slows with each -e pattern, and the filter after it reads only the prompt lines.
-L=$(env LC_ALL=C grep -n -E '"role":"user","content":("|\[\{"type":"(text|image)")' "$T" 2>/dev/null |
-  env LC_ALL=C grep -v -F -e '"isMeta":true' -e '"isCompactSummary":true' -e '"isSidechain":true' -e '"type":"progress"' \
-    -e '"type":"api-request-blob"' \
-    -e '"content":"<task-notification' -e '"content":"<cross-session-message' -e '"content":"<scheduled-task' \
-    -e '"content":"<teammate-message' -e '"content":"<channel-message' -e '"content":"<agent-message' |
-  tail -n 1 | cut -d : -f 1)
+# itself. With none found, the turn is the whole transcript; a grep that fails allows, since a wider turn could
+# block on an earlier one. The prompt grep takes one pattern, since BSD grep slows with each -e pattern, and the
+# filter after it reads only the prompt lines.
+# piped_ok STATUS...: the statuses of a grep, a grep -v, tail and cut, where a grep's 1 (no line) passes.
+piped_ok() { [ "$1" -le 1 ] && [ "$2" -le 1 ] && [ "$3" = 0 ] && [ "$4" = 0 ]; }
+L=$(
+  env LC_ALL=C grep -n -E '"role":"user","content":("|\[\{"type":"(text|image)")' "$T" 2>/dev/null |
+    env LC_ALL=C grep -v -F -e '"isMeta":true' -e '"isCompactSummary":true' -e '"isSidechain":true' -e '"type":"progress"' \
+      -e '"type":"api-request-blob"' \
+      -e '"content":"<task-notification' -e '"content":"<cross-session-message' -e '"content":"<scheduled-task' \
+      -e '"content":"<teammate-message' -e '"content":"<channel-message' -e '"content":"<agent-message' |
+    tail -n 1 | cut -d : -f 1
+  piped_ok "${PIPESTATUS[@]}"
+) || exit 0
 case "$L" in '' | *[!0-9]*) L=1 ;; esac
-# Then one grep of the turn, so a read from an earlier turn costs no parse either.
-[ "$L" = 1 ] || tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -q -F 'self-review' || exit 0
+EDITS=0
+if [ "$NUDGE" = 1 ]; then
+  tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -q -E '"name":"(Edit|Write|NotebookEdit|MultiEdit)"' && EDITS=1
+fi
+# Outside a go, then one grep of the turn, so a read or an ask from an earlier turn costs no parse either.
+if [ "$GO" = 0 ] && [ "$EDITS" = 0 ]; then
+  [ "$L" = 1 ] || tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -q -F -e 'self-review' -e 'size-check' || exit 0
+fi
+# Under a go the scan starts at the go's prompt, the last typed `/kern:autopilot go` (or `/autopilot go`) as
+# Claude Code writes a slash command, so a background task from before the go holds nothing open. With none
+# found it starts at the transcript's first line; a grep that fails allows.
+S=$L
+if [ "$GO" = 1 ]; then
+  S=$(
+    env LC_ALL=C grep -n -E '"role":"user","content":"<command-message>(kern:)?autopilot</command-message>\\n<command-name>/(kern:)?autopilot</command-name>\\n<command-args> *[Gg][Oo] ' "$T" 2>/dev/null |
+      env LC_ALL=C grep -v -F -e '"isMeta":true' -e '"isSidechain":true' -e '"type":"api-request-blob"' | tail -n 1 | cut -d : -f 1
+    piped_ok "${PIPESTATUS[@]}"
+  ) || exit 0
+  case "$S" in '' | *[!0-9]*) S=1 ;; esac
+  [ "$S" -le "$L" ] || S=$L
+fi
 # The running kern's roots: kern's root as this hook finds it and as CLAUDE_PLUGIN_ROOT names it, each as written
 # and resolved physically.
 KERN_STOP_ROOTS=""
@@ -236,15 +503,239 @@ for r in "$KERN_ROOT" "${CLAUDE_PLUGIN_ROOT-}"; do
   KERN_STOP_ROOTS="$KERN_STOP_ROOTS${r%/}"$'\n'
   r=$(CDPATH='' cd -P -- "$r" 2>/dev/null && pwd -P) && KERN_STOP_ROOTS="$KERN_STOP_ROOTS$r"$'\n'
 done
-export KERN_STOP_ROOTS
-V=$(tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -F '"type":"tool_use"' | env LC_ALL=C awk "$_KERN_STOP_AWK" 2>/dev/null) || exit 0
-[ "$V" = block ] || exit 0
-# kern: off for this project allows. The settings read runs git, so it waits until the scan would block.
-CWD=$(json_get cwd 2>/dev/null) || CWD="$PWD"
-export CWD
-# shellcheck source=hooks/lib/settings.sh
-. "$KERN_ROOT/hooks/lib/settings.sh" 2>/dev/null || exit 0
-declare -F kern_enabled >/dev/null && kern_enabled 2>/dev/null || exit 0
-# shellcheck disable=SC2016 # literal backticks
-printf '%s\n' '{"decision":"block","reason":"kern: self-review step 2 has not run since self-review was read. When a spec exists, write `<package>.proofs.md`, then run `review-check <wt> <package> --spec <spec>` (`--no-spec` with none) then give the whole report again, its verdict from the `floor:` line."}'
+# test_words KEY: the words of test.focused or test.full before the first that holds a {, from the settings,
+# else from kern-detect in CWD; nothing when neither gives a value.
+test_words() {
+  local v w out=""
+  v=$(settings_get "$1" 2>/dev/null)
+  if [ -z "$v" ]; then
+    v=$(cd "$CWD" 2>/dev/null && bash "$KERN_ROOT/scripts/kern-detect" "$1" 2>/dev/null) || v=""
+    v=${v%%$'\t'*}
+  fi
+  set -f
+  for w in $v; do
+    case "$w" in *'{'*) break ;; esac
+    out="${out:+$out }$w"
+  done
+  set +f
+  printf '%s\n' "$out"
+}
+KERN_STOP_TESTS=""
+KERN_STOP_WORK=""
+if [ "$EDITS" = 1 ] && main_root; then
+  KERN_STOP_TESTS="$(test_words test.focused)"$'\n'"$(test_words test.full)"
+  W=$(settings_get work_dir .kern 2>/dev/null) || W=""
+  case "$W" in '' | /*) ;; *) KERN_STOP_WORK="${KERN_MAIN%/}/${W%/}/" ;; esac
+fi
+export KERN_STOP_ROOTS KERN_STOP_TESTS KERN_STOP_WORK
+# A tail that fails would leave awk an empty transcript, so the pipe's status counts.
+V=$(
+  set -o pipefail
+  tail -n "+$S" "$T" 2>/dev/null | env LC_ALL=C awk -v base=$((S - 1)) -v turn="$L" "$_KERN_STOP_AWK" 2>/dev/null
+) || exit 0
+case "$V" in *$'\001'*) ;; *) exit 0 ;; esac
+TEXT=${V#*$'\001'}
+V=${V%%$'\001'*}
+
+SELF=0 STOPLINE=0 PENDING=0 STEP="" SKIPS="" SIZEQ="" UNPROVEN=0 FILES="" NOTIF=0
+while [ -n "$V" ]; do
+  l=${V%%$'\n'*}
+  case "$V" in *$'\n'*) V=${V#*$'\n'} ;; *) V="" ;; esac
+  case "$l" in
+    selfreview) SELF=1 ;;
+    stopline) STOPLINE=1 ;;
+    pending) PENDING=1 ;;
+    "step "*) STEP=${l#step } ;;
+    "skip "*) SKIPS="$SKIPS${SKIPS:+, }\`check: ${l#skip }: skip (named)\`" ;;
+    "skipmore "*) SKIPS="$SKIPS and ${l#skipmore } more" ;;
+    "size "*) SIZEQ=${l#size } ;;
+    unproven) UNPROVEN=1 ;;
+    "file "*) FILES="$FILES${l#file }"$'\n' ;;
+    "notif "*) NOTIF=${l#notif } ;;
+  esac
+done
+case "$NOTIF" in '' | *[!0-9]*) NOTIF=0 ;; esac
+
+# floor_hits: floor-scan's hits in `git diff HEAD` of FILES, one diff and one scan per repository, as
+# `path:line<TAB>class` lines, path:line as git names it from the repository's top; up to 100 files. Each file
+# goes to git as its path from its repository's top (rev-parse --show-prefix), read literally
+# (--literal-pathspecs), so a name like app/[id]/page.tsx or :(exclude)x is a file, and a file in no repository,
+# or in a directory that is gone, is left out alone. A diff or a scan that fails gives no hit.
+floor_hits() {
+  local rest f dir out top lastdir="" lasttop="" lastpre="" pairs="" tops="" t tmp h n=0
+  rest=$FILES
+  while [ -n "$rest" ] && [ "$n" -lt 100 ]; do
+    f=${rest%%$'\n'*}
+    rest=${rest#*$'\n'}
+    n=$((n + 1))
+    case "$f" in /*/*) dir=${f%/*} ;; /*) dir=/ ;; *) continue ;; esac
+    if [ "$dir" != "$lastdir" ]; then
+      lastdir=$dir lasttop="" lastpre=""
+      if [ -d "$dir" ] && out=$(git -C "$dir" rev-parse --show-toplevel --show-prefix 2>/dev/null); then
+        lasttop=${out%%$'\n'*}
+        case "$out" in *$'\n'*) lastpre=${out#*$'\n'} ;; esac
+      fi
+    fi
+    top=$lasttop
+    [ -n "$top" ] || continue
+    pairs="$pairs$top"$'\t'"$lastpre${f##*/}"$'\n'
+    case "$tops" in *$'\n'"$top"$'\n'*) ;; *) tops="${tops:-$'\n'}$top"$'\n' ;; esac
+  done
+  tmp=$(mktemp "${TMPDIR:-/tmp}/kern-stop.XXXXXX" 2>/dev/null) || return 0
+  [ -n "$tmp" ] || return 0
+  tops=${tops#$'\n'}
+  while [ -n "$tops" ]; do
+    t=${tops%%$'\n'*}
+    tops=${tops#*$'\n'}
+    set --
+    rest=$pairs
+    while [ -n "$rest" ]; do
+      f=${rest%%$'\n'*}
+      rest=${rest#*$'\n'}
+      [ "${f%%$'\t'*}" = "$t" ] && set -- "$@" "${f#*$'\t'}"
+    done
+    git -C "$t" --literal-pathspecs diff --no-ext-diff --no-textconv --no-color HEAD -- "$@" >"$tmp" 2>/dev/null || continue
+    [ -s "$tmp" ] || continue
+    h=$(cd "$t" && bash "$KERN_ROOT/scripts/floor-scan" "$tmp" 2>/dev/null)
+    case $? in 0 | 1) ;; *) continue ;; esac
+    printf '%s\n' "$h" | env LC_ALL=C awk -F '\t' 'NF >= 2 && $1 != "" { print $1 "\t" $2 }'
+  done
+  rm -f "$tmp"
+}
+
+# The hits the last message does not name. The input is the last message, \001, then floor_hits' lines. A hit
+# is named when the message holds its path:line with no digit right after it, so sum.test.js:12 does not name
+# sum.test.js:1. Prints the first 20 as `path:line` (class), then "and N more"; each hit costs one pass of the
+# message.
+# shellcheck disable=SC2016 # awk text
+_KERN_STOP_HITS='
+function named(h,   s, i, L) {
+  s = text; L = length(h)
+  while ((i = index(s, h)) > 0) {
+    if (substr(s, i + L, 1) !~ /^[0-9]$/) return 1
+    s = substr(s, i + L)
+  }
+  return 0
+}
+BEGIN { RS = "\001" }
+NR == 1 { text = $0; next }
+{
+  n = split($0, H, "\n")
+  for (j = 1; j <= n; j++) {
+    i = index(H[j], "\t")
+    if (i < 2) continue
+    h = substr(H[j], 1, i - 1)
+    if (h in seen) continue
+    seen[h] = 1
+    if (named(h)) continue
+    if (++k <= 20) out = out (k > 1 ? ", " : "") "`" h "` (" substr(H[j], i + 1) ")"
+  }
+}
+END { if (k > 20) out = out " and " (k - 20) " more"; printf "%s", out }
+'
+
+# st_read KEY: SV, the state's KEY, empty when the state holds none; exit 1 when the read fails, which allows.
+st_read() {
+  SV=$(state_get "$SID" "$1" 2>/dev/null)
+  case $? in 0) ;; 1) SV="" ;; *) return 1 ;; esac
+}
+
+# The reasons, in the order the checks run. The once checks first, then the counted ones. Self-review's reason
+# is a fixed text that needs no escape, printed first as written below (SR); the eval runners read its words
+# (STOP_BLOCK in scripts/lib/claude-run.mjs).
+SR=0
+REASON=""
+COUNTED=0
+add() { REASON="${REASON:+$REASON }$1"; }
+if [ "$A" != true ]; then
+  [ "$SELF" = 1 ] && SR=1
+  [ -n "$SIZEQ" ] && add "kern: size-check asked the size question this turn, and your last message does not carry it as printed. End with its question word for word: $SIZEQ"
+fi
+SETDOWN=0
+B0=0
+if [ "$GO" = 1 ]; then
+  st_read stop_down || exit 0
+  if [ -z "$SV" ]; then
+    if [ "$STOPLINE" = 1 ]; then
+      SETDOWN=1
+    elif [ "$PENDING" = 0 ]; then
+      st_read go_phase || exit 0
+      if [ "$SV" != pr ]; then
+        STEP="no draft PR is open yet"
+      else
+        # shellcheck disable=SC2016 # literal backticks and ${CLAUDE_PLUGIN_ROOT}
+        case "$STEP" in
+          ciwait) STEP='no `ci-wait` has run since the last push; start `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ci-wait <wt>` as a background command and end the turn to wait for its verdict' ;;
+          "red "*) STEP="\`ci-wait\` reported \`ci: ${STEP}\` and no push came after it; sort each red as \`skills/autopilot/references/ci.md\` says" ;;
+          *) STEP='`gh pr ready` has not marked the PR ready; run it once CI is clear and self-review passed the pushed tree' ;;
+        esac
+      fi
+      add "kern: this go has not reached its finish line: $STEP. Do that next, or, when the run must stop here, end with the report, its first line \`kern stop: <what>\`."
+      COUNTED=1
+    fi
+  fi
+  # While a wait is open the run has not given its report, so the report is not read.
+  if [ -n "$SKIPS" ] && [ "$PENDING" = 0 ]; then
+    add "kern: review-check printed $SKIPS this turn, and the report does not name that skip. Give the whole report again with a line that names each skipped check and the word skip."
+    COUNTED=1
+  fi
+  st_read stop_backs || exit 0
+  B0=$SV
+  case "$B0" in 0 | 1 | 2 | 3) ;; *) B0=0 ;; esac
+fi
+if [ "$NUDGE" = 1 ] && [ "$EDITS" = 1 ]; then
+  if [ "$UNPROVEN" = 1 ]; then
+    # shellcheck disable=SC2016 # literal backticks
+    add 'kern: a file was edited after the last proving command of the turn. Run `test.focused` or `test.full` on the change, or `task-done`, `review-check` or `probe`, and report the result.'
+    COUNTED=1
+  fi
+  if [ -n "$FILES" ]; then
+    HITS=$({ printf '%s\001' "$TEXT"; floor_hits; } | env LC_ALL=C awk "$_KERN_STOP_HITS" 2>/dev/null) || HITS=""
+    if [ -n "$HITS" ]; then
+      add "kern: floor-scan finds a lowered floor in this turn's edits: $HITS. Undo it, or name each \`path:line\` in your last message with the reason it stays."
+      COUNTED=1
+    fi
+  fi
+fi
+# A stop allowed with stop_backs at 3 still writes it back to 0, so the next failure blocks again.
+[ "$SR" = 1 ] || [ -n "$REASON" ] || [ "$SETDOWN" = 1 ] || [ "$B0" = 3 ] || exit 0
+# kern: off for this project allows, and writes nothing. The settings read runs git, so it waits until the hook
+# would act.
+main_root
+kern_enabled 2>/dev/null || exit 0
+if [ "$GO" = 1 ]; then
+  [ "$SETDOWN" = 1 ] && { state_set "$SID" stop_down=1 2>/dev/null || exit 0; }
+  st_read stop_line || exit 0
+  M=$SV
+  case "$M" in '' | *[!0-9]* | ??????????*) M=0 ;; esac
+  # A wait's first task-notification after the last block starts the count again.
+  B=$B0
+  [ "$NOTIF" -gt "$M" ] && B=0
+  if [ "$B" = 3 ]; then
+    state_set "$SID" stop_backs=0 2>/dev/null
+    exit 0
+  fi
+  if [ "$COUNTED" = 1 ]; then
+    B=$((B + 1))
+    N=$(exec wc -l <"$T") || exit 0
+    N=${N//[!0-9]/}
+    case "$N" in '' | ??????????*) exit 0 ;; esac
+    # A count the state did not keep would send the run back without end, so a write that fails allows.
+    state_set "$SID" "stop_backs=$B" "stop_line=$((10#$N))" 2>/dev/null || exit 0
+    [ "$B" = 3 ] && add "This is the third send-back in a row: end with your report, saying the run stopped short."
+  elif [ "$B0" = 3 ]; then
+    state_set "$SID" stop_backs=0 2>/dev/null
+  fi
+fi
+[ "$SR" = 1 ] || [ -n "$REASON" ] || exit 0
+E=""
+if [ -n "$REASON" ]; then
+  E=$(printf '%s' "$REASON" | json_escape) && [ -n "$E" ] || exit 0
+fi
+if [ "$SR" = 1 ]; then
+  # shellcheck disable=SC2016 # literal backticks
+  printf '%s%s"}\n' '{"decision":"block","reason":"kern: self-review step 2 has not run since self-review was read. When a spec exists, write `<package>.proofs.md`, then run `review-check <wt> <package> --spec <spec>` (`--no-spec` with none) then give the whole report again, its verdict from the `floor:` line.' "${E:+ $E}"
+else
+  printf '{"decision":"block","reason":"%s"}\n' "$E"
+fi
 exit 0

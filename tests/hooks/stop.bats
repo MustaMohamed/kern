@@ -483,3 +483,609 @@ allows() {
   echo "# stop took $((t1 - t0)) ms on $(wc -c <"$T") bytes after a new prompt, an allow" >&3
   [ $((t1 - t0)) -lt 2000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
 }
+
+# M3 part 2 project 2, Task 7: the Stop hook holds a go to ready, checks the size ask and nudges on request. The
+# background launches and task notifications come from tests/fixtures/transcripts: synthetic lines in the shapes
+# Claude Code 2.1.318 writes (a Bash call with run_in_background and its result's backgroundTaskId; an Agent call
+# and its result's async_launched status; a task-notification as a user entry, a queue operation and a queued
+# attachment), with invented text.
+
+STATE() { printf '%s\n' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state"; }
+# repo_key: go_repo for this repository, as apply_go writes it.
+repo_key() {
+  printf '%s' "$(git -C "$R" worktree list --porcelain | sed -n '1s/^worktree //p')" | git -C "$R" hash-object --stdin
+}
+# go_on [PHASE]: autopilot on with a live go MA-254 for this repository, its go_phase PHASE (pr when left out).
+go_on() {
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: %s\ngo_phase: %s\n' "$(repo_key)" "${1-pr}" >>"$(STATE)"
+}
+state_line() { printf '%s\n' "$1" >>"$(STATE)"; }
+st() { sed -n "s/^$1: //p" "$(STATE)"; }
+# go_prompt: the typed go, as Claude Code writes a slash command the user typed.
+go_prompt() {
+  N=$((N + 1))
+  printf '{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"<command-message>kern:autopilot</command-message>\\n<command-name>/kern:autopilot</command-name>\\n<command-args>go MA-254</command-args>"},"uuid":"g%s"}\n' "$N" >>"$T"
+}
+# fixture NAME: appends tests/fixtures/transcripts/NAME.jsonl.
+fixture() { cat "$K/tests/fixtures/transcripts/$1.jsonl" >>"$T"; }
+# out TEXT: the result of the last tool_use, a Bash call whose stdout is TEXT (JSON-escaped), as a transcript keeps it.
+out() {
+  printf '{"parentUuid":"u%s","isSidechain":false,"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_%s","type":"tool_result","content":"%s","is_error":false}]},"uuid":"o%s","toolUseResult":{"stdout":"%s","stderr":"","interrupted":false,"isImage":false,"noOutputExpected":false}}\n' \
+    "$N" "$N" "$1" "$N" "$1" >>"$T"
+}
+# drafted: the go pushed its branch and opened its draft PR.
+drafted() {
+  sh_run 'git push -u origin ma-254'
+  out ''
+  sh_run 'gh pr create --draft --title MA-254 --body-file pr-body.md'
+  out 'https://github.com/o/r/pull/12'
+}
+# held: the last stop exited 0 with a block object, whatever its reason; sets reason.
+held() {
+  [ "$status" -eq 0 ] && reason=$(reason_of "$output") || { echo "expected a block; status $status, output: $output"; return 1; }
+}
+nudge_on() {
+  mkdir -p "$R/.claude"
+  printf 'stop.nudge: on\n' >>"$R/.claude/kern.local.yml"
+}
+# bg_out ID: the result of the last tool_use, a Bash call Claude Code sent to the background as task ID.
+bg_out() {
+  printf '{"parentUuid":"u%s","isSidechain":false,"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_%s","type":"tool_result","content":"Command running in background with ID: %s.","is_error":false}]},"uuid":"b%s","toolUseResult":{"stdout":"","stderr":"","interrupted":false,"isImage":false,"noOutputExpected":false,"backgroundTaskId":"%s"}}\n' \
+    "$N" "$N" "$1" "$N" "$1" >>"$T"
+}
+# notice [TOOL_USE_ID]: a task-notification user entry, naming TOOL_USE_ID in <tool-use-id> when given (a Monitor's
+# event can name none), after its queue operation.
+notice() {
+  local id=""
+  [ -n "${1-}" ] && id="<tool-use-id>$1</tool-use-id>\\n"
+  N=$((N + 1))
+  printf '{"type":"queue-operation","operation":"enqueue","sessionId":"test-session","content":"<task-notification>\\n<task-id>t%s</task-id>\\n%s<status>completed</status>\\n</task-notification>"}\n' "$N" "$id" >>"$T"
+  printf '{"parentUuid":"u%s","isSidechain":false,"type":"user","message":{"role":"user","content":"<task-notification>\\n<task-id>t%s</task-id>\\n%s<status>completed</status>\\n<event>line %s</event>\\n</task-notification>"},"uuid":"n%s","origin":{"kind":"task-notification"}}\n' \
+    "$N" "$N" "$id" "$N" "$N" >>"$T"
+}
+# fail_with: puts grep, tail, wc and awk stubs first on PATH, which fail as KERN_T_FAIL says: turn or window, the
+# hook's grep for the turn or the go's prompt; scan, its tail of the transcript; wc, its line count; state, a state
+# read of the key KERN_T_KEY. Each runs the real tool otherwise.
+fail_with() {
+  local d="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$d"
+  cat >"$d/grep" <<EOF
+#!/bin/sh
+case "\$KERN_T_FAIL:\$*" in turn:*'"content":("'* | window:*command-message*) exit 2 ;; esac
+exec $(command -v grep) "\$@"
+EOF
+  cat >"$d/tail" <<EOF
+#!/bin/sh
+case "\$KERN_T_FAIL:\$1 \$2" in 'scan:-n +'*) exit 1 ;; esac
+exec $(command -v tail) "\$@"
+EOF
+  cat >"$d/wc" <<EOF
+#!/bin/sh
+case "\$KERN_T_FAIL:\$*" in wc:-l) exit 0 ;; esac
+exec $(command -v wc) "\$@"
+EOF
+  cat >"$d/awk" <<EOF
+#!/bin/sh
+case "\$KERN_T_FAIL:\$*" in "state:-v k=\$KERN_T_KEY "*) exit 2 ;; esac
+exec $(command -v awk) "\$@"
+EOF
+  chmod +x "$d/grep" "$d/tail" "$d/wc" "$d/awk"
+  export PATH="$d:$PATH"
+}
+
+@test "a go that quits before its draft is sent back" {
+  go_on ''
+  go_prompt
+  sh_run 'npm test'
+  out 'ok 1 - sum adds'
+  say 'The change is built and its tests pass.'
+  stop
+  held
+  [[ "$reason" == 'kern: this go has not reached its finish line: no draft PR is open yet. Do that next, or, when the run must stop here, end with the report, its first line `kern stop: <what>`.' ]] || false
+  [ "$(st stop_backs)" = 1 ]
+  [ "$(st stop_line)" = "$(wc -l <"$T" | tr -d ' ')" ]
+  [[ "$reason" != *"$(printf '\342\200\224')"* && "$reason" != *"$(printf '\342\200\223')"* ]] || false
+}
+
+@test "a go whose last message reports a stop may end" {
+  go_on ''
+  go_prompt
+  say 'kern stop: required check lint cannot run\nThe project names no lint command, and the ticket requires one.'
+  stop
+  allows
+  [ "$(st stop_down)" = 1 ]
+  [ -z "$(st stop_backs)" ]
+}
+
+@test "after a reported stop the finish line stays down" {
+  go_on ''
+  go_prompt
+  say 'kern stop: required check lint cannot run'
+  stop
+  allows
+  prompt 'What does the lint rule check?'
+  say 'It checks that each hook file loads its libraries.'
+  stop
+  allows
+  [ "$(st stop_down)" = 1 ]
+  [ -z "$(st stop_backs)" ]
+}
+
+@test "a go waiting on a background ci-wait may end" {
+  go_on
+  go_prompt
+  drafted
+  fixture background-bash
+  say 'CI is running; I will read its verdict when it reports.'
+  stop
+  allows
+  [ -z "$(st stop_backs)" ]
+  # Once the wait reports, the finish line holds again: its next step is gh pr ready.
+  fixture task-notification
+  say 'CI reported.'
+  stop
+  held
+  [[ "$reason" == *'`gh pr ready` has not marked the PR ready'* ]] || false
+}
+
+@test "a go waiting on a background subagent may end" {
+  go_on ''
+  go_prompt
+  fixture async-agent
+  say 'Task 2 runs in the background.'
+  stop
+  allows
+  fixture task-notification-queued
+  say 'Task 2 is in.'
+  stop
+  held
+  [[ "$reason" == *'no draft PR is open yet'* ]] || false
+}
+
+@test "a go's prompt bounds its waits: a background task from before the go holds nothing open" {
+  go_on ''
+  prompt 'Start the dev server.'
+  fixture background-bash
+  say 'The server runs in the background.'
+  go_prompt
+  say 'Planning the change.'
+  stop
+  held
+  [[ "$reason" == *'no draft PR is open yet'* ]] || false
+}
+
+@test "a red verdict with no push after it is named" {
+  go_on
+  go_prompt
+  drafted
+  sh_run "bash $P/scripts/ci-wait $R"
+  out 'check: lint: fail\ncheck: test: pass\nci: red lint'
+  say 'Lint is red.'
+  stop
+  held
+  [[ "$reason" == *'`ci-wait` reported `ci: red lint` and no push came after it'* ]] || false
+  # A push after the red moves the finish line to the next wait; a send-back under a go holds on stop_hook_active.
+  sh_run 'git push origin ma-254'
+  out ''
+  say 'Pushed the lint fix.'
+  stop true
+  held
+  [[ "$reason" == *'no `ci-wait` has run since the last push'* ]] || false
+  # A verdict read from the wait's output file, through Read's line numbers, counts as well.
+  sh_run "bash $P/scripts/ci-wait $R"
+  out 'check: lint: pass\nci: clear'
+  read_file /tmp/kern-test/tasks/bk3q9x2mz.output
+  result '     1\tcheck: lint: fail\n     2\tci: red lint'
+  stop true
+  held
+  [[ "$reason" == *'`ci: red lint`'* ]] || false
+}
+
+@test "the third send-back asks for the report; the fourth stop ends" {
+  go_on ''
+  go_prompt
+  say 'Done.'
+  stop
+  held
+  [[ "$reason" != *'stopped short'* ]] || false
+  [ "$(st stop_backs)" = 1 ]
+  stop true
+  held
+  [ "$(st stop_backs)" = 2 ]
+  stop true
+  held
+  [[ "$reason" == *'This is the third send-back in a row: end with your report, saying the run stopped short.' ]] || false
+  [ "$(st stop_backs)" = 3 ]
+  stop true
+  allows
+  [ "$(st stop_backs)" = 0 ]
+}
+
+@test "a task notification resets the count" {
+  go_on ''
+  go_prompt
+  fixture async-agent
+  fixture task-notification-queued
+  say 'Task 2 is in.'
+  stop
+  held
+  [ "$(st stop_backs)" = 1 ]
+  # The notification came before the last block, so the count goes on.
+  stop true
+  held
+  [ "$(st stop_backs)" = 2 ]
+  fixture background-bash
+  fixture task-notification
+  say 'CI reported.'
+  stop true
+  held
+  [ "$(st stop_backs)" = 1 ]
+  # Each wait starts the count again once: a later notice of the same wait does not.
+  fixture task-notification
+  stop true
+  held
+  [ "$(st stop_backs)" = 2 ]
+}
+
+@test "a go's report must name review-check's skip" {
+  go_on
+  state_line 'stop_down: 1'
+  go_prompt
+  sh_run "bash $P/scripts/review-check $R pkg --no-spec --autopilot"
+  out 'check: verify.fast: skip (named)\ncheck: floor-scan: ok\nproofs: not checked (no spec)\nfloor: none'
+  say 'Verdict: ready. Every check passed.'
+  stop
+  held
+  [[ "$reason" == 'kern: review-check printed `check: verify.fast: skip (named)` this turn, and the report does not name that skip. Give the whole report again with a line that names each skipped check and the word skip.' ]] || false
+  [ "$(st stop_backs)" = 1 ]
+  # Naming the check without the word skip on its line is not enough.
+  say 'Verdict: ready. verify.fast had nothing to run.'
+  stop true
+  held
+  say 'Verdict: ready.\n- verify.fast: skip (named), no command resolves.'
+  stop true
+  allows
+}
+
+@test "a paraphrased size ask is sent back once" {
+  local q='The change is now lines: 412 (git diff --shortstat), 398 with -w, in files: 5, over pr.max_lines: 300 (default). Reply split or one PR.'
+  sh_run "bash $P/scripts/size-check $R pkg"
+  out "size: over pr.max_lines: stop for execute-plan step 10's size decision before the next task\\nsize: ask: $q"
+  say 'The change is 412 lines, over the 300 limit. Split it, or keep one PR?'
+  stop
+  held
+  [[ "$reason" == "kern: size-check asked the size question this turn, and your last message does not carry it as printed. End with its question word for word: $q" ]] || false
+  stop true
+  allows
+  : >"$T"
+  sh_run "bash $P/scripts/size-check $R pkg"
+  out "size: ask: $q"
+  say "Step 10 stops here.\\n$q"
+  stop
+  allows
+}
+
+@test "an unproven edit nudges only when asked" {
+  use Edit "\"file_path\":\"$R/README.md\",\"old_string\":\"readme\",\"new_string\":\"read me\""
+  out 'The file has been updated.'
+  say 'Updated the readme.'
+  stop
+  allows
+  nudge_on
+  stop
+  held
+  [[ "$reason" == 'kern: a file was edited after the last proving command of the turn. Run `test.focused` or `test.full` on the change, or `task-done`, `review-check` or `probe`, and report the result.' ]] || false
+  # Outside a go a nudge blocks once and counts nothing.
+  [ -z "$(st stop_backs)" ]
+  stop true
+  allows
+  # A run of test.full or a kern proving script after the edit clears it; an edit in kern's work dir needs none.
+  printf 'test.full: npm test\n' >>"$R/.claude/kern.local.yml"
+  sh_run 'cd /w && npm test 2>&1 | tail -5'
+  say 'Tests pass.'
+  stop
+  allows
+  use Write "\"file_path\":\"$R/.kern/tmp/pr-body.md\",\"content\":\"Body.\""
+  stop
+  allows
+  use Edit "\"file_path\":\"$R/README.md\",\"old_string\":\"read me\",\"new_string\":\"readme\""
+  sh_run "bash $P/scripts/task-done $R"
+  stop
+  allows
+}
+
+@test "a lowered floor names its line or blocks" {
+  printf "it('adds', () => {});\n" >"$R/sum.test.js"
+  git -C "$R" add sum.test.js
+  git -C "$R" commit -q -m 'add test'
+  nudge_on
+  printf "it.skip('adds', () => {});\n" >"$R/sum.test.js"
+  use Edit "\"file_path\":\"$R/sum.test.js\",\"old_string\":\"it(\",\"new_string\":\"it.skip(\""
+  sh_run "bash $P/scripts/task-done $R"
+  say 'Done.'
+  stop
+  held
+  [[ "$reason" == 'kern: floor-scan finds a lowered floor in this turn'"'"'s edits: `sum.test.js:1` (test-made-easier). Undo it, or name each `path:line` in your last message with the reason it stays.' ]] || false
+  # A longer line number names another line.
+  say 'sum.test.js:12 is another test.'
+  stop
+  held
+  say 'sum.test.js:1 skips the adds test until its fixture lands.'
+  stop
+  allows
+}
+
+@test "no go, no nudge key, no self-review: no parse" {
+  local real
+  real=$(command -v awk)
+  mkdir "$BATS_TEST_TMPDIR/bin"
+  # This awk records a run of the hook's scan and fails it, and runs every other awk program as usual.
+  printf '#!/bin/sh\ncase "$*" in *"function own("*) : >"%s"; exit 1 ;; esac\nexec "%s" "$@"\n' \
+    "$BATS_TEST_TMPDIR/scanned" "$real" >"$BATS_TEST_TMPDIR/bin/awk"
+  chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  prompt 'Rename the helper.'
+  use Edit "\"file_path\":\"$R/README.md\",\"old_string\":\"readme\",\"new_string\":\"read me\""
+  sh_run 'git push origin feat'
+  say 'Renamed.'
+  stop
+  allows
+  [ ! -e "$BATS_TEST_TMPDIR/scanned" ]
+  # A go runs the scan.
+  go_on ''
+  stop
+  allows
+  [ -e "$BATS_TEST_TMPDIR/scanned" ]
+}
+
+@test "under a go, kern: off and a state the hook cannot write allow" {
+  go_on ''
+  go_prompt
+  say 'Done.'
+  mkdir -p "$R/.claude"
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  stop
+  allows
+  [ -z "$(st stop_backs)" ]
+  rm "$R/.claude/kern.local.yml"
+  chmod a-w "$CLAUDE_PLUGIN_DATA/sessions"
+  stop
+  chmod u+w "$CLAUDE_PLUGIN_DATA/sessions"
+  allows
+  [ -z "$(st stop_backs)" ]
+}
+
+@test "outside a live go the finish line does not run" {
+  # A go for another repository, then autopilot on with no go.
+  set_autopilot on
+  printf 'go: MA-254\ngo_repo: 0000000000000000000000000000000000000000\n' >>"$(STATE)"
+  go_prompt
+  say 'Done.'
+  stop
+  allows
+  set_autopilot on
+  stop
+  allows
+}
+
+@test "stop checks every function each library it loads defines" {
+  need_lists_match stop
+}
+
+@test "under a go the scan stays linear: a transcript over 6 MB finishes well under the 10 s timeout" {
+  # The go's prompt, 2,000 Bash calls, each with a result full of escaped quotes and markers in mid-line, which
+  # costs no parse, and every 20th with a ci-wait verdict at its start, which is parsed; 2,000 assistant text
+  # blocks; a 1 MB Write full of escaped quotes; a push. A block names the missing ci-wait.
+  go_on
+  awk -v cwd="$CWD" 'BEGIN {
+    print "{\"parentUuid\":null,\"isSidechain\":false,\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"<command-message>kern:autopilot</command-message>\\n<command-name>/kern:autopilot</command-name>\\n<command-args>go MA-254</command-args>\"},\"uuid\":\"q0\"}"
+    pad = "text \\\"quoted\\\" ci: clear size: ask: x {\\\"type\\\":\\\"tool_use\\\",\\\"name\\\":\\\"Edit\\\"} "
+    while (length(pad) < 1300) pad = pad pad
+    q = "a\\\"b"; while (length(q) < 1000000) q = q q
+    head = "{\"parentUuid\":\"p\",\"isSidechain\":false,\"cwd\":\"" cwd "\",\"message\":{\"id\":\"m\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t\",\"name\":"
+    tail = "}],\"stop_reason\":null},\"type\":\"assistant\",\"uuid\":\"u\"}"
+    for (i = 1; i <= 2000; i++) {
+      v = (i % 20) ? "" : "ci: pending lint (timeout 45m)\\n"
+      print head "\"Bash\",\"input\":{\"command\":\"npm test 2>&1 | tail -15; echo \\\"" i "\\\"\"}" tail
+      print "{\"parentUuid\":\"u\",\"isSidechain\":false,\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"t\",\"type\":\"tool_result\",\"content\":\"" v pad "\"}]},\"toolUseResult\":{\"stdout\":\"" v pad "\"}}"
+      print "{\"parentUuid\":\"u\",\"isSidechain\":false,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"" pad "\"}]},\"type\":\"assistant\"}"
+    }
+    print head "\"Write\",\"input\":{\"file_path\":\"/w/big.json\",\"content\":\"" q "\"}" tail
+    print head "\"Bash\",\"input\":{\"command\":\"git push origin ma-254\"}" tail
+  }' >"$T"
+  [ "$(wc -c <"$T")" -gt 6000000 ]
+  say 'Pushed.'
+  t0=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  stop
+  t1=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  held
+  [[ "$reason" == *'no `ci-wait` has run since the last push'* ]] || false
+  echo "# stop took $((t1 - t0)) ms on $(wc -c <"$T") bytes under a go, a block" >&3
+  [ $((t1 - t0)) -lt 5000 ] || { echo "took $((t1 - t0)) ms"; return 1; }
+}
+
+# Task 7's fix round 1 (the review of 2026-11-05).
+
+@test "notices of tasks that are no wait of the go never reset the count; the fourth stop still ends" {
+  local dev mon
+  go_on
+  go_prompt
+  drafted
+  # A dev server in the background and a Monitor: neither is one of the go's waits.
+  use Bash '"command":"npm run dev","run_in_background":true'
+  bg_out bdev1
+  dev="toolu_$N"
+  use Monitor '"command":"tail -f app.log","description":"app log"'
+  out 'Monitor started.'
+  mon="toolu_$N"
+  say 'Waiting on the server.'
+  stop
+  held
+  [ "$(st stop_backs)" = 1 ]
+  notice "$mon"
+  notice
+  notice "$dev"
+  stop true
+  held
+  [ "$(st stop_backs)" = 2 ]
+  notice "$mon"
+  notice
+  stop true
+  held
+  [[ "$reason" == *'saying the run stopped short.' ]] || false
+  [ "$(st stop_backs)" = 3 ]
+  notice "$mon"
+  stop true
+  allows
+  [ "$(st stop_backs)" = 0 ]
+}
+
+@test "a background command that is no ci-wait holds nothing open" {
+  go_on
+  go_prompt
+  drafted
+  use Bash '"command":"sleep 3600","run_in_background":true'
+  bg_out bslp1
+  say 'Waiting on the background task.'
+  stop
+  held
+  [[ "$reason" == *'no `ci-wait` has run since the last push'* ]] || false
+  # A ci-wait in the foreground is no wait either: its verdict is in.
+  sh_run "bash $P/scripts/ci-wait $R"
+  out 'ci: clear'
+  stop true
+  held
+  [[ "$reason" == *'`gh pr ready` has not marked the PR ready'* ]] || false
+}
+
+@test "a go waiting on CI is not asked for its report" {
+  go_on
+  go_prompt
+  drafted
+  sh_run "bash $P/scripts/review-check $R pkg --no-spec --autopilot"
+  out 'check: verify.fast: skip (named)\nfloor: none'
+  fixture background-bash
+  say 'CI is running; the report comes with its verdict.'
+  stop
+  allows
+  [ -z "$(st stop_backs)" ]
+  fixture task-notification
+  say 'Verdict: ready.'
+  stop
+  held
+  [[ "$reason" == *'kern: review-check printed `check: verify.fast: skip (named)` this turn'* ]] || false
+}
+
+@test "a stop allowed with the count at 3 sets it back to 0, so the next failure blocks" {
+  go_on ''
+  state_line 'stop_backs: 3'
+  go_prompt
+  fixture async-agent
+  say 'Task 2 runs in the background.'
+  stop true
+  allows
+  [ "$(st stop_backs)" = 0 ]
+  fixture task-notification-queued
+  say 'Task 2 is in.'
+  stop true
+  held
+  [ "$(st stop_backs)" = 1 ]
+}
+
+@test "a grep, a tail, a state read or a line count that fails allows" {
+  local c
+  fail_with
+  go_on ''
+  go_prompt
+  say 'Done.'
+  for c in turn window scan wc state:stop_down state:go_phase state:stop_backs state:stop_line; do
+    export KERN_T_FAIL=${c%%:*} KERN_T_KEY=${c#*:}
+    stop
+    allows || { echo "fault $c"; return 1; }
+    [ -z "$(st stop_backs)" ] || { echo "fault $c wrote stop_backs"; return 1; }
+  done
+  export KERN_T_FAIL=none
+  stop
+  held
+  [ "$(st stop_backs)" = 1 ]
+}
+
+@test "the floor scan reads each edited file literally from its own repository, and leaves out one in none" {
+  mkdir -p "$R/app/[id]" "$R/app/i" "$BATS_TEST_TMPDIR/loose" "$BATS_TEST_TMPDIR/gone"
+  printf "it('a', () => {});\n" >"$R/app/[id]/page.test.js"
+  printf "it('b', () => {});\n" >"$R/app/i/page.test.js"
+  git -C "$R" add app
+  git -C "$R" commit -q -m 'add tests'
+  nudge_on
+  printf "it.skip('a', () => {});\n" >"$R/app/[id]/page.test.js"
+  printf "it.skip('b', () => {});\n" >"$R/app/i/page.test.js"
+  use Edit "\"file_path\":\"$R/app/[id]/page.test.js\",\"old_string\":\"it(\",\"new_string\":\"it.skip(\""
+  use Write "\"file_path\":\"$BATS_TEST_TMPDIR/loose/notes.md\",\"content\":\"x\""
+  use Write "\"file_path\":\"$BATS_TEST_TMPDIR/gone/notes.md\",\"content\":\"x\""
+  rmdir "$BATS_TEST_TMPDIR/gone"
+  sh_run "bash $P/scripts/task-done $R"
+  say 'Done.'
+  stop
+  held
+  [[ "$reason" == 'kern: floor-scan finds a lowered floor in this turn'"'"'s edits: `app/[id]/page.test.js:1` (test-made-easier). Undo it,'* ]] || false
+}
+
+@test "a lowered floor names 20 hits, then how many more" {
+  local i
+  for i in $(seq 1 25); do printf "it('t%s', () => {});\n" "$i"; done >"$R/many.test.js"
+  git -C "$R" add many.test.js
+  git -C "$R" commit -q -m 'add tests'
+  nudge_on
+  sed 's/^it(/it.skip(/' "$R/many.test.js" >"$BATS_TEST_TMPDIR/many"
+  cp "$BATS_TEST_TMPDIR/many" "$R/many.test.js"
+  use Edit "\"file_path\":\"$R/many.test.js\",\"old_string\":\"it(\",\"new_string\":\"it.skip(\""
+  sh_run "bash $P/scripts/task-done $R"
+  say 'Done.'
+  stop
+  held
+  [[ "$reason" == *'`many.test.js:20` (test-made-easier) and 5 more. Undo it,'* ]] || false
+  [[ "$reason" != *'many.test.js:21'* ]] || false
+}
+
+@test "a call whose input opens with a task-notification is read as a call" {
+  nudge_on
+  use Write "\"file_path\":\"$R/notes.md\",\"content\":\"<task-notification>notes</task-notification>\""
+  say 'Saved the notes.'
+  stop
+  held
+  [[ "$reason" == 'kern: a file was edited after the last proving command of the turn.'* ]] || false
+}
+
+@test "an inherited KERN_MAIN does not stand for the input's cwd" {
+  go_on ''
+  go_prompt
+  say 'Done.'
+  mkdir -p "$BATS_TEST_TMPDIR/other"
+  export KERN_MAIN="$BATS_TEST_TMPDIR/other"
+  stop
+  unset KERN_MAIN
+  held
+  [[ "$reason" == *'no draft PR is open yet'* ]] || false
+}
+
+@test "a verdict read with the arrow line numbers of a Read counts" {
+  go_on
+  go_prompt
+  drafted
+  fixture background-bash
+  fixture task-notification
+  fixture read-arrow
+  say 'CI reported.'
+  stop
+  held
+  [[ "$reason" == *'`ci-wait` reported `ci: red lint` and no push came after it'* ]] || false
+  # The arrow as a JSON escape counts as well.
+  sh_run "bash $P/scripts/ci-wait $R"
+  out 'ci: clear'
+  read_file /tmp/kern-test/tasks/bk3q9x2mz.output
+  result '     1→ci: red lint'
+  stop true
+  held
+  [[ "$reason" == *'`ci: red lint`'* ]] || false
+}
