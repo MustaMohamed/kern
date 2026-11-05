@@ -11,7 +11,7 @@ setup() {
   make_repo "$R"
   kern_env "$R"
   fake_gh
-  unset FAKE_GH_CHECKS FAKE_GH_CHECKS_FILE FAKE_GH_RC FAKE_GH_STDERR
+  unset FAKE_GH_CHECKS FAKE_GH_CHECKS_FILE FAKE_GH_RC FAKE_GH_STDERR FAKE_GH_STDERR_FIRST GH_DEBUG
   export FAKE_GH_LOG="$BATS_TEST_TMPDIR/gh.log"
   export KERN_CI_INTERVAL=1
   unset KERN_CI_SETTLE KERN_CI_MINUTE
@@ -115,17 +115,45 @@ reads() {
 }
 
 @test "gh failing is exit 2" {
-  export FAKE_GH_RC=1 FAKE_GH_STDERR='HTTP 502: Bad Gateway'
+  # GH_DEBUG goes empty for gh, so its debug log does not come first in the cause.
+  export FAKE_GH_RC=1 FAKE_GH_STDERR='HTTP 502: Bad Gateway' GH_DEBUG=api
   run --separate-stderr bash "$W" "$R"
   [ "$status" -eq 2 ]
   [ -z "$output" ]
-  [[ "$stderr" == *"gh pr checks exited 1"*"HTTP 502: Bad Gateway"* ]] || false
-  # JSON that does not close is no read either, whatever gh's exit code.
-  export FAKE_GH_RC=0 FAKE_GH_CHECKS='[{"bucket":"pass","name":"bu'
-  unset FAKE_GH_STDERR
+  [[ "$stderr" == *"gh pr checks exited 1"*": HTTP 502: Bad Gateway"* ]] || false
+  [[ "$stderr" != *"git remote"* ]] || false
+  # JSON that is not whole is no read either, whatever gh's exit code.
+  unset FAKE_GH_STDERR GH_DEBUG
+  export FAKE_GH_RC=0
+  for json in '[{"bucket":"pass","name":"bu' '[{"bucket":"pass","name":"build"}] more' '[{"bucket":"pass","name":"build"]}' '[ nope ]'; do
+    FAKE_GH_CHECKS=$json run --separate-stderr bash "$W" "$R"
+    [ "$status" -eq 2 ] || { echo "status $status for $json"; return 1; }
+    [ -z "$output" ]
+  done
+}
+
+@test "gh's debug log is no array: a red read stays red" {
+  # Review fix round 1: with GH_DEBUG on, gh logs `[git remote -v]` on stderr before the JSON, and a reader
+  # that took that line for an empty array read a red PR as `ci: none`.
+  export FAKE_GH_STDERR='[git remote -v]' FAKE_GH_STDERR_FIRST=1
+  export FAKE_GH_CHECKS='[{"bucket":"fail","name":"lint"},{"bucket":"pass","name":"build"}]'
   run --separate-stderr bash "$W" "$R"
-  [ "$status" -eq 2 ]
-  [ -z "$output" ]
+  [ "$status" -eq 1 ]
+  [ "$output" = "check: lint: fail"$'\n'"check: build: pass"$'\n'"ci: red lint" ]
+  # On stdout too, a bracketed line that is no array start is passed over.
+  export FAKE_GH_CHECKS=$'[git remote -v]\n[{"bucket":"fail","name":"lint"}]'
+  run --separate-stderr bash "$W" "$R"
+  [ "$status" -eq 1 ]
+  [ "${lines[1]}" = "ci: red lint" ]
+}
+
+@test "a whole JSON array is the read whatever gh's exit code" {
+  # Review fix round 1: gh may exit 1 on a failed check with --json; the array still reads red.
+  export FAKE_GH_RC=1 FAKE_GH_CHECKS='[{"bucket":"fail","name":"lint"}]'
+  run --separate-stderr bash "$W" "$R"
+  [ "$status" -eq 1 ]
+  [ "$output" = "check: lint: fail"$'\n'"ci: red lint" ]
+  [ -z "$stderr" ]
 }
 
 @test "a bad minutes value is a usage error" {

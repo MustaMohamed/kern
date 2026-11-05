@@ -285,6 +285,9 @@ test('the design and the contract keep the CI wait project 2 added', () => {
   assertContains('docs/plans/contract.md', [
     'when any bucket is `fail` or `cancel` (red wins over pending)',
     'An empty array and gh\'s "no checks reported" error both read as none.',
+    // Its fix round 1: stdout and stderr apart, and the array is the read whatever gh's exit code.
+    'only stdout holds the JSON, and only stderr the "no checks reported" error. A whole JSON array on stdout is the read, whatever gh\'s exit code',
+    'so gh\'s debug line `[git remote -v]` starts none',
     '| `ci-wait` | `ci-wait WT [--minutes N]`',
     '`ci: none` stands only after 2 minutes of reads with no checks, re-read every 20 s at most',
     'its verdict line as `ci: pending <name>[, ...] (timeout <N>m)`']);
