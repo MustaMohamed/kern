@@ -75,6 +75,9 @@ expand() {
   [[ "$output" == *"; park judgment calls not on the stop list."* ]] || false
   [[ "$output" == *"no run-time-built name, no unparseable shell script, no code piped to a shell, no gh alias;"* ]] || false
   [[ "$output" != *"no shell script or code"* ]] || false
+  # M3 part 2 project 2 Task 5 review fix round 1: G1 also takes the typed lease, and a go runs on past its draft.
+  [[ "$output" == *"; draft PR after dedup (a go: then ci.md to gh pr ready);"* ]] || false
+  [[ "$output" == *"; lease push only if rebase.push=autopilot or the user typed rebase and push;"* ]] || false
 }
 
 @test "autopilot on is refused when settings deny it" {

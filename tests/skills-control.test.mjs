@@ -424,10 +424,16 @@ test('ci.md stays within its byte cap', () => {
   // file since run.md sat at its cap.
   // 6,793 since the controller's ruling on that task's concerns: a `split` after the draft is a stop, never a ready, and
   // finish-branch's go-on default on size covers only the draft.
-  assertMaxBytes('skills/autopilot/references/ci.md', 6793);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 6,793 bytes (6,651 until the controller\'s ruling on that task\'s concerns: ',
-    '; new in M3 part 2 project 2\'s Task 5: ']);
-  assertContains(CI, ['A `split` after the draft is a stop, never a ready: on size it asks split or one PR, as finish-branch\'s go-on default covers only the draft.']);
+  // 7,002 since Task 5's review fix round 1: class 4 skips its ask only on the words G1 reads, a denied lease push stops
+  // before the body edit, a conflict resolution that stops aborts the rebase, and the draft's own size `split` stops unless
+  // a typed `one PR` settles it, less the `ci.advisory` line (ci-wait drops those checks) and the `<dir>` line (push-and-pr
+  // gives it).
+  assertMaxBytes('skills/autopilot/references/ci.md', 7002);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 7,002 bytes (6,793 until Task 5\'s review fix round 1: ',
+    '; 6,651 until the controller\'s ruling on Task 5\'s concerns: ', '; new in M3 part 2 project 2\'s Task 5: ']);
+  // Review fix round 1, I2: a draft opened on a size-only `split` (finish-branch's go-on default) reaches Ready with that verdict.
+  assertContains(CI, ['A `split` verdict on the pushed tree, the draft\'s own on size included, is a stop that asks split or one PR. A typed `one PR` settles size for this go, so a `split` on size alone then counts as `ready`.']);
+  assert.ok(!readFileSync(join(import.meta.dirname, '..', CI), 'utf8').includes('A `split` after the draft'), 'the old split line is gone');
 });
 
 test('the skills spec states the go past its draft, and the autopilot size it brought', () => {
@@ -435,7 +441,12 @@ test('the skills spec states the go past its draft, and the autopilot size it br
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
     'then take the ticket to a draft PR, and from there by `references/ci.md` to `gh pr ready` on its own PR or a stop (M3 part 2 project 2 Task 5).',
     'SKILL.md 6,121 bytes (6,106 until M3 part 2 project 2\'s Task 5: step 6\'s run ends at `gh pr ready` on its own PR, not at the draft; 5,651 until its Task 4: ',
-    '| `autopilot` | slash | M1 | 6.1 KB built (+14.2 KB refs) |']);
+    '| `autopilot` | slash | M1 | 6.1 KB built (+14.5 KB refs) |',
+    // Review fix round 1: the spec quotes the per-prompt autopilot line word for word.
+    'draft PR after dedup (a go: then ci.md to gh pr ready); run git and gh directly,',
+    'lease push only if rebase.push=autopilot or the user typed rebase and push; every other ask is denied;']);
+  // Review fix round 1: settings.md's Lease push row said rebase.push alone, while G1 also takes the typed lease.
+  assertContains('kernel/settings.md', ["| never allowed. It asks or denies | allowed only with `rebase.push: autopilot` or the user's typed `rebase and push` |"]);
 });
 
 test('ci.md holds the CI loop a go follows from its draft PR to `gh pr ready`, in the design\'s order', () => {
@@ -461,8 +472,18 @@ test('ci.md holds the CI loop a go follows from its draft PR to `gh pr ready`, i
     'A bare yes, ok or go ahead gives no consent', 'An unclear red goes as class 2.',
     // Class 4.
     '`git rebase origin/<base>` in the run\'s worktree, in its own Bash call',
-    'A resolution that changes behaviour neither side names is a design choice: stop.',
+    'A resolution that changes behaviour neither side names is a design choice',
     '`git push --force-with-lease origin <branch>`', 'A rebase is no CI round.',
+    // Review fix round 1, I1: `prompt_consent` gives `lease` only for these bare phrases, and only this turn's prompt counts,
+    // so a wider skip rebased and edited the body before G1 denied the push. The lease push now comes before the body edit.
+    "or this turn's typed prompt is one G1 reads as a rebase: `rebase and push`, or `rebase` or `sync` alone.",
+    "as its push, made before Every push's body edit. If G1 denies it, stop with `kern stop:` and G1's reason, and leave the body as it was.",
+    // Its minors: a resolution that stops leaves no half-done rebase; only two of the replies are guard words; a deny's push
+    // goes through Every push.
+    'is a design choice: run `git rebase --abort`, push nothing and stop.',
+    'G1 reads `rebase and push`, and G2 `leave it and mark the PR ready`, as the user\'s consent.',
+    'With P the highest package number before this push, round N reviews package P+N+1. When round 3\'s package, P+4, is still `fix first`, push, stop and keep the PR draft.',
+    'such as a push through Every push or a self-review; a second deny is a stop.',
     // Fix rounds.
     'Up to 3 per go, counted apart from self-review\'s rounds.', '`CI round: <N>`', '`git log --format=%b origin/<base>..HEAD`',
     'When the wait after round 3 is still red, stop: the branch is pushed and the PR stays draft.',

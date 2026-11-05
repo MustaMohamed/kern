@@ -10,7 +10,7 @@ Start `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ci-wait <wt>` as a background command 
 
 Never poll with turns: no `sleep`, no `gh pr checks` and no read of its output while it runs. With no other work left, end the turn; its exit brings the verdict back.
 
-Its limit is `ci.wait_minutes`, default 45. It leaves out the checks `ci.advisory` names, which never gate.
+Its limit is `ci.wait_minutes`, default 45.
 
 | Verdict | Exit | The run |
 |---|---|---|
@@ -41,14 +41,14 @@ An unclear red goes as class 2. A self-review `rebase first` goes as class 4.
 
 With reds of several classes, class 1's fix round runs first; one stop then names every red that asks.
 
-Offer each reply in its exact words: the guards read them as the user's consent. A bare yes, ok or go ahead gives no consent: ask again in the reply's words.
+Offer each reply in its exact words: G1 reads `rebase and push`, and G2 `leave it and mark the PR ready`, as the user's consent. A bare yes, ok or go ahead gives no consent: ask again in the reply's words.
 
 ## Class 4
 
-1. Ask first, as a stop: the report says the branch is behind `origin/<base>` and asks for the reply `rebase and push`. Skip the ask when `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get rebase.push` gives `autopilot`, or the user's last typed prompt asks to rebase or sync.
+1. Ask first, as a stop: the report says the branch is behind `origin/<base>` and asks for the reply `rebase and push`. Skip the ask when `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get rebase.push` gives `autopilot`, or this turn's typed prompt is one G1 reads as a rebase: `rebase and push`, or `rebase` or `sync` alone.
 2. Run `git fetch origin <base>`, then `git rebase origin/<base>` in the run's worktree, in its own Bash call.
-3. On conflicts, resolve them and prove the result. A resolution that changes behaviour neither side names is a design choice: stop.
-4. Then run Every push, below, with `git push --force-with-lease origin <branch>` as its push. A rebase is no CI round.
+3. On conflicts, resolve them and prove the result. A resolution that changes behaviour neither side names is a design choice: run `git rebase --abort`, push nothing and stop.
+4. Then run Every push, below, with `git push --force-with-lease origin <branch>` as its push, made before Every push's body edit. If G1 denies it, stop with `kern stop:` and G1's reason, and leave the body as it was. A rebase is no CI round.
 
 A typed reply's consent holds for its prompt only, and only for the main thread's calls: run the rebase, Every push and the lease push in that turn, with no background wait between.
 
@@ -66,15 +66,13 @@ Every push, the class 4 lease push and each round's push included, runs these in
 1. `test.full` on the tree, by `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`.
 2. Self-review in full on `<wt>`, by `${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md`, its `review-check` run included.
 3. Proof where prove-it says it applies, on this tree.
-4. The body: write `<dir>/pr-body.md` again as `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/references/push-and-pr.md`, section PR, says, so its checks and proof lines match this tree; `<dir>` is what `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-dir tmp` prints. Then run `gh pr edit --body-file <dir>/pr-body.md` alone.
+4. The body: write `<dir>/pr-body.md` again as `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/references/push-and-pr.md`, section PR, says, so its checks and proof lines match this tree. Then run `gh pr edit --body-file <dir>/pr-body.md` alone.
 5. The push: `git push origin <branch>`, or the lease push after a rebase.
 6. The wait, above.
 
 Commit every change before step 1 and leave no untracked file: at ready, G2 reads review-check's record for `HEAD^{tree}`.
 
-A red step 1 or a `fix first` starts run.md's fix round: fix, commit, and run again from step 1. These rounds count from this push's first package, so the third round's package is that number plus 3. A third still `fix first` pushes, stops and keeps the PR draft.
-
-A `split` after the draft is a stop, never a ready: on size it asks split or one PR, as finish-branch's go-on default covers only the draft.
+A red step 1 or a `fix first` starts run.md's fix round: fix, commit, and run again from step 1. With P the highest package number before this push, round N reviews package P+N+1. When round 3's package, P+4, is still `fix first`, push, stop and keep the PR draft.
 
 ## Ready
 
@@ -82,6 +80,8 @@ Run `gh pr ready` when all hold: the wait after the last push read `ci: clear` o
 
 Run it bare, as its own Bash call from the main thread: exactly `gh pr ready`, with no PR number, `-R`, pipe, redirect or second command.
 
+A `split` verdict on the pushed tree, the draft's own on size included, is a stop that asks split or one PR. A typed `one PR` settles size for this go, so a `split` on size alone then counts as `ready`.
+
 A typed `leave it and mark the PR ready` lets G2 allow it for that prompt only, over any CI, review record or PR head, so the run marks it ready in the same turn.
 
-G2's allow ends the go: end with the run report. On a deny, do once what its reason names, such as a push or self-review; a second deny is a stop.
+G2's allow ends the go: end with the run report. On a deny, do once what its reason names, such as a push through Every push or a self-review; a second deny is a stop.

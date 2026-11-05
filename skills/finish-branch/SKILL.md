@@ -22,7 +22,7 @@ A failure no step handles stops the run: report its output.
 8. Commit, for options 1 to 3: nothing to commit when `git status --porcelain` prints nothing; else run steps 2 to 6 of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md` on `<wt>`; its stops stop this skill, and its proof is its own, apart from step 4's. Then offer a rebase step 3 put off. A release, if asked: `references/release.md`. Option 1 ends with the short SHA. It compares `git rev-parse HEAD^{tree}` with step 4's tree and reports any difference, a rebase included, as unproven.
 9. Dedup, before any push or PR: `references/push-and-pr.md`, section Dedup.
 10. Push, for options 2 and 3: `references/branch-ops.md`, section Proven tree, then `references/push-and-pr.md`, section Push.
-11. Draft PR, for option 3: `references/push-and-pr.md`, section PR. Report the URL; the worktree stays. Then report each review that ran and its result (self-review's verdict and lanes; from the work's ledger, the task and whole-branch reviews), and, but under a go, run `gh pr checks <n>` (`<n>`: the PR number from its URL) once, with no wait: report its output, or why it could not run.
+11. Draft PR, for option 3: `references/push-and-pr.md`, section PR. Report the URL; the worktree stays. Then report each review that ran and its result (self-review's verdict and lanes; from the work's ledger, the task and whole-branch reviews), and, except under a go, run `gh pr checks <n>` (`<n>`: the PR number from its URL) once, with no wait: report its output, or why it could not run.
 
 ## Inputs
 

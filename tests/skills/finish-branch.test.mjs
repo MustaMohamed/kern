@@ -88,9 +88,10 @@ test('finish-branch sections, steps and red flags', () => {
   // and on a change it does not name.
   // 9,453 since M3 part 2 project 2's Task 5: step 11's single checks read is skipped under a go, which follows autopilot's
   // `references/ci.md` after step 11, its class 4 rebase the only one autopilot makes.
-  assertMaxBytes(SKILL, 9453);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `finish-branch` | slash | M2a | at most 9,453 bytes,',
-    "SKILL.md at most 9,453 bytes (9,265 until M3 part 2 project 2's Task 5: ",
+  // 9,456 since Task 5's review fix round 1: step 11 reads "except under a go", where "but under a go" read two ways.
+  assertMaxBytes(SKILL, 9456);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `finish-branch` | slash | M2a | at most 9,456 bytes,',
+    "SKILL.md at most 9,456 bytes (9,453 until Task 5's review fix round 1: step 11 reads \"except under a go\"; 9,265 until M3 part 2 project 2's Task 5: ",
     "Under a go, after step 11, the run follows autopilot's `references/ci.md` to `gh pr ready` or a stop, its class 4 rebase the only one autopilot makes (M3 part 2 project 2 Task 5)."]);
 });
 
@@ -98,7 +99,7 @@ test('under a go, finish-branch hands the open draft to the CI loop after step 1
   // M3 part 2 project 2 Task 5: a person's run keeps step 11's single checks read; a go waits on CI in autopilot's
   // `references/ci.md`, whose class 4 rebase is the one exception to "nothing is rebased".
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[11].includes('and, but under a go, run `gh pr checks <n>`'), s[11]);
+  assert.ok(s[11].includes('and, except under a go, run `gh pr checks <n>`'), s[11]);
   assertOnce(SKILL, ['Under a go, after step 11, follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/ci.md to `gh pr ready` or a stop. Its class 4 rebase is the only one autopilot makes.']);
   const auto = section(readDoc(SKILL).body, '## Stops and autopilot').split('\n');
   assert.ok(auto.indexOf('Under autopilot, stops, unblocking and the run report follow ${CLAUDE_PLUGIN_ROOT}/skills/autopilot/references/run.md.') < auto.findIndex((l) => l.startsWith('Under a go, after step 11,')), 'the go line follows the run.md pointer');
