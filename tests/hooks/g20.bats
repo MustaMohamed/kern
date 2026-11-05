@@ -431,6 +431,230 @@ go_denied() {
   [ "$(sed -n 's/^go_phase: //p' "$CLAUDE_PLUGIN_DATA/sessions/test-session.state")" = "" ]
 }
 
+# M3 part 2 project 2, Task 8: under a go a plan approves only after plan step 11's review record holds
+# Verdict: approve.
+
+# write_plan [WORK]: the go's Write of a plan, WORK/plans/export.md (WORK .kern by default), approved in
+# that first write.
+write_plan() {
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/${1:-.kern}/plans/export.md\",\"content\":\"---\\nstatus: approved\\nissue: MA-254\\napproved: 2026-11-05, \\\"$GO\\\"\\nexecution: delegate\\n---\\n## Goal\\n\"")" g20
+}
+
+# review LINE...: the plan review's record for export.md under .kern, one line per LINE.
+review() {
+  mkdir -p "$R/.kern/reviews"
+  printf '%s\n' "$@" > "$R/.kern/reviews/plan-export.md"
+}
+
+# review_denied [WORK]: G20 denied the last call for want of the plan's approving review, naming its record
+# under WORK (.kern by default).
+review_denied() {
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [[ "$output" == *"kern G20: under a go a plan approves only after its review: "*"/${1:-.kern}/reviews/plan-export.md, where plan step 11 saves the plan reviewer's reply, needs a line Verdict: approve and no line Verdict: revise; keep status: draft"* ]] || { echo "$output"; return 1; }
+}
+
+# plan_untold: G20 failed closed on the last call, as it could not tell whether the file is a plan.
+plan_untold() {
+  [ "$(decision_of "$output")" = deny ] || { echo "$output"; return 1; }
+  [[ "$output" == *"G20 could not tell whether export.md is a plan, which under a go approves only after its review"* ]] || { echo "$output"; return 1; }
+}
+
+@test "a go's plan approved in its first write is denied" {
+  say "$GO"
+  write_plan
+  review_denied
+  # Neither the plans folder nor the work dir need exist yet: the Write makes them.
+  rm -rf "$R/.kern"
+  write_plan
+  review_denied
+  # An Edit that approves a draft plan is judged the same way.
+  mkdir -p "$R/.kern/plans"
+  SPEC="$R/.kern/plans/export.md"
+  ticket 'issue: MA-254'
+  approve "$GO"
+  review_denied
+}
+
+@test "a go's plan approved after an approving review passes" {
+  say "$GO"
+  review 'Verdict: approve' '' '2: the verify command names no file. name it.'
+  write_plan
+  no_vote
+  mkdir -p "$R/.kern/plans"
+  SPEC="$R/.kern/plans/export.md"
+  ticket 'issue: MA-254'
+  approve "$GO"
+  no_vote
+  # Blanks around the line, a CRLF line end among them, leave it the verdict.
+  review '  Verdict: approve	'
+  write_plan
+  no_vote
+  printf 'Verdict: approve\r\n' > "$R/.kern/reviews/plan-export.md"
+  write_plan
+  no_vote
+}
+
+@test "a revise verdict keeps the approval denied" {
+  say "$GO"
+  review 'Verdict: revise' '' '1: two tasks read the interface differently. pin one signature.'
+  write_plan
+  review_denied
+}
+
+@test "a record rewritten from revise to approve then allows" {
+  # Task 8's pre-review change: plan step 11 saves a go's second review over the same record.
+  say "$GO"
+  review 'Verdict: revise' '' '1: two tasks read the interface differently. pin one signature.'
+  write_plan
+  review_denied
+  review 'Verdict: approve'
+  write_plan
+  no_vote
+}
+
+@test "a record that also holds a revise line is no approve" {
+  # Task 8 fix round 1: a revise line anywhere in the record outweighs an approve line.
+  say "$GO"
+  for order in approve revise; do
+    if [ "$order" = approve ]; then review 'Verdict: approve' '  Verdict: revise'; else review 'Verdict: revise' 'Verdict: approve'; fi
+    write_plan
+    review_denied || { echo "first: $order"; return 1; }
+  done
+  # Text that only mentions a revise is no revise line.
+  review 'Verdict: approve' '' 'An earlier draft got Verdict: revise.'
+  write_plan
+  no_vote
+  # A failed read of the revise line stays no approve.
+  read_fails grep '*Verdict: revise*'
+  write_plan
+  review_denied
+  [ "$(read_failures grep)" -ge 1 ]
+}
+
+@test "a go fails closed when the work dir cannot be told" {
+  # Task 8 fix round 1: a work_dir kern-dir refuses leaves G20 unable to tell a plan. A settings file that cannot be
+  # read reads as autopilot denied, so a go never meets one; the lost-pipe row covers a failed settings read.
+  mkdir -p "$R/.claude"
+  printf 'work_dir: ../out\n' > "$R/.claude/kern.local.yml"
+  say "$GO"
+  write_plan
+  plan_untold
+}
+
+@test "a . or .. part after a directory that does not exist yet fails closed" {
+  # Task 8 fix round 1: the Write resolves new/../export.md to plans/export.md, which a string compare reads as
+  # nested.
+  say "$GO"
+  local p
+  for p in plans/new/../export.md new/../plans/export.md plans/./export.md plans//export.md; do
+    rm -rf "$R/.kern/plans" "$R/.kern/new"
+    run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/$p\",\"content\":\"---\\nstatus: approved\\nissue: MA-254\\napproved: 2026-11-05, \\\"$GO\\\"\\n---\\n\"")" g20
+    plan_untold || { echo "path: $p"; return 1; }
+  done
+  # Through directories that exist, cd -P resolves the parts, so the plan is seen as one.
+  mkdir -p "$R/.kern/plans/new"
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/.kern/plans/new/../export.md\",\"content\":\"---\\nstatus: approved\\nissue: MA-254\\napproved: 2026-11-05, \\\"$GO\\\"\\n---\\n\"")" g20
+  review_denied
+}
+
+@test "a go's plan is not approved when a substitution's pipe fails" {
+  # Task 8 fix round 1: a substitution whose pipe cannot be made gives status 0 and no output, which must not read
+  # as "no plan". work_dir is .work, so a settings read that fell back to the .kern default would miss the plan.
+  # Each substitution _g20_reviewed starts fails in turn, for the plan and for a link to it, with no record.
+  local n f p
+  for f in json settings state decide; do . "$K/hooks/lib/$f.sh"; done
+  . "$K/hooks/guards/g20-approval.sh"
+  mkdir -p "$R/.claude" "$R/.work/plans"
+  printf 'work_dir: .work\n' > "$R/.claude/kern.local.yml"
+  ln -s .work/plans/export.md "$R/docs-link.md"
+  SID=test-session
+  KERN_MAIN=$(kern_main_root "$R")
+  for p in "$R/.work/plans/export.md" "$R/docs-link.md"; do
+    _KERN_VOTE=''
+    _g20_reviewed "$p"
+    [ "$_KERN_VOTE" = deny ] || { echo "no deny for $p"; return 1; }
+    _KERN_VOTE=''
+    n=1
+    while [ "$n" -le 80 ]; do
+      if (pipe_fails "$n" _g20_reviewed "$p"; [ -z "$_KERN_VOTE" ]) 2>/dev/null; then
+        echo "no vote for $p when substitution $n failed"
+        return 1
+      fi
+      [ -e "$BATS_TEST_TMPDIR/pipe-failed" ] || break
+      n=$((n + 1))
+    done
+    [ "$n" -gt 3 ] && [ "$n" -le 80 ] || { echo "$p: stopped at $n"; return 1; }
+  done
+}
+
+@test "only a whole line Verdict: approve is an approving review" {
+  say "$GO"
+  for l in 'Verdict: approve | revise' 'verdict: approve' 'Verdict: approved' 'Verdict:  approve' '**Verdict: approve**' \
+    'Verdict: approve, once task 2 names its file' 'The reviewer gave no Verdict: approve'; do
+    review "$l"
+    write_plan
+    review_denied || { echo "line: $l"; return 1; }
+  done
+  # A record that is no regular file is no approve.
+  rm -f "$R/.kern/reviews/plan-export.md"
+  mkdir "$R/.kern/reviews/plan-export.md"
+  write_plan
+  review_denied
+}
+
+@test "a review record that cannot be read is no approve" {
+  say "$GO"
+  review 'Verdict: approve'
+  read_fails grep '*plan-export.md'
+  write_plan
+  review_denied
+  [ "$(read_failures grep)" -ge 1 ]
+  read_fails grep '*plan-export.md' 0
+  chmod 000 "$R/.kern/reviews/plan-export.md"
+  write_plan
+  chmod 644 "$R/.kern/reviews/plan-export.md"
+  review_denied
+  write_plan
+  no_vote
+}
+
+@test "a person's approval is unchanged" {
+  mkdir -p "$R/.kern/plans"
+  SPEC="$R/.kern/plans/export.md"
+  ticket
+  say 'Yes, go with delegate.'
+  approve 'Yes, go with delegate.'
+  no_vote
+  review 'Verdict: revise'
+  approve 'Yes, go with delegate.'
+  no_vote
+  approve 'ship it'
+  [ "$(decision_of "$output")" = deny ]
+  [[ "$output" == *"kern G20: the approved: quote is not a line of the user's last message"* ]] || false
+}
+
+@test "the review record is read from the work dir the settings name" {
+  mkdir -p "$R/.claude"
+  printf 'work_dir: .work\n' > "$R/.claude/kern.local.yml"
+  say "$GO"
+  review 'Verdict: approve'
+  write_plan .work
+  review_denied .work
+  mkdir -p "$R/.work/reviews"
+  printf 'Verdict: approve\n' > "$R/.work/reviews/plan-export.md"
+  write_plan .work
+  no_vote
+}
+
+@test "a write through a link into the plans folder is a plan's" {
+  say "$GO"
+  mkdir -p "$R/.kern/plans"
+  printf '%s\n' '---' 'status: draft' '---' > "$R/.kern/plans/export.md"
+  ln -s .kern/plans/export.md "$R/docs-link.md"
+  run_guard "$(tool_payload Write "\"file_path\":\"$R/docs-link.md\",\"content\":\"---\\nstatus: approved\\nissue: MA-254\\napproved: 2026-11-05, \\\"$GO\\\"\\n---\\n\"")" g20
+  review_denied
+}
+
 @test "a failed read is no go" {
   ticket 'issue: MA-254'
   say "$GO"
