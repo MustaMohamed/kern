@@ -523,6 +523,27 @@ no_go() {
   grep -q '^stop_down: $' "$s"
 }
 
+@test "a typed prompt, a go and autopilot off empty go_report; a wrapped prompt keeps it" {
+  # Final review I1: G2's allow of a go's gh pr ready writes go_report=1, so the Stop hook reads the ended go's
+  # report once more.
+  local s="$CLAUDE_PLUGIN_DATA/sessions/test-session.state"
+  printf 'go_report: 1\n' >>"$s"
+  submit '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>'
+  [ "$(st go_report)" = 1 ]
+  submit 'Where does the run stand?'
+  [ -z "$(st go_report)" ]
+  # An expansion with the prompt_id of the consent stored skips the clear at the top, so these rows show the
+  # writes of apply_go and autopilot_off themselves.
+  printf 'go_report: 1\nconsent_prompt: e1\n' >>"$s"
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"kern:autopilot","command_args":"go MA-1","command_source":"plugin","prompt":"/kern:autopilot go MA-1","prompt_id":"e1"')"
+  [ "$(st go)" = MA-1 ]
+  [ -z "$(st go_report)" ]
+  printf 'go_report: 1\n' >>"$s"
+  run bash "$K/hooks/prompt-submit" <<<"$(payload UserPromptExpansion '"expansion_type":"slash_command","command_name":"kern:autopilot","command_args":"off","command_source":"plugin","prompt":"/kern:autopilot off","prompt_id":"e1"')"
+  [ "$(st autopilot)" = off ]
+  [ -z "$(st go_report)" ]
+}
+
 # expand_go FIELDS: a kern:autopilot expansion of `go MA-1` with FIELDS added, each after a comma. A real
 # payload, from a stored exec trace, also holds command_source plugin and the typed line as prompt.
 expand_go() {

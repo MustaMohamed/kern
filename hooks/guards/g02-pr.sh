@@ -653,7 +653,8 @@ _g02_go_pr() {
 # PR (_g02_go_pr, with no option at all, so no -R) when the user's last typed prompt says to mark it
 # ready. Without that it also needs CWD's tree to have a review-check record whose floor is none
 # (_g02_reviewed), the PR's head to be CWD's HEAD (_g02_pushed), and ci_read to read the PR's checks as
-# clear or none. The allow ends the go. Anything else is denied, the reason naming what is missing.
+# clear or none. The allow ends the go and writes go_report=1, so the Stop hook still reads the go's report
+# once, outside the go (final review I1). Anything else is denied, the reason naming what is missing.
 _g02_go_ready() {
   local tree out rc verdict
   # TOKS lost to a substitution whose pipe could not be made is empty, the shape allowed here, so the
@@ -664,7 +665,7 @@ _g02_go_ready() {
   fi
   if consent_for "${SID-}" "${AGENT-}${AGENT_ID-}" ready; then
     vote allow G2 "gh pr ready of the go's PR: the user's last prompt asked for it"
-    state_set "$SID" "go=" "go_phase="
+    state_set "$SID" "go=" "go_phase=" "go_report=1"
     return 0
   fi
   # A tree that is not hex, as from a substitution whose pipe could not be made, names no record.
@@ -699,7 +700,7 @@ _g02_go_ready() {
   case "$rc:$verdict" in
     0:clear | 0:none)
       vote allow G2 "gh pr ready of the go's PR: CI ${verdict}, review-check passed tree ${tree%"${tree#???????}"}"
-      state_set "$SID" "go=" "go_phase="
+      state_set "$SID" "go=" "go_phase=" "go_report=1"
       ;;
     1:red* | 3:pending*)
       vote deny G2 "gh pr ready under a go needs clear CI, and the PR's checks read ci: $verdict; fix a red check in a CI round, wait for a pending one, or stop and report, offering the user the reply \`leave it and mark the PR ready\`"

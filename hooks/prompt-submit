@@ -43,23 +43,26 @@ SID=$(json_get session_id) || exit 0
 # typed command can fire UserPromptExpansion alone (the exec trace of 2026-10-24 has `/kern:autopilot on`
 # with no submit). A clear that fails changes nothing else; consent_for also binds consent to the
 # prompt's prompt_id and to the repository. A typed prompt, one no wrapper tag opens, also ends a run of the
-# Stop hook's send-backs under a go (stop_backs, M3 part 2 project 2): the user is back. The prompt is read for
-# its wrapper only when the state holds a count above 0.
+# Stop hook's send-backs under a go (stop_backs, M3 part 2 project 2): the user is back. It also drops the
+# report an ended go still owes the Stop hook (go_report, final review I1), which the user now reads. The
+# prompt is read for its wrapper only when the state holds a count above 0 or an owed report.
 if KERN_SF=$(state_file "$SID" 2>/dev/null) && [ -f "$KERN_SF" ]; then
   KERN_EPID=""
   KERN_BACKS=""
+  KERN_REPORT=""
   case "$(state_get "$SID" stop_backs 2>/dev/null)" in '' | 0) ;; *) KERN_BACKS="stop_backs=0" ;; esac
+  [ "$(state_get "$SID" go_report 2>/dev/null)" = 1 ] && KERN_REPORT="go_report="
   if [ "$EVENT" = UserPromptExpansion ]; then
     KERN_EPID=$(json_get prompt_id) || KERN_EPID=""
-  elif [ -n "$KERN_BACKS" ]; then
+  elif [ -n "$KERN_BACKS$KERN_REPORT" ]; then
     KERN_P0=$(json_get prompt) || KERN_P0=""
     KERN_P0=${KERN_P0#"${KERN_P0%%[![:space:]]*}"}
     for KERN_T in $KERN_WRAPPER_TAGS; do
-      case "$KERN_P0" in "$KERN_T"*) KERN_BACKS="" ;; esac
+      case "$KERN_P0" in "$KERN_T"*) KERN_BACKS="" KERN_REPORT="" ;; esac
     done
   fi
   [ -n "$KERN_EPID" ] && [ "$(state_get "$SID" consent_prompt 2>/dev/null)" = "$KERN_EPID" ] ||
-    state_set "$SID" "consent=" ${KERN_BACKS:+"$KERN_BACKS"} 2>/dev/null
+    state_set "$SID" "consent=" ${KERN_BACKS:+"$KERN_BACKS"} ${KERN_REPORT:+"$KERN_REPORT"} 2>/dev/null
 fi
 CWD=$(json_get cwd) || CWD="$PWD"
 KERN_MAIN=$(kern_main_root "$CWD" 2>/dev/null) || KERN_MAIN=""
@@ -118,12 +121,12 @@ set_surface() {
   state_set "$SID" "surface=$1" && CHANGED_SURFACE="$1"
 }
 
-# autopilot_off: writes autopilot off and clears the go and its go_phase. When state_set cannot read the
-# state to keep its other keys, the default state is written instead (state_reset reads nothing; autopilot
-# off, no go), so turning autopilot off never depends on a read; losing voice and surface is the safe
-# loss, and the notice says so.
+# autopilot_off: writes autopilot off and clears the go, its go_phase and any report an ended go still owes
+# (go_report). When state_set cannot read the state to keep its other keys, the default state is written
+# instead (state_reset reads nothing; autopilot off, no go), so turning autopilot off never depends on a
+# read; losing voice and surface is the safe loss, and the notice says so.
 autopilot_off() {
-  state_set "$SID" autopilot=off "go=" "go_repo=" "go_phase=" && return 0
+  state_set "$SID" autopilot=off "go=" "go_repo=" "go_phase=" "go_report=" && return 0
   state_reset "$SID" || return 1
   NOTICE="kern: the session state could not be read, so autopilot off also reset voice and surface to their defaults."
 }
@@ -174,8 +177,8 @@ apply_go() {
     return 0
   fi
   # A new go starts before its draft PR, so G20 takes it again (go_phase, which G2 sets at the draft), and with
-  # no Stop hook send-backs and no stop reported (stop_backs, stop_down).
-  set -- autopilot=on "go=$id" "go_repo=$key" "go_phase=" "stop_backs=0" "stop_down="
+  # no Stop hook send-backs, no stop reported and no report owed (stop_backs, stop_down, go_report).
+  set -- autopilot=on "go=$id" "go_repo=$key" "go_phase=" "stop_backs=0" "stop_down=" "go_report="
   [ "$(state_get "$SID" autopilot 2>/dev/null)" = on ] || { set -- "$@" "since=$(now_iso)"; AP_TURNED_ON=1; }
   if state_set "$SID" "$@"; then
     NOTICE="kern: go recorded for $id."

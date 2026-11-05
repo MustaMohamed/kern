@@ -70,11 +70,11 @@ Every push, each round's push included, runs these in order. The class 4 lease p
 5. The push: `git push origin <branch>`; after a rebase, the lease push.
 6. The wait, above.
 
-Commit every change before step 1 and leave no untracked file: at ready, G2 reads review-check's record for `HEAD^{tree}`.
-
 A red step 1 or a `fix first` starts run.md's fix round: fix, commit, and run again from step 1. With P the highest package number before this push, round N reviews package P+N+1. When round 3's package, P+4, is still `fix first`, push, stop and keep the PR draft.
 
 ## Ready
+
+Commit every change and leave no untracked file before each self-review: G2 reads review-check's record for `HEAD^{tree}`.
 
 Run `gh pr ready` when all hold: the wait after the last push read `ci: clear` or `ci: none`; self-review's verdict on that pushed tree is `ready`, with its `review-check` run; proof is sent or its named skip reported; the body matches the pushed tree.
 

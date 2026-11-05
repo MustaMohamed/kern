@@ -150,6 +150,8 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
   [ -z "$(st go)" ]
   [ -z "$(st go_phase)" ]
   [ "$(st autopilot)" = on ]
+  # Final review I1: the go has ended, and the Stop hook still owes it one read of its report.
+  [ "$(st go_report)" = 1 ]
 }
 
 @test "no checks counts as clear" {
@@ -174,6 +176,7 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
   [[ "$output" == *"ci: pending test"* ]] || false
   [ "$(st go)" = MA-254 ]
   [ "$(st go_phase)" = pr ]
+  [ -z "$(st go_report)" ]
 }
 
 @test "a CI read that fails denies ready" {
@@ -224,6 +227,7 @@ PASS='[{"name":"test","bucket":"pass"},{"name":"lint","bucket":"pass"}]'
   [[ "$output" == *"the user's last prompt asked for it"* ]] || false
   [ -z "$(st go)" ]
   [ -z "$(st go_phase)" ]
+  [ "$(st go_report)" = 1 ]
 }
 
 @test "ready before the draft is denied" {
