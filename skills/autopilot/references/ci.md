@@ -48,7 +48,7 @@ Offer each reply in its exact words: G1 reads `rebase and push`, and G2 `leave i
 1. Ask first, as a stop: the report says the branch is behind `origin/<base>` and asks for the reply `rebase and push`. Skip the ask when `bash ${CLAUDE_PLUGIN_ROOT}/scripts/kern-get rebase.push` gives `autopilot`, or this turn's typed prompt is one G1 reads as a rebase: `rebase and push`, or `rebase` or `sync` alone.
 2. Run `git fetch origin <base>`, then `git rebase origin/<base>` in the run's worktree, in its own Bash call.
 3. On conflicts, resolve them and prove the result. A resolution that changes behaviour neither side names is a design choice: run `git rebase --abort`, push nothing and stop.
-4. Then run Every push, below, with `git push --force-with-lease origin <branch>` as its push, made before Every push's body edit. If G1 denies it, stop with `kern stop:` and G1's reason, and leave the body as it was. A rebase is no CI round.
+4. Then run Every push, below, with `git push --force-with-lease origin <branch>` as its push. If G1 denies it, stop with `kern stop:` and G1's reason, and leave the body as it was. A rebase is no CI round.
 
 A typed reply's consent holds for its prompt only, and only for the main thread's calls: run the rebase, Every push and the lease push in that turn, with no background wait between.
 
@@ -61,13 +61,13 @@ A typed reply's consent holds for its prompt only, and only for the main thread'
 
 ## Every push
 
-Every push, the class 4 lease push and each round's push included, runs these in order:
+Every push, each round's push included, runs these in order. The class 4 lease push runs them too, with step 5 before step 4:
 
 1. `test.full` on the tree, by `${CLAUDE_PLUGIN_ROOT}/skills/prove-it/SKILL.md`.
 2. Self-review in full on `<wt>`, by `${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md`, its `review-check` run included.
 3. Proof where prove-it says it applies, on this tree.
 4. The body: write `<dir>/pr-body.md` again as `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/references/push-and-pr.md`, section PR, says, so its checks and proof lines match this tree. Then run `gh pr edit --body-file <dir>/pr-body.md` alone.
-5. The push: `git push origin <branch>`, or the lease push after a rebase.
+5. The push: `git push origin <branch>`; after a rebase, the lease push, made before step 4.
 6. The wait, above.
 
 Commit every change before step 1 and leave no untracked file: at ready, G2 reads review-check's record for `HEAD^{tree}`.

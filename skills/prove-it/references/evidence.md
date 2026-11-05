@@ -12,7 +12,7 @@ Each claim needs its proving command run fresh, in full, on the tree that will b
 | Lint clean | `lint`, exit 0 | Typecheck passing |
 | Regression test works | `probe` prints `probe: fail-then-pass ok` | The test passes now |
 | Requirements met | Each acceptance line ticked against a command or an artifact | Tests pass |
-| UI works | `verify.browser` on the changed screen, with its artifact | Unit tests; the component compiles |
+| UI works | Proof on the running app, below | Unit tests; the component compiles |
 | Subagent finished | Its worktree diff read with `wt-diff`, its commands re-run | Its report says DONE |
 
 ## Labels
@@ -26,3 +26,14 @@ Each claim needs its proving command run fresh, in full, on the tree that will b
 Skipped tests, zero tests ran, a run in the wrong environment, a timeout, a probe that could not run, and output you did not read all count as a failed proof. Suspect the observation method (wrong directory, cached build, wrong target) before the system.
 
 A failed emulator walk resumes from the failed step only on the same tree, at most 2 reruns of a step. A fix moves the tree, so the walk reruns whole from a clean app. Past 2 reruns, a real failure is red and takes a fix round; only a walk that cannot run is a required check that cannot run.
+
+## Proof on the running app
+
+A change to what someone sees or does on a screen gets screenshots of each changed screen, taken on the running app.
+
+- Add a video or a GIF for something that changes over time and needs to be noticed, or when the ticket's verification steps or the user ask for one or for a recording of the whole flow.
+- Take them only through `verify.browser`, for a web app, or `verify.app`, for a simulator or emulator. With neither, a proof that is not required is the named skip `skip: proof on the running app, no verify.browser or verify.app`: report it and go on.
+- The proof is required when the ticket or a verification step names it or the claim is "UI works". A required proof that cannot run is a stop.
+- Run it on the tree being pushed, after `test.full`. A later fix moves the tree, so run it again before that push.
+- Save the files under `kern-dir tmp`. In the desktop app, send each to the chat with `SendUserFile`; elsewhere, list their paths in the report.
+- The PR body says in text what was checked, with no images.

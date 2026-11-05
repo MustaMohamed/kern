@@ -354,6 +354,17 @@ test('the design and the contract keep the CI wait project 2 added', () => {
     'its verdict line as `ci: pending <name>[, ...] (timeout <N>m)`']);
 });
 
+test('the design keeps verify.app, and the contract the autopilot line\'s length', () => {
+  // M3 part 2 project 2 Task 6: the new key's 5.4 row; and, from Task 5's review, contract.md's count of the per-prompt
+  // autopilot line, which read 680 after Task 5 made it longer. The count is measured, so the next change to the line
+  // moves it too.
+  assertContains('docs/specs/2026-10-12-kern-design.md', ['| Checks | `verify.app` | None; how to start and drive the app on a simulator or emulator | prove-it, diagnose |']);
+  const hook = readFileSync(join(import.meta.dirname, '..', 'hooks', 'prompt-submit'), 'utf8');
+  const line = hook.match(/^ {2}printf '%s\\n' "(autopilot ON: [^\n]*)"$/m)[1].replaceAll('\\$', '$');
+  assert.ok(line.startsWith('autopilot ON: commit on a non-protected branch') && line.endsWith('park judgment calls not on the stop list.'), line);
+  assertContains('docs/plans/contract.md', [`no code piped to a shell, no gh alias; ...\` (${line.length} chars). The rest is unchanged.`]);
+});
+
 test('the design, the contract and autopilot keep a go marking its own PR ready and the typed lease', () => {
   // M3 part 2 project 2 Task 4: G2 marks a go's PR ready on clear CI and a passed review-check, or on the typed word, and
   // edits its body; G1 takes the typed lease; review-check writes the record G2 reads.
@@ -428,8 +439,11 @@ test('ci.md stays within its byte cap', () => {
   // before the body edit, a conflict resolution that stops aborts the rebase, and the draft's own size `split` stops unless
   // a typed `one PR` settles it, less the `ci.advisory` line (ci-wait drops those checks) and the `<dir>` line (push-and-pr
   // gives it).
-  assertMaxBytes('skills/autopilot/references/ci.md', 7002);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 7,002 bytes (6,793 until Task 5\'s review fix round 1: ',
+  // 7,022 since Task 6, from Task 5's review: Every push states the one order, with the class 4 lease push before the
+  // body edit, and class 4 step 4 drops its own clause.
+  assertMaxBytes('skills/autopilot/references/ci.md', 7022);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 7,022 bytes (7,002 until M3 part 2 project 2\'s Task 6: ',
+    '; 6,793 until Task 5\'s review fix round 1: ',
     '; 6,651 until the controller\'s ruling on Task 5\'s concerns: ', '; new in M3 part 2 project 2\'s Task 5: ']);
   // Review fix round 1, I2: a draft opened on a size-only `split` (finish-branch's go-on default) reaches Ready with that verdict.
   assertContains(CI, ['A `split` verdict on the pushed tree, the draft\'s own on size included, is a stop that asks split or one PR. A typed `one PR` settles size for this go, so a `split` on size alone then counts as `ready`.']);
@@ -477,7 +491,11 @@ test('ci.md holds the CI loop a go follows from its draft PR to `gh pr ready`, i
     // Review fix round 1, I1: `prompt_consent` gives `lease` only for these bare phrases, and only this turn's prompt counts,
     // so a wider skip rebased and edited the body before G1 denied the push. The lease push now comes before the body edit.
     "or this turn's typed prompt is one G1 reads as a rebase: `rebase and push`, or `rebase` or `sync` alone.",
-    "as its push, made before Every push's body edit. If G1 denies it, stop with `kern stop:` and G1's reason, and leave the body as it was.",
+    // Task 6, from Task 5's review: Every push listed the lease push after the body edit, a second order beside class 4's,
+    // so Every push now states the one order and class 4 step 4 drops its own clause.
+    "as its push. If G1 denies it, stop with `kern stop:` and G1's reason, and leave the body as it was.",
+    'Every push, each round\'s push included, runs these in order. The class 4 lease push runs them too, with step 5 before step 4:',
+    '5. The push: `git push origin <branch>`; after a rebase, the lease push, made before step 4.',
     // Its minors: a resolution that stops leaves no half-done rebase; only two of the replies are guard words; a deny's push
     // goes through Every push.
     'is a design choice: run `git rebase --abort`, push nothing and stop.',
@@ -494,6 +512,8 @@ test('ci.md holds the CI loop a go follows from its draft PR to `gh pr ready`, i
   const push = section(readFileSync(join(import.meta.dirname, '..', CI), 'utf8'), '## Every push');
   const at = ['`test.full`', '`review-check`', 'Proof', '`gh pr edit --body-file', '`git push origin <branch>`', 'The wait'].map((s) => push.indexOf(s));
   assert.ok(at.every((n, i) => n >= 0 && (i === 0 || n > at[i - 1])), `every push's order: ${at}`);
+  assert.ok(!push.includes('or the lease push after a rebase.'), 'the lease push is no longer listed after the body edit alone');
+  assert.ok(!readFileSync(join(import.meta.dirname, '..', CI), 'utf8').includes("made before Every push's body edit"), 'class 4 step 4 leaves the order to Every push');
   // run.md points at it, and autopilot step 6 names the new finish line.
   assertContains('skills/autopilot/references/run.md', ['`references/ci.md`', '`kern stop: <what>`']);
   assert.ok(read('autopilot').body.split('\n6. `go <ticket>`')[1].split('\n')[0].includes('`gh pr ready`'), 'autopilot step 6 names gh pr ready');

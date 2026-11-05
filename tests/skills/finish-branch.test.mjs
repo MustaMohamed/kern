@@ -270,7 +270,14 @@ test('push-and-pr reference: dedup, push, PR', () => {
 
 test('PR body template', () => {
   assertHeadings(BODY, ['# PR body', '## Why', '## What changed', '## Scope', '## Tradeoffs', '## Merge danger', '## Verification']);
-  assertContains(BODY, ['drop a section with nothing to say', 'about 40 lines', 'smallest useful view', 'Screenshots first']);
+  assertContains(BODY, ['drop a section with nothing to say', 'about 40 lines', 'smallest useful view']);
+  // M3 part 2 project 2 Task 6: proof on the running app goes to the chat, so Verification says in text what was checked
+  // and holds no images; a screen change names its screens or the proof's skip line.
+  const verification = section(readDoc(BODY).body, '## Verification');
+  for (const s of ['Say in text what was checked, before and after: the commands with their output, such as the failing reproduction, the passing run and the full suite summary.',
+    'For a screen change, name each screen the proof on the running app covered, or give its skip line.',
+    'No images: screenshots and recordings go to the chat.']) assert.ok(verification.includes(s), s);
+  assert.ok(!verification.includes('Screenshots first'), verification);
   // M2b Task 17, coverage P69: a lowered bar self-review kept had no line in the body, so no reviewer saw it; only
   // the user's typed yes keeps one (tests/skills/self-review.test.mjs).
   const danger = section(readDoc(BODY).body, '## Merge danger');

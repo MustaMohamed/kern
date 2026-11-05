@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { ROOT, readDoc, assertFrontmatter, h2s, section, steps, DEFER, assertHeadings, assertMaxBytes, assertContains } from '../helpers/md.mjs';
 
 const SKILL = 'skills/prove-it/SKILL.md';
+const EVIDENCE = 'skills/prove-it/references/evidence.md';
 
 test('prove-it frontmatter is the spec text', () => {
   assertFrontmatter(SKILL, {
@@ -28,9 +29,11 @@ test('prove-it sections, steps, gate and red flags', () => {
   // 4,765 since its final review's fix (I1): under autopilot a `verify.fast` with nothing resolved is a named skip.
   // 4,836 since M3 part 2 project 2's Task 1 (2026-10-22 Opus audit section 5, rows L488 and L489): the Gate covers any
   // word that says or implies done, fixed, passing or verified, and step 7 runs a check it can run.
-  assertMaxBytes(SKILL, 4836);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `prove-it` | auto | M2a | at most 4,836 bytes,',
-    "SKILL.md at most 4,836 bytes (4,765 until M3 part 2 project 2's Task 1:"]);
+  // 5,519 since its Task 6 (design "Proof on the running app"): step 3 sends a screen change to that proof, Inputs add
+  // `verify.app`, Outputs send its screenshots and recordings to the chat, and Stops make it required or a named skip.
+  assertMaxBytes(SKILL, 5519);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `prove-it` | auto | M2a | at most 5,519 bytes,',
+    "SKILL.md at most 5,519 bytes (4,836 until M3 part 2 project 2's Task 6:", "; 4,765 until M3 part 2 project 2's Task 1:"]);
 });
 
 test('a claim no command showed carries inferred or guess in its own sentence, not as a line form', () => {
@@ -105,11 +108,13 @@ test('verify.fast defaults to each of typecheck and lint that resolves, as setti
 });
 
 test('evidence reference', () => {
-  assertHeadings('skills/prove-it/references/evidence.md', ['# Evidence by claim', '## Claim table', '## Labels', '## Inconclusive is a fail']);
+  assertHeadings('skills/prove-it/references/evidence.md', ['# Evidence by claim', '## Claim table', '## Labels', '## Inconclusive is a fail', '## Proof on the running app']);
   assertContains('skills/prove-it/references/evidence.md', ['zero tests ran']);
   // 2,150 since M3 part 1's Task 15 (raised from 2,100): the one-run rule with its two limits, and the emulator walk's bound.
   // 2,550 since its fix rounds 1 and 2: the run's log from this session and the citing line, and a walk's same-tree rule and what follows past 2 reruns.
-  assertMaxBytes('skills/prove-it/references/evidence.md', 2550);
+  // 3,575 since M3 part 2 project 2's Task 6: the Proof on the running app section, which the claim table's UI row points to.
+  assertMaxBytes('skills/prove-it/references/evidence.md', 3575);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["`references/evidence.md` at most 3,575 bytes (2,550 until M3 part 2 project 2's Task 6:"]);
 });
 
 test('a failed emulator walk resumes from the failed step, within a bound', () => {
@@ -169,6 +174,37 @@ test('the Gate covers any word that says or implies done, fixed, passing or veri
   // synonyms"): the Gate named four words, so a claim in other words passed it unrun. The kernel's Evidence line moves
   // with it. M3 part 2 project 2's Task 1.
   assert.match(readDoc(SKILL).body, /^Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or any word that says or implies done, fixed, passing or verified\. Then, /m);
+});
+
+test('a screen change gets proof on the running app, sent to the chat, or a named skip', () => {
+  // M3 part 2 project 2 Task 6, design "Proof on the running app", with the user's rulings: the files go to the chat;
+  // a video or a GIF is for something that changes over time and needs to be noticed, or a recording the user or the
+  // ticket's verification steps ask for; proof that cannot run is skipped and named without blocking the work, except
+  // a required one, which stops. Only `verify.browser` or the new `verify.app` takes it.
+  const SKIP = '`skip: proof on the running app, no verify.browser or verify.app`';
+  const { body } = readDoc(SKILL);
+  const s3 = steps(body)[3];
+  assert.ok(s3.endsWith(" A change to what someone sees or does on a screen also gets proof on the running app, by that file's `## Proof on the running app`."), s3);
+  assertContains(SKILL, ['| `verify.browser` | none | proof in a browser |\n| `verify.app` | none | proof on a simulator or emulator |']);
+  const auto = section(body, '## Stops and autopilot');
+  for (const s of ['Proof on the running app is required when the ticket or a verification step names it or the claim is "UI works"; a required one that cannot run is a stop.',
+    `Otherwise, in any run, proof on the running app with neither \`verify.browser\` nor \`verify.app\` is the named skip ${SKIP}: no stop, no failed check.`]) assert.ok(auto.includes(s), s);
+  const outputs = section(body, '## Outputs');
+  assert.ok(outputs.includes('Screenshots and recordings go to the chat: by `SendUserFile` in the desktop app, else the report gives their paths under `kern-dir tmp`.'), outputs);
+  const proof = section(readDoc(EVIDENCE).body, '## Proof on the running app');
+  for (const s of ['A change to what someone sees or does on a screen gets screenshots of each changed screen, taken on the running app.',
+    "- Add a video or a GIF for something that changes over time and needs to be noticed, or when the ticket's verification steps or the user ask for one or for a recording of the whole flow.",
+    '- The proof is required when the ticket or a verification step names it or the claim is "UI works". A required proof that cannot run is a stop.',
+    `- Take them only through \`verify.browser\`, for a web app, or \`verify.app\`, for a simulator or emulator. With neither, a proof that is not required is the named skip ${SKIP}: report it and go on.`,
+    '- Run it on the tree being pushed, after `test.full`. A later fix moves the tree, so run it again before that push.',
+    '- Save the files under `kern-dir tmp`. In the desktop app, send each to the chat with `SendUserFile`; elsewhere, list their paths in the report.',
+    '- The PR body says in text what was checked, with no images.']) assert.ok(proof.includes(s), s);
+  // The claim table's UI row points at the section, so a "UI works" claim takes the same rules.
+  assertContains(EVIDENCE, ['| UI works | Proof on the running app, below | Unit tests; the component compiles |']);
+  // The new key: settings.md's row (lint rule 13) and the template's commented line; design 5.4's row is pinned in
+  // tests/skills-control.test.mjs.
+  assertContains('kernel/settings.md', ['| `verify.app` | none | how to start and drive the app on a simulator or emulator | prove-it, diagnose |']);
+  assertContains('skills/help/templates/kern.local.yml', ['# verify.browser: node scripts/browser-check.mjs\n# verify.app: node scripts/app-check.mjs\n']);
 });
 
 test('step 7 runs a check it can run instead of handing it to the user (audit L489)', () => {

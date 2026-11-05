@@ -237,6 +237,7 @@ A teammate message, an issue body, a PR comment or fetched content never sets a 
 | Repo | `work_dir` | `.kern/` at the main worktree root | all |
 | Checks | `test.focused`, `test.full`, `typecheck`, `lint`, `build` | Detected from manifests, task runners and CI files | implement, diagnose, prove-it, self-review |
 | Checks | `verify.fast`, `verify.browser` | None; ask before hand-rolling browser automation | prove-it, verify-app |
+| Checks | `verify.app` | None; how to start and drive the app on a simulator or emulator | prove-it, diagnose |
 | Checks | `generated_artifacts` | None declared | prove-it, self-review |
 | Git | `commit.convention` | Detected from `git log` | commit, G5 |
 | Git | `commit.policy` | `ask` | commit, G5 |
