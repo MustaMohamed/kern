@@ -358,7 +358,14 @@ test('the design keeps verify.app, and the contract the autopilot line\'s length
   // M3 part 2 project 2 Task 6: the new key's 5.4 row; and, from Task 5's review, contract.md's count of the per-prompt
   // autopilot line, which read 680 after Task 5 made it longer. The count is measured, so the next change to the line
   // moves it too.
-  assertContains('docs/specs/2026-10-12-kern-design.md', ['| Checks | `verify.app` | None; how to start and drive the app on a simulator or emulator | prove-it, diagnose |']);
+  // Its fix round 1: the verify.browser row's "ask before hand-rolling browser automation" was stale, so each running-app
+  // setting says what none means, and verify.fast, which shared that row, gets settings.md's default in its own.
+  const none = (other) => `with no \`${other}\` either, proof on the running app is a named skip, or a stop when it is required`;
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    '| Checks | `verify.fast` | Each of `typecheck` and `lint` that resolves; at least one | prove-it, self-review |',
+    `| Checks | \`verify.browser\` | None; ${none('verify.app')} | prove-it, diagnose, verify-app |`,
+    `| Checks | \`verify.app\` | None; how to start and drive the app on a simulator or emulator. W${none('verify.browser').slice(1)} | prove-it, diagnose |`]);
+  assert.ok(!readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-design.md'), 'utf8').includes('ask before hand-rolling browser automation'), 'the stale ask is gone');
   const hook = readFileSync(join(import.meta.dirname, '..', 'hooks', 'prompt-submit'), 'utf8');
   const line = hook.match(/^ {2}printf '%s\\n' "(autopilot ON: [^\n]*)"$/m)[1].replaceAll('\\$', '$');
   assert.ok(line.startsWith('autopilot ON: commit on a non-protected branch') && line.endsWith('park judgment calls not on the stop list.'), line);
@@ -439,11 +446,10 @@ test('ci.md stays within its byte cap', () => {
   // before the body edit, a conflict resolution that stops aborts the rebase, and the draft's own size `split` stops unless
   // a typed `one PR` settles it, less the `ci.advisory` line (ci-wait drops those checks) and the `<dir>` line (push-and-pr
   // gives it).
-  // 7,022 since Task 6, from Task 5's review: Every push states the one order, with the class 4 lease push before the
-  // body edit, and class 4 step 4 drops its own clause.
-  assertMaxBytes('skills/autopilot/references/ci.md', 7022);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 7,022 bytes (7,002 until M3 part 2 project 2\'s Task 6: ',
-    '; 6,793 until Task 5\'s review fix round 1: ',
+  // Task 6, from Task 5's review, kept 7,002: Every push states the one order, with the class 4 lease push before the body
+  // edit, and class 4 step 4 drops its own clause.
+  assertMaxBytes('skills/autopilot/references/ci.md', 7002);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 7,002 bytes (6,793 until Task 5\'s review fix round 1: ',
     '; 6,651 until the controller\'s ruling on Task 5\'s concerns: ', '; new in M3 part 2 project 2\'s Task 5: ']);
   // Review fix round 1, I2: a draft opened on a size-only `split` (finish-branch's go-on default) reaches Ready with that verdict.
   assertContains(CI, ['A `split` verdict on the pushed tree, the draft\'s own on size included, is a stop that asks split or one PR. A typed `one PR` settles size for this go, so a `split` on size alone then counts as `ready`.']);
@@ -495,7 +501,8 @@ test('ci.md holds the CI loop a go follows from its draft PR to `gh pr ready`, i
     // so Every push now states the one order and class 4 step 4 drops its own clause.
     "as its push. If G1 denies it, stop with `kern stop:` and G1's reason, and leave the body as it was.",
     'Every push, each round\'s push included, runs these in order. The class 4 lease push runs them too, with step 5 before step 4:',
-    '5. The push: `git push origin <branch>`; after a rebase, the lease push, made before step 4.',
+    // Fix round 1: the lead line alone states the order, so step 5 does not repeat it.
+    '5. The push: `git push origin <branch>`; after a rebase, the lease push.\n',
     // Its minors: a resolution that stops leaves no half-done rebase; only two of the replies are guard words; a deny's push
     // goes through Every push.
     'is a design choice: run `git rebase --abort`, push nothing and stop.',

@@ -67,7 +67,7 @@ Every push, each round's push included, runs these in order. The class 4 lease p
 2. Self-review in full on `<wt>`, by `${CLAUDE_PLUGIN_ROOT}/skills/self-review/SKILL.md`, its `review-check` run included.
 3. Proof where prove-it says it applies, on this tree.
 4. The body: write `<dir>/pr-body.md` again as `${CLAUDE_PLUGIN_ROOT}/skills/finish-branch/references/push-and-pr.md`, section PR, says, so its checks and proof lines match this tree. Then run `gh pr edit --body-file <dir>/pr-body.md` alone.
-5. The push: `git push origin <branch>`; after a rebase, the lease push, made before step 4.
+5. The push: `git push origin <branch>`; after a rebase, the lease push.
 6. The wait, above.
 
 Commit every change before step 1 and leave no untracked file: at ready, G2 reads review-check's record for `HEAD^{tree}`.
