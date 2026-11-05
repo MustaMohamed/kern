@@ -10,6 +10,8 @@ Run `gh pr list --head <branch> --state all --json number,state,headRefOid,url`,
 - Only merged or closed PRs: push, then ask before a new PR. Autopilot parks with no PR (why: a second PR for a branch is the user's call).
 - gh missing, logged out or failing: report its output; push, but open no PR.
 
+Under a go each outcome above is a stop: its report opens with `kern stop: <what>`.
+
 ## Push
 
 `git push -u origin <branch>`. Under `push.policy: ask` G1 asks; under `auto` or autopilot it allows this shape to an unprotected branch; `deny` denies every push. After this run's rebase of a published branch, push with `git push --force-with-lease origin <branch>` instead, as its own call: G1 asks when every commit past the base is the user's, else denies. Autopilot rebases and lease-pushes only in a go's CI loop. A failing pre-push hook stops: report it, never `--no-verify`. A plain push rejected right after this run's rebase is that rebase: it rewrote published commits, so use the lease push. Any other rejection means the remote moved: run `git fetch origin <branch>`, show `git log --oneline HEAD..origin/<branch>` and stop. Never a plain force.

@@ -612,6 +612,33 @@ EOF
   [ -z "$(st stop_backs)" ]
 }
 
+@test "a stop line counts past list, quote, emphasis and heading marks, as the grader reads it" {
+  # Final review I2: scripts/lib/exec-grade.mjs's stopLines drops these marks before `kern stop: `, so a stop the
+  # grader passes is one the hook lets end.
+  local l
+  for l in '**kern stop: class 2 red: deploy-preview**' '## kern stop: class 2 red: deploy-preview' \
+    '1. kern stop: class 2 red: deploy-preview' '12) kern stop: class 2 red: deploy-preview' \
+    '  > - _kern stop: merge_' '+ `kern stop: merge`' 'Report:\n### **kern stop: merge**'; do
+    : >"$T"
+    go_on ''
+    go_prompt
+    say "$l"
+    stop
+    allows || { echo "line: $l"; return 1; }
+    [ "$(st stop_down)" = 1 ] || { echo "line: $l"; return 1; }
+  done
+  # A mark that is not one of those, a number with no blank after it, or a word before it is no stop line.
+  for l in 'Step 2 kern stop: merge' '1.kern stop: merge' '(kern stop: merge)' '~~kern stop: merge~~'; do
+    : >"$T"
+    go_on ''
+    go_prompt
+    say "$l"
+    stop
+    held || { echo "line: $l"; return 1; }
+    [[ "$reason" == *'no draft PR is open yet'* ]] || { echo "line: $l"; return 1; }
+  done
+}
+
 @test "a go waiting on a background ci-wait may end" {
   go_on
   go_prompt
@@ -975,6 +1002,94 @@ EOF
   stop
   held
   [[ "$reason" == *'kern: review-check printed `check: verify.fast: skip (named)` this turn'* ]] || false
+}
+
+# owe_report: the state's go_report is 1, on one line, so st reads it alone.
+owe_report() {
+  sed '/^go_report: /d' "$(STATE)" >"$(STATE).new" && mv "$(STATE).new" "$(STATE)"
+  state_line 'go_report: 1'
+}
+# ready_allowed: G2's allow of the go's `gh pr ready`, as g02-pr.sh writes it: the go ends, and its report is owed.
+ready_allowed() {
+  sh_run 'gh pr ready'
+  out 'Pull request #12 is marked as ready for review'
+  state_line 'go: '
+  state_line 'go_phase: '
+  owe_report
+}
+
+@test "a go that reached ready still owes its report: once, then the key empties" {
+  # Final review I1: the ready allow ends the go, so the last stop is no go's; go_report keeps its report check.
+  go_on
+  go_prompt
+  drafted
+  sh_run "bash $P/scripts/review-check $R pkg --no-spec --autopilot"
+  out 'check: verify.fast: skip (named)\nfloor: none'
+  fixture background-bash
+  say 'CI is running; the report comes with its verdict.'
+  stop
+  allows
+  fixture task-notification
+  ready_allowed
+  say 'PR #12 is ready for review. Verdict: ready.'
+  stop
+  held
+  [[ "$reason" == 'kern: review-check printed `check: verify.fast: skip (named)` this turn, and the report does not name that skip. Give the whole report again with a line that names each skipped check and the word skip.' ]] || false
+  [ "$(st go_report)" = 1 ]
+  # Outside the go a send-back is not counted.
+  [ -z "$(st stop_backs)" ]
+  say 'PR #12 is ready for review.\n- verify.fast: skip (named), no command resolves.'
+  stop
+  allows
+  [ -z "$(st go_report)" ]
+  grep -q '^go_report: $' "$(STATE)"
+  # With the key empty, the report is not read again.
+  sh_run 'git status'
+  out ''
+  say 'Done.'
+  stop
+  allows
+}
+
+@test "a go's owed report: an open wait keeps the key, a stop the hook blocked empties it, and every fault allows" {
+  go_on
+  go_prompt
+  drafted
+  sh_run "bash $P/scripts/review-check $R pkg --no-spec --autopilot"
+  out 'check: verify.fast: skip (named)\nfloor: none'
+  ready_allowed
+  # A wait still open: the report comes later, so the key stays for that stop.
+  fixture background-bash
+  say 'One more check runs.'
+  stop
+  allows
+  [ "$(st go_report)" = 1 ]
+  fixture task-notification
+  say 'PR #12 is ready for review.'
+  stop
+  held
+  [[ "$reason" == *'`check: verify.fast: skip (named)`'* ]] || false
+  # The check is once: the stop after a block allows and empties the key.
+  stop true
+  allows
+  [ -z "$(st go_report)" ]
+  # kern: off allows and writes nothing; so does a read of go_report that fails.
+  owe_report
+  mkdir -p "$R/.claude"
+  printf 'kern: off\n' >"$R/.claude/kern.local.yml"
+  stop
+  allows
+  [ "$(st go_report)" = 1 ]
+  rm "$R/.claude/kern.local.yml"
+  fail_with
+  export KERN_T_FAIL=state KERN_T_KEY=go_report
+  stop
+  allows
+  [ "$(st go_report)" = 1 ]
+  export KERN_T_FAIL=none
+  stop
+  held
+  [[ "$reason" == *'`check: verify.fast: skip (named)`'* ]] || false
 }
 
 @test "a stop allowed with the count at 3 sets it back to 0, so the next failure blocks" {

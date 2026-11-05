@@ -10,12 +10,16 @@
 #   `size: ask: <q>` line and the turn's last message does not hold <q> as printed.
 # These two block once: a stop the hook already blocked (stop_hook_active) skips them.
 # - A go's finish line, under a live go (go_live) with no stop reported yet (stop_down empty): the last message
-#   holds a line that opens `kern stop: ` (the run reports a stop, and stop_down becomes 1: the user is back),
-#   or one of the go's waits, a background ci-wait or subagent it started, has no task-notification yet.
-#   Otherwise the reason names the first step missing: the draft PR (go_phase, which G2 sets at the
-#   draft), a ci-wait after the last push or `gh pr create`, a push after a red verdict, or `gh pr ready`.
+#   holds a line that opens `kern stop: ` past any list, quote, emphasis or heading mark (the run reports a
+#   stop, and stop_down becomes 1: the user is back), or one of the go's waits, a background ci-wait or
+#   subagent it started, has no task-notification yet. Otherwise the reason names the first step missing: the
+#   draft PR (go_phase, which G2 sets at the draft), a ci-wait after the last push or `gh pr create`, a push
+#   after a red verdict, or `gh pr ready`.
 # - A go's report, under a live go with no wait open: each `check: <name>: skip (named)` line review-check
-#   printed in the turn is named in the last message, on a line that also says skip.
+#   printed in the turn is named in the last message, on a line that also says skip. G2's allow of the go's
+#   `gh pr ready` ends the go and writes go_report=1, so the check also runs outside a go, once: the first
+#   stop with no wait open reads it, and a stop allowed after that, the one after a block included, empties
+#   go_report.
 # - The nudges, under a live go, or outside one with `stop.nudge: on`: a main-thread Edit, Write or
 #   NotebookEdit in the turn, kern's work dir aside, with no proving command after the last one (test.focused,
 #   test.full, task-done, review-check or probe); and floor-scan's hits in `git diff HEAD` of the files those
@@ -387,7 +391,9 @@ END {
   if (read && ran < read) print "selfreview"
   text = joined(TX, ntx, "\n")
   nx = split(text, X, "\n")
-  for (j = 1; j <= nx; j++) { x = X[j]; sub(/^[ \t]+/, "", x); if (substr(x, 1, 11) == "kern stop: ") { print "stopline"; break } }
+  # A stop line opens `kern stop: ` past any blank, list (a bullet, or a number with . or ) and a blank), quote,
+  # emphasis or heading mark, as a report in Markdown may set it (final review I2).
+  for (j = 1; j <= nx; j++) { x = X[j]; sub(/^([ \t>*_`#+-]|[0-9]+[.)][ \t])+/, "", x); if (substr(x, 1, 11) == "kern stop: ") { print "stopline"; break } }
   # A wait is open while no notification names it. The count starts again at the latest first notice of a wait.
   fn = 0
   for (t in launched) {
@@ -442,10 +448,28 @@ GO=0
 if [ -n "$SID" ] && G=$(state_get "$SID" go 2>/dev/null) && [ -n "$G" ] && main_root && go_live "$SID" "$KERN_MAIN"; then
   GO=1
 fi
-# Outside a go, a stop the hook already blocked allows, as before.
-[ "$GO" = 1 ] || [ "$A" != true ] || exit 0
+# A go G2 let mark its PR ready has ended, and still owes its report (go_report, which that allow writes; final
+# review I1): outside a go the report check runs once more. A read that fails is no report owed.
+REP=0
+if [ "$GO" = 0 ] && [ -n "$SID" ] && RP=$(state_get "$SID" go_report 2>/dev/null) && [ "$RP" = 1 ]; then
+  REP=1
+fi
+# report_read: the owed report is read, so go_report empties, unless kern is off for this project; the stop is
+# allowed either way.
+report_read() {
+  main_root
+  kern_enabled 2>/dev/null && state_set "$SID" "go_report=" 2>/dev/null
+  exit 0
+}
+# Outside a go, a stop the hook already blocked allows, as before; the owed report's check is once, so that stop
+# also empties go_report.
+if [ "$GO" = 0 ] && [ "$A" = true ]; then
+  [ "$REP" = 1 ] && report_read
+  exit 0
+fi
 # Outside a go, one grep of the whole transcript first: with no self-review and no size-check in it, only the
 # nudges could block, and they run only with `stop.nudge: on` and an edit to read; otherwise nothing more runs.
+# An owed report reads on.
 NUDGE=$GO
 MARK=0
 if [ "$GO" = 0 ]; then
@@ -453,7 +477,7 @@ if [ "$GO" = 0 ]; then
   if env LC_ALL=C grep -q -E '"name":"(Edit|Write|NotebookEdit|MultiEdit)"' "$T" 2>/dev/null; then
     [ "$(settings_get stop.nudge off 2>/dev/null)" = on ] && NUDGE=1
   fi
-  [ "$MARK" = 1 ] || [ "$NUDGE" = 1 ] || exit 0
+  [ "$MARK" = 1 ] || [ "$NUDGE" = 1 ] || [ "$REP" = 1 ] || exit 0
 fi
 # The turn starts at the user's last prompt: a user entry whose content is text, or a list that opens with a text
 # or image block, written role before content as Claude Code writes it, and none of a meta entry (a skill's
@@ -478,8 +502,9 @@ EDITS=0
 if [ "$NUDGE" = 1 ]; then
   tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -q -E '"name":"(Edit|Write|NotebookEdit|MultiEdit)"' && EDITS=1
 fi
-# Outside a go, then one grep of the turn, so a read or an ask from an earlier turn costs no parse either.
-if [ "$GO" = 0 ] && [ "$EDITS" = 0 ]; then
+# Outside a go, then one grep of the turn, so a read or an ask from an earlier turn costs no parse either. An owed
+# report is parsed, since only the scan tells whether a wait is open.
+if [ "$GO" = 0 ] && [ "$EDITS" = 0 ] && [ "$REP" = 0 ]; then
   [ "$L" = 1 ] || tail -n "+$L" "$T" 2>/dev/null | env LC_ALL=C grep -q -F -e 'self-review' -e 'size-check' || exit 0
 fi
 # Under a go the scan starts at the go's prompt, the last typed `/kern:autopilot go` (or `/autopilot go`) as
@@ -653,6 +678,7 @@ if [ "$A" != true ]; then
 fi
 SETDOWN=0
 B0=0
+REPORT="kern: review-check printed $SKIPS this turn, and the report does not name that skip. Give the whole report again with a line that names each skipped check and the word skip."
 if [ "$GO" = 1 ]; then
   st_read stop_down || exit 0
   if [ -z "$SV" ]; then
@@ -676,12 +702,19 @@ if [ "$GO" = 1 ]; then
   fi
   # While a wait is open the run has not given its report, so the report is not read.
   if [ -n "$SKIPS" ] && [ "$PENDING" = 0 ]; then
-    add "kern: review-check printed $SKIPS this turn, and the report does not name that skip. Give the whole report again with a line that names each skipped check and the word skip."
+    add "$REPORT"
     COUNTED=1
   fi
   st_read stop_backs || exit 0
   B0=$SV
   case "$B0" in 0 | 1 | 2 | 3) ;; *) B0=0 ;; esac
+fi
+# An owed report, outside the go, is read the same way once no wait is open; its send-back is not counted, since
+# the stop after it allows (stop_hook_active).
+READ=0
+if [ "$REP" = 1 ] && [ "$PENDING" = 0 ]; then
+  READ=1
+  [ -n "$SKIPS" ] && add "$REPORT"
 fi
 if [ "$NUDGE" = 1 ] && [ "$EDITS" = 1 ]; then
   if [ "$UNPROVEN" = 1 ]; then
@@ -698,11 +731,16 @@ if [ "$NUDGE" = 1 ] && [ "$EDITS" = 1 ]; then
   fi
 fi
 # A stop allowed with stop_backs at 3 still writes it back to 0, so the next failure blocks again.
-[ "$SR" = 1 ] || [ -n "$REASON" ] || [ "$SETDOWN" = 1 ] || [ "$B0" = 3 ] || exit 0
+[ "$SR" = 1 ] || [ -n "$REASON" ] || [ "$SETDOWN" = 1 ] || [ "$B0" = 3 ] || [ "$READ" = 1 ] || exit 0
 # kern: off for this project allows, and writes nothing. The settings read runs git, so it waits until the hook
 # would act.
 main_root
 kern_enabled 2>/dev/null || exit 0
+# A stop allowed once the owed report was read empties go_report.
+if [ "$READ" = 1 ] && [ "$SR" = 0 ] && [ -z "$REASON" ]; then
+  state_set "$SID" "go_report=" 2>/dev/null
+  exit 0
+fi
 if [ "$GO" = 1 ]; then
   [ "$SETDOWN" = 1 ] && { state_set "$SID" stop_down=1 2>/dev/null || exit 0; }
   st_read stop_line || exit 0

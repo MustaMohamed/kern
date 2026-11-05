@@ -376,13 +376,15 @@ test('the design, the contract and autopilot keep a go marking its own PR ready 
   // M3 part 2 project 2 Task 4: G2 marks a go's PR ready on clear CI and a passed review-check, or on the typed word, and
   // edits its body; G1 takes the typed lease; review-check writes the record G2 reads.
   assertContains('docs/specs/2026-10-12-kern-design.md', [
-    'a commit, a push, a draft PR (which covers its push), a PR edit, a lease push after a rebase or `gh pr ready`, in the closed grammar of `prompt_consent`',
+    // Final review M4: G1 and G2 read the typed lease and ready only under autopilot.
+    'a commit, a push, a draft PR (which covers its push) or a PR edit, and under autopilot a lease push after a rebase or `gh pr ready`, in the closed grammar of `prompt_consent`',
     // Fix round 1: the typed word lifts every deny of a go's ready but its shape and its open draft.
-    "and lifts no deny but two under autopilot: G1's lease push of the user's own branch, and G2's `gh pr ready` on a live go's own open draft, over checks that are red, pending or unread, a review-check record that is missing or above the floor, and a PR head that is not HEAD.",
+    "and lifts no deny but two under autopilot: G1's lease push of the user's own branch, and G2's `gh pr ready` on a live go's own open draft, over checks that are red, pending or unread, a review-check record that is missing or above the floor, and a PR head that is not HEAD. Outside autopilot G1 and G2 read no typed consent for those two.",
     "`--force-with-lease` only with `rebase.push: autopilot` or the user's typed rebase or sync; a go marks its own PR ready on clear CI and a passed review-check, and edits its body from a file (M3 part 2 project 2); everything else denied |",
     "A go's CI fix rounds stop the same way, up to 3 per go (M3 part 2 project 2) |",
     "only with `rebase.push: autopilot` or when the user's last typed prompt asks to rebase or sync (section 5.1; a bare yes is not one, M3 part 2 project 2), and only when every commit on it is the user's |",
-    "Under a live go with its draft open, `gh pr ready` on that PR (no PR number, no `-R`) allowed when the user's last typed prompt says to mark it ready, or when the PR's head is HEAD, its checks read clear or none at the call and the review-check record for HEAD's tree ends `floor: none`; the allow ends the go.",
+    // Final review I1: the allow also leaves the Stop hook its read of the go's report.
+    "Under a live go with its draft open, `gh pr ready` on that PR (no PR number, no `-R`) allowed when the user's last typed prompt says to mark it ready, or when the PR's head is HEAD, its checks read clear or none at the call and the review-check record for HEAD's tree ends `floor: none`; the allow ends the go and leaves the Stop hook one read of its report (`go_report`, section 6.3).",
     '`gh pr edit --body-file <file>` alone on that PR allowed with no prompt, the file checked as on create (M3 part 2 project 2). Any other `gh pr edit`, non-draft, an attributed body file and any other `gh pr ready` denied |']);
   assertContains('docs/plans/contract.md', [
     'G5 (`commit`), G1 (`push`, and `lease` under autopilot) and G2 (`pr`, `pr-edit`, `pr-title`, `pr-body`, and `ready` under a live go) call it.',
@@ -392,7 +394,7 @@ test('the design, the contract and autopilot keep a go marking its own PR ready 
     "so the go lives on through CI until G2 allows its `gh pr ready` (Task 4), `/kern:autopilot off`, a second go or the session's end",
     "- **G2 marks a go's PR ready and edits its body (M3 part 2 project 2, Task 4).**",
     "is a regular readable file whose last non-blank line, blanks trimmed, is `floor: none`: review-check prints its floor last, so a check's tail above it is not one.",
-    'Each allow runs `state_set "$SID" "go=" "go_phase="`, which ends the go; `go_repo` and `autopilot` stay.',
+    'Each allow runs `state_set "$SID" "go=" "go_phase=" "go_report=1"`, which ends the go; `go_repo` and `autopilot` stay, and `go_report` has the Stop hook read the go\'s report once more, outside the go (the final review\'s I1).',
     // Fix round 1: lost reads, the PR's head, the failed record write and the settle the next task's ci-wait gives.
     "ready also needs the record's text to be exactly `gh pr ready`, since tokens lost to a substitution whose pipe could not be made come back empty, which is ready's allowed shape (fix round 1).",
     '`gh pr view --json headRefOid --jq .headRefOid`, run in CWD with no PR named under `with_timeout 10` and `GH_DEBUG` empty, must equal `git -C "$CWD" rev-parse --verify --quiet HEAD`',
@@ -448,7 +450,11 @@ test('ci.md stays within its byte cap', () => {
   // gives it).
   // Task 6, from Task 5's review, kept 7,002: Every push states the one order, with the class 4 lease push before the body
   // edit, and class 4 step 4 drops its own clause.
+  // The project's final review, M6, kept 7,002: the untracked-file sentence moves from Every push to Ready and holds before
+  // each self-review, so the draft's path to ready keeps it too.
   assertMaxBytes('skills/autopilot/references/ci.md', 7002);
+  assertContains(CI, ["## Ready\n\nCommit every change and leave no untracked file before each self-review: G2 reads review-check's record for `HEAD^{tree}`.\n\nRun `gh pr ready` when all hold:"]);
+  assert.ok(!readFileSync(join(import.meta.dirname, '..', CI), 'utf8').includes('before step 1 and leave no untracked file'), 'the Every push copy is gone');
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/ci.md` at most 7,002 bytes (6,793 until Task 5\'s review fix round 1: ',
     '; 6,651 until the controller\'s ruling on Task 5\'s concerns: ', '; new in M3 part 2 project 2\'s Task 5: ']);
   // Review fix round 1, I2: a draft opened on a size-only `split` (finish-branch's go-on default) reaches Ready with that verdict.
@@ -466,7 +472,13 @@ test('the skills spec states the go past its draft, and the autopilot size it br
     'draft PR after dedup (a go: then ci.md to gh pr ready); run git and gh directly,',
     'lease push only if rebase.push=autopilot or the user typed rebase and push; every other ask is denied;']);
   // Review fix round 1: settings.md's Lease push row said rebase.push alone, while G1 also takes the typed lease.
-  assertContains('kernel/settings.md', ["| never allowed. It asks or denies | allowed only with `rebase.push: autopilot` or the user's typed `rebase and push` |"]);
+  // Final review M2: G1 reads `rebase` or `sync` alone as the lease too; the table adds a go's body edit and ready, the
+  // approval's bounds, and the two typed consents that lift a deny under autopilot.
+  assertContains('kernel/settings.md', ["| never allowed. It asks or denies | allowed only with `rebase.push: autopilot` or the user's typed `rebase and push`, `rebase` or `sync` |",
+    "Under autopilot it also stands for G1's lease push (a typed `rebase and push`, or `rebase` or `sync` alone) and G2's `gh pr ready` on a go's own draft (a typed `leave it and mark the PR ready`), and lifts their deny, as the rows below say. It counts only for that prompt and repository, and lifts no other deny.",
+    '| PR body edit | `gh pr edit --body-file <file>` alone, with no PR number or `-R`, on a live go\'s own open draft. The file is a regular file in the repo that git keeps, with no attribution | never allowed. It asks | allowed only under that go, with `pr.policy` at `ask` or `auto` |',
+    "| Mark a PR ready | `gh pr ready` alone, with no PR number, `-R` or other option, on a live go's own open draft | never allowed. It asks | allowed only under that go: when the PR's head is HEAD, its checks read clear or none and the review-check record for HEAD's tree ends `floor: none`, or on the user's typed `leave it and mark the PR ready`. The allow ends the go |",
+    "| Approve a spec or plan | the go's quote on a file whose issue: names its ticket | never | only with a go, until its draft PR opens; a plan only after its review record holds `Verdict: approve` and no `Verdict: revise` |"]);
 });
 
 test('ci.md holds the CI loop a go follows from its draft PR to `gh pr ready`, in the design\'s order', () => {
@@ -612,7 +624,7 @@ test('the design, the contract and the settings keep the Stop hook that holds a 
     '| Checks | `stop.nudge` | `off`; `on` turns on the Stop hook\'s nudges outside a go (section 6.3) | the Stop hook |',
     '| Stop | One reason lists each check that fails, printed as `{"decision":"block","reason":...}` with exit 0; `kern: off` and any fault allow.',
     "The size ask (M3 part 2 project 2): the turn's results hold `size-check`'s `size: ask: <q>` and the last message does not hold `<q>` as printed. These two block once: a stop the hook already blocked (`stop_hook_active`) skips them.",
-    "A go's finish line (M3 part 2 project 2), under a live go until the run reports its first stop: a stop is allowed when the last message holds a line that opens `kern stop: `, which stands the check down for the rest of the go (`stop_down`), or while a background `ci-wait` or subagent the go started has no task-notification; otherwise the reason names the first missing step: the draft PR, a `ci-wait` after the last push, a push after a red verdict, or `gh pr ready`.",
+    "A go's finish line (M3 part 2 project 2), under a live go until the run reports its first stop: a stop is allowed when the last message holds a line that opens `kern stop: ` past any list, quote, emphasis or heading mark, as the eval grader reads it, which stands the check down for the rest of the go (`stop_down`), or while a background `ci-wait` or subagent the go started has no task-notification; otherwise the reason names the first missing step: the draft PR, a `ci-wait` after the last push, a push after a red verdict, or `gh pr ready`.",
     "A go's report, while no such wait is open: each `check: <name>: skip (named)` line `review-check` printed in the turn is named in the last message beside the word skip.",
     "The nudges, under a go, or outside one only with `stop.nudge: on`: a main-thread Edit, Write or NotebookEdit outside the work dir with no `test.focused`, `test.full`, `task-done`, `review-check` or `probe` run after it, and `floor-scan`'s hits in `git diff HEAD` of the files those calls edited (G7, section 8.3) that the last message does not name by `path:line`.",
     "Under a go each finish-line, report or nudge block adds 1 to `stop_backs`; the third asks the run to end with its report, saying it stopped short, and the next stop is allowed; any stop allowed at 3 sets the count back to 0. A typed prompt, or the first task-notification after the last block of a background `ci-wait` or subagent the go started, once for each, starts the count again; a notice of anything else does not. Outside a go `stop_hook_active` allows.",
@@ -625,7 +637,7 @@ test('the design, the contract and the settings keep the Stop hook that holds a 
     'a hook entry file (`prompt-submit`, `session-start`, `subagent-start`, `pre-tool-use` or, since M3 part 2 project 2\'s Task 7, `stop`, which counts in this path form, and as a bare word or a glob that could match it only where the hooks folder in play may be kern\'s (the word rule\'s unknown folder: kern\'s own, one a cd or a variable names, or one G16 cannot tell), and is no entry file\'s name for the write rules below, so `docker compose stop` with the session\'s cwd in a project\'s own hooks folder gets no vote, `bash stop` after a cd into kern\'s hooks folder asks, and a project\'s own `hooks/stop` clears) after `hooks/`',
     '- **The Stop hook holds a go to ready (M3 part 2 project 2, Task 7).**',
     'Outside a go the hook reads on only when the transcript holds `self-review` or `size-check` (one `grep -F`), or `stop.nudge` reads `on`',
-    "(3) The finish line, under a live go with `stop_down` empty: a line of the last message that opens `kern stop: `, leading blanks dropped, writes `stop_down=1` and passes;",
+    "(3) The finish line, under a live go with `stop_down` empty: a line of the last message that opens `kern stop: `, once a leading run of blanks, `>`, `*`, `_`, backticks, `#`, `+`, `-` and list numbers (digits, then `.` or `)` and a blank) is dropped, as `stopLines` in `scripts/lib/exec-grade.mjs` drops them (the final review's I2), writes `stop_down=1` and passes;",
     'Under a go each block that holds (3), (4), (5) or (6) is a send-back: `stop_backs` (0 to 3) goes up by 1 and `stop_line` takes the transcript\'s line count, and a write that fails allows, as do a read',
     "any stop allowed with `stop_backs` at 3 writes `stop_backs=0`. A wait's first task-notification line past `stop_line` reads as `stop_backs` 0, so each wait starts the count again once; a notice of anything else (a Monitor's event, a command that is no wait) does not.",
     "so does one of the go's waits, a Bash call whose simple command runs `ci-wait` or an Agent (or Task) call, whose result's `toolUseResult` holds a `backgroundTaskId` or the status `async_launched`, while no task-notification names its `tool_use_id`; any other background command holds nothing open.",
@@ -646,4 +658,37 @@ test('the design, the contract and the settings keep the Stop hook that holds a 
   for (const [name, text] of [['contract', contract], ['design', design], ['hooks/stop', hook]]) {
     assert.ok(!/Project 2 extends it/.test(text), name);
   }
+});
+
+test("the skills spec's key table holds verify.browser's default and points at the keys added since", () => {
+  // Final review M3: A5 still had verify.browser's old ask; the keys M3 added live in kernel/settings.md and design 5.4.
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    '| `verify.browser` | none: with no `verify.app` either, proof on the running app is a named skip, or a stop when it is required | none | prove-it, diagnose, verify-app |',
+    'Keys added since M2, `verify.app`, `ci.wait_minutes`, `ci.advisory` and `stop.nudge` among them, are listed in `kernel/settings.md` and design section 5.4.']);
+  assert.ok(!readFileSync(join(import.meta.dirname, '..', 'docs', 'specs', '2026-10-12-kern-m1-m2-skills.md'), 'utf8').includes('ask when a UI claim needs it'), 'the stale ask is gone');
+});
+
+test('the design and the contract keep the report a go owes after ready, and the stop line the grader reads', () => {
+  // Final review I1: G2's ready allow ends the go, so go_report keeps the Stop hook's report check for the stop after it.
+  // Final review I2: the hook drops the marks the grader drops before `kern stop: `.
+  assertContains('docs/specs/2026-10-12-kern-design.md', [
+    "G2's allow of the go's `gh pr ready` ends the go and writes `go_report=1`, so this check runs once more outside the go, at the first stop with no wait open; its block there is not counted, and the stop allowed after it empties `go_report`, as do a typed prompt, a new go and autopilot off.",
+    'allows with no parse when neither holds `self-review` or `size-check`, no nudge applies and no report is owed;']);
+  assertContains('docs/plans/contract.md', [
+    "G2's allow of a go's `gh pr ready` adds `go_report` (`1` while the ended go's report is owed to the Stop hook, else empty or unset), the final review's I1.",
+    '`apply_go` writes `go_phase` empty with its `go`, `autopilot_off` writes it empty with `go` and `go_repo`, and `state_reset` writes no `go_phase`. Both also write `go_report` empty',
+    'Outside a go `stop_hook_active` allows, as before; with `go_report` at `1` that stop also writes it empty.',
+    'With `go_report` at `1` it always reads on.',
+    "Outside a go it runs once more while `go_report` is `1` (G2's ready allow ends the go and writes it; the final review's I1), at the first stop with no wait open: there its block is no send-back, and the stop it allows, or the `stop_hook_active` stop after its block, writes `go_report` empty; a read of `go_report` that fails owes no report.",
+    "and `go_report` empty likewise when it is `1`; `apply_go` writes `stop_backs=0`, and `stop_down` and `go_report` empty, with its go, and `autopilot_off` writes `go_report` empty.",
+    // Final review M1: the two cases that push after the draft wait on their last push too.
+    '`go-ci-fix-ready` and `go-ci-behind-rebase` also want such a call after the last push that ran, so a fix or lease push is waited on before ready (the final review\'s M1); with no push that ran that row passes, and the push rows fail the run.']);
+  for (const [name, path] of [['contract', join('docs', 'plans', 'contract.md')], ['design', join('docs', 'specs', '2026-10-12-kern-design.md')]]) {
+    assert.ok(!readFileSync(join(import.meta.dirname, '..', path), 'utf8').includes('leading blanks dropped'), `${name} still says leading blanks dropped`);
+  }
+  // One mark set in both readers: the hook's BWK awk has no lookahead, so it drops the blank after a list number with it.
+  const hook = readFileSync(join(import.meta.dirname, '..', 'hooks', 'stop'), 'utf8');
+  const grade = readFileSync(join(import.meta.dirname, '..', 'scripts', 'lib', 'exec-grade.mjs'), 'utf8');
+  assert.ok(hook.includes('sub(/^([ \\t>*_`#+-]|[0-9]+[.)][ \\t])+/, "", x); if (substr(x, 1, 11) == "kern stop: ")'), 'the hook strips the marks');
+  assert.ok(grade.includes(".replace(/^(?:[\\s>*_`#+-]|\\d+[.)](?=\\s))+/, '')).filter((l) => l.startsWith('kern stop: '))"), 'the grader strips the same marks');
 });

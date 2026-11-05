@@ -243,6 +243,8 @@ test('push-and-pr reference: dedup, push, PR', () => {
     'A PR counts only if its URL is this repo\'s (`git remote get-url origin`); check before reporting it.',
     'whose `headRefOid` is `git rev-parse HEAD`, in any state: report its URL and stop', 'An open PR at an older head: push, report its URL, and open no new PR.',
     'Only merged or closed PRs: push, then ask before a new PR', 'Autopilot parks with no PR', 'gh missing, logged out or failing: report its output; push, but open no PR.',
+    // Final review M10: under a go no dedup outcome opens the go's draft, so G2 never sets go_phase; each is a stop the Stop hook reads.
+    'Under a go each outcome above is a stop: its report opens with `kern stop: <what>`.',
     'git push -u origin <branch>', 'Under `push.policy: ask` G1 asks', 'under `auto` or autopilot it allows this shape', '`deny` denies every push',
     'After this run\'s rebase of a published branch, push with `git push --force-with-lease origin <branch>` instead, as its own call',
     // M3 part 2 project 2 Task 5: a go's CI loop rebases and lease-pushes on a class 4 red, and marks the PR ready.
@@ -264,8 +266,9 @@ test('push-and-pr reference: dedup, push, PR', () => {
   assert.ok(pr.indexOf('Write the body from `pr.template`, else `references/pr-body.md`') < pr.indexOf(danger) && pr.indexOf(danger) < pr.indexOf('gh pr create'), 'the clause sits with the body, before the gh command');
   assertNoSubstitution(PUSH);
   // 2,467 since M3 part 2 project 2's Task 5: autopilot rebases, lease-pushes and runs `gh pr ready` only in a go's CI loop.
-  assertMaxBytes(PUSH, 2467);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["`push-and-pr.md` at most 2,467 (2,441 until M3 part 2 project 2's Task 5: "]);
+  // 2,552 since that project's final review, M10: under a go each dedup outcome is a stop whose report opens `kern stop: <what>`.
+  assertMaxBytes(PUSH, 2552);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ["`push-and-pr.md` at most 2,552 (2,467 until M3 part 2 project 2's final review, M10: under a go each dedup outcome is a stop whose report opens `kern stop: <what>`; 2,441 until its Task 5: "]);
 });
 
 test('PR body template', () => {

@@ -737,11 +737,19 @@ const forcePushed = (events) => ranAt(events, (c) => pushArgs(c).some((args) => 
 // background launch, or exit 0), or that printed a verdict of red or pending (a foreground exit 1 or 3). Exit 2, 126 and 127
 // waited for nothing, and a read of `gh pr checks` is no wait (fix rounds 1 and 2).
 const CI_VERDICT = /^ci: (red|pending) /m;
+// waitedAfter(events, at): a ci-wait call that counts, as above, ran after the event index at.
+const waitedAfter = (events, at) => bashRuns(events).some((r) => r.at > at && scriptCalls(r.command, 'ci-wait').length > 0 && (r.ok || CI_VERDICT.test(r.output)));
 const waitedAfterCreate = (events) => {
   const [created] = createAt(events);
-  return created !== undefined && bashRuns(events).some((r) => r.at > created && scriptCalls(r.command, 'ci-wait').length > 0 && (r.ok || CI_VERDICT.test(r.output)));
+  return created !== undefined && waitedAfter(events, created);
 };
 const waitRow = (events) => [waitedAfterCreate(events), 'no ci-wait ran after gh pr create'];
+// pushWaitRow(events): a ci-wait that counts ran after the last push that ran, as ci.md's Every push row says, so a fix or lease
+// push is waited on before ready (final review M1). With no push that ran it passes: the push rows fail that run.
+const pushWaitRow = (events) => {
+  const last = pushAt(events).at(-1);
+  return [last === undefined || waitedAfter(events, last), 'no ci-wait ran after the last push'];
+};
 // pushAfterCreate(events): a push ran after the first `gh pr create` that ran.
 const pushAfterCreate = (events) => {
   const [created] = createAt(events);
@@ -1034,6 +1042,7 @@ export const GRADERS = {
   // line, so a CI fix round commits with `CI round: 1`, pushes after Every push's body edit, and marks the PR ready last.
   'go-ci-fix-ready': ({ events, ghLog, git }) => ciRows({ events, ghLog },
     [pushAfterCreate(events), 'no push ran after gh pr create'],
+    pushWaitRow(events),
     [ciRound(git, 1), "no commit body on the run's branch holds the line `CI round: 1`"],
     [readyLast(events, ghLog), 'gh pr ready did not run last, after the PR opened and after its last push and body edit']),
   // Class 2: an outside registry refused the connection, which no push fixes: the run stops with the PR draft and names the check.
@@ -1056,6 +1065,7 @@ export const GRADERS = {
   // Class 4 under `rebase.push: autopilot`: the run rebases, lease-pushes and, on clear CI, marks the PR ready.
   'go-ci-behind-rebase': ({ events, ghLog }) => ciRows({ events, ghLog },
     [leaseAt(events).length > 0, 'no git push --force-with-lease ran'],
+    pushWaitRow(events),
     [readyAfterLease(events, ghLog), 'gh pr ready did not run after the lease push']),
   // Class 5: lint names a line in the file the ticket changes, on a line it does not change, so the run leaves it and asks.
   'go-ci-touched-ask': ({ events, ghLog, git }) => ciRows({ events, ghLog },

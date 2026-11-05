@@ -1426,6 +1426,17 @@ expect_kern() {
   expect_cmd none 'docker compose stop' 'npm run stop' 'cat stop'
 }
 
+@test "go_report is held as the other state keys are: its writers ask, and a write of the state file is denied" {
+  # Final review I1: G2 writes go_report=1 at a go's ready, and hooks/stop and prompt-submit empty it. No new
+  # writer comes with it, so the state file's deny and the entry-file asks that cover stop_backs cover it too.
+  K=$(kern_root)
+  set_autopilot off
+  expect_bash deny "echo go_report: 1 >> $S/test-session.state" "echo go_report: | tee -a $S/test-session.state"
+  expect_file_tools "$S/test-session.state" deny
+  expect_hook "bash $K/hooks/guards/g02-pr.sh" "bash $K/hooks/stop" "bash $K/hooks/prompt-submit" \
+    "bash -c '. $K/hooks/lib/state.sh; state_set test-session go_report='"
+}
+
 @test "a bare stop asks where the hooks folder in play may be kern's" {
   # The fix review's second ruling: in kern's own hooks folder, or one G16 cannot tell from it, a bare stop, or a
   # glob that could match it, may run kern's Stop hook, which writes stop_down.

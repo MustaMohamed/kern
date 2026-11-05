@@ -3804,6 +3804,8 @@ const RC_RUN = ran('pr', ['bash /k/scripts/review-check . /w/app/.kern/tmp/revie
 const CI_LOG = ['issue view 7', DRAFT];
 const EDIT = 'pr edit --body-file /w/app/.kern/tmp/pr-body.md';
 const NO_PUSH_AFTER = 'no push ran after gh pr create';
+// Final review M1: a fix or lease push is waited on before ready, as the first push is.
+const NO_PUSH_WAIT = 'no ci-wait ran after the last push';
 const NO_ROUND = 'no commit body on the run\'s branch holds the line `CI round: 1`';
 const NOT_LAST = 'gh pr ready did not run last, after the PR opened and after its last push and body edit';
 const PUSHED_AFTER = 'pushed after gh pr create';
@@ -3826,7 +3828,12 @@ test('go-ci-fix-ready: a push after the PR opened, a commit body with CI round: 
   const BODY = 'CI round: 1\n';
   const grade = ({ events = ROUTE, ghLog = LOG, body = BODY } = {}) => GRADERS['go-ci-fix-ready']({ events: [...events, say('PR #8 is ready for review. CI: clear.')], ghLog, git: workGit({ [ROUND_BODY]: body }) }).reasons;
   assert.deepEqual(grade(), []);
-  assert.deepEqual(grade({ events: [...OPENED, ...pushedBy('pa'), ...MARKED] }), [NO_WAIT], 'no ci-wait: a run that read gh pr checks itself');
+  assert.deepEqual(grade({ events: [...OPENED, ...pushedBy('pa'), ...MARKED] }), [NO_WAIT, NO_PUSH_WAIT], 'no ci-wait: a run that read gh pr checks itself');
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...MARKED] }), [NO_PUSH_WAIT], 'the fix pushed, then ready with no second wait');
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...ran('wb', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-sum', false, 'Exit code 2\nci-wait: usage']), ...MARKED] }),
+    [NO_PUSH_WAIT], 'a second wait that waited for nothing (exit 2)');
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...ran('wb', ['bash /k/scripts/ci-wait /w/app/.claude/worktrees/round-sum', false, 'Exit code 3\nci: pending lint (timeout 45m)\n']), ...MARKED] }),
+    [], 'a foreground second wait that printed a verdict counts, as the first does');
   assert.deepEqual(grade({ events: [...pushedBy('pz'), ...OPENED, ...waited('wa', 'ci: red lint'), ...MARKED] }), [NO_PUSH_AFTER], 'the only push came before the PR');
   assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...ran('pd', ['git push origin kern/round-sum', false, 'kern G1: denied']), ...MARKED] }), [NO_PUSH_AFTER], 'a refused push pushed nothing');
   assert.deepEqual(grade({ body: '' }), [NO_ROUND]);
@@ -3834,8 +3841,8 @@ test('go-ci-fix-ready: a push after the PR opened, a commit body with CI round: 
   assert.deepEqual(grade({ body: 'After CI round: 1 came this.\n' }), [NO_ROUND], 'not on its own line');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, EDIT] }), [NOT_LAST], 'no ready');
   assert.deepEqual(grade({ ghLog: [...CI_LOG, 'pr ready', EDIT] }), [NOT_LAST], 'a body edit after the ready');
-  assert.deepEqual(grade({ events: [...ROUTE, ...pushedBy('py')] }), [NOT_LAST], 'a push after the ready');
-  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NOT_LAST], 'G2 refused the ready');
+  assert.deepEqual(grade({ events: [...ROUTE, ...pushedBy('py')] }), [NO_PUSH_WAIT, NOT_LAST], 'a push after the ready');
+  assert.deepEqual(grade({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NO_PUSH_WAIT, NOT_LAST], 'G2 refused the ready');
   assert.deepEqual(grade({ ghLog: ['issue view 7', 'pr ready'] }), [NO_DRAFT, NOT_LAST], 'a ready with no PR opened');
 });
 
@@ -3843,7 +3850,7 @@ test('go-ci-fix-ready: a push after the PR opened, a commit body with CI round: 
 test('go-ci-fix-ready: CI round: 1 counts in a pushed commit body, not as a subject line', () => {
   const r = ciRepo('red-then-green');
   try {
-    const grade = () => GRADERS['go-ci-fix-ready']({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...MARKED, say('PR #8 is ready.')], ghLog: [...CI_LOG, 'pr ready'], git: r.g }).reasons;
+    const grade = () => GRADERS['go-ci-fix-ready']({ events: [...OPENED, ...waited('wa', 'ci: red lint'), ...pushedBy('pa'), ...waited('wb', 'ci: clear'), ...MARKED, say('PR #8 is ready.')], ghLog: [...CI_LOG, 'pr ready'], git: r.g }).reasons;
     assert.deepEqual(grade(), [NO_ROUND], 'no round yet');
     r.commit('src/sum.js', `/** Adds. */\n${ROUNDED}`, 'CI round: 1');
     r.push();
@@ -3924,11 +3931,13 @@ test('go-ci-behind-rebase: a lease push, then gh pr ready', () => {
   const LOG = [...CI_LOG, EDIT, 'pr ready'];
   const grade = ({ events = ROUTE, ghLog = LOG } = {}) => GRADERS['go-ci-behind-rebase']({ events: [...events, say('PR #8 is ready for review.')], ghLog, git: workGit() }).reasons;
   assert.deepEqual(grade(), []);
-  assert.deepEqual(grade({ events: [...OPENED, ...REBASED, ...LEASED, ...MARKED] }), [NO_WAIT]);
-  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...REBASED, ...pushedBy('pa'), ...MARKED] }), [NO_LEASE, NOT_AFTER_LEASE], 'a plain push');
+  assert.deepEqual(grade({ events: [...OPENED, ...REBASED, ...LEASED, ...MARKED] }), [NO_WAIT, NO_PUSH_WAIT]);
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...REBASED, ...LEASED, ...MARKED] }), [NO_PUSH_WAIT], 'the lease push, then ready with no second wait');
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...REBASED, ...LEASED, ...waited('wb', 'Command running in background with ID: b2'), ...MARKED] }), [], 'a background wait after the lease');
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...REBASED, ...pushedBy('pa'), ...MARKED] }), [NO_LEASE, NO_PUSH_WAIT, NOT_AFTER_LEASE], 'a plain push');
   assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...ran('pd', ['git push --force-with-lease origin kern/round-sum', false, 'kern G1: denied']), ...MARKED] }), [NO_LEASE, NOT_AFTER_LEASE], 'G1 refused the lease');
-  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...MARKED, ...LEASED] }), [NOT_AFTER_LEASE], 'the ready before the lease');
-  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...LEASED, ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NOT_AFTER_LEASE], 'G2 refused the ready');
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...MARKED, ...LEASED] }), [NO_PUSH_WAIT, NOT_AFTER_LEASE], 'the ready before the lease');
+  assert.deepEqual(grade({ events: [...OPENED, ...WAIT, ...LEASED, ...REFUSED_READY], ghLog: [...CI_LOG, EDIT] }), [NO_PUSH_WAIT, NOT_AFTER_LEASE], 'G2 refused the ready');
 });
 
 test('go-ci-touched-ask: the named line left as it was, no ready, and a stop that names lint and asks for approval', () => {
