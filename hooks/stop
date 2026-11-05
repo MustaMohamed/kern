@@ -719,7 +719,11 @@ fi
 if [ "$NUDGE" = 1 ] && [ "$EDITS" = 1 ]; then
   if [ "$UNPROVEN" = 1 ]; then
     # shellcheck disable=SC2016 # literal backticks
-    add 'kern: a file was edited after the last proving command of the turn. Run `test.focused` or `test.full` on the change, or `task-done`, `review-check` or `probe`, and report the result.'
+    U='kern: a file was edited after the last proving command of the turn. Run `test.focused` or `test.full` on the change, or `task-done`, `review-check` or `probe`, and report the result.'
+    # Under a go the last reply stands as the run's report, so the reason asks for the whole report again, as the
+    # skip reason does (M3 part 2 project 2's paid round 1: a reply after this send-back gave a probe's result alone).
+    [ "$GO" = 1 ] && U="$U Then give the whole report again."
+    add "$U"
     COUNTED=1
   fi
   if [ -n "$FILES" ]; then

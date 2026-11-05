@@ -822,6 +822,39 @@ EOF
   allows
 }
 
+# M3 part 2 project 2's paid round 1: under a go the unproven-edit send-back asked only for the result, and
+# go-required-check-stop's last reply gave a probe's result alone, the final text the grader reads, so its report lost
+# the `Test suite: fail` line. Under a go the reason ends as the skip reason does; outside one it is unchanged.
+UNPROVEN='kern: a file was edited after the last proving command of the turn. Run `test.focused` or `test.full` on the change, or `task-done`, `review-check` or `probe`, and report the result.'
+
+@test "under a go the unproven-edit reason asks for the whole report again" {
+  go_on ''
+  go_prompt
+  use Edit "\"file_path\":\"$R/README.md\",\"old_string\":\"readme\",\"new_string\":\"read me\""
+  out 'The file has been updated.'
+  say 'kern stop: required check test.full cannot run\nTest suite: fail, cannot run.'
+  stop
+  held
+  [ "$reason" = "$UNPROVEN Then give the whole report again." ]
+  [ "$(st stop_backs)" = 1 ]
+}
+
+@test "outside a go the unproven-edit reason asks for no report" {
+  nudge_on
+  use Edit "\"file_path\":\"$R/README.md\",\"old_string\":\"readme\",\"new_string\":\"read me\""
+  out 'The file has been updated.'
+  say 'Updated the readme.'
+  stop
+  held
+  [ "$reason" = "$UNPROVEN" ]
+  # A go that reached ready owes its report outside the go, and the nudge there is the same.
+  set_autopilot on
+  state_line 'go_report: 1'
+  stop
+  held
+  [ "$reason" = "$UNPROVEN" ]
+}
+
 @test "a lowered floor names its line or blocks" {
   printf "it('adds', () => {});\n" >"$R/sum.test.js"
   git -C "$R" add sum.test.js

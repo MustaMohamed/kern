@@ -692,3 +692,9 @@ test('the design and the contract keep the report a go owes after ready, and the
   assert.ok(hook.includes('sub(/^([ \\t>*_`#+-]|[0-9]+[.)][ \\t])+/, "", x); if (substr(x, 1, 11) == "kern stop: ")'), 'the hook strips the marks');
   assert.ok(grade.includes(".replace(/^(?:[\\s>*_`#+-]|\\d+[.)](?=\\s))+/, '')).filter((l) => l.startsWith('kern stop: '))"), 'the grader strips the same marks');
 });
+
+test("the contract keeps the round 1 fix batch's Stop hook reason", () => {
+  // M3 part 2 project 2's paid round 1, F1: under a go the unproven-edit reason asks for the whole report again.
+  assertContains('docs/plans/contract.md', [
+    "Under a live go its reason ends `Then give the whole report again.`, since the grader reads the last reply (M3 part 2 project 2's round 1 fix batch: go-required-check-stop's last reply after this send-back gave a probe's result alone)."]);
+});
