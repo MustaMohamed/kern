@@ -39,14 +39,23 @@ test('plan sections and steps', () => {
   // scope_threshold files.
   // 7,277 since its fix round 1: step 11 leaves a warn: line step 7's stop settled.
   // 7,372 since M3 part 2 project 2's Task 8: step 11 saves the plan review's reply, which G20 reads under a go.
-  assertMaxBytes(SKILL, 7372);
+  // 7,598 since its pre-review change: under a go a revise reply gets one more fresh review, and a second stops the go.
+  assertMaxBytes(SKILL, 7598);
 });
 
 test('plan step 11 names the review record', () => {
   // M3 part 2 project 2, Task 8: under a go G20 reads this record before the plan's approval.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[11].includes('kern-dir reviews') && s[11].includes('plan-<slug>.md'), s[11]);
-  assert.ok(s[11].endsWith('never size or budget. Save the reviewer\'s reply verbatim with the Write tool to `<kern-dir reviews>/plan-<slug>.md`.'), s[11]);
+  assert.ok(s[11].includes('never size or budget. Save the reviewer\'s reply verbatim with the Write tool to `<kern-dir reviews>/plan-<slug>.md`.'), s[11]);
+});
+
+test('under a go a revise reply gets one more review, and a second stops the go', () => {
+  // M3 part 2 project 2, Task 8's pre-review change: G20 denies a go's plan approval on a revise record, and round 1
+  // only left the go no way on. A person's run keeps round 1 only.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[11].includes('as its brief, round 1 only.'), s[11]);
+  assert.ok(s[11].endsWith('Under a go, on `Verdict: revise`: fix its findings, rerun plan-check, send the plan to one more fresh reviewer on the same brief and save that reply over the same file; a second `revise` stops the go and reports its findings.'), s[11]);
 });
 
 test('under a go the plan asks nothing the stop list does not stop for', () => {

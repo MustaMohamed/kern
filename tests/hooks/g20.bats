@@ -495,6 +495,17 @@ review_denied() {
   review_denied
 }
 
+@test "a record rewritten from revise to approve then allows" {
+  # Task 8's pre-review change: plan step 11 saves a go's second review over the same record.
+  say "$GO"
+  review 'Verdict: revise' '' '1: two tasks read the interface differently. pin one signature.'
+  write_plan
+  review_denied
+  review 'Verdict: approve'
+  write_plan
+  no_vote
+}
+
 @test "only a whole line Verdict: approve is an approving review" {
   say "$GO"
   for l in 'Verdict: approve | revise' 'verdict: approve' 'Verdict: approved' 'Verdict:  approve' '**Verdict: approve**' \

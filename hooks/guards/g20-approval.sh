@@ -38,8 +38,8 @@
 # - A go approves any file whose issue: line names its ticket, and the model writes that line.
 # - The model writes a go's plan review record too, so G20 reads that it holds an approve verdict, not that
 #   a reviewer wrote it or reviewed this draft. A plan outside WORK/plans, below a folder in it, or
-#   reached by a hard link waits for no record. After a revise verdict a go has no second review round,
-#   so its plan stays a draft.
+#   reached by a hard link waits for no record. A user's word to skip the review leaves a go's plan with
+#   no record, so the go cannot approve it; a user who wants no review turns autopilot off.
 # - A subagent call that carries neither agent_type nor agent_id counts as the main session, as for
 #   consent_for.
 # - The hash is djb2, not a cryptographic hash: a quote built to collide with a line of the message
