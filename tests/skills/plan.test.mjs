@@ -184,15 +184,19 @@ test('the limits are read at step 1, stated in chat only at a scope split or sto
   // every plan, so step 7's rule covers chat only, and step 7 splits over `pr.max_lines` as well as `scope_threshold`.
   // Final review M1: a 2026-10-24 head-to-head run looped `kern-get $k 4` over several keys, which would read
   // `pr.max_lines` as 4, so each `kern-get` runs in its own call.
+  // M3 part 2 project 2's paid round 1 (the user's "Fix kern-get defaults"): two h2h plan runs still looped both keys, one
+  // with `4` for each and one with no default, and stated a limit no lookup printed. kern-get now prints settings.md's
+  // `4` and `300` itself when nothing sets them, so the step passes no default and a loop reads each key's own.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Under a go neither asks: `run.md`\'s stop list decides. Read the limits now with `kern-get scope_threshold 4` and `kern-get pr.max_lines 300`, each `kern-get` in its own call.'), s[1]);
+  assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Under a go neither asks: `run.md`\'s stop list decides. Read the limits now with `kern-get scope_threshold` and `kern-get pr.max_lines`, each `kern-get` in its own call.'), s[1]);
+  assert.ok(!s[1].includes('kern-get scope_threshold 4') && !s[1].includes('kern-get pr.max_lines 300'), 'the per-key defaults are gone');
   assert.ok(s[7].includes('One PR is one change, within `scope_threshold` files and `pr.max_lines` lines, else stop'), s[7]);
   assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. In chat, state a limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` or `pr.max_lines: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
   assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');
   assert.ok(!s[7].includes('(kern-get)'), 'the old source label is gone');
   assert.ok(!s[7].includes('wherever the plan or reply states it'), 'the limit is no longer stated wherever the plan or reply goes');
   assert.ok(!s[7].includes('Read the limit with'), 'step 7 no longer runs the lookup; step 1 does');
-  // The default the step passes is the Inputs table's.
+  // The defaults kern-get prints are the Inputs table's.
   assertContains(SKILL, ['| `scope_threshold`, `pr.max_lines` | 4 files; 300 lines | PR size gate |']);
   // The cuts that paid for these bytes left their text where the steps point: step 3's verify keys in the Inputs
   // table, step 8's Interfaces and Acceptance forms in task-template.md, step 9's header fields in plan-template.md.

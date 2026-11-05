@@ -197,13 +197,21 @@ test('run.md lists every report field, the jobs another skill ran among them', (
   const report = section(RUN, '## The run report');
   for (const s of ['the ticket and PR', 'each stop', 'each block and the route taken', 'each decision with its why', 'each skipped step', 'each check with its result',
     // M3 part 2 project 2 Task 5: the CI loop's verdict and classes.
-    "the last CI verdict and each red's class", 'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".',
+    "the last CI verdict and each red's class", 'the jobs that ran under another skill', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".',
+    // M3 part 2 project 2's paid round 1 (the user's "Keep the set line"): go-proof-skip named its skip in its own words, not
+    // prove-it's `skip: proof on the running app, no verify.browser or verify.app`, so a `skip:` line keeps its skill's form.
+    '`parked:` and `skip:` lines keep their format, as the skill that names the skip gives it.',
     // Paid round 3: go-deploy-stop's lane said `needs fixes`, and its report said only that the review found it compliant.
     // M3 part 2 project 1's paid round 3: go-bug-draft's report gave the lane's "approved" for "the review's verdict" and no
     // self-review verdict word, so the sentence names self-review, and a lane's `needs fixes` as its own clause, which
     // go-mandated-defect-stop's grader reads (the controller's rulings on the round 4 fix batch).
     "The report gives self-review's verdict, and any lane's `needs fixes` as it came."]) assert.ok(report.includes(s), s);
+  assert.ok(!report.includes('`parked:` lines keep their format.'), 'the parked-only sentence is gone');
   assert.match(RUN, /^These rules cover kern's routes only\. .*`overrides\.<job>`/m);
+  // The round 1 fix batch's trims, which paid for the skip line within the cap: the overrides line leaves the report's
+  // job line to this section, and the issue line keeps its quote rule and example.
+  assert.ok(RUN.includes("A job an `overrides.<job>` key leaves to another skill runs that skill: kern's guards still apply.\n"), 'the overrides line');
+  assert.ok(RUN.includes('G20 also needs `issue:` to name this ticket; quote a `#` id: `issue: "#853"`.'), 'the issue line');
 });
 
 test('the CHANGELOG caps line and the plan\'s expected line hold the current values', () => {
@@ -432,6 +440,9 @@ test('run.md stays within its byte cap', () => {
   // 7,518 since M3 part 2 project 2's Task 5: a go does not stop for CI fixes or `gh pr ready` on clear CI, a stop's report opens
   // with a `kern stop: <what>` line, the go follows `references/ci.md` once its draft opens, and the report gives the CI verdict
   // and each red's class.
+  // M3 part 2 project 2's round 1 fix batch kept 7,518: the report's `skip:` line clause (55 bytes) came from the overrides
+  // line's "and the report names the job", which the report's field list holds, and the issue line's YAML aside, whose quote
+  // rule and example stay.
   assertMaxBytes('skills/autopilot/references/run.md', 7518);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,518 bytes (7,337 until M3 part 2 project 2\'s Task 5: ',
     '; 7,329 until the controller\'s second ruling on M3 part 2 project 1\'s round 4 fix batch: ']);
@@ -691,4 +702,35 @@ test('the design and the contract keep the report a go owes after ready, and the
   const grade = readFileSync(join(import.meta.dirname, '..', 'scripts', 'lib', 'exec-grade.mjs'), 'utf8');
   assert.ok(hook.includes('sub(/^([ \\t>*_`#+-]|[0-9]+[.)][ \\t])+/, "", x); if (substr(x, 1, 11) == "kern stop: ")'), 'the hook strips the marks');
   assert.ok(grade.includes(".replace(/^(?:[\\s>*_`#+-]|\\d+[.)](?=\\s))+/, '')).filter((l) => l.startsWith('kern stop: '))"), 'the grader strips the same marks');
+});
+
+test("the contract keeps the round 1 fix batch's Stop hook reason", () => {
+  // M3 part 2 project 2's paid round 1, F1: under a go the unproven-edit reason asks for the whole report again.
+  assertContains('docs/plans/contract.md', [
+    "Under a live go its reason ends `Then give the whole report again.`, since the grader reads the last reply (M3 part 2 project 2's round 1 fix batch: go-required-check-stop's last reply after this send-back gave a probe's result alone)."]);
+});
+
+test("the contract and the skills spec keep plan-check's plan line for a short spec over 2 files", () => {
+  // M3 part 2 project 2's paid round 1, F2: go-no-lint-draft's approved short spec named 4 files and the run built with no plan.
+  assertContains('docs/plans/contract.md', [
+    "A spec with no problems, `status: approved` and `form: short` whose `## Size` section's first `Files:` line, past a list mark and bold, opens with a count over 2 also prints `next: plan (define step 9: over 2 files)` and exits 0 (M3 part 2 project 2's round 1 fix batch: `go-no-lint-draft` built from such a spec with no plan, 3 rounds running); 2 or fewer files, no count, a draft and the full form print no such line |"]);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    "on a clean approved `form: short` spec whose `## Size` Files count is over 2, `next: plan (define step 9: over 2 files)` (M3 part 2 project 2's round 1 fix batch);"]);
+});
+
+test('the contract grades go-block-reroute as the delete stop', () => {
+  // M3 part 2 project 2's paid round 1, F3 (the user's "Grade the stop"): run.md makes the ticket's delete a stop, so G21 never votes.
+  assertContains('docs/plans/contract.md', [
+    "`go-block-reroute` wants the ticket read, `keep: intact`, a line of the final text that opens `kern stop: ` past the marks `stopLines` drops and names the delete (`export-cache`, `cache`, `delet`, `clear`, `remov` or `folder`), no `pr create`, and the delete stop named; since M3 part 2 project 2's round 1 fix batch (the user's \"Grade the stop\", 2026-11-05) it grades the stop that run.md's delete rule makes of the ticket's delete, where it wanted G21's vote, a commit changing `src/cache.js` and a draft PR, and no exec case measures a guard-block reroute."]);
+  assert.ok(!readFileSync(join(import.meta.dirname, '..', 'docs', 'plans', 'contract.md'), 'utf8').includes('a draft PR, and the block named'), 'the old rows are gone');
+});
+
+test('the contract and the skills spec keep the size defaults kern-get gives', () => {
+  // M3 part 2 project 2's paid round 1, F4 (the user's "Fix kern-get defaults"): plan step 1 passes no default.
+  assertContains('docs/plans/contract.md', [
+    "with no DEFAULT, `scope_threshold` and `pr.max_lines` take `kernel/settings.md`'s defaults, so unset they print `4<TAB>default` and `300<TAB>default`, and a DEFAULT given still wins (M3 part 2 project 2's round 1 fix batch, the user's \"Fix kern-get defaults\": two plan runs looped kern-get over both keys with one default or none and stated a limit it never printed);",
+    '| 0; 3 unset, no default, never for those two keys (on exit 4 too when nothing readable sets KEY) |']);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    "Layered settings read (A4); prints `value<TAB>source`; with no default, `scope_threshold` and `pr.max_lines` print `kernel/settings.md`'s `4` and `300` when unset (M3 part 2 project 2's round 1 fix batch) |",
+    "The limits are read here, with the first lookups: `kern-get scope_threshold` and, since the pilot fix plan's Task 5, `kern-get pr.max_lines`, each in its own call, printing its value and source (`4<TAB>default` when unset). Until M3 part 2 project 2's round 1 fix batch each lookup passed its default, `4` and `300`, which kern-get now gives itself: two head-to-head plan runs that round looped both keys with one default or none and stated a limit no lookup printed (the user's \"Fix kern-get defaults\")."]);
 });
