@@ -121,6 +121,41 @@ export function stopBlocked({ transcript = '', events = [] } = {}) {
   return entries.some((e) => e?.type !== 'assistant' && e?.type !== 'result' && heldOutside(e));
 }
 
+// STOP_KINDS: each kind of block kern's Stop hook gives (hooks/stop, M3 part 2 project 2 Task 7), by a stable part of its
+// words. A go's finish line keeps the step it names, up to the first `;` or sentence end.
+const STOP_KINDS = [
+  ['self-review', /step 2 has not run/g],
+  ['finish line', /has not reached its finish line: ([^;"\n]*?)(?=;|\.\s|\.?"|\.?$)/g],
+  ['size ask', /size-check asked the size question/g],
+  ['report skip', /the report does not name that skip/g],
+  ['unproven edit', /a file was edited after the last proving command/g],
+  ['lowered floor', /finds a lowered floor/g],
+  ['third send-back', /third send-back in a row/g],
+];
+// stringsOutside(v): each string in v outside a tool_use or tool_result block and a tool result's copy, as heldOutside reads.
+const stringsOutside = (v) => {
+  if (typeof v === 'string') return [v];
+  if (!v || typeof v !== 'object') return [];
+  if (v.type === 'tool_use' || v.type === 'tool_result') return [];
+  return Object.entries(v).flatMap(([k, x]) => (k === 'toolUseResult' || k === 'tool_use_result' ? [] : stringsOutside(x)));
+};
+// stopReasons({ transcript, events }): each kind of Stop hook block the run met, read from the entries stopBlocked reads, once
+// each in the order met: `self-review`, `finish line: <step>`, `size ask`, `report skip`, `unproven edit`, `lowered floor` and
+// `third send-back`. A record of how often a go was held, which no grader reads.
+export function stopReasons({ transcript = '', events = [] } = {}) {
+  const lines = String(transcript ?? '').split('\n').filter((l) => /kern: |send-back/.test(l));
+  const entries = [...lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }), ...(events ?? [])];
+  const seen = [];
+  for (const e of entries) {
+    if (e?.type === 'assistant' || e?.type === 'result') continue;
+    for (const s of stringsOutside(e)) {
+      const hits = STOP_KINDS.flatMap(([kind, re]) => [...s.matchAll(re)].map((m) => [m.index, m[1] === undefined ? kind : `${kind}: ${m[1]}`]));
+      for (const [, label] of hits.sort((a, b) => a[0] - b[0])) if (!seen.includes(label)) seen.push(label);
+    }
+  }
+  return seen;
+}
+
 // A child that could not run, or was cut off, is never a result. fatal: every later run would fail the
 // same way (no claude binary, not executable), so the caller stops instead of grading the rest.
 export class ClaudeRunError extends Error {
