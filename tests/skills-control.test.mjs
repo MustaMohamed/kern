@@ -197,13 +197,21 @@ test('run.md lists every report field, the jobs another skill ran among them', (
   const report = section(RUN, '## The run report');
   for (const s of ['the ticket and PR', 'each stop', 'each block and the route taken', 'each decision with its why', 'each skipped step', 'each check with its result',
     // M3 part 2 project 2 Task 5: the CI loop's verdict and classes.
-    "the last CI verdict and each red's class", 'the jobs that ran under another skill', '`parked:` lines keep their format.', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".',
+    "the last CI verdict and each red's class", 'the jobs that ran under another skill', 'A check that did not run, but for a named skip, is reported as a fail, not as "not run".',
+    // M3 part 2 project 2's paid round 1 (the user's "Keep the set line"): go-proof-skip named its skip in its own words, not
+    // prove-it's `skip: proof on the running app, no verify.browser or verify.app`, so a `skip:` line keeps its skill's form.
+    '`parked:` and `skip:` lines keep their format, as the skill that names the skip gives it.',
     // Paid round 3: go-deploy-stop's lane said `needs fixes`, and its report said only that the review found it compliant.
     // M3 part 2 project 1's paid round 3: go-bug-draft's report gave the lane's "approved" for "the review's verdict" and no
     // self-review verdict word, so the sentence names self-review, and a lane's `needs fixes` as its own clause, which
     // go-mandated-defect-stop's grader reads (the controller's rulings on the round 4 fix batch).
     "The report gives self-review's verdict, and any lane's `needs fixes` as it came."]) assert.ok(report.includes(s), s);
+  assert.ok(!report.includes('`parked:` lines keep their format.'), 'the parked-only sentence is gone');
   assert.match(RUN, /^These rules cover kern's routes only\. .*`overrides\.<job>`/m);
+  // The round 1 fix batch's trims, which paid for the skip line within the cap: the overrides line leaves the report's
+  // job line to this section, and the issue line keeps its quote rule and example.
+  assert.ok(RUN.includes("A job an `overrides.<job>` key leaves to another skill runs that skill: kern's guards still apply.\n"), 'the overrides line');
+  assert.ok(RUN.includes('G20 also needs `issue:` to name this ticket; quote a `#` id: `issue: "#853"`.'), 'the issue line');
 });
 
 test('the CHANGELOG caps line and the plan\'s expected line hold the current values', () => {
@@ -432,6 +440,9 @@ test('run.md stays within its byte cap', () => {
   // 7,518 since M3 part 2 project 2's Task 5: a go does not stop for CI fixes or `gh pr ready` on clear CI, a stop's report opens
   // with a `kern stop: <what>` line, the go follows `references/ci.md` once its draft opens, and the report gives the CI verdict
   // and each red's class.
+  // M3 part 2 project 2's round 1 fix batch kept 7,518: the report's `skip:` line clause (55 bytes) came from the overrides
+  // line's "and the report names the job", which the report's field list holds, and the issue line's YAML aside, whose quote
+  // rule and example stay.
   assertMaxBytes('skills/autopilot/references/run.md', 7518);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,518 bytes (7,337 until M3 part 2 project 2\'s Task 5: ',
     '; 7,329 until the controller\'s second ruling on M3 part 2 project 1\'s round 4 fix batch: ']);
