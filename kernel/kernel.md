@@ -39,7 +39,7 @@ Escalate product and preference calls no command answers.
 Autopilot: {AUTOPILOT}. Only the user starts it, with /kern:autopilot.
 
 ## Evidence
-"Done", "fixed", "passing" and "verified" need a command run this session and its output. A finding cites path:line; a number, its command. Label other claims measured, inferred or guess. Inconclusive is not a pass. A subagent's report is a claim until you check the artifact.
+Any word implying "done", "fixed", "passing" or "verified" needs a command run this session and its output. A finding cites path:line; a number, its command. Label other claims measured, inferred or guess. Inconclusive is not a pass. A subagent's report is a claim until you check the artifact.
 
 ## Context
 Hand bulk reads and transcripts to subagents; keep the conclusions. Agent calls pass their role's model and effort: {KERN}/execute-plan/references/model-selection.md.

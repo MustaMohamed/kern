@@ -26,7 +26,11 @@ test('prove-it sections, steps, gate and red flags', () => {
   // what carries `inferred`, and the Under autopilot text follows run.md's wait rule and finish-branch's fix round and end path.
   // 4,610 since its Task 15: step 3 says when a passed `test.full` stands, or "fresh" read against that rule.
   // 4,765 since its final review's fix (I1): under autopilot a `verify.fast` with nothing resolved is a named skip.
-  assertMaxBytes(SKILL, 4765);
+  // 4,836 since M3 part 2 project 2's Task 1 (2026-10-22 Opus audit section 5, rows L488 and L489): the Gate covers any
+  // word that says or implies done, fixed, passing or verified, and step 7 runs a check it can run.
+  assertMaxBytes(SKILL, 4836);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['| `prove-it` | auto | M2a | at most 4,836 bytes,',
+    "SKILL.md at most 4,836 bytes (4,765 until M3 part 2 project 2's Task 1:"]);
 });
 
 test('a claim no command showed carries inferred or guess in its own sentence, not as a line form', () => {
@@ -49,7 +53,7 @@ test('a claim no command showed carries inferred or guess in its own sentence, n
   // phrases live only in evidence.md's ## Labels, bound to "are inferred". The red-flag row names the copied phrase.
   const { body } = readDoc(SKILL);
   const s = steps(body);
-  assert.equal(s[7], '7. Back a claim a command showed with `claim: command, result`. A claim no command showed carries the word inferred or guess in its own sentence, with what it rests on: "The cause, inferred from `src/x.js:42`, is …"; "The fix, inferred and not run, is …".');
+  assert.equal(s[7], '7. Back a claim a command showed with `claim: command, result`. A claim no command showed carries the word inferred or guess in its own sentence, with what it rests on: "The cause, inferred from `src/x.js:42`, is …"; "The fix, inferred and not run, is …". Never hand the user a check you can run: run it.');
   for (const phrase of ['such as a cause read in the code', 'read in the code', 'did not run']) assert.ok(!s[7].includes(phrase), `step 7 has no word-free basis phrase: ${phrase}`);
   const examples = [...s[7].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(examples.map((e) => e.split(',')[0]), ['The cause', 'The fix'], `step 7 quotes a cause and a fix example: ${examples}`);
@@ -158,4 +162,17 @@ test('under autopilot a failed proof takes a fix round or waits, and only finish
     "On finish-branch's end path the Gate stops neither the commit nor the push: each red or unrun check is reported as `fail`, and the path claims nothing."]) assert.ok(auto.includes(s), s);
   assertContains('skills/finish-branch/SKILL.md', ['Under autopilot a red step 4, first pass or in a round, counts as `fix first`.', 'reports each red or unrun check as `fail`, opens no PR and stops.']);
   assertContains('skills/autopilot/references/run.md', ['then waits for a typed reply']);
+});
+
+test('the Gate covers any word that says or implies done, fixed, passing or verified (audit L488)', () => {
+  // 2026-10-22 Opus audit section 5, row L488, from superpowers verification-before-completion ("Paraphrases and
+  // synonyms"): the Gate named four words, so a claim in other words passed it unrun. The kernel's Evidence line moves
+  // with it. M3 part 2 project 2's Task 1.
+  assert.match(readDoc(SKILL).body, /^Gate: steps 1 to 7 hold before any commit, push, PR, tracker write, or any word that says or implies done, fixed, passing or verified\. Then, /m);
+});
+
+test('step 7 runs a check it can run instead of handing it to the user (audit L489)', () => {
+  // 2026-10-22 Opus audit section 5, row L489, from pstack poteto-mode ("Never hand the human a check you could run"):
+  // step 7 labelled an unrun claim but let the reply leave its check to the user. M3 part 2 project 2's Task 1.
+  assert.match(steps(readDoc(SKILL).body)[7], / Never hand the user a check you can run: run it\.$/);
 });
