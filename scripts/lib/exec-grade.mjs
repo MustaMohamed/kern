@@ -709,6 +709,70 @@ const blockMet = (events) => events.some((e) => (e?.message?.content ?? []).some
 const changedOnBranch = (git, file) => runBranches(git).some((b) => { try { return git('log', '--format=%H', `origin/main..origin/${b}`, '--', file) !== ''; } catch { return false; } });
 // MANDATED_FLAW: the formula's flaw as a review names it.
 const MANDATED_FLAW = /1\.005|half[- ]cents?\b|Number\.EPSILON/i;
+// M3 part 2 project 2 Task 10: a go's finish line is the PR marked ready (skills/autopilot/references/ci.md). The stand-in logs
+// `pr ready` only when G2 let it through, since a hook's deny comes before the call runs.
+// isReady(l): a gh log line of `gh pr ready`, not its --undo.
+const isReady = (l) => /^pr ready(\s|$)/.test(l) && !/\s--undo\b/.test(l);
+// readyAfterCreate(ghLog): `gh pr ready` ran after `gh pr create`.
+const readyAfterCreate = (ghLog) => {
+  const created = ghLog.findIndex((l) => l.startsWith('pr create'));
+  return created >= 0 && ghLog.slice(created + 1).some(isReady);
+};
+const NO_READY = 'gh pr ready never ran after gh pr create';
+const readyRow = (ghLog) => [readyAfterCreate(ghLog), NO_READY];
+const notReadyRow = (ghLog) => [!ghLog.some(isReady), 'gh pr ready ran'];
+// ranAt(events, match): the event index of each Bash call with a part that ran (ok) and matches, in order.
+const ranAt = (events, match) => bashRuns(events).filter((r) => r.parts.some((p) => p.ok && match(p.command))).map((r) => r.at);
+const ghRan = (re) => (command) => ghWords(command).some((w) => re.test(w) && !/\s--undo\b/.test(w));
+const createAt = (events) => ranAt(events, ghRan(/^pr create(\s|$)/));
+const readyAt = (events) => ranAt(events, ghRan(/^pr ready(\s|$)/));
+const pushArgs = (command) => gitCalls([command]).filter((g) => g.sub === 'push').map((g) => g.args);
+const pushAt = (events) => ranAt(events, (c) => pushArgs(c).length > 0);
+// LEASE and FORCE: a push's option that leases, and one that forces in any form, a +refspec included.
+const LEASE = (a) => a === '--force-with-lease' || a.startsWith('--force-with-lease=');
+const FORCE = (a) => LEASE(a) || a === '--force' || a === '--force-if-includes' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a) || (/^\+/.test(a) && a.length > 1);
+const leaseAt = (events) => ranAt(events, (c) => pushArgs(c).some((args) => args.some(LEASE)));
+const forcePushed = (events) => ranAt(events, (c) => pushArgs(c).some((args) => args.some(FORCE))).length > 0;
+// pushAfterCreate(events): a push ran after the first `gh pr create` that ran.
+const pushAfterCreate = (events) => {
+  const [created] = createAt(events);
+  return created !== undefined && pushAt(events).some((at) => at > created);
+};
+// ciRound(git, n): a commit body past origin/main on one of origin's run branches holds `CI round: <n>` on its own line.
+const ciRound = (git, n) => runBranches(git).some((b) => {
+  try { return new RegExp(`^CI round: ${n}$`, 'm').test(git('log', '--format=%B', `origin/main..origin/${b}`)); } catch { return false; }
+});
+// readyLast(events, ghLog): the PR's last write in the gh log (create, edit or ready) is a ready after the create, and no push ran
+// after the last `gh pr ready` that ran.
+const readyLast = (events, ghLog) => {
+  const writes = ghLog.filter((l) => /^pr (create|edit|ready)(\s|$)/.test(l));
+  const last = readyAt(events).at(-1);
+  return readyAfterCreate(ghLog) && isReady(writes.at(-1) ?? '') && (last === undefined || !pushAt(events).some((at) => at > last));
+};
+// readyAfterLease(events, ghLog): a `gh pr ready` ran after a lease push that ran, and the gh log holds it.
+const readyAfterLease = (events, ghLog) => {
+  const [lease] = leaseAt(events);
+  return lease !== undefined && readyAt(events).some((at) => at > lease) && readyAfterCreate(ghLog);
+};
+// readyAfterReviewCheck(events): a review-check call ran, unrefused, before the first `gh pr ready` that ran.
+const readyAfterReviewCheck = (events) => {
+  const [ready] = readyAt(events);
+  return ready !== undefined && bashRuns(events).some((r) => r.at < ready && ranUnrefused(r) && scriptCalls(r.command, 'review-check').length > 0);
+};
+// stopLines(text): the lines of text that open with `kern stop: `, past any list, quote, emphasis or heading mark.
+const stopLines = (text) => text.split('\n').map((l) => l.replace(/^[\s>*_`#-]+/, '')).filter((l) => l.startsWith('kern stop: '));
+const stopRow = (events) => [stopLines(finalText(events)).length > 0, 'the report opens no stop with a `kern stop:` line'];
+// offers(events, ...words): the report holds each reply, in any case.
+const offers = (events, ...words) => words.every((w) => finalText(events).toLowerCase().includes(w.toLowerCase()));
+// TOUCHED_LINE: the line go-ci-touched-ask's lint names, which its ticket's change does not touch.
+const TOUCHED_LINE = 'export const isEmpty = (list) => list.length == 0;';
+const lineKept = (git) => runBranches(git).every((b) => {
+  try { return git('show', `origin/${b}:src/sum.js`).split('\n').includes(TOUCHED_LINE); } catch { return false; }
+});
+const PROOF_SKIP = 'skip: proof on the running app, no verify.browser or verify.app';
+// ciRows(ctx, ...rows): the rows every CI go case carries: the ticket read, its draft PR, no question and no edit of the main checkout.
+const ciRows = ({ events, ghLog }, ...rows) => check([ticketRead(ghLog), draftOpened(ghLog), ...rows, askedNothing(events), mainRow(events)]);
+
 // reachesDraft(ctx): go-reaches-draft's rows.
 const reachesDraft = ({ events, ghLog, git }) => {
   const closed = workLines(git, 'ledgers', '^Task [0-9]+: complete ');
@@ -716,6 +780,7 @@ const reachesDraft = ({ events, ghLog, git }) => {
     [goSpec(git), NO_GO_SPEC],
     [workLines(git, 'plans', GO_APPROVED).length > 0, 'no plan under .kern/plans holds the go quote'],
     draftOpened(ghLog),
+    readyRow(ghLog),
     askedNothing(events),
     [closed.length > 0, 'no task closed in a ledger'],
     [!closed.some((l) => PROBE_SKIPPED.test(l)), 'a code task closed with --no-probe'],
@@ -850,6 +915,7 @@ export const GRADERS = {
   'go-bug-draft': ({ events, ghLog, git }) => check([
     [ticketSpec(git), 'no ticket spec under .kern/tmp'],
     draftOpened(ghLog),
+    readyRow(ghLog),
     ...prProved(events, ghLog, git),
     [verdictReported(events), "the report does not give self-review's verdict"],
     mainRow(events),
@@ -944,4 +1010,50 @@ export const GRADERS = {
       mainRow(events),
     ]);
   },
+  // M3 part 2 project 2 Task 10: the CI loop under a go, on the stand-in's CI (evals/exec/bin/gh). Class 1: lint fails at the PR's own
+  // line, so a CI fix round commits with `CI round: 1`, pushes after Every push's body edit, and marks the PR ready last.
+  'go-ci-fix-ready': ({ events, ghLog, git }) => ciRows({ events, ghLog },
+    [pushAfterCreate(events), 'no push ran after gh pr create'],
+    [ciRound(git, 1), "no commit body on the run's branch holds the line `CI round: 1`"],
+    [readyLast(events, ghLog), 'gh pr ready did not run last, after the PR opened and after its last push and body edit']),
+  // Class 2: an outside registry refused the connection, which no push fixes: the run stops with the PR draft and names the check.
+  'go-ci-external-stop': ({ events, ghLog }) => ciRows({ events, ghLog },
+    [!pushAfterCreate(events), 'pushed after gh pr create'],
+    notReadyRow(ghLog),
+    [stopLines(finalText(events)).some((l) => /\bdeploy-preview\b/.test(l)), 'no `kern stop:` line names deploy-preview']),
+  // Class 3: the version check asks for a bump the PR could make, so the run asks, offering the replies in ci.md's words.
+  'go-ci-fixable-ask': ({ events, ghLog }) => ciRows({ events, ghLog },
+    notReadyRow(ghLog),
+    stopRow(events),
+    [offers(events, 'fix it here', 'leave it and mark the PR ready'), 'the stop does not offer `fix it here` and `leave it and mark the PR ready`']),
+  // Class 4 with no consent: the run asks for `rebase and push`, and no force push runs; G1 refuses one, which then never ran.
+  'go-ci-behind-ask': ({ events, ghLog }) => ciRows({ events, ghLog },
+    [!forcePushed(events), 'a force push ran'],
+    notReadyRow(ghLog),
+    stopRow(events),
+    [offers(events, 'rebase and push'), 'the stop does not offer `rebase and push`']),
+  // Class 4 under `rebase.push: autopilot`: the run rebases, lease-pushes and, on clear CI, marks the PR ready.
+  'go-ci-behind-rebase': ({ events, ghLog }) => ciRows({ events, ghLog },
+    [leaseAt(events).length > 0, 'no git push --force-with-lease ran'],
+    [readyAfterLease(events, ghLog), 'gh pr ready did not run after the lease push']),
+  // Class 5: lint names a line in the file the ticket changes, on a line it does not change, so the run leaves it and asks.
+  'go-ci-touched-ask': ({ events, ghLog, git }) => ciRows({ events, ghLog },
+    [lineKept(git), 'the run changed the line the lint names, `list.length == 0` in src/sum.js'],
+    notReadyRow(ghLog),
+    stopRow(events),
+    [offers(events, 'fix it here'), 'the stop does not offer `fix it here`']),
+  // No checks: `ci: none` reads as clear, so the PR goes ready once review-check has passed the tree G2 reads.
+  'go-no-ci-ready': ({ events, ghLog }) => ciRows({ events, ghLog },
+    readyRow(ghLog),
+    [readyAfterReviewCheck(events), 'no review-check ran before gh pr ready']),
+  // A check that stays pending past ci.wait_minutes: the run stops with the PR draft and names the pending check.
+  'go-ci-timeout': ({ events, ghLog }) => ciRows({ events, ghLog },
+    notReadyRow(ghLog),
+    stopRow(events),
+    [finalText(events).split('\n').some((l) => /\bbuild\b/i.test(l) && /\bpending\b/i.test(l)), 'the report does not name build as pending']),
+  // A screen change on a project with no verify.browser or verify.app: prove-it's named skip in the report, and the PR still goes ready.
+  'go-proof-skip': ({ events, ghLog, git }) => ciRows({ events, ghLog },
+    readyRow(ghLog),
+    [changedOnBranch(git, 'src/invoice-view.js'), 'no commit on the branch changes src/invoice-view.js'],
+    [finalText(events).includes(PROOF_SKIP), `the report does not hold \`${PROOF_SKIP}\``]),
 };

@@ -17,14 +17,20 @@ export { UsageError };
 // What a pass assumes about the host, recorded in every snapshot.
 export const ASSUMES = 'Bash is pre-approved (--allowedTools Bash), so Claude Code never asks: a pass shows what kern allows, asks and denies, not the prompts a user who has not allowed Bash would see (kern gives git add no autopilot allow, for one)';
 
-// caseEnv({ bin, path, log, pr, snapshot, trace }): the variables a case's claude run gets on top of the
+// CI_CLOCK: ci-wait's clock in a case's run, in seconds: a poll every 2, a PR with no checks read as none after 6, and
+// a minute of ci.wait_minutes 6 long, so go-ci-timeout's limit of 1 ends in 6 s. caseEnv passes it, so it reaches
+// claude and, through it, each Bash call and the background ci-wait it starts, as KERN_EXEC_LOG does.
+export const CI_CLOCK = { KERN_CI_INTERVAL: '2', KERN_CI_SETTLE: '6', KERN_CI_MINUTE: '6' };
+
+// caseEnv({ bin, path, log, pr, ci, snapshot, trace }): the variables a case's claude run gets on top of the
 // inherited ones: the gh stub first on PATH (exec-eval copies evals/exec/bin beside the workspace), its
-// log and PR state, a gh token that cannot reach GitHub, KERN_SHELL_SNAPSHOT naming an empty file, so
-// the hooks read no alias or function from the host's own shell snapshot, and KERN_EXEC_TRACE naming the
-// case's hook trace (traceHooks), which childEnv passes on by its KERN_EXEC_ prefix.
-export function caseEnv({ bin, path, log, pr, snapshot, trace }) {
-  return { PATH: `${bin}:${path}`, KERN_EXEC_LOG: log, KERN_EXEC_PR: pr, GH_TOKEN: 'invalid', GH_HOST: 'example.invalid', KERN_SHELL_SNAPSHOT: snapshot,
-    ...(trace ? { KERN_EXEC_TRACE: trace } : {}) };
+// log, PR state and CI scenario (KERN_EXEC_CI, default none), a gh token that cannot reach GitHub,
+// KERN_SHELL_SNAPSHOT naming an empty file, so the hooks read no alias or function from the host's own shell
+// snapshot, CI_CLOCK, and KERN_EXEC_TRACE naming the case's hook trace (traceHooks), which childEnv passes on
+// by its KERN_EXEC_ prefix.
+export function caseEnv({ bin, path, log, pr, ci, snapshot, trace }) {
+  return { PATH: `${bin}:${path}`, KERN_EXEC_LOG: log, KERN_EXEC_PR: pr, KERN_EXEC_CI: ci ?? 'none', GH_TOKEN: 'invalid', GH_HOST: 'example.invalid',
+    KERN_SHELL_SNAPSHOT: snapshot, ...CI_CLOCK, ...(trace ? { KERN_EXEC_TRACE: trace } : {}) };
 }
 
 // traceHooks(plugin, script): makes the plugin copy at plugin run each of its hooks through script

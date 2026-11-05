@@ -8,7 +8,8 @@
 // Each case's final reply goes to evals/results/exec-<date>/<id>.txt (gitignored), or (no reply: <why>) for
 // an invalid case, and its stream-json events, tool results included, to <id>.events.jsonl beside it, with the
 // session's transcript, when Claude Code wrote one, as <id>.transcript.jsonl (runClaude takes it and removes the
-// session's folder from the eval config dir; the record's stopBlocked says whether kern's Stop hook blocked); the
+// session's folder from the eval config dir; the record's stopBlocked says whether kern's Stop hook blocked, and its
+// stopReasons each kind of block it gave, a go's finish line with its step, which no grader reads); the
 // last line prints the directory; a --dry-run writes none. Each kern hook runs through a trace (traceHooks),
 // whose lines go to <id>.trace.jsonl beside the events, a cut-off or invalid case's too. A case that
 // turns autopilot on is INVALID when kern's state file for the run's session does not read autopilot: on
@@ -32,7 +33,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, runSummary, stopBlocked, toolUses, workspace } from './lib/claude-run.mjs';
+import { ClaudeRunError, claudeVersion, evalConfigProblem, finalText, runClaudeAsync, runSummary, stopBlocked, stopReasons, toolUses, workspace } from './lib/claude-run.mjs';
 import { pluginCopy } from './lib/behave.mjs';
 import { caseInputs, changedCases, rangeSources, skillHashes, touchedSkills, treeSource } from './lib/case-inputs.mjs';
 import { filesVersion, openRun, timeStamp, unitKey, unitStore, writeManifest } from './lib/eval-cache.mjs';
@@ -150,13 +151,13 @@ async function runCase(c, save) {
       run = await runClaudeAsync({
         cwd: dir, prompts, pluginDirs: [kern], model: MODEL, ...caseLimits(c),
         // The gh stand-in prints the ticket for `issue view 7`, passed on by the KERN_EXEC_ prefix.
-        env: { ...caseEnv({ bin, path: process.env.PATH, log, pr: c.pr || 'none', snapshot, trace }), ...(c.ticket ? { KERN_EXEC_TICKET: c.ticket } : {}) },
+        env: { ...caseEnv({ bin, path: process.env.PATH, log, pr: c.pr || 'none', ci: c.ci || 'none', snapshot, trace }), ...(c.ticket ? { KERN_EXEC_TICKET: c.ticket } : {}) },
       });
     } catch (e) {
       if (!(e instanceof ClaudeRunError) || e.fatal) throw e;
       // A run cut off by the timeout keeps the events it printed, and its transcript.
       save({ reason: e.message, events: e.events, transcript: e.transcript, trace });
-      return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [], stopBlocked: stopBlocked(e), session: null };
+      return { id: c.id, pass: false, invalid: true, reasons: [e.message], exit: null, commands: [], stopBlocked: stopBlocked(e), stopReasons: stopReasons(e), session: null };
     }
     // A case's keep file sits outside the workspace, so --regrade has no copy of it: the log says what the run left.
     // Emptying the file is the same delete in other words, so only its bytes count.
@@ -178,7 +179,7 @@ async function runCase(c, save) {
       saveWorkspace(REPLIES, c.id, dir);
     });
     return { id: c.id, pass: g.pass, invalid: g.invalid || false, reasons: g.reasons, exit: run.status, ...runSummary(run.events),
-      commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command), stopBlocked: stopBlocked(run),
+      commands: toolUses(run.events).filter((u) => u.name === 'Bash').map((u) => u.input.command), stopBlocked: stopBlocked(run), stopReasons: stopReasons(run),
       session: { status: run.status, badLines: run.badLines, stderr: run.stderr.slice(-4000), plugin: kern },
       touched: Object.fromEntries(touchedSkills(run.events, hashes, [kern]).map((n) => [n, hashes.get(n)])) };
   } finally {

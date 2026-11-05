@@ -1,16 +1,35 @@
 #!/usr/bin/env bash
 # gh stand-in for the exec evals: logs every call to $KERN_EXEC_LOG and answers from $KERN_EXEC_PR
-# (none, open-at-head or open-older) and $KERN_EXEC_TICKET (the case's issue 7: a title line, a blank line,
-# then its body). It never reaches a network; a call it does not know fails.
+# (none, open-at-head or open-older), $KERN_EXEC_TICKET (the case's issue 7: a title line, a blank line,
+# then its body) and $KERN_EXEC_CI, the case's CI (below; none when unset). It never reaches a network; a
+# call it does not know fails.
 # PR URLs are file://<origin path>/pull/<n>: finish-branch counts a PR only if its URL is this repo's
 # (`git remote get-url origin`), so the URL has to contain the origin path to be believed.
+# The PR `pr create` opens is number 8. The create writes $KERN_EXEC_LOG.ci: the PR's branch, the origin
+# repository's path and the branch's head on origin at the create. Each later answer reads the branch's head
+# on origin as it is then, so `pr view --json headRefOid` prints the commit last pushed, and the checks move
+# with the pushes. With no create yet, `pr view` and `pr checks` answer as they did before CI: PR 7, no checks.
+# The CI, as `pr checks` buckets it, each check with a run that `run view <id> --log-failed` prints:
+#   none              no checks
+#   red-then-green    lint fails until origin's head of the branch moves past the head at the create; its log, a
+#                     lint of the lines the PR changes, names the first line the PR's change adds under src/
+#   external          deploy-preview fails; its log names an outside registry that refused the connection
+#   external-fixable  version fails until the branch changes version.json from main; its log asks for a minor bump
+#   behind            the create lands a commit on origin's main; up-to-date fails, and `pr view --json
+#                     mergeStateStatus` says BEHIND, until the branch on origin holds main's head
+#   touched           lint fails; its log, a lint of the files the PR changes, names the `list.length == 0` line of
+#                     src/sum.js, which the case's change does not touch
+#   pending           build stays pending
+# `pr ready` and `pr edit --body-file` act on PR 8 once it is open; the edit logs its body as the create does.
 printf '%s\n' "$*" >>"${KERN_EXEC_LOG:?KERN_EXEC_LOG is not set}"
 origin=$(git remote get-url origin 2>/dev/null) || origin=
+STATE=$KERN_EXEC_LOG.ci
+CI=${KERN_EXEC_CI:-none}
 pr_url() {
   [ -n "$origin" ] || { echo "gh stub: no origin remote here" >&2; return 1; }
   printf 'file://%s/pull/%s' "$origin" "$1"
 }
-pr_json() { printf '[{"number":7,"state":"OPEN","headRefOid":"%s","url":"%s"}]\n' "$1" "$(pr_url 7)"; }
+pr_json() { printf '[{"number":%s,"state":"OPEN","headRefOid":"%s","url":"%s"}]\n' "$2" "$1" "$3"; }
 # json_text: its argument as a JSON string, quotes included.
 json_text() {
   local s=$1
@@ -20,38 +39,309 @@ json_text() {
   s=${s//$'\n'/\\n}
   printf '"%s"' "$s"
 }
+# has WORD ARGS...: one of ARGS is WORD.
+has() {
+  local w=$1 a
+  shift
+  for a in "$@"; do [ "$a" = "$w" ] && return 0; done
+  return 1
+}
+# opt NAME SHORT ARGS...: the value of --NAME, --NAME= or SHORT among ARGS; exit 1 when none is given.
+opt() {
+  local n=$1 s=$2 prev="" a
+  shift 2
+  for a in "$@"; do
+    if [ "$prev" = "--$n" ] || { [ -n "$s" ] && [ "$prev" = "$s" ]; }; then
+      printf '%s\n' "$a"
+      return 0
+    fi
+    case "$a" in "--$n="*) printf '%s\n' "${a#--"$n"=}"; return 0 ;; esac
+    prev=$a
+  done
+  return 1
+}
+# log_body ARGS...: logs the body that --body, --body=, -b, --body-file, --body-file=, -F or - for standard
+# input gives, on one line, as `body: <text>`. Exit 1 when no body file or text is given.
+log_body() {
+  local prev="" a body got any=1
+  for a in "$@"; do
+    body="" got=""
+    case "$prev" in
+      --body | -b) body=$a got=1 ;;
+      --body-file | -F) if [ "$a" = - ]; then body=$(cat) got=1; elif [ -f "$a" ]; then body=$(cat "$a") got=1; fi ;;
+      *)
+        case "$a" in
+          --body=*) body=${a#--body=} got=1 ;;
+          --body-file=-) body=$(cat) got=1 ;;
+          --body-file=*) [ -f "${a#--body-file=}" ] && body=$(cat "${a#--body-file=}") got=1 ;;
+        esac
+        ;;
+    esac
+    [ -n "$got" ] && { printf 'body: %s\n' "${body//$'\n'/\\n}" >>"$KERN_EXEC_LOG"; any=0; }
+    prev=$a
+  done
+  return "$any"
+}
+# st KEY: KEY's value in the state file the create wrote; '' when there is none.
+st() { [ -f "$STATE" ] && sed -n "s/^$1=//p" "$STATE" | tail -n 1; }
+# og ARGS...: git in the origin repository the create recorded.
+og() { git --git-dir="$(st origin)" "$@" 2>/dev/null; }
+# now: the PR branch's head on origin now; '' when origin has no such branch.
+now() { og rev-parse --verify -q "refs/heads/$(st branch)"; }
+# moved: origin's head of the branch has moved past its head at the create.
+moved() {
+  local h n
+  h=$(st head) n=$(now)
+  [ -n "$n" ] && [ "$n" != "$h" ] && { [ -z "$h" ] || og merge-base --is-ancestor "$h" "$n"; }
+}
+# checks: one line per check of PR 8, `<name> <bucket> <run id>`, for the case's CI; none before the create.
+checks() {
+  [ -f "$STATE" ] || return 0
+  case "$CI" in
+    red-then-green) if moved; then echo "lint pass 9101"; else echo "lint fail 9101"; fi ;;
+    external) echo "deploy-preview fail 9102" ;;
+    external-fixable)
+      local n
+      n=$(now)
+      if [ -n "$n" ] && ! og diff --quiet main "$n" -- version.json; then echo "version pass 9103"; else echo "version fail 9103"; fi
+      ;;
+    behind) if uptodate; then echo "up-to-date pass 9104"; else echo "up-to-date fail 9104"; fi ;;
+    touched) echo "lint fail 9105" ;;
+    pending) echo "build pending 9106" ;;
+  esac
+}
+# uptodate: the PR branch on origin holds origin's main.
+uptodate() {
+  local n
+  n=$(now)
+  [ -n "$n" ] && og merge-base --is-ancestor main "$n"
+}
+link() { printf 'https://example.invalid/dev/invoice-app/actions/runs/%s/job/%s' "$1" "$(($1 + 100))"; }
+# checks_json: the checks as `gh pr checks --json` prints them, every field gh's --json takes for a check.
+checks_json() {
+  local name bucket id state first=1
+  printf '['
+  while read -r name bucket id; do
+    [ -n "$name" ] || continue
+    case "$bucket" in pass) state=SUCCESS ;; fail) state=FAILURE ;; *) state=IN_PROGRESS ;; esac
+    [ "$first" = 1 ] || printf ','
+    first=0
+    printf '{"name":"%s","bucket":"%s","state":"%s","link":"%s","workflow":"CI","event":"pull_request","description":"","startedAt":"2026-11-05T09:00:00Z","completedAt":"%s"}' \
+      "$name" "$bucket" "$state" "$(link "$id")" "$([ "$bucket" = pending ] && echo 0001-01-01T00:00:00Z || echo 2026-11-05T09:01:00Z)"
+  done <<EOT
+$(checks)
+EOT
+  printf ']\n'
+}
+# rollup: the checks as statusCheckRollup holds them.
+rollup() {
+  local name bucket id first=1 status conclusion
+  printf '['
+  while read -r name bucket id; do
+    [ -n "$name" ] || continue
+    case "$bucket" in pass) status=COMPLETED conclusion=SUCCESS ;; fail) status=COMPLETED conclusion=FAILURE ;; *) status=IN_PROGRESS conclusion="" ;; esac
+    [ "$first" = 1 ] || printf ','
+    first=0
+    printf '{"__typename":"CheckRun","name":"%s","workflowName":"CI","status":"%s","conclusion":"%s","detailsUrl":"%s"}' "$name" "$status" "$conclusion" "$(link "$id")"
+  done <<EOT
+$(checks)
+EOT
+  printf ']'
+}
+# merge_state: PR 8's mergeStateStatus.
+merge_state() {
+  if [ "$CI" = behind ] && ! uptodate; then echo BEHIND
+  elif checks | grep -qv ' pass '; then echo BLOCKED
+  else echo CLEAN; fi
+}
+# pr8: PR 8 as `gh pr view --json` prints it, every field this stand-in knows.
+pr8() {
+  local draft=true
+  [ "$(st ready)" = 1 ] && draft=false
+  printf '{"number":8,"state":"OPEN","isDraft":%s,"title":%s,"url":%s,"headRefName":%s,"headRefOid":"%s","baseRefName":"main","mergeStateStatus":"%s","mergeable":"MERGEABLE","statusCheckRollup":%s}\n' \
+    "$draft" "$(json_text "$(st title)")" "$(json_text "$(pr_url 8)")" "$(json_text "$(st branch)")" "$(now)" "$(merge_state)" "$(rollup)"
+}
+# jq_out JSON ARGS...: JSON, or what jq makes of it with the --jq or -q expression in ARGS. With no jq on PATH,
+# a bare `.<field>` of PR 8's object is read here, and any other expression fails.
+jq_out() {
+  local json=$1 q f
+  shift
+  q=$(opt jq -q "$@") || { printf '%s\n' "$json"; return 0; }
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s\n' "$json" | jq -r "$q"
+    return
+  fi
+  f=${q#.}
+  case "$q" in .[A-Za-z]*) ;; *) f="" ;; esac
+  case "$f" in *[!A-Za-z]*) f="" ;; esac
+  case "$json" in "{"*) ;; *) f="" ;; esac
+  [ -n "$f" ] || { echo "gh stub: --jq $q needs jq" >&2; return 1; }
+  printf '%s\n' "${json%%,\"statusCheckRollup\"*}" | sed -E -n "s/.*\"$f\":(\"([^\"]*)\"|([^,}\"]*)).*/\2\3/p"
+}
+# advance_main: lands a commit on origin's main, as another PR's merge would, so the PR's branch falls behind.
+advance_main() {
+  local o=$1 base d blob tree c
+  base=$(git --git-dir="$o" rev-parse --verify -q refs/heads/main) || return 0
+  d=$(mktemp -d "${TMPDIR:-/tmp}/gh-stub.XXXXXX") || return 0
+  blob=$(printf '# Changelog\n\n## Unreleased\n\n- The README names the test command.\n' | git --git-dir="$o" hash-object -w --stdin) &&
+    GIT_INDEX_FILE=$d/index git --git-dir="$o" read-tree "$base" &&
+    GIT_INDEX_FILE=$d/index git --git-dir="$o" update-index --add --cacheinfo "100644,$blob,CHANGELOG.md" &&
+    tree=$(GIT_INDEX_FILE=$d/index git --git-dir="$o" write-tree) &&
+    c=$(git --git-dir="$o" -c user.name=dev -c user.email=dev@example.com commit-tree "$tree" -p "$base" -m 'docs: start a changelog') &&
+    git --git-dir="$o" update-ref refs/heads/main "$c" "$base"
+  rm -rf "$d"
+}
+# changed_line: `<file>:<line>` of the first line the PR's change at the create adds under src/, from main.
+changed_line() {
+  og diff --unified=0 --no-color --no-ext-diff main "$(st head)" -- src | awk '
+    /^\+\+\+ b\// { f = substr($0, 7); next }
+    /^@@/ && f != "" { split($3, a, ","); n = (a[2] == "" ? 1 : a[2] + 0); if (n > 0) { print f ":" substr(a[1], 2); exit } }'
+}
+# run_log ID: the failed log of the run ID, as `gh run view --log-failed` prints it.
+run_log() {
+  local at line n
+  case "$1" in
+    9101)
+      at=$(changed_line)
+      [ -n "$at" ] || at=src/sum.js:1
+      printf 'lint\tLint the lines this PR changes\t2026-11-05T09:00:41Z %s\n' \
+        "${at}:1: Missing JSDoc comment. [Error/jsdoc/require-jsdoc]" "" "1 problem" "##[error]Process completed with exit code 1."
+      ;;
+    9102)
+      printf 'deploy-preview\tPull the preview image\t2026-11-05T09:00:12Z %s\n' \
+        "Pulling registry.example.invalid/preview/node:22-slim" \
+        'Error response from daemon: Get "https://registry.example.invalid/v2/": dial tcp 203.0.113.7:443: connect: connection refused' \
+        "##[error]Process completed with exit code 1."
+      ;;
+    9103)
+      printf 'version\tCheck the version\t2026-11-05T09:00:08Z %s\n' \
+        "version.json holds 1.4.0, the version main released as the tag v1.4.0." \
+        "A change after a release needs a minor bump: set version.json to 1.5.0." \
+        "##[error]Process completed with exit code 1."
+      ;;
+    9104)
+      n=$(og rev-list --count "$(now)..main") || n=1
+      printf 'up-to-date\tCheck the branch is up to date\t2026-11-05T09:00:05Z %s\n' \
+        "This branch is ${n:-1} commit(s) behind main. Rebase it onto main and push." \
+        "##[error]Process completed with exit code 1."
+      ;;
+    9105)
+      line=$(og show "$(now):src/sum.js" | grep -n -F 'list.length == 0' | head -n 1 | cut -d: -f1)
+      printf 'lint\tLint the files this PR changes\t2026-11-05T09:00:41Z %s\n' \
+        "src/sum.js:${line:-2}:46: Expected '===' and instead saw '=='. [Error/eqeqeq]" "" "1 problem" "##[error]Process completed with exit code 1."
+      ;;
+  esac
+}
 case "$1 $2" in
   "pr list")
+    if [ -f "$STATE" ]; then
+      h=$(opt head -H "$@") || h=$(st branch)
+      if [ "$h" = "$(st branch)" ]; then
+        case "$*" in *--jq*) echo OPEN ;; *) pr_json "$(now)" 8 "$(pr_url 8)" ;; esac
+      else
+        case "$*" in *--jq*) ;; *) echo '[]' ;; esac
+      fi
+      exit 0
+    fi
     case "${KERN_EXEC_PR:-none}" in
-      open-at-head) case "$*" in *--jq*) echo OPEN ;; *) pr_json "$(git rev-parse HEAD)" ;; esac ;;
-      open-older) case "$*" in *--jq*) echo OPEN ;; *) pr_json "$(git rev-parse HEAD~1)" ;; esac ;;
+      open-at-head) case "$*" in *--jq*) echo OPEN ;; *) pr_json "$(git rev-parse HEAD)" 7 "$(pr_url 7)" ;; esac ;;
+      open-older) case "$*" in *--jq*) echo OPEN ;; *) pr_json "$(git rev-parse HEAD~1)" 7 "$(pr_url 7)" ;; esac ;;
       *) case "$*" in *--jq*) ;; *) echo '[]' ;; esac ;;
     esac
     ;;
   "pr create")
     # The body the PR would carry, one line, so a grader can check it (commit.attribution, gap 54). Every
     # form gh takes: --body, --body=, -b, --body-file, --body-file=, -F, and - for standard input.
-    prev=""
-    for a in "$@"; do
-      body="" got=""
-      case "$prev" in
-        --body | -b) body=$a got=1 ;;
-        --body-file | -F) if [ "$a" = - ]; then body=$(cat) got=1; elif [ -f "$a" ]; then body=$(cat "$a") got=1; fi ;;
-        *)
-          case "$a" in
-            --body=*) body=${a#--body=} got=1 ;;
-            --body-file=-) body=$(cat) got=1 ;;
-            --body-file=*) [ -f "${a#--body-file=}" ] && body=$(cat "${a#--body-file=}") got=1 ;;
-          esac
-          ;;
-      esac
-      [ -n "$got" ] && printf 'body: %s\n' "${body//$'\n'/\\n}" >>"$KERN_EXEC_LOG"
-      prev=$a
+    log_body "$@"
+    url=$(pr_url 8) || exit 1
+    b=$(opt head -H "$@") || b=$(git branch --show-current 2>/dev/null)
+    b=${b#*:}
+    if [ -f "$STATE" ] && [ "$(st branch)" = "$b" ]; then
+      printf 'a pull request for branch "%s" into branch "main" already exists:\n%s\n' "$b" "$url" >&2
+      exit 1
+    fi
+    o=${origin#file://}
+    h=$(git --git-dir="$o" rev-parse --verify -q "refs/heads/$b" 2>/dev/null) || h=
+    t=$(opt title -t "$@") || t=
+    printf 'branch=%s\norigin=%s\nhead=%s\ntitle=%s\n' "$b" "$o" "$h" "${t//$'\n'/ }" >"$STATE"
+    [ "$CI" = behind ] && advance_main "$o"
+    printf '%s\n' "$url"
+    ;;
+  "pr view")
+    sel=""
+    for a in "${@:3}"; do
+      case "$a" in -*) break ;; *) sel=$a; break ;; esac
     done
+    if [ ! -f "$STATE" ] || [ "${sel##*/}" = 7 ]; then
+      url=$(pr_url 7) || exit 1
+      printf '{"number":7,"state":"OPEN","url":"%s"}\n' "$url"
+      exit 0
+    fi
+    pr_url 8 >/dev/null || exit 1
+    if has --json "$@" || opt json "" "$@" >/dev/null; then
+      jq_out "$(pr8)" "$@" || exit 1
+    else
+      [ "$(st ready)" = 1 ] && s=OPEN || s=DRAFT
+      printf 'title:\t%s\nstate:\t%s\nauthor:\tdev\nlabels:\t\nassignees:\t\nreviewers:\t\nprojects:\t\nmilestone:\t\nnumber:\t8\nurl:\t%s\n--\n' "$(st title)" "$s" "$(pr_url 8)"
+    fi
+    ;;
+  "pr checks")
+    list=$(checks)
+    rc=0
+    case "$list" in *" fail "*) rc=1 ;; *" pending "*) rc=8 ;; esac
+    if has --json "$@" || opt json "" "$@" >/dev/null; then
+      jq_out "$(checks_json)" "$@" || exit 1
+      exit "$rc"
+    fi
+    if [ -z "$list" ]; then
+      if [ -f "$STATE" ]; then b=$(st branch); else b=$(git branch --show-current 2>/dev/null); fi
+      echo "no checks reported on the '$b' branch"
+      exit 1
+    fi
+    while read -r name bucket id; do
+      printf '%s\t%s\t%s\t%s\t\n' "$name" "$bucket" "$([ "$bucket" = pending ] && echo 0 || echo 1m0s)" "$(link "$id")"
+    done <<EOT
+$list
+EOT
+    exit "$rc"
+    ;;
+  "pr ready")
+    [ -f "$STATE" ] || { echo "gh stub: no pull request to mark ready" >&2; exit 1; }
+    if has --undo "$@"; then
+      echo "ready=0" >>"$STATE"
+      echo "Pull request #8 is converted to \"draft\""
+    else
+      echo "ready=1" >>"$STATE"
+      echo "Pull request #8 is marked as \"ready for review\""
+    fi
+    ;;
+  "pr edit")
+    [ -f "$STATE" ] || { echo "gh stub: no pull request to edit" >&2; exit 1; }
+    for a in "${@:3}"; do
+      case "$a" in --body-file | --body-file=* | -F | -) ;; -*) echo "gh stub: unhandled call: $*" >&2; exit 1 ;; esac
+    done
+    log_body "${@:3}" || { echo "gh stub: unhandled call: $*" >&2; exit 1; }
     pr_url 8 || exit 1
     echo
     ;;
-  "pr view") url=$(pr_url 7) || exit 1; printf '{"number":7,"state":"OPEN","url":"%s"}\n' "$url" ;;
+  "run view")
+    # The run id, or a job id (the run's plus 100) as --job gives it.
+    id=""
+    for a in "${@:3}"; do
+      case "$a" in --job=*) id=${a#--job=}; break ;; -*) ;; *) id=$a; break ;; esac
+    done
+    case "$id" in 92[0-9][0-9]) id=$((id - 100)) ;; esac
+    row=$(checks | awk -v id="$id" '$3 == id')
+    [ -n "$row" ] || { echo "gh stub: no run $id on this PR" >&2; exit 1; }
+    name=${row%% *} bucket=${row#* } bucket=${bucket%% *}
+    if has --log-failed "$@" || has --log "$@"; then
+      [ "$bucket" = pending ] && { echo "run $id is still in progress; logs will be available when it is complete" >&2; exit 1; }
+      [ "$bucket" = fail ] && run_log "$id"
+    else
+      printf '%s CI · %s\nTriggered via pull_request\n\nJOBS\n%s %s (ID %s)\n\nFor more information about a job, try: gh run view --job=%s\n' \
+        "$([ "$bucket" = fail ] && echo X || echo '*')" "$id" "$bucket" "$name" "$((id + 100))" "$((id + 100))"
+    fi
+    ;;
   "issue view")
     [ "${3#\#}" = 7 ] || { echo "gh stub: no issue $3" >&2; exit 1; }
     [ -n "${KERN_EXEC_TICKET-}" ] || { echo "gh stub: no ticket in this case" >&2; exit 1; }
@@ -65,7 +355,6 @@ case "$1 $2" in
     ;;
   "api user") echo dev ;;
   "auth status") echo "Logged in to example.invalid account dev" ;;
-  "pr checks") echo "no checks reported on the '$(git branch --show-current 2>/dev/null)' branch"; exit 1 ;;
   *) echo "gh stub: unhandled call: $*" >&2; exit 1 ;;
 esac
 exit 0
