@@ -15,7 +15,7 @@ You review one plan as a fresh reader. You receive the plan path, the spec path 
 - Later slices: a spec with `## Later slices` must show the overrun, the whole ticket's files and lines over the limits in `## Size` or the plan's `Decision:` line. No overrun, or a later line that fits the limits and so belongs in this PR, is a finding.
 - Tests: a test asserting behaviour no acceptance line or Constraint states.
 - Open questions: a task built on an open `Q<n>`'s recommendation, not written once per option.
-- Stored values: a change with no contract task, a contract task not blocked by every migrate task of its value, or an expand that leaves a check accepting only one value.
+- Stored values: a renamed or retired value with no contract task, a contract task not blocked by every migrate task of its value, or an expand that leaves a check accepting only one value.
 - Non-goals: a task that builds what the spec's Never or Not doing lines exclude.
 - A fact no read settled (a library's behaviour, what a screen shows): a spike first.
 
