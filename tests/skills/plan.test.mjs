@@ -77,7 +77,9 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   assertMaxBytes('skills/plan/references/plan-template.md', 2200);
   assertHeadings('skills/plan/references/task-template.md', ['# Task template', '### Task N: <name>']);
   assertContains('skills/plan/references/task-template.md', ['**Files:**', '**Interfaces:**', 'Consumes:', 'Produces:', '**Blocked by:**', '**Acceptance:**', 'Run it to verify it fails', 'Expected:', '`plan-check` fails a task']);
-  assertMaxBytes('skills/plan/references/task-template.md', 2200);
+  // 2,401 since this plan's Task 3 (plan open-decisions): the Blocked by line takes `Q<n>` and `Q<n>=<option>`, a
+  // task that depends on an open question is written once per option, and step 1's test asserts only the spec.
+  assertMaxBytes('skills/plan/references/task-template.md', 2401);
   assertHeadings('skills/plan/references/plan-review.md', ['# Plan reviewer brief', '## What to check', '## Calibration', '## Output']);
   // 1,450 since the pilot fix plan's Task 5 (raised from 1,400): the States, Size, Non-goals and spike checks.
   // 1,600 since pilot fix plan 2's Task 4: the Size check reads the gate's own measure, re-indented lines included.
@@ -85,7 +87,9 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   // 1,900 since M3 part 1 Task 5: a spec with `## Later slices` must show its overrun.
   // 1,922 since M3 part 2 project 1's Task 18 fix round 1, audit row L494: the plan-check output the reviewer gets may
   // hold a warn: line step 7's stop settled, after cutting "in substance" from the coverage check.
-  assertMaxBytes('skills/plan/references/plan-review.md', 1922);
+  // 2,097 since this plan's Task 3 (plan open-decisions): two findings, a test asserting what the spec never states
+  // and a task built on an open `Q<n>`'s recommendation; step 7's `Q<n>`, not its stop, settles a warn: line.
+  assertMaxBytes('skills/plan/references/plan-review.md', 2097);
   assertContains('skills/plan/references/plan-review.md', ["Check its line estimate in the gate's own measure (`git diff --shortstat`, or `pr.size_command` when set) against the file map, re-indented lines included"]);
 });
 
@@ -290,13 +294,14 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
 
 test('step 7 takes plan-check\'s warn: line for a task over scope_threshold files, and Review Focus lines get their tests', () => {
   // M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task over the file
-  // limit is a PR over it, so plan-check warns and step 7's stop settles it.
+  // limit is a PR over it, so plan-check warns and step 7's one-PR `Q<n>` settles it.
   const seven = steps(readDoc(SKILL).body)[7];
   assert.ok(seven.includes('every migrate batch. A renamed or retired stored value (an enum member, a status, a role name) is a stored shape. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or leave it to the one-PR `Q<n>` below. One PR is one change,'), seven);
   // Audit row L495, after superpowers' writing-plans Self-Review item 4.
   // Fix round 1: a warn: line survives the user's one-PR word and a go's first slice, so neither step 11 nor the
   // reviewer asks for a fix that cannot be made.
-  assertContains('skills/plan/references/plan-review.md', ["You receive the plan path, the spec path and plan-check's output, clean or a warn: line step 7's stop settled, nothing about how the plan was written."]);
+  // Plan open-decisions Task 3: step 7 no longer stops; its one-PR `Q<n>` settles the warn: line, as step 11 says.
+  assertContains('skills/plan/references/plan-review.md', ["You receive the plan path, the spec path and plan-check's output, clean or a warn: line step 7's `Q<n>` settled, nothing about how the plan was written."]);
   const focus = section(readDoc('skills/plan/references/plan-template.md').body, '## Review Focus');
   assert.ok(focus.includes("Each line's pinning test goes into the task that owns the code, which the line names; an empty section means checked and none found, not skipped."), focus);
 });
@@ -325,4 +330,21 @@ test('plan writes the draft and gates each open decision on its `Q<n>`', () => {
   const stops = section(body, '## Stops and autopilot');
   assert.ok(stops.includes('Stops at steps 1, 4 (a spike) and 12.'), stops);
   assert.ok(stops.includes('no task builds on the default'), stops);
+});
+
+test('the references carry the `Q<n>` forms, the option tasks and the two review findings', () => {
+  // Plan open-decisions Task 3 (design goals 2, 5 and 6): steps 4, 8 and 12 point here for the forms.
+  const tpl = 'skills/plan/references/plan-template.md';
+  assertContains(tpl, ['`Q<n>: <question>. Options: (a) <option>; (b) <option>. Recommended: (a), <why>.`', '`Q<n>: answered <date>, "<one whole line of the user\'s message>"`']);
+  assertContains(tpl, ['Over either: the split step 7 writes, or the user\'s word for one PR.']);
+  assert.ok(!readDoc(tpl).raw.includes('step 7 asks'), 'step 7 writes the split and asks nothing');
+  const task = 'skills/plan/references/task-template.md';
+  const blocked = readDoc(task).raw.split('\n').find((l) => l.startsWith('**Blocked by:**')) ?? '';
+  assert.ok(blocked.includes('`Q<n>` or `Q<n>=<option>`'), blocked);
+  assertContains(task, ['written once per option', '(Q1=a)', 'The Size line counts the largest option']);
+  const one = readDoc(task).raw.split('\n').find((l) => l.startsWith('- [ ] Step 1:')) ?? '';
+  assert.ok(one.includes('asserts only what an acceptance line or a Constraint states'), one);
+  const review = section(readDoc('skills/plan/references/plan-review.md').body, '## What to check');
+  assert.ok(review.includes('a test asserting behaviour no acceptance line or Constraint states'), review);
+  assert.ok(review.includes('built on an open `Q<n>`\'s recommendation'), review);
 });

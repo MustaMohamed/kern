@@ -425,7 +425,7 @@ slice_spec() {
 }
 
 # M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task whose Files exceed
-# scope_threshold makes a PR over it, so lint mode warns, and plan step 7's stop settles it. The warning never
+# scope_threshold makes a PR over it, so lint mode warns, and plan step 7's one-PR `Q<n>` settles it. The warning never
 # changes the exit, and --graph and --files print none, since their output is read by scripts.
 five_files() {
   sed -i.bak 's#^- Create: `src/parse.js:1-20`$#- Create: `src/parse.js:1-20`, `src/a.js`, `src/b.js`\
