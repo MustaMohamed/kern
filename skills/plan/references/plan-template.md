@@ -28,7 +28,7 @@ Inputs or conditions the spec implies but no test exercises, most likely first. 
 
 ## Open questions
 
-Each user question: `Q<n>: <question>. Options: (a) <option>; (b) <option>. Recommended: (a), <why>.`; an answer adds `Q<n>: answered <date>, "<one whole line of the user's message>"` under it. A spike's answer: the branch or SHA plus the evidence. Under autopilot, each `parked: <question>; default: <choice>; why: <one line>` line. Else none.
+Each user question: `Q<n>: <question>. Options: (a) <option>; (b) <option>. Recommended: (a), <why>.`, its `<why>` from a read or said to be a guess; an answer adds `Q<n>: answered <date>, "<one whole line of the user's message>"` under it. A spike's answer: the branch or SHA plus the evidence. Under autopilot, each `parked: <question>; default: <choice>; why: <one line>` line. Else none.
 
 ## File map
 
