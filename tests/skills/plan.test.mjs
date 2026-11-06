@@ -40,7 +40,7 @@ test('plan sections and steps', () => {
   // 7,277 since its fix round 1: step 11 leaves a warn: line step 7's stop settled.
   // 7,509 since M3 part 2 project 2's Task 8: step 11 saves the plan review's reply, which G20 reads under a go, and
   // under a go a revise gets one more fresh review, a second stopping the go.
-  // 8,555 since this plan's Task 2 (plan open-decisions): plan writes the draft, a user decision is a `Q<n>` with a
+  // 8,555 since plan open-decisions Task 2: plan writes the draft, a user decision is a `Q<n>` with a
   // task per option, step 3 names every writer, step 7 takes a renamed stored value as a stored shape, and tests
   // assert only the spec.
   // 8,687 since its fix round 1: step 12 reruns plan-check after a `Q<n>` answer and puts a one-PR answer on the Size
@@ -74,10 +74,12 @@ test('under a go the plan asks nothing the stop list does not stop for', () => {
 test('plan templates are contracts task-brief and plan-check can read', () => {
   assertHeadings('skills/plan/references/plan-template.md', ['# Plan template', '## Global Constraints', '## Review Focus', '## Open questions', '## File map']);
   assertContains('skills/plan/references/plan-template.md', ['Copy from the first `---` line to the end', 'status: draft', 'approved: (set only on an explicit yes', 'execution:', 'commits: ask', '### Task 1:', 'Always, Ask first, Never']);
-  assertMaxBytes('skills/plan/references/plan-template.md', 2200);
+  // 2,241 since the plan open-decisions final review fix: a Review Focus question names its task and gets no
+  // assertion until the user answers it.
+  assertMaxBytes('skills/plan/references/plan-template.md', 2241);
   assertHeadings('skills/plan/references/task-template.md', ['# Task template', '### Task N: <name>']);
   assertContains('skills/plan/references/task-template.md', ['**Files:**', '**Interfaces:**', 'Consumes:', 'Produces:', '**Blocked by:**', '**Acceptance:**', 'Run it to verify it fails', 'Expected:', '`plan-check` fails a task']);
-  // 2,401 since this plan's Task 3 (plan open-decisions): the Blocked by line takes `Q<n>` and `Q<n>=<option>`, a
+  // 2,401 since plan open-decisions Task 3: the Blocked by line takes `Q<n>` and `Q<n>=<option>`, a
   // task that depends on an open question is written once per option, and step 1's test asserts only the spec.
   assertMaxBytes('skills/plan/references/task-template.md', 2401);
   assertHeadings('skills/plan/references/plan-review.md', ['# Plan reviewer brief', '## What to check', '## Calibration', '## Output']);
@@ -87,9 +89,10 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   // 1,900 since M3 part 1 Task 5: a spec with `## Later slices` must show its overrun.
   // 1,922 since M3 part 2 project 1's Task 18 fix round 1, audit row L494: the plan-check output the reviewer gets may
   // hold a warn: line step 7's stop settled, after cutting "in substance" from the coverage check.
-  // 2,097 since this plan's Task 3 (plan open-decisions): two findings, a test asserting what the spec never states
+  // 2,097 since plan open-decisions Task 3: two findings, a test asserting what the spec never states
   // and a task built on an open `Q<n>`'s recommendation; step 7's `Q<n>`, not its stop, settles a warn: line.
-  assertMaxBytes('skills/plan/references/plan-review.md', 2097);
+  // 2,161 since its final review fix: a Review Focus question needs only its task named until the user answers it.
+  assertMaxBytes('skills/plan/references/plan-review.md', 2161);
   assertContains('skills/plan/references/plan-review.md', ["Check its line estimate in the gate's own measure (`git diff --shortstat`, or `pr.size_command` when set) against the file map, re-indented lines included"]);
 });
 
@@ -303,7 +306,10 @@ test('step 7 takes plan-check\'s warn: line for a task over scope_threshold file
   // Plan open-decisions Task 3: step 7 no longer stops; its one-PR `Q<n>` settles the warn: line, as step 11 says.
   assertContains('skills/plan/references/plan-review.md', ["You receive the plan path, the spec path and plan-check's output, clean or a warn: line step 7's `Q<n>` settled, nothing about how the plan was written."]);
   const focus = section(readDoc('skills/plan/references/plan-template.md').body, '## Review Focus');
-  assert.ok(focus.includes("Each line's pinning test goes into the task that owns the code, which the line names; an empty section means checked and none found, not skipped."), focus);
+  // Plan open-decisions final review fix: step 8 sends behaviour the spec does not state to Review Focus as a
+  // question, so a question line names its task and gets no assertion, and the reviewer does not flag it.
+  assert.ok(focus.includes("Each line names the task that owns the code, where its pinning test goes; a question, behaviour the spec does not state, gets no assertion until the user answers it. An empty section means checked and none found, not skipped."), focus);
+  assertContains('skills/plan/references/plan-review.md', ['- A Review Focus line pinned to no task; a question needs only its task named until the user answers it.']);
 });
 
 test('plan writes the draft and gates each open decision on its `Q<n>`', () => {
