@@ -18,9 +18,10 @@
 # a shared_services entry ordered by Blocked by;
 # a consumed name blocked by its producer; every spec acceptance number covered; no placeholders, long
 # dashes or curly quotes. A Blocked by may also name an open question, `Q<k>` or `Q<k>=x`, which needs a
-# `Q<k>:` line under ## Open questions listing `(x)`, and no approved plan keeps one. Two tasks naming one
-# Q<k> with different options are alternatives: neither orders the other, and when a name has a producer
-# with such a blocker, a consumer is checked against every producer of it that is not its alternative.
+# `Q<k>:` line under ## Open questions, past a list mark and bold, listing `(x)`, and no approved plan keeps
+# one. Two tasks naming one Q<k> with different options are alternatives: neither orders the other, and when a
+# name has a producer with such a blocker, a consumer is checked against every producer of it that is not its
+# alternative, a later one only when no earlier one exists.
 # Structure checks adapted from pstack poteto-mode scripts/check-plan.mjs (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -132,11 +133,11 @@ fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
 /^## / { h2[$0] = 1; field = ""; if (cur) { cur = "" } }
 # A spec: the count that the first Files: line under ## Size gives, past a list mark and bold (spec-template.md).
 /^## / { insize = ($0 ~ /^## Size[ \t]*$/) }
-# Open questions of a plan: a Q<k>: line under ## Open questions, with its (<letter>) options.
+# Open questions of a plan: a Q<k>: line under ## Open questions, past a list mark and bold, with its (<letter>) options.
 /^## / { inoq = ($0 ~ /^## Open questions[ \t]*$/) }
 /^### Task [0-9]+:/ { inoq = 0 }
-inoq && /^Q[0-9]+:/ {
-  k = $0; sub(/:.*/, "", k); oq[k] = 1; s = $0
+inoq && /^[ \t]*([-*+][ \t]+)?(\*\*|__)?Q[0-9]+(\*\*|__)?:/ {
+  k = $0; sub(/^[ \t]*([-*+][ \t]+)?(\*\*|__)?/, "", k); sub(/[:*_].*/, "", k); oq[k] = 1; s = $0
   while (match(s, /\([a-z]\)/)) { oqopt[k] = oqopt[k] substr(s, RSTART + 1, 1); s = substr(s, RSTART + RLENGTH) }
 }
 insize && !sizeseen {
@@ -280,9 +281,12 @@ END {
       np = split(producer[w], ps, " "); qw = 0
       for (x = 1; x <= np; x++) if (qb[ps[x]] != "") qw = 1
       if (!qw) np = 1
+      # A later producer counts only when no earlier producer that is not an alternative of t exists.
+      early = 0
+      for (x = 1; x <= np; x++) { p = ps[x] + 0; if (p < t && !conflict(p, t)) early = 1 }
       for (x = 1; x <= np; x++) {
         p = ps[x] + 0; if (p == t || conflict(p, t)) continue
-        if (p > t) problem(tline[t], "Task " t " consumes `" w "` before Task " p " produces it")
+        if (p > t) { if (!early) problem(tline[t], "Task " t " consumes `" w "` before Task " p " produces it") }
         else if (!has(anc[t], p)) problem(tline[t], "Task " t " consumes `" w "` from Task " p " but is not blocked by it")
       }
     }

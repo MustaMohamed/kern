@@ -580,3 +580,34 @@ option_plan() {
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "a later option producer leaves a consumer of an earlier producer alone" {
+  draft
+  { task 5 'Parse (Q1=a)' src/parse-a.js none '`parse(text)`' 'Q1=a' 1; task 6 'Parse (Q1=b)' src/parse-b.js none '`parse(text)`' 'Q1=b' 1; } >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ -z "$output" ]
+  sed -i.bak '/^### Task 1:/,/^### Task 2:/s/^- Consumes: none$/- Consumes: `opt()`/' plan.md
+  { task 7 'Opt (Q1=a)' src/opt-a.js none '`opt()`' 'Q1=a' 1; task 8 'Opt (Q1=b)' src/opt-b.js none '`opt()`' 'Q1=b' 1; } >> plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 1 consumes \`opt\` before Task 7 produces it"
+  says "Task 1 consumes \`opt\` before Task 8 produces it"
+}
+
+@test "an Open questions entry may carry a list mark and bold around its label" {
+  for form in '- Q1:' '* **Q1:**' '**Q1**:' '- **Q1**:'; do
+    cp plan.md plan.orig
+    option_plan
+    sed -i.bak "s/^Q1: /$form /" plan.md
+    pc plan.md
+    [ "$status" -eq 0 ] || { echo "$form: $output"; false; }
+    [ -z "$output" ]
+    task 7 Opt src/opt-c.js none none 'Q1=c' 1 >> plan.md
+    pc plan.md
+    [ "$status" -eq 1 ]
+    says "Task 7: Blocked by names Q1=c, but Q1 lists no option (c)"
+    mv plan.orig plan.md
+  done
+}
