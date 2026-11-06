@@ -17,7 +17,11 @@
 # entry but a closing /* or /**; tasks numbered from 1; a task blocked only by earlier tasks; tasks sharing a file or
 # a shared_services entry ordered by Blocked by;
 # a consumed name blocked by its producer; every spec acceptance number covered; no placeholders, long
-# dashes or curly quotes. Structure checks adapted from pstack poteto-mode scripts/check-plan.mjs (MIT).
+# dashes or curly quotes. A Blocked by may also name an open question, `Q<k>` or `Q<k>=x`, which needs a
+# `Q<k>:` line under ## Open questions listing `(x)`, and no approved plan keeps one. Two tasks naming one
+# Q<k> with different options are alternatives: neither orders the other, and in a plan with such a blocker
+# a consumer is checked against every producer of the name that is not its alternative. Structure checks
+# adapted from pstack poteto-mode scripts/check-plan.mjs (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
@@ -95,6 +99,20 @@ function mentions(txt, w,   pos, before, after, rest, off) {
   }
   return 0
 }
+# Alternatives: tasks a and b name one open question with different options.
+function conflict(a, b,   na, nb, xa, xb, i, j, ka, kb) {
+  na = split(qb[a], xa, " "); nb = split(qb[b], xb, " ")
+  for (i = 1; i <= na; i++) {
+    if (!index(xa[i], "=")) continue
+    ka = xa[i]; sub(/=.*/, "", ka)
+    for (j = 1; j <= nb; j++) {
+      if (!index(xb[j], "=")) continue
+      kb = xb[j]; sub(/=.*/, "", kb)
+      if (ka == kb && xa[i] != xb[j]) return 1
+    }
+  }
+  return 0
+}
 { sub(/\r$/, "") }
 BEGIN { shared_n = split(tolower(ENVIRON["SHARED"]), shared, /[ \t]*,[ \t]*/) }
 NR == 1 && fm_delim($0, 1) { infm = 1; fmstart = 1; next }
@@ -114,6 +132,13 @@ fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
 /^## / { h2[$0] = 1; field = ""; if (cur) { cur = "" } }
 # A spec: the count that the first Files: line under ## Size gives, past a list mark and bold (spec-template.md).
 /^## / { insize = ($0 ~ /^## Size[ \t]*$/) }
+# Open questions of a plan: a Q<k>: line under ## Open questions, with its (<letter>) options.
+/^## / { inoq = ($0 ~ /^## Open questions[ \t]*$/) }
+/^### Task [0-9]+:/ { inoq = 0 }
+inoq && /^Q[0-9]+:/ {
+  k = $0; sub(/:.*/, "", k); oq[k] = 1; s = $0
+  while (match(s, /\([a-z]\)/)) { oqopt[k] = oqopt[k] substr(s, RSTART + 1, 1); s = substr(s, RSTART + RLENGTH) }
+}
 insize && !sizeseen {
   s = $0; sub(/^[ \t]*([-*+][ \t]+)?(\*\*|__)?/, "", s)
   if (match(s, /^Files:(\*\*|__)?[ \t]*[0-9]+/)) { s = substr(s, 1, RLENGTH); gsub(/[^0-9]/, "", s); sizefiles = s + 0; sizeseen = 1 }
@@ -128,9 +153,11 @@ insize && !sizeseen {
 /^\*\*Files:\*\*/ { field = "files"; nfiles[cur] += 0; next }
 /^\*\*Interfaces:\*\*/ { field = "ifaces"; next }
 /^\*\*Blocked by:\*\*/ {
-  field = ""; seenb[cur] = 1; s = $0; sub(/^\*\*Blocked by:\*\*[ \t]*/, "", s)
+  field = ""; seenb[cur] = 1; bline[cur] = NR; s = $0; sub(/^\*\*Blocked by:\*\*[ \t]*/, "", s)
+  q = s
+  while (match(q, /(^|[^A-Za-z0-9_])Q[0-9]+(=[a-z])?/)) { b = substr(q, RSTART, RLENGTH); q = substr(q, RSTART + RLENGTH); sub(/^[^Q]/, "", b); qb[cur] = qb[cur] " " b; anyq = 1 }
   while (match(s, /Task[ \t]+[0-9]+/)) { b = substr(s, RSTART, RLENGTH); sub(/Task[ \t]+/, "", b); blk[cur] = blk[cur] " " (b + 0); s = substr(s, RSTART + RLENGTH) }
-  if (blk[cur] == "" && tolower(s) !~ /none/) problem(NR, "Task " cur ": Blocked by names no task and is not none")
+  if (blk[cur] == "" && qb[cur] == "" && tolower(s) !~ /none/) problem(NR, "Task " cur ": Blocked by names no task and is not none")
   next
 }
 /^\*\*Acceptance:\*\*/ {
@@ -159,7 +186,7 @@ field == "files" && /^- (Create|Modify|Test|Delete):/ {
   next
 }
 field == "ifaces" && /^- Consumes:/ { k = spans($0, sp); for (i = 1; i <= k; i++) if (first(sp[i]) != "none") cons[cur] = cons[cur] " " first(sp[i]); seenc[cur] = 1; next }
-field == "ifaces" && /^- Produces:/ { k = spans($0, sp); for (i = 1; i <= k; i++) { w = first(sp[i]); if (w == "none") continue; prod[cur] = prod[cur] " " w; if (!(w in producer)) producer[w] = cur }; seenp[cur] = 1; next }
+field == "ifaces" && /^- Produces:/ { k = spans($0, sp); for (i = 1; i <= k; i++) { w = first(sp[i]); if (w == "none") continue; prod[cur] = prod[cur] " " w; if (!has(producer[w], cur)) producer[w] = producer[w] " " cur }; seenp[cur] = 1; next }
 END {
   if (fmstart && !fmclosed) problem(1, "frontmatter is not closed")
   if (fence) { problem(fenceline, "fence not closed"); exit 1 }
@@ -220,10 +247,18 @@ END {
       if (bs[j] >= t || !(bs[j] in tline)) problem(tline[t], "Task " t " is blocked by Task " bs[j] ", which is not an earlier task")
       else { anc[t] = anc[t] " " bs[j] " " anc[bs[j]] }
     }
+    m = split(qb[t], bs, " ")
+    for (j = 1; j <= m; j++) {
+      k = bs[j]; x = ""; if (index(k, "=")) { x = k; sub(/^[^=]*=/, "", x); sub(/=.*/, "", k) }
+      if (!(k in oq)) problem(bline[t], "Task " t ": Blocked by names " k ", which Open questions does not list")
+      else if (x != "" && !index(oqopt[k], x)) problem(bline[t], "Task " t ": Blocked by names " bs[j] ", but " k " lists no option (" x ")")
+      if (st == "approved") problem(bline[t], "Task " t ": blocked by open question " k "; an approved plan answers it first")
+    }
   }
   # Overlap: a shared file or a shared service must be ordered by Blocked by.
   for (i = 1; i <= tasks; i++) for (j = i + 1; j <= tasks; j++) {
     a = order[i]; b = order[j]; what = ""
+    if (conflict(a, b)) continue
     for (x = 1; x <= nfiles[a]; x++) for (y = 1; y <= nfiles[b]; y++) if (covers(files[a, x], files[b, y])) { what = (length(files[a, x]) < length(files[b, y])) ? files[a, x] : files[b, y]; break }
     if (what == "") for (s = 1; s <= shared_n; s++) if (shared[s] != "" && mentions(text[a], shared[s]) && mentions(text[b], shared[s])) { what = shared[s]; break }
     if (what == "") {
@@ -241,9 +276,13 @@ END {
     t = order[i]; m = split(cons[t], cs, " ")
     for (j = 1; j <= m; j++) {
       w = cs[j]; if (!(w in producer)) continue
-      p = producer[w]; if (p == t) continue
-      if (p > t) problem(tline[t], "Task " t " consumes `" w "` before Task " p " produces it")
-      else if (!has(anc[t], p)) problem(tline[t], "Task " t " consumes `" w "` from Task " p " but is not blocked by it")
+      # With no open-question blocker in the plan, only the first producer counts, as before.
+      np = split(producer[w], ps, " "); if (!anyq) np = 1
+      for (x = 1; x <= np; x++) {
+        p = ps[x] + 0; if (p == t || conflict(p, t)) continue
+        if (p > t) problem(tline[t], "Task " t " consumes `" w "` before Task " p " produces it")
+        else if (!has(anc[t], p)) problem(tline[t], "Task " t " consumes `" w "` from Task " p " but is not blocked by it")
+      }
     }
   }
   if (ENVIRON["SPECBAD"] != "" && ("spec" in fm)) problem(fmline["spec"] + 0, "spec: must name a .md file")

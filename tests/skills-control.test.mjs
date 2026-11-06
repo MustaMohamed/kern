@@ -842,6 +842,15 @@ test("the contract and the skills spec keep plan-check's plan line for a short s
     "on a clean approved `form: short` spec whose `## Size` Files count is over 2, `next: plan (define step 9: over 2 files)` (M3 part 2 project 2's round 1 fix batch);"]);
 });
 
+test("the contract and the skills spec keep plan-check's open-question blocker rules", () => {
+  // M3 plan open-decisions Task 1: a draft plan holds a user question as a Q<n> entry with one task per option.
+  assertContains('docs/plans/contract.md', [
+    "`Task N: Blocked by names Qk, which Open questions does not list`, `Task N: Blocked by names Qk=x, but Qk lists no option (x)` and, on `status: approved`, `Task N: blocked by open question Qk; an approved plan answers it first`.",
+    "a plan with none checks only the first producer, as before (M3 plan open-decisions Task 1)."]);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
+    "two tasks naming one `Q<k>` with different options are alternatives, which neither the overlap rule nor a consumer's producer check orders (M3 plan open-decisions Task 1);"]);
+});
+
 test('the contract grades go-block-reroute as the delete stop', () => {
   // M3 part 2 project 2's paid round 1, F3 (the user's "Grade the stop"): run.md makes the ticket's delete a stop, so G21 never votes.
   assertContains('docs/plans/contract.md', [
