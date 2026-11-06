@@ -40,7 +40,10 @@ test('plan sections and steps', () => {
   // 7,277 since its fix round 1: step 11 leaves a warn: line step 7's stop settled.
   // 7,509 since M3 part 2 project 2's Task 8: step 11 saves the plan review's reply, which G20 reads under a go, and
   // under a go a revise gets one more fresh review, a second stopping the go.
-  assertMaxBytes(SKILL, 7509);
+  // 8,555 since this plan's Task 2 (plan open-decisions): plan writes the draft, a user decision is a `Q<n>` with a
+  // task per option, step 3 names every writer, step 7 takes a renamed stored value as a stored shape, and tests
+  // assert only the spec.
+  assertMaxBytes(SKILL, 8555);
 });
 
 test('plan step 11 names the review record', () => {
@@ -125,7 +128,7 @@ test('plan pins order, routing and stop rules', () => {
     'issue acceptance criteria alone are not approved (its bounded path records them as an approved short spec)',
     'Look for existing PRs with `gh pr list --search <id> --state all`; if gh fails',
     'Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask.',
-    'else stop and ask the user to confirm the scope or split',
+    'write the split, each PR within both limits, and add a `Q<n>` asking whether one PR instead; it gates no task',
     'Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel',
     'round 1 only',
     'each demoable on its own',
@@ -190,8 +193,9 @@ test('the limits are read at step 1, stated in chat only at a scope split or sto
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Under a go neither asks: `run.md`\'s stop list decides. Read the limits now with `kern-get scope_threshold` and `kern-get pr.max_lines`, each `kern-get` in its own call.'), s[1]);
   assert.ok(!s[1].includes('kern-get scope_threshold 4') && !s[1].includes('kern-get pr.max_lines 300'), 'the per-key defaults are gone');
-  assert.ok(s[7].includes('One PR is one change, within `scope_threshold` files and `pr.max_lines` lines, else stop'), s[7]);
-  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. In chat, state a limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` or `pr.max_lines: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
+  // Plan open-decisions Task 2: over a limit step 7 writes the split and asks one PR as a `Q<n>`; it no longer stops.
+  assert.ok(s[7].includes('One PR is one change, within `scope_threshold` files and `pr.max_lines` lines; over a limit, write the split'), s[7]);
+  assert.ok(s[7].includes('whether one PR instead; it gates no task. In chat, state a limit only at a scope split, as `scope_threshold: <value> (<source>)` or `pr.max_lines: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
   assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');
   assert.ok(!s[7].includes('(kern-get)'), 'the old source label is gone');
   assert.ok(!s[7].includes('wherever the plan or reply states it'), 'the limit is no longer stated wherever the plan or reply goes');
@@ -285,11 +289,31 @@ test('step 7 takes plan-check\'s warn: line for a task over scope_threshold file
   // M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task over the file
   // limit is a PR over it, so plan-check warns and step 7's stop settles it.
   const seven = steps(readDoc(SKILL).body)[7];
-  assert.ok(seven.includes('every migrate batch. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or take the stop below. One PR is one change,'), seven);
+  assert.ok(seven.includes('every migrate batch. A renamed or retired stored value (an enum member, a status, a role name) is a stored shape. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or ask the `Q<n>` below. One PR is one change,'), seven);
   // Audit row L495, after superpowers' writing-plans Self-Review item 4.
   // Fix round 1: a warn: line survives the user's one-PR word and a go's first slice, so neither step 11 nor the
   // reviewer asks for a fix that cannot be made.
   assertContains('skills/plan/references/plan-review.md', ["You receive the plan path, the spec path and plan-check's output, clean or a warn: line step 7's stop settled, nothing about how the plan was written."]);
   const focus = section(readDoc('skills/plan/references/plan-template.md').body, '## Review Focus');
   assert.ok(focus.includes("Each line's pinning test goes into the task that owns the code, which the line names; an empty section means checked and none found, not skipped."), focus);
+});
+
+test('plan writes the draft and gates each open decision on its `Q<n>`', () => {
+  // Plan open-decisions Task 2 (design docs/specs/2026-11-06-plan-open-decisions-design.md, goals 1-5): h2h round 2
+  // plan runs stopped with questions and no plan file, built tasks on their own default for a user decision, missed
+  // a writer of a gated property, renamed a stored value in one step, and asserted behaviour the spec never states.
+  const { body } = readDoc(SKILL);
+  const s = steps(body);
+  assert.ok(s[3].includes('every writer and what it does to the new state'), s[3]);
+  assert.ok(s[3].includes('undo or re-trigger'), s[3]);
+  for (const n of ['becomes a `Q<n>`', 'the plan goes on', 'written once per option', 'Under a go, `run.md` decides']) assert.ok(s[4].includes(n), n);
+  assert.ok(!s[4].includes('as options with a recommendation'), s[4]);
+  for (const n of ['A renamed or retired stored value', 'is a stored shape', 'write the split', 'whether one PR instead']) assert.ok(s[7].includes(n), n);
+  assert.ok(!s[7].includes('else stop'), s[7]);
+  assert.ok(s[8].includes('asserts only what an acceptance line or a Constraint states'), s[8]);
+  assert.ok(s[12].includes('An answer to a `Q<n>` is a change request'), s[12]);
+  assert.ok(s[12].includes('A yes that leaves a gating `Q<n>` open'), s[12]);
+  const stops = section(body, '## Stops and autopilot');
+  assert.ok(stops.includes('Stops at steps 1, 4 (a spike) and 12.'), stops);
+  assert.ok(stops.includes('no task builds on the default'), stops);
 });
