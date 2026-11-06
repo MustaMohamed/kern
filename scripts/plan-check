@@ -19,9 +19,9 @@
 # a consumed name blocked by its producer; every spec acceptance number covered; no placeholders, long
 # dashes or curly quotes. A Blocked by may also name an open question, `Q<k>` or `Q<k>=x`, which needs a
 # `Q<k>:` line under ## Open questions listing `(x)`, and no approved plan keeps one. Two tasks naming one
-# Q<k> with different options are alternatives: neither orders the other, and in a plan with such a blocker
-# a consumer is checked against every producer of the name that is not its alternative. Structure checks
-# adapted from pstack poteto-mode scripts/check-plan.mjs (MIT).
+# Q<k> with different options are alternatives: neither orders the other, and when a name has a producer
+# with such a blocker, a consumer is checked against every producer of it that is not its alternative.
+# Structure checks adapted from pstack poteto-mode scripts/check-plan.mjs (MIT).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 # shellcheck source=/dev/null
@@ -155,7 +155,7 @@ insize && !sizeseen {
 /^\*\*Blocked by:\*\*/ {
   field = ""; seenb[cur] = 1; bline[cur] = NR; s = $0; sub(/^\*\*Blocked by:\*\*[ \t]*/, "", s)
   q = s
-  while (match(q, /(^|[^A-Za-z0-9_])Q[0-9]+(=[a-z])?/)) { b = substr(q, RSTART, RLENGTH); q = substr(q, RSTART + RLENGTH); sub(/^[^Q]/, "", b); qb[cur] = qb[cur] " " b; anyq = 1 }
+  while (match(q, /(^|[^A-Za-z0-9_])Q[0-9]+(=[a-z])?/)) { b = substr(q, RSTART, RLENGTH); q = substr(q, RSTART + RLENGTH); sub(/^[^Q]/, "", b); qb[cur] = qb[cur] " " b }
   while (match(s, /Task[ \t]+[0-9]+/)) { b = substr(s, RSTART, RLENGTH); sub(/Task[ \t]+/, "", b); blk[cur] = blk[cur] " " (b + 0); s = substr(s, RSTART + RLENGTH) }
   if (blk[cur] == "" && qb[cur] == "" && tolower(s) !~ /none/) problem(NR, "Task " cur ": Blocked by names no task and is not none")
   next
@@ -276,8 +276,10 @@ END {
     t = order[i]; m = split(cons[t], cs, " ")
     for (j = 1; j <= m; j++) {
       w = cs[j]; if (!(w in producer)) continue
-      # With no open-question blocker in the plan, only the first producer counts, as before.
-      np = split(producer[w], ps, " "); if (!anyq) np = 1
+      # A name no option task produces keeps its first producer only, as before.
+      np = split(producer[w], ps, " "); qw = 0
+      for (x = 1; x <= np; x++) if (qb[ps[x]] != "") qw = 1
+      if (!qw) np = 1
       for (x = 1; x <= np; x++) {
         p = ps[x] + 0; if (p == t || conflict(p, t)) continue
         if (p > t) problem(tline[t], "Task " t " consumes `" w "` before Task " p " produces it")

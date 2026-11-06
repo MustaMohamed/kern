@@ -571,3 +571,12 @@ option_plan() {
   [ "${lines[0]}" = $'overlap\t2\t3\tmigrations' ]
   ! printf '%s\n' "$output" | grep -q "$(printf '^overlap\t5\t6\t')"
 }
+
+@test "a Q blocker elsewhere leaves a name with no option producer on its first producer" {
+  draft
+  { task 5 Reparse src/reparse.js '`parse(text)`' '`parse(text)`' 'Task 1' 1; task 6 'Opt (Q1=a)' src/opt.js none none 'Q1=a' 1; } >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

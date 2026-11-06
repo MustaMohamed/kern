@@ -846,7 +846,7 @@ test("the contract and the skills spec keep plan-check's open-question blocker r
   // M3 plan open-decisions Task 1: a draft plan holds a user question as a Q<n> entry with one task per option.
   assertContains('docs/plans/contract.md', [
     "`Task N: Blocked by names Qk, which Open questions does not list`, `Task N: Blocked by names Qk=x, but Qk lists no option (x)` and, on `status: approved`, `Task N: blocked by open question Qk; an approved plan answers it first`.",
-    "a plan with none checks only the first producer, as before (M3 plan open-decisions Task 1)."]);
+    "where a name with none keeps only its first producer, as before (M3 plan open-decisions Task 1)."]);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
     "two tasks naming one `Q<k>` with different options are alternatives, which neither the overlap rule nor a consumer's producer check orders (M3 plan open-decisions Task 1);"]);
 });
