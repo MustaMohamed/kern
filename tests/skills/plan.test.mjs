@@ -43,7 +43,9 @@ test('plan sections and steps', () => {
   // 8,555 since this plan's Task 2 (plan open-decisions): plan writes the draft, a user decision is a `Q<n>` with a
   // task per option, step 3 names every writer, step 7 takes a renamed stored value as a stored shape, and tests
   // assert only the spec.
-  assertMaxBytes(SKILL, 8555);
+  // 8,687 since its fix round 1: step 12 reruns plan-check after a `Q<n>` answer and puts a one-PR answer on the Size
+  // line; steps 7 and 11 and the Stops paragraph name step 7's one-PR `Q<n>`, not a stop.
+  assertMaxBytes(SKILL, 8687);
 });
 
 test('plan step 11 names the review record', () => {
@@ -142,7 +144,8 @@ test('plan pins order, routing and stop rules', () => {
     'Draft tracker sub-issues only on request',
     'execute-plan runs only an approved plan',
     'every stop parks',
-    'the step 4 spike is not run and the step 7 scope question takes its default',
+    // Plan open-decisions Task 2 fix round 1: step 7 is no longer a stop; its one-PR `Q<n>` parks beside the stops.
+    'every stop parks, as does step 7\'s one-PR `Q<n>`: the step 4 spike is not run and that `Q<n>` takes its default',
     'under Open questions in the plan and in the reply',
   ]);
   assertContains('skills/plan/references/plan-template.md', ['## Open questions', 'branch or SHA plus the evidence', '`parked: <question>; default: <choice>; why: <one line>`', 'every acceptance number covered', 'one line per `checklists` item in each', 'regression check that runs the same scenario on base and head']);
@@ -215,7 +218,7 @@ test('the plan summary cites no plan-check or git output', () => {
   // command printed. plan-check still runs at step 11; only the reply stops citing it.
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[12].includes('else say once "visual pages not installed"); it cites no plan-check or git output.'), s[12]);
-  assert.ok(s[11].includes('Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints but a warn: line step 7\'s stop settled.'), s[11]);
+  assert.ok(s[11].includes('Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints but a warn: line step 7\'s `Q<n>` settled.'), s[11]);
 });
 
 test('only the user\'s word skips the plan review', () => {
@@ -289,7 +292,7 @@ test('step 7 takes plan-check\'s warn: line for a task over scope_threshold file
   // M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task over the file
   // limit is a PR over it, so plan-check warns and step 7's stop settles it.
   const seven = steps(readDoc(SKILL).body)[7];
-  assert.ok(seven.includes('every migrate batch. A renamed or retired stored value (an enum member, a status, a role name) is a stored shape. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or ask the `Q<n>` below. One PR is one change,'), seven);
+  assert.ok(seven.includes('every migrate batch. A renamed or retired stored value (an enum member, a status, a role name) is a stored shape. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or leave it to the one-PR `Q<n>` below. One PR is one change,'), seven);
   // Audit row L495, after superpowers' writing-plans Self-Review item 4.
   // Fix round 1: a warn: line survives the user's one-PR word and a go's first slice, so neither step 11 nor the
   // reviewer asks for a fix that cannot be made.
@@ -313,6 +316,12 @@ test('plan writes the draft and gates each open decision on its `Q<n>`', () => {
   assert.ok(s[8].includes('asserts only what an acceptance line or a Constraint states'), s[8]);
   assert.ok(s[12].includes('An answer to a `Q<n>` is a change request'), s[12]);
   assert.ok(s[12].includes('A yes that leaves a gating `Q<n>` open'), s[12]);
+  // Fix round 1: an answer alone is handled as a change request, not by "no explicit yes: ask again", and it reruns
+  // plan-check (the design's Approval section); a one-PR answer gates no task, so its word goes on the Size line.
+  assert.ok(s[12].includes('is a change request, with or without a yes:'), s[12]);
+  assert.ok(s[12].includes('`, a one-PR answer on the Size line too; run plan-check, show it, ask again.'), s[12]);
+  assert.ok(!s[7].includes('ask the `Q<n>`'), 'step 7 asks nothing before the plan file exists');
+  assert.ok(!s[11].includes("step 7's stop"), s[11]);
   const stops = section(body, '## Stops and autopilot');
   assert.ok(stops.includes('Stops at steps 1, 4 (a spike) and 12.'), stops);
   assert.ok(stops.includes('no task builds on the default'), stops);
