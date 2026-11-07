@@ -3588,7 +3588,9 @@ test('the gh stand-in with no jq on PATH: --jq reads a field of PR 8 or of the f
   }
   const gh = (...a) => spawnSync(STUB, a, { cwd: r.repo, encoding: 'utf8', env: { PATH: bin, KERN_EXEC_LOG: r.log, KERN_EXEC_CI: 'red-then-green' } });
   try {
-    assert.equal(spawnSync('/bin/sh', ['-c', 'command -v jq'], { encoding: 'utf8', env: { PATH: bin } }).status, 1, 'no jq here');
+    // bash's sh exits 1 for a name it cannot find, dash's 127: any non-zero status with nothing printed is no jq.
+    const jq = spawnSync('/bin/sh', ['-c', 'command -v jq'], { encoding: 'utf8', env: { PATH: bin } });
+    assert.ok(jq.status !== 0 && jq.stdout === '', 'no jq here');
     r.open();
     assert.equal(gh('pr', 'view', '--json', 'headRefOid', '--jq', '.headRefOid').stdout, `${r.g('rev-parse', 'HEAD')}\n`);
     assert.equal(gh('pr', 'view', '--json', 'mergeStateStatus', '--jq', '.mergeStateStatus').stdout, 'BLOCKED\n');
